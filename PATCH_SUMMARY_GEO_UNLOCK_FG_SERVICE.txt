@@ -1,0 +1,78 @@
+变更摘要：
+[
+  {
+    "file": "android/app/src/main/kotlin/com/example/quote_app/NotifyHelper.kt",
+    "description": "统一通知标题为“愿景提醒”",
+    "lines": [
+      76,
+      217
+    ],
+    "count": 2
+  },
+  {
+    "file": "lib/data/db.dart",
+    "description": "为 configs 表新增列 location_rules_enabled 与 baidu_ak（含默认值）",
+    "lines": [
+      614
+    ],
+    "count": 2
+  },
+  {
+    "file": "lib/data/dao.dart",
+    "description": "ConfigDao 增加地点规则开关与百度AK的 get/set 接口",
+    "lines": [
+      262
+    ],
+    "count": 46
+  },
+  {
+    "file": "lib/pages/discover_page.dart",
+    "description": "Discover 页面 State 增加 _geoEnabled 字段",
+    "lines": [
+      1
+    ],
+    "count": 1
+  },
+  {
+    "file": "lib/pages/discover_page.dart",
+    "description": "initState 中加载地点规则开关状态",
+    "lines": [
+      1
+    ],
+    "count": 1
+  },
+  {
+    "file": "lib/pages/discover_page.dart",
+    "description": "地点规则段落右侧新增开关按钮（绑定 configs.location_rules_enabled）",
+    "lines": [],
+    "count": 1
+  },
+  {
+    "file": "android/app/src/main/kotlin/com/example/quote_app/GeoForegroundService.kt",
+    "description": "新增前台服务 GeoForegroundService（高精度定位+百度兜底+半径判断+通知+日志）",
+    "lines": [
+      1
+    ],
+    "count": 247
+  },
+  {
+    "file": "android/app/src/main/kotlin/com/example/quote_app/UnlockReceiver.kt",
+    "description": "UnlockReceiver 增加地点规则优先判断与启动前台服务，关闭则直接返回",
+    "lines": [
+      1
+    ],
+    "count": 1
+  },
+  {
+    "file": "android/app/src/main/AndroidManifest.xml",
+    "description": "Manifest 增加前台服务声明与前台服务权限",
+    "lines": [],
+    "count": 1
+  },
+  {
+    "file": "android/app/build.gradle",
+    "description": "app/build.gradle 增加百度定位SDK依赖（BaiduMapSDK_Location）",
+    "lines": [],
+    "count": 1
+  }
+]

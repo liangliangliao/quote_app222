@@ -1,0 +1,715 @@
+import 'package:flutter/material.dart';
+
+import 'todo_dao.dart';
+import 'todo_models.dart';
+import 'todo_service.dart';
+
+class TodoHomePage extends StatefulWidget {
+  const TodoHomePage({super.key});
+
+  @override
+  State<TodoHomePage> createState() => _TodoHomePageState();
+}
+
+class _TodoHomePageState extends State<TodoHomePage> {
+  final _dao = TodoDao();
+  late final _service = TodoGraphService(dao: _dao);
+  final _listNameCtrl = TextEditingController();
+  bool _busy = false;
+  String _status = '';
+  List<TodoListRecord> _lists = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _listNameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    await _dao.ensureTables();
+    final rows = await _dao.listLists();
+    if (!mounted) return;
+    setState(() => _lists = rows);
+  }
+
+  Future<void> _sync() async {
+    setState(() {
+      _busy = true;
+      _status = '准备同步 Microsoft To Do...';
+    });
+    try {
+      final r = await _service.sync(
+        listName: _listNameCtrl.text.trim(),
+        onProgress: (m) {
+          if (!mounted) return;
+          setState(() => _status = m);
+        },
+      );
+      await _load();
+      if (!mounted) return;
+      setState(() => _status = '同步完成：任务列表 ${r.lists} 个，任务 ${r.tasks} 个，检查项/附件/关联资源 ${r.children} 条。');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _status = '同步失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _createList() async {
+    final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const TodoListEditPage()));
+    if (ok == true) await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Microsoft To Do'),
+        actions: [IconButton(onPressed: _busy ? null : _load, icon: const Icon(Icons.refresh))],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _busy ? null : _createList,
+        icon: const Icon(Icons.add),
+        label: const Text('新建列表'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('同步 Microsoft To Do 数据', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '留空会同步全部 To Do 任务列表；填写任务列表名称时，只同步该列表。会保存任务列表 → 任务 → 检查项/附件/关联资源的结构。',
+                    style: TextStyle(color: Color(0xFF6B7280)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _listNameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: '任务列表名称（可选）',
+                      hintText: '例如：Tasks / 我的任务 / 工作',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _sync,
+                    icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_sync_outlined),
+                    label: const Text('开始同步 To Do'),
+                  ),
+                  if (_status.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(12)),
+                      child: Text(_status),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const Expanded(child: Text('已同步 To Do 结构', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+              Text('${_lists.length} 个列表', style: const TextStyle(color: Color(0xFF6B7280))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_lists.isEmpty)
+            const _TodoEmptyHint(text: '暂无 To Do 数据。请先登录 Microsoft，并点击“开始同步 To Do”。')
+          else
+            ..._lists.map((l) => Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    leading: Icon(l.localStatus == 'synced' ? Icons.checklist_rtl_outlined : Icons.sync_problem_outlined),
+                    title: Text(l.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('任务 ${l.taskCount} 个 · 未完成 ${l.openTaskCount} · 已完成 ${l.completedTaskCount}\n状态：${_localStatusName(l.localStatus)}'),
+                    isThreeLine: true,
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoListPage(listId: l.listId))).then((_) => _load()),
+                  ),
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+class TodoListPage extends StatefulWidget {
+  const TodoListPage({super.key, required this.listId});
+  final String listId;
+
+  @override
+  State<TodoListPage> createState() => _TodoListPageState();
+}
+
+class _TodoListPageState extends State<TodoListPage> {
+  final _dao = TodoDao();
+  late final _service = TodoGraphService(dao: _dao);
+  TodoListRecord? _list;
+  final List<TodoTaskRecord> _tasks = [];
+  String _filter = 'all';
+  bool _loading = false;
+  bool _hasMore = true;
+  int _offset = 0;
+  static const int _limit = 50;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitial();
+  }
+
+  Future<void> _loadInitial() async {
+    final l = await _dao.getList(widget.listId);
+    if (!mounted) return;
+    setState(() => _list = l);
+    await _loadMore(reset: true);
+  }
+
+  Future<void> _loadMore({bool reset = false}) async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      if (reset) {
+        _tasks.clear();
+        _offset = 0;
+        _hasMore = true;
+      }
+      final rows = await _dao.listTasks(widget.listId, filter: _filter, limit: _limit, offset: _offset);
+      if (!mounted) return;
+      setState(() {
+        _tasks.addAll(rows);
+        _offset += rows.length;
+        _hasMore = rows.length == _limit;
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _editList() async {
+    final l = _list;
+    if (l == null) return;
+    final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TodoListEditPage(list: l)));
+    if (ok == true) await _loadInitial();
+  }
+
+  Future<void> _deleteList() async {
+    final l = _list;
+    if (l == null) return;
+    final writeBack = await _confirmWriteBack('删除任务列表', '会先在本地标记删除。选择“同时写回”会继续删除 Microsoft To Do 远端列表。');
+    if (writeBack == null) return;
+    await _service.deleteList(listId: l.listId, writeBack: writeBack);
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  Future<void> _addTask() async {
+    final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TodoTaskEditPage(listId: widget.listId)));
+    if (ok == true) await _loadInitial();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = _list;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l?.displayName ?? 'To Do 列表'),
+        actions: [
+          IconButton(onPressed: _editList, icon: const Icon(Icons.edit_outlined)),
+          IconButton(onPressed: _deleteList, icon: const Icon(Icons.delete_outline)),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(onPressed: _addTask, icon: const Icon(Icons.add_task), label: const Text('新建任务')),
+      body: RefreshIndicator(
+        onRefresh: () => _loadInitial(),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (l != null)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.checklist_rtl_outlined),
+                  title: Text(l.displayName),
+                  subtitle: Text('任务 ${l.taskCount} 个 · 未完成 ${l.openTaskCount} · 已完成 ${l.completedTaskCount}\n本地状态：${_localStatusName(l.localStatus)}'),
+                  isThreeLine: true,
+                ),
+              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(label: const Text('全部'), selected: _filter == 'all', onSelected: (_) => setState(() => _filter = 'all')),
+                ChoiceChip(label: const Text('未完成'), selected: _filter == 'open', onSelected: (_) => setState(() => _filter = 'open')),
+                ChoiceChip(label: const Text('已完成'), selected: _filter == 'completed', onSelected: (_) => setState(() => _filter = 'completed')),
+                OutlinedButton.icon(onPressed: () => _loadMore(reset: true), icon: const Icon(Icons.search), label: const Text('应用筛选')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_tasks.isEmpty && !_loading)
+              const _TodoEmptyHint(text: '这个列表下暂未同步到任务。')
+            else
+              ..._tasks.map((t) => Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      leading: Icon(t.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked),
+                      title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${_summary(t.bodyText)}\n${_statusName(t.status)} · ${_importanceName(t.importance)} · 截止：${t.dueDateTime.isEmpty ? '-' : t.dueDateTime} · ${_localStatusName(t.localStatus)}', maxLines: 3, overflow: TextOverflow.ellipsis),
+                      isThreeLine: true,
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoTaskDetailPage(taskId: t.taskId))).then((_) => _loadInitial()),
+                    ),
+                  )),
+            if (_loading)
+              const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+            else if (_hasMore)
+              OutlinedButton.icon(onPressed: () => _loadMore(), icon: const Icon(Icons.expand_more), label: const Text('加载更多任务')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<bool?> _confirmWriteBack(String title, String message) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          OutlinedButton(onPressed: () => Navigator.pop(context, false), child: const Text('仅本地')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('同时写回')),
+        ],
+      ),
+    );
+  }
+}
+
+class TodoListEditPage extends StatefulWidget {
+  const TodoListEditPage({super.key, this.list});
+  final TodoListRecord? list;
+
+  @override
+  State<TodoListEditPage> createState() => _TodoListEditPageState();
+}
+
+class _TodoListEditPageState extends State<TodoListEditPage> {
+  final _nameCtrl = TextEditingController();
+  late final _service = TodoGraphService();
+  bool _writeBack = true;
+  bool _busy = false;
+  String _status = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl.text = widget.list?.displayName ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _status = '正在先保存本地...';
+    });
+    try {
+      final l = widget.list;
+      if (l == null) {
+        await _service.createList(displayName: _nameCtrl.text, writeBack: _writeBack);
+      } else {
+        await _service.updateList(listId: l.listId, displayName: _nameCtrl.text, writeBack: _writeBack);
+      }
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _status = '保存失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.list == null ? '新建 To Do 列表' : '修改 To Do 列表')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: '列表名称', border: OutlineInputBorder())),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('同时写回 Microsoft To Do'),
+            subtitle: const Text('无论是否写回，都会先保存到本地数据库。'),
+            value: _writeBack,
+            onChanged: _busy ? null : (v) => setState(() => _writeBack = v),
+          ),
+          FilledButton.icon(onPressed: _busy ? null : _save, icon: const Icon(Icons.save_outlined), label: const Text('保存')),
+          if (_status.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_status)),
+        ],
+      ),
+    );
+  }
+}
+
+class TodoTaskDetailPage extends StatefulWidget {
+  const TodoTaskDetailPage({super.key, required this.taskId});
+  final String taskId;
+
+  @override
+  State<TodoTaskDetailPage> createState() => _TodoTaskDetailPageState();
+}
+
+class _TodoTaskDetailPageState extends State<TodoTaskDetailPage> {
+  final _dao = TodoDao();
+  late final _service = TodoGraphService(dao: _dao);
+  TodoTaskRecord? _task;
+  List<TodoChildRecord> _checklist = [];
+  List<TodoChildRecord> _attachments = [];
+  List<TodoChildRecord> _links = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final t = await _dao.getTask(widget.taskId);
+    final c = await _dao.listChildren(widget.taskId, 'checklistItem');
+    final a = await _dao.listChildren(widget.taskId, 'attachment');
+    final l = await _dao.listChildren(widget.taskId, 'linkedResource');
+    if (!mounted) return;
+    setState(() {
+      _task = t;
+      _checklist = c;
+      _attachments = a;
+      _links = l;
+    });
+  }
+
+  Future<void> _edit() async {
+    final t = _task;
+    if (t == null) return;
+    final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TodoTaskEditPage(listId: t.listId, task: t)));
+    if (ok == true) await _load();
+  }
+
+  Future<void> _delete() async {
+    final t = _task;
+    if (t == null) return;
+    final writeBack = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('删除任务'),
+        content: const Text('会先在本地标记删除。选择“同时写回”会继续删除 Microsoft To Do 远端任务。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          OutlinedButton(onPressed: () => Navigator.pop(context, false), child: const Text('仅本地')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('同时写回')),
+        ],
+      ),
+    );
+    if (writeBack == null) return;
+    await _service.deleteTask(task: t, writeBack: writeBack);
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _task;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(t?.title ?? 'To Do 任务'),
+        actions: [IconButton(onPressed: _edit, icon: const Icon(Icons.edit_outlined)), IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline))],
+      ),
+      body: t == null
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(t.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                Text('${_statusName(t.status)} · ${_importanceName(t.importance)} · 本地状态：${_localStatusName(t.localStatus)}', style: const TextStyle(color: Color(0xFF6B7280))),
+                const SizedBox(height: 8),
+                Text('创建：${_formatRawTime(t.createdDateTime)}\n修改：${_formatRawTime(t.lastModifiedDateTime)}\n截止：${t.dueDateTime.isEmpty ? '-' : '${t.dueDateTime} ${t.dueTimeZone}'}'),
+                const SizedBox(height: 16),
+                SelectableText(t.bodyText.isEmpty ? '无正文' : t.bodyText, style: const TextStyle(fontSize: 16, height: 1.55)),
+                const SizedBox(height: 18),
+                _ChildSection(title: '检查项', children: _checklist),
+                _ChildSection(title: '附件', children: _attachments),
+                _ChildSection(title: '关联资源', children: _links),
+              ],
+            ),
+    );
+  }
+}
+
+class TodoTaskEditPage extends StatefulWidget {
+  const TodoTaskEditPage({super.key, required this.listId, this.task});
+  final String listId;
+  final TodoTaskRecord? task;
+
+  @override
+  State<TodoTaskEditPage> createState() => _TodoTaskEditPageState();
+}
+
+class _TodoTaskEditPageState extends State<TodoTaskEditPage> {
+  final _titleCtrl = TextEditingController();
+  final _bodyCtrl = TextEditingController();
+  final _dueCtrl = TextEditingController();
+  final _tzCtrl = TextEditingController(text: 'Asia/Shanghai');
+  late final _service = TodoGraphService();
+  String _statusValue = 'notStarted';
+  String _importanceValue = 'normal';
+  bool _writeBack = true;
+  bool _busy = false;
+  String _status = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.task;
+    if (t != null) {
+      _titleCtrl.text = t.title;
+      _bodyCtrl.text = t.bodyText;
+      _dueCtrl.text = t.dueDateTime;
+      _tzCtrl.text = t.dueTimeZone.isEmpty ? 'Asia/Shanghai' : t.dueTimeZone;
+      _statusValue = _safeStatus(t.status);
+      _importanceValue = _safeImportance(t.importance);
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _bodyCtrl.dispose();
+    _dueCtrl.dispose();
+    _tzCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _status = '正在先保存本地...';
+    });
+    try {
+      final t = widget.task;
+      if (t == null) {
+        await _service.createTask(
+          listId: widget.listId,
+          title: _titleCtrl.text,
+          bodyText: _bodyCtrl.text,
+          status: _statusValue,
+          importance: _importanceValue,
+          dueDateTime: _dueCtrl.text,
+          dueTimeZone: _tzCtrl.text,
+          writeBack: _writeBack,
+        );
+      } else {
+        await _service.updateTask(
+          task: t,
+          title: _titleCtrl.text,
+          bodyText: _bodyCtrl.text,
+          status: _statusValue,
+          importance: _importanceValue,
+          dueDateTime: _dueCtrl.text,
+          dueTimeZone: _tzCtrl.text,
+          writeBack: _writeBack,
+        );
+      }
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _status = '保存失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.task == null ? '新建 To Do 任务' : '修改 To Do 任务')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: '任务标题', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: _bodyCtrl, maxLines: 5, decoration: const InputDecoration(labelText: '任务正文', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _statusValue,
+            decoration: const InputDecoration(labelText: '状态', border: OutlineInputBorder()),
+            items: const [
+              DropdownMenuItem(value: 'notStarted', child: Text('未开始')),
+              DropdownMenuItem(value: 'inProgress', child: Text('进行中')),
+              DropdownMenuItem(value: 'completed', child: Text('已完成')),
+              DropdownMenuItem(value: 'waitingOnOthers', child: Text('等待他人')),
+              DropdownMenuItem(value: 'deferred', child: Text('已延期')),
+            ],
+            onChanged: _busy ? null : (v) => setState(() => _statusValue = v ?? 'notStarted'),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _importanceValue,
+            decoration: const InputDecoration(labelText: '重要程度', border: OutlineInputBorder()),
+            items: const [
+              DropdownMenuItem(value: 'low', child: Text('低')),
+              DropdownMenuItem(value: 'normal', child: Text('普通')),
+              DropdownMenuItem(value: 'high', child: Text('重要')),
+            ],
+            onChanged: _busy ? null : (v) => setState(() => _importanceValue = v ?? 'normal'),
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: _dueCtrl, decoration: const InputDecoration(labelText: '截止时间 dateTime（可选）', hintText: '2026-05-02T22:00:00', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: _tzCtrl, decoration: const InputDecoration(labelText: '时区', border: OutlineInputBorder())),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('同时写回 Microsoft To Do'),
+            subtitle: const Text('会先保存本地数据库，再调用 Microsoft Graph 写回。'),
+            value: _writeBack,
+            onChanged: _busy ? null : (v) => setState(() => _writeBack = v),
+          ),
+          FilledButton.icon(onPressed: _busy ? null : _save, icon: const Icon(Icons.save_outlined), label: const Text('保存')),
+          if (_status.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_status)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChildSection extends StatelessWidget {
+  const _ChildSection({required this.title, required this.children});
+  final String title;
+  final List<TodoChildRecord> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        ...children.map((c) => Card(
+              child: ListTile(
+                leading: Icon(c.childType == 'checklistItem' ? (c.isChecked ? Icons.check_box : Icons.check_box_outline_blank) : Icons.link_outlined),
+                title: Text(c.title.isEmpty ? c.content : c.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: c.remoteUrl.isEmpty ? null : SelectableText(c.remoteUrl),
+              ),
+            )),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+}
+
+class _TodoEmptyHint extends StatelessWidget {
+  const _TodoEmptyHint({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(14)),
+      child: Text(text, style: const TextStyle(color: Color(0xFF6B7280))),
+    );
+  }
+}
+
+String _summary(String text) {
+  final s = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (s.length <= 70) return s;
+  return '${s.substring(0, 70)}...';
+}
+
+String _localStatusName(String s) {
+  switch (s) {
+    case 'synced':
+      return '已同步';
+    case 'pending_create':
+      return '本地新增待写回';
+    case 'pending_update':
+      return '本地修改待写回';
+    case 'pending_delete':
+      return '本地删除待写回';
+    default:
+      return s.isEmpty ? '-' : s;
+  }
+}
+
+String _statusName(String s) {
+  switch (s) {
+    case 'notStarted':
+      return '未开始';
+    case 'inProgress':
+      return '进行中';
+    case 'completed':
+      return '已完成';
+    case 'waitingOnOthers':
+      return '等待他人';
+    case 'deferred':
+      return '已延期';
+    default:
+      return s.isEmpty ? '-' : s;
+  }
+}
+
+String _importanceName(String s) {
+  switch (s) {
+    case 'low':
+      return '低';
+    case 'normal':
+      return '普通';
+    case 'high':
+      return '重要';
+    default:
+      return s.isEmpty ? '-' : s;
+  }
+}
+
+String _safeStatus(String v) {
+  const values = <String>{'notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred'};
+  return values.contains(v) ? v : 'notStarted';
+}
+
+String _safeImportance(String v) {
+  const values = <String>{'low', 'normal', 'high'};
+  return values.contains(v) ? v : 'normal';
+}
+
+String _formatRawTime(String raw) {
+  if (raw.trim().isEmpty) return '-';
+  final dt = DateTime.tryParse(raw);
+  if (dt == null) return raw;
+  final local = dt.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${local.year}-${two(local.month)}-${two(local.day)} ${two(local.hour)}:${two(local.minute)}';
+}

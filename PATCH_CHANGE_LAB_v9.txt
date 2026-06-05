@@ -1,0 +1,11 @@
+Change Lab v9 patch notes
+
+- Added world mission runtime state machine with persistent mission records.
+- Added automatic mission progress accumulation from completed task runs.
+- Added automatic reward claiming and next-stage unlocking after mission completion.
+- Added mission-generated follow-up task instances when a new stage unlocks.
+- Added reward events feed and latest milestone message.
+- Updated world progress to be stage-based instead of raw action-count based.
+- Enhanced world scene page with recent reward display.
+- Enhanced task instance detail page to surface latest reward / milestone feedback.
+- Enhanced rules/config page with reward event metrics and recent rewards list.

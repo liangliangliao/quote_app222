@@ -1,0 +1,5 @@
+change_lab_v3
+- AI coach page added
+- task run records persisted
+- richer task execution and reflection flow
+- overview/task/profile metrics expanded

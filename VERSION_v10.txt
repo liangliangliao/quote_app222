@@ -1,0 +1,2 @@
+v10: Fix notebook_list_page SafeArea parentheses syntax + fix movie_ranking_page TabBar/TabBarView parentheses.
+Based on final2_updated_project_patched_v9.zip

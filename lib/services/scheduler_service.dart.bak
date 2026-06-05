@@ -1,0 +1,425 @@
+import 'dart:isolate';
+import 'dart:math';
+import 'package:flutter/widgets.dart';
+import 'dart:ui' as ui;
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'package:intl/intl.dart';
+import 'package:workmanager/workmanager.dart';
+import 'package:sqflite/sqflite.dart';
+import '../utils/debug_logger.dart';
+
+import '../data/db.dart';
+import '../data/dao.dart';
+import 'notification_service.dart';
+import 'openai_service.dart';
+import 'dart:async';
+import '../platform/perm_helper.dart';
+
+import '../utils/run_context.dart';
+class SchedulerService {
+  // ---- runKey helpers / WM fallback ----
+  static String _runKeyForPlanned(DateTime planned) {
+    String two(int n)=> n.toString().padLeft(2,'0');
+    return '${planned.year}${two(planned.month)}${two(planned.day)}${two(planned.hour)}${two(planned.minute)}';
+  }
+  
+  static Future<bool> _hasRunSuccess(String taskUid, String runKey) async {
+    final db = await AppDatabase.instance();
+    final rows = await db.query('logs', where: 'task_uid=? AND detail LIKE ?', whereArgs: [taskUid, '%run='+runKey+'%'], limit: 1);
+    return rows.isNotEmpty;
+  }
+  
+  static Future<void> _scheduleWmOneOff(String uniqueName, Map<String, dynamic> data, Duration delay) async {
+    await Workmanager().registerOneOffTask(
+      uniqueName,
+      data['job']?.toString() ?? 'wm_fallback',
+      initialDelay: delay < const Duration(minutes: 1) ? const Duration(minutes: 1) : delay,
+      existingWorkPolicy: ExistingWorkPolicy.replace,
+      constraints: const Constraints(networkType: NetworkType.notRequired),
+      inputData: data.map((k, v) => MapEntry(k, v is num || v is String || v is bool ? v : v.toString())),
+    );
+  }
+  
+  static Future<void> wmRunTask(String taskUid, String runKey) async {
+    final db = await AppDatabase.instance();
+    final trows = await db.query('tasks', where: 'task_uid=?', whereArgs: [taskUid], limit: 1);
+    if (trows.isEmpty) return;
+    final t = trows.first;
+    // 避免重复：若已成功，直接跳过
+    if (await _hasRunSuccess(taskUid, runKey)) return;
+    await _sendForTask(t, runKey: runKey);
+  }
+/// 初始化调度：初始化 WorkManager，并在无精确闹钟权限时注册 15 分钟兜底任务。
+  static Future<void> init() async {
+    await DLog.i('SCH', 'init start');
+    final hasExact = await PermHelper.hasExactAlarmPermission();
+    await DLog.i('SCH', 'hasExact(now)=$hasExact');
+    if (!hasExact) {
+      await PermHelper.requestExactAlarmPermission();
+      await Workmanager().registerPeriodicTask(
+          'due_check_periodic',
+          'due_check_periodic',
+          frequency: const Duration(minutes: 15),
+          initialDelay: const Duration(minutes: 15),
+          existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+          constraints: Constraints(networkType: NetworkType.notRequired),
+        );
+        await DLog.i('SCH', 'registered fallback periodic task');
+        
+    }
+    else {
+      // 有精确闹钟权限：取消兜底任务
+      await Workmanager().cancelByUniqueName('due_check_periodic');
+        await DLog.i('SCH', 'cancelled fallback periodic task');
+        
+    }
+  }
+
+  /// 扫描任务并为每个任务安排下一次触发（有精确闹钟权限时使用 AndroidAlarmManager）。
+  static Future<void> scheduleNextForAll() async {
+    final db = await AppDatabase.instance();
+    final hasExact = await PermHelper.hasExactAlarmPermission();
+    await DLog.i('SCH', 'hasExact(now)=$hasExact');
+    final tasks = await TaskDao().all();
+    final Map<String, DateTime> _nextChosen = {};
+
+    for (final t in tasks) {
+      final status = (t['status'] ?? 'on').toString();
+      if (status != 'on' && status != 'active') continue;
+      final uid = (t['task_uid'] ?? '').toString();
+      if (uid.isEmpty) continue;
+
+      final next = _computeNext(t);
+      if (next == null) continue;
+      // 去重：同一 uid 只保留最早 future 触发 
+      if (_nextChosen.containsKey(uid)) {
+        if (next.isBefore(_nextChosen[uid]!)) {
+          _nextChosen[uid] = next;
+        }
+        continue;
+      } else {
+        _nextChosen[uid] = next;
+      }
+
+      final diffSecs = next.difference(DateTime.now()).inSeconds;
+      if (diffSecs.abs() <= 5) {
+        await DLog.i('SCH', 'instant fire $uid');
+        await _sendForTask(t, runKey: _runKeyForPlanned(planned));
+        await LogDao().add(taskUid: uid, detail: '即时触发：${_fmt(DateTime.now())}');
+        continue;
+      }
+
+      // 把“下一次”写回任务（保持你原有约定）
+      await db.update('tasks', {'start_time': _fmt(next)}, where: 'task_uid=?', whereArgs: [uid]);
+        
+
+      if (hasExact) {
+        final id = _alarmIdForTask(uid);
+          await AndroidAlarmManager.cancel(id);
+
+      // 如果没有“精确闹钟”权限，则用 WorkManager 注册非精确 one-off
+      if (!(await PermHelper.hasExactAlarmPermission())) {
+        final runKey = _runKeyForPlanned(next);
+        final uniq = 'wm_run_'+uid+'_'+runKey;
+        await _scheduleWmOneOff(uniq, {'job':'wm_run','task_uid':uid,'run_key':runKey}, next.difference(DateTime.now()));
+        await DLog.i('SCH', 'WM oneOff for $uid run=$runKey');
+        continue;
+      }
+
+          await AndroidAlarmManager.oneShotAt(next, id, alarmCallback,
+              exact: true, allowWhileIdle: true, wakeup: true, rescheduleOnReboot: true);
+          await DLog.i('SCH', 'alarm $uid @${_fmt(next)}');
+          
+      }
+    }
+  }
+
+  /// 被闹钟或兜底调用：检查到期任务并发送通知。
+  static Future<void> callback() async {
+    final db = await AppDatabase.instance();
+    final now = DateTime.now();
+    final tasks = await TaskDao().all();
+
+    for (final t in tasks) {
+      final status = (t['status'] ?? 'on').toString();
+      if (status != 'on' && status != 'active') continue;
+
+      final uid = (t['task_uid'] ?? '').toString();
+      if (uid.isEmpty) continue;
+
+      final st = (t['start_time'] ?? '').toString();
+      await DLog.i('CB', 'check task $uid st=$st');
+      if (st.isEmpty) continue;
+
+      final planned = _parseTimeOrToday(st);
+      if (planned == null) continue;
+
+      // 只在“计划时间已到或已过”的时候触发一次
+      final delta = now.difference(planned).inSeconds;
+      await DLog.i('CB', 'check task $uid st=$st delta=$delta');
+      // 触发窗口：提前 10 秒 ~ 延迟 5 分钟
+      if (delta >= -10 && delta <= 300) {
+        // recent duplicate guard (5 min)
+        final fiveMinAgo = now.subtract(const Duration(minutes: 5)).millisecondsSinceEpoch;
+        final recent = await db.query('logs', where: 'task_uid=? AND detail LIKE ? AND created_at > ?', whereArgs: [uid, '触发:%', fiveMinAgo], limit: 1);
+        if (recent.isNotEmpty) { await DLog.i('CB', 'skip recent uid=$uid'); continue; }
+        await _sendForTask(t, runKey: _runKeyForPlanned(planned));
+        await LogDao().add(taskUid: uid, detail: '触发：${_fmt(now)}');
+      }
+      else {
+        await DLog.i('CB', 'skip delta too large uid=$uid delta=$delta');
+      }
+    }
+  }
+
+  /// 计算下一次时间：支持 'HH:mm' 每日、'yyyy-MM-dd HH:mm' 精确时间、以及包含 freq/weekday/dayOfMonth 的扩展。
+  
+  /// 计算下一次时间：兼容旧/新字段。
+  
+  /// 计算下一次时间：兼容旧/新字段。
+  static DateTime? _computeNext(Map<String, dynamic> t) {
+    final now = DateTime.now();
+    final start = (t['start_time'] ?? '').toString().trim();
+    if (start.isEmpty) return null;
+
+    // 解析“时:分”
+    int hh = 9, mm = 0;
+    final reHm = RegExp(r'^\d{2}:\d{2}$');
+    final reAbs = RegExp(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$');
+    DateTime? absDt;
+    if (reHm.hasMatch(start)) {
+      hh = int.parse(start.substring(0,2));
+      mm = int.parse(start.substring(3,5));
+    } else if (reAbs.hasMatch(start)) {
+      final yyyy = int.parse(start.substring(0,4));
+        final MMm  = int.parse(start.substring(5,7));
+        final dd   = int.parse(start.substring(8,10));
+        hh = int.parse(start.substring(11,13));
+        mm = int.parse(start.substring(14,16));
+        absDt = DateTime(yyyy, MMm, dd, hh, mm);
+        
+    } else {
+      // 尝试从任意字符串中提取 “HH:mm”
+      final m2 = RegExp(r'(\d{2}):(\d{2})').firstMatch(start);
+      if (m2 != null) {
+        hh = int.parse(m2.group(1)!);
+          mm = int.parse(m2.group(2)!);
+          
+      }
+    }
+
+    // 读取频率（新字段优先，兼容旧字段）
+    final String freqType = (t['freq_type'] ?? t['freq'] ?? 'daily').toString();
+    final int? weekDay = (t['freq_weekday'] ?? t['weekday']) as int?;
+    final int? dayOfMonth = (t['freq_day_of_month'] ?? t['dayOfMonth']) as int?;
+
+    // 如果 start 为绝对时间且在未来：直接使用它（作为“下一次”）
+    if (absDt != null && absDt.isAfter(now)) {
+      return absDt;
+    }
+
+    if (freqType == 'weekly' && weekDay != null) {
+      final wd = weekDay;
+      int delta = (wd - now.weekday) % 7;
+      var cand = DateTime(now.year, now.month, now.day, hh, mm).add(Duration(days: delta));
+      if (cand.isBefore(now)) cand = cand.add(const Duration(days: 7));
+      return cand;
+    }
+
+    if (freqType == 'monthly' && dayOfMonth != null) {
+      final d = dayOfMonth.clamp(1,31);
+      int y = now.year, m = now.month;
+      int end = DateTime(y, m + 1, 0).day;
+      var cand = DateTime(y, m, d.clamp(1, end), hh, mm);
+      if (cand.isBefore(now)) {
+        m += 1;
+        end = DateTime(y, m + 1, 0).day;
+        cand = DateTime(y, m, d.clamp(1, end), hh, mm);
+      }
+      return cand;
+    }
+
+    // 默认：每天
+    final today = DateTime(now.year, now.month, now.day, hh, mm);
+    if (!today.isBefore(now)) return today;
+    return today.add(const Duration(days: 1));
+  }
+static DateTime? _parseTimeOrToday(String st) {
+    final now = DateTime.now();
+    if (RegExp(r'^\d{2}:\d{2}$').hasMatch(st)) {
+        final hh = int.parse(st.substring(0,2));
+        final mm = int.parse(st.substring(3,5));
+        return DateTime(now.year, now.month, now.day, hh, mm);
+      } else if (RegExp(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$').hasMatch(st)) {
+        final yyyy = int.parse(st.substring(0,4));
+        final mm = int.parse(st.substring(5,7));
+        final dd = int.parse(st.substring(8,10));
+        final HH = int.parse(st.substring(11,13));
+        final MM = int.parse(st.substring(14,16));
+        return DateTime(yyyy, mm, dd, HH, MM);
+      }
+      
+    return null;
+  }
+
+  static Future<void> _sendForTask(Map<String, dynamic> t, {String? runKey, DateTime? planned}) async {
+    final type = (t['type'] ?? '').toString();
+    final uid = (t['task_uid'] ?? '').toString();
+    String title = (t['name'] ?? '提醒').toString();
+    String body = '到了预设时间';
+    String? largeIconPath;
+
+    
+    // 手动任务：直接取该任务的最新一条名言并发送
+    if (type == 'manual') {
+      final q = await QuoteDao().latestForTask(uid);
+      if (q != null) {
+        final content = q['content']?.toString() ?? '';
+        body = content;
+        // 标记为已通知
+        final id = q['id'] is int ? q['id'] as int : int.tryParse(q['id']?.toString() ?? '');
+        if (id != null) {
+          await QuoteDao().markNotified(id);
+        }
+      }
+    } else if (type == 'carousel') {
+
+        final q = await QuoteDao().carouselNextSequential(uid);
+        if (q != null) {
+          final content = q['content']?.toString() ?? '';
+          final author = q['author']?.toString() ?? '';
+          body = author.isNotEmpty ? '$content —— $author' : content;
+          largeIconPath = (q['avatar'] ?? '') as String?;
+          // 标记为已通知
+          if (q['id'] != null) { await QuoteDao().markNotified(q['id'] as int); }
+        }
+      } 
+else if (type == 'auto') {
+      // 自动任务：OpenAI 在线拉取 → 去重 → 入库 → 日志 → 通知
+      final cfg = await ConfigDao().getOne();
+      final key = (cfg['api_key'] ?? '').toString();
+      final model = (cfg['model'] ?? 'gpt-5').toString();
+      final endpoint = (cfg['endpoint'] ?? 'https://api.openai.com/v1/responses').toString();
+      final prompt = (t['prompt'] ?? '给一句著名人物的名言，中文，短句').toString();
+
+      if (key.isEmpty) {
+        await LogDao().add(taskUid: uid, detail: '调用openai api发生错误或失败!(未配置API Key)');
+        return;
+      }
+
+      final api = OpenAIService(endpoint: endpoint, apiKey: key, model: model);
+
+      String? acceptedContent;
+      int retry = 0;
+      while (retry < 10) {
+          final resp = await api.generateQuote(prompt);
+          final content = resp.trim();
+          if (content.isEmpty) {
+            retry++;
+            continue;
+          final dup = await QuoteDao().existsSimilar(content, threshold: 0.9);
+          if (dup) {
+            retry++;
+            continue;
+          }
+          acceptedContent = content;
+          break;
+        } catch (e) {
+          await LogDao().add(taskUid: uid, detail: '调用openai api发生错误或失败! run=' + (runKey ?? ''));
+          return;
+        }
+      }
+
+      if (acceptedContent == null) {
+        await LogDao().add(taskUid: uid, detail: '错误!连续调用api10次去重检验未通过！ run=' + (runKey ?? ''));
+        return;
+      }
+
+      // 入库（再次保护性去重）
+      final quoteUid = await QuoteDao().insertIfUnique(
+        taskUid: uid,
+        type: type,
+        taskName: title,
+        avatarPath: (t['avatar_path'] ?? '').toString(),
+        content: acceptedContent,
+      );
+      } catch (e) { _notifOk = false; await LogDao().add(taskUid: uid, detail: '通知发送失败 run=' + (runKey ?? '')); }
+      if (quoteUid.isEmpty) {
+        // 理论上不应该走到这里（上面已做去重），但仍作为保护；不发通知只记日志
+        await LogDao().add(taskUid: uid, detail: '错误!内容重复，未插入。 run=' + (runKey ?? ''));
+        return;
+      }
+
+      body = acceptedContent;
+
+      // 标记 quotes.notified = 1 by quote_uid
+      final db = await AppDatabase.instance();
+      await db.update('quotes', {'notified': 1}, where: 'quote_uid=?', whereArgs: [quoteUid]);
+
+      // moved: success log after showing notification
+    }
+
+      
+
+          // 使用任务头像作为通知大图标（如为空则用系统默认）
+      var largeIconPath = (t['avatar_path'] ?? '').toString();
+        await NotificationService.show(
+      id: uid.hashCode & 0x7fffffff,
+      title: title,
+      body: body,
+      largeIconPath: largeIconPath ?? '',
+    );
+
+  static int _alarmIdForTask(String uid) => uid.hashCode & 0x7fffffff;
+  static String _fmt(DateTime dt) => DateFormat('yyyy-MM-dd HH:mm').format(dt);
+
+  static Future<void> catchupIfMissed() async => _catchupIfMissed();
+}
+
+/// AndroidAlarmManager 回调入口（顶层，避免 tree-shaking）
+@pragma('vm:entry-point')
+Future<void> alarmCallback() async {
+  // 标记后台环境（供日志前缀使用）
+  RunContext.isBackground = true; 
+
+  await DLog.i('ALARM', 'alarm hit');
+  WidgetsFlutterBinding.ensureInitialized();
+  ui.DartPluginRegistrant.ensureInitialized();
+  await NotificationService.init();
+  await AppDatabase.instance();
+  await SchedulerService.callback();
+  await SchedulerService.catchupIfMissed();
+  
+  await SchedulerService.scheduleNextForAll();
+}
+
+/// 当天漏发补发（所有任务类型，仅补一次）
+Future<void> _catchupIfMissed() async {
+  final db = await AppDatabase.instance();
+    final now = DateTime.now();
+    final dayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final dayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999).millisecondsSinceEpoch;
+    final tasks = await TaskDao().all();
+    for (final t in tasks) {
+      final status = (t['status'] ?? 'on').toString();
+      if (status != 'on' && status != 'active') continue;
+      final uid = (t['task_uid'] ?? '').toString();
+      if (uid.isEmpty) continue;
+      final st = (t['start_time'] ?? '').toString();
+      await DLog.i('CB', 'check task $uid st=$st');
+      if (st.isEmpty) continue;
+      final planned = SchedulerService._parseTimeOrToday(st);
+      if (planned == null) continue;
+      if (planned.isAfter(now)) continue;
+
+      final sent = await db.query('logs',
+          where: 'task_uid=? AND created_at BETWEEN ? AND ?',
+          whereArgs: [uid, dayStart, dayEnd],
+          limit: 1);
+      if (sent.isNotEmpty) continue;
+
+      await SchedulerService._sendForTask(t, runKey: _runKeyForPlanned(planned));
+      await LogDao().add(taskUid: uid, detail: '补发：${SchedulerService._fmt(now)}');
+    }
+    
+}

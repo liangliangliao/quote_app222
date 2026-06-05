@@ -1,0 +1,475 @@
+import 'dart:convert';
+
+import 'package:sqflite/sqflite.dart';
+
+import '../data/db.dart';
+import 'todo_models.dart';
+
+class TodoDao {
+  Future<Database> get _db async {
+    final db = await AppDatabase.instance();
+    await ensureTables(db);
+    return db;
+  }
+
+  Future<void> ensureTables([Database? database]) async {
+    final db = database ?? await AppDatabase.instance();
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ms_todo_lists (
+        list_id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        wellknown_list_name TEXT,
+        is_owner INTEGER DEFAULT 0,
+        is_shared INTEGER DEFAULT 0,
+        raw_json TEXT,
+        local_status TEXT DEFAULT 'synced',
+        local_deleted INTEGER DEFAULT 0,
+        synced_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ms_todo_tasks (
+        task_id TEXT PRIMARY KEY,
+        list_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body_text TEXT,
+        body_html TEXT,
+        body_content_type TEXT,
+        status TEXT,
+        importance TEXT,
+        created_date_time TEXT,
+        last_modified_date_time TEXT,
+        due_date_time TEXT,
+        due_time_zone TEXT,
+        reminder_date_time TEXT,
+        reminder_time_zone TEXT,
+        completed_date_time TEXT,
+        has_attachments INTEGER DEFAULT 0,
+        raw_json TEXT,
+        local_status TEXT DEFAULT 'synced',
+        local_deleted INTEGER DEFAULT 0,
+        synced_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ms_todo_task_children (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        list_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        child_type TEXT NOT NULL,
+        child_id TEXT,
+        title TEXT,
+        content TEXT,
+        is_checked INTEGER DEFAULT 0,
+        remote_url TEXT,
+        local_path TEXT,
+        raw_json TEXT,
+        synced_at_ms INTEGER NOT NULL,
+        UNIQUE(task_id, child_type, child_id)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ms_todo_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS external_api_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        endpoint TEXT,
+        method TEXT,
+        request_params TEXT,
+        response_body TEXT,
+        status_code INTEGER,
+        error_message TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_ms_todo_tasks_list ON ms_todo_tasks(list_id, local_deleted, last_modified_date_time DESC)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_ms_todo_child_task ON ms_todo_task_children(task_id)');
+  }
+
+  String newLocalId(String prefix) => 'local_${prefix}_${DateTime.now().microsecondsSinceEpoch}';
+
+  Future<void> addApiLog({
+    required String endpoint,
+    required String method,
+    String? requestParams,
+    String? responseBody,
+    int? statusCode,
+    String? errorMessage,
+  }) async {
+    try {
+      final db = await _db;
+      await db.insert('external_api_logs', {
+        'source': 'todo',
+        'endpoint': endpoint,
+        'method': method,
+        'request_params': _limit(requestParams),
+        'response_body': _limit(responseBody, max: 5000),
+        'status_code': statusCode,
+        'error_message': _limit(errorMessage, max: 2000),
+        'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      });
+    } catch (_) {}
+  }
+
+  Future<List<Map<String, Object?>>> recentApiLogs({int limit = 80}) async {
+    final db = await _db;
+    return db.query('external_api_logs', where: 'source = ?', whereArgs: ['todo'], orderBy: 'id DESC', limit: limit);
+  }
+
+  Future<void> upsertList(Map<String, dynamic> item) async {
+    final db = await _db;
+    final id = (item['id'] ?? item['list_id'] ?? '').toString();
+    if (id.isEmpty) return;
+    await db.insert(
+      'ms_todo_lists',
+      {
+        'list_id': id,
+        'display_name': (item['displayName'] ?? item['display_name'] ?? '未命名任务列表').toString(),
+        'wellknown_list_name': (item['wellknownListName'] ?? item['wellknown_list_name'] ?? '').toString(),
+        'is_owner': _boolToInt(item['isOwner'] ?? item['is_owner']),
+        'is_shared': _boolToInt(item['isShared'] ?? item['is_shared']),
+        'raw_json': jsonEncode(item),
+        'local_status': 'synced',
+        'local_deleted': 0,
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<String> createLocalList(String displayName) async {
+    final db = await _db;
+    final id = newLocalId('todo_list');
+    await db.insert('ms_todo_lists', {
+      'list_id': id,
+      'display_name': displayName.trim().isEmpty ? '未命名任务列表' : displayName.trim(),
+      'wellknown_list_name': '',
+      'is_owner': 1,
+      'is_shared': 0,
+      'raw_json': '{}',
+      'local_status': 'pending_create',
+      'local_deleted': 0,
+      'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
+    return id;
+  }
+
+  Future<void> replaceLocalListId(String oldId, Map<String, dynamic> remote) async {
+    final db = await _db;
+    final newId = (remote['id'] ?? '').toString();
+    if (oldId.isEmpty || newId.isEmpty || oldId == newId) return;
+    await db.transaction((txn) async {
+      await txn.update('ms_todo_tasks', {'list_id': newId}, where: 'list_id = ?', whereArgs: [oldId]);
+      await txn.update('ms_todo_task_children', {'list_id': newId}, where: 'list_id = ?', whereArgs: [oldId]);
+      await txn.delete('ms_todo_lists', where: 'list_id = ?', whereArgs: [oldId]);
+      await txn.insert('ms_todo_lists', {
+        'list_id': newId,
+        'display_name': (remote['displayName'] ?? '未命名任务列表').toString(),
+        'wellknown_list_name': (remote['wellknownListName'] ?? '').toString(),
+        'is_owner': _boolToInt(remote['isOwner']),
+        'is_shared': _boolToInt(remote['isShared']),
+        'raw_json': jsonEncode(remote),
+        'local_status': 'synced',
+        'local_deleted': 0,
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  }
+
+  Future<void> updateLocalList(String listId, String displayName, {String localStatus = 'pending_update'}) async {
+    final db = await _db;
+    await db.update(
+      'ms_todo_lists',
+      {
+        'display_name': displayName.trim().isEmpty ? '未命名任务列表' : displayName.trim(),
+        'local_status': localStatus,
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'list_id = ?',
+      whereArgs: [listId],
+    );
+  }
+
+  Future<void> markListDeleted(String listId, {String localStatus = 'pending_delete'}) async {
+    final db = await _db;
+    await db.update(
+      'ms_todo_lists',
+      {
+        'local_deleted': 1,
+        'local_status': localStatus,
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'list_id = ?',
+      whereArgs: [listId],
+    );
+  }
+
+  Future<void> removeList(String listId) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete('ms_todo_task_children', where: 'list_id = ?', whereArgs: [listId]);
+      await txn.delete('ms_todo_tasks', where: 'list_id = ?', whereArgs: [listId]);
+      await txn.delete('ms_todo_lists', where: 'list_id = ?', whereArgs: [listId]);
+    });
+  }
+
+  Future<void> upsertTask(Map<String, dynamic> item, {required String listId}) async {
+    final db = await _db;
+    final id = (item['id'] ?? item['task_id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final body = item['body'];
+    final due = item['dueDateTime'];
+    final reminder = item['reminderDateTime'];
+    final completed = item['completedDateTime'];
+    await db.insert(
+      'ms_todo_tasks',
+      {
+        'task_id': id,
+        'list_id': listId,
+        'title': (item['title'] ?? '未命名任务').toString(),
+        'body_text': _plainBody(body),
+        'body_html': body is Map ? (body['content'] ?? '').toString() : '',
+        'body_content_type': body is Map ? (body['contentType'] ?? '').toString() : '',
+        'status': (item['status'] ?? 'notStarted').toString(),
+        'importance': (item['importance'] ?? 'normal').toString(),
+        'created_date_time': (item['createdDateTime'] ?? '').toString(),
+        'last_modified_date_time': (item['lastModifiedDateTime'] ?? '').toString(),
+        'due_date_time': due is Map ? (due['dateTime'] ?? '').toString() : '',
+        'due_time_zone': due is Map ? (due['timeZone'] ?? '').toString() : '',
+        'reminder_date_time': reminder is Map ? (reminder['dateTime'] ?? '').toString() : '',
+        'reminder_time_zone': reminder is Map ? (reminder['timeZone'] ?? '').toString() : '',
+        'completed_date_time': completed is Map ? (completed['dateTime'] ?? '').toString() : '',
+        'has_attachments': _boolToInt(item['hasAttachments']),
+        'raw_json': jsonEncode(item),
+        'local_status': 'synced',
+        'local_deleted': 0,
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<String> createLocalTask({
+    required String listId,
+    required String title,
+    required String bodyText,
+    required String status,
+    required String importance,
+    String dueDateTime = '',
+    String dueTimeZone = 'Asia/Shanghai',
+  }) async {
+    final db = await _db;
+    final id = newLocalId('todo_task');
+    final now = DateTime.now().toUtc().toIso8601String();
+    await db.insert('ms_todo_tasks', {
+      'task_id': id,
+      'list_id': listId,
+      'title': title.trim().isEmpty ? '未命名任务' : title.trim(),
+      'body_text': bodyText,
+      'body_html': bodyText,
+      'body_content_type': 'text',
+      'status': status,
+      'importance': importance,
+      'created_date_time': now,
+      'last_modified_date_time': now,
+      'due_date_time': dueDateTime,
+      'due_time_zone': dueTimeZone,
+      'reminder_date_time': '',
+      'reminder_time_zone': '',
+      'completed_date_time': '',
+      'has_attachments': 0,
+      'raw_json': '{}',
+      'local_status': 'pending_create',
+      'local_deleted': 0,
+      'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
+    return id;
+  }
+
+  Future<void> replaceLocalTaskId(String oldId, String listId, Map<String, dynamic> remote) async {
+    final db = await _db;
+    final newId = (remote['id'] ?? '').toString();
+    if (oldId.isEmpty || newId.isEmpty || oldId == newId) return;
+    await db.transaction((txn) async {
+      await txn.update('ms_todo_task_children', {'task_id': newId}, where: 'task_id = ?', whereArgs: [oldId]);
+      await txn.delete('ms_todo_tasks', where: 'task_id = ?', whereArgs: [oldId]);
+    });
+    await upsertTask(remote, listId: listId);
+  }
+
+  Future<void> updateLocalTask({
+    required String taskId,
+    required String title,
+    required String bodyText,
+    required String status,
+    required String importance,
+    required String dueDateTime,
+    required String dueTimeZone,
+    String localStatus = 'pending_update',
+  }) async {
+    final db = await _db;
+    await db.update(
+      'ms_todo_tasks',
+      {
+        'title': title.trim().isEmpty ? '未命名任务' : title.trim(),
+        'body_text': bodyText,
+        'body_html': bodyText,
+        'body_content_type': 'text',
+        'status': status,
+        'importance': importance,
+        'due_date_time': dueDateTime,
+        'due_time_zone': dueTimeZone,
+        'local_status': localStatus,
+        'last_modified_date_time': DateTime.now().toUtc().toIso8601String(),
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'task_id = ?',
+      whereArgs: [taskId],
+    );
+  }
+
+  Future<void> markTaskDeleted(String taskId, {String localStatus = 'pending_delete'}) async {
+    final db = await _db;
+    await db.update(
+      'ms_todo_tasks',
+      {
+        'local_deleted': 1,
+        'local_status': localStatus,
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'task_id = ?',
+      whereArgs: [taskId],
+    );
+  }
+
+  Future<void> removeTask(String taskId) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete('ms_todo_task_children', where: 'task_id = ?', whereArgs: [taskId]);
+      await txn.delete('ms_todo_tasks', where: 'task_id = ?', whereArgs: [taskId]);
+    });
+  }
+
+  Future<void> replaceChildren({required String listId, required String taskId, required String childType, required List<Map<String, dynamic>> rows}) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.delete('ms_todo_task_children', where: 'task_id = ? AND child_type = ?', whereArgs: [taskId, childType]);
+      for (final row in rows) {
+        final childId = (row['id'] ?? '').toString();
+        String title = (row['displayName'] ?? row['subject'] ?? row['title'] ?? row['name'] ?? '').toString();
+        String content = (row['content'] ?? row['webUrl'] ?? row['applicationName'] ?? '').toString();
+        String remoteUrl = (row['contentUrl'] ?? row['webUrl'] ?? row['externalLink'] ?? '').toString();
+        final checked = row['isChecked'] == true || (row['checkedDateTime'] != null && row['checkedDateTime'].toString().isNotEmpty);
+        await txn.insert('ms_todo_task_children', {
+          'list_id': listId,
+          'task_id': taskId,
+          'child_type': childType,
+          'child_id': childId,
+          'title': title,
+          'content': content,
+          'is_checked': checked ? 1 : 0,
+          'remote_url': remoteUrl,
+          'local_path': '',
+          'raw_json': jsonEncode(row),
+          'synced_at_ms': now,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
+
+  Future<List<TodoListRecord>> listLists({bool includeDeleted = false}) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT l.*,
+             (SELECT COUNT(*) FROM ms_todo_tasks t WHERE t.list_id = l.list_id AND t.local_deleted = 0) AS task_count,
+             (SELECT COUNT(*) FROM ms_todo_tasks t WHERE t.list_id = l.list_id AND t.local_deleted = 0 AND t.status != 'completed') AS open_task_count,
+             (SELECT COUNT(*) FROM ms_todo_tasks t WHERE t.list_id = l.list_id AND t.local_deleted = 0 AND t.status = 'completed') AS completed_task_count
+      FROM ms_todo_lists l
+      ${includeDeleted ? '' : 'WHERE l.local_deleted = 0'}
+      ORDER BY l.wellknown_list_name DESC, l.display_name ASC
+    ''');
+    return rows.map(TodoListRecord.fromMap).toList();
+  }
+
+  Future<TodoListRecord?> getList(String listId) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT l.*,
+             (SELECT COUNT(*) FROM ms_todo_tasks t WHERE t.list_id = l.list_id AND t.local_deleted = 0) AS task_count,
+             (SELECT COUNT(*) FROM ms_todo_tasks t WHERE t.list_id = l.list_id AND t.local_deleted = 0 AND t.status != 'completed') AS open_task_count,
+             (SELECT COUNT(*) FROM ms_todo_tasks t WHERE t.list_id = l.list_id AND t.local_deleted = 0 AND t.status = 'completed') AS completed_task_count
+      FROM ms_todo_lists l WHERE l.list_id = ? LIMIT 1
+    ''', [listId]);
+    if (rows.isEmpty) return null;
+    return TodoListRecord.fromMap(rows.first);
+  }
+
+  Future<List<TodoTaskRecord>> listTasks(String listId, {String filter = 'all', int limit = 50, int offset = 0}) async {
+    final db = await _db;
+    var where = 't.list_id = ? AND t.local_deleted = 0';
+    final args = <Object?>[listId];
+    if (filter == 'open') where += " AND t.status != 'completed'";
+    if (filter == 'completed') where += " AND t.status = 'completed'";
+    final rows = await db.rawQuery('''
+      SELECT t.*,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'checklistItem') AS checklist_count,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'attachment') AS attachment_count,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'linkedResource') AS linked_resource_count
+      FROM ms_todo_tasks t
+      WHERE $where
+      ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, t.due_date_time ASC, t.last_modified_date_time DESC
+      LIMIT ? OFFSET ?
+    ''', [...args, limit, offset]);
+    return rows.map(TodoTaskRecord.fromMap).toList();
+  }
+
+  Future<TodoTaskRecord?> getTask(String taskId) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT t.*,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'checklistItem') AS checklist_count,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'attachment') AS attachment_count,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'linkedResource') AS linked_resource_count
+      FROM ms_todo_tasks t WHERE t.task_id = ? LIMIT 1
+    ''', [taskId]);
+    if (rows.isEmpty) return null;
+    return TodoTaskRecord.fromMap(rows.first);
+  }
+
+  Future<List<TodoChildRecord>> listChildren(String taskId, String type) async {
+    final db = await _db;
+    final rows = await db.query(
+      'ms_todo_task_children',
+      where: 'task_id = ? AND child_type = ?',
+      whereArgs: [taskId, type],
+      orderBy: 'id ASC',
+    );
+    return rows.map(TodoChildRecord.fromMap).toList();
+  }
+
+  String _plainBody(Object? body) {
+    if (body is! Map) return '';
+    final raw = (body['content'] ?? '').toString();
+    var s = raw.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    s = s.replaceAll(RegExp(r'</(p|div|li)>', caseSensitive: false), '\n');
+    s = s.replaceAll(RegExp(r'<[^>]+>'), ' ');
+    s = s.replaceAll('&nbsp;', ' ').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>');
+    s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return s;
+  }
+
+  int _boolToInt(Object? v) => v == true || v == 1 || v?.toString() == 'true' ? 1 : 0;
+
+  String _limit(String? s, {int max = 1200}) {
+    if (s == null) return '';
+    if (s.length <= max) return s;
+    return '${s.substring(0, max)}...(truncated)';
+  }
+}

@@ -1,0 +1,42 @@
+人生注解功能落地说明
+
+本补丁新增“人生注解：AI 经历解读与疗愈书单”功能，集成位置为首页左侧菜单栏。
+
+主要改动：
+1. 新增 lib/life_note_module/life_note_home_page.dart
+   - 用户输入个人生活体验、感受或人生经历。
+   - 支持情绪标签与场景标签辅助分析。
+   - 展示 AI 深度注解报告：我听见了什么、主要情绪、核心主题、深层需求、模式解释、温柔重述、理论提升、相关思想、治愈书籍、探索问题和小练习。
+   - 页面顶部展示当前设置页通用 AI 模型状态。
+   - 页面右上角可直接进入人生注解提示词配置项。
+
+2. 新增 lib/life_note_module/life_note_ai_service.dart
+   - 复用 UnifiedAiService.generateText。
+   - 不单独配置模型，完全采用设置页 GlobalAiSettings 的通用 AI Provider / API Key / Model。
+   - 以 expectJson=true 请求结构化 JSON 输出。
+
+3. 新增 lib/life_note_module/life_note_models.dart
+   - 定义 LifeNoteReport、LifeThoughtMatch、LifeBookRecommendation。
+   - 对 AI 返回 JSON 做容错解析与 UI 友好映射。
+
+4. 修改 lib/main.dart
+   - 首页左侧菜单栏新增“人生注解”入口。
+
+5. 修改 lib/services/global_ai_settings.dart
+   - 新增 life_note_analysis_promptKey。
+   - 新增 defaultLifeNoteAnalysisPrompt。
+   - 新增 get/save/inspect LifeNoteAnalysisPrompt 方法。
+
+6. 修改 lib/pages/ai_prompt_settings_page.dart
+   - AI 提示词统一配置中心新增“人生注解”模块。
+   - 新增“经历深度注解与疗愈书单提示词”配置项。
+   - 支持占位符：{{user_experience}}、{{selected_emotions}}、{{scene_tags}}、{{life_note_input_json}}。
+
+7. 修改 lib/pages/settings_page.dart
+   - AI 提示词统一配置中心说明加入“人生注解”。
+
+注意：
+当前容器没有 Flutter/Dart SDK，无法执行 flutter analyze 或真机构建；已完成源码层面的结构检查与括号匹配检查。建议在本地执行：
+flutter pub get
+flutter analyze
+flutter run

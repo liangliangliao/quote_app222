@@ -1,0 +1,93 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:ns1="http://schemas.android.com/tools" package="com.example.quote_app">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+        <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Location permissions needed for geo triggers -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<application android:name=".App" android:roundIcon="@mipmap/ic_launcher_round" android:label="名人名言" android:icon="@mipmap/ic_launcher" android:usesCleartextTraffic="true">
+        <!-- 强制 Geolocator 在 Android 使用原生 LocationManager（规避GMS/Fused依赖） -->
+<meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />
+                <service
+            android:name=".ScreenGatekeeperService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+<activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
+            <intent-filter>
+                <action android:name="FLUTTER_NOTIFICATION_CLICK"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/AppTheme" />
+        </activity>
+            <meta-data android:name="flutterEmbedding" android:value="2" />
+
+    
+    <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        </intent-filter>
+        <intent-filter>
+      <action android:name="com.example.quote_app.ALARM" />
+    </intent-filter>
+  </receiver>
+    <receiver android:name=".AlarmReceiver" android:exported="true">
+        <intent-filter>
+            <action android:name="ALARM_FIRE" />
+        </intent-filter>
+    </receiver>
+    <!-- Receiver to handle device unlock events and trigger vision reminders.
+         Android 8+ limits certain implicit broadcasts (USER_PRESENT) when the app is in the background.
+         To improve reliability we also listen for USER_UNLOCKED. -->
+    <!-- UnlockReceiver is kept for in-process delegation only.
+         System will not deliver implicit USER_PRESENT/SCREEN_ON broadcasts
+         directly to this receiver; instead ScreenGatekeeperService registers
+         its own dynamic receiver and calls into UnlockReceiver as needed. -->
+        <receiver android:name=".UnlockReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <!-- Intent-filter kept for documentation only; it is ignored while
+                 the receiver is disabled. Unlock events are handled via the
+                 foreground service. -->
+            <intent-filter>
+                <!-- 只监听解锁屏幕广播 USER_PRESENT，避免与其他广播/监听重复触发 -->
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+                <action android:name="android.intent.action.SCREEN_ON" />
+            </intent-filter>
+        </receiver>
+    <receiver android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver" android:enabled="false" android:exported="false" ns1:replace="android:enabled">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        <action android:name="android.intent.action.LOCALE_CHANGED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+
+    
+
+        
+        <receiver android:name=".am.AlarmReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.quote_app.ALARM" />
+            </intent-filter>
+        </receiver>
+
+
+        <receiver android:name=".am.KickAlarmReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.quote_app.action.KICK_ALARM" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

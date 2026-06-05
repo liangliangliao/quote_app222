@@ -1,0 +1,195 @@
+--- lib/services/scheduler_service.dart (orig)
++++ lib/services/scheduler_service.dart (modified)
+@@ -106,10 +106,11 @@
+     if (trows.isEmpty) return;
+     final t = trows.first;
+      // 跨通道幂等：谁先执行谁赢
+     if (!await RunGuard.begin(taskUid, runKey, source: 'WM')) return;
+     await _sendForTask(t, runKey: runKey, source: 'WM');
++    await SchedulerService.scheduleNextForTask(taskUid);
+   }
+ /// 初始化调度：初始化 WorkManager，并在无精确闹钟权限时注册 15 分钟兜底任务。
+   static Future<void> init() async {
+     await DLog.i('SCH', 'init start');
+     final hasExact = await PermHelper.hasExactAlarmPermission();
+@@ -195,10 +196,61 @@
+         await DLog.i('SCH', '已注册WM oneOff uid='+uid+' run='+runKey);
+       }
+       }
+     }
+ 
++  /// 只为指定任务安排下一次触发；不影响其他任务。
++  static Future<void> scheduleNextForTask(String uid) async {
++    final db = await AppDatabase.instance();
++    final trows = await db.query('tasks', where: 'task_uid=?', whereArgs: [uid], limit: 1);
++    if (trows.isEmpty) return;
++    final t = trows.first;
++
++    final status = (t['status'] ?? 'on').toString();
++    if (status != 'on' && status != 'active') {
++      await cancelNextForTask(uid);
++      return;
++    }
++
++    final next = _computeNext(t);
++    if (next == null) {
++      await cancelNextForTask(uid);
++      return;
++    }
++
++    // 即时窗口（±5 秒）直接发送
++    final diffSecs = next.difference(DateTime.now()).inSeconds;
++    if (diffSecs.abs() <= 5) {
++      await _sendForTask(t, runKey: _runKeyForPlanned(next), source: 'INSTANT');
++      await LogDao().add(taskUid: uid, detail: '即时触发：${_fmt(DateTime.now())}');
++      return;
++    }
++
++    // 把“下一次”写回任务
++    await db.update('tasks', {'start_time': _fmt(next)}, where: 'task_uid=?', whereArgs: [uid]);
++
++    // 精确权限优先走 AM，否则走 WM one‑off
++    if (await PermHelper.hasExactAlarmPermission()) {
++      final runKey = _runKeyForPlanned(next);
++      if (next.isBefore(DateTime.now()) && DateTime.now().difference(next) <= kExactGrace) {
++        await cancelNextForTask(uid);
++        await _scheduleWmOneOff('next_'+uid, {'job':'wm_run','task_uid': uid, 'run_key': runKey}, Duration.zero);
++        await DLog.w('SCH','已过期≤2分钟，用WM立即执行 uid='+uid+' runKey='+runKey);
++      } else {
++        await AndroidAlarmManager.oneShotAt(
++          next, _nextAlarmId(uid), alarmCallback,
++          exact: true, allowWhileIdle: true, wakeup: true, rescheduleOnReboot: true);
++        await DLog.i('SCH', '已注册AM uid='+uid+' @'+_fmt(next));
++      }
++    } else {
++      final runKey = _runKeyForPlanned(next);
++      await _scheduleWmOneOff('next_'+uid, {'job':'wm_run','task_uid': uid, 'run_key': runKey}, Duration.zero);
++      await DLog.i('SCH', '无精确权限，注册WM uid='+uid);
++    }
++  }
++
++
+   /// 被闹钟或兜底调用：检查到期任务并发送通知。
+   static Future<void> callback() async {
+     await _logEnter('回调环节');
+     final db = await AppDatabase.instance();
+     final now = DateTime.now();
+@@ -226,10 +278,11 @@
+         // recent duplicate guard (5 min)
+         final fiveMinAgo = now.subtract(const Duration(minutes: 5)).millisecondsSinceEpoch;
+         final recent = await db.query('logs', where: 'task_uid=? AND detail LIKE ? AND created_at > ?', whereArgs: [uid, '触发:%', fiveMinAgo], limit: 1);
+         if (recent.isNotEmpty) { await DLog.i('CB', 'skip recent uid=$uid'); continue; }
+         await _sendForTask(t, runKey: _runKeyForPlanned(planned), source: (RunContext.isFromWM ? 'WM' : 'AM'));
++        await SchedulerService.scheduleNextForTask(uid);
+         await LogDao().add(taskUid: uid, detail: '触发：${_fmt(now)}');
+       }
+       else {
+         await DLog.i('CB', '跳过：超出容忍窗口，uid=$uid delta=$delta');
+       }
+@@ -531,11 +584,11 @@
+   await NotificationService.init();
+   await AppDatabase.instance();
+   await SchedulerService.callback();
+   await SchedulerService.catchupIfMissed();
+   
+-  await SchedulerService.scheduleNextForAll();
++  // removed: per‑task reschedule now handled in callback()
+ }
+ 
+ /// 当天漏发补发（所有任务类型，仅补一次）
+ Future<void> _catchupIfMissed() async {
+   final db = await AppDatabase.instance();
+
+
+--- lib/services/wm_dispatcher.dart (orig)
++++ lib/services/wm_dispatcher.dart (modified)
+@@ -21,19 +21,19 @@
+ 
+       if (task == 'bg_selfcheck') {
+         await DLog.i('WM', "调度任务=bg_selfcheck data="+(inputData??{}).toString());
+         await SchedulerService.catchupIfMissed();
+         await SchedulerService.callback();
+-        await SchedulerService.scheduleNextForAll();
++        // removed: now per‑task reschedule handled inside SchedulerService
+         await BackgroundTasks.registerSelfCheck();
+         return Future.value(true);
+       }
+ 
+       if (task == 'due_check_periodic') {
+         await DLog.i('WM', "调度任务=due_check_periodic");
+         await SchedulerService.catchupIfMissed();
+-        await SchedulerService.scheduleNextForAll();
++        // removed: now per‑task reschedule handled inside SchedulerService
+         return Future.value(true);
+       }
+ 
+       if (task == 'wm_run' || task == 'wm_fallback') {
+         final uid = (inputData?['task_uid'] ?? '').toString();
+
+
+--- lib/pages/settings_page.dart (orig)
++++ lib/pages/settings_page.dart (modified)
+@@ -299,12 +299,11 @@
+             actions: [
+               if (isEdit)
+                 TextButton(
+                   onPressed: () async {
+                     await SchedulerService.cancelNextForTask(task!['task_uid'] as String);
+-                    await SchedulerService.cancelForTask(task!['task_uid'] as String);
+-                    await _taskDao.delete(task!['task_uid'] as String);
++                                        await _taskDao.delete(task!['task_uid'] as String);
+                     showToast('已删除任务');
+                     await _load();
+                     if (context.mounted) Navigator.pop(context);
+                   },
+                   child: const Text('删除'),
+@@ -333,15 +332,14 @@
+                       'start_time': _fmt(computeNext(DateTime.now())),
+                       'freq_custom': freqCustomJson,
+                     };
+                     await _taskDao.update(task!['task_uid'] as String, patch);
+                       await SchedulerService.cancelNextForTask(task['task_uid'] as String);
+-                      await SchedulerService.cancelForTask(task['task_uid'] as String);
+-
++                      
+                       await _reloadTasksAfterSave();
+ 
+-                      await SchedulerService.scheduleNextForAll();
++                      await SchedulerService.scheduleNextForTask(task!['task_uid'] as String);
+                     
+ if (type == 'manual') {
+                       final content = manualQuote.trim();
+                       if (content.isNotEmpty) {
+                         final ok = await QuoteDao().updateLatestForTask(task['task_uid'] as String, content);
+@@ -383,11 +381,11 @@
+                         );
+                       }
+                     }
+                   }
+ 
+-                  await SchedulerService.scheduleNextForAll();
++                  await SchedulerService.scheduleNextForTask(task!['task_uid'] as String);
+                   await _load();
+                   showToast('已保存');
+                   if (context.mounted) Navigator.pop(context);
+                 },
+                 child: const Text('保存'),
+
+
+--- lib/main.dart (orig)
++++ lib/main.dart (modified)
+@@ -35,11 +35,11 @@
+       if (alarmId != null) { try { await AndroidAlarmManager.cancel(alarmId); } catch (_) {} }
+       if (wmUnique != null && wmUnique.isNotEmpty) { try { await Workmanager().cancelByUniqueName(wmUnique); } catch (_) {} }
+     }
+     await db.delete('pending_run');
+   } catch (_) {}
+-  try { await Workmanager().cancelAll(); } catch (_) {}
++  
+ 
+   await AndroidAlarmManager.initialize();
+   await Workmanager().initialize(workmanagerCallbackDispatcher, isInDebugMode: true);
+ 
+   await DLog.i('SCH', 'init start (from main)');
+
+

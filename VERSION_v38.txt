@@ -1,0 +1,2 @@
+v38
+Fixed scene detail endless spinner by making world-scene loading fault-tolerant and surfacing partial-load warnings.

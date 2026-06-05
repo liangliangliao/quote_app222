@@ -1,0 +1,4055 @@
+{
+  "version": 1,
+  "configs": [
+    {
+      "lesson_id": "ZX-01",
+      "title": "我都知道",
+      "world": "书院·现实任务大厅",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你面对一件拖延很久但明知应做的事。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“知道很多却总不做”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“知而不行只是未知”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“知道很多却总不做”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“知而不行只是未知 / 知是行之始”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天哪件事我其实并没有真知道？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“把一句“我知道”改写成今天5分钟动作”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我最常用什么理由把知道伪装成完成？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“今天至少执行一个拖延任务的最小起步”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 我都知道 的操练里，你不只做了较好的选择，还把“知而不行只是未知”真正带回了现实。接下来重点不是继续空想，而是把“把一句“我知道”改写成今天5分钟动作”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“知道很多却总不做 / 把理解误当成完成”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“今天至少执行一个拖延任务的最小起步”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“把一句“我知道”改写成今天5分钟动作”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-02",
+      "title": "下手处",
+      "world": "书院·课程树",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "眼前同时出现高境界词汇与一件具体事务。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“总想一步到位”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“工夫要有下手处”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“总想一步到位”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“工夫要有下手处 / 本体与工夫要分层理解”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我最近是否在拿高目标逃避低处下手？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“今天只选一个现实场景做工夫”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“今天我的本原下手处是什么？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“把“彻底改变”降成一个行为守持”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 下手处 的操练里，你不只做了较好的选择，还把“工夫要有下手处”真正带回了现实。接下来重点不是继续空想，而是把“今天只选一个现实场景做工夫”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“总想一步到位 / 高目标替代现实下手”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“把“彻底改变”降成一个行为守持”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“今天只选一个现实场景做工夫”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-03",
+      "title": "不是两门课",
+      "world": "书院·学习塔",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你可以一直停在学习塔，也可以学一点就进入行动场。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“先学完再做”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“圣学只一个功夫”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“先学完再做”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“圣学只一个功夫 / 学习与实践不可割裂”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天哪次学习自然带出了行动？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“每学一段立即绑定一个现实动作”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我是否仍把知与行当成两个阶段？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“禁止出现“先学完再说””",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 不是两门课 的操练里，你不只做了较好的选择，还把“圣学只一个功夫”真正带回了现实。接下来重点不是继续空想，而是把“每学一段立即绑定一个现实动作”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“先学完再做 / 课程与生活分家”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“禁止出现“先学完再说””。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“每学一段立即绑定一个现实动作”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-04",
+      "title": "念起之时",
+      "world": "心念秘境",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "瞬时念头不断闪现：逃避、比较、拖延。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“以为想想不算”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“意念发动就是行之始”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“以为想想不算”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“意念发动就是行之始 / 亲历才能完成真知”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天最值得警惕的一念是什么？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“记录3次念头刚起的时刻”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我是否还把“还没做”当作免责理由？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“把“准备做”改成“现在做第一步””",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 念起之时 的操练里，你不只做了较好的选择，还把“意念发动就是行之始”真正带回了现实。接下来重点不是继续空想，而是把“记录3次念头刚起的时刻”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“以为想想不算 / 低估起心动念”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“把“准备做”改成“现在做第一步””。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“记录3次念头刚起的时刻”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-05",
+      "title": "你真的相信吗",
+      "world": "价值镜厅",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "系统展示你常说的原则，并安排压力测试。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“价值原则停在口头”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“知之真切笃实处即是行”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“价值原则停在口头”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“知之真切笃实处即是行 / 理不外吾心”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“哪条原则在真实压力下最容易失效？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“选择一句最常说的原则，今天行为兑现一次”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我讲得最多、活得最少的道理是什么？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“写下最常说但最少做的一句话”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 你真的相信吗 的操练里，你不只做了较好的选择，还把“知之真切笃实处即是行”真正带回了现实。接下来重点不是继续空想，而是把“选择一句最常说的原则，今天行为兑现一次”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“价值原则停在口头 / 说一套做一套”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“写下最常说但最少做的一句话”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“选择一句最常说的原则，今天行为兑现一次”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-06",
+      "title": "永远在准备",
+      "world": "方法迷宫",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你持续收到更多资料、更多比较、更多准备建议。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“讨论代替实践”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“问思辨也在行中”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“讨论代替实践”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“问思辨也在行中 / 学若不行不成其学”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我今天哪次思考其实只是延迟行动？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“把一个正在研究的主题变成实际验证”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我是否把问思辨变成了逃避现实的外衣？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“为每个新知识建立验证场景”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 永远在准备 的操练里，你不只做了较好的选择，还把“问思辨也在行中”真正带回了现实。接下来重点不是继续空想，而是把“把一个正在研究的主题变成实际验证”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“讨论代替实践 / 分析包装拖延”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“为每个新知识建立验证场景”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“把一个正在研究的主题变成实际验证”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-07",
+      "title": "你的物在哪里",
+      "world": "事务地图",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "抽象成长按钮和具体现实事务同时摆在你面前。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“只想改观念不肯进事情”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“意之所在便是物”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“只想改观念不肯进事情”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“意之所在便是物 / 格物在具体事务中展开”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天哪件现实事务就是我该格的物？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“写下今天真正该格的“物””",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我是否还在逃向空泛自我感动？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“不再空谈改变，直接挑一件具体事务”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 你的物在哪里 的操练里，你不只做了较好的选择，还把“意之所在便是物”真正带回了现实。接下来重点不是继续空想，而是把“写下今天真正该格的“物””落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“只想改观念不肯进事情 / 抽象成长逃避现实处理”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“不再空谈改变，直接挑一件具体事务”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“写下今天真正该格的“物””，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-08",
+      "title": "复杂局面",
+      "world": "城市治理",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "一个没有完美答案的高压事件突然发生。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“一复杂就失去判断”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“良知是复杂情境的尺度”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“一复杂就失去判断”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“良知是复杂情境的尺度 / 不行不可以为致知”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天我是否借复杂性拖延决断？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“先写一句当前第一原则”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我此刻真正的准绳是什么？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“在有限条件下做一件最好决策”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 复杂局面 的操练里，你不只做了较好的选择，还把“良知是复杂情境的尺度”真正带回了现实。接下来重点不是继续空想，而是把“先写一句当前第一原则”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“一复杂就失去判断 / 借复杂性拖延决策”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“在有限条件下做一件最好决策”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“先写一句当前第一原则”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-09",
+      "title": "知识洪流",
+      "world": "信息市集",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "课程、观点、案例在你眼前不断涌入。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“信息越多心越散”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“多闻多见是第二义”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“信息越多心越散”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“多闻多见是第二义 / 见闻要服从致良知”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天摄入的知识，哪一条真正改变了行为？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“今天减少一半输入，只保留一个执行点”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我是否把见闻积累当成成长本身？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“输入后必须输出或行动”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 知识洪流 的操练里，你不只做了较好的选择，还把“多闻多见是第二义”真正带回了现实。接下来重点不是继续空想，而是把“今天减少一半输入，只保留一个执行点”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“信息越多心越散 / 把见闻积累当成长本身”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“输入后必须输出或行动”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“今天减少一半输入，只保留一个执行点”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-10",
+      "title": "本体未坏",
+      "world": "修炼场·挫败区",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你连续几次训练失败，系统弹出“也许你根本不适合”。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“因失败否定自己”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“本体上人人有良知”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“因失败否定自己”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“本体上人人有良知 / 工夫上有深浅难易”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天我在哪件事上因失败误判了自己？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“把“我不行”改写成“我还在困知勉行””",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我需要的是否定自己，还是加深工夫？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“缩小动作重新训练”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 本体未坏 的操练里，你不只做了较好的选择，还把“本体上人人有良知”真正带回了现实。接下来重点不是继续空想，而是把“把“我不行”改写成“我还在困知勉行””落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“因失败否定自己 / 把工夫困难误判成本体无能”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“缩小动作重新训练”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“把“我不行”改写成“我还在困知勉行””，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-11",
+      "title": "不离不滞",
+      "world": "社交回廊",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "评价、互动、反馈持续袭来。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“被外界带跑”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“良知不离见闻也不滞于见闻”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“被外界带跑”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“良知不离见闻也不滞于见闻 / 互动中也要回心判断”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天我在哪个场景里被外界带跑了？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“在一次互动中记录自己如何没有被带走”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我有没有误把外部信息当成内在准则？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“不把外界刺激直接等于真相”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 不离不滞 的操练里，你不只做了较好的选择，还把“良知不离见闻也不滞于见闻”真正带回了现实。接下来重点不是继续空想，而是把“在一次互动中记录自己如何没有被带走”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“被外界带跑 / 逃进内在玄想”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“不把外界刺激直接等于真相”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“在一次互动中记录自己如何没有被带走”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-12",
+      "title": "方萌",
+      "world": "方萌室",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "嫉妒、怨、饰非、推责等念头在心里刚刚冒头。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“只做事后补救”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“一念发动处便即是行”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“只做事后补救”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“一念发动处便即是行 / 恶念要在方萌时克治”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天哪一念若不及时处理会酿成更大问题？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“记录一个本来可以在起念时就拦住的瞬间”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我最常在哪类起念上放过自己？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“设计一条拦截句和替代动作”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 方萌 的操练里，你不只做了较好的选择，还把“一念发动处便即是行”真正带回了现实。接下来重点不是继续空想，而是把“记录一个本来可以在起念时就拦住的瞬间”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“只做事后补救 / 纵容不善念潜伏”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“设计一条拦截句和替代动作”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“记录一个本来可以在起念时就拦住的瞬间”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-13",
+      "title": "笨功夫",
+      "world": "重复训练场",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "守时、记录、沟通、反思这些基础动作需要反复训练。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“想一步到位”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“自然来自熟练工夫”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“想一步到位”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“自然来自熟练工夫 / 知行都需笨功夫”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我今天最抗拒的笨功夫是什么？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“选择一个最基础的动作连续练7天”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我是不是总想跳过训练直接成熟？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“记录本周最有价值的一次笨功夫”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 笨功夫 的操练里，你不只做了较好的选择，还把“自然来自熟练工夫”真正带回了现实。接下来重点不是继续空想，而是把“选择一个最基础的动作连续练7天”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“想一步到位 / 抗拒重复训练”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“记录本周最有价值的一次笨功夫”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“选择一个最基础的动作连续练7天”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-14",
+      "title": "触动之后",
+      "world": "洞见长廊",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你不断获得“深受启发”的时刻。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“深受启发却不行动”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“难不在知，在致”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“深受启发却不行动”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“难不在知，在致 / 被触动不等于已经改变”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天“明白了”的事情里，有哪件真正致出来了？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“任何让你有触动的点，都绑定一个现实动作”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我逃避的是不知道，还是落实的代价？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“把认同感受变成代价明确的行动”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 触动之后 的操练里，你不只做了较好的选择，还把“难不在知，在致”真正带回了现实。接下来重点不是继续空想，而是把“任何让你有触动的点，都绑定一个现实动作”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“深受启发却不行动 / 浅层认知感动很多”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“把认同感受变成代价明确的行动”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“任何让你有触动的点，都绑定一个现实动作”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "ZX-15",
+      "title": "守",
+      "world": "守持回廊",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你已经懂了原则，但要连续多天把它守住。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“理解不差但守不住”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“博学、笃行、知及、仁守是一条工夫”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“理解不差但守不住”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“博学、笃行、知及、仁守是一条工夫 / 关键在守”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我本周最需要提升的是理解，还是守持？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“选一个最小原则连续守7天”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我通常在哪个节点开始松掉？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“中断后当天重启”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "知行已接上",
+          "diagnosis": "这次 守 的操练里，你不只做了较好的选择，还把“博学、笃行、知及、仁守是一条工夫”真正带回了现实。接下来重点不是继续空想，而是把“选一个最小原则连续守7天”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "已看见，但还不稳",
+          "diagnosis": "你已经能识别自己更像卡在“理解不差但守不住 / 一时热情高后面就散”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“中断后当天重启”。"
+        },
+        "low": {
+          "route_tag": "仍在自动路径里",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“选一个最小原则连续守7天”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-01",
+      "title": "志是什么",
+      "world": "志向大厅",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "成功、地位、认可、自由与存天理同时出现在你面前。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“目标很多方向很乱”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“立志是内在定向”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“目标很多方向很乱”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“立志是内在定向 / 念念存天理即是立志”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我今天追逐的是结果，还是方向？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“写一句当前最重要的内在方向”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我的志到底是内在原则，还是外部想要？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“删掉一个不服务于主志的目标”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 志是什么 的操练里，你不只做了较好的选择，还把“立志是内在定向”真正带回了现实。接下来重点不是继续空想，而是把“写一句当前最重要的内在方向”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“目标很多方向很乱 / 把立志误成成功规划”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“删掉一个不服务于主志的目标”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“写一句当前最重要的内在方向”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-02",
+      "title": "心痛",
+      "world": "分心风暴",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "通知、闲事、社交邀请不断涌入，你只有有限精力。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“重要的事总被次要事挤掉”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“持志如心痛”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“重要的事总被次要事挤掉”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“持志如心痛 / 真正重要的事要进入注意力中心”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天我最重要的事被什么轻易打断了？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“给主志安排30分钟绝对不被打断时间”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我真的像心痛一样在意自己的志吗？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“把次要事后移”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 心痛 的操练里，你不只做了较好的选择，还把“持志如心痛”真正带回了现实。接下来重点不是继续空想，而是把“给主志安排30分钟绝对不被打断时间”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“重要的事总被次要事挤掉 / 口头重视不够真切”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“把次要事后移”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“给主志安排30分钟绝对不被打断时间”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-03",
+      "title": "种树",
+      "world": "培根园",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你经营一棵树，可以培根，也可以不断查看是否开花。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“急于求成”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“立志用功如种树”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“急于求成”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“立志用功如种树 / 先根后枝叶花果”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我最近最想看见结果的地方，是不是正该回到根上？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“接下来7天只做基础动作不评价结果”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“今天我做的是枝叶工程还是根部工夫？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“今天只做“浇水”不做结果想象”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 种树 的操练里，你不只做了较好的选择，还把“立志用功如种树”真正带回了现实。接下来重点不是继续空想，而是把“接下来7天只做基础动作不评价结果”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“急于求成 / 总盯结果不肯扎根”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“今天只做“浇水”不做结果想象”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“接下来7天只做基础动作不评价结果”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-04",
+      "title": "护住善念",
+      "world": "善芽庭院",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "道歉、感谢、承担、节制等善念不断在你心里生起。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“善念一来就拖延”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“长立此善念而已”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“善念一来就拖延”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“长立此善念而已 / 善念出现时要护住根芽”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天哪一念善我没有护住？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“善念一起立刻执行第一步”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我有没有在善念之外加太多自我表演？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“每天记录一念善及其落实情况”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 护住善念 的操练里，你不只做了较好的选择，还把“长立此善念而已”真正带回了现实。接下来重点不是继续空想，而是把“善念一起立刻执行第一步”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“善念一来就拖延 / 在善念外加太多戏”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“每天记录一念善及其落实情况”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“善念一起立刻执行第一步”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-05",
+      "title": "你不是不知道",
+      "world": "真实回廊",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "系统回放你反复说“还不确定”的场景。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“总说还没想清楚”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“总是志未切”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“总说还没想清楚”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“总是志未切 / 不是理不明，多半是志不真”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我今天哪件事不是不明白，而是不够切？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“写一件其实早知道却没面对的事”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我最常用哪种“还没想清楚”来掩盖逃避？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“把“还没想明白”改成一个动作”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 你不是不知道 的操练里，你不只做了较好的选择，还把“总是志未切”真正带回了现实。接下来重点不是继续空想，而是把“写一件其实早知道却没面对的事”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“总说还没想清楚 / 以不确定掩盖不承担”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“把“还没想明白”改成一个动作”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“写一件其实早知道却没面对的事”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-06",
+      "title": "删枝",
+      "world": "主干森林",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "成长树不断长出诱人支线，你的主干在变弱。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“主轴弱而支线太多”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“立志贵专一”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“主轴弱而支线太多”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“立志贵专一 / 外好会漏泄精神”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我今天最典型的外好是什么？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“本周砍掉一个分心源”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“哪一件事最该成为我当前唯一主轴？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“每天固定一段主志时间块”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 删枝 的操练里，你不只做了较好的选择，还把“立志贵专一”真正带回了现实。接下来重点不是继续空想，而是把“本周砍掉一个分心源”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“主轴弱而支线太多 / 忙得很满却没真正推进”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“每天固定一段主志时间块”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“本周砍掉一个分心源”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-07",
+      "title": "离群之后",
+      "world": "独行坡",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "导师与同伴全部退场，只剩你自己。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“离开监督就松”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“为学紧要大头脑只是立志”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“离开监督就松”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“为学紧要大头脑只是立志 / 修养最终不能外包”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天哪些努力是靠外部推着走？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“今天独立完成一项修养任务”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“如果没人提醒，我还愿意坚持什么？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“建立个人晚间自检机制”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 离群之后 的操练里，你不只做了较好的选择，还把“为学紧要大头脑只是立志”真正带回了现实。接下来重点不是继续空想，而是把“今天独立完成一项修养任务”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“离开监督就松 / 靠群体和提醒维持”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“建立个人晚间自检机制”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“今天独立完成一项修养任务”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-08",
+      "title": "房子与装饰",
+      "world": "书院建设",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你可以先建根基，也可以先买装饰和皮肤。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“技能多道心弱”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“志于道一句含后面功夫”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“技能多道心弱”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“志于道一句含后面功夫 / 无志而游艺只是门面”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我现在最像在建房，还是在买装饰？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“写下一项技能究竟服务于什么更深目标”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我的技能真正服务于什么？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“砍掉一个只是门面的练习”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 房子与装饰 的操练里，你不只做了较好的选择，还把“志于道一句含后面功夫”真正带回了现实。接下来重点不是继续空想，而是把“写下一项技能究竟服务于什么更深目标”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“技能多道心弱 / 爱形式和技巧不重根本”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“砍掉一个只是门面的练习”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“写下一项技能究竟服务于什么更深目标”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-09",
+      "title": "一事",
+      "world": "多线生活地图",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "工作、家庭、学习、关系同时压来。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“把现实事务当修养借口”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“志立得时千事万为只是一事”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“把现实事务当修养借口”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“志立得时千事万为只是一事 / 不是事情累人，是得失累人”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“哪件现实事务我本可以拿来修身，却拿来当借口？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“把最不想碰的现实事务改写成修养场”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我真正被事情拖累，还是被得失拖累？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“问这件事里我该守的良知是什么”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 一事 的操练里，你不只做了较好的选择，还把“志立得时千事万为只是一事”真正带回了现实。接下来重点不是继续空想，而是把“把最不想碰的现实事务改写成修养场”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“把现实事务当修养借口 / 多线程生活中主轴丢失”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“问这件事里我该守的良知是什么”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“把最不想碰的现实事务改写成修养场”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-10",
+      "title": "利害当前",
+      "world": "抉择门",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "说真话可能受损，沉默更安全。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“一遇利害就退”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“志若不在天理关键处会坍塌”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“一遇利害就退”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“志若不在天理关键处会坍塌 / 利害会揭示真实排序”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“今天我在哪个地方把原则让给了利害？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“写出最容易牺牲原则的场景”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我的志在关键时刻到底站在哪一边？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“在一个小利害冲突里守一次底线”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 利害当前 的操练里，你不只做了较好的选择，还把“志若不在天理关键处会坍塌”真正带回了现实。接下来重点不是继续空想，而是把“写出最容易牺牲原则的场景”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“一遇利害就退 / 平时讲原则关键时刻让位”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“在一个小利害冲突里守一次底线”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“写出最容易牺牲原则的场景”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-11",
+      "title": "不是同一个模子",
+      "world": "人格工坊",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "系统提供不同人格底色，你必须决定如何成就自己。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“人格模仿”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“圣人教人不是做成一个模子”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“人格模仿”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“圣人教人不是做成一个模子 / 因材成就而不失其道”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我最近是否在表演某种“正确样子”？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“写下自己的气质优点与偏差”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我的真实气质应如何被纳入修养？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“设计一条适合自己性格的修养路径”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 不是同一个模子 的操练里，你不只做了较好的选择，还把“圣人教人不是做成一个模子”真正带回了现实。接下来重点不是继续空想，而是把“写下自己的气质优点与偏差”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“人格模仿 / 把修养做成姿态扮演”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“设计一条适合自己性格的修养路径”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“写下自己的气质优点与偏差”，把断开的地方重新接上。"
+        }
+      }
+    },
+    {
+      "lesson_id": "LZ-12",
+      "title": "别念挂带",
+      "world": "决断台",
+      "version": 1,
+      "rounds": [
+        {
+          "id": "round_1_scene",
+          "title": "第一轮：进入情境",
+          "prompt": "你口头上要真正改变，但体面、懒惰、讨好、旧习惯都在拉你。",
+          "guide": "先看见你面对情境时的第一反应，它常常就是平时最自动的路径。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "顺着惯性反应走",
+              "feedback": "你沿着最熟悉的旧路径滑了下去，暂时轻松，但没有真正进入工夫。",
+              "will_delta": -1,
+              "awareness_delta": -1,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "先停一下，辨认这里是不是“志不够纯”",
+              "feedback": "你开始暂停自动反应，愿意把情绪翻译成结构。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "直接用“未是必为圣人之志耳”来照见眼前情境",
+              "feedback": "你把课程概念拉回了当下，虚拟世界开始和现实相连。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_2_inner",
+          "title": "第二轮：辨认内在结构",
+          "prompt": "如果把刚才的反应放回现实，你当前更像卡在什么地方？请不要急着自我解释，先识别结构。",
+          "guide": "这一轮不是求对错，而是把“我不舒服”翻译成“我现在卡在哪一种问题结构里”。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先把问题归给环境、别人或时机",
+              "feedback": "这会让你暂时轻松，但真正的卡点被继续遮住。",
+              "will_delta": -1,
+              "awareness_delta": -2,
+              "integration_delta": -1
+            },
+            {
+              "id": "B",
+              "label": "承认当前更像“志不够纯”",
+              "feedback": "你开始把问题从情绪层带回结构层，觉察正在变清楚。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "用“未是必为圣人之志耳 / 主志旁不得留别念挂带”来对照自己",
+              "feedback": "你把课程概念带回了自己，知与行开始重新接上。",
+              "will_delta": 2,
+              "awareness_delta": 3,
+              "integration_delta": 3
+            }
+          ]
+        },
+        {
+          "id": "round_3_action",
+          "title": "第三轮：现实迁移",
+          "prompt": "现在不要停在理解上。请决定：你要把这次关卡，怎样搬回今天的真实生活？",
+          "guide": "这一轮决定的是：这次操练会不会真的改变你今天的生活。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "先记住，等以后有状态再做",
+              "feedback": "你再次把迁移推迟，虚拟世界和现实世界重新断开了。",
+              "will_delta": -2,
+              "awareness_delta": 0,
+              "integration_delta": -3
+            },
+            {
+              "id": "B",
+              "label": "先写下复盘问题：“我最影响主志的一条挂带是什么？”",
+              "feedback": "你开始搭桥，但还缺一小步现实动作来完成闭环。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 1
+            },
+            {
+              "id": "C",
+              "label": "立即带走现实动作：“写出当前最大的别念挂带”",
+              "feedback": "你完成了从情境、结构到现实动作的迁移，这正是原 PRD 里虚拟世界的目的。",
+              "will_delta": 3,
+              "awareness_delta": 1,
+              "integration_delta": 4
+            }
+          ]
+        },
+        {
+          "id": "round_4_reinforce",
+          "title": "第四轮：守持与补救",
+          "prompt": "如果现实里没有一次做到，你准备如何避免“全盘放弃”，而是继续把工夫接回去？",
+          "guide": "真正的训练，不是一次选对，而是在失手后还能把工夫接回来。",
+          "choices": [
+            {
+              "id": "A",
+              "label": "没做到就算了，说明现在还不适合",
+              "feedback": "这会把一次失手放大成整体否定，守持会在这里断掉。",
+              "will_delta": -2,
+              "awareness_delta": -1,
+              "integration_delta": -2
+            },
+            {
+              "id": "B",
+              "label": "回到复盘问题：“我是真的想变，还是只想保留体面地想变？”再看一次",
+              "feedback": "你没有让训练断掉，而是在失败后保住了回看的通道。",
+              "will_delta": 1,
+              "awareness_delta": 2,
+              "integration_delta": 2
+            },
+            {
+              "id": "C",
+              "label": "动作再缩小一半，继续做：“做一个真实切断动作”",
+              "feedback": "你开始具备真正的守持能力：不中断地把路接回去。",
+              "will_delta": 3,
+              "awareness_delta": 2,
+              "integration_delta": 3
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "high": {
+          "route_tag": "志向开始稳住",
+          "diagnosis": "这次 别念挂带 的操练里，你不只做了较好的选择，还把“未是必为圣人之志耳”真正带回了现实。接下来重点不是继续空想，而是把“写出当前最大的别念挂带”落实到今天。"
+        },
+        "mid": {
+          "route_tag": "志已看见，但尚未定",
+          "diagnosis": "你已经能识别自己更像卡在“志不够纯 / 一边想变一边保留太多退路”之中，也愿意回看，但现实迁移和守持还不够稳定。下一步宜把动作再缩小，先守住“做一个真实切断动作”。"
+        },
+        "low": {
+          "route_tag": "仍受旧习牵引",
+          "diagnosis": "这次更像是被自动反应带着走：要么把问题推给外界，要么把训练推迟到以后。现在不要追求复杂修正，只先做“写出当前最大的别念挂带”，把断开的地方重新接上。"
+        }
+      }
+    }
+  ]
+}

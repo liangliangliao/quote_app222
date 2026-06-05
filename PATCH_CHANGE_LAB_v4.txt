@@ -1,0 +1,26 @@
+PATCH CHANGE LAB V4
+
+1. Models
+- Added ReminderType / PromptScenario enums
+- Added ReminderTemplate / AiPromptTemplate / WorldScene models
+
+2. Seed Data
+- Added 6 world scene configs
+- Added generated reminder templates for all concept tasks
+- Added generated AI prompt templates for all concept tasks
+- Moved related concept mapping into seed layer
+
+3. Controller
+- Refactored to use seed-driven reminders, AI prompts, and world scenes
+- Added worldById, conceptsForWorld, worldUnlockHint, recommendedTaskForWorld
+- Added aiPromptForTask / aiPromptsForConcept / remindersForConcept
+- Removed several hardcoded maps from controller logic
+
+4. UI
+- Added change_rules_config_page.dart
+- Added app bar entry: 规则与配置
+- Updated mirror world list and scene detail to use configured world scenes
+- Updated AI coach page to show assigned AI prompt text for recommended task
+
+5. Notes
+- This is source-level integration and enhancement. Flutter/Dart SDK was not available in the container, so runtime compilation verification could not be executed here.

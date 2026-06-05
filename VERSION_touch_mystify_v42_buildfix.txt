@@ -1,0 +1,5 @@
+quote_app_touch_mystify_v42_buildfix
+
+基于 V41，仅修复 Flutter 编译错误：_MystifyPreviewPainter 中 _drawArtMotifAccents 没有接收 Size size，导致内部调用 _drawVideoSubjectPreview(canvas, size, ...) 时 size 未定义。
+
+释放阶段、余韵阶段和主体形体算法均未重新改动。

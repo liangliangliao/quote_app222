@@ -1,0 +1,7 @@
+Change Lab Integrated v7
+- local notification bridge for due reminders
+- reminder snooze support
+- next-day follow-up to action instance loop-back
+- world narrative progression helpers
+- weekly plan skip state
+- app resume sync for reminder bridge

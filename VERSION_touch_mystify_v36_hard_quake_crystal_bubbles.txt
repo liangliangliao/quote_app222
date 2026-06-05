@@ -1,0 +1,4 @@
+quote_app_touch_mystify_v36_hard_quake_crystal_bubbles
+- Release stage: faster, harsher, more violent short quake using raw phase progress.
+- Afterglow stage: no FBO trail for bubbles; crystal bubbles are redrawn cleanly each frame to remove ghost/tube trails.
+- UI text updated for hard quake release and no-ghost crystal bubble afterglow.

@@ -1,0 +1,56 @@
+pluginManagement {
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def flutterSdkPath = properties.getProperty("flutter.sdk")
+        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        return flutterSdkPath
+    }()
+
+    includeBuild("${flutterSdkPath}/packages/flutter_tools/gradle")
+
+		repositories {
+			google()
+			mavenCentral()
+			// Flutter engine Maven repo (required for io.flutter:* artifacts)
+			maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
+			maven { url 'https://storage.googleapis.com/download.flutter.io' }
+			maven { url 'https://pub.dev/download.flutter.io' }
+			// Gradle plugin mirror is kept only for plugin resolution.
+			maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+			// Fallback mirrors.
+			maven { url 'https://maven.aliyun.com/repository/public' }
+			maven { url 'https://maven.aliyun.com/repository/central' }
+			maven { url 'https://repo1.maven.org/maven2' }
+		}
+}
+
+plugins {
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+    // Some recent AndroidX AARs (e.g. androidx.core:core:1.17.0) encode AAR metadata
+    // that requires newer Android Gradle Plugin versions.
+    // See Android Developers compatibility table for required Gradle versions.
+    id "com.android.application" version "8.12.1" apply false
+    id "org.jetbrains.kotlin.android" version "2.2.0" apply false
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+        repositories {
+            google()
+            mavenCentral()
+            // Flutter engine Maven repo (required for io.flutter:* artifacts)
+            maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
+            maven { url 'https://storage.googleapis.com/download.flutter.io' }
+            maven { url 'https://pub.dev/download.flutter.io' }
+            // NOTE: do NOT include the Aliyun gradle-plugin mirror here.
+            // It can return 502 for ordinary runtime artifacts (for example Baidu LBS SDK),
+            // which aborts dependency resolution before Gradle can try healthier mirrors.
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://maven.aliyun.com/repository/central' }
+            maven { url 'https://repo1.maven.org/maven2' }
+        }
+}
+
+
+include(":app")

@@ -1,0 +1,6 @@
+quote_app_touch_mystify_v28_art_director_upgrade
+
+Focus:
+- Fix repeated shape issue by adding motif families and an art-director scheduler.
+- Add video-matched petal hooks, leaf/vine arcs, fan lattices, silver blades, prism polygons, and long bridge arcs.
+- Reduce disorder by making particles and short lines follow primary strokes instead of scattering freely.

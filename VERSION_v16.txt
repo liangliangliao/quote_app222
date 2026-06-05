@@ -1,0 +1,1 @@
+V16: Step sensor assisted motion detection + motion-gated coordinate updates + dynamic location throttling (moving vs still).

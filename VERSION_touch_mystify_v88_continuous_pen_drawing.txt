@@ -1,0 +1,1 @@
+V88 continuous pen drawing: touch subject now behaves like a single glowing brush that draws long lines, then continuously connects varied artistic shapes while previous traces fade through FBO afterimage.

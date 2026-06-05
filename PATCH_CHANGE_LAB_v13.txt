@@ -1,0 +1,19 @@
+Change Lab v13
+
+本次增强：
+1. 新增“世界完成成就页”，用于承接完整世界完成奖励、阶段完成清单、奖励回放与下一主线动作。
+2. 完整世界奖励弹层现在可直接跳转到世界成就页。
+3. 完成整个世界后，控制器会自动尝试派发下一条主线的现实任务实例。
+4. 镜像世界页、世界场景页、AI 教练页、首页总览已接入世界成就页入口与完整世界奖励摘要。
+5. 控制器新增完整世界辅助方法：下一主线推荐、成就页文案、完成世界后的自动派发实例查询。
+
+重点新增文件：
+- lib/change_lab/ui/change_world_achievement_page.dart
+
+重点修改文件：
+- lib/change_lab/controllers/change_lab_controller.dart
+- lib/change_lab/ui/change_lab_shell_page.dart
+- lib/change_lab/ui/mirror_world_page.dart
+- lib/change_lab/ui/mirror_world_scene_page.dart
+- lib/change_lab/ui/change_ai_coach_page.dart
+- lib/change_lab/change_lab.dart

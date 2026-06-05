@@ -1,0 +1,664 @@
+﻿2025-11-26T06:38:45.8066293Z Current runner version: '2.329.0'
+2025-11-26T06:38:45.8101239Z ##[group]Runner Image Provisioner
+2025-11-26T06:38:45.8102609Z Hosted Compute Agent
+2025-11-26T06:38:45.8103487Z Version: 20251016.436
+2025-11-26T06:38:45.8104404Z Commit: 8ab8ac8bfd662a3739dab9fe09456aba92132568
+2025-11-26T06:38:45.8105665Z Build Date: 2025-10-15T20:44:12Z
+2025-11-26T06:38:45.8106565Z ##[endgroup]
+2025-11-26T06:38:45.8107432Z ##[group]Operating System
+2025-11-26T06:38:45.8108412Z Ubuntu
+2025-11-26T06:38:45.8109181Z 24.04.3
+2025-11-26T06:38:45.8109899Z LTS
+2025-11-26T06:38:45.8111112Z ##[endgroup]
+2025-11-26T06:38:45.8111927Z ##[group]Runner Image
+2025-11-26T06:38:45.8112949Z Image: ubuntu-24.04
+2025-11-26T06:38:45.8114018Z Version: 20251112.124.1
+2025-11-26T06:38:45.8115768Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20251112.124/images/ubuntu/Ubuntu2404-Readme.md
+2025-11-26T06:38:45.8118701Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20251112.124
+2025-11-26T06:38:45.8120688Z ##[endgroup]
+2025-11-26T06:38:45.8122683Z ##[group]GITHUB_TOKEN Permissions
+2025-11-26T06:38:45.8125242Z Contents: read
+2025-11-26T06:38:45.8126113Z Metadata: read
+2025-11-26T06:38:45.8127113Z Packages: read
+2025-11-26T06:38:45.8127970Z ##[endgroup]
+2025-11-26T06:38:45.8131217Z Secret source: Actions
+2025-11-26T06:38:45.8132291Z Prepare workflow directory
+2025-11-26T06:38:45.8711326Z Prepare all required actions
+2025-11-26T06:38:45.8769682Z Getting action download info
+2025-11-26T06:38:46.1764235Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2025-11-26T06:38:46.8464176Z Download action repository 'actions/setup-java@v4' (SHA:c5195efecf7bdfc987ee8bae7a71cb8b11521c00)
+2025-11-26T06:38:47.3714261Z Download action repository 'subosito/flutter-action@v2' (SHA:fd55f4c5af5b953cc57a2be44cb082c8f6635e8e)
+2025-11-26T06:38:47.6756100Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2025-11-26T06:38:47.8352035Z Download action repository 'gradle/actions@v3' (SHA:d9c87d481d55275bb5441eef3fe0e46805f9ef70)
+2025-11-26T06:38:48.8143145Z Getting action download info
+2025-11-26T06:38:48.9622833Z Download action repository 'actions/cache@v4' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+2025-11-26T06:38:49.1739798Z Complete job name: build
+2025-11-26T06:38:49.2483912Z ##[group]Run actions/checkout@v4
+2025-11-26T06:38:49.2484584Z with:
+2025-11-26T06:38:49.2484802Z   repository: liangliangliao/quote_app
+2025-11-26T06:38:49.2485219Z   token: ***
+2025-11-26T06:38:49.2485406Z   ssh-strict: true
+2025-11-26T06:38:49.2485592Z   ssh-user: git
+2025-11-26T06:38:49.2485785Z   persist-credentials: true
+2025-11-26T06:38:49.2485994Z   clean: true
+2025-11-26T06:38:49.2486191Z   sparse-checkout-cone-mode: true
+2025-11-26T06:38:49.2486419Z   fetch-depth: 1
+2025-11-26T06:38:49.2486598Z   fetch-tags: false
+2025-11-26T06:38:49.2486774Z   show-progress: true
+2025-11-26T06:38:49.2486961Z   lfs: false
+2025-11-26T06:38:49.2487120Z   submodules: false
+2025-11-26T06:38:49.2487316Z   set-safe-directory: true
+2025-11-26T06:38:49.2487714Z env:
+2025-11-26T06:38:49.2487936Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:49.2488198Z ##[endgroup]
+2025-11-26T06:38:49.3589069Z Syncing repository: liangliangliao/quote_app
+2025-11-26T06:38:49.3590591Z ##[group]Getting Git version info
+2025-11-26T06:38:49.3591024Z Working directory is '/home/runner/work/quote_app/quote_app'
+2025-11-26T06:38:49.3591572Z [command]/usr/bin/git version
+2025-11-26T06:38:49.4467441Z git version 2.51.2
+2025-11-26T06:38:49.4495642Z ##[endgroup]
+2025-11-26T06:38:49.4509904Z Temporarily overriding HOME='/home/runner/work/_temp/014d901b-a5e8-4928-9de9-ca3fa7e69701' before making global git config changes
+2025-11-26T06:38:49.4511310Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-26T06:38:49.4524165Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/quote_app/quote_app
+2025-11-26T06:38:49.4595178Z Deleting the contents of '/home/runner/work/quote_app/quote_app'
+2025-11-26T06:38:49.4598947Z ##[group]Initializing the repository
+2025-11-26T06:38:49.4604365Z [command]/usr/bin/git init /home/runner/work/quote_app/quote_app
+2025-11-26T06:38:49.5117323Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-11-26T06:38:49.5118635Z hint: is subject to change. To configure the initial branch name to use in all
+2025-11-26T06:38:49.5119367Z hint: of your new repositories, which will suppress this warning, call:
+2025-11-26T06:38:49.5119838Z hint:
+2025-11-26T06:38:49.5120197Z hint: 	git config --global init.defaultBranch <name>
+2025-11-26T06:38:49.5120840Z hint:
+2025-11-26T06:38:49.5121226Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-11-26T06:38:49.5121859Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-11-26T06:38:49.5122302Z hint:
+2025-11-26T06:38:49.5122539Z hint: 	git branch -m <name>
+2025-11-26T06:38:49.5122843Z hint:
+2025-11-26T06:38:49.5123253Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-11-26T06:38:49.5154822Z Initialized empty Git repository in /home/runner/work/quote_app/quote_app/.git/
+2025-11-26T06:38:49.5168622Z [command]/usr/bin/git remote add origin https://github.com/liangliangliao/quote_app
+2025-11-26T06:38:49.5262322Z ##[endgroup]
+2025-11-26T06:38:49.5263128Z ##[group]Disabling automatic garbage collection
+2025-11-26T06:38:49.5268101Z [command]/usr/bin/git config --local gc.auto 0
+2025-11-26T06:38:49.5298596Z ##[endgroup]
+2025-11-26T06:38:49.5299398Z ##[group]Setting up auth
+2025-11-26T06:38:49.5307104Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-26T06:38:49.5337833Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-26T06:38:49.6942894Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-26T06:38:49.6979543Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-26T06:38:49.7226654Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2025-11-26T06:38:49.7262031Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2025-11-26T06:38:49.7526167Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-11-26T06:38:49.7563373Z ##[endgroup]
+2025-11-26T06:38:49.7564336Z ##[group]Fetching the repository
+2025-11-26T06:38:49.7573345Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9285d5280e417d5a65d0c1c6c39dcb12f7631cb5:refs/remotes/origin/main
+2025-11-26T06:38:50.2950822Z From https://github.com/liangliangliao/quote_app
+2025-11-26T06:38:50.2952960Z  * [new ref]         9285d5280e417d5a65d0c1c6c39dcb12f7631cb5 -> origin/main
+2025-11-26T06:38:50.3084550Z ##[endgroup]
+2025-11-26T06:38:50.3085327Z ##[group]Determining the checkout info
+2025-11-26T06:38:50.3087731Z ##[endgroup]
+2025-11-26T06:38:50.3093390Z [command]/usr/bin/git sparse-checkout disable
+2025-11-26T06:38:50.3168220Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-11-26T06:38:50.3195358Z ##[group]Checking out the ref
+2025-11-26T06:38:50.3198747Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-11-26T06:38:50.3319086Z Switched to a new branch 'main'
+2025-11-26T06:38:50.3322439Z branch 'main' set up to track 'origin/main'.
+2025-11-26T06:38:50.3329054Z ##[endgroup]
+2025-11-26T06:38:50.3365812Z [command]/usr/bin/git log -1 --format=%H
+2025-11-26T06:38:50.3388802Z 9285d5280e417d5a65d0c1c6c39dcb12f7631cb5
+2025-11-26T06:38:50.3557200Z ##[group]Run ls -lah
+2025-11-26T06:38:50.3557490Z [36;1mls -lah[0m
+2025-11-26T06:38:50.3592318Z shell: /usr/bin/bash -e {0}
+2025-11-26T06:38:50.3592565Z env:
+2025-11-26T06:38:50.3592775Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.3593033Z ##[endgroup]
+2025-11-26T06:38:50.3674800Z total 2.4M
+2025-11-26T06:38:50.3675225Z drwxr-xr-x 4 runner runner 4.0K Nov 26 06:38 .
+2025-11-26T06:38:50.3675741Z drwxr-xr-x 3 runner runner 4.0K Nov 26 06:38 ..
+2025-11-26T06:38:50.3676229Z drwxr-xr-x 7 runner runner 4.0K Nov 26 06:38 .git
+2025-11-26T06:38:50.3676575Z drwxr-xr-x 3 runner runner 4.0K Nov 26 06:38 .github
+2025-11-26T06:38:50.3676952Z -rw-r--r-- 1 runner runner    0 Nov 26 06:38 17582248524483561327215006368404.jpg
+2025-11-26T06:38:50.3677433Z -rw-r--r-- 1 runner runner 2.4M Nov 26 06:38 app_fixed3_vision_multi_triggers_v4_dbifix_updated.zip
+2025-11-26T06:38:50.3702957Z ##[group]Run set -e
+2025-11-26T06:38:50.3703212Z [36;1mset -e[0m
+2025-11-26T06:38:50.3703569Z [36;1mif [[ -f "quote_app_v2_alllatest_20250915_OFFICIAL_PLUS_LIB_APPLY_FIX555.zip" ]]; then[0m
+2025-11-26T06:38:50.3704097Z [36;1m  zip="quote_app_v2_alllatest_20250915_OFFICIAL_PLUS_LIB_APPLY_FI555X.zip"[0m
+2025-11-26T06:38:50.3704469Z [36;1melif [[ -f "quote_app333.zip" ]]; then[0m
+2025-11-26T06:38:50.3704736Z [36;1m  zip="quote_app333.zip"[0m
+2025-11-26T06:38:50.3705074Z [36;1melse[0m
+2025-11-26T06:38:50.3705274Z [36;1m  # fallback to any top-level .zip[0m
+2025-11-26T06:38:50.3705625Z [36;1m  count=$(ls -1 *.zip 2>/dev/null | wc -l || true)[0m
+2025-11-26T06:38:50.3705914Z [36;1m  if [[ "$count" -ge 1 ]]; then[0m
+2025-11-26T06:38:50.3706167Z [36;1m    zip="$(ls -1 *.zip | head -n 1)"[0m
+2025-11-26T06:38:50.3706400Z [36;1m  else[0m
+2025-11-26T06:38:50.3706684Z [36;1m    echo "❌ 未找到 zip：请把工程 zip 放在仓库根目录，例如 quote_app.zip"; exit 1[0m
+2025-11-26T06:38:50.3707022Z [36;1m  fi[0m
+2025-11-26T06:38:50.3707185Z [36;1mfi[0m
+2025-11-26T06:38:50.3707377Z [36;1mecho "zip=$zip" >> "$GITHUB_OUTPUT"[0m
+2025-11-26T06:38:50.3707642Z [36;1mecho "Using ZIP: $zip"[0m
+2025-11-26T06:38:50.3707866Z [36;1mecho "—— ZIP 内容预览 ——"[0m
+2025-11-26T06:38:50.3708094Z [36;1munzip -l "$zip" | head -n 50[0m
+2025-11-26T06:38:50.3738633Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-26T06:38:50.3738961Z env:
+2025-11-26T06:38:50.3739173Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.3739433Z ##[endgroup]
+2025-11-26T06:38:50.3911263Z Using ZIP: app_fixed3_vision_multi_triggers_v4_dbifix_updated.zip
+2025-11-26T06:38:50.3912840Z —— ZIP 内容预览 ——
+2025-11-26T06:38:50.4078006Z Archive:  app_fixed3_vision_multi_triggers_v4_dbifix_updated.zip
+2025-11-26T06:38:50.4078746Z   Length      Date    Time    Name
+2025-11-26T06:38:50.4079249Z ---------  ---------- -----   ----
+2025-11-26T06:38:50.4079754Z      3540  2025-11-25 18:26   patch_diffs.txt
+2025-11-26T06:38:50.4080327Z      1111  2025-11-26 06:33   pubspec.yaml
+2025-11-26T06:38:50.4081080Z      1106  2025-11-25 18:26   CHANGELOG_FIX27.txt
+2025-11-26T06:38:50.4081582Z         0  2025-11-26 01:39   android/
+2025-11-26T06:38:50.4082086Z       270  2025-11-25 18:26   android/gradle.properties
+2025-11-26T06:38:50.4082704Z       731  2025-11-25 18:26   android/settings.gradle
+2025-11-26T06:38:50.4083211Z       852  2025-11-25 18:26   android/gradlew
+2025-11-26T06:38:50.4083675Z         0  2025-11-26 01:39   android/app/
+2025-11-26T06:38:50.4084213Z      1144  2025-11-25 18:26   android/app/proguard-rules.pro
+2025-11-26T06:38:50.4084789Z         0  2025-11-26 01:39   android/app/src/
+2025-11-26T06:38:50.4085278Z         0  2025-11-26 01:39   android/app/src/main/
+2025-11-26T06:38:50.4085807Z         0  2025-11-26 01:39   android/app/src/main/res/
+2025-11-26T06:38:50.4086393Z         0  2025-11-26 01:39   android/app/src/main/res/values-v23/
+2025-11-26T06:38:50.4087118Z       210  2025-11-25 18:26   android/app/src/main/res/values-v23/styles.xml
+2025-11-26T06:38:50.4087850Z         0  2025-11-26 01:39   android/app/src/main/res/values-v26/
+2025-11-26T06:38:50.4088581Z       214  2025-11-25 18:26   android/app/src/main/res/values-v26/styles.xml
+2025-11-26T06:38:50.4089525Z         0  2025-11-26 01:39   android/app/src/main/res/values-v21/
+2025-11-26T06:38:50.4089974Z       296  2025-11-25 18:26   android/app/src/main/res/values-v21/styles.xml
+2025-11-26T06:38:50.4090655Z         0  2025-11-26 01:39   android/app/src/main/res/mipmap-anydpi-v26/
+2025-11-26T06:38:50.4091130Z       272  2025-11-25 18:26   android/app/src/main/res/mipmap-anydpi-v26/ic_app_installer.xml
+2025-11-26T06:38:50.4091755Z       278  2025-11-25 18:26   android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+2025-11-26T06:38:50.4092876Z       272  2025-11-25 18:26   android/app/src/main/res/mipmap-anydpi-v26/ic_app_installer_round.xml
+2025-11-26T06:38:50.4094082Z     26030  2025-11-25 18:26   android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_foreground_nopad.png
+2025-11-26T06:38:50.4095026Z       273  2025-11-25 18:26   android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+2025-11-26T06:38:50.4095653Z         0  2025-11-26 01:39   android/app/src/main/res/values-v28/
+2025-11-26T06:38:50.4096193Z       231  2025-11-25 18:26   android/app/src/main/res/values-v28/styles.xml
+2025-11-26T06:38:50.4096759Z         0  2025-11-26 01:39   android/app/src/main/res/raw/
+2025-11-26T06:38:50.4097312Z       220  2025-11-25 18:26   android/app/src/main/res/raw/keep.xml
+2025-11-26T06:38:50.4097819Z         0  2025-11-26 01:39   android/app/src/main/res/values/
+2025-11-26T06:38:50.4098346Z       177  2025-11-25 18:26   android/app/src/main/res/values/colors.xml
+2025-11-26T06:38:50.4098933Z       352  2025-11-25 18:26   android/app/src/main/res/values/dimens.xml
+2025-11-26T06:38:50.4099481Z       182  2025-11-25 18:26   android/app/src/main/res/values/styles.xml
+2025-11-26T06:38:50.4100042Z         0  2025-11-26 01:39   android/app/src/main/res/drawable/
+2025-11-26T06:38:50.4100825Z       387  2025-11-25 18:26   android/app/src/main/res/drawable/launch_background.xml
+2025-11-26T06:38:50.4101579Z      1334  2025-11-25 18:26   android/app/src/main/res/drawable/ic_launcher_background.png
+2025-11-26T06:38:50.4102494Z       335  2025-11-25 18:26   android/app/src/main/res/drawable/ic_launcher_foreground_inset_56.xml
+2025-11-26T06:38:50.4103025Z       177  2025-11-25 18:26   android/app/src/main/res/drawable/ic_splash_bg_light_green.xml
+2025-11-26T06:38:50.4103438Z         0  2025-11-26 01:39   android/app/src/main/res/values-v31/
+2025-11-26T06:38:50.4103786Z       362  2025-11-25 18:26   android/app/src/main/res/values-v31/styles.xml
+2025-11-26T06:38:50.4104150Z         0  2025-11-26 01:39   android/app/src/main/res/drawable-nodpi/
+2025-11-26T06:38:50.4104609Z     19075  2025-11-25 18:26   android/app/src/main/res/drawable-nodpi/ic_launcher_fg_export.png
+2025-11-26T06:38:50.4105197Z     18846  2025-11-25 18:26   android/app/src/main/res/drawable-nodpi/ic_fg_subject264_432_v21.png
+2025-11-26T06:38:50.4105732Z     11421  2025-11-25 18:26   android/app/src/main/res/drawable-nodpi/ic_fg_subject264_432_v2.png
+2025-11-26T06:38:50.4106149Z         0  2025-11-26 01:39   android/app/src/main/java/
+2025-11-26T06:38:50.4106442Z         0  2025-11-26 01:39   android/app/src/main/java/com/
+2025-11-26T06:38:50.4106758Z         0  2025-11-26 01:39   android/app/src/main/java/com/example/
+2025-11-26T06:38:50.4107106Z         0  2025-11-26 01:39   android/app/src/main/java/com/example/quote_app/
+2025-11-26T06:38:50.4144854Z ##[group]Run set -euo pipefail
+2025-11-26T06:38:50.4145131Z [36;1mset -euo pipefail[0m
+2025-11-26T06:38:50.4145407Z [36;1mSEL="$(ls -1t *.zip 2>/dev/null | head -n1 || true)"[0m
+2025-11-26T06:38:50.4145764Z [36;1m[ -n "$SEL" ] || { echo "No zip found"; exit 66; }[0m
+2025-11-26T06:38:50.4146047Z [36;1mecho "Using ZIP: $SEL"[0m
+2025-11-26T06:38:50.4146287Z [36;1munzip -q -o "$SEL" -x ".github/*"[0m
+2025-11-26T06:38:50.4176055Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-26T06:38:50.4176367Z env:
+2025-11-26T06:38:50.4176562Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.4176983Z ##[endgroup]
+2025-11-26T06:38:50.4241374Z Using ZIP: app_fixed3_vision_multi_triggers_v4_dbifix_updated.zip
+2025-11-26T06:38:50.4501818Z caution: excluded filename not matched:  .github/*
+2025-11-26T06:38:50.4529510Z ##[group]Run set -e
+2025-11-26T06:38:50.4529818Z [36;1m[0m
+2025-11-26T06:38:50.4529985Z [36;1mset -e[0m
+2025-11-26T06:38:50.4530301Z [36;1m# Prefer a Flutter *app* root: must have both pubspec.yaml and lib/main.dart[0m
+2025-11-26T06:38:50.4530839Z [36;1mFLUTTER_DIR=""[0m
+2025-11-26T06:38:50.4531047Z [36;1mwhile IFS= read -r d; do[0m
+2025-11-26T06:38:50.4531354Z [36;1m if [[ -f "$d/lib/main.dart" ]]; then FLUTTER_DIR="$d"; break; fi[0m
+2025-11-26T06:38:50.4531801Z [36;1m done < <(find . -maxdepth 3 -type f -name pubspec.yaml -printf '%h\n' | sort -u)[0m
+2025-11-26T06:38:50.4532156Z [36;1m[0m
+2025-11-26T06:38:50.4532323Z [36;1mGRADLE_DIR=""[0m
+2025-11-26T06:38:50.4532522Z [36;1mif [[ -z "$FLUTTER_DIR" ]]; then[0m
+2025-11-26T06:38:50.4532864Z [36;1m# fallback: first pubspec.yaml (sorted) if no app-style root found[0m
+2025-11-26T06:38:50.4533447Z [36;1m FLUTTER_DIR="$(find . -maxdepth 3 -type f -name pubspec.yaml -printf '%h\n' | sort -u | head -n 1 || true)"[0m
+2025-11-26T06:38:50.4533867Z [36;1m fi[0m
+2025-11-26T06:38:50.4534063Z [36;1m if [[ -z "$FLUTTER_DIR" ]]; then[0m
+2025-11-26T06:38:50.4534337Z [36;1m# find Android Gradle settings as last resort[0m
+2025-11-26T06:38:50.4534890Z [36;1m GRADLE_DIR="$(find . -maxdepth 3 -type f \( -name settings.gradle -o -name settings.gradle.kts \) -printf '%h\n' | sort -u | head -n 1 || true)"[0m
+2025-11-26T06:38:50.4535399Z [36;1m  fi[0m
+2025-11-26T06:38:50.4535555Z [36;1m[0m
+2025-11-26T06:38:50.4535733Z [36;1m   if [[ -n "$FLUTTER_DIR" ]]; then[0m
+2025-11-26T06:38:50.4536010Z [36;1m   echo "project_type=flutter" >> $GITHUB_OUTPUT[0m
+2025-11-26T06:38:50.4536337Z [36;1m   echo "project_dir=$FLUTTER_DIR" >> $GITHUB_OUTPUT[0m
+2025-11-26T06:38:50.4536657Z [36;1m   echo "Detected Flutter project: $FLUTTER_DIR"[0m
+2025-11-26T06:38:50.4536931Z [36;1m    ls -la "$FLUTTER_DIR"[0m
+2025-11-26T06:38:50.4537185Z [36;1m   test -f "$FLUTTER_DIR/pubspec.yaml"[0m
+2025-11-26T06:38:50.4537461Z [36;1m   test -f "$FLUTTER_DIR/lib/main.dart"[0m
+2025-11-26T06:38:50.4537730Z [36;1m   elif [[ -n "$GRADLE_DIR" ]]; then[0m
+2025-11-26T06:38:50.4538001Z [36;1m   echo "project_type=gradle" >> $GITHUB_OUTPUT[0m
+2025-11-26T06:38:50.4538313Z [36;1m   echo "project_dir=$GRADLE_DIR" >> $GITHUB_OUTPUT[0m
+2025-11-26T06:38:50.4538647Z [36;1m   echo "Detected Android Gradle project: $GRADLE_DIR"[0m
+2025-11-26T06:38:50.4538930Z [36;1m   ls -la "$GRADLE_DIR"[0m
+2025-11-26T06:38:50.4539143Z [36;1m   else[0m
+2025-11-26T06:38:50.4539478Z [36;1m    echo "❌ 未检测到 Flutter 或 Android Gradle 工程（缺少 pubspec.yaml / settings.gradle）"; exit 1[0m
+2025-11-26T06:38:50.4539868Z [36;1m    fi[0m
+2025-11-26T06:38:50.4569093Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-26T06:38:50.4569399Z env:
+2025-11-26T06:38:50.4569603Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.4569870Z ##[endgroup]
+2025-11-26T06:38:50.4639361Z Detected Flutter project: .
+2025-11-26T06:38:50.4653443Z total 2516
+2025-11-26T06:38:50.4653841Z drwxr-xr-x 8 runner runner    4096 Nov 26 06:38 .
+2025-11-26T06:38:50.4654366Z drwxr-xr-x 3 runner runner    4096 Nov 26 06:38 ..
+2025-11-26T06:38:50.4654777Z drwxr-xr-x 7 runner runner    4096 Nov 26 06:38 .git
+2025-11-26T06:38:50.4655108Z drwxr-xr-x 3 runner runner    4096 Nov 26 06:38 .github
+2025-11-26T06:38:50.4655470Z -rw-r--r-- 1 runner runner       0 Nov 26 06:38 17582248524483561327215006368404.jpg
+2025-11-26T06:38:50.4655904Z -rw-r--r-- 1 runner runner    1106 Nov 25 18:26 CHANGELOG_FIX27.txt
+2025-11-26T06:38:50.4656321Z -rw-r--r-- 1 runner runner    2739 Nov 25 18:26 CHANGES_quote_app_PATCHED.md
+2025-11-26T06:38:50.4656732Z -rw-r--r-- 1 runner runner    6305 Nov 25 18:26 MIGRATION_MAP_MAPPING.md
+2025-11-26T06:38:50.4657118Z -rw-r--r-- 1 runner runner     882 Nov 25 18:26 PATCH_CHANGELOG.json
+2025-11-26T06:38:50.4657684Z -rw-r--r-- 1 runner runner    1100 Nov 25 18:26 README.md
+2025-11-26T06:38:50.4658001Z drwxr-xr-x 4 runner runner    4096 Nov 26 01:39 android
+2025-11-26T06:38:50.4658566Z -rw-r--r-- 1 runner runner 2498506 Nov 26 06:38 app_fixed3_vision_multi_triggers_v4_dbifix_updated.zip
+2025-11-26T06:38:50.4659007Z drwxr-xr-x 6 runner runner    4096 Nov 26 01:39 assets
+2025-11-26T06:38:50.4659735Z drwxr-xr-x 8 runner runner    4096 Nov 26 01:39 lib
+2025-11-26T06:38:50.4660274Z -rw-r--r-- 1 runner runner    3540 Nov 25 18:26 patch_diffs.txt
+2025-11-26T06:38:50.4661010Z -rw-r--r-- 1 runner runner    1111 Nov 26 06:33 pubspec.yaml
+2025-11-26T06:38:50.4661396Z -rw-r--r-- 1 runner runner    8246 Nov 25 18:26 scoped_reschedule_patch.diff
+2025-11-26T06:38:50.4661773Z drwxr-xr-x 2 runner runner    4096 Nov 26 01:39 store
+2025-11-26T06:38:50.4790052Z ##[group]Run actions/setup-java@v4
+2025-11-26T06:38:50.4790326Z with:
+2025-11-26T06:38:50.4790689Z   distribution: temurin
+2025-11-26T06:38:50.4790888Z   java-version: 17
+2025-11-26T06:38:50.4791090Z   java-package: jdk
+2025-11-26T06:38:50.4791287Z   check-latest: false
+2025-11-26T06:38:50.4791472Z   server-id: github
+2025-11-26T06:38:50.4791662Z   server-username: GITHUB_ACTOR
+2025-11-26T06:38:50.4791885Z   server-password: GITHUB_TOKEN
+2025-11-26T06:38:50.4792112Z   overwrite-settings: true
+2025-11-26T06:38:50.4792313Z   job-status: success
+2025-11-26T06:38:50.4792673Z   token: ***
+2025-11-26T06:38:50.4792841Z env:
+2025-11-26T06:38:50.4793038Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.4793296Z ##[endgroup]
+2025-11-26T06:38:50.6729565Z ##[group]Installed distributions
+2025-11-26T06:38:50.6931052Z Resolved Java 17.0.17+10 from tool-cache
+2025-11-26T06:38:50.6932132Z Setting Java 17.0.17+10 as the default
+2025-11-26T06:38:50.6945681Z Creating toolchains.xml for JDK version 17 from temurin
+2025-11-26T06:38:50.7023855Z Writing to /home/runner/.m2/toolchains.xml
+2025-11-26T06:38:50.7024761Z 
+2025-11-26T06:38:50.7025062Z Java configuration:
+2025-11-26T06:38:50.7025468Z   Distribution: temurin
+2025-11-26T06:38:50.7025820Z   Version: 17.0.17+10
+2025-11-26T06:38:50.7027732Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.7028251Z 
+2025-11-26T06:38:50.7028708Z ##[endgroup]
+2025-11-26T06:38:50.7053869Z Creating settings.xml with server-id: github
+2025-11-26T06:38:50.7054426Z Writing to /home/runner/.m2/settings.xml
+2025-11-26T06:38:50.7242600Z ##[group]Run subosito/flutter-action@v2
+2025-11-26T06:38:50.7242892Z with:
+2025-11-26T06:38:50.7243069Z   flutter-version: 3.35.3
+2025-11-26T06:38:50.7243272Z   channel: stable
+2025-11-26T06:38:50.7243444Z   cache: true
+2025-11-26T06:38:50.7243609Z   architecture: X64
+2025-11-26T06:38:50.7243803Z   pub-cache-path: default
+2025-11-26T06:38:50.7244003Z   dry-run: false
+2025-11-26T06:38:50.7244245Z   git-source: https://github.com/flutter/flutter.git
+2025-11-26T06:38:50.7244516Z env:
+2025-11-26T06:38:50.7244707Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.7245065Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.7245530Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.7245872Z ##[endgroup]
+2025-11-26T06:38:50.7320242Z ##[group]Run chmod +x "$GITHUB_ACTION_PATH/setup.sh"
+2025-11-26T06:38:50.7320761Z [36;1mchmod +x "$GITHUB_ACTION_PATH/setup.sh"[0m
+2025-11-26T06:38:50.7355349Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-26T06:38:50.7355677Z env:
+2025-11-26T06:38:50.7355881Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.7356242Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.7356686Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.7357025Z ##[endgroup]
+2025-11-26T06:38:50.7466722Z ##[group]Run $GITHUB_ACTION_PATH/setup.sh -p \
+2025-11-26T06:38:50.7467072Z [36;1m$GITHUB_ACTION_PATH/setup.sh -p \[0m
+2025-11-26T06:38:50.7467336Z [36;1m  -n '3.35.3' \[0m
+2025-11-26T06:38:50.7467720Z [36;1m  -f '' \[0m
+2025-11-26T06:38:50.7467902Z [36;1m  -a 'X64' \[0m
+2025-11-26T06:38:50.7468082Z [36;1m  -k '' \[0m
+2025-11-26T06:38:50.7468244Z [36;1m  -c '' \[0m
+2025-11-26T06:38:50.7468410Z [36;1m  -l '' \[0m
+2025-11-26T06:38:50.7468587Z [36;1m  -d 'default' \[0m
+2025-11-26T06:38:50.7468865Z [36;1m  -g 'https://github.com/flutter/flutter.git' \[0m
+2025-11-26T06:38:50.7469150Z [36;1m  stable[0m
+2025-11-26T06:38:50.7499772Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-26T06:38:50.7500085Z env:
+2025-11-26T06:38:50.7500293Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.7501052Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.7501537Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.7501879Z ##[endgroup]
+2025-11-26T06:38:50.9079723Z ##[group]Run actions/cache@v4
+2025-11-26T06:38:50.9079960Z with:
+2025-11-26T06:38:50.9080199Z   path: /opt/hostedtoolcache/flutter/stable-3.35.3-x64
+2025-11-26T06:38:50.9080923Z   key: flutter-linux-stable-3.35.3-x64-a402d9a4376add5bc2d6b1e33e53edaae58c07f8
+2025-11-26T06:38:50.9081311Z   enableCrossOsArchive: false
+2025-11-26T06:38:50.9081540Z   fail-on-cache-miss: false
+2025-11-26T06:38:50.9081746Z   lookup-only: false
+2025-11-26T06:38:50.9081934Z   save-always: false
+2025-11-26T06:38:50.9082119Z env:
+2025-11-26T06:38:50.9082314Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:38:50.9082671Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.9083111Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:38:50.9083449Z ##[endgroup]
+2025-11-26T06:38:51.1713628Z Cache hit for: flutter-linux-stable-3.35.3-x64-a402d9a4376add5bc2d6b1e33e53edaae58c07f8
+2025-11-26T06:38:52.2898183Z Received 130023424 of 1583732605 (8.2%), 124.0 MBs/sec
+2025-11-26T06:38:53.2955496Z Received 281018368 of 1583732605 (17.7%), 133.6 MBs/sec
+2025-11-26T06:38:54.3022357Z Received 494927872 of 1583732605 (31.3%), 157.0 MBs/sec
+2025-11-26T06:38:55.2971823Z Received 671088640 of 1583732605 (42.4%), 159.7 MBs/sec
+2025-11-26T06:38:56.3016777Z Received 893386752 of 1583732605 (56.4%), 170.0 MBs/sec
+2025-11-26T06:38:57.3026679Z Received 1090519040 of 1583732605 (68.9%), 173.0 MBs/sec
+2025-11-26T06:38:58.3023976Z Received 1207959552 of 1583732605 (76.3%), 164.3 MBs/sec
+2025-11-26T06:38:59.3047604Z Received 1400897536 of 1583732605 (88.5%), 166.7 MBs/sec
+2025-11-26T06:39:00.2376564Z Received 1583732605 of 1583732605 (100.0%), 168.8 MBs/sec
+2025-11-26T06:39:00.2378858Z Cache Size: ~1510 MB (1583732605 B)
+2025-11-26T06:39:00.2489364Z [command]/usr/bin/tar -xf /home/runner/work/_temp/09d8d4d0-6f59-4caf-a59e-9ff810008b56/cache.tzst -P -C /home/runner/work/quote_app/quote_app --use-compress-program unzstd
+2025-11-26T06:39:05.0149328Z Cache restored successfully
+2025-11-26T06:39:05.3096098Z Cache restored from key: flutter-linux-stable-3.35.3-x64-a402d9a4376add5bc2d6b1e33e53edaae58c07f8
+2025-11-26T06:39:05.3996069Z ##[group]Run actions/cache@v4
+2025-11-26T06:39:05.3996334Z with:
+2025-11-26T06:39:05.3996521Z   path: /home/runner/.pub-cache
+2025-11-26T06:39:05.3996916Z   key: flutter-pub-linux-stable-3.35.3-x64-a402d9a4376add5bc2d6b1e33e53edaae58c07f8-
+2025-11-26T06:39:05.3997328Z   enableCrossOsArchive: false
+2025-11-26T06:39:05.3997582Z   fail-on-cache-miss: false
+2025-11-26T06:39:05.3997799Z   lookup-only: false
+2025-11-26T06:39:05.3997985Z   save-always: false
+2025-11-26T06:39:05.3998170Z env:
+2025-11-26T06:39:05.3998373Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:39:05.3998743Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:05.3999201Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:05.3999548Z ##[endgroup]
+2025-11-26T06:39:05.6767463Z Cache hit for: flutter-pub-linux-stable-3.35.3-x64-a402d9a4376add5bc2d6b1e33e53edaae58c07f8-
+2025-11-26T06:39:06.3163841Z Received 45646402 of 45646402 (100.0%), 82.0 MBs/sec
+2025-11-26T06:39:06.3165066Z Cache Size: ~44 MB (45646402 B)
+2025-11-26T06:39:06.3194530Z [command]/usr/bin/tar -xf /home/runner/work/_temp/a3ad2599-b85d-4ba1-aa5e-3069eb387c60/cache.tzst -P -C /home/runner/work/quote_app/quote_app --use-compress-program unzstd
+2025-11-26T06:39:07.0944815Z Cache restored successfully
+2025-11-26T06:39:07.1111274Z Cache restored from key: flutter-pub-linux-stable-3.35.3-x64-a402d9a4376add5bc2d6b1e33e53edaae58c07f8-
+2025-11-26T06:39:07.1229442Z ##[group]Run $GITHUB_ACTION_PATH/setup.sh \
+2025-11-26T06:39:07.1229771Z [36;1m$GITHUB_ACTION_PATH/setup.sh \[0m
+2025-11-26T06:39:07.1230033Z [36;1m  -n '3.35.3' \[0m
+2025-11-26T06:39:07.1230252Z [36;1m  -a 'x64' \[0m
+2025-11-26T06:39:07.1230832Z [36;1m  -c '/opt/hostedtoolcache/flutter/stable-3.35.3-x64' \[0m
+2025-11-26T06:39:07.1231185Z [36;1m  -d '/home/runner/.pub-cache' \[0m
+2025-11-26T06:39:07.1231448Z [36;1m  stable[0m
+2025-11-26T06:39:07.1263863Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-26T06:39:07.1264189Z env:
+2025-11-26T06:39:07.1264424Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:39:07.1264806Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:07.1265286Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:07.1265667Z ##[endgroup]
+2025-11-26T06:39:07.2752744Z ##[group]Run flutter pub get
+2025-11-26T06:39:07.2753034Z [36;1mflutter pub get[0m
+2025-11-26T06:39:07.2786703Z shell: /usr/bin/bash -e {0}
+2025-11-26T06:39:07.2786941Z env:
+2025-11-26T06:39:07.2787146Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:39:07.2787535Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:07.2788002Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:07.2788456Z   FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.35.3-x64
+2025-11-26T06:39:07.2788806Z   PUB_CACHE: /home/runner/.pub-cache
+2025-11-26T06:39:07.2789052Z ##[endgroup]
+2025-11-26T06:39:07.6870267Z Resolving dependencies...
+2025-11-26T06:39:08.8999874Z Downloading packages...
+2025-11-26T06:39:12.0743205Z + archive 3.6.1 (4.0.7 available)
+2025-11-26T06:39:12.0743779Z + args 2.7.0
+2025-11-26T06:39:12.0744106Z + async 2.13.0
+2025-11-26T06:39:12.0744446Z + boolean_selector 2.1.2
+2025-11-26T06:39:12.0744927Z + characters 1.4.0 (1.4.1 available)
+2025-11-26T06:39:12.0745345Z + clock 1.1.2
+2025-11-26T06:39:12.0745665Z + collection 1.19.1
+2025-11-26T06:39:12.0746011Z + cross_file 0.3.5+1
+2025-11-26T06:39:12.0746362Z + crypto 3.0.7
+2025-11-26T06:39:12.0746691Z + csv 6.0.0
+2025-11-26T06:39:12.0746998Z + dbus 0.7.11
+2025-11-26T06:39:12.0747312Z + equatable 2.0.7
+2025-11-26T06:39:12.0747652Z + excel 2.1.0 (4.0.6 available)
+2025-11-26T06:39:12.0748082Z + fake_async 1.3.3
+2025-11-26T06:39:12.0748439Z + ffi 2.1.4
+2025-11-26T06:39:12.0748791Z + file_picker 8.3.7 (10.3.7 available)
+2025-11-26T06:39:12.0749290Z + file_selector_linux 0.9.4
+2025-11-26T06:39:12.0749697Z + file_selector_macos 0.9.5
+2025-11-26T06:39:12.0750125Z + file_selector_platform_interface 2.7.0
+2025-11-26T06:39:12.0750977Z + file_selector_windows 0.9.3+5
+2025-11-26T06:39:12.0751462Z + fixnum 1.1.1
+2025-11-26T06:39:12.0751838Z + fl_chart 0.68.0 (1.1.1 available)
+2025-11-26T06:39:12.0752314Z + flutter 0.0.0 from sdk flutter
+2025-11-26T06:39:12.0752753Z + flutter_lints 4.0.0 (6.0.0 available)
+2025-11-26T06:39:12.0753277Z + flutter_local_notifications 19.5.0
+2025-11-26T06:39:12.0753767Z + flutter_local_notifications_linux 6.0.0
+2025-11-26T06:39:12.0754341Z + flutter_local_notifications_platform_interface 9.1.0
+2025-11-26T06:39:12.0754890Z + flutter_local_notifications_windows 1.0.3
+2025-11-26T06:39:12.0755385Z + flutter_plugin_android_lifecycle 2.0.33
+2025-11-26T06:39:12.0755863Z + flutter_test 0.0.0 from sdk flutter
+2025-11-26T06:39:12.0756343Z + flutter_web_plugins 0.0.0 from sdk flutter
+2025-11-26T06:39:12.0756831Z + geolocator 10.1.1 (14.0.2 available)
+2025-11-26T06:39:12.0757679Z + geolocator_android 4.6.2 (5.0.2 available)
+2025-11-26T06:39:12.0758170Z + geolocator_apple 2.3.13
+2025-11-26T06:39:12.0758597Z + geolocator_platform_interface 4.2.6
+2025-11-26T06:39:12.0759065Z + geolocator_web 2.2.1 (4.1.3 available)
+2025-11-26T06:39:12.0759528Z + geolocator_windows 0.2.5
+2025-11-26T06:39:12.0759912Z + http 1.6.0
+2025-11-26T06:39:12.0760234Z + http_parser 4.1.2
+2025-11-26T06:39:12.0760802Z + image 4.3.0 (4.5.4 available)
+2025-11-26T06:39:12.0761226Z + image_picker 1.2.1
+2025-11-26T06:39:12.0761609Z + image_picker_android 0.8.13+10
+2025-11-26T06:39:12.0762056Z + image_picker_for_web 3.1.1
+2025-11-26T06:39:12.0762463Z + image_picker_ios 0.8.13+2
+2025-11-26T06:39:12.0762867Z + image_picker_linux 0.2.2
+2025-11-26T06:39:12.0763275Z + image_picker_macos 0.2.2+1
+2025-11-26T06:39:12.0763718Z + image_picker_platform_interface 2.11.1
+2025-11-26T06:39:12.0764215Z + image_picker_windows 0.2.2
+2025-11-26T06:39:12.0764611Z + intl 0.19.0 (0.20.2 available)
+2025-11-26T06:39:12.0765026Z + leak_tracker 11.0.2
+2025-11-26T06:39:12.0765406Z + leak_tracker_flutter_testing 3.0.10
+2025-11-26T06:39:12.0765857Z + leak_tracker_testing 3.0.2
+2025-11-26T06:39:12.0766240Z + lints 4.0.0 (6.0.0 available)
+2025-11-26T06:39:12.0766640Z + matcher 0.12.17 (0.12.18 available)
+2025-11-26T06:39:12.0767124Z + material_color_utilities 0.11.1 (0.13.0 available)
+2025-11-26T06:39:12.0767927Z + meta 1.16.0 (1.17.0 available)
+2025-11-26T06:39:12.0768340Z + mime 2.0.0
+2025-11-26T06:39:12.0768654Z + path 1.9.1
+2025-11-26T06:39:12.0768989Z + path_provider 2.1.5
+2025-11-26T06:39:12.0769382Z + path_provider_android 2.2.22
+2025-11-26T06:39:12.0769822Z + path_provider_foundation 2.5.1
+2025-11-26T06:39:12.0770266Z + path_provider_linux 2.2.1
+2025-11-26T06:39:12.0770931Z + path_provider_platform_interface 2.1.2
+2025-11-26T06:39:12.0771437Z + path_provider_windows 2.3.0
+2025-11-26T06:39:12.0771858Z + petitparser 7.0.1
+2025-11-26T06:39:12.0772249Z + platform 3.1.6
+2025-11-26T06:39:12.0772668Z + plugin_platform_interface 2.1.8
+2025-11-26T06:39:12.0773149Z + sky_engine 0.0.0 from sdk flutter
+2025-11-26T06:39:12.0773589Z + source_span 1.10.1
+2025-11-26T06:39:12.0773936Z + sqflite 2.4.2
+2025-11-26T06:39:12.0774258Z + sqflite_android 2.4.2+2
+2025-11-26T06:39:12.0774608Z + sqflite_common 2.5.6
+2025-11-26T06:39:12.0774941Z + sqflite_darwin 2.4.2
+2025-11-26T06:39:12.0775311Z + sqflite_platform_interface 2.4.0
+2025-11-26T06:39:12.0775715Z + stack_trace 1.12.1
+2025-11-26T06:39:12.0776044Z + stream_channel 2.1.4
+2025-11-26T06:39:12.0776381Z + string_scanner 1.4.1
+2025-11-26T06:39:12.0776811Z + synchronized 3.4.0
+2025-11-26T06:39:12.0777221Z + term_glyph 1.2.2
+2025-11-26T06:39:12.0777590Z + test_api 0.7.6 (0.7.8 available)
+2025-11-26T06:39:12.0778011Z + timezone 0.10.1
+2025-11-26T06:39:12.0778355Z + typed_data 1.4.0
+2025-11-26T06:39:12.0778654Z + uuid 4.5.2
+2025-11-26T06:39:12.0778942Z + vector_math 2.2.0
+2025-11-26T06:39:12.0779260Z + vm_service 15.0.2
+2025-11-26T06:39:12.0779581Z + web 1.1.1
+2025-11-26T06:39:12.0779875Z + win32 5.15.0
+2025-11-26T06:39:12.0780219Z + workmanager 0.9.0+3
+2025-11-26T06:39:12.0780871Z + workmanager_android 0.9.0+2
+2025-11-26T06:39:12.0781295Z + workmanager_apple 0.9.1+2
+2025-11-26T06:39:12.0781732Z + workmanager_platform_interface 0.9.1+1
+2025-11-26T06:39:12.0782195Z + xdg_directories 1.1.0
+2025-11-26T06:39:12.0782557Z + xml 6.6.1
+2025-11-26T06:39:12.0782900Z Changed 93 dependencies!
+2025-11-26T06:39:12.0783528Z 16 packages have newer versions incompatible with dependency constraints.
+2025-11-26T06:39:12.0784257Z Try `flutter pub outdated` for more information.
+2025-11-26T06:39:12.4230172Z ##[group]Run if [ ! -d "android" ]; then
+2025-11-26T06:39:12.4230796Z [36;1mif [ ! -d "android" ]; then[0m
+2025-11-26T06:39:12.4231218Z [36;1m  flutter create . --platforms=android --project-name quote_app --org com.example[0m
+2025-11-26T06:39:12.4231615Z [36;1mfi[0m
+2025-11-26T06:39:12.4265151Z shell: /usr/bin/bash -e {0}
+2025-11-26T06:39:12.4265394Z env:
+2025-11-26T06:39:12.4265612Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:39:12.4266193Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:12.4266665Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:12.4267115Z   FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.35.3-x64
+2025-11-26T06:39:12.4267445Z   PUB_CACHE: /home/runner/.pub-cache
+2025-11-26T06:39:12.4267688Z ##[endgroup]
+2025-11-26T06:39:12.4370961Z ##[group]Run echo "***"
+2025-11-26T06:39:12.4371648Z [36;1mecho "***"[0m
+2025-11-26T06:39:12.4372026Z [36;1mls -la[0m
+2025-11-26T06:39:12.4372400Z [36;1mtest -f pubspec.yaml[0m
+2025-11-26T06:39:12.4372859Z [36;1mtest -f lib/main.dart[0m
+2025-11-26T06:39:12.4417988Z shell: /usr/bin/bash -e {0}
+2025-11-26T06:39:12.4418377Z env:
+2025-11-26T06:39:12.4418727Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:39:12.4419390Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:12.4420221Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:12.4421240Z   FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.35.3-x64
+2025-11-26T06:39:12.4421829Z   PUB_CACHE: /home/runner/.pub-cache
+2025-11-26T06:39:12.4422252Z ##[endgroup]
+2025-11-26T06:39:12.4493843Z ***
+2025-11-26T06:39:12.4509777Z total 2556
+2025-11-26T06:39:12.4510237Z drwxr-xr-x 9 runner runner    4096 Nov 26 06:39 .
+2025-11-26T06:39:12.4511156Z drwxr-xr-x 3 runner runner    4096 Nov 26 06:38 ..
+2025-11-26T06:39:12.4511796Z drwxr-xr-x 2 runner runner    4096 Nov 26 06:39 .dart_tool
+2025-11-26T06:39:12.4512550Z -rw-r--r-- 1 runner runner    8678 Nov 26 06:39 .flutter-plugins-dependencies
+2025-11-26T06:39:12.4513263Z drwxr-xr-x 7 runner runner    4096 Nov 26 06:38 .git
+2025-11-26T06:39:12.4513843Z drwxr-xr-x 3 runner runner    4096 Nov 26 06:38 .github
+2025-11-26T06:39:12.4514774Z -rw-r--r-- 1 runner runner       0 Nov 26 06:38 17582248524483561327215006368404.jpg
+2025-11-26T06:39:12.4515547Z -rw-r--r-- 1 runner runner    1106 Nov 25 18:26 CHANGELOG_FIX27.txt
+2025-11-26T06:39:12.4516318Z -rw-r--r-- 1 runner runner    2739 Nov 25 18:26 CHANGES_quote_app_PATCHED.md
+2025-11-26T06:39:12.4517105Z -rw-r--r-- 1 runner runner    6305 Nov 25 18:26 MIGRATION_MAP_MAPPING.md
+2025-11-26T06:39:12.4517844Z -rw-r--r-- 1 runner runner     882 Nov 25 18:26 PATCH_CHANGELOG.json
+2025-11-26T06:39:12.4518501Z -rw-r--r-- 1 runner runner    1100 Nov 25 18:26 README.md
+2025-11-26T06:39:12.4519105Z drwxr-xr-x 4 runner runner    4096 Nov 26 06:39 android
+2025-11-26T06:39:12.4519910Z -rw-r--r-- 1 runner runner 2498506 Nov 26 06:38 app_fixed3_vision_multi_triggers_v4_dbifix_updated.zip
+2025-11-26T06:39:12.4520945Z drwxr-xr-x 6 runner runner    4096 Nov 26 01:39 assets
+2025-11-26T06:39:12.4521520Z drwxr-xr-x 8 runner runner    4096 Nov 26 01:39 lib
+2025-11-26T06:39:12.4522125Z -rw-r--r-- 1 runner runner    3540 Nov 25 18:26 patch_diffs.txt
+2025-11-26T06:39:12.4522779Z -rw-r--r-- 1 runner runner   21917 Nov 26 06:39 pubspec.lock
+2025-11-26T06:39:12.4523393Z -rw-r--r-- 1 runner runner    1111 Nov 26 06:33 pubspec.yaml
+2025-11-26T06:39:12.4524082Z -rw-r--r-- 1 runner runner    8246 Nov 25 18:26 scoped_reschedule_patch.diff
+2025-11-26T06:39:12.4524749Z drwxr-xr-x 2 runner runner    4096 Nov 26 01:39 store
+2025-11-26T06:39:12.4561733Z ##[group]Run flutter build apk --release -t lib/main.dart
+2025-11-26T06:39:12.4562450Z [36;1mflutter build apk --release -t lib/main.dart[0m
+2025-11-26T06:39:12.4608110Z shell: /usr/bin/bash -e {0}
+2025-11-26T06:39:12.4608530Z env:
+2025-11-26T06:39:12.4608910Z   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+2025-11-26T06:39:12.4609616Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:12.4610733Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+2025-11-26T06:39:12.4611555Z   FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.35.3-x64
+2025-11-26T06:39:12.4612158Z   PUB_CACHE: /home/runner/.pub-cache
+2025-11-26T06:39:12.4612648Z ##[endgroup]
+2025-11-26T06:39:12.9690049Z Upgrading build.gradle
+2025-11-26T06:41:33.9415084Z Running Gradle task 'assembleRelease'...                        
+2025-11-26T06:41:33.9417002Z Checking the license for package NDK (Side by side) 27.0.12077973 in /usr/local/lib/android/sdk/licenses
+2025-11-26T06:41:33.9418625Z License for package NDK (Side by side) 27.0.12077973 accepted.
+2025-11-26T06:41:33.9420269Z Preparing "Install NDK (Side by side) 27.0.12077973 v.27.0.12077973".
+2025-11-26T06:41:49.3276980Z "Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" ready.
+2025-11-26T06:41:49.3279785Z Installing NDK (Side by side) 27.0.12077973 in /usr/local/lib/android/sdk/ndk/27.0.12077973
+2025-11-26T06:41:49.3282051Z "Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" complete.
+2025-11-26T06:41:49.6336105Z "Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" finished.
+2025-11-26T06:44:17.7289753Z Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 6000 bytes (99.6% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+2025-11-26T06:44:38.1280046Z Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
+2025-11-26T06:44:38.1281749Z License for package CMake 3.22.1 accepted.
+2025-11-26T06:44:38.1282464Z Preparing "Install CMake 3.22.1 v.3.22.1".
+2025-11-26T06:44:39.1282670Z "Install CMake 3.22.1 v.3.22.1" ready.
+2025-11-26T06:44:39.1283714Z Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
+2025-11-26T06:44:39.1286238Z "Install CMake 3.22.1 v.3.22.1" complete.
+2025-11-26T06:44:39.1286721Z "Install CMake 3.22.1 v.3.22.1" finished.
+2025-11-26T06:45:42.8343216Z /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/am/AlarmReceiver.java:44: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:42.8344929Z             try { NotifyHelper.send(context.getApplicationContext(), id, title, body, null); } catch (Throwable ignore) {}
+2025-11-26T06:45:42.8345789Z                               ^
+2025-11-26T06:45:42.8346316Z   required: Context,int,String,String,String,String,String
+2025-11-26T06:45:42.8354745Z   found:    Context,int,String,String,<null>
+2025-11-26T06:45:42.8356077Z   reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.0276671Z /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/biz/Biz.java:69: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:43.0303562Z             NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
+2025-11-26T06:45:43.0309318Z                         ^
+2025-11-26T06:45:43.0310299Z   required: Context,int,String,String,String,String,String
+2025-11-26T06:45:43.0311682Z   found:    Context,int,String,String,String
+2025-11-26T06:45:43.0314311Z   reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.0317258Z /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/biz/Biz.java:92: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:43.0318844Z             NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
+2025-11-26T06:45:43.0319951Z                         ^
+2025-11-26T06:45:43.0320663Z   required: Context,int,String,String,String,String,String
+2025-11-26T06:45:43.0326632Z   found:    Context,int,String,String,String
+2025-11-26T06:45:43.0354988Z   reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.0366580Z /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/biz/Biz.java:116: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:43.0368164Z             NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
+2025-11-26T06:45:43.0368848Z                         ^
+2025-11-26T06:45:43.0369342Z   required: Context,int,String,String,String,String,String
+2025-11-26T06:45:43.0370331Z   found:    Context,int,String,String,String
+2025-11-26T06:45:43.0371143Z   reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.0373441Z Note: /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/data/DbInspector.java uses or overrides a deprecated API.
+2025-11-26T06:45:43.0375002Z Note: Recompile with -Xlint:deprecation for details.
+2025-11-26T06:45:43.0376678Z 4 errors
+2025-11-26T06:45:43.1331380Z 
+2025-11-26T06:45:43.1371197Z FAILURE: Build failed with an exception.
+2025-11-26T06:45:43.1371879Z 
+2025-11-26T06:45:43.1372131Z * What went wrong:
+2025-11-26T06:45:43.1392497Z Execution failed for task ':app:compileReleaseJavaWithJavac'.
+2025-11-26T06:45:43.1394259Z > Compilation failed; see the compiler output below.
+2025-11-26T06:45:43.1395626Z   /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/am/AlarmReceiver.java:44: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:43.1398166Z               try { NotifyHelper.send(context.getApplicationContext(), id, title, body, null); } catch (Throwable ignore) {}
+2025-11-26T06:45:43.1398932Z                                 ^
+2025-11-26T06:45:43.1399432Z     required: Context,int,String,String,String,String,String
+2025-11-26T06:45:43.1399988Z     found:    Context,int,String,String,<null>
+2025-11-26T06:45:43.1400692Z     reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.1401915Z   /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/biz/Biz.java:69: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:43.1403295Z               NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
+2025-11-26T06:45:43.1403940Z                           ^
+2025-11-26T06:45:43.1404406Z     required: Context,int,String,String,String,String,String
+2025-11-26T06:45:43.1404975Z     found:    Context,int,String,String,String
+2025-11-26T06:45:43.1405514Z     reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.1406807Z   /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/biz/Biz.java:92: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:43.1408046Z               NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
+2025-11-26T06:45:43.1408602Z                           ^
+2025-11-26T06:45:43.1409002Z     required: Context,int,String,String,String,String,String
+2025-11-26T06:45:43.1409495Z     found:    Context,int,String,String,String
+2025-11-26T06:45:43.1409969Z     reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.1411321Z   /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/biz/Biz.java:116: error: method send in class NotifyHelper cannot be applied to given types;
+2025-11-26T06:45:43.1412589Z               NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
+2025-11-26T06:45:43.1413151Z                           ^
+2025-11-26T06:45:43.1413546Z     required: Context,int,String,String,String,String,String
+2025-11-26T06:45:43.1414507Z     found:    Context,int,String,String,String
+2025-11-26T06:45:43.1414990Z     reason: actual and formal argument lists differ in length
+2025-11-26T06:45:43.1416000Z   Note: /home/runner/work/quote_app/quote_app/android/app/src/main/java/com/example/quote_app/data/DbInspector.java uses or overrides a deprecated API.
+2025-11-26T06:45:43.1416993Z   Note: Recompile with -Xlint:deprecation for details.
+2025-11-26T06:45:43.1417392Z   4 errors
+2025-11-26T06:45:43.1417528Z 
+2025-11-26T06:45:43.1417620Z * Try:
+2025-11-26T06:45:43.1417978Z > Check your code and dependencies to fix the compilation error(s)
+2025-11-26T06:45:43.1418462Z > Run with --scan to get full insights.
+2025-11-26T06:45:43.1418714Z 
+2025-11-26T06:45:43.1418822Z BUILD FAILED in 6m 29s
+2025-11-26T06:45:43.5777753Z Running Gradle task 'assembleRelease'...                          390.5s
+2025-11-26T06:45:43.5878216Z Gradle task assembleRelease failed with exit code 1
+2025-11-26T06:45:43.5947617Z ##[error]Process completed with exit code 1.
+2025-11-26T06:45:43.6094903Z Post job cleanup.
+2025-11-26T06:45:43.6159020Z Post job cleanup.
+2025-11-26T06:45:43.8015044Z Post job cleanup.
+2025-11-26T06:45:43.9823088Z [command]/usr/bin/git version
+2025-11-26T06:45:43.9892401Z git version 2.51.2
+2025-11-26T06:45:43.9956958Z Temporarily overriding HOME='/home/runner/work/_temp/a97d0810-b958-4fe8-8175-133c78100f55' before making global git config changes
+2025-11-26T06:45:43.9958716Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-26T06:45:43.9964886Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/quote_app/quote_app
+2025-11-26T06:45:44.0045087Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-26T06:45:44.0103001Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-26T06:45:44.0491347Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-26T06:45:44.0530747Z http.https://github.com/.extraheader
+2025-11-26T06:45:44.0546964Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2025-11-26T06:45:44.0582755Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-26T06:45:44.0820559Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2025-11-26T06:45:44.0855215Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2025-11-26T06:45:44.1191744Z Cleaning up orphan processes
+2025-11-26T06:45:44.1488437Z Terminate orphan process: pid (2647) (java)
+2025-11-26T06:45:44.1553272Z Terminate orphan process: pid (3332) (java)

@@ -1,0 +1,23 @@
+Fix15: Geo target coordinate-system mismatch + UnlockPulse Doze reliability
+
+1) GeoRuleEngine.kt
+- Read optional cfg.coordType from geo trigger config.
+- Distance comparison now normalizes both current location and target coordinates to WGS84.
+  * If current Location.provider contains 'baidu' -> treat as BD-09 and convert to WGS84.
+  * For target: if coordType is known (wgs84/gcj02/bd09), convert accordingly.
+  * For legacy targets without coordType, try raw + gcj02->wgs84 + bd09->wgs84 and pick the minimum distance.
+- Log includes coordType and which normalization path was used.
+
+2) discover_page.dart
+- When adding/updating geo trigger and lat/lng present, persist cfg.coordType:
+  * LocationService.lastProvider == 'baidu' => 'bd09'
+  * else => 'wgs84'
+
+3) UnlockPulse.kt
+- scheduleNext() uses AlarmManager.setExactAndAllowWhileIdle / setAndAllowWhileIdle on API 23+.
+- Keeps exact-alarm permission guards (Android 12+/14+ may throw SecurityException).
+- Falls back to setExact/set for API < 23.
+
+Notes:
+- No foreground-service permanent notification introduced.
+- This is a best-effort reliability improvement; OEM battery restrictions may still throttle idle alarms.

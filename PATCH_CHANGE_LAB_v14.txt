@@ -1,0 +1,35 @@
+Change Lab v14 patch summary
+
+This iteration focuses on post-world-completion retention and branching follow-up flows.
+
+Added:
+- world achievement poster share text generation
+- copy/share-ready poster text action on world achievement page
+- multi-branch next-mainline recommendations on world achievement page
+- branch-aware weekly plan generation after world completion
+- direct "generate next weekly plan" actions from:
+  - world achievement page
+  - home completion card
+  - AI coach latest completion reward card
+
+Controller additions:
+- recommendedNextWorldBranches(worldId)
+- recommendedNextBranchMissions(worldId)
+- branchRecommendationSummary(worldId)
+- achievementPosterShareText(worldId)
+- generateWeeklyPlanFromWorldCompletion(worldId)
+- generateWeeklyPlanForWorldBranch(targetWorldId, {sourceWorldId})
+- internal helper _replaceWeeklyPlanWithConcepts(...)
+
+UI additions:
+- achievement poster section
+- copy poster text CTA
+- multi-branch recommendation cards
+- branch-specific weekly plan CTA
+- weekly plan CTA on latest world completion cards
+
+Files touched:
+- lib/change_lab/controllers/change_lab_controller.dart
+- lib/change_lab/ui/change_world_achievement_page.dart
+- lib/change_lab/ui/change_lab_shell_page.dart
+- lib/change_lab/ui/change_ai_coach_page.dart

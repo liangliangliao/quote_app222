@@ -1,0 +1,8 @@
+基于 quote_app_semantic_consistency_v17_relation_judge.zip 修改：
+- EPUB 导入优先读取 OPF spine 阅读顺序、nav.xhtml / toc.ncx 目录，并按目录标题注入章/节结构。
+- DOCX 导入尝试读取 Word 标题样式并转换为 Markdown 标题，提升章/节识别率。
+- Markdown/HTML/EPUB 标题识别增强，支持无“第……章”的电子书标题。
+- 增加阅读位置记忆，可从课程目录直接继续上次阅读。
+- 课程目录中已展开课程的章节支持拖拽排序并保存到数据库。
+- 支持清空全部课程，清空前有确认提醒。
+- 长按章节标题可弹出删除按钮并删除该章全部内容。

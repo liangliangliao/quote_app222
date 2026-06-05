@@ -1,0 +1,12 @@
+Change Lab Integrated Version: v10
+Date: 2026-04-01
+Theme: Reward flow + mission banners + world-priority recommendation loop
+
+Highlights:
+- Added reward-event feed and mission banner integration to overview, AI coach, and world pages.
+- Prioritized active world missions in recommendedTaskNow.
+- Added controller helpers for latest reward events, active mission queue, recently unlocked missions, priority mission selection, remaining action count, and reward narratives.
+- Added overview cards for world mainline progress and recent rewards.
+- Added AI coach sections for world mainline prompts and reward flow.
+- Enhanced mirror world home cards with active mission status and latest reward hints.
+- Enhanced rules page with automatic mainline snapshot.

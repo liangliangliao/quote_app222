@@ -1,0 +1,32 @@
+Change Lab v3 patch summary
+
+1. Added AI coach page:
+   - lib/change_lab/ui/change_ai_coach_page.dart
+   - app bar entry from Change Lab shell
+
+2. Enhanced controller:
+   - task run records persisted to local JSON
+   - coach daily brief / success / failure feedback
+   - recommended task for now
+   - today and weekly action metrics
+   - average relief score from before/after task check-in
+   - reminder templates for each task card
+
+3. Enhanced concept detail execution:
+   - before/after score sliders
+   - structured task run capture
+   - snackbar now shows coach-style success feedback
+   - reflection tab now shows recent task run records
+
+4. Enhanced overview and task center:
+   - AI coach summary card
+   - weekly action overview
+   - recent action records
+   - task cards now show reminder templates
+
+5. Enhanced profile page:
+   - today/weekly action metrics
+   - recent task run list in addition to reflections
+
+6. Updated drawer subtitle in main menu:
+   - added AI coach to Change Lab entry subtitle

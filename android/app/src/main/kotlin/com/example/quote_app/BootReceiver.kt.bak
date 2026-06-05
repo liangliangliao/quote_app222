@@ -1,0 +1,42 @@
+package com.example.quote_app
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+
+/**
+ * BootReceiver listens for device boot completed or app package replacement
+ * events and reinitializes all scheduled tasks.  It enqueues a one‑off
+ * workmanager job with job name `wm_boot` which is handled in the Dart
+ * dispatcher to restore all alarms and scheduled WorkManager tasks.
+ */
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        // Build data payload
+        val data = Data.Builder()
+            .putString("job", "wm_boot")
+            .build()
+        val request = OneTimeWorkRequestBuilder<AlarmProxyWorker>()
+            .setInputData(data)
+            .build()
+        WorkManager.getInstance(context).enqueue(request)
+
+        // Schedule periodic geo location checks on boot to handle geo triggers
+        try {
+            GeoWorker.schedule(context)
+        } catch (_: Throwable) { /* ignore scheduling errors */ }
+
+        // Start ScreenGatekeeperService so that unlock reminders can run after reboot
+        try {
+            val sIntent = Intent(context, ScreenGatekeeperService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(sIntent)
+            } else {
+                context.startService(sIntent)
+            }
+        } catch (_: Throwable) { /* ignore */ }
+    }
+}

@@ -1,0 +1,27 @@
+Patch Change Lab v10
+
+Core changes:
+1. Controller logic
+- Added latestRewardEvent getter.
+- Added activeMissionQueue, recentlyUnlockedMissions, priorityMission.
+- Added remainingActionCountForMission, missionUnlockBanner, rewardFeedNarrative.
+- Added worldPriorityRecommendation.
+- Updated recommendedTaskNow to prioritize active world missions after open task instances.
+- Updated coachDailyBrief to mention mission banners and recent reward events.
+
+2. Overview page
+- Added '世界主线推进' card with CTA to current mission world and recommended action.
+- Added '最近奖励事件流' card.
+
+3. AI coach page
+- Added '世界主线提示' section.
+- Added '奖励事件流' section.
+- Connected world flow with existing task recommendation narrative.
+
+4. Mirror world page
+- Added top-level auto-recommended mission card.
+- Added reward event feed section.
+- Enhanced each world card with active mission progress and latest reward hint.
+
+5. Rules/config page
+- Added automatic mainline snapshot section for debugging/ops visibility.

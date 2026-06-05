@@ -1,0 +1,5 @@
+quote_app_touch_mystify_v37_visible_impact_quake
+
+- Release stage: visibly stronger hard quake, driven by real elapsed seconds.
+- Adds strobe flash, diagonal tear bands, multi-exposure displaced core, stronger jump offsets.
+- Keeps afterglow crystal bubbles without FBO ghost trails.

@@ -1,0 +1,3 @@
+v25 compile fix
+- fixed missing _moduleReviewProgressTile in lib/goal_module/goal_study_progress_page.dart
+- keeps theme review progress section compiling in release builds

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Insets for icon foreground (dp). Launcher uses a slightly larger inset to compensate launcher normalization/masks -->
+    <dimen name="icon_inset_launcher_dp">80dp</dimen>
+    <dimen name="icon_inset_splash_dp">24dp</dimen>
+    <dimen name="icon_inset_installer_dp">26dp</dimen>
+</resources>

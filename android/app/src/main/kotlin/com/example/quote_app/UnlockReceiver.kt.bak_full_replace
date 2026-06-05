@@ -1,0 +1,135 @@
+package com.example.quote_app
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.database.sqlite.SQLiteDatabase
+import android.os.Build
+import android.widget.Toast
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.example.quote_app.data.DbRepo
+
+/**
+ * UnlockReceiver listens for the USER_PRESENT broadcast which fires
+ * when the user unlocks the device. When triggered, it checks for
+ * any enabled screen‑unlock vision triggers and, if present, sends a
+ * gentle reminder notification encouraging the user to recall their
+ * vision goal.
+ */
+class UnlockReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        // 统一改为后台任务：将解锁/亮屏后的所有业务逻辑交给 UnlockWorker 执行（后台）
+        try {
+            com.example.quote_app.data.DbRepo.log(context, null, "【解锁后台】UnlockReceiver 收到广播，已改为触发后台 UnlockWorker 执行完整流程")
+        } catch (_: Throwable) {}
+        try {
+            UnlockWorker.trigger(context.applicationContext)
+        } catch (_: Throwable) {}
+    
+
+    /**
+     * Sends a notification reminding the user about their vision goal.
+     */
+    
+    /**
+     * 调试用：在关键时刻通过 Toast 提示当前处于哪一步后台解锁流程。
+     * 由于 BroadcastReceiver 与前台守护服务大多运行在主线程，这里直接使用 Toast。
+     * 为避免任何异常影响主流程，整个方法内部用 try/catch 保护。
+     */
+    private fun showDebugToast(context: Context, message: String) {
+        try {
+            Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun sendReminder(context: Context) {
+        // 记录最近一次通过解锁事件发送提醒的时间，方便 App 在启动时
+        // 避免立刻再补发一条重复通知。
+        try {
+            val prefs = context.getSharedPreferences("vision_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putLong("last_unlock_reminder_time", System.currentTimeMillis()).apply()
+        } catch (_: Throwable) {
+            // 忽略异常，避免因为偏好写入失败影响解锁提醒主流程
+        }
+
+        // 使用固定的通知 ID，避免在通知栏产生过多重复解锁提醒条目
+        val id = 2000
+        val title = "愿景提醒"
+        val body = "别忘了你的一件事！"
+
+        // 记录本次计划发送解锁提醒的时间戳，用于后续排查“何时触发了通知发送逻辑”
+        val ts = System.currentTimeMillis()
+        try {
+            DbRepo.log(
+                context,
+                null,
+                "【解锁提醒】即将通过专用解锁提醒渠道发送通知，准备延迟 300ms 触发，ts=" + ts + "，通知ID=" + id
+            )
+        } catch (_: Throwable) {
+        }
+
+        // 在主线程上做一个轻微的延迟，避免在系统解锁动画尚未完全结束时立刻弹出通知，
+        // 某些 ROM 上会在此窗口内压制或静默处理 heads-up 通知。
+        try {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                {
+                    try {
+                        DbRepo.log(
+                            context,
+                            null,
+                            "【解锁提醒】延迟 300ms 后正式调用 NotifyHelper.sendUnlockReminder 发送解锁提醒通知"
+                        )
+                    } catch (_: Throwable) {
+                    }
+                    try {
+                        showDebugToast(context, "正在发送解锁提醒通知（已调用 NotifyHelper.sendUnlockReminder）")
+                    } catch (_: Throwable) {}
+                    try {
+                        NotifyHelper.sendUnlockReminder(context, id, title, body)
+                    } catch (e: Throwable) {
+                        // 这里捕获所有异常，避免通知构造/发送异常导致解锁广播链路崩溃
+                        try {
+                            DbRepo.log(
+                                context,
+                                null,
+                                "【解锁提醒】调用 NotifyHelper.sendUnlockReminder 发送解锁提醒通知时发生异常，异常类型=" +
+                                    e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                            )
+                        } catch (_: Throwable) {
+                        }
+                    }
+                },
+                300L
+            )
+        } catch (e: Throwable) {
+            // 如果延迟调度本身出现异常，则回退为直接同步发送，确保用户仍有机会收到提醒
+            try {
+                DbRepo.log(
+                    context,
+                    null,
+                    "【解锁提醒】Handler.postDelayed 安排延迟发送失败，回退为同步发送解锁提醒通知，异常类型=" +
+                        e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                )
+            } catch (_: Throwable) {
+            }
+            try {
+                NotifyHelper.sendUnlockReminder(context, id, title, body)
+            } catch (inner: Throwable) {
+                try {
+                    DbRepo.log(
+                        context,
+                        null,
+                        "【解锁提醒】回退同步发送解锁提醒通知仍然失败，异常类型=" +
+                            inner.javaClass.simpleName + "，message=" + (inner.message ?: "null")
+                    )
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        // 无需在此处重复调度 GeoWorker；GeoWorker 已在 onReceive 中统一调度。
+    }
+
+}

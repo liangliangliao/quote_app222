@@ -1,0 +1,4 @@
+v20 goal module: home continue flow now includes theme-review-originated actions.
+- Added GoalModuleReviewActionOverview model and DAO query.
+- Home dashboard now shows recent/pending theme review actions.
+- Continue flow prioritizes pending theme review followup after unfinished action drafts.

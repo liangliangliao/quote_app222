@@ -1,0 +1,456 @@
+package com.example.quote_app
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.database.sqlite.SQLiteDatabase
+import android.os.Build
+import android.widget.Toast
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.example.quote_app.data.DbRepo
+
+/**
+ * UnlockReceiver listens for the USER_PRESENT broadcast which fires
+ * when the user unlocks the device. When triggered, it checks for
+ * any enabled screen‑unlock vision triggers and, if present, sends a
+ * gentle reminder notification encouraging the user to recall their
+ * vision goal.
+ */
+class UnlockReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        // Log screen-on/unlock to trigger notification later
+        try {
+            showDebugToast(context, "UnlockReceiver.onReceive 已被调用，action=" + (intent?.action ?: "null"))
+        } catch (_: Throwable) {}
+        try {
+            val act = intent?.action
+            if (act == android.content.Intent.ACTION_SCREEN_ON ||
+                act == android.content.Intent.ACTION_USER_PRESENT ||
+                act == android.content.Intent.ACTION_USER_UNLOCKED) {
+                DbRepo.log(context, null, "正在解锁屏幕将触发通知发送")
+                try {
+                    showDebugToast(context, "正在解锁屏幕（解锁广播已到达 UnlockReceiver）")
+                } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) {}
+        try {
+            // Log the received broadcast action for debugging and analytics
+            try {
+                DbRepo.log(context, null, "[UnlockReceiver] onReceive action=" + (intent?.action ?: "null"))
+                DbRepo.log(
+                    context,
+                    null,
+                    "【解锁提醒】收到系统解锁相关广播，action=" + (intent?.action ?: "null")
+                )
+            } catch (_: Throwable) {}
+
+            
+            // 在真正处理数据库与解锁提醒业务逻辑之前，优先检查前台守护服务状态：
+            // 1）如果前台服务当前不在运行，则尝试从本次解锁/亮屏广播拉起 ScreenGatekeeperService；
+            // 2）如果前台服务已在运行，则发送 ACTION_REFRESH_FG 指令，让其重新注册监听、刷新内部状态；
+            // 这样可以最大程度保证后续解锁提醒逻辑在一个“被前台服务保护”的进程环境中执行。
+            try {
+                val actNow = intent?.action
+                if (actNow == Intent.ACTION_SCREEN_ON ||
+                    actNow == Intent.ACTION_USER_PRESENT ||
+                    actNow == Intent.ACTION_USER_UNLOCKED) {
+                    if (!ScreenGatekeeperService.isRunning) {
+                        try {
+                            DbRepo.log(
+                                context,
+                                null,
+                                "【解锁守护服务】UnlockReceiver：检测到解锁/亮屏事件且前台守护服务当前不在运行，准备通过解锁广播尝试拉起前台守护服务"
+                            )
+                        } catch (_: Throwable) {
+                        }
+                        val serviceIntent = Intent(context, ScreenGatekeeperService::class.java)
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
+                            try {
+                                DbRepo.log(
+                                    context,
+                                    null,
+                                    "【解锁守护服务】UnlockReceiver：已向系统发出拉起 ScreenGatekeeperService 的请求（前台守护服务），后续将通过服务日志确认实际运行状态"
+                                )
+                            } catch (_: Throwable) {
+                            }
+                        } catch (e: Throwable) {
+                            try {
+                                DbRepo.log(
+                                    context,
+                                    null,
+                                    "【解锁守护服务】UnlockReceiver：尝试从解锁/亮屏广播拉起 ScreenGatekeeperService 失败，将仅依赖当前进程处理本次解锁逻辑，exception=" +
+                                        e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                                )
+                            } catch (_: Throwable) {
+                            }
+                        }
+                    } else {
+                        // 前台守护服务已在运行：通过自定义 Action 下发刷新指令，触发服务内部重新注册监听。
+                        try {
+                            DbRepo.log(
+                                context,
+                                null,
+                                "【解锁守护服务】UnlockReceiver：检测到解锁/亮屏事件且前台守护服务已在运行，本次不重新拉起，仅发送 ACTION_REFRESH_FG 指令刷新内部监听"
+                            )
+                        } catch (_: Throwable) {
+                        }
+                        val refreshIntent = Intent(context, ScreenGatekeeperService::class.java).apply {
+                            action = ScreenGatekeeperService.ACTION_REFRESH_FG
+                        }
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(refreshIntent)
+                            } else {
+                                context.startService(refreshIntent)
+                            }
+                            try {
+                                DbRepo.log(
+                                    context,
+                                    null,
+                                    "【解锁守护服务】UnlockReceiver：已向前台守护服务发送 ACTION_REFRESH_FG 刷新指令，请在 ScreenGatekeeperService 日志中确认 refreshInternalState 是否执行"
+                                )
+                            } catch (_: Throwable) {
+                            }
+                        } catch (e: Throwable) {
+                            try {
+                                DbRepo.log(
+                                    context,
+                                    null,
+                                    "【解锁守护服务】UnlockReceiver：尝试通过 ACTION_REFRESH_FG 刷新前台守护服务内部监听失败，本次仍继续执行解锁提醒业务逻辑，exception=" +
+                                        e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                                )
+                            } catch (_: Throwable) {
+                            }
+                        }
+                    }
+                } else {
+                    try {
+                        DbRepo.log(
+                            context,
+                            null,
+                            "【解锁守护服务】UnlockReceiver：收到的并非解锁/亮屏相关广播（action=" + (actNow ?: "null") + "），本次不执行前台服务拉起或刷新逻辑"
+                        )
+                    } catch (_: Throwable) {
+                    }
+                }
+            } catch (_: Throwable) {
+                // 捕获所有异常，避免因为前台服务状态检查影响解锁提醒主流程
+                try {
+                    DbRepo.log(
+                        context,
+                        null,
+                        "【解锁守护服务】UnlockReceiver：在检查/拉起/刷新前台守护服务时发生异常，本次将直接继续后续解锁提醒逻辑"
+                    )
+                } catch (_: Throwable) {
+                }
+            }
+
+// No matter whether a screen_unlock trigger exists or whether a reminder will be sent,
+            // enqueue a one‑off GeoWorker when the user unlocks the device. This ensures that
+            // the device's current location is checked after every unlock so that geo rules
+            // can fire without requiring the user to manually press the locate button.  Wrap
+            // the scheduling in a try/catch so that any WorkManager issues do not break
+            // the unlock flow.  Duplicates are allowed; WorkManager treats each request
+            // independently for one‑off workers.
+            try {
+                val request = OneTimeWorkRequestBuilder<GeoWorker>().build()
+                WorkManager.getInstance(context).enqueue(request)
+            } catch (_: Throwable) {
+                // ignore scheduling errors
+            }
+            // Open the SQLite database and query for enabled screen_unlock triggers.
+            try {
+                showDebugToast(context, "正在查询数据库（解锁提醒配置）")
+            } catch (_: Throwable) {}
+            val contract = com.example.quote_app.data.DbInspector.loadOrLightScan(context)
+            if (contract == null || contract.dbPath == null) {
+                // 如果无法加载数据库或路径为空，则无法判断解锁开关与冷却时间，直接跳过本次解锁提醒
+                try {
+                    DbRepo.log(
+                    context,
+                    null,
+                    "【解锁提醒】DbInspector 加载失败或 dbPath 为空，无法读取配置，本次解锁提醒将被跳过"
+                )
+                } catch (_: Throwable) {}
+                return
+            }
+            val db: SQLiteDatabase = SQLiteDatabase.openDatabase(contract.dbPath, null, SQLiteDatabase.OPEN_READONLY)
+            val cursor = db.rawQuery(
+                "SELECT config FROM vision_triggers WHERE type='screen_unlock' AND enabled=1 LIMIT 1",
+                null
+            )
+            val hasTrigger = cursor.moveToFirst()
+            cursor.close()
+            // Also check the persistent flag stored in notify_config so that
+            // unlocking can trigger reminders even if there is no
+            // screen_unlock row in vision_triggers. If the key is missing or
+            // false, configEnabled will remain false.
+            var configEnabled = false
+            try {
+                val c = db.rawQuery(
+                    "SELECT value FROM notify_config WHERE key='unlock_switch_enabled' LIMIT 1",
+                    null
+                )
+                if (c.moveToFirst()) {
+                    val v = c.getString(0)
+                    if (v != null) {
+                        val s = v.trim().lowercase()
+                        configEnabled = (s == "1" || s == "true")
+                    }
+                }
+                c.close()
+            } catch (_: Throwable) {
+                // ignore DB errors
+            }
+            try {
+                DbRepo.log(
+                context,
+                null,
+                "【解锁提醒】数据库检查完成，hasTrigger=" + hasTrigger +
+                    "，configEnabled=" + configEnabled +
+                    "（是否存在解锁触发器 / 解锁提醒开关是否开启）"
+            )
+            } catch (_: Throwable) {}
+            // 若解锁手机轻提醒开关处于关闭状态，则本次解锁直接跳过，不发送任何解锁通知
+            if (!configEnabled) {
+                try { DbRepo.log(
+                context,
+                null,
+                "【解锁提醒】解锁轻提醒开关已关闭，本次解锁不发送任何通知"
+            ) } catch (_: Throwable) {}
+                return
+            }
+            // 计算解锁提醒的冷却时间（默认30分钟，可被 notify_config 中的 unlock_cooldown_days / unlock_cooldown_minutes 覆盖）
+            var cooldownMs = 30L * 60L * 1000L
+            try {
+                // 优先读取按天配置
+                try {
+                    val cDay = db.rawQuery("SELECT value FROM notify_config WHERE key='unlock_cooldown_days' LIMIT 1", null)
+                    if (cDay.moveToFirst()) {
+                        val v = cDay.getString(0)
+                        try {
+                            val d = v?.toDouble()
+                            if (d != null && d > 0.0) {
+                                cooldownMs = (d * 24.0 * 60.0 * 60.0 * 1000.0).toLong()
+                            }
+                        } catch (_: Throwable) { }
+                    }
+                    cDay.close()
+                } catch (_: Throwable) { }
+                // 如果天数配置未覆盖，则尝试读取按分钟配置
+                if (cooldownMs == 30L * 60L * 1000L) {
+                    try {
+                        val cMin = db.rawQuery("SELECT value FROM notify_config WHERE key='unlock_cooldown_minutes' LIMIT 1", null)
+                        if (cMin.moveToFirst()) {
+                            val v2 = cMin.getString(0)
+                            try {
+                                val m = v2?.toInt()
+                                if (m != null && m > 0) {
+                                    cooldownMs = m.toLong() * 60L * 1000L
+                                }
+                            } catch (_: Throwable) { }
+                        }
+                        cMin.close()
+                    } catch (_: Throwable) { }
+                }
+            } catch (_: Throwable) { }
+            db.close()
+            // 根据冷却时间判断是否需要发送解锁提醒
+            var inCooldown = false
+            try {
+                val prefs = context.getSharedPreferences("vision_prefs", Context.MODE_PRIVATE)
+                val now = System.currentTimeMillis()
+                val last = prefs.getLong("last_unlock_reminder_time", 0L)
+                if (last > 0L && (now - last) < cooldownMs) {
+                    inCooldown = true
+                }
+            } catch (_: Throwable) { }
+            if (inCooldown) {
+                try { DbRepo.log(
+                context,
+                null,
+                "【解锁提醒】仍处于解锁提醒冷却期，跳过本次解锁通知，cooldownMs=" + cooldownMs
+            ) } catch (_: Throwable) {}
+                return
+            }
+            if (hasTrigger || configEnabled) {
+                // Record the timestamp of this unlock event so the app can detect
+                // recent unlocks when it starts. This value will be consumed
+                // by App.maybeSendUnlockReminderOnAppStart to avoid sending
+                // reminders when the app is opened long after unlocking.
+                try {
+                    val prefs = context.getSharedPreferences("vision_prefs", Context.MODE_PRIVATE)
+                    val ts = System.currentTimeMillis()
+                    prefs.edit().putLong("last_unlock_time", ts).apply()
+                    try {
+                        DbRepo.log(
+                            context,
+                            null,
+                            "【解锁提醒】记录本次解锁事件时间戳 last_unlock_time=" + ts
+                        )
+                    } catch (_: Throwable) {}
+                } catch (_: Throwable) { /* ignore errors */ }
+                sendReminder(context)
+
+                // 确保用于解锁/情景触发的守护服务已启动：Manifest UnlockReceiver 负责“第一声敲门”，
+                // 这里顺带拉起 ScreenGatekeeperService 提高进程存活率；如果服务已在运行，则不重复拉起。
+                try {
+                    if (!ScreenGatekeeperService.isRunning) {
+                        val serviceIntent = Intent(context, ScreenGatekeeperService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            context.startForegroundService(serviceIntent)
+                        } else {
+                            context.startService(serviceIntent)
+                        }
+                        try {
+                            DbRepo.log(
+                                context,
+                                null,
+                                "【解锁守护服务】已从解锁广播成功拉起 ScreenGatekeeperService（前台守护服务）"
+                            )
+                        } catch (_: Throwable) {
+                        }
+                    } else {
+                        try {
+                            DbRepo.log(
+                                context,
+                                null,
+                                "【解锁守护服务】检测到 ScreenGatekeeperService 已在运行，本次解锁不重复拉起"
+                            )
+                        } catch (_: Throwable) {
+                        }
+                    }
+                } catch (_: Throwable) {
+                    try {
+                        DbRepo.log(
+                            context,
+                            null,
+                            "【解锁守护服务】尝试从解锁广播拉起 ScreenGatekeeperService 失败，将仅依赖当前进程，异常已忽略"
+                        )
+                    } catch (_: Throwable) {
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+            // 发生异常时不再兜底发送解锁提醒，只记录错误日志，避免绕过解锁开关与冷却时间逻辑
+            try {
+                DbRepo.log(
+                context,
+                null,
+                "【解锁提醒】处理解锁广播时发生异常，本次解锁通知已被安全跳过，避免绕过开关和冷却时间逻辑"
+            )
+            } catch (_: Throwable) { /* ignore */ }
+        }
+    }
+
+    /**
+     * Sends a notification reminding the user about their vision goal.
+     */
+    
+    /**
+     * 调试用：在关键时刻通过 Toast 提示当前处于哪一步后台解锁流程。
+     * 由于 BroadcastReceiver 与前台守护服务大多运行在主线程，这里直接使用 Toast。
+     * 为避免任何异常影响主流程，整个方法内部用 try/catch 保护。
+     */
+    private fun showDebugToast(context: Context, message: String) {
+        try {
+            Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun sendReminder(context: Context) {
+        // 记录最近一次通过解锁事件发送提醒的时间，方便 App 在启动时
+        // 避免立刻再补发一条重复通知。
+        try {
+            val prefs = context.getSharedPreferences("vision_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putLong("last_unlock_reminder_time", System.currentTimeMillis()).apply()
+        } catch (_: Throwable) {
+            // 忽略异常，避免因为偏好写入失败影响解锁提醒主流程
+        }
+
+        // 使用固定的通知 ID，避免在通知栏产生过多重复解锁提醒条目
+        val id = 2000
+        val title = "愿景提醒"
+        val body = "别忘了你的一件事！"
+
+        // 记录本次计划发送解锁提醒的时间戳，用于后续排查“何时触发了通知发送逻辑”
+        val ts = System.currentTimeMillis()
+        try {
+            DbRepo.log(
+                context,
+                null,
+                "【解锁提醒】即将通过专用解锁提醒渠道发送通知，准备延迟 300ms 触发，ts=" + ts + "，通知ID=" + id
+            )
+        } catch (_: Throwable) {
+        }
+
+        // 在主线程上做一个轻微的延迟，避免在系统解锁动画尚未完全结束时立刻弹出通知，
+        // 某些 ROM 上会在此窗口内压制或静默处理 heads-up 通知。
+        try {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                {
+                    try {
+                        DbRepo.log(
+                            context,
+                            null,
+                            "【解锁提醒】延迟 300ms 后正式调用 NotifyHelper.sendUnlockReminder 发送解锁提醒通知"
+                        )
+                    } catch (_: Throwable) {
+                    }
+                    try {
+                        showDebugToast(context, "正在发送解锁提醒通知（已调用 NotifyHelper.sendUnlockReminder）")
+                    } catch (_: Throwable) {}
+                    try {
+                        NotifyHelper.sendUnlockReminder(context, id, title, body)
+                    } catch (e: Throwable) {
+                        // 这里捕获所有异常，避免通知构造/发送异常导致解锁广播链路崩溃
+                        try {
+                            DbRepo.log(
+                                context,
+                                null,
+                                "【解锁提醒】调用 NotifyHelper.sendUnlockReminder 发送解锁提醒通知时发生异常，异常类型=" +
+                                    e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                            )
+                        } catch (_: Throwable) {
+                        }
+                    }
+                },
+                300L
+            )
+        } catch (e: Throwable) {
+            // 如果延迟调度本身出现异常，则回退为直接同步发送，确保用户仍有机会收到提醒
+            try {
+                DbRepo.log(
+                    context,
+                    null,
+                    "【解锁提醒】Handler.postDelayed 安排延迟发送失败，回退为同步发送解锁提醒通知，异常类型=" +
+                        e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                )
+            } catch (_: Throwable) {
+            }
+            try {
+                NotifyHelper.sendUnlockReminder(context, id, title, body)
+            } catch (inner: Throwable) {
+                try {
+                    DbRepo.log(
+                        context,
+                        null,
+                        "【解锁提醒】回退同步发送解锁提醒通知仍然失败，异常类型=" +
+                            inner.javaClass.simpleName + "，message=" + (inner.message ?: "null")
+                    )
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        // 无需在此处重复调度 GeoWorker；GeoWorker 已在 onReceive 中统一调度。
+    }
+
+}

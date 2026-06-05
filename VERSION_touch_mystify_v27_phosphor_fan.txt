@@ -1,0 +1,15 @@
+quote_app_touch_mystify_v27_phosphor_fan_upgrade
+
+Scope:
+- Discovery Journey > Physical Enhancement > Touch entry copy
+- Flutter Mystify preview painter
+- Android OpenGL ES live wallpaper renderer
+- Flutter-to-Android wallpaper config defaults
+
+Visual target:
+- Windows Mystify-style black field
+- additive neon point-line trails
+- phosphor/FBO decay
+- fiber ribbons
+- fan lattice / electronic veil
+- spray particles and bright white cores

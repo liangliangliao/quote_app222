@@ -1,0 +1,4 @@
+Phase 29: Goal trial world enhancement
+- Added role status panel to world home and scene detail pages.
+- Added branch consequence previews for scene simulation choices.
+- Scene cards now summarize chosen branch outcome.

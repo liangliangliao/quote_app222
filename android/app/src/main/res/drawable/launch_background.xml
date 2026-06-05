@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_launcher_background"/>
+     <item>
+        <inset
+            android:drawable="@drawable/ic_fg_subject264_432_v2"
+            android:inset="12dp"/>   <!-- 这里缩多少都行，因为它算“背景” -->
+    </item>
+</layer-list>

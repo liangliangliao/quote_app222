@@ -1,0 +1,81 @@
+--- /mnt/data/quote_app_native_wm_base/android/app/src/main/kotlin/com/example/quote_app/App.kt+++ /mnt/data/quote_app_native_wm_base/android/app/src/main/kotlin/com/example/quote_app/App.kt@@ -1,40 +1,15 @@ package com.example.quote_app
+ 
+ import android.app.Application
+-import io.flutter.plugin.common.PluginRegistry
+-import io.flutter.plugins.GeneratedPluginRegistrant
+ 
+ /**
+- * Application entry without direct plugin references.
+- * Flutter v2 embedding handles plugin registration automatically.
+- * Workmanager is initialised from Dart (Workmanager().initialize(...)).
++ * Application (Flutter V2 embedding).
++ * No custom plugin registrant callbacks are used.
++ * Workmanager/plugin registration is handled by the framework and plugins themselves.
+  */
+-class App : Application(), PluginRegistry.PluginRegistrantCallback {
+-
++class App : Application() {
+   override fun onCreate() {
+     super.onCreate()
+-    // Ensure Workmanager background engine registers our channels & plugins
+-    try {
+-      val cls = Class.forName("be.tramckrijte.workmanager.WorkmanagerPlugin")
+-      val m = cls.getMethod("setPluginRegistrantCallback", io.flutter.plugin.common.PluginRegistry.PluginRegistrantCallback::class.java)
+-      m.invoke(null, this)
+-    } catch (_: Throwable) {
+-      try {
+-        val cls2 = Class.forName("dev.fluttercommunity.plus.workmanager.WorkmanagerPlugin")
+-        val m2 = cls2.getMethod("setPluginRegistrantCallback", io.flutter.plugin.common.PluginRegistry.PluginRegistrantCallback::class.java)
+-        m2.invoke(null, this)
+-      } catch (_: Throwable) {
+-        // No workmanager plugin detected; background registration won't be set.
+-      }
+-    }
++    // Keep empty: no v1 embedding APIs, no reflection.
+   }
+-
+-  override fun registerWith(registry: PluginRegistry) {
+-    // Register default plugins
+-    GeneratedPluginRegistrant.registerWith(registry)
+-    // Register our custom channel for background (v1 registrar messenger)
+-    val registrar = registry.registrarFor("com.example.quote_app.NOTIFY_BG")
+-    Channels.registerWith(registrar, applicationContext)
+-  }
+-
+ }
+
+
+--- /mnt/data/quote_app_native_wm_base/android/app/src/main/kotlin/com/example/quote_app/Channels.kt+++ /mnt/data/quote_app_native_wm_base/android/app/src/main/kotlin/com/example/quote_app/Channels.kt@@ -3,9 +3,6 @@ import android.content.Context
+ import io.flutter.embedding.engine.FlutterEngine
+ import io.flutter.plugin.common.MethodChannel
+-import io.flutter.plugin.common.MethodCall
+-import io.flutter.plugin.common.MethodChannel.Result
+-import io.flutter.plugin.common.PluginRegistry
+ 
+ object Channels {
+   private const val CH_NOTIFY = "com.example.quote_app/notify"
+@@ -26,22 +23,4 @@         }
+       }
+   }
+-
+-  // Register for legacy v1 background (WorkManager) using Registrar messenger
+-  fun registerWith(registrar: PluginRegistry.Registrar, appCtx: Context) {
+-    MethodChannel(registrar.messenger(), CH_NOTIFY)
+-      .setMethodCallHandler { call, result ->
+-        when (call.method) {
+-          "notify" -> {
+-            val title = call.argument<String>("title") ?: ""
+-            val body = call.argument<String>("body") ?: ""
+-            val id = call.argument<Int>("id") ?: 1
+-            val largeIcon = call.argument<String>("largeIconPath")
+-            val ok = NotifyHelper.send(appCtx, id, title, body, largeIcon)
+-            result.success(ok)
+-          }
+-          else -> result.notImplemented()
+-        }
+-      }
+-  }
+ }
+
+
+Patched NotifyWorker.kt to use NotifyHelper.send(...)

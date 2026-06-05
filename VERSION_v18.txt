@@ -1,0 +1,5 @@
+Version v18 - Goal Module Phase 18
+- Added theme review page for completed module groups.
+- Added persistent module reflection storage.
+- Completion ritual can now lead into theme review.
+- Study progress completed modules can jump to theme review.

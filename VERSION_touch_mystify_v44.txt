@@ -1,0 +1,3 @@
+quote_app_touch_mystify_v44_video_observed_curled_membrane
+
+Based on V43. Continues optimizing the touch wallpaper subject shape according to the reference video: single curled asymmetric membrane, narrow ridge, tapered hook/stem, green/cyan/purple palette, reduced broad white/yellow bands, reduced old membrane overlap. Release and afterglow drawing functions are unchanged.

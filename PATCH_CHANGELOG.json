@@ -1,0 +1,31 @@
+[
+  {
+    "file": "lib/services/run_guard.dart",
+    "action": "ADD",
+    "notes": "新增跨通道幂等屏障（run_guard表，PRIMARY KEY(uid, run_key)）"
+  },
+  {
+    "file": "lib/services/scheduler_service.dart",
+    "action": "MODIFY",
+    "line": 20,
+    "detail": "增加 import 'run_guard.dart';"
+  },
+  {
+    "file": "lib/services/scheduler_service.dart",
+    "action": "MODIFY",
+    "line": 42,
+    "detail": "新增 _ensurePendingTable() 以确保 pending_run 表存在"
+  },
+  {
+    "file": "lib/services/scheduler_service.dart",
+    "action": "MODIFY",
+    "line": 324,
+    "detail": "_sendForTask 内加入 RunGuard 幂等拦截（AM/INSTANT 等路径）"
+  },
+  {
+    "file": "lib/background_tasks.dart",
+    "action": "MODIFY",
+    "line": 11,
+    "detail": "registerSelfCheck 改为清理+禁用，不再注册任何自检任务；移除原自检handler。"
+  }
+]

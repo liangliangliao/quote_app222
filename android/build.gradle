@@ -1,0 +1,206 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        // Flutter engine Maven repo (required for io.flutter:* artifacts)
+        maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
+        maven { url 'https://storage.googleapis.com/download.flutter.io' }
+        maven { url 'https://pub.dev/download.flutter.io' }
+        // Fallback mirrors (useful when Maven Central is blocked/unreachable in some networks).
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        // Extra fallback: direct Central mirror hostname.
+        maven { url 'https://repo1.maven.org/maven2' }
+    }
+}
+
+// Some older Flutter/Android plugins still declare buildscript classpath
+// dependencies (e.g. kotlin-gradle-plugin) inside their own module Gradle files.
+// Those are resolved using each subproject's `buildscript.repositories`, which is
+// *not* affected by the `allprojects { repositories { ... } }` block above.
+//
+// When Maven Central is unreachable/blocked (common behind some firewalls), Gradle
+// may fail early while configuring such plugins (e.g. :audioplayers_android) with:
+//   "Could not GET 'https://repo.maven.apache.org/...'. Received status code 403"
+//
+// We therefore augment (do not replace) every subproject's buildscript repos with
+// the same mirror list.
+subprojects { project ->
+    project.buildscript.repositories {
+        google()
+        mavenCentral()
+        // Fallback mirrors (useful when Maven Central is blocked/unreachable in some networks).
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        // Extra fallback: direct Central mirror hostname.
+        maven { url 'https://repo1.maven.org/maven2' }
+        // DO NOT call mavenCentral() here to avoid hard dependency on repo.maven.apache.org.
+        gradlePluginPortal()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
+
+
+subprojects {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == "com.android.tools" && details.requested.name == "desugar_jdk_libs") {
+                details.useVersion "2.1.4"
+            }
+        }
+    }
+}
+
+// AGP 8+ requires every Android module (including 3rd‑party Flutter plugins)
+// to declare an `android.namespace` in its Gradle config. Some plugins in
+// pub.dev (e.g. image_gallery_saver 2.0.3) still ship without this field,
+// causing:
+//   "Namespace not specified. Specify a namespace in the module's build file"
+// This block injects a stable namespace for any Android library module that
+// doesn't define one, avoiding fragile edits inside ~/.pub-cache.
+subprojects { project ->
+    // NOTE: Do NOT use `afterEvaluate {}` here.
+    // Some builds (including Flutter's default Gradle wiring) may evaluate
+    // certain subprojects early (e.g. via evaluationDependsOn), and Gradle
+    // 7+ throws if you register `afterEvaluate` on an already-evaluated
+    // project. Instead, hook on plugin application so this runs safely
+    // for both already-evaluated and not-yet-evaluated projects.
+    project.plugins.withId('com.android.library') {
+        def androidExt = project.extensions.findByName('android')
+        if (androidExt != null) {
+            // Ensure Java/Kotlin JVM targets are aligned to avoid Gradle 8+ errors like:
+            //   "Inconsistent JVM-target compatibility detected for tasks 'compileReleaseJavaWithJavac' (1.8)
+            //    and 'compileReleaseKotlin' (17)."
+            // NOTE: Many Flutter plugins set compileOptions in their own build.gradle *after* the plugin is applied.
+            // If we only configure compileOptions here, those scripts may overwrite our settings.
+            // To make the fix deterministic, we apply the JVM alignment again after evaluation (only if safe),
+            // and also best-effort force the Java/Kotlin compile tasks to the same target.
+
+            def applyJvmAlignment = {
+                // 1) Android compileOptions (drives JavaCompile task defaults)
+                try {
+                    androidExt.compileOptions {
+                        sourceCompatibility JavaVersion.VERSION_17
+                        targetCompatibility JavaVersion.VERSION_17
+                    }
+                } catch (Throwable ignored) {
+                    // best-effort only
+                }
+
+                // 2) Force JavaCompile tasks (covers cases where compileOptions is overwritten later)
+                try {
+                    project.tasks.withType(JavaCompile).configureEach {
+                        sourceCompatibility = JavaVersion.VERSION_17.toString()
+                        targetCompatibility = JavaVersion.VERSION_17.toString()
+                    }
+                } catch (Throwable ignored) {
+                    // best-effort only
+                }
+
+                // 3) Force KotlinCompile tasks
+                try {
+                    project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                        kotlinOptions {
+                            jvmTarget = '17'
+                        }
+                    }
+                } catch (Throwable ignored) {
+                    // best-effort only
+                }
+            }
+
+            // Avoid `project.afterEvaluate {}` because Gradle 7+ can throw
+            // "Cannot run Project.afterEvaluate(Closure) when the project is already evaluated"
+            // in some Flutter build graphs (evaluationDependsOn, pre-evaluated plugins, etc.).
+            // We apply once now and again after all projects are evaluated.
+            applyJvmAlignment()
+            project.gradle.projectsEvaluated {
+                applyJvmAlignment()
+            }
+
+            // Some Flutter plugins ship without a compileSdk declaration.
+            // AGP 7+/8+ requires it, otherwise builds fail with:
+            //   "project ':<plugin>' does not specify `compileSdk` in build.gradle"
+            // We align plugin compileSdk with android/gradle.properties (android.compileSdkVersion).
+            def desiredCompileSdk = null
+            try {
+                desiredCompileSdk = rootProject.findProperty('android.compileSdkVersion')
+            } catch (Throwable ignored) {
+                desiredCompileSdk = null
+            }
+            if (desiredCompileSdk == null || desiredCompileSdk.toString().trim().isEmpty()) {
+                desiredCompileSdk = '33'
+            }
+            def desiredCompileSdkInt = 33
+            try {
+                desiredCompileSdkInt = Integer.parseInt(desiredCompileSdk.toString().trim())
+            } catch (Throwable ignored) {
+                desiredCompileSdkInt = 33
+            }
+
+            // Best-effort: set compileSdk only when missing/zero.
+            try {
+                def currentCompileSdk = null
+                try {
+                    currentCompileSdk = androidExt.compileSdk
+                } catch (Throwable ignored) {
+                    currentCompileSdk = null
+                }
+                if (currentCompileSdk == null || currentCompileSdk.toString().trim().isEmpty() || currentCompileSdk.toString() == '0') {
+                    try {
+                        androidExt.compileSdk = desiredCompileSdkInt
+                    } catch (Throwable ignored) {
+                        // Older DSL might expose a method instead of a property.
+                        try {
+                            androidExt.compileSdkVersion(desiredCompileSdkInt)
+                        } catch (Throwable ignored2) {
+                            // ignore
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
+                // ignore
+            }
+
+            def currentNs = null
+            try {
+                currentNs = androidExt.namespace
+            } catch (Throwable ignored) {
+                currentNs = null
+            }
+
+            if (currentNs == null || currentNs.toString().trim().isEmpty()) {
+                // Prefer the historical package for known plugins where possible.
+                def ns = null
+                if (project.name == 'image_gallery_saver') {
+                    ns = 'com.mr.flutter.image_gallery_saver'
+                }
+                if (ns == null || ns.trim().isEmpty()) {
+                    def g = project.group?.toString()
+                    if (g != null && !g.trim().isEmpty() && g != 'unspecified') {
+                        ns = g
+                    } else {
+                        ns = "com.example.${project.name}"
+                    }
+                }
+                try {
+                    androidExt.namespace = ns
+                } catch (Throwable ignored) {
+                    // Best-effort only; if AGP API changes, fail with
+                    // the original helpful error message.
+                }
+            }
+        }
+    }
+}

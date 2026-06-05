@@ -1,0 +1,252 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import 'onenote_service.dart';
+import 'todo_dao.dart';
+import 'todo_models.dart';
+
+class TodoSyncResult {
+  const TodoSyncResult({required this.lists, required this.tasks, required this.children});
+  final int lists;
+  final int tasks;
+  final int children;
+}
+
+class TodoGraphService {
+  TodoGraphService({TodoDao? dao, OneNoteAuthService? auth})
+      : _dao = dao ?? TodoDao(),
+        _auth = auth ?? OneNoteAuthService();
+
+  final TodoDao _dao;
+  final OneNoteAuthService _auth;
+  static const String _base = 'https://graph.microsoft.com/v1.0';
+
+  Future<TodoSyncResult> sync({String listName = '', void Function(String message)? onProgress}) async {
+    await _dao.ensureTables();
+    final token = await _auth.ensureAccessToken();
+    onProgress?.call('正在读取 Microsoft To Do 任务列表...');
+    final lists = await _getJsonList(token, '$_base/me/todo/lists');
+    int listCount = 0;
+    int taskCount = 0;
+    int childCount = 0;
+    final targetName = listName.trim().toLowerCase();
+    final targets = lists.where((l) {
+      if (targetName.isEmpty) return true;
+      return (l['displayName'] ?? '').toString().trim().toLowerCase() == targetName;
+    }).toList();
+    if (targets.isEmpty) {
+      throw Exception(targetName.isEmpty ? '没有读取到 Microsoft To Do 任务列表。' : '没有找到名称为“$listName”的 Microsoft To Do 任务列表。');
+    }
+    for (final list in targets) {
+      final listId = (list['id'] ?? '').toString();
+      if (listId.isEmpty) continue;
+      await _dao.upsertList(list);
+      listCount++;
+      final listTitle = (list['displayName'] ?? '未命名任务列表').toString();
+      onProgress?.call('正在读取任务列表“$listTitle”的任务...');
+      final tasks = await _getJsonList(
+        token,
+        '$_base/me/todo/lists/${Uri.encodeComponent(listId)}/tasks?\$top=100',
+      );
+      var idx = 0;
+      for (final task in tasks) {
+        idx++;
+        final taskId = (task['id'] ?? '').toString();
+        if (taskId.isEmpty) continue;
+        onProgress?.call('正在同步“$listTitle”任务 $idx/${tasks.length}：${task['title'] ?? ''}');
+        await _dao.upsertTask(task, listId: listId);
+        taskCount++;
+        childCount += await _syncTaskChildren(token: token, listId: listId, taskId: taskId);
+      }
+    }
+    onProgress?.call('Microsoft To Do 同步完成：列表 $listCount 个，任务 $taskCount 个，子结构 $childCount 条。');
+    return TodoSyncResult(lists: listCount, tasks: taskCount, children: childCount);
+  }
+
+  Future<int> _syncTaskChildren({required String token, required String listId, required String taskId}) async {
+    int count = 0;
+    final base = '$_base/me/todo/lists/${Uri.encodeComponent(listId)}/tasks/${Uri.encodeComponent(taskId)}';
+    final specs = <String, String>{
+      'checklistItem': '$base/checklistItems',
+      'attachment': '$base/attachments',
+      'linkedResource': '$base/linkedResources',
+    };
+    for (final e in specs.entries) {
+      try {
+        final rows = await _getJsonList(token, e.value);
+        await _dao.replaceChildren(listId: listId, taskId: taskId, childType: e.key, rows: rows);
+        count += rows.length;
+      } catch (err) {
+        await _dao.addApiLog(endpoint: e.value, method: 'GET', errorMessage: err.toString());
+      }
+    }
+    return count;
+  }
+
+  Future<String> createList({required String displayName, bool writeBack = false}) async {
+    final localId = await _dao.createLocalList(displayName);
+    if (!writeBack) return localId;
+    final token = await _auth.ensureAccessToken();
+    final remote = await _postJson(token, '$_base/me/todo/lists', {'displayName': displayName.trim().isEmpty ? '未命名任务列表' : displayName.trim()});
+    await _dao.replaceLocalListId(localId, remote);
+    return (remote['id'] ?? localId).toString();
+  }
+
+  Future<void> updateList({required String listId, required String displayName, bool writeBack = false}) async {
+    await _dao.updateLocalList(listId, displayName);
+    if (!writeBack) return;
+    if (listId.startsWith('local_')) throw Exception('本地新建的任务列表尚未写回 Microsoft，不能直接更新远端。请先写回创建。');
+    final token = await _auth.ensureAccessToken();
+    final remote = await _patchJson(token, '$_base/me/todo/lists/${Uri.encodeComponent(listId)}', {'displayName': displayName.trim().isEmpty ? '未命名任务列表' : displayName.trim()});
+    await _dao.upsertList(remote);
+  }
+
+  Future<void> deleteList({required String listId, bool writeBack = false}) async {
+    await _dao.markListDeleted(listId);
+    if (!writeBack) return;
+    if (!listId.startsWith('local_')) {
+      final token = await _auth.ensureAccessToken();
+      await _delete(token, '$_base/me/todo/lists/${Uri.encodeComponent(listId)}');
+    }
+    await _dao.removeList(listId);
+  }
+
+  Future<String> createTask({
+    required String listId,
+    required String title,
+    required String bodyText,
+    required String status,
+    required String importance,
+    String dueDateTime = '',
+    String dueTimeZone = 'Asia/Shanghai',
+    bool writeBack = false,
+  }) async {
+    final localId = await _dao.createLocalTask(
+      listId: listId,
+      title: title,
+      bodyText: bodyText,
+      status: status,
+      importance: importance,
+      dueDateTime: dueDateTime,
+      dueTimeZone: dueTimeZone,
+    );
+    if (!writeBack) return localId;
+    if (listId.startsWith('local_')) throw Exception('任务所属列表还是本地列表，请先把任务列表写回 Microsoft。');
+    final token = await _auth.ensureAccessToken();
+    final payload = _taskPayload(title: title, bodyText: bodyText, status: status, importance: importance, dueDateTime: dueDateTime, dueTimeZone: dueTimeZone);
+    final remote = await _postJson(token, '$_base/me/todo/lists/${Uri.encodeComponent(listId)}/tasks', payload);
+    await _dao.replaceLocalTaskId(localId, listId, remote);
+    return (remote['id'] ?? localId).toString();
+  }
+
+  Future<void> updateTask({
+    required TodoTaskRecord task,
+    required String title,
+    required String bodyText,
+    required String status,
+    required String importance,
+    required String dueDateTime,
+    required String dueTimeZone,
+    bool writeBack = false,
+  }) async {
+    await _dao.updateLocalTask(
+      taskId: task.taskId,
+      title: title,
+      bodyText: bodyText,
+      status: status,
+      importance: importance,
+      dueDateTime: dueDateTime,
+      dueTimeZone: dueTimeZone,
+    );
+    if (!writeBack) return;
+    if (task.taskId.startsWith('local_') || task.listId.startsWith('local_')) throw Exception('本地新建任务尚未写回 Microsoft，不能直接更新远端。');
+    final token = await _auth.ensureAccessToken();
+    final payload = _taskPayload(title: title, bodyText: bodyText, status: status, importance: importance, dueDateTime: dueDateTime, dueTimeZone: dueTimeZone);
+    final remote = await _patchJson(token, '$_base/me/todo/lists/${Uri.encodeComponent(task.listId)}/tasks/${Uri.encodeComponent(task.taskId)}', payload);
+    await _dao.upsertTask(remote, listId: task.listId);
+  }
+
+  Future<void> deleteTask({required TodoTaskRecord task, bool writeBack = false}) async {
+    await _dao.markTaskDeleted(task.taskId);
+    if (!writeBack) return;
+    if (!task.taskId.startsWith('local_') && !task.listId.startsWith('local_')) {
+      final token = await _auth.ensureAccessToken();
+      await _delete(token, '$_base/me/todo/lists/${Uri.encodeComponent(task.listId)}/tasks/${Uri.encodeComponent(task.taskId)}');
+    }
+    await _dao.removeTask(task.taskId);
+  }
+
+  Map<String, dynamic> _taskPayload({
+    required String title,
+    required String bodyText,
+    required String status,
+    required String importance,
+    required String dueDateTime,
+    required String dueTimeZone,
+  }) {
+    final payload = <String, dynamic>{
+      'title': title.trim().isEmpty ? '未命名任务' : title.trim(),
+      'body': {'content': bodyText, 'contentType': 'text'},
+      'status': status,
+      'importance': importance,
+    };
+    if (dueDateTime.trim().isNotEmpty) {
+      payload['dueDateTime'] = {'dateTime': dueDateTime.trim(), 'timeZone': dueTimeZone.trim().isEmpty ? 'Asia/Shanghai' : dueTimeZone.trim()};
+    }
+    return payload;
+  }
+
+  Future<List<Map<String, dynamic>>> _getJsonList(String token, String url) async {
+    final out = <Map<String, dynamic>>[];
+    String? nextUrl = url;
+    while (nextUrl != null && nextUrl.isNotEmpty) {
+      final obj = await _requestJson(token: token, method: 'GET', url: nextUrl);
+      final value = obj['value'];
+      if (value is List) {
+        for (final item in value) {
+          if (item is Map) out.add(Map<String, dynamic>.from(item));
+        }
+      }
+      nextUrl = obj['@odata.nextLink']?.toString();
+    }
+    return out;
+  }
+
+  Future<Map<String, dynamic>> _postJson(String token, String url, Map<String, dynamic> payload) => _requestJson(token: token, method: 'POST', url: url, payload: payload);
+  Future<Map<String, dynamic>> _patchJson(String token, String url, Map<String, dynamic> payload) => _requestJson(token: token, method: 'PATCH', url: url, payload: payload);
+
+  Future<void> _delete(String token, String url) async {
+    final resp = await http.delete(Uri.parse(url), headers: {'Authorization': 'Bearer $token'});
+    final body = _decodeBody(resp.bodyBytes);
+    await _dao.addApiLog(endpoint: url, method: 'DELETE', statusCode: resp.statusCode, responseBody: body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) throw Exception('Microsoft To Do 删除失败：${resp.statusCode} $body');
+  }
+
+  Future<Map<String, dynamic>> _requestJson({required String token, required String method, required String url, Map<String, dynamic>? payload}) async {
+    try {
+      final uri = Uri.parse(url);
+      final headers = {'Authorization': 'Bearer $token', 'Accept': 'application/json', 'Content-Type': 'application/json'};
+      late final http.Response resp;
+      if (method == 'POST') {
+        resp = await http.post(uri, headers: headers, body: jsonEncode(payload ?? <String, dynamic>{}));
+      } else if (method == 'PATCH') {
+        resp = await http.patch(uri, headers: headers, body: jsonEncode(payload ?? <String, dynamic>{}));
+      } else {
+        resp = await http.get(uri, headers: headers);
+      }
+      final body = _decodeBody(resp.bodyBytes);
+      await _dao.addApiLog(endpoint: url, method: method, requestParams: payload == null ? null : jsonEncode(payload), responseBody: body, statusCode: resp.statusCode);
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw Exception('Microsoft To Do API 请求失败：${resp.statusCode} $body');
+      }
+      if (body.trim().isEmpty) return <String, dynamic>{};
+      return jsonDecode(body) as Map<String, dynamic>;
+    } catch (e) {
+      await _dao.addApiLog(endpoint: url, method: method, requestParams: payload == null ? null : jsonEncode(payload), errorMessage: e.toString());
+      rethrow;
+    }
+  }
+}
+
+String _decodeBody(List<int> bytes) => utf8.decode(bytes, allowMalformed: true);

@@ -1,0 +1,10 @@
+Change Lab v12 patch summary
+
+- Added continuous growth journey section to overview home.
+- Added world completion aware reward dialog and CTA routing.
+- Added controller helpers for completed worlds, completion rewards, journey summary, and next mainline summary.
+- Added completed worlds section to mirror world overview.
+- Added world completion reward section to world scene detail.
+- Enhanced AI coach and rules pages with next mainline / completed world context.
+- Improved active mission queue prioritization by recent unlock and remaining actions.
+- Distinguished timeline reward labels between stage rewards and full world completion rewards.

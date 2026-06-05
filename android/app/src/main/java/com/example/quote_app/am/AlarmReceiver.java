@@ -1,0 +1,174 @@
+package com.example.quote_app.am;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.text.TextUtils;
+
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+
+import androidx.work.WorkManager;
+
+import com.example.quote_app.NotifyHelper;
+import com.example.quote_app.NativeSchedulerK;
+import com.example.quote_app.biz.Biz;
+import com.example.quote_app.data.DbRepository;
+import com.example.quote_app.data.DbInspector;
+import com.example.quote_app.wm.WmScheduler;
+import com.example.quote_app.wm.WmNames;
+import com.example.quote_app.schedule.AutoRescheduler;
+
+import org.json.JSONObject;
+
+public final class AlarmReceiver extends BroadcastReceiver {
+    private static final String TAG_LOG = "AlarmReceiver";
+    @Override public void onReceive(Context context, Intent intent) {
+        try { com.example.quote_app.data.DbRepo.log(context, null, "【原生】AM 广播触发"); } catch (Throwable ignore) {}
+        String _act = intent==null?null:intent.getAction();
+try { com.example.quote_app.data.DbRepo.log(context, null, "【原生】AM Intent action="+String.valueOf(_act)); } catch (Throwable ignore) {}
+int id = intent != null ? intent.getIntExtra("id", 0) : 0;
+        String payload = intent != null ? intent.getStringExtra("payload") : "{}";
+        String uid = null;
+        String runKey = "";
+
+        // === Sport alarms (no uid) ===
+        // Sport alarms use payload.type=sport_fullscreen / sport_reminder / sport_midnight_renew.
+        // They must work even when the app process was killed.
+        try {
+            JSONObject o = new JSONObject(payload == null ? "{}" : payload);
+            String type = o.optString("type", "");
+            if (type != null && type.startsWith("sport_")) {
+                if ("sport_midnight_renew".equals(type)) {
+                    try { com.example.quote_app.sport.SportPlanRenewal.runMidnightRenew(context.getApplicationContext()); } catch (Throwable ignore) {}
+                    return;
+                }
+
+                // Defensive: avoid showing stale notifications when old alarms still exist.
+                // If payload carries planId+planTime, verify it matches current plan_time in DB.
+                try {
+                    int planId = o.optInt("planId", 0);
+                    String planTime = o.optString("planTime", "");
+                    if (planId > 0 && !TextUtils.isEmpty(planTime)) {
+                        String cur = querySportPlanTime(context.getApplicationContext(), planId);
+                        if (!TextUtils.isEmpty(cur) && !planTime.equals(cur)) {
+                            // Stale alarm: cancel and ignore.
+                            try { NativeSchedulerK.cancel(context.getApplicationContext(), id); } catch (Throwable ignore) {}
+                            return;
+                        }
+                    }
+                } catch (Throwable ignore) {}
+
+                if ("sport_fullscreen".equals(type)) {
+                    NotifyHelper.sendSportFullScreen(
+                        context.getApplicationContext(),
+                        id,
+                        "运动开始",
+                        "点击进入运动进行中",
+                        type,
+                        payload == null ? "{}" : payload
+                    );
+                } else {
+                    NotifyHelper.sendSportReminder(
+                        context.getApplicationContext(),
+                        id,
+                        "运动提醒",
+                        "点击查看运动计划",
+                        type,
+                        payload == null ? "{}" : payload
+                    );
+                }
+                return;
+            }
+        } catch (Throwable ignore) {}
+
+        try {
+            DbRepository.log(context.getApplicationContext(), uid==null?"":uid, "【原生】AM 触发 uid="+(uid==null?"":uid)+" run="+runKey);
+            JSONObject obj = new JSONObject(payload == null ? "{}" : payload);
+            uid = obj.optString("uid", null);
+            runKey = obj.optString("runKey", "");
+            try { DbRepository.log(context.getApplicationContext(), uid==null?"":uid, "【原生】AM 触发(解析后) uid="+(uid==null?"":uid)+" run="+runKey); } catch (Throwable ignore) {}
+
+        } catch (Throwable ignore) {}
+
+        if (TextUtils.isEmpty(uid)) {
+            // 兜底：没有 uid 仍然发一个到点提醒
+            String title = "提醒";
+            String body = "到点了";
+            try { NotifyHelper.send(context.getApplicationContext(), id, title, body, null); } catch (Throwable ignore) {}
+            return;
+        }
+
+        boolean entered = false;
+        try {
+            entered = DbRepository.runGuardBegin(context.getApplicationContext(), uid, runKey, "am");
+            if (!entered) return;
+
+            boolean handled = Biz.run(context.getApplicationContext(), uid);
+            if (handled) {
+                DbRepository.log(context.getApplicationContext(), uid, "【原生】AM 发送成功 uid="+uid+" run="+runKey);
+                // 通知成功：标记成功并取消兜底和当前任务，安排下一次
+                DbRepository.markLatestSuccess(context.getApplicationContext(), uid);
+                try { android.util.Log.d(TAG_LOG, "before rotateCursorByTaskType");
+        DbRepository.rotateCursorByTaskType(context.getApplicationContext(), uid); } catch (Throwable ignore) {}
+                try { android.util.Log.d(TAG_LOG, "before updateQuoteNotify");
+        DbRepository.updateQuoteNotify(context.getApplicationContext(), uid, true, System.currentTimeMillis());
+                try { DbRepository.log(context.getApplicationContext(), uid, "【DB】(AM) cursor+1 & quote updated(success)"); } catch (Throwable ignore) {} } catch (Throwable ignore) {}
+                // Cancel fallback by unique id
+                try {
+                    String fbId = WmNames.fbUnique(uid, runKey);
+                    WmScheduler.cancelFallback(context.getApplicationContext(), fbId);
+                } catch (Throwable ignore) {}
+                // Cancel current AM
+                try {
+                    NativeSchedulerK.cancel(context.getApplicationContext(), id);
+                } catch (Throwable ignore) {}
+                // schedule next via AutoRescheduler
+                AutoRescheduler.scheduleNext(context.getApplicationContext(), uid);
+            } else {
+                DbRepository.log(context.getApplicationContext(), uid, "【原生】AM 发送失败 uid="+uid+" run="+runKey);
+                DbRepository.log(context.getApplicationContext(), uid, "AM通道：业务未处理");
+                try { android.util.Log.d(TAG_LOG, "before rotateCursorByTaskType");
+        DbRepository.rotateCursorByTaskType(context.getApplicationContext(), uid); } catch (Throwable ignore) {}
+                try { android.util.Log.d(TAG_LOG, "before updateQuoteNotify");
+        DbRepository.updateQuoteNotify(context.getApplicationContext(), uid, false, System.currentTimeMillis());
+                try { DbRepository.log(context.getApplicationContext(), uid, "【DB】(AM) cursor+1 & quote updated(fail)"); } catch (Throwable ignore) {} } catch (Throwable ignore) {}
+                // 通知失败：取消当前 AM，并安排下一次（兜底保持不动）
+                try {
+                    NativeSchedulerK.cancel(context.getApplicationContext(), id);
+                } catch (Throwable ignore) {}
+                AutoRescheduler.scheduleNext(context.getApplicationContext(), uid);
+            }
+        } catch (Throwable t) {
+            DbRepository.log(context.getApplicationContext(), uid, "AM异常: " + (t.getMessage()==null?"未知错误":t.getMessage()));
+            // Exception: cancel current and schedule next to avoid losing future tasks
+            try {
+                NativeSchedulerK.cancel(context.getApplicationContext(), id);
+            } catch (Throwable ignore) {}
+            try { AutoRescheduler.scheduleNext(context.getApplicationContext(), uid); } catch (Throwable ignore) {}
+        } finally {
+            try { DbRepository.runGuardEnd(context.getApplicationContext(), uid, runKey, "am"); } catch (Throwable ignore) {}
+        }
+    }
+
+    /** Query current plan_time for sport plan to avoid showing stale notifications from legacy alarms. */
+    private static String querySportPlanTime(Context ctx, int planId) {
+        SQLiteDatabase db = null;
+        Cursor c = null;
+        try {
+            DbInspector.Contract cc = DbInspector.loadOrLightScan(ctx.getApplicationContext());
+            if (cc == null || TextUtils.isEmpty(cc.dbPath)) return "";
+            db = SQLiteDatabase.openDatabase(cc.dbPath, null, SQLiteDatabase.OPEN_READONLY);
+            c = db.rawQuery("SELECT plan_time FROM sport_plans WHERE id=? LIMIT 1", new String[]{String.valueOf(planId)});
+            if (c.moveToFirst()) {
+                String v = c.getString(0);
+                return v == null ? "" : v;
+            }
+        } catch (Throwable ignore) {
+        } finally {
+            try { if (c != null) c.close(); } catch (Throwable ignore) {}
+            try { if (db != null) db.close(); } catch (Throwable ignore) {}
+        }
+        return "";
+    }
+}

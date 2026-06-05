@@ -1,0 +1,6 @@
+Phase 31: world timeline + scene state unlocking
+- Added world timeline event table and DAO queries
+- Logged branch choice, branch path completion, reward claim, and first reality-note translation into timeline
+- Added scene-state shifts so one scene's branch changes later scene state hints
+- Added world home timeline card
+- Added incoming/outgoing scene-state hints in scene detail

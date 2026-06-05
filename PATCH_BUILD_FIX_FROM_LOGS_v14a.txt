@@ -1,0 +1,4 @@
+Fix build errors from logs_62896168035.zip:
+1) Fixed broken multiline string in change_concept_detail_page.dart
+2) Fixed Dart string interpolation boundary in _newInstanceId()
+3) Fixed Iterable.asMap misuse in change_world_achievement_page.dart

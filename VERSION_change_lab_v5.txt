@@ -1,0 +1,5 @@
+Change Lab Integrated v5
+- 任务实例化
+- 本周计划引擎
+- 失败重启状态机
+- 周计划页面

@@ -1,0 +1,9 @@
+Change Lab v17
+
+本次增强重点：
+1. 原课全景阅读页新增逐段重点高亮。
+2. 原课全景阅读页支持把任意课程段落直接“加入本周学习”。
+3. 原课全景阅读页为每个课程段落自动挂接推荐动作与进入行动页。
+4. 概念详情页“原课”页签新增重点高亮、加入本周学习、去做推荐动作。
+5. 概念详情页“案例”页签新增重点关键词芯片，强化概念—案例—行动联动。
+6. 控制器新增：recommendedTaskForConcept / recommendedOpenInstanceForConcept / addConceptToWeeklyLearning / isConceptInWeeklyLearning。

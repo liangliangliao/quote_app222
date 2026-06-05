@@ -1,0 +1,9 @@
+Change Lab v18 patch summary
+- Added paragraph-level study persistence for course reading.
+- Added CourseParagraphRecord / CourseParagraphView models.
+- Added controller support for paragraph favorite, note, review list, and recent study items.
+- Added full page: lib/change_lab/ui/change_course_review_page.dart
+- Enhanced course reader with paragraph actions: 收藏 / 加入复习清单 / 写笔记.
+- Added shell entry points to open course review page.
+- Enhanced overview tab with course study progress snapshot.
+- Added concept-detail quick entry to course review page.

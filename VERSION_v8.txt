@@ -1,0 +1,2 @@
+app patched v8 build from v7 on 2025-12-13
+- Standardized dialog toast UI for location failures (smaller font, fixed width, bottom position, no stacking)

@@ -1,0 +1,34 @@
+语义一致性精判 v26 优化说明
+
+本次优化针对“共同性和差异性分析不够深入、不够一针见血”的问题，尤其是近义词/成语/四字词/抽象概念之间的细微差异。
+
+主要改造：
+1. 默认 LLM Judge 提示词新增“本质分析要求”：
+   - 必须输出本质共同性 essentialCommonality。
+   - 必须输出本质差异 essentialDifference。
+   - 必须分别说明 A/B 的语义重心 aSemanticFocus / bSemanticFocus。
+   - 必须说明可互换语境 interchangeableContext 和不宜互换语境 nonInterchangeableContext。
+
+2. 对近义词、成语、四字词和形容词新增专项判断要求：
+   - 不能只写“用词不同”“词根不同”“主题相同”。
+   - 必须分析隐含画面、审美色彩、过程感、力量感、搭配对象、使用边界。
+   - 示例强化：波澜壮阔 vs 气势磅礴，应指出前者偏过程展开/起伏/历史画卷感，后者偏力量气场/雄浑压迫感/瞬间震撼。
+
+3. JSON Schema 新增字段：
+   - essentialCommonality
+   - essentialDifference
+   - aSemanticFocus
+   - bSemanticFocus
+   - interchangeableContext
+   - nonInterchangeableContext
+
+4. 主结果页优化：
+   - 共同性摘要优先显示 essentialCommonality。
+   - 差异性摘要优先显示 essentialDifference。
+   - 新增“本质共同性”“本质差异”“语义重心”“可互换语境”“不宜互换语境”展示。
+   - 完整 JSON 仍保留在展开区。
+
+5. 快速示例新增：
+   - 近义词本质差异：波澜壮阔 vs 气势磅礴。
+
+注意：原生 Embedding 余弦仍单独显示，仅作为语义场接近度参考，不作为同义、等价或最终判断分。

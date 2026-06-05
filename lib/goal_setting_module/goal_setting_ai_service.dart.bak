@@ -1,0 +1,2408 @@
+import 'dart:convert';
+
+import '../services/global_ai_settings.dart';
+import '../services/unified_ai_service.dart';
+import 'goal_setting_dao.dart';
+import 'goal_setting_models.dart';
+
+class GoalSettingAiResult {
+  final List<GoalSettingAction> actions;
+  final String provider;
+  final String modelLabel;
+  final bool usedFallback;
+  final String generationNote;
+  final String rawResponse;
+
+  const GoalSettingAiResult({
+    required this.actions,
+    required this.provider,
+    required this.modelLabel,
+    this.usedFallback = false,
+    this.generationNote = '',
+    this.rawResponse = '',
+  });
+}
+
+class GoalSettingAiService {
+  final GoalSettingDao _goalDao = GoalSettingDao();
+  final GlobalAiSettings _settings = GlobalAiSettings();
+  final UnifiedAiService _unifiedAiService = UnifiedAiService();
+
+  Future<Map<String, String>> getGlobalAiState() => _settings.getState();
+  Future<String> getUnderstandingPrompt() => _settings.getGoalSettingUnderstandingPrompt();
+  Future<String> getActionPrompt() => _settings.getGoalSettingActionPrompt();
+  Future<String> getLoopPrompt() => _settings.getGoalSettingLoopPrompt();
+
+  Future<GoalSettingUnderstandingResult> generateUnderstandingAnalysis({
+    required GoalSettingSegment segment,
+  }) async {
+    final state = await getGlobalAiState();
+    final fallback = GoalSettingUnderstandingResult(
+      whatText: segment.whatText,
+      whyText: segment.whyText,
+      howText: segment.howSteps.join('；'),
+      realCase: segment.cases.join('；'),
+      provider: 'local',
+      modelLabel: state['label'] ?? '本地策略',
+    );
+    if (state['available'] != '1') return fallback;
+    final basePrompt = await getUnderstandingPrompt();
+    final understandingTemplate = _settings.ensurePromptContains(
+      basePrompt,
+      requiredBlocks: <String, String>{
+        'segment_title': '课程标题：{{segment_title}}',
+        'original_text': '课程原文（必须完整阅读并紧扣分析）：\n{{original_text}}',
+      },
+    );
+    final prompt = _settings.renderTemplate(
+      understandingTemplate,
+      <String, String>{
+        'segment_title': segment.title,
+        'original_text': segment.originalText,
+      },
+    );
+    final raw = await _requestText(prompt: prompt, purpose: 'goal_setting_understanding');
+    final parsed = _extractJsonObject(raw);
+    if (parsed.isEmpty) return fallback;
+    final whatText = ('${parsed['what_text'] ?? ''}').trim();
+    final whyText = ('${parsed['why_text'] ?? ''}').trim();
+    final howText = ('${parsed['how_to_do'] ?? ''}').trim();
+    final realCase = ('${parsed['real_case'] ?? ''}').trim();
+    if (whatText.isEmpty || whyText.isEmpty || howText.isEmpty || realCase.isEmpty) return fallback;
+    return GoalSettingUnderstandingResult(
+      whatText: whatText,
+      whyText: whyText,
+      howText: howText,
+      realCase: realCase,
+      provider: state['provider'] ?? 'ai',
+      modelLabel: state['label'] ?? 'AI',
+    );
+  }
+
+  Future<GoalSettingAiResult> generateActionOptions({
+    required GoalSettingSegment segment,
+    required String userConcern,
+  }) async {
+    final state = await getGlobalAiState();
+    final fallback = _buildLocalActions(segment: segment, userConcern: userConcern);
+    if (state['available'] != '1') {
+      return GoalSettingAiResult(actions: fallback, provider: 'local', modelLabel: state['label'] ?? '本地策略', usedFallback: true, generationNote: '当前未配置可用 AI，已回退到本地动作草稿。');
+    }
+    final basePrompt = await getActionPrompt();
+    final actionTemplate = _settings.ensurePromptContains(
+      basePrompt,
+      requiredBlocks: <String, String>{
+        'segment_title': '课程标题：{{segment_title}}',
+        'original_text': '课程原文（必须完整阅读并紧扣行动设计）：
+{{original_text}}',
+        'core_concepts': '核心概念：{{core_concepts}}',
+        'default_action_title': '默认动作标题：{{default_action_title}}',
+        'default_action_body': '默认动作说明：{{default_action_body}}',
+        'how_steps': '课程建议步骤：{{how_steps}}',
+        'user_concern': '用户当前困扰：{{user_concern}}',
+      },
+    );
+    final prompt = _settings.renderTemplate(
+      actionTemplate,
+      <String, String>{
+        'segment_title': segment.title,
+        'original_text': segment.originalText,
+        'core_concepts': segment.concepts.join('、'),
+        'default_action_title': segment.defaultActionTitle,
+        'default_action_body': segment.defaultActionBody,
+        'how_steps': segment.howSteps.join('；'),
+        'user_concern': userConcern.trim().isEmpty ? '未提供，请按一般学习者输出。' : userConcern.trim(),
+      },
+    );
+    try {
+      final raw = await _requestText(prompt: prompt, purpose: 'goal_setting_actions');
+      if (raw.trim().isEmpty) {
+        return GoalSettingAiResult(actions: fallback, provider: state['provider'] ?? 'ai', modelLabel: state['label'] ?? 'AI', usedFallback: true, generationNote: 'AI 返回为空，已回退到本地动作草稿。', rawResponse: raw);
+      }
+      final parsed = _extractJsonObject(raw);
+      if (parsed.isEmpty) {
+        if (_looksLikeActionErrorResponse(raw)) {
+          return GoalSettingAiResult(actions: fallback, provider: state['provider'] ?? 'ai', modelLabel: state['label'] ?? 'AI', usedFallback: true, generationNote: 'AI 请求返回错误内容，已回退到本地动作草稿。', rawResponse: raw);
+        }
+        final salvaged = _salvageActionsFromRaw(raw: raw, segment: segment, userConcern: userConcern, fallback: fallback);
+        if (salvaged != null && salvaged.isNotEmpty) {
+          return GoalSettingAiResult(
+            actions: salvaged,
+            provider: state['provider'] ?? 'ai',
+            modelLabel: state['label'] ?? 'AI',
+            usedFallback: false,
+            generationNote: 'AI 已返回内容；已放宽结构校验并自动整理为结构化动作，缺失字段已按默认值补齐。',
+            rawResponse: raw,
+          );
+        }
+        return GoalSettingAiResult(actions: fallback, provider: state['provider'] ?? 'ai', modelLabel: state['label'] ?? 'AI', usedFallback: true, generationNote: 'AI 已返回，但内容全空或没有可用动作信息，已回退到本地动作草稿。', rawResponse: raw);
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final minimalObj = _mapValue(parsed['minimal_action']);
+      final standardObj = _mapValue(parsed['standard_action']);
+      final deepObj = _mapValue(parsed['deep_action']);
+      final reviewQuestionRaw = ('${parsed['review_question'] ?? segment.reflectionQuestion}').trim();
+      final reviewQuestion = reviewQuestionRaw.isEmpty ? segment.reflectionQuestion : reviewQuestionRaw;
+      final minimal = GoalSettingAction(
+        id: 'gs_ai_min_${segment.id}_$now',
+        segmentId: segment.id,
+        segmentTitle: segment.title,
+        level: 'min',
+        source: 'ai',
+        title: _readActionTitle(minimalObj, fallback: 'AI最小动作｜${segment.defaultActionTitle}'),
+        body: _readActionBody(minimalObj, fallback: segment.defaultActionBody),
+        steps: _readActionSteps(minimalObj, fallback: segment.howSteps.take(2).toList()),
+        successCriteria: _readActionField(minimalObj, 'success_criteria', fallback: '今天能开始，并留下 1 条事实记录。'),
+        fallbackAction: _readActionField(minimalObj, 'fallback_action', fallback: '把动作进一步缩小到 5 分钟。'),
+        reviewQuestion: reviewQuestion,
+        createdAt: now,
+      );
+      final standard = GoalSettingAction(
+        id: 'gs_ai_std_${segment.id}_$now',
+        segmentId: segment.id,
+        segmentTitle: segment.title,
+        level: 'standard',
+        source: 'ai',
+        title: _readActionTitle(standardObj, fallback: 'AI标准动作｜${segment.defaultActionTitle}'),
+        body: _readActionBody(standardObj, fallback: segment.defaultActionBody),
+        steps: _readActionSteps(standardObj, fallback: segment.howSteps),
+        successCriteria: _readActionField(standardObj, 'success_criteria', fallback: '完成一次完整练习，并写出一个新理解。'),
+        fallbackAction: _readActionField(standardObj, 'fallback_action', fallback: '把动作缩小并继续。'),
+        reviewQuestion: reviewQuestion,
+        createdAt: now + 1,
+      );
+      final deep = GoalSettingAction(
+        id: 'gs_ai_deep_${segment.id}_$now',
+        segmentId: segment.id,
+        segmentTitle: segment.title,
+        level: 'deep',
+        source: 'ai',
+        title: _readActionTitle(deepObj, fallback: 'AI深度动作｜${segment.defaultActionTitle}'),
+        body: _readActionBody(deepObj, fallback: segment.defaultActionBody),
+        steps: _readActionSteps(deepObj, fallback: [...segment.howSteps, '写一次复盘']),
+        successCriteria: _readActionField(deepObj, 'success_criteria', fallback: '完成一轮连续实践并写复盘。'),
+        fallbackAction: _readActionField(deepObj, 'fallback_action', fallback: '先回退到标准动作。'),
+        reviewQuestion: reviewQuestion,
+        createdAt: now + 2,
+      );
+      return GoalSettingAiResult(actions: <GoalSettingAction>[minimal, standard, deep], provider: state['provider'] ?? 'ai', modelLabel: state['label'] ?? 'AI', generationNote: '已使用 AI 生成结构化行动方案。', rawResponse: raw);
+    } catch (e) {
+      return GoalSettingAiResult(actions: fallback, provider: state['provider'] ?? 'ai', modelLabel: state['label'] ?? 'AI', usedFallback: true, generationNote: 'AI 请求失败，已回退到本地动作草稿：$e');
+    }
+  }
+
+  Future<GoalSettingActionLoopInsight> generateLoopInsight({
+    required GoalSettingSegment segment,
+    required GoalSettingAction action,
+    required List<GoalSettingFactRecord> records,
+    String actionStatus = 'todo',
+  }) async {
+    final state = await getGlobalAiState();
+
+    final remoteContext = await _goalDao.fetchRemoteLoopContext(action.id);
+    final remoteRecords = <GoalSettingFactRecord>[];
+    final remoteFacts = remoteContext?['fact_records'];
+    if (remoteFacts is List) {
+      for (final item in remoteFacts) {
+        if (item is Map) {
+          remoteRecords.add(GoalSettingFactRecord.fromJson(Map<String, dynamic>.from(item)));
+        }
+      }
+    }
+
+    final mergedById = <String, GoalSettingFactRecord>{};
+    for (final record in [...remoteRecords, ...records]) {
+      final key = record.id.trim().isEmpty ? '${record.createdAt}_${record.actionId}' : record.id;
+      mergedById[key] = record;
+    }
+    final allRecords = mergedById.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    final actionTitle = ((remoteContext?['action_title'] ?? '').toString().trim().isNotEmpty)
+        ? (remoteContext?['action_title'] ?? '').toString().trim()
+        : action.title;
+    final actionBody = ((remoteContext?['action_body'] ?? '').toString().trim().isNotEmpty)
+        ? (remoteContext?['action_body'] ?? '').toString().trim()
+        : action.body;
+    final actionSteps = _stringList(remoteContext?['action_steps']);
+    final effectiveSteps = actionSteps.isEmpty ? action.steps : actionSteps;
+    final behaviorChain = ((remoteContext?['behavior_chain'] ?? '').toString().trim().isNotEmpty)
+        ? (remoteContext?['behavior_chain'] ?? '').toString().trim()
+        : _buildBehaviorChain(action);
+    final successCriteria = ((remoteContext?['success_criteria'] ?? '').toString().trim().isNotEmpty)
+        ? (remoteContext?['success_criteria'] ?? '').toString().trim()
+        : action.successCriteria;
+    final effectiveFallbackAction = ((remoteContext?['fallback_action'] ?? '').toString().trim().isNotEmpty)
+        ? (remoteContext?['fallback_action'] ?? '').toString().trim()
+        : action.fallbackAction;
+    final effectiveStatus = ((remoteContext?['action_status'] ?? '').toString().trim().isNotEmpty)
+        ? (remoteContext?['action_status'] ?? '').toString().trim()
+        : actionStatus;
+
+    final latestRecord = allRecords.isEmpty ? null : allRecords.first;
+    final latestFact = ((remoteContext?['latest_fact'] ?? '').toString().trim().isNotEmpty ? (remoteContext?['latest_fact'] ?? '').toString().trim() : (latestRecord?.fact.trim() ?? ''));
+    final latestFeedback = ((remoteContext?['latest_feedback'] ?? '').toString().trim().isNotEmpty ? (remoteContext?['latest_feedback'] ?? '').toString().trim() : (latestRecord?.feedback.trim() ?? ''));
+    final latestResult = ((remoteContext?['latest_result'] ?? '').toString().trim().isNotEmpty ? (remoteContext?['latest_result'] ?? '').toString().trim() : (latestRecord?.result.trim() ?? ''));
+
+    final factsText = allRecords.isEmpty
+        ? '暂无历史事实记录。'
+        : allRecords
+            .asMap()
+            .entries
+            .map((entry) {
+              final e = entry.value;
+              return '记录${entry.key + 1}｜时间:${DateTime.fromMillisecondsSinceEpoch(e.createdAt)}\n事实:${e.fact}\n反馈:${e.feedback}\n结果:${e.result}\n证据:${e.evidence}';
+            })
+            .join('\n\n');
+    final factsStructured = allRecords.isEmpty
+        ? '[]'
+        : jsonEncode(allRecords.map((e) => {
+              'createdAt': e.createdAt,
+              'fact': e.fact,
+              'feedback': e.feedback,
+              'result': e.result,
+              'evidence': e.evidence,
+            }).toList());
+
+    final loopPromptState = await _settings.inspectGoalSettingLoopPromptState();
+    final savedPromptSource = loopPromptState['source'] ?? '';
+    final savedPromptSourceLabel = loopPromptState['sourceLabel'] ?? '';
+    final promptSource = 'builtin_single_complete_loop_prompt_v1';
+    final promptSourceLabel = '内置单一完整闭环提示词';
+    final promptSourceNote = (savedPromptSourceLabel.isNotEmpty || savedPromptSource.isNotEmpty)
+        ? '为保证设置页所见与实际请求完全一致，闭环分析现固定使用内置单一完整提示词；设置页中已保存的 loop prompt 不再参与本接口请求。'
+        : '为保证设置页所见与实际请求一致，闭环分析现固定使用内置单一完整提示词。';
+    final loopSystemPrompt = _buildLoopAnalysisSystemPrompt();
+    final repairSystemPrompt = _buildLoopRepairSystemPrompt();
+    final basePrompt = _buildHighJudgementLoopUserPrompt(analysisInputJson: '{{analysis_input_json}}');
+    final baseDebugTrace = <String>[
+      '提供方：${state['provider'] ?? 'unknown'}',
+      '模型：${state['label'] ?? 'unknown'}',
+      'Prompt 来源：$promptSourceLabel',
+      if (savedPromptSourceLabel.isNotEmpty || savedPromptSource.isNotEmpty)
+        '检测到已保存的 loop prompt（${savedPromptSourceLabel.isEmpty ? savedPromptSource : savedPromptSourceLabel}），但本次闭环请求已忽略该模板，改用内置单一完整提示词。',
+    ];
+
+    final fallback = GoalSettingActionLoopInsight(
+      actionId: action.id,
+      segmentId: action.segmentId,
+      evidenceBasis: _buildFallbackEvidenceBasis(allRecords),
+      experienceRecap: _buildFallbackExperienceRecap(action: action, records: allRecords, actionStatus: effectiveStatus),
+      resultJudgement: _buildFallbackResultJudgement(allRecords, effectiveStatus),
+      resultReasonAnalysis: _buildFallbackResultReasonAnalysis(action: action, records: allRecords, actionStatus: effectiveStatus),
+      strengthsFound: _buildFallbackStrengths(allRecords),
+      weaknessesOrBlindspots: _buildFallbackWeaknesses(allRecords, effectiveStatus),
+      patternInduction: _buildFallbackPatternInduction(allRecords, actionTitle),
+      relatedKnowledgeConcepts: _buildFallbackKnowledgeConcepts(allRecords),
+      theoryElevation: _buildFallbackTheoryElevation(segment: segment, records: allRecords, actionTitle: actionTitle),
+      courseConnection: _buildFallbackCourseConnection(segment: segment, records: allRecords),
+      retrospectiveGuidance: _buildFallbackGuidance(segment: segment, action: action, records: allRecords),
+      retryPlanTitle: '下一轮重新挑战｜$actionTitle',
+      retryVisualPlan: _buildFallbackRetryVisualPlan(action: action, records: allRecords),
+      retryPlanSteps: _buildFallbackRetrySteps(segment: segment, action: action, records: allRecords),
+      closureSummary: _buildFallbackClosureSummary(allRecords),
+      provider: state['provider'] ?? 'local',
+      modelLabel: state['label'] ?? '本地策略',
+      usedFallback: true,
+      generationNote: 'AI 不可用或结构化输出无法解析，已回退到本地闭环模板。',
+      promptSource: promptSource,
+      promptSourceLabel: promptSourceLabel,
+      promptSourceNote: promptSourceNote,
+      promptTemplateUsed: basePrompt,
+      requestPrompt: '',
+      rawResponse: '',
+      retryRawResponse: '',
+      fallbackReason: '',
+      debugTrace: baseDebugTrace,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    if (state['available'] != '1') {
+      return _withLoopInsightMeta(
+        fallback,
+        generationNote: '当前未配置可用 AI，已直接使用本地闭环模板。',
+        fallbackReason: '当前未配置可用 AI。',
+        debugTrace: <String>[...baseDebugTrace, '未配置可用 AI，未发起模型请求。'],
+      );
+    }
+    if (allRecords.isEmpty) {
+      return _withLoopInsightMeta(
+        fallback,
+        generationNote: '缺少事实、反馈或结果输入，已使用本地闭环模板。',
+        fallbackReason: '缺少已保存的事实记录，无法发起有效闭环分析。',
+        debugTrace: <String>[...baseDebugTrace, '没有可用于复盘的事实记录。'],
+      );
+    }
+
+    final historicalClosedLoops = await _goalDao.loadHistoricalClosedLoops(
+      segmentId: segment.id,
+      actionTitle: actionTitle,
+    );
+    final analysisInputJson = _buildLoopAnalysisInputJson(
+      segment: segment,
+      actionTitle: actionTitle,
+      actionBody: actionBody,
+      actionSteps: effectiveSteps,
+      latestFact: latestFact,
+      latestFeedback: latestFeedback,
+      latestResult: latestResult,
+      records: allRecords,
+      historicalClosedLoops: historicalClosedLoops,
+    );
+    final prompt = _buildHighJudgementLoopUserPrompt(
+      analysisInputJson: analysisInputJson,
+    );
+
+    final debugTrace = <String>[
+      ...baseDebugTrace,
+      '事实记录数：${allRecords.length}',
+      '历史闭环数：${historicalClosedLoops.length}',
+      'System Prompt 长度：${loopSystemPrompt.length}',
+      'User Prompt 长度：${prompt.length}',
+      '本地提交策略：不截断、不删减；业务结果失败不自动重试，网络/连接中断仅做一次传输层重连。',
+    ];
+
+    final raw = await _requestText(prompt: prompt, purpose: 'goal_setting_loop', systemPrompt: loopSystemPrompt);
+    const retryRaw = '';
+    final parsed = _extractJsonObject(raw);
+    const loopNote = '已使用 AI 生成结构化闭环分析；本地不再做内容层校验，仅要求结果可解析为 JSON。若 AI 某些字段返回为空，则页面按空字段显示。';
+    debugTrace.add(raw.trim().isEmpty ? '首轮模型输出为空。' : '首轮模型输出长度：${raw.length}');
+
+    if (parsed.isNotEmpty) {
+      debugTrace.add('首轮获得可解析 JSON；已直接采用 AI 结果，不做本地内容层校验。');
+      return _buildLoopInsightFromParsed(
+        parsed: parsed,
+        action: action,
+        fallback: fallback,
+        provider: state['provider'] ?? 'ai',
+        modelLabel: state['label'] ?? 'AI',
+        generationNote: loopNote,
+        promptSource: promptSource,
+        promptSourceLabel: promptSourceLabel,
+        promptSourceNote: promptSourceNote,
+        promptTemplateUsed: basePrompt,
+        requestPrompt: prompt,
+        rawResponse: raw,
+        retryRawResponse: retryRaw,
+        fallbackReason: '',
+        debugTrace: debugTrace,
+      );
+    }
+
+    debugTrace.add('首轮输出不是可解析 JSON；按当前规则不再自动重试。');
+    final anchors = _extractLoopAnchors(
+      records: allRecords,
+      draftFact: '',
+      draftFeedback: '',
+      draftResult: '',
+      actionTitle: actionTitle,
+      segmentTitle: segment.title,
+      actionBody: actionBody,
+      actionSteps: effectiveSteps,
+    );
+    final recovered = _recoverLoopInsightFromCandidates(
+      <String>[raw],
+      anchors: anchors,
+    );
+    if (_isRecoverablePartialLoopInsight(recovered)) {
+      debugTrace.add('首轮虽不是完整 JSON，但已从原始文本恢复出结构字段，并直接展示，不再自动重试。');
+      return _buildLoopInsightFromParsed(
+        parsed: recovered,
+        action: action,
+        fallback: fallback,
+        provider: state['provider'] ?? 'ai',
+        modelLabel: '${state['label'] ?? 'AI'}（结构恢复）',
+        generationNote: '模型返回内容不是完整 JSON；系统已从首轮原始文本中恢复出结构字段并直接展示，不再自动重试；若部分字段为空，则按空字段显示。',
+        promptSource: promptSource,
+        promptSourceLabel: promptSourceLabel,
+        promptSourceNote: promptSourceNote,
+        promptTemplateUsed: basePrompt,
+        requestPrompt: prompt,
+        rawResponse: raw,
+        retryRawResponse: retryRaw,
+        fallbackReason: 'partial_recovery:首轮输出不是可解析 JSON。',
+        debugTrace: <String>[...debugTrace, '最终处理：从首轮原始输出恢复出结构字段，并直接展示。'],
+      );
+    }
+    final fallbackReason = 'json_parse_failed:首轮输出不是可解析 JSON，且无法从首轮原始文本恢复出足够字段。';
+    return _withLoopInsightMeta(
+      fallback,
+      generationNote: 'AI 已返回，但首轮输出不是可解析 JSON，且无法从首轮原始文本恢复出足够字段，已回退到本地闭环模板。',
+      fallbackReason: fallbackReason,
+      requestPrompt: prompt,
+      rawResponse: raw,
+      retryRawResponse: retryRaw,
+      debugTrace: <String>[...debugTrace, '最终回退原因：$fallbackReason'],
+    );
+  }
+
+  GoalSettingActionLoopInsight _withLoopInsightMeta(
+    GoalSettingActionLoopInsight base, {
+    String? provider,
+    String? modelLabel,
+    bool? usedFallback,
+    String? generationNote,
+    String? promptSource,
+    String? promptSourceLabel,
+    String? promptSourceNote,
+    String? promptTemplateUsed,
+    String? requestPrompt,
+    String? rawResponse,
+    String? retryRawResponse,
+    String? fallbackReason,
+    List<String>? debugTrace,
+  }) {
+    return GoalSettingActionLoopInsight(
+      actionId: base.actionId,
+      segmentId: base.segmentId,
+      evidenceBasis: base.evidenceBasis,
+      experienceRecap: base.experienceRecap,
+      resultJudgement: base.resultJudgement,
+      resultReasonAnalysis: base.resultReasonAnalysis,
+      strengthsFound: base.strengthsFound,
+      weaknessesOrBlindspots: base.weaknessesOrBlindspots,
+      patternInduction: base.patternInduction,
+      relatedKnowledgeConcepts: base.relatedKnowledgeConcepts,
+      theoryElevation: base.theoryElevation,
+      courseConnection: base.courseConnection,
+      retrospectiveGuidance: base.retrospectiveGuidance,
+      retryPlanTitle: base.retryPlanTitle,
+      retryVisualPlan: base.retryVisualPlan,
+      retryPlanSteps: base.retryPlanSteps,
+      closureSummary: base.closureSummary,
+      provider: provider ?? base.provider,
+      modelLabel: modelLabel ?? base.modelLabel,
+      usedFallback: usedFallback ?? base.usedFallback,
+      generationNote: generationNote ?? base.generationNote,
+      promptSource: promptSource ?? base.promptSource,
+      promptSourceLabel: promptSourceLabel ?? base.promptSourceLabel,
+      promptSourceNote: promptSourceNote ?? base.promptSourceNote,
+      promptTemplateUsed: promptTemplateUsed ?? base.promptTemplateUsed,
+      requestPrompt: requestPrompt ?? base.requestPrompt,
+      rawResponse: rawResponse ?? base.rawResponse,
+      retryRawResponse: retryRawResponse ?? base.retryRawResponse,
+      fallbackReason: fallbackReason ?? base.fallbackReason,
+      debugTrace: debugTrace ?? base.debugTrace,
+      extraSections: base.extraSections,
+      createdAt: base.createdAt,
+    );
+  }
+
+  GoalSettingActionLoopInsight _buildLoopInsightFromParsed({
+    required Map<String, dynamic> parsed,
+    required GoalSettingAction action,
+    required GoalSettingActionLoopInsight fallback,
+    required String provider,
+    required String modelLabel,
+    required String generationNote,
+    required String promptSource,
+    required String promptSourceLabel,
+    required String promptSourceNote,
+    required String promptTemplateUsed,
+    required String requestPrompt,
+    required String rawResponse,
+    required String retryRawResponse,
+    required String fallbackReason,
+    required List<String> debugTrace,
+  }) {
+    final newSchema = parsed.containsKey('result_final_judgement') || parsed.containsKey('failure_analysis') || parsed.containsKey('strengths_and_blindspots');
+    final intermediateSchema = parsed.containsKey('final_judgment') || parsed.containsKey('failure_analysis_and_suggestions') || parsed.containsKey('strengths_and_weaknesses') || parsed.containsKey('theoretical_analysis') || parsed.containsKey('historical_person_match') || parsed.containsKey('next_action_plan');
+
+    List<String> evidenceBasis = _stringList(parsed['evidence_basis']);
+    String experienceRecap = ('${parsed['experience_recap'] ?? ''}').trim();
+    String resultJudgement = ('${parsed['result_judgement'] ?? ''}').trim();
+    String resultReasonAnalysis = ('${parsed['result_reason_analysis'] ?? ''}').trim();
+    String strengthsFound = ('${parsed['strengths_found'] ?? ''}').trim();
+    String weaknessesOrBlindspots = ('${parsed['weaknesses_or_blindspots'] ?? ''}').trim();
+    String patternInduction = ('${parsed['pattern_induction'] ?? ''}').trim();
+    List<String> relatedKnowledgeConcepts = _stringList(parsed['related_knowledge_concepts']);
+    String theoryElevation = ('${parsed['theory_elevation'] ?? ''}').trim();
+    String courseConnection = ('${parsed['course_connection'] ?? ''}').trim();
+    String retrospectiveGuidance = ('${parsed['retrospective_guidance'] ?? ''}').trim();
+    String retryPlanTitle = ('${parsed['retry_plan_title'] ?? ''}').trim();
+    String retryVisualPlan = ('${parsed['retry_visual_plan'] ?? ''}').trim();
+    List<String> retryPlanSteps = _stringList(parsed['retry_plan_steps']);
+    String closureSummary = ('${parsed['closure_summary'] ?? ''}').trim();
+    final baseExtraSections = _normalizeExtraSections(parsed['extra_sections']);
+    Map<String, dynamic> mergedExtraSections = Map<String, dynamic>.from(baseExtraSections);
+
+    if (newSchema) {
+      final judgement = parsed['result_final_judgement'];
+      if (judgement is Map) {
+        final label = ('${judgement['label'] ?? ''}').trim();
+        final confidence = ('${judgement['confidence'] ?? ''}').trim();
+        final summary = ('${judgement['summary'] ?? ''}').trim();
+        resultJudgement = [
+          if (label.isNotEmpty) label,
+          if (confidence.isNotEmpty) '置信度：$confidence',
+          if (summary.isNotEmpty) summary,
+        ].join('｜');
+        if (closureSummary.isEmpty && summary.isNotEmpty) {
+          closureSummary = summary;
+        }
+      }
+
+      final failure = parsed['failure_analysis'];
+      if (failure is Map) {
+        final core = ('${failure['core_failure_point'] ?? ''}').trim();
+        final deep = ('${failure['deep_analysis'] ?? ''}').trim();
+        final suggestions = _stringList(failure['change_suggestions']);
+        final parts = <String>[];
+        if (core.isNotEmpty) parts.add('核心断点：$core');
+        if (deep.isNotEmpty) parts.add(deep);
+        if (suggestions.isNotEmpty) {
+          parts.add('改变建议：\n${suggestions.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')}');
+        }
+        if (parts.isNotEmpty) {
+          resultReasonAnalysis = parts.join('\n\n');
+        }
+      }
+
+      final strengthsBlock = parsed['strengths_and_blindspots'];
+      if (strengthsBlock is Map) {
+        final strengths = strengthsBlock['strengths'];
+        final weaknesses = strengthsBlock['weaknesses_or_blindspots'];
+        if (strengths is List) {
+          final lines = <String>[];
+          for (final item in strengths) {
+            if (item is Map) {
+              final title = ('${item['title'] ?? ''}').trim();
+              final analysis = ('${item['analysis'] ?? ''}').trim();
+              final line = [if (title.isNotEmpty) title, if (analysis.isNotEmpty) analysis].join('：');
+              if (line.trim().isNotEmpty) lines.add(line);
+            } else if ('$item'.trim().isNotEmpty) {
+              lines.add('$item'.trim());
+            }
+          }
+          if (lines.isNotEmpty) strengthsFound = lines.join('\n');
+        }
+        if (weaknesses is List) {
+          final lines = <String>[];
+          for (final item in weaknesses) {
+            if (item is Map) {
+              final title = ('${item['title'] ?? ''}').trim();
+              final analysis = ('${item['analysis'] ?? ''}').trim();
+              final line = [if (title.isNotEmpty) title, if (analysis.isNotEmpty) analysis].join('：');
+              if (line.trim().isNotEmpty) lines.add(line);
+            } else if ('$item'.trim().isNotEmpty) {
+              lines.add('$item'.trim());
+            }
+          }
+          if (lines.isNotEmpty) weaknessesOrBlindspots = lines.join('\n');
+        }
+      }
+
+      final comparative = parsed['comparative_judgement'];
+      if (comparative is Map) {
+        final same = _stringList(comparative['same_underlying_pattern']);
+        final diff = _stringList(comparative['key_differences']);
+        final shortLong = comparative['short_term_vs_long_term'];
+        final hist = ('${comparative['historical_comparison'] ?? ''}').trim();
+        final parts = <String>[];
+        if (same.isNotEmpty) parts.add('同一底层结构：\n${same.join('\n')}');
+        if (diff.isNotEmpty) parts.add('关键差异：\n${diff.join('\n')}');
+        if (shortLong is Map) {
+          final s = ('${shortLong['short_term'] ?? ''}').trim();
+          final l = ('${shortLong['long_term'] ?? ''}').trim();
+          final shortLongLines = <String>[];
+          if (s.isNotEmpty) shortLongLines.add('短期：$s');
+          if (l.isNotEmpty) shortLongLines.add('长期：$l');
+          if (shortLongLines.isNotEmpty) {
+            parts.add('短期/长期：\n${shortLongLines.join('\n')}');
+          }
+        }
+        if (hist.isNotEmpty) parts.add('历史比较：$hist');
+        if (parts.isNotEmpty) {
+          patternInduction = parts.join('\n\n');
+        }
+      }
+
+      final theories = parsed['related_theories'];
+      if (theories is List) {
+        final lines = <String>[];
+        final theoryMaps = <Map<String, dynamic>>[];
+        for (final item in theories) {
+          if (item is Map) {
+            final mapped = Map<String, dynamic>.from(item.cast<dynamic, dynamic>());
+            theoryMaps.add(mapped);
+            final name = ('${mapped['name'] ?? ''}').trim();
+            final source = ('${mapped['source'] ?? ''}').trim();
+            final relevance = ('${mapped['relevance_analysis'] ?? ''}').trim();
+            final better = ('${mapped['why_this_fits_better'] ?? ''}').trim();
+            final line = [
+              if (name.isNotEmpty) name,
+              if (source.isNotEmpty) '来源：$source',
+              if (relevance.isNotEmpty) relevance,
+              if (better.isNotEmpty) better,
+            ].join('｜');
+            if (line.trim().isNotEmpty) lines.add(line);
+          } else if ('$item'.trim().isNotEmpty) {
+            lines.add('$item'.trim());
+          }
+        }
+        if (lines.isNotEmpty) {
+          relatedKnowledgeConcepts = lines;
+        }
+        final explicitTheoryElevation = ('${parsed['theory_elevation'] ?? ''}').trim();
+        if (explicitTheoryElevation.isNotEmpty) {
+          theoryElevation = explicitTheoryElevation;
+        } else if (theoryMaps.isNotEmpty) {
+          theoryElevation = _synthesizeTheoryElevation(
+            theoryMaps,
+            comparative: parsed['comparative_judgement'],
+            currentTheoryElevation: theoryElevation,
+          );
+        }
+      }
+
+      final next = parsed['next_iteration_guidance'];
+      if (next is Map) {
+        final review = ('${next['review_guidance'] ?? ''}').trim();
+        if (review.isNotEmpty) {
+          retrospectiveGuidance = review;
+        }
+        final plan = next['next_action_plan'];
+        if (plan is Map) {
+          final planTitle = ('${plan['plan_title'] ?? ''}').trim();
+          final visualScript = ('${plan['visual_script'] ?? ''}').trim();
+          final completion = ('${plan['completion_criteria'] ?? ''}').trim();
+          final fallbackOption = ('${plan['fallback_option'] ?? ''}').trim();
+          final planSteps = _stringList(plan['steps']);
+          if (planTitle.isNotEmpty) retryPlanTitle = planTitle;
+          if (planSteps.isNotEmpty) retryPlanSteps = planSteps;
+          final visualLines = <String>[];
+          if (visualScript.isNotEmpty) visualLines.add(visualScript);
+          if (completion.isNotEmpty) visualLines.add('完成标准：$completion');
+          if (fallbackOption.isNotEmpty) visualLines.add('遇阻替代：$fallbackOption');
+          if (visualLines.isNotEmpty) retryVisualPlan = visualLines.join('\n');
+        }
+      }
+
+      for (final key in <String>['comparative_judgement', 'related_theories', 'psychology_analysis', 'philosophy_analysis', 'similar_historical_figure', 'next_iteration_guidance']) {
+        final value = parsed[key];
+        if (value != null && (!(value is String) || value.trim().isNotEmpty)) {
+          mergedExtraSections[key] = value;
+        }
+      }
+    }
+
+    if (intermediateSchema) {
+      resultJudgement = ('${parsed['final_judgment'] ?? ''}').trim();
+      resultReasonAnalysis = ('${parsed['failure_analysis_and_suggestions'] ?? ''}').trim();
+      strengthsFound = ('${parsed['strengths_and_weaknesses'] ?? ''}').trim();
+      theoryElevation = ('${parsed['theoretical_analysis'] ?? ''}').trim();
+      retrospectiveGuidance = ('${parsed['next_action_plan'] ?? ''}').trim();
+      if (closureSummary.isEmpty) {
+        closureSummary = resultJudgement;
+      }
+      final psych = ('${parsed['psychological_analysis'] ?? ''}').trim();
+      final phil = ('${parsed['philosophical_analysis'] ?? ''}').trim();
+      final hist = ('${parsed['historical_person_match'] ?? ''}').trim();
+      if (psych.isNotEmpty) mergedExtraSections['psychology_analysis'] = psych;
+      if (phil.isNotEmpty) mergedExtraSections['philosophy_analysis'] = phil;
+      if (hist.isNotEmpty) mergedExtraSections['similar_historical_figure'] = hist;
+      if (theoryElevation.isNotEmpty && relatedKnowledgeConcepts.isEmpty) {
+        relatedKnowledgeConcepts = <String>[theoryElevation];
+      }
+    }
+
+    return GoalSettingActionLoopInsight(
+      actionId: action.id,
+      segmentId: fallback.segmentId,
+      evidenceBasis: evidenceBasis,
+      experienceRecap: experienceRecap,
+      resultJudgement: resultJudgement,
+      resultReasonAnalysis: resultReasonAnalysis,
+      strengthsFound: strengthsFound,
+      weaknessesOrBlindspots: weaknessesOrBlindspots,
+      patternInduction: patternInduction,
+      relatedKnowledgeConcepts: relatedKnowledgeConcepts,
+      theoryElevation: theoryElevation,
+      courseConnection: courseConnection,
+      retrospectiveGuidance: retrospectiveGuidance,
+      retryPlanTitle: retryPlanTitle,
+      retryVisualPlan: retryVisualPlan,
+      retryPlanSteps: retryPlanSteps,
+      closureSummary: closureSummary,
+      provider: provider,
+      modelLabel: modelLabel,
+      usedFallback: false,
+      generationNote: generationNote,
+      promptSource: promptSource,
+      promptSourceLabel: promptSourceLabel,
+      promptSourceNote: promptSourceNote,
+      promptTemplateUsed: promptTemplateUsed,
+      requestPrompt: requestPrompt,
+      rawResponse: rawResponse,
+      retryRawResponse: retryRawResponse,
+      fallbackReason: fallbackReason,
+      debugTrace: debugTrace,
+      extraSections: mergedExtraSections,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  String _buildLoopAnalysisInputJson({
+    required GoalSettingSegment segment,
+    required String actionTitle,
+    required String actionBody,
+    required List<String> actionSteps,
+    required String latestFact,
+    required String latestFeedback,
+    required String latestResult,
+    required List<GoalSettingFactRecord> records,
+    required List<GoalSettingReview> historicalClosedLoops,
+  }) {
+    final payload = <String, dynamic>{
+      'course_context': <String, dynamic>{
+        'segment_id': segment.id,
+        'segment_title': segment.title,
+        'segment_full_text': segment.originalText,
+      },
+      'action_context': <String, dynamic>{
+        'action_title': actionTitle,
+        'action_description': actionBody,
+        'action_steps': actionSteps,
+      },
+      'current_attempt': <String, dynamic>{
+        'fact': latestFact,
+        'feedback': latestFeedback,
+        'result': latestResult,
+      },
+      'current_records': records
+          .map((e) => <String, dynamic>{
+                'id': e.id,
+                'created_at': e.createdAt,
+                'action_title': e.actionTitle,
+                'fact': e.fact,
+                'feedback': e.feedback,
+                'result': e.result,
+                'evidence': e.evidence,
+              })
+          .toList(),
+      'historical_closed_loops': historicalClosedLoops.map((e) => e.toJson()).toList(),
+    };
+    return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  String _buildLoopAnalysisSystemPrompt() {
+    return '';
+  }
+
+  String _buildHighJudgementLoopUserPrompt({
+    required String analysisInputJson,
+  }) {
+    const template = '''你是“目标训练模块”的顶级 AI 复盘教练、心理学分析教练、理论整合教练与实践规划教练。
+
+你的任务是：基于“课程理论—现实行动—本轮经验—历史经验”整合分析，帮助用户真正理解这次实践中发生了什么、为什么会这样、这意味着什么，以及下一步如何改变。不要复述课程，不要空泛鼓励，不要机械罗列术语。
+
+【分析中心与信息优先级】
+始终以本轮经验为中心，按以下顺序理解输入：
+1. current_attempt：本轮 fact、feedback、result，是最重要的分析对象；
+2. historical_closed_loops：同课程、同行动、且已成功生成 AI 闭环总结的历史数据，用于识别长期模式、重复卡点、进步与变化；
+3. action_context：行动说明与行动步骤，用于理解用户在实践什么；
+4. course_context：课程完整原文，用于理解理论背景。
+
+【分析要求】
+你必须体现出高水平判断力，而不是普通总结。尤其要主动指出：
+1. 本轮最核心的问题、突破、变化或矛盾是什么；
+2. 哪些看似不同的现象，本质上来自同一个底层结构；
+3. 哪些看似相似的现象，其实在目的、功能、心理机制、关系意义或长期后果上不同；
+4. 从短期效果和长期成长两个维度，本轮经验分别意味着什么；
+5. 若有历史经验，本轮相对于历史是重复、升级、改善、转向，还是新的结构性变化；
+6. 当前最值得保留的进步是什么，最需要修正的惯性是什么。
+
+【心理学与哲学要求】
+你要以真正懂心理学的方式理解经验，而不是只贴标签。分析时尽量看到：
+- 行为层
+- 情绪层
+- 认知层
+- 动机层
+- 防御与保护层
+- 关系层
+- 自我调节层
+- 时间结构层
+
+至少考虑以下心理学视角：
+- 行为主义
+- 认知心理学
+- 精神分析/心理动力学
+- 人本主义
+- 积极心理学
+- 存在主义/存在心理学
+
+但不要为了凑学派而硬套；若某学派解释力较弱，要明确说明它更像补充视角而非核心框架。
+
+哲学分析必须真正服务于理解这次经验，重点说明：它如何帮助用户重新理解行动、失败、责任、坚持、自我关系与成长方向。不要只列哲学家名字。
+
+历史人物匹配只有在相似度足够高时才给出；否则明确写“暂时缺乏高置信匹配”。若给出人物，必须说明相似点、差异、可借鉴之处、不可简单类比之处。
+
+【理论提升与概念匹配要求】
+你要先从用户本轮经验与历史经验（如果有）中提炼出更深层的经验结构，再去人类已有知识中寻找与之重合度最高、解释力最强的已有概念。
+
+概念匹配时，请遵循以下原则：
+1. 首先考虑当前经验本身的结构特征，而不是先决定要用哪门学科；
+2. 心理学和哲学是重点优先考虑的来源，但不是唯一来源；
+3. 你可以扩展到任何已有知识领域，只要它与当前经验的重合度更高、解释力更强；
+4. 不要为了凑概念而硬套；不要因为某概念知名就优先采用；
+5. 你需要优先选择“最贴切、最能解释当前经验核心结构”的概念，而不是“最熟悉、最常见”的概念；
+6. 如果多个概念都相关，要比较它们的共同点、差异、适用边界，并说明为什么当前更适合用其中某一个；
+7. 如果现有人类知识中没有足够贴切的概念，就不要强行匹配；此时应先对经验本身做高度概括与归纳，并在必要时提出一个“新的暂定概念”，说明它试图抓住的经验结构是什么。
+
+【成功与失败分流】
+若本轮结果是失败或部分失败：
+- 必须重点分析失败原因、结构、改变方向；
+- 必须给出详细复盘指导和下一轮行动规划。
+
+若本轮结果是成功：
+- 不分析成功原因；
+- 不规划下一轮行动；
+- 但仍可分析优势、相关理论、心理学视角、哲学视角和历史人物参照。
+
+【输出内容要求】
+你必须完成以下内容：
+0. 对本轮结果做最终判断；
+1. 若失败或部分失败：深度分析失败原因并给出改变建议；若成功：返回 null；
+2. 分析本轮体现出的优势，以及不足、缺点、盲点；
+3. 深度分析并匹配与这次经验重合度最高、解释力最强的已有概念或理论框架；优先考虑心理学与哲学，但不局限于它们，也可以扩展到任何其他知识领域。你需要指出这些概念之间的共同点、差异、适用边界，以及为什么此时更适合用某个概念来理解当前经验；如果现有知识中没有足够贴切的概念，就不要强行匹配，而应先对经验进行理论层面的归纳和总结，并在必要时提出一个新的暂定概念。
+4. 在 theory_elevation 中，先概括本轮经验最核心的结构，再说明与之重合度最高的已有概念或理论框架是什么、为什么更贴切；如果多个概念都相关，要比较后再给出当前最优匹配；如果暂无足够贴切的已有概念，就直接归纳这个经验结构，并在必要时提出一个新的暂定概念。这个字段不能只是重复 related_theories 中某一条概念解释，而要完成“从经验提升到理论层面”的总结。
+5. 从多个心理学学派分析当前经验，并说明哪些最能解释核心问题，哪些只是补充；
+5. 分析与本轮经验高度相关的哲学思想，并说明它如何帮助用户重新理解这次经验；
+6. 匹配高度相似的历史人物；若没有高质量匹配，明确说明；
+7. 若失败或部分失败：基于本轮经验与历史经验（如果有），给出详细复盘指导和下一轮实践行动；行动必须不脱离当前行动范畴，且可视化、可执行、具体、可观察；若成功：返回 null。
+
+【输出规则】
+只输出一个合法 JSON 对象。
+不要输出 markdown、代码块、前言、后记或 JSON 之外的任何文字。
+所有字段必须保留；不适用时返回 null、空字符串或空数组。
+输出要稳定、清晰、可扩展；如需扩展内容，放入 extra_sections。
+
+【输出 JSON 结构】
+{
+  "result_final_judgement": {
+    "label": "成功/失败/部分失败",
+    "confidence": "高/中/低",
+    "summary": "对本轮结果的最终判断"
+  },
+  "failure_analysis": {
+    "is_applicable": true,
+    "core_failure_point": "本轮失败最核心的断点、失效环节或结构性问题",
+    "deep_analysis": "对失败原因的深度分析；若有历史经验，要说明与历史相比是重复、升级、改善还是转向",
+    "change_suggestions": ["建议1", "建议2"]
+  },
+  "strengths_and_blindspots": {
+    "strengths": [
+      {
+        "title": "优势标题",
+        "analysis": "为什么这是优势，它体现了怎样的能力或成长方向"
+      }
+    ],
+    "weaknesses_or_blindspots": [
+      {
+        "title": "不足/缺点/盲点标题",
+        "analysis": "为什么这是当前最需要看见和修正的地方"
+      }
+    ]
+  },
+  "comparative_judgement": {
+    "same_underlying_pattern": ["哪些不同表现本质上来自同一个底层结构"],
+    "key_differences": ["哪些内容看似相似，但目的、功能、心理机制或长期后果不同"],
+    "function_analysis": {
+      "action_function": "这次行动在现实中承担了什么功能",
+      "emotion_function": "这次主要情绪承担了什么功能",
+      "cognition_function": "当前认知方式在保护什么、限制什么",
+      "relationship_function": "关系或他人评价在其中起了什么作用",
+      "self_regulation_function": "自我调节系统的关键问题在哪里"
+    },
+    "short_term_vs_long_term": {
+      "short_term": "从短期看，这次经验意味着什么",
+      "long_term": "从长期成长看，这次经验意味着什么"
+    },
+    "historical_comparison": "若有历史数据，说明本轮相对历史是重复、升级、改善、转向还是新变化；若无则返回空字符串"
+  },
+  "related_theories": [
+    {
+      "name": "与当前经验高度重合的概念/理论/框架名称；若暂时无法高质量匹配，可写“暂缺高重合已有概念”",
+      "source": "所属知识来源，如心理学、哲学、行为科学、社会学、认知科学、教育学、系统论等",
+      "relevance_analysis": "为什么它与当前经验高度相关，主要重合在什么结构上",
+      "similarities_with_other_concepts": "它与其他相近概念的共同点",
+      "differences_from_other_concepts": "它与其他相近概念的差异",
+      "scope_and_boundary": "它更适合解释哪一面，不适合解释哪一面",
+      "why_this_fits_better": "为什么当前最终更适合用它来理解这次经验"
+    }
+  ],
+  "theory_elevation": "先概括本轮经验最核心的结构，再把它提升到与之重合度最高的已有概念或理论框架；若暂无足够贴切的已有概念，则直接归纳这个经验结构，并在必要时提出新的暂定概念。不要只是重复 related_theories 中单条概念的解释。",
+  "psychology_analysis": {
+    "behaviorism": {
+      "analysis": "从行为主义角度分析",
+      "fit_level": "高/中/低",
+      "why": "为什么适合或不太适合"
+    },
+    "cognitive_psychology": {
+      "analysis": "从认知心理学角度分析",
+      "fit_level": "高/中/低",
+      "why": "为什么适合或不太适合"
+    },
+    "psychoanalysis": {
+      "analysis": "从精神分析/心理动力学角度分析",
+      "fit_level": "高/中/低",
+      "why": "为什么适合或不太适合"
+    },
+    "humanistic_psychology": {
+      "analysis": "从人本主义角度分析",
+      "fit_level": "高/中/低",
+      "why": "为什么适合或不太适合"
+    },
+    "positive_psychology": {
+      "analysis": "从积极心理学角度分析",
+      "fit_level": "高/中/低",
+      "why": "为什么适合或不太适合"
+    },
+    "existential_psychology": {
+      "analysis": "从存在主义/存在心理学角度分析",
+      "fit_level": "高/中/低",
+      "why": "为什么适合或不太适合"
+    },
+    "overall_judgement": "综合判断：哪几个心理学视角最能解释本轮核心问题，哪几个只是补充"
+  },
+  "philosophy_analysis": [
+    {
+      "tradition": "哲学思想/流派",
+      "analysis": "为什么它与本轮经验高度相关",
+      "core_help": "它帮助用户重新理解什么"
+    }
+  ],
+  "similar_historical_figure": {
+    "name": "人物姓名；若无高质量匹配则写“暂时缺乏高置信匹配”",
+    "match_confidence": "高/中/低",
+    "similarity_summary": "相似点",
+    "brief_intro": "简要介绍",
+    "difference_note": "不能简单类比的差异",
+    "practical_inspiration": "可借鉴之处"
+  },
+  "next_iteration_guidance": {
+    "is_applicable": true,
+    "review_guidance": "详细复盘指导；若有历史经验，要结合历史模式给出指导",
+    "next_action_plan": {
+      "plan_title": "下一轮行动标题",
+      "visual_script": "可视化行动脚本",
+      "steps": ["步骤1", "步骤2", "步骤3"],
+      "completion_criteria": "完成标准",
+      "fallback_option": "遇阻替代方案"
+    }
+  },
+  "extra_sections": {}
+}
+
+【输入数据】
+{{analysis_input_json}}''';
+    return template.replaceAll('{{analysis_input_json}}', analysisInputJson);
+  }
+
+  String _buildLoopRepairSystemPrompt() {
+    return '你是 JSON 修复助手。你的唯一任务是把已有内容整理成一个合法 JSON 对象。不要补写新的分析，不要扩写，不要 markdown，不要代码块，只返回一个合法 JSON 对象。';
+  }
+
+  String _buildLoopRepairPrompt({
+    required String rawOutput,
+    required String analysisInputJson,
+  }) {
+    return '''请把下面内容整理成一个合法 JSON 对象，并且只返回 JSON。
+
+修复要求：
+- 只修 JSON 结构，不重做整轮分析；
+- 尽量保留原意，不新增无依据的新结论；
+- 缺失字段时：对象填 null 或 {}，数组填 []，字符串填 ""；
+- comparative_judgement、related_theories、theory_elevation、psychology_analysis、philosophy_analysis、similar_historical_figure、next_iteration_guidance、extra_sections 都要保留；
+- theory_elevation 需要优先保留已有输出中的“经验结构总结 / 最优概念匹配 / 新概念归纳”，不要只复制某一条 related_theories。
+- 课程背景和行动步骤不能被补写成用户已经发生的事实。
+
+固定字段名：
+  result_final_judgement, failure_analysis, strengths_and_blindspots, comparative_judgement, related_theories, theory_elevation, psychology_analysis, philosophy_analysis, similar_historical_figure, next_iteration_guidance, extra_sections。
+
+原始输出：
+$rawOutput
+
+输入数据（仅用于避免误把背景补成事实）：
+$analysisInputJson''';
+  }
+
+  String _synthesizeTheoryElevation(
+    List<Map<String, dynamic>> theories, {
+    dynamic comparative,
+    String currentTheoryElevation = '',
+  }) {
+    if (currentTheoryElevation.trim().isNotEmpty) {
+      return currentTheoryElevation.trim();
+    }
+    if (theories.isEmpty) return currentTheoryElevation.trim();
+
+    final first = theories.first;
+    final primaryName = ('${first['name'] ?? ''}').trim();
+    final primaryRel = ('${first['relevance_analysis'] ?? ''}').trim();
+    final primaryFit = ('${first['why_this_fits_better'] ?? ''}').trim();
+    final secondary = theories.length > 1 ? theories[1] : null;
+    final secondaryName = secondary == null ? '' : ('${secondary['name'] ?? ''}').trim();
+    final secondaryDiff = secondary == null ? '' : ('${secondary['differences_from_other_concepts'] ?? ''}').trim();
+    String structure = '';
+    if (comparative is Map) {
+      final same = _stringList(comparative['same_underlying_pattern']);
+      final diffs = _stringList(comparative['key_differences']);
+      if (same.isNotEmpty) {
+        structure = same.first.trim();
+      } else if (diffs.isNotEmpty) {
+        structure = diffs.first.trim();
+      }
+    }
+
+    final parts = <String>[];
+    if (structure.isNotEmpty) {
+      parts.add('这轮经验更核心的结构是：$structure');
+    }
+    if (primaryName.isNotEmpty) {
+      final reason = primaryFit.isNotEmpty ? primaryFit : primaryRel;
+      parts.add(reason.isNotEmpty
+          ? '与之重合度最高、当前最适合拿来理解这轮经验的已有概念，是“$primaryName”。$reason'
+          : '与之重合度最高、当前最适合拿来理解这轮经验的已有概念，是“$primaryName”。');
+    } else if (primaryRel.isNotEmpty) {
+      parts.add(primaryRel);
+    }
+    if (secondaryName.isNotEmpty) {
+      parts.add(secondaryDiff.isNotEmpty
+          ? '它与“$secondaryName”也有相关之处，但两者的差异在于：$secondaryDiff'
+          : '它与“$secondaryName”也有相关之处，但当前第一概念的解释力更强。');
+    }
+    if (parts.isEmpty && primaryRel.isNotEmpty) {
+      parts.add(primaryRel);
+    }
+    return parts.join('\n');
+  }
+
+  Map<String, dynamic> _normalizeExtraSections(dynamic raw) {
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+      return <String, dynamic>{'notes': raw.trim()};
+    }
+    return const <String, dynamic>{};
+  }
+
+  bool _passesLoopInsightQualityGate(
+    Map<String, dynamic> parsed, {
+    required List<GoalSettingFactRecord> records,
+    required String draftFact,
+    required String draftFeedback,
+    required String draftResult,
+    String actionTitle = '',
+    String segmentTitle = '',
+    String actionBody = '',
+    List<String> actionSteps = const <String>[],
+  }) {
+    return _evaluateLoopInsightQualityIssues(
+      parsed,
+      records: records,
+      draftFact: draftFact,
+      draftFeedback: draftFeedback,
+      draftResult: draftResult,
+      actionTitle: actionTitle,
+      segmentTitle: segmentTitle,
+      actionBody: actionBody,
+      actionSteps: actionSteps,
+    ).isEmpty;
+  }
+
+  List<String> _evaluateLoopInsightQualityIssues(
+    Map<String, dynamic> parsed, {
+    required List<GoalSettingFactRecord> records,
+    required String draftFact,
+    required String draftFeedback,
+    required String draftResult,
+    String actionTitle = '',
+    String segmentTitle = '',
+    String actionBody = '',
+    List<String> actionSteps = const <String>[],
+  }) {
+    final issues = <String>[];
+    final evidenceBasis = _stringList(parsed['evidence_basis']);
+    final relatedKnowledgeConcepts = _stringList(parsed['related_knowledge_concepts']);
+    final retryPlanSteps = _stringList(parsed['retry_plan_steps']);
+
+    final textFields = <String, String>{
+      'experience_recap': ('${parsed['experience_recap'] ?? ''}').trim(),
+      'result_judgement': ('${parsed['result_judgement'] ?? ''}').trim(),
+      'result_reason_analysis': ('${parsed['result_reason_analysis'] ?? ''}').trim(),
+      'strengths_found': ('${parsed['strengths_found'] ?? ''}').trim(),
+      'weaknesses_or_blindspots': ('${parsed['weaknesses_or_blindspots'] ?? ''}').trim(),
+      'pattern_induction': ('${parsed['pattern_induction'] ?? ''}').trim(),
+      'theory_elevation': ('${parsed['theory_elevation'] ?? ''}').trim(),
+      'course_connection': ('${parsed['course_connection'] ?? ''}').trim(),
+      'retrospective_guidance': ('${parsed['retrospective_guidance'] ?? ''}').trim(),
+      'retry_plan_title': ('${parsed['retry_plan_title'] ?? ''}').trim(),
+      'retry_visual_plan': ('${parsed['retry_visual_plan'] ?? ''}').trim(),
+      'closure_summary': ('${parsed['closure_summary'] ?? ''}').trim(),
+    };
+
+    final requiredLongFields = <String>[
+      'experience_recap',
+      'result_reason_analysis',
+      'strengths_found',
+      'weaknesses_or_blindspots',
+      'pattern_induction',
+      'retrospective_guidance',
+      'closure_summary',
+    ];
+    for (final key in requiredLongFields) {
+      final value = textFields[key] ?? '';
+      if (value.isEmpty) {
+        issues.add('$key 为空');
+      } else if (value.runes.length < 18) {
+        issues.add('$key 过短，像模板话术');
+      }
+    }
+
+    final resultJudgement = textFields['result_judgement'] ?? '';
+    if (resultJudgement.isEmpty) {
+      issues.add('result_judgement 为空');
+    } else {
+      final hasOutcomeWord = <String>['成功', '失败', '部分成功', 'partial', 'success', 'fail'].any((e) => resultJudgement.toLowerCase().contains(e.toLowerCase()));
+      if (!hasOutcomeWord) {
+        issues.add('result_judgement 未明确判断成功/失败/部分成功');
+      }
+    }
+
+    if (textFields['theory_elevation']!.isEmpty || textFields['theory_elevation']!.runes.length < 12) {
+      issues.add('theory_elevation 为空或过短');
+    }
+    if (textFields['course_connection']!.isEmpty || textFields['course_connection']!.runes.length < 12) {
+      issues.add('course_connection 为空或过短');
+    }
+    if (textFields['retry_plan_title']!.isEmpty) {
+      issues.add('retry_plan_title 为空');
+    }
+    if (textFields['retry_visual_plan']!.isEmpty || textFields['retry_visual_plan']!.runes.length < 8) {
+      issues.add('retry_visual_plan 为空或过短');
+    }
+
+    if (evidenceBasis.length < 2) {
+      issues.add('evidence_basis 少于 2 条');
+    }
+    if (relatedKnowledgeConcepts.length < 2) {
+      issues.add('related_knowledge_concepts 少于 2 条');
+    }
+    if (retryPlanSteps.length < 3) {
+      issues.add('retry_plan_steps 少于 3 步');
+    }
+
+    final anchors = _extractLoopAnchors(
+      records: records,
+      draftFact: draftFact,
+      draftFeedback: draftFeedback,
+      draftResult: draftResult,
+      actionTitle: actionTitle,
+      segmentTitle: segmentTitle,
+      actionBody: actionBody,
+      actionSteps: actionSteps,
+    );
+    final evidenceText = evidenceBasis.join('\n');
+    final analysisText = <String>[
+      evidenceText,
+      textFields['experience_recap'] ?? '',
+      textFields['result_reason_analysis'] ?? '',
+      textFields['strengths_found'] ?? '',
+      textFields['weaknesses_or_blindspots'] ?? '',
+      textFields['pattern_induction'] ?? '',
+      textFields['retrospective_guidance'] ?? '',
+      textFields['closure_summary'] ?? '',
+    ].join('\n');
+    if (anchors.isNotEmpty) {
+      final evidenceHits = _countAnchorHits(evidenceText, anchors);
+      final analysisHits = _countAnchorHits(analysisText, anchors);
+      final recapHits = _countAnchorHits(textFields['experience_recap'] ?? '', anchors);
+      final reasonHits = _countAnchorHits(textFields['result_reason_analysis'] ?? '', anchors);
+      final patternHits = _countAnchorHits(
+        <String>[
+          textFields['strengths_found'] ?? '',
+          textFields['weaknesses_or_blindspots'] ?? '',
+          textFields['pattern_induction'] ?? '',
+        ].join('\n'),
+        anchors,
+      );
+      if (evidenceHits < 2) {
+        issues.add('evidence_basis 没有充分引用用户输入锚点');
+      }
+      if (analysisHits < 3) {
+        issues.add('整体分析与用户输入绑定不足');
+      }
+      if (recapHits < 1) {
+        issues.add('experience_recap 未引用用户输入关键锚点');
+      }
+      if (reasonHits < 1) {
+        issues.add('result_reason_analysis 未引用用户输入关键锚点');
+      }
+      if (patternHits < 1) {
+        issues.add('优势/盲点/模式分析未引用用户输入关键锚点');
+      }
+    }
+
+    final genericPhrases = <String>[
+      '不是单纯意志不足',
+      '触发场景不够清楚',
+      '第一步过大',
+      '形成闭环',
+      '抽象动机',
+      '留痕',
+      '最先失效的一环',
+    ];
+    final genericHits = genericPhrases.where((phrase) => analysisText.contains(phrase)).length;
+    if (genericHits >= 4 && anchors.isNotEmpty && _countAnchorHits(analysisText, anchors) < 4) {
+      issues.add('分析出现明显模板化措辞，且用户证据锚点不足');
+    }
+
+    final coreKeys = <String>[
+      'experience_recap',
+      'result_reason_analysis',
+      'strengths_found',
+      'weaknesses_or_blindspots',
+      'pattern_induction',
+    ];
+    for (final key in coreKeys) {
+      final value = textFields[key] ?? '';
+      if (value.isEmpty) continue;
+      if (_containsGenericLoopPlaceholder(value) && (anchors.isEmpty || _countAnchorHits(value, anchors) < 1)) {
+        issues.add('$key 出现泛化占位表述，缺少真实输入绑定');
+      }
+    }
+
+    for (final item in relatedKnowledgeConcepts) {
+      if (item.trim().runes.length < 8) {
+        issues.add('related_knowledge_concepts 存在过短条目');
+        break;
+      }
+    }
+    for (final item in retryPlanSteps) {
+      if (item.trim().runes.length < 6) {
+        issues.add('retry_plan_steps 存在过短步骤');
+        break;
+      }
+    }
+
+    return issues.toSet().toList();
+  }
+
+  List<String> _extractLoopAnchors({
+    required List<GoalSettingFactRecord> records,
+    required String draftFact,
+    required String draftFeedback,
+    required String draftResult,
+    String actionTitle = '',
+    String segmentTitle = '',
+    String actionBody = '',
+    List<String> actionSteps = const <String>[],
+  }) {
+    final rawParts = <String>[
+      actionTitle,
+      segmentTitle,
+      actionBody,
+      ...actionSteps,
+      draftFact,
+      draftFeedback,
+      draftResult,
+      ...records.map((e) => e.fact),
+      ...records.map((e) => e.feedback),
+      ...records.map((e) => e.result),
+    ].where((e) => e.trim().isNotEmpty);
+    final anchors = <String>[];
+    final seen = <String>{};
+    for (final part in rawParts) {
+      _addLoopAnchorsFromText(part, anchors, seen);
+      if (anchors.length >= 24) break;
+    }
+    return anchors;
+  }
+
+  void _addLoopAnchorsFromText(String raw, List<String> anchors, Set<String> seen) {
+    final normalized = raw
+        .replaceAll('「', ' ')
+        .replaceAll('」', ' ')
+        .replaceAll('【', ' ')
+        .replaceAll('】', ' ')
+        .replaceAll('（', ' ')
+        .replaceAll('）', ' ')
+        .replaceAll('(', ' ')
+        .replaceAll(')', ' ')
+        .replaceAll('｜', ' ')
+        .trim();
+    if (normalized.isEmpty) return;
+
+    void addToken(String token) {
+      final t = token.trim();
+      if (t.isEmpty) return;
+      if (RegExp(r'^[0-9]+$').hasMatch(t)) return;
+      if (_isLoopStopAnchor(t)) return;
+      final minLen = _isMostlyCjk(t) ? 2 : 3;
+      if (t.length < minLen || t.length > 24) return;
+      final key = t.toLowerCase();
+      if (seen.add(key)) anchors.add(t);
+    }
+
+    addToken(normalized);
+    final stripped = normalized.replaceFirst(RegExp(r'^(今天|昨天|今日|今晚|明天|这次|本次|本轮|这轮|最近一次|最近|当前|现在)'), '').trim();
+    if (stripped.isNotEmpty && stripped != normalized) addToken(stripped);
+
+    final parts = normalized
+        .split(RegExp(r'[\s,，。；;：:！!？?、/\|]+'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    for (final part in parts) {
+      addToken(part);
+      final trimmedTime = part.replaceFirst(RegExp(r'^(今天|昨天|今日|今晚|明天|这次|本次|本轮|这轮|最近一次|最近|当前|现在)'), '').trim();
+      if (trimmedTime.isNotEmpty && trimmedTime != part) addToken(trimmedTime);
+      if (_isMostlyCjk(part) && part.length >= 5) {
+        final variants = <String>{
+          part.substring(part.length - 4),
+          part.substring(part.length - 3),
+        };
+        if (part.length >= 6) variants.add(part.substring(part.length - 5));
+        for (final variant in variants) {
+          addToken(variant);
+        }
+      }
+      if (anchors.length >= 24) return;
+    }
+  }
+
+  bool _isMostlyCjk(String text) {
+    var cjk = 0;
+    var letters = 0;
+    for (final rune in text.runes) {
+      final ch = String.fromCharCode(rune);
+      if ((rune >= 0x4E00 && rune <= 0x9FFF) || (rune >= 0x3400 && rune <= 0x4DBF)) {
+        cjk += 1;
+        letters += 1;
+      } else if (RegExp(r'[A-Za-z0-9]').hasMatch(ch)) {
+        letters += 1;
+      }
+    }
+    return letters > 0 && cjk * 2 >= letters;
+  }
+
+  bool _isLoopStopAnchor(String token) {
+    const stopwords = <String>{
+      '用户', '记录', '事实', '反馈', '结果', '当前', '最近', '一次', '本轮', '这轮', '今天', '昨天', '明天',
+      '行动', '步骤', '课程', '标题', '说明', '状态'
+    };
+    return stopwords.contains(token);
+  }
+
+  int _countAnchorHits(String text, List<String> anchors) {
+    final normalized = text.toLowerCase();
+    var hits = 0;
+    for (final anchor in anchors) {
+      if (anchor.trim().isEmpty) continue;
+      if (normalized.contains(anchor.toLowerCase())) hits += 1;
+    }
+    return hits;
+  }
+
+  List<String> _filterBlockingLoopQualityIssues(
+    List<String> issues, {
+    required Map<String, dynamic> parsed,
+    required List<GoalSettingFactRecord> records,
+    required String draftFact,
+    required String draftFeedback,
+    required String draftResult,
+    String actionTitle = '',
+    String segmentTitle = '',
+    String actionBody = '',
+    List<String> actionSteps = const <String>[],
+  }) {
+    if (issues.isEmpty) return const <String>[];
+    final evidenceBasis = _stringList(parsed['evidence_basis']);
+    final recap = ('${parsed['experience_recap'] ?? ''}').trim();
+    final reason = ('${parsed['result_reason_analysis'] ?? ''}').trim();
+    final resultJudgement = ('${parsed['result_judgement'] ?? ''}').trim();
+    final strengths = ('${parsed['strengths_found'] ?? ''}').trim();
+    final weaknesses = ('${parsed['weaknesses_or_blindspots'] ?? ''}').trim();
+    final pattern = ('${parsed['pattern_induction'] ?? ''}').trim();
+    final anchors = _extractLoopAnchors(
+      records: records,
+      draftFact: draftFact,
+      draftFeedback: draftFeedback,
+      draftResult: draftResult,
+      actionTitle: actionTitle,
+      segmentTitle: segmentTitle,
+      actionBody: actionBody,
+      actionSteps: actionSteps,
+    );
+    final evidenceText = evidenceBasis.join('\n');
+    final coreText = <String>[recap, reason, resultJudgement].join('\n');
+    final patternText = <String>[strengths, weaknesses, pattern].join('\n');
+    final evidenceHits = _countAnchorHits(evidenceText, anchors);
+    final coreHits = _countAnchorHits(coreText, anchors);
+    final patternHits = _countAnchorHits(patternText, anchors);
+
+    bool hasOutcomeWord(String text) =>
+        <String>['成功', '失败', '部分成功', 'partial', 'success', 'fail'].any((e) => text.toLowerCase().contains(e.toLowerCase()));
+
+    final blocking = <String>[];
+    for (final issue in issues) {
+      if (issue == '最终输出不是可解析 JSON。' || issue == '首轮输出不是可解析 JSON。' || issue == '重试输出不是可解析 JSON。') {
+        blocking.add(issue);
+        continue;
+      }
+      if (issue == 'result_judgement 为空' || issue == 'result_judgement 未明确判断成功/失败/部分成功') {
+        blocking.add(issue);
+        continue;
+      }
+      if (issue == 'experience_recap 为空' || issue == 'result_reason_analysis 为空') {
+        blocking.add(issue);
+        continue;
+      }
+      if (issue == 'evidence_basis 少于 2 条') {
+        if (evidenceBasis.isEmpty) blocking.add(issue);
+        continue;
+      }
+      if (issue == 'evidence_basis 没有充分引用用户输入锚点') {
+        if (evidenceHits == 0 && coreHits == 0) blocking.add(issue);
+        continue;
+      }
+      if (issue == '整体分析与用户输入绑定不足') {
+        if (coreHits == 0 && evidenceHits == 0) blocking.add(issue);
+        continue;
+      }
+      if (issue == 'experience_recap 未引用用户输入关键锚点' || issue == 'result_reason_analysis 未引用用户输入关键锚点') {
+        if (coreHits == 0 && evidenceHits == 0) blocking.add(issue);
+        continue;
+      }
+      if (issue == '优势/盲点/模式分析未引用用户输入关键锚点') {
+        if (patternText.isNotEmpty && patternHits == 0 && coreHits == 0 && evidenceHits == 0) blocking.add(issue);
+        continue;
+      }
+      if (issue.contains('出现泛化占位表述')) {
+        blocking.add(issue);
+        continue;
+      }
+      if (issue == '分析出现明显模板化措辞，且用户证据锚点不足') {
+        if (evidenceHits == 0 && coreHits == 0) blocking.add(issue);
+        continue;
+      }
+      if (issue.endsWith('为空')) {
+        if (issue.startsWith('strengths_found') || issue.startsWith('weaknesses_or_blindspots') || issue.startsWith('pattern_induction')) {
+          continue;
+        }
+        if (issue.startsWith('theory_elevation') || issue.startsWith('course_connection') || issue.startsWith('retrospective_guidance') || issue.startsWith('retry_plan_title') || issue.startsWith('retry_visual_plan') || issue.startsWith('closure_summary')) {
+          continue;
+        }
+      }
+      if (issue.contains('过短')) {
+        continue;
+      }
+      if (issue.startsWith('related_knowledge_concepts ') || issue.startsWith('retry_plan_steps ')) {
+        continue;
+      }
+      if (!hasOutcomeWord(resultJudgement) || recap.isEmpty || reason.isEmpty) {
+        blocking.add(issue);
+      }
+    }
+    return blocking.toSet().toList();
+  }
+
+  bool _containsGenericLoopPlaceholder(String text) {
+    final placeholders = <String>[
+      '某项目标',
+      '某个目标',
+      '某件事',
+      '某种情绪',
+      '用户尝试了',
+      '这可能源于',
+      '目标执行中断',
+      '情绪干扰',
+      '用户在这次经历中',
+      '某个任务',
+    ];
+    return placeholders.any((e) => text.contains(e));
+  }
+
+  bool _isAllowedPartialRecoveryIssue(String issue) {
+    const allowedPrefixes = <String>[
+      'theory_elevation 为空或过短',
+      'course_connection 为空或过短',
+      'retrospective_guidance ',
+      'retry_plan_title ',
+      'retry_visual_plan ',
+      'retry_plan_steps ',
+      'closure_summary ',
+      'related_knowledge_concepts 少于 2 条',
+      'related_knowledge_concepts 存在过短条目',
+    ];
+    for (final prefix in allowedPrefixes) {
+      if (issue.startsWith(prefix)) return true;
+    }
+    return false;
+  }
+
+  List<String> _buildFallbackEvidenceBasis(List<GoalSettingFactRecord> records) {
+    final items = <String>[];
+    for (final entry in records.asMap().entries) {
+      final r = entry.value;
+      if (r.fact.isNotEmpty) items.add('记录${entry.key + 1}事实：${r.fact}');
+      if (r.feedback.isNotEmpty) items.add('记录${entry.key + 1}反馈：${r.feedback}');
+      if (r.result.isNotEmpty) items.add('记录${entry.key + 1}结果：${r.result}');
+    }
+    return items;
+  }
+
+  String _buildBehaviorChain(GoalSettingAction action) {
+    final steps = action.steps.where((e) => e.trim().isNotEmpty).toList();
+    if (steps.isEmpty) {
+      return '触发：遇到相关困境时；第一步：先做一个 5 分钟最小动作；留痕：完成后立即记录事实、反馈和结果。';
+    }
+    final buffer = <String>[];
+    for (var i = 0; i < steps.length; i++) {
+      buffer.add('第${i + 1}步：${steps[i]}');
+    }
+    buffer.add('完成后：立刻记录事实、反馈和结果。');
+    return buffer.join('；');
+  }
+
+  String _buildFallbackResultJudgement(List<GoalSettingFactRecord> records, String actionStatus) {
+    if (records.isEmpty) {
+      return actionStatus == 'done' ? '部分成功：状态显示已完成，但缺少事实记录作为依据。' : '部分成功：已有行动意图，但证据不足，暂不能判定完全成功或失败。';
+    }
+    final joined = records.map((e) => '${e.feedback} ${e.result}').join(' ').toLowerCase();
+    final successHits = ['完成', '做到', '推进', '成功', '开始', '坚持'].where((e) => joined.contains(e)).length;
+    final failHits = ['失败', '没', '未', '拖', '中断', '放弃', '逃避'].where((e) => joined.contains(e)).length;
+    if (successHits > 0 && failHits == 0) return '成功：有清晰结果与推进证据。';
+    if (failHits > 0 && successHits == 0) return '失败：目前记录显示关键行为链没有跑通。';
+    return '部分成功：有推进，但关键环节仍存在中断或阻碍。';
+  }
+
+  String _buildFallbackResultReasonAnalysis({
+    required GoalSettingAction action,
+    required List<GoalSettingFactRecord> records,
+    required String actionStatus,
+  }) {
+    if (records.isEmpty) {
+      return '当前还缺少足够的事实、反馈与结果记录，因此不能对成功或失败原因做可靠判断。下一步应先补一条包含“做了什么 / 遇到什么 / 结果如何”的记录。';
+    }
+    final latest = records.first;
+    final text = '${latest.fact} ${latest.feedback} ${latest.result}'.trim();
+    final lower = text.toLowerCase();
+    final failed = text.contains('失败') || text.contains('没') || text.contains('未') || text.contains('拖') || text.contains('中断') || lower.contains('fail');
+    if (failed) {
+      return '根据用户记录，这轮更像是在“启动到第一步”之间或“做完后留痕”这一环出现中断。原因不是单纯意志不足，而更像触发场景不够清楚、第一步过大、情绪阻碍或完成后没有形成闭环。';
+    }
+    return '根据用户记录，这轮之所以能够推进，说明触发场景、第一步动作或留痕方式里至少有一环是有效的。真正值得保留的是这些可重复的成功条件，而不是笼统地说“我这次状态好”。';
+  }
+
+  String _buildFallbackStrengths(List<GoalSettingFactRecord> records) {
+    if (records.isEmpty) return '当前最明显的优势是：你愿意进入练习并尝试记录，这为后续成长提供了最基本的证据。';
+    return '这轮实践中表现出的优势包括：愿意把抽象想法带进真实场景、愿意记录过程、能够在结果不完美时仍然留下反馈。';
+  }
+
+  String _buildFallbackWeaknesses(List<GoalSettingFactRecord> records, String actionStatus) {
+    if (records.isEmpty) return '当前暴露出的主要盲点是：缺少足够事实记录，导致复盘容易停留在印象层而不是证据层。';
+    final latest = records.first;
+    return '这轮更明显的薄弱环节在于：${latest.feedback.trim().isNotEmpty ? latest.feedback.trim() : '行为链中的触发、第一步或留痕环节还不稳定'}。这提示你下一轮要优先修“最先失效的一环”。';
+  }
+
+  String _buildFallbackPatternInduction(List<GoalSettingFactRecord> records, String actionTitle) {
+    if (records.isEmpty) return '目前可提炼的模式是：在没有足够事实证据时，人容易把行动问题理解成自我评价问题。';
+    return '从这轮经验可提炼出的模式是：你在面对「$actionTitle」时，真正影响结果的往往不是抽象动机，而是触发是否清楚、第一步是否过大、以及是否及时留痕。';
+  }
+
+  List<String> _buildFallbackKnowledgeConcepts(List<GoalSettingFactRecord> records) {
+    if (records.isEmpty) {
+      return const <String>[
+        '方法论层面｜证据优先：在心理学与实践哲学中，缺少经验材料就无法做可靠归纳。',
+        '反思方法｜事实记录：没有事实记录，复盘容易退化成自我评价。',
+      ];
+    }
+    final joined = records.map((e) => '${e.fact} ${e.feedback} ${e.result}').join(' ').toLowerCase();
+    final hasFail = ['失败', '没', '未', '拖', '中断', '放弃', '逃避', '自责', '焦虑'].any((e) => joined.contains(e));
+    if (hasFail) {
+      return const <String>[
+        '行为主义 / 行为设计｜行为链设计：失败往往不是“人不行”，而是触发、第一步或强化链没有设计好。',
+        '认知心理学｜自我效能感：一次受阻后若把结果解释成“我就是做不到”，后续启动成本会继续升高。',
+        '精神分析 / 心理动力学｜防御与回避：拖延、逃开、合理化有时是为了暂时躲开羞耻、焦虑或自我价值受损。',
+        '存在主义 / 人本主义｜意义与选择：若行动与真实价值脱节，人会在关键时刻失去承担与投入。',
+        '积极心理学｜优势与韧性：即使失败，也要识别已经出现的优势信号，否则容易只剩负面自我定义。',
+      ];
+    }
+    return const <String>[
+      '行为主义 / 行为设计｜实施意图：成功往往来自明确触发和较小可执行动作，而不是抽象决心。',
+      '认知心理学｜自我效能感：成功经验会提升“我能做到”的判断，并增加下一次启动概率。',
+      '积极心理学｜优势识别：保留成功时真正起作用的优势，比笼统夸自己更有复用价值。',
+      '实用主义｜用结果检验方法：有效的做法值得继续迭代，而不是停留在概念正确。',
+    ];
+  }
+
+  String _buildFallbackTheoryElevation({required GoalSettingSegment segment, required List<GoalSettingFactRecord> records, required String actionTitle}) {
+    if (records.isEmpty) {
+      return '当前更适合把这轮经验提升到“方法论”层面来理解：没有足够事实记录时，任何理论归纳都容易失真。先补足证据，再谈哪一类心理机制或哲学问题更相关。';
+    }
+    final joined = records.map((e) => '${e.fact} ${e.feedback} ${e.result}').join(' ');
+    final hasFail = ['失败', '没', '未', '拖', '中断', '放弃', '逃避', '自责', '焦虑'].any((e) => joined.contains(e));
+    if (hasFail) {
+      return '从理论层面看，这轮更像是一个“行动结构失配 + 情绪防御并存”的失败经验：一方面，行为主义/行为设计会提醒你检查触发—动作—强化链是否过大或断裂；另一方面，精神分析与存在主义视角会提醒你，失败不只可能是技术问题，也可能和羞耻、自我评价、意义感不足或对选择后果的回避有关。若现有概念仍不足以贴合，可暂时把这类经验命名为“启动后退缩型失败”——指用户不是完全没有意愿，而是在真正启动或留痕时被内外阻力拉回去。';
+    }
+    return '从理论层面看，这轮更像是一个“有效触发 + 小步推进 + 正反馈累积”的成功经验。行为设计强调清晰触发与小动作，人本主义和积极心理学则提醒你看到自己已经在行动中展现出的主动性、价值感与优势。若要给这类经验一个更概括的名字，可以叫“可复制的小步成功结构”——即通过清晰触发、低阻力启动与及时留痕，让成功不再只靠一时状态。';
+  }
+
+  String _buildFallbackCourseConnection({required GoalSettingSegment segment, required List<GoalSettingFactRecord> records}) {
+    return '当前课程原文提供的是训练语境：${segment.title}。从这轮经验看，课程强调的不是空想目标，而是把目标压到具体行为结构中去。';
+  }
+
+  String _buildFallbackRetryVisualPlan({required GoalSettingAction action, required List<GoalSettingFactRecord> records}) {
+    return '下一次当你再次遇到与「${action.title}」相关的真实情境时，在一个固定地点先只做第一步动作，做完后立即写下事实、反馈和结果，避免这轮再次只停留在感受层。';
+  }
+
+  List<String> _buildFallbackRetrySteps({required GoalSettingSegment segment, required GoalSettingAction action, required List<GoalSettingFactRecord> records}) {
+    return <String>[
+      '先固定一个会再次出现的具体场景，例如今天晚上回到书桌前或明天上班打开电脑后。',
+      '只执行第一步：${action.steps.isNotEmpty ? action.steps.first : '先做一个 5 分钟最小动作'}。',
+      '如果卡住，立刻执行降级方案：${action.fallbackAction}',
+      '完成后 1 分钟内写下事实、反馈和结果，作为下一轮复盘依据。',
+    ];
+  }
+
+  String _buildFallbackExperienceRecap({
+    required GoalSettingAction action,
+    required List<GoalSettingFactRecord> records,
+    required String actionStatus,
+  }) {
+    if (records.isEmpty) {
+      return '目前还没有足够的实践证据。当前状态是「$actionStatus」，说明这轮练习还停留在准备阶段。下一步先在一个明确场景里做出一次可观察动作，并立即留下事实记录。';
+    }
+    final latest = records.first;
+    final fact = latest.fact.trim();
+    final resultText = latest.result.trim().isEmpty ? '结果尚未写清。' : '结果是：${latest.result.trim()}';
+    final feedbackText = latest.feedback.trim().isEmpty ? '反馈尚未写清。' : '当时的反馈是：${latest.feedback.trim()}';
+    final looksLikeOutcomeOnly = fact.contains('失败') || fact.contains('没') || fact.contains('未') || fact.contains('达成目标') || fact.contains('没做到');
+    if (looksLikeOutcomeOnly) {
+      return '最近一次围绕「${action.title}」的实践中，你已经尝试推进这个动作；目前能确认的事实是：${fact.isEmpty ? '尚未写清具体执行细节。' : fact}，$feedbackText $resultText 这说明这轮记录更清楚地保留了结果与情绪，但具体执行细节还需要在下一轮补得更完整。';
+    }
+    return '最近一次围绕「${action.title}」的实践中，你实际做了：${fact.isEmpty ? '尚未写清具体动作。' : fact} $feedbackText $resultText 这说明你已经把课程从想法推进到了真实场景。';
+  }
+
+  String _buildFallbackLearningSummary({
+    required GoalSettingAction action,
+    required List<GoalSettingFactRecord> records,
+    required String actionStatus,
+  }) {
+    if (records.isEmpty) {
+      return '当前最关键的学习点不是再理解概念，而是先补一条真实证据：什么时候开始、做了什么、卡在了哪一步。没有证据，复盘就会滑向空泛。';
+    }
+    final latest = records.first;
+    final text = '${latest.feedback} ${latest.result}'.trim();
+    final lower = text.toLowerCase();
+    final failed = text.contains('失败') || text.contains('没') || text.contains('未') || text.contains('拖') || lower.contains('fail');
+    if (failed) {
+      return '这次失败或停滞暴露出的不是“你不行”，而是行为链不够清楚：要么触发场景不明确，要么第一步太大，要么做完后没有及时留痕。真正该学到的是：下一轮要把动作缩小、场景固定、记录提前准备好。';
+    }
+    return '这次经验里已经出现了有效信号：你能够启动并留下结果。下一步要学到的不是“我终于做到了”这么笼统，而是具体识别：是哪一个触发场景、哪一个第一步、哪一种留痕方式最帮你推进。';
+  }
+
+  String _buildFallbackAbstractConcept({
+    required GoalSettingSegment segment,
+    required GoalSettingAction action,
+    required List<GoalSettingFactRecord> records,
+  }) {
+    final key = segment.concepts.isNotEmpty ? segment.concepts.take(3).join('、') : segment.title;
+    if (records.isEmpty) {
+      return '从这段课看，当前最需要被验证的概念是「$key」：抽象原则只有压成具体行为链，才会真正产生作用。';
+    }
+    return '从这轮经验可抽出来的概念是：这段课强调的「$key」并不是停留在理解层，而是要通过明确触发、最小动作、事实留痕，把抽象原则转成可重复的行为结构。';
+  }
+
+  String _buildFallbackGuidance({
+    required GoalSettingSegment segment,
+    required GoalSettingAction action,
+    required List<GoalSettingFactRecord> records,
+  }) {
+    if (records.isEmpty) {
+      return '先不要急着下结论，下一轮最优先修的是“证据采集”这一环：挑一个明确场景，按行动链只做第一步，并在结束后 1 分钟内写下事实、反馈和结果。';
+    }
+    final latest = records.first;
+    final evidence = '${latest.fact} ${latest.feedback} ${latest.result}'.trim();
+    final failed = evidence.contains('失败') || evidence.contains('没') || evidence.contains('未') || evidence.contains('拖') || evidence.contains('不想');
+    if (failed) {
+      return '复盘指导：下一轮先不要扩大目标，优先修“第一步过大/触发不清”这一环。做法是固定一个更具体的触发场景，把第一步缩到 5-15 分钟，并提前准备留痕方式。';
+    }
+    return '复盘指导：下一轮优先固化这次有效环节——把最有帮助的触发场景、第一步动作和留痕方式写成固定模板，并在同类情境里再次复用。';
+  }
+
+  List<String> _buildFallbackRetryPlan({
+    required GoalSettingAction action,
+    required List<GoalSettingFactRecord> records,
+  }) {
+    final scene = records.isEmpty ? '今晚 20:00，在你通常最容易拖延的那个地点' : '下一次再次出现同类情境时（例如你又想回避「${action.title}」）';
+    return <String>[
+      '重新挑战标题：把课程原则压成下一次看得见的动作。',
+      '可视化场景：$scene，先不要追求完整解决，只追求启动第一步。',
+      '第一步动作：${action.steps.isNotEmpty ? action.steps.first : '先做一个 5 分钟的最小动作'}。',
+      '遇阻替代：如果卡住，立刻执行降级方案——${action.fallbackAction}',
+      '完成留痕：动作结束后 1 分钟内写下“我做了什么、卡在哪、结果如何”。',
+    ];
+  }
+
+  String _buildFallbackClosureSummary(List<GoalSettingFactRecord> records) {
+    if (records.isEmpty) {
+      return '你现在最需要补的不是更多想法，而是一条真实记录：先做，再记，再用记录来提炼概念。';
+    }
+    return '真正的闭环不是“这次成不成功”，而是把这次经验变成下一轮更清楚的动作设计。';
+  }
+
+  List<GoalSettingAction> previewActionOptions({
+    required GoalSettingSegment segment,
+    String userConcern = '',
+  }) => _buildLocalActions(segment: segment, userConcern: userConcern);
+
+  String buildReviewSummary({
+    required GoalSettingSegment segment,
+    required String fact,
+    required String feeling,
+    required String action,
+    required String result,
+  }) {
+    return '你这次围绕「${segment.title}」做了一次现实练习。事实层面：$fact。感受层面：$feeling。行动层面：$action。结果层面：$result。结合这段课程，更值得保留的不是一句口号，而是你今天真正做出的那一步。下一次建议：把动作再缩小一点，但保持重复。';
+  }
+
+  List<String> buildReviewQuestions({required GoalSettingSegment segment}) => <String>[
+        '这次行动里，最接近客观事实的一句话是什么？',
+        '你原本担心什么，真实发生了什么？',
+        segment.reflectionQuestion,
+        '下一次我最想保留的一个动作是什么？',
+      ];
+
+  List<GoalSettingAction> _buildLocalActions({required GoalSettingSegment segment, required String userConcern}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final concern = userConcern.trim().isEmpty ? '当前先按课程默认动作来练。' : userConcern.trim();
+    return <GoalSettingAction>[
+      GoalSettingAction(
+        id: 'gs_local_min_${segment.id}_$now',
+        segmentId: segment.id,
+        segmentTitle: segment.title,
+        level: 'min',
+        source: 'local',
+        title: '最小动作｜${segment.defaultActionTitle}',
+        body: '围绕你的现实问题「$concern」，先完成一个低阻力版本：${segment.defaultActionBody}',
+        steps: segment.howSteps.take(2).toList(),
+        successCriteria: '今天能开始，并留下 1 条事实记录。',
+        fallbackAction: '如果做不完整，就只完成第一步。',
+        reviewQuestion: segment.reflectionQuestion,
+        createdAt: now,
+      ),
+      GoalSettingAction(
+        id: 'gs_local_std_${segment.id}_$now',
+        segmentId: segment.id,
+        segmentTitle: segment.title,
+        level: 'standard',
+        source: 'local',
+        title: '标准动作｜${segment.defaultActionTitle}',
+        body: segment.defaultActionBody,
+        steps: segment.howSteps,
+        successCriteria: '完成一次完整练习，并写出一个新理解。',
+        fallbackAction: '如果卡住，就把动作缩小到 10 分钟。',
+        reviewQuestion: segment.reflectionQuestion,
+        createdAt: now + 1,
+      ),
+      GoalSettingAction(
+        id: 'gs_local_deep_${segment.id}_$now',
+        segmentId: segment.id,
+        segmentTitle: segment.title,
+        level: 'deep',
+        source: 'local',
+        title: '挑战动作｜把它带进真实场景',
+        body: '把这段课程真正带进一个现实场景：$concern。不是只写下来，而是在事情发生时当场使用。',
+        steps: <String>[...segment.howSteps, '结束后写一次复盘'],
+        successCriteria: '在现实场景里完成一次迁移应用。',
+        fallbackAction: '如果真实场景难度太大，就先做脑内预演。',
+        reviewQuestion: segment.reflectionQuestion,
+        createdAt: now + 2,
+      ),
+    ];
+  }
+
+  Map<String, dynamic> _mapValue(dynamic value) {
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String && value.trim().isNotEmpty) {
+      return <String, dynamic>{'body': value.trim()};
+    }
+    return <String, dynamic>{};
+  }
+
+  String _readActionTitle(Map<String, dynamic> obj, {required String fallback}) {
+    final raw = ('${obj['title'] ?? ''}').trim();
+    return raw.isEmpty ? fallback : raw;
+  }
+
+  String _readActionBody(Map<String, dynamic> obj, {required String fallback}) {
+    final raw = ('${obj['body'] ?? ''}').trim();
+    return raw.isEmpty ? fallback : raw;
+  }
+
+  List<String> _readActionSteps(Map<String, dynamic> obj, {required List<String> fallback}) {
+    final steps = _stringList(obj['steps']);
+    return steps.isEmpty ? fallback : steps;
+  }
+
+  bool _looksLikeActionErrorResponse(String raw) {
+    final text = raw.trim().toLowerCase();
+    if (text.isEmpty) return true;
+    const hardSignals = <String>[
+      '"error"',
+      'request failed',
+      'api error',
+      'invalid api key',
+      'authentication failed',
+      'rate limit',
+      'context length',
+      'timeout',
+      'timed out',
+      '网络错误',
+      '请求失败',
+      '调用失败',
+      '认证失败',
+      '超时',
+      '限流',
+    ];
+    for (final signal in hardSignals) {
+      if (text.contains(signal)) return true;
+    }
+    return false;
+  }
+
+
+  List<GoalSettingAction>? _salvageActionsFromRaw({
+    required String raw,
+    required GoalSettingSegment segment,
+    required String userConcern,
+    required List<GoalSettingAction> fallback,
+  }) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    final lines = text
+        .replaceAll('```json', '')
+        .replaceAll('```', '')
+        .split(RegExp(r'\r?\n'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return null;
+
+    String? current;
+    final sections = <String, List<String>>{'min': <String>[], 'standard': <String>[], 'deep': <String>[]};
+
+    String detect(String line) {
+      final s = line.replaceAll('：', ':');
+      if (RegExp(r'^(最小动作|最小行动|微行动|minimal_action|minimal action)', caseSensitive: false).hasMatch(s)) return 'min';
+      if (RegExp(r'^(标准动作|标准行动|standard_action|standard action)', caseSensitive: false).hasMatch(s)) return 'standard';
+      if (RegExp(r'^(深度动作|深度行动|挑战动作|deep_action|deep action)', caseSensitive: false).hasMatch(s)) return 'deep';
+      return '';
+    }
+
+    for (final line in lines) {
+      final hit = detect(line);
+      if (hit.isNotEmpty) {
+        current = hit;
+        sections[current]!.add(line);
+      } else if (current != null) {
+        sections[current]!.add(line);
+      }
+    }
+
+    final hasSections = sections.values.any((e) => e.isNotEmpty);
+    if (!hasSections) {
+      sections['standard'] = lines;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    GoalSettingAction build(String level, List<String> sec, GoalSettingAction fb, int offset) {
+      final bodyLines = <String>[];
+      final steps = <String>[];
+      String success = fb.successCriteria;
+      String fallbackAction = fb.fallbackAction;
+      String title = fb.title;
+      for (final line in sec) {
+        final normalized = line.replaceAll('：', ':');
+        if (normalized.contains(':') && (normalized.startsWith('最小动作') || normalized.startsWith('最小行动') || normalized.startsWith('微行动') || normalized.startsWith('标准动作') || normalized.startsWith('标准行动') || normalized.startsWith('深度动作') || normalized.startsWith('深度行动') || normalized.startsWith('挑战动作'))) {
+          final parts = normalized.split(':');
+          if (parts.length >= 2 && parts.sublist(1).join(':').trim().isNotEmpty) {
+            title = parts.sublist(1).join(':').trim();
+          }
+          continue;
+        }
+        if (normalized.startsWith('完成标准:') || normalized.startsWith('完成标准：')) {
+          success = normalized.split(':').sublist(1).join(':').trim();
+          continue;
+        }
+        if (normalized.startsWith('降级动作:') || normalized.startsWith('失败后的降级动作:') || normalized.startsWith('fallback_action:')) {
+          fallbackAction = normalized.split(':').sublist(1).join(':').trim();
+          continue;
+        }
+        if (line.startsWith('-') || line.startsWith('•') || RegExp(r'^[0-9]+[.、]').hasMatch(line)) {
+          steps.add(line.replaceFirst(RegExp(r'^[-•]\s*'), '').replaceFirst(RegExp(r'^[0-9]+[.、]\s*'), '').trim());
+        } else {
+          bodyLines.add(line);
+        }
+      }
+      final body = bodyLines.join('\n').trim().isEmpty ? fb.body : bodyLines.join('\n').trim();
+      return GoalSettingAction(
+        id: 'gs_salvage_${level}_${segment.id}_$now',
+        segmentId: segment.id,
+        segmentTitle: segment.title,
+        level: level,
+        source: 'ai',
+        title: title,
+        body: body,
+        steps: steps.isEmpty ? fb.steps : steps,
+        successCriteria: success.isEmpty ? fb.successCriteria : success,
+        fallbackAction: fallbackAction.isEmpty ? fb.fallbackAction : fallbackAction,
+        reviewQuestion: fb.reviewQuestion,
+        createdAt: now + offset,
+      );
+    }
+
+    return <GoalSettingAction>[
+      build('min', sections['min']!, fallback[0], 0),
+      build('standard', sections['standard']!, fallback[1], 1),
+      build('deep', sections['deep']!, fallback[2], 2),
+    ];
+  }
+
+  String _readActionField(Map<String, dynamic> obj, String key, {required String fallback}) {
+    final raw = ('${obj[key] ?? ''}').trim();
+    return raw.isEmpty ? fallback : raw;
+  }
+
+  Future<String> _requestText({required String prompt, required String purpose, String? systemPrompt}) async {
+    return _unifiedAiService.generateText(
+      prompt: prompt,
+      purpose: 'goal_setting_ai.$purpose',
+      systemPrompt: systemPrompt ?? _defaultSystemPromptForPurpose(purpose),
+      maxTokens: _openAiMaxTokensForPurpose(purpose),
+      expectJson: _expectsJsonResponse(purpose),
+      temperature: 0.1,
+    );
+  }
+
+  String _defaultSystemPromptForPurpose(String purpose) {
+    switch (purpose) {
+      case 'goal_setting_loop':
+        return _buildLoopAnalysisSystemPrompt();
+      case 'goal_setting_understanding':
+      case 'goal_setting_actions':
+      default:
+        return '你是目标设定知行课的 AI 教练。回答必须全中文；若要求 JSON，则只能输出 JSON 对象。';
+    }
+  }
+
+  bool _expectsJsonResponse(String purpose) {
+    switch (purpose) {
+      case 'goal_setting_understanding':
+      case 'goal_setting_actions':
+      case 'goal_setting_loop':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  int _openAiMaxTokensForPurpose(String purpose) {
+    switch (purpose) {
+      case 'goal_setting_loop':
+        return 4200;
+      case 'goal_setting_actions':
+        return 1800;
+      case 'goal_setting_understanding':
+        return 1500;
+      default:
+        return 1800;
+    }
+  }
+
+  String _extractText(String raw) {
+    try {
+      final data = jsonDecode(raw);
+      if (data is Map && data['output'] is List) {
+        for (final dynamic item in data['output'] as List) {
+          if (item is Map && item['content'] is List) {
+            for (final dynamic content in item['content'] as List) {
+              if (content is Map && content['text'] != null) return content['text'].toString();
+            }
+          }
+        }
+      }
+      if (data is Map && data['choices'] is List && (data['choices'] as List).isNotEmpty) {
+        final first = (data['choices'] as List).first;
+        if (first is Map) {
+          final msg = first['message'];
+          if (msg is Map) {
+            final content = msg['content'];
+            if (content is String) return content;
+            if (content is List) {
+              final buffer = StringBuffer();
+              for (final item in content) {
+                if (item is Map && item['text'] != null) buffer.write(item['text'].toString());
+              }
+              if (buffer.isNotEmpty) return buffer.toString();
+            }
+          }
+        }
+      }
+      if (data is Map && data['content'] != null) return data['content'].toString();
+    } catch (_) {}
+    return raw;
+  }
+
+  Map<String, dynamic> _extractJsonObject(String raw) {
+    final normalized = _normalizeJsonCandidate(raw);
+    if (normalized.isEmpty) return <String, dynamic>{};
+    for (final candidate in <String>[
+      normalized,
+      _sliceToOutermostJson(normalized),
+      _sliceToBalancedJson(normalized),
+    ]) {
+      final text = candidate.trim();
+      if (text.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        if (decoded is String && decoded.trim().isNotEmpty) {
+          final nested = _extractJsonObject(decoded);
+          if (nested.isNotEmpty) return nested;
+        }
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
+  }
+
+  String _normalizeJsonCandidate(String raw) {
+    var text = raw.trim();
+    if (text.isEmpty) return '';
+    if (text.startsWith('```')) {
+      text = text.replaceFirst(RegExp(r'^```(?:json)?\s*'), '');
+      text = text.replaceFirst(RegExp(r'\s*```$'), '');
+    }
+    text = text.replaceAll(RegExp(r'^[^{\[]*'), '');
+    text = text.replaceAll(RegExp(r'[^}\]]*$'), '');
+    text = text.replaceAll('“', '"').replaceAll('”', '"').replaceAll('’', "'");
+    text = text.replaceAll(RegExp(r',\s*([}\]])'), r'$1');
+    return text.trim();
+  }
+
+  String _sliceToOutermostJson(String text) {
+    final start = text.indexOf('{');
+    final end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) return text.substring(start, end + 1);
+    return text;
+  }
+
+  String _sliceToBalancedJson(String text) {
+    final start = text.indexOf('{');
+    if (start < 0) return text;
+    var depth = 0;
+    var inString = false;
+    var escaped = false;
+    for (var i = start; i < text.length; i++) {
+      final ch = text[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch == '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch == '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (ch == '{') depth++;
+      if (ch == '}') {
+        depth--;
+        if (depth == 0) {
+          return text.substring(start, i + 1);
+        }
+      }
+    }
+    return _sliceToOutermostJson(text);
+  }
+
+  Map<String, dynamic> _recoverLoopInsightFromCandidates(
+    List<String> raws, {
+    Map<String, dynamic>? baseParsed,
+    List<String> anchors = const <String>[],
+  }) {
+    final candidates = <Map<String, dynamic>>[];
+    if (baseParsed != null && baseParsed.isNotEmpty) {
+      candidates.add(Map<String, dynamic>.from(baseParsed));
+    }
+    for (final raw in raws) {
+      if (raw.trim().isEmpty) continue;
+      final parsed = _extractLoopInsightPartialFields(raw);
+      if (parsed.isNotEmpty) candidates.add(parsed);
+    }
+    if (candidates.isEmpty) return <String, dynamic>{};
+    return _mergeLoopInsightCandidates(candidates, anchors: anchors);
+  }
+
+  Map<String, dynamic> _mergeLoopInsightCandidates(
+    List<Map<String, dynamic>> candidates, {
+    List<String> anchors = const <String>[],
+  }) {
+    if (candidates.isEmpty) return <String, dynamic>{};
+    final merged = <String, dynamic>{};
+
+    for (final key in <String>['evidence_basis', 'related_knowledge_concepts', 'retry_plan_steps']) {
+      List<String> best = const <String>[];
+      var bestScore = -1;
+      for (final candidate in candidates) {
+        final list = _stringList(candidate[key]);
+        if (list.isEmpty) continue;
+        final score = _scoreLoopListField(list, anchors: anchors, key: key);
+        if (score > bestScore) {
+          best = list;
+          bestScore = score;
+        }
+      }
+      if (best.isNotEmpty) merged[key] = best;
+    }
+
+    for (final key in <String>[
+      'experience_recap',
+      'result_judgement',
+      'result_reason_analysis',
+      'strengths_found',
+      'weaknesses_or_blindspots',
+      'pattern_induction',
+      'theory_elevation',
+      'course_connection',
+      'retrospective_guidance',
+      'retry_plan_title',
+      'retry_visual_plan',
+      'closure_summary',
+    ]) {
+      var best = '';
+      var bestScore = -1;
+      for (final candidate in candidates) {
+        final value = ('${candidate[key] ?? ''}').trim();
+        if (value.isEmpty) continue;
+        final score = _scoreLoopTextField(value, anchors: anchors, key: key);
+        if (score > bestScore) {
+          best = value;
+          bestScore = score;
+        }
+      }
+      if (best.isNotEmpty) merged[key] = best;
+    }
+
+    return merged;
+  }
+
+  int _scoreLoopListField(List<String> items, {List<String> anchors = const <String>[], String key = ''}) {
+    final text = items.join('\n');
+    var score = text.runes.length + (items.length * 40);
+    final anchorHits = _countAnchorHits(text, anchors);
+    score += anchorHits * 60;
+    if (key == 'evidence_basis' && items.length >= 2) score += 120;
+    if (key == 'retry_plan_steps' && items.length >= 3) score += 90;
+    if (key == 'related_knowledge_concepts' && items.length >= 2) score += 80;
+    return score;
+  }
+
+  int _scoreLoopTextField(String value, {List<String> anchors = const <String>[], String key = ''}) {
+    final text = value.trim();
+    if (text.isEmpty) return -1;
+    var score = text.runes.length;
+    final anchorHits = _countAnchorHits(text, anchors);
+    score += anchorHits * 80;
+
+    final genericPhrases = <String>[
+      '不是单纯意志不足',
+      '触发场景不够清楚',
+      '第一步过大',
+      '形成闭环',
+      '抽象动机',
+      '留痕',
+      '最先失效的一环',
+    ];
+    final genericHits = genericPhrases.where((phrase) => text.contains(phrase)).length;
+    if (genericHits > 0 && anchorHits == 0) {
+      score -= genericHits * 45;
+    }
+    if (_containsGenericLoopPlaceholder(text) && anchorHits == 0) {
+      score -= 220;
+    }
+
+    if (key == 'result_judgement') {
+      final hasOutcomeWord = <String>['成功', '失败', '部分成功', 'partial', 'success', 'fail'].any((e) => text.toLowerCase().contains(e.toLowerCase()));
+      if (hasOutcomeWord) score += 60;
+    }
+    if (key == 'retry_plan_title' && text.runes.length >= 6) score += 20;
+    if (key == 'retry_visual_plan' && text.runes.length >= 16) score += 30;
+    return score;
+  }
+
+  Map<String, dynamic> _mergeLoopInsightParsed(Map<String, dynamic> primary, Map<String, dynamic> secondary) {
+    if (secondary.isEmpty) return Map<String, dynamic>.from(primary);
+    final merged = <String, dynamic>{...secondary, ...primary};
+    for (final key in <String>['evidence_basis', 'related_knowledge_concepts', 'retry_plan_steps']) {
+      final primaryList = _stringList(primary[key]);
+      if (primaryList.isNotEmpty) {
+        merged[key] = primaryList;
+        continue;
+      }
+      final secondaryList = _stringList(secondary[key]);
+      if (secondaryList.isNotEmpty) merged[key] = secondaryList;
+    }
+    for (final key in <String>[
+      'experience_recap',
+      'result_judgement',
+      'result_reason_analysis',
+      'strengths_found',
+      'weaknesses_or_blindspots',
+      'pattern_induction',
+      'theory_elevation',
+      'course_connection',
+      'retrospective_guidance',
+      'retry_plan_title',
+      'retry_visual_plan',
+      'closure_summary',
+    ]) {
+      final primaryValue = ('${primary[key] ?? ''}').trim();
+      if (primaryValue.isNotEmpty) {
+        merged[key] = primaryValue;
+        continue;
+      }
+      final secondaryValue = ('${secondary[key] ?? ''}').trim();
+      if (secondaryValue.isNotEmpty) merged[key] = secondaryValue;
+    }
+    return merged;
+  }
+
+  bool _isRecoverablePartialLoopInsight(Map<String, dynamic> parsed) {
+    final filledCount = _countRecoveredLoopInsightFields(parsed);
+    final coreOk = _stringList(parsed['evidence_basis']).length >= 2 &&
+        ('${parsed['experience_recap'] ?? ''}').trim().isNotEmpty &&
+        ('${parsed['result_reason_analysis'] ?? ''}').trim().isNotEmpty;
+    return filledCount >= 6 || coreOk;
+  }
+
+  int _countRecoveredLoopInsightFields(Map<String, dynamic> parsed) {
+    var count = 0;
+    if (_stringList(parsed['evidence_basis']).isNotEmpty) count += 1;
+    if (_stringList(parsed['related_knowledge_concepts']).isNotEmpty) count += 1;
+    if (_stringList(parsed['retry_plan_steps']).isNotEmpty) count += 1;
+    for (final key in <String>[
+      'experience_recap',
+      'result_judgement',
+      'result_reason_analysis',
+      'strengths_found',
+      'weaknesses_or_blindspots',
+      'pattern_induction',
+      'theory_elevation',
+      'course_connection',
+      'retrospective_guidance',
+      'retry_plan_title',
+      'retry_visual_plan',
+      'closure_summary',
+    ]) {
+      if (('${parsed[key] ?? ''}').trim().isNotEmpty) count += 1;
+    }
+    return count;
+  }
+
+  Map<String, dynamic> _extractLoopInsightPartialFields(String raw) {
+    final text = _extractText(raw).trim();
+    if (text.isEmpty) return <String, dynamic>{};
+    final result = <String, dynamic>{};
+
+    List<String> extractList(String key) {
+      final match = RegExp('\"$key\"\\s*:\\s*(\\[[\\s\\S]*?\\])', multiLine: true).firstMatch(text);
+      if (match == null) return const <String>[];
+      final block = match.group(1)?.trim() ?? '';
+      if (block.isEmpty) return const <String>[];
+      try {
+        final decoded = jsonDecode(block);
+        if (decoded is List) return decoded.map((e) => '$e').where((e) => e.trim().isNotEmpty).toList();
+      } catch (_) {}
+      return const <String>[];
+    }
+
+    String extractString(String key) {
+      final match = RegExp('\"$key\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"', multiLine: true).firstMatch(text);
+      final value = match?.group(1);
+      if (value == null) return '';
+      try {
+        return jsonDecode('\"' + value + '\"').toString().trim();
+      } catch (_) {
+        return value.replaceAll(r'\\n', '\n').replaceAll(r'\\"', '"').trim();
+      }
+    }
+
+    final evidenceBasis = extractList('evidence_basis');
+    if (evidenceBasis.isNotEmpty) result['evidence_basis'] = evidenceBasis;
+    final relatedKnowledgeConcepts = extractList('related_knowledge_concepts');
+    if (relatedKnowledgeConcepts.isNotEmpty) result['related_knowledge_concepts'] = relatedKnowledgeConcepts;
+    final retryPlanSteps = extractList('retry_plan_steps');
+    if (retryPlanSteps.isNotEmpty) result['retry_plan_steps'] = retryPlanSteps;
+
+    for (final key in <String>[
+      'experience_recap',
+      'result_judgement',
+      'result_reason_analysis',
+      'strengths_found',
+      'weaknesses_or_blindspots',
+      'pattern_induction',
+      'theory_elevation',
+      'course_connection',
+      'retrospective_guidance',
+      'retry_plan_title',
+      'retry_visual_plan',
+      'closure_summary',
+    ]) {
+      final value = extractString(key);
+      if (value.isNotEmpty) result[key] = value;
+    }
+    return result;
+  }
+
+  String _extractFinishReason(String raw) {
+    try {
+      final data = jsonDecode(raw);
+      if (data is Map && data['choices'] is List && (data['choices'] as List).isNotEmpty) {
+        final first = (data['choices'] as List).first;
+        if (first is Map && first['finish_reason'] != null) return first['finish_reason'].toString();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  bool _shouldRetryDeepSeekResponse(String raw, String purpose) {
+    if (!_expectsJsonResponse(purpose)) return false;
+    final finishReason = _extractFinishReason(raw).trim().toLowerCase();
+    if (finishReason == 'length') return true;
+    final text = _extractText(raw).trim();
+    if (text.isEmpty) return false;
+    if (finishReason.isNotEmpty && finishReason != 'stop' && _extractJsonObject(text).isEmpty) return true;
+    return false;
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is List) return value.map((e) => '$e').where((e) => e.trim().isNotEmpty).toList();
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) return decoded.map((e) => '$e').where((e) => e.trim().isNotEmpty).toList();
+      } catch (_) {}
+    }
+    return <String>[];
+  }
+}

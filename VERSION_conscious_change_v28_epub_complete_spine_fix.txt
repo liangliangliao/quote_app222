@@ -1,0 +1,6 @@
+conscious_change v28 EPUB complete spine fix
+
+- 修复 EPUB HTML block 提取逻辑：保留 div/section/body 中的 p/li/blockquote 等叶子段落，不再因为存在 block 祖先而误删正文。
+- 阅读书籍导入改为完整性优先：不再删除目录页、版权页、前言或疑似导航块，目录条目只是不作为分页起点，但仍保留在阅读内容中。
+- EPUB 仍按 OPF spine 顺序读取，从电子书第一份线性正文到最后一份线性正文完整导入，再基于标题和自然段兜底分页。
+- 旧版已导入的书籍需要删除后重新导入，才能生成完整内容。

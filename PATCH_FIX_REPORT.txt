@@ -1,0 +1,10 @@
+discover_page.dart: Switch + 按钮置灰已规范化; import 去重; _geoEnabled 单一声明。
+  - 'Switch(' @ line 3252
+  - '新增地点规则' @ line 3399
+  - '_geoEnabled ? _onAddGeoTrigger : null' @ line 3400
+dao.dart: 'isGeoRulesEnabled' @ line 263
+dao.dart: 'setGeoRulesEnabled' @ line 273
+dao.dart: 'getBaiduAk' @ line 286
+dao.dart: 'setBaiduAk' @ line 296
+db.dart: 'location_rules_enabled' @ line 615
+db.dart: 'baidu_ak' @ line 616

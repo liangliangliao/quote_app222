@@ -1,0 +1,7 @@
+quote_app_conscious_change_v25
+
+修复 v24 小节内容页空白问题：
+- 阅读页外层 Stack 改为 StackFit.expand。
+- 翻页手势层改为 Positioned.fill，确保小节内容层获得完整屏幕约束。
+- _buildSwipePager 增加 SizedBox.expand + StackFit.expand，防止只有 Positioned 子节点时在松约束下尺寸为 0。
+- 保留 v24 的边界翻页手势逻辑，不再让页面内容区被空白覆盖。

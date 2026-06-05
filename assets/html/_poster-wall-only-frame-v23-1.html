@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>装裱作品 · Gallery v23.2.7（正文+署名+注解 统一滚动）</title>
+<style>
+  :root{
+    --bg-url: url('../bg-wood-upload.jpg');
+    --ink:#111; --ink-soft:#111; --ink-muted:#3a3a3a;
+    --pad-h: clamp(24px, 5.6vw, 40px);
+    --s: clamp(10px,1.6vw,14px);
+    --m: clamp(14px,2.2vw,18px);
+    --avatar: clamp(56px, 12vw, 84px);
+    --serif:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","Times New Roman",serif;
+    --italic: Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,"Noto Sans SC","PingFang SC","Hiragino Sans GB",sans-serif;
+    --inner-pad: clamp(64px, 8.6vw, 96px);
+  }
+  *{box-sizing:border-box}
+  html,body{overflow-x:hidden; height:100%}
+  body{overflow-x:hidden; 
+    margin:0; min-height:100dvh; display:grid; place-items:center;
+    background:#fafafa; color:var(--ink); font-family:var(--sans);
+    overflow:hidden; letter-spacing:0.08em; padding:4vh 4vw;
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  }
+  @supports (-webkit-text-size-adjust: none){
+    html, body{overflow-x:hidden;  -webkit-text-size-adjust: none; }
+  }
+  .poster{
+    width:min(calc(92vw + 10px), 570px);
+    aspect-ratio: 2 / 3;
+    background-image: var(--bg-url); background-size: cover; background-position: center;
+    position: relative;
+  }
+
+  /* 外层不滚动，内部由 header(固定) + body(整体滚动) 组成 */
+  .content{
+    position:absolute; inset: var(--inner-pad); display:flex; flex-direction:column;
+    overflow:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+  }
+  .content::-webkit-scrollbar{ width:0; height:0; }
+
+  .paper-header{ display:grid; grid-template-columns: 1fr auto; align-items:start; gap:12px; padding: var(--s) 0 0; flex:0 0 auto; }
+  .avatar-div{
+    grid-column: 2; grid-row: 1 / span 2;
+    width: calc(var(--avatar) + 25px); height: calc(var(--avatar) + 25px);
+    border-radius: 50%; overflow:hidden; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    margin-top: 0; margin-right: 0; margin-bottom: -5px; background:#fff;
+  }
+  .avatar-div img{ width:100%; height:100%; display:block; object-fit:cover; object-position:50% 50%; image-rendering:auto; max-width:none; }
+
+  .topic-div{ grid-column: 1; grid-row: 1; margin-top: calc(var(--s) + 4px);
+              padding-left:0; padding-right:0; display:flex; align-items:center; justify-content:center; text-align:center;
+              min-height: calc(2.6 * 1.3 * 1em); }
+  .topic-scroll{ font-size: clamp(20px, 4.6vw, 26px); line-height:1.30; max-height: calc(3 * 1.30em); }
+  .topic-text{ font-family: var(--serif); font-weight:800; letter-spacing:0.08em; font-size:inherit; line-height:1.30; margin:0; color:var(--ink);
+               text-shadow: 0 .4px 0 rgba(0,0,0,.18); white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+
+  /* 统一滚动主体：名言 + 署名 + 注解 */
+  .paper-body{overflow-x:hidden;  flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .paper-body::-webkit-scrollbar{ width:0; height:0; }
+
+  .quote-div, .author-div, .note-div{ padding-left:0; padding-right:0; }
+  .quote-div{ font-size: clamp(20px, 4.8vw, 32px); margin-top: calc(var(--m) + 10px - 18px); margin-bottom: 3px; position:relative; }
+  .quote-wrap{ display:block; /* 统一滚动，取消独立 max-height，不限制行数 */ }
+  .quote-text{ display:block; font-family: var(--serif); font-weight:700; color: var(--ink-soft);
+               -webkit-text-stroke: 0.1px rgba(0,0,0,.30); text-shadow: 0 0 .015em rgba(0,0,0,.18);
+               font-size: 1em; line-height:1.60; letter-spacing:0.06em; margin:0; text-align:left;
+               white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+
+  .author-div{ text-align:left; margin-bottom:3px; }
+  .author-text{ font-family: var(--italic); font-style: italic; color: var(--ink-muted); font-size: clamp(14px, 2.2vw, 17px);
+                margin:0; display:inline-block; text-indent: 6ch; letter-spacing:0.08em; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+
+  .note-div{ margin: calc(var(--s) + 4px - 1.2em + 5px - 8px) 0 0 0; text-align:left; padding-top:0; padding-bottom:0; }
+  .note-text{ font-family: var(--sans); font-weight:600; color:#1b1b1b; font-size: clamp(12px, 2.1vw, 14px); line-height:1.62; display:inline; margin:0;
+              min-height: calc(6 * 1.62 * 1em); letter-spacing:0.04em; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere;  text-align:left; }
+
+/* NAVFIX25: circular crop + keep entire face visible */
+.avatar-div{
+  border: none !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  -webkit-clip-path: circle(50% at 50% 50%) !important;
+          clip-path: circle(50% at 50% 50%) !important;
+  background: #fff !important;
+}
+.avatar-div img, .avatar-img{
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  object-fit: contain !important;          /* 全脸完整露出 */
+  object-position: center 45% !important;  /* 轻微上移，避免头顶被错觉遮到 */
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transform: none !important;
+}
+
+body{overflow-x:hidden; background:#ffffff!important;}
+</style>
+<style>
+  /* === Minimal, reversible tweaks per user's request === */
+  /* 1) All text a touch finer: slightly smaller + a tad lighter */
+  /* Reduce key typographic clamps by ~3–5% and ease font-weights one notch */
+  .topic-scroll{ font-size: clamp(19px, 4.4vw, 25px) !important; }
+  .topic-text{ font-weight: 700 !important; } /* was 800 */
+
+  .quote-div{ font-size: clamp(19px, 4.6vw, 31px) !important; }
+  .quote-text{ font-weight: 600 !important; } /* was 700 */
+
+  .author-text{ font-size: clamp(13px, 2.1vw, 16px) !important; }
+
+  .note-text{ font-size: clamp(11.5px, 2vw, 13.5px) !important; font-weight: 500 !important; } /* was 600 */
+
+  /* 2) Avatar a bit brighter (and stable across themes) */
+  .avatar-div img#avatar-img{
+    filter: brightness(1.12) contrast(1.04) saturate(1.05);
+    transition: filter .2s ease;
+  }
+  @media (prefers-color-scheme: dark){
+    .avatar-div img#avatar-img{ filter: brightness(1.08) contrast(1.04) saturate(1.05); }
+  }
+</style>
+<style>
+  /* === Incremental fine-tuning (theme + note thinner; avatar brighter) === */
+  /* Theme (主题) — only slightly finer */
+  .topic-scroll{ font-size: clamp(18.5px, 4.2vw, 24px) !important; } /* -~2–4% */
+  .topic-text{ font-weight: 600 !important; } /* 700 → 600 */
+
+  /* Note (注解) — slightly finer */
+  .note-text{
+    font-size: clamp(11px, 1.9vw, 13px) !important; /* -~3–5% */
+    font-weight: 450 !important; /* 500 → 450 */
+  }
+
+  /* Avatar — a bit brighter */
+  .avatar-div img#avatar-img{
+    filter: brightness(1.17) contrast(1.04) saturate(1.05);
+    transition: filter .2s ease;
+  }
+  @media (prefers-color-scheme: dark){
+    .avatar-div img#avatar-img{ filter: brightness(1.12) contrast(1.04) saturate(1.05); }
+  }
+</style>
+<style>
+  /* === Incremental tweak: note thinner; quote body slightly bolder === */
+  /* 注解（note）— 再细一点（极小幅度） */
+  .note-text{
+    font-size: clamp(10.8px, 1.85vw, 12.8px) !important; /* 比上一版再小约 ~1–2% */
+    font-weight: 400 !important; /* 450 → 400（轻一档） */
+  }
+  /* 名人名言正文（quote body）— 略微更粗 */
+  .quote-text{
+    font-weight: 650 !important; /* 600 → 650，温和加粗 */
+  }
+</style>
+<style>
+  /* === Revert avatar to original realistic look (no artificial brightening) === */
+  .avatar-div img#avatar-img{
+    -webkit-filter: none !important;
+    filter: none !important;
+  }
+  @media (prefers-color-scheme: dark){
+    .avatar-div img#avatar-img{
+      -webkit-filter: none !important;
+      filter: none !important;
+    }
+  }
+</style>
+<style>
+  /* === Head note (注解) — slightly finer & lighter === */
+  .note-text{
+    font-size: clamp(10.7px, 1.82vw, 12.6px) !important; /* 比上一版再小约 1–2% */
+    font-weight: 350 !important; /* 400 → 350，轻一档 */
+    letter-spacing: 0.01em; /* 极轻微增距，保证细字仍清晰 */
+  }
+</style>
+<style>
+  /* === Note text — slightly finer & lighter (another small step) === */
+  .note-text{
+    font-size: clamp(10.6px, 1.80vw, 12.4px) !important; /* ~1–2% smaller than previous */
+    font-weight: 300 !important; /* 350 → 300 */
+    letter-spacing: 0.012em; /* tiny tracking to preserve legibility */
+  }
+</style>
+<style>
+  /* === Incremental tweaks === */
+  /* 注解（note）：再细一点、再轻一点（极小幅度） */
+  .note-text{
+    font-size: clamp(10.5px, 1.78vw, 12.2px) !important; /* ~再降 1–2% */
+    font-weight: 275 !important; /* 300 → 275（若字体不支持，将回退到最接近值） */
+    letter-spacing: 0.014em;
+  }
+
+  /* 署名（author）：稍微更重一些 */
+  .author-text{
+    font-weight: 600 !important; /* 略增一档 */
+  }
+
+  /* 名人名言正文（quote）：文字稍微更粗一些 */
+  .quote-text{
+    font-weight: 675 !important; /* 650 → 675，温和加粗 */
+  }
+</style>
+<style>
+  /* === Signature & quote: slightly heavier === */
+  .author-text{
+    font-weight: 650 !important; /* 600 → 650 (small step) */
+  }
+  .quote-text{
+    font-weight: 700 !important; /* 675 → 700 (small step) */
+  }
+</style>
+<style>
+/* === 注解区域调整 === */
+/* 增加顶部外边距（兼容多命名） */
+.note-area, .note, .note-section, .note-wrapper, .annotation, .annotation-area { 
+  margin-top: 24px !important; 
+}
+/* 兜底：直接作用于注解文字 */
+.note-text { 
+  margin-top: 24px !important; 
+  line-height: 1.3 !important; /* 减小行距 */
+}
+</style>
+
+<style>
+/* 注解文字行距降到 1 */
+.note-text { 
+  line-height: 1 !important;
+}
+</style>
+
+<style>
+/* v25: 移动端注解字重 400（防发灰），桌面/通用仍为 100；其余设置保持 */
+
+/* 统一白底 */
+html, body{overflow-x:hidden; 
+  background-color:#ffffff !important;
+  background:#ffffff !important;
+  background-image:none !important;
+}
+
+/* 名人名言正文：极粗 + 字距 */
+.quote-text{
+  font-weight:1000 !important;
+  letter-spacing:0.17em !important;
+}
+
+/* 署名 */
+.author-text{ font-weight:650 !important; }
+
+/* 注解基础（桌面/通用） */
+#note-text, .note-div .note-text{
+  color:#000 !important;
+  font-weight:100 !important;
+  line-height:1.5 !important;
+  text-align:left !important;
+  text-indent:0 !important;
+  display:block !important;
+  margin:0 !important;
+
+  /* 去除导致发灰的效果 */
+  opacity:1 !important;
+  -webkit-text-stroke:0 !important;
+  text-shadow:none !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+  font-synthesis-weight: none;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC","PingFang SC","Hiragino Sans GB",Arial,sans-serif !important;
+}
+
+/* 容器也清除淡化效果 */
+.note-div, .note-div *{
+  opacity:1 !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+}
+
+/* 注解顶部外边距 */
+.note-div{ margin-top:25px !important; }
+
+/* 主题文字左对齐 */
+.topic-text{ text-align:left !important; }
+
+/* 移动端/高DPR：注解字重 400，避免发灰 */
+@media (max-width: 480px), (-webkit-min-device-pixel-ratio: 2){
+  #note-text, .note-div .note-text{ font-weight:400 !important; }
+}
+
+/* NAVFIX15: margins & anti-flicker */
+body::after{content:'';position:fixed;left:0;right:0;bottom:0;height:2px;background:#ffffff !important;pointer-events:none;z-index:2147483647;}
+.note-div{margin-bottom:20px !important;}
+.topic-div{margin-top:15px !important;}                       /* 主题顶部 -10dp */
+.quote-div{margin-top: calc(var(--m) - 15px) !important;}     /* 正文顶部 -15dp */
+.avatar-div{margin-top:30px !important;}                      /* 头像顶部 +20dp → 30dp */
+
+/* NAVFIX16: spacing adjustments */
+.topic-div{ margin-top:23px !important; }      /* +8dp from previous 15 */
+.avatar-div{ margin-bottom:10px !important; }                                     /* avatar bottom +10dp */
+
+/* NAVFIX17 spacing tweaks */
+.topic-div{ margin-top:18px !important; }           /* 23 -> 18 (-5dp) */
+.avatar-div{ margin-bottom:22px !important; }  /* +12dp from previous override */
+
+/* NAVFIX18 spacing tweaks */
+.avatar-div{ margin-top:18px !important; margin-bottom:12px !important; }
+.topic-div{  margin-top:13px !important; margin-bottom:0px !important; }
+
+/* NAVFIX19: spacing + avatar size (-5%) */
+.avatar-div{ margin-top:13px !important; margin-bottom:7px !important; }
+.topic-div{  margin-top:8px !important; margin-bottom:0px !important; }
+/* Scale avatar visuals by 5% without affecting layout flow too much */
+.avatar-div img,
+.avatar-div .avatar-img,
+.avatar-div .img{ transform: scale(0.95); transform-origin: top center; display: inline-block; }
+
+/* NAVFIX21: bottom hairline fix + spacing + remove avatar frame (no font/layout change) */
+html,body{overflow-x:hidden; min-height:100% !important;height:auto !important;background:#fff;}
+/* 1px white mask to hide any compositor seam above nav bar */
+body::after{content:'';position:fixed;left:0;right:0;bottom:0;height:1px;background:#fff !important;pointer-events:none;z-index:2147483647;display:block !important;}
+/* Remove potential bottom borders/shadows inside content */
+body,.root,.frame,.page,.container{border-bottom:none !important;box-shadow:none !important;outline:none !important;}
+/* Remove avatar circular frame/ring (keep the circular shape if any) */
+.avatar-div,.avatar-div img,.avatar-img{border:none !important;box-shadow:none !important;outline:none !important;background:transparent !important;}
+.avatar-div::before,.avatar-div::after{display:none !important;content:none !important;}
+/* Requested spacing changes */
+.topic-div{margin-top:18px !important;}                    /* +10dp from previous 8 → 18 */
+.quote-div{margin-top:calc(var(--m) - 25px) !important;}   /* 再减少 5dp（-20 → -25） */
+/* Keep scroll visuals hidden but behavior intact */
+::-webkit-scrollbar{width:0;height:0;display:none;}
+html,body{overflow-x:hidden; overscroll-behavior:contain;}
+
+/* NAVFIX23: top spacing safe, circular avatar with border, white hairline */
+body, .root, .frame, .page, .poster, .poster-root { padding-top:10px !important; } /* extra safety */
+.avatar-div, .avatar-div img, .avatar-img{
+  border-radius:50% !important; clip-path:none !important; overflow:hidden !important;
+}
+.avatar-div{
+  border:2px solid rgba(0,0,0,0.10) !important; box-shadow:none !important; background:transparent !important;
+}
+body::after{
+  content:''; position:fixed; left:0; right:0; bottom:0; height:1px;
+  background:#ffffff !important; pointer-events:none; z-index:2147483647; display:block !important;
+}
+
+/* NAVFIX24: move page up 10dp; avatar full-head & no outer border (keep circle) */
+body, .root, .frame, .page, .poster, .poster-root { padding-top:10px !important; }
+
+.avatar-div{
+  border: none !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+.avatar-div img, .avatar-img{
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;      /* show full head */
+  object-position: center center !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transform: none !important;          /* override earlier scale */
+}
+</style>
+
+</head>
+<body>
+<main class="poster" id="poster">
+<div class="content" id="paper-content">
+<header class="paper-header">
+<div class="topic-div">
+<div class="topic-scroll">
+<h1 class="topic-text" id="topic-text">不可战胜的夏天</h1>
+</div>
+</div>
+<div class="avatar-div" title="阿尔贝·加缪">
+<img alt="Albert Camus portrait" id="avatar-img" src="https://upload.wikimedia.org/wikipedia/commons/c/c3/Albert_Camus_1945_%28cropped%29.jpg"/>
+</div>
+</header>
+<div class="paper-body" id="paper-body">
+<section class="quote-div">
+<div class="quote-wrap">
+<span class="quote-text" id="quote-text">在隆冬之中，我终于在自己内心发现了一个不可战胜的夏天。</span>
+</div>
+</section>
+<section class="author-div">
+<p class="author-text" id="author-text">— Albert Camus, “Return to Tipasa” (from “Summer”)</p>
+</section>
+<section class="note-div">
+<p class="note-text" id="note-text">
+这句出自随笔《重返提帕萨》（收于《夏天》）。加缪在战后重返阿尔及利亚的光、海与石之间，意识到即便身处“隆冬”——荒谬、失落与历史的沉重之中——人的内心仍可保存一簇不被世界熄灭的热与明。它指向加缪伦理中的“清醒的反抗”：不自欺也不绝望。所谓“不可战胜的夏天”，并非盲目乐观，而是承认世界的荒谬之后仍选择热爱、行动与承担的能力。
+          </p>
+</section>
+</div>
+</div>
+</main>
+<script>
+  // 背景自动探测（保持上一版逻辑）
+  (function(){
+    const candidates = [
+      "../bg-wood-upload.jpg",
+      "bg-wood-upload.jpg",
+      "file:///android_asset/bg-wood-upload.jpg",
+      "file:///android_asset/flutter_assets/assets/bg-wood-upload.jpg",
+      "/android_asset/bg-wood-upload.jpg",
+      "/android_asset/flutter_assets/assets/bg-wood-upload.jpg"
+    ];
+    function tryNext(i){
+      if(i>=candidates.length) return;
+      const url = candidates[i];
+      const img = new Image();
+      img.onload = ()=> document.documentElement.style.setProperty('--bg-url', `url('${url}')`);
+      img.onerror = ()=> tryNext(i+1);
+      img.src = url + (url.includes('?')?'':'?v=' + Date.now());
+    }
+    if(getComputedStyle(document.documentElement).getPropertyValue('--bg-url').includes("bg-wood-upload.jpg")){
+      tryNext(0);
+    }
+  })();
+
+  window.setBackground = function(url){
+    document.documentElement.style.setProperty('--bg-url', `url('${url}')`);
+  };
+  window.setDynamicData = function(payload){
+    if(payload.topic !== undefined){ document.getElementById('topic-text').textContent = payload.topic ?? ''; }
+    if(payload.quote !== undefined){ document.getElementById('quote-text').textContent = payload.quote ?? ''; }
+    if(payload.author !== undefined){ document.getElementById('author-text').textContent = payload.author ?? ''; }
+    if(payload.note !== undefined){ document.getElementById('note-text').textContent = payload.note ?? ''; }
+    if(payload.avatarUrl){
+      const img = document.getElementById('avatar-img');
+      img.src = payload.avatarUrl;
+      const fx = (payload.focalX ?? 50); const fy = (payload.focalY ?? 50);
+      img.style.objectPosition = fx + '% ' + fy + '%';
+    }
+    if(payload.bgUrl){ window.setBackground(payload.bgUrl); }
+  };
+</script>
+</body>
+</html>

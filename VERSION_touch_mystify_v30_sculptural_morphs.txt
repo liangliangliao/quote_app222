@@ -1,0 +1,5 @@
+quote_app touch mystify v30 sculptural morphs
+- reduce point/line net dominance
+- add sculptural motifs: liquid pod, luminous wing, blossom crown, silk banner, orbit halo, crystal shard
+- Android OpenGL renderer: IntimacyMystifyGLRendererV30SculpturalMorphs
+- Flutter preview synced with sculptural modes 14-19

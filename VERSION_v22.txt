@@ -1,0 +1,12 @@
+v22 - 主题复盘统计增强
+
+本次更新：
+1. 数据看板新增“主题复盘统计”板块，显示：
+   - 已写主题复盘数
+   - 写过现实一步的主题数
+   - 进入行动的主题数
+   - 进入闭环的主题数
+   - 各主题的复盘/行动/闭环状态明细
+2. 学习进度页新增“主题复盘统计”板块，并在顶部概览中加入“主题复盘”数量。
+3. 首页进度概览增加“主题复盘”统计值。
+4. DAO 新增 listModuleReviewProgress()，并在 getStatsSummary() 中加入 moduleReviews / moduleReviewActions / moduleReviewFollowups 统计。

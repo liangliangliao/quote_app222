@@ -1,0 +1,14 @@
+[FIX BUILD 27 - Settings time apply on save]
+
+- Root Cause:
+  1) SchedulerService regex incorrectly used '\$' at end of patterns, failing to recognize 'HH:mm' and 'yyyy-MM-dd HH:mm' strings.
+  2) _computeNext() relied on obsolete fields (freq, weekday, dayOfMonth, hhmm). When saving a task, scheduleNextForAll() rewrote `start_time` using defaults (09:00), so the time appeared to not change.
+
+- Fixes:
+  * Updated regex to `^\d{2}:\d{2}$` and `^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$`.
+  * Rewrote `_computeNext()` to use the new fields `freq_type`, `freq_weekday`, `freq_day_of_month` (with backward-compat fallbacks) and to robustly parse time-of-day from `start_time`.
+  * Kept behaviour to write back the next trigger to `tasks.start_time`, but now it uses correct parsing and frequency logic, so changing time in Settings persists and is reflected in the task list and dialog preview.
+
+[PATCH 2 / BUILD FIX 28]
+- Fixed leftover old code block in scheduler_service.dart that caused parse errors and undefined identifiers.
+- Cleaned regex anchors and ensured catchupIfMissed is available (parse succeeded).

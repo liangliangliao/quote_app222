@@ -1,0 +1,6 @@
+Change Lab v15 patch
+- Added full course-content data file: lib/change_lab/data/change_course_full_content.dart
+- Covered Lecture 9 Change sections 1-6 and Lecture 10 sections 1-13 across C01-C19
+- Updated concept detail page to render full original-course simplified Chinese content in the “原课” tab
+- Updated case tab to show detailed course cases/examples rather than only short seed summaries
+- Kept existing task engine / world engine unchanged; this patch focuses on content coverage fidelity

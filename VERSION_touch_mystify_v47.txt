@@ -1,0 +1,4 @@
+quote_app_touch_mystify_v47_direct_video_membrane
+- Subject phases switched to direct observed-video membrane renderer.
+- Old random Mystify strokes are disabled during subject phases only.
+- Release and afterglow rendering paths remain unchanged.

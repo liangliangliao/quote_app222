@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APP_HOME="$( cd "${BASH_SOURCE%/*}" >/dev/null 2>&1 && pwd )"
+WRAPPER_JAR="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+# Keep wrapper jar version aligned with gradle-wrapper.properties distributionUrl.
+WRAPPER_URL="https://raw.githubusercontent.com/gradle/gradle/v8.11.1/gradle/wrapper/gradle-wrapper.jar"
+
+# Use a project-local Gradle user home so the init.d script under android/.gradle/init.d
+# is automatically loaded (it enforces repository mirrors to avoid HTTP 403 from Maven Central
+# in some environments).
+if [ -z "${GRADLE_USER_HOME:-}" ]; then
+  export GRADLE_USER_HOME="$APP_HOME/.gradle"
+fi
+
+# Ensure our project-local init script is always loaded, even if Flutter / CI overrides
+# Gradle user home (which would otherwise prevent android/.gradle/init.d from loading).
+INIT_SCRIPT="$APP_HOME/.gradle/init.d/00_repo_mirrors.gradle"
+INIT_ARGS=()
+if [ -f "$INIT_SCRIPT" ]; then
+  INIT_ARGS+=("--init-script" "$INIT_SCRIPT")
+fi
+
+if [ ! -f "$WRAPPER_JAR" ]; then
+  echo "gradle-wrapper.jar not found, downloading..."
+  mkdir -p "$APP_HOME/gradle/wrapper"
+  if command -v curl >/dev/null 2>&1; then
+    curl -LfSo "$WRAPPER_JAR" "$WRAPPER_URL"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$WRAPPER_JAR" "$WRAPPER_URL"
+  else
+    echo "Neither curl nor wget found to fetch gradle-wrapper.jar"; exit 1
+  fi
+fi
+
+JAVA_EXE="${JAVA_HOME:-}/bin/java"
+if [ ! -x "$JAVA_EXE" ]; then
+  JAVA_EXE="java"
+fi
+
+exec "$JAVA_EXE" -Dorg.gradle.appname=gradlew -classpath "$WRAPPER_JAR" org.gradle.wrapper.GradleWrapperMain "${INIT_ARGS[@]}" "$@"

@@ -1,0 +1,2415 @@
+{
+  "seed_version": 1,
+  "generated_at": "2026-02-16",
+  "episodes": [
+    {
+      "episode_no": 14,
+      "title_zh": "第14集 过犹不及",
+      "title_en": "Too Much of a Good Thing",
+      "total_big_sections": 14,
+      "total_segments": 47
+    },
+    {
+      "episode_no": 15,
+      "title_zh": "第15集 完美主义",
+      "title_en": "Perfectionism",
+      "total_big_sections": 16,
+      "total_segments": 16
+    },
+    {
+      "episode_no": 16,
+      "title_zh": "第16集 享受过程",
+      "title_en": "Enjoy the Process",
+      "total_big_sections": 8,
+      "total_segments": 8
+    }
+  ],
+  "big_sections": [
+    {
+      "id": "L14-B01",
+      "episode_no": 14,
+      "section_index": 1,
+      "title": ""
+    },
+    {
+      "id": "L14-B02",
+      "episode_no": 14,
+      "section_index": 2,
+      "title": ""
+    },
+    {
+      "id": "L14-B03",
+      "episode_no": 14,
+      "section_index": 3,
+      "title": ""
+    },
+    {
+      "id": "L14-B04",
+      "episode_no": 14,
+      "section_index": 4,
+      "title": ""
+    },
+    {
+      "id": "L14-B05",
+      "episode_no": 14,
+      "section_index": 5,
+      "title": ""
+    },
+    {
+      "id": "L14-B06",
+      "episode_no": 14,
+      "section_index": 6,
+      "title": ""
+    },
+    {
+      "id": "L14-B07",
+      "episode_no": 14,
+      "section_index": 7,
+      "title": ""
+    },
+    {
+      "id": "L14-B08",
+      "episode_no": 14,
+      "section_index": 8,
+      "title": ""
+    },
+    {
+      "id": "L14-B09",
+      "episode_no": 14,
+      "section_index": 9,
+      "title": ""
+    },
+    {
+      "id": "L14-B10",
+      "episode_no": 14,
+      "section_index": 10,
+      "title": ""
+    },
+    {
+      "id": "L14-B11",
+      "episode_no": 14,
+      "section_index": 11,
+      "title": ""
+    },
+    {
+      "id": "L14-B12",
+      "episode_no": 14,
+      "section_index": 12,
+      "title": ""
+    },
+    {
+      "id": "L14-B13",
+      "episode_no": 14,
+      "section_index": 13,
+      "title": ""
+    },
+    {
+      "id": "L14-B14",
+      "episode_no": 14,
+      "section_index": 14,
+      "title": ""
+    },
+    {
+      "id": "L15-B01",
+      "episode_no": 15,
+      "section_index": 1,
+      "title": ""
+    },
+    {
+      "id": "L15-B02",
+      "episode_no": 15,
+      "section_index": 2,
+      "title": ""
+    },
+    {
+      "id": "L15-B03",
+      "episode_no": 15,
+      "section_index": 3,
+      "title": ""
+    },
+    {
+      "id": "L15-B04",
+      "episode_no": 15,
+      "section_index": 4,
+      "title": ""
+    },
+    {
+      "id": "L15-B05",
+      "episode_no": 15,
+      "section_index": 5,
+      "title": ""
+    },
+    {
+      "id": "L15-B06",
+      "episode_no": 15,
+      "section_index": 6,
+      "title": ""
+    },
+    {
+      "id": "L15-B07",
+      "episode_no": 15,
+      "section_index": 7,
+      "title": ""
+    },
+    {
+      "id": "L15-B08",
+      "episode_no": 15,
+      "section_index": 8,
+      "title": ""
+    },
+    {
+      "id": "L15-B09",
+      "episode_no": 15,
+      "section_index": 9,
+      "title": ""
+    },
+    {
+      "id": "L15-B10",
+      "episode_no": 15,
+      "section_index": 10,
+      "title": ""
+    },
+    {
+      "id": "L15-B11",
+      "episode_no": 15,
+      "section_index": 11,
+      "title": ""
+    },
+    {
+      "id": "L15-B12",
+      "episode_no": 15,
+      "section_index": 12,
+      "title": ""
+    },
+    {
+      "id": "L15-B13",
+      "episode_no": 15,
+      "section_index": 13,
+      "title": ""
+    },
+    {
+      "id": "L15-B14",
+      "episode_no": 15,
+      "section_index": 14,
+      "title": ""
+    },
+    {
+      "id": "L15-B15",
+      "episode_no": 15,
+      "section_index": 15,
+      "title": ""
+    },
+    {
+      "id": "L15-B16",
+      "episode_no": 15,
+      "section_index": 16,
+      "title": ""
+    },
+    {
+      "id": "L16-B01",
+      "episode_no": 16,
+      "section_index": 1,
+      "title": ""
+    },
+    {
+      "id": "L16-B02",
+      "episode_no": 16,
+      "section_index": 2,
+      "title": ""
+    },
+    {
+      "id": "L16-B03",
+      "episode_no": 16,
+      "section_index": 3,
+      "title": ""
+    },
+    {
+      "id": "L16-B04",
+      "episode_no": 16,
+      "section_index": 4,
+      "title": ""
+    },
+    {
+      "id": "L16-B05",
+      "episode_no": 16,
+      "section_index": 5,
+      "title": ""
+    },
+    {
+      "id": "L16-B06",
+      "episode_no": 16,
+      "section_index": 6,
+      "title": ""
+    },
+    {
+      "id": "L16-B07",
+      "episode_no": 16,
+      "section_index": 7,
+      "title": ""
+    },
+    {
+      "id": "L16-B08",
+      "episode_no": 16,
+      "section_index": 8,
+      "title": ""
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "L14-S01",
+      "episode_no": 14,
+      "big_section_id": "L14-B01",
+      "sort_index": 1,
+      "summary_zh": "个人经历：在哈佛追求每篇作业完美→陷入痛苦→转向哲学/心理学研究幸福。",
+      "excerpt_en": "now it was academics that became the central part of my life. The knot returned,very shortly after freshman week. Because every paper had to be perfect. Every word had to be read and summarized. Every assignment had to b",
+      "start_idx": 730,
+      "end_idx": 747,
+      "primary_node": "B01",
+      "secondary_nodes": [
+        "B06",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S02",
+      "episode_no": 14,
+      "big_section_id": "L14-B01",
+      "sort_index": 2,
+      "summary_zh": "意识到完美主义普遍且被误解；本课与下节将谈完美主义及研究。",
+      "excerpt_en": "And it was very quickly that I realized, that I understood that I was engaged, or suffering from something that is so common, so pervasive and so misunderstood. Perfectionism. This is what I want to talk about today, and",
+      "start_idx": 748,
+      "end_idx": 756,
+      "primary_node": "B01",
+      "secondary_nodes": [
+        "B07",
+        "A03"
+      ]
+    },
+    {
+      "segment_id": "L14-S03",
+      "episode_no": 14,
+      "big_section_id": "L14-B01",
+      "sort_index": 3,
+      "summary_zh": "没人处在极端；更幸福=更少完美主义；不放弃雄心而是换对失败的态度。",
+      "excerpt_en": "Now there is no perfectionist, there is no one person who is on this extreme, nor there is a person who's on the excellence extreme which I will depict later. The key is how do I become happier and I become happier by be",
+      "start_idx": 757,
+      "end_idx": 768,
+      "primary_node": "B03",
+      "secondary_nodes": [
+        "B02",
+        "A01"
+      ]
+    },
+    {
+      "segment_id": "L14-S04",
+      "episode_no": 14,
+      "big_section_id": "L14-B01",
+      "sort_index": 4,
+      "summary_zh": "课程路线：定义→特征(下次)→后果→来源→如何克服/帮助他人；强调失败之痛不可免但可更理性应对。",
+      "excerpt_en": "So what I'm going to talk about is first of all, define it so that we understand it. Because it is misunderstood. I'm going to talk about characteristics. We are going to get to that next time only. The characteristics-",
+      "start_idx": 769,
+      "end_idx": 792,
+      "primary_node": "B01",
+      "secondary_nodes": [
+        "D06",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S05",
+      "episode_no": 14,
+      "big_section_id": "L14-B02",
+      "sort_index": 5,
+      "summary_zh": "招募会画画的志愿者；勇气=有恐惧仍前进。",
+      "excerpt_en": "OK.So let's get to work.I need a volunteer. I need a volunteer,but before you put your hand up, it's a very special kind of volunteer. I need a volunteer who is a very good artist, a volunteer who can draw really well. N",
+      "start_idx": 793,
+      "end_idx": 803,
+      "primary_node": "B08",
+      "secondary_nodes": [
+        "A01",
+        "B04"
+      ]
+    },
+    {
+      "segment_id": "L14-S06",
+      "episode_no": 14,
+      "big_section_id": "L14-B02",
+      "sort_index": 6,
+      "summary_zh": "Vincent上台自述要征服恐惧；营造“上场”氛围。",
+      "excerpt_en": "Won't you come up? (Applause) OK.Hi.What's your name? Vincent. Are you a VS concentrator? (Inaudible) Don't tell me you are an economics.OK. What are you? Biology.OK.Good.(Laugh) All right. So biology- you have to draw m",
+      "start_idx": 804,
+      "end_idx": 816,
+      "primary_node": "B08",
+      "secondary_nodes": [
+        "A03",
+        "D04"
+      ]
+    },
+    {
+      "segment_id": "L14-S07",
+      "episode_no": 14,
+      "big_section_id": "L14-B02",
+      "sort_index": 7,
+      "summary_zh": "任务：在黑板画圆；给时间、可擦改；把尝试当过程。",
+      "excerpt_en": "All right.Are you ready for this,Vincent? You sure? All right. Here's what I want you to do now. I don't know if I want to do this to you though,you know. All right,but I am going to do it to you anyway. I want you to dr",
+      "start_idx": 817,
+      "end_idx": 829,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "B10",
+        "B04"
+      ]
+    },
+    {
+      "segment_id": "L14-S08",
+      "episode_no": 14,
+      "big_section_id": "L14-B03",
+      "sort_index": 8,
+      "summary_zh": "画出‘完美圆’并获掌声；但练习还没结束。",
+      "excerpt_en": "The meantime we'll meditate.(Laugh) Yeah. I didn't mean it literally half an hour, but...OK.(Laugh) Use it as a time-in.That's all. A circle! Vincent,well done! Ooh hoo! (Applause) You are not done yet.",
+      "start_idx": 830,
+      "end_idx": 834,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "B02",
+        "A01"
+      ]
+    },
+    {
+      "segment_id": "L14-S09",
+      "episode_no": 14,
+      "big_section_id": "L14-B03",
+      "sort_index": 9,
+      "summary_zh": "要求画‘3岁时的圆’，降低标准、允许不完美。",
+      "excerpt_en": "Hey hey! Woah woah woah woah. Don't run away on me now. OK.So I'm putting a line here. What I'd like you to do here is draw something else. So you are ready for it? I would like you to draw another circle, but this time",
+      "start_idx": 835,
+      "end_idx": 846,
+      "primary_node": "B04",
+      "secondary_nodes": [
+        "A02",
+        "B01"
+      ]
+    },
+    {
+      "segment_id": "L14-S10",
+      "episode_no": 14,
+      "big_section_id": "L14-B03",
+      "sort_index": 10,
+      "summary_zh": "再画‘1岁时的圆’；强调从粗糙开始。",
+      "excerpt_en": "And that's when his parents said,\"Van Gogh was reborn.\" Can you draw it as you drew it when you were 3 years old,please? (Laugh) I know there are many talented people here, but we want some real...OK.All right. Still,ver",
+      "start_idx": 847,
+      "end_idx": 857,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "B10",
+        "B04"
+      ]
+    },
+    {
+      "segment_id": "L14-S11",
+      "episode_no": 14,
+      "big_section_id": "L14-B03",
+      "sort_index": 11,
+      "summary_zh": "评分演示：第一个圆好、后两个像‘灾难’；关键提问：没有大量失败圆，不可能画出好圆→成功之路必含失败。",
+      "excerpt_en": "The one thing that I really don't like doing teaching- I love to teach, but the one thing that I really don't like doing- is grading. I hate grading. But you know,as a teacher,you have to do it. You have to do it. So I'm",
+      "start_idx": 858,
+      "end_idx": 885,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "A01",
+        "B01"
+      ]
+    },
+    {
+      "segment_id": "L14-S12",
+      "episode_no": 14,
+      "big_section_id": "L14-B04",
+      "sort_index": 12,
+      "summary_zh": "口头禅：Learn to fail；心理学家观察：你们都是好走路者。",
+      "excerpt_en": "Learn to fail or fail to learn- there is no other way. You know I'm a psychologist and you know what a psychologist do? Psychologists watch people. And I watch you every time you come to class. And I watch you very very",
+      "start_idx": 886,
+      "end_idx": 895,
+      "primary_node": "A01",
+      "secondary_nodes": [
+        "A02",
+        "B02"
+      ]
+    },
+    {
+      "segment_id": "L14-S13",
+      "episode_no": 14,
+      "big_section_id": "L14-B04",
+      "sort_index": 13,
+      "summary_zh": "夸张描绘你们走路优雅、像毫不费力；指出成熟技能看似轻松。",
+      "excerpt_en": "You know in fact what you do is you come in and you lift you left leg and then you just, your ankle slightly is moved up and very gracefully- as you put it down,you lift your back heel. You did it so beautifully.So elega",
+      "start_idx": 896,
+      "end_idx": 909,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "B02",
+        "B06"
+      ]
+    },
+    {
+      "segment_id": "L14-S14",
+      "episode_no": 14,
+      "big_section_id": "L14-B04",
+      "sort_index": 14,
+      "summary_zh": "反问：不摔无数次能走这么好？不可能→再强调learn to fail。",
+      "excerpt_en": "Have you considered a career of modeling? I mean really! Nice! And you put here. Then you are talking.You are smiling. And you pretend as if there's no effort involved. Well done! Yes! You deserve it! Absolutely! But her",
+      "start_idx": 910,
+      "end_idx": 919,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "A01",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S15",
+      "episode_no": 14,
+      "big_section_id": "L14-B04",
+      "sort_index": 15,
+      "summary_zh": "小时候我们知道：摔了会哭也会再站起，还会笑；引出幼儿学走路视频。",
+      "excerpt_en": "And as kids,we know it. And you know, we fall down and maybe we cry a little bit if it hurts, but we get up again. We fall down.And we laugh. In fact,let's see an example.Someone is learning how to walk.",
+      "start_idx": 920,
+      "end_idx": 925,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "B04",
+        "A01"
+      ]
+    },
+    {
+      "segment_id": "L14-S16",
+      "episode_no": 14,
+      "big_section_id": "L14-B04",
+      "sort_index": 16,
+      "summary_zh": "视频：孩子跌跌撞撞但兴奋；体现学习的快乐与反复尝试。",
+      "excerpt_en": "[Video] Man: Go get mommy. Go get her.Go get mommy. Woman: Good job! Good job! Man: Hey Sophie! Woman: Can you walk back to daddy? Oops. Give me your hand. Man: Slow down.Slow down. Woman: (Laugh) Yay! So hyper. Man: Go",
+      "start_idx": 926,
+      "end_idx": 939,
+      "primary_node": "A02",
+      "secondary_nodes": [
+        "A05",
+        "B02"
+      ]
+    },
+    {
+      "segment_id": "L14-S17",
+      "episode_no": 14,
+      "big_section_id": "L14-B04",
+      "sort_index": 17,
+      "summary_zh": "快乐为何消失：懂得他人观看→形象焦虑→不敢尝试/表白/发言；回避替代应对，长期伤害自尊、韧性与幸福。",
+      "excerpt_en": "Dr.Tal Ben-Shahar:The joy of learning.The joy of... Where is it? Where is it? Where does it go? Well it goes away because we come to a certain age when we begin to understand other people are watching us, and then the im",
+      "start_idx": 940,
+      "end_idx": 954,
+      "primary_node": "A03",
+      "secondary_nodes": [
+        "B08",
+        "D01"
+      ]
+    },
+    {
+      "segment_id": "L14-S18",
+      "episode_no": 14,
+      "big_section_id": "L14-B04",
+      "sort_index": 18,
+      "summary_zh": "约会也追求完美；提醒：成长/韧性/成功无他路，只能在失败中学。",
+      "excerpt_en": "Or we go on a date.And everything has to be so perfect. So perfect. Forgetting how we learn how to eat in the first place. Learn to fail or fail to learn. This is not actually concrete recommendation for your first date.",
+      "start_idx": 955,
+      "end_idx": 963,
+      "primary_node": "A01",
+      "secondary_nodes": [
+        "B06",
+        "A02"
+      ]
+    },
+    {
+      "segment_id": "L14-S19",
+      "episode_no": 14,
+      "big_section_id": "L14-B05",
+      "sort_index": 19,
+      "summary_zh": "个人重复的自我提醒：在失败后或害怕前问‘最坏会怎样’→最坏是学到东西/会痛但能反弹。",
+      "excerpt_en": "Have I said this before? This is my personal mantra that I repeat to myself over and over again, especially after failures,especially before doing things when I'm afraid to do it,when I said \"well,maybe I shouldn't do.\"",
+      "start_idx": 964,
+      "end_idx": 973,
+      "primary_node": "A01",
+      "secondary_nodes": [
+        "B04",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S20",
+      "episode_no": 14,
+      "big_section_id": "L14-B05",
+      "sort_index": 20,
+      "summary_zh": "‘危机’=危险+机会；失败/危机里同时包含学习与成长机会。",
+      "excerpt_en": "I can handle anything. \"Wei Ji\",the Chinese character for crisis, has two parts: the first part is danger- this is the top character; the bottom character,opportunity. There is danger of failing. And wherever there is a",
+      "start_idx": 974,
+      "end_idx": 981,
+      "primary_node": "A04",
+      "secondary_nodes": [
+        "A05",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S21",
+      "episode_no": 14,
+      "big_section_id": "L14-B05",
+      "sort_index": 21,
+      "summary_zh": "引述：最大错误是害怕犯错；引出‘终极失败者’案例。",
+      "excerpt_en": "Elbert Hubbard: \"The greatest mistake a man can make is to be afraid of making one.\" I want to show you an example of a person who had made mistakes, who failed time and time and again. In fact,I was thinking of labeling",
+      "start_idx": 982,
+      "end_idx": 989,
+      "primary_node": "A01",
+      "secondary_nodes": [
+        "A03",
+        "B08"
+      ]
+    },
+    {
+      "segment_id": "L14-S22",
+      "episode_no": 14,
+      "big_section_id": "L14-B06",
+      "sort_index": 22,
+      "summary_zh": "失败清单：22丢工作、23从政失败、经商失败、27崩溃；但又站起来。",
+      "excerpt_en": "At the age of 22,already- just started a new job,lost it. Didn't leave- he lost it. At the age of 23,decided to go into politics because he wasn't doing well in other jobs. But didn't make it there either. And then he we",
+      "start_idx": 989,
+      "end_idx": 999,
+      "primary_node": "A07",
+      "secondary_nodes": [
+        "A01",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S23",
+      "episode_no": 14,
+      "big_section_id": "L14-B06",
+      "sort_index": 23,
+      "summary_zh": "屡败屡战：34/39竞选国会失败，46再败，47竞选副总统失败；仍继续尝试。",
+      "excerpt_en": "And at the age of 34,7 years after his nervous breakdown, he ran for congress- wasn't even close. Didn't make it. At the age of 39,hasn't learned the lesson yet. And he was defeated again for congress. And then he said,\"",
+      "start_idx": 999,
+      "end_idx": 1010,
+      "primary_node": "A07",
+      "secondary_nodes": [
+        "A01",
+        "B08"
+      ]
+    },
+    {
+      "segment_id": "L14-S24",
+      "episode_no": 14,
+      "big_section_id": "L14-B06",
+      "sort_index": 24,
+      "summary_zh": "50竞选参议员几乎放弃但没放弃；51当选总统；失败不愉快但坚持，因为这是成长唯一道路。",
+      "excerpt_en": "So at the age of 50,he tried again for Senate. And then he almost gave up.But he didn't. And at the age of 51, he became the 16th President of the United States. Arguably the most important President this country has eve",
+      "start_idx": 1010,
+      "end_idx": 1021,
+      "primary_node": "A07",
+      "secondary_nodes": [
+        "A01",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S25",
+      "episode_no": 14,
+      "big_section_id": "L14-B07",
+      "sort_index": 25,
+      "summary_zh": "甘地自传副题‘真理实验’：尝试—失败—再尝试；南非失败、印度多次失败后成功。",
+      "excerpt_en": "Mohandas Gandhi,the subtitle of his book is \"My Experiments with Truth\". He talks about experiments,trying and failing, trying and failing and succeeding, and failing again,and trying again. Those of you who know his sto",
+      "start_idx": 1022,
+      "end_idx": 1033,
+      "primary_node": "A05",
+      "secondary_nodes": [
+        "A07",
+        "A01"
+      ]
+    },
+    {
+      "segment_id": "L14-S26",
+      "episode_no": 14,
+      "big_section_id": "L14-B07",
+      "sort_index": 26,
+      "summary_zh": "甘地：若无‘犯错自由’，自由不值；既指国家也指个人。",
+      "excerpt_en": "\"Freedom is not worth having if it does not connote freedom to err.\" And when he talks about \"freedom to err\", he means it on the national level: being self-determined,free people. He also means it on the individual leve",
+      "start_idx": 1034,
+      "end_idx": 1039,
+      "primary_node": "A04",
+      "secondary_nodes": [
+        "B04",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S27",
+      "episode_no": 14,
+      "big_section_id": "L14-B08",
+      "sort_index": 27,
+      "summary_zh": "乔治·艾略特：推动世界前进不等完美的人；因此‘去做’并准备失败。",
+      "excerpt_en": "My favorite author,my favorite writer is George Eliot. Her name was Mary Anne Evans,changed to George Eliot, because at the time,when she published, mid 19th to late 19th century, it was very difficult for a woman to be",
+      "start_idx": 1040,
+      "end_idx": 1052,
+      "primary_node": "A01",
+      "secondary_nodes": [
+        "B02",
+        "B04"
+      ]
+    },
+    {
+      "segment_id": "L14-S28",
+      "episode_no": 14,
+      "big_section_id": "L14-B08",
+      "sort_index": 28,
+      "summary_zh": "引入SNL视频：一个理解自己缺点、给自己失败许可的主持人。",
+      "excerpt_en": "I want to show you an example. Once again,a video of a person who understands his imperfections and yet gives himself the permission to fail. Here he is.A TV presenter. [Saturday Night Live]",
+      "start_idx": 1053,
+      "end_idx": 1057,
+      "primary_node": "B04",
+      "secondary_nodes": [
+        "D02",
+        "A01"
+      ]
+    },
+    {
+      "segment_id": "L14-S29",
+      "episode_no": 14,
+      "big_section_id": "L14-B08",
+      "sort_index": 29,
+      "summary_zh": "视频内容：公开自嘲一连串缺点；展示‘不完美也能上场’。",
+      "excerpt_en": "Bennett Brauer:That's right. Bennett Brauer here with another commentary. Didn't think the suits would have me back perhaps. Thought they'd have my dairy-air replaced by one of cookie store mannequin. Well maybe I'm not",
+      "start_idx": 1058,
+      "end_idx": 1083,
+      "primary_node": "B04",
+      "secondary_nodes": [
+        "A03",
+        "D02"
+      ]
+    },
+    {
+      "segment_id": "L14-S30",
+      "episode_no": 14,
+      "big_section_id": "L14-B09",
+      "sort_index": 30,
+      "summary_zh": "贝比·鲁斯：全垒打最多同时三振也多；成功者常也是失败最多者。",
+      "excerpt_en": "Dr.Tal Ben-Shahar:In sports,Bay Brooth,at the time, the most home runs out of the any other player. Held the record for many years. How many people know that he also topped the league 5 years. 5 years he topped the leagu",
+      "start_idx": 1084,
+      "end_idx": 1093,
+      "primary_node": "A06",
+      "secondary_nodes": [
+        "A01",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S31",
+      "episode_no": 14,
+      "big_section_id": "L14-B09",
+      "sort_index": 31,
+      "summary_zh": "要追求高成就就必须准备好多次失败；引出乔丹。",
+      "excerpt_en": "Or the greatest of them all. (Michael Jordan) Before he learned how to fly, he learned how to walk. Before he learned how to walk,he learned how to crawl. And he failed many times. Here he is in his own words,the one and",
+      "start_idx": 1094,
+      "end_idx": 1099,
+      "primary_node": "A06",
+      "secondary_nodes": [
+        "B08",
+        "A03"
+      ]
+    },
+    {
+      "segment_id": "L14-S32",
+      "episode_no": 14,
+      "big_section_id": "L14-B09",
+      "sort_index": 32,
+      "summary_zh": "乔丹：错失9000球、输近300场、关键球多次投失；正因反复失败才成功。",
+      "excerpt_en": "Michael Jordan:I've missed more than 9000 shots in my career. I've lost almost 300 games. 26 times, I've been trusted to take the game winning shot and missed. I've failed over and over and over again in my life. And tha",
+      "start_idx": 1100,
+      "end_idx": 1106,
+      "primary_node": "A06",
+      "secondary_nodes": [
+        "A01",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S33",
+      "episode_no": 14,
+      "big_section_id": "L14-B09",
+      "sort_index": 33,
+      "summary_zh": "人们记得绝杀却忘了大量失败；但失败正是成功路径。",
+      "excerpt_en": "People remember his game winning shot that made him famous. Was at North Carolina while he shot with the buzzer and they won. Do you remember that he had 20, or did you know that he had 26 game winning shots that he miss",
+      "start_idx": 1107,
+      "end_idx": 1112,
+      "primary_node": "A01",
+      "secondary_nodes": [
+        "A06",
+        "A02"
+      ]
+    },
+    {
+      "segment_id": "L14-S34",
+      "episode_no": 14,
+      "big_section_id": "L14-B09",
+      "sort_index": 34,
+      "summary_zh": "爱迪生一万次失败=找到不行的方法；安妮塔·罗迪克创业也屡败屡成；强调失败是学习。",
+      "excerpt_en": "Thomas Edison.Remember \"I failed my way to success\"? Ten thousand times failures before he invented the light bulb. But he didn't see them as failures. He succeeded in showing what doesn't work. Anita Roddick,founder of",
+      "start_idx": 1113,
+      "end_idx": 1122,
+      "primary_node": "A05",
+      "secondary_nodes": [
+        "A06",
+        "A01"
+      ]
+    },
+    {
+      "segment_id": "L14-S35",
+      "episode_no": 14,
+      "big_section_id": "L14-B10",
+      "sort_index": 35,
+      "summary_zh": "转入艾米·埃德蒙森：研究如何降低医院错误；背景与导师Hackman。",
+      "excerpt_en": "Harvard Business School. She was a graduate student here in the psychology department when I was an undergraduate. And I remember when she was working on her dissertation, cause we had the same advisor.I was working... W",
+      "start_idx": 1123,
+      "end_idx": 1129,
+      "primary_node": "C05",
+      "secondary_nodes": [
+        "C01",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S36",
+      "episode_no": 14,
+      "big_section_id": "L14-B10",
+      "sort_index": 36,
+      "summary_zh": "医疗差错代价巨大（钱与生命）；她试图理解并减少错误。",
+      "excerpt_en": "And what she wanted to understand was how can you help eliminate or at least reduce failure rates in hospitals.Why? Because medical errors cost millions and billions dollars a year. And much more importantly, many people",
+      "start_idx": 1130,
+      "end_idx": 1136,
+      "primary_node": "C05",
+      "secondary_nodes": [
+        "C01",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S37",
+      "episode_no": 14,
+      "big_section_id": "L14-B10",
+      "sort_index": 37,
+      "summary_zh": "Hackman有效团队条件：清晰目标、结构、支持、教练；假设医院具备后会少犯错。",
+      "excerpt_en": "And she was working with Richard Hackman who's been doing work for decades on effective groups. Those of you who have taken his class,psychology 501,know him. If you haven't taken his class,put it on the top of your list",
+      "start_idx": 1137,
+      "end_idx": 1156,
+      "primary_node": "C05",
+      "secondary_nodes": [
+        "C01",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S38",
+      "episode_no": 14,
+      "big_section_id": "L14-B10",
+      "sort_index": 38,
+      "summary_zh": "结果显著但方向相反：实施条件的医院报告‘更多错误’；回到现场追原因。",
+      "excerpt_en": "Very important research.So she did this research. It took her very long time. She went to the field,studied at hospitals. And after a long time- again this was on the 15th floor in William James Hall, I remember that- sh",
+      "start_idx": 1156,
+      "end_idx": 1189,
+      "primary_node": "C02",
+      "secondary_nodes": [
+        "C05",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S39",
+      "episode_no": 14,
+      "big_section_id": "L14-B10",
+      "sort_index": 39,
+      "summary_zh": "发现关键：并非更常犯错，而是更常报告；另一组把错误藏起来，重大错误藏不住。",
+      "excerpt_en": "So she had to go back to the drawing board- tired,enervated, didn't understand what happened,went back to the hospitals, and in almost no time,realized what the issue was. These hospitals,or groups within these hospitals",
+      "start_idx": 1190,
+      "end_idx": 1204,
+      "primary_node": "C02",
+      "secondary_nodes": [
+        "C01",
+        "A08"
+      ]
+    },
+    {
+      "segment_id": "L14-S40",
+      "episode_no": 14,
+      "big_section_id": "L14-B10",
+      "sort_index": 40,
+      "summary_zh": "研究转向‘心理安全感’：在组织里能安全谈错误、能摔倒再站起。",
+      "excerpt_en": "they made more mistake but they didn't report. And then she changed the focus of her research to the notion of psychological safety. Psychological safety is the feeling,the experience, the space that you feel in your wor",
+      "start_idx": 1205,
+      "end_idx": 1212,
+      "primary_node": "C01",
+      "secondary_nodes": [
+        "B04",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L14-S41",
+      "episode_no": 14,
+      "big_section_id": "L14-B10",
+      "sort_index": 41,
+      "summary_zh": "心理安全感高→学习型组织、更成功；员工敢犯错、敢吹哨、持续学习改进。",
+      "excerpt_en": "they performed better. And again,this was in 1999,a lot of research done by her and people around the world, showing how groups,organizations with their psychological safety with their employees don't or are not afraid o",
+      "start_idx": 1213,
+      "end_idx": 1219,
+      "primary_node": "C01",
+      "secondary_nodes": [
+        "C06",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S42",
+      "episode_no": 14,
+      "big_section_id": "L14-B11",
+      "sort_index": 42,
+      "summary_zh": "意义延伸到领导与父母：为孩子创造谈失败的安全空间。",
+      "excerpt_en": "These are learning organizations with the employees constantly learn and grow. Or you learn from your mistakes and then the next time you are able to do better. Very significant,very important research, whether it's for",
+      "start_idx": 1220,
+      "end_idx": 1229,
+      "primary_node": "C03",
+      "secondary_nodes": [
+        "C04",
+        "C01"
+      ]
+    },
+    {
+      "segment_id": "L14-S43",
+      "episode_no": 14,
+      "big_section_id": "L14-B11",
+      "sort_index": 43,
+      "summary_zh": "孩子若感到安全，就不易陷入完美主义式恐惧，更可能幸福且成功。",
+      "excerpt_en": "Because if they do feel comfortable,they are much less likely to enter into this perfectionistic fear of failure. And they are much more likely to be happier as well as successful This is a story about Thomas Watson,",
+      "start_idx": 1230,
+      "end_idx": 1233,
+      "primary_node": "C03",
+      "secondary_nodes": [
+        "A03",
+        "B01"
+      ]
+    },
+    {
+      "segment_id": "L14-S44",
+      "episode_no": 14,
+      "big_section_id": "L14-B12",
+      "sort_index": 44,
+      "summary_zh": "IBM故事：员工错失100万美元，主动辞职；Watson撕信：‘我刚花100万买了你的教育’→鼓励尝试。",
+      "excerpt_en": "This is a story about Thomas Watson, founder of IBM,one organization that he invented and reinvented itself numerous times- continues on the daily basis. And that's why it survives. So there was an employee at the beginn",
+      "start_idx": 1233,
+      "end_idx": 1258,
+      "primary_node": "C03",
+      "secondary_nodes": [
+        "C01",
+        "A06"
+      ]
+    },
+    {
+      "segment_id": "L14-S45",
+      "episode_no": 14,
+      "big_section_id": "L14-B13",
+      "sort_index": 45,
+      "summary_zh": "强生故事：Burke失误被祝贺：错误是学习方式；但同错再犯会被开除→允许错+要求学习。",
+      "excerpt_en": "and a story that creates a certain reality in IBM, a reality that says \"you have to try\". There is a similar story in Johnson & Johnson, one of the most successful companies in the world, where General Johnson, one of th",
+      "start_idx": 1260,
+      "end_idx": 1283,
+      "primary_node": "A08",
+      "secondary_nodes": [
+        "C03",
+        "C01"
+      ]
+    },
+    {
+      "segment_id": "L14-S46",
+      "episode_no": 14,
+      "big_section_id": "L14-B14",
+      "sort_index": 46,
+      "summary_zh": "Watson：想提高成功率就把失败率翻倍；‘天才起源’研究：最成功者也失败最多（duds最多）。",
+      "excerpt_en": "Thomas Watson- I'm almost done,one minute,almost done: \"If you want to increase your success rate, double your failure rate.\" We talked about this research.We talked about this research, the origins of the genius- the mo",
+      "start_idx": 1287,
+      "end_idx": 1299,
+      "primary_node": "A06",
+      "secondary_nodes": [
+        "A01",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L14-S47",
+      "episode_no": 14,
+      "big_section_id": "L14-B14",
+      "sort_index": 47,
+      "summary_zh": "Jane Klam：成功减肥/运动者平均失败约5次后才持续；收束到learn to fail。",
+      "excerpt_en": "Jane Klam who did research on people's success in dieting or people's success in starting an exercise regime, what she found was the most successful people, people who have been able to persist are people who have failed",
+      "start_idx": 1300,
+      "end_idx": 1310,
+      "primary_node": "A07",
+      "secondary_nodes": [
+        "A01",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L15-01",
+      "episode_no": 15,
+      "big_section_id": "L15-B01",
+      "sort_index": 0,
+      "summary_zh": "开场用‘忘带电源/不完美’做示范：讲完美主义也要接受现实；回顾上节“学会失败”。",
+      "excerpt_en": "Student:Hello.Last lecture we learned about recovery. At time,away from work really relax. I'd like to invite you to join a traditional and time-tested recovery period,Shiva,the Jewish sabbath. This Friday night, Howard",
+      "start_idx": 0,
+      "end_idx": 37,
+      "primary_node": "B07",
+      "secondary_nodes": [
+        "A01",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L15-02",
+      "episode_no": 15,
+      "big_section_id": "L15-B02",
+      "sort_index": 0,
+      "summary_zh": "回顾失败案例与Bennis：领导者的‘crucible’常源自重大挫败；失败可成为转折点。",
+      "excerpt_en": "So where were we last time? Last time we talked about how you learned how to walk. We learned about how you learned to draw circles. And all through failure.As Thomas Edison said, \"I learned my way...I failed my way to s",
+      "start_idx": 38,
+      "end_idx": 112,
+      "primary_node": "A05",
+      "secondary_nodes": [
+        "A01",
+        "A07"
+      ]
+    },
+    {
+      "segment_id": "L15-03",
+      "episode_no": 15,
+      "big_section_id": "L15-B03",
+      "sort_index": 0,
+      "summary_zh": "定义完美主义：在你在乎的领域，对失败的失能性恐惧；强调不是追求卓越的垄断品。",
+      "excerpt_en": "So let me move on and define what we mean by perfectionism. Because there are many definitions and we throw that word around constantly. But what do I actually mean by perfectionism? I define it as: an incapacitating fea",
+      "start_idx": 113,
+      "end_idx": 142,
+      "primary_node": "B01",
+      "secondary_nodes": [
+        "A03",
+        "D05"
+      ]
+    },
+    {
+      "segment_id": "L15-04",
+      "episode_no": 15,
+      "big_section_id": "L15-B04",
+      "sort_index": 0,
+      "summary_zh": "两种‘旅程图式’：完美主义直线A→B vs 卓越螺旋；卓越接受现实与起伏，仍可能失败但会继续。",
+      "excerpt_en": "It is an approach,a cognitive and emotional schema, that we hold toward the journey of our lives, toward the process of getting from point A to point B. The emphasis here is on journey. A person committed to excellence c",
+      "start_idx": 143,
+      "end_idx": 212,
+      "primary_node": "B02",
+      "secondary_nodes": [
+        "B01",
+        "B06"
+      ]
+    },
+    {
+      "segment_id": "L15-05",
+      "episode_no": 15,
+      "big_section_id": "L15-B05",
+      "sort_index": 0,
+      "summary_zh": "完美主义的特征：对偏离的防御/攻击；卓越更愿意面对批评与现实。",
+      "excerpt_en": "I want to discuss some of these consequences and some of the characteristics of a person who holds this schema Now there is no perfect perfectionist. As I said,we all exist somewhere along the continuum. And there are ma",
+      "start_idx": 213,
+      "end_idx": 299,
+      "primary_node": "B05",
+      "secondary_nodes": [
+        "B01",
+        "B02"
+      ]
+    },
+    {
+      "segment_id": "L15-06",
+      "episode_no": 15,
+      "big_section_id": "L15-B06",
+      "sort_index": 0,
+      "summary_zh": "‘鼠轮/rat racer’故事：只活在B点的未来快感；卓越者能在当下与过程里体验满足。",
+      "excerpt_en": "Here are some of them. The first one is that a perfectionist experiences only, at best,temporary relief. So yes, there are constant pressure but when he or she gets to point B, then they feel relieved. This is essentiall",
+      "start_idx": 300,
+      "end_idx": 539,
+      "primary_node": "B06",
+      "secondary_nodes": [
+        "B02",
+        "D05"
+      ]
+    },
+    {
+      "segment_id": "L15-07",
+      "episode_no": 15,
+      "big_section_id": "L15-B07",
+      "sort_index": 0,
+      "summary_zh": "后果：浪费时间、非全即无；在少数领域可追求无误但多数不必；完美主义与饮食等问题相关，并损伤自尊。",
+      "excerpt_en": "Well,you may want to get...really want to get there, but where you really are is here and now. No other place. You know,I haven't met,maybe you have, but I haven't met the perfect person. I don't think that person exists",
+      "start_idx": 540,
+      "end_idx": 659,
+      "primary_node": "B01",
+      "secondary_nodes": [
+        "B09",
+        "D01"
+      ]
+    },
+    {
+      "segment_id": "L15-08",
+      "episode_no": 15,
+      "big_section_id": "L15-B08",
+      "sort_index": 0,
+      "summary_zh": "后果延伸到关系：完美主义要求一致/无冲突→不现实；卓越的关系包含差异与争执。",
+      "excerpt_en": "and very often,usually harms the relationship. Versus on-going growth of the relationship, as we'll talk about when we talk about relationships. The ideal relationship is not a relationship that is devoid of failure, tha",
+      "start_idx": 660,
+      "end_idx": 679,
+      "primary_node": "D04",
+      "secondary_nodes": [
+        "B05",
+        "B04"
+      ]
+    },
+    {
+      "segment_id": "L15-09",
+      "episode_no": 15,
+      "big_section_id": "L15-B09",
+      "sort_index": 0,
+      "summary_zh": "完美主义并不带来更好表现：卓越更可持续（增长+恢复）；完美主义易焦虑并导致‘瘫痪/拖延’。",
+      "excerpt_en": "What Peter Senge called \"creative tension\". But what about performance? What about the \"no pain,no gain\" mantra that's drilled into our mind constantly? I mean we know self-evident that we need to work hard in order to s",
+      "start_idx": 680,
+      "end_idx": 740,
+      "primary_node": "B02",
+      "secondary_nodes": [
+        "B06",
+        "B10"
+      ]
+    },
+    {
+      "segment_id": "L15-10",
+      "episode_no": 15,
+      "big_section_id": "L15-B10",
+      "sort_index": 0,
+      "summary_zh": "更多后果/机制：完美主义伤自尊并降低尝试；‘好运’更多来自愿意冒险与尝试；创造力需要容错。",
+      "excerpt_en": "Self-esteem as I mentioned earlier is much higher for a person committed to excellence. And as Nathaniel Branden said,self concept is destiny; beliefs become self-fulfilling prophecies. If I believe in myself,if I think",
+      "start_idx": 741,
+      "end_idx": 778,
+      "primary_node": "A05",
+      "secondary_nodes": [
+        "D01",
+        "A03"
+      ]
+    },
+    {
+      "segment_id": "L15-11",
+      "episode_no": 15,
+      "big_section_id": "L15-B11",
+      "sort_index": 0,
+      "summary_zh": "80/20原则：资源有限，要决定哪些事‘够好’；以学业与时间分配为例说明取舍与优先级。",
+      "excerpt_en": "The 80/20 rule. This rule- understanding this rule as it applies to time management changed my Harvard experience. So what is the Pareto principle? Pareto was an Italian economist about 100 years ago. And he came up with",
+      "start_idx": 779,
+      "end_idx": 889,
+      "primary_node": "B09",
+      "secondary_nodes": [
+        "D06",
+        "B06"
+      ]
+    },
+    {
+      "segment_id": "L15-12",
+      "episode_no": 15,
+      "big_section_id": "L15-B12",
+      "sort_index": 0,
+      "summary_zh": "与幸福/高峰体验相关：Flow与最佳唤醒区；卓越更容易进入心流而非紧绷。",
+      "excerpt_en": "You read about \"flow\"- Mihaly Csikszentmihalyi who talks about flow is being peak experience we enjoy the most and peak performance- we perform at our best,defying the \"no pain,no gain\" formula. And when do we experience",
+      "start_idx": 890,
+      "end_idx": 902,
+      "primary_node": "B02",
+      "secondary_nodes": [
+        "B09",
+        "B04"
+      ]
+    },
+    {
+      "segment_id": "L15-13",
+      "episode_no": 15,
+      "big_section_id": "L15-B13",
+      "sort_index": 0,
+      "summary_zh": "来源：条件化奖励目的地；社会/媒体对完美的压力与不真实标准；商业与自助书的‘完美承诺’。",
+      "excerpt_en": "Let me talk a little bit about the sources of the perfectionism. Because if we understand that,as I mentioned last time, if we understand where it comes from, we are much more likely to be able to get over it. So some of",
+      "start_idx": 903,
+      "end_idx": 1074,
+      "primary_node": "C02",
+      "secondary_nodes": [
+        "C01",
+        "A03"
+      ]
+    },
+    {
+      "segment_id": "L15-14",
+      "episode_no": 15,
+      "big_section_id": "L15-B14",
+      "sort_index": 0,
+      "summary_zh": "Dweck研究：夸智商(固定)vs夸努力(成长)影响挑战选择、坚持与面对失败的方式。",
+      "excerpt_en": "There is something else that leads to perfectionism. And this is the research that you have already read about. And this is work done by,great work done by Carol Dweck, who is now at Stanford. Here is her study. Because",
+      "start_idx": 1075,
+      "end_idx": 1171,
+      "primary_node": "C04",
+      "secondary_nodes": [
+        "B02",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L15-15",
+      "episode_no": 15,
+      "big_section_id": "L15-B15",
+      "sort_index": 0,
+      "summary_zh": "克服：先觉察；别用完美主义方式克服完美主义；奖励努力/过程；可塑性与积极改变。",
+      "excerpt_en": "So how do we overcome perfectionism? What do we do about it if we have it? And again,remember there's no perfect perfectionist. There is no perfect person committed to excellence. You need to choose in your life where yo",
+      "start_idx": 1172,
+      "end_idx": 1242,
+      "primary_node": "D06",
+      "secondary_nodes": [
+        "C04",
+        "B07"
+      ]
+    },
+    {
+      "segment_id": "L15-16",
+      "episode_no": 15,
+      "big_section_id": "L15-B16",
+      "sort_index": 0,
+      "summary_zh": "行动：把自己放到线上、主动求批评以降低防御；个人约会被拒故事；收束到‘learn to fail or fail to learn’。",
+      "excerpt_en": "KAREN: No. JACK: Half a cup. KAREN: No. JACK: How about you drink a cup and I'll lick your tongue? KAREN: [BEAT] Tempting,but no.Ok,come here.Right here. JACK: Oh,Karen,when will the lambs stop screaming? Dr.Tal Ben-Shah",
+      "start_idx": 1243,
+      "end_idx": 1324,
+      "primary_node": "B08",
+      "secondary_nodes": [
+        "A01",
+        "D04"
+      ]
+    },
+    {
+      "segment_id": "L16-01",
+      "episode_no": 16,
+      "big_section_id": "L16-B01",
+      "sort_index": 0,
+      "summary_zh": "回顾完美主义直线 vs 卓越螺旋；用投资银行同学为例：在当下就能享受过程，而不是只等终点。",
+      "excerpt_en": "Dr.Tal Ben-Shahar:Any announcement today? Anyone? No. OK.Good morning. What we are going to do today is finish up on perfectionism and then move on to the mind body. This semester for me has been going great. There are v",
+      "start_idx": 0,
+      "end_idx": 91,
+      "primary_node": "B02",
+      "secondary_nodes": [
+        "B06",
+        "B03"
+      ]
+    },
+    {
+      "segment_id": "L16-02",
+      "episode_no": 16,
+      "big_section_id": "L16-B02",
+      "sort_index": 0,
+      "summary_zh": "如何克服：先理解完美主义/卓越差异；奖励努力与过程；主动接纳现实；别试图‘完美地克服完美主义’。",
+      "excerpt_en": "Now the question is,\"how do we overcome this perfectionism, this constant knot in our stomach? How do we overcome this living in the future, being afraid of the present because what if I fail? And I started to describe a",
+      "start_idx": 92,
+      "end_idx": 139,
+      "primary_node": "D06",
+      "secondary_nodes": [
+        "C04",
+        "B07"
+      ]
+    },
+    {
+      "segment_id": "L16-03",
+      "episode_no": 16,
+      "big_section_id": "L16-B03",
+      "sort_index": 0,
+      "summary_zh": "把‘神经质/倾向’当工具：承认它存在但不被它驱动；通过行动改变（不是等待态度先变）。",
+      "excerpt_en": "\"OK.So I'm not...So I'm still a perfectionist. I will always probably have part of it in me. And that's OK.And that's OK.\" One of the things that Buddhists talk about is that very often, our greatest challenges, what Kar",
+      "start_idx": 140,
+      "end_idx": 179,
+      "primary_node": "D06",
+      "secondary_nodes": [
+        "B08",
+        "B07"
+      ]
+    },
+    {
+      "segment_id": "L16-04",
+      "episode_no": 16,
+      "big_section_id": "L16-B04",
+      "sort_index": 0,
+      "summary_zh": "行为工具：用‘内在模拟器’做可视化演练；冥想/正念练习让自己进入更好的心理状态。",
+      "excerpt_en": "Learn to fail or fail to learn. Next,we don't always have to act out in the world; we can also act in our internal simulator- the mind doesn't know the difference between the real thing and the imaginary thing. And there",
+      "start_idx": 180,
+      "end_idx": 205,
+      "primary_node": "D06",
+      "secondary_nodes": [
+        "B04",
+        "A05"
+      ]
+    },
+    {
+      "segment_id": "L16-05",
+      "episode_no": 16,
+      "big_section_id": "L16-B05",
+      "sort_index": 0,
+      "summary_zh": "粗稿原则：Coleridge‘写作的最好方法是坐下写’；先做粗糙版本，目标能解放而非压垮。",
+      "excerpt_en": "This is a technique,method that I learn from Samuel Coleridge, the British philosopher, late 18th century and the beginning of the 19th century, one of the philosophers who influence our Ralph Waldo Emerson. And what Col",
+      "start_idx": 206,
+      "end_idx": 249,
+      "primary_node": "B10",
+      "secondary_nodes": [
+        "B08",
+        "D06"
+      ]
+    },
+    {
+      "segment_id": "L16-06",
+      "episode_no": 16,
+      "big_section_id": "L16-B06",
+      "sort_index": 0,
+      "summary_zh": "白金法则/自我慈悲：不要用不会对待他人的方式对待自己；达赖喇嘛谈‘慈悲’在严厉文化中被忽视。",
+      "excerpt_en": "The Platinum Rule. So the Golden Rule: do not do unto others what you would not have done unto yourself\" Or \"do unto others what you would unto yourself.\" The foundation of most moral systems,most religions today. The Pl",
+      "start_idx": 250,
+      "end_idx": 289,
+      "primary_node": "D03",
+      "secondary_nodes": [
+        "D02",
+        "D01"
+      ]
+    },
+    {
+      "segment_id": "L16-07",
+      "episode_no": 16,
+      "big_section_id": "L16-B07",
+      "sort_index": 0,
+      "summary_zh": "帮助他人：改变别人的完美主义很难；最有效是以身作则、讲故事、奖励努力与学习而非只奖励结果。",
+      "excerpt_en": "After all,why not? How do we help other people? Because very often when we are in relationships, people are in relationships with a perfectionist or, we know a friend of ours is a perfectionist, how do we help other peop",
+      "start_idx": 290,
+      "end_idx": 330,
+      "primary_node": "C03",
+      "secondary_nodes": [
+        "C04",
+        "D04"
+      ]
+    },
+    {
+      "segment_id": "L16-08",
+      "episode_no": 16,
+      "big_section_id": "L16-B08",
+      "sort_index": 0,
+      "summary_zh": "三个P：Permission to be human（允许情绪）+ Positive reframe（积极重构）+ Perspective/Distraction（转换视角/适度转移）；不是回避，而是成熟的应对；以个人案例说明练习。",
+      "excerpt_en": "I want to end this lecture by introducing a mini summary of the course so far. This is a technique- quite a simple technique, but a technique that I found very powerful. Because what it does is synthesize a lot of what w",
+      "start_idx": 331,
+      "end_idx": 519,
+      "primary_node": "B04",
+      "secondary_nodes": [
+        "D06",
+        "A01"
+      ]
+    }
+  ],
+  "concept_nodes": [
+    {
+      "node_id": "A01",
+      "category": "A",
+      "name": "Learn to fail or fail to learn",
+      "definition": "把失败当成学习必经之路与口头禅；敢试、敢摔、敢复盘。",
+      "tags": []
+    },
+    {
+      "node_id": "A02",
+      "category": "A",
+      "name": "Mastery requires many micro-failures",
+      "definition": "掌握技能=大量小失败（画圈/走路/写作等），失败是训练数据。",
+      "tags": []
+    },
+    {
+      "node_id": "A03",
+      "category": "A",
+      "name": "Fear of failure & image",
+      "definition": "明白“被观看/被评价”触发形象焦虑→回避尝试。",
+      "tags": []
+    },
+    {
+      "node_id": "A04",
+      "category": "A",
+      "name": "Crisis = danger + opportunity",
+      "definition": "危机既有风险也有成长机会；在失败中找机会。",
+      "tags": []
+    },
+    {
+      "node_id": "A05",
+      "category": "A",
+      "name": "Failure as experiment & feedback",
+      "definition": "把行动当实验：尝试→失败→反馈→调整→再试。",
+      "tags": []
+    },
+    {
+      "node_id": "A06",
+      "category": "A",
+      "name": "Double failure rate to raise success rate",
+      "definition": "提高成功率=提高失败率（更高尝试密度与更快迭代）。",
+      "tags": []
+    },
+    {
+      "node_id": "A07",
+      "category": "A",
+      "name": "Persistence through repeated setbacks",
+      "definition": "长期坚持者通常失败多次（例如减肥/运动平均失败≈5次）。",
+      "tags": []
+    },
+    {
+      "node_id": "A08",
+      "category": "A",
+      "name": "Learn, don’t repeat the same mistake",
+      "definition": "允许犯错，但要避免“同错复犯”：复盘+改系统。",
+      "tags": []
+    },
+    {
+      "node_id": "B01",
+      "category": "B",
+      "name": "Perfectionism definition (all-or-nothing, refusal to accept reality)",
+      "definition": "完美主义=在重要领域对失败的失能性恐惧；“非全即无”。",
+      "tags": []
+    },
+    {
+      "node_id": "B02",
+      "category": "B",
+      "name": "Excellence schema (meandering/spiral journey)",
+      "definition": "卓越=曲折螺旋式成长：接受现实与起伏，继续前进。",
+      "tags": []
+    },
+    {
+      "node_id": "B03",
+      "category": "B",
+      "name": "Ambition compatible with excellence",
+      "definition": "不需要放弃雄心/努力；只是换一种对失败与过程的关系。",
+      "tags": []
+    },
+    {
+      "node_id": "B04",
+      "category": "B",
+      "name": "Permission to be human (emotional acceptance)",
+      "definition": "允许自己有负面情绪与不完美：先接纳，再行动。",
+      "tags": []
+    },
+    {
+      "node_id": "B05",
+      "category": "B",
+      "name": "Defensiveness & criticism sensitivity",
+      "definition": "完美主义常以防御/攻击应对批评；卓越更开放。",
+      "tags": []
+    },
+    {
+      "node_id": "B06",
+      "category": "B",
+      "name": "Rat racer / living at point B",
+      "definition": "只活在目的地B：当下难享受，短暂快感后继续空。",
+      "tags": []
+    },
+    {
+      "node_id": "B07",
+      "category": "B",
+      "name": "Perfectionism as neurosis (tendency remains)",
+      "definition": "完美主义倾向可能长期存在；关键是识别、接纳、管理。",
+      "tags": []
+    },
+    {
+      "node_id": "B08",
+      "category": "B",
+      "name": "Coping/exposure: put yourself on the line",
+      "definition": "用“上场/暴露/求反馈”替代回避；行为先行改变态度。",
+      "tags": []
+    },
+    {
+      "node_id": "B09",
+      "category": "B",
+      "name": "Good-enough decisions (80/20)",
+      "definition": "用80/20与优先级界定“够好”，避免把精力耗在非关键。",
+      "tags": []
+    },
+    {
+      "node_id": "B10",
+      "category": "B",
+      "name": "Rough draft principle",
+      "definition": "先写/先做粗稿，解除“完美=瘫痪”，迭代完善。",
+      "tags": []
+    },
+    {
+      "node_id": "C01",
+      "category": "C",
+      "name": "Psychological safety (definition & value)",
+      "definition": "组织/关系里“犯错可说、可学”的安全感→学习型文化。",
+      "tags": []
+    },
+    {
+      "node_id": "C02",
+      "category": "C",
+      "name": "Reporting vs hiding errors",
+      "definition": "安全感高→报告错误多≠错误更多；隐藏才危险。",
+      "tags": []
+    },
+    {
+      "node_id": "C03",
+      "category": "C",
+      "name": "Leader response to mistakes",
+      "definition": "领导/父母把错误当投资：不羞辱、不急惩，强调学习。",
+      "tags": []
+    },
+    {
+      "node_id": "C04",
+      "category": "C",
+      "name": "Reward effort & growth (Dweck)",
+      "definition": "奖励努力/策略而非天赋/结果→更愿挑战、抗挫、更会学。",
+      "tags": []
+    },
+    {
+      "node_id": "C05",
+      "category": "C",
+      "name": "Effective team conditions (Hackman)",
+      "definition": "清晰目标、结构、支持、教练等条件让团队更有效与更敢学。",
+      "tags": []
+    },
+    {
+      "node_id": "C06",
+      "category": "C",
+      "name": "Speak up / whistleblowing",
+      "definition": "敢指出问题与失败，组织才会持续进化。",
+      "tags": []
+    },
+    {
+      "node_id": "D01",
+      "category": "D",
+      "name": "Unconditional self-esteem (Branden)",
+      "definition": "自尊不应完全系于表现；价值感需要更稳固的基础。",
+      "tags": []
+    },
+    {
+      "node_id": "D02",
+      "category": "D",
+      "name": "Self-compassion (treat yourself as friend)",
+      "definition": "像对待朋友那样对待自己；失败后给支持而非羞辱。",
+      "tags": []
+    },
+    {
+      "node_id": "D03",
+      "category": "D",
+      "name": "Platinum rule (compassion for self)",
+      "definition": "“不要用你不会用来对待他人的方式对待自己”。",
+      "tags": []
+    },
+    {
+      "node_id": "D04",
+      "category": "D",
+      "name": "Vulnerability & intimacy via sharing/feedback",
+      "definition": "分享与求反馈能减防御、增亲密、促成长。",
+      "tags": []
+    },
+    {
+      "node_id": "D05",
+      "category": "D",
+      "name": "Internal vs external validation",
+      "definition": "把自我价值从外界评价/输赢中松绑。",
+      "tags": []
+    },
+    {
+      "node_id": "D06",
+      "category": "D",
+      "name": "Accept then act",
+      "definition": "接纳现实/倾向/情绪后，通过行为改变自己。",
+      "tags": []
+    },
+    {
+      "node_id": "X01",
+      "category": "X",
+      "name": "失败复盘模板（After-Action Review）",
+      "definition": "每次失败按：目标-事实-原因-可控点-下一步实验，强化A05/A08。",
+      "tags": [
+        "扩展"
+      ]
+    },
+    {
+      "node_id": "X02",
+      "category": "X",
+      "name": "暴露阶梯（Fear Ladder）",
+      "definition": "把‘怕失败的场景’拆成从易到难的8级，逐级上场，对应B08。",
+      "tags": [
+        "扩展"
+      ]
+    },
+    {
+      "node_id": "X03",
+      "category": "X",
+      "name": "失败日记/失败收藏夹",
+      "definition": "把失败像‘训练数据’一样保存：失败类型、情绪、学到的规则，支撑A02/A05。",
+      "tags": [
+        "扩展"
+      ]
+    },
+    {
+      "node_id": "X04",
+      "category": "X",
+      "name": "自我慈悲三步（Self-compassion break）",
+      "definition": "1承认痛 2共通人性 3对自己说一句友好话，支撑D02/D03。",
+      "tags": [
+        "扩展"
+      ]
+    },
+    {
+      "node_id": "X05",
+      "category": "X",
+      "name": "‘够好’清单与退出条件",
+      "definition": "为常见任务预设完成标准与停止条件，减少无止境打磨，对应B09。",
+      "tags": [
+        "扩展"
+      ]
+    },
+    {
+      "node_id": "X06",
+      "category": "X",
+      "name": "团队心理安全的‘一句话回应脚本’",
+      "definition": "领导/父母遇到失误先说：‘谢谢说出来，我们一起找原因/下次怎么做’，强化C03/C01。",
+      "tags": [
+        "扩展"
+      ]
+    }
+  ],
+  "concept_edges": [
+    {
+      "from_node": "A03",
+      "to_node": "B01",
+      "relation": "形象焦虑/怕被看见失败 → 发展为完美主义的核心恐惧",
+      "weight": 1.0
+    },
+    {
+      "from_node": "B01",
+      "to_node": "B05",
+      "relation": "完美主义 → 防御性/对批评高度敏感",
+      "weight": 1.0
+    },
+    {
+      "from_node": "B01",
+      "to_node": "B06",
+      "relation": "完美主义直线思维 → 只活在终点B（鼠轮）",
+      "weight": 1.0
+    },
+    {
+      "from_node": "B01",
+      "to_node": "B10",
+      "relation": "完美主义 → 瘫痪/拖延 → 需要粗稿策略破局",
+      "weight": 1.0
+    },
+    {
+      "from_node": "B02",
+      "to_node": "A05",
+      "relation": "卓越螺旋 → 把失败当反馈实验持续迭代",
+      "weight": 1.0
+    },
+    {
+      "from_node": "A02",
+      "to_node": "A01",
+      "relation": "大量小失败的事实 → ‘学会失败’原则强化",
+      "weight": 1.0
+    },
+    {
+      "from_node": "A05",
+      "to_node": "A06",
+      "relation": "实验-反馈迭代加速 → 失败率↑往往成功率↑",
+      "weight": 1.0
+    },
+    {
+      "from_node": "C01",
+      "to_node": "C02",
+      "relation": "心理安全感高 → 报告多、隐藏少",
+      "weight": 1.0
+    },
+    {
+      "from_node": "C03",
+      "to_node": "C01",
+      "relation": "领导/父母的回应方式 → 决定心理安全感",
+      "weight": 1.0
+    },
+    {
+      "from_node": "C04",
+      "to_node": "A05",
+      "relation": "奖励努力/成长 → 更愿挑战与复盘 → 学得更快",
+      "weight": 1.0
+    },
+    {
+      "from_node": "D01",
+      "to_node": "A03",
+      "relation": "自尊绑在表现上 → 更怕失败/更完美主义",
+      "weight": 1.0
+    },
+    {
+      "from_node": "D02",
+      "to_node": "D03",
+      "relation": "自我慈悲 → 白金法则化：对自己也要仁慈",
+      "weight": 1.0
+    },
+    {
+      "from_node": "D06",
+      "to_node": "B08",
+      "relation": "接纳现实后 → 用行为暴露/求反馈改变习惯",
+      "weight": 1.0
+    },
+    {
+      "from_node": "B08",
+      "to_node": "A05",
+      "relation": "上场与求反馈 → 获得真实数据→迭代改进",
+      "weight": 1.0
+    },
+    {
+      "from_node": "A08",
+      "to_node": "A05",
+      "relation": "避免同错再犯 → 把失败转成可执行改进",
+      "weight": 1.0
+    }
+  ],
+  "templates": [
+    {
+      "template_id": "T_NOTE",
+      "name": "自由记录",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "note",
+            "label": "记录",
+            "type": "textarea",
+            "hint": "写下你想到的任何内容。"
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"note\", \"label\": \"记录\", \"type\": \"textarea\", \"hint\": \"写下你想到的任何内容。\"}]}"
+    },
+    {
+      "template_id": "T_AAR",
+      "name": "失败复盘（AAR）",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "goal",
+            "label": "当时的目标/意图",
+            "type": "textarea",
+            "hint": "我当时想达成什么？"
+          },
+          {
+            "id": "facts",
+            "label": "发生了什么（事实）",
+            "type": "textarea",
+            "hint": "只写事实，不评价。"
+          },
+          {
+            "id": "reason",
+            "label": "为什么会这样（原因）",
+            "type": "textarea",
+            "hint": "可控/不可控分别写。"
+          },
+          {
+            "id": "learning",
+            "label": "我从中学到的规则",
+            "type": "textarea",
+            "hint": "一句话规则：下次我会……"
+          },
+          {
+            "id": "next",
+            "label": "下一步最小实验",
+            "type": "textarea",
+            "hint": "用更小的成本再试一次。"
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"goal\", \"label\": \"当时的目标/意图\", \"type\": \"textarea\", \"hint\": \"我当时想达成什么？\"}, {\"id\": \"facts\", \"label\": \"发生了什么（事实）\", \"type\": \"textarea\", \"hint\": \"只写事实，不评价。\"}, {\"id\": \"reason\", \"label\": \"为什么会这样（原因）\", \"type\": \"textarea\", \"hint\": \"可控/不可控分别写。\"}, {\"id\": \"learning\", \"label\": \"我从中学到的规则\", \"type\": \"textarea\", \"hint\": \"一句话规则：下次我会……\"}, {\"id\": \"next\", \"label\": \"下一步最小实验\", \"type\": \"textarea\", \"hint\": \"用更小的成本再试一次。\"}]}"
+    },
+    {
+      "template_id": "T_QUICK_3P",
+      "name": "3P急救（允许做人/积极重构/视角转换）",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "pain",
+            "label": "我现在最痛的点",
+            "type": "textarea",
+            "hint": "一句话描述痛点。"
+          },
+          {
+            "id": "permission",
+            "label": "Permission（允许做人）",
+            "type": "textarea",
+            "hint": "我允许自己……（不完美/难过/犯错）"
+          },
+          {
+            "id": "positive",
+            "label": "Positive reframe（积极重构）",
+            "type": "textarea",
+            "hint": "这件事可能在教我什么？"
+          },
+          {
+            "id": "perspective",
+            "label": "Perspective（视角转换）",
+            "type": "textarea",
+            "hint": "一年后回看，这件事意味着什么？"
+          },
+          {
+            "id": "action",
+            "label": "我现在能做的最小行动",
+            "type": "textarea",
+            "hint": "3分钟可完成的动作。"
+          },
+          {
+            "id": "emotion_before",
+            "label": "情绪强度（前）0-10",
+            "type": "number",
+            "min": 0,
+            "max": 10
+          },
+          {
+            "id": "emotion_after",
+            "label": "情绪强度（后）0-10",
+            "type": "number",
+            "min": 0,
+            "max": 10
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"pain\", \"label\": \"我现在最痛的点\", \"type\": \"textarea\", \"hint\": \"一句话描述痛点。\"}, {\"id\": \"permission\", \"label\": \"Permission（允许做人）\", \"type\": \"textarea\", \"hint\": \"我允许自己……（不完美/难过/犯错）\"}, {\"id\": \"positive\", \"label\": \"Positive reframe（积极重构）\", \"type\": \"textarea\", \"hint\": \"这件事可能在教我什么？\"}, {\"id\": \"perspective\", \"label\": \"Perspective（视角转换）\", \"type\": \"textarea\", \"hint\": \"一年后回看，这件事意味着什么？\"}, {\"id\": \"action\", \"label\": \"我现在能做的最小行动\", \"type\": \"textarea\", \"hint\": \"3分钟可完成的动作。\"}, {\"id\": \"emotion_before\", \"label\": \"情绪强度（前）0-10\", \"type\": \"number\", \"min\": 0, \"max\": 10}, {\"id\": \"emotion_after\", \"label\": \"情绪强度（后）0-10\", \"type\": \"number\", \"min\": 0, \"max\": 10}]}"
+    },
+    {
+      "template_id": "T_FEAR_LADDER",
+      "name": "暴露阶梯（8级）",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "scene",
+            "label": "我害怕失败的场景",
+            "type": "textarea",
+            "hint": "例如：公开发作品、面试、表白、发邮件。"
+          },
+          {
+            "id": "levels",
+            "label": "8级阶梯（从易到难）",
+            "type": "list_text",
+            "hint": "每行一个等级：1最容易，8最难。"
+          },
+          {
+            "id": "today_level",
+            "label": "今天选择哪一级",
+            "type": "number",
+            "min": 1,
+            "max": 8
+          },
+          {
+            "id": "result",
+            "label": "执行结果与感受",
+            "type": "textarea",
+            "hint": "做了什么？发生了什么？"
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"scene\", \"label\": \"我害怕失败的场景\", \"type\": \"textarea\", \"hint\": \"例如：公开发作品、面试、表白、发邮件。\"}, {\"id\": \"levels\", \"label\": \"8级阶梯（从易到难）\", \"type\": \"list_text\", \"hint\": \"每行一个等级：1最容易，8最难。\"}, {\"id\": \"today_level\", \"label\": \"今天选择哪一级\", \"type\": \"number\", \"min\": 1, \"max\": 8}, {\"id\": \"result\", \"label\": \"执行结果与感受\", \"type\": \"textarea\", \"hint\": \"做了什么？发生了什么？\"}]}"
+    },
+    {
+      "template_id": "T_GOOD_ENOUGH_EXIT",
+      "name": "够好清单与退出条件（80/20）",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "task",
+            "label": "这件事是什么",
+            "type": "textarea",
+            "hint": "例如：写一份简历/做一份PPT/发一条朋友圈。"
+          },
+          {
+            "id": "must",
+            "label": "必须做到的20%（最低标准）",
+            "type": "list_text",
+            "hint": "每行一条必须项。"
+          },
+          {
+            "id": "nice",
+            "label": "可选加分项（可做可不做）",
+            "type": "list_text",
+            "hint": "每行一条。"
+          },
+          {
+            "id": "exit",
+            "label": "退出条件（做到什么就停止）",
+            "type": "textarea",
+            "hint": "写清楚“做到X就停止”。"
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"task\", \"label\": \"这件事是什么\", \"type\": \"textarea\", \"hint\": \"例如：写一份简历/做一份PPT/发一条朋友圈。\"}, {\"id\": \"must\", \"label\": \"必须做到的20%（最低标准）\", \"type\": \"list_text\", \"hint\": \"每行一条必须项。\"}, {\"id\": \"nice\", \"label\": \"可选加分项（可做可不做）\", \"type\": \"list_text\", \"hint\": \"每行一条。\"}, {\"id\": \"exit\", \"label\": \"退出条件（做到什么就停止）\", \"type\": \"textarea\", \"hint\": \"写清楚“做到X就停止”。\"}]}"
+    },
+    {
+      "template_id": "T_ROUGH_DRAFT",
+      "name": "粗稿交付",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "deliverable",
+            "label": "粗稿要交付什么",
+            "type": "textarea",
+            "hint": "最小可交付物。"
+          },
+          {
+            "id": "timer",
+            "label": "计时（分钟）",
+            "type": "number",
+            "min": 5,
+            "max": 120
+          },
+          {
+            "id": "done",
+            "label": "完成后我交付了什么",
+            "type": "textarea",
+            "hint": "发出去/保存/给谁看？"
+          },
+          {
+            "id": "next_iter",
+            "label": "下一次迭代的一个改进点",
+            "type": "textarea",
+            "hint": "只选一个。"
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"deliverable\", \"label\": \"粗稿要交付什么\", \"type\": \"textarea\", \"hint\": \"最小可交付物。\"}, {\"id\": \"timer\", \"label\": \"计时（分钟）\", \"type\": \"number\", \"min\": 5, \"max\": 120}, {\"id\": \"done\", \"label\": \"完成后我交付了什么\", \"type\": \"textarea\", \"hint\": \"发出去/保存/给谁看？\"}, {\"id\": \"next_iter\", \"label\": \"下一次迭代的一个改进点\", \"type\": \"textarea\", \"hint\": \"只选一个。\"}]}"
+    },
+    {
+      "template_id": "T_EXPERIMENT",
+      "name": "微实验（假设-行动-反馈）",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "hypothesis",
+            "label": "假设",
+            "type": "textarea",
+            "hint": "我猜……会发生……"
+          },
+          {
+            "id": "action",
+            "label": "行动",
+            "type": "textarea",
+            "hint": "我将做什么？"
+          },
+          {
+            "id": "metric",
+            "label": "观察指标",
+            "type": "textarea",
+            "hint": "我怎么判断结果？"
+          },
+          {
+            "id": "result",
+            "label": "结果/反馈",
+            "type": "textarea",
+            "hint": "发生了什么？"
+          },
+          {
+            "id": "adjust",
+            "label": "调整",
+            "type": "textarea",
+            "hint": "下次我会怎么改？"
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"hypothesis\", \"label\": \"假设\", \"type\": \"textarea\", \"hint\": \"我猜……会发生……\"}, {\"id\": \"action\", \"label\": \"行动\", \"type\": \"textarea\", \"hint\": \"我将做什么？\"}, {\"id\": \"metric\", \"label\": \"观察指标\", \"type\": \"textarea\", \"hint\": \"我怎么判断结果？\"}, {\"id\": \"result\", \"label\": \"结果/反馈\", \"type\": \"textarea\", \"hint\": \"发生了什么？\"}, {\"id\": \"adjust\", \"label\": \"调整\", \"type\": \"textarea\", \"hint\": \"下次我会怎么改？\"}]}"
+    },
+    {
+      "template_id": "T_SELF_COMPASSION",
+      "name": "自我慈悲三步",
+      "type": "form",
+      "schema": {
+        "fields": [
+          {
+            "id": "step1",
+            "label": "1) 承认痛（这很难）",
+            "type": "textarea",
+            "hint": "把痛说出来。"
+          },
+          {
+            "id": "step2",
+            "label": "2) 共通人性（我不是唯一）",
+            "type": "textarea",
+            "hint": "很多人都会这样。"
+          },
+          {
+            "id": "step3",
+            "label": "3) 对自己说一句友好话",
+            "type": "textarea",
+            "hint": "像对朋友一样。"
+          }
+        ]
+      },
+      "schema_json": "{\"fields\": [{\"id\": \"step1\", \"label\": \"1) 承认痛（这很难）\", \"type\": \"textarea\", \"hint\": \"把痛说出来。\"}, {\"id\": \"step2\", \"label\": \"2) 共通人性（我不是唯一）\", \"type\": \"textarea\", \"hint\": \"很多人都会这样。\"}, {\"id\": \"step3\", \"label\": \"3) 对自己说一句友好话\", \"type\": \"textarea\", \"hint\": \"像对朋友一样。\"}]}"
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK_A01",
+      "concept_id": "A01",
+      "title": "失败复盘：把失败变成学习卡",
+      "difficulty": 2,
+      "duration_min": 12,
+      "description": "把一次失败写成可复用的‘学习规则’，降低对失败的恐惧。",
+      "template_id": "T_AAR",
+      "steps": [
+        "选取最近一次让你难受的失败/受挫事件。",
+        "用模板写：目标→事实→原因→学到的规则→下一步最小实验。",
+        "把“学到的规则”保存为一句话，作为下次行动前的提示。"
+      ]
+    },
+    {
+      "task_id": "TASK_A02",
+      "concept_id": "A02",
+      "title": "微失败训练：每天一件可失败的小练习",
+      "difficulty": 1,
+      "duration_min": 8,
+      "description": "用‘大量小失败’训练大脑：失败是数据，不是判决。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "选一个小技能（写一句、画一个圆、开口问一次）。",
+        "设定‘允许失败’的次数目标（例如：10次粗糙尝试）。",
+        "记录：每次尝试我学到的一个微改进。"
+      ]
+    },
+    {
+      "task_id": "TASK_A03",
+      "concept_id": "A03",
+      "title": "形象焦虑识别：我在怕什么？",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "找出触发‘怕被看见失败’的场景与自动想法。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你最怕失败被看见的一个场景。",
+        "写下当时脑中最强的念头（例如：他们会笑我）。",
+        "写下一个更现实的替代说法，并选择一个最小上场动作。"
+      ]
+    },
+    {
+      "task_id": "TASK_A04",
+      "concept_id": "A04",
+      "title": "危机双面表：危险与机会",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "把危机拆成‘风险’与‘机会’，恢复行动感。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下当前危机/失败事件。",
+        "列出：它的危险/成本是什么？",
+        "再列出：它可能带来的机会/成长是什么？",
+        "挑一个机会，转成最小实验。"
+      ]
+    },
+    {
+      "task_id": "TASK_A05",
+      "concept_id": "A05",
+      "title": "微实验：失败=反馈",
+      "difficulty": 2,
+      "duration_min": 15,
+      "description": "把下一步行动当作实验，而不是考试。",
+      "template_id": "T_EXPERIMENT",
+      "steps": [
+        "用模板写清楚：假设、行动、指标。",
+        "执行一次小实验。",
+        "记录反馈并做一次调整。"
+      ]
+    },
+    {
+      "task_id": "TASK_A06",
+      "concept_id": "A06",
+      "title": "失败率翻倍挑战（7天）",
+      "difficulty": 3,
+      "duration_min": 10,
+      "description": "把尝试次数翻倍：让成功自然出现。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "选一个领域（投简历/发作品/练口语）。",
+        "把‘本周尝试次数’目标翻倍。",
+        "每天记录尝试次数与一次反馈。",
+        "周末复盘：哪些失败最有价值？"
+      ]
+    },
+    {
+      "task_id": "TASK_A07",
+      "concept_id": "A07",
+      "title": "五次失败坚持清单",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "把‘屡败屡战’变成看得见的进度。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "选一个目标（例如：公开输出、面试）。",
+        "为它准备一个‘失败计数器’：目标是至少5次失败。",
+        "每次失败写下：我坚持了什么？我学到了什么？",
+        "完成5次后，总结你的‘坚持策略’。"
+      ]
+    },
+    {
+      "task_id": "TASK_A08",
+      "concept_id": "A08",
+      "title": "同错不复：错误-对策卡",
+      "difficulty": 2,
+      "duration_min": 12,
+      "description": "允许失败，但要把同一类错误变成系统改进。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "回忆一个你反复犯的错误。",
+        "写出导致它的触发条件与早期信号。",
+        "设计一个简单防呆：提醒、清单、提前准备。",
+        "下次再遇到时按防呆执行，并记录结果。"
+      ]
+    },
+    {
+      "task_id": "TASK_B01",
+      "concept_id": "B01",
+      "title": "识别‘非全即无’并改写",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "把完美主义句式改写成可行动的版本。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你最近的完美主义想法（例如：做不到最好就别做）。",
+        "标出其中的‘全或无’词语（必须/完美/一定）。",
+        "改写成‘足够好+可迭代’句式（先做粗稿再改）。",
+        "立刻做一个3分钟动作验证改写。"
+      ]
+    },
+    {
+      "task_id": "TASK_B02",
+      "concept_id": "B02",
+      "title": "螺旋式成长图",
+      "difficulty": 1,
+      "duration_min": 8,
+      "description": "把成长看成曲折但前进的螺旋，而不是直线。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你正在努力的一件事。",
+        "回看最近3次挫折：它们分别教了你什么？",
+        "画一条‘螺旋进步线’：每次挫折后你前进了哪怕1%。",
+        "挑一个最小迭代点，作为下一次尝试。"
+      ]
+    },
+    {
+      "task_id": "TASK_B03",
+      "concept_id": "B03",
+      "title": "雄心≠完美：高标准的健康版本",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "保留雄心，但把标准改成‘可实践’。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你追求的高目标。",
+        "写出‘健康标准’：我能控制的过程行为是什么？",
+        "写出‘不健康标准’：我在追求别人评价/绝对完美的部分是什么？",
+        "把健康标准转成今日一个行动。"
+      ]
+    },
+    {
+      "task_id": "TASK_B04",
+      "concept_id": "B04",
+      "title": "允许做人：Permission句",
+      "difficulty": 1,
+      "duration_min": 6,
+      "description": "用一句话给自己许可，从而继续行动。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下现在的难受/害怕。",
+        "写一句 Permission：‘我允许自己……（不完美/紧张/犯错）’",
+        "再写一句：‘即便如此，我仍然愿意做……（最小行动）’"
+      ]
+    },
+    {
+      "task_id": "TASK_B05",
+      "concept_id": "B05",
+      "title": "低防御回应脚本",
+      "difficulty": 3,
+      "duration_min": 12,
+      "description": "面对批评/否定时，先降低防御再学习。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "回忆一次你被批评的场景。",
+        "写出你本能的防御反应（反驳/解释/逃避）。",
+        "改写成低防御脚本：‘谢谢指出→我想理解→你建议我下次怎么做？’",
+        "找一个安全对象练习说出来。"
+      ]
+    },
+    {
+      "task_id": "TASK_B06",
+      "concept_id": "B06",
+      "title": "从终点B回到过程",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "把‘只活在终点’改成‘每日过程目标’。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你执念的终点B（例如：完美简历/一次通过）。",
+        "把它拆成3个过程指标（例如：投递数量/迭代次数/反馈次数）。",
+        "今天只完成其中一个最小指标。"
+      ]
+    },
+    {
+      "task_id": "TASK_B07",
+      "concept_id": "B07",
+      "title": "完美主义回归预案",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "承认倾向可能回来，提前设计应对。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "列出你完美主义回归的3个信号（熬夜打磨、迟迟不交）。",
+        "为每个信号写一个‘刹车动作’（例如：用够好标准停）。",
+        "把刹车动作加入你的待办或提醒。"
+      ]
+    },
+    {
+      "task_id": "TASK_B08",
+      "concept_id": "B08",
+      "title": "上场与反馈：暴露阶梯第一级",
+      "difficulty": 3,
+      "duration_min": 15,
+      "description": "用‘上场’代替‘准备到完美’。",
+      "template_id": "T_FEAR_LADDER",
+      "steps": [
+        "选择一个你害怕失败的场景。",
+        "写出从易到难的8级阶梯。",
+        "今天只做第1级，并记录感受与反馈。"
+      ]
+    },
+    {
+      "task_id": "TASK_B09",
+      "concept_id": "B09",
+      "title": "80/20：够好与退出条件",
+      "difficulty": 2,
+      "duration_min": 12,
+      "description": "为任务设定完成边界，避免无止境打磨。",
+      "template_id": "T_GOOD_ENOUGH_EXIT",
+      "steps": [
+        "选一件你容易打磨过度的任务。",
+        "写清楚必须项（20%）与加分项。",
+        "写退出条件并遵守它：做到就停。"
+      ]
+    },
+    {
+      "task_id": "TASK_B10",
+      "concept_id": "B10",
+      "title": "粗稿原则：20分钟交付",
+      "difficulty": 2,
+      "duration_min": 20,
+      "description": "用‘粗稿交付’打破瘫痪与拖延。",
+      "template_id": "T_ROUGH_DRAFT",
+      "steps": [
+        "设定计时器（建议20分钟）。",
+        "只做粗稿：不润色、不追求完美。",
+        "时间到就交付（保存/发给朋友/发出去）。",
+        "写下下一次迭代的一个改进点。"
+      ]
+    },
+    {
+      "task_id": "TASK_C01",
+      "concept_id": "C01",
+      "title": "心理安全感自检",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "评估你是否处于可试错的环境，并寻找可控改进。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "想一个你常在其中工作/生活的环境（团队/家庭）。",
+        "回答：我能说‘我不知道/我错了’吗？",
+        "列出能让环境更安全的一个小举动（先感谢+一起找原因）。",
+        "执行一次并记录结果。"
+      ]
+    },
+    {
+      "task_id": "TASK_C02",
+      "concept_id": "C02",
+      "title": "报告更多≠错误更多：重新解释",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "把‘敢说出来’当成健康信号。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你或团队曾‘不敢说错’的例子。",
+        "写下隐藏错误带来的代价。",
+        "写下‘说出来’可能带来的学习与改进。",
+        "为下一次说出来写一句开场白。"
+      ]
+    },
+    {
+      "task_id": "TASK_C03",
+      "concept_id": "C03",
+      "title": "一句话回应脚本（父母/领导）",
+      "difficulty": 2,
+      "duration_min": 8,
+      "description": "把‘责备’换成‘学习’，提升心理安全。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你遇到别人犯错时常说的一句话。",
+        "用模板改写为：‘谢谢说出来，我们一起找原因/下次怎么做。’",
+        "下一次真实场景中使用一次，并记录对方反应。"
+      ]
+    },
+    {
+      "task_id": "TASK_C04",
+      "concept_id": "C04",
+      "title": "奖励努力：三句成长型反馈",
+      "difficulty": 1,
+      "duration_min": 6,
+      "description": "用‘夸努力/策略’替代‘夸聪明’，强化敢试。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你要鼓励的一个人（也可以是自己）。",
+        "写三句反馈：夸努力、夸策略、夸坚持。",
+        "在24小时内说/写出去一次。"
+      ]
+    },
+    {
+      "task_id": "TASK_C05",
+      "concept_id": "C05",
+      "title": "Hackman团队条件清单",
+      "difficulty": 2,
+      "duration_min": 12,
+      "description": "用6个条件检查团队有效性，找一个可控改进点。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你的团队/合作关系。",
+        "对照：真实团队/正确边界/授权方向/结构/支持/教练。",
+        "挑一个最可控的点，写一个最小改进动作。"
+      ]
+    },
+    {
+      "task_id": "TASK_C06",
+      "concept_id": "C06",
+      "title": "指出问题：最小吹哨行动",
+      "difficulty": 3,
+      "duration_min": 12,
+      "description": "把指出问题做成更安全的小步行动。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你想指出但一直没说的问题。",
+        "把它改写成‘事实+影响+请求’三段式。",
+        "选择一个更安全的渠道（私聊/书面/匿名）。",
+        "执行一次并记录结果。"
+      ]
+    },
+    {
+      "task_id": "TASK_D01",
+      "concept_id": "D01",
+      "title": "无条件自尊：把价值从表现中拿回来",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "练习：我值得被尊重，不依赖一次结果。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你常用来评判自己的一个标准（成绩/业绩）。",
+        "写下：即便暂时做不好，我依然有哪些‘不变的价值’？",
+        "写一条你愿意对自己承诺的底线：不羞辱自己。"
+      ]
+    },
+    {
+      "task_id": "TASK_D02",
+      "concept_id": "D02",
+      "title": "自我慈悲三步（练习）",
+      "difficulty": 1,
+      "duration_min": 6,
+      "description": "像对朋友那样对自己，降低羞耻并恢复行动力。",
+      "template_id": "T_SELF_COMPASSION",
+      "steps": [
+        "按模板完成三步。",
+        "完成后写一句：我愿意继续做的最小行动。"
+      ]
+    },
+    {
+      "task_id": "TASK_D03",
+      "concept_id": "D03",
+      "title": "白金法则：别用不会对待他人的方式对待自己",
+      "difficulty": 1,
+      "duration_min": 8,
+      "description": "把自我批评翻译成对朋友的语气。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你最近对自己的苛责话。",
+        "假设朋友对你说同样的事，你会怎么回应？",
+        "把那句话改写成对自己的版本，并保存。"
+      ]
+    },
+    {
+      "task_id": "TASK_D04",
+      "concept_id": "D04",
+      "title": "脆弱练习：分享一个小失败",
+      "difficulty": 2,
+      "duration_min": 12,
+      "description": "用适度分享换来连接与支持，降低孤立感。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "选择一个你信任的人。",
+        "准备一句话：‘我最近在……上卡住了/失败了。’",
+        "提出一个具体请求：‘你愿意给我一个建议/反馈吗？’",
+        "记录你分享后的感受。"
+      ]
+    },
+    {
+      "task_id": "TASK_D05",
+      "concept_id": "D05",
+      "title": "内在/外在验证：我在追什么？",
+      "difficulty": 2,
+      "duration_min": 10,
+      "description": "识别你对外在认可的依赖，并找到内在指标。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你最在意的一个评价来源（领导/父母/同伴）。",
+        "写下它带给你的好处与代价。",
+        "为同一目标写一个内在指标（可控过程）。"
+      ]
+    },
+    {
+      "task_id": "TASK_D06",
+      "concept_id": "D06",
+      "title": "接纳现实→选择→行动",
+      "difficulty": 2,
+      "duration_min": 12,
+      "description": "先承认现实，再做可控的一步。",
+      "template_id": "T_NOTE",
+      "steps": [
+        "写下你不愿面对的现实是什么。",
+        "区分：我能控制的是什么？不能控制的是什么？",
+        "选一个可控点，做一个最小行动。",
+        "用AAR快速复盘。"
+      ]
+    },
+    {
+      "task_id": "TASK_QUICK_3P",
+      "concept_id": "D06",
+      "title": "我刚失败了：3P急救",
+      "difficulty": 1,
+      "duration_min": 5,
+      "description": "情绪最强的时候先止血：允许做人→积极重构→视角转换→最小行动。",
+      "template_id": "T_QUICK_3P",
+      "steps": [
+        "用三段式完成3P。",
+        "写下一个3分钟最小行动。",
+        "保存后立即去做。"
+      ]
+    }
+  ]
+}

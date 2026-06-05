@@ -1,0 +1,7 @@
+# 这是 Android release 签名示例配置文件（不要提交到 Git / 公共仓库）
+# 请复制为 key.properties 并填写你真实的 keystore 信息：
+
+storeFile=quote_release.jks        # keystore 文件位于 android/app/ 目录下
+storePassword=替换为你的keystore密码
+keyAlias=quote_release
+keyPassword=替换为你的密钥密码（一般和storePassword相同）

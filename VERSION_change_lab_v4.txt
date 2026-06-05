@@ -1,0 +1,8 @@
+Change Lab integrated version: v4
+Date: 2026-04-01
+Highlights:
+- Added config-driven task/reminder/AI prompt engine models
+- Added world scene configuration and unlock rules
+- Added rules & configuration page in module app bar
+- Refactored controller to read from seed configuration instead of hardcoded maps
+- Enhanced mirror world scene page with unlock hints and recommended scene actions

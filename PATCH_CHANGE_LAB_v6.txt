@@ -1,0 +1,31 @@
+Change Lab v6 patch summary
+
+1. Added reminder scheduling runtime:
+- ReminderSchedule model
+- pending / done / dismissed states
+- due reminders / upcoming reminders / next-day followups
+- auto scheduling from task instances
+
+2. Added world progress runtime:
+- WorldProgress model
+- world progress ratio / completed actions / target actions
+- progress labels and scene advancement visibility
+
+3. Added reminder center page:
+- due reminders
+- next-day followups
+- upcoming reminders
+- mark done / dismiss / jump to concept
+
+4. Integrated reminder access into:
+- shell app bar
+- overview tab
+- task center
+- AI coach
+- rules/config page
+
+5. Enhanced mirror world:
+- progress bar on world cards
+- scene progress and latest real-world advancement
+
+Note: this is source-level integration. Flutter/Dart SDK was not available in the container, so no real compile/run verification was possible here.

@@ -1,0 +1,264 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" package="com.example.quote_app">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
+    <!-- Camera PPG measurement (heart rate) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FLASHLIGHT" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <!-- 保存图片到系统相册（兼容旧版Android存储权限；Android 10+ 使用 MediaStore/Scoped Storage） -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Allow showing the system whitelist prompt (user-driven; no常驻通知的情况下提高后台稳定性) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Full-screen intent for alarm-style notifications (used by Sport full-screen popup) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+        <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Android 10+ step counter permission (SportRunningPage) -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+
+    <!-- Health Connect read permissions used by 健康饮食/身体状态摘要. User must still grant these in Health Connect. -->
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_NUTRITION" />
+    <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE" />
+    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
+    <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_HEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_SPEED" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_HYDRATION" />
+    <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE" />
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_POWER" />
+    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
+    <uses-permission android:name="android.permission.health.READ_BASAL_METABOLIC_RATE" />
+    <!-- Location permissions needed for geo triggers -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Android 10+ 后台定位权限：解锁/后台触发地点规则提醒需要“始终允许定位” -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Baidu Location SDK: network/Wi‑Fi positioning permissions -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Allow url_launcher to resolve external browser handlers for https links. -->
+    <queries>
+        <!-- Allow detecting the Health Connect provider package on Android 11+. -->
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+
+        <!-- Android 11+ package visibility: allow resolving live wallpaper picker/preview entries. -->
+        <intent>
+            <action android:name="android.service.wallpaper.WallpaperService" />
+        </intent>
+        <intent>
+            <action android:name="android.service.wallpaper.CHANGE_LIVE_WALLPAPER" />
+        </intent>
+        <intent>
+            <action android:name="android.service.wallpaper.LIVE_WALLPAPER_CHOOSER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_WALLPAPER" />
+        </intent>
+
+        <!-- Android 11+ package visibility: allow speech_to_text to discover
+             installed speech recognition services. Without this, some devices
+             report recognizerNotAvailable even when a recognizer exists. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+<application android:name=".App" android:roundIcon="@mipmap/ic_launcher_round" android:label="名人名言" android:icon="@mipmap/ic_launcher" android:usesCleartextTraffic="true">
+        <!-- 强制 Geolocator 在 Android 使用原生 LocationManager（规避GMS/Fused依赖） -->
+<meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />
+        <!-- Baidu Location SDK AK (建议配置；也可通过 LocationClient.setKey 设置) -->
+        <meta-data
+            android:name="com.baidu.lbsapi.API_KEY"
+            android:value="oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh" />
+
+        <!-- Baidu Location SDK required remote service -->
+        <service
+            android:name="com.baidu.location.f"
+            android:enabled="true"
+            android:process=":remote" />
+                <service
+            android:name=".ScreenGatekeeperService"
+            android:exported="false"
+ />
+<activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="FLUTTER_NOTIFICATION_CLICK"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/AppTheme" />
+        </activity>
+
+        <!-- OAuth callback handler (Fitbit) for flutter_web_auth_2.
+             Redirect URI used by the app: quoteappfitbit://auth
+             See: https://pub.dev/packages/flutter_web_auth_2#android -->
+        <activity
+            android:name="com.linusu.flutter_web_auth_2.CallbackActivity"
+            android:exported="true">
+            <intent-filter android:label="flutter_web_auth_2">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="quoteappfitbit" android:host="auth" />
+            </intent-filter>
+
+            <intent-filter android:label="flutter_web_auth_2_msauth">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="msauth" />
+            </intent-filter>
+        </activity>
+            <meta-data android:name="flutterEmbedding" android:value="2" />
+
+    
+    <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        </intent-filter>
+        <intent-filter>
+      <action android:name="com.example.quote_app.ALARM" />
+    </intent-filter>
+  </receiver>
+    <receiver android:name=".AlarmReceiver" android:exported="true">
+        <intent-filter>
+            <action android:name="ALARM_FIRE" />
+        </intent-filter>
+    </receiver>
+    <!-- Receiver to handle device unlock events and trigger vision reminders.
+         Android 8+ limits certain implicit broadcasts (USER_PRESENT) when the app is in the background.
+         To improve reliability we also listen for USER_UNLOCKED. -->
+    <!-- UnlockReceiver is kept for in-process delegation only.
+         System will not deliver implicit USER_PRESENT/SCREEN_ON broadcasts
+         directly to this receiver; instead ScreenGatekeeperService registers
+         its own dynamic receiver and calls into UnlockReceiver as needed. -->
+<receiver
+    android:name=".UnlockReceiver"
+    android:enabled="true"
+    android:exported="true">
+    <!-- 只监听解锁相关广播（USER_PRESENT / USER_UNLOCKED），避免与其他广播/监听重复触发 -->
+    <intent-filter>
+        <action android:name="android.intent.action.USER_PRESENT" />
+        <action android:name="android.intent.action.USER_UNLOCKED" />
+    </intent-filter>
+</receiver>
+
+    <!-- 解锁延迟兜底（<=5分钟）：由 SCREEN_ON 调度 AlarmManager 触发，显式 Intent 回调到此接收器。 -->
+    <receiver
+        android:name=".UnlockWatchdogReceiver"
+        android:enabled="true"
+        android:exported="false" />
+
+    <!-- 无常驻通知的命中率增强：低频脉冲探测锁屏/解锁状态（显式 PendingIntent 回调）。 -->
+    <receiver
+        android:name=".UnlockPulseReceiver"
+        android:enabled="true"
+        android:exported="false" />
+    <receiver android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver" android:enabled="false" android:exported="false" tools:replace="android:enabled">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        <action android:name="android.intent.action.LOCALE_CHANGED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+
+    
+
+        
+        <receiver android:name=".am.AlarmReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.quote_app.ALARM" />
+            </intent-filter>
+        </receiver>
+
+
+        <receiver android:name=".am.KickAlarmReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.quote_app.action.KICK_ALARM" />
+            </intent-filter>
+        </receiver>
+        <service
+            android:name=".GeoForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+    
+                <service
+            android:name=".SportForegroundService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="location" />
+<activity
+            android:name=".FgKickActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
+            android:launchMode="singleTask" />
+    
+
+
+        <activity
+            android:name=".WallpaperApplyActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <service
+            android:name=".wallpaper.IntimacyMystifyWallpaperService"
+            android:label="潮汐之间"
+            android:permission="android.permission.BIND_WALLPAPER"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/intimacy_mystify_wallpaper" />
+        </service>
+
+    </application>
+</manifest>

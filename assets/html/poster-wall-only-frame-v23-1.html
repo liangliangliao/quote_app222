@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta name="color-scheme" content="light">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>装裱作品 · Gallery v23.2.7（正文+署名+注解 统一滚动）</title>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  :root{
+    --bg-url: none;
+    --ink:#111; --ink-soft:#111; --ink-muted:#3a3a3a;
+    --pad-h: clamp(24px, 5.6vw, 40px);
+    --s: clamp(10px,1.6vw,14px);
+    --m: clamp(14px,2.2vw,18px);
+    --avatar: clamp(56px, 12vw, 84px);
+    --serif:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","Times New Roman",serif;
+    --italic: Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,"Noto Sans SC","PingFang SC","Hiragino Sans GB",sans-serif;
+    --inner-pad: clamp(64px, 8.6vw, 96px);
+  }
+  *{box-sizing:border-box}
+  html,html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden; height:100%}
+  html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden; 
+    margin:0; min-height:100dvh; display:grid; place-items:center;
+    background:#ffffff; color:var(--ink); font-family:var(--sans);
+    overflow:hidden; letter-spacing:0.08em; padding:4vh 4vw;
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  }
+  @supports (-webkit-text-size-adjust: none){
+    html, html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden;  -webkit-text-size-adjust: none; }
+  }
+  .poster{ position:absolute; inset:0;
+    width:min(calc(92vw + 10px), 570px);
+    aspect-ratio: 2 / 3;
+    background:#ffffff; background-image: var(--bg-url); background-size: cover; background-position: center;
+    position: relative;
+  }
+
+  /* 外层不滚动，内部由 header(固定) + body(整体滚动) 组成 */
+  .content{
+    position:absolute; inset: var(--inner-pad); display:flex; flex-direction:column;
+    overflow:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+  }
+  .content::-webkit-scrollbar{ width:0; height:0; }
+
+  .paper-header{ display:grid; grid-template-columns: 1fr auto; align-items:start; gap:12px; padding: var(--s) 0 0; flex:0 0 auto; }
+  .avatar-div{
+    grid-column: 2; grid-row: 1 / span 2;
+    width: calc(var(--avatar) + 25px); height: calc(var(--avatar) + 25px);
+    border-radius: 50%; overflow:hidden; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    margin-top: 0; margin-right: 0; margin-bottom: -5px; background:#fff;
+  }
+  .avatar-div img{ width:100%; height:100%; display:block; object-fit:cover; object-position:50% 50%; image-rendering:auto; max-width:none; }
+
+  .topic-div{ grid-column: 1; grid-row: 1; margin-top: calc(var(--s) + 4px);
+              padding-left:0; padding-right:0; display:flex; align-items:center; justify-content:center; text-align:center;
+              min-height: calc(2.6 * 1.3 * 1em); }
+  .topic-scroll{ font-size: clamp(20px, 4.6vw, 26px); line-height:1.30; max-height: calc(3 * 1.30em); }
+  .topic-text{ font-family: var(--serif); font-weight:800; letter-spacing:0.08em; font-size:inherit; line-height:1.30; margin:0; color:var(--ink);
+               text-shadow: 0 .4px 0 rgba(0,0,0,.18); white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+
+  /* 统一滚动主体：名言 + 署名 + 注解 */
+  .paper-html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden;  flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .paper-body::-webkit-scrollbar{ width:0; height:0; }
+
+  .quote-div, .author-div, .note-div{ padding-left:0; padding-right:0; }
+  .quote-div{ font-size: clamp(20px, 4.8vw, 32px); margin-top: calc(var(--m) + 10px - 18px); margin-bottom: 3px; position:relative; }
+  .quote-wrap{ display:block; /* 统一滚动，取消独立 max-height，不限制行数 */ }
+  .quote-text{ display:block; font-family: var(--serif); font-weight:700; color: var(--ink-soft);
+               -webkit-text-stroke: 0.1px rgba(0,0,0,.30); text-shadow: 0 0 .015em rgba(0,0,0,.18);
+               font-size: 1em; line-height:1.60; letter-spacing:0.06em; margin:0; text-align:left;
+               white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+
+  .author-div{ text-align:left; margin-bottom:3px; }
+  .author-text{ font-family: var(--italic); font-style: italic; color: var(--ink-muted); font-size: clamp(14px, 2.2vw, 17px);
+                margin:0; display:inline-block; text-indent: 6ch; letter-spacing:0.08em; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+
+  .note-div{ margin: calc(var(--s) + 4px - 1.2em + 5px - 8px) 0 0 0; text-align:left; padding-top:0; padding-bottom:0; }
+  .note-text{ font-family: var(--sans); font-weight:600; color:#1b1b1b; font-size: clamp(12px, 2.1vw, 14px); line-height:1.62; display:inline; margin:0;
+              min-height: calc(6 * 1.62 * 1em); letter-spacing:0.04em; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere;  text-align:left; }
+
+/* ==== App overrides for spacing (requested) ==== */
+.author-div{ text-align:right !important; }
+.author-text{ text-align:right !important; text-indent:0 !important; display:inline-block; }
+.quote-div { margin-top: 15px !important; } /* 名人名言正文 上外边距=15dp */
+.topic-div {
+  padding-top: 5px;            /* 主题 上内边距=5dp */
+  padding-bottom: 5px;         /* 主题 下内边距=5dp */
+  margin-bottom: 5px;          /* 主题 下外边距=5dp */
+  margin-top: calc(var(--s) + 4px - 22px) !important; /* 主题 上外边距在原基础上减小12dp */
+}
+
+
+
+/* ==== App override: requested adjustments (2025-11-15) ==== */
+/* 1) Author (署名+出处) top margin +10dp */
+.author-div { margin-top: 10px !important; }
+/* 2) Note block top margin -8dp relative to previous; replicate base formula and subtract 16px total */
+.note-div { margin-top: calc(var(--s) + 4px - 1.2em + 5px - 16px) !important; }
+/* 3) Topic letter-spacing +0.5 and font size up one notch */
+.topic-text { letter-spacing: 0.5px !important; }
+.topic-scroll { font-size: clamp(22px, 4.8vw, 28px) !important; }
+/* 5) Quote letter-spacing -> 1.1 */
+.quote-text { letter-spacing: 0.11em !important; }
+/* 6) Bottom margin for note text +5dp */
+.note-text { margin-bottom: 5px !important; }
+
+/* ==== App override: force HTML background white (robust) ==== */
+:root, html, body {
+  --bg: #ffffff !important;
+  --paper-bg: #ffffff !important;
+  --page-bg: #ffffff !important;
+  --surface: #ffffff !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+.paper, .page, .root, #root, #app {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+
+
+/* NAVFIX25: circular crop + keep entire face visible */
+.avatar-div{
+  border: none !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  -webkit-clip-path: circle(50% at 50% 50%) !important;
+          clip-path: circle(50% at 50% 50%) !important;
+  background: #fff !important;
+}
+.avatar-div img, .avatar-img{
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  object-fit: contain !important;          /* 全脸完整露出 */
+  object-position: center 45% !important;  /* 轻微上移，避免头顶被错觉遮到 */
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transform: none !important;
+}
+
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden; background:#ffffff!important;}
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Minimal, reversible tweaks per user's request === */
+  /* 1) All text a touch finer: slightly smaller + a tad lighter */
+  /* Reduce key typographic clamps by ~3–5% and ease font-weights one notch */
+  .topic-scroll{ font-size: clamp(19px, 4.4vw, 25px) !important; }
+  .topic-text{ font-weight: 700 !important; } /* was 800 */
+
+  .quote-div{ font-size: clamp(19px, 4.6vw, 31px) !important; }
+  .quote-text{ font-weight: 600 !important; } /* was 700 */
+
+  .author-text{ font-size: clamp(13px, 2.1vw, 16px) !important; }
+
+  .note-text{ font-size: clamp(11.5px, 2vw, 13.5px) !important; font-weight: 500 !important; } /* was 600 */
+
+  /* 2) Avatar a bit brighter (and stable across themes) */
+  .avatar-div img#avatar-img{
+    filter: brightness(1.12) contrast(1.04) saturate(1.05);
+    transition: filter .2s ease;
+  }
+  @media (prefers-color-scheme: dark){
+    .avatar-div img#avatar-img{ filter: brightness(1.08) contrast(1.04) saturate(1.05); }
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Incremental fine-tuning (theme + note thinner; avatar brighter) === */
+  /* Theme (主题) — only slightly finer */
+  .topic-scroll{ font-size: clamp(18.5px, 4.2vw, 24px) !important; } /* -~2–4% */
+  .topic-text{ font-weight: 600 !important; } /* 700 → 600 */
+
+  /* Note (注解) — slightly finer */
+  .note-text{
+    font-size: clamp(11px, 1.9vw, 13px) !important; /* -~3–5% */
+    font-weight: 450 !important; /* 500 → 450 */
+  }
+
+  /* Avatar — a bit brighter */
+  .avatar-div img#avatar-img{
+    filter: brightness(1.17) contrast(1.04) saturate(1.05);
+    transition: filter .2s ease;
+  }
+  @media (prefers-color-scheme: dark){
+    .avatar-div img#avatar-img{ filter: brightness(1.12) contrast(1.04) saturate(1.05); }
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Incremental tweak: note thinner; quote body slightly bolder === */
+  /* 注解（note）— 再细一点（极小幅度） */
+  .note-text{
+    font-size: clamp(10.8px, 1.85vw, 12.8px) !important; /* 比上一版再小约 ~1–2% */
+    font-weight: 400 !important; /* 450 → 400（轻一档） */
+  }
+  /* 名人名言正文（quote body）— 略微更粗 */
+  .quote-text{
+    font-weight: 650 !important; /* 600 → 650，温和加粗 */
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Revert avatar to original realistic look (no artificial brightening) === */
+  .avatar-div img#avatar-img{
+    -webkit-filter: none !important;
+    filter: none !important;
+  }
+  @media (prefers-color-scheme: dark){
+    .avatar-div img#avatar-img{
+      -webkit-filter: none !important;
+      filter: none !important;
+    }
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Head note (注解) — slightly finer & lighter === */
+  .note-text{
+    font-size: clamp(10.7px, 1.82vw, 12.6px) !important; /* 比上一版再小约 1–2% */
+    font-weight: 350 !important; /* 400 → 350，轻一档 */
+    letter-spacing: 0.01em; /* 极轻微增距，保证细字仍清晰 */
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Note text — slightly finer & lighter (another small step) === */
+  .note-text{
+    font-size: clamp(10.6px, 1.80vw, 12.4px) !important; /* ~1–2% smaller than previous */
+    font-weight: 300 !important; /* 350 → 300 */
+    letter-spacing: 0.012em; /* tiny tracking to preserve legibility */
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Incremental tweaks === */
+  /* 注解（note）：再细一点、再轻一点（极小幅度） */
+  .note-text{
+    font-size: clamp(10.5px, 1.78vw, 12.2px) !important; /* ~再降 1–2% */
+    font-weight: 275 !important; /* 300 → 275（若字体不支持，将回退到最接近值） */
+    letter-spacing: 0.014em;
+  }
+
+  /* 署名（author）：稍微更重一些 */
+  .author-text{
+    font-weight: 600 !important; /* 略增一档 */
+  }
+
+  /* 名人名言正文（quote）：文字稍微更粗一些 */
+  .quote-text{
+    font-weight: 675 !important; /* 650 → 675，温和加粗 */
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* === Signature & quote: slightly heavier === */
+  .author-text{
+    font-weight: 650 !important; /* 600 → 650 (small step) */
+  }
+  .quote-text{
+    font-weight: 700 !important; /* 675 → 700 (small step) */
+  }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+  /* FORCE MIN GAP BETWEEN TOPIC AND QUOTE */
+  .quote-div{ margin-top: clamp(20px, calc(var(--m) + 10px), 64px) !important; }
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+/* === 注解区域调整 === */
+/* 增加顶部外边距（兼容多命名） */
+.note-area, .note, .note-section, .note-wrapper, .annotation, .annotation-area { 
+  margin-top: 24px !important; 
+}
+/* 兜底：直接作用于注解文字 */
+.note-text { 
+  margin-top: 24px !important; 
+  line-height: 1.3 !important; /* 减小行距 */
+}
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+/* 注解文字行距降到 1 */
+.note-text { 
+  line-height: 1 !important;
+}
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+
+<style>
+html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;margin:0;padding:0;height:100%;width:100%;background:#ffffff !important;}
+/* v26-fixed: 注解移动端字重 350（桌面/通用 100），并保留既有排版 */
+
+/* 白色背景，移除背景图干扰 */
+html, html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden; 
+  background-color:#ffffff !important;
+  background:#ffffff !important;
+  background-image:none !important;
+}
+
+/* 名人名言正文：极粗 + 字距 */
+.quote-text{
+  font-weight:1000 !important;
+  letter-spacing:0.17em !important;
+}
+
+/* 署名 */
+.author-text{ font-weight:650 !important; }
+
+/* 注解（基础：桌面/通用） */
+#note-text, .note-div .note-text{
+  color:#000 !important;
+  font-weight:100 !important;
+  line-height:1.5 !important;
+  text-align:left !important;
+  text-indent:0 !important;
+  display:block !important;
+  margin:0 !important;
+
+  /* 防发灰：清除淡化效果 */
+  opacity:1 !important;
+  -webkit-text-stroke:0 !important;
+  text-shadow:none !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+  font-synthesis-weight:none;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC","PingFang SC","Hiragino Sans GB",Arial,sans-serif !important;
+}
+
+/* 容器层也清除淡化效果 */
+.note-div, .note-div *{
+  opacity:1 !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+}
+
+/* 注解顶部外边距 */
+.note-div{ margin-top:25px !important; }
+
+/* 主题文字左对齐 */
+.topic-text{ text-align:left !important; }
+
+/* 移动端/高DPR：注名字重 350 */
+@media (max-width: 480px), (-webkit-min-device-pixel-ratio: 2){
+  #note-text, .note-div .note-text{ font-weight:350 !important; }
+}
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+
+
+  <style id="empty-topic-fix">
+    /* 主题为空时，为正文预留上边距，避免与标题区域重叠 */
+    .quote-div.empty-topic { margin-top: 24px !important; }
+  
+/* NAVFIX15: margins & anti-flicker */
+body::after{content:'';position:fixed;left:0;right:0;bottom:0;height:2px;background:#ffffff !important;pointer-events:none;z-index:2147483647;}
+.note-div{margin-bottom:20px !important;}
+.topic-div{margin-top:15px !important;}                       /* 主题顶部 -10dp */
+.quote-div{margin-top: calc(var(--m) - 15px) !important;}     /* 正文顶部 -15dp */
+.avatar-div{margin-top:30px !important;}                      /* 头像顶部 +20dp → 30dp */
+
+/* NAVFIX16: spacing adjustments */
+.topic-div{ margin-top:23px !important; }      /* +8dp from previous 15 */
+.avatar-div{ margin-bottom:10px !important; }                                     /* avatar bottom +10dp */
+
+/* NAVFIX17 spacing tweaks */
+.topic-div{ margin-top:18px !important; }           /* 23 -> 18 (-5dp) */
+.avatar-div{ margin-bottom:22px !important; }  /* +12dp from previous override */
+
+/* NAVFIX18 spacing tweaks */
+.avatar-div{ margin-top:18px !important; margin-bottom:12px !important; }
+.topic-div{  margin-top:13px !important; margin-bottom:0px !important; }
+
+/* NAVFIX19: spacing + avatar size (-5%) */
+.avatar-div{ margin-top:13px !important; margin-bottom:7px !important; }
+.topic-div{  margin-top:8px !important; margin-bottom:0px !important; }
+/* Scale avatar visuals by 5% without affecting layout flow too much */
+.avatar-div img,
+.avatar-div .avatar-img,
+.avatar-div .img{ transform: scale(0.95); transform-origin: top center; display: inline-block; }
+
+/* NAVFIX21: bottom hairline fix + spacing + remove avatar frame (no font/layout change) */
+html,html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden; min-height:100% !important;height:auto !important;background:#fff;}
+/* 1px white mask to hide any compositor seam above nav bar */
+body::after{content:'';position:fixed;left:0;right:0;bottom:0;height:1px;background:#fff !important;pointer-events:none;z-index:2147483647;display:block !important;}
+/* Remove potential bottom borders/shadows inside content */
+body,.root,.frame,.page,.container{border-bottom:none !important;box-shadow:none !important;outline:none !important;}
+/* Remove avatar circular frame/ring (keep the circular shape if any) */
+.avatar-div,.avatar-div img,.avatar-img{border:none !important;box-shadow:none !important;outline:none !important;background:transparent !important;}
+.avatar-div::before,.avatar-div::after{display:none !important;content:none !important;}
+/* Requested spacing changes */
+.topic-div{margin-top:18px !important;}                    /* +10dp from previous 8 → 18 */
+.quote-div{margin-top:calc(var(--m) - 25px) !important;}   /* 再减少 5dp（-20 → -25） */
+/* Keep scroll visuals hidden but behavior intact */
+::-webkit-scrollbar{width:0;height:0;display:none;}
+html,html,html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;background:#ffffff !important;}
+html,body{width:100%;height:100%;background:#ffffff !important;margin:0;padding:0}
+/* SEAMLESS_FADE */
+body{opacity:0;transition:opacity .18s ease;overflow-x:hidden; overscroll-behavior:contain;}
+
+/* NAVFIX23: top spacing safe, circular avatar with border, white hairline */
+body, .root, .frame, .page, .poster, .poster-root{ padding-top:10px !important;  position:relative; min-height:100vh; }
+/* WHITE_FALLBACK_INSERTED */
+.poster, .poster-root{background:#ffffff !important; position:relative; min-height:100vh; } /* extra safety */
+.avatar-div, .avatar-div img, .avatar-img{
+  border-radius:50% !important; clip-path:none !important; overflow:hidden !important;
+}
+.avatar-div{
+  border:2px solid rgba(0,0,0,0.10) !important; box-shadow:none !important; background:transparent !important;
+}
+body::after{
+  content:''; position:fixed; left:0; right:0; bottom:0; height:1px;
+  background:#ffffff !important; pointer-events:none; z-index:2147483647; display:block !important;
+}
+
+/* NAVFIX24: move page up 10dp; avatar full-head & no outer border (keep circle) */
+body, .root, .frame, .page, .poster, .poster-root{ padding-top:10px !important;  position:relative; min-height:100vh; }
+/* WHITE_FALLBACK_INSERTED */
+.poster, .poster-root{background:#ffffff !important; position:relative; min-height:100vh; }
+
+.avatar-div{
+  border: none !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+.avatar-div img, .avatar-img{
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;      /* show full head */
+  object-position: center center !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transform: none !important;          /* override earlier scale */
+}
+.viewport-cover{position:fixed;inset:0;background:#ffffff;z-index:9;pointer-events:none;}
+.poster-root,.poster{ position:absolute; inset:0;position:relative;z-index:10;}
+</style>
+</head>
+<body style="background:#ffffff; background-color:#ffffff;">
+<main class="poster" id="poster">
+<div class="content" id="paper-content">
+<header class="paper-header">
+<div class="topic-div">
+<div class="topic-scroll">
+<h1 class="topic-text" id="topic-text"></h1>
+</div>
+</div>
+<div class="avatar-div" id="avatar-div" title="阿尔贝·加缪" style="display:none">
+<img alt="Albert Camus portrait" id="avatar-img" style="display:none"  src="" />
+</div>
+</header>
+<div class="paper-body" id="paper-body">
+<section class="quote-div empty-topic">
+<div class="quote-wrap">
+<span class="quote-text" id="quote-text"></span>
+</div>
+</section>
+<section class="author-div">
+<p class="author-text" id="author-text"></p>
+</section>
+<section class="note-div">
+<p class="note-text" id="note-text"></p>
+</section>
+</div>
+</div>
+</main>
+<script>
+  // 背景自动探测（保持上一版逻辑）
+  (function(){
+    const candidates = [
+      "../bg-wood-upload.jpg",
+      "bg-wood-upload.jpg",
+      "file:///android_asset/bg-wood-upload.jpg",
+      "file:///android_asset/flutter_assets/assets/bg-wood-upload.jpg",
+      "/android_asset/bg-wood-upload.jpg",
+      "/android_asset/flutter_assets/assets/bg-wood-upload.jpg"
+    ];
+    function tryNext(i){
+      if(i>=candidates.length) return;
+      const url = candidates[i];
+      const img = new Image();
+      img.onload = ()=> document.documentElement.style.setProperty('--bg-url', `url('${url}')`);
+      img.onerror = ()=> tryNext(i+1);
+      img.src = url + (url.includes('?')?'':'?v=' + Date.now());
+    }
+    if(getComputedStyle(document.documentElement).getPropertyValue('--bg-url').includes("bg-wood-upload.jpg")){
+      tryNext(0);
+    }
+  })();
+
+  window.setBackground = function(url){
+    document.documentElement.style.setProperty('--bg-url', `url('${url}')`);
+  };
+  window.setDynamicData = function(payload){
+    if(payload.topic !== undefined){ document.getElementById('topic-text').textContent = payload.topic ?? ''; }
+    if(payload.quote !== undefined){ document.getElementById('quote-text').textContent = payload.quote ?? ''; }
+    if(payload.author !== undefined){ document.getElementById('author-text').textContent = payload.author ?? ''; }
+    if(payload.note !== undefined){ document.getElementById('note-text').textContent = payload.note ?? ''; }
+    /* AVATAR_TOGGLE_HOOK */
+    if(payload.avatarUrl && String(payload.avatarUrl).trim() !== ''){
+      const img = document.getElementById('avatar-img');
+      img.src = payload.avatarUrl;
+      const fx = (payload.focalX ?? 50); const fy = (payload.focalY ?? 50);
+      img.style.objectPosition = fx + '% ' + fy + '%';
+      img.style.display = 'block';
+      try{ document.getElementById('avatar-div').style.display = 'block'; }catch(_){}
+    } else {
+      try{ document.getElementById('avatar-img').style.display = 'none'; }catch(_){}
+      try{ document.getElementById('avatar-div').style.display = 'none'; }catch(_){}
+    }
+    if(payload.bgUrl){ window.setBackground(payload.bgUrl); }
+  };
+</script>
+<script id="HIDE_VIEWPORT_COVER">
+(function(){
+  function hideCover(){var c=document.querySelector('.viewport-cover'); if(c){c.style.display='none';}}
+  if(document.readyState==='complete'||document.readyState==='interactive'){ hideCover(); }
+  else { window.addEventListener('DOMContentLoaded', hideCover, {once:true}); }
+  // also hide after dynamic payload injection if template uses it
+  window.__hideCover = hideCover;
+})();
+</script>
+<script>window.addEventListener('load',function(){document.body.style.opacity='1';});</script>
+</body>
+</html>

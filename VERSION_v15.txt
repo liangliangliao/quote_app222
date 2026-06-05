@@ -1,0 +1,1 @@
+Fix missing comma after AppBar in entry_reader_page.dart based on final2_updated_project_patched_v14.zip

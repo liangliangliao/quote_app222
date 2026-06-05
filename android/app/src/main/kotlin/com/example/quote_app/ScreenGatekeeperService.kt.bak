@@ -1,0 +1,555 @@
+package com.example.quote_app
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.app.Service
+import android.app.ActivityManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.view.Display
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.os.IBinder
+import com.example.quote_app.data.DbRepo
+import androidx.core.app.NotificationCompat
+
+/**
+ * ScreenGatekeeperService
+ *
+ * A lightweight foreground service whose only responsibility is to
+ * listen for screen-on / display-on events and trigger the same logic
+ * that UnlockReceiver would run when the user unlocks the device.
+ *
+ * This improves reliability of unlock reminders and geo triggers on
+ * devices / ROMs that aggressively restrict background broadcast
+ * delivery when the app process is not already in memory.
+ *
+ * NOTE: The service does not show any custom UI. It simply delegates
+ * to [UnlockReceiver] so that all business logic (DB queries, geo
+ * worker scheduling, cooldown logic, etc.) stays in one place.
+ */
+class ScreenGatekeeperService : Service() {
+
+    companion object {
+        @Volatile
+        var lastTaskRemovedAt: Long = 0L
+
+        @Volatile
+        var isRunning: Boolean = false
+
+        /**
+         * 针对已经在运行中的前台守护服务下发“刷新指令”的自定义 Action。
+         * 当 UnlockReceiver 或其他组件认为服务仍在运行、但希望重新注册监听器、
+         * 重置内部状态时，会通过 startForegroundService/startService 携带该 Action
+         * 再次触达 onStartCommand，从而触发一次 refreshInternalState()。
+         */
+        const val ACTION_REFRESH_FG = "com.example.quote_app.ACTION_REFRESH_FG"
+    }
+
+
+    private val channelId = "vision_unlock_guard_service"
+
+    private var screenReceiver: BroadcastReceiver? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
+
+    @Volatile
+    private var lastDisplayStateOn: Boolean = false
+
+    @Volatile
+    private var lastTriggerAt: Long = 0L
+
+    private val MIN_TRIGGER_INTERVAL_MS = 1500L
+
+    override fun onCreate() {
+        super.onCreate()
+        isRunning = true
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】ScreenGatekeeperService.onCreate：创建前台守护服务（用于提升进程存活率），解锁广播由 UnlockReceiver 统一处理"
+            )
+        } catch (_: Throwable) {
+        }
+        createChannel()
+        // 目前仅通过 Manifest 注册的 UnlockReceiver 监听解锁事件；
+        // 这里不再额外动态注册解锁广播或 DisplayListener，以避免重复触发。
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        val notification = buildServiceNotification()
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】onStartCommand：收到启动/指令请求，action=" + (action ?: "null") +
+                    "，startId=" + startId + "，将确保以前台服务方式运行"
+            )
+        } catch (_: Throwable) {
+        }
+        try {
+            startForeground(1338, notification)
+        } catch (_: Throwable) {
+            // ignore failures to start foreground; service may still run briefly
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】onStartCommand：调用 startForeground 失败，但服务仍可能短暂存活，异常已忽略"
+                )
+            } catch (_: Throwable) {
+            }
+        }
+
+        // 如果是外部发来的刷新指令（例如解锁广播检测到服务仍在运行时），
+        // 则在保证处于前台状态的前提下，主动刷新内部监听与状态。
+        if (ACTION_REFRESH_FG == action) {
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】onStartCommand：检测到 ACTION_REFRESH_FG，准备执行 refreshInternalState() 刷新前台服务内部监听"
+                )
+            } catch (_: Throwable) {
+            }
+            try {
+                refreshInternalState()
+            } catch (t: Throwable) {
+                try {
+                    DbRepo.log(
+                        this,
+                        null,
+                        "【解锁守护服务】onStartCommand：调用 refreshInternalState() 刷新前台服务内部监听时发生异常，exception=" +
+                            t.javaClass.simpleName + "，message=" + (t.message ?: "null")
+                    )
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        lastTaskRemovedAt = System.currentTimeMillis()
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】onTaskRemoved：检测到用户从最近任务移除应用，标记 lastTaskRemovedAt=" + lastTaskRemovedAt
+            )
+        } catch (_: Throwable) {
+        }
+        // 当用户从最近任务划掉应用时，尝试在短时间后通过 AlarmManager 自行恢复前台守护服务
+        scheduleSelfRestart(3000L, "onTaskRemoved")
+    }
+
+    override fun onDestroy() {
+        // 标记服务已停止；通过 AlarmManager 安排一次自我恢复，尽量降低被系统销毁后解锁监听完全失效的概率。
+        val now = System.currentTimeMillis()
+        val taskRemovedRecently = now - lastTaskRemovedAt < 5000L
+        isRunning = false
+
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】onDestroy：前台守护服务被销毁，taskRemovedRecently=$taskRemovedRecently，本次将尝试使用 AlarmManager 自我恢复，避免解锁监听长期失效"
+            )
+        } catch (_: Throwable) {
+        }
+
+        // 尝试注销屏幕广播和显示监听，避免资源泄漏
+        try {
+            screenReceiver?.let {
+                unregisterReceiver(it)
+            }
+        } catch (_: Throwable) {
+        } finally {
+            screenReceiver = null
+        }
+
+        try {
+            displayListener?.let {
+                val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+                dm?.unregisterDisplayListener(it)
+            }
+        } catch (_: Throwable) {
+        } finally {
+            displayListener = null
+        }
+
+        // 在完成清理之后，通过 AlarmManager 安排一次延迟自启，进一步增强前台守护服务的存活能力
+        scheduleSelfRestart(if (taskRemovedRecently) 8000L else 4000L, "onDestroy")
+
+        super.onDestroy()
+    }
+
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * 使用 AlarmManager 在短延迟后重新拉起当前前台守护服务，用于在服务被销毁或从最近任务划掉后自我恢复。
+     * 该方法仅用于增强稳定性，内部通过 try/catch 防御，避免任何异常影响系统稳定性。
+     */
+    private fun scheduleSelfRestart(delayMs: Long, reason: String) {
+        try {
+            val am = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val intent = Intent(this, ScreenGatekeeperService::class.java).apply {
+                putExtra("restart_reason", reason)
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pi = PendingIntent.getService(this, 1001, intent, flags)
+            val triggerAt = System.currentTimeMillis() + if (delayMs > 0) delayMs else 1000L
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+            } else {
+                am.set(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+            }
+
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】scheduleSelfRestart：已通过 AlarmManager 安排在 " +
+                        delayMs + "ms 后尝试重新拉起前台守护服务，reason=" + reason
+                )
+            } catch (_: Throwable) {
+            }
+        } catch (_: Throwable) {
+            // 忽略所有异常，避免干扰系统生命周期
+        }
+    }
+
+
+    private fun registerScreenOnReceiver() {
+        val filter = IntentFilter().apply {
+            // Listen for both screen-on and explicit user-present / user-unlocked
+            // broadcasts. The actual business logic is funneled through
+            // [triggerUnlockLogic] which in turn delegates to [UnlockReceiver].
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_USER_UNLOCKED)
+        }
+        screenReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val act = intent?.action ?: "null"
+                // Log every broadcast so we can verify delivery on real devices.
+                try {
+                    DbRepo.log(
+                    this@ScreenGatekeeperService,
+                    null,
+                    "【解锁守护服务】screenReceiver 收到系统广播，action=" + act
+                )
+                } catch (_: Throwable) {
+                }
+                when (act) {
+                    Intent.ACTION_USER_PRESENT,
+                    Intent.ACTION_USER_UNLOCKED -> {
+                        // Primary path: user has just unlocked the device.
+                        triggerUnlockLogic("user_present_broadcast")
+                    }
+                    Intent.ACTION_SCREEN_ON -> {
+                        // Fallback path: some ROMs may never deliver USER_PRESENT
+                        // while still dispatching SCREEN_ON. Coarse rate limiting
+                        // inside triggerUnlockLogic() prevents duplicate work.
+                        triggerUnlockLogic("screen_on_broadcast")
+                    }
+                }
+            }
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(screenReceiver, filter)
+            }
+            try {
+                DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】screenReceiver 注册成功，将监听 SCREEN_ON / USER_PRESENT / USER_UNLOCKED"
+            )
+            } catch (_: Throwable) {
+            }
+        } catch (t: Throwable) {
+            try {
+                DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】screenReceiver 注册失败，后续可能仅依赖已有监听逻辑，原因=" + (t.message ?: "unknown")
+            )
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+
+private fun registerDisplayListener() {
+        try {
+            val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            displayListener = object : DisplayManager.DisplayListener {
+                override fun onDisplayChanged(displayId: Int) {
+                    val d = dm.getDisplay(displayId) ?: return
+                    val isOn = (d.displayId == Display.DEFAULT_DISPLAY && d.state == Display.STATE_ON)
+                    if (isOn && !lastDisplayStateOn) {
+                        triggerUnlockLogic("display_on")
+                    }
+                    lastDisplayStateOn = isOn
+                }
+
+                override fun onDisplayAdded(displayId: Int) {}
+                override fun onDisplayRemoved(displayId: Int) {}
+            }
+            dm.registerDisplayListener(displayListener, null)
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】DisplayListener 注册中：用于辅助判断主屏是否点亮（display_on）"
+                )
+            } catch (_: Throwable) {
+            }
+        } catch (t: Throwable) {
+            // ignore; service still works partially via SCREEN_ON receiver
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】DisplayListener 注册失败，将仅依赖 SCREEN_ON 广播；原因=" + (t.message
+                        ?: "unknown")
+                )
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    
+    /**
+     * 刷新当前前台守护服务内部的监听与状态：
+     * - 如果之前已经注册过 screenReceiver / DisplayListener，这里会先安全地反注册，避免重复注册导致的异常；
+     * - 然后重新调用 registerScreenOnReceiver() 与 registerDisplayListener()，确保在服务长时间运行、
+     *   或系统发生内存回收/显示栈变化后，解锁相关事件仍然可以被稳定监听到；
+     * - 所有关键步骤都会记录详细的中文日志，方便后续从数据库中排查行为。
+     */
+    private fun refreshInternalState() {
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】refreshInternalState：开始刷新前台守护服务内部监听与状态"
+            )
+        } catch (_: Throwable) {
+        }
+
+        // 1. 安全反注册已有的 screenReceiver（如果存在）
+        try {
+            if (screenReceiver != null) {
+                try {
+                    unregisterReceiver(screenReceiver)
+                    DbRepo.log(
+                        this,
+                        null,
+                        "【解锁守护服务】refreshInternalState：检测到已有 screenReceiver，已先执行 unregisterReceiver 反注册"
+                    )
+                } catch (e: Throwable) {
+                    try {
+                        DbRepo.log(
+                            this,
+                            null,
+                            "【解锁守护服务】refreshInternalState：反注册旧的 screenReceiver 时发生异常，exception=" +
+                                e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                        )
+                    } catch (_: Throwable) {
+                    }
+                } finally {
+                    screenReceiver = null
+                }
+            } else {
+                try {
+                    DbRepo.log(
+                        this,
+                        null,
+                        "【解锁守护服务】refreshInternalState：当前不存在已注册的 screenReceiver，跳过反注册步骤"
+                    )
+                } catch (_: Throwable) {
+                }
+            }
+        } catch (_: Throwable) {
+        }
+
+        // 2. 安全反注册已有的 DisplayListener（如果存在）
+        try {
+            if (displayListener != null) {
+                try {
+                    val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+                    dm?.unregisterDisplayListener(displayListener)
+                    DbRepo.log(
+                        this,
+                        null,
+                        "【解锁守护服务】refreshInternalState：检测到已有 DisplayListener，已先执行 unregisterDisplayListener 反注册"
+                    )
+                } catch (e: Throwable) {
+                    try {
+                        DbRepo.log(
+                            this,
+                            null,
+                            "【解锁守护服务】refreshInternalState：反注册旧的 DisplayListener 时发生异常，exception=" +
+                                e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                        )
+                    } catch (_: Throwable) {
+                    }
+                } finally {
+                    displayListener = null
+                }
+            } else {
+                try {
+                    DbRepo.log(
+                        this,
+                        null,
+                        "【解锁守护服务】refreshInternalState：当前不存在已注册的 DisplayListener，跳过反注册步骤"
+                    )
+                } catch (_: Throwable) {
+                }
+            }
+        } catch (_: Throwable) {
+        }
+
+        // 3. 重新注册 screenReceiver / DisplayListener，确保后续的解锁事件可以重新被捕获
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】refreshInternalState：开始重新注册 screenReceiver / DisplayListener"
+            )
+        } catch (_: Throwable) {
+        }
+        try {
+            registerScreenOnReceiver()
+        } catch (e: Throwable) {
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】refreshInternalState：调用 registerScreenOnReceiver() 时发生异常，exception=" +
+                        e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                )
+            } catch (_: Throwable) {
+            }
+        }
+
+        try {
+            registerDisplayListener()
+        } catch (e: Throwable) {
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】refreshInternalState：调用 registerDisplayListener() 时发生异常，exception=" +
+                        e.javaClass.simpleName + "，message=" + (e.message ?: "null")
+                )
+            } catch (_: Throwable) {
+            }
+        }
+
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】refreshInternalState：前台守护服务内部监听刷新流程执行完毕"
+            )
+        } catch (_: Throwable) {
+        }
+    }
+
+private fun triggerUnlockLogic(reason: String) {
+        val now = System.currentTimeMillis()
+        // coarse rate limit to avoid duplicate work when both the broadcast
+        // and display listener fire around the same time
+        if (now - lastTriggerAt < MIN_TRIGGER_INTERVAL_MS) {
+            try {
+                DbRepo.log(
+                    this,
+                    null,
+                    "【解锁守护服务】triggerUnlockLogic：在限流窗口内收到重复触发（reason=" + reason + "），本次直接忽略"
+                )
+            } catch (_: Throwable) {
+            }
+            return
+        }
+        lastTriggerAt = now
+        try {
+            DbRepo.log(
+                this,
+                null,
+                "【解锁守护服务】triggerUnlockLogic：触发解锁业务逻辑，reason=" + reason +
+                    "，即将委托 UnlockReceiver 进行数据库判断和通知发送"
+            )
+        } catch (_: Throwable) {
+        }
+        try {
+            // Delegate to UnlockReceiver so all unlock/geo business logic
+            // stays centralized.
+            val receiver = UnlockReceiver()
+            val intent = Intent(Intent.ACTION_USER_PRESENT).apply {
+                putExtra("from_service", reason)
+            }
+            receiver.onReceive(this, intent)
+        } catch (_: Throwable) {
+            // swallow errors; this service must never crash the app process
+        }
+    }
+
+private fun buildServiceNotification(): Notification {
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        val pi = PendingIntent.getActivity(
+            this,
+            100,
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            flags
+        )
+        return NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("情景触发守护中")
+            .setContentText("用于解锁提醒与地点提醒的后台守护服务。")
+            .setOngoing(true)
+            .setContentIntent(pi)
+            .build()
+    }
+
+    private fun createChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                if (nm.getNotificationChannel(channelId) == null) {
+                    val ch = NotificationChannel(
+                        channelId,
+                        "解锁守护服务",
+                        NotificationManager.IMPORTANCE_MIN
+                    )
+                    ch.setShowBadge(false)
+                    nm.createNotificationChannel(ch)
+                }
+            } catch (_: Throwable) {
+                // ignore
+            }
+        }
+    }
+}

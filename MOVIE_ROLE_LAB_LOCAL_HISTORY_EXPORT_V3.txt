@@ -1,0 +1,18 @@
+电影角色实验室本轮改造说明（v3）
+
+1. 搜索历史
+- 每次 TMDb 搜索成功后，自动把本次返回的所有电影结果保存到本地数据库 movie_role_lab_search_history。
+- 保存内容包括：搜索词、电影ID、标题、简介、海报路径、背景图路径、上映日期、评分、TMDb原始JSON、搜索时间。
+- 电影角色实验室首页顶部新增“搜索历史”入口。
+- 首页也显示最近搜索历史快捷入口。
+- 搜索历史页面支持查看原始 TMDb JSON、查看/导入字幕、直接进入角色选择。
+
+2. 字幕导出
+- 字幕 TXT 导出优先走 Android MediaStore，保存到系统下载目录：Downloads/MovieRoleLab/。
+- Android 10+ 不再使用 App 私有外部目录作为主路径；只有 MediaStore 写入失败时才兜底到 App 专属目录。
+- 原生通道 native.scheduler 新增 saveTextToDownloads 方法。
+
+3. 角色台词归属问题
+- 普通 SRT 字幕通常没有说话人字段，不能可靠判断某句台词属于哪个角色。
+- 数据库 movie_role_lab_subtitle_cues 已预留 speaker_name、speaker_confidence、speaker_source 字段，后续可做人工标注/AI辅助标注/外部剧本对齐。
+- 当前角色进入仪式仍按“真实字幕优先、角色归属不可断言”的原则工作。

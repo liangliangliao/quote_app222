@@ -1,0 +1,5 @@
+Goal module phase 35
+- Goal virtual world: added recent identity leap detail card on world home
+- Goal virtual world: added 7-day growth trend chart on world home
+- Goal world scene detail: added compact recent identity leap detail and 7-day trend cards
+- DAO: added recent identity leap detail summary and 7-day trend queries

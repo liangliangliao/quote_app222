@@ -1,0 +1,3 @@
+VERSION v13 (enablecache13)
+- Fix: UnlockPulse.shouldEnable() no longer cancels pulse due to transient DB read/open failures in background.
+- Change: Schedule next UnlockPulse with preferExact=true to reduce delay when system allows exact scheduling.

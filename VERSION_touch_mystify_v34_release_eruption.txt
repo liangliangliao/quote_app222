@@ -1,0 +1,6 @@
+quote_app_touch_mystify_v34_release_eruption
+- Release stage upgraded from simple pulse/rings to abstract white-gold eruption.
+- Adds thick radial beams, warm orange-gold glow, hot wave arcs, and non-iconic glowing shard/particle flood.
+- Does not copy concrete ad/game elements from the reference video.
+- Reduces line dominance during release and lowers FBO feedback to avoid dirty residual traces.
+- Keeps afterglow as crystal bubble waterfield from V33.

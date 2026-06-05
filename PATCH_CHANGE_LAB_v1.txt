@@ -1,0 +1,14 @@
+Change Lab module integrated into existing app.
+
+Included:
+- New left drawer entry: 改变实验室
+- Integrated module under lib/change_lab/
+- Main shell with tabs: 总览 / 概念 / 任务 / 镜像 / 画像
+- Diagnosis flow
+- 19 seeded concept cards
+- Task completion and reflection loop
+- Local persistence via documents/change_lab_state_v1.json
+
+Modified files:
+- lib/main.dart
+- lib/change_lab/**
