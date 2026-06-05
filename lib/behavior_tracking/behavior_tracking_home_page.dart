@@ -1099,6 +1099,7 @@ class _BehaviorTrackingReviewPageState extends State<BehaviorTrackingReviewPage>
                     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => BehaviorTrackingEditPage(initial: record)));
                     if (saved == true) _load();
                   }),
+                  _PatternCards(records: _records),
                   const SizedBox(height: 12),
                   _InputCard(title: '统计解释边界', subtitle: '帮助发现模式，不做医疗或因果判断', children: const [
                     _PromptLine(text: '• 趋势和相关性只说明“经常一起出现”，不代表因果或诊断。'),
@@ -1236,6 +1237,44 @@ class _PendingFollowUpCard extends StatelessWidget {
             ),
           ),
         ),
+    ]);
+  }
+}
+
+  final List<BehaviorTrackingRecord> records;
+  const _PatternCards({required this.records});
+
+  Map<String, int> _countBy(Iterable<String> values) {
+    final map = <String, int>{};
+    for (final raw in values) {
+      final value = raw.trim();
+      if (value.isEmpty) continue;
+      map[value] = (map[value] ?? 0) + 1;
+    }
+    return map;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final behaviors = _countBy(records.map((r) => r.behavior));
+    final triggers = _countBy(records.expand((r) => [r.trigger, r.cueTags]));
+    final effects = records.where((r) => r.longTermImpact.trim().isNotEmpty || r.energyMorning != null).length;
+    List<MapEntry<String, int>> top(Map<String, int> source) => (source.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(4).toList();
+    return _InputCard(title: '7/30/90 天模式', subtitle: '把高频行为、触发与后续状态放到同一复盘层', children: [
+      if (records.isEmpty) const Text('有记录后会显示高频行为、触发复现和长期效果样本。', style: TextStyle(color: Color(0xFF6B7280))),
+      if (records.isNotEmpty) ...[
+        Text('有 ${records.length} 条记录，其中 $effects 条包含长期影响或身体状态，可用于“之后怎样了”的复盘。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.45)),
+        const SizedBox(height: 10),
+        const Text('高频行为', style: TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 6),
+        if (top(behaviors).isEmpty) const _PromptLine(text: '• 行为字段还不够多，优先用快捷记录补“我刚刚做了什么”。'),
+        for (final item in top(behaviors)) _PromptLine(text: '• ${item.key}：${item.value} 次'),
+        const SizedBox(height: 8),
+        const Text('触发线索', style: TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 6),
+        if (top(triggers).isEmpty) const _PromptLine(text: '• 触发字段还不够多，复盘时可补“任务太大/睡前/无聊”等标签。'),
+        for (final item in top(triggers)) _PromptLine(text: '• ${item.key}：${item.value} 次'),
+      ],
     ]);
   }
 }
