@@ -1,0 +1,165 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/**"
+      - "lib/**"
+      - "android/**"
+      - "ios/**"
+      - "assets/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "gradle/**"
+      - "gradlew"
+      - "settings.gradle"
+      - "settings.gradle.kts"
+      - "build.gradle"
+      - "build.gradle.kts"
+      - "**/*.dart"
+      - "**/*.gradle"
+      - "**/*.gradle.kts"
+      - "**/*.xml"
+      - "**/*.kt"
+      - "**/*.java"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sanity check - list repo root
+        shell: bash
+        run: |
+          pwd
+          ls -lah
+
+      - name: Detect project type and root
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 现在仓库已经不再依赖源码 zip，直接从仓库中的真实源码构建。
+          # Prefer repo root when it is a Flutter app root.
+          FLUTTER_DIR=""
+          if [[ -f "pubspec.yaml" && -f "lib/main.dart" ]]; then
+            FLUTTER_DIR="."
+          else
+            while IFS= read -r d; do
+              if [[ -f "$d/lib/main.dart" ]]; then
+                FLUTTER_DIR="$d"
+                break
+              fi
+            done < <(find . -maxdepth 4 -type f -name pubspec.yaml -printf '%h\n' | sort -u)
+          fi
+
+          GRADLE_DIR=""
+          if [[ -z "$FLUTTER_DIR" ]]; then
+            if [[ -f "settings.gradle" || -f "settings.gradle.kts" ]]; then
+              GRADLE_DIR="."
+            else
+              GRADLE_DIR="$(find . -maxdepth 4 -type f \( -name settings.gradle -o -name settings.gradle.kts \) -printf '%h\n' | sort -u | head -n 1 || true)"
+            fi
+          fi
+
+          if [[ -n "$FLUTTER_DIR" ]]; then
+            echo "project_type=flutter" >> "$GITHUB_OUTPUT"
+            echo "project_dir=$FLUTTER_DIR" >> "$GITHUB_OUTPUT"
+            echo "Detected Flutter project: $FLUTTER_DIR"
+            ls -la "$FLUTTER_DIR"
+            test -f "$FLUTTER_DIR/pubspec.yaml"
+            test -f "$FLUTTER_DIR/lib/main.dart"
+          elif [[ -n "$GRADLE_DIR" ]]; then
+            echo "project_type=gradle" >> "$GITHUB_OUTPUT"
+            echo "project_dir=$GRADLE_DIR" >> "$GITHUB_OUTPUT"
+            echo "Detected Android Gradle project: $GRADLE_DIR"
+            ls -la "$GRADLE_DIR"
+          else
+            echo "❌ 未检测到 Flutter 或 Android Gradle 工程。请确认仓库中存在 pubspec.yaml + lib/main.dart，或 settings.gradle/settings.gradle.kts。"
+            exit 1
+          fi
+
+      # ---------- Flutter path preferred ----------
+      - name: Set up JDK 17
+        if: steps.detect.outputs.project_type == 'flutter' || steps.detect.outputs.project_type == 'gradle'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        if: steps.detect.outputs.project_type == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: flutter pub get
+
+      - name: Ensure Android platform exists
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: |
+          if [ ! -d "android" ]; then
+            flutter create . --platforms=android --project-name quote_app --org com.example
+          fi
+
+      - name: Sanity check - project root
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: |
+          echo "PWD=$(pwd)"
+          ls -la
+          test -f pubspec.yaml
+          test -f lib/main.dart
+
+      - name: Build APK - Flutter release
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: flutter build apk --release -t lib/main.dart
+
+      - name: Upload APK - Flutter
+        if: steps.detect.outputs.project_type == 'flutter'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quote_app-apk
+          path: ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/app-release.apk
+
+      # ---------- Gradle path fallback ----------
+      - name: Set up Gradle 8.7
+        if: steps.detect.outputs.project_type == 'gradle'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Assemble debug with Gradle
+        if: steps.detect.outputs.project_type == 'gradle'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: |
+          if [[ -f "./gradlew" ]]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --no-daemon
+          else
+            gradle assembleDebug --no-daemon
+          fi
+
+      - name: Upload APK - Gradle
+        if: steps.detect.outputs.project_type == 'gradle'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: |
+            ${{ steps.detect.outputs.project_dir }}/**/outputs/apk/**/*.apk
