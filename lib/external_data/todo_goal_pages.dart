@@ -218,9 +218,30 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
 
   Future<void> _startStep(TodoGoalActionStep step) async {
     if (step.isCompleted) return;
+    var intention = step.experienceIntention.trim();
+    if (intention.isEmpty || intention.startsWith('今天做这件事时')) {
+      final selected = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+          title: const Text('今天攀登时，你想体验什么？'),
+          children: [
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, '学习感：允许自己先不熟练'), child: const Text('学习感 · 允许不熟练')),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, '掌控感：只专注于手边这一步'), child: const Text('掌控感 · 专注这一步')),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, '勇气：在不完美中仍然开始'), child: const Text('勇气 · 不完美也开始')),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, '自由：为未来增加一点选择权'), child: const Text('自由 · 增加选择权')),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, '进步感：比开始前多一个事实证据'), child: const Text('一点点进步 · 留下证据')),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (selected != null && selected.trim().isNotEmpty) {
+        intention = selected.trim();
+        await _goalDao.updateStepExperienceIntention(step.stepId, intention);
+      }
+    }
     await _goalDao.updateStepStatus(step.stepId, 'in_progress');
     await _load();
-    _show('已进入 5 分钟行动：先开始，不要求一次完成。');
+    _show(intention.isEmpty ? '已进入 5 分钟行动：先开始，不要求一次完成。' : '已进入 5 分钟行动。今天留意：$intention');
   }
 
   Future<void> _makeStepSmaller(TodoGoalActionStep step) async {
@@ -229,12 +250,15 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
       sourceTaskId: step.sourceTaskId,
       title: '先做2分钟：${step.title}',
       minimumStandard: '只做2分钟，打开、写一句、读一遍或完成一个最小可观察动作即可。',
+      simplifiedStandard: '做5分钟，并留下一个事实记录。',
       recommendedStandard: '完成5分钟，并留下一个事实记录。',
       stretchStandard: '状态允许时再推进到15分钟，不强求。',
       difficultyScore: 2,
       zoneType: 'stretch',
       plannedDate: _goalDao.todayDate(),
       parentStepId: step.stepId,
+      actionType: step.actionType,
+      experienceIntention: step.experienceIntention,
     );
     await _load();
     _show('已把行动缩小成更容易开始的一步。');
@@ -1122,7 +1146,9 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                     _InfoBlock(title: '过程价值：沿途哪里值得体验', text: goal.processValue),
                     _InfoBlock(title: '可能阻力：哪里会把目标变成压力', text: goal.obstacleSummary),
                     const SizedBox(height: 14),
-                    const _SectionHeader(title: '行动步骤', subtitle: '每一步都要落到现实：让目标回到今天，让过程可体验，让行动足够小、足够真实。'),
+                    const _ThreeActionTypesCard(),
+                    const SizedBox(height: 12),
+                    const _SectionHeader(title: '行动步骤', subtitle: '每个目标同时保留结果型、过程型、价值型行动；不是只追结果，也不是只谈感受。'),
                     if (_steps.isEmpty) const _EmptyCard(text: '暂无行动步骤。'),
                     if (_steps.isNotEmpty)
                       _GoalStepTreeCard(
@@ -1246,13 +1272,16 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
             goalId: widget.step.goalId,
             sourceTaskId: widget.step.sourceTaskId,
             title: nextTitle.trim(),
-            minimumStandard: alternative?.minimumStandard ?? (_completed ? '明天先做5分钟，保持连续性。' : '明天只做2-5分钟，把行动重新降到可以开始。'),
+            minimumStandard: alternative?.minimumStandard ?? (_completed ? '明天先做2分钟，保持连续性。' : '明天只做2分钟，把行动重新降到可以开始。'),
+            simplifiedStandard: '做5分钟，并留下一个事实记录。',
             recommendedStandard: alternative?.recommendedStandard ?? '完成一个小步骤，并记录一句过程体验。',
             stretchStandard: '如果状态允许，再推进到15-25分钟；连续失败时优先换备用步骤，不急于重构全方案。',
             difficultyScore: alternative?.difficultyScore ?? (_completed ? 4 : 2),
             zoneType: alternative?.zoneType ?? 'stretch',
             plannedDate: _dateAfterDays(1),
             parentStepId: widget.step.stepId,
+            actionType: widget.step.actionType,
+            experienceIntention: widget.step.experienceIntention,
           );
         }
       }
@@ -2375,7 +2404,15 @@ class _TodayStepCard extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(step.title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, decoration: step.isCompleted ? TextDecoration.lineThrough : null)),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(step.title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, decoration: step.isCompleted ? TextDecoration.lineThrough : null)),
+                  _ActionTypeChip(actionType: step.actionType),
+                ],
+              ),
               if (showGoalSubtitle) ...[
                 const SizedBox(height: 4),
                 Text(step.goalTitle, style: const TextStyle(color: Color(0xFF6B7280))),
@@ -2396,8 +2433,11 @@ class _TodayStepCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _RelationPathCard(step: step),
-          if (step.minimumStandard.trim().isNotEmpty) _MiniLine(label: '最低标准', text: step.minimumStandard),
-          if (step.recommendedStandard.trim().isNotEmpty) _MiniLine(label: '推荐标准', text: step.recommendedStandard),
+          if (step.minimumStandard.trim().isNotEmpty) _MiniLine(label: '最低版', text: step.minimumStandard),
+          if (step.simplifiedStandard.trim().isNotEmpty) _MiniLine(label: '简化版', text: step.simplifiedStandard),
+          if (step.recommendedStandard.trim().isNotEmpty) _MiniLine(label: '标准版', text: step.recommendedStandard),
+          if (step.stretchStandard.trim().isNotEmpty) _MiniLine(label: '挑战版（可选）', text: step.stretchStandard),
+          if (step.experienceIntention.trim().isNotEmpty) _MiniLine(label: '今日 AI 提问', text: step.experienceIntention),
           if (step.processValue.trim().isNotEmpty) _MiniLine(label: '做时观察', text: step.processValue),
           const SizedBox(height: 10),
           if (onStart != null || onMakeSmaller != null || onReview != null || onWriteBack != null)
@@ -2426,7 +2466,7 @@ class _ActionStepListTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(step.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: step.isCompleted ? Colors.green.shade700 : _goalBlue),
         title: Text(step.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text('$relationLine\n最低标准：$minimumLine'),
+        subtitle: Text('${step.actionTypeLabel} · $relationLine\n最低版：$minimumLine'),
         isThreeLine: true,
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
@@ -2780,6 +2820,46 @@ class _MiniLine extends StatelessWidget {
             TextSpan(text: text),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ActionTypeChip extends StatelessWidget {
+  const _ActionTypeChip({required this.actionType});
+  final String actionType;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (actionType) {
+      'process' => ('过程型', const Color(0xFF0F766E)),
+      'value' => ('价值型', const Color(0xFFB45309)),
+      _ => ('结果型', _goalBlue),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withOpacity(0.35))),
+      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w900)),
+    );
+  }
+}
+
+class _ThreeActionTypesCard extends StatelessWidget {
+  const _ThreeActionTypesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFFF8FAFC),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+          Text('三类行动：同时推进未来与当下', style: TextStyle(fontWeight: FontWeight.w900, color: _goalInk)),
+          SizedBox(height: 8),
+          _MiniLine(label: '结果型', text: '直接产生可验证进展，回答“我向山顶推进了什么”。'),
+          _MiniLine(label: '过程型', text: '刻意体验学习、投入、勇气或掌控感，回答“今天如何攀登”。'),
+          _MiniLine(label: '价值型', text: '把行动与真正看重的生活连接，回答“这一步为什么值得”。'),
+        ]),
       ),
     );
   }

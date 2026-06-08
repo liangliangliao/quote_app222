@@ -62,8 +62,11 @@ class TodoGoalDao {
         action_place TEXT,
         start_trigger TEXT,
         completion_question TEXT,
+        action_type TEXT DEFAULT 'result',
+        experience_intention TEXT,
         title TEXT NOT NULL,
         minimum_standard TEXT,
+        simplified_standard TEXT,
         recommended_standard TEXT,
         stretch_standard TEXT,
         difficulty_score INTEGER DEFAULT 5,
@@ -187,6 +190,9 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_action_steps', 'action_place', 'TEXT');
     await _addColumnIfMissing(db, 'goal_action_steps', 'start_trigger', 'TEXT');
     await _addColumnIfMissing(db, 'goal_action_steps', 'completion_question', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'action_type', "TEXT DEFAULT 'result'");
+    await _addColumnIfMissing(db, 'goal_action_steps', 'experience_intention', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'simplified_standard', 'TEXT');
 
     // Positive-psychology goal framework: keep the four-layer goal card and
     // the full self-concordance diagnosis alongside synchronized To Do data.
@@ -504,21 +510,53 @@ class TodoGoalDao {
     );
 
     final existingSteps = old == null ? <TodoGoalActionStep>[] : await listActionSteps(goalId);
-    final hasOpenStep = existingSteps.any((e) => !e.isCompleted && e.title.trim() == analysis.todayMinimumAction.trim());
-    if (!hasOpenStep) {
+    final actionDrafts = <({String type, String title, String minimum, String simplified, String recommended, int difficulty})>[
+      (
+        type: 'result',
+        title: analysis.todayMinimumAction.trim().isEmpty ? '今天推进“${task.title}”5分钟' : analysis.todayMinimumAction.trim(),
+        minimum: analysis.minimumStandard,
+        simplified: analysis.simplifiedStandard,
+        recommended: analysis.recommendedStandard,
+        difficulty: analysis.difficultyScore,
+      ),
+      (
+        type: 'process',
+        title: analysis.processAction.trim().isEmpty ? '行动时只观察一次“我正在学习或鼓起勇气”的体验' : analysis.processAction.trim(),
+        minimum: '行动2分钟，并记录一个真实的过程感受。',
+        simplified: '行动5分钟，记录一个过程感受。',
+        recommended: '完成主行动时，刻意关注学习感、投入感或掌控感。',
+        difficulty: (analysis.difficultyScore - 1).clamp(1, 10).toInt(),
+      ),
+      (
+        type: 'value',
+        title: analysis.valueAction.trim().isEmpty ? '写一句：这一步如何服务于${analysis.coreValues.trim().isEmpty ? '我真正重视的生活' : analysis.coreValues}' : analysis.valueAction.trim(),
+        minimum: '写下一句话，把行动与一个核心价值连接起来。',
+        simplified: '写两句话：我重视什么、今天如何体现它。',
+        recommended: '说明今天的行动如何增加选择、成长、关系、健康或贡献。',
+        difficulty: 2,
+      ),
+    ];
+    for (var index = 0; index < actionDrafts.length; index++) {
+      final draft = actionDrafts[index];
+      final hasOpenStep = existingSteps.any((step) => !step.isCompleted && step.actionType == draft.type && step.title.trim() == draft.title);
+      if (hasOpenStep) continue;
       await createActionStep(
         goalId: goalId,
         sourceTaskId: task.taskId,
-        title: analysis.todayMinimumAction.trim().isEmpty ? '今天推进“${task.title}”5分钟' : analysis.todayMinimumAction.trim(),
-        minimumStandard: analysis.minimumStandard,
-        recommendedStandard: analysis.recommendedStandard,
+        title: draft.title,
+        minimumStandard: draft.minimum,
+        simplifiedStandard: draft.simplified,
+        recommendedStandard: draft.recommended,
         stretchStandard: analysis.stretchStandard,
-        difficultyScore: analysis.difficultyScore,
-        zoneType: analysis.zoneType,
+        difficultyScore: draft.difficulty,
+        zoneType: draft.type == 'result' ? analysis.zoneType : 'comfort',
         plannedDate: todayDate(),
         actionPlace: analysis.actionPlace,
-        startTrigger: analysis.startTrigger,
+        startTrigger: index == 0 ? analysis.startTrigger : '完成或开始结果型行动时，立刻进入这一小步。',
         completionQuestion: analysis.completionQuestion,
+        actionType: draft.type,
+        experienceIntention: analysis.experiencePrompt,
+        sortOrder: index,
       );
     }
 
@@ -538,6 +576,7 @@ class TodoGoalDao {
     required String sourceTaskId,
     required String title,
     String minimumStandard = '',
+    String simplifiedStandard = '',
     String recommendedStandard = '',
     String stretchStandard = '',
     int difficultyScore = 5,
@@ -550,6 +589,8 @@ class TodoGoalDao {
     String actionPlace = '',
     String startTrigger = '',
     String completionQuestion = '',
+    String actionType = 'result',
+    String experienceIntention = '',
   }) async {
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -574,8 +615,11 @@ class TodoGoalDao {
       'action_place': actionPlace,
       'start_trigger': startTrigger,
       'completion_question': completionQuestion,
+      'action_type': const <String>{'result', 'process', 'value'}.contains(actionType) ? actionType : 'result',
+      'experience_intention': experienceIntention,
       'title': title.trim().isEmpty ? '今天做一个5分钟最小行动' : title.trim(),
       'minimum_standard': minimumStandard,
+      'simplified_standard': simplifiedStandard,
       'recommended_standard': recommendedStandard,
       'stretch_standard': stretchStandard,
       'difficulty_score': difficultyScore.clamp(1, 10).toInt(),
@@ -686,6 +730,19 @@ class TodoGoalDao {
       },
       where: 'goal_id = ?',
       whereArgs: [goalId],
+    );
+  }
+
+  Future<void> updateStepExperienceIntention(String stepId, String intention) async {
+    final db = await _db;
+    await db.update(
+      'goal_action_steps',
+      <String, Object?>{
+        'experience_intention': intention.trim(),
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'step_id = ?',
+      whereArgs: [stepId],
     );
   }
 

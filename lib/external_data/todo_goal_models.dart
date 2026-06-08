@@ -31,6 +31,7 @@ class TodoGoalAnalysisResult {
     required this.obstacleSummary,
     required this.todayMinimumAction,
     required this.minimumStandard,
+    this.simplifiedStandard = '',
     required this.recommendedStandard,
     required this.stretchStandard,
     required this.difficultyScore,
@@ -56,6 +57,9 @@ class TodoGoalAnalysisResult {
     this.actionPlace = '',
     this.startTrigger = '',
     this.completionQuestion = '',
+    this.processAction = '',
+    this.valueAction = '',
+    this.experiencePrompt = '',
   });
 
   final String goalTitle;
@@ -68,6 +72,7 @@ class TodoGoalAnalysisResult {
   final String obstacleSummary;
   final String todayMinimumAction;
   final String minimumStandard;
+  final String simplifiedStandard;
   final String recommendedStandard;
   final String stretchStandard;
   final int difficultyScore;
@@ -93,6 +98,9 @@ class TodoGoalAnalysisResult {
   final String actionPlace;
   final String startTrigger;
   final String completionQuestion;
+  final String processAction;
+  final String valueAction;
+  final String experiencePrompt;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'goalTitle': goalTitle,
@@ -105,6 +113,7 @@ class TodoGoalAnalysisResult {
         'obstacleSummary': obstacleSummary,
         'todayMinimumAction': todayMinimumAction,
         'minimumStandard': minimumStandard,
+        'simplifiedStandard': simplifiedStandard,
         'recommendedStandard': recommendedStandard,
         'stretchStandard': stretchStandard,
         'difficultyScore': difficultyScore,
@@ -129,6 +138,9 @@ class TodoGoalAnalysisResult {
         'actionPlace': actionPlace,
         'startTrigger': startTrigger,
         'completionQuestion': completionQuestion,
+        'processAction': processAction,
+        'valueAction': valueAction,
+        'experiencePrompt': experiencePrompt,
       };
 }
 
@@ -318,6 +330,7 @@ class TodoGoalActionStep {
     required this.sourceTaskId,
     required this.title,
     required this.minimumStandard,
+    this.simplifiedStandard = '',
     required this.recommendedStandard,
     required this.stretchStandard,
     required this.difficultyScore,
@@ -341,6 +354,8 @@ class TodoGoalActionStep {
     this.actionPlace = '',
     this.startTrigger = '',
     this.completionQuestion = '',
+    this.actionType = 'result',
+    this.experienceIntention = '',
   });
 
   final String stepId;
@@ -348,6 +363,7 @@ class TodoGoalActionStep {
   final String sourceTaskId;
   final String title;
   final String minimumStandard;
+  final String simplifiedStandard;
   final String recommendedStandard;
   final String stretchStandard;
   final int difficultyScore;
@@ -371,6 +387,19 @@ class TodoGoalActionStep {
   final String actionPlace;
   final String startTrigger;
   final String completionQuestion;
+  final String actionType;
+  final String experienceIntention;
+
+  String get actionTypeLabel {
+    switch (actionType) {
+      case 'process':
+        return '过程型行动';
+      case 'value':
+        return '价值型行动';
+      default:
+        return '结果型行动';
+    }
+  }
 
   bool get isCompleted => status == 'completed';
   bool get hasParentStep => parentStepId.trim().isNotEmpty;
@@ -384,6 +413,7 @@ class TodoGoalActionStep {
         sourceTaskId: (row['source_task_id'] ?? '').toString(),
         title: (row['title'] ?? '').toString(),
         minimumStandard: (row['minimum_standard'] ?? '').toString(),
+        simplifiedStandard: (row['simplified_standard'] ?? '').toString(),
         recommendedStandard: (row['recommended_standard'] ?? '').toString(),
         stretchStandard: (row['stretch_standard'] ?? '').toString(),
         difficultyScore: _toInt(row['difficulty_score']),
@@ -407,6 +437,8 @@ class TodoGoalActionStep {
         actionPlace: (row['action_place'] ?? '').toString(),
         startTrigger: (row['start_trigger'] ?? '').toString(),
         completionQuestion: (row['completion_question'] ?? '').toString(),
+        actionType: (row['action_type'] ?? 'result').toString(),
+        experienceIntention: (row['experience_intention'] ?? '').toString(),
       );
 }
 
