@@ -41,6 +41,21 @@ class TodoGoalAnalysisResult {
     required this.modelLabel,
     this.rawResponse = '',
     this.usedFallback = false,
+    this.resultGoal = '',
+    this.valueGoal = '',
+    this.processGoal = '',
+    this.coreValues = '',
+    this.autonomyScore = 0,
+    this.valueAlignmentScore = 0,
+    this.interestConnectionScore = 0,
+    this.passionScore = 0,
+    this.externalPressureScore = 0,
+    this.processHappinessScore = 0,
+    this.goalType = '',
+    this.currentStage = '',
+    this.actionPlace = '',
+    this.startTrigger = '',
+    this.completionQuestion = '',
   });
 
   final String goalTitle;
@@ -63,6 +78,21 @@ class TodoGoalAnalysisResult {
   final String modelLabel;
   final String rawResponse;
   final bool usedFallback;
+  final String resultGoal;
+  final String valueGoal;
+  final String processGoal;
+  final String coreValues;
+  final int autonomyScore;
+  final int valueAlignmentScore;
+  final int interestConnectionScore;
+  final int passionScore;
+  final int externalPressureScore;
+  final int processHappinessScore;
+  final String goalType;
+  final String currentStage;
+  final String actionPlace;
+  final String startTrigger;
+  final String completionQuestion;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'goalTitle': goalTitle,
@@ -84,6 +114,21 @@ class TodoGoalAnalysisResult {
         'solutionPlans': solutionPlans.map((e) => e.toJson()).toList(),
         'modelLabel': modelLabel,
         'usedFallback': usedFallback,
+        'resultGoal': resultGoal,
+        'valueGoal': valueGoal,
+        'processGoal': processGoal,
+        'coreValues': coreValues,
+        'autonomyScore': autonomyScore,
+        'valueAlignmentScore': valueAlignmentScore,
+        'interestConnectionScore': interestConnectionScore,
+        'passionScore': passionScore,
+        'externalPressureScore': externalPressureScore,
+        'processHappinessScore': processHappinessScore,
+        'goalType': goalType,
+        'currentStage': currentStage,
+        'actionPlace': actionPlace,
+        'startTrigger': startTrigger,
+        'completionQuestion': completionQuestion,
       };
 }
 
@@ -142,6 +187,18 @@ class TodoGoalProfile {
     this.aiProvider = '',
     this.aiModelLabel = '',
     this.aiUsedFallback = false,
+    this.resultGoal = '',
+    this.valueGoal = '',
+    this.processGoal = '',
+    this.coreValues = '',
+    this.autonomyScore = 0,
+    this.valueAlignmentScore = 0,
+    this.interestConnectionScore = 0,
+    this.passionScore = 0,
+    this.externalPressureScore = 0,
+    this.processHappinessScore = 0,
+    this.goalType = '',
+    this.currentStage = '',
   });
 
   final String goalId;
@@ -162,6 +219,28 @@ class TodoGoalProfile {
   final String aiProvider;
   final String aiModelLabel;
   final bool aiUsedFallback;
+  final String resultGoal;
+  final String valueGoal;
+  final String processGoal;
+  final String coreValues;
+  final int autonomyScore;
+  final int valueAlignmentScore;
+  final int interestConnectionScore;
+  final int passionScore;
+  final int externalPressureScore;
+  final int processHappinessScore;
+  final String goalType;
+  final String currentStage;
+
+  List<String> get coreValueList => coreValues
+      .split(RegExp(r'[,，、|]'))
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList(growable: false);
+
+  bool get needsRealignment => externalPressureScore >= 70 || selfConcordanceScore < 45;
+
+  bool get lacksProcessDesign => processGoal.trim().isEmpty || processHappinessScore < 45;
 
   bool get isLikelyFallbackAnalysis {
     final provider = aiProvider.trim().toLowerCase();
@@ -195,6 +274,18 @@ class TodoGoalProfile {
         aiProvider: (row['ai_provider'] ?? '').toString(),
         aiModelLabel: (row['ai_model_label'] ?? '').toString(),
         aiUsedFallback: _toBool(row['ai_used_fallback']),
+        resultGoal: (row['result_goal'] ?? '').toString(),
+        valueGoal: (row['value_goal'] ?? '').toString(),
+        processGoal: (row['process_goal'] ?? '').toString(),
+        coreValues: (row['core_values'] ?? '').toString(),
+        autonomyScore: _toInt(row['autonomy_score']),
+        valueAlignmentScore: _toInt(row['value_alignment_score']),
+        interestConnectionScore: _toInt(row['interest_connection_score']),
+        passionScore: _toInt(row['passion_score']),
+        externalPressureScore: _toInt(row['external_pressure_score']),
+        processHappinessScore: _toInt(row['process_happiness_score']),
+        goalType: (row['goal_type'] ?? '').toString(),
+        currentStage: (row['current_stage'] ?? '').toString(),
       );
 }
 
@@ -225,6 +316,9 @@ class TodoGoalActionStep {
     this.parentStepTitle = '',
     this.stepLevel = 1,
     this.sortOrder = 0,
+    this.actionPlace = '',
+    this.startTrigger = '',
+    this.completionQuestion = '',
   });
 
   final String stepId;
@@ -252,6 +346,9 @@ class TodoGoalActionStep {
   final String parentStepTitle;
   final int stepLevel;
   final int sortOrder;
+  final String actionPlace;
+  final String startTrigger;
+  final String completionQuestion;
 
   bool get isCompleted => status == 'completed';
   bool get hasParentStep => parentStepId.trim().isNotEmpty;
@@ -285,6 +382,9 @@ class TodoGoalActionStep {
         parentStepTitle: (row['parent_step_title'] ?? '').toString(),
         stepLevel: _toInt(row['step_level']) == 0 ? 1 : _toInt(row['step_level']),
         sortOrder: _toInt(row['sort_order']),
+        actionPlace: (row['action_place'] ?? '').toString(),
+        startTrigger: (row['start_trigger'] ?? '').toString(),
+        completionQuestion: (row['completion_question'] ?? '').toString(),
       );
 }
 
@@ -342,6 +442,30 @@ class TodoGoalReflection {
       );
 }
 
+
+
+class TodoGoalSolutionGenerationResult {
+  const TodoGoalSolutionGenerationResult({
+    required this.plans,
+    required this.provider,
+    required this.modelLabel,
+    this.rawResponse = '',
+    this.usedFallback = false,
+  });
+
+  final List<TodoGoalSolutionPlan> plans;
+  final String provider;
+  final String modelLabel;
+  final String rawResponse;
+  final bool usedFallback;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'plans': plans.map((plan) => plan.toJson()).toList(),
+        'provider': provider,
+        'modelLabel': modelLabel,
+        'usedFallback': usedFallback,
+      };
+}
 
 class TodoGoalSolutionPlan {
   const TodoGoalSolutionPlan({

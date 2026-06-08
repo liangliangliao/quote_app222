@@ -29,10 +29,10 @@ class TodoGoalAiService {
     );
     try {
       final raw = await _ai.generateText(
-        prompt: '$prompt\n\n${_deepProblemSolutionSchema()}',
-        purpose: 'microsoft_todo.goal_deep_problem_solution',
-        systemPrompt: '${templates.systemPrompt}\n你还必须把目标当成用户关注的棘手问题，输出多套科学问题解决方案和可执行问题树。',
-        maxTokens: 4200,
+        prompt: prompt,
+        purpose: 'microsoft_todo.goal_analysis',
+        systemPrompt: templates.systemPrompt,
+        maxTokens: 2400,
         expectJson: true,
         temperature: 0.35,
       );
@@ -45,24 +45,14 @@ class TodoGoalAiService {
       if (parsed.isEmpty) {
         return _analysisFromAiRaw(task, raw, state, fallback);
       }
-      final aiPlans = _readPlans(parsed);
       final aiHasMeaningfulContent = _hasMeaningfulAnalysis(parsed);
-      if (!aiHasMeaningfulContent && aiPlans.isEmpty) {
+      if (!aiHasMeaningfulContent) {
         return _analysisFromAiRaw(task, raw, state, fallback);
       }
 
       final aiDefaults = _analysisFromAiRaw(task, raw, state, fallback, markRawOnly: false);
       final goalTitle = _read(parsed, 'goalTitle', aiDefaults.goalTitle);
       final todayMinimumAction = _read(parsed, 'todayMinimumAction', aiDefaults.todayMinimumAction);
-      final actionTitle = todayMinimumAction.trim().isEmpty
-          ? (goalTitle.length > 18 ? '${goalTitle.substring(0, 18)}…' : goalTitle)
-          : todayMinimumAction;
-      // v55: as long as the provider returned usable AI text/fields, do not mark
-      // the whole target as local fallback merely because some fields or plans
-      // are absent. Fill missing fields with AI-raw-derived safe defaults and
-      // only supplement the plan tree locally.
-      final effectivePlans = aiPlans.isEmpty ? _fallbackPlans(goalTitle, actionTitle) : aiPlans;
-
       return TodoGoalAnalysisResult(
         goalTitle: goalTitle,
         deepMeaning: _read(parsed, 'deepMeaning', aiDefaults.deepMeaning),
@@ -79,14 +69,81 @@ class TodoGoalAiService {
         difficultyScore: _readInt(parsed, 'difficultyScore', aiDefaults.difficultyScore).clamp(1, 10).toInt(),
         zoneType: _normalizeZone(_read(parsed, 'zoneType', aiDefaults.zoneType)),
         coachMessage: _read(parsed, 'coachMessage', aiDefaults.coachMessage),
+        resultGoal: _read(parsed, 'resultGoal', aiDefaults.resultGoal),
+        valueGoal: _read(parsed, 'valueGoal', aiDefaults.valueGoal),
+        processGoal: _read(parsed, 'processGoal', aiDefaults.processGoal),
+        coreValues: _read(parsed, 'coreValues', aiDefaults.coreValues),
+        autonomyScore: _readInt(parsed, 'autonomyScore', aiDefaults.autonomyScore).clamp(0, 100).toInt(),
+        valueAlignmentScore: _readInt(parsed, 'valueAlignmentScore', aiDefaults.valueAlignmentScore).clamp(0, 100).toInt(),
+        interestConnectionScore: _readInt(parsed, 'interestConnectionScore', aiDefaults.interestConnectionScore).clamp(0, 100).toInt(),
+        passionScore: _readInt(parsed, 'passionScore', aiDefaults.passionScore).clamp(0, 100).toInt(),
+        externalPressureScore: _readInt(parsed, 'externalPressureScore', aiDefaults.externalPressureScore).clamp(0, 100).toInt(),
+        processHappinessScore: _readInt(parsed, 'processHappinessScore', aiDefaults.processHappinessScore).clamp(0, 100).toInt(),
+        goalType: _read(parsed, 'goalType', aiDefaults.goalType),
+        currentStage: _read(parsed, 'currentStage', aiDefaults.currentStage),
+        actionPlace: _read(parsed, 'actionPlace', aiDefaults.actionPlace),
+        startTrigger: _read(parsed, 'startTrigger', aiDefaults.startTrigger),
+        completionQuestion: _read(parsed, 'completionQuestion', aiDefaults.completionQuestion),
         provider: state['provider'] ?? 'ai',
-        solutionPlans: effectivePlans,
+        solutionPlans: const <TodoGoalSolutionPlan>[],
         modelLabel: state['label'] ?? 'AI',
         rawResponse: raw,
         usedFallback: false,
       );
     } catch (_) {
       return fallback;
+    }
+  }
+
+  Future<TodoGoalSolutionGenerationResult> generateProblemSolutions({
+    required TodoTaskRecord task,
+    required TodoGoalAnalysisResult analysis,
+  }) async {
+    final state = await getGlobalAiState();
+    final fallbackPlans = _fallbackPlans(analysis.goalTitle, analysis.todayMinimumAction);
+    TodoGoalSolutionGenerationResult fallback() => TodoGoalSolutionGenerationResult(
+          plans: fallbackPlans,
+          provider: 'local',
+          modelLabel: state['label'] ?? '本地策略',
+          usedFallback: true,
+        );
+    if (state['available'] != '1') return fallback();
+
+    final templates = await _promptConfig.load();
+    final prompt = _promptConfig.renderSolutionPrompt(
+      templates,
+      goalTitle: analysis.goalTitle,
+      resultGoal: analysis.resultGoal,
+      valueGoal: analysis.valueGoal,
+      processGoal: analysis.processGoal,
+      coreValues: analysis.coreValues,
+      obstacleSummary: analysis.obstacleSummary,
+      todayAction: analysis.todayMinimumAction,
+      taskBody: task.bodyText,
+    );
+    try {
+      final raw = await _ai.generateText(
+        prompt: prompt,
+        purpose: 'microsoft_todo.goal_problem_solutions',
+        systemPrompt: '你只负责生成目标问题解决方案和问题树，不执行目标分析或复盘。只输出合法JSON。',
+        maxTokens: 3400,
+        expectJson: true,
+        temperature: 0.35,
+      );
+      if (raw.trim().isEmpty) return fallback();
+      final parsed = _extractJsonObject(raw);
+      if (parsed.isEmpty) return fallback();
+      var plans = _readPlans(parsed);
+      if (plans.isEmpty) plans = _readPlans(_resolveAnalysisPayload(parsed));
+      if (plans.isEmpty) return fallback();
+      return TodoGoalSolutionGenerationResult(
+        plans: plans,
+        provider: state['provider'] ?? 'ai',
+        modelLabel: state['label'] ?? 'AI',
+        rawResponse: raw,
+      );
+    } catch (_) {
+      return fallback();
     }
   }
 
@@ -275,8 +332,23 @@ class TodoGoalAiService {
         _fieldAliases('coachMessage'),
         '先不要追求一次解决全部问题。把目标拆成今天能开始的最小动作，做完后再根据反馈调整。',
       ),
+      resultGoal: _readTextFieldFromRaw(raw, _fieldAliases('resultGoal'), goalTitle),
+      valueGoal: _readTextFieldFromRaw(raw, _fieldAliases('valueGoal'), fallback.valueGoal.isEmpty ? fallback.deepMeaning : fallback.valueGoal),
+      processGoal: _readTextFieldFromRaw(raw, _fieldAliases('processGoal'), fallback.processGoal.isEmpty ? fallback.processValue : fallback.processGoal),
+      coreValues: _readTextFieldFromRaw(raw, _fieldAliases('coreValues'), fallback.coreValues),
+      autonomyScore: _readIntFromRaw(raw, _fieldAliases('autonomyScore'), fallback.autonomyScore).clamp(0, 100).toInt(),
+      valueAlignmentScore: _readIntFromRaw(raw, _fieldAliases('valueAlignmentScore'), fallback.valueAlignmentScore).clamp(0, 100).toInt(),
+      interestConnectionScore: _readIntFromRaw(raw, _fieldAliases('interestConnectionScore'), fallback.interestConnectionScore).clamp(0, 100).toInt(),
+      passionScore: _readIntFromRaw(raw, _fieldAliases('passionScore'), fallback.passionScore).clamp(0, 100).toInt(),
+      externalPressureScore: _readIntFromRaw(raw, _fieldAliases('externalPressureScore'), fallback.externalPressureScore).clamp(0, 100).toInt(),
+      processHappinessScore: _readIntFromRaw(raw, _fieldAliases('processHappinessScore'), fallback.processHappinessScore).clamp(0, 100).toInt(),
+      goalType: _readTextFieldFromRaw(raw, _fieldAliases('goalType'), fallback.goalType),
+      currentStage: _readTextFieldFromRaw(raw, _fieldAliases('currentStage'), fallback.currentStage),
+      actionPlace: _readTextFieldFromRaw(raw, _fieldAliases('actionPlace'), fallback.actionPlace),
+      startTrigger: _readTextFieldFromRaw(raw, _fieldAliases('startTrigger'), fallback.startTrigger),
+      completionQuestion: _readTextFieldFromRaw(raw, _fieldAliases('completionQuestion'), fallback.completionQuestion),
       provider: state['provider'] ?? 'ai',
-      solutionPlans: _fallbackPlans(goalTitle, todayAction),
+      solutionPlans: const <TodoGoalSolutionPlan>[],
       modelLabel: state['label'] ?? 'AI',
       rawResponse: raw,
       usedFallback: false,
@@ -378,9 +450,24 @@ class TodoGoalAiService {
       stretchStandard: '连续推进 25 分钟，并整理出下一步。',
       difficultyScore: 5,
       zoneType: 'stretch',
-      coachMessage: '当前是本地兜底结果：先把它变成今天能够开始的一小步；如需真正贴合目标背景的问题树，请检查AI配置后点击“AI重新分析”。',
+      coachMessage: '当前是本地兜底结果：先把它变成今天能够开始的一小步；如需真正贴合目标背景的问题树，请在目标详情页单独点击“问题树”按钮。',
+      resultGoal: title,
+      valueGoal: '让这个方向服务于真实需要、选择权与长期成长，而不是只服务于比较和焦虑。',
+      processGoal: '每天用一个 2-5 分钟可开始的动作练习投入、不完美行动和现实反馈。',
+      coreValues: '成长、自由、勇气',
+      autonomyScore: 68,
+      valueAlignmentScore: 72,
+      interestConnectionScore: 60,
+      passionScore: 58,
+      externalPressureScore: 35,
+      processHappinessScore: 70,
+      goalType: '需要继续澄清的自我一致目标',
+      currentStage: '最小行动验证期',
+      actionPlace: '当前最容易开始的安静位置',
+      startTrigger: '打开完成动作所需的第一个工具后立即开始',
+      completionQuestion: '完成后，你比开始前多了一点什么？',
       provider: provider,
-      solutionPlans: _fallbackPlans(title, actionTitle),
+      solutionPlans: const <TodoGoalSolutionPlan>[],
       modelLabel: modelLabel,
       usedFallback: true,
     );
@@ -622,31 +709,6 @@ class TodoGoalAiService {
     ];
   }
 
-  String _deepProblemSolutionSchema() => '''
-额外要求：除了原有字段，你必须增加 solutionPlans 数组，至少3个方案：舒适区、拉伸区、恐慌区。
-每个方案都要体现不同科学方法，例如问题分解、WOOP/心理对比、执行意图、行为激活、设计思维、反馈调节、风险预案等。
-每个方案都必须包含 nodes 数组，用父子节点表达“顶层问题→子问题→更小子问题→底层可执行动作”。
-节点之间可以是 tree/linear/network 关系，但必须给 parentId；底层 action 节点必须是用户现实中可直接执行的动作。
-未被用户选中的方案会保存为备用方案，因此每个方案都要完整可用。
-
-solutionPlans 的结构：
-[
-  {
-    "title": "方案名称",
-    "methodName": "使用的方法",
-    "methodBasis": "科学依据/问题解决依据",
-    "zoneType": "comfort/stretch/panic",
-    "coreValueFocus": "如何体现目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌",
-    "summary": "方案摘要",
-    "riskNotes": "风险与适用边界",
-    "nodes": [
-      {"id":"root", "parentId":"", "relationType":"tree", "nodeType":"problem", "title":"顶层问题", "description":"", "acceptanceCriteria":"", "actionableStep":"", "zoneType":"stretch", "difficultyScore":5, "estimatedMinutes":10, "sequenceOrder":0},
-      {"id":"a", "parentId":"root", "relationType":"tree", "nodeType":"sub_problem", "title":"子问题", "description":"", "acceptanceCriteria":"", "actionableStep":"", "zoneType":"stretch", "difficultyScore":4, "estimatedMinutes":8, "sequenceOrder":1},
-      {"id":"a1", "parentId":"a", "relationType":"tree", "nodeType":"action", "title":"底层动作", "description":"", "acceptanceCriteria":"", "actionableStep":"具体到时间/地点/对象/动作/完成标准", "zoneType":"stretch", "difficultyScore":3, "estimatedMinutes":5, "sequenceOrder":2}
-    ]
-  }
-]
-''';
 
   List<TodoGoalSolutionPlan> _readPlans(Map<String, dynamic> map) {
     final value = _readDynamic(map, const <String>[
