@@ -12,12 +12,14 @@ import '../data/sport_dao.dart';
 import '../pages/discover_page.dart';
 import '../pages/sport_detail_page.dart';
 import '../pages/sport_running_page.dart';
+import '../behavior_tracking/behavior_tracking_home_page.dart';
 import 'sport_music_service.dart';
 import 'package:flutter/material.dart';
 
 /// Native capability guard (kept minimal and backwards-compatible)
 class NativeGuard {
   static const _ch = MethodChannel('com.example.quote_app/sys');
+  static const _behaviorCh = MethodChannel('com.example.quote_app/behavior_tracking');
 
 static Future<bool> isNativeAM() async {
   // Some pages call this legacy probe; keep it as an alias/fallback.
@@ -50,6 +52,12 @@ static Future<bool> isNativeAM() async {
   static void ensureNotificationTapHandler() {
     if (_notifHandlerInstalled) return;
     _notifHandlerInstalled = true;
+    // 冷启动场景：MainActivity 可能先收到桌面小组件/通知点击，
+    // Flutter MethodChannel 尚未就绪。原生侧会暂存 payload；这里在
+    // handler 安装后主动消费一次，保证小组件点击可直达轻量表单。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 900), _consumePendingBehaviorObservationPayload);
+    });
     _ch.setMethodCallHandler((call) async {
       if (call.method == 'onSportMusicAction') {
         final args = call.arguments;
@@ -81,6 +89,40 @@ static Future<bool> isNativeAM() async {
         try {
           await DLog.i('NotifTap', 'NativeGuard handler: onNativeNotificationTap type='+ (type ?? 'null'));
         } catch (_) {}
+        // 行为观察 V21：通知点击后不进入首页，而是直接打开轻量“选择层面 + 对应字段”表单页。
+        // 同一条通知可能会同时从通用 native.scheduler 通道和行为观察专用通道抵达，使用 Guard 去重。
+        try {
+          final decoded = payload == null || payload.trim().isEmpty ? null : jsonDecode(payload);
+          final isBehavior = type == 'behavior_tracking' || (decoded is Map && decoded['module']?.toString() == 'behavior_tracking');
+          if (isBehavior) {
+            final Map<String, dynamic> payloadMap = decoded is Map ? decoded.map<String, dynamic>((key, value) => MapEntry(key.toString(), value)) : <String, dynamic>{};
+            if (!BehaviorObservationNotificationOpenGuard.shouldOpen(payloadMap)) return null;
+            final templateKey = payloadMap['templateKey']?.toString();
+            final payloadType = payloadMap['type']?.toString();
+            final primaryLayer = payloadMap['primaryLayer']?.toString();
+            final nav = SimpleBus.navigatorKey.currentState;
+            if (nav != null) {
+              if (templateKey == 'preset_daily_review' || payloadType == 'behavior_preset_daily_review') {
+                nav.push(MaterialPageRoute(
+                  builder: (_) => const BehaviorTrackingHomePage(
+                    initialTabIndex: 1,
+                    initialTemplateKey: 'preset_daily_review',
+                    autoOpenInitialTemplate: true,
+                  ),
+                ));
+                return null;
+              }
+              nav.push(MaterialPageRoute(
+                builder: (_) => BehaviorObservationNotificationFormPage(
+                  initialTemplateKey: templateKey,
+                  initialPrimaryLayer: primaryLayer,
+                ),
+              ));
+              return null;
+            }
+          }
+        } catch (_) {}
+
         // Handle vision focus notifications by navigating to VisionFocusPreparePage
         if (type == 'vision_focus') {
           try {
@@ -342,6 +384,51 @@ static Future<bool> isNativeAM() async {
     }
   }
 
+
+
+  static Future<void> _consumePendingBehaviorObservationPayload() async {
+    try {
+      final row = await _behaviorCh.invokeMethod<Map<dynamic, dynamic>>('consumeLastNotificationPayload');
+      if (row == null) return;
+      final envelope = row.map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
+      final rawPayload = envelope['payload'];
+      Map<String, dynamic>? payloadMap;
+      if (rawPayload is Map) {
+        payloadMap = rawPayload.map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
+      } else {
+        final text = rawPayload?.toString();
+        if (text != null && text.trim().isNotEmpty) {
+          final decoded = jsonDecode(text);
+          if (decoded is Map) payloadMap = decoded.map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
+        }
+      }
+      final behaviorPayload = payloadMap ?? envelope;
+      final type = envelope['type']?.toString();
+      final isBehavior = type == 'behavior_tracking' || behaviorPayload['module']?.toString() == 'behavior_tracking';
+      if (!isBehavior) return;
+      if (!BehaviorObservationNotificationOpenGuard.shouldOpen(behaviorPayload)) return;
+      final nav = SimpleBus.navigatorKey.currentState;
+      if (nav == null) return;
+      final templateKey = behaviorPayload['templateKey']?.toString();
+      final payloadType = behaviorPayload['type']?.toString();
+      if (templateKey == 'preset_daily_review' || payloadType == 'behavior_preset_daily_review') {
+        nav.push(MaterialPageRoute(
+          builder: (_) => const BehaviorTrackingHomePage(
+            initialTabIndex: 1,
+            initialTemplateKey: 'preset_daily_review',
+            autoOpenInitialTemplate: true,
+          ),
+        ));
+        return;
+      }
+      nav.push(MaterialPageRoute(
+        builder: (_) => BehaviorObservationNotificationFormPage(
+          initialTemplateKey: templateKey,
+          initialPrimaryLayer: behaviorPayload['primaryLayer']?.toString(),
+        ),
+      ));
+    } catch (_) {}
+  }
 
   /// Ensure dynamic runtime receivers (e.g., unlock/user-present) are registered on first launch.
   /// We try multiple method names to be compatible with different native builds.

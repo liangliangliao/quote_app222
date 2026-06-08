@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" package="com.example.quote_app">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
     <!-- Camera PPG measurement (heart rate) -->
@@ -12,9 +15,12 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Allow showing the system whitelist prompt (user-driven; no常驻通知的情况下提高后台稳定性) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Full-screen intent for alarm-style notifications (used by Sport full-screen popup) -->
@@ -130,8 +136,51 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/behavior_observation_shortcuts" />
             <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/AppTheme" />
         </activity>
+
+        <activity
+            android:name=".BehaviorObservationWidgetFormActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/BehaviorObservationWidgetFormTheme" />
+
+        <activity
+            android:name=".BehaviorObservationWidgetPinActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/BehaviorObservationTransparentTheme" />
+
+
+        <activity
+            android:name=".BehaviorPresetAlarmFormActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.example.quote_app.behaviorAlarm"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTask"
+            android:theme="@style/BehaviorObservationPresetAlarmTheme" />
+
+        <receiver
+            android:name=".BehaviorPresetAlarmFireReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <service
+            android:name=".BehaviorPresetAlarmRingingService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <activity
+            android:name=".BehaviorPresetRingtonePickActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/BehaviorObservationTransparentTheme" />
 
         <!-- OAuth callback handler (Fitbit) for flutter_web_auth_2.
              Redirect URI used by the app: quoteappfitbit://auth
@@ -159,6 +208,7 @@
     <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
         </intent-filter>
         <intent-filter>
@@ -224,6 +274,24 @@
                 <action android:name="com.example.quote_app.action.KICK_ALARM" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".BehaviorObservationQuickRecordReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".BehaviorObservationWidgetProvider"
+            android:label="行为观察"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/behavior_observation_widget_info" />
+        </receiver>
+
         <service
             android:name=".GeoForegroundService"
             android:exported="false"

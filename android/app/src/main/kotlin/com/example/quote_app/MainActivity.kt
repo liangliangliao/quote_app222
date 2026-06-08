@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
             // Record and emit the event with type/payload
             Channels.markNotificationTapped()
             Channels.emitNotificationTap(notifType, payload)
+            BehaviorTrackingNativeChannel.onNotificationIntent(notifType, payload)
         }
     }
 
@@ -82,6 +83,7 @@ class MainActivity : FlutterActivity() {
 		// 高精度 PPG：Android Camera2（含可选预览）
 		try { PpgCamera2Channel.register(flutterEngine, applicationContext) } catch (_: Throwable) {}
 		try { HealthDietHealthConnectChannel.register(this, flutterEngine) } catch (_: Throwable) {}
+		try { BehaviorTrackingNativeChannel.register(this, flutterEngine) } catch (_: Throwable) {}
 			// 发现之旅/触摸：动态艺术壁纸（Mystify 亲密艺术）原生通道。
 			try { IntimacyWallpaperChannel.register(this, flutterEngine) } catch (_: Throwable) {}
 			// 触摸页原生 OpenGL 预览：复用动态壁纸同一套 renderer，避免 Flutter 预览与真实壁纸效果不一致。

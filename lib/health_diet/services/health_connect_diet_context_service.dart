@@ -63,6 +63,18 @@ class HealthConnectDietContextService {
     }
   }
 
+
+  Future<HealthConnectStatus> openSettings() async {
+    try {
+      final result = await _channel.invokeMapMethod<String, Object?>('openSettings');
+      return HealthConnectStatus.fromMap(result ?? const {'available': false, 'status': 'empty'});
+    } on MissingPluginException {
+      return const HealthConnectStatus(available: false, status: 'missing_plugin', message: '当前构建未注册 Health Connect 原生通道。');
+    } catch (e) {
+      return HealthConnectStatus(available: false, status: 'error', message: e.toString());
+    }
+  }
+
   Future<HealthConnectDailySummary> readAndSaveToday({
     String userId = HealthProfileRepository.defaultUserId,
   }) async {

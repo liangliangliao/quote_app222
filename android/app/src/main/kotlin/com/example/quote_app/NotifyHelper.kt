@@ -1,6 +1,7 @@
 package com.example.quote_app
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -14,6 +15,8 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.app.RemoteInput
+import org.json.JSONObject
 
 object NotifyHelper {
   private const val DEFAULT_CHANNEL_ID = "quote_default_v2"
@@ -120,6 +123,313 @@ object NotifyHelper {
     avatarPath: String?
   ) {
     send(ctx, id, title, body, avatarPath, null, null)
+  }
+
+
+
+  // =========================
+  // Behavior Observation: inline notification form
+  // =========================
+  private const val BEHAVIOR_CHANNEL_ID = "behavior_observation_v1"
+  private const val BEHAVIOR_CHANNEL_NAME = "行为观察提醒"
+
+  private fun ensureBehaviorObservationChannel(ctx: Context, nm: NotificationManager) {
+    if (Build.VERSION.SDK_INT >= 26) {
+      val ch = NotificationChannel(
+        BEHAVIOR_CHANNEL_ID,
+        BEHAVIOR_CHANNEL_NAME,
+        NotificationManager.IMPORTANCE_HIGH
+      ).apply {
+        description = "行为观察提醒：点击通知后选择层面并填写对应表单"
+        enableVibration(true)
+        setShowBadge(true)
+      }
+      nm.createNotificationChannel(ch)
+    }
+  }
+
+  @JvmStatic
+  fun sendBehaviorObservationReminder(
+    ctx: Context,
+    id: Int,
+    title: String,
+    body: String,
+    payload: String?
+  ) {
+    val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (Build.VERSION.SDK_INT >= 33 && ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      try { com.example.quote_app.data.DbRepo.log(ctx, null, "[BehaviorObservation] skip reminder: no POST_NOTIFICATIONS permission") } catch (_: Throwable) {}
+      return
+    }
+    if (!nm.areNotificationsEnabled()) return
+    ensureBehaviorObservationChannel(ctx, nm)
+
+    val safeTitle = title.ifBlank { "行为观察提醒" }
+    // V21：通知栏只保留简短提醒，不再显示操作步骤说明。
+    // 兼容旧提醒计划：如果旧 body 里包含“下拉框/打开后/步骤”等说明，通知展示时自动收敛为一句话。
+    val cleanedBody = body.trim()
+    val safeBody = if (cleanedBody.isBlank() || cleanedBody.contains("下拉框") || cleanedBody.contains("打开后") || cleanedBody.contains("步骤") || cleanedBody.contains("选择观察层面")) {
+      "现在可以记录一条行为观察。"
+    } else {
+      cleanedBody
+    }
+
+    val selectPayload = try {
+      val obj = JSONObject(payload ?: "{}")
+      obj.put("module", "behavior_tracking")
+      obj.put("route", "/behavior_tracking")
+      obj.put("templateKey", "notification_layer_select")
+      obj.put("entryMode", "notification_layer_selector")
+      obj.toString()
+    } catch (_: Throwable) {
+      "{\"module\":\"behavior_tracking\",\"route\":\"/behavior_tracking\",\"templateKey\":\"notification_layer_select\",\"entryMode\":\"notification_layer_selector\"}"
+    }
+
+    val openSelectorIntent = Intent(ctx, MainActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      putExtra("from_notification", true)
+      putExtra("notif_type", "behavior_tracking")
+      putExtra("payload", selectPayload)
+    }
+    val openSelectorPi = PendingIntent.getActivity(
+      ctx,
+      id + 9100,
+      openSelectorIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val n = NotificationCompat.Builder(ctx, BEHAVIOR_CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setContentTitle(safeTitle)
+      .setContentText(safeBody)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setDefaults(NotificationCompat.DEFAULT_ALL)
+      .setContentIntent(openSelectorPi)
+      .setAutoCancel(true)
+      .setCategory(NotificationCompat.CATEGORY_REMINDER)
+      .addAction(android.R.drawable.ic_menu_edit, "选择层面填写", openSelectorPi)
+      .build()
+
+    nm.notify(id, n)
+    try { com.example.quote_app.data.DbRepo.log(ctx, null, "[BehaviorObservation] posted single selector reminder id=$id") } catch (_: Throwable) {}
+  }
+
+
+  @JvmStatic
+  fun sendBehaviorObservationAutoSyncResult(ctx: Context, id: Int, body: String?) {
+    val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (Build.VERSION.SDK_INT >= 33 && ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+    ensureBehaviorObservationChannel(ctx, nm)
+    val text = body?.takeIf { it.isNotBlank() } ?: "自动读取完成，结果已进入待确认队列。"
+    val launchIntent = Intent(ctx, MainActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      putExtra("from_notification", true)
+      putExtra("notif_type", "behavior_tracking")
+      putExtra("payload", "{\"module\":\"behavior_tracking\",\"route\":\"/behavior_tracking\",\"templateKey\":\"data_sources\"}")
+    }
+    val pi = PendingIntent.getActivity(ctx, id + 9400, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val n = NotificationCompat.Builder(ctx, BEHAVIOR_CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setContentTitle("行为观察自动读取完成")
+      .setContentText(text)
+      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+      .setContentIntent(pi)
+      .setAutoCancel(true)
+      .build()
+    nm.notify(id, n)
+  }
+
+
+  /**
+   * 桌面小组件入口：点击某一观察层面后，弹出一条支持 Direct Reply 的通知。
+   * 用户可在通知中输入一句话保存，无需打开完整 App。
+   * 返回 false 表示通知权限不可用，调用方可回退到打开轻量表单页。
+   */
+  @JvmStatic
+  fun sendBehaviorObservationWidgetQuickReply(ctx: Context, layer: String?): Boolean {
+    val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (Build.VERSION.SDK_INT >= 33 && ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      try { com.example.quote_app.data.DbRepo.log(ctx, null, "[BehaviorObservationWidget] no POST_NOTIFICATIONS permission") } catch (_: Throwable) {}
+      return false
+    }
+    if (!nm.areNotificationsEnabled()) return false
+    ensureBehaviorObservationChannel(ctx, nm)
+
+    val cleanLayer = when {
+      layer == null -> "行为层面"
+      layer.contains("时间") -> "时间层面"
+      layer.contains("行为") -> "行为层面"
+      layer.contains("情绪") -> "情绪层面"
+      layer.contains("认知") || layer.contains("想法") -> "认知层面"
+      layer.contains("结果") -> "结果层面"
+      layer.contains("环境") -> "环境层面"
+      layer.contains("身体") || layer.contains("睡眠") || layer.contains("精力") -> "身体状态层面"
+      else -> "行为层面"
+    }
+    val shortName = cleanLayer.replace("层面", "")
+    val id = ((System.currentTimeMillis() / 1000L) % 1000000L).toInt() + 895000
+    val payload = try {
+      JSONObject().apply {
+        put("module", "behavior_tracking")
+        put("route", "/behavior_tracking")
+        put("templateKey", "notification_layer_select")
+        put("entryMode", "desktop_widget_remote_input")
+        put("primaryLayer", cleanLayer)
+        put("source", "desktop_widget")
+      }.toString()
+    } catch (_: Throwable) { "{}" }
+
+    val replyIntent = Intent(ctx, BehaviorObservationQuickRecordReceiver::class.java).apply {
+      action = BehaviorObservationQuickRecordReceiver.ACTION
+      putExtra(BehaviorObservationQuickRecordReceiver.EXTRA_LAYER, cleanLayer)
+      putExtra(BehaviorObservationQuickRecordReceiver.EXTRA_PAYLOAD, payload)
+      putExtra(BehaviorObservationQuickRecordReceiver.EXTRA_NOTIFICATION_ID, id)
+    }
+    // Direct Reply 必须使用可变 PendingIntent，否则系统无法把用户输入写入 Intent。
+    val replyFlags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+    val replyPi = PendingIntent.getBroadcast(ctx, id + (cleanLayer.hashCode() and 0x7fffffff) % 997, replyIntent, replyFlags)
+    val input = RemoteInput.Builder(BehaviorObservationQuickRecordReceiver.KEY_TEXT)
+      .setLabel("输入${shortName}观察内容")
+      .build()
+    val replyAction = NotificationCompat.Action.Builder(android.R.drawable.ic_menu_edit, "输入并保存", replyPi)
+      .addRemoteInput(input)
+      .setAllowGeneratedReplies(false)
+      .build()
+
+    val openIntent = Intent(ctx, MainActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      putExtra("from_notification", true)
+      putExtra("notif_type", "behavior_tracking")
+      putExtra("payload", payload)
+    }
+    val openPi = PendingIntent.getActivity(ctx, id + 9200, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    val n = NotificationCompat.Builder(ctx, BEHAVIOR_CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.ic_menu_edit)
+      .setContentTitle("桌面小组件 · ${shortName}观察")
+      .setContentText("不用打开 App，点“输入并保存”记录一句话。")
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setDefaults(NotificationCompat.DEFAULT_ALL)
+      .setContentIntent(openPi)
+      .setAutoCancel(true)
+      .setCategory(NotificationCompat.CATEGORY_REMINDER)
+      .addAction(replyAction)
+      .build()
+    nm.notify(id, n)
+    try { com.example.quote_app.data.DbRepo.log(ctx, null, "[BehaviorObservationWidget] posted quick reply layer=$cleanLayer id=$id") } catch (_: Throwable) {}
+    return true
+  }
+
+  @JvmStatic
+  fun sendBehaviorObservationSaved(ctx: Context, id: Int, layer: String, text: String?, savedId: Long) {
+    val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (Build.VERSION.SDK_INT >= 33 && ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+    ensureBehaviorObservationChannel(ctx, nm)
+    val ok = savedId > 0L
+    val body = if (ok) {
+      val t = (text ?: "").trim().ifBlank { "已保存一条记录" }
+      "已保存到行为观察：${layer.replace("层面", "")} · $t"
+    } else {
+      "保存失败：请打开 App 后再试，或检查数据库是否已初始化。"
+    }
+    val launchIntent = Intent(ctx, MainActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      putExtra("from_notification", true)
+      putExtra("notif_type", "behavior_tracking")
+      putExtra("payload", "{\"module\":\"behavior_tracking\",\"route\":\"/behavior_tracking\",\"templateKey\":\"quick_capture\"}")
+    }
+    val pi = PendingIntent.getActivity(ctx, id + 9300, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val n = NotificationCompat.Builder(ctx, BEHAVIOR_CHANNEL_ID)
+      .setSmallIcon(if (ok) android.R.drawable.ic_dialog_info else android.R.drawable.ic_dialog_alert)
+      .setContentTitle(if (ok) "行为观察已保存" else "行为观察保存失败")
+      .setContentText(body)
+      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+      .setContentIntent(pi)
+      .setAutoCancel(true)
+      .setTimeoutAfter(8000)
+      .build()
+    nm.notify(id, n)
+  }
+
+
+
+  private const val BEHAVIOR_PRESET_ALARM_CHANNEL_ID = "behavior_preset_alarm_v40_fullscreen"
+
+  private fun ensureBehaviorPresetAlarmChannel(ctx: Context, nm: NotificationManager) {
+    if (Build.VERSION.SDK_INT >= 26) {
+      val ch = NotificationChannel(
+        BEHAVIOR_PRESET_ALARM_CHANNEL_ID,
+        "预设行为闹钟提醒",
+        NotificationManager.IMPORTANCE_HIGH
+      ).apply {
+        description = "预设行为到点后弹出全屏确认表单；铃声/音量/震动由响铃服务统一控制"
+        // 使用新的高优先级渠道，但不配置渠道声音/震动，避免覆盖用户选择的统一铃声和震动。
+        // 不再把通知本身标记为 silent；部分 ROM 会把 silent 通知降级，导致 fullScreenIntent 不弹出。
+        enableVibration(false)
+        setShowBadge(true)
+        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        setSound(null, null)
+      }
+      nm.createNotificationChannel(ch)
+    }
+  }
+
+  @JvmStatic
+  fun sendBehaviorPresetAlarmFullScreen(ctx: Context, id: Int, payload: String?) {
+    sendBehaviorPresetAlarmFullScreen(ctx, id, payload, false)
+  }
+
+  @JvmStatic
+  fun sendBehaviorPresetAlarmFullScreen(ctx: Context, id: Int, payload: String?, ringServiceActive: Boolean) {
+    val app = ctx.applicationContext
+    val normalizedPayload = payload ?: "{}"
+    val formIntent = Intent(app, BehaviorPresetAlarmFormActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      putExtra("payload", normalizedPayload)
+      putExtra("from_preset_alarm", true)
+      putExtra("alarm_fire", true)
+      putExtra("ring_service_active", ringServiceActive)
+    }
+    val flags = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
+    val fullScreenPi = PendingIntent.getActivity(app, id + 730000, formIntent, flags)
+
+    // Do not start the Activity unconditionally here.  v39 did that from Receiver + Service + Notification paths and
+    // foreground users could get several forms.  v40 lets the ringing service show an overlay first; when overlay is
+    // unavailable, only one direct Activity launch is allowed by the shared UI gate.
+    if (!BehaviorPresetAlarmOverlay.canDraw(app) && BehaviorPresetAlarmUiGate.claimUi(app, normalizedPayload)) {
+      try {
+        app.startActivity(formIntent)
+        try { com.example.quote_app.data.DbRepo.log(app, null, "[BehaviorPresetAlarm] direct fullscreen form id=$id") } catch (_: Throwable) {}
+      } catch (t: Throwable) {
+        try { com.example.quote_app.data.DbRepo.log(app, null, "[BehaviorPresetAlarm] direct form start failed; full-screen notification fallback: ${t.javaClass.simpleName} ${t.message}") } catch (_: Throwable) {}
+      }
+    }
+
+    try {
+      val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      ensureBehaviorPresetAlarmChannel(app, nm)
+      val n = NotificationCompat.Builder(app, BEHAVIOR_PRESET_ALARM_CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+        .setContentTitle("预设行为闹钟")
+        .setContentText("到点了，点击查看预设提醒表单")
+        .setPriority(NotificationCompat.PRIORITY_MAX)
+        .setCategory(NotificationCompat.CATEGORY_ALARM)
+        .setFullScreenIntent(fullScreenPi, true)
+        .setContentIntent(fullScreenPi)
+        .setOngoing(true)
+        .setAutoCancel(true)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setDefaults(0)
+        .setOnlyAlertOnce(false)
+        .build()
+      if (Build.VERSION.SDK_INT < 33 || ActivityCompat.checkSelfPermission(app, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+        nm.notify(id, n)
+      }
+    } catch (t: Throwable) {
+      try { com.example.quote_app.data.DbRepo.log(app, null, "[BehaviorPresetAlarm] full-screen notification failed: ${t.javaClass.simpleName} ${t.message}") } catch (_: Throwable) {}
+    }
   }
 
 

@@ -1,0 +1,9 @@
+quote_app_microsoft_todo_goal_value_dynamic_prompts_v48
+
+Changes:
+- Restored all positive-environment Chinese quote cards into the value system and distributed them by usage moment.
+- Added deterministic daily/contextual quote rotation via todoGoalQuoteForMoment().
+- Added dynamic quotes to entry, transform, today journey, goal detail, review, and Microsoft To Do write-back body.
+- Added unified AI prompt settings page in Microsoft external sync configuration.
+- Added configurable system, task-to-goal, and daily-review prompts stored in ms_todo_settings.
+- TodoGoalAiService now loads prompt templates from settings instead of hardcoded prompt strings.

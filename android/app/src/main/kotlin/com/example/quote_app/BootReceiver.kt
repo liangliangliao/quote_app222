@@ -54,5 +54,9 @@ class BootReceiver : BroadcastReceiver() {
         // Sport: ensure midnight renewal alarm exists after reboot and best-effort reschedule all sport plan alarms.
         try { com.example.quote_app.sport.SportPlanRenewal.scheduleMidnightAlarm(context) } catch (_: Throwable) {}
         try { com.example.quote_app.sport.SportPlanRenewal.rescheduleAllPlanAlarms(context) } catch (_: Throwable) {}
+
+        // Behavior preset alarms: after reboot/package replace, restore upcoming alarm-clock style reminders
+        // from local DB so they still work when the app process is not running.
+        try { BehaviorPresetAlarmScheduler.rescheduleUpcoming(context.applicationContext) } catch (_: Throwable) {}
     }
 }

@@ -11,4 +11,33 @@
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@android:color/white</item>
     </style>
+
+
+    <style name="BehaviorObservationWidgetFormTheme" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:colorAccent">#4F5FA3</item>
+    </style>
+
+    <style name="BehaviorObservationTransparentTheme" parent="android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorAccent">#4F5FA3</item>
+    </style>
+
+
+    <style name="BehaviorObservationPresetAlarmTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowBackground">@android:color/white</item>
+        <!-- Do not declare show/turn-screen-on/keep-screen-on as style items here.
+             They are not valid style attrs on the CI compileSdk resource table and caused
+             AAPT resource linking failures. BehaviorPresetAlarmFormActivity sets the
+             equivalent flags programmatically via setShowWhenLocked/setTurnScreenOn and
+             FLAG_KEEP_SCREEN_ON. -->
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:colorAccent">#4F5FA3</item>
+    </style>
+
 </resources>

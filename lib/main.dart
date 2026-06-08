@@ -429,7 +429,7 @@ class _RootShellState extends State<RootShell> {
     ),
     _DrawerEntrySpec(
       icon: Icons.fact_check_outlined,
-      title: '行为跟踪',
+      title: '行为观察',
       subtitle: '时间日志 → 行为证据 → 情绪触发 → 认知结果 → 定期复盘',
       badgeText: '记录我做了什么、为什么做、产生了什么结果',
       pageBuilder: (_) => const BehaviorTrackingHomePage(),

@@ -8,6 +8,8 @@ import 'onenote_dao.dart';
 import 'onenote_models.dart';
 import 'onenote_service.dart';
 import 'todo_dao.dart';
+import 'todo_goal_dao.dart';
+import 'todo_goal_prompt_config.dart';
 import 'todo_pages.dart';
 
 class ExternalDataSyncHomePage extends StatefulWidget {
@@ -33,6 +35,7 @@ class _ExternalDataSyncHomePageState extends State<ExternalDataSyncHomePage> {
   Future<void> _load() async {
     await _dao.ensureTables();
     await TodoDao().ensureTables();
+    await TodoGoalDao().ensureTables();
     final auth = await _auth.currentAuth();
     if (!mounted) return;
     setState(() => _account = (auth?['display_name'] ?? '').toString());
@@ -130,7 +133,7 @@ class _ExternalDataSyncHomePageState extends State<ExternalDataSyncHomePage> {
           _EntryCard(
             icon: Icons.checklist_rtl_outlined,
             title: 'Microsoft To Do',
-            subtitle: '同步任务列表 → 任务 → 检查项/附件/关联资源；支持本地增删改查，也可写回 Microsoft To Do。',
+            subtitle: '同步任务列表 → 任务 → 检查项/附件/关联资源；支持目标价值系统、AI 自我和谐转化、今日旅程、复盘落地和写回 To Do。',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TodoHomePage())),
           ),
             ],
@@ -173,7 +176,11 @@ class MicrosoftExternalConfigPage extends StatefulWidget {
 class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPage> {
   final _dao = OneNoteDao();
   final _todoDao = TodoDao();
+  final _promptConfig = TodoGoalPromptConfig();
   final _redirectCtrl = TextEditingController();
+  final _goalSystemPromptCtrl = TextEditingController();
+  final _goalTaskPromptCtrl = TextEditingController();
+  final _goalReviewPromptCtrl = TextEditingController();
   List<Map<String, Object?>> _noteLogs = [];
   List<Map<String, Object?>> _todoLogs = [];
   String _status = '';
@@ -187,6 +194,9 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
   @override
   void dispose() {
     _redirectCtrl.dispose();
+    _goalSystemPromptCtrl.dispose();
+    _goalTaskPromptCtrl.dispose();
+    _goalReviewPromptCtrl.dispose();
     super.dispose();
   }
 
@@ -194,11 +204,15 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
     await _dao.ensureTables();
     await _todoDao.ensureTables();
     final uri = await _dao.getRedirectUri();
+    final promptTemplates = await _promptConfig.load();
     final noteLogs = await _dao.recentApiLogs(limit: 30);
     final todoLogs = await _todoDao.recentApiLogs(limit: 30);
     if (!mounted) return;
     setState(() {
       _redirectCtrl.text = uri;
+      _goalSystemPromptCtrl.text = promptTemplates.systemPrompt;
+      _goalTaskPromptCtrl.text = promptTemplates.taskPrompt;
+      _goalReviewPromptCtrl.text = promptTemplates.reviewPrompt;
       _noteLogs = noteLogs;
       _todoLogs = todoLogs;
     });
@@ -230,6 +244,25 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
     await _load();
     if (!mounted) return;
     setState(() => _status = '已恢复默认重定向 URI，并已清除旧 token。');
+  }
+
+
+  Future<void> _saveGoalAiPrompts() async {
+    await _promptConfig.save(TodoGoalPromptTemplates(
+      systemPrompt: _goalSystemPromptCtrl.text,
+      taskPrompt: _goalTaskPromptCtrl.text,
+      reviewPrompt: _goalReviewPromptCtrl.text,
+    ));
+    await _load();
+    if (!mounted) return;
+    setState(() => _status = '已保存 To Do 目标实践系统的 AI 提示词配置。');
+  }
+
+  Future<void> _resetGoalAiPrompts() async {
+    await _promptConfig.reset();
+    await _load();
+    if (!mounted) return;
+    setState(() => _status = '已恢复 To Do 目标实践系统默认 AI 提示词。');
   }
 
   @override
@@ -288,8 +321,98 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
             ),
           ),
           const SizedBox(height: 12),
+          _GoalAiPromptConfigCard(
+            systemCtrl: _goalSystemPromptCtrl,
+            taskCtrl: _goalTaskPromptCtrl,
+            reviewCtrl: _goalReviewPromptCtrl,
+            onSave: _saveGoalAiPrompts,
+            onReset: _resetGoalAiPrompts,
+          ),
+          const SizedBox(height: 12),
           _LogsTile(title: 'OneNote 最近 API 日志', logs: _noteLogs),
           _LogsTile(title: 'Microsoft To Do 最近 API 日志', logs: _todoLogs),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _GoalAiPromptConfigCard extends StatelessWidget {
+  const _GoalAiPromptConfigCard({
+    required this.systemCtrl,
+    required this.taskCtrl,
+    required this.reviewCtrl,
+    required this.onSave,
+    required this.onReset,
+  });
+
+  final TextEditingController systemCtrl;
+  final TextEditingController taskCtrl;
+  final TextEditingController reviewCtrl;
+  final VoidCallback onSave;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('To Do 目标实践系统 AI 提示词', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            const Text(
+              '这里统一配置 Microsoft To Do 目标转化、今日实践和复盘落地所使用的 AI 提示词。可使用占位符：{{VALUE_SYSTEM}}、{{TASK_TITLE}}、{{TASK_BODY}}、{{TASK_LIST}}、{{TASK_IMPORTANCE}}、{{TASK_DUE}}、{{TASK_STATUS}}、{{GOAL_TITLE}}、{{DEEP_MEANING}}、{{PROCESS_VALUE}}、{{ACTION_TITLE}}、{{COMPLETED_TEXT}}、{{USER_REFLECTION}}。',
+              style: TextStyle(color: Color(0xFF6B7280), height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            _PromptEditorTile(title: '系统提示词', subtitle: '控制 AI 的身份、语气和输出格式。', controller: systemCtrl, minLines: 4, maxLines: 10),
+            _PromptEditorTile(title: '任务转目标提示词', subtitle: '用于把 Microsoft To Do 任务转化为方向、意义、过程价值和今日最小行动。', controller: taskCtrl, minLines: 8, maxLines: 18),
+            _PromptEditorTile(title: '每日复盘提示词', subtitle: '用于把完成/未完成记录转化为过程洞察和明日最小一步。', controller: reviewCtrl, minLines: 8, maxLines: 18),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(onPressed: onSave, icon: const Icon(Icons.save_outlined), label: const Text('保存提示词')),
+                OutlinedButton.icon(onPressed: onReset, icon: const Icon(Icons.restore), label: const Text('恢复默认')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PromptEditorTile extends StatelessWidget {
+  const _PromptEditorTile({required this.title, required this.subtitle, required this.controller, required this.minLines, required this.maxLines});
+
+  final String title;
+  final String subtitle;
+  final TextEditingController controller;
+  final int minLines;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+        subtitle: Text(subtitle),
+        children: [
+          TextField(
+            controller: controller,
+            minLines: minLines,
+            maxLines: maxLines,
+            decoration: const InputDecoration(border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );

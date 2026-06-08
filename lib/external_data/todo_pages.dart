@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'todo_dao.dart';
 import 'todo_models.dart';
 import 'todo_service.dart';
+import 'todo_goal_pages.dart';
 
 const _todoBlue = Color(0xFF5E72C3);
 const _todoBg = Color(0xFFF7F7FA);
@@ -252,6 +253,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
             if (_showSync) _SyncCard(busy: _busy, controller: _listNameCtrl, status: _status, timeZone: _preferredTimeZone, onTimeZoneChanged: _changePreferredTimeZone, onSync: () => _sync(auto: false)),
             const _NietzscheWhyQuoteCard(),
             const SizedBox(height: 10),
+            _TodoGoalEntryCard(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TodoGoalHomePage())).then((_) => _load())),
+            const SizedBox(height: 10),
             ..._smartLists.map((l) => _TodoNavTile(
                   icon: _smartIcon(l.listId),
                   iconColor: _smartColor(l.listId),
@@ -319,6 +322,68 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 }
 
+
+
+class _TodoGoalEntryCard extends StatelessWidget {
+  const _TodoGoalEntryCard({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F6FF),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFFE0E7FF)),
+          boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 12, offset: Offset(0, 6))],
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.auto_awesome, color: _todoBlue, size: 32),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('To Do 目标价值系统', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF22223B))),
+              SizedBox(height: 6),
+              Text('围绕目标价值体系，把任务转化为方向感、自我和谐、沿途体验、今日最小行动和每日复盘。', style: TextStyle(color: Color(0xFF4B5563), height: 1.4)),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right, color: Color(0xFF6B7280)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _TodoGoalTransformButton extends StatelessWidget {
+  const _TodoGoalTransformButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F6FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE0E7FF)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('按核心价值重新理解这个任务', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF22223B))),
+        const SizedBox(height: 5),
+        const Text('AI 会先判断它是否通向你真正关心的生活，再提炼方向、深层意义、沿途价值，并生成今天5分钟内能开始的最小行动。', style: TextStyle(color: Color(0xFF4B5563), height: 1.35)),
+        const SizedBox(height: 10),
+        Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: onTap, icon: const Icon(Icons.auto_awesome), label: const Text('AI 按核心价值转化'))),
+      ]),
+    );
+  }
+}
 
 class _TodoUnsyncedWarningCard extends StatelessWidget {
   const _TodoUnsyncedWarningCard({required this.summary, this.onSync});
@@ -1602,6 +1667,10 @@ class _TodoTaskDetailPageState extends State<TodoTaskDetailPage> {
                   Expanded(child: Text(t.title, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w500))),
                   Icon(t.importance == 'high' ? Icons.star : Icons.star_border, size: 34, color: t.importance == 'high' ? Colors.amber.shade700 : Colors.grey),
                 ]),
+                const SizedBox(height: 14),
+                _TodoGoalTransformButton(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalHomePage(initialTaskId: t.taskId))).then((_) => _load()),
+                ),
                 if (_checklist.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   ..._checklist.map((s) => ListTile(

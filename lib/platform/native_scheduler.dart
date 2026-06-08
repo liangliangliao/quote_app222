@@ -15,6 +15,27 @@ class NativeScheduler {
     }
   }
 
+
+  /// 是否具备精确闹钟权限；Android 12+ 若未授权，预设时间提醒可能不会触发。
+  static Future<bool> canScheduleExactAlarm() async {
+    try {
+      final ok = await _ch.invokeMethod('canScheduleExact');
+      return ok == true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// 打开精确闹钟授权页。授权后需要用户返回 App 再注册提醒。
+  static Future<bool> requestExactAlarmPermission() async {
+    try {
+      final ok = await _ch.invokeMethod('requestExactPermission');
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 注册精准闹钟（原生侧实现）
   static Future<bool> scheduleExactAt({
     required int id,
@@ -23,6 +44,22 @@ class NativeScheduler {
   }) async {
     await DLog.i('SCH', '【Dart→原生】AM 注册请求(id='+id.toString()+', epochMs='+epochMs.toString()+')');
     final ok = await _ch.invokeMethod<bool>('scheduleExactAt', {
+      'id': id,
+      'epochMs': epochMs,
+      'payload': jsonEncode(payload ?? {}),
+    });
+    return ok ?? false;
+  }
+
+  /// 注册系统闹钟级别提醒（Android AlarmManager.setAlarmClock）。
+  /// 用于行为预设闹钟：即使 App 后台进程不在，也尽量像系统闹钟一样准时拉起。
+  static Future<bool> scheduleAlarmClockAt({
+    required int id,
+    required int epochMs,
+    Map<String, dynamic>? payload,
+  }) async {
+    await DLog.i('SCH', '【Dart→原生】AlarmClock 注册请求(id=' + id.toString() + ', epochMs=' + epochMs.toString() + ')');
+    final ok = await _ch.invokeMethod<bool>('scheduleAlarmClockAt', {
       'id': id,
       'epochMs': epochMs,
       'payload': jsonEncode(payload ?? {}),

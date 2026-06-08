@@ -1148,8 +1148,14 @@ class UnifiedAiService {
                 }
               }
             }
+            // v55: some DeepSeek-compatible reasoning models may return the
+            // useful text in reasoning_content while final content is empty.
+            // For target conversion this is still better than silently falling
+            // back to local templates; downstream parsers will validate/repair it.
+            final reasoning = (message['reasoning_content'] ?? message['reasoningContent'] ?? message['reasoning'] ?? message['thinking'] ?? '').toString();
+            if (reasoning.trim().isNotEmpty) return reasoning.trim();
           }
-          final text = (first['text'] ?? '').toString();
+          final text = (first['text'] ?? first['reasoning_content'] ?? first['reasoningContent'] ?? '').toString();
           if (text.trim().isNotEmpty) return text.trim();
         }
       }

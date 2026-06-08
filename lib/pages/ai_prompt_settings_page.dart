@@ -82,6 +82,14 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           ],
         ),
         const _PromptModule(
+          id: 'behavior_tracking',
+          name: '行为观察模块',
+          description: '每日预设行为复盘时，调用统一 AI 做人类行为坐标、概率、风险、难度、罕见价值案例等结构化分析。',
+          items: <_PromptItem>[
+            _PromptItem(id: 'behavior_preset_daily_review_ai', name: '每日预设行为 AI 人类行为坐标分析'),
+          ],
+        ),
+        const _PromptModule(
           id: 'app_shell',
           name: 'App 外壳 / 首页侧栏',
           description: '左侧菜单展开时，通过 AI 随机生成侧栏标题与简介的轻量提示词。',
@@ -199,6 +207,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.defaultMovieRoleLabTurnPrompt;
       case 'movie_analysis':
         return _settings.defaultMovieAnalysisPrompt;
+      case 'behavior_preset_daily_review_ai':
+        return _settings.defaultBehaviorPresetDailyReviewAiPrompt;
       case 'drawer_header':
         return _settings.defaultDrawerHeaderPrompt;
       case 'life_note_analysis':
@@ -233,6 +243,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.inspectMovieRoleLabTurnPromptState();
       case 'movie_analysis':
         return _settings.inspectMovieAnalysisPromptState();
+      case 'behavior_preset_daily_review_ai':
+        return _settings.inspectBehaviorPresetDailyReviewAiPromptState();
       case 'drawer_header':
         return _settings.inspectDrawerHeaderPromptState();
       case 'life_note_analysis':
@@ -267,6 +279,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.saveMovieRoleLabTurnPrompt(value);
       case 'movie_analysis':
         return _settings.saveMovieAnalysisPrompt(value);
+      case 'behavior_preset_daily_review_ai':
+        return _settings.saveBehaviorPresetDailyReviewAiPrompt(value);
       case 'drawer_header':
         return _settings.saveDrawerHeaderPrompt(value);
       case 'life_note_analysis':
@@ -380,6 +394,10 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           MapEntry('{{selected_emotions}}', '用户手动勾选的当前情绪标签。'),
           MapEntry('{{scene_tags}}', '用户手动勾选的相关生活场景或人生主题标签。'),
           MapEntry('{{life_note_input_json}}', '完整结构化输入 JSON，包含用户原文、情绪标签、场景标签与客户端时间。'),
+        ];
+      case 'behavior_preset_daily_review_ai':
+        return const <MapEntry<String, String>>[
+          MapEntry('{{review_input_json}}', '每日预设行为复盘输入 JSON，包含日期、总数、完成数、未完成数、完成率、每项预设行为名称、类别、状态、未完成原因、转入明天状态、目标值与实际值。'),
         ];
       case 'drawer_header':
         return const <MapEntry<String, String>>[

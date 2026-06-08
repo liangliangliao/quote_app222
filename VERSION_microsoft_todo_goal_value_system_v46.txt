@@ -1,0 +1,5 @@
+quote_app_microsoft_todo_goal_value_system_v46
+- Removed visible Lecture 12 / Lecture 13 labels from app UI.
+- Replaced bulk original quote stack with contextual quote cards.
+- Quotes now appear on value, transform, today journey, goal detail, review, and To Do write-back moments.
+- Microsoft To Do write-back now includes only one appropriate action prompt instead of stacked quotes.

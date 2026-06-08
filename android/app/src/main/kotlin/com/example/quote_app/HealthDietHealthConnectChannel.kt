@@ -81,6 +81,10 @@ object HealthDietHealthConnectChannel {
             when (call.method) {
                 "status" -> scope.launch { handleStatus(activity, result) }
                 "requestPermissions" -> handleRequestPermissions(activity, result)
+                "openSettings" -> {
+                    val opened = openHealthConnectAccessPage(activity)
+                    result.success(mapOf("available" to true, "status" to if (opened) "settings_opened" else "settings_unavailable", "message" to if (opened) "已打开 Health Connect 授权管理页面。" else "未能打开 Health Connect 授权管理页面。", "granted" to false))
+                }
                 "readTodaySummary" -> scope.launch { handleReadToday(activity, result) }
                 else -> result.notImplemented()
             }

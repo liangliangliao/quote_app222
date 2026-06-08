@@ -2,4 +2,8 @@
 <resources>
     <string name="app_name">名人名言</string>
     <string name="intimacy_mystify_wallpaper_desc">潮汐之间：Mystify 亲密艺术动态壁纸</string>
+    <string name="behavior_observation_widget_description">桌面快速选择行为观察层面，并直达对应记录表单</string>
+    <string name="behavior_observation_add_widget_short">添加行为观察小组件</string>
+    <string name="behavior_observation_add_widget_long">添加行为观察桌面小组件</string>
+    <string name="behavior_observation_widget_disabled">行为观察小组件暂不可用</string>
 </resources>

@@ -126,6 +126,10 @@ class App : Application(), Application.ActivityLifecycleCallbacks {
         com.example.quote_app.data.DbRepo.log(this, null, "【App】runtime SCREEN_ON 探测接收器已注册（仅用于确认已解锁，不直接触发业务）")
       } catch (_: Throwable) {}
 
+      // 行为预设闹钟：每次主进程启动时轻量恢复未来闹钟。
+      // 这能覆盖用户升级/系统清理/ROM 丢失 PendingIntent 后，仅打开一次 App 即恢复后续 setAlarmClock 触发。
+      try { BehaviorPresetAlarmScheduler.rescheduleUpcoming(applicationContext) } catch (_: Throwable) {}
+
       // 说明：按需求“仅解锁广播触发提醒”，不再在 App 启动时兜底补发解锁提醒。
     }
   }

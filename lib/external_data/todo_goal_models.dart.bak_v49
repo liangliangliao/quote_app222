@@ -1,0 +1,287 @@
+int _toInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+class TodoGoalAnalysisResult {
+  const TodoGoalAnalysisResult({
+    required this.goalTitle,
+    required this.deepMeaning,
+    required this.desiredIdentity,
+    required this.goalCategory,
+    required this.goalOriginType,
+    required this.selfConcordanceScore,
+    required this.processValue,
+    required this.obstacleSummary,
+    required this.todayMinimumAction,
+    required this.minimumStandard,
+    required this.recommendedStandard,
+    required this.stretchStandard,
+    required this.difficultyScore,
+    required this.zoneType,
+    required this.coachMessage,
+    required this.provider,
+    required this.modelLabel,
+    this.rawResponse = '',
+    this.usedFallback = false,
+  });
+
+  final String goalTitle;
+  final String deepMeaning;
+  final String desiredIdentity;
+  final String goalCategory;
+  final String goalOriginType;
+  final int selfConcordanceScore;
+  final String processValue;
+  final String obstacleSummary;
+  final String todayMinimumAction;
+  final String minimumStandard;
+  final String recommendedStandard;
+  final String stretchStandard;
+  final int difficultyScore;
+  final String zoneType;
+  final String coachMessage;
+  final String provider;
+  final String modelLabel;
+  final String rawResponse;
+  final bool usedFallback;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'goalTitle': goalTitle,
+        'deepMeaning': deepMeaning,
+        'desiredIdentity': desiredIdentity,
+        'goalCategory': goalCategory,
+        'goalOriginType': goalOriginType,
+        'selfConcordanceScore': selfConcordanceScore,
+        'processValue': processValue,
+        'obstacleSummary': obstacleSummary,
+        'todayMinimumAction': todayMinimumAction,
+        'minimumStandard': minimumStandard,
+        'recommendedStandard': recommendedStandard,
+        'stretchStandard': stretchStandard,
+        'difficultyScore': difficultyScore,
+        'zoneType': zoneType,
+        'coachMessage': coachMessage,
+        'provider': provider,
+        'modelLabel': modelLabel,
+        'usedFallback': usedFallback,
+      };
+}
+
+class TodoGoalReviewResult {
+  const TodoGoalReviewResult({
+    required this.summary,
+    required this.processInsight,
+    required this.meaningConnection,
+    required this.tomorrowNextStep,
+    required this.encouragement,
+    required this.provider,
+    required this.modelLabel,
+    this.rawResponse = '',
+    this.usedFallback = false,
+  });
+
+  final String summary;
+  final String processInsight;
+  final String meaningConnection;
+  final String tomorrowNextStep;
+  final String encouragement;
+  final String provider;
+  final String modelLabel;
+  final String rawResponse;
+  final bool usedFallback;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'summary': summary,
+        'processInsight': processInsight,
+        'meaningConnection': meaningConnection,
+        'tomorrowNextStep': tomorrowNextStep,
+        'encouragement': encouragement,
+        'provider': provider,
+        'modelLabel': modelLabel,
+        'usedFallback': usedFallback,
+      };
+}
+
+class TodoGoalProfile {
+  const TodoGoalProfile({
+    required this.goalId,
+    required this.sourceType,
+    required this.sourceTaskId,
+    required this.sourceListId,
+    required this.goalTitle,
+    required this.deepMeaning,
+    required this.desiredIdentity,
+    required this.goalCategory,
+    required this.goalOriginType,
+    required this.selfConcordanceScore,
+    required this.processValue,
+    required this.obstacleSummary,
+    required this.status,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  final String goalId;
+  final String sourceType;
+  final String sourceTaskId;
+  final String sourceListId;
+  final String goalTitle;
+  final String deepMeaning;
+  final String desiredIdentity;
+  final String goalCategory;
+  final String goalOriginType;
+  final int selfConcordanceScore;
+  final String processValue;
+  final String obstacleSummary;
+  final String status;
+  final int createdAtMs;
+  final int updatedAtMs;
+
+  factory TodoGoalProfile.fromMap(Map<String, Object?> row) => TodoGoalProfile(
+        goalId: (row['goal_id'] ?? '').toString(),
+        sourceType: (row['source_type'] ?? '').toString(),
+        sourceTaskId: (row['source_task_id'] ?? '').toString(),
+        sourceListId: (row['source_list_id'] ?? '').toString(),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+        deepMeaning: (row['deep_meaning'] ?? '').toString(),
+        desiredIdentity: (row['desired_identity'] ?? '').toString(),
+        goalCategory: (row['goal_category'] ?? '').toString(),
+        goalOriginType: (row['goal_origin_type'] ?? '').toString(),
+        selfConcordanceScore: _toInt(row['self_concordance_score']),
+        processValue: (row['process_value'] ?? '').toString(),
+        obstacleSummary: (row['obstacle_summary'] ?? '').toString(),
+        status: (row['status'] ?? 'active').toString(),
+        createdAtMs: _toInt(row['created_at_ms']),
+        updatedAtMs: _toInt(row['updated_at_ms']),
+      );
+}
+
+class TodoGoalActionStep {
+  const TodoGoalActionStep({
+    required this.stepId,
+    required this.goalId,
+    required this.sourceTaskId,
+    required this.title,
+    required this.minimumStandard,
+    required this.recommendedStandard,
+    required this.stretchStandard,
+    required this.difficultyScore,
+    required this.zoneType,
+    required this.plannedDate,
+    required this.plannedTime,
+    required this.status,
+    required this.completedAtMs,
+    required this.writeBackToTodo,
+    required this.remoteTaskId,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.goalTitle = '',
+    this.deepMeaning = '',
+    this.processValue = '',
+    this.sourceListId = '',
+  });
+
+  final String stepId;
+  final String goalId;
+  final String sourceTaskId;
+  final String title;
+  final String minimumStandard;
+  final String recommendedStandard;
+  final String stretchStandard;
+  final int difficultyScore;
+  final String zoneType;
+  final String plannedDate;
+  final String plannedTime;
+  final String status;
+  final int completedAtMs;
+  final bool writeBackToTodo;
+  final String remoteTaskId;
+  final int createdAtMs;
+  final int updatedAtMs;
+  final String goalTitle;
+  final String deepMeaning;
+  final String processValue;
+  final String sourceListId;
+
+  bool get isCompleted => status == 'completed';
+
+  factory TodoGoalActionStep.fromMap(Map<String, Object?> row) => TodoGoalActionStep(
+        stepId: (row['step_id'] ?? '').toString(),
+        goalId: (row['goal_id'] ?? '').toString(),
+        sourceTaskId: (row['source_task_id'] ?? '').toString(),
+        title: (row['title'] ?? '').toString(),
+        minimumStandard: (row['minimum_standard'] ?? '').toString(),
+        recommendedStandard: (row['recommended_standard'] ?? '').toString(),
+        stretchStandard: (row['stretch_standard'] ?? '').toString(),
+        difficultyScore: _toInt(row['difficulty_score']),
+        zoneType: (row['zone_type'] ?? '').toString(),
+        plannedDate: (row['planned_date'] ?? '').toString(),
+        plannedTime: (row['planned_time'] ?? '').toString(),
+        status: (row['status'] ?? 'not_started').toString(),
+        completedAtMs: _toInt(row['completed_at_ms']),
+        writeBackToTodo: _toInt(row['write_back_to_todo']) == 1,
+        remoteTaskId: (row['remote_task_id'] ?? '').toString(),
+        createdAtMs: _toInt(row['created_at_ms']),
+        updatedAtMs: _toInt(row['updated_at_ms']),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+        deepMeaning: (row['deep_meaning'] ?? '').toString(),
+        processValue: (row['process_value'] ?? '').toString(),
+        sourceListId: (row['source_list_id'] ?? '').toString(),
+      );
+}
+
+class TodoGoalReflection {
+  const TodoGoalReflection({
+    required this.reflectionId,
+    required this.goalId,
+    required this.stepId,
+    required this.reflectionDate,
+    required this.whatDone,
+    required this.whyDone,
+    required this.processExperience,
+    required this.obstacle,
+    required this.tomorrowNextStep,
+    required this.aiSummary,
+    required this.moodScore,
+    required this.meaningScore,
+    required this.processScore,
+    required this.createdAtMs,
+    this.goalTitle = '',
+  });
+
+  final String reflectionId;
+  final String goalId;
+  final String stepId;
+  final String reflectionDate;
+  final String whatDone;
+  final String whyDone;
+  final String processExperience;
+  final String obstacle;
+  final String tomorrowNextStep;
+  final String aiSummary;
+  final int moodScore;
+  final int meaningScore;
+  final int processScore;
+  final int createdAtMs;
+  final String goalTitle;
+
+  factory TodoGoalReflection.fromMap(Map<String, Object?> row) => TodoGoalReflection(
+        reflectionId: (row['reflection_id'] ?? '').toString(),
+        goalId: (row['goal_id'] ?? '').toString(),
+        stepId: (row['step_id'] ?? '').toString(),
+        reflectionDate: (row['reflection_date'] ?? '').toString(),
+        whatDone: (row['what_done'] ?? '').toString(),
+        whyDone: (row['why_done'] ?? '').toString(),
+        processExperience: (row['process_experience'] ?? '').toString(),
+        obstacle: (row['obstacle'] ?? '').toString(),
+        tomorrowNextStep: (row['tomorrow_next_step'] ?? '').toString(),
+        aiSummary: (row['ai_summary'] ?? '').toString(),
+        moodScore: _toInt(row['mood_score']),
+        meaningScore: _toInt(row['meaning_score']),
+        processScore: _toInt(row['process_score']),
+        createdAtMs: _toInt(row['created_at_ms']),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+      );
+}

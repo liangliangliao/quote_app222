@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add_behavior_observation_widget"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/behavior_observation_add_widget_short"
+        android:shortcutLongLabel="@string/behavior_observation_add_widget_long"
+        android:shortcutDisabledMessage="@string/behavior_observation_widget_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.quote_app"
+            android:targetClass="com.example.quote_app.BehaviorObservationWidgetPinActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

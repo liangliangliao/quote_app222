@@ -291,6 +291,13 @@ object Channels {
             val ok = NativeSchedulerK.scheduleExactAt(appCtx, id, epochMs, payload)
             result.success(ok)
           }
+          "scheduleAlarmClockAt" -> {
+            val id = call.argument<Int>("id") ?: 0
+            val epochMs = call.argument<Long>("epochMs") ?: 0L
+            val payload = call.argument<String>("payload")
+            val ok = NativeSchedulerK.scheduleAlarmClockAt(appCtx, id, epochMs, payload)
+            result.success(ok)
+          }
           "cancel" -> {
             val id = call.argument<Int>("id") ?: 0
             NativeSchedulerK.cancel(appCtx, id)

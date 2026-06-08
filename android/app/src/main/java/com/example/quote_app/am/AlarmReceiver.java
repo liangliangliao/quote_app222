@@ -92,6 +92,51 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
         } catch (Throwable ignore) {}
 
         if (TextUtils.isEmpty(uid)) {
+            // 行为观察提醒：无 uid，但 payload 携带 module=behavior_tracking。
+            // 需要保留 payload/type，点击通知后 Flutter 才能路由到对应模板。
+            try {
+                JSONObject obj = new JSONObject(payload == null ? "{}" : payload);
+                String module = obj.optString("module", "");
+                if ("behavior_tracking".equals(module)) {
+                    String type = obj.optString("type", "");
+                    if ("behavior_auto_sync".equals(type)) {
+                        String result = com.example.quote_app.BehaviorObservationNativeImporter.runAutoSync(context.getApplicationContext(), payload == null ? "{}" : payload);
+                        String body = "自动读取完成，结果已进入待确认队列。";
+                        try { body = new JSONObject(result).optString("message", body); } catch (Throwable ignore2) {}
+                        NotifyHelper.sendBehaviorObservationAutoSyncResult(context.getApplicationContext(), id, body);
+                        return;
+                    }
+                    if ("behavior_preset_alarm".equals(type) || "behavior_preset_setup_alarm".equals(type)) {
+                        String mergedPayload = payload == null ? "{}" : payload;
+                        try { mergedPayload = com.example.quote_app.BehaviorPresetAlarmScheduler.normalizePayloadForFire(context.getApplicationContext(), mergedPayload); } catch (Throwable ignore2) {}
+                        String fireKey = "";
+                        try { fireKey = com.example.quote_app.BehaviorPresetAlarmScheduler.fireKey(mergedPayload); } catch (Throwable ignore2) {}
+                        try {
+                            android.content.SharedPreferences prefs = context.getApplicationContext().getSharedPreferences("behavior_preset_alarm_fire_guard", Context.MODE_PRIVATE);
+                            String lastKey = prefs.getString("last_key", "");
+                            long lastAt = prefs.getLong("last_at", 0L);
+                            long nowMs = System.currentTimeMillis();
+                            if (!TextUtils.isEmpty(fireKey) && fireKey.equals(lastKey) && nowMs - lastAt < 60_000L) {
+                                try { DbRepository.log(context.getApplicationContext(), "", "[BehaviorPresetAlarm] duplicate fire ignored key=" + fireKey + " id=" + id); } catch (Throwable ignore3) {}
+                                return;
+                            }
+                            prefs.edit().putString("last_key", fireKey).putLong("last_at", nowMs).apply();
+                        } catch (Throwable ignore2) {}
+                        try { com.example.quote_app.BehaviorPresetAlarmRingingService.startRinging(context.getApplicationContext(), id, mergedPayload); } catch (Throwable ringErr) {
+                            try { DbRepository.log(context.getApplicationContext(), "", "[BehaviorPresetAlarm] legacy start ringing service failed: " + ringErr.getClass().getSimpleName() + " " + ringErr.getMessage()); } catch (Throwable ignore3) {}
+                        }
+                        // v40: BehaviorPresetAlarmRingingService owns overlay + full-screen notification UI. Avoid a
+                        // second helper notification here, which can trigger duplicate foreground forms on some ROMs.
+                        try { com.example.quote_app.BehaviorPresetAlarmScheduler.scheduleNextAfterFire(context.getApplicationContext(), mergedPayload); } catch (Throwable ignore2) {}
+                        return;
+                    }
+                    String title = obj.optString("title", "行为观察提醒");
+                    String body = obj.optString("body", obj.optString("message", "点击通知，选择观察层面，再填写对应字段表单"));
+                    NotifyHelper.sendBehaviorObservationReminder(context.getApplicationContext(), id, title, body, payload == null ? "{}" : payload);
+                    return;
+                }
+            } catch (Throwable ignore) {}
+
             // 兜底：没有 uid 仍然发一个到点提醒
             String title = "提醒";
             String body = "到点了";

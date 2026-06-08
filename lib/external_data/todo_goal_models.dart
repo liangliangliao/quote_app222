@@ -1,0 +1,700 @@
+int _toInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+bool _toBool(Object? value) {
+  if (value is bool) return value;
+  if (value is num) return value.toInt() == 1;
+  final text = (value ?? '').toString().trim().toLowerCase();
+  return text == '1' || text == 'true' || text == 'yes' || text == 'fallback';
+}
+
+String _firstText(Map<String, Object?> row, List<String> keys, [String fallback = '']) {
+  for (final key in keys) {
+    final text = (row[key] ?? '').toString().trim();
+    if (text.isNotEmpty) return text;
+  }
+  return fallback;
+}
+
+class TodoGoalAnalysisResult {
+  const TodoGoalAnalysisResult({
+    required this.goalTitle,
+    required this.deepMeaning,
+    required this.desiredIdentity,
+    required this.goalCategory,
+    required this.goalOriginType,
+    required this.selfConcordanceScore,
+    required this.processValue,
+    required this.obstacleSummary,
+    required this.todayMinimumAction,
+    required this.minimumStandard,
+    required this.recommendedStandard,
+    required this.stretchStandard,
+    required this.difficultyScore,
+    required this.zoneType,
+    required this.coachMessage,
+    required this.provider,
+    this.solutionPlans = const <TodoGoalSolutionPlan>[],
+    required this.modelLabel,
+    this.rawResponse = '',
+    this.usedFallback = false,
+  });
+
+  final String goalTitle;
+  final String deepMeaning;
+  final String desiredIdentity;
+  final String goalCategory;
+  final String goalOriginType;
+  final int selfConcordanceScore;
+  final String processValue;
+  final String obstacleSummary;
+  final String todayMinimumAction;
+  final String minimumStandard;
+  final String recommendedStandard;
+  final String stretchStandard;
+  final int difficultyScore;
+  final String zoneType;
+  final String coachMessage;
+  final String provider;
+  final List<TodoGoalSolutionPlan> solutionPlans;
+  final String modelLabel;
+  final String rawResponse;
+  final bool usedFallback;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'goalTitle': goalTitle,
+        'deepMeaning': deepMeaning,
+        'desiredIdentity': desiredIdentity,
+        'goalCategory': goalCategory,
+        'goalOriginType': goalOriginType,
+        'selfConcordanceScore': selfConcordanceScore,
+        'processValue': processValue,
+        'obstacleSummary': obstacleSummary,
+        'todayMinimumAction': todayMinimumAction,
+        'minimumStandard': minimumStandard,
+        'recommendedStandard': recommendedStandard,
+        'stretchStandard': stretchStandard,
+        'difficultyScore': difficultyScore,
+        'zoneType': zoneType,
+        'coachMessage': coachMessage,
+        'provider': provider,
+        'solutionPlans': solutionPlans.map((e) => e.toJson()).toList(),
+        'modelLabel': modelLabel,
+        'usedFallback': usedFallback,
+      };
+}
+
+class TodoGoalReviewResult {
+  const TodoGoalReviewResult({
+    required this.summary,
+    required this.processInsight,
+    required this.meaningConnection,
+    required this.tomorrowNextStep,
+    required this.encouragement,
+    required this.provider,
+    required this.modelLabel,
+    this.rawResponse = '',
+    this.usedFallback = false,
+  });
+
+  final String summary;
+  final String processInsight;
+  final String meaningConnection;
+  final String tomorrowNextStep;
+  final String encouragement;
+  final String provider;
+  final String modelLabel;
+  final String rawResponse;
+  final bool usedFallback;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'summary': summary,
+        'processInsight': processInsight,
+        'meaningConnection': meaningConnection,
+        'tomorrowNextStep': tomorrowNextStep,
+        'encouragement': encouragement,
+        'provider': provider,
+        'modelLabel': modelLabel,
+        'usedFallback': usedFallback,
+      };
+}
+
+class TodoGoalProfile {
+  const TodoGoalProfile({
+    required this.goalId,
+    required this.sourceType,
+    required this.sourceTaskId,
+    required this.sourceListId,
+    required this.goalTitle,
+    required this.deepMeaning,
+    required this.desiredIdentity,
+    required this.goalCategory,
+    required this.goalOriginType,
+    required this.selfConcordanceScore,
+    required this.processValue,
+    required this.obstacleSummary,
+    required this.status,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.aiProvider = '',
+    this.aiModelLabel = '',
+    this.aiUsedFallback = false,
+  });
+
+  final String goalId;
+  final String sourceType;
+  final String sourceTaskId;
+  final String sourceListId;
+  final String goalTitle;
+  final String deepMeaning;
+  final String desiredIdentity;
+  final String goalCategory;
+  final String goalOriginType;
+  final int selfConcordanceScore;
+  final String processValue;
+  final String obstacleSummary;
+  final String status;
+  final int createdAtMs;
+  final int updatedAtMs;
+  final String aiProvider;
+  final String aiModelLabel;
+  final bool aiUsedFallback;
+
+  bool get isLikelyFallbackAnalysis {
+    final provider = aiProvider.trim().toLowerCase();
+    final model = aiModelLabel.trim().toLowerCase();
+    if (aiUsedFallback) return true;
+    if (provider.isEmpty || provider == 'local' || provider == 'fallback') return true;
+    if (model.contains('本地') || model.contains('local')) return true;
+    // v54: the explicit AI metadata is the source of truth. Earlier builds also
+    // guessed fallback from generic phrases such as “方向线索”, which could be
+    // generated by a real model and caused successful AI results to be displayed
+    // as local fallback. Do not classify real provider results by text alone.
+    return false;
+  }
+
+  factory TodoGoalProfile.fromMap(Map<String, Object?> row) => TodoGoalProfile(
+        goalId: (row['goal_id'] ?? '').toString(),
+        sourceType: (row['source_type'] ?? '').toString(),
+        sourceTaskId: (row['source_task_id'] ?? '').toString(),
+        sourceListId: (row['source_list_id'] ?? '').toString(),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+        deepMeaning: (row['deep_meaning'] ?? '').toString(),
+        desiredIdentity: (row['desired_identity'] ?? '').toString(),
+        goalCategory: (row['goal_category'] ?? '').toString(),
+        goalOriginType: (row['goal_origin_type'] ?? '').toString(),
+        selfConcordanceScore: _toInt(row['self_concordance_score']),
+        processValue: (row['process_value'] ?? '').toString(),
+        obstacleSummary: (row['obstacle_summary'] ?? '').toString(),
+        status: (row['status'] ?? 'active').toString(),
+        createdAtMs: _toInt(row['created_at_ms']),
+        updatedAtMs: _toInt(row['updated_at_ms']),
+        aiProvider: (row['ai_provider'] ?? '').toString(),
+        aiModelLabel: (row['ai_model_label'] ?? '').toString(),
+        aiUsedFallback: _toBool(row['ai_used_fallback']),
+      );
+}
+
+class TodoGoalActionStep {
+  const TodoGoalActionStep({
+    required this.stepId,
+    required this.goalId,
+    required this.sourceTaskId,
+    required this.title,
+    required this.minimumStandard,
+    required this.recommendedStandard,
+    required this.stretchStandard,
+    required this.difficultyScore,
+    required this.zoneType,
+    required this.plannedDate,
+    required this.plannedTime,
+    required this.status,
+    required this.completedAtMs,
+    required this.writeBackToTodo,
+    required this.remoteTaskId,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.goalTitle = '',
+    this.deepMeaning = '',
+    this.processValue = '',
+    this.sourceListId = '',
+    this.parentStepId = '',
+    this.parentStepTitle = '',
+    this.stepLevel = 1,
+    this.sortOrder = 0,
+  });
+
+  final String stepId;
+  final String goalId;
+  final String sourceTaskId;
+  final String title;
+  final String minimumStandard;
+  final String recommendedStandard;
+  final String stretchStandard;
+  final int difficultyScore;
+  final String zoneType;
+  final String plannedDate;
+  final String plannedTime;
+  final String status;
+  final int completedAtMs;
+  final bool writeBackToTodo;
+  final String remoteTaskId;
+  final int createdAtMs;
+  final int updatedAtMs;
+  final String goalTitle;
+  final String deepMeaning;
+  final String processValue;
+  final String sourceListId;
+  final String parentStepId;
+  final String parentStepTitle;
+  final int stepLevel;
+  final int sortOrder;
+
+  bool get isCompleted => status == 'completed';
+  bool get hasParentStep => parentStepId.trim().isNotEmpty;
+  String get parentLabel => hasParentStep
+      ? (parentStepTitle.trim().isEmpty ? '上一步行动' : parentStepTitle.trim())
+      : (goalTitle.trim().isEmpty ? '父目标' : goalTitle.trim());
+
+  factory TodoGoalActionStep.fromMap(Map<String, Object?> row) => TodoGoalActionStep(
+        stepId: (row['step_id'] ?? '').toString(),
+        goalId: (row['goal_id'] ?? '').toString(),
+        sourceTaskId: (row['source_task_id'] ?? '').toString(),
+        title: (row['title'] ?? '').toString(),
+        minimumStandard: (row['minimum_standard'] ?? '').toString(),
+        recommendedStandard: (row['recommended_standard'] ?? '').toString(),
+        stretchStandard: (row['stretch_standard'] ?? '').toString(),
+        difficultyScore: _toInt(row['difficulty_score']),
+        zoneType: (row['zone_type'] ?? '').toString(),
+        plannedDate: (row['planned_date'] ?? '').toString(),
+        plannedTime: (row['planned_time'] ?? '').toString(),
+        status: (row['status'] ?? 'not_started').toString(),
+        completedAtMs: _toInt(row['completed_at_ms']),
+        writeBackToTodo: _toInt(row['write_back_to_todo']) == 1,
+        remoteTaskId: (row['remote_task_id'] ?? '').toString(),
+        createdAtMs: _toInt(row['created_at_ms']),
+        updatedAtMs: _toInt(row['updated_at_ms']),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+        deepMeaning: (row['deep_meaning'] ?? '').toString(),
+        processValue: (row['process_value'] ?? '').toString(),
+        sourceListId: (row['source_list_id'] ?? '').toString(),
+        parentStepId: (row['parent_step_id'] ?? '').toString(),
+        parentStepTitle: (row['parent_step_title'] ?? '').toString(),
+        stepLevel: _toInt(row['step_level']) == 0 ? 1 : _toInt(row['step_level']),
+        sortOrder: _toInt(row['sort_order']),
+      );
+}
+
+class TodoGoalReflection {
+  const TodoGoalReflection({
+    required this.reflectionId,
+    required this.goalId,
+    required this.stepId,
+    required this.reflectionDate,
+    required this.whatDone,
+    required this.whyDone,
+    required this.processExperience,
+    required this.obstacle,
+    required this.tomorrowNextStep,
+    required this.aiSummary,
+    required this.moodScore,
+    required this.meaningScore,
+    required this.processScore,
+    required this.createdAtMs,
+    this.goalTitle = '',
+  });
+
+  final String reflectionId;
+  final String goalId;
+  final String stepId;
+  final String reflectionDate;
+  final String whatDone;
+  final String whyDone;
+  final String processExperience;
+  final String obstacle;
+  final String tomorrowNextStep;
+  final String aiSummary;
+  final int moodScore;
+  final int meaningScore;
+  final int processScore;
+  final int createdAtMs;
+  final String goalTitle;
+
+  factory TodoGoalReflection.fromMap(Map<String, Object?> row) => TodoGoalReflection(
+        reflectionId: (row['reflection_id'] ?? '').toString(),
+        goalId: (row['goal_id'] ?? '').toString(),
+        stepId: (row['step_id'] ?? '').toString(),
+        reflectionDate: (row['reflection_date'] ?? '').toString(),
+        whatDone: (row['what_done'] ?? '').toString(),
+        whyDone: (row['why_done'] ?? '').toString(),
+        processExperience: (row['process_experience'] ?? '').toString(),
+        obstacle: (row['obstacle'] ?? '').toString(),
+        tomorrowNextStep: (row['tomorrow_next_step'] ?? '').toString(),
+        aiSummary: (row['ai_summary'] ?? '').toString(),
+        moodScore: _toInt(row['mood_score']),
+        meaningScore: _toInt(row['meaning_score']),
+        processScore: _toInt(row['process_score']),
+        createdAtMs: _toInt(row['created_at_ms']),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+      );
+}
+
+
+class TodoGoalSolutionPlan {
+  const TodoGoalSolutionPlan({
+    required this.solutionId,
+    required this.goalId,
+    required this.sourceTaskId,
+    required this.title,
+    required this.methodName,
+    required this.methodBasis,
+    required this.zoneType,
+    required this.coreValueFocus,
+    required this.summary,
+    required this.riskNotes,
+    required this.isSelected,
+    required this.status,
+    required this.sortOrder,
+    required this.rawJson,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.nodes = const <TodoGoalProblemNode>[],
+  });
+
+  final String solutionId;
+  final String goalId;
+  final String sourceTaskId;
+  final String title;
+  final String methodName;
+  final String methodBasis;
+  final String zoneType;
+  final String coreValueFocus;
+  final String summary;
+  final String riskNotes;
+  final bool isSelected;
+  final String status;
+  final int sortOrder;
+  final String rawJson;
+  final int createdAtMs;
+  final int updatedAtMs;
+  final List<TodoGoalProblemNode> nodes;
+
+  bool get isComfort => zoneType == 'comfort';
+  bool get isStretch => zoneType == 'stretch';
+  bool get isPanic => zoneType == 'panic';
+  String get zoneLabel => zoneType == 'comfort' ? '舒适区方案' : (zoneType == 'panic' ? '恐慌区方案' : '拉伸区方案');
+
+  factory TodoGoalSolutionPlan.fromMap(Map<String, Object?> row) => TodoGoalSolutionPlan(
+        solutionId: _firstText(row, const ['solution_id', 'plan_id']),
+        goalId: _firstText(row, const ['goal_id']),
+        sourceTaskId: _firstText(row, const ['source_task_id', 'task_id']),
+        title: _firstText(row, const ['title', 'plan_title', 'plan_name'], 'AI问题解决方案'),
+        methodName: _firstText(row, const ['method_name', 'scientific_method', 'method'], '科学问题解决法'),
+        methodBasis: _firstText(row, const ['method_basis', 'basis'], '问题分解、执行意图、反馈调节'),
+        zoneType: _normalizeZoneValue(_firstText(row, const ['zone_type', 'zone'], 'stretch')),
+        coreValueFocus: _firstText(row, const ['core_value_focus', 'value_focus']),
+        summary: _firstText(row, const ['summary', 'plan_summary']),
+        riskNotes: _firstText(row, const ['risk_notes', 'risk_note']),
+        isSelected: _toInt(row['is_selected']) == 1,
+        status: (row['status'] ?? 'candidate').toString(),
+        sortOrder: _toInt(row['sort_order']),
+        rawJson: (row['raw_json'] ?? '').toString(),
+        createdAtMs: _toInt(row['created_at_ms']),
+        updatedAtMs: _toInt(row['updated_at_ms']),
+      );
+
+  factory TodoGoalSolutionPlan.fromJson(Map<String, dynamic> json, {int sortOrder = 0}) {
+    final nodesRaw = _readJsonListAny(json, const <String>[
+      'nodes',
+      'problemNodes',
+      'problem_nodes',
+      'problemTree',
+      'problem_tree',
+      'tree',
+      'steps',
+      '问题树',
+      '问题节点',
+      '节点',
+      '子问题',
+      '步骤',
+    ]);
+    final nodes = <TodoGoalProblemNode>[];
+    for (var i = 0; i < nodesRaw.length; i++) {
+      final item = nodesRaw[i];
+      if (item is Map<String, dynamic>) {
+        nodes.add(TodoGoalProblemNode.fromJson(item, sequenceOrder: i));
+      } else if (item is Map) {
+        nodes.add(TodoGoalProblemNode.fromJson(Map<String, dynamic>.from(item), sequenceOrder: i));
+      }
+    }
+    return TodoGoalSolutionPlan(
+      solutionId: '',
+      goalId: '',
+      sourceTaskId: '',
+      title: _readJsonTextAny(json, const <String>['title', 'planTitle', 'plan_title', 'planName', 'plan_name', 'name', '方案名称', '方案标题', '标题'], '问题解决方案'),
+      methodName: _readJsonTextAny(json, const <String>['methodName', 'method_name', 'scientificMethod', 'scientific_method', 'method', '方法', '科学方法', '问题解决方法'], '科学问题解决法'),
+      methodBasis: _readJsonTextAny(json, const <String>['methodBasis', 'method_basis', 'basis', 'scientificBasis', 'scientific_basis', '依据', '科学依据', '方法依据'], '问题分解、执行意图、反馈调节'),
+      zoneType: _normalizeZoneValue(_readJsonTextAny(json, const <String>['zoneType', 'zone_type', 'zone', 'difficultyZone', 'difficulty_zone', '区域', '难度区间'], 'stretch')),
+      coreValueFocus: _readJsonTextAny(json, const <String>['coreValueFocus', 'core_value_focus', 'valueFocus', 'value_focus', '核心价值', '价值焦点', '价值体系体现'], '目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌'),
+      summary: _readJsonTextAny(json, const <String>['summary', 'planSummary', 'plan_summary', '摘要', '方案摘要'], ''),
+      riskNotes: _readJsonTextAny(json, const <String>['riskNotes', 'risk_notes', 'riskNote', 'risk_note', 'risks', '风险', '风险说明', '适用边界'], ''),
+      isSelected: false,
+      status: 'candidate',
+      sortOrder: sortOrder,
+      rawJson: '',
+      createdAtMs: 0,
+      updatedAtMs: 0,
+      nodes: nodes,
+    );
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'solutionId': solutionId,
+        'goalId': goalId,
+        'sourceTaskId': sourceTaskId,
+        'title': title,
+        'methodName': methodName,
+        'methodBasis': methodBasis,
+        'zoneType': zoneType,
+        'coreValueFocus': coreValueFocus,
+        'summary': summary,
+        'riskNotes': riskNotes,
+        'isSelected': isSelected,
+        'status': status,
+        'sortOrder': sortOrder,
+        'nodes': nodes.map((e) => e.toJson()).toList(),
+      };
+}
+
+class TodoGoalProblemNode {
+  const TodoGoalProblemNode({
+    required this.nodeId,
+    required this.goalId,
+    required this.solutionId,
+    required this.parentNodeId,
+    required this.relationType,
+    required this.nodeType,
+    required this.title,
+    required this.description,
+    required this.acceptanceCriteria,
+    required this.actionableStep,
+    required this.zoneType,
+    required this.difficultyScore,
+    required this.estimatedMinutes,
+    required this.sequenceOrder,
+    required this.dependenciesJson,
+    required this.status,
+    required this.completionNote,
+    required this.aiReviewJson,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.tempNodeId = '',
+    this.tempParentNodeId = '',
+  });
+
+  final String nodeId;
+  final String goalId;
+  final String solutionId;
+  final String parentNodeId;
+  final String relationType;
+  final String nodeType;
+  final String title;
+  final String description;
+  final String acceptanceCriteria;
+  final String actionableStep;
+  final String zoneType;
+  final int difficultyScore;
+  final int estimatedMinutes;
+  final int sequenceOrder;
+  final String dependenciesJson;
+  final String status;
+  final String completionNote;
+  final String aiReviewJson;
+  final int createdAtMs;
+  final int updatedAtMs;
+  final String tempNodeId;
+  final String tempParentNodeId;
+
+  bool get isCompleted => status == 'completed';
+  bool get isFailed => status == 'failed';
+  bool get isActionable => actionableStep.trim().isNotEmpty || nodeType == 'action';
+  String get displayAction => actionableStep.trim().isEmpty ? title : actionableStep.trim();
+
+  factory TodoGoalProblemNode.fromMap(Map<String, Object?> row) => TodoGoalProblemNode(
+        nodeId: (row['node_id'] ?? '').toString(),
+        goalId: (row['goal_id'] ?? '').toString(),
+        solutionId: (row['solution_id'] ?? '').toString(),
+        parentNodeId: (row['parent_node_id'] ?? '').toString(),
+        relationType: (row['relation_type'] ?? 'tree').toString(),
+        nodeType: (row['node_type'] ?? 'problem').toString(),
+        title: (row['title'] ?? '').toString(),
+        description: (row['description'] ?? '').toString(),
+        acceptanceCriteria: (row['acceptance_criteria'] ?? '').toString(),
+        actionableStep: (row['actionable_step'] ?? '').toString(),
+        zoneType: _normalizeZoneValue((row['zone_type'] ?? 'stretch').toString()),
+        difficultyScore: _toInt(row['difficulty_score']) == 0 ? 5 : _toInt(row['difficulty_score']),
+        estimatedMinutes: _toInt(row['estimated_minutes']),
+        sequenceOrder: _toInt(row['sequence_order']),
+        dependenciesJson: (row['dependencies_json'] ?? '').toString(),
+        status: (row['status'] ?? 'not_started').toString(),
+        completionNote: (row['completion_note'] ?? '').toString(),
+        aiReviewJson: (row['ai_review_json'] ?? '').toString(),
+        createdAtMs: _toInt(row['created_at_ms']),
+        updatedAtMs: _toInt(row['updated_at_ms']),
+      );
+
+  factory TodoGoalProblemNode.fromJson(Map<String, dynamic> json, {int sequenceOrder = 0}) => TodoGoalProblemNode(
+        nodeId: '',
+        goalId: '',
+        solutionId: '',
+        parentNodeId: '',
+        relationType: _readJsonTextAny(json, const <String>['relationType', 'relation_type', 'relation', '关系类型'], 'tree'),
+        nodeType: _readJsonTextAny(json, const <String>['nodeType', 'node_type', 'type', '节点类型', '类型'], 'problem'),
+        title: _readJsonTextAny(json, const <String>['title', 'nodeTitle', 'node_title', 'name', '标题', '节点标题', '子问题'], '子问题'),
+        description: _readJsonTextAny(json, const <String>['description', 'desc', '说明', '描述'], ''),
+        acceptanceCriteria: _readJsonTextAny(json, const <String>['acceptanceCriteria', 'acceptance_criteria', 'doneCriteria', 'done_criteria', 'completionCriteria', '完成标准', '验收标准'], '能用事实判断是否完成'),
+        actionableStep: _readJsonTextAny(json, const <String>['actionableStep', 'actionable_step', 'action', 'step', '具体行动', '可执行动作', '行动', '最小行动'], ''),
+        zoneType: _normalizeZoneValue(_readJsonTextAny(json, const <String>['zoneType', 'zone_type', 'zone', '难度区间', '区域'], 'stretch')),
+        difficultyScore: _readJsonIntAny(json, const <String>['difficultyScore', 'difficulty_score', 'difficulty', '难度', '难度分'], 5),
+        estimatedMinutes: _readJsonIntAny(json, const <String>['estimatedMinutes', 'estimated_minutes', 'minutes', 'durationMinutes', '预计分钟', '耗时分钟'], 5),
+        sequenceOrder: _readJsonIntAny(json, const <String>['sequenceOrder', 'sequence_order', 'sortOrder', 'sort_order', 'order', '顺序'], sequenceOrder),
+        dependenciesJson: _readJsonDynamic(json, const <String>['dependencies', 'dependenciesJson', 'dependencies_json', '依赖'])?.toString() ?? '',
+        status: 'not_started',
+        completionNote: '',
+        aiReviewJson: '',
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        tempNodeId: _readJsonTextAny(json, const <String>['id', 'nodeId', 'node_id', '节点ID'], ''),
+        tempParentNodeId: _readJsonTextAny(json, const <String>['parentId', 'parentNodeId', 'parent_node_id', 'parent_id', '父节点ID'], ''),
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'nodeId': nodeId,
+        'goalId': goalId,
+        'solutionId': solutionId,
+        'parentNodeId': parentNodeId,
+        'relationType': relationType,
+        'nodeType': nodeType,
+        'title': title,
+        'description': description,
+        'acceptanceCriteria': acceptanceCriteria,
+        'actionableStep': actionableStep,
+        'zoneType': zoneType,
+        'difficultyScore': difficultyScore,
+        'estimatedMinutes': estimatedMinutes,
+        'sequenceOrder': sequenceOrder,
+        'dependenciesJson': dependenciesJson,
+        'status': status,
+        'completionNote': completionNote,
+      };
+}
+
+class TodoGoalAlternativeStep {
+  const TodoGoalAlternativeStep({
+    required this.title,
+    required this.rationale,
+    required this.minimumStandard,
+    required this.recommendedStandard,
+    required this.zoneType,
+    required this.difficultyScore,
+  });
+
+  final String title;
+  final String rationale;
+  final String minimumStandard;
+  final String recommendedStandard;
+  final String zoneType;
+  final int difficultyScore;
+
+  factory TodoGoalAlternativeStep.fromJson(Map<String, dynamic> json) => TodoGoalAlternativeStep(
+        title: _readJsonTextAny(json, const <String>['title', 'action', 'step', 'name', '标题', '行动', '替代步骤'], '替代步骤'),
+        rationale: _readJsonTextAny(json, const <String>['rationale', 'why', 'reason', '理由', '为什么更适合'], '让步骤更小、更清晰、更贴近当前阻力。'),
+        minimumStandard: _readJsonTextAny(json, const <String>['minimumStandard', 'minimum_standard', '最低标准'], '先做2-5分钟，能开始即可。'),
+        recommendedStandard: _readJsonTextAny(json, const <String>['recommendedStandard', 'recommended_standard', '推荐标准'], '完成一个可观察动作并记录事实。'),
+        zoneType: _normalizeZoneValue(_readJsonTextAny(json, const <String>['zoneType', 'zone_type', 'zone', '难度区间'], 'stretch')),
+        difficultyScore: _readJsonIntAny(json, const <String>['difficultyScore', 'difficulty_score', 'difficulty', '难度'], 3),
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'title': title,
+        'rationale': rationale,
+        'minimumStandard': minimumStandard,
+        'recommendedStandard': recommendedStandard,
+        'zoneType': zoneType,
+        'difficultyScore': difficultyScore,
+      };
+}
+
+class TodoGoalStepRecoveryResult {
+  const TodoGoalStepRecoveryResult({
+    required this.failureDiagnosis,
+    required this.restartGuidance,
+    required this.principleFit,
+    required this.alternatives,
+    required this.restructureWarning,
+    required this.provider,
+    required this.modelLabel,
+    this.rawResponse = '',
+    this.usedFallback = false,
+  });
+
+  final String failureDiagnosis;
+  final String restartGuidance;
+  final String principleFit;
+  final List<TodoGoalAlternativeStep> alternatives;
+  final String restructureWarning;
+  final String provider;
+  final String modelLabel;
+  final String rawResponse;
+  final bool usedFallback;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'failureDiagnosis': failureDiagnosis,
+        'restartGuidance': restartGuidance,
+        'principleFit': principleFit,
+        'alternatives': alternatives.map((e) => e.toJson()).toList(),
+        'restructureWarning': restructureWarning,
+        'provider': provider,
+        'modelLabel': modelLabel,
+        'usedFallback': usedFallback,
+      };
+}
+
+Object? _readJsonDynamic(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    if (json.containsKey(key) && json[key] != null) return json[key];
+  }
+  return null;
+}
+
+String _readJsonText(Map<String, dynamic> json, String key, String fallback) {
+  return _readJsonTextAny(json, <String>[key], fallback);
+}
+
+String _readJsonTextAny(Map<String, dynamic> json, List<String> keys, String fallback) {
+  final value = _readJsonDynamic(json, keys);
+  final text = value == null ? '' : value.toString().trim();
+  return text.isEmpty ? fallback : text;
+}
+
+int _readJsonIntAny(Map<String, dynamic> json, List<String> keys, int fallback) {
+  final value = _readJsonDynamic(json, keys);
+  if (value is int) return value == 0 ? fallback : value;
+  if (value is num) return value.toInt() == 0 ? fallback : value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
+List<dynamic> _readJsonListAny(Map<String, dynamic> json, List<String> keys) {
+  final value = _readJsonDynamic(json, keys);
+  return value is List ? value : <dynamic>[];
+}
+
+String _normalizeZoneValue(String value) {
+  final v = value.trim().toLowerCase();
+  if (v.contains('panic') || v.contains('恐慌')) return 'panic';
+  if (v.contains('comfort') || v.contains('舒适')) return 'comfort';
+  return 'stretch';
+}

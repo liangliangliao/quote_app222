@@ -24,6 +24,7 @@ class GlobalAiSettings {
   static const String meditationWeeklySummaryPromptKey = 'meditation_weekly_summary_prompt';
   static const String meditationRecommendationPromptKey = 'meditation_recommendation_prompt';
   static const String meditationUploadPausePromptKey = 'meditation_upload_pause_prompt';
+  static const String behaviorPresetDailyReviewAiPromptKey = 'behavior_preset_daily_review_ai_prompt';
 
   final ConfigDao _configDao = ConfigDao();
   final KeyValueDao _kvDao = KeyValueDao();
@@ -1141,6 +1142,95 @@ ending_reflection''';
   ],
   "ending_reflection": ""
 }''';
+
+
+
+  String get defaultBehaviorPresetDailyReviewAiPrompt => '''你是“行为观察模块”的顶级行为科学、社会统计、风险评估、心理学与哲学综合分析助手。
+
+你将收到用户某一天的“预设行为复盘”结构化输入 JSON：
+{{review_input_json}}
+
+你的任务：
+1. 对当天所有预设行为分别分析，并把每个行为放到“人类迄今所有行为经验”的大坐标中理解。
+2. 根据人类历史迄今为止的经验、公开知识、心理学/社会学/行为科学常识、人口统计数量级，用科学方法做粗略估算：该行为在人类行为历史数据中的占比大小、出现概率、按世界总人口换算大约有多少人曾经或正在做类似行为。
+3. 必须说明估算依据、估算不确定性、证据等级与限制。你无法访问真实全人类完整数据库，所以要用“合理数量级估算”，不要假装精确。
+4. 借助直观类比或通俗案例，让用户心中有数：这是否前无古人后无来者、是否绝无仅有、是否稀有/罕见、是否占据人类活动主要部分、是否普遍存在、是否非常显而易见。
+5. 同时评估该行为的风险水平、执行难易程度、长期价值与自我成长意义。
+6. 如果某个行为属于罕见或极罕见行为，要额外从探索未知领域精神、超越与创新精神、哲学角度，客观分析其正面意义、潜在价值与负面影响。
+7. 最后从多个层面给出至少 10 组“人类历史上一些罕见甚至无人涉足、风险高、但长期看蕴含巨大正面意义和价值的行为案例”，至少包含自我成长层面，也可以包含科学探索、航海/地理发现、医学、社会改革、艺术创造、思想哲学、工程技术、极限运动、创业创新、教育实践等层面。
+
+输出要求：只输出一个 JSON 对象，不要 markdown，不要代码块。字段必须尽量完整：
+{
+  "schema_version": "behavior_preset_ai_analysis_v1",
+  "review_date": "YYYY-MM-DD",
+  "summary": {
+    "title": "一句话标题",
+    "overall_conclusion": "总体结论",
+    "human_behavior_position": "这些行为在人类行为谱系中的位置",
+    "total_count": 0,
+    "done_count": 0,
+    "missed_count": 0,
+    "completion_rate_text": "完成率说明",
+    "reliability_statement": "可靠性、估算限制与不确定性说明"
+  },
+  "behaviors": [
+    {
+      "preset_name": "行为名称",
+      "status": "done/missed",
+      "category": "类别",
+      "missed_reason": "未完成原因，没有则空字符串",
+      "one_sentence_conclusion": "一句话结论",
+      "human_commonality_level": "极普遍/普遍/较常见/少见/罕见/极罕见/近乎无人涉足",
+      "estimated_population_text": "按全球人口换算的大致人数或范围",
+      "estimated_probability_text": "粗略出现概率或数量级",
+      "historical_share_text": "在人类行为历史中的粗略占比/数量级说明",
+      "not_unique_explanation": "是否前无古人后无来者、是否绝无仅有的判断",
+      "intuitive_analogy": "直观类比或通俗案例",
+      "risk_level": "低/中/高/极高",
+      "risk_reasoning": "风险判断依据",
+      "difficulty_level": "容易/中等/困难/极难",
+      "difficulty_reasoning": "难易度判断依据",
+      "self_growth_meaning": "自我成长层面的意义",
+      "positive_value": "正面价值",
+      "negative_impact": "负面影响或代价",
+      "rare_behavior_extra_analysis": "若罕见或极罕见，从探索未知、超越创新、哲学角度分析；若不罕见，说明不适用",
+      "evidence_and_assumptions": ["依据1", "依据2"],
+      "confidence": "低/中/高"
+    }
+  ],
+  "rare_high_risk_meaningful_cases": [
+    {
+      "layer": "自我成长/科学探索/社会改革等",
+      "case_title": "案例标题",
+      "why_rare_or_unprecedented": "为什么罕见甚至无人涉足",
+      "risk": "风险说明",
+      "long_term_value": "长期正面意义",
+      "philosophical_meaning": "哲学意义",
+      "possible_negative_impact": "可能负面影响"
+    }
+  ],
+  "method_notes": ["估算方法说明", "数据限制说明", "如何阅读这些结论"]
+}
+
+必须保证 rare_high_risk_meaningful_cases 至少 10 组。语言要清楚、可读、具体，不要空泛。''';
+
+
+
+  Future<String> getBehaviorPresetDailyReviewAiPrompt() => _getLocalPrompt(
+        key: behaviorPresetDailyReviewAiPromptKey,
+        fallback: defaultBehaviorPresetDailyReviewAiPrompt,
+      );
+
+  Future<void> saveBehaviorPresetDailyReviewAiPrompt(String prompt) => _saveLocalPrompt(
+        key: behaviorPresetDailyReviewAiPromptKey,
+        fallback: defaultBehaviorPresetDailyReviewAiPrompt,
+        value: prompt,
+      );
+
+  Future<Map<String, String>> inspectBehaviorPresetDailyReviewAiPromptState() => _inspectLocalPrompt(
+        key: behaviorPresetDailyReviewAiPromptKey,
+        fallback: defaultBehaviorPresetDailyReviewAiPrompt,
+      );
 
   Future<String> getDrawerHeaderPrompt() => _getLocalPrompt(
         key: drawerHeaderPromptKey,

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="150dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="120dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/behavior_observation_widget"
+    android:previewImage="@mipmap/ic_launcher"
+    android:description="@string/behavior_observation_widget_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

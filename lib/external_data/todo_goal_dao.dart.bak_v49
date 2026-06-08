@@ -1,0 +1,400 @@
+import 'dart:convert';
+
+import 'package:sqflite/sqflite.dart';
+
+import '../data/db.dart';
+import 'todo_dao.dart';
+import 'todo_goal_models.dart';
+import 'todo_models.dart';
+
+class TodoGoalDao {
+  Future<Database> get _db async {
+    final db = await AppDatabase.instance();
+    await ensureTables(db);
+    return db;
+  }
+
+  Future<void> ensureTables([Database? database]) async {
+    final db = database ?? await AppDatabase.instance();
+    await TodoDao().ensureTables(db);
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_profiles (
+        goal_id TEXT PRIMARY KEY,
+        source_type TEXT NOT NULL,
+        source_task_id TEXT,
+        source_list_id TEXT,
+        goal_title TEXT NOT NULL,
+        deep_meaning TEXT,
+        desired_identity TEXT,
+        goal_category TEXT,
+        goal_origin_type TEXT,
+        self_concordance_score INTEGER DEFAULT 0,
+        process_value TEXT,
+        obstacle_summary TEXT,
+        status TEXT DEFAULT 'active',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_action_steps (
+        step_id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL,
+        source_task_id TEXT,
+        title TEXT NOT NULL,
+        minimum_standard TEXT,
+        recommended_standard TEXT,
+        stretch_standard TEXT,
+        difficulty_score INTEGER DEFAULT 5,
+        zone_type TEXT,
+        planned_date TEXT,
+        planned_time TEXT,
+        status TEXT DEFAULT 'not_started',
+        completed_at_ms INTEGER,
+        write_back_to_todo INTEGER DEFAULT 0,
+        remote_task_id TEXT,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_reflections (
+        reflection_id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL,
+        step_id TEXT,
+        reflection_date TEXT NOT NULL,
+        what_done TEXT,
+        why_done TEXT,
+        process_experience TEXT,
+        obstacle TEXT,
+        tomorrow_next_step TEXT,
+        ai_summary TEXT,
+        mood_score INTEGER DEFAULT 0,
+        meaning_score INTEGER DEFAULT 0,
+        process_score INTEGER DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_ai_analysis (
+        analysis_id TEXT PRIMARY KEY,
+        goal_id TEXT,
+        source_task_id TEXT,
+        analysis_type TEXT NOT NULL,
+        prompt_text TEXT,
+        result_json TEXT,
+        model_name TEXT,
+        token_usage INTEGER DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_sync_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id TEXT NOT NULL,
+        local_step_id TEXT,
+        todo_list_id TEXT,
+        todo_task_id TEXT,
+        sync_direction TEXT,
+        last_sync_at_ms INTEGER,
+        local_status TEXT DEFAULT 'synced'
+      )
+    ''');
+  }
+
+  String newId(String prefix) => '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
+
+  String todayDate() {
+    final now = DateTime.now();
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$m-$d';
+  }
+
+  Future<TodoGoalProfile?> getGoal(String goalId) async {
+    final db = await _db;
+    final rows = await db.query('goal_profiles', where: 'goal_id = ?', whereArgs: [goalId], limit: 1);
+    if (rows.isEmpty) return null;
+    return TodoGoalProfile.fromMap(rows.first);
+  }
+
+  Future<TodoGoalProfile?> getGoalForTask(String taskId) async {
+    final db = await _db;
+    final rows = await db.query('goal_profiles', where: 'source_task_id = ? AND status != ?', whereArgs: [taskId, 'deleted'], orderBy: 'updated_at_ms DESC', limit: 1);
+    if (rows.isEmpty) return null;
+    return TodoGoalProfile.fromMap(rows.first);
+  }
+
+  Future<String> saveGoalFromAnalysis({
+    required TodoTaskRecord task,
+    required TodoGoalAnalysisResult analysis,
+    String? existingGoalId,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final old = existingGoalId == null || existingGoalId.trim().isEmpty ? await getGoalForTask(task.taskId) : await getGoal(existingGoalId.trim());
+    final goalId = old?.goalId ?? newId('todo_goal');
+    await db.insert(
+      'goal_profiles',
+      <String, Object?>{
+        'goal_id': goalId,
+        'source_type': 'microsoft_todo',
+        'source_task_id': task.taskId,
+        'source_list_id': task.listId,
+        'goal_title': analysis.goalTitle.trim().isEmpty ? task.title : analysis.goalTitle.trim(),
+        'deep_meaning': analysis.deepMeaning,
+        'desired_identity': analysis.desiredIdentity,
+        'goal_category': analysis.goalCategory,
+        'goal_origin_type': analysis.goalOriginType,
+        'self_concordance_score': analysis.selfConcordanceScore.clamp(0, 100).toInt(),
+        'process_value': analysis.processValue,
+        'obstacle_summary': analysis.obstacleSummary,
+        'status': old?.status ?? 'active',
+        'created_at_ms': old?.createdAtMs ?? now,
+        'updated_at_ms': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    final existingSteps = old == null ? <TodoGoalActionStep>[] : await listActionSteps(goalId);
+    final hasOpenStep = existingSteps.any((e) => !e.isCompleted && e.title.trim() == analysis.todayMinimumAction.trim());
+    if (!hasOpenStep) {
+      await createActionStep(
+        goalId: goalId,
+        sourceTaskId: task.taskId,
+        title: analysis.todayMinimumAction.trim().isEmpty ? '今天推进“${task.title}”5分钟' : analysis.todayMinimumAction.trim(),
+        minimumStandard: analysis.minimumStandard,
+        recommendedStandard: analysis.recommendedStandard,
+        stretchStandard: analysis.stretchStandard,
+        difficultyScore: analysis.difficultyScore,
+        zoneType: analysis.zoneType,
+        plannedDate: todayDate(),
+      );
+    }
+
+    await addAiAnalysis(
+      goalId: goalId,
+      sourceTaskId: task.taskId,
+      analysisType: 'task_to_goal',
+      promptText: '',
+      resultJson: jsonEncode(analysis.toJson()),
+      modelName: analysis.modelLabel,
+    );
+    return goalId;
+  }
+
+  Future<String> createActionStep({
+    required String goalId,
+    required String sourceTaskId,
+    required String title,
+    String minimumStandard = '',
+    String recommendedStandard = '',
+    String stretchStandard = '',
+    int difficultyScore = 5,
+    String zoneType = 'stretch',
+    String? plannedDate,
+    String plannedTime = '',
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final stepId = newId('todo_step_goal');
+    await db.insert('goal_action_steps', <String, Object?>{
+      'step_id': stepId,
+      'goal_id': goalId,
+      'source_task_id': sourceTaskId,
+      'title': title.trim().isEmpty ? '今天做一个5分钟最小行动' : title.trim(),
+      'minimum_standard': minimumStandard,
+      'recommended_standard': recommendedStandard,
+      'stretch_standard': stretchStandard,
+      'difficulty_score': difficultyScore.clamp(1, 10).toInt(),
+      'zone_type': zoneType.trim().isEmpty ? 'stretch' : zoneType.trim(),
+      'planned_date': plannedDate ?? todayDate(),
+      'planned_time': plannedTime,
+      'status': 'not_started',
+      'completed_at_ms': 0,
+      'write_back_to_todo': 0,
+      'remote_task_id': '',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    });
+    return stepId;
+  }
+
+  Future<List<TodoGoalProfile>> listGoals({int limit = 100}) async {
+    final db = await _db;
+    final rows = await db.query('goal_profiles', where: 'status != ?', whereArgs: ['deleted'], orderBy: 'updated_at_ms DESC', limit: limit);
+    return rows.map(TodoGoalProfile.fromMap).toList();
+  }
+
+  Future<List<TodoGoalActionStep>> listActionSteps(String goalId) async {
+    final db = await _db;
+    final rows = await db.query('goal_action_steps', where: 'goal_id = ?', whereArgs: [goalId], orderBy: 'created_at_ms DESC');
+    return rows.map(TodoGoalActionStep.fromMap).toList();
+  }
+
+  Future<List<TodoGoalActionStep>> listTodaySteps({bool includeCompleted = true}) async {
+    final db = await _db;
+    final today = todayDate();
+    final rows = await db.rawQuery('''
+      SELECT s.*, g.goal_title, g.deep_meaning, g.process_value, g.source_list_id
+      FROM goal_action_steps s
+      LEFT JOIN goal_profiles g ON g.goal_id = s.goal_id
+      WHERE g.status != 'deleted'
+        AND (s.planned_date = ? OR s.planned_date IS NULL OR s.planned_date = '')
+        ${includeCompleted ? '' : "AND s.status != 'completed'"}
+      ORDER BY CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END, s.created_at_ms DESC
+      LIMIT 100
+    ''', [today]);
+    return rows.map(TodoGoalActionStep.fromMap).toList();
+  }
+
+  Future<List<TodoTaskRecord>> listCandidateTasks({int limit = 80}) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT t.*,
+             COALESCE(l.display_name, '') AS list_display_name,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'checklistItem' AND COALESCE(c.local_deleted, 0) = 0) AS checklist_count,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'attachment' AND COALESCE(c.local_deleted, 0) = 0) AS attachment_count,
+             (SELECT COUNT(*) FROM ms_todo_task_children c WHERE c.task_id = t.task_id AND c.child_type = 'linkedResource' AND COALESCE(c.local_deleted, 0) = 0) AS linked_resource_count
+      FROM ms_todo_tasks t
+      LEFT JOIN ms_todo_lists l ON l.list_id = t.list_id
+      WHERE COALESCE(t.local_deleted, 0) = 0
+        AND t.status != 'completed'
+      ORDER BY CASE WHEN t.is_my_day = 1 THEN 0 ELSE 1 END,
+               t.due_date_time ASC,
+               t.last_modified_date_time DESC
+      LIMIT ?
+    ''', [limit]);
+    return rows.map(TodoTaskRecord.fromMap).toList();
+  }
+
+
+  Future<void> updateStepStatus(String stepId, String status) async {
+    final db = await _db;
+    final normalized = status.trim().isEmpty ? 'not_started' : status.trim();
+    await db.update(
+      'goal_action_steps',
+      <String, Object?>{
+        'status': normalized,
+        'completed_at_ms': normalized == 'completed' ? DateTime.now().millisecondsSinceEpoch : 0,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'step_id = ?',
+      whereArgs: [stepId],
+    );
+  }
+
+  Future<void> completeStep(String stepId, {bool completed = true}) async {
+    final db = await _db;
+    await db.update(
+      'goal_action_steps',
+      <String, Object?>{
+        'status': completed ? 'completed' : 'not_started',
+        'completed_at_ms': completed ? DateTime.now().millisecondsSinceEpoch : 0,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'step_id = ?',
+      whereArgs: [stepId],
+    );
+  }
+
+  Future<void> markStepWrittenBack({required String stepId, required String remoteTaskId}) async {
+    final db = await _db;
+    await db.update(
+      'goal_action_steps',
+      <String, Object?>{'write_back_to_todo': 1, 'remote_task_id': remoteTaskId, 'updated_at_ms': DateTime.now().millisecondsSinceEpoch},
+      where: 'step_id = ?',
+      whereArgs: [stepId],
+    );
+  }
+
+  Future<String> addReflection({
+    required String goalId,
+    required String stepId,
+    required String whatDone,
+    required String whyDone,
+    required String processExperience,
+    required String obstacle,
+    required String tomorrowNextStep,
+    required String aiSummary,
+    int moodScore = 0,
+    int meaningScore = 0,
+    int processScore = 0,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = newId('todo_reflection');
+    await db.insert('goal_reflections', <String, Object?>{
+      'reflection_id': id,
+      'goal_id': goalId,
+      'step_id': stepId,
+      'reflection_date': todayDate(),
+      'what_done': whatDone,
+      'why_done': whyDone,
+      'process_experience': processExperience,
+      'obstacle': obstacle,
+      'tomorrow_next_step': tomorrowNextStep,
+      'ai_summary': aiSummary,
+      'mood_score': moodScore,
+      'meaning_score': meaningScore,
+      'process_score': processScore,
+      'created_at_ms': now,
+    });
+    return id;
+  }
+
+  Future<List<TodoGoalReflection>> listReflections({int limit = 80}) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT r.*, COALESCE(g.goal_title, '') AS goal_title
+      FROM goal_reflections r
+      LEFT JOIN goal_profiles g ON g.goal_id = r.goal_id
+      ORDER BY r.created_at_ms DESC
+      LIMIT ?
+    ''', [limit]);
+    return rows.map(TodoGoalReflection.fromMap).toList();
+  }
+
+  Future<void> addAiAnalysis({
+    required String goalId,
+    required String sourceTaskId,
+    required String analysisType,
+    required String promptText,
+    required String resultJson,
+    required String modelName,
+    int tokenUsage = 0,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert('goal_ai_analysis', <String, Object?>{
+      'analysis_id': newId('todo_ai'),
+      'goal_id': goalId,
+      'source_task_id': sourceTaskId,
+      'analysis_type': analysisType,
+      'prompt_text': promptText,
+      'result_json': resultJson,
+      'model_name': modelName,
+      'token_usage': tokenUsage,
+      'created_at_ms': now,
+    });
+  }
+
+  Future<void> addSyncLink({
+    required String goalId,
+    required String localStepId,
+    required String todoListId,
+    required String todoTaskId,
+    String syncDirection = 'goal_to_todo',
+  }) async {
+    final db = await _db;
+    await db.insert('goal_sync_links', <String, Object?>{
+      'goal_id': goalId,
+      'local_step_id': localStepId,
+      'todo_list_id': todoListId,
+      'todo_task_id': todoTaskId,
+      'sync_direction': syncDirection,
+      'last_sync_at_ms': DateTime.now().millisecondsSinceEpoch,
+      'local_status': 'synced',
+    });
+  }
+}
