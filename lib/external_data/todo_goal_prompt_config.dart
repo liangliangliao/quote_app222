@@ -9,6 +9,7 @@ class TodoGoalPromptConfig {
   static const String systemPromptKey = 'todo_goal_ai_system_prompt_v1';
   static const String taskPromptKey = 'todo_goal_ai_task_prompt_v1';
   static const String reviewPromptKey = 'todo_goal_ai_review_prompt_v1';
+  static const String solutionPromptKey = 'todo_goal_ai_solution_prompt_v1';
 
   static const String defaultSystemPrompt = '''你是积极心理学行动教练。
 不要讲抽象理论，不要输出 Markdown。
@@ -36,6 +37,18 @@ class TodoGoalPromptConfig {
 请只输出 JSON：
 {
   "goalTitle": "用一句话表达这个任务背后的方向，而不是机械复制任务标题",
+  "resultGoal": "山顶：有时间范围或可验证标准的未来结果",
+  "valueGoal": "价值：这个结果服务于怎样的生活、关系、自由、成长或贡献",
+  "processGoal": "山路：可持续重复、允许不完美的过程目标",
+  "coreValues": "绑定1-3个核心价值，用中文逗号分隔",
+  "autonomyScore": 0,
+  "valueAlignmentScore": 0,
+  "interestConnectionScore": 0,
+  "passionScore": 0,
+  "externalPressureScore": 0,
+  "processHappinessScore": 0,
+  "goalType": "自我一致目标/外部压力目标/结果焦虑型目标/过程缺失型目标/模糊愿望型目标/可行动目标/需要重写目标",
+  "currentStage": "当前所处的现实阶段",
   "deepMeaning": "用现实语言说明它通向哪种生活、能力或身份，并明确今天为什么值得做",
   "desiredIdentity": "我正在成为怎样的人",
   "goalCategory": "工作/学习/健康/关系/成长/生活/其他",
@@ -43,13 +56,57 @@ class TodoGoalPromptConfig {
   "selfConcordanceScore": 0,
   "processValue": "做今天这一小步时，用户要观察、体验或练习什么，必须可记录",
   "obstacleSummary": "可能让用户无法进入当下行动的阻力",
-  "todayMinimumAction": "5分钟内可开始、清晰可观察的动作",
-  "minimumStandard": "最低完成标准：足够小，避免恐慌",
-  "recommendedStandard": "推荐完成标准：正常拉伸区",
-  "stretchStandard": "拉伸挑战：可选，不制造压力",
+  "todayMinimumAction": "结果型行动：5分钟内可开始、清晰可观察、直接推进结果的动作",
+  "processAction": "过程型行动：让用户在主行动中体验学习、投入、勇气或掌控感的动作",
+  "valueAction": "价值型行动：用一句话或一个微行动把今天与核心价值连接起来",
+  "experiencePrompt": "今天做这件事时，你想体验什么？只问一个具体、可回答的问题",
+  "actionPlace": "最容易开始的具体地点或场景",
+  "startTrigger": "看到什么或打开什么后立即开始",
+  "completionQuestion": "行动后用于提炼意义的一个问题",
+  "minimumStandard": "最低版：2分钟也能完成，只证明可以开始",
+  "simplifiedStandard": "简化版：5-10分钟，状态一般时仍能完成",
+  "recommendedStandard": "标准版：正常状态下的清晰完成标准",
+  "stretchStandard": "挑战版：状态允许时可选，不制造压力",
+
   "difficultyScore": 5,
   "zoneType": "comfort/stretch/panic",
   "coachMessage": "不要讲道理，只用两三句话告诉用户现在先做什么、为什么只做最低标准也有效"
+}
+''';
+
+
+  static const String defaultSolutionPromptTemplate = '''{{VALUE_SYSTEM}}
+
+你是独立的“目标问题解决方案设计器”。本请求只负责生成问题解决方案，不再重复执行目标澄清、自我一致性评分或每日复盘。
+
+已确认目标：{{GOAL_TITLE}}
+结果目标：{{RESULT_GOAL}}
+价值目标：{{VALUE_GOAL}}
+过程目标：{{PROCESS_GOAL}}
+核心价值：{{CORE_VALUES}}
+已识别阻力：{{OBSTACLE_SUMMARY}}
+今日最小行动：{{TODAY_ACTION}}
+原始任务背景：{{TASK_BODY}}
+
+请生成至少3个相互独立、完整可用的方案：舒适区、拉伸区、恐慌区。方案可使用问题分解、WOOP/心理对比、执行意图、行为激活、设计思维、反馈调节或风险预案等方法。
+每个方案必须包含 nodes，用父子节点表达“顶层问题→子问题→更小子问题→底层可执行动作”。底层 action 必须具体到时间、地点、对象、动作与完成标准。
+只输出 JSON：
+{
+  "solutionPlans": [
+    {
+      "title": "方案名称",
+      "methodName": "科学方法",
+      "methodBasis": "方法依据",
+      "zoneType": "comfort/stretch/panic",
+      "coreValueFocus": "如何保持自我一致并重视过程",
+      "summary": "方案摘要",
+      "riskNotes": "风险与适用边界",
+      "nodes": [
+        {"id":"root", "parentId":"", "relationType":"tree", "nodeType":"problem", "title":"顶层问题", "description":"", "acceptanceCriteria":"", "actionableStep":"", "zoneType":"stretch", "difficultyScore":5, "estimatedMinutes":10, "sequenceOrder":0},
+        {"id":"a", "parentId":"root", "relationType":"tree", "nodeType":"action", "title":"底层动作", "description":"", "acceptanceCriteria":"", "actionableStep":"具体行动", "zoneType":"stretch", "difficultyScore":3, "estimatedMinutes":5, "sequenceOrder":1}
+      ]
+    }
+  ]
 }
 ''';
 
@@ -87,6 +144,7 @@ class TodoGoalPromptConfig {
       systemPrompt: await _dao.getSetting(systemPromptKey, defaultValue: defaultSystemPrompt),
       taskPrompt: await _dao.getSetting(taskPromptKey, defaultValue: defaultTaskPromptTemplate),
       reviewPrompt: await _dao.getSetting(reviewPromptKey, defaultValue: defaultReviewPromptTemplate),
+      solutionPrompt: await _dao.getSetting(solutionPromptKey, defaultValue: defaultSolutionPromptTemplate),
     );
   }
 
@@ -95,6 +153,7 @@ class TodoGoalPromptConfig {
     await _dao.setSetting(systemPromptKey, templates.systemPrompt.trim().isEmpty ? defaultSystemPrompt : templates.systemPrompt.trim());
     await _dao.setSetting(taskPromptKey, templates.taskPrompt.trim().isEmpty ? defaultTaskPromptTemplate : templates.taskPrompt.trim());
     await _dao.setSetting(reviewPromptKey, templates.reviewPrompt.trim().isEmpty ? defaultReviewPromptTemplate : templates.reviewPrompt.trim());
+    await _dao.setSetting(solutionPromptKey, templates.solutionPrompt.trim().isEmpty ? defaultSolutionPromptTemplate : templates.solutionPrompt.trim());
   }
 
   Future<void> reset() async {
@@ -102,6 +161,7 @@ class TodoGoalPromptConfig {
       systemPrompt: defaultSystemPrompt,
       taskPrompt: defaultTaskPromptTemplate,
       reviewPrompt: defaultReviewPromptTemplate,
+      solutionPrompt: defaultSolutionPromptTemplate,
     ));
   }
 
@@ -121,6 +181,30 @@ class TodoGoalPromptConfig {
       'TASK_IMPORTANCE': taskImportance,
       'TASK_DUE': taskDue.trim().isEmpty ? '无' : taskDue,
       'TASK_STATUS': taskStatus,
+    });
+  }
+
+  String renderSolutionPrompt(
+    TodoGoalPromptTemplates templates, {
+    required String goalTitle,
+    required String resultGoal,
+    required String valueGoal,
+    required String processGoal,
+    required String coreValues,
+    required String obstacleSummary,
+    required String todayAction,
+    required String taskBody,
+  }) {
+    return _render(templates.solutionPrompt, <String, String>{
+      'VALUE_SYSTEM': todoGoalValueSystemPromptBlock(),
+      'GOAL_TITLE': goalTitle,
+      'RESULT_GOAL': resultGoal,
+      'VALUE_GOAL': valueGoal,
+      'PROCESS_GOAL': processGoal,
+      'CORE_VALUES': coreValues,
+      'OBSTACLE_SUMMARY': obstacleSummary,
+      'TODAY_ACTION': todayAction,
+      'TASK_BODY': taskBody.trim().isEmpty ? '无' : taskBody,
     });
   }
 
@@ -153,9 +237,10 @@ class TodoGoalPromptConfig {
 }
 
 class TodoGoalPromptTemplates {
-  const TodoGoalPromptTemplates({required this.systemPrompt, required this.taskPrompt, required this.reviewPrompt});
+  const TodoGoalPromptTemplates({required this.systemPrompt, required this.taskPrompt, required this.reviewPrompt, required this.solutionPrompt});
 
   final String systemPrompt;
   final String taskPrompt;
   final String reviewPrompt;
+  final String solutionPrompt;
 }
