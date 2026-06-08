@@ -31,6 +31,26 @@ class TodoGoalDao {
         self_concordance_score INTEGER DEFAULT 0,
         process_value TEXT,
         obstacle_summary TEXT,
+        result_goal TEXT,
+        value_goal TEXT,
+        process_goal TEXT,
+        core_values TEXT,
+        autonomy_score INTEGER DEFAULT 0,
+        value_alignment_score INTEGER DEFAULT 0,
+        interest_connection_score INTEGER DEFAULT 0,
+        passion_score INTEGER DEFAULT 0,
+        feasibility_score INTEGER DEFAULT 0,
+        external_pressure_score INTEGER DEFAULT 0,
+        process_happiness_score INTEGER DEFAULT 0,
+        goal_type TEXT,
+        current_stage TEXT,
+        user_need_interpretation TEXT,
+        key_uncertainties TEXT,
+        clarifying_questions TEXT,
+        possible_directions TEXT,
+        reference_cases TEXT,
+        recommendation_rationale TEXT,
+        user_decision_prompt TEXT,
         ai_provider TEXT,
         ai_model_label TEXT,
         ai_used_fallback INTEGER DEFAULT 0,
@@ -47,8 +67,14 @@ class TodoGoalDao {
         parent_step_id TEXT DEFAULT '',
         step_level INTEGER DEFAULT 1,
         sort_order INTEGER DEFAULT 0,
+        action_place TEXT,
+        start_trigger TEXT,
+        completion_question TEXT,
+        action_type TEXT DEFAULT 'result',
+        experience_intention TEXT,
         title TEXT NOT NULL,
         minimum_standard TEXT,
+        simplified_standard TEXT,
         recommended_standard TEXT,
         stretch_standard TEXT,
         difficulty_score INTEGER DEFAULT 5,
@@ -118,6 +144,15 @@ class TodoGoalDao {
         core_value_focus TEXT,
         summary TEXT,
         risk_notes TEXT,
+        problem_definition TEXT,
+        known_facts TEXT,
+        key_assumptions TEXT,
+        root_cause_analysis TEXT,
+        option_comparison TEXT,
+        evidence_plan TEXT,
+        success_metrics TEXT,
+        stop_conditions TEXT,
+        user_choice_guidance TEXT,
         is_selected INTEGER DEFAULT 0,
         status TEXT DEFAULT 'candidate',
         sort_order INTEGER DEFAULT 0,
@@ -143,6 +178,11 @@ class TodoGoalDao {
         estimated_minutes INTEGER DEFAULT 5,
         sequence_order INTEGER DEFAULT 0,
         dependencies_json TEXT,
+        logic_question TEXT,
+        known_facts TEXT,
+        assumptions TEXT,
+        evidence_needed TEXT,
+        decision_rule TEXT,
         status TEXT DEFAULT 'not_started',
         completion_note TEXT,
         ai_review_json TEXT,
@@ -169,6 +209,35 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_action_steps', 'parent_step_id', "TEXT DEFAULT ''");
     await _addColumnIfMissing(db, 'goal_action_steps', 'step_level', 'INTEGER DEFAULT 1');
     await _addColumnIfMissing(db, 'goal_action_steps', 'sort_order', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'action_place', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'start_trigger', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'completion_question', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'action_type', "TEXT DEFAULT 'result'");
+    await _addColumnIfMissing(db, 'goal_action_steps', 'experience_intention', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'simplified_standard', 'TEXT');
+
+    // Positive-psychology goal framework: keep the four-layer goal card and
+    // the full self-concordance diagnosis alongside synchronized To Do data.
+    await _addColumnIfMissing(db, 'goal_profiles', 'result_goal', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'value_goal', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'process_goal', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'core_values', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'autonomy_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_profiles', 'value_alignment_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_profiles', 'interest_connection_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_profiles', 'passion_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_profiles', 'feasibility_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_profiles', 'external_pressure_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_profiles', 'process_happiness_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_profiles', 'goal_type', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'current_stage', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'user_need_interpretation', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'key_uncertainties', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'clarifying_questions', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'possible_directions', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'reference_cases', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'recommendation_rationale', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_profiles', 'user_decision_prompt', 'TEXT');
 
     // v52: persist whether a goal came from real AI or from local fallback,
     // and repair core id columns that old/broken installs may miss.
@@ -198,6 +267,15 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_solution_plans', 'core_value_focus', 'TEXT');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'summary', 'TEXT');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'risk_notes', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'problem_definition', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'known_facts', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'key_assumptions', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'root_cause_analysis', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'option_comparison', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'evidence_plan', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'success_metrics', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'stop_conditions', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'user_choice_guidance', 'TEXT');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'is_selected', 'INTEGER DEFAULT 0');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'status', "TEXT DEFAULT 'candidate'");
     await _addColumnIfMissing(db, 'goal_solution_plans', 'sort_order', 'INTEGER DEFAULT 0');
@@ -217,6 +295,11 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'estimated_minutes', 'INTEGER DEFAULT 5');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'sequence_order', 'INTEGER DEFAULT 0');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'dependencies_json', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'logic_question', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'known_facts', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'assumptions', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'evidence_needed', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'decision_rule', 'TEXT');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'status', "TEXT DEFAULT 'not_started'");
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'completion_note', 'TEXT');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'ai_review_json', 'TEXT');
@@ -448,6 +531,26 @@ class TodoGoalDao {
         'self_concordance_score': analysis.selfConcordanceScore.clamp(0, 100).toInt(),
         'process_value': analysis.processValue,
         'obstacle_summary': analysis.obstacleSummary,
+        'result_goal': analysis.resultGoal.trim().isEmpty ? analysis.goalTitle : analysis.resultGoal,
+        'value_goal': analysis.valueGoal.trim().isEmpty ? analysis.deepMeaning : analysis.valueGoal,
+        'process_goal': analysis.processGoal.trim().isEmpty ? analysis.processValue : analysis.processGoal,
+        'core_values': analysis.coreValues,
+        'autonomy_score': analysis.autonomyScore.clamp(0, 100).toInt(),
+        'value_alignment_score': analysis.valueAlignmentScore.clamp(0, 100).toInt(),
+        'interest_connection_score': analysis.interestConnectionScore.clamp(0, 100).toInt(),
+        'passion_score': analysis.passionScore.clamp(0, 100).toInt(),
+        'feasibility_score': analysis.feasibilityScore.clamp(0, 100).toInt(),
+        'external_pressure_score': analysis.externalPressureScore.clamp(0, 100).toInt(),
+        'process_happiness_score': analysis.processHappinessScore.clamp(0, 100).toInt(),
+        'goal_type': analysis.goalType,
+        'current_stage': analysis.currentStage,
+        'user_need_interpretation': analysis.userNeedInterpretation,
+        'key_uncertainties': analysis.keyUncertainties,
+        'clarifying_questions': analysis.clarifyingQuestions,
+        'possible_directions': analysis.possibleDirections,
+        'reference_cases': analysis.referenceCases,
+        'recommendation_rationale': analysis.recommendationRationale,
+        'user_decision_prompt': analysis.userDecisionPrompt,
         'ai_provider': analysis.provider,
         'ai_model_label': analysis.modelLabel,
         'ai_used_fallback': analysis.usedFallback ? 1 : 0,
@@ -459,27 +562,60 @@ class TodoGoalDao {
     );
 
     final existingSteps = old == null ? <TodoGoalActionStep>[] : await listActionSteps(goalId);
-    final hasOpenStep = existingSteps.any((e) => !e.isCompleted && e.title.trim() == analysis.todayMinimumAction.trim());
-    if (!hasOpenStep) {
+    final actionDrafts = <({String type, String title, String minimum, String simplified, String recommended, int difficulty})>[
+      (
+        type: 'result',
+        title: analysis.todayMinimumAction.trim().isEmpty ? '今天推进“${task.title}”5分钟' : analysis.todayMinimumAction.trim(),
+        minimum: analysis.minimumStandard,
+        simplified: analysis.simplifiedStandard,
+        recommended: analysis.recommendedStandard,
+        difficulty: analysis.difficultyScore,
+      ),
+      (
+        type: 'process',
+        title: analysis.processAction.trim().isEmpty ? '行动时只观察一次“我正在学习或鼓起勇气”的体验' : analysis.processAction.trim(),
+        minimum: '行动2分钟，并记录一个真实的过程感受。',
+        simplified: '行动5分钟，记录一个过程感受。',
+        recommended: '完成主行动时，刻意关注学习感、投入感或掌控感。',
+        difficulty: (analysis.difficultyScore - 1).clamp(1, 10).toInt(),
+      ),
+      (
+        type: 'value',
+        title: analysis.valueAction.trim().isEmpty ? '写一句：这一步如何服务于${analysis.coreValues.trim().isEmpty ? '我真正重视的生活' : analysis.coreValues}' : analysis.valueAction.trim(),
+        minimum: '写下一句话，把行动与一个核心价值连接起来。',
+        simplified: '写两句话：我重视什么、今天如何体现它。',
+        recommended: '说明今天的行动如何增加选择、成长、关系、健康或贡献。',
+        difficulty: 2,
+      ),
+    ];
+    for (var index = 0; index < actionDrafts.length; index++) {
+      final draft = actionDrafts[index];
+      final hasOpenStep = existingSteps.any((step) => !step.isCompleted && step.actionType == draft.type && step.title.trim() == draft.title);
+      if (hasOpenStep) continue;
       await createActionStep(
         goalId: goalId,
         sourceTaskId: task.taskId,
-        title: analysis.todayMinimumAction.trim().isEmpty ? '今天推进“${task.title}”5分钟' : analysis.todayMinimumAction.trim(),
-        minimumStandard: analysis.minimumStandard,
-        recommendedStandard: analysis.recommendedStandard,
+        title: draft.title,
+        minimumStandard: draft.minimum,
+        simplifiedStandard: draft.simplified,
+        recommendedStandard: draft.recommended,
         stretchStandard: analysis.stretchStandard,
-        difficultyScore: analysis.difficultyScore,
-        zoneType: analysis.zoneType,
+        difficultyScore: draft.difficulty,
+        zoneType: draft.type == 'result' ? analysis.zoneType : 'comfort',
         plannedDate: todayDate(),
+        actionPlace: analysis.actionPlace,
+        startTrigger: index == 0 ? analysis.startTrigger : '完成或开始结果型行动时，立刻进入这一小步。',
+        completionQuestion: analysis.completionQuestion,
+        actionType: draft.type,
+        experienceIntention: analysis.experiencePrompt,
+        sortOrder: index,
       );
     }
-
-    await saveSolutionPlansFromAnalysis(goalId: goalId, sourceTaskId: task.taskId, plans: analysis.solutionPlans);
 
     await addAiAnalysis(
       goalId: goalId,
       sourceTaskId: task.taskId,
-      analysisType: 'task_to_goal_deep_problem_solution',
+      analysisType: 'task_to_goal_analysis',
       promptText: '',
       resultJson: jsonEncode(analysis.toJson()),
       modelName: analysis.modelLabel,
@@ -492,6 +628,7 @@ class TodoGoalDao {
     required String sourceTaskId,
     required String title,
     String minimumStandard = '',
+    String simplifiedStandard = '',
     String recommendedStandard = '',
     String stretchStandard = '',
     int difficultyScore = 5,
@@ -501,6 +638,11 @@ class TodoGoalDao {
     String parentStepId = '',
     int? stepLevel,
     int sortOrder = 0,
+    String actionPlace = '',
+    String startTrigger = '',
+    String completionQuestion = '',
+    String actionType = 'result',
+    String experienceIntention = '',
   }) async {
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -522,8 +664,14 @@ class TodoGoalDao {
       'parent_step_id': normalizedParentId,
       'step_level': normalizedLevel.clamp(1, 9).toInt(),
       'sort_order': sortOrder,
+      'action_place': actionPlace,
+      'start_trigger': startTrigger,
+      'completion_question': completionQuestion,
+      'action_type': const <String>{'result', 'process', 'value'}.contains(actionType) ? actionType : 'result',
+      'experience_intention': experienceIntention,
       'title': title.trim().isEmpty ? '今天做一个5分钟最小行动' : title.trim(),
       'minimum_standard': minimumStandard,
+      'simplified_standard': simplifiedStandard,
       'recommended_standard': recommendedStandard,
       'stretch_standard': stretchStandard,
       'difficulty_score': difficultyScore.clamp(1, 10).toInt(),
@@ -572,7 +720,7 @@ class TodoGoalDao {
       FROM goal_action_steps s
       LEFT JOIN goal_profiles g ON g.goal_id = s.goal_id
       LEFT JOIN goal_action_steps p ON p.step_id = s.parent_step_id
-      WHERE g.status != 'deleted'
+      WHERE g.status = 'active'
         AND (s.planned_date = ? OR s.planned_date IS NULL OR s.planned_date = '')
         ${includeCompleted ? '' : "AND s.status != 'completed'"}
       ORDER BY CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END,
@@ -605,6 +753,54 @@ class TodoGoalDao {
     return rows.map(TodoTaskRecord.fromMap).toList();
   }
 
+
+  Future<void> updateGoalStatus(String goalId, String status) async {
+    final normalized = const <String>{'active', 'paused', 'archived', 'deleted'}.contains(status) ? status : 'active';
+    final db = await _db;
+    await db.update(
+      'goal_profiles',
+      <String, Object?>{'status': normalized, 'updated_at_ms': DateTime.now().millisecondsSinceEpoch},
+      where: 'goal_id = ?',
+      whereArgs: [goalId],
+    );
+  }
+
+  Future<void> updateGoalAlignment({
+    required String goalId,
+    required String goalTitle,
+    required String resultGoal,
+    required String coreValues,
+    required String valueGoal,
+    required String processGoal,
+  }) async {
+    final db = await _db;
+    await db.update(
+      'goal_profiles',
+      <String, Object?>{
+        'goal_title': goalTitle.trim(),
+        'result_goal': resultGoal.trim(),
+        'core_values': coreValues.trim(),
+        'value_goal': valueGoal.trim(),
+        'process_goal': processGoal.trim(),
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'goal_id = ?',
+      whereArgs: [goalId],
+    );
+  }
+
+  Future<void> updateStepExperienceIntention(String stepId, String intention) async {
+    final db = await _db;
+    await db.update(
+      'goal_action_steps',
+      <String, Object?>{
+        'experience_intention': intention.trim(),
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'step_id = ?',
+      whereArgs: [stepId],
+    );
+  }
 
   Future<void> updateStepStatus(String stepId, String status) async {
     final db = await _db;
@@ -735,6 +931,37 @@ class TodoGoalDao {
     });
   }
 
+
+  Future<void> clearSolutionPlans(String goalId) async {
+    final db = await _db;
+    final rows = await db.query('goal_solution_plans', columns: ['solution_id'], where: 'goal_id = ?', whereArgs: [goalId]);
+    final ids = rows.map((row) => (row['solution_id'] ?? '').toString()).where((id) => id.isNotEmpty).toList();
+    await db.transaction((txn) async {
+      if (ids.isNotEmpty) {
+        await txn.delete('goal_problem_nodes', where: 'solution_id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
+      }
+      await txn.delete('goal_solution_plans', where: 'goal_id = ?', whereArgs: [goalId]);
+    });
+  }
+
+  Future<void> clearAllGoalModuleData() async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (final table in const <String>[
+        'goal_step_reviews',
+        'goal_problem_nodes',
+        'goal_solution_plans',
+        'goal_sync_links',
+        'goal_ai_analysis',
+        'goal_reflections',
+        'goal_action_steps',
+        'goal_profiles',
+      ]) {
+        await txn.delete(table);
+      }
+    });
+  }
+
   Future<void> saveSolutionPlansFromAnalysis({
     required String goalId,
     required String sourceTaskId,
@@ -742,8 +969,6 @@ class TodoGoalDao {
   }) async {
     if (plans.isEmpty) return;
     final db = await _db;
-    final existing = await listSolutionPlans(goalId: goalId, includeArchived: false);
-    final shouldSelectFirst = !existing.any((p) => p.isSelected);
     final now = DateTime.now().millisecondsSinceEpoch;
     for (var i = 0; i < plans.length; i++) {
       final plan = plans[i];
@@ -760,8 +985,17 @@ class TodoGoalDao {
         'core_value_focus': plan.coreValueFocus,
         'summary': plan.summary,
         'risk_notes': plan.riskNotes,
-        'is_selected': shouldSelectFirst && i == 0 ? 1 : 0,
-        'status': shouldSelectFirst && i == 0 ? 'selected' : 'candidate',
+        'problem_definition': plan.problemDefinition,
+        'known_facts': plan.knownFacts,
+        'key_assumptions': plan.keyAssumptions,
+        'root_cause_analysis': plan.rootCauseAnalysis,
+        'option_comparison': plan.optionComparison,
+        'evidence_plan': plan.evidencePlan,
+        'success_metrics': plan.successMetrics,
+        'stop_conditions': plan.stopConditions,
+        'user_choice_guidance': plan.userChoiceGuidance,
+        'is_selected': 0,
+        'status': 'candidate',
         'sort_order': plan.sortOrder == 0 ? i : plan.sortOrder,
         'raw_json': jsonEncode(plan.toJson()),
         'created_at_ms': now,
@@ -823,6 +1057,11 @@ class TodoGoalDao {
         'estimated_minutes': n.estimatedMinutes <= 0 ? 5 : n.estimatedMinutes,
         'sequence_order': n.sequenceOrder == 0 ? i : n.sequenceOrder,
         'dependencies_json': n.dependenciesJson,
+        'logic_question': n.logicQuestion,
+        'known_facts': n.knownFacts,
+        'assumptions': n.assumptions,
+        'evidence_needed': n.evidenceNeeded,
+        'decision_rule': n.decisionRule,
         'status': 'not_started',
         'completion_note': '',
         'ai_review_json': '',
