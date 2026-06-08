@@ -291,20 +291,27 @@ ${quote.translation}
     m?.showSnackBar(SnackBar(content: Text(message), backgroundColor: isError ? Colors.red.shade700 : null));
   }
 
+  TodoGoalActionStep? get _firstOpenTodayStep {
+    for (final step in _todaySteps) {
+      if (!step.isCompleted) return step;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('To Do 目标实践系统'),
+        title: const Text('向峰而行 · 目标系统'),
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
           tabs: const [
-            Tab(text: '实践应用'),
-            Tab(text: '目标转化'),
-            Tab(text: '今日旅程'),
-            Tab(text: '复盘落地'),
+            Tab(text: '今日攀登'),
+            Tab(text: '我的山峰'),
+            Tab(text: '山路行动'),
+            Tab(text: '过程复盘'),
           ],
         ),
         actions: [
@@ -347,6 +354,14 @@ ${quote.translation}
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 90),
         children: [
+          _TodayClimbDashboard(
+            goal: _goals.isEmpty ? null : _goals.first,
+            step: _firstOpenTodayStep,
+            completedCount: _todaySteps.where((step) => step.isCompleted).length,
+            onStart: () => _tabController.animateTo(2),
+            onCreateGoal: () => _tabController.animateTo(1),
+          ),
+          const SizedBox(height: 12),
           _ValuePracticeHeroCard(onStartToday: () => _tabController.animateTo(2), onTransform: () => _tabController.animateTo(1)),
           const SizedBox(height: 12),
           _TodayPracticeConsoleCard(goalCount: _goals.length, actionCount: _todaySteps.length, completedCount: _todaySteps.where((s) => s.isCompleted).length),
@@ -776,6 +791,10 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
                   children: [
                     _GoalDetailHeader(goal: goal),
+                    const SizedBox(height: 12),
+                    _FourLayerGoalCard(goal: goal),
+                    const SizedBox(height: 12),
+                    _SelfConcordanceDiagnosisCard(goal: goal),
                     const SizedBox(height: 12),
                     _ContextualQuoteCard(momentTitle: '目标详情提示', momentKey: 'detail', seedOffset: goal.goalId.hashCode, quote: todoGoalQuoteForMoment('detail', seedOffset: goal.goalId.hashCode), actionText: todoGoalQuoteActionForMoment('detail')),
                     const SizedBox(height: 12),
@@ -2566,4 +2585,200 @@ Color _scoreColor(int score) {
   if (score >= 60) return _goalBlue;
   if (score >= 40) return Colors.orange.shade800;
   return Colors.red.shade700;
+}
+
+class _TodayClimbDashboard extends StatelessWidget {
+  const _TodayClimbDashboard({
+    required this.goal,
+    required this.step,
+    required this.completedCount,
+    required this.onStart,
+    required this.onCreateGoal,
+  });
+
+  final TodoGoalProfile? goal;
+  final TodoGoalActionStep? step;
+  final int completedCount;
+  final VoidCallback onStart;
+  final VoidCallback onCreateGoal;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeGoal = goal;
+    final todayStep = step;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF29386D), Color(0xFF6879C9)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [BoxShadow(color: Color(0x3329386D), blurRadius: 18, offset: Offset(0, 8))],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.landscape_outlined, color: Colors.white),
+          SizedBox(width: 8),
+          Text('今日攀登', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+        ]),
+        const SizedBox(height: 8),
+        const Text('幸福不是站在山顶，而是朝山顶攀登的体验。', style: TextStyle(color: Color(0xFFE8ECFF), height: 1.4)),
+        const SizedBox(height: 18),
+        if (activeGoal == null) ...[
+          const Text('还没有正在攀登的山峰', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          const Text('输入一个愿望或同步一条 To Do，AI 会先澄清价值，再生成今天能开始的一小步。', style: TextStyle(color: Color(0xFFDCE3FF), height: 1.45)),
+        ] else ...[
+          Text(activeGoal.goalTitle, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 6),
+          Text(
+            activeGoal.valueGoal.trim().isEmpty ? activeGoal.deepMeaning : activeGoal.valueGoal,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xFFDCE3FF), height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(16)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('今天只需要完成', style: TextStyle(color: Color(0xFFC9D3FF), fontSize: 12, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 5),
+              Text(todayStep?.title ?? '为这座山峰生成一个 2 分钟最低版本', style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 7),
+              Text(
+                todayStep?.processValue.trim().isNotEmpty == true ? todayStep!.processValue : activeGoal.processValue,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Color(0xFFE5E9FF), height: 1.35),
+              ),
+              if (todayStep?.actionPlace.trim().isNotEmpty == true || todayStep?.startTrigger.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 8),
+                Text(
+                  [
+                    if (todayStep!.actionPlace.trim().isNotEmpty) '地点：${todayStep!.actionPlace}',
+                    if (todayStep!.startTrigger.trim().isNotEmpty) '启动：${todayStep.startTrigger}',
+                  ].join(' · '),
+                  style: const TextStyle(color: Color(0xFFC9D3FF), fontSize: 12),
+                ),
+              ],
+            ]),
+          ),
+        ],
+        const SizedBox(height: 16),
+        Row(children: [
+          Expanded(
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF33427D)),
+              onPressed: activeGoal == null ? onCreateGoal : onStart,
+              icon: Icon(activeGoal == null ? Icons.add : Icons.hiking),
+              label: Text(activeGoal == null ? '创建第一座山峰' : '开始攀登'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text('今日已走 $completedCount 步', style: const TextStyle(color: Color(0xFFDCE3FF), fontWeight: FontWeight.w700)),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _FourLayerGoalCard extends StatelessWidget {
+  const _FourLayerGoalCard({required this.goal});
+  final TodoGoalProfile goal;
+
+  @override
+  Widget build(BuildContext context) {
+    final layers = <(IconData, String, String)>[
+      (Icons.flag_outlined, '山顶 · 结果目标', goal.resultGoal.trim().isEmpty ? goal.goalTitle : goal.resultGoal),
+      (Icons.explore_outlined, '价值 · 为什么值得', goal.valueGoal.trim().isEmpty ? goal.deepMeaning : goal.valueGoal),
+      (Icons.route_outlined, '山路 · 过程目标', goal.processGoal.trim().isEmpty ? goal.processValue : goal.processGoal),
+      (Icons.directions_walk_outlined, '风景 · 当下体验', goal.processValue),
+    ];
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFF7F8FF),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFDDE2FF))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('山路地图', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: _goalInk)),
+          const SizedBox(height: 12),
+          ...layers.map((layer) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFFE8ECFF), borderRadius: BorderRadius.circular(10)), child: Icon(layer.$1, color: _goalBlue, size: 20)),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(layer.$2, style: const TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
+                    const SizedBox(height: 3),
+                    Text(layer.$3.trim().isEmpty ? '等待进一步澄清' : layer.$3, style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
+                  ])),
+                ]),
+              )),
+        ]),
+      ),
+    );
+  }
+}
+
+class _SelfConcordanceDiagnosisCard extends StatelessWidget {
+  const _SelfConcordanceDiagnosisCard({required this.goal});
+  final TodoGoalProfile goal;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = <(String, int)>[
+      ('自主性', goal.autonomyScore),
+      ('价值一致', goal.valueAlignmentScore),
+      ('兴趣连接', goal.interestConnectionScore),
+      ('热情', goal.passionScore),
+      ('过程幸福', goal.processHappinessScore),
+      ('外部压力', goal.externalPressureScore),
+    ];
+    final values = goal.coreValueList;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFE5E7EB))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Expanded(child: Text('目标体检 · 自我一致性', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+            Chip(label: Text(goal.goalType.trim().isEmpty ? '待持续校准' : goal.goalType)),
+          ]),
+          const SizedBox(height: 4),
+          Text('当前阶段：${goal.currentStage.trim().isEmpty ? '现实行动验证期' : goal.currentStage}', style: const TextStyle(color: Color(0xFF6B7280))),
+          const SizedBox(height: 14),
+          ...metrics.map((metric) {
+            final isPressure = metric.$1 == '外部压力';
+            final score = metric.$2 == 0 ? (isPressure ? 100 - goal.selfConcordanceScore : goal.selfConcordanceScore) : metric.$2;
+            final color = isPressure ? (score >= 70 ? Colors.red : Colors.orange) : _scoreColor(score);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: Row(children: [
+                SizedBox(width: 72, child: Text(metric.$1, style: const TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(child: LinearProgressIndicator(value: score / 100, minHeight: 8, borderRadius: BorderRadius.circular(99), color: color, backgroundColor: color.withOpacity(0.12))),
+                const SizedBox(width: 9),
+                SizedBox(width: 30, child: Text('$score', textAlign: TextAlign.right, style: TextStyle(color: color, fontWeight: FontWeight.w900))),
+              ]),
+            );
+          }),
+          if (values.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Wrap(spacing: 7, runSpacing: 7, children: values.map((value) => Chip(avatar: const Icon(Icons.explore, size: 16), label: Text(value))).toList()),
+          ],
+          if (goal.needsRealignment || goal.lacksProcessDesign) ...[
+            const SizedBox(height: 8),
+            Text(
+              goal.needsRealignment ? '这个目标的外部压力较高。建议先缩短承诺周期，并重新确认它是否仍服务于你的真实价值。' : '这个目标缺少可享受、可观察的过程设计。建议把下一步改写为一个能体验学习、勇气或掌控感的动作。',
+              style: TextStyle(color: Colors.orange.shade900, height: 1.4, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
 }
