@@ -887,7 +887,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
           processValue: goal.processValue,
           actionTitle: node.displayAction,
           minimumStandard: node.acceptanceCriteria,
-          userResult: _resultStatus,
+          userResult: 'failure',
           userReflection: note,
           obstacle: note,
         );
@@ -897,7 +897,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
           goalId: goal.goalId,
           stepId: '',
           nodeId: node.nodeId,
-          userResult: _resultStatus,
+          userResult: 'failure',
           userText: note.trim(),
           recovery: recovery,
         );
@@ -1206,14 +1206,14 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
           processValue: widget.step.processValue,
           actionTitle: widget.step.title,
           minimumStandard: widget.step.minimumStandard,
-          userResult: 'failure',
+          userResult: _resultStatus,
           userReflection: _reflectionCtrl.text,
           obstacle: _obstacleCtrl.text,
         );
         await _goalDao.addStepReview(
           goalId: widget.step.goalId,
           stepId: widget.step.stepId,
-          userResult: 'failure',
+          userResult: _resultStatus,
           userText: _reflectionCtrl.text.trim(),
           recovery: recovery,
         );
