@@ -147,6 +147,59 @@ class TodoGoalAiService {
     }
   }
 
+  Future<TodoGoalWeeklySummaryResult> generateWeeklySummary({
+    required List<TodoGoalProfile> goals,
+    required List<TodoGoalReflection> reflections,
+  }) async {
+    final state = await getGlobalAiState();
+    TodoGoalWeeklySummaryResult fallback() => TodoGoalWeeklySummaryResult(
+          alignmentInsight: goals.isEmpty ? '本周还没有可分析的目标。' : '本周共有 ${goals.length} 个目标，其中 ${goals.where((goal) => goal.selfConcordanceScore >= 70).length} 个自我一致度较高。',
+          processInsight: reflections.isEmpty ? '还没有过程复盘证据。' : '本周留下了 ${reflections.length} 条过程复盘，这些记录比单纯完成率更能说明真实成长。',
+          valueEvidence: goals.expand((goal) => goal.coreValueList).take(5).join('、'),
+          adjustmentAdvice: goals.any((goal) => goal.externalPressureScore >= 70) ? '优先调整外部压力过高的目标：缩短承诺周期、降低强度或重新绑定价值。' : '保持能带来意义感和投入感的行动方式。',
+          nextWeekFocus: '选择一个最自我一致的目标，每天只保留一个可以开始的最低行动。',
+          provider: 'local',
+          modelLabel: state['label'] ?? '本地策略',
+          usedFallback: true,
+        );
+    if (state['available'] != '1') return fallback();
+    final goalText = goals.take(12).map((goal) => '- ${goal.goalTitle}｜自我一致${goal.selfConcordanceScore}｜外部压力${goal.externalPressureScore}｜过程幸福${goal.processHappinessScore}｜价值${goal.coreValues}').join('\n');
+    final reflectionText = reflections.take(20).map((reflection) => '- ${reflection.reflectionDate} ${reflection.goalTitle}｜意义${reflection.meaningScore}/5｜过程${reflection.processScore}/5｜${reflection.processExperience}').join('\n');
+    final prompt = '''
+你是积极心理学目标教练。请生成一份“过程与自我一致”周总结，不以完成率羞辱用户。
+目标：
+$goalText
+本周复盘：
+$reflectionText
+只输出JSON：
+{"alignmentInsight":"哪些目标更自我一致","processInsight":"哪些行动带来过程幸福","valueEvidence":"本周体现了哪些价值","adjustmentAdvice":"哪些目标需暂停、降强度或重写","nextWeekFocus":"下周一个温和具体的重点"}
+''';
+    try {
+      final raw = await _ai.generateText(
+        prompt: prompt,
+        purpose: 'microsoft_todo.goal_weekly_summary',
+        systemPrompt: '你是温和、具体、反对完成率崇拜的积极心理学目标教练。只输出合法JSON。',
+        maxTokens: 1200,
+        expectJson: true,
+        temperature: 0.4,
+      );
+      final parsed = _extractJsonObject(raw);
+      if (parsed.isEmpty) return fallback();
+      final local = fallback();
+      return TodoGoalWeeklySummaryResult(
+        alignmentInsight: _read(parsed, 'alignmentInsight', local.alignmentInsight),
+        processInsight: _read(parsed, 'processInsight', local.processInsight),
+        valueEvidence: _read(parsed, 'valueEvidence', local.valueEvidence),
+        adjustmentAdvice: _read(parsed, 'adjustmentAdvice', local.adjustmentAdvice),
+        nextWeekFocus: _read(parsed, 'nextWeekFocus', local.nextWeekFocus),
+        provider: state['provider'] ?? 'ai',
+        modelLabel: state['label'] ?? 'AI',
+      );
+    } catch (_) {
+      return fallback();
+    }
+  }
+
   Future<TodoGoalReviewResult> generateDailyReview({
     required String goalTitle,
     required String deepMeaning,

@@ -30,6 +30,11 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   final _promptConfig = TodoGoalPromptConfig();
   final _manualGoalTitleCtrl = TextEditingController();
   final _manualGoalBodyCtrl = TextEditingController();
+  final _clarifyWhyCtrl = TextEditingController();
+  final _clarifyOwnershipCtrl = TextEditingController();
+  final _clarifyChangeCtrl = TextEditingController();
+  final _clarifyProcessCtrl = TextEditingController();
+  final _clarifyValuesCtrl = TextEditingController();
   late final _todoService = TodoGraphService(dao: _todoDao);
   late final TabController _tabController;
   bool _loading = true;
@@ -39,11 +44,12 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   List<TodoTaskRecord> _tasks = [];
   List<TodoGoalActionStep> _todaySteps = [];
   List<TodoGoalReflection> _reflections = [];
+  TodoGoalWeeklySummaryResult? _weeklyAiSummary;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _load().then((_) async {
       final id = widget.initialTaskId;
       if (id != null && id.trim().isNotEmpty) {
@@ -57,6 +63,11 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   void dispose() {
     _manualGoalTitleCtrl.dispose();
     _manualGoalBodyCtrl.dispose();
+    _clarifyWhyCtrl.dispose();
+    _clarifyOwnershipCtrl.dispose();
+    _clarifyChangeCtrl.dispose();
+    _clarifyProcessCtrl.dispose();
+    _clarifyValuesCtrl.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -164,11 +175,24 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
       _status = '正在把用户输入目标转化为自我一致目标...';
     });
     try {
-      final task = _buildManualTask(title, _manualGoalBodyCtrl.text);
+      final clarification = <String>[
+        if (_clarifyWhyCtrl.text.trim().isNotEmpty) '为什么想要：${_clarifyWhyCtrl.text.trim()}',
+        if (_clarifyOwnershipCtrl.text.trim().isNotEmpty) '目标归属：${_clarifyOwnershipCtrl.text.trim()}',
+        if (_clarifyChangeCtrl.text.trim().isNotEmpty) '期待变化：${_clarifyChangeCtrl.text.trim()}',
+        if (_clarifyProcessCtrl.text.trim().isNotEmpty) '愿意体验的过程：${_clarifyProcessCtrl.text.trim()}',
+        if (_clarifyValuesCtrl.text.trim().isNotEmpty) '核心价值：${_clarifyValuesCtrl.text.trim()}',
+      ].join('\n');
+      final background = [_manualGoalBodyCtrl.text.trim(), clarification].where((text) => text.isNotEmpty).join('\n\n');
+      final task = _buildManualTask(title, background);
       final analysis = await _ai.analyzeTaskAsGoal(task);
       final goalId = await _goalDao.saveGoalFromAnalysis(task: task, analysis: analysis);
       _manualGoalTitleCtrl.clear();
       _manualGoalBodyCtrl.clear();
+      _clarifyWhyCtrl.clear();
+      _clarifyOwnershipCtrl.clear();
+      _clarifyChangeCtrl.clear();
+      _clarifyProcessCtrl.clear();
+      _clarifyValuesCtrl.clear();
       await _load();
       if (!mounted) return;
       _show(analysis.usedFallback ? '已使用本地策略生成目标卡。配置 AI 后可重新分析。' : 'AI 已生成目标卡。需要问题树时，请在详情页单独点击“生成方案”。');
@@ -327,6 +351,11 @@ ${quote.translation}
       await _promptConfig.reset();
       _manualGoalTitleCtrl.clear();
       _manualGoalBodyCtrl.clear();
+      _clarifyWhyCtrl.clear();
+      _clarifyOwnershipCtrl.clear();
+      _clarifyChangeCtrl.clear();
+      _clarifyProcessCtrl.clear();
+      _clarifyValuesCtrl.clear();
       await _load();
       if (mounted) _show('已清除目标模块全部数据，并恢复默认状态。');
     } catch (e) {
@@ -346,6 +375,13 @@ ${quote.translation}
     final m = ScaffoldMessenger.maybeOf(context);
     m?.hideCurrentSnackBar();
     m?.showSnackBar(SnackBar(content: Text(message), backgroundColor: isError ? Colors.red.shade700 : null));
+  }
+
+  TodoGoalProfile? get _primaryActiveGoal {
+    for (final goal in _goals) {
+      if (goal.status == 'active') return goal;
+    }
+    return null;
   }
 
   TodoGoalActionStep? get _firstOpenTodayStep {
@@ -369,6 +405,7 @@ ${quote.translation}
             Tab(text: '我的山峰'),
             Tab(text: '山路行动'),
             Tab(text: '过程复盘'),
+            Tab(text: '价值罗盘'),
           ],
         ),
         actions: [
@@ -402,6 +439,7 @@ ${quote.translation}
                     _buildTransformTab(),
                     _buildTodayTab(),
                     _buildReviewTab(),
+                    _buildCompassTab(),
                   ],
                 ),
                 if (_busy)
@@ -423,7 +461,7 @@ ${quote.translation}
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 90),
         children: [
           _TodayClimbDashboard(
-            goal: _goals.isEmpty ? null : _goals.first,
+            goal: _primaryActiveGoal,
             step: _firstOpenTodayStep,
             completedCount: _todaySteps.where((step) => step.isCompleted).length,
             onStart: () => _tabController.animateTo(2),
@@ -457,6 +495,11 @@ ${quote.translation}
           _ManualGoalInputCard(
             titleCtrl: _manualGoalTitleCtrl,
             bodyCtrl: _manualGoalBodyCtrl,
+            whyCtrl: _clarifyWhyCtrl,
+            ownershipCtrl: _clarifyOwnershipCtrl,
+            changeCtrl: _clarifyChangeCtrl,
+            processCtrl: _clarifyProcessCtrl,
+            valuesCtrl: _clarifyValuesCtrl,
             busy: _busy,
             onGenerate: _transformManualGoal,
           ),
@@ -540,6 +583,79 @@ ${quote.translation}
       ),
     );
   }
+
+  Future<void> _generateWeeklySummary() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _status = '正在生成本周过程总结...';
+    });
+    try {
+      final since = DateTime.now().subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+      final result = await _ai.generateWeeklySummary(
+        goals: _goals,
+        reflections: _reflections.where((reflection) => reflection.createdAtMs >= since).toList(),
+      );
+      if (!mounted) return;
+      setState(() => _weeklyAiSummary = result);
+      _show(result.usedFallback ? '当前使用本地策略生成周总结。' : 'AI 已生成本周过程与价值总结。');
+    } catch (e) {
+      if (mounted) _show('周总结生成失败：$e', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _status = '';
+        });
+      }
+    }
+  }
+
+  Widget _buildCompassTab() {
+    final since = DateTime.now().subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+    final weekly = _reflections.where((reflection) => reflection.createdAtMs >= since).toList();
+    final valueCounts = <String, int>{};
+    for (final goal in _goals) {
+      for (final value in goal.coreValueList) {
+        valueCounts[value] = (valueCounts[value] ?? 0) + 1;
+      }
+    }
+    final sortedValues = valueCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    double average(Iterable<int> values) {
+      final list = values.where((value) => value > 0).toList();
+      return list.isEmpty ? 0 : list.reduce((a, b) => a + b) / list.length;
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 90),
+        children: [
+          _ValueCompassCard(goals: _goals, values: sortedValues),
+          const SizedBox(height: 12),
+          _WeeklyMeaningCard(
+            reflectionCount: weekly.length,
+            actionCount: _todaySteps.length,
+            completedCount: _todaySteps.where((step) => step.isCompleted).length,
+            meaningAverage: average(weekly.map((reflection) => reflection.meaningScore)),
+            processAverage: average(weekly.map((reflection) => reflection.processScore)),
+            moodAverage: average(weekly.map((reflection) => reflection.moodScore)),
+            alignedGoals: _goals.where((goal) => goal.selfConcordanceScore >= 70).length,
+            pressureGoals: _goals.where((goal) => goal.externalPressureScore >= 70).length,
+            aiSummary: _weeklyAiSummary,
+            busy: _busy,
+            onGenerate: _generateWeeklySummary,
+          ),
+          const SizedBox(height: 12),
+          const _PlainValueCard(
+            icon: Icons.explore_outlined,
+            title: '罗盘不是另一张成绩单',
+            text: '它用来检查：哪些目标更像真实的你，哪些行动带来意义、投入和自主感，哪些目标需要暂停、降强度或重新绑定价值。',
+          ),
+        ],
+      ),
+    );
+  }
+
 }
 
 class TodoGoalDetailPage extends StatefulWidget {
@@ -860,6 +976,60 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     );
   }
 
+  Future<void> _setGoalStatus(String status) async {
+    final goal = _goal;
+    if (goal == null || _busy) return;
+    await _goalDao.updateGoalStatus(goal.goalId, status);
+    if (status == 'archived' || status == 'deleted') {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+    await _load();
+    _show(status == 'paused' ? '目标已暂停。暂停不是失败，今日行动将暂时隐藏。' : '目标已恢复，重新回到山路。');
+  }
+
+  Future<void> _editGoalAlignment() async {
+    final goal = _goal;
+    if (goal == null || _busy) return;
+    final valuesCtrl = TextEditingController(text: goal.coreValues);
+    final valueGoalCtrl = TextEditingController(text: goal.valueGoal);
+    final processGoalCtrl = TextEditingController(text: goal.processGoal);
+    try {
+      final save = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('让目标重新与真实自我对齐'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: valuesCtrl, decoration: const InputDecoration(labelText: '核心价值（1-3个）', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: valueGoalCtrl, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '价值目标：为什么值得', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: processGoalCtrl, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '过程目标：想如何走这段山路', border: OutlineInputBorder())),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存调整')),
+          ],
+        ),
+      );
+      if (save != true) return;
+      await _goalDao.updateGoalAlignment(
+        goalId: goal.goalId,
+        coreValues: valuesCtrl.text,
+        valueGoal: valueGoalCtrl.text,
+        processGoal: processGoalCtrl.text,
+      );
+      await _load();
+      _show('目标已重新绑定价值与过程。调整目标不是失败，而是重新对齐。');
+    } finally {
+      valuesCtrl.dispose();
+      valueGoalCtrl.dispose();
+      processGoalCtrl.dispose();
+    }
+  }
+
   Future<String?> _askText({required String title, required String hint}) async {
     final ctrl = TextEditingController();
     try {
@@ -895,6 +1065,20 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
           IconButton(onPressed: _busy || _sourceTask == null ? null : _reanalyze, tooltip: 'AI 重新分析目标卡', icon: const Icon(Icons.auto_awesome)),
           IconButton(onPressed: _busy || _sourceTask == null ? null : _generateProblemSolutions, tooltip: '单独生成AI问题解决方案', icon: const Icon(Icons.account_tree_outlined)),
           IconButton(onPressed: _busy ? null : _addTinyStep, tooltip: '新增最小行动', icon: const Icon(Icons.add_task_outlined)),
+          PopupMenuButton<String>(
+            tooltip: '调整目标',
+            onSelected: (value) {
+              if (value == 'align') _editGoalAlignment();
+              if (value == 'pause') _setGoalStatus('paused');
+              if (value == 'resume') _setGoalStatus('active');
+              if (value == 'archive') _setGoalStatus('archived');
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'align', child: Text('重新绑定价值与过程')),
+              PopupMenuItem(value: goal?.status == 'paused' ? 'resume' : 'pause', child: Text(goal?.status == 'paused' ? '恢复目标' : '暂停目标')),
+              const PopupMenuItem(value: 'archive', child: Text('归档目标')),
+            ],
+          ),
         ],
       ),
       body: _loading
@@ -997,8 +1181,15 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
       _status = '正在生成复盘...';
     });
     try {
-      _completed = _resultStatus == 'success';
-      await _goalDao.updateStepStatus(widget.step.stepId, _completed ? 'completed' : 'failed');
+      _completed = _resultStatus == 'success' || _resultStatus == 'minimum';
+      final persistedStatus = switch (_resultStatus) {
+        'success' || 'minimum' => 'completed',
+        'partial' => 'partial',
+        'blocked' => 'blocked',
+        'adjust' => 'adjusted',
+        _ => 'failed',
+      };
+      await _goalDao.updateStepStatus(widget.step.stepId, persistedStatus);
       final review = await _ai.generateDailyReview(
         goalTitle: widget.step.goalTitle,
         deepMeaning: widget.step.deepMeaning,
@@ -1015,14 +1206,14 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
           processValue: widget.step.processValue,
           actionTitle: widget.step.title,
           minimumStandard: widget.step.minimumStandard,
-          userResult: 'failure',
+          userResult: _resultStatus,
           userReflection: _reflectionCtrl.text,
           obstacle: _obstacleCtrl.text,
         );
         await _goalDao.addStepReview(
           goalId: widget.step.goalId,
           stepId: widget.step.stepId,
-          userResult: 'failure',
+          userResult: _resultStatus,
           userText: _reflectionCtrl.text.trim(),
           recovery: recovery,
         );
@@ -1094,7 +1285,7 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
             value: _resultStatus,
             onChanged: _busy ? null : (v) => setState(() {
               _resultStatus = v;
-              _completed = v == 'success';
+              _completed = v == 'success' || v == 'minimum';
             }),
           ),
           TextField(controller: _whatCtrl, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '今天我具体做了什么（事实，不评价）', border: OutlineInputBorder())),
@@ -1804,7 +1995,7 @@ class _GoalCard extends StatelessWidget {
         onTap: onTap,
         leading: CircleAvatar(backgroundColor: _scoreColor(goal.selfConcordanceScore).withOpacity(0.12), child: Text('${goal.selfConcordanceScore}', style: TextStyle(color: _scoreColor(goal.selfConcordanceScore), fontWeight: FontWeight.w900))),
         title: Text(goal.goalTitle, style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text('${goal.goalCategory} · ${goal.goalOriginType}\n沿途体验：${goal.processValue}', maxLines: 3, overflow: TextOverflow.ellipsis),
+        subtitle: Text('${goal.goalCategory} · ${goal.goalOriginType} · ${goal.status == 'paused' ? '已暂停' : (goal.status == 'archived' ? '已归档' : '进行中')}\n过程幸福：${goal.processHappinessScore}/100 · ${goal.currentStage.trim().isEmpty ? '现实行动期' : goal.currentStage}\n沿途体验：${goal.processValue}', maxLines: 4, overflow: TextOverflow.ellipsis),
         isThreeLine: true,
         trailing: const Icon(Icons.chevron_right),
       ),
@@ -1814,9 +2005,24 @@ class _GoalCard extends StatelessWidget {
 
 
 class _ManualGoalInputCard extends StatelessWidget {
-  const _ManualGoalInputCard({required this.titleCtrl, required this.bodyCtrl, required this.busy, required this.onGenerate});
+  const _ManualGoalInputCard({
+    required this.titleCtrl,
+    required this.bodyCtrl,
+    required this.whyCtrl,
+    required this.ownershipCtrl,
+    required this.changeCtrl,
+    required this.processCtrl,
+    required this.valuesCtrl,
+    required this.busy,
+    required this.onGenerate,
+  });
   final TextEditingController titleCtrl;
   final TextEditingController bodyCtrl;
+  final TextEditingController whyCtrl;
+  final TextEditingController ownershipCtrl;
+  final TextEditingController changeCtrl;
+  final TextEditingController processCtrl;
+  final TextEditingController valuesCtrl;
   final bool busy;
   final VoidCallback onGenerate;
 
@@ -1847,6 +2053,20 @@ class _ManualGoalInputCard extends StatelessWidget {
             minLines: 2,
             maxLines: 5,
             decoration: const InputDecoration(labelText: '背景、阻力或当前状态（可选）', hintText: '例：下班后很累，开始成本高，怕自己坚持不了', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('目标澄清五问', style: TextStyle(fontWeight: FontWeight.w900)),
+            subtitle: const Text('填写越具体，AI越能判断目标是否真正属于你；可先回答最有感觉的问题。'),
+            children: [
+              _ClarificationField(controller: whyCtrl, label: '1. 你为什么想要这个目标？'),
+              _ClarificationField(controller: ownershipCtrl, label: '2. 这是你真正想要的，还是别人期待的？'),
+              _ClarificationField(controller: changeCtrl, label: '3. 实现后，你希望生活发生什么变化？'),
+              _ClarificationField(controller: processCtrl, label: '4. 过程中，哪一部分是你愿意体验的？'),
+              _ClarificationField(controller: valuesCtrl, label: '5. 它对应哪些价值？', hint: '成长、自由、安全、创造、关系、健康、贡献……'),
+            ],
           ),
           const SizedBox(height: 12),
           Align(
@@ -2614,19 +2834,14 @@ class _ResultStatusSelector extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('这个节点/步骤的实际结果', style: TextStyle(fontWeight: FontWeight.w900, color: _goalInk)),
           const SizedBox(height: 6),
-          const Text('至少要明确选择成功或失败。失败不是推翻目标，而是触发AI诊断、重启指导和替代步骤。', style: TextStyle(color: Color(0xFF6B7280), height: 1.4)),
+          const Text('如实选择今天走到了哪里。没有完美完成也不等于失败；系统会据此保留成果、缩小行动或调整山路。', style: TextStyle(color: Color(0xFF6B7280), height: 1.4)),
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            ChoiceChip(
-              label: const Text('成功'),
-              selected: value == 'success',
-              onSelected: onChanged == null ? null : (_) => onChanged!('success'),
-            ),
-            ChoiceChip(
-              label: const Text('失败'),
-              selected: value == 'failure',
-              onSelected: onChanged == null ? null : (_) => onChanged!('failure'),
-            ),
+            ChoiceChip(label: const Text('已完成'), selected: value == 'success', onSelected: onChanged == null ? null : (_) => onChanged!('success')),
+            ChoiceChip(label: const Text('完成最低版'), selected: value == 'minimum', onSelected: onChanged == null ? null : (_) => onChanged!('minimum')),
+            ChoiceChip(label: const Text('做了一部分'), selected: value == 'partial', onSelected: onChanged == null ? null : (_) => onChanged!('partial')),
+            ChoiceChip(label: const Text('遇到阻碍'), selected: value == 'blocked', onSelected: onChanged == null ? null : (_) => onChanged!('blocked')),
+            ChoiceChip(label: const Text('今天需调整'), selected: value == 'adjust', onSelected: onChanged == null ? null : (_) => onChanged!('adjust')),
           ]),
         ]),
       ),
@@ -2669,8 +2884,22 @@ class _StepStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = status == 'completed' ? '已完成' : (status == 'failed' ? '失败' : (status == 'in_progress' ? '进行中' : '未开始'));
-    final color = status == 'completed' ? Colors.green.shade700 : (status == 'failed' ? Colors.red.shade700 : (status == 'in_progress' ? Colors.orange.shade800 : Colors.grey.shade700));
+    final label = switch (status) {
+      'completed' => '已完成',
+      'partial' => '完成部分',
+      'blocked' => '遇到阻碍',
+      'adjusted' => '需要调整',
+      'failed' => '未完成',
+      'in_progress' => '进行中',
+      _ => '未开始',
+    };
+    final color = switch (status) {
+      'completed' => Colors.green.shade700,
+      'partial' => Colors.blue.shade700,
+      'blocked' || 'failed' => Colors.red.shade700,
+      'adjusted' || 'in_progress' => Colors.orange.shade800,
+      _ => Colors.grey.shade700,
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withOpacity(0.25))),
@@ -2897,6 +3126,134 @@ class _SelfConcordanceDiagnosisCard extends StatelessWidget {
               goal.needsRealignment ? '这个目标的外部压力较高。建议先缩短承诺周期，并重新确认它是否仍服务于你的真实价值。' : '这个目标缺少可享受、可观察的过程设计。建议把下一步改写为一个能体验学习、勇气或掌控感的动作。',
               style: TextStyle(color: Colors.orange.shade900, height: 1.4, fontWeight: FontWeight.w600),
             ),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _ClarificationField extends StatelessWidget {
+  const _ClarificationField({required this.controller, required this.label, this.hint = ''});
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: TextField(
+        controller: controller,
+        minLines: 1,
+        maxLines: 3,
+        decoration: InputDecoration(labelText: label, hintText: hint.isEmpty ? null : hint, border: const OutlineInputBorder()),
+      ),
+    );
+  }
+}
+
+class _ValueCompassCard extends StatelessWidget {
+  const _ValueCompassCard({required this.goals, required this.values});
+  final List<TodoGoalProfile> goals;
+  final List<MapEntry<String, int>> values;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFF0FDF4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFBBF7D0))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [Icon(Icons.explore_outlined, color: Color(0xFF166534)), SizedBox(width: 8), Text('价值罗盘', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _goalInk))]),
+          const SizedBox(height: 6),
+          const Text('每个目标绑定的价值，会在这里形成你当前的人生方向地图。', style: TextStyle(color: Color(0xFF4B5563), height: 1.4)),
+          const SizedBox(height: 14),
+          if (values.isEmpty)
+            const Text('还没有价值数据。创建目标时回答“目标澄清五问”，或重新分析已有目标。', style: TextStyle(color: Color(0xFF6B7280)))
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: values.map((entry) => Chip(avatar: const Icon(Icons.navigation_outlined, size: 16), label: Text('${entry.key} · ${entry.value} 个目标'))).toList(),
+            ),
+          const SizedBox(height: 14),
+          ...goals.take(5).map((goal) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Expanded(child: Text(goal.goalTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
+                  Text('${goal.selfConcordanceScore}', style: TextStyle(color: _scoreColor(goal.selfConcordanceScore), fontWeight: FontWeight.w900)),
+                ]),
+              )),
+        ]),
+      ),
+    );
+  }
+}
+
+class _WeeklyMeaningCard extends StatelessWidget {
+  const _WeeklyMeaningCard({
+    required this.reflectionCount,
+    required this.actionCount,
+    required this.completedCount,
+    required this.meaningAverage,
+    required this.processAverage,
+    required this.moodAverage,
+    required this.alignedGoals,
+    required this.pressureGoals,
+    required this.aiSummary,
+    required this.busy,
+    required this.onGenerate,
+  });
+  final int reflectionCount;
+  final int actionCount;
+  final int completedCount;
+  final double meaningAverage;
+  final double processAverage;
+  final double moodAverage;
+  final int alignedGoals;
+  final int pressureGoals;
+  final TodoGoalWeeklySummaryResult? aiSummary;
+  final bool busy;
+  final VoidCallback onGenerate;
+
+  String _score(double value) => value == 0 ? '暂无' : value.toStringAsFixed(1);
+
+  @override
+  Widget build(BuildContext context) {
+    final insight = pressureGoals > 0
+        ? '有 $pressureGoals 个目标外部压力偏高。下周优先降低强度、缩短承诺周期，或重新确认价值。'
+        : (reflectionCount == 0 ? '完成一次行动后复盘，才能看见过程幸福的真实证据。' : '本周已有 $reflectionCount 次过程记录。继续保留带来意义感和投入感的行动方式。');
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFE0E7FF))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('本周过程总结', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: _goalInk)),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            _MetricPill(label: '行动', value: '$completedCount/$actionCount'),
+            _MetricPill(label: '复盘', value: '$reflectionCount'),
+            _MetricPill(label: '意义感', value: _score(meaningAverage)),
+            _MetricPill(label: '过程感', value: _score(processAverage)),
+            _MetricPill(label: '情绪', value: _score(moodAverage)),
+            _MetricPill(label: '自我一致目标', value: '$alignedGoals'),
+          ]),
+          const SizedBox(height: 12),
+          Text(insight, style: const TextStyle(color: Color(0xFF4B5563), height: 1.45, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          if (aiSummary == null)
+            OutlinedButton.icon(onPressed: busy ? null : onGenerate, icon: const Icon(Icons.auto_awesome), label: const Text('AI生成本周深度总结'))
+          else ...[
+            _MiniLine(label: '自我一致', text: aiSummary!.alignmentInsight),
+            _MiniLine(label: '过程幸福', text: aiSummary!.processInsight),
+            _MiniLine(label: '价值证据', text: aiSummary!.valueEvidence),
+            _MiniLine(label: '需要调整', text: aiSummary!.adjustmentAdvice),
+            _MiniLine(label: '下周重点', text: aiSummary!.nextWeekFocus),
+            TextButton.icon(onPressed: busy ? null : onGenerate, icon: const Icon(Icons.refresh), label: const Text('重新生成')),
           ],
         ]),
       ),

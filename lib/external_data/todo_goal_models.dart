@@ -132,6 +132,28 @@ class TodoGoalAnalysisResult {
       };
 }
 
+class TodoGoalWeeklySummaryResult {
+  const TodoGoalWeeklySummaryResult({
+    required this.alignmentInsight,
+    required this.processInsight,
+    required this.valueEvidence,
+    required this.adjustmentAdvice,
+    required this.nextWeekFocus,
+    required this.provider,
+    required this.modelLabel,
+    this.usedFallback = false,
+  });
+
+  final String alignmentInsight;
+  final String processInsight;
+  final String valueEvidence;
+  final String adjustmentAdvice;
+  final String nextWeekFocus;
+  final String provider;
+  final String modelLabel;
+  final bool usedFallback;
+}
+
 class TodoGoalReviewResult {
   const TodoGoalReviewResult({
     required this.summary,

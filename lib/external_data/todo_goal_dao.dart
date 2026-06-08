@@ -624,7 +624,7 @@ class TodoGoalDao {
       FROM goal_action_steps s
       LEFT JOIN goal_profiles g ON g.goal_id = s.goal_id
       LEFT JOIN goal_action_steps p ON p.step_id = s.parent_step_id
-      WHERE g.status != 'deleted'
+      WHERE g.status = 'active'
         AND (s.planned_date = ? OR s.planned_date IS NULL OR s.planned_date = '')
         ${includeCompleted ? '' : "AND s.status != 'completed'"}
       ORDER BY CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END,
@@ -657,6 +657,37 @@ class TodoGoalDao {
     return rows.map(TodoTaskRecord.fromMap).toList();
   }
 
+
+  Future<void> updateGoalStatus(String goalId, String status) async {
+    final normalized = const <String>{'active', 'paused', 'archived', 'deleted'}.contains(status) ? status : 'active';
+    final db = await _db;
+    await db.update(
+      'goal_profiles',
+      <String, Object?>{'status': normalized, 'updated_at_ms': DateTime.now().millisecondsSinceEpoch},
+      where: 'goal_id = ?',
+      whereArgs: [goalId],
+    );
+  }
+
+  Future<void> updateGoalAlignment({
+    required String goalId,
+    required String coreValues,
+    required String valueGoal,
+    required String processGoal,
+  }) async {
+    final db = await _db;
+    await db.update(
+      'goal_profiles',
+      <String, Object?>{
+        'core_values': coreValues.trim(),
+        'value_goal': valueGoal.trim(),
+        'process_goal': processGoal.trim(),
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'goal_id = ?',
+      whereArgs: [goalId],
+    );
+  }
 
   Future<void> updateStepStatus(String stepId, String status) async {
     final db = await _db;
