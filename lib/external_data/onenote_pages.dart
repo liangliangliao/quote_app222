@@ -181,6 +181,7 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
   final _goalSystemPromptCtrl = TextEditingController();
   final _goalTaskPromptCtrl = TextEditingController();
   final _goalReviewPromptCtrl = TextEditingController();
+  final _goalSolutionPromptCtrl = TextEditingController();
   List<Map<String, Object?>> _noteLogs = [];
   List<Map<String, Object?>> _todoLogs = [];
   String _status = '';
@@ -197,6 +198,7 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
     _goalSystemPromptCtrl.dispose();
     _goalTaskPromptCtrl.dispose();
     _goalReviewPromptCtrl.dispose();
+    _goalSolutionPromptCtrl.dispose();
     super.dispose();
   }
 
@@ -213,6 +215,7 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
       _goalSystemPromptCtrl.text = promptTemplates.systemPrompt;
       _goalTaskPromptCtrl.text = promptTemplates.taskPrompt;
       _goalReviewPromptCtrl.text = promptTemplates.reviewPrompt;
+      _goalSolutionPromptCtrl.text = promptTemplates.solutionPrompt;
       _noteLogs = noteLogs;
       _todoLogs = todoLogs;
     });
@@ -252,6 +255,7 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
       systemPrompt: _goalSystemPromptCtrl.text,
       taskPrompt: _goalTaskPromptCtrl.text,
       reviewPrompt: _goalReviewPromptCtrl.text,
+      solutionPrompt: _goalSolutionPromptCtrl.text,
     ));
     await _load();
     if (!mounted) return;
@@ -325,6 +329,7 @@ class _MicrosoftExternalConfigPageState extends State<MicrosoftExternalConfigPag
             systemCtrl: _goalSystemPromptCtrl,
             taskCtrl: _goalTaskPromptCtrl,
             reviewCtrl: _goalReviewPromptCtrl,
+            solutionCtrl: _goalSolutionPromptCtrl,
             onSave: _saveGoalAiPrompts,
             onReset: _resetGoalAiPrompts,
           ),
@@ -343,6 +348,7 @@ class _GoalAiPromptConfigCard extends StatelessWidget {
     required this.systemCtrl,
     required this.taskCtrl,
     required this.reviewCtrl,
+    required this.solutionCtrl,
     required this.onSave,
     required this.onReset,
   });
@@ -350,6 +356,7 @@ class _GoalAiPromptConfigCard extends StatelessWidget {
   final TextEditingController systemCtrl;
   final TextEditingController taskCtrl;
   final TextEditingController reviewCtrl;
+  final TextEditingController solutionCtrl;
   final VoidCallback onSave;
   final VoidCallback onReset;
 
@@ -364,12 +371,13 @@ class _GoalAiPromptConfigCard extends StatelessWidget {
             const Text('To Do 目标实践系统 AI 提示词', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
             const SizedBox(height: 8),
             const Text(
-              '这里统一配置 Microsoft To Do 目标转化、今日实践和复盘落地所使用的 AI 提示词。可使用占位符：{{VALUE_SYSTEM}}、{{TASK_TITLE}}、{{TASK_BODY}}、{{TASK_LIST}}、{{TASK_IMPORTANCE}}、{{TASK_DUE}}、{{TASK_STATUS}}、{{GOAL_TITLE}}、{{DEEP_MEANING}}、{{PROCESS_VALUE}}、{{ACTION_TITLE}}、{{COMPLETED_TEXT}}、{{USER_REFLECTION}}。',
+              '这里统一配置 Microsoft To Do 目标转化、今日实践和复盘落地所使用的 AI 提示词。可使用占位符：{{VALUE_SYSTEM}}、{{TASK_TITLE}}、{{TASK_BODY}}、{{TASK_LIST}}、{{TASK_IMPORTANCE}}、{{TASK_DUE}}、{{TASK_STATUS}}、{{GOAL_TITLE}}、{{DEEP_MEANING}}、{{PROCESS_VALUE}}、{{ACTION_TITLE}}、{{COMPLETED_TEXT}}、{{USER_REFLECTION}}；独立方案请求还支持 {{RESULT_GOAL}}、{{VALUE_GOAL}}、{{PROCESS_GOAL}}、{{CORE_VALUES}}、{{OBSTACLE_SUMMARY}}、{{TODAY_ACTION}}。',
               style: TextStyle(color: Color(0xFF6B7280), height: 1.45),
             ),
             const SizedBox(height: 10),
             _PromptEditorTile(title: '系统提示词', subtitle: '控制 AI 的身份、语气和输出格式。', controller: systemCtrl, minLines: 4, maxLines: 10),
             _PromptEditorTile(title: '任务转目标提示词', subtitle: '用于把 Microsoft To Do 任务转化为方向、意义、过程价值和今日最小行动。', controller: taskCtrl, minLines: 8, maxLines: 18),
+            _PromptEditorTile(title: '独立问题解决方案提示词', subtitle: '仅用于单独生成多套方案和问题树，不与目标分析共用请求。', controller: solutionCtrl, minLines: 8, maxLines: 18),
             _PromptEditorTile(title: '每日复盘提示词', subtitle: '用于把完成/未完成记录转化为过程洞察和明日最小一步。', controller: reviewCtrl, minLines: 8, maxLines: 18),
             const SizedBox(height: 10),
             Wrap(

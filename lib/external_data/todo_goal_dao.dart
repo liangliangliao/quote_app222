@@ -522,12 +522,10 @@ class TodoGoalDao {
       );
     }
 
-    await saveSolutionPlansFromAnalysis(goalId: goalId, sourceTaskId: task.taskId, plans: analysis.solutionPlans);
-
     await addAiAnalysis(
       goalId: goalId,
       sourceTaskId: task.taskId,
-      analysisType: 'task_to_goal_deep_problem_solution',
+      analysisType: 'task_to_goal_analysis',
       promptText: '',
       resultJson: jsonEncode(analysis.toJson()),
       modelName: analysis.modelLabel,
@@ -786,6 +784,37 @@ class TodoGoalDao {
       'sync_direction': syncDirection,
       'last_sync_at_ms': DateTime.now().millisecondsSinceEpoch,
       'local_status': 'synced',
+    });
+  }
+
+
+  Future<void> clearSolutionPlans(String goalId) async {
+    final db = await _db;
+    final rows = await db.query('goal_solution_plans', columns: ['solution_id'], where: 'goal_id = ?', whereArgs: [goalId]);
+    final ids = rows.map((row) => (row['solution_id'] ?? '').toString()).where((id) => id.isNotEmpty).toList();
+    await db.transaction((txn) async {
+      if (ids.isNotEmpty) {
+        await txn.delete('goal_problem_nodes', where: 'solution_id IN (${List.filled(ids.length, '?').join(',')})', whereArgs: ids);
+      }
+      await txn.delete('goal_solution_plans', where: 'goal_id = ?', whereArgs: [goalId]);
+    });
+  }
+
+  Future<void> clearAllGoalModuleData() async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (final table in const <String>[
+        'goal_step_reviews',
+        'goal_problem_nodes',
+        'goal_solution_plans',
+        'goal_sync_links',
+        'goal_ai_analysis',
+        'goal_reflections',
+        'goal_action_steps',
+        'goal_profiles',
+      ]) {
+        await txn.delete(table);
+      }
     });
   }
 

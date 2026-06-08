@@ -7,6 +7,7 @@ import 'todo_dao.dart';
 import 'todo_goal_ai_service.dart';
 import 'todo_goal_dao.dart';
 import 'todo_goal_models.dart';
+import 'todo_goal_prompt_config.dart';
 import 'todo_goal_value_system.dart';
 import 'todo_models.dart';
 import 'todo_service.dart';
@@ -26,6 +27,7 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   final _todoDao = TodoDao();
   final _goalDao = TodoGoalDao();
   final _ai = TodoGoalAiService();
+  final _promptConfig = TodoGoalPromptConfig();
   final _manualGoalTitleCtrl = TextEditingController();
   final _manualGoalBodyCtrl = TextEditingController();
   late final _todoService = TodoGraphService(dao: _todoDao);
@@ -159,7 +161,7 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
     if (_busy) return;
     setState(() {
       _busy = true;
-      _status = '正在把用户输入目标转化为问题解决方案...';
+      _status = '正在把用户输入目标转化为自我一致目标...';
     });
     try {
       final task = _buildManualTask(title, _manualGoalBodyCtrl.text);
@@ -169,12 +171,12 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
       _manualGoalBodyCtrl.clear();
       await _load();
       if (!mounted) return;
-      _show(analysis.usedFallback ? '已使用本地策略生成目标方案。配置 AI 后可重新分析。' : 'AI 已生成多套问题解决方案和问题树。');
+      _show(analysis.usedFallback ? '已使用本地策略生成目标卡。配置 AI 后可重新分析。' : 'AI 已生成目标卡。需要问题树时，请在详情页单独点击“生成方案”。');
       await Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalDetailPage(goalId: goalId)));
       if (mounted) await _load();
     } catch (e) {
       if (!mounted) return;
-      _show('目标方案生成失败：$e', isError: true);
+      _show('目标转化失败：$e', isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -284,6 +286,61 @@ ${quote.translation}
     }
   }
 
+  Future<bool> _confirmDanger({required String title, required String message, String actionText = '确认'}) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(actionText)),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _resetGoalModuleDefaults() async {
+    if (_busy) return;
+    final ok = await _confirmDanger(title: '恢复默认配置', message: '这会恢复 To Do 目标实践系统的默认 AI 提示词，不会删除已有目标、行动或复盘。');
+    if (!ok) return;
+    await _promptConfig.reset();
+    await _load();
+    _show('已恢复 To Do 目标实践系统默认配置。');
+  }
+
+  Future<void> _clearGoalModuleData() async {
+    if (_busy) return;
+    final ok = await _confirmDanger(
+      title: '清除全部目标模块数据？',
+      message: '这会删除“向峰而行/To Do目标实践系统”的目标卡、今日行动、复盘、AI分析、问题解决方案和写回链接，并恢复默认提示词。不会删除 Microsoft To Do 原始同步任务。',
+      actionText: '清除并恢复默认',
+    );
+    if (!ok) return;
+    setState(() {
+      _busy = true;
+      _status = '正在清除目标模块数据并恢复默认状态...';
+    });
+    try {
+      await _goalDao.clearAllGoalModuleData();
+      await _promptConfig.reset();
+      _manualGoalTitleCtrl.clear();
+      _manualGoalBodyCtrl.clear();
+      await _load();
+      if (mounted) _show('已清除目标模块全部数据，并恢复默认状态。');
+    } catch (e) {
+      if (mounted) _show('清除失败：$e', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _status = '';
+        });
+      }
+    }
+  }
+
   void _show(String message, {bool isError = false}) {
     if (!mounted) return;
     final m = ScaffoldMessenger.maybeOf(context);
@@ -319,6 +376,17 @@ ${quote.translation}
             tooltip: '提示词配置位置',
             onPressed: () => _show('AI 提示词请到：外部数据同步 → 右上角统一配置 → To Do 目标实践系统 AI 提示词 中统一配置。'),
             icon: const Icon(Icons.tune_outlined),
+          ),
+          PopupMenuButton<String>(
+            tooltip: '模块重置/清理',
+            onSelected: (value) {
+              if (value == 'reset_defaults') _resetGoalModuleDefaults();
+              if (value == 'clear_all') _clearGoalModuleData();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'reset_defaults', child: Text('恢复默认配置')),
+              PopupMenuItem(value: 'clear_all', child: Text('清除目标模块全部数据')),
+            ],
           ),
           IconButton(onPressed: _busy ? null : _load, icon: const Icon(Icons.refresh)),
         ],
@@ -584,6 +652,58 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     }
   }
 
+  Future<void> _generateProblemSolutions() async {
+    final goal = _goal;
+    final task = _sourceTask;
+    if (goal == null || task == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final analysis = TodoGoalAnalysisResult(
+        goalTitle: goal.goalTitle,
+        deepMeaning: goal.deepMeaning,
+        desiredIdentity: goal.desiredIdentity,
+        goalCategory: goal.goalCategory,
+        goalOriginType: goal.goalOriginType,
+        selfConcordanceScore: goal.selfConcordanceScore,
+        processValue: goal.processValue,
+        obstacleSummary: goal.obstacleSummary,
+        todayMinimumAction: _steps.isEmpty ? '先做一个5分钟最小行动' : _steps.first.title,
+        minimumStandard: _steps.isEmpty ? '开始5分钟即可。' : _steps.first.minimumStandard,
+        recommendedStandard: _steps.isEmpty ? '完成一个小步骤并记录过程。' : _steps.first.recommendedStandard,
+        stretchStandard: _steps.isEmpty ? '状态允许时推进15分钟。' : _steps.first.stretchStandard,
+        difficultyScore: _steps.isEmpty ? 5 : _steps.first.difficultyScore,
+        zoneType: _steps.isEmpty ? 'stretch' : _steps.first.zoneType,
+        coachMessage: '',
+        provider: goal.aiProvider,
+        modelLabel: goal.aiModelLabel,
+        resultGoal: goal.resultGoal,
+        valueGoal: goal.valueGoal,
+        processGoal: goal.processGoal,
+        coreValues: goal.coreValues,
+      );
+      final result = await _ai.generateProblemSolutions(task: task, analysis: analysis);
+      final keepExisting = result.usedFallback && _solutionPlans.isNotEmpty;
+      if (!keepExisting) {
+        await _goalDao.clearSolutionPlans(goal.goalId);
+        await _goalDao.saveSolutionPlansFromAnalysis(goalId: goal.goalId, sourceTaskId: goal.sourceTaskId, plans: result.plans);
+      }
+      await _goalDao.addAiAnalysis(
+        goalId: goal.goalId,
+        sourceTaskId: goal.sourceTaskId,
+        analysisType: 'goal_problem_solutions',
+        promptText: '',
+        resultJson: jsonEncode(result.toJson()),
+        modelName: result.modelLabel,
+      );
+      await _load();
+      _show(result.usedFallback ? (keepExisting ? 'AI方案请求未完成，已保留原有问题解决方案。' : 'AI方案请求未完成，已生成本地备用问题树。') : 'AI 已单独生成问题解决方案和问题树。');
+    } catch (e) {
+      _show('生成问题解决方案失败：$e', isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _addTinyStep() async {
     final goal = _goal;
     if (goal == null) return;
@@ -772,7 +892,8 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
       appBar: AppBar(
         title: const Text('目标详情'),
         actions: [
-          IconButton(onPressed: _busy || _sourceTask == null ? null : _reanalyze, tooltip: 'AI 重新分析', icon: const Icon(Icons.auto_awesome)),
+          IconButton(onPressed: _busy || _sourceTask == null ? null : _reanalyze, tooltip: 'AI 重新分析目标卡', icon: const Icon(Icons.auto_awesome)),
+          IconButton(onPressed: _busy || _sourceTask == null ? null : _generateProblemSolutions, tooltip: '单独生成AI问题解决方案', icon: const Icon(Icons.account_tree_outlined)),
           IconButton(onPressed: _busy ? null : _addTinyStep, tooltip: '新增最小行动', icon: const Icon(Icons.add_task_outlined)),
         ],
       ),
@@ -1189,7 +1310,7 @@ class _GoalFallbackNoticeCard extends StatelessWidget {
             Expanded(child: Text('当前目标内容是本地兜底，不代表AI已成功深度分析', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF92400E)))),
           ]),
           const SizedBox(height: 8),
-          Text('系统没有拿到可靠的结构化AI返回，或AI没有返回完整方案树，所以先使用通用兜底数据保证页面可继续使用。这个结果只能作为临时启动方案，不应当当作真正贴合“${goal.goalTitle}”的深度问题解决方案。', style: const TextStyle(height: 1.45, color: Color(0xFF78350F), fontWeight: FontWeight.w600)),
+          Text('系统没有拿到可靠的结构化目标分析，因此先使用本地策略保证目标卡和今日行动可继续使用。问题解决方案已经拆为独立请求，可在目标详情页右上角单独生成，不受本次目标分析影响。', style: const TextStyle(height: 1.45, color: Color(0xFF78350F), fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Text('建议：检查 API Key、模型、网络和JSON返回格式后，点击右上角“AI重新分析”。当前模型/来源：$model。', style: const TextStyle(height: 1.45, color: Color(0xFF92400E), fontWeight: FontWeight.w800)),
         ]),
@@ -1714,7 +1835,7 @@ class _ManualGoalInputCard extends StatelessWidget {
             Expanded(child: Text('直接输入一个目标或棘手问题', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk))),
           ]),
           const SizedBox(height: 6),
-          const Text('不必先进入 Microsoft To Do。你可以直接输入“我现在最想解决的问题”，AI会按同样标准生成多套方案、主备路径和可执行问题树。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
+          const Text('不必先进入 Microsoft To Do。你可以直接输入“我现在最想解决的问题”，AI会先生成目标卡、价值诊断和今日最小行动；深度问题解决方案可在目标详情页单独生成。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
           const SizedBox(height: 12),
           TextField(
             controller: titleCtrl,
@@ -1730,7 +1851,7 @@ class _ManualGoalInputCard extends StatelessWidget {
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,
-            child: FilledButton.icon(onPressed: busy ? null : onGenerate, icon: const Icon(Icons.auto_awesome), label: const Text('AI生成问题解决方案')),
+            child: FilledButton.icon(onPressed: busy ? null : onGenerate, icon: const Icon(Icons.auto_awesome), label: const Text('AI生成目标卡')),
           ),
         ]),
       ),
@@ -2116,7 +2237,7 @@ class _SolutionPlanBoard extends StatelessWidget {
       return const _PlainValueCard(
         icon: Icons.account_tree_outlined,
         title: 'AI问题解决方案尚未生成',
-        text: '点击右上角“AI重新分析”后，系统会把目标当作一个棘手问题，生成舒适区、拉伸区、恐慌区三类方案，并保存未选方案作为备用。',
+        text: '目标卡已和问题解决方案拆成两个独立 AI 请求。点击右上角“问题树”按钮，系统会单独生成舒适区、拉伸区、恐慌区三类方案，并保存未选方案作为备用。',
       );
     }
     final selected = plans.where((p) => p.isSelected).isEmpty ? plans.first : plans.firstWhere((p) => p.isSelected);
@@ -2195,7 +2316,7 @@ class _ProblemNodeTreeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (nodes.isEmpty) {
-      return const _EmptyCard(text: '当前方案还没有问题树节点。可以重新分析目标生成完整问题树。');
+      return const _EmptyCard(text: '当前方案还没有问题树节点。请点击右上角“问题树”按钮单独重新生成方案。');
     }
     final ids = nodes.map((n) => n.nodeId).toSet();
     final childrenByParent = <String, List<TodoGoalProblemNode>>{};

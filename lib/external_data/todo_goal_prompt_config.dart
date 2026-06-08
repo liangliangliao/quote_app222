@@ -9,6 +9,7 @@ class TodoGoalPromptConfig {
   static const String systemPromptKey = 'todo_goal_ai_system_prompt_v1';
   static const String taskPromptKey = 'todo_goal_ai_task_prompt_v1';
   static const String reviewPromptKey = 'todo_goal_ai_review_prompt_v1';
+  static const String solutionPromptKey = 'todo_goal_ai_solution_prompt_v1';
 
   static const String defaultSystemPrompt = '''你是积极心理学行动教练。
 不要讲抽象理论，不要输出 Markdown。
@@ -68,6 +69,42 @@ class TodoGoalPromptConfig {
 }
 ''';
 
+
+  static const String defaultSolutionPromptTemplate = '''{{VALUE_SYSTEM}}
+
+你是独立的“目标问题解决方案设计器”。本请求只负责生成问题解决方案，不再重复执行目标澄清、自我一致性评分或每日复盘。
+
+已确认目标：{{GOAL_TITLE}}
+结果目标：{{RESULT_GOAL}}
+价值目标：{{VALUE_GOAL}}
+过程目标：{{PROCESS_GOAL}}
+核心价值：{{CORE_VALUES}}
+已识别阻力：{{OBSTACLE_SUMMARY}}
+今日最小行动：{{TODAY_ACTION}}
+原始任务背景：{{TASK_BODY}}
+
+请生成至少3个相互独立、完整可用的方案：舒适区、拉伸区、恐慌区。方案可使用问题分解、WOOP/心理对比、执行意图、行为激活、设计思维、反馈调节或风险预案等方法。
+每个方案必须包含 nodes，用父子节点表达“顶层问题→子问题→更小子问题→底层可执行动作”。底层 action 必须具体到时间、地点、对象、动作与完成标准。
+只输出 JSON：
+{
+  "solutionPlans": [
+    {
+      "title": "方案名称",
+      "methodName": "科学方法",
+      "methodBasis": "方法依据",
+      "zoneType": "comfort/stretch/panic",
+      "coreValueFocus": "如何保持自我一致并重视过程",
+      "summary": "方案摘要",
+      "riskNotes": "风险与适用边界",
+      "nodes": [
+        {"id":"root", "parentId":"", "relationType":"tree", "nodeType":"problem", "title":"顶层问题", "description":"", "acceptanceCriteria":"", "actionableStep":"", "zoneType":"stretch", "difficultyScore":5, "estimatedMinutes":10, "sequenceOrder":0},
+        {"id":"a", "parentId":"root", "relationType":"tree", "nodeType":"action", "title":"底层动作", "description":"", "acceptanceCriteria":"", "actionableStep":"具体行动", "zoneType":"stretch", "difficultyScore":3, "estimatedMinutes":5, "sequenceOrder":1}
+      ]
+    }
+  ]
+}
+''';
+
   static const String defaultReviewPromptTemplate = '''{{VALUE_SYSTEM}}
 
 请根据用户今日目标行动记录生成积极心理学取向的复盘。
@@ -102,6 +139,7 @@ class TodoGoalPromptConfig {
       systemPrompt: await _dao.getSetting(systemPromptKey, defaultValue: defaultSystemPrompt),
       taskPrompt: await _dao.getSetting(taskPromptKey, defaultValue: defaultTaskPromptTemplate),
       reviewPrompt: await _dao.getSetting(reviewPromptKey, defaultValue: defaultReviewPromptTemplate),
+      solutionPrompt: await _dao.getSetting(solutionPromptKey, defaultValue: defaultSolutionPromptTemplate),
     );
   }
 
@@ -110,6 +148,7 @@ class TodoGoalPromptConfig {
     await _dao.setSetting(systemPromptKey, templates.systemPrompt.trim().isEmpty ? defaultSystemPrompt : templates.systemPrompt.trim());
     await _dao.setSetting(taskPromptKey, templates.taskPrompt.trim().isEmpty ? defaultTaskPromptTemplate : templates.taskPrompt.trim());
     await _dao.setSetting(reviewPromptKey, templates.reviewPrompt.trim().isEmpty ? defaultReviewPromptTemplate : templates.reviewPrompt.trim());
+    await _dao.setSetting(solutionPromptKey, templates.solutionPrompt.trim().isEmpty ? defaultSolutionPromptTemplate : templates.solutionPrompt.trim());
   }
 
   Future<void> reset() async {
@@ -117,6 +156,7 @@ class TodoGoalPromptConfig {
       systemPrompt: defaultSystemPrompt,
       taskPrompt: defaultTaskPromptTemplate,
       reviewPrompt: defaultReviewPromptTemplate,
+      solutionPrompt: defaultSolutionPromptTemplate,
     ));
   }
 
@@ -136,6 +176,30 @@ class TodoGoalPromptConfig {
       'TASK_IMPORTANCE': taskImportance,
       'TASK_DUE': taskDue.trim().isEmpty ? '无' : taskDue,
       'TASK_STATUS': taskStatus,
+    });
+  }
+
+  String renderSolutionPrompt(
+    TodoGoalPromptTemplates templates, {
+    required String goalTitle,
+    required String resultGoal,
+    required String valueGoal,
+    required String processGoal,
+    required String coreValues,
+    required String obstacleSummary,
+    required String todayAction,
+    required String taskBody,
+  }) {
+    return _render(templates.solutionPrompt, <String, String>{
+      'VALUE_SYSTEM': todoGoalValueSystemPromptBlock(),
+      'GOAL_TITLE': goalTitle,
+      'RESULT_GOAL': resultGoal,
+      'VALUE_GOAL': valueGoal,
+      'PROCESS_GOAL': processGoal,
+      'CORE_VALUES': coreValues,
+      'OBSTACLE_SUMMARY': obstacleSummary,
+      'TODAY_ACTION': todayAction,
+      'TASK_BODY': taskBody.trim().isEmpty ? '无' : taskBody,
     });
   }
 
@@ -168,9 +232,10 @@ class TodoGoalPromptConfig {
 }
 
 class TodoGoalPromptTemplates {
-  const TodoGoalPromptTemplates({required this.systemPrompt, required this.taskPrompt, required this.reviewPrompt});
+  const TodoGoalPromptTemplates({required this.systemPrompt, required this.taskPrompt, required this.reviewPrompt, required this.solutionPrompt});
 
   final String systemPrompt;
   final String taskPrompt;
   final String reviewPrompt;
+  final String solutionPrompt;
 }

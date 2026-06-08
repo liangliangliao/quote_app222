@@ -443,6 +443,30 @@ class TodoGoalReflection {
 }
 
 
+
+class TodoGoalSolutionGenerationResult {
+  const TodoGoalSolutionGenerationResult({
+    required this.plans,
+    required this.provider,
+    required this.modelLabel,
+    this.rawResponse = '',
+    this.usedFallback = false,
+  });
+
+  final List<TodoGoalSolutionPlan> plans;
+  final String provider;
+  final String modelLabel;
+  final String rawResponse;
+  final bool usedFallback;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'plans': plans.map((plan) => plan.toJson()).toList(),
+        'provider': provider,
+        'modelLabel': modelLabel,
+        'usedFallback': usedFallback,
+      };
+}
+
 class TodoGoalSolutionPlan {
   const TodoGoalSolutionPlan({
     required this.solutionId,
