@@ -32,7 +32,7 @@ class TodoGoalAiService {
         prompt: prompt,
         purpose: 'microsoft_todo.goal_analysis',
         systemPrompt: templates.systemPrompt,
-        maxTokens: 2400,
+        maxTokens: 3800,
         expectJson: true,
         temperature: 0.35,
       );
@@ -78,6 +78,7 @@ class TodoGoalAiService {
         valueAlignmentScore: _readInt(parsed, 'valueAlignmentScore', aiDefaults.valueAlignmentScore).clamp(0, 100).toInt(),
         interestConnectionScore: _readInt(parsed, 'interestConnectionScore', aiDefaults.interestConnectionScore).clamp(0, 100).toInt(),
         passionScore: _readInt(parsed, 'passionScore', aiDefaults.passionScore).clamp(0, 100).toInt(),
+        feasibilityScore: _readInt(parsed, 'feasibilityScore', aiDefaults.feasibilityScore).clamp(0, 100).toInt(),
         externalPressureScore: _readInt(parsed, 'externalPressureScore', aiDefaults.externalPressureScore).clamp(0, 100).toInt(),
         processHappinessScore: _readInt(parsed, 'processHappinessScore', aiDefaults.processHappinessScore).clamp(0, 100).toInt(),
         goalType: _read(parsed, 'goalType', aiDefaults.goalType),
@@ -88,6 +89,13 @@ class TodoGoalAiService {
         processAction: _read(parsed, 'processAction', aiDefaults.processAction),
         valueAction: _read(parsed, 'valueAction', aiDefaults.valueAction),
         experiencePrompt: _read(parsed, 'experiencePrompt', aiDefaults.experiencePrompt),
+        userNeedInterpretation: _read(parsed, 'userNeedInterpretation', aiDefaults.userNeedInterpretation),
+        keyUncertainties: _read(parsed, 'keyUncertainties', aiDefaults.keyUncertainties),
+        clarifyingQuestions: _read(parsed, 'clarifyingQuestions', aiDefaults.clarifyingQuestions),
+        possibleDirections: _read(parsed, 'possibleDirections', aiDefaults.possibleDirections),
+        referenceCases: _read(parsed, 'referenceCases', aiDefaults.referenceCases),
+        recommendationRationale: _read(parsed, 'recommendationRationale', aiDefaults.recommendationRationale),
+        userDecisionPrompt: _read(parsed, 'userDecisionPrompt', aiDefaults.userDecisionPrompt),
         provider: state['provider'] ?? 'ai',
         solutionPlans: const <TodoGoalSolutionPlan>[],
         modelLabel: state['label'] ?? 'AI',
@@ -129,8 +137,8 @@ class TodoGoalAiService {
       final raw = await _ai.generateText(
         prompt: prompt,
         purpose: 'microsoft_todo.goal_problem_solutions',
-        systemPrompt: '你只负责生成目标问题解决方案和问题树，不执行目标分析或复盘。只输出合法JSON。',
-        maxTokens: 3400,
+        systemPrompt: '你是严谨、务实、客观的科学问题解决分析器。区分事实、推断、假设和未知；使用根因分析、方案比较和验证实验；不得替用户做最终选择。只输出合法JSON。',
+        maxTokens: 6500,
         expectJson: true,
         temperature: 0.35,
       );
@@ -170,7 +178,7 @@ class TodoGoalAiService {
     final goalText = goals.take(12).map((goal) => '- ${goal.goalTitle}｜自我一致${goal.selfConcordanceScore}｜外部压力${goal.externalPressureScore}｜过程幸福${goal.processHappinessScore}｜价值${goal.coreValues}').join('\n');
     final reflectionText = reflections.take(20).map((reflection) => '- ${reflection.reflectionDate} ${reflection.goalTitle}｜意义${reflection.meaningScore}/5｜过程${reflection.processScore}/5｜${reflection.processExperience}').join('\n');
     final prompt = '''
-你是积极心理学目标教练。请生成一份“过程与自我一致”周总结，不以完成率羞辱用户。
+你是促进用户自主判断的积极心理学目标教练。请生成“过程与自我一致”周总结，不以完成率羞辱用户，也不替用户决定下周目标。区分记录事实、你的推断和待用户确认的问题；调整建议至少给出多种可能性及适用条件。
 目标：
 $goalText
 本周复盘：
@@ -182,7 +190,7 @@ $reflectionText
       final raw = await _ai.generateText(
         prompt: prompt,
         purpose: 'microsoft_todo.goal_weekly_summary',
-        systemPrompt: '你是温和、具体、反对完成率崇拜的积极心理学目标教练。只输出合法JSON。',
+        systemPrompt: '你是温和、具体、反对完成率崇拜并尊重用户自主选择的积极心理学目标教练。不得把建议写成唯一答案。只输出合法JSON。',
         maxTokens: 1200,
         expectJson: true,
         temperature: 0.4,
@@ -250,6 +258,8 @@ $reflectionText
         meaningConnection: _read(parsed, 'meaningConnection', fallback.meaningConnection),
         tomorrowNextStep: _read(parsed, 'tomorrowNextStep', fallback.tomorrowNextStep),
         encouragement: _read(parsed, 'encouragement', fallback.encouragement),
+        nextStepOptions: _read(parsed, 'nextStepOptions', fallback.nextStepOptions),
+        decisionPrompt: _read(parsed, 'decisionPrompt', fallback.decisionPrompt),
         provider: state['provider'] ?? 'ai',
         modelLabel: state['label'] ?? 'AI',
         rawResponse: raw,
@@ -293,10 +303,10 @@ $reflectionText
 用户阻力描述：${obstacle.trim().isEmpty ? '未填写' : obstacle.trim()}
 
 请根据科学问题解决原则输出：
-1. 为什么这一步成功/失败；成功时提炼可复用条件，失败时指出问题发生在哪个更小环节。
+1. 先列出已观察事实，再区分可能原因与待验证假设；成功时提炼可复用条件，失败时指出问题发生在哪个更小环节。
 2. 如何重启当前子问题，优先缩小、换路径、换环境、降低阻力，而不是立刻推翻整套方案。
-3. 给出3个替代步骤，必须符合目标价值体系：目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌。
-4. 只有在原方案方向明显错误时才提醒可重构整个方案；默认不建议重构，避免功亏一篑。
+3. 给出3个机制不同的替代步骤，说明各自适用条件、代价和风险，不能替用户选择；必须符合目标价值体系：目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌。
+4. 给出验证关键假设的低成本实验和判断规则。只有证据显示原方案方向错误时才提醒重构；最终由用户选择继续、换路或暂停。
 
 只输出JSON：
 {
@@ -398,6 +408,7 @@ $reflectionText
       valueAlignmentScore: _readIntFromRaw(raw, _fieldAliases('valueAlignmentScore'), fallback.valueAlignmentScore).clamp(0, 100).toInt(),
       interestConnectionScore: _readIntFromRaw(raw, _fieldAliases('interestConnectionScore'), fallback.interestConnectionScore).clamp(0, 100).toInt(),
       passionScore: _readIntFromRaw(raw, _fieldAliases('passionScore'), fallback.passionScore).clamp(0, 100).toInt(),
+      feasibilityScore: _readIntFromRaw(raw, _fieldAliases('feasibilityScore'), fallback.feasibilityScore).clamp(0, 100).toInt(),
       externalPressureScore: _readIntFromRaw(raw, _fieldAliases('externalPressureScore'), fallback.externalPressureScore).clamp(0, 100).toInt(),
       processHappinessScore: _readIntFromRaw(raw, _fieldAliases('processHappinessScore'), fallback.processHappinessScore).clamp(0, 100).toInt(),
       goalType: _readTextFieldFromRaw(raw, _fieldAliases('goalType'), fallback.goalType),
@@ -408,6 +419,13 @@ $reflectionText
       processAction: _readTextFieldFromRaw(raw, _fieldAliases('processAction'), fallback.processAction),
       valueAction: _readTextFieldFromRaw(raw, _fieldAliases('valueAction'), fallback.valueAction),
       experiencePrompt: _readTextFieldFromRaw(raw, _fieldAliases('experiencePrompt'), fallback.experiencePrompt),
+      userNeedInterpretation: _readTextFieldFromRaw(raw, _fieldAliases('userNeedInterpretation'), fallback.userNeedInterpretation),
+      keyUncertainties: _readTextFieldFromRaw(raw, _fieldAliases('keyUncertainties'), fallback.keyUncertainties),
+      clarifyingQuestions: _readTextFieldFromRaw(raw, _fieldAliases('clarifyingQuestions'), fallback.clarifyingQuestions),
+      possibleDirections: _readTextFieldFromRaw(raw, _fieldAliases('possibleDirections'), fallback.possibleDirections),
+      referenceCases: _readTextFieldFromRaw(raw, _fieldAliases('referenceCases'), fallback.referenceCases),
+      recommendationRationale: _readTextFieldFromRaw(raw, _fieldAliases('recommendationRationale'), fallback.recommendationRationale),
+      userDecisionPrompt: _readTextFieldFromRaw(raw, _fieldAliases('userDecisionPrompt'), fallback.userDecisionPrompt),
       provider: state['provider'] ?? 'ai',
       solutionPlans: const <TodoGoalSolutionPlan>[],
       modelLabel: state['label'] ?? 'AI',
@@ -521,6 +539,7 @@ $reflectionText
       valueAlignmentScore: 72,
       interestConnectionScore: 60,
       passionScore: 58,
+      feasibilityScore: 76,
       externalPressureScore: 35,
       processHappinessScore: 70,
       goalType: '需要继续澄清的自我一致目标',
@@ -531,6 +550,13 @@ $reflectionText
       processAction: '行动时只观察一个瞬间：我正在练习开始、学习或面对不完美。',
       valueAction: '写一句这一步如何服务于成长、自由或勇气。',
       experiencePrompt: '今天做这件事时，你想体验什么：学习感、掌控感、勇气、自由，还是一点点进步？',
+      userNeedInterpretation: '这项输入可能同时包含现实任务、情绪压力和长期方向。当前信息不足以替你判断哪一层最重要。',
+      keyUncertainties: '尚不确定这是你主动选择的目标、现实必要任务，还是主要来自外部期待；也不清楚你愿意投入的时间与可接受代价。',
+      clarifyingQuestions: '1. 如果没有人评价你，你还会选择它吗？ 2. 你真正想改变的是结果、能力还是生活状态？ 3. 你愿意为它承担什么成本？',
+      possibleDirections: '方向A：先验证真实需要；方向B：保留结果但降低强度；方向C：换一种更符合价值的实现路径。',
+      referenceCases: '例如“提高英语”可能是为了工作选择、表达自信或社交连接；不同需要会导向完全不同的行动设计。',
+      recommendationRationale: '建议先做一个低成本验证动作，因为它能增加事实信息，同时不会过早锁定路线。该建议只是起点，不是标准答案。',
+      userDecisionPrompt: '看完这些可能性后，哪一种最接近你现在真正想解决的问题？你也可以拒绝全部建议并重新描述。',
       provider: provider,
       solutionPlans: const <TodoGoalSolutionPlan>[],
       modelLabel: modelLabel,
@@ -554,6 +580,10 @@ $reflectionText
       meaningConnection: deepMeaning.trim().isEmpty ? '这个目标可以继续追问：它究竟通向你想要的哪一种生活？它是自我和谐目标，还是外部压力伪装成目标？' : deepMeaning,
       tomorrowNextStep: '明天继续做一个更小、更清晰、5分钟内能开始的动作；先开始最低标准，再观察过程。',
       encouragement: '不要只用完成率评价自己。能把任务缩小、开始、记录、再设计下一步，本身就是改变。',
+      nextStepOptions: completed
+          ? '选项A：重复最低行动巩固；选项B：只增加一个小变量；选项C：先复盘最有效的条件。'
+          : '选项A：缩小到2分钟；选项B：更换时间或环境；选项C：先收集导致卡住的信息。',
+      decisionPrompt: '哪一种下一步最符合你明天的精力、现实条件和真正需要？你也可以提出第四种。',
       provider: provider,
       modelLabel: modelLabel,
       usedFallback: true,
@@ -629,6 +659,15 @@ $reflectionText
         rawJson: '',
         createdAtMs: 0,
         updatedAtMs: 0,
+        problemDefinition: '当前问题不是“必须立刻完成目标”，而是尚未形成低阻力、可重复的启动链条；需要先验证启动成本是否是主要约束。',
+        knownFacts: '已知用户有目标，并需要一个今天能开始的动作；其他资源、时间、能力与阻力信息尚不充分。',
+        keyAssumptions: '假设主要瓶颈是启动成本而不是方向错误或资源缺失；需要用微行动验证。',
+        rootCauseAnalysis: '候选近因包括动作过大、触发不清、环境阻力和完美主义；目前没有证据断言唯一根因。',
+        optionComparison: '成本最低、可逆性最高、反馈快，但对能力或资源型问题的解决力度有限。',
+        evidencePlan: '连续2-3次执行2分钟动作，记录是否能启动、卡点位置和完成后的阻力变化。',
+        successMetrics: '能在明确触发后开始；连续执行率提高；能指出真实阻力而非笼统自责。',
+        stopConditions: '若多次可启动但目标仍无进展，或发现核心问题是知识、资源或方向，则切换方案。',
+        userChoiceGuidance: '若你当前精力低且最大问题是开始，可优先考虑；若存在硬性期限或专业能力缺口，不应只用微行动。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'comfort'),
       ),
       TodoGoalSolutionPlan(
@@ -648,6 +687,15 @@ $reflectionText
         rawJson: '',
         createdAtMs: 0,
         updatedAtMs: 0,
+        problemDefinition: '需要把目标与现实差距拆成可验证子问题，识别真正约束并逐步解决，而不是直接把目标拆成待办清单。',
+        knownFacts: '已知目标方向和一个候选行动；根因、资源约束、优先级和有效路径仍需验证。',
+        keyAssumptions: '假设问题可以通过分解、证据收集和迭代实验逐步降低不确定性。',
+        rootCauseAnalysis: '先区分症状、近因、能力缺口、资源限制、环境结构和目标本身是否合理，再验证最关键根因。',
+        optionComparison: '信息质量和长期有效性较高，成本与速度居中；需要用户持续记录事实和执行判断规则。',
+        evidencePlan: '先验证影响最大的一个假设，再根据证据选择能力建设、流程优化、环境调整或资源协作。',
+        successMetrics: '关键不确定性减少；子问题有明确证据；行动能改变领先指标并逐步影响结果指标。',
+        stopConditions: '若证据否定核心因果链、成本超过收益或目标不再符合价值，应暂停并重定义问题。',
+        userChoiceGuidance: '适合愿意用事实逐步判断、又不希望过度冲刺的情况；这是暂定推荐，不是自动选择。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'stretch'),
       ),
       TodoGoalSolutionPlan(
@@ -667,6 +715,15 @@ $reflectionText
         rawJson: '',
         createdAtMs: 0,
         updatedAtMs: 0,
+        problemDefinition: '存在可能的真实紧急期限，需要判断高强度投入是否必要、有效且风险可接受。',
+        knownFacts: '当前没有足够信息证明必须冲刺；期限真实性、失败代价和可用资源需要确认。',
+        keyAssumptions: '假设时间是首要约束，且外部约束能提高执行而不会造成不可接受的反弹。',
+        rootCauseAnalysis: '若根因是信息不足、路径错误或能力缺口，单纯加压可能只会放大问题。',
+        optionComparison: '速度可能最快，但风险、成本和不可持续性最高；只有紧急性证据充分时才合理。',
+        evidencePlan: '先核实期限、最低必要结果、可动用资源和健康风险，再进行短周期试运行。',
+        successMetrics: '在限定周期内产生关键结果，同时睡眠、健康和错误率保持在可接受范围。',
+        stopConditions: '出现健康恶化、错误率显著增加、连续失败或紧急性被证伪时立即降级。',
+        userChoiceGuidance: '仅在真实紧急、代价明确且你知情同意时考虑；默认不应作为长期方案。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'panic'),
       ),
     ];
@@ -698,6 +755,11 @@ $reflectionText
         createdAtMs: 0,
         updatedAtMs: 0,
         tempNodeId: 'root',
+        logicQuestion: '现实差距是什么，哪些部分可控，最关键的不确定性是什么？',
+        knownFacts: '用户表达了目标“$goalTitle”。',
+        assumptions: '目标值得继续、且存在可通过行动改变的因素；均待用户与证据确认。',
+        evidenceNeeded: '当前状态、期望标准、期限、资源、约束和利益相关者信息。',
+        decisionRule: '先补齐影响路径选择的关键信息，再决定进入诊断、实验或执行分支。',
       ),
       TodoGoalProblemNode(
         nodeId: '',
@@ -722,6 +784,11 @@ $reflectionText
         updatedAtMs: 0,
         tempNodeId: 'entry',
         tempParentNodeId: 'root',
+        logicQuestion: '当前最大约束是启动、能力、资源、环境还是目标方向？',
+        knownFacts: '现有行动入口为“$actionTitle”。',
+        assumptions: '该入口足够小且与结果存在因果联系。',
+        evidenceNeeded: '实际开始时间、卡点、完成结果和过程记录。',
+        decisionRule: '若能启动但无有效反馈，转向能力/路径诊断；若不能启动，继续降低阻力。',
       ),
       TodoGoalProblemNode(
         nodeId: '',
@@ -746,6 +813,11 @@ $reflectionText
         updatedAtMs: 0,
         tempNodeId: 'first_action',
         tempParentNodeId: 'entry',
+        logicQuestion: '执行该动作能否产生支持或否定关键假设的证据？',
+        knownFacts: '这是当前可用的最小实验动作。',
+        assumptions: '完成动作会提供比继续思考更多的现实信息。',
+        evidenceNeeded: '是否开始、实际耗时、产出、阻力和下一步信息。',
+        decisionRule: '达到验收标准则保留或小幅升级；未达到则分析具体环节并换实验。',
       ),
       TodoGoalProblemNode(
         nodeId: '',
