@@ -830,6 +830,14 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     if (goal == null || task == null || _busy) return;
     setState(() => _busy = true);
     try {
+      final primaryStep = _steps.isEmpty ? null : _steps.first;
+      TodoGoalActionStep? processStep;
+      TodoGoalActionStep? valueStep;
+      for (final step in _steps) {
+        if (processStep == null && step.actionType == 'process') processStep = step;
+        if (valueStep == null && step.actionType == 'value') valueStep = step;
+        if (processStep != null && valueStep != null) break;
+      }
       final analysis = TodoGoalAnalysisResult(
         goalTitle: goal.goalTitle,
         deepMeaning: goal.deepMeaning,
@@ -839,12 +847,12 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
         selfConcordanceScore: goal.selfConcordanceScore,
         processValue: goal.processValue,
         obstacleSummary: goal.obstacleSummary,
-        todayMinimumAction: _steps.isEmpty ? '先做一个5分钟最小行动' : _steps.first.title,
-        minimumStandard: _steps.isEmpty ? '开始5分钟即可。' : _steps.first.minimumStandard,
-        recommendedStandard: _steps.isEmpty ? '完成一个小步骤并记录过程。' : _steps.first.recommendedStandard,
-        stretchStandard: _steps.isEmpty ? '状态允许时推进15分钟。' : _steps.first.stretchStandard,
-        difficultyScore: _steps.isEmpty ? 5 : _steps.first.difficultyScore,
-        zoneType: _steps.isEmpty ? 'stretch' : _steps.first.zoneType,
+        todayMinimumAction: primaryStep == null ? '先做一个5分钟最小行动' : primaryStep.title,
+        minimumStandard: primaryStep == null ? '开始5分钟即可。' : primaryStep.minimumStandard,
+        recommendedStandard: primaryStep == null ? '完成一个小步骤并记录过程。' : primaryStep.recommendedStandard,
+        stretchStandard: primaryStep == null ? '状态允许时推进15分钟。' : primaryStep.stretchStandard,
+        difficultyScore: primaryStep == null ? 5 : primaryStep.difficultyScore,
+        zoneType: primaryStep == null ? 'stretch' : primaryStep.zoneType,
         coachMessage: '',
         provider: goal.aiProvider,
         modelLabel: goal.aiModelLabel,
@@ -852,6 +860,28 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
         valueGoal: goal.valueGoal,
         processGoal: goal.processGoal,
         coreValues: goal.coreValues,
+        autonomyScore: goal.autonomyScore,
+        valueAlignmentScore: goal.valueAlignmentScore,
+        interestConnectionScore: goal.interestConnectionScore,
+        passionScore: goal.passionScore,
+        feasibilityScore: goal.feasibilityScore,
+        externalPressureScore: goal.externalPressureScore,
+        processHappinessScore: goal.processHappinessScore,
+        goalType: goal.goalType,
+        currentStage: goal.currentStage,
+        actionPlace: primaryStep?.actionPlace ?? '',
+        startTrigger: primaryStep?.startTrigger ?? '',
+        completionQuestion: primaryStep?.completionQuestion ?? '',
+        processAction: processStep?.title ?? '',
+        valueAction: valueStep?.title ?? '',
+        experiencePrompt: primaryStep?.experienceIntention ?? '',
+        userNeedInterpretation: goal.userNeedInterpretation,
+        keyUncertainties: goal.keyUncertainties,
+        clarifyingQuestions: goal.clarifyingQuestions,
+        possibleDirections: goal.possibleDirections,
+        referenceCases: goal.referenceCases,
+        recommendationRationale: goal.recommendationRationale,
+        userDecisionPrompt: goal.userDecisionPrompt,
       );
       final result = await _ai.generateProblemSolutions(task: task, analysis: analysis);
       final keepExisting = result.usedFallback && _solutionPlans.isNotEmpty;
@@ -886,11 +916,14 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
       sourceTaskId: goal.sourceTaskId,
       title: title.trim(),
       minimumStandard: '开始5分钟即可。',
+      simplifiedStandard: '做5分钟，并留下一个事实记录。',
       recommendedStandard: '完成一个小步骤并记录过程。',
       stretchStandard: '连续推进25分钟。',
       difficultyScore: 5,
       zoneType: 'stretch',
       plannedDate: _goalDao.todayDate(),
+      actionType: 'result',
+      experienceIntention: '由我自己判断这一步是否仍然服务于真实需要。',
     );
     await _load();
   }
@@ -1209,6 +1242,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                     _GoalPracticePanel(goal: goal, stepCount: _steps.length, openStepCount: _steps.where((s) => !s.isCompleted).length),
                     const SizedBox(height: 12),
                     _SolutionPlanBoard(
+                      goalTitle: goal.goalTitle,
                       plans: _solutionPlans,
                       nodes: _selectedNodes,
                       onSelect: _selectSolutionPlan,
@@ -2672,6 +2706,7 @@ class _ActionStepListTile extends StatelessWidget {
 
 class _SolutionPlanBoard extends StatelessWidget {
   const _SolutionPlanBoard({
+    required this.goalTitle,
     required this.plans,
     required this.nodes,
     required this.onSelect,
@@ -2679,6 +2714,7 @@ class _SolutionPlanBoard extends StatelessWidget {
     required this.onMarkNode,
   });
 
+  final String goalTitle;
   final List<TodoGoalSolutionPlan> plans;
   final List<TodoGoalProblemNode> nodes;
   final ValueChanged<TodoGoalSolutionPlan> onSelect;
@@ -2690,8 +2726,8 @@ class _SolutionPlanBoard extends StatelessWidget {
     if (plans.isEmpty) {
       return const _PlainValueCard(
         icon: Icons.account_tree_outlined,
-        title: 'AI问题解决方案尚未生成',
-        text: '目标卡已和问题解决方案拆成两个独立 AI 请求。点击右上角“问题树”按钮，系统会单独生成舒适区、拉伸区、恐慌区三类方案，并保存未选方案作为备用。',
+        title: '还没有为这个目标设计行动路径',
+        text: '点击右上角“问题树”，AI 会结合这个目标的现实处境，提出几条走法和可以先验证的小步骤。你可以比较、组合，也可以都不选。',
       );
     }
     final selectedPlans = plans.where((p) => p.isSelected).toList();
@@ -2703,18 +2739,18 @@ class _SolutionPlanBoard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Row(children: [
-            Icon(Icons.psychology_alt_outlined, color: _goalBlue),
-            SizedBox(width: 8),
-            Expanded(child: Text('AI深度问题解决方案', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk))),
+          Row(children: [
+            const Icon(Icons.route_outlined, color: _goalBlue),
+            const SizedBox(width: 8),
+            Expanded(child: Text('怎样更实际地推进“$goalTitle”', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk))),
           ]),
           const SizedBox(height: 6),
-          const Text('把目标当作用户关注的棘手问题来解决：先查看问题定义、事实、假设、根因、证据计划和客观比较，再由你选择主方案；AI 不会自动替你选中第一项。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
+          const Text('下面是几条不同的走法。先看哪一条更符合你现在的时间、资源和承受范围，再决定是否试一小步；选择后仍然可以调整。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
           const SizedBox(height: 12),
           ...plans.map((p) => _SolutionPlanCard(plan: p, onSelect: p.isSelected ? null : () => onSelect(p))),
           const SizedBox(height: 12),
           if (selected == null)
-            const _EmptyCard(text: 'AI 已提供候选方案，但不会自动替你选择。请比较事实、假设、成本、风险和验证计划后，再选择一个主方案。')
+            const _EmptyCard(text: '先不用急着选。比较每条路是否适合你目前的现实条件，以及你愿意先承担哪一种成本，再选一条做小范围尝试。')
           else
             _ProblemNodeTreeCard(
               plan: selected,
@@ -2738,35 +2774,46 @@ class _SolutionPlanCard extends StatelessWidget {
     final color = plan.zoneType == 'panic' ? Colors.red.shade700 : (plan.zoneType == 'comfort' ? Colors.grey.shade700 : _goalBlue);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: plan.isSelected ? color.withOpacity(0.45) : const Color(0xFFE5E7EB))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(plan.isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: color),
-          const SizedBox(width: 8),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(plan.title, style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
-            const SizedBox(height: 4),
-            Text('${plan.zoneLabel} · ${plan.methodName}', style: TextStyle(color: color, fontWeight: FontWeight.w800)),
-          ])),
-          if (onSelect != null) TextButton(onPressed: onSelect, child: const Text('选择')),
-        ]),
-        if (plan.summary.trim().isNotEmpty) _MiniLine(label: '方案摘要', text: plan.summary),
-        if (plan.problemDefinition.trim().isNotEmpty) _MiniLine(label: '问题定义', text: plan.problemDefinition),
-        if (plan.knownFacts.trim().isNotEmpty) _MiniLine(label: '已知事实', text: plan.knownFacts),
-        if (plan.keyAssumptions.trim().isNotEmpty) _MiniLine(label: '关键假设', text: plan.keyAssumptions),
-        if (plan.rootCauseAnalysis.trim().isNotEmpty) _MiniLine(label: '根因分析', text: plan.rootCauseAnalysis),
-        if (plan.methodBasis.trim().isNotEmpty) _MiniLine(label: '科学方法与局限', text: plan.methodBasis),
-        if (plan.optionComparison.trim().isNotEmpty) _MiniLine(label: '客观比较', text: plan.optionComparison),
-        if (plan.evidencePlan.trim().isNotEmpty) _MiniLine(label: '验证计划', text: plan.evidencePlan),
-        if (plan.successMetrics.trim().isNotEmpty) _MiniLine(label: '成功指标', text: plan.successMetrics),
-        if (plan.stopConditions.trim().isNotEmpty) _MiniLine(label: '停止/转向条件', text: plan.stopConditions),
-        if (plan.coreValueFocus.trim().isNotEmpty) _MiniLine(label: '核心价值', text: plan.coreValueFocus),
-        if (plan.riskNotes.trim().isNotEmpty) _MiniLine(label: '风险边界', text: plan.riskNotes),
-        if (plan.userChoiceGuidance.trim().isNotEmpty) _MiniLine(label: '选择参考（非结论）', text: plan.userChoiceGuidance),
-        if (!plan.isSelected) const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('候选方案：请比较适用条件、证据、成本与风险后再决定；未选择不代表较差。', style: TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w700)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(plan.isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: color),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(plan.title, style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
+              if (plan.methodName.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(_humanizeAiText(plan.methodName), style: TextStyle(color: color, fontWeight: FontWeight.w800)),
+              ],
+            ])),
+            if (onSelect != null) TextButton(onPressed: onSelect, child: const Text('先试这条路')),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (plan.summary.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.route_outlined, title: '这条路怎么走', text: plan.summary),
+            if (plan.evidencePlan.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_circle_outline, title: '可以先试的一小步', text: plan.evidencePlan),
+            if (plan.successMetrics.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.visibility_outlined, title: '怎样知道它值得继续', text: plan.successMetrics),
+            if (plan.riskNotes.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.warning_amber_outlined, title: '选择前需要考虑', text: plan.riskNotes),
+          ]),
+        ),
+        ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: const Text('为什么可能适合你', style: TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
+          subtitle: const Text('展开查看判断依据；这些内容仍需要你结合实际确认。'),
+          children: [
+            if (plan.problemDefinition.trim().isNotEmpty) _MiniLine(label: 'AI理解的当前难题', text: plan.problemDefinition),
+            if (plan.knownFacts.trim().isNotEmpty) _MiniLine(label: '从你的描述中能确认', text: plan.knownFacts),
+            if (plan.keyAssumptions.trim().isNotEmpty) _MiniLine(label: '开始前还要问清', text: plan.keyAssumptions),
+            if (plan.rootCauseAnalysis.trim().isNotEmpty) _MiniLine(label: '可能卡住你的地方', text: plan.rootCauseAnalysis),
+            if (plan.optionComparison.trim().isNotEmpty) _MiniLine(label: '它更适合什么情况', text: plan.optionComparison),
+            if (plan.stopConditions.trim().isNotEmpty) _MiniLine(label: '什么时候应该换路', text: plan.stopConditions),
+            if (plan.userChoiceGuidance.trim().isNotEmpty) _MiniLine(label: '你可以怎样判断', text: plan.userChoiceGuidance),
+          ],
         ),
       ]),
     );
@@ -2799,9 +2846,9 @@ class _ProblemNodeTreeCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: const Color(0xFFF4F6FF), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE0E7FF))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('当前主方案问题树：${plan.title}', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
+        Text('把“${plan.title}”拆成可以验证的步骤', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
         const SizedBox(height: 4),
-        Text('节点进度 $completed / ${nodes.length}。从最底层可执行动作开始，完成后逐层回推父问题。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
+        Text('已验证 $completed / ${nodes.length} 步。先处理眼前能行动或能确认的一步，再根据结果决定继续还是换路。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
         const SizedBox(height: 8),
         ...roots.map((n) => _ProblemNodeTreeNode(
               node: n,
@@ -2840,21 +2887,30 @@ class _ProblemNodeTreeNode extends StatelessWidget {
               Expanded(child: Text(node.title, style: TextStyle(fontWeight: FontWeight.w900, color: _goalInk, decoration: node.isCompleted ? TextDecoration.lineThrough : null))),
               _NodeStatusChip(status: node.status),
             ]),
-            if (node.description.trim().isNotEmpty) _MiniLine(label: '说明', text: node.description),
-            if (node.logicQuestion.trim().isNotEmpty) _MiniLine(label: '逻辑问题', text: node.logicQuestion),
-            if (node.knownFacts.trim().isNotEmpty) _MiniLine(label: '事实', text: node.knownFacts),
-            if (node.assumptions.trim().isNotEmpty) _MiniLine(label: '待验证假设', text: node.assumptions),
-            if (node.evidenceNeeded.trim().isNotEmpty) _MiniLine(label: '所需证据', text: node.evidenceNeeded),
-            if (node.decisionRule.trim().isNotEmpty) _MiniLine(label: '判断规则', text: node.decisionRule),
-            if (node.actionableStep.trim().isNotEmpty) _MiniLine(label: '可执行动作', text: node.actionableStep),
-            if (node.acceptanceCriteria.trim().isNotEmpty) _MiniLine(label: '完成标准', text: node.acceptanceCriteria),
-            if (node.completionNote.trim().isNotEmpty) _MiniLine(label: '用户记录', text: node.completionNote),
+            if (node.description.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_humanizeAiText(node.description), style: const TextStyle(color: Color(0xFF4B5563), height: 1.4))),
+            if (node.actionableStep.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_arrow_rounded, title: '现在可以做', text: node.actionableStep),
+            if (node.acceptanceCriteria.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.flag_outlined, title: '做到这里就够', text: node.acceptanceCriteria),
+            if (node.completionNote.trim().isNotEmpty) _MiniLine(label: '我的记录', text: node.completionNote),
+            if (node.logicQuestion.trim().isNotEmpty || node.knownFacts.trim().isNotEmpty || node.assumptions.trim().isNotEmpty || node.evidenceNeeded.trim().isNotEmpty || node.decisionRule.trim().isNotEmpty)
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 6),
+                dense: true,
+                title: const Text('为什么安排这一步', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                children: [
+                  if (node.logicQuestion.trim().isNotEmpty) _MiniLine(label: '这一步要弄清', text: node.logicQuestion),
+                  if (node.knownFacts.trim().isNotEmpty) _MiniLine(label: '目前知道', text: node.knownFacts),
+                  if (node.assumptions.trim().isNotEmpty) _MiniLine(label: '还要确认', text: node.assumptions),
+                  if (node.evidenceNeeded.trim().isNotEmpty) _MiniLine(label: '请留意或记录', text: node.evidenceNeeded),
+                  if (node.decisionRule.trim().isNotEmpty) _MiniLine(label: '接下来怎么判断', text: node.decisionRule),
+                ],
+              ),
             if (node.aiReviewJson.trim().isNotEmpty) _NodeAiReviewBox(reviewJson: node.aiReviewJson),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               if (node.isActionable) OutlinedButton.icon(onPressed: node.isCompleted ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
-              OutlinedButton.icon(onPressed: node.isCompleted ? null : () => onMarkNode(node, 'completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('成功')),
-              OutlinedButton.icon(onPressed: node.isFailed ? null : () => onMarkNode(node, 'failed'), icon: const Icon(Icons.cancel_outlined), label: const Text('失败')),
+              OutlinedButton.icon(onPressed: node.isCompleted ? null : () => onMarkNode(node, 'completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('这一步有效')),
+              OutlinedButton.icon(onPressed: node.isFailed ? null : () => onMarkNode(node, 'failed'), icon: const Icon(Icons.tune_outlined), label: const Text('遇到阻碍')),
             ]),
           ]),
         ),
@@ -3015,6 +3071,123 @@ class _ReflectionCard extends StatelessWidget {
   }
 }
 
+String _humanizeAiText(String raw) {
+  var text = raw.trim();
+  if (text.isEmpty) return '';
+  try {
+    final decoded = jsonDecode(text);
+    return _decodedAiText(decoded);
+  } catch (_) {
+    // Older records may contain Dart-style Map/List strings. Convert the
+    // direction objects that users previously saw as raw implementation data.
+  }
+
+  if (text.contains('direction:') || text.contains('applicableConditions:') || text.contains('costsAndRisks:')) {
+    final options = <String>[];
+    final objectPattern = RegExp(r'\{([^{}]+)\}');
+    for (final match in objectPattern.allMatches(text)) {
+      final body = match.group(1) ?? '';
+      String field(String key) {
+        final pattern = RegExp('$key' r':\s*(.*?)(?=,\s*(?:direction|applicableConditions|benefits|costsAndRisks):|$)');
+        return (pattern.firstMatch(body)?.group(1) ?? '').trim();
+      }
+      final direction = field('direction');
+      final conditions = field('applicableConditions');
+      final benefits = field('benefits');
+      final costs = field('costsAndRisks');
+      if (direction.isEmpty && conditions.isEmpty && benefits.isEmpty && costs.isEmpty) continue;
+      options.add(<String>[
+        '${options.length + 1}. ${direction.isEmpty ? '一种可选路径' : direction}',
+        if (conditions.isNotEmpty) '适合：$conditions',
+        if (benefits.isNotEmpty) '可能收获：$benefits',
+        if (costs.isNotEmpty) '需要考虑：$costs',
+      ].join('\n'));
+    }
+    if (options.isNotEmpty) return options.join('\n\n');
+  }
+
+  text = text
+      .replaceAll(RegExp(r'^\s*[\[\{]+'), '')
+      .replaceAll(RegExp(r'[\]\}]+\s*$'), '')
+      .replaceAll(RegExp(r'\bapplicableConditions\s*:'), '适合：')
+      .replaceAll(RegExp(r'\bcostsAndRisks\s*:'), '需要考虑：')
+      .replaceAll(RegExp(r'\bbenefits\s*:'), '可能收获：')
+      .replaceAll(RegExp(r'\bdirection\s*:'), '')
+      .replaceAll(RegExp(r'\},\s*\{'), '\n\n')
+      .replaceAll(r'\n', '\n');
+  return text.trim();
+}
+
+String _decodedAiText(dynamic value, {int depth = 0}) {
+  if (value == null) return '';
+  if (value is String) return value.trim();
+  if (value is List) {
+    final items = <String>[];
+    for (var index = 0; index < value.length; index++) {
+      final item = value[index];
+      if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        final direction = (map['direction'] ?? map['title'] ?? map['name'] ?? '').toString().trim();
+        final conditions = (map['applicableConditions'] ?? map['conditions'] ?? '').toString().trim();
+        final benefits = (map['benefits'] ?? map['possibleBenefits'] ?? '').toString().trim();
+        final costs = (map['costsAndRisks'] ?? map['risks'] ?? '').toString().trim();
+        items.add(<String>[
+          '${index + 1}. ${direction.isEmpty ? '一种可选路径' : direction}',
+          if (conditions.isNotEmpty) '适合：$conditions',
+          if (benefits.isNotEmpty) '可能收获：$benefits',
+          if (costs.isNotEmpty) '需要考虑：$costs',
+        ].join('\n'));
+      } else {
+        final text = _decodedAiText(item, depth: depth + 1);
+        if (text.isNotEmpty) items.add('${index + 1}. $text');
+      }
+    }
+    return items.join('\n\n');
+  }
+  if (value is Map) {
+    final readable = <String>[];
+    for (final entry in value.entries) {
+      final text = _decodedAiText(entry.value, depth: depth + 1);
+      if (text.isNotEmpty) readable.add(text);
+    }
+    return readable.join('\n');
+  }
+  return value.toString();
+}
+
+String _firstReadableItem(String raw) {
+  final text = _humanizeAiText(raw);
+  if (text.isEmpty) return '';
+  final lines = text.split(RegExp(r'[\n]+')).map((line) => line.replaceFirst(RegExp(r'^\s*(?:\d+[.、)]|[-•])\s*'), '').trim()).where((line) => line.isNotEmpty);
+  if (lines.isEmpty) return '';
+  final first = lines.first;
+  final questionEnd = first.indexOf('？');
+  return questionEnd >= 0 ? first.substring(0, questionEnd + 1) : first;
+}
+
+class _FriendlyTextBlock extends StatelessWidget {
+  const _FriendlyTextBlock({required this.icon, required this.title, required this.text});
+  final IconData icon;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 19, color: _goalBlue),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk)),
+          const SizedBox(height: 3),
+          Text(_humanizeAiText(text), style: const TextStyle(color: Color(0xFF374151), height: 1.45)),
+        ])),
+      ]),
+    );
+  }
+}
+
 class _MiniLine extends StatelessWidget {
   const _MiniLine({required this.label, required this.text});
   final String label;
@@ -3029,7 +3202,7 @@ class _MiniLine extends StatelessWidget {
           style: const TextStyle(color: Color(0xFF374151), height: 1.35),
           children: [
             TextSpan(text: '$label：', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk)),
-            TextSpan(text: text),
+            TextSpan(text: _humanizeAiText(text)),
           ],
         ),
       ),
@@ -3336,23 +3509,70 @@ class _UserDecisionSupportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasContent = goal.userNeedInterpretation.trim().isNotEmpty || goal.possibleDirections.trim().isNotEmpty || goal.userDecisionPrompt.trim().isNotEmpty;
     if (!hasContent) return const SizedBox.shrink();
+    final firstQuestion = _firstReadableItem(goal.clarifyingQuestions);
     return Card(
+      elevation: 0,
       color: const Color(0xFFFFFBEB),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Color(0xFFF3D9A4))),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Row(children: [Icon(Icons.alt_route_outlined, color: Color(0xFFB45309)), SizedBox(width: 8), Expanded(child: Text('判断支持 · AI 建议不是标准答案', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk)))]),
+          const Row(children: [
+            Icon(Icons.explore_outlined, color: Color(0xFFB45309)),
+            SizedBox(width: 8),
+            Expanded(child: Text('先确认：这是不是你真正想解决的？', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk))),
+          ]),
           const SizedBox(height: 8),
-          const Text('请把下面内容当作帮助思考的解释、假设和参考可能性。你可以修改、组合或全部拒绝，最终判断仍属于你。', style: TextStyle(color: Color(0xFF78350F), height: 1.45)),
-          if (goal.userNeedInterpretation.trim().isNotEmpty) _MiniLine(label: '可能的真实需要（待确认）', text: goal.userNeedInterpretation),
-          if (goal.keyUncertainties.trim().isNotEmpty) _MiniLine(label: '不确定与假设', text: goal.keyUncertainties),
-          if (goal.clarifyingQuestions.trim().isNotEmpty) _MiniLine(label: '请先思考', text: goal.clarifyingQuestions),
-          if (goal.possibleDirections.trim().isNotEmpty) _MiniLine(label: '多种可能方向', text: goal.possibleDirections),
-          if (goal.referenceCases.trim().isNotEmpty) _MiniLine(label: '参考案例', text: goal.referenceCases),
-          if (goal.recommendationRationale.trim().isNotEmpty) _MiniLine(label: '暂定建议与理由', text: goal.recommendationRationale),
-          if (goal.userDecisionPrompt.trim().isNotEmpty) _MiniLine(label: '由你决定', text: goal.userDecisionPrompt),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(onPressed: onRealign, icon: const Icon(Icons.edit_outlined), label: const Text('根据我的判断修改目标')),
+          if (goal.userNeedInterpretation.trim().isNotEmpty)
+            Text(_humanizeAiText(goal.userNeedInterpretation), style: const TextStyle(color: Color(0xFF78350F), height: 1.5)),
+          if (firstQuestion.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFF3D9A4))),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('先回答这一个问题', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF92400E))),
+                const SizedBox(height: 6),
+                Text(firstQuestion, style: const TextStyle(color: _goalInk, height: 1.45, fontSize: 16)),
+              ]),
+            ),
+          ],
+          if (goal.keyUncertainties.trim().isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('AI 还不了解哪些现实情况', style: TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
+              children: [Align(alignment: Alignment.centerLeft, child: Text(_humanizeAiText(goal.keyUncertainties), style: const TextStyle(color: Color(0xFF4B5563), height: 1.45)))],
+            ),
+          if (goal.possibleDirections.trim().isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('看看几种不同的走法', style: TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
+              subtitle: const Text('不是让你立刻选，只是帮助你打开思路。'),
+              children: [Align(alignment: Alignment.centerLeft, child: Text(_humanizeAiText(goal.possibleDirections), style: const TextStyle(color: Color(0xFF374151), height: 1.55)))],
+            ),
+          if (goal.referenceCases.trim().isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('看看别人可能怎样判断', style: TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
+              children: [Align(alignment: Alignment.centerLeft, child: Text(_humanizeAiText(goal.referenceCases), style: const TextStyle(color: Color(0xFF374151), height: 1.55)))],
+            ),
+          if (goal.recommendationRationale.trim().isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('如果想先试一步', style: TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
+              children: [Align(alignment: Alignment.centerLeft, child: Text(_humanizeAiText(goal.recommendationRationale), style: const TextStyle(color: Color(0xFF374151), height: 1.55)))],
+            ),
+          if (goal.userDecisionPrompt.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(_humanizeAiText(goal.userDecisionPrompt), style: const TextStyle(fontWeight: FontWeight.w800, color: _goalInk, height: 1.45)),
+          ],
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(onPressed: onRealign, icon: const Icon(Icons.edit_outlined), label: const Text('按我的实际情况调整目标')),
         ]),
       ),
     );

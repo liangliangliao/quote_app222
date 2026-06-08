@@ -550,12 +550,12 @@ $reflectionText
       processAction: '行动时只观察一个瞬间：我正在练习开始、学习或面对不完美。',
       valueAction: '写一句这一步如何服务于成长、自由或勇气。',
       experiencePrompt: '今天做这件事时，你想体验什么：学习感、掌控感、勇气、自由，还是一点点进步？',
-      userNeedInterpretation: '这项输入可能同时包含现实任务、情绪压力和长期方向。当前信息不足以替你判断哪一层最重要。',
+      userNeedInterpretation: '你写下“$title”，可能是想解决一个眼前任务，也可能是希望获得更多选择、能力或安心感。仅凭标题还不能判断哪一种对你最重要。',
       keyUncertainties: '尚不确定这是你主动选择的目标、现实必要任务，还是主要来自外部期待；也不清楚你愿意投入的时间与可接受代价。',
-      clarifyingQuestions: '1. 如果没有人评价你，你还会选择它吗？ 2. 你真正想改变的是结果、能力还是生活状态？ 3. 你愿意为它承担什么成本？',
-      possibleDirections: '方向A：先验证真实需要；方向B：保留结果但降低强度；方向C：换一种更符合价值的实现路径。',
-      referenceCases: '例如“提高英语”可能是为了工作选择、表达自信或社交连接；不同需要会导向完全不同的行动设计。',
-      recommendationRationale: '建议先做一个低成本验证动作，因为它能增加事实信息，同时不会过早锁定路线。该建议只是起点，不是标准答案。',
+      clarifyingQuestions: '如果没有人评价你，你还会选择“$title”吗？\n你最希望它改变的是眼前结果、长期能力，还是当前生活状态？\n你目前愿意为它投入多少时间和精力？',
+      possibleDirections: '1. 先花一点时间弄清自己真正想通过“$title”改变什么。适合方向仍模糊、暂时没有硬期限的情况。\n2. 保留目标，但先从“$actionTitle”的最小版本开始。适合目标基本明确、只是难以启动的情况。\n3. 保留真正重视的需要，换一条成本更可承受的实现路径。适合当前方式长期消耗、却仍认可目标价值的情况。',
+      referenceCases: '例如，同样想完成“$title”的两个人，一个可能先解决眼前期限，另一个可能先补关键能力。看起来目标相同，但他们适合的第一步并不一样。',
+      recommendationRationale: '可以先做一个成本很低、容易撤回的小尝试，因为实际体验通常比继续空想更能帮助你判断。若你面临明确期限或安全风险，则不适合只做缓慢试探。',
       userDecisionPrompt: '看完这些可能性后，哪一种最接近你现在真正想解决的问题？你也可以拒绝全部建议并重新描述。',
       provider: provider,
       solutionPlans: const <TodoGoalSolutionPlan>[],
@@ -646,12 +646,12 @@ $reflectionText
         solutionId: '',
         goalId: '',
         sourceTaskId: '',
-        title: '舒适区方案：先恢复行动链条',
-        methodName: '微行动法 + 行为激活',
+        title: '先重新开始：把第一步降到足够小',
+        methodName: '适合目前很难开始或精力不足时',
         methodBasis: '把问题缩小到能立刻开始的行为单元，先用行动产生反馈，再逐渐提高难度。',
         zoneType: 'comfort',
         coreValueFocus: '目标服务当下；先进入过程，不追求一次完成。',
-        summary: '适合状态低、容易逃避、需要重新启动的人。优先建立“我能开始”的证据。',
+        summary: '先围绕“$actionTitle”做一个极小版本，降低开始时的压力；连续尝试几次后，再判断真正卡住你的是启动、能力还是方向。',
         riskNotes: '进展较慢，需要避免一直停留在过小动作里。',
         isSelected: false,
         status: 'candidate',
@@ -664,8 +664,8 @@ $reflectionText
         keyAssumptions: '假设主要瓶颈是启动成本而不是方向错误或资源缺失；需要用微行动验证。',
         rootCauseAnalysis: '候选近因包括动作过大、触发不清、环境阻力和完美主义；目前没有证据断言唯一根因。',
         optionComparison: '成本最低、可逆性最高、反馈快，但对能力或资源型问题的解决力度有限。',
-        evidencePlan: '连续2-3次执行2分钟动作，记录是否能启动、卡点位置和完成后的阻力变化。',
-        successMetrics: '能在明确触发后开始；连续执行率提高；能指出真实阻力而非笼统自责。',
+        evidencePlan: '连续2-3次只做2分钟，记录是否顺利开始、在哪一步卡住，以及做完后是否更愿意继续。',
+        successMetrics: '看到提示后能开始，并且你越来越能说清具体卡点，而不是只觉得“我不行”。',
         stopConditions: '若多次可启动但目标仍无进展，或发现核心问题是知识、资源或方向，则切换方案。',
         userChoiceGuidance: '若你当前精力低且最大问题是开始，可优先考虑；若存在硬性期限或专业能力缺口，不应只用微行动。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'comfort'),
@@ -674,12 +674,12 @@ $reflectionText
         solutionId: '',
         goalId: '',
         sourceTaskId: '',
-        title: '拉伸区方案：问题树逐层拆解',
-        methodName: '问题分解 + 执行意图 + 反馈调节',
+        title: '边做边判断：逐步找出真正卡点',
+        methodName: '适合目标大致明确、但路径和阻力还不清楚时',
         methodBasis: '把大问题拆成父子节点；从底层可执行动作开始，完成后逐层回推到父问题。',
         zoneType: 'stretch',
         coreValueFocus: '自我和谐、过程重于抵达、拉伸而非恐慌。',
-        summary: '推荐方案。既不空谈目标，也不直接硬扛结果，而是每天推进一个可验证子节点。',
+        summary: '把“$goalTitle”拆成几个现实障碍，每次只处理一个，并根据行动结果决定下一步，不预先假定唯一原因。',
         riskNotes: '需要按节点复盘；失败时优先换替代步骤，不轻易推翻整套方案。',
         isSelected: false,
         status: 'candidate',
@@ -692,8 +692,8 @@ $reflectionText
         keyAssumptions: '假设问题可以通过分解、证据收集和迭代实验逐步降低不确定性。',
         rootCauseAnalysis: '先区分症状、近因、能力缺口、资源限制、环境结构和目标本身是否合理，再验证最关键根因。',
         optionComparison: '信息质量和长期有效性较高，成本与速度居中；需要用户持续记录事实和执行判断规则。',
-        evidencePlan: '先验证影响最大的一个假设，再根据证据选择能力建设、流程优化、环境调整或资源协作。',
-        successMetrics: '关键不确定性减少；子问题有明确证据；行动能改变领先指标并逐步影响结果指标。',
+        evidencePlan: '先挑一个最可能影响进展的卡点，做一次低成本尝试；再根据结果决定补能力、改流程、换环境还是寻求协作。',
+        successMetrics: '每次尝试后都更清楚什么有效、什么无效，并且能看到一个与目标相关的实际变化。',
         stopConditions: '若证据否定核心因果链、成本超过收益或目标不再符合价值，应暂停并重定义问题。',
         userChoiceGuidance: '适合愿意用事实逐步判断、又不希望过度冲刺的情况；这是暂定推荐，不是自动选择。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'stretch'),
@@ -702,12 +702,12 @@ $reflectionText
         solutionId: '',
         goalId: '',
         sourceTaskId: '',
-        title: '恐慌区方案：高强度冲刺对照',
-        methodName: '限时冲刺 + 外部约束',
+        title: '期限真的紧迫时：集中完成关键结果',
+        methodName: '只适合期限真实、后果明确且资源足够时',
         methodBasis: '用明确截止时间和强约束快速推进，但只作为对照方案或短期应急方案。',
         zoneType: 'panic',
         coreValueFocus: '提醒用户识别恐慌区，避免把目标变成压迫。',
-        summary: '适合真实紧急且代价明确的场景；默认不推荐长期使用。',
+        summary: '先确认期限和最低必要结果，再集中时间处理最关键部分，同时保留健康和错误率的底线；不作为长期方式。',
         riskNotes: '容易导致逃避、挫败或反弹；若连续失败，应退回拉伸区方案。',
         isSelected: false,
         status: 'candidate',
@@ -720,7 +720,7 @@ $reflectionText
         keyAssumptions: '假设时间是首要约束，且外部约束能提高执行而不会造成不可接受的反弹。',
         rootCauseAnalysis: '若根因是信息不足、路径错误或能力缺口，单纯加压可能只会放大问题。',
         optionComparison: '速度可能最快，但风险、成本和不可持续性最高；只有紧急性证据充分时才合理。',
-        evidencePlan: '先核实期限、最低必要结果、可动用资源和健康风险，再进行短周期试运行。',
+        evidencePlan: '先核实真正的截止时间、最低必须交付什么、能获得哪些帮助，再试一个短周期集中行动。',
         successMetrics: '在限定周期内产生关键结果，同时睡眠、健康和错误率保持在可接受范围。',
         stopConditions: '出现健康恶化、错误率显著增加、连续失败或紧急性被证伪时立即降级。',
         userChoiceGuidance: '仅在真实紧急、代价明确且你知情同意时考虑；默认不应作为长期方案。',
@@ -740,8 +740,8 @@ $reflectionText
         parentNodeId: '',
         relationType: 'tree',
         nodeType: 'problem',
-        title: '顶层问题：实现“$goalTitle”',
-        description: '把目标视为一个需要被解决的问题，而不是一句口号。',
+        title: '先说清“$goalTitle”现在具体卡在哪里',
+        description: '先把想达到的状态、当前差距和现实限制说具体。',
         acceptanceCriteria: '能说清目标状态，并看到至少一个现实中的证据。',
         actionableStep: '',
         zoneType: zone,
@@ -768,7 +768,7 @@ $reflectionText
         parentNodeId: '',
         relationType: 'tree',
         nodeType: 'sub_problem',
-        title: '子问题A：找到今天能开始的入口',
+        title: '找到今天能够开始的一步',
         description: '把抽象目标落到一个可观察动作。',
         acceptanceCriteria: '存在一个2-10分钟内能开始的动作。',
         actionableStep: '',
@@ -797,7 +797,7 @@ $reflectionText
         parentNodeId: '',
         relationType: 'tree',
         nodeType: 'action',
-        title: '底层动作：$actionTitle',
+        title: '先试一次：$actionTitle',
         description: '先做最低标准，做完记录事实和过程体验。',
         acceptanceCriteria: zone == 'comfort' ? '只做2分钟即可。' : '完成5-10分钟，并留下一个事实记录。',
         actionableStep: actionTitle,
@@ -826,10 +826,10 @@ $reflectionText
         parentNodeId: '',
         relationType: 'tree',
         nodeType: 'sub_problem',
-        title: '子问题B：复盘并选择下一步',
-        description: '根据成功/失败反馈调整动作，不轻易推翻整套方案。',
+        title: '根据这次结果决定下一步',
+        description: '看这一步是否带来实际变化；有效就继续，遇到阻碍就缩小或换一种走法。',
         acceptanceCriteria: '复盘中至少得到一个替代步骤或下一步。',
-        actionableStep: '完成后记录：成功/失败、阻力、下一步替代动作。',
+        actionableStep: '完成后记录：发生了什么、哪里卡住、下一次准备怎样调整。',
         zoneType: zone,
         difficultyScore: difficulty,
         estimatedMinutes: 5,
@@ -1077,8 +1077,78 @@ $reflectionText
 
   String _read(Map<String, dynamic> map, String key, String fallback) {
     final value = _readDynamic(map, _fieldAliases(key));
-    final text = value == null ? '' : value.toString().trim();
+    final text = _toUserFacingText(value, fieldKey: key);
     return text.isEmpty ? fallback : text;
+  }
+
+  String _toUserFacingText(dynamic value, {required String fieldKey}) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    if (value is List) {
+      final lines = <String>[];
+      for (var index = 0; index < value.length; index++) {
+        final item = value[index];
+        final text = item is Map
+            ? _mapToUserFacingText(Map<String, dynamic>.from(item), fieldKey: fieldKey, index: index)
+            : item.toString().trim();
+        if (text.isNotEmpty) lines.add(text);
+      }
+      return lines.join('\n');
+    }
+    if (value is Map) {
+      return _mapToUserFacingText(Map<String, dynamic>.from(value), fieldKey: fieldKey, index: 0);
+    }
+    return value.toString().trim();
+  }
+
+  String _mapToUserFacingText(Map<String, dynamic> value, {required String fieldKey, required int index}) {
+    String read(List<String> keys) {
+      for (final key in keys) {
+        final item = value[key];
+        if (item != null && item.toString().trim().isNotEmpty) return item.toString().trim();
+      }
+      return '';
+    }
+
+    if (fieldKey == 'possibleDirections') {
+      final direction = read(const <String>['direction', 'title', 'name', '方向', '路径']);
+      final conditions = read(const <String>['applicableConditions', 'applicable_conditions', 'conditions', '适用条件']);
+      final benefits = read(const <String>['benefits', 'possibleBenefits', '收益', '可能收获']);
+      final costs = read(const <String>['costsAndRisks', 'costs_and_risks', 'risks', '成本风险', '需要考虑']);
+      return <String>[
+        '${index + 1}. ${direction.isEmpty ? '一种可选路径' : direction}',
+        if (conditions.isNotEmpty) '适合：$conditions',
+        if (benefits.isNotEmpty) '可能收获：$benefits',
+        if (costs.isNotEmpty) '需要考虑：$costs',
+      ].join('\n');
+    }
+
+    if (fieldKey == 'referenceCases') {
+      final title = read(const <String>['title', 'case', 'scenario', '案例', '情境']);
+      final choice = read(const <String>['choice', 'approach', 'action', '选择', '做法']);
+      final lesson = read(const <String>['lesson', 'insight', 'result', '启发', '结果']);
+      return <String>[
+        '${index + 1}. ${title.isEmpty ? '参考情境' : title}',
+        if (choice.isNotEmpty) choice,
+        if (lesson.isNotEmpty) '可以借鉴：$lesson',
+      ].join('\n');
+    }
+
+    const labels = <String, String>{
+      'interpretation': '一种可能',
+      'reason': '原因',
+      'condition': '适合',
+      'benefit': '可能收获',
+      'risk': '需要考虑',
+      'question': '想一想',
+    };
+    final parts = <String>[];
+    for (final entry in value.entries) {
+      final text = _toUserFacingText(entry.value, fieldKey: fieldKey);
+      if (text.isEmpty) continue;
+      parts.add('${labels[entry.key] ?? ''}${labels.containsKey(entry.key) ? '：' : ''}$text');
+    }
+    return parts.join('\n');
   }
 
   int _readInt(Map<String, dynamic> map, String key, int fallback) {
