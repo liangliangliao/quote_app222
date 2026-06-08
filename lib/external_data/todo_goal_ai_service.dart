@@ -79,6 +79,21 @@ class TodoGoalAiService {
         difficultyScore: _readInt(parsed, 'difficultyScore', aiDefaults.difficultyScore).clamp(1, 10).toInt(),
         zoneType: _normalizeZone(_read(parsed, 'zoneType', aiDefaults.zoneType)),
         coachMessage: _read(parsed, 'coachMessage', aiDefaults.coachMessage),
+        resultGoal: _read(parsed, 'resultGoal', aiDefaults.resultGoal),
+        valueGoal: _read(parsed, 'valueGoal', aiDefaults.valueGoal),
+        processGoal: _read(parsed, 'processGoal', aiDefaults.processGoal),
+        coreValues: _read(parsed, 'coreValues', aiDefaults.coreValues),
+        autonomyScore: _readInt(parsed, 'autonomyScore', aiDefaults.autonomyScore).clamp(0, 100).toInt(),
+        valueAlignmentScore: _readInt(parsed, 'valueAlignmentScore', aiDefaults.valueAlignmentScore).clamp(0, 100).toInt(),
+        interestConnectionScore: _readInt(parsed, 'interestConnectionScore', aiDefaults.interestConnectionScore).clamp(0, 100).toInt(),
+        passionScore: _readInt(parsed, 'passionScore', aiDefaults.passionScore).clamp(0, 100).toInt(),
+        externalPressureScore: _readInt(parsed, 'externalPressureScore', aiDefaults.externalPressureScore).clamp(0, 100).toInt(),
+        processHappinessScore: _readInt(parsed, 'processHappinessScore', aiDefaults.processHappinessScore).clamp(0, 100).toInt(),
+        goalType: _read(parsed, 'goalType', aiDefaults.goalType),
+        currentStage: _read(parsed, 'currentStage', aiDefaults.currentStage),
+        actionPlace: _read(parsed, 'actionPlace', aiDefaults.actionPlace),
+        startTrigger: _read(parsed, 'startTrigger', aiDefaults.startTrigger),
+        completionQuestion: _read(parsed, 'completionQuestion', aiDefaults.completionQuestion),
         provider: state['provider'] ?? 'ai',
         solutionPlans: effectivePlans,
         modelLabel: state['label'] ?? 'AI',
@@ -275,6 +290,21 @@ class TodoGoalAiService {
         _fieldAliases('coachMessage'),
         '先不要追求一次解决全部问题。把目标拆成今天能开始的最小动作，做完后再根据反馈调整。',
       ),
+      resultGoal: _readTextFieldFromRaw(raw, _fieldAliases('resultGoal'), goalTitle),
+      valueGoal: _readTextFieldFromRaw(raw, _fieldAliases('valueGoal'), fallback.valueGoal.isEmpty ? fallback.deepMeaning : fallback.valueGoal),
+      processGoal: _readTextFieldFromRaw(raw, _fieldAliases('processGoal'), fallback.processGoal.isEmpty ? fallback.processValue : fallback.processGoal),
+      coreValues: _readTextFieldFromRaw(raw, _fieldAliases('coreValues'), fallback.coreValues),
+      autonomyScore: _readIntFromRaw(raw, _fieldAliases('autonomyScore'), fallback.autonomyScore).clamp(0, 100).toInt(),
+      valueAlignmentScore: _readIntFromRaw(raw, _fieldAliases('valueAlignmentScore'), fallback.valueAlignmentScore).clamp(0, 100).toInt(),
+      interestConnectionScore: _readIntFromRaw(raw, _fieldAliases('interestConnectionScore'), fallback.interestConnectionScore).clamp(0, 100).toInt(),
+      passionScore: _readIntFromRaw(raw, _fieldAliases('passionScore'), fallback.passionScore).clamp(0, 100).toInt(),
+      externalPressureScore: _readIntFromRaw(raw, _fieldAliases('externalPressureScore'), fallback.externalPressureScore).clamp(0, 100).toInt(),
+      processHappinessScore: _readIntFromRaw(raw, _fieldAliases('processHappinessScore'), fallback.processHappinessScore).clamp(0, 100).toInt(),
+      goalType: _readTextFieldFromRaw(raw, _fieldAliases('goalType'), fallback.goalType),
+      currentStage: _readTextFieldFromRaw(raw, _fieldAliases('currentStage'), fallback.currentStage),
+      actionPlace: _readTextFieldFromRaw(raw, _fieldAliases('actionPlace'), fallback.actionPlace),
+      startTrigger: _readTextFieldFromRaw(raw, _fieldAliases('startTrigger'), fallback.startTrigger),
+      completionQuestion: _readTextFieldFromRaw(raw, _fieldAliases('completionQuestion'), fallback.completionQuestion),
       provider: state['provider'] ?? 'ai',
       solutionPlans: _fallbackPlans(goalTitle, todayAction),
       modelLabel: state['label'] ?? 'AI',
@@ -379,6 +409,21 @@ class TodoGoalAiService {
       difficultyScore: 5,
       zoneType: 'stretch',
       coachMessage: '当前是本地兜底结果：先把它变成今天能够开始的一小步；如需真正贴合目标背景的问题树，请检查AI配置后点击“AI重新分析”。',
+      resultGoal: title,
+      valueGoal: '让这个方向服务于真实需要、选择权与长期成长，而不是只服务于比较和焦虑。',
+      processGoal: '每天用一个 2-5 分钟可开始的动作练习投入、不完美行动和现实反馈。',
+      coreValues: '成长、自由、勇气',
+      autonomyScore: 68,
+      valueAlignmentScore: 72,
+      interestConnectionScore: 60,
+      passionScore: 58,
+      externalPressureScore: 35,
+      processHappinessScore: 70,
+      goalType: '需要继续澄清的自我一致目标',
+      currentStage: '最小行动验证期',
+      actionPlace: '当前最容易开始的安静位置',
+      startTrigger: '打开完成动作所需的第一个工具后立即开始',
+      completionQuestion: '完成后，你比开始前多了一点什么？',
       provider: provider,
       solutionPlans: _fallbackPlans(title, actionTitle),
       modelLabel: modelLabel,
@@ -623,7 +668,14 @@ class TodoGoalAiService {
   }
 
   String _deepProblemSolutionSchema() => '''
-额外要求：除了原有字段，你必须增加 solutionPlans 数组，至少3个方案：舒适区、拉伸区、恐慌区。
+额外要求：无论用户是否使用旧版自定义提示词，都必须先返回完整的“结果—价值—过程—今日行动”目标卡片和自我一致性诊断字段：
+- resultGoal、valueGoal、processGoal、coreValues
+- autonomyScore、valueAlignmentScore、interestConnectionScore、passionScore、externalPressureScore、processHappinessScore（全部0-100）
+- goalType、currentStage
+- actionPlace、startTrigger、completionQuestion
+这些字段必须基于用户输入判断，不能把所有分数写成相同值；外部压力越高越需要温和改写而不是批评。
+
+除了原有字段，你还必须增加 solutionPlans 数组，至少3个方案：舒适区、拉伸区、恐慌区。
 每个方案都要体现不同科学方法，例如问题分解、WOOP/心理对比、执行意图、行为激活、设计思维、反馈调节、风险预案等。
 每个方案都必须包含 nodes 数组，用父子节点表达“顶层问题→子问题→更小子问题→底层可执行动作”。
 节点之间可以是 tree/linear/network 关系，但必须给 parentId；底层 action 节点必须是用户现实中可直接执行的动作。
