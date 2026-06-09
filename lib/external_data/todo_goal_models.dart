@@ -865,6 +865,41 @@ class TodoGoalProblemNode {
     }
   }
 
+  List<String> get dependencyNodeIds {
+    final raw = dependenciesJson.trim();
+    if (raw.isEmpty) return const <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((value) => value.toString().trim()).where((value) => value.isNotEmpty).toList(growable: false);
+      }
+    } catch (_) {
+      // Legacy AI responses may have stored Dart-style list strings.
+    }
+    return raw
+        .replaceAll(RegExp(r'^[\[\{]+|[\]\}]+$'), '')
+        .split(RegExp(r'[,，、|]'))
+        .map((value) => value.replaceAll(RegExp(r'''^[\s"']+|[\s"']+$'''), '').trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String get relationLabel {
+    switch (relationType.trim().toLowerCase()) {
+      case 'and':
+        return '全部子问题都要解决';
+      case 'or':
+        return '任选一条有效路径';
+      case 'sequence':
+        return '按顺序推进';
+      case 'dependency':
+      case 'network':
+        return '存在交叉依赖';
+      default:
+        return '父子分解';
+    }
+  }
+
   factory TodoGoalProblemNode.fromMap(Map<String, Object?> row) => TodoGoalProblemNode(
         nodeId: (row['node_id'] ?? '').toString(),
         goalId: (row['goal_id'] ?? '').toString(),
