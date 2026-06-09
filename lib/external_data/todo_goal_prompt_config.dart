@@ -121,12 +121,21 @@ class TodoGoalPromptConfig {
    - dependency：除父子关系外还依赖其他节点，用 dependencies 引用节点 id；
    - network：存在交叉依赖时使用网状关系，不得强行画成单一路径。
 7. 生成至少3个原理不同的完整方案，而不是同一方案只改变强度：例如信息验证、能力建设、流程/环境重构、资源协作、风险控制等。每个方案标注舒适区、拉伸区或恐慌区，并客观比较有效性、成本、时间、风险、可逆性和适用条件。
-8. 每个方案都必须从初始状态覆盖到目标状态，至少包含3个层级和6个节点；至少2个叶节点必须是可执行动作。非叶节点不可伪装成行动，叶节点必须包含具体对象、场景/触发、动作、产出和验收标准。
+8. 每个方案都必须从初始状态覆盖到目标状态，至少包含3个层级和6个节点；至少2个叶节点必须是可执行动作。非叶节点不可伪装成行动。
+   每个行动叶节点必须分别填写以下字段，任何一项都不能省略或用“视情况、适当、相关、进一步、做一些”等模糊词代替：
+   - actionWhen：具体日期/时段，或可观察的启动触发；
+   - actionWhere：具体地点、软件、页面、设备或工具；
+   - actionObject：要处理的具体人、材料、文件、题目、身体动作或其他对象；
+   - actionProcedure：按顺序写出的实际操作，至少包含动词、对象和数量/时长；
+   - actionOutput：执行后必须留下的文件、记录、消息、录音、完成数量或其他可核对产出；
+   - acceptanceCriteria：用户如何根据数量、质量或状态直接判断成功/失败。
+   actionableStep 只是这些字段的一句话摘要，不能替代以上结构化字段。
 9. 根节点代表目标问题；中间节点代表阶段状态、必要条件、决策或子问题；叶节点代表直接行动。所有节点必须能沿父子或依赖关系回推到根节点，禁止孤立节点、循环依赖和无依据跳步。
 10. 对未知原因先设计低成本验证节点，再根据结果进入不同分支；不能直接断言用户缺乏能力、存在心理问题或某方法必然有效。
 11. 给出清晰答案：summary 要说明该方案如何从当前状态推进到目标状态；userChoiceGuidance 要说明在什么现实条件下选它，不能替用户决定。
 12. 用户选择主方案后，未选方案保留为备用；节点失败时优先在同一父问题下换叶节点、替代路径或备用方案。只有关键前提被证伪且局部修复无效时，才建议重构整套方案。
-13. 以上严谨结构用于系统求解和校验。用户可见文字仍要围绕具体目标，使用清楚的日常中文，不输出空泛理论课程、虚构案例或无法验证的断言。
+13. 如果输入信息不足以生成目标领域内的具体行动，不得猜测。此时叶节点必须改为具体的信息获取动作，例如打开哪个页面、询问谁、记录哪些字段、产出什么清单；获得信息后再进入后续求解分支。
+14. 以上严谨结构用于系统求解和校验。用户可见文字仍要围绕具体目标，使用清楚的日常中文，不输出空泛理论课程、虚构案例或无法验证的断言。
 只输出 JSON：
 {
   "solutionPlans": [
@@ -150,7 +159,7 @@ class TodoGoalPromptConfig {
       "nodes": [
         {"id":"root","parentId":"","relationType":"and","nodeType":"goal_state","title":"达到可验证的目标状态","description":"当前状态→关键中间状态→目标状态的完整求解结论","logicQuestion":"哪些必要条件全部成立时，目标才算实现","knownFacts":"仅写输入中确认的信息","assumptions":"尚未确认的前提","evidenceNeeded":"最终结果证据","decisionRule":"所有必要子问题完成后，用户评估根问题成功或失败","acceptanceCriteria":"明确的目标完成判据","actionableStep":"","dependencies":[],"zoneType":"stretch","difficultyScore":5,"estimatedMinutes":10,"sequenceOrder":0},
         {"id":"condition1","parentId":"root","relationType":"sequence","nodeType":"sub_problem","title":"解决一个实现目标所必需的具体条件","description":"说明该条件为何是根问题的必要组成部分","logicQuestion":"这个条件不成立时，目标为什么无法实现","knownFacts":"支持该子问题的已知条件","assumptions":"需要验证的未知条件","evidenceNeeded":"该中间状态的证据","decisionRule":"子节点全部完成后再评估此父节点","acceptanceCriteria":"中间状态的可验证标准","actionableStep":"","dependencies":[],"zoneType":"stretch","difficultyScore":4,"estimatedMinutes":10,"sequenceOrder":1},
-        {"id":"action1","parentId":"condition1","relationType":"sequence","nodeType":"action","title":"完成一个不可再分的现实动作","description":"说明动作产出如何直接解决父问题","logicQuestion":"该产出是否足以推动父问题成立","knownFacts":"执行动作所需且已确认的条件","assumptions":"动作将验证的前提","evidenceNeeded":"可观察产出","decisionRule":"达到验收标准则成功，否则进入同父问题的替代步骤","acceptanceCriteria":"明确数量、质量或可观察结果","actionableStep":"在具体场景下，对具体对象执行具体动作并留下产出","dependencies":[],"zoneType":"stretch","difficultyScore":3,"estimatedMinutes":15,"sequenceOrder":2}
+        {"id":"action1","parentId":"condition1","relationType":"sequence","nodeType":"action","title":"完成一个不可再分的现实动作","description":"说明动作产出如何直接解决父问题","logicQuestion":"该产出是否足以推动父问题成立","knownFacts":"执行动作所需且已确认的条件","assumptions":"动作将验证的前提","evidenceNeeded":"可观察产出","decisionRule":"达到验收标准则成功，否则进入同父问题的替代步骤","acceptanceCriteria":"明确数量、质量或可观察结果","actionableStep":"一句话行动摘要","actionWhen":"具体时间或启动触发","actionWhere":"具体地点、软件页面或工具","actionObject":"明确处理对象","actionProcedure":"按顺序说明动词、对象、数量或时长","actionOutput":"执行后留下的可核对产出","dependencies":[],"zoneType":"stretch","difficultyScore":3,"estimatedMinutes":15,"sequenceOrder":2}
       ]
     }
   ]

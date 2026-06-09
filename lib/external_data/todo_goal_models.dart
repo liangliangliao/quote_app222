@@ -777,6 +777,11 @@ class TodoGoalProblemNode {
     this.assumptions = '',
     this.evidenceNeeded = '',
     this.decisionRule = '',
+    this.actionWhen = '',
+    this.actionWhere = '',
+    this.actionObject = '',
+    this.actionProcedure = '',
+    this.actionOutput = '',
   });
 
   final String nodeId;
@@ -806,11 +811,59 @@ class TodoGoalProblemNode {
   final String assumptions;
   final String evidenceNeeded;
   final String decisionRule;
+  final String actionWhen;
+  final String actionWhere;
+  final String actionObject;
+  final String actionProcedure;
+  final String actionOutput;
 
   bool get isCompleted => status == 'completed';
   bool get isFailed => status == 'failed';
   bool get isActionable => actionableStep.trim().isNotEmpty || nodeType == 'action';
+  bool get hasConcreteActionContract => actionWhen.trim().isNotEmpty && actionWhere.trim().isNotEmpty && actionObject.trim().isNotEmpty && actionProcedure.trim().isNotEmpty && actionOutput.trim().isNotEmpty && acceptanceCriteria.trim().isNotEmpty;
   String get displayAction => actionableStep.trim().isEmpty ? title : actionableStep.trim();
+  String get concreteActionText => <String>[
+        '时间/触发：$actionWhen',
+        '地点/工具：$actionWhere',
+        '对象：$actionObject',
+        '步骤：$actionProcedure',
+        '产出：$actionOutput',
+      ].join('；');
+
+  List<String> get dependencyNodeIds {
+    final raw = dependenciesJson.trim();
+    if (raw.isEmpty) return const <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((value) => value.toString().trim()).where((value) => value.isNotEmpty).toList(growable: false);
+      }
+    } catch (_) {
+      // Legacy AI responses may have stored Dart-style list strings.
+    }
+    return raw
+        .replaceAll(RegExp(r'^[\[\{]+|[\]\}]+$'), '')
+        .split(RegExp(r'[,，、|]'))
+        .map((value) => value.replaceAll(RegExp(r'''^[\s"']+|[\s"']+$'''), '').trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String get relationLabel {
+    switch (relationType.trim().toLowerCase()) {
+      case 'and':
+        return '全部子问题都要解决';
+      case 'or':
+        return '任选一条有效路径';
+      case 'sequence':
+        return '按顺序推进';
+      case 'dependency':
+      case 'network':
+        return '存在交叉依赖';
+      default:
+        return '父子分解';
+    }
+  }
 
   List<String> get dependencyNodeIds {
     final raw = dependenciesJson.trim();
@@ -873,6 +926,11 @@ class TodoGoalProblemNode {
         assumptions: (row['assumptions'] ?? '').toString(),
         evidenceNeeded: (row['evidence_needed'] ?? '').toString(),
         decisionRule: (row['decision_rule'] ?? '').toString(),
+        actionWhen: (row['action_when'] ?? '').toString(),
+        actionWhere: (row['action_where'] ?? '').toString(),
+        actionObject: (row['action_object'] ?? '').toString(),
+        actionProcedure: (row['action_procedure'] ?? '').toString(),
+        actionOutput: (row['action_output'] ?? '').toString(),
       );
 
   factory TodoGoalProblemNode.fromJson(Map<String, dynamic> json, {int sequenceOrder = 0}) => TodoGoalProblemNode(
@@ -903,6 +961,11 @@ class TodoGoalProblemNode {
         assumptions: _readJsonTextAny(json, const <String>['assumptions', '假设'], ''),
         evidenceNeeded: _readJsonTextAny(json, const <String>['evidenceNeeded', 'evidence_needed', '所需证据'], ''),
         decisionRule: _readJsonTextAny(json, const <String>['decisionRule', 'decision_rule', '判断规则'], ''),
+        actionWhen: _readJsonTextAny(json, const <String>['actionWhen', 'action_when', 'when', '时间触发', '时间', '触发'], ''),
+        actionWhere: _readJsonTextAny(json, const <String>['actionWhere', 'action_where', 'where', '地点工具', '地点', '工具'], ''),
+        actionObject: _readJsonTextAny(json, const <String>['actionObject', 'action_object', 'object', '行动对象', '对象'], ''),
+        actionProcedure: _readJsonTextAny(json, const <String>['actionProcedure', 'action_procedure', 'procedure', 'steps', '操作步骤', '步骤'], ''),
+        actionOutput: _readJsonTextAny(json, const <String>['actionOutput', 'action_output', 'output', 'deliverable', '产出物', '产出'], ''),
       );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -928,6 +991,11 @@ class TodoGoalProblemNode {
         'assumptions': assumptions,
         'evidenceNeeded': evidenceNeeded,
         'decisionRule': decisionRule,
+        'actionWhen': actionWhen,
+        'actionWhere': actionWhere,
+        'actionObject': actionObject,
+        'actionProcedure': actionProcedure,
+        'actionOutput': actionOutput,
       };
 }
 
@@ -939,6 +1007,11 @@ class TodoGoalAlternativeStep {
     required this.recommendedStandard,
     required this.zoneType,
     required this.difficultyScore,
+    this.actionWhen = '',
+    this.actionWhere = '',
+    this.actionObject = '',
+    this.actionProcedure = '',
+    this.actionOutput = '',
   });
 
   final String title;
@@ -947,6 +1020,11 @@ class TodoGoalAlternativeStep {
   final String recommendedStandard;
   final String zoneType;
   final int difficultyScore;
+  final String actionWhen;
+  final String actionWhere;
+  final String actionObject;
+  final String actionProcedure;
+  final String actionOutput;
 
   factory TodoGoalAlternativeStep.fromJson(Map<String, dynamic> json) => TodoGoalAlternativeStep(
         title: _readJsonTextAny(json, const <String>['title', 'action', 'step', 'name', '标题', '行动', '替代步骤'], '替代步骤'),
@@ -955,6 +1033,11 @@ class TodoGoalAlternativeStep {
         recommendedStandard: _readJsonTextAny(json, const <String>['recommendedStandard', 'recommended_standard', '推荐标准'], '完成一个可观察动作并记录事实。'),
         zoneType: _normalizeZoneValue(_readJsonTextAny(json, const <String>['zoneType', 'zone_type', 'zone', '难度区间'], 'stretch')),
         difficultyScore: _readJsonIntAny(json, const <String>['difficultyScore', 'difficulty_score', 'difficulty', '难度'], 3),
+        actionWhen: _readJsonTextAny(json, const <String>['actionWhen', 'action_when', 'when', '时间触发'], ''),
+        actionWhere: _readJsonTextAny(json, const <String>['actionWhere', 'action_where', 'where', '地点工具'], ''),
+        actionObject: _readJsonTextAny(json, const <String>['actionObject', 'action_object', 'object', '行动对象'], ''),
+        actionProcedure: _readJsonTextAny(json, const <String>['actionProcedure', 'action_procedure', 'procedure', '操作步骤'], ''),
+        actionOutput: _readJsonTextAny(json, const <String>['actionOutput', 'action_output', 'output', '产出物'], ''),
       );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -964,6 +1047,11 @@ class TodoGoalAlternativeStep {
         'recommendedStandard': recommendedStandard,
         'zoneType': zoneType,
         'difficultyScore': difficultyScore,
+        'actionWhen': actionWhen,
+        'actionWhere': actionWhere,
+        'actionObject': actionObject,
+        'actionProcedure': actionProcedure,
+        'actionOutput': actionOutput,
       };
 }
 

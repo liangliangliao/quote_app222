@@ -122,7 +122,7 @@ class TodoGoalAiService {
     if (state['available'] != '1') return fallback();
 
     final templates = await _promptConfig.load();
-    final prompt = _promptConfig.renderSolutionPrompt(
+    final renderedPrompt = _promptConfig.renderSolutionPrompt(
       templates,
       goalTitle: analysis.goalTitle,
       resultGoal: analysis.resultGoal,
@@ -133,6 +133,14 @@ class TodoGoalAiService {
       todayAction: analysis.todayMinimumAction,
       taskBody: task.bodyText,
     );
+    final prompt = '''$renderedPrompt
+
+不可覆盖的叶节点行动协议：
+- 每个 action 叶节点必须同时返回 actionWhen、actionWhere、actionObject、actionProcedure、actionOutput 和 acceptanceCriteria。
+- actionProcedure 必须包含实际动词、明确对象、数量或时长；actionOutput 必须是执行后可以查看、保存、发送、计数或核对的产出。
+- “适当处理、进一步推进、做一些准备、根据情况行动、完成目标”等抽象表达视为无效。
+- 信息不足时不得猜测，必须生成具体的信息获取行动，写明打开哪个页面/询问谁/记录哪些字段/形成什么清单。
+缺少上述任一字段的方案将被程序拒绝。''';
     try {
       final raw = await _ai.generateText(
         prompt: prompt,
@@ -316,6 +324,7 @@ $reflectionText
 3. 如何重启当前子问题，优先缩小、换路径、换环境、补前置条件，而不是立刻推翻整套方案。
 4. 给出3个机制不同、但仍然解决同一父问题的替代步骤。每个替代步骤必须说明它如何绕过本次具体阻力、产出什么证据、适用条件、代价和风险，不能只是改写原句。
 5. 给出验证关键前提的低成本实验和判断规则。只有关键前提被证伪、同一父问题下的多个替代步骤均失败，或推导链与目标无关时，才建议重构全方案；最终由用户选择继续、换路、切备用方案或暂停。
+6. 每个替代步骤必须填写具体时间/触发、地点/工具、对象、按顺序的操作和可核对产出。缺少信息时设计具体的信息收集动作，禁止使用“适当处理、进一步推进、做一些准备”等抽象说法。
 
 只输出JSON：
 {
@@ -323,9 +332,9 @@ $reflectionText
   "restartGuidance": "重启当前子问题的具体指导，必须可照做",
   "principleFit": "说明为什么这些调整仍然符合整个目标原则和价值体系",
   "alternatives": [
-    {"title": "替代步骤1", "rationale": "为什么更适合", "minimumStandard": "最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1},
-    {"title": "替代步骤2", "rationale": "为什么更适合", "minimumStandard": "最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1},
-    {"title": "替代步骤3", "rationale": "为什么更适合", "minimumStandard": "最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1}
+    {"title": "替代步骤1", "rationale": "如何绕过本次具体阻力并继续解决同一父问题", "minimumStandard": "可核对的最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1, "actionWhen":"具体时间或启动触发", "actionWhere":"具体地点、页面或工具", "actionObject":"明确处理对象", "actionProcedure":"按顺序写出动词、对象、数量或时长", "actionOutput":"执行后留下的文件、记录、消息、录音或数量"},
+    {"title": "替代步骤2", "rationale": "如何绕过本次具体阻力并继续解决同一父问题", "minimumStandard": "可核对的最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1, "actionWhen":"具体时间或启动触发", "actionWhere":"具体地点、页面或工具", "actionObject":"明确处理对象", "actionProcedure":"按顺序写出动词、对象、数量或时长", "actionOutput":"执行后留下的文件、记录、消息、录音或数量"},
+    {"title": "替代步骤3", "rationale": "如何绕过本次具体阻力并继续解决同一父问题", "minimumStandard": "可核对的最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1, "actionWhen":"具体时间或启动触发", "actionWhere":"具体地点、页面或工具", "actionObject":"明确处理对象", "actionProcedure":"按顺序写出动词、对象、数量或时长", "actionOutput":"执行后留下的文件、记录、消息、录音或数量"}
   ],
   "restructureWarning": "是否需要重构全方案。默认写：暂不建议重构，先用替代步骤验证。"
 }
@@ -341,7 +350,7 @@ $reflectionText
       );
       final parsed = _extractJsonObject(raw);
       if (parsed.isEmpty) return fallback;
-      final alternatives = _readAlternativeSteps(parsed);
+      final alternatives = _readAlternativeSteps(parsed).where(_isConcreteAlternativeStep).toList(growable: false);
       return TodoGoalStepRecoveryResult(
         failureDiagnosis: _read(parsed, 'failureDiagnosis', fallback.failureDiagnosis),
         restartGuidance: _read(parsed, 'restartGuidance', fallback.restartGuidance),
@@ -624,6 +633,11 @@ $reflectionText
           recommendedStandard: '完成5分钟并记录“我实际做了什么”。',
           zoneType: 'comfort',
           difficultyScore: 2,
+          actionWhen: '今天下一次拿起手机时，立即计时2分钟。',
+          actionWhere: '手机计时器和执行“$actionTitle”所需的原页面或文件。',
+          actionObject: '“$actionTitle”对应的原始页面、材料或文件。',
+          actionProcedure: '打开原页面或文件；计时2分钟；只完成一个最小片段；结束时保存或截图。',
+          actionOutput: '一张截图、一个已保存片段或一句事实记录。',
         ),
         TodoGoalAlternativeStep(
           title: '换入口：先解决最小阻力点',
@@ -632,6 +646,11 @@ $reflectionText
           recommendedStandard: '针对这个阻力做一个可观察调整。',
           zoneType: 'stretch',
           difficultyScore: 3,
+          actionWhen: '保存失败记录后立即进行，限定5分钟。',
+          actionWhere: '同一份目标求解记录和手机/电脑日历。',
+          actionObject: '本次失败记录中最先出现的一个具体阻力。',
+          actionProcedure: '从时间、工具、资料、环境四类中勾选一类；写出一个具体阻力；完成一项调整并截图或保存。',
+          actionOutput: '一条明确阻力记录和一个已完成的环境/工具/日程调整。',
         ),
         TodoGoalAlternativeStep(
           title: '同一目标的旁路推进',
@@ -640,6 +659,11 @@ $reflectionText
           recommendedStandard: '做完后判断它是否能回推父问题。',
           zoneType: 'stretch',
           difficultyScore: 4,
+          actionWhen: '完成阻力记录后的今天，预留5分钟执行。',
+          actionWhere: '目标求解记录以及能够产生父问题证据的页面、工具或联系人窗口。',
+          actionObject: '当前父问题要求的同一种产出，不改变父问题。',
+          actionProcedure: '写出原动作预期产出；列出另一种获得同类产出的方式；选择成本最低的一种执行5分钟；保存结果。',
+          actionOutput: '一个与原动作服务同一父问题的替代产出，以及采用该路径的记录。',
         ),
       ],
       restructureWarning: '暂不建议重构整个方案。先用替代步骤验证1-2次；只有连续多次证明父目标或方法方向错误时，再考虑重构。',
@@ -721,7 +745,7 @@ $reflectionText
       maxDepth = depth > maxDepth ? depth : maxDepth;
       final descendants = children[id] ?? const <TodoGoalProblemNode>[];
       if (descendants.isEmpty) {
-        if (!node.isActionable || node.actionableStep.trim().isEmpty || node.evidenceNeeded.trim().isEmpty) return false;
+        if (!node.isActionable || !node.hasConcreteActionContract || node.evidenceNeeded.trim().isEmpty || !_isConcreteActionNode(node)) return false;
         actionableLeaves++;
       } else if (node.actionableStep.trim().isNotEmpty) {
         return false;
@@ -735,6 +759,30 @@ $reflectionText
     }
     if (!walk(roots.first.tempNodeId.trim(), 0)) return false;
     return visited.length == plan.nodes.length && maxDepth >= 2 && actionableLeaves >= 2;
+  }
+
+
+  bool _isConcreteActionNode(TodoGoalProblemNode node) {
+    final fields = <String>[
+      node.actionWhen,
+      node.actionWhere,
+      node.actionObject,
+      node.actionProcedure,
+      node.actionOutput,
+      node.acceptanceCriteria,
+    ];
+    const vagueOnly = <String>['视情况', '适当', '相关', '进一步', '做一些', '处理一下', '推进目标', '完成任务', '采取行动', '根据需要', '自行选择'];
+    const vaguePhrases = <String>['相关内容', '相关材料', '相关页面', '相关工具', '做一点', '先行动', '逐步推进', '开展工作', '进行处理', '采取措施', '完成一个小步骤'];
+    const schemaPlaceholders = <String>['具体时间或启动触发', '具体时间或触发', '具体地点、软件页面或工具', '具体地点或工具', '明确处理对象', '明确对象', '按顺序说明动词', '按顺序的现实操作', '可核对产出', '一句话行动摘要'];
+    if (fields.any((field) => field.trim().length < 4)) return false;
+    if (fields.any((field) => vagueOnly.any((word) => field.trim() == word || field.trim() == '$word。'))) return false;
+    if (<String>[node.actionWhere, node.actionObject, node.actionProcedure, node.actionOutput].any((field) => vaguePhrases.any((phrase) => field.contains(phrase)))) return false;
+    if (fields.any((field) => schemaPlaceholders.any((placeholder) => field.contains(placeholder)))) return false;
+    final procedure = node.actionProcedure.trim();
+    final hasActionVerb = RegExp(r'打开|进入|新建|填写|写下|发送|拨打|搜索|筛选|下载|上传|朗读|录制|练习|完成|整理|比较|测量|预约|询问|联系|保存|拍照|勾选|运行|修改|创建').hasMatch(procedure);
+    final hasAmountOrDuration = RegExp(r'\d+|一份|一个|一条|一次|至少|每个|全部').hasMatch('${node.actionWhen}$procedure${node.acceptanceCriteria}');
+    final hasVerifiableOutput = RegExp(r'文件|记录|清单|截图|消息|邮件|录音|视频|表格|文档|结果|数量|链接|日程|产出|完成').hasMatch('${node.actionOutput}${node.acceptanceCriteria}');
+    return hasActionVerb && hasAmountOrDuration && hasVerifiableOutput;
   }
 
 
@@ -839,6 +887,11 @@ $reflectionText
       required String description,
       required String criteria,
       String action = '',
+      String actionWhen = '',
+      String actionWhere = '',
+      String actionObject = '',
+      String actionProcedure = '',
+      String actionOutput = '',
       required String question,
       required String facts,
       required String assumptions,
@@ -876,6 +929,11 @@ $reflectionText
         assumptions: assumptions,
         evidenceNeeded: evidence,
         decisionRule: rule,
+        actionWhen: actionWhen,
+        actionWhere: actionWhere,
+        actionObject: actionObject,
+        actionProcedure: actionProcedure,
+        actionOutput: actionOutput,
       );
     }
 
@@ -917,7 +975,12 @@ $reflectionText
         title: '写下目标起点与完成标准',
         description: '这份记录为后续步骤提供已知条件。',
         criteria: '至少写出当前状态、希望达到的状态、期限和一个可观察完成标准。',
-        action: '用5分钟写下：我现在在哪里、要到哪里、何时完成、看到什么算完成。',
+        action: '建立一份“$goalTitle 求解记录”，填写当前状态、目标状态、期限和完成证据。',
+        actionWhen: '现在或今天第一个不被打断的5分钟；打开手机备忘录后立即开始。',
+        actionWhere: '手机备忘录、纸质笔记或电脑文档。',
+        actionObject: '目标“$goalTitle”的当前状态、目标状态、期限和完成证据。',
+        actionProcedure: '新建标题为“$goalTitle 求解记录”的笔记；依次写四个小标题“现在是、要达到、最晚时间、完成证据”；每个标题下至少写一句。',
+        actionOutput: '一份包含四个已填写标题的目标起点记录。',
         question: '这些信息是否足以判断下一步，而不是继续猜测？',
         facts: '目标“$goalTitle”已被提出。',
         assumptions: '用户能够通过简短记录补齐最关键的信息。',
@@ -950,7 +1013,12 @@ $reflectionText
         title: '移除一个最直接的执行阻力',
         description: '只选择当前证据最明确、能立刻处理的一个阻力。',
         criteria: '完成一个能让“$actionTitle”更容易开始的环境、工具或时间安排。',
-        action: '根据起点记录，准备一个必要工具、材料或固定时间段，并立即放到可使用状态。',
+        action: '从起点记录中选择一个明确阻力，并完成一项可见的准备。',
+        actionWhen: '完成目标起点记录后立即进行，最多5分钟。',
+        actionWhere: '阻力实际发生的工作位置；使用日历、文件夹或目标所需工具。',
+        actionObject: '起点记录中写下的第一个明确阻力。',
+        actionProcedure: '圈出一个会阻止下一步的具体障碍；只选择一种处理：把所需工具放到手边、把必要文件打开、或在日历中锁定一个时间段；完成后截图或勾选。',
+        actionOutput: '一个已经就位的工具/文件，或一个已保存的具体日程。',
         question: '这个调整是否直接降低了关键行动的开始成本？',
         facts: '起点记录已经指出一个主要阻力。',
         assumptions: '处理该阻力会提高关键行动发生的可能性。',
@@ -967,7 +1035,12 @@ $reflectionText
         title: '执行一次关键目标动作',
         description: '用一次现实行动验证当前路径能否产生与目标有关的进展。',
         criteria: zone == 'comfort' ? '执行2分钟并留下一个可观察产出。' : '执行5-10分钟并留下一个可观察产出。',
-        action: actionTitle,
+        action: '把“$actionTitle”完成一个可观察的最小片段，并保存产出。',
+        actionWhen: zone == 'panic' ? '在已确认的最早可用45分钟时段开始。' : '完成准备动作后，在今天预留的${zone == 'comfort' ? '2' : '10'}分钟内开始。',
+        actionWhere: '使用刚刚准备好的工具、文件或实际工作场景。',
+        actionObject: '“$actionTitle”中能够独立保存或核对的第一个最小片段。',
+        actionProcedure: '打开所需工具；只处理一个最小片段；过程中不扩展到第二项；结束时保存、拍照、录音或勾选完成。',
+        actionOutput: '一个与“$actionTitle”直接相关、可保存或查看的最小产出。',
         question: '这次行动是否产生了能推动“$goalTitle”的实际产出？',
         facts: '起点和最低准备条件已经完成。',
         assumptions: '当前候选行动能够产生与目标直接相关的反馈。',
@@ -1000,7 +1073,12 @@ $reflectionText
         title: '记录结果并决定下一小步',
         description: '把成功或失败转换成下一次求解信息。',
         criteria: '记录实际结果、与验收标准的差距，以及下一次继续或替换的具体动作。',
-        action: '用3分钟记录：发生了什么、哪一步有效或失败、下一次继续什么或替换什么。',
+        action: '在同一份求解记录中追加本轮结果和下一动作。',
+        actionWhen: '关键动作结束后立即进行，限定3分钟。',
+        actionWhere: '打开前面创建的“$goalTitle 求解记录”。',
+        actionObject: '本轮实际产出、验收结果和遇到的具体阻力。',
+        actionProcedure: '追加三行：“实际产出：”“是否达到标准：”“下一次具体动作：”；每行填写一句，下一动作必须包含动词、对象和数量。',
+        actionOutput: '一条包含实际产出、验收结论和下一具体动作的复盘记录。',
         question: '这份记录能否明确支持下一次决策？',
         facts: '本轮行动结果已经发生。',
         assumptions: '如实记录能减少重复试错。',
@@ -1075,6 +1153,15 @@ $reflectionText
       }
     }
     return plans;
+  }
+
+  bool _isConcreteAlternativeStep(TodoGoalAlternativeStep step) {
+    final fields = <String>[step.actionWhen, step.actionWhere, step.actionObject, step.actionProcedure, step.actionOutput, step.minimumStandard];
+    const placeholders = <String>['具体时间或启动触发', '具体地点、页面或工具', '明确处理对象', '按顺序写出动词', '执行后留下的文件'];
+    if (fields.any((field) => field.trim().length < 4 || placeholders.any((placeholder) => field.contains(placeholder)))) return false;
+    final hasVerb = RegExp(r'打开|进入|新建|填写|写下|发送|拨打|搜索|筛选|下载|上传|朗读|录制|练习|完成|整理|比较|测量|预约|询问|联系|保存|拍照|勾选|运行|修改|创建').hasMatch(step.actionProcedure);
+    final hasAmount = RegExp(r'\d+|一份|一个|一条|一次|至少|每个|全部').hasMatch('${step.actionWhen}${step.actionProcedure}${step.minimumStandard}');
+    return hasVerb && hasAmount;
   }
 
   List<TodoGoalAlternativeStep> _readAlternativeSteps(Map<String, dynamic> map) {

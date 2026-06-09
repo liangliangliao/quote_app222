@@ -173,6 +173,11 @@ class TodoGoalDao {
         description TEXT,
         acceptance_criteria TEXT,
         actionable_step TEXT,
+        action_when TEXT,
+        action_where TEXT,
+        action_object TEXT,
+        action_procedure TEXT,
+        action_output TEXT,
         zone_type TEXT DEFAULT 'stretch',
         difficulty_score INTEGER DEFAULT 5,
         estimated_minutes INTEGER DEFAULT 5,
@@ -290,6 +295,11 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'description', 'TEXT');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'acceptance_criteria', 'TEXT');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'actionable_step', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'action_when', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'action_where', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'action_object', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'action_procedure', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_problem_nodes', 'action_output', 'TEXT');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'zone_type', "TEXT DEFAULT 'stretch'");
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'difficulty_score', 'INTEGER DEFAULT 5');
     await _addColumnIfMissing(db, 'goal_problem_nodes', 'estimated_minutes', 'INTEGER DEFAULT 5');
@@ -1056,6 +1066,11 @@ class TodoGoalDao {
         'description': n.description,
         'acceptance_criteria': n.acceptanceCriteria,
         'actionable_step': n.actionableStep,
+        'action_when': n.actionWhen,
+        'action_where': n.actionWhere,
+        'action_object': n.actionObject,
+        'action_procedure': n.actionProcedure,
+        'action_output': n.actionOutput,
         'zone_type': _normalizeZone(n.zoneType),
         'difficulty_score': n.difficultyScore.clamp(1, 10).toInt(),
         'estimated_minutes': n.estimatedMinutes <= 0 ? 5 : n.estimatedMinutes,
@@ -1185,6 +1200,11 @@ class TodoGoalDao {
       'description': alternative.rationale,
       'acceptance_criteria': alternative.minimumStandard,
       'actionable_step': alternative.title,
+      'action_when': alternative.actionWhen,
+      'action_where': alternative.actionWhere,
+      'action_object': alternative.actionObject,
+      'action_procedure': alternative.actionProcedure,
+      'action_output': alternative.actionOutput,
       'zone_type': _normalizeZone(alternative.zoneType),
       'difficulty_score': alternative.difficultyScore.clamp(1, 10).toInt(),
       'estimated_minutes': 5,
@@ -1209,12 +1229,16 @@ class TodoGoalDao {
       goalId: node.goalId,
       sourceTaskId: sourceTaskId,
       title: node.displayAction,
-      minimumStandard: node.acceptanceCriteria.trim().isEmpty ? '先做2-5分钟，能用事实判断开始即可。' : node.acceptanceCriteria,
-      recommendedStandard: node.description.trim().isEmpty ? '完成一个可观察动作并记录过程。' : node.description,
+      minimumStandard: node.acceptanceCriteria.trim().isEmpty ? '完成明确产出并可现场核对。' : node.acceptanceCriteria,
+      simplifiedStandard: node.actionOutput.trim().isEmpty ? node.acceptanceCriteria : '至少留下：${node.actionOutput}',
+      recommendedStandard: node.concreteActionText,
       stretchStandard: '状态允许时再多推进一个相邻子节点，不强行进入恐慌区。',
       difficultyScore: node.difficultyScore,
       zoneType: node.zoneType,
       plannedDate: todayDate(),
+      actionPlace: node.actionWhere,
+      startTrigger: node.actionWhen,
+      completionQuestion: '是否已经得到“${node.actionOutput}”，并达到“${node.acceptanceCriteria}”？',
       sortOrder: node.sequenceOrder,
     );
   }

@@ -959,7 +959,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
       if (!earlierSiblings.every((item) => item.isCompleted)) return false;
     }
     final children = _selectedNodes.where((item) => item.parentNodeId == node.nodeId).toList();
-    if (!forEvaluation) return children.isEmpty && node.isActionable;
+    if (!forEvaluation) return children.isEmpty && node.isActionable && node.hasConcreteActionContract;
     if (children.isEmpty) return true;
     return node.relationType.toLowerCase() == 'or' ? children.any((child) => child.isCompleted) : children.every((child) => child.isCompleted);
   }
@@ -1033,12 +1033,15 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
             sourceTaskId: goal.sourceTaskId,
             title: chosen.title,
             minimumStandard: chosen.minimumStandard,
-            simplifiedStandard: chosen.minimumStandard,
-            recommendedStandard: chosen.recommendedStandard,
+            simplifiedStandard: chosen.actionOutput.trim().isEmpty ? chosen.minimumStandard : '至少留下：${chosen.actionOutput}',
+            recommendedStandard: <String>[chosen.actionProcedure, chosen.recommendedStandard].where((text) => text.trim().isNotEmpty).join('；'),
             stretchStandard: '如果仍然失败，先尝试复盘中保存的其他备用步骤，或切换备用方案；只有关键前提被证伪时才重构全方案。',
             difficultyScore: chosen.difficultyScore,
             zoneType: chosen.zoneType,
             plannedDate: _goalDao.todayDate(),
+            actionPlace: chosen.actionWhere,
+            startTrigger: chosen.actionWhen,
+            completionQuestion: '是否已经得到“${chosen.actionOutput}”，并达到“${chosen.minimumStandard}”？',
             actionType: 'result',
             experienceIntention: '验证这个替代步骤能否绕过原阻力，同时继续解决同一个父问题。',
           );
@@ -1099,7 +1102,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
             ...alternatives.map((a) => Card(
                   child: ListTile(
                     title: Text(a.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text('${a.minimumStandard}\n${a.rationale}', maxLines: 3, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${a.actionWhen}\n${a.actionProcedure}\n产出：${a.actionOutput}', maxLines: 4, overflow: TextOverflow.ellipsis),
                     isThreeLine: true,
                     trailing: _ZoneChip(zone: a.zoneType, score: a.difficultyScore),
                     onTap: () => Navigator.pop(context, a),
@@ -1492,7 +1495,7 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
             ...alternatives.map((option) => Card(
                   child: ListTile(
                     title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text('${option.rationale}\n最低标准：${option.minimumStandard}', maxLines: 4, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${option.actionWhen}\n${option.actionProcedure}\n产出：${option.actionOutput}', maxLines: 4, overflow: TextOverflow.ellipsis),
                     trailing: _ZoneChip(zone: option.zoneType, score: option.difficultyScore),
                     isThreeLine: true,
                     onTap: () => Navigator.pop(sheetContext, option),
@@ -2959,7 +2962,16 @@ class _ProblemNodeTreeNode extends StatelessWidget {
             if (dependencyTitles.isNotEmpty) _MiniLine(label: '还需要先完成', text: dependencyTitles.join('、')),
             if (node.description.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_humanizeAiText(node.description), style: const TextStyle(color: Color(0xFF4B5563), height: 1.4))),
             if (node.actionableStep.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_arrow_rounded, title: '现在可以做', text: node.actionableStep),
-            if (node.acceptanceCriteria.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.flag_outlined, title: '做到这里就够', text: node.acceptanceCriteria),
+            if (node.isActionable && !node.hasConcreteActionContract)
+              const _FriendlyTextBlock(icon: Icons.warning_amber_outlined, title: '这个旧节点还不能直接执行', text: '缺少时间、地点/工具、对象、操作步骤或产出物。请重新生成问题树，系统不会把抽象建议加入今日行动。'),
+            if (node.isActionable) ...[
+              if (node.actionWhen.trim().isNotEmpty) _MiniLine(label: '何时开始', text: node.actionWhen),
+              if (node.actionWhere.trim().isNotEmpty) _MiniLine(label: '在哪里/用什么', text: node.actionWhere),
+              if (node.actionObject.trim().isNotEmpty) _MiniLine(label: '具体处理什么', text: node.actionObject),
+              if (node.actionProcedure.trim().isNotEmpty) _MiniLine(label: '按什么步骤做', text: node.actionProcedure),
+              if (node.actionOutput.trim().isNotEmpty) _MiniLine(label: '必须留下什么', text: node.actionOutput),
+            ],
+            if (node.acceptanceCriteria.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.flag_outlined, title: '怎样算成功', text: node.acceptanceCriteria),
             if (node.completionNote.trim().isNotEmpty) _MiniLine(label: '我的记录', text: node.completionNote),
             if (node.logicQuestion.trim().isNotEmpty || node.knownFacts.trim().isNotEmpty || node.assumptions.trim().isNotEmpty || node.evidenceNeeded.trim().isNotEmpty || node.decisionRule.trim().isNotEmpty)
               ExpansionTile(
@@ -2978,7 +2990,7 @@ class _ProblemNodeTreeNode extends StatelessWidget {
             if (node.aiReviewJson.trim().isNotEmpty) _NodeAiReviewBox(reviewJson: node.aiReviewJson),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              if (node.isActionable && children.isEmpty) OutlinedButton.icon(onPressed: node.isCompleted || !ready ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
+              if (node.isActionable && children.isEmpty) OutlinedButton.icon(onPressed: node.isCompleted || !ready || !node.hasConcreteActionContract ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
               OutlinedButton.icon(onPressed: node.isCompleted || !ready ? null : () => onMarkNode(node, 'completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('成功')),
               OutlinedButton.icon(onPressed: node.isFailed || !ready ? null : () => onMarkNode(node, 'failed'), icon: const Icon(Icons.cancel_outlined), label: const Text('失败')),
             ]),
