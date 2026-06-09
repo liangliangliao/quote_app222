@@ -29,10 +29,10 @@ class TodoGoalAiService {
     );
     try {
       final raw = await _ai.generateText(
-        prompt: '$prompt\n\n${_deepProblemSolutionSchema()}',
-        purpose: 'microsoft_todo.goal_deep_problem_solution',
-        systemPrompt: '${templates.systemPrompt}\n你还必须把目标当成用户关注的棘手问题，输出多套科学问题解决方案和可执行问题树。',
-        maxTokens: 4200,
+        prompt: prompt,
+        purpose: 'microsoft_todo.goal_analysis',
+        systemPrompt: templates.systemPrompt,
+        maxTokens: 3800,
         expectJson: true,
         temperature: 0.35,
       );
@@ -45,24 +45,14 @@ class TodoGoalAiService {
       if (parsed.isEmpty) {
         return _analysisFromAiRaw(task, raw, state, fallback);
       }
-      final aiPlans = _readPlans(parsed);
       final aiHasMeaningfulContent = _hasMeaningfulAnalysis(parsed);
-      if (!aiHasMeaningfulContent && aiPlans.isEmpty) {
+      if (!aiHasMeaningfulContent) {
         return _analysisFromAiRaw(task, raw, state, fallback);
       }
 
       final aiDefaults = _analysisFromAiRaw(task, raw, state, fallback, markRawOnly: false);
       final goalTitle = _read(parsed, 'goalTitle', aiDefaults.goalTitle);
       final todayMinimumAction = _read(parsed, 'todayMinimumAction', aiDefaults.todayMinimumAction);
-      final actionTitle = todayMinimumAction.trim().isEmpty
-          ? (goalTitle.length > 18 ? '${goalTitle.substring(0, 18)}…' : goalTitle)
-          : todayMinimumAction;
-      // v55: as long as the provider returned usable AI text/fields, do not mark
-      // the whole target as local fallback merely because some fields or plans
-      // are absent. Fill missing fields with AI-raw-derived safe defaults and
-      // only supplement the plan tree locally.
-      final effectivePlans = aiPlans.isEmpty ? _fallbackPlans(goalTitle, actionTitle) : aiPlans;
-
       return TodoGoalAnalysisResult(
         goalTitle: goalTitle,
         deepMeaning: _read(parsed, 'deepMeaning', aiDefaults.deepMeaning),
@@ -74,19 +64,161 @@ class TodoGoalAiService {
         obstacleSummary: _read(parsed, 'obstacleSummary', aiDefaults.obstacleSummary),
         todayMinimumAction: todayMinimumAction,
         minimumStandard: _read(parsed, 'minimumStandard', aiDefaults.minimumStandard),
+        simplifiedStandard: _read(parsed, 'simplifiedStandard', aiDefaults.simplifiedStandard),
         recommendedStandard: _read(parsed, 'recommendedStandard', aiDefaults.recommendedStandard),
         stretchStandard: _read(parsed, 'stretchStandard', aiDefaults.stretchStandard),
         difficultyScore: _readInt(parsed, 'difficultyScore', aiDefaults.difficultyScore).clamp(1, 10).toInt(),
         zoneType: _normalizeZone(_read(parsed, 'zoneType', aiDefaults.zoneType)),
         coachMessage: _read(parsed, 'coachMessage', aiDefaults.coachMessage),
+        resultGoal: _read(parsed, 'resultGoal', aiDefaults.resultGoal),
+        valueGoal: _read(parsed, 'valueGoal', aiDefaults.valueGoal),
+        processGoal: _read(parsed, 'processGoal', aiDefaults.processGoal),
+        coreValues: _read(parsed, 'coreValues', aiDefaults.coreValues),
+        autonomyScore: _readInt(parsed, 'autonomyScore', aiDefaults.autonomyScore).clamp(0, 100).toInt(),
+        valueAlignmentScore: _readInt(parsed, 'valueAlignmentScore', aiDefaults.valueAlignmentScore).clamp(0, 100).toInt(),
+        interestConnectionScore: _readInt(parsed, 'interestConnectionScore', aiDefaults.interestConnectionScore).clamp(0, 100).toInt(),
+        passionScore: _readInt(parsed, 'passionScore', aiDefaults.passionScore).clamp(0, 100).toInt(),
+        feasibilityScore: _readInt(parsed, 'feasibilityScore', aiDefaults.feasibilityScore).clamp(0, 100).toInt(),
+        externalPressureScore: _readInt(parsed, 'externalPressureScore', aiDefaults.externalPressureScore).clamp(0, 100).toInt(),
+        processHappinessScore: _readInt(parsed, 'processHappinessScore', aiDefaults.processHappinessScore).clamp(0, 100).toInt(),
+        goalType: _read(parsed, 'goalType', aiDefaults.goalType),
+        currentStage: _read(parsed, 'currentStage', aiDefaults.currentStage),
+        actionPlace: _read(parsed, 'actionPlace', aiDefaults.actionPlace),
+        startTrigger: _read(parsed, 'startTrigger', aiDefaults.startTrigger),
+        completionQuestion: _read(parsed, 'completionQuestion', aiDefaults.completionQuestion),
+        processAction: _read(parsed, 'processAction', aiDefaults.processAction),
+        valueAction: _read(parsed, 'valueAction', aiDefaults.valueAction),
+        experiencePrompt: _read(parsed, 'experiencePrompt', aiDefaults.experiencePrompt),
+        userNeedInterpretation: _read(parsed, 'userNeedInterpretation', aiDefaults.userNeedInterpretation),
+        keyUncertainties: _read(parsed, 'keyUncertainties', aiDefaults.keyUncertainties),
+        clarifyingQuestions: _read(parsed, 'clarifyingQuestions', aiDefaults.clarifyingQuestions),
+        possibleDirections: _read(parsed, 'possibleDirections', aiDefaults.possibleDirections),
+        referenceCases: _read(parsed, 'referenceCases', aiDefaults.referenceCases),
+        recommendationRationale: _read(parsed, 'recommendationRationale', aiDefaults.recommendationRationale),
+        userDecisionPrompt: _read(parsed, 'userDecisionPrompt', aiDefaults.userDecisionPrompt),
         provider: state['provider'] ?? 'ai',
-        solutionPlans: effectivePlans,
+        solutionPlans: const <TodoGoalSolutionPlan>[],
         modelLabel: state['label'] ?? 'AI',
         rawResponse: raw,
         usedFallback: false,
       );
     } catch (_) {
       return fallback;
+    }
+  }
+
+  Future<TodoGoalSolutionGenerationResult> generateProblemSolutions({
+    required TodoTaskRecord task,
+    required TodoGoalAnalysisResult analysis,
+  }) async {
+    final state = await getGlobalAiState();
+    final fallbackPlans = _fallbackPlans(analysis.goalTitle, analysis.todayMinimumAction);
+    TodoGoalSolutionGenerationResult fallback() => TodoGoalSolutionGenerationResult(
+          plans: fallbackPlans,
+          provider: 'local',
+          modelLabel: state['label'] ?? '本地策略',
+          usedFallback: true,
+        );
+    if (state['available'] != '1') return fallback();
+
+    final templates = await _promptConfig.load();
+    final renderedPrompt = _promptConfig.renderSolutionPrompt(
+      templates,
+      goalTitle: analysis.goalTitle,
+      resultGoal: analysis.resultGoal,
+      valueGoal: analysis.valueGoal,
+      processGoal: analysis.processGoal,
+      coreValues: analysis.coreValues,
+      obstacleSummary: analysis.obstacleSummary,
+      todayAction: analysis.todayMinimumAction,
+      taskBody: task.bodyText,
+    );
+    final prompt = '''$renderedPrompt
+
+不可覆盖的叶节点行动协议：
+- 每个 action 叶节点必须同时返回 actionWhen、actionWhere、actionObject、actionProcedure、actionOutput 和 acceptanceCriteria。
+- actionProcedure 必须包含实际动词、明确对象、数量或时长；actionOutput 必须是执行后可以查看、保存、发送、计数或核对的产出。
+- “适当处理、进一步推进、做一些准备、根据情况行动、完成目标”等抽象表达视为无效。
+- 信息不足时不得猜测，必须生成具体的信息获取行动，写明打开哪个页面/询问谁/记录哪些字段/形成什么清单。
+缺少上述任一字段的方案将被程序拒绝。''';
+    try {
+      final raw = await _ai.generateText(
+        prompt: prompt,
+        purpose: 'microsoft_todo.goal_problem_solutions',
+        systemPrompt: '你是严谨的现实问题求解器。像完成证明题一样，只使用给定事实，把目标状态反向分解为必要条件、子问题和可验收叶节点；每一步必须有推导依据，未知信息必须先验证，禁止虚构事实、空泛建议和逻辑跳步。生成原理不同的主备方案，但不得替用户选择。只输出合法JSON。',
+        maxTokens: 9000,
+        expectJson: true,
+        temperature: 0.2,
+      );
+      if (raw.trim().isEmpty) return fallback();
+      final parsed = _extractJsonObject(raw);
+      if (parsed.isEmpty) return fallback();
+      var plans = _readPlans(parsed);
+      if (plans.isEmpty) plans = _readPlans(_resolveAnalysisPayload(parsed));
+      if (plans.isEmpty) return fallback();
+      final checked = _buildRigorousPlanSet(plans, fallbackPlans);
+      return TodoGoalSolutionGenerationResult(
+        plans: checked.plans,
+        provider: checked.usedFallback ? 'hybrid' : (state['provider'] ?? 'ai'),
+        modelLabel: state['label'] ?? 'AI',
+        rawResponse: raw,
+        usedFallback: checked.usedFallback,
+      );
+    } catch (_) {
+      return fallback();
+    }
+  }
+
+  Future<TodoGoalWeeklySummaryResult> generateWeeklySummary({
+    required List<TodoGoalProfile> goals,
+    required List<TodoGoalReflection> reflections,
+  }) async {
+    final state = await getGlobalAiState();
+    TodoGoalWeeklySummaryResult fallback() => TodoGoalWeeklySummaryResult(
+          alignmentInsight: goals.isEmpty ? '本周还没有可分析的目标。' : '本周共有 ${goals.length} 个目标，其中 ${goals.where((goal) => goal.selfConcordanceScore >= 70).length} 个自我一致度较高。',
+          processInsight: reflections.isEmpty ? '还没有过程复盘证据。' : '本周留下了 ${reflections.length} 条过程复盘，这些记录比单纯完成率更能说明真实成长。',
+          valueEvidence: goals.expand((goal) => goal.coreValueList).take(5).join('、'),
+          adjustmentAdvice: goals.any((goal) => goal.externalPressureScore >= 70) ? '优先调整外部压力过高的目标：缩短承诺周期、降低强度或重新绑定价值。' : '保持能带来意义感和投入感的行动方式。',
+          nextWeekFocus: '选择一个最自我一致的目标，每天只保留一个可以开始的最低行动。',
+          provider: 'local',
+          modelLabel: state['label'] ?? '本地策略',
+          usedFallback: true,
+        );
+    if (state['available'] != '1') return fallback();
+    final goalText = goals.take(12).map((goal) => '- ${goal.goalTitle}｜自我一致${goal.selfConcordanceScore}｜外部压力${goal.externalPressureScore}｜过程幸福${goal.processHappinessScore}｜价值${goal.coreValues}').join('\n');
+    final reflectionText = reflections.take(20).map((reflection) => '- ${reflection.reflectionDate} ${reflection.goalTitle}｜意义${reflection.meaningScore}/5｜过程${reflection.processScore}/5｜${reflection.processExperience}').join('\n');
+    final prompt = '''
+你是促进用户自主判断的积极心理学目标教练。请生成“过程与自我一致”周总结，不以完成率羞辱用户，也不替用户决定下周目标。区分记录事实、你的推断和待用户确认的问题；调整建议至少给出多种可能性及适用条件。
+目标：
+$goalText
+本周复盘：
+$reflectionText
+只输出JSON：
+{"alignmentInsight":"哪些目标更自我一致","processInsight":"哪些行动带来过程幸福","valueEvidence":"本周体现了哪些价值","adjustmentAdvice":"哪些目标需暂停、降强度或重写","nextWeekFocus":"下周一个温和具体的重点"}
+''';
+    try {
+      final raw = await _ai.generateText(
+        prompt: prompt,
+        purpose: 'microsoft_todo.goal_weekly_summary',
+        systemPrompt: '你是温和、具体、反对完成率崇拜并尊重用户自主选择的积极心理学目标教练。不得把建议写成唯一答案。只输出合法JSON。',
+        maxTokens: 1200,
+        expectJson: true,
+        temperature: 0.4,
+      );
+      final parsed = _extractJsonObject(raw);
+      if (parsed.isEmpty) return fallback();
+      final local = fallback();
+      return TodoGoalWeeklySummaryResult(
+        alignmentInsight: _read(parsed, 'alignmentInsight', local.alignmentInsight),
+        processInsight: _read(parsed, 'processInsight', local.processInsight),
+        valueEvidence: _read(parsed, 'valueEvidence', local.valueEvidence),
+        adjustmentAdvice: _read(parsed, 'adjustmentAdvice', local.adjustmentAdvice),
+        nextWeekFocus: _read(parsed, 'nextWeekFocus', local.nextWeekFocus),
+        provider: state['provider'] ?? 'ai',
+        modelLabel: state['label'] ?? 'AI',
+      );
+    } catch (_) {
+      return fallback();
     }
   }
 
@@ -136,6 +268,8 @@ class TodoGoalAiService {
         meaningConnection: _read(parsed, 'meaningConnection', fallback.meaningConnection),
         tomorrowNextStep: _read(parsed, 'tomorrowNextStep', fallback.tomorrowNextStep),
         encouragement: _read(parsed, 'encouragement', fallback.encouragement),
+        nextStepOptions: _read(parsed, 'nextStepOptions', fallback.nextStepOptions),
+        decisionPrompt: _read(parsed, 'decisionPrompt', fallback.decisionPrompt),
         provider: state['provider'] ?? 'ai',
         modelLabel: state['label'] ?? 'AI',
         rawResponse: raw,
@@ -154,6 +288,9 @@ class TodoGoalAiService {
     required String userResult,
     required String userReflection,
     required String obstacle,
+    String parentProblem = '',
+    String reasoningBasis = '',
+    String decisionRule = '',
   }) async {
     final state = await getGlobalAiState();
     final fallback = _fallbackRecovery(
@@ -173,16 +310,21 @@ class TodoGoalAiService {
 深层意义：$deepMeaning
 过程价值：$processValue
 当前步骤：$actionTitle
+它正在解决的父问题：${parentProblem.trim().isEmpty ? '未提供' : parentProblem.trim()}
+本步骤为何能推动父问题：${reasoningBasis.trim().isEmpty ? '未提供' : reasoningBasis.trim()}
+原判断规则：${decisionRule.trim().isEmpty ? '未提供' : decisionRule.trim()}
 最低标准：$minimumStandard
 用户选择结果：$userResult
 用户过程记录：${userReflection.trim().isEmpty ? '未填写' : userReflection.trim()}
 用户阻力描述：${obstacle.trim().isEmpty ? '未填写' : obstacle.trim()}
 
 请根据科学问题解决原则输出：
-1. 为什么这一步成功/失败；成功时提炼可复用条件，失败时指出问题发生在哪个更小环节。
-2. 如何重启当前子问题，优先缩小、换路径、换环境、降低阻力，而不是立刻推翻整套方案。
-3. 给出3个替代步骤，必须符合目标价值体系：目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌。
-4. 只有在原方案方向明显错误时才提醒可重构整个方案；默认不建议重构，避免功亏一篑。
+1. 先列出已观察事实，再区分可能原因与待验证假设；成功时提炼可复用条件，失败时指出问题发生在哪个更小环节。
+2. 定位失败发生在当前动作内部、前置条件、依赖节点还是父问题推导关系，不能用泛化心理标签解释。
+3. 如何重启当前子问题，优先缩小、换路径、换环境、补前置条件，而不是立刻推翻整套方案。
+4. 给出3个机制不同、但仍然解决同一父问题的替代步骤。每个替代步骤必须说明它如何绕过本次具体阻力、产出什么证据、适用条件、代价和风险，不能只是改写原句。
+5. 给出验证关键前提的低成本实验和判断规则。只有关键前提被证伪、同一父问题下的多个替代步骤均失败，或推导链与目标无关时，才建议重构全方案；最终由用户选择继续、换路、切备用方案或暂停。
+6. 每个替代步骤必须填写具体时间/触发、地点/工具、对象、按顺序的操作和可核对产出。缺少信息时设计具体的信息收集动作，禁止使用“适当处理、进一步推进、做一些准备”等抽象说法。
 
 只输出JSON：
 {
@@ -190,9 +332,9 @@ class TodoGoalAiService {
   "restartGuidance": "重启当前子问题的具体指导，必须可照做",
   "principleFit": "说明为什么这些调整仍然符合整个目标原则和价值体系",
   "alternatives": [
-    {"title": "替代步骤1", "rationale": "为什么更适合", "minimumStandard": "最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1},
-    {"title": "替代步骤2", "rationale": "为什么更适合", "minimumStandard": "最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1},
-    {"title": "替代步骤3", "rationale": "为什么更适合", "minimumStandard": "最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1}
+    {"title": "替代步骤1", "rationale": "如何绕过本次具体阻力并继续解决同一父问题", "minimumStandard": "可核对的最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1, "actionWhen":"具体时间或启动触发", "actionWhere":"具体地点、页面或工具", "actionObject":"明确处理对象", "actionProcedure":"按顺序写出动词、对象、数量或时长", "actionOutput":"执行后留下的文件、记录、消息、录音或数量"},
+    {"title": "替代步骤2", "rationale": "如何绕过本次具体阻力并继续解决同一父问题", "minimumStandard": "可核对的最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1, "actionWhen":"具体时间或启动触发", "actionWhere":"具体地点、页面或工具", "actionObject":"明确处理对象", "actionProcedure":"按顺序写出动词、对象、数量或时长", "actionOutput":"执行后留下的文件、记录、消息、录音或数量"},
+    {"title": "替代步骤3", "rationale": "如何绕过本次具体阻力并继续解决同一父问题", "minimumStandard": "可核对的最低标准", "recommendedStandard": "推荐标准", "zoneType": "comfort/stretch/panic", "difficultyScore": 1, "actionWhen":"具体时间或启动触发", "actionWhere":"具体地点、页面或工具", "actionObject":"明确处理对象", "actionProcedure":"按顺序写出动词、对象、数量或时长", "actionOutput":"执行后留下的文件、记录、消息、录音或数量"}
   ],
   "restructureWarning": "是否需要重构全方案。默认写：暂不建议重构，先用替代步骤验证。"
 }
@@ -208,7 +350,7 @@ class TodoGoalAiService {
       );
       final parsed = _extractJsonObject(raw);
       if (parsed.isEmpty) return fallback;
-      final alternatives = _readAlternativeSteps(parsed);
+      final alternatives = _readAlternativeSteps(parsed).where(_isConcreteAlternativeStep).toList(growable: false);
       return TodoGoalStepRecoveryResult(
         failureDiagnosis: _read(parsed, 'failureDiagnosis', fallback.failureDiagnosis),
         restartGuidance: _read(parsed, 'restartGuidance', fallback.restartGuidance),
@@ -265,7 +407,8 @@ class TodoGoalAiService {
         '可能阻力是开始成本高、目标过大、紧张焦虑、信息不清或不知道第一步怎么落地。',
       ),
       todayMinimumAction: todayAction,
-      minimumStandard: _readTextFieldFromRaw(raw, _fieldAliases('minimumStandard'), '只要开始 2-5 分钟，并留下一个事实记录即可。'),
+      minimumStandard: _readTextFieldFromRaw(raw, _fieldAliases('minimumStandard'), '只要开始 2 分钟，并留下一个事实记录即可。'),
+      simplifiedStandard: _readTextFieldFromRaw(raw, _fieldAliases('simplifiedStandard'), '做5分钟，完成一个不要求完美的小片段。'),
       recommendedStandard: _readTextFieldFromRaw(raw, _fieldAliases('recommendedStandard'), '完成一个清晰小步骤，并记录过程、阻力和下一步。'),
       stretchStandard: _readTextFieldFromRaw(raw, _fieldAliases('stretchStandard'), '状态允许时连续推进 15-25 分钟，并拆出下一个子问题。'),
       difficultyScore: _readIntFromRaw(raw, _fieldAliases('difficultyScore'), 5).clamp(1, 10).toInt(),
@@ -275,8 +418,34 @@ class TodoGoalAiService {
         _fieldAliases('coachMessage'),
         '先不要追求一次解决全部问题。把目标拆成今天能开始的最小动作，做完后再根据反馈调整。',
       ),
+      resultGoal: _readTextFieldFromRaw(raw, _fieldAliases('resultGoal'), goalTitle),
+      valueGoal: _readTextFieldFromRaw(raw, _fieldAliases('valueGoal'), fallback.valueGoal.isEmpty ? fallback.deepMeaning : fallback.valueGoal),
+      processGoal: _readTextFieldFromRaw(raw, _fieldAliases('processGoal'), fallback.processGoal.isEmpty ? fallback.processValue : fallback.processGoal),
+      coreValues: _readTextFieldFromRaw(raw, _fieldAliases('coreValues'), fallback.coreValues),
+      autonomyScore: _readIntFromRaw(raw, _fieldAliases('autonomyScore'), fallback.autonomyScore).clamp(0, 100).toInt(),
+      valueAlignmentScore: _readIntFromRaw(raw, _fieldAliases('valueAlignmentScore'), fallback.valueAlignmentScore).clamp(0, 100).toInt(),
+      interestConnectionScore: _readIntFromRaw(raw, _fieldAliases('interestConnectionScore'), fallback.interestConnectionScore).clamp(0, 100).toInt(),
+      passionScore: _readIntFromRaw(raw, _fieldAliases('passionScore'), fallback.passionScore).clamp(0, 100).toInt(),
+      feasibilityScore: _readIntFromRaw(raw, _fieldAliases('feasibilityScore'), fallback.feasibilityScore).clamp(0, 100).toInt(),
+      externalPressureScore: _readIntFromRaw(raw, _fieldAliases('externalPressureScore'), fallback.externalPressureScore).clamp(0, 100).toInt(),
+      processHappinessScore: _readIntFromRaw(raw, _fieldAliases('processHappinessScore'), fallback.processHappinessScore).clamp(0, 100).toInt(),
+      goalType: _readTextFieldFromRaw(raw, _fieldAliases('goalType'), fallback.goalType),
+      currentStage: _readTextFieldFromRaw(raw, _fieldAliases('currentStage'), fallback.currentStage),
+      actionPlace: _readTextFieldFromRaw(raw, _fieldAliases('actionPlace'), fallback.actionPlace),
+      startTrigger: _readTextFieldFromRaw(raw, _fieldAliases('startTrigger'), fallback.startTrigger),
+      completionQuestion: _readTextFieldFromRaw(raw, _fieldAliases('completionQuestion'), fallback.completionQuestion),
+      processAction: _readTextFieldFromRaw(raw, _fieldAliases('processAction'), fallback.processAction),
+      valueAction: _readTextFieldFromRaw(raw, _fieldAliases('valueAction'), fallback.valueAction),
+      experiencePrompt: _readTextFieldFromRaw(raw, _fieldAliases('experiencePrompt'), fallback.experiencePrompt),
+      userNeedInterpretation: _readTextFieldFromRaw(raw, _fieldAliases('userNeedInterpretation'), fallback.userNeedInterpretation),
+      keyUncertainties: _readTextFieldFromRaw(raw, _fieldAliases('keyUncertainties'), fallback.keyUncertainties),
+      clarifyingQuestions: _readTextFieldFromRaw(raw, _fieldAliases('clarifyingQuestions'), fallback.clarifyingQuestions),
+      possibleDirections: _readTextFieldFromRaw(raw, _fieldAliases('possibleDirections'), fallback.possibleDirections),
+      referenceCases: _readTextFieldFromRaw(raw, _fieldAliases('referenceCases'), fallback.referenceCases),
+      recommendationRationale: _readTextFieldFromRaw(raw, _fieldAliases('recommendationRationale'), fallback.recommendationRationale),
+      userDecisionPrompt: _readTextFieldFromRaw(raw, _fieldAliases('userDecisionPrompt'), fallback.userDecisionPrompt),
       provider: state['provider'] ?? 'ai',
-      solutionPlans: _fallbackPlans(goalTitle, todayAction),
+      solutionPlans: const <TodoGoalSolutionPlan>[],
       modelLabel: state['label'] ?? 'AI',
       rawResponse: raw,
       usedFallback: false,
@@ -373,14 +542,41 @@ class TodoGoalAiService {
       processValue: '【兜底过程价值】先把推进过程当作一次“为沿途而活”的练习：不把幸福押在完成那一刻，而是在今天这一小步里体验自己进入现实、获得方向、逐渐成长。',
       obstacleSummary: '【兜底阻力判断】可能的阻力是目标过大、意义感不清、开始成本高、担心做得不够好，或把目标误解为终点压力。建议重新点击 AI 分析以获得更贴合此目标的判断。',
       todayMinimumAction: '围绕“$actionTitle”先做 5 分钟，并留下一个事实记录。',
-      minimumStandard: '开始5分钟即可；目标的第一作用是让你进入当下，不要求完美完成。',
+      minimumStandard: '开始2分钟即可；目标的第一作用是让你进入当下，不要求完美完成。',
+      simplifiedStandard: '做5分钟，完成一个不要求完美的小片段。',
       recommendedStandard: '完成一个清晰小步骤，并写下一句话：这个过程里有什么值得体验。',
       stretchStandard: '连续推进 25 分钟，并整理出下一步。',
       difficultyScore: 5,
       zoneType: 'stretch',
-      coachMessage: '当前是本地兜底结果：先把它变成今天能够开始的一小步；如需真正贴合目标背景的问题树，请检查AI配置后点击“AI重新分析”。',
+      coachMessage: '当前是本地兜底结果：先把它变成今天能够开始的一小步；如需真正贴合目标背景的问题树，请在目标详情页单独点击“问题树”按钮。',
+      resultGoal: title,
+      valueGoal: '让这个方向服务于真实需要、选择权与长期成长，而不是只服务于比较和焦虑。',
+      processGoal: '每天用一个 2-5 分钟可开始的动作练习投入、不完美行动和现实反馈。',
+      coreValues: '成长、自由、勇气',
+      autonomyScore: 68,
+      valueAlignmentScore: 72,
+      interestConnectionScore: 60,
+      passionScore: 58,
+      feasibilityScore: 76,
+      externalPressureScore: 35,
+      processHappinessScore: 70,
+      goalType: '需要继续澄清的自我一致目标',
+      currentStage: '最小行动验证期',
+      actionPlace: '当前最容易开始的安静位置',
+      startTrigger: '打开完成动作所需的第一个工具后立即开始',
+      completionQuestion: '完成后，你比开始前多了一点什么？',
+      processAction: '行动时只观察一个瞬间：我正在练习开始、学习或面对不完美。',
+      valueAction: '写一句这一步如何服务于成长、自由或勇气。',
+      experiencePrompt: '今天做这件事时，你想体验什么：学习感、掌控感、勇气、自由，还是一点点进步？',
+      userNeedInterpretation: '你写下“$title”，可能是想解决一个眼前任务，也可能是希望获得更多选择、能力或安心感。仅凭标题还不能判断哪一种对你最重要。',
+      keyUncertainties: '尚不确定这是你主动选择的目标、现实必要任务，还是主要来自外部期待；也不清楚你愿意投入的时间与可接受代价。',
+      clarifyingQuestions: '如果没有人评价你，你还会选择“$title”吗？\n你最希望它改变的是眼前结果、长期能力，还是当前生活状态？\n你目前愿意为它投入多少时间和精力？',
+      possibleDirections: '1. 先花一点时间弄清自己真正想通过“$title”改变什么。适合方向仍模糊、暂时没有硬期限的情况。\n2. 保留目标，但先从“$actionTitle”的最小版本开始。适合目标基本明确、只是难以启动的情况。\n3. 保留真正重视的需要，换一条成本更可承受的实现路径。适合当前方式长期消耗、却仍认可目标价值的情况。',
+      referenceCases: '例如，同样想完成“$title”的两个人，一个可能先解决眼前期限，另一个可能先补关键能力。看起来目标相同，但他们适合的第一步并不一样。',
+      recommendationRationale: '可以先做一个成本很低、容易撤回的小尝试，因为实际体验通常比继续空想更能帮助你判断。若你面临明确期限或安全风险，则不适合只做缓慢试探。',
+      userDecisionPrompt: '看完这些可能性后，哪一种最接近你现在真正想解决的问题？你也可以拒绝全部建议并重新描述。',
       provider: provider,
-      solutionPlans: _fallbackPlans(title, actionTitle),
+      solutionPlans: const <TodoGoalSolutionPlan>[],
       modelLabel: modelLabel,
       usedFallback: true,
     );
@@ -402,6 +598,10 @@ class TodoGoalAiService {
       meaningConnection: deepMeaning.trim().isEmpty ? '这个目标可以继续追问：它究竟通向你想要的哪一种生活？它是自我和谐目标，还是外部压力伪装成目标？' : deepMeaning,
       tomorrowNextStep: '明天继续做一个更小、更清晰、5分钟内能开始的动作；先开始最低标准，再观察过程。',
       encouragement: '不要只用完成率评价自己。能把任务缩小、开始、记录、再设计下一步，本身就是改变。',
+      nextStepOptions: completed
+          ? '选项A：重复最低行动巩固；选项B：只增加一个小变量；选项C：先复盘最有效的条件。'
+          : '选项A：缩小到2分钟；选项B：更换时间或环境；选项C：先收集导致卡住的信息。',
+      decisionPrompt: '哪一种下一步最符合你明天的精力、现实条件和真正需要？你也可以提出第四种。',
       provider: provider,
       modelLabel: modelLabel,
       usedFallback: true,
@@ -433,6 +633,11 @@ class TodoGoalAiService {
           recommendedStandard: '完成5分钟并记录“我实际做了什么”。',
           zoneType: 'comfort',
           difficultyScore: 2,
+          actionWhen: '今天下一次拿起手机时，立即计时2分钟。',
+          actionWhere: '手机计时器和执行“$actionTitle”所需的原页面或文件。',
+          actionObject: '“$actionTitle”对应的原始页面、材料或文件。',
+          actionProcedure: '打开原页面或文件；计时2分钟；只完成一个最小片段；结束时保存或截图。',
+          actionOutput: '一张截图、一个已保存片段或一句事实记录。',
         ),
         TodoGoalAlternativeStep(
           title: '换入口：先解决最小阻力点',
@@ -441,6 +646,11 @@ class TodoGoalAiService {
           recommendedStandard: '针对这个阻力做一个可观察调整。',
           zoneType: 'stretch',
           difficultyScore: 3,
+          actionWhen: '保存失败记录后立即进行，限定5分钟。',
+          actionWhere: '同一份目标求解记录和手机/电脑日历。',
+          actionObject: '本次失败记录中最先出现的一个具体阻力。',
+          actionProcedure: '从时间、工具、资料、环境四类中勾选一类；写出一个具体阻力；完成一项调整并截图或保存。',
+          actionOutput: '一条明确阻力记录和一个已完成的环境/工具/日程调整。',
         ),
         TodoGoalAlternativeStep(
           title: '同一目标的旁路推进',
@@ -449,6 +659,11 @@ class TodoGoalAiService {
           recommendedStandard: '做完后判断它是否能回推父问题。',
           zoneType: 'stretch',
           difficultyScore: 4,
+          actionWhen: '完成阻力记录后的今天，预留5分钟执行。',
+          actionWhere: '目标求解记录以及能够产生父问题证据的页面、工具或联系人窗口。',
+          actionObject: '当前父问题要求的同一种产出，不改变父问题。',
+          actionProcedure: '写出原动作预期产出；列出另一种获得同类产出的方式；选择成本最低的一种执行5分钟；保存结果。',
+          actionOutput: '一个与原动作服务同一父问题的替代产出，以及采用该路径的记录。',
         ),
       ],
       restructureWarning: '暂不建议重构整个方案。先用替代步骤验证1-2次；只有连续多次证明父目标或方法方向错误时，再考虑重构。',
@@ -458,18 +673,131 @@ class TodoGoalAiService {
     );
   }
 
+  ({List<TodoGoalSolutionPlan> plans, bool usedFallback}) _buildRigorousPlanSet(
+    List<TodoGoalSolutionPlan> aiPlans,
+    List<TodoGoalSolutionPlan> fallbackPlans,
+  ) {
+    final valid = aiPlans.where(_isRigorousPlan).toList(growable: false);
+    final result = <TodoGoalSolutionPlan>[];
+    final usedMethods = <String>{};
+    final fullyFallback = valid.isEmpty;
+    for (final zone in const <String>['comfort', 'stretch', 'panic']) {
+      TodoGoalSolutionPlan? candidate;
+      for (final plan in valid) {
+        final methodKey = plan.methodName.trim().toLowerCase();
+        if (plan.zoneType == zone && !result.contains(plan) && methodKey.isNotEmpty && !usedMethods.contains(methodKey)) {
+          candidate = plan;
+          break;
+        }
+      }
+      if (candidate == null) {
+        candidate = fallbackPlans.firstWhere((plan) => plan.zoneType == zone);
+      }
+      result.add(candidate);
+      usedMethods.add(candidate.methodName.trim().toLowerCase());
+    }
+    return (plans: result, usedFallback: fullyFallback);
+  }
+
+  bool _isRigorousPlan(TodoGoalSolutionPlan plan) {
+    if (plan.title.trim().isEmpty ||
+        plan.summary.trim().isEmpty ||
+        plan.problemDefinition.trim().isEmpty ||
+        plan.knownFacts.trim().isEmpty ||
+        plan.keyAssumptions.trim().isEmpty ||
+        plan.userChoiceGuidance.trim().isEmpty ||
+        plan.nodes.length < 6) {
+      return false;
+    }
+    final nodesById = <String, TodoGoalProblemNode>{};
+    for (final node in plan.nodes) {
+      final id = node.tempNodeId.trim();
+      if (id.isEmpty || nodesById.containsKey(id)) return false;
+      nodesById[id] = node;
+    }
+    final roots = plan.nodes.where((node) => node.tempParentNodeId.trim().isEmpty).toList(growable: false);
+    if (roots.length != 1) return false;
+    const logicalRelations = <String>{'and', 'or', 'sequence', 'dependency', 'network'};
+    if (!plan.nodes.any((node) => logicalRelations.contains(node.relationType.trim().toLowerCase()))) return false;
+    final children = <String, List<TodoGoalProblemNode>>{};
+    for (final node in plan.nodes) {
+      final id = node.tempNodeId.trim();
+      final parent = node.tempParentNodeId.trim();
+      if (parent.isNotEmpty) {
+        if (!nodesById.containsKey(parent) || parent == id) return false;
+        children.putIfAbsent(parent, () => <TodoGoalProblemNode>[]).add(node);
+      }
+      for (final dependency in node.resolvedDependencyNodeIds) {
+        if (!nodesById.containsKey(dependency) || dependency == id) return false;
+      }
+      if (node.title.trim().isEmpty || node.acceptanceCriteria.trim().isEmpty || node.logicQuestion.trim().isEmpty || node.decisionRule.trim().isEmpty) {
+        return false;
+      }
+    }
+    var maxDepth = 0;
+    var actionableLeaves = 0;
+    final visiting = <String>{};
+    final visited = <String>{};
+    bool walk(String id, int depth) {
+      if (!visiting.add(id)) return false;
+      final node = nodesById[id];
+      if (node == null) return false;
+      maxDepth = depth > maxDepth ? depth : maxDepth;
+      final descendants = children[id] ?? const <TodoGoalProblemNode>[];
+      if (descendants.isEmpty) {
+        if (!node.isActionable || !node.hasConcreteActionContract || node.evidenceNeeded.trim().isEmpty || !_isConcreteActionNode(node)) return false;
+        actionableLeaves++;
+      } else if (node.actionableStep.trim().isNotEmpty) {
+        return false;
+      }
+      for (final child in descendants) {
+        if (!walk(child.tempNodeId.trim(), depth + 1)) return false;
+      }
+      visiting.remove(id);
+      visited.add(id);
+      return true;
+    }
+    if (!walk(roots.first.tempNodeId.trim(), 0)) return false;
+    return visited.length == plan.nodes.length && maxDepth >= 2 && actionableLeaves >= 2;
+  }
+
+
+  bool _isConcreteActionNode(TodoGoalProblemNode node) {
+    final fields = <String>[
+      node.actionWhen,
+      node.actionWhere,
+      node.actionObject,
+      node.actionProcedure,
+      node.actionOutput,
+      node.acceptanceCriteria,
+    ];
+    const vagueOnly = <String>['视情况', '适当', '相关', '进一步', '做一些', '处理一下', '推进目标', '完成任务', '采取行动', '根据需要', '自行选择'];
+    const vaguePhrases = <String>['相关内容', '相关材料', '相关页面', '相关工具', '做一点', '先行动', '逐步推进', '开展工作', '进行处理', '采取措施', '完成一个小步骤'];
+    const schemaPlaceholders = <String>['具体时间或启动触发', '具体时间或触发', '具体地点、软件页面或工具', '具体地点或工具', '明确处理对象', '明确对象', '按顺序说明动词', '按顺序的现实操作', '可核对产出', '一句话行动摘要'];
+    if (fields.any((field) => field.trim().length < 4)) return false;
+    if (fields.any((field) => vagueOnly.any((word) => field.trim() == word || field.trim() == '$word。'))) return false;
+    if (<String>[node.actionWhere, node.actionObject, node.actionProcedure, node.actionOutput].any((field) => vaguePhrases.any((phrase) => field.contains(phrase)))) return false;
+    if (fields.any((field) => schemaPlaceholders.any((placeholder) => field.contains(placeholder)))) return false;
+    final procedure = node.actionProcedure.trim();
+    final hasActionVerb = RegExp(r'打开|进入|新建|填写|写下|发送|拨打|搜索|筛选|下载|上传|朗读|录制|练习|完成|整理|比较|测量|预约|询问|联系|保存|拍照|勾选|运行|修改|创建').hasMatch(procedure);
+    final hasAmountOrDuration = RegExp(r'\d+|一份|一个|一条|一次|至少|每个|全部').hasMatch('${node.actionWhen}$procedure${node.acceptanceCriteria}');
+    final hasVerifiableOutput = RegExp(r'文件|记录|清单|截图|消息|邮件|录音|视频|表格|文档|结果|数量|链接|日程|产出|完成').hasMatch('${node.actionOutput}${node.acceptanceCriteria}');
+    return hasActionVerb && hasAmountOrDuration && hasVerifiableOutput;
+  }
+
+
   List<TodoGoalSolutionPlan> _fallbackPlans(String goalTitle, String actionTitle) {
     return <TodoGoalSolutionPlan>[
       TodoGoalSolutionPlan(
         solutionId: '',
         goalId: '',
         sourceTaskId: '',
-        title: '舒适区方案：先恢复行动链条',
-        methodName: '微行动法 + 行为激活',
+        title: '先重新开始：把第一步降到足够小',
+        methodName: '适合目前很难开始或精力不足时',
         methodBasis: '把问题缩小到能立刻开始的行为单元，先用行动产生反馈，再逐渐提高难度。',
         zoneType: 'comfort',
         coreValueFocus: '目标服务当下；先进入过程，不追求一次完成。',
-        summary: '适合状态低、容易逃避、需要重新启动的人。优先建立“我能开始”的证据。',
+        summary: '先围绕“$actionTitle”做一个极小版本，降低开始时的压力；连续尝试几次后，再判断真正卡住你的是启动、能力还是方向。',
         riskNotes: '进展较慢，需要避免一直停留在过小动作里。',
         isSelected: false,
         status: 'candidate',
@@ -477,18 +805,27 @@ class TodoGoalAiService {
         rawJson: '',
         createdAtMs: 0,
         updatedAtMs: 0,
+        problemDefinition: '当前问题不是“必须立刻完成目标”，而是尚未形成低阻力、可重复的启动链条；需要先验证启动成本是否是主要约束。',
+        knownFacts: '已知用户有目标，并需要一个今天能开始的动作；其他资源、时间、能力与阻力信息尚不充分。',
+        keyAssumptions: '假设主要瓶颈是启动成本而不是方向错误或资源缺失；需要用微行动验证。',
+        rootCauseAnalysis: '候选近因包括动作过大、触发不清、环境阻力和完美主义；目前没有证据断言唯一根因。',
+        optionComparison: '成本最低、可逆性最高、反馈快，但对能力或资源型问题的解决力度有限。',
+        evidencePlan: '连续2-3次只做2分钟，记录是否顺利开始、在哪一步卡住，以及做完后是否更愿意继续。',
+        successMetrics: '看到提示后能开始，并且你越来越能说清具体卡点，而不是只觉得“我不行”。',
+        stopConditions: '若多次可启动但目标仍无进展，或发现核心问题是知识、资源或方向，则切换方案。',
+        userChoiceGuidance: '若你当前精力低且最大问题是开始，可优先考虑；若存在硬性期限或专业能力缺口，不应只用微行动。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'comfort'),
       ),
       TodoGoalSolutionPlan(
         solutionId: '',
         goalId: '',
         sourceTaskId: '',
-        title: '拉伸区方案：问题树逐层拆解',
-        methodName: '问题分解 + 执行意图 + 反馈调节',
+        title: '边做边判断：逐步找出真正卡点',
+        methodName: '适合目标大致明确、但路径和阻力还不清楚时',
         methodBasis: '把大问题拆成父子节点；从底层可执行动作开始，完成后逐层回推到父问题。',
         zoneType: 'stretch',
         coreValueFocus: '自我和谐、过程重于抵达、拉伸而非恐慌。',
-        summary: '推荐方案。既不空谈目标，也不直接硬扛结果，而是每天推进一个可验证子节点。',
+        summary: '把“$goalTitle”拆成几个现实障碍，每次只处理一个，并根据行动结果决定下一步，不预先假定唯一原因。',
         riskNotes: '需要按节点复盘；失败时优先换替代步骤，不轻易推翻整套方案。',
         isSelected: false,
         status: 'candidate',
@@ -496,18 +833,27 @@ class TodoGoalAiService {
         rawJson: '',
         createdAtMs: 0,
         updatedAtMs: 0,
+        problemDefinition: '需要把目标与现实差距拆成可验证子问题，识别真正约束并逐步解决，而不是直接把目标拆成待办清单。',
+        knownFacts: '已知目标方向和一个候选行动；根因、资源约束、优先级和有效路径仍需验证。',
+        keyAssumptions: '假设问题可以通过分解、证据收集和迭代实验逐步降低不确定性。',
+        rootCauseAnalysis: '先区分症状、近因、能力缺口、资源限制、环境结构和目标本身是否合理，再验证最关键根因。',
+        optionComparison: '信息质量和长期有效性较高，成本与速度居中；需要用户持续记录事实和执行判断规则。',
+        evidencePlan: '先挑一个最可能影响进展的卡点，做一次低成本尝试；再根据结果决定补能力、改流程、换环境还是寻求协作。',
+        successMetrics: '每次尝试后都更清楚什么有效、什么无效，并且能看到一个与目标相关的实际变化。',
+        stopConditions: '若证据否定核心因果链、成本超过收益或目标不再符合价值，应暂停并重定义问题。',
+        userChoiceGuidance: '适合愿意用事实逐步判断、又不希望过度冲刺的情况；这是暂定推荐，不是自动选择。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'stretch'),
       ),
       TodoGoalSolutionPlan(
         solutionId: '',
         goalId: '',
         sourceTaskId: '',
-        title: '恐慌区方案：高强度冲刺对照',
-        methodName: '限时冲刺 + 外部约束',
+        title: '期限真的紧迫时：集中完成关键结果',
+        methodName: '只适合期限真实、后果明确且资源足够时',
         methodBasis: '用明确截止时间和强约束快速推进，但只作为对照方案或短期应急方案。',
         zoneType: 'panic',
         coreValueFocus: '提醒用户识别恐慌区，避免把目标变成压迫。',
-        summary: '适合真实紧急且代价明确的场景；默认不推荐长期使用。',
+        summary: '先确认期限和最低必要结果，再集中时间处理最关键部分，同时保留健康和错误率的底线；不作为长期方式。',
         riskNotes: '容易导致逃避、挫败或反弹；若连续失败，应退回拉伸区方案。',
         isSelected: false,
         status: 'candidate',
@@ -515,6 +861,15 @@ class TodoGoalAiService {
         rawJson: '',
         createdAtMs: 0,
         updatedAtMs: 0,
+        problemDefinition: '存在可能的真实紧急期限，需要判断高强度投入是否必要、有效且风险可接受。',
+        knownFacts: '当前没有足够信息证明必须冲刺；期限真实性、失败代价和可用资源需要确认。',
+        keyAssumptions: '假设时间是首要约束，且外部约束能提高执行而不会造成不可接受的反弹。',
+        rootCauseAnalysis: '若根因是信息不足、路径错误或能力缺口，单纯加压可能只会放大问题。',
+        optionComparison: '速度可能最快，但风险、成本和不可持续性最高；只有紧急性证据充分时才合理。',
+        evidencePlan: '先核实真正的截止时间、最低必须交付什么、能获得哪些帮助，再试一个短周期集中行动。',
+        successMetrics: '在限定周期内产生关键结果，同时睡眠、健康和错误率保持在可接受范围。',
+        stopConditions: '出现健康恶化、错误率显著增加、连续失败或紧急性被证伪时立即降级。',
+        userChoiceGuidance: '仅在真实紧急、代价明确且你知情同意时考虑；默认不应作为长期方案。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'panic'),
       ),
     ];
@@ -523,130 +878,219 @@ class TodoGoalAiService {
   List<TodoGoalProblemNode> _fallbackNodes(String goalTitle, String actionTitle, String zone) {
     final difficulty = zone == 'panic' ? 8 : (zone == 'comfort' ? 2 : 5);
     final minutes = zone == 'panic' ? 45 : (zone == 'comfort' ? 2 : 10);
+    TodoGoalProblemNode node({
+      required String id,
+      String parentId = '',
+      required String relation,
+      required String type,
+      required String title,
+      required String description,
+      required String criteria,
+      String action = '',
+      String actionWhen = '',
+      String actionWhere = '',
+      String actionObject = '',
+      String actionProcedure = '',
+      String actionOutput = '',
+      required String question,
+      required String facts,
+      required String assumptions,
+      required String evidence,
+      required String rule,
+      List<String> dependencies = const <String>[],
+      required int order,
+      int? duration,
+    }) {
+      return TodoGoalProblemNode(
+        nodeId: '',
+        goalId: '',
+        solutionId: '',
+        parentNodeId: '',
+        relationType: relation,
+        nodeType: type,
+        title: title,
+        description: description,
+        acceptanceCriteria: criteria,
+        actionableStep: action,
+        zoneType: zone,
+        difficultyScore: difficulty,
+        estimatedMinutes: duration ?? minutes,
+        sequenceOrder: order,
+        dependenciesJson: jsonEncode(dependencies),
+        status: 'not_started',
+        completionNote: '',
+        aiReviewJson: '',
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        tempNodeId: id,
+        tempParentNodeId: parentId,
+        logicQuestion: question,
+        knownFacts: facts,
+        assumptions: assumptions,
+        evidenceNeeded: evidence,
+        decisionRule: rule,
+        actionWhen: actionWhen,
+        actionWhere: actionWhere,
+        actionObject: actionObject,
+        actionProcedure: actionProcedure,
+        actionOutput: actionOutput,
+      );
+    }
+
     return <TodoGoalProblemNode>[
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'problem',
-        title: '顶层问题：实现“$goalTitle”',
-        description: '把目标视为一个需要被解决的问题，而不是一句口号。',
-        acceptanceCriteria: '能说清目标状态，并看到至少一个现实中的证据。',
-        actionableStep: '',
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: minutes,
-        sequenceOrder: 0,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'root',
+      node(
+        id: 'root',
+        relation: 'and',
+        type: 'goal_state',
+        title: '实现“$goalTitle”的可验证目标状态',
+        description: '从当前状态出发，先确认现实差距，再准备必要条件、执行关键动作并验证结果。',
+        criteria: '用户确认所有必要子问题均已解决，并出现目标结果要求的现实证据。',
+        question: '哪些必要条件全部成立时，“$goalTitle”才算真正实现？',
+        facts: '用户已经明确表达目标“$goalTitle”。',
+        assumptions: '具体期限、资源、能力基础和目标完成标准仍需用户确认。',
+        evidence: '目标结果、时间范围以及用户认可的完成证据。',
+        rule: '三个阶段问题都完成后，再由用户评估根问题成功或失败。',
+        order: 0,
       ),
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'sub_problem',
-        title: '子问题A：找到今天能开始的入口',
-        description: '把抽象目标落到一个可观察动作。',
-        acceptanceCriteria: '存在一个2-10分钟内能开始的动作。',
-        actionableStep: '',
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: minutes,
-        sequenceOrder: 1,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'entry',
-        tempParentNodeId: 'root',
+      node(
+        id: 'baseline',
+        parentId: 'root',
+        relation: 'sequence',
+        type: 'sub_problem',
+        title: '确认当前状态与目标差距',
+        description: '先取得真实起点，避免根据未确认的信息直接制定方案。',
+        criteria: '写清当前状态、目标状态、期限、已有资源和一个主要阻力。',
+        question: '当前状态与目标状态之间，最先需要确认的差距是什么？',
+        facts: '目前只有目标标题和候选行动可用。',
+        assumptions: '候选行动“$actionTitle”与目标存在直接关系，但仍需验证。',
+        evidence: '用户填写的现状、期限、资源和阻力记录。',
+        rule: '信息足以判断下一步时进入准备阶段；信息不足则继续补充，不虚构结论。',
+        order: 1,
       ),
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'action',
-        title: '底层动作：$actionTitle',
-        description: '先做最低标准，做完记录事实和过程体验。',
-        acceptanceCriteria: zone == 'comfort' ? '只做2分钟即可。' : '完成5-10分钟，并留下一个事实记录。',
-        actionableStep: actionTitle,
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: minutes,
-        sequenceOrder: 2,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'first_action',
-        tempParentNodeId: 'entry',
+      node(
+        id: 'baseline_action',
+        parentId: 'baseline',
+        relation: 'sequence',
+        type: 'action',
+        title: '写下目标起点与完成标准',
+        description: '这份记录为后续步骤提供已知条件。',
+        criteria: '至少写出当前状态、希望达到的状态、期限和一个可观察完成标准。',
+        action: '建立一份“$goalTitle 求解记录”，填写当前状态、目标状态、期限和完成证据。',
+        actionWhen: '现在或今天第一个不被打断的5分钟；打开手机备忘录后立即开始。',
+        actionWhere: '手机备忘录、纸质笔记或电脑文档。',
+        actionObject: '目标“$goalTitle”的当前状态、目标状态、期限和完成证据。',
+        actionProcedure: '新建标题为“$goalTitle 求解记录”的笔记；依次写四个小标题“现在是、要达到、最晚时间、完成证据”；每个标题下至少写一句。',
+        actionOutput: '一份包含四个已填写标题的目标起点记录。',
+        question: '这些信息是否足以判断下一步，而不是继续猜测？',
+        facts: '目标“$goalTitle”已被提出。',
+        assumptions: '用户能够通过简短记录补齐最关键的信息。',
+        evidence: '一段包含起点、目标状态、期限和完成标准的文字。',
+        rule: '四项信息齐全则成功；缺哪一项就只补哪一项。',
+        order: 2,
+        duration: zone == 'comfort' ? 2 : 5,
       ),
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'sub_problem',
-        title: '子问题B：复盘并选择下一步',
-        description: '根据成功/失败反馈调整动作，不轻易推翻整套方案。',
-        acceptanceCriteria: '复盘中至少得到一个替代步骤或下一步。',
-        actionableStep: '完成后记录：成功/失败、阻力、下一步替代动作。',
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: 5,
-        sequenceOrder: 3,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'review',
-        tempParentNodeId: 'root',
+      node(
+        id: 'prepare',
+        parentId: 'root',
+        relation: 'and',
+        type: 'sub_problem',
+        title: '准备执行目标所需的最低条件',
+        description: '只处理会直接阻止关键行动的条件，不无限准备。',
+        criteria: '执行关键行动所必需的工具、材料、时间和环境均达到最低可用状态。',
+        question: '缺少哪一个条件会让关键行动无法发生？',
+        facts: '候选关键行动是“$actionTitle”。',
+        assumptions: '主要阻力可以通过一次最小准备动作降低。',
+        evidence: '工具、材料、时间段或协作对象已经就位。',
+        rule: '最低条件具备即停止准备并进入执行；非必要准备不继续扩张。',
+        dependencies: const <String>['baseline_action'],
+        order: 3,
+      ),
+      node(
+        id: 'prepare_action',
+        parentId: 'prepare',
+        relation: 'sequence',
+        type: 'action',
+        title: '移除一个最直接的执行阻力',
+        description: '只选择当前证据最明确、能立刻处理的一个阻力。',
+        criteria: '完成一个能让“$actionTitle”更容易开始的环境、工具或时间安排。',
+        action: '从起点记录中选择一个明确阻力，并完成一项可见的准备。',
+        actionWhen: '完成目标起点记录后立即进行，最多5分钟。',
+        actionWhere: '阻力实际发生的工作位置；使用日历、文件夹或目标所需工具。',
+        actionObject: '起点记录中写下的第一个明确阻力。',
+        actionProcedure: '圈出一个会阻止下一步的具体障碍；只选择一种处理：把所需工具放到手边、把必要文件打开、或在日历中锁定一个时间段；完成后截图或勾选。',
+        actionOutput: '一个已经就位的工具/文件，或一个已保存的具体日程。',
+        question: '这个调整是否直接降低了关键行动的开始成本？',
+        facts: '起点记录已经指出一个主要阻力。',
+        assumptions: '处理该阻力会提高关键行动发生的可能性。',
+        evidence: '可看到已准备的工具、材料、日程或环境变化。',
+        rule: '阻力被实际移除则成功；没有变化则选择同一父问题下的另一准备动作。',
+        dependencies: const <String>['baseline_action'],
+        order: 4,
+      ),
+      node(
+        id: 'execute_action',
+        parentId: 'prepare',
+        relation: 'sequence',
+        type: 'action',
+        title: '执行一次关键目标动作',
+        description: '用一次现实行动验证当前路径能否产生与目标有关的进展。',
+        criteria: zone == 'comfort' ? '执行2分钟并留下一个可观察产出。' : '执行5-10分钟并留下一个可观察产出。',
+        action: '把“$actionTitle”完成一个可观察的最小片段，并保存产出。',
+        actionWhen: zone == 'panic' ? '在已确认的最早可用45分钟时段开始。' : '完成准备动作后，在今天预留的${zone == 'comfort' ? '2' : '10'}分钟内开始。',
+        actionWhere: '使用刚刚准备好的工具、文件或实际工作场景。',
+        actionObject: '“$actionTitle”中能够独立保存或核对的第一个最小片段。',
+        actionProcedure: '打开所需工具；只处理一个最小片段；过程中不扩展到第二项；结束时保存、拍照、录音或勾选完成。',
+        actionOutput: '一个与“$actionTitle”直接相关、可保存或查看的最小产出。',
+        question: '这次行动是否产生了能推动“$goalTitle”的实际产出？',
+        facts: '起点和最低准备条件已经完成。',
+        assumptions: '当前候选行动能够产生与目标直接相关的反馈。',
+        evidence: '实际耗时、完成产出、遇到的具体阻力和下一步信息。',
+        rule: '达到验收标准则进入验证阶段；失败则在同一父问题下选择替代动作，不立即推翻整套方案。',
+        dependencies: const <String>['baseline_action', 'prepare_action'],
+        order: 5,
+      ),
+      node(
+        id: 'verify',
+        parentId: 'root',
+        relation: 'dependency',
+        type: 'sub_problem',
+        title: '验证这条路径是否真的推动目标',
+        description: '比较行动前后变化，决定继续、调整或切换备用方案。',
+        criteria: '能够根据行动证据说明继续、调整或换路的理由。',
+        question: '现有结果支持继续当前路径，还是说明某个前提不成立？',
+        facts: '关键行动已产生一次现实结果。',
+        assumptions: '一次结果足以决定下一小步，但通常不足以证明整个方案必然有效。',
+        evidence: '行动产出、阻力记录和与目标标准的差距变化。',
+        rule: '有正向变化则继续；局部失败则换叶节点；关键前提被证伪时再考虑备用方案。',
+        dependencies: const <String>['execute_action'],
+        order: 6,
+      ),
+      node(
+        id: 'verify_action',
+        parentId: 'verify',
+        relation: 'sequence',
+        type: 'action',
+        title: '记录结果并决定下一小步',
+        description: '把成功或失败转换成下一次求解信息。',
+        criteria: '记录实际结果、与验收标准的差距，以及下一次继续或替换的具体动作。',
+        action: '在同一份求解记录中追加本轮结果和下一动作。',
+        actionWhen: '关键动作结束后立即进行，限定3分钟。',
+        actionWhere: '打开前面创建的“$goalTitle 求解记录”。',
+        actionObject: '本轮实际产出、验收结果和遇到的具体阻力。',
+        actionProcedure: '追加三行：“实际产出：”“是否达到标准：”“下一次具体动作：”；每行填写一句，下一动作必须包含动词、对象和数量。',
+        actionOutput: '一条包含实际产出、验收结论和下一具体动作的复盘记录。',
+        question: '这份记录能否明确支持下一次决策？',
+        facts: '本轮行动结果已经发生。',
+        assumptions: '如实记录能减少重复试错。',
+        evidence: '一条包含结果、差距和下一动作的复盘记录。',
+        rule: '能明确下一动作则成功；仍无法判断时补一次低成本验证，不直接重构全方案。',
+        dependencies: const <String>['execute_action'],
+        order: 7,
+        duration: 3,
       ),
     ];
   }
 
-  String _deepProblemSolutionSchema() => '''
-额外要求：除了原有字段，你必须增加 solutionPlans 数组，至少3个方案：舒适区、拉伸区、恐慌区。
-每个方案都要体现不同科学方法，例如问题分解、WOOP/心理对比、执行意图、行为激活、设计思维、反馈调节、风险预案等。
-每个方案都必须包含 nodes 数组，用父子节点表达“顶层问题→子问题→更小子问题→底层可执行动作”。
-节点之间可以是 tree/linear/network 关系，但必须给 parentId；底层 action 节点必须是用户现实中可直接执行的动作。
-未被用户选中的方案会保存为备用方案，因此每个方案都要完整可用。
-
-solutionPlans 的结构：
-[
-  {
-    "title": "方案名称",
-    "methodName": "使用的方法",
-    "methodBasis": "科学依据/问题解决依据",
-    "zoneType": "comfort/stretch/panic",
-    "coreValueFocus": "如何体现目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌",
-    "summary": "方案摘要",
-    "riskNotes": "风险与适用边界",
-    "nodes": [
-      {"id":"root", "parentId":"", "relationType":"tree", "nodeType":"problem", "title":"顶层问题", "description":"", "acceptanceCriteria":"", "actionableStep":"", "zoneType":"stretch", "difficultyScore":5, "estimatedMinutes":10, "sequenceOrder":0},
-      {"id":"a", "parentId":"root", "relationType":"tree", "nodeType":"sub_problem", "title":"子问题", "description":"", "acceptanceCriteria":"", "actionableStep":"", "zoneType":"stretch", "difficultyScore":4, "estimatedMinutes":8, "sequenceOrder":1},
-      {"id":"a1", "parentId":"a", "relationType":"tree", "nodeType":"action", "title":"底层动作", "description":"", "acceptanceCriteria":"", "actionableStep":"具体到时间/地点/对象/动作/完成标准", "zoneType":"stretch", "difficultyScore":3, "estimatedMinutes":5, "sequenceOrder":2}
-    ]
-  }
-]
-''';
 
   List<TodoGoalSolutionPlan> _readPlans(Map<String, dynamic> map) {
     final value = _readDynamic(map, const <String>[
@@ -709,6 +1153,15 @@ solutionPlans 的结构：
       }
     }
     return plans;
+  }
+
+  bool _isConcreteAlternativeStep(TodoGoalAlternativeStep step) {
+    final fields = <String>[step.actionWhen, step.actionWhere, step.actionObject, step.actionProcedure, step.actionOutput, step.minimumStandard];
+    const placeholders = <String>['具体时间或启动触发', '具体地点、页面或工具', '明确处理对象', '按顺序写出动词', '执行后留下的文件'];
+    if (fields.any((field) => field.trim().length < 4 || placeholders.any((placeholder) => field.contains(placeholder)))) return false;
+    final hasVerb = RegExp(r'打开|进入|新建|填写|写下|发送|拨打|搜索|筛选|下载|上传|朗读|录制|练习|完成|整理|比较|测量|预约|询问|联系|保存|拍照|勾选|运行|修改|创建').hasMatch(step.actionProcedure);
+    final hasAmount = RegExp(r'\d+|一份|一个|一条|一次|至少|每个|全部').hasMatch('${step.actionWhen}${step.actionProcedure}${step.minimumStandard}');
+    return hasVerb && hasAmount;
   }
 
   List<TodoGoalAlternativeStep> _readAlternativeSteps(Map<String, dynamic> map) {
@@ -878,8 +1331,78 @@ solutionPlans 的结构：
 
   String _read(Map<String, dynamic> map, String key, String fallback) {
     final value = _readDynamic(map, _fieldAliases(key));
-    final text = value == null ? '' : value.toString().trim();
+    final text = _toUserFacingText(value, fieldKey: key);
     return text.isEmpty ? fallback : text;
+  }
+
+  String _toUserFacingText(dynamic value, {required String fieldKey}) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    if (value is List) {
+      final lines = <String>[];
+      for (var index = 0; index < value.length; index++) {
+        final item = value[index];
+        final text = item is Map
+            ? _mapToUserFacingText(Map<String, dynamic>.from(item), fieldKey: fieldKey, index: index)
+            : item.toString().trim();
+        if (text.isNotEmpty) lines.add(text);
+      }
+      return lines.join('\n');
+    }
+    if (value is Map) {
+      return _mapToUserFacingText(Map<String, dynamic>.from(value), fieldKey: fieldKey, index: 0);
+    }
+    return value.toString().trim();
+  }
+
+  String _mapToUserFacingText(Map<String, dynamic> value, {required String fieldKey, required int index}) {
+    String read(List<String> keys) {
+      for (final key in keys) {
+        final item = value[key];
+        if (item != null && item.toString().trim().isNotEmpty) return item.toString().trim();
+      }
+      return '';
+    }
+
+    if (fieldKey == 'possibleDirections') {
+      final direction = read(const <String>['direction', 'title', 'name', '方向', '路径']);
+      final conditions = read(const <String>['applicableConditions', 'applicable_conditions', 'conditions', '适用条件']);
+      final benefits = read(const <String>['benefits', 'possibleBenefits', '收益', '可能收获']);
+      final costs = read(const <String>['costsAndRisks', 'costs_and_risks', 'risks', '成本风险', '需要考虑']);
+      return <String>[
+        '${index + 1}. ${direction.isEmpty ? '一种可选路径' : direction}',
+        if (conditions.isNotEmpty) '适合：$conditions',
+        if (benefits.isNotEmpty) '可能收获：$benefits',
+        if (costs.isNotEmpty) '需要考虑：$costs',
+      ].join('\n');
+    }
+
+    if (fieldKey == 'referenceCases') {
+      final title = read(const <String>['title', 'case', 'scenario', '案例', '情境']);
+      final choice = read(const <String>['choice', 'approach', 'action', '选择', '做法']);
+      final lesson = read(const <String>['lesson', 'insight', 'result', '启发', '结果']);
+      return <String>[
+        '${index + 1}. ${title.isEmpty ? '参考情境' : title}',
+        if (choice.isNotEmpty) choice,
+        if (lesson.isNotEmpty) '可以借鉴：$lesson',
+      ].join('\n');
+    }
+
+    const labels = <String, String>{
+      'interpretation': '一种可能',
+      'reason': '原因',
+      'condition': '适合',
+      'benefit': '可能收获',
+      'risk': '需要考虑',
+      'question': '想一想',
+    };
+    final parts = <String>[];
+    for (final entry in value.entries) {
+      final text = _toUserFacingText(entry.value, fieldKey: fieldKey);
+      if (text.isEmpty) continue;
+      parts.add('${labels[entry.key] ?? ''}${labels.containsKey(entry.key) ? '：' : ''}$text');
+    }
+    return parts.join('\n');
   }
 
   int _readInt(Map<String, dynamic> map, String key, int fallback) {
