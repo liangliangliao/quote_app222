@@ -105,6 +105,20 @@ class TodoGoalDao {
         mood_score INTEGER DEFAULT 0,
         meaning_score INTEGER DEFAULT 0,
         process_score INTEGER DEFAULT 0,
+        body_signal TEXT,
+        emotion_label TEXT,
+        cognition TEXT,
+        authentic_truth TEXT,
+        feedback_source TEXT,
+        feedback_content TEXT,
+        feedback_learning TEXT,
+        core_pattern TEXT,
+        core_value TEXT,
+        action_experiment TEXT,
+        action_when TEXT,
+        action_evidence TEXT,
+        follow_up_question TEXT,
+        review_mode TEXT DEFAULT 'daily',
         created_at_ms INTEGER NOT NULL
       )
     ''');
@@ -319,6 +333,23 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_profiles', 'ai_provider', 'TEXT');
     await _addColumnIfMissing(db, 'goal_profiles', 'ai_model_label', 'TEXT');
     await _addColumnIfMissing(db, 'goal_profiles', 'ai_used_fallback', 'INTEGER DEFAULT 0');
+
+    // Reflective Growth: structured time-in, ABCDE, feedback, authenticity,
+    // pattern and action-experiment evidence for old and new installations.
+    await _addColumnIfMissing(db, 'goal_reflections', 'body_signal', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'emotion_label', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'cognition', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'authentic_truth', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'feedback_source', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'feedback_content', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'feedback_learning', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'core_pattern', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'core_value', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'action_experiment', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'action_when', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'action_evidence', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'follow_up_question', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_reflections', 'review_mode', "TEXT DEFAULT 'daily'");
 
     await _addColumnIfMissing(db, 'goal_solution_plans', 'solution_id', "TEXT DEFAULT ''");
     await _addColumnIfMissing(db, 'goal_solution_plans', 'goal_id', "TEXT DEFAULT ''");
@@ -933,6 +964,20 @@ class TodoGoalDao {
     int moodScore = 0,
     int meaningScore = 0,
     int processScore = 0,
+    String bodySignal = '',
+    String emotionLabel = '',
+    String cognition = '',
+    String authenticTruth = '',
+    String feedbackSource = '',
+    String feedbackContent = '',
+    String feedbackLearning = '',
+    String corePattern = '',
+    String coreValue = '',
+    String actionExperiment = '',
+    String actionWhen = '',
+    String actionEvidence = '',
+    String followUpQuestion = '',
+    String reviewMode = 'daily',
   }) async {
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -951,6 +996,20 @@ class TodoGoalDao {
       'mood_score': moodScore,
       'meaning_score': meaningScore,
       'process_score': processScore,
+      'body_signal': bodySignal,
+      'emotion_label': emotionLabel,
+      'cognition': cognition,
+      'authentic_truth': authenticTruth,
+      'feedback_source': feedbackSource,
+      'feedback_content': feedbackContent,
+      'feedback_learning': feedbackLearning,
+      'core_pattern': corePattern,
+      'core_value': coreValue,
+      'action_experiment': actionExperiment,
+      'action_when': actionWhen,
+      'action_evidence': actionEvidence,
+      'follow_up_question': followUpQuestion,
+      'review_mode': reviewMode,
       'created_at_ms': now,
     });
     return id;

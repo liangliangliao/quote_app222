@@ -607,6 +607,8 @@ ${quote.translation}
           const SizedBox(height: 12),
           const _ReviewValueChecklistCard(),
           const SizedBox(height: 12),
+          _GrowthMapSnapshot(reflections: _reflections),
+          const SizedBox(height: 12),
           _SectionHeader(title: '最近复盘', subtitle: _reflections.isEmpty ? '完成或部分完成今日行动后，可在这里沉淀过程体验。' : '复盘不是自责，而是让目标继续靠近真实生活。'),
           if (_reflections.isEmpty) const _EmptyCard(text: '暂无复盘记录。'),
           ..._reflections.map((r) => _ReflectionCard(reflection: r)),
@@ -1392,6 +1394,17 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
   final _reflectionCtrl = TextEditingController();
   final _whatCtrl = TextEditingController();
   final _obstacleCtrl = TextEditingController();
+  final _bodyCtrl = TextEditingController();
+  final _emotionCtrl = TextEditingController();
+  final _cognitionCtrl = TextEditingController();
+  final _authenticCtrl = TextEditingController();
+  final _feedbackCtrl = TextEditingController();
+  final _feedbackLearningCtrl = TextEditingController();
+  final _valueCtrl = TextEditingController();
+  final _actionCtrl = TextEditingController();
+  final _actionWhenCtrl = TextEditingController();
+  final _evidenceCtrl = TextEditingController();
+  String _reviewMode = 'daily';
   bool _completed = true;
   String _resultStatus = 'success';
   bool _createNextStep = true;
@@ -1406,6 +1419,16 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
     _reflectionCtrl.dispose();
     _whatCtrl.dispose();
     _obstacleCtrl.dispose();
+    _bodyCtrl.dispose();
+    _emotionCtrl.dispose();
+    _cognitionCtrl.dispose();
+    _authenticCtrl.dispose();
+    _feedbackCtrl.dispose();
+    _feedbackLearningCtrl.dispose();
+    _valueCtrl.dispose();
+    _actionCtrl.dispose();
+    _actionWhenCtrl.dispose();
+    _evidenceCtrl.dispose();
     super.dispose();
   }
 
@@ -1439,6 +1462,14 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
         actionTitle: widget.step.title,
         completed: _completed,
         userReflection: _reflectionCtrl.text,
+        bodySignal: _bodyCtrl.text,
+        emotionLabel: _emotionCtrl.text,
+        cognition: _cognitionCtrl.text,
+        authenticTruth: _authenticCtrl.text,
+        feedbackContent: _feedbackCtrl.text,
+        feedbackLearning: _feedbackLearningCtrl.text,
+        coreValue: _valueCtrl.text,
+        reviewMode: _reviewMode,
       );
       TodoGoalStepRecoveryResult? recovery;
       if (!_completed) {
@@ -1466,7 +1497,7 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
       final recoveryText = recovery == null
           ? ''
           : '\n\n失败诊断：${recovery.failureDiagnosis}\n\n重启指导：${recovery.restartGuidance}\n\n替代步骤：$recoveryAlternativesText\n\n${recovery.restructureWarning}';
-      final aiSummary = '${review.summary}\n\n过程洞察：${review.processInsight}\n\n意义连接：${review.meaningConnection}\n\n可选下一步：${review.nextStepOptions}\n\n暂定建议：${review.tomorrowNextStep}\n\n由你决定：${review.decisionPrompt}\n\n${review.encouragement}$recoveryText';
+      final aiSummary = '${review.summary}\n\n事实镜像：${review.factReflection}\n\n身体与情绪：${review.bodySignal}；${review.emotionLabel}\n\n认知解释：${review.cognitionPattern}\n\n待确认模式：${review.growthPattern}\n\n价值问题：${review.valueQuestion}\n\n反馈消化：${review.feedbackInsight}\n\n真实表达：${review.authenticExpression}\n\n过程洞察：${review.processInsight}\n\n意义连接：${review.meaningConnection}\n\n行动实验：${review.actionExperiment}\n\n执行情境：${review.actionWhen}\n\n完成证据：${review.actionEvidence}\n\n行动后复盘：${review.followUpQuestion}\n\n可选下一步：${review.nextStepOptions}\n\n暂定建议：${review.tomorrowNextStep}\n\n由你决定：${review.decisionPrompt}\n\n${review.encouragement}$recoveryText';
       await _goalDao.addReflection(
         goalId: widget.step.goalId,
         stepId: widget.step.stepId,
@@ -1479,11 +1510,25 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
         moodScore: _moodScore,
         meaningScore: _meaningScore,
         processScore: _processScore,
+        bodySignal: _bodyCtrl.text.trim(),
+        emotionLabel: _emotionCtrl.text.trim(),
+        cognition: _cognitionCtrl.text.trim(),
+        authenticTruth: _authenticCtrl.text.trim(),
+        feedbackSource: _reviewMode == 'feedback' ? '他人反馈' : '自我复盘',
+        feedbackContent: _feedbackCtrl.text.trim(),
+        feedbackLearning: _feedbackLearningCtrl.text.trim(),
+        corePattern: review.growthPattern,
+        coreValue: _valueCtrl.text.trim(),
+        actionExperiment: _actionCtrl.text.trim().isEmpty ? review.actionExperiment : _actionCtrl.text.trim(),
+        actionWhen: _actionWhenCtrl.text.trim().isEmpty ? review.actionWhen : _actionWhenCtrl.text.trim(),
+        actionEvidence: _evidenceCtrl.text.trim().isEmpty ? review.actionEvidence : _evidenceCtrl.text.trim(),
+        followUpQuestion: review.followUpQuestion,
+        reviewMode: _reviewMode,
       );
       if (_createNextStep) {
         final alternative = recovery == null || recovery.alternatives.isEmpty ? null : await _chooseReviewAlternative(recovery.alternatives);
         final useReviewSuggestion = recovery == null ? await _confirmReviewSuggestion(review) : alternative != null;
-        final nextTitle = alternative?.title ?? (useReviewSuggestion ? review.tomorrowNextStep.trim() : '');
+        final nextTitle = alternative?.title ?? (_actionCtrl.text.trim().isNotEmpty ? _actionCtrl.text.trim() : (useReviewSuggestion ? (review.actionExperiment.trim().isEmpty ? review.tomorrowNextStep.trim() : review.actionExperiment.trim()) : ''));
         if (nextTitle.trim().isNotEmpty) {
           await _goalDao.createActionStep(
             goalId: widget.step.goalId,
@@ -1578,33 +1623,90 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
           const SizedBox(height: 12),
           _ContextualQuoteCard(momentTitle: '填写前提示', momentKey: 'review', seedOffset: step.stepId.hashCode, quote: todoGoalQuoteForMoment('review', seedOffset: step.stepId.hashCode), actionText: todoGoalQuoteActionForMoment('review')),
           const SizedBox(height: 12),
-          const _ReviewGuidanceCard(),
+          const _ReflectiveGrowthHero(),
           const SizedBox(height: 12),
-          _ResultStatusSelector(
-            value: _resultStatus,
-            onChanged: _busy ? null : (v) => setState(() {
-              _resultStatus = v;
-              _completed = v == 'success' || v == 'minimum';
-            }),
+          _ReviewModeSelector(value: _reviewMode, onChanged: _busy ? null : (value) => setState(() => _reviewMode = value)),
+          const SizedBox(height: 12),
+          _ReflectionStageCard(
+            number: '01',
+            eyebrow: 'PAUSE · TIME-IN',
+            title: '先暂停，再分析',
+            subtitle: '不需要立刻变得更好。先让身体和情绪进入记录。',
+            color: const Color(0xFFEEF2FF),
+            children: [
+              _ReflectiveTextField(controller: _bodyCtrl, label: '身体哪里最有感觉？', hint: '例如：肩膀紧、胸口发沉、呼吸变快'),
+              _ReflectiveTextField(controller: _emotionCtrl, label: '最真实的情绪是什么？', hint: '例如：焦虑、愤怒、失落、感激、平静'),
+            ],
           ),
-          TextField(controller: _whatCtrl, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '今天我具体做了什么（事实，不评价）', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          TextField(controller: _reflectionCtrl, minLines: 3, maxLines: 8, decoration: const InputDecoration(labelText: '过程中有什么体验、阻力或一点进步（为沿途而活）', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          TextField(controller: _obstacleCtrl, minLines: 2, maxLines: 5, decoration: const InputDecoration(labelText: '今天哪里把目标变成压力或逃避（可选）', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
+          _ReflectionStageCard(
+            number: '02',
+            eyebrow: 'ABCDE · REPLAY',
+            title: '把事实和解释分开',
+            subtitle: 'A 事实 · B 身体 · C 想法 · D 情绪，不急着评价自己。',
+            color: const Color(0xFFFFF7ED),
+            children: [
+              _ResultStatusSelector(
+                value: _resultStatus,
+                onChanged: _busy ? null : (v) => setState(() {
+                  _resultStatus = v;
+                  _completed = v == 'success' || v == 'minimum';
+                }),
+              ),
+              _ReflectiveTextField(controller: _whatCtrl, label: 'A · 发生了什么？我具体做了什么？', hint: '只写摄像机能记录到的事实', minLines: 2),
+              _ReflectiveTextField(controller: _cognitionCtrl, label: 'C · 我当时如何解释这件事？', hint: '例如：如果说错，大家会觉得我不专业', minLines: 2),
+              _ReflectiveTextField(controller: _reflectionCtrl, label: 'D · 过程里发生了什么？', hint: '体验、阻力、转折或一点进步', minLines: 3),
+              _ReflectiveTextField(controller: _obstacleCtrl, label: '哪里出现了压力、回避或卡点？', hint: '负面经验也是材料，不是人格结论', minLines: 2),
+            ],
+          ),
+          if (_reviewMode == 'feedback')
+            _ReflectionStageCard(
+              number: '03',
+              eyebrow: 'FEEDBACK · GIFT',
+              title: '消化反馈，不急着防御',
+              subtitle: '提取事实、评价、可用信息，也允许不全盘接受。',
+              color: const Color(0xFFF0FDF4),
+              children: [
+                _ReflectiveTextField(controller: _feedbackCtrl, label: '对方具体说了什么？', hint: '尽量保留原意，不先反驳', minLines: 3),
+                _ReflectiveTextField(controller: _feedbackLearningCtrl, label: '哪部分是事实？哪部分对我有用？', hint: '也可以写：哪些评价我不需要吸收', minLines: 3),
+                const _FeedbackMicroGuide(),
+              ],
+            ),
+          _ReflectionStageCard(
+            number: _reviewMode == 'feedback' ? '04' : '03',
+            eyebrow: 'TRUTH · INTEGRITY',
+            title: '看见真实与价值冲突',
+            subtitle: '不是追问“我哪里做错”，而是看自己有没有真实出现。',
+            color: const Color(0xFFFDF2F8),
+            children: [
+              _ReflectiveTextField(controller: _authenticCtrl, label: '我真正想表达、但没有表达的是什么？', hint: '是否讨好、夸大、掩饰、回避或说了违心话？', minLines: 3),
+              _ReflectiveTextField(controller: _valueCtrl, label: '我想守护什么价值？', hint: '真实、连接、成长、自由、责任、勇气……'),
+            ],
+          ),
+          _ReflectionStageCard(
+            number: _reviewMode == 'feedback' ? '05' : '04',
+            eyebrow: 'EXPERIMENT · REAL LIFE',
+            title: '把洞察压缩成小行动',
+            subtitle: '小、具体、可验证、允许 60 分完成，并回到现实关系。',
+            color: const Color(0xFFF5F3FF),
+            children: [
+              _ReflectiveTextField(controller: _actionCtrl, label: '下一次我要尝试什么？（可留空由 AI 生成）', hint: '例如：会议中说一句“我有一个不同角度”', minLines: 2),
+              _ReflectiveTextField(controller: _actionWhenCtrl, label: '在什么时间、对象、场景执行？', hint: '例如：明天 10:00 项目会，轮到方案讨论时'),
+              _ReflectiveTextField(controller: _evidenceCtrl, label: '什么证据代表我做了？', hint: '一句话、一次发送记录、一个具体产出'),
+            ],
+          ),
+          const SizedBox(height: 4),
           _ScoreSelector(title: '方向清晰度', value: _meaningScore, onChanged: _busy ? null : (v) => setState(() => _meaningScore = v)),
-          _ScoreSelector(title: '过程体验感', value: _processScore, onChanged: _busy ? null : (v) => setState(() => _processScore = v)),
+          _ScoreSelector(title: '过程觉察度', value: _processScore, onChanged: _busy ? null : (v) => setState(() => _processScore = v)),
           _ScoreSelector(title: '行动可持续感', value: _moodScore, onChanged: _busy ? null : (v) => setState(() => _moodScore = v)),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _createNextStep,
             onChanged: _busy ? null : (v) => setState(() => _createNextStep = v),
-            title: const Text('保存后自动生成明日最小一步'),
-            subtitle: const Text('复盘不是结束，而是把今天的经验变成下一步设计。'),
+            title: const Text('把行动实验加入明日一步', style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('洞察必须回到现实，但最终采用哪一步仍由你决定。'),
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(onPressed: _busy ? null : _save, icon: const Icon(Icons.auto_awesome), label: Text(_busy ? '正在保存...' : '生成 AI 复盘并落到明天')),
+          FilledButton.icon(onPressed: _busy ? null : _save, icon: const Icon(Icons.auto_awesome), label: Text(_busy ? '正在整理成长线索...' : '生成复盘镜像与行动卡')),
           if (_status.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(_status, style: TextStyle(color: _status.contains('失败') ? Colors.red.shade700 : const Color(0xFF6B7280))),
@@ -1616,6 +1718,176 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
 }
 
 
+
+
+class _ReflectiveGrowthHero extends StatelessWidget {
+  const _ReflectiveGrowthHero();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF23213D), Color(0xFF5B4B8A), Color(0xFFB66B78)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [BoxShadow(color: Color(0x2423213D), blurRadius: 24, offset: Offset(0, 10))],
+      ),
+      child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.auto_awesome, color: Color(0xFFFFD6A5), size: 18),
+          SizedBox(width: 7),
+          Text('REFLECTIVE GROWTH · 复行', style: TextStyle(color: Color(0xFFFFE8D6), fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+        ]),
+        SizedBox(height: 12),
+        Text('让经历，成为下一次真实行动', style: TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.w900, height: 1.2)),
+        SizedBox(height: 8),
+        Text('暂停 → 复盘 → 反馈 → 洞察 → 小行动 → 再实践', style: TextStyle(color: Color(0xFFE6E1F2), height: 1.5, fontWeight: FontWeight.w600)),
+        SizedBox(height: 14),
+        Wrap(spacing: 7, runSpacing: 7, children: [
+          _HeroPill('真实优先'),
+          _HeroPill('接纳现实'),
+          _HeroPill('反馈是信息'),
+          _HeroPill('行动胜于理解'),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _HeroPill extends StatelessWidget {
+  const _HeroPill(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(.13), borderRadius: BorderRadius.circular(99), border: Border.all(color: Colors.white24)),
+        child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+      );
+}
+
+class _ReviewModeSelector extends StatelessWidget {
+  const _ReviewModeSelector({required this.value, required this.onChanged});
+  final String value;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const modes = <(String, String, IconData)>[
+      ('daily', '复盘一件事', Icons.edit_note_rounded),
+      ('feedback', '处理一个反馈', Icons.forum_outlined),
+      ('conversation', '重要对话', Icons.record_voice_over_outlined),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('这次想从哪里进入？', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: _goalInk)),
+      const SizedBox(height: 9),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: modes.map((mode) {
+          final selected = value == mode.$1;
+          return ChoiceChip(
+            selected: selected,
+            onSelected: onChanged == null ? null : (_) => onChanged!(mode.$1),
+            avatar: Icon(mode.$3, size: 18, color: selected ? Colors.white : const Color(0xFF5B4B8A)),
+            label: Text(mode.$2),
+            labelStyle: TextStyle(color: selected ? Colors.white : _goalInk, fontWeight: FontWeight.w800),
+            selectedColor: const Color(0xFF5B4B8A),
+            backgroundColor: const Color(0xFFF7F5FA),
+            side: BorderSide(color: selected ? const Color(0xFF5B4B8A) : const Color(0xFFE5E0EA)),
+            showCheckmark: false,
+          );
+        }).toList(),
+      ),
+    ]);
+  }
+}
+
+class _ReflectionStageCard extends StatelessWidget {
+  const _ReflectionStageCard({required this.number, required this.eyebrow, required this.title, required this.subtitle, required this.color, required this.children});
+  final String number;
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0x14000000))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: Colors.white.withOpacity(.84), shape: BoxShape.circle),
+            child: Text(number, style: const TextStyle(color: Color(0xFF5B4B8A), fontWeight: FontWeight.w900)),
+          ),
+          const SizedBox(width: 11),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(eyebrow, style: const TextStyle(fontSize: 11, letterSpacing: 1.1, fontWeight: FontWeight.w900, color: Color(0xFF7C6A84))),
+            const SizedBox(height: 3),
+            Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: _goalInk)),
+            const SizedBox(height: 4),
+            Text(subtitle, style: const TextStyle(color: Color(0xFF625A68), height: 1.4)),
+          ])),
+        ]),
+        const SizedBox(height: 14),
+        ...children,
+      ]),
+    );
+  }
+}
+
+class _ReflectiveTextField extends StatelessWidget {
+  const _ReflectiveTextField({required this.controller, required this.label, required this.hint, this.minLines = 1});
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  final int minLines;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 11),
+        child: TextField(
+          controller: controller,
+          minLines: minLines,
+          maxLines: minLines + 3,
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: hint,
+            alignLabelWithHint: true,
+            filled: true,
+            fillColor: Colors.white.withOpacity(.9),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0x18000000))),
+          ),
+        ),
+      );
+}
+
+class _FeedbackMicroGuide extends StatelessWidget {
+  const _FeedbackMicroGuide();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(.75), borderRadius: BorderRadius.circular(14)),
+        child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.pause_circle_outline, color: Color(0xFF28765B)),
+          SizedBox(width: 9),
+          Expanded(child: Text('接收反馈三步：先暂停，不解释；再复述“我听到你说的是……”；最后询问一个具体例子。', style: TextStyle(color: Color(0xFF285947), height: 1.45, fontWeight: FontWeight.w700))),
+        ]),
+      );
+}
 
 class _AiCoachConsoleCard extends StatelessWidget {
   const _AiCoachConsoleCard({required this.activeGoal, required this.onClarify, required this.onAction, required this.onReview, required this.onCompass, this.onOpenGoal});
@@ -3218,6 +3490,84 @@ class _InfoBlock extends StatelessWidget {
   }
 }
 
+
+class _GrowthMapSnapshot extends StatelessWidget {
+  const _GrowthMapSnapshot({required this.reflections});
+  final List<TodoGoalReflection> reflections;
+
+  @override
+  Widget build(BuildContext context) {
+    final since = DateTime.now().subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+    final weekly = reflections.where((item) => item.createdAtMs >= since).toList();
+    final feedback = weekly.where((item) => item.feedbackContent.trim().isNotEmpty).length;
+    final truth = weekly.where((item) => item.authenticTruth.trim().isNotEmpty).length;
+    final actions = weekly.where((item) => item.actionExperiment.trim().isNotEmpty).length;
+    final patterns = <String, int>{};
+    for (final item in weekly) {
+      final value = item.corePattern.trim();
+      if (value.isNotEmpty) patterns[value] = (patterns[value] ?? 0) + 1;
+    }
+    final topPattern = patterns.entries.isEmpty ? '继续记录后，AI 会帮助你看见循环模式' : (patterns.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFFF7F5FA), Color(0xFFFFF8F2)]),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE9E2EC)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Icon(Icons.insights_outlined, color: Color(0xFF5B4B8A)), SizedBox(width: 8), Text('成长地图 · 本周', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk))]),
+        const SizedBox(height: 5),
+        const Text('不是给你打分，而是观察觉察是否正在进入真实行动。', style: TextStyle(color: Color(0xFF6B7280))),
+        const SizedBox(height: 13),
+        Row(children: [
+          Expanded(child: _GrowthMetric(value: '${weekly.length}', label: '复盘')),
+          const SizedBox(width: 8),
+          Expanded(child: _GrowthMetric(value: '$feedback', label: '反馈消化')),
+          const SizedBox(width: 8),
+          Expanded(child: _GrowthMetric(value: '$truth', label: '真实表达')),
+          const SizedBox(width: 8),
+          Expanded(child: _GrowthMetric(value: '$actions', label: '行动实验')),
+        ]),
+        const SizedBox(height: 12),
+        Text('正在浮现的模式：$topPattern', maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF5B4B8A), height: 1.4, fontWeight: FontWeight.w800)),
+      ]),
+    );
+  }
+}
+
+class _GrowthMetric extends StatelessWidget {
+  const _GrowthMetric({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(.8), borderRadius: BorderRadius.circular(13)),
+        child: Column(children: [
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF5B4B8A))),
+          const SizedBox(height: 2),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280), fontWeight: FontWeight.w700)),
+        ]),
+      );
+}
+
+class _ReviewModePill extends StatelessWidget {
+  const _ReviewModePill({required this.mode});
+  final String mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (mode) { 'feedback' => '反馈', 'conversation' => '对话', _ => '日常' };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(color: const Color(0xFFF0ECF7), borderRadius: BorderRadius.circular(99)),
+      child: Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF5B4B8A), fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
 class _ReflectionCard extends StatelessWidget {
   const _ReflectionCard({required this.reflection});
   final TodoGoalReflection reflection;
@@ -3230,10 +3580,36 @@ class _ReflectionCard extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(reflection.goalTitle.trim().isEmpty ? '目标复盘' : reflection.goalTitle, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
           const SizedBox(height: 4),
-          Text(reflection.reflectionDate, style: const TextStyle(color: Color(0xFF6B7280))),
-          if (reflection.whatDone.trim().isNotEmpty) _MiniLine(label: '做了什么', text: reflection.whatDone),
-          if (reflection.processExperience.trim().isNotEmpty) _MiniLine(label: '过程体验', text: reflection.processExperience),
-          if (reflection.aiSummary.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(reflection.aiSummary, style: const TextStyle(height: 1.45))),
+          Row(children: [
+            Text(reflection.reflectionDate, style: const TextStyle(color: Color(0xFF6B7280))),
+            const Spacer(),
+            _ReviewModePill(mode: reflection.reviewMode),
+          ]),
+          if (reflection.whatDone.trim().isNotEmpty) _MiniLine(label: '事实', text: reflection.whatDone),
+          if (reflection.bodySignal.trim().isNotEmpty || reflection.emotionLabel.trim().isNotEmpty) _MiniLine(label: '身心', text: [reflection.bodySignal, reflection.emotionLabel].where((e) => e.trim().isNotEmpty).join(' · ')),
+          if (reflection.cognition.trim().isNotEmpty) _MiniLine(label: '当时解释', text: reflection.cognition),
+          if (reflection.authenticTruth.trim().isNotEmpty) _MiniLine(label: '未表达的真实', text: reflection.authenticTruth),
+          if (reflection.feedbackLearning.trim().isNotEmpty) _MiniLine(label: '反馈学习', text: reflection.feedbackLearning),
+          if (reflection.corePattern.trim().isNotEmpty) _MiniLine(label: '待确认模式', text: reflection.corePattern),
+          if (reflection.coreValue.trim().isNotEmpty) _MiniLine(label: '价值', text: reflection.coreValue),
+          if (reflection.actionExperiment.trim().isNotEmpty) Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFF5F3FF), borderRadius: BorderRadius.circular(14)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('行动实验', style: TextStyle(color: Color(0xFF5B4B8A), fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              Text(reflection.actionExperiment, style: const TextStyle(height: 1.4, fontWeight: FontWeight.w700)),
+              if (reflection.actionWhen.trim().isNotEmpty) Text('情境：${reflection.actionWhen}', style: const TextStyle(height: 1.4, color: Color(0xFF625A68))),
+              if (reflection.actionEvidence.trim().isNotEmpty) Text('证据：${reflection.actionEvidence}', style: const TextStyle(height: 1.4, color: Color(0xFF625A68))),
+            ]),
+          ),
+          if (reflection.aiSummary.trim().isNotEmpty) ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 6),
+            title: const Text('查看 AI 复盘镜像', style: TextStyle(fontWeight: FontWeight.w800)),
+            children: [Align(alignment: Alignment.centerLeft, child: Text(reflection.aiSummary, style: const TextStyle(height: 1.5)))],
+          ),
         ]),
       ),
     );
