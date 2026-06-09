@@ -383,7 +383,7 @@ class TodoGoalDao {
     }
   }
 
-  Future<List<Map<String, Object?>>> _tableInfo(Database db, String table) async {
+  Future<List<Map<String, Object?>>> _tableInfo(DatabaseExecutor db, String table) async {
     return db.rawQuery('PRAGMA table_info($table)');
   }
 
@@ -410,7 +410,7 @@ class TodoGoalDao {
   }
 
   Future<Map<String, Object?>> _compatibleInsertValues(
-    Database db,
+    DatabaseExecutor db,
     String table,
     Map<String, Object?> values, {
     Map<String, String> aliases = const <String, String>{},
@@ -1036,8 +1036,49 @@ class TodoGoalDao {
     }
   }
 
+  Future<void> replaceSolutionPlanTree({
+    required String goalId,
+    required String sourceTaskId,
+    required String solutionId,
+    required TodoGoalSolutionPlan plan,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.delete('goal_problem_nodes', where: 'solution_id = ?', whereArgs: [solutionId]);
+      final updated = await txn.update(
+        'goal_solution_plans',
+        <String, Object?>{
+          'source_task_id': sourceTaskId,
+          'title': plan.title,
+          'method_name': plan.methodName,
+          'method_basis': plan.methodBasis,
+          'zone_type': _normalizeZone(plan.zoneType),
+          'core_value_focus': plan.coreValueFocus,
+          'summary': plan.summary,
+          'risk_notes': plan.riskNotes,
+          'problem_definition': plan.problemDefinition,
+          'known_facts': plan.knownFacts,
+          'key_assumptions': plan.keyAssumptions,
+          'root_cause_analysis': plan.rootCauseAnalysis,
+          'option_comparison': plan.optionComparison,
+          'evidence_plan': plan.evidencePlan,
+          'success_metrics': plan.successMetrics,
+          'stop_conditions': plan.stopConditions,
+          'user_choice_guidance': plan.userChoiceGuidance,
+          'raw_json': jsonEncode(plan.toJson()),
+          'updated_at_ms': now,
+        },
+        where: 'solution_id = ? AND goal_id = ?',
+        whereArgs: [solutionId, goalId],
+      );
+      if (updated != 1) throw StateError('Solution plan not found: $solutionId');
+      await _insertProblemNodes(db: txn, goalId: goalId, solutionId: solutionId, nodes: plan.nodes, now: now);
+    });
+  }
+
   Future<void> _insertProblemNodes({
-    required Database db,
+    required DatabaseExecutor db,
     required String goalId,
     required String solutionId,
     required List<TodoGoalProblemNode> nodes,

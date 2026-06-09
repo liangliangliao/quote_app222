@@ -110,19 +110,68 @@ class TodoGoalAiService {
   Future<TodoGoalSolutionGenerationResult> generateProblemSolutions({
     required TodoTaskRecord task,
     required TodoGoalAnalysisResult analysis,
-    void Function(String message, int completedBatches, int totalBatches)? onProgress,
   }) async {
     final state = await getGlobalAiState();
-    final fallbackPlans = _fallbackPlans(analysis.goalTitle, analysis.todayMinimumAction);
-    const totalBatches = 4;
+    final localOutlines = _fallbackPlans(analysis.goalTitle, analysis.todayMinimumAction).map(_withoutProblemNodes).toList(growable: false);
     TodoGoalSolutionGenerationResult fallback() => TodoGoalSolutionGenerationResult(
-          plans: fallbackPlans,
+          plans: localOutlines,
           provider: 'local',
           modelLabel: state['label'] ?? '本地策略',
           usedFallback: true,
         );
     if (state['available'] != '1') return fallback();
 
+    final context = _solutionContext(task: task, analysis: analysis);
+    try {
+      final raw = await _ai.generateText(
+        prompt: '''$context
+本次只生成三条问题解决“方案概览”，不要生成 nodes、problemTree、步骤或行动树。
+分别提供 comfort、stretch、panic 三条原理不同的候选路径。每条只填写：title、methodName、methodBasis、zoneType、coreValueFocus、summary、riskNotes、problemDefinition、knownFacts、keyAssumptions、rootCauseAnalysis、optionComparison、evidencePlan、successMetrics、stopConditions、userChoiceGuidance。
+用户稍后会手动点击某条方案，再单独请求该方案的问题树。不得提前生成节点，不得替用户选择。
+只输出合法 JSON：{"solutionPlans":[{...},{...},{...}]}。''',
+        purpose: 'microsoft_todo.goal_solution_outlines',
+        systemPrompt: '你是严谨的现实问题求解器。本次只比较三条方案概览，不生成任何问题树节点，不虚构事实，不替用户选择。只输出合法JSON。',
+        maxTokens: 3000,
+        expectJson: true,
+        temperature: 0.2,
+      );
+      final parsed = _extractJsonObject(raw);
+      var outlines = _readPlans(parsed);
+      if (outlines.isEmpty) outlines = _readPlans(_resolveAnalysisPayload(parsed));
+      final byZone = <String, TodoGoalSolutionPlan>{};
+      for (final plan in outlines) {
+        if (!byZone.containsKey(plan.zoneType)) byZone[plan.zoneType] = _withoutProblemNodes(plan);
+      }
+      final completed = <TodoGoalSolutionPlan>[];
+      for (final zone in const <String>['comfort', 'stretch', 'panic']) {
+        completed.add(byZone[zone] ?? localOutlines.firstWhere((plan) => plan.zoneType == zone));
+      }
+      return TodoGoalSolutionGenerationResult(
+        plans: completed,
+        provider: byZone.length == 3 ? (state['provider'] ?? 'ai') : 'hybrid',
+        modelLabel: state['label'] ?? 'AI',
+        rawResponse: raw,
+        usedFallback: byZone.length != 3,
+      );
+    } catch (_) {
+      return fallback();
+    }
+  }
+
+  Future<TodoGoalSolutionGenerationResult> generateProblemTree({
+    required TodoTaskRecord task,
+    required TodoGoalAnalysisResult analysis,
+    required TodoGoalSolutionPlan outline,
+  }) async {
+    final state = await getGlobalAiState();
+    if (state['available'] != '1') {
+      return TodoGoalSolutionGenerationResult(
+        plans: const <TodoGoalSolutionPlan>[],
+        provider: 'local',
+        modelLabel: state['label'] ?? '本地策略',
+        usedFallback: true,
+      );
+    }
     final templates = await _promptConfig.load();
     final renderedPrompt = _promptConfig.renderSolutionPrompt(
       templates,
@@ -136,7 +185,61 @@ class TodoGoalAiService {
       taskBody: task.bodyText,
     );
     final solutionGuidance = renderedPrompt.split('只输出 JSON：').first;
-    final context = '''
+    final context = _solutionContext(task: task, analysis: analysis);
+    final zone = outline.zoneType;
+    final zoneName = zone == 'comfort' ? '舒适区' : (zone == 'panic' ? '恐慌区' : '拉伸区');
+    try {
+      final raw = await _ai.generateText(
+        prompt: '''$solutionGuidance
+$context
+
+用户已手动选择为下面这条“$zoneName”候选方案生成问题树：
+${jsonEncode(_withoutProblemNodes(outline).toJson())}
+
+本次请求只生成这一条方案的问题树：
+- 只返回一个方案，放在 solutionPlans 数组中；zoneType 必须是 "$zone"。
+- 根节点到可执行叶节点至少三层，总节点建议 6-12 个。
+- 父节点必须能由子问题完成结果逻辑回推；dependencies 只引用本次节点 id。
+- action 叶节点必须返回 actionWhen、actionWhere、actionObject、actionProcedure、actionOutput、acceptanceCriteria、evidenceNeeded。
+- 叶节点必须是现实中可以立即执行和验收的动作；信息不足时生成具体的信息获取动作，不得虚构事实。
+只输出合法 JSON。''',
+        purpose: 'microsoft_todo.goal_solution_tree_$zone',
+        systemPrompt: '你是严谨的现实问题求解器。本次只展开用户手动指定的一条候选方案。像证明题一样给出父子推导和现实动作，不生成其他方案。只输出合法JSON。',
+        maxTokens: 6000,
+        expectJson: true,
+        temperature: 0.2,
+      );
+      final parsed = _extractJsonObject(raw);
+      var candidates = _readPlans(parsed);
+      if (candidates.isEmpty) candidates = _readPlans(_resolveAnalysisPayload(parsed));
+      for (final candidate in candidates) {
+        if (candidate.zoneType == zone && _isRigorousPlan(candidate)) {
+          return TodoGoalSolutionGenerationResult(
+            plans: <TodoGoalSolutionPlan>[candidate],
+            provider: state['provider'] ?? 'ai',
+            modelLabel: state['label'] ?? 'AI',
+            rawResponse: raw,
+          );
+        }
+      }
+      return TodoGoalSolutionGenerationResult(
+        plans: const <TodoGoalSolutionPlan>[],
+        provider: state['provider'] ?? 'ai',
+        modelLabel: state['label'] ?? 'AI',
+        rawResponse: raw,
+        usedFallback: true,
+      );
+    } catch (_) {
+      return TodoGoalSolutionGenerationResult(
+        plans: const <TodoGoalSolutionPlan>[],
+        provider: state['provider'] ?? 'ai',
+        modelLabel: state['label'] ?? 'AI',
+        usedFallback: true,
+      );
+    }
+  }
+
+  String _solutionContext({required TodoTaskRecord task, required TodoGoalAnalysisResult analysis}) => '''
 用户目标：${analysis.goalTitle}
 结果目标：${analysis.resultGoal}
 价值目标：${analysis.valueGoal}
@@ -146,104 +249,34 @@ class TodoGoalAiService {
 当前最小行动：${analysis.todayMinimumAction}
 用户补充：${task.bodyText}
 ''';
-    final rawResponses = <String>[];
-    var usedFallback = false;
-    onProgress?.call('第 1/4 批：先比较三条解决路径，不生成问题树', 0, totalBatches);
 
-    List<TodoGoalSolutionPlan> outlines = const <TodoGoalSolutionPlan>[];
-    try {
-      final outlineRaw = await _ai.generateText(
-        prompt: '''$context
-请只完成“方案概览”这一批，不要生成 nodes、步骤或问题树。
-输出 comfort、stretch、panic 三条原理不同的候选路径，帮助用户比较后自行选择。每条只填写：title、methodName、methodBasis、zoneType、coreValueFocus、summary、riskNotes、problemDefinition、knownFacts、keyAssumptions、rootCauseAnalysis、optionComparison、evidencePlan、successMetrics、stopConditions、userChoiceGuidance。
-只输出合法 JSON：{"solutionPlans":[{...},{...},{...}]}。''',
-        purpose: 'microsoft_todo.goal_solution_outlines',
-        systemPrompt: '你是严谨的现实问题求解器。本轮只生成三个方案概览，不生成问题树，不替用户选择，不虚构事实。只输出合法JSON。',
-        maxTokens: 3000,
-        expectJson: true,
-        temperature: 0.2,
+  TodoGoalSolutionPlan _withoutProblemNodes(TodoGoalSolutionPlan plan) => TodoGoalSolutionPlan(
+        solutionId: plan.solutionId,
+        goalId: plan.goalId,
+        sourceTaskId: plan.sourceTaskId,
+        title: plan.title,
+        methodName: plan.methodName,
+        methodBasis: plan.methodBasis,
+        zoneType: plan.zoneType,
+        coreValueFocus: plan.coreValueFocus,
+        summary: plan.summary,
+        riskNotes: plan.riskNotes,
+        isSelected: plan.isSelected,
+        status: plan.status,
+        sortOrder: plan.sortOrder,
+        rawJson: plan.rawJson,
+        createdAtMs: plan.createdAtMs,
+        updatedAtMs: plan.updatedAtMs,
+        problemDefinition: plan.problemDefinition,
+        knownFacts: plan.knownFacts,
+        keyAssumptions: plan.keyAssumptions,
+        rootCauseAnalysis: plan.rootCauseAnalysis,
+        optionComparison: plan.optionComparison,
+        evidencePlan: plan.evidencePlan,
+        successMetrics: plan.successMetrics,
+        stopConditions: plan.stopConditions,
+        userChoiceGuidance: plan.userChoiceGuidance,
       );
-      rawResponses.add(outlineRaw);
-      final parsed = _extractJsonObject(outlineRaw);
-      outlines = _readPlans(parsed);
-      if (outlines.isEmpty) outlines = _readPlans(_resolveAnalysisPayload(parsed));
-    } catch (_) {
-      usedFallback = true;
-    }
-    onProgress?.call('方案概览已完成，开始逐个生成问题树', 1, totalBatches);
-
-    TodoGoalSolutionPlan outlineForZone(String zone) {
-      for (final outline in outlines) {
-        if (outline.zoneType == zone) return outline;
-      }
-      usedFallback = true;
-      return fallbackPlans.firstWhere((plan) => plan.zoneType == zone);
-    }
-
-    final completedPlans = <TodoGoalSolutionPlan>[];
-    const zones = <String>['comfort', 'stretch', 'panic'];
-    for (var i = 0; i < zones.length; i++) {
-      final zone = zones[i];
-      final outline = outlineForZone(zone);
-      final zoneName = zone == 'comfort' ? '舒适区' : (zone == 'panic' ? '恐慌区' : '拉伸区');
-      onProgress?.call('第 ${i + 2}/4 批：生成$zoneName方案的问题树', i + 1, totalBatches);
-      TodoGoalSolutionPlan? generated;
-      for (var attempt = 0; attempt < 2 && generated == null; attempt++) {
-        try {
-          final detailRaw = await _ai.generateText(
-            prompt: '''$solutionGuidance
-$context
-
-本轮只生成下面这一条“$zoneName”方案的完整问题树，不要重复生成其他方案：
-${jsonEncode(outline.toJson())}
-
-分批生成约束：
-- 只返回一个方案，并放在 solutionPlans 数组中；zoneType 必须是 "$zone"。
-- 根节点到可执行叶节点至少三层，总节点建议 6-12 个，避免为了数量重复内容。
-- 每个父节点必须由子问题的完成结果逻辑回推；dependencies 只引用本批节点 id。
-- 每个 action 叶节点必须同时返回 actionWhen、actionWhere、actionObject、actionProcedure、actionOutput、acceptanceCriteria 和 evidenceNeeded。
-- actionProcedure 必须包含实际动词、对象、数量或时长；actionOutput 必须可以查看、保存、发送、计数或核对。
-- 信息不足时生成具体的信息获取动作，不得虚构用户事实。
-只输出合法 JSON。''',
-            purpose: 'microsoft_todo.goal_solution_tree_${zone}_attempt_${attempt + 1}',
-            systemPrompt: '你是严谨的现实问题求解器。本轮只把一个已确定的候选路径展开为可验证问题树。像证明题一样给出父子推导和现实动作，不生成其他方案。只输出合法JSON。',
-            maxTokens: 6000,
-            expectJson: true,
-            temperature: 0.2,
-          );
-          rawResponses.add(detailRaw);
-          final parsed = _extractJsonObject(detailRaw);
-          var candidates = _readPlans(parsed);
-          if (candidates.isEmpty) candidates = _readPlans(_resolveAnalysisPayload(parsed));
-          for (final candidate in candidates) {
-            if (candidate.zoneType == zone && _isRigorousPlan(candidate)) {
-              generated = candidate;
-              break;
-            }
-          }
-        } catch (_) {
-          // Retry only the failed zone; completed batches are never requested again.
-        }
-        if (generated == null && attempt == 0) {
-          onProgress?.call('$zoneName方案未通过校验，正在单独重试', i + 1, totalBatches);
-        }
-      }
-      if (generated == null) {
-        usedFallback = true;
-        generated = fallbackPlans.firstWhere((plan) => plan.zoneType == zone);
-      }
-      completedPlans.add(generated);
-      onProgress?.call('$zoneName方案已完成', i + 2, totalBatches);
-    }
-
-    return TodoGoalSolutionGenerationResult(
-      plans: completedPlans,
-      provider: usedFallback ? 'hybrid' : (state['provider'] ?? 'ai'),
-      modelLabel: state['label'] ?? 'AI',
-      rawResponse: rawResponses.join('\n\n--- batch ---\n\n'),
-      usedFallback: usedFallback,
-    );
-  }
 
   Future<TodoGoalWeeklySummaryResult> generateWeeklySummary({
     required List<TodoGoalProfile> goals,

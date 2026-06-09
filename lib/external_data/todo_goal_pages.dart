@@ -826,80 +826,69 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     }
   }
 
+  TodoGoalAnalysisResult _buildCurrentGoalAnalysis(TodoGoalProfile goal) {
+    final primaryStep = _steps.isEmpty ? null : _steps.first;
+    TodoGoalActionStep? processStep;
+    TodoGoalActionStep? valueStep;
+    for (final step in _steps) {
+      if (processStep == null && step.actionType == 'process') processStep = step;
+      if (valueStep == null && step.actionType == 'value') valueStep = step;
+      if (processStep != null && valueStep != null) break;
+    }
+    return TodoGoalAnalysisResult(
+      goalTitle: goal.goalTitle,
+      deepMeaning: goal.deepMeaning,
+      desiredIdentity: goal.desiredIdentity,
+      goalCategory: goal.goalCategory,
+      goalOriginType: goal.goalOriginType,
+      selfConcordanceScore: goal.selfConcordanceScore,
+      processValue: goal.processValue,
+      obstacleSummary: goal.obstacleSummary,
+      todayMinimumAction: primaryStep == null ? '先做一个5分钟最小行动' : primaryStep.title,
+      minimumStandard: primaryStep == null ? '开始5分钟即可。' : primaryStep.minimumStandard,
+      recommendedStandard: primaryStep == null ? '完成一个小步骤并记录过程。' : primaryStep.recommendedStandard,
+      stretchStandard: primaryStep == null ? '状态允许时推进15分钟。' : primaryStep.stretchStandard,
+      difficultyScore: primaryStep == null ? 5 : primaryStep.difficultyScore,
+      zoneType: primaryStep == null ? 'stretch' : primaryStep.zoneType,
+      coachMessage: '',
+      provider: goal.aiProvider,
+      modelLabel: goal.aiModelLabel,
+      resultGoal: goal.resultGoal,
+      valueGoal: goal.valueGoal,
+      processGoal: goal.processGoal,
+      coreValues: goal.coreValues,
+      autonomyScore: goal.autonomyScore,
+      valueAlignmentScore: goal.valueAlignmentScore,
+      interestConnectionScore: goal.interestConnectionScore,
+      passionScore: goal.passionScore,
+      feasibilityScore: goal.feasibilityScore,
+      externalPressureScore: goal.externalPressureScore,
+      processHappinessScore: goal.processHappinessScore,
+      goalType: goal.goalType,
+      currentStage: goal.currentStage,
+      actionPlace: primaryStep?.actionPlace ?? '',
+      startTrigger: primaryStep?.startTrigger ?? '',
+      completionQuestion: primaryStep?.completionQuestion ?? '',
+      processAction: processStep?.title ?? '',
+      valueAction: valueStep?.title ?? '',
+      experiencePrompt: primaryStep?.experienceIntention ?? '',
+      userNeedInterpretation: goal.userNeedInterpretation,
+      keyUncertainties: goal.keyUncertainties,
+      clarifyingQuestions: goal.clarifyingQuestions,
+      possibleDirections: goal.possibleDirections,
+      referenceCases: goal.referenceCases,
+      recommendationRationale: goal.recommendationRationale,
+      userDecisionPrompt: goal.userDecisionPrompt,
+    );
+  }
+
   Future<void> _generateProblemSolutions() async {
     final goal = _goal;
     final task = _sourceTask;
     if (goal == null || task == null || _busy) return;
-    setState(() {
-      _busy = true;
-      _solutionGenerationStatus = '准备分批生成问题解决方案…';
-      _solutionGenerationProgress = 0;
-    });
+    setState(() => _busy = true);
     try {
-      final primaryStep = _steps.isEmpty ? null : _steps.first;
-      TodoGoalActionStep? processStep;
-      TodoGoalActionStep? valueStep;
-      for (final step in _steps) {
-        if (processStep == null && step.actionType == 'process') processStep = step;
-        if (valueStep == null && step.actionType == 'value') valueStep = step;
-        if (processStep != null && valueStep != null) break;
-      }
-      final analysis = TodoGoalAnalysisResult(
-        goalTitle: goal.goalTitle,
-        deepMeaning: goal.deepMeaning,
-        desiredIdentity: goal.desiredIdentity,
-        goalCategory: goal.goalCategory,
-        goalOriginType: goal.goalOriginType,
-        selfConcordanceScore: goal.selfConcordanceScore,
-        processValue: goal.processValue,
-        obstacleSummary: goal.obstacleSummary,
-        todayMinimumAction: primaryStep == null ? '先做一个5分钟最小行动' : primaryStep.title,
-        minimumStandard: primaryStep == null ? '开始5分钟即可。' : primaryStep.minimumStandard,
-        recommendedStandard: primaryStep == null ? '完成一个小步骤并记录过程。' : primaryStep.recommendedStandard,
-        stretchStandard: primaryStep == null ? '状态允许时推进15分钟。' : primaryStep.stretchStandard,
-        difficultyScore: primaryStep == null ? 5 : primaryStep.difficultyScore,
-        zoneType: primaryStep == null ? 'stretch' : primaryStep.zoneType,
-        coachMessage: '',
-        provider: goal.aiProvider,
-        modelLabel: goal.aiModelLabel,
-        resultGoal: goal.resultGoal,
-        valueGoal: goal.valueGoal,
-        processGoal: goal.processGoal,
-        coreValues: goal.coreValues,
-        autonomyScore: goal.autonomyScore,
-        valueAlignmentScore: goal.valueAlignmentScore,
-        interestConnectionScore: goal.interestConnectionScore,
-        passionScore: goal.passionScore,
-        feasibilityScore: goal.feasibilityScore,
-        externalPressureScore: goal.externalPressureScore,
-        processHappinessScore: goal.processHappinessScore,
-        goalType: goal.goalType,
-        currentStage: goal.currentStage,
-        actionPlace: primaryStep?.actionPlace ?? '',
-        startTrigger: primaryStep?.startTrigger ?? '',
-        completionQuestion: primaryStep?.completionQuestion ?? '',
-        processAction: processStep?.title ?? '',
-        valueAction: valueStep?.title ?? '',
-        experiencePrompt: primaryStep?.experienceIntention ?? '',
-        userNeedInterpretation: goal.userNeedInterpretation,
-        keyUncertainties: goal.keyUncertainties,
-        clarifyingQuestions: goal.clarifyingQuestions,
-        possibleDirections: goal.possibleDirections,
-        referenceCases: goal.referenceCases,
-        recommendationRationale: goal.recommendationRationale,
-        userDecisionPrompt: goal.userDecisionPrompt,
-      );
-      final result = await _ai.generateProblemSolutions(
-        task: task,
-        analysis: analysis,
-        onProgress: (message, completedBatches, totalBatches) {
-          if (!mounted) return;
-          setState(() {
-            _solutionGenerationStatus = message;
-            _solutionGenerationProgress = totalBatches <= 0 ? 0.0 : (completedBatches / totalBatches).clamp(0.0, 1.0).toDouble();
-          });
-        },
-      );
+      final result = await _ai.generateProblemSolutions(task: task, analysis: _buildCurrentGoalAnalysis(goal));
       final keepExisting = result.usedFallback && result.rawResponse.trim().isEmpty && _solutionPlans.isNotEmpty;
       if (!keepExisting) {
         await _goalDao.clearSolutionPlans(goal.goalId);
@@ -908,30 +897,55 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
       await _goalDao.addAiAnalysis(
         goalId: goal.goalId,
         sourceTaskId: goal.sourceTaskId,
-        analysisType: 'goal_problem_solutions',
+        analysisType: 'goal_solution_outlines',
         promptText: '',
         resultJson: jsonEncode(result.toJson()),
         modelName: result.modelLabel,
       );
       await _load();
-      final resultMessage = !result.usedFallback
-          ? 'AI 已分 4 批生成并校验三套问题解决方案。'
-          : keepExisting
-              ? '分批请求未取得可用结果，已保留原有问题解决方案。'
-              : result.rawResponse.trim().isNotEmpty
-                  ? '分批生成已完成；个别批次未通过校验，已只替换该批为本地备用方案。'
-                  : 'AI 当前不可用，已生成完整的本地备用问题树。';
-      _show(resultMessage);
+      _show(keepExisting
+          ? '方案概览请求未完成，已保留原有方案。'
+          : result.usedFallback
+              ? '已生成三条备用方案概览。请在想深入的方案上点击“生成这棵问题树”。'
+              : '方案概览已生成。请逐个点击你想深入的方案，手动生成对应问题树。');
     } catch (e) {
-      _show('生成问题解决方案失败：$e', isError: true);
+      _show('生成方案概览失败：$e', isError: true);
     } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _solutionGenerationStatus = '';
-          _solutionGenerationProgress = 0;
-        });
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _generateProblemTree(TodoGoalSolutionPlan outline) async {
+    final goal = _goal;
+    final task = _sourceTask;
+    if (goal == null || task == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await _ai.generateProblemTree(task: task, analysis: _buildCurrentGoalAnalysis(goal), outline: outline);
+      if (result.plans.isEmpty) {
+        _show('这棵问题树没有通过结构校验，原方案和已有节点均已保留。你可以稍后再次手动点击重试。', isError: true);
+        return;
       }
+      await _goalDao.replaceSolutionPlanTree(
+        goalId: goal.goalId,
+        sourceTaskId: goal.sourceTaskId,
+        solutionId: outline.solutionId,
+        plan: result.plans.first,
+      );
+      await _goalDao.addAiAnalysis(
+        goalId: goal.goalId,
+        sourceTaskId: goal.sourceTaskId,
+        analysisType: 'goal_solution_tree_${outline.zoneType}',
+        promptText: '',
+        resultJson: jsonEncode(result.toJson()),
+        modelName: result.modelLabel,
+      );
+      await _load();
+      _show('“${outline.title}”的问题树已生成。其他方案不会自动发送请求。');
+    } catch (e) {
+      _show('生成该方案问题树失败：$e', isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -1278,7 +1292,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
               ),
         actions: [
           IconButton(onPressed: _busy || _sourceTask == null ? null : _reanalyze, tooltip: 'AI 重新分析目标卡', icon: const Icon(Icons.auto_awesome)),
-          IconButton(onPressed: _busy || _sourceTask == null ? null : _generateProblemSolutions, tooltip: '单独生成AI问题解决方案', icon: const Icon(Icons.account_tree_outlined)),
+          IconButton(onPressed: _busy || _sourceTask == null ? null : _generateProblemSolutions, tooltip: '生成三条路线概览', icon: const Icon(Icons.account_tree_outlined)),
           IconButton(onPressed: _busy ? null : _addTinyStep, tooltip: '新增最小行动', icon: const Icon(Icons.add_task_outlined)),
           PopupMenuButton<String>(
             tooltip: '调整目标',
@@ -1333,6 +1347,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                       plans: _solutionPlans,
                       nodes: _selectedNodes,
                       onSelect: _selectSolutionPlan,
+                      onGenerateTree: _generateProblemTree,
                       onActivateNode: _activateProblemNode,
                       onMarkNode: _markProblemNode,
                     ),
@@ -2797,6 +2812,7 @@ class _SolutionPlanBoard extends StatelessWidget {
     required this.plans,
     required this.nodes,
     required this.onSelect,
+    required this.onGenerateTree,
     required this.onActivateNode,
     required this.onMarkNode,
   });
@@ -2805,6 +2821,7 @@ class _SolutionPlanBoard extends StatelessWidget {
   final List<TodoGoalSolutionPlan> plans;
   final List<TodoGoalProblemNode> nodes;
   final ValueChanged<TodoGoalSolutionPlan> onSelect;
+  final ValueChanged<TodoGoalSolutionPlan> onGenerateTree;
   final ValueChanged<TodoGoalProblemNode> onActivateNode;
   final void Function(TodoGoalProblemNode node, String status) onMarkNode;
 
@@ -2814,7 +2831,7 @@ class _SolutionPlanBoard extends StatelessWidget {
       return const _PlainValueCard(
         icon: Icons.account_tree_outlined,
         title: '还没有为这个目标设计行动路径',
-        text: '点击右上角“问题树”，AI 会结合这个目标的现实处境，提出几条走法和可以先验证的小步骤。你可以比较、组合，也可以都不选。',
+        text: '先点击右上角“路线概览”，只请求三条候选方案。概览生成后，再在你想深入的方案上手动点击“生成这棵问题树”。',
       );
     }
     final selectedPlans = plans.where((p) => p.isSelected).toList();
@@ -2832,9 +2849,13 @@ class _SolutionPlanBoard extends StatelessWidget {
             Expanded(child: Text('怎样更实际地推进“$goalTitle”', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk))),
           ]),
           const SizedBox(height: 6),
-          const Text('下面是几条不同的走法。先看哪一条更符合你现在的时间、资源和承受范围，再决定是否试一小步；选择后仍然可以调整。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
+          const Text('下面先展示几条不同走法的概览。系统不会连续请求全部问题树；请只在你想深入的方案上手动生成，也可以逐个生成后再比较。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
           const SizedBox(height: 12),
-          ...plans.map((p) => _SolutionPlanCard(plan: p, onSelect: p.isSelected ? null : () => onSelect(p))),
+          ...plans.map((p) => _SolutionPlanCard(
+                plan: p,
+                onSelect: p.isSelected ? null : () => onSelect(p),
+                onGenerateTree: () => onGenerateTree(p),
+              )),
           const SizedBox(height: 12),
           if (selected == null)
             const _EmptyCard(text: '先不用急着选。比较每条路是否适合你目前的现实条件，以及你愿意先承担哪一种成本，再选一条做小范围尝试。')
@@ -2852,9 +2873,10 @@ class _SolutionPlanBoard extends StatelessWidget {
 }
 
 class _SolutionPlanCard extends StatelessWidget {
-  const _SolutionPlanCard({required this.plan, required this.onSelect});
+  const _SolutionPlanCard({required this.plan, required this.onSelect, required this.onGenerateTree});
   final TodoGoalSolutionPlan plan;
   final VoidCallback? onSelect;
+  final VoidCallback onGenerateTree;
 
   @override
   Widget build(BuildContext context) {
@@ -2875,7 +2897,13 @@ class _SolutionPlanCard extends StatelessWidget {
                 Text(_humanizeAiText(plan.methodName), style: TextStyle(color: color, fontWeight: FontWeight.w800)),
               ],
             ])),
-            if (onSelect != null) TextButton(onPressed: onSelect, child: const Text('先试这条路')),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Wrap(spacing: 8, runSpacing: 6, children: [
+            OutlinedButton.icon(onPressed: onGenerateTree, icon: const Icon(Icons.account_tree_outlined, size: 18), label: const Text('生成这棵问题树')),
+            if (onSelect != null) TextButton(onPressed: onSelect, child: const Text('选择为主方案')),
           ]),
         ),
         Padding(
@@ -2917,7 +2945,7 @@ class _ProblemNodeTreeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (nodes.isEmpty) {
-      return const _EmptyCard(text: '当前方案还没有问题树节点。请点击右上角“问题树”按钮单独重新生成方案。');
+      return const _EmptyCard(text: '当前方案还没有问题树节点。请回到该方案卡片，手动点击“生成这棵问题树”；系统不会自动请求其他方案。');
     }
     final ids = nodes.map((n) => n.nodeId).toSet();
     final childrenByParent = <String, List<TodoGoalProblemNode>>{};
