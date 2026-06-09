@@ -278,6 +278,64 @@ ${jsonEncode(_withoutProblemNodes(outline).toJson())}
         userChoiceGuidance: plan.userChoiceGuidance,
       );
 
+  Future<String> reframeEffortLanguage(String userText) async {
+    final text = userText.trim();
+    if (text.isEmpty) return '';
+    final state = await getGlobalAiState();
+    String fallback() {
+      final lower = text.toLowerCase();
+      if (lower.contains('懒')) return '这不是身份结论。更可能是启动阻力过高、行动过大或触发器不明确。先把下一步缩小到 2 分钟，并提前准备材料。';
+      if (lower.contains('天赋') || lower.contains('不行') || lower.contains('废')) return '先把“我不行”改成可观察反馈：当前练习量、反馈方式或策略还没有产生需要的结果。选择一个可调整变量，做一次小实验。';
+      return '不要用一次结果定义自己。把这句话改写成：我遇到了一个具体阻力；下一次可以调整行动大小、时间、环境或反馈方式。';
+    }
+    if (state['available'] != '1') return fallback();
+    try {
+      final raw = await _ai.generateText(
+        prompt: '''用户原话：$text
+请把固定型、羞耻型身份评价改写成努力语言。只围绕用户原话回答三点：可观察事实、可能的系统变量、一个 2-10 分钟可验证调整。不得诊断人格，不得空泛鼓励，不得说教。输出 2-4 句自然中文，不要 JSON。''',
+        purpose: 'microsoft_todo.effort_language',
+        systemPrompt: '你是积极心理学行动教练，把身份否定转换为可观察、可调整、可验证的过程反馈。',
+        maxTokens: 500,
+        expectJson: false,
+        temperature: 0.35,
+      );
+      return raw.trim().isEmpty ? fallback() : raw.trim();
+    } catch (_) {
+      return fallback();
+    }
+  }
+
+  Future<String> generateEffortResponsePaper({required List<TodoGoalEffortEntry> entries, required List<TodoGoalRitual> rituals}) async {
+    if (entries.isEmpty) return '本周还没有努力记录。先完成一次 2 分钟行动并写一句 Time-In，周报才有真实证据。';
+    final state = await getGlobalAiState();
+    final evidence = entries.take(30).map((e) => '${e.effortDate}｜${e.goalTitle}｜${e.effortMinutes}分钟｜${e.zoneLabel}｜投入:${e.investmentText}｜阻力:${e.obstacle}｜策略:${e.strategyUsed}｜学习:${e.timeInLearning}｜回归:${e.returnedAfterBreak}').join('\n');
+    final ritualText = rituals.take(10).map((r) => '${r.goalTitle}｜触发:${r.triggerText}｜行动:${r.minimumAction}｜预案:${r.frictionPlan}').join('\n');
+    String fallback() {
+      final minutes = entries.fold<int>(0, (sum, e) => sum + e.effortMinutes);
+      final returns = entries.where((e) => e.returnedAfterBreak).length;
+      final stretch = entries.where((e) => e.zoneType == 'stretch').length;
+      return '本周你留下了 ${entries.length} 次有意义努力、共 $minutes 分钟，其中 $stretch 次处在拉伸区，$returns 次是在中断后重新回来。下周不要同时增加所有强度：保留一个有效触发器，把最常见阻力对应的行动再缩小一级。';
+    }
+    if (state['available'] != '1') return fallback();
+    try {
+      final raw = await _ai.generateText(
+        prompt: '''请根据以下真实记录写一篇简短的个人 Response Paper：本周最重要的努力、失败提供的反馈、有效仪式、拉伸区是否平衡、努力中的愉悦与关系投入、需要重新定义的目标、下周一个最重要行动。区分事实与推断，不用完成率羞辱用户，不虚构记录。
+努力记录：
+$evidence
+仪式：
+$ritualText''',
+        purpose: 'microsoft_todo.effort_response_paper',
+        systemPrompt: '你是积极心理学行动教练，把一周努力证据综合为可内化、可调整的 Response Paper。使用自然中文，不输出JSON。',
+        maxTokens: 1200,
+        expectJson: false,
+        temperature: 0.4,
+      );
+      return raw.trim().isEmpty ? fallback() : raw.trim();
+    } catch (_) {
+      return fallback();
+    }
+  }
+
   Future<TodoGoalWeeklySummaryResult> generateWeeklySummary({
     required List<TodoGoalProfile> goals,
     required List<TodoGoalReflection> reflections,

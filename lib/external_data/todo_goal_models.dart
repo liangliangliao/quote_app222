@@ -1097,3 +1097,166 @@ String _normalizeZoneValue(String value) {
   if (v.contains('comfort') || v.contains('舒适')) return 'comfort';
   return 'stretch';
 }
+
+class TodoGoalRitual {
+  const TodoGoalRitual({
+    required this.ritualId,
+    required this.goalId,
+    required this.triggerText,
+    required this.minimumAction,
+    required this.minimumMinutes,
+    required this.rewardOrRecord,
+    required this.environmentDesign,
+    required this.frictionPlan,
+    required this.stabilityScore,
+    required this.status,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.goalTitle = '',
+  });
+
+  final String ritualId;
+  final String goalId;
+  final String triggerText;
+  final String minimumAction;
+  final int minimumMinutes;
+  final String rewardOrRecord;
+  final String environmentDesign;
+  final String frictionPlan;
+  final int stabilityScore;
+  final String status;
+  final int createdAtMs;
+  final int updatedAtMs;
+  final String goalTitle;
+
+  factory TodoGoalRitual.fromMap(Map<String, Object?> row) => TodoGoalRitual(
+        ritualId: (row['ritual_id'] ?? '').toString(),
+        goalId: (row['goal_id'] ?? '').toString(),
+        triggerText: (row['trigger_text'] ?? '').toString(),
+        minimumAction: (row['minimum_action'] ?? '').toString(),
+        minimumMinutes: _toInt(row['minimum_minutes']),
+        rewardOrRecord: (row['reward_or_record'] ?? '').toString(),
+        environmentDesign: (row['environment_design'] ?? '').toString(),
+        frictionPlan: (row['friction_plan'] ?? '').toString(),
+        stabilityScore: _toInt(row['stability_score']),
+        status: (row['status'] ?? 'active').toString(),
+        createdAtMs: _toInt(row['created_at_ms']),
+        updatedAtMs: _toInt(row['updated_at_ms']),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+      );
+}
+
+class TodoGoalEffortEntry {
+  const TodoGoalEffortEntry({
+    required this.entryId,
+    required this.goalId,
+    required this.stepId,
+    required this.effortDate,
+    required this.effortMinutes,
+    required this.energyLevel,
+    required this.emotionState,
+    required this.availableMinutes,
+    required this.zoneType,
+    required this.effortType,
+    required this.investmentText,
+    required this.obstacle,
+    required this.strategyUsed,
+    required this.smallProgress,
+    required this.nextMinimumStep,
+    required this.timeInLearning,
+    required this.identityEvidence,
+    required this.gratitudeText,
+    required this.joyScore,
+    required this.reflectionDepth,
+    required this.strategyChanged,
+    required this.returnedAfterBreak,
+    required this.createdAtMs,
+    this.goalTitle = '',
+  });
+
+  final String entryId;
+  final String goalId;
+  final String stepId;
+  final String effortDate;
+  final int effortMinutes;
+  final String energyLevel;
+  final String emotionState;
+  final int availableMinutes;
+  final String zoneType;
+  final String effortType;
+  final String investmentText;
+  final String obstacle;
+  final String strategyUsed;
+  final String smallProgress;
+  final String nextMinimumStep;
+  final String timeInLearning;
+  final String identityEvidence;
+  final String gratitudeText;
+  final int joyScore;
+  final int reflectionDepth;
+  final bool strategyChanged;
+  final bool returnedAfterBreak;
+  final int createdAtMs;
+  final String goalTitle;
+
+  String get zoneLabel => zoneType == 'comfort' ? '舒适区' : (zoneType == 'panic' ? '恐慌区' : '拉伸区');
+  String get effortTypeLabel {
+    switch (effortType) {
+      case 'relationship': return '关系投入';
+      case 'deep_work': return '深度努力';
+      case 'recovery': return '恢复与孵化';
+      default: return '目标行动';
+    }
+  }
+
+  factory TodoGoalEffortEntry.fromMap(Map<String, Object?> row) => TodoGoalEffortEntry(
+        entryId: (row['entry_id'] ?? '').toString(),
+        goalId: (row['goal_id'] ?? '').toString(),
+        stepId: (row['step_id'] ?? '').toString(),
+        effortDate: (row['effort_date'] ?? '').toString(),
+        effortMinutes: _toInt(row['effort_minutes']),
+        energyLevel: (row['energy_level'] ?? 'medium').toString(),
+        emotionState: (row['emotion_state'] ?? 'stable').toString(),
+        availableMinutes: _toInt(row['available_minutes']),
+        zoneType: (row['zone_type'] ?? 'stretch').toString(),
+        effortType: (row['effort_type'] ?? 'goal').toString(),
+        investmentText: (row['investment_text'] ?? '').toString(),
+        obstacle: (row['obstacle'] ?? '').toString(),
+        strategyUsed: (row['strategy_used'] ?? '').toString(),
+        smallProgress: (row['small_progress'] ?? '').toString(),
+        nextMinimumStep: (row['next_minimum_step'] ?? '').toString(),
+        timeInLearning: (row['time_in_learning'] ?? '').toString(),
+        identityEvidence: (row['identity_evidence'] ?? '').toString(),
+        gratitudeText: (row['gratitude_text'] ?? '').toString(),
+        joyScore: _toInt(row['joy_score']),
+        reflectionDepth: _toInt(row['reflection_depth']),
+        strategyChanged: _toInt(row['strategy_changed']) == 1,
+        returnedAfterBreak: _toInt(row['returned_after_break']) == 1,
+        createdAtMs: _toInt(row['created_at_ms']),
+        goalTitle: (row['goal_title'] ?? '').toString(),
+      );
+}
+
+class TodoGoalEffortSummary {
+  const TodoGoalEffortSummary({
+    required this.meaningfulEfforts,
+    required this.effortMinutes,
+    required this.returnCount,
+    required this.stretchCount,
+    required this.reflectionCount,
+    required this.strategyChangeCount,
+    required this.relationshipInvestmentCount,
+    required this.averageJoy,
+    required this.commonObstacle,
+  });
+
+  final int meaningfulEfforts;
+  final int effortMinutes;
+  final int returnCount;
+  final int stretchCount;
+  final int reflectionCount;
+  final int strategyChangeCount;
+  final int relationshipInvestmentCount;
+  final double averageJoy;
+  final String commonObstacle;
+}

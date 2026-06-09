@@ -211,6 +211,49 @@ class TodoGoalDao {
         created_at_ms INTEGER NOT NULL
       )
     ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_rituals (
+        ritual_id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL,
+        trigger_text TEXT,
+        minimum_action TEXT,
+        minimum_minutes INTEGER DEFAULT 2,
+        reward_or_record TEXT,
+        environment_design TEXT,
+        friction_plan TEXT,
+        stability_score INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_effort_entries (
+        entry_id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL,
+        step_id TEXT,
+        effort_date TEXT NOT NULL,
+        effort_minutes INTEGER DEFAULT 0,
+        energy_level TEXT DEFAULT 'medium',
+        emotion_state TEXT DEFAULT 'stable',
+        available_minutes INTEGER DEFAULT 5,
+        zone_type TEXT DEFAULT 'stretch',
+        effort_type TEXT DEFAULT 'goal',
+        investment_text TEXT,
+        obstacle TEXT,
+        strategy_used TEXT,
+        small_progress TEXT,
+        next_minimum_step TEXT,
+        time_in_learning TEXT,
+        identity_evidence TEXT,
+        gratitude_text TEXT,
+        joy_score INTEGER DEFAULT 0,
+        reflection_depth INTEGER DEFAULT 0,
+        strategy_changed INTEGER DEFAULT 0,
+        returned_after_break INTEGER DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
     await _addColumnIfMissing(db, 'goal_action_steps', 'parent_step_id', "TEXT DEFAULT ''");
     await _addColumnIfMissing(db, 'goal_action_steps', 'step_level', 'INTEGER DEFAULT 1');
     await _addColumnIfMissing(db, 'goal_action_steps', 'sort_order', 'INTEGER DEFAULT 0');
@@ -958,6 +1001,8 @@ class TodoGoalDao {
     final db = await _db;
     await db.transaction((txn) async {
       for (final table in const <String>[
+        'goal_effort_entries',
+        'goal_rituals',
         'goal_step_reviews',
         'goal_problem_nodes',
         'goal_solution_plans',
@@ -1313,4 +1358,143 @@ class TodoGoalDao {
     return id;
   }
 
+  Future<List<TodoGoalRitual>> listRituals({String? goalId}) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT r.*, COALESCE(g.goal_title, '') AS goal_title
+      FROM goal_rituals r
+      LEFT JOIN goal_profiles g ON g.goal_id = r.goal_id
+      WHERE r.status != 'archived' ${goalId == null ? '' : 'AND r.goal_id = ?'}
+      ORDER BY r.updated_at_ms DESC
+    ''', goalId == null ? const <Object?>[] : <Object?>[goalId]);
+    return rows.map(TodoGoalRitual.fromMap).toList();
+  }
+
+  Future<String> saveRitual({
+    required String goalId,
+    required String triggerText,
+    required String minimumAction,
+    required int minimumMinutes,
+    required String rewardOrRecord,
+    required String environmentDesign,
+    required String frictionPlan,
+    String? ritualId,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = ritualId?.trim().isNotEmpty == true ? ritualId!.trim() : newId('goal_ritual');
+    await db.insert('goal_rituals', <String, Object?>{
+      'ritual_id': id,
+      'goal_id': goalId,
+      'trigger_text': triggerText.trim(),
+      'minimum_action': minimumAction.trim(),
+      'minimum_minutes': minimumMinutes.clamp(1, 120),
+      'reward_or_record': rewardOrRecord.trim(),
+      'environment_design': environmentDesign.trim(),
+      'friction_plan': frictionPlan.trim(),
+      'stability_score': 0,
+      'status': 'active',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    return id;
+  }
+
+  Future<String> addEffortEntry({
+    required String goalId,
+    String stepId = '',
+    required int effortMinutes,
+    required String energyLevel,
+    required String emotionState,
+    required int availableMinutes,
+    required String zoneType,
+    required String effortType,
+    required String investmentText,
+    required String obstacle,
+    required String strategyUsed,
+    required String smallProgress,
+    required String nextMinimumStep,
+    required String timeInLearning,
+    required String identityEvidence,
+    required String gratitudeText,
+    required int joyScore,
+    required int reflectionDepth,
+    required bool strategyChanged,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final recent = await db.query('goal_effort_entries', columns: ['created_at_ms'], where: 'goal_id = ?', whereArgs: [goalId], orderBy: 'created_at_ms DESC', limit: 1);
+    final lastAt = recent.isEmpty ? 0 : _toLocalInt(recent.first['created_at_ms']);
+    final returned = lastAt > 0 && now - lastAt >= const Duration(hours: 24).inMilliseconds;
+    final id = newId('goal_effort');
+    await db.insert('goal_effort_entries', <String, Object?>{
+      'entry_id': id,
+      'goal_id': goalId,
+      'step_id': stepId,
+      'effort_date': todayDate(),
+      'effort_minutes': effortMinutes.clamp(0, 1440),
+      'energy_level': energyLevel,
+      'emotion_state': emotionState,
+      'available_minutes': availableMinutes.clamp(1, 1440),
+      'zone_type': _normalizeZone(zoneType),
+      'effort_type': effortType,
+      'investment_text': investmentText.trim(),
+      'obstacle': obstacle.trim(),
+      'strategy_used': strategyUsed.trim(),
+      'small_progress': smallProgress.trim(),
+      'next_minimum_step': nextMinimumStep.trim(),
+      'time_in_learning': timeInLearning.trim(),
+      'identity_evidence': identityEvidence.trim(),
+      'gratitude_text': gratitudeText.trim(),
+      'joy_score': joyScore.clamp(0, 5),
+      'reflection_depth': reflectionDepth.clamp(0, 5),
+      'strategy_changed': strategyChanged ? 1 : 0,
+      'returned_after_break': returned ? 1 : 0,
+      'created_at_ms': now,
+    });
+    return id;
+  }
+
+  Future<List<TodoGoalEffortEntry>> listEffortEntries({int days = 7, int limit = 100}) async {
+    final db = await _db;
+    final since = DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
+    final rows = await db.rawQuery('''
+      SELECT e.*, COALESCE(g.goal_title, '') AS goal_title
+      FROM goal_effort_entries e
+      LEFT JOIN goal_profiles g ON g.goal_id = e.goal_id
+      WHERE e.created_at_ms >= ?
+      ORDER BY e.created_at_ms DESC
+      LIMIT ?
+    ''', [since, limit]);
+    return rows.map(TodoGoalEffortEntry.fromMap).toList();
+  }
+
+  Future<TodoGoalEffortSummary> getEffortSummary({int days = 7}) async {
+    final entries = await listEffortEntries(days: days, limit: 500);
+    final obstacleCounts = <String, int>{};
+    for (final entry in entries) {
+      final obstacle = entry.obstacle.trim();
+      if (obstacle.isNotEmpty) obstacleCounts[obstacle] = (obstacleCounts[obstacle] ?? 0) + 1;
+    }
+    var commonObstacle = '';
+    var maxCount = 0;
+    for (final item in obstacleCounts.entries) {
+      if (item.value > maxCount) {
+        commonObstacle = item.key;
+        maxCount = item.value;
+      }
+    }
+    final joyTotal = entries.fold<int>(0, (sum, item) => sum + item.joyScore);
+    return TodoGoalEffortSummary(
+      meaningfulEfforts: entries.length,
+      effortMinutes: entries.fold<int>(0, (sum, item) => sum + item.effortMinutes),
+      returnCount: entries.where((item) => item.returnedAfterBreak).length,
+      stretchCount: entries.where((item) => item.zoneType == 'stretch').length,
+      reflectionCount: entries.where((item) => item.timeInLearning.trim().isNotEmpty).length,
+      strategyChangeCount: entries.where((item) => item.strategyChanged).length,
+      relationshipInvestmentCount: entries.where((item) => item.effortType == 'relationship').length,
+      averageJoy: entries.isEmpty ? 0 : joyTotal / entries.length,
+      commonObstacle: commonObstacle,
+    );
+  }
 }

@@ -49,7 +49,7 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _load().then((_) async {
       final id = widget.initialTaskId;
       if (id != null && id.trim().isNotEmpty) {
@@ -420,7 +420,7 @@ ${quote.translation}
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('向峰而行 · 目标系统'),
+        title: const Text('向峰而行 · 足下行动系统'),
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -431,6 +431,7 @@ ${quote.translation}
             Tab(text: '过程复盘'),
             Tab(text: 'AI教练'),
             Tab(text: '价值罗盘'),
+            Tab(text: '足下努力'),
           ],
         ),
         actions: [
@@ -466,6 +467,7 @@ ${quote.translation}
                     _buildReviewTab(),
                     _buildCoachTab(),
                     _buildCompassTab(),
+                    _EffortOperatingSystemTab(goals: _goals, todaySteps: _todaySteps, onDataChanged: _load),
                   ],
                 ),
                 if (_busy)
@@ -3968,4 +3970,361 @@ class _WeeklyMeaningCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EffortOperatingSystemTab extends StatefulWidget {
+  const _EffortOperatingSystemTab({required this.goals, required this.todaySteps, required this.onDataChanged});
+  final List<TodoGoalProfile> goals;
+  final List<TodoGoalActionStep> todaySteps;
+  final Future<void> Function() onDataChanged;
+
+  @override
+  State<_EffortOperatingSystemTab> createState() => _EffortOperatingSystemTabState();
+}
+
+class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
+  final _dao = TodoGoalDao();
+  final _ai = TodoGoalAiService();
+  List<TodoGoalRitual> _rituals = const <TodoGoalRitual>[];
+  List<TodoGoalEffortEntry> _entries = const <TodoGoalEffortEntry>[];
+  TodoGoalEffortSummary _summary = const TodoGoalEffortSummary(
+    meaningfulEfforts: 0,
+    effortMinutes: 0,
+    returnCount: 0,
+    stretchCount: 0,
+    reflectionCount: 0,
+    strategyChangeCount: 0,
+    relationshipInvestmentCount: 0,
+    averageJoy: 0,
+    commonObstacle: '',
+  );
+  bool _loading = true;
+  String _energy = 'medium';
+  String _emotion = 'stable';
+  int _availableMinutes = 15;
+  String _difficulty = 'right';
+  String _responsePaper = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final rituals = await _dao.listRituals();
+    final entries = await _dao.listEffortEntries(days: 7);
+    final summary = await _dao.getEffortSummary(days: 7);
+    if (!mounted) return;
+    setState(() {
+      _rituals = rituals;
+      _entries = entries;
+      _summary = summary;
+      _loading = false;
+    });
+  }
+
+  TodoGoalProfile? get _activeGoal {
+    for (final goal in widget.goals) {
+      if (goal.status == 'active') return goal;
+    }
+    return widget.goals.isEmpty ? null : widget.goals.first;
+  }
+
+  TodoGoalActionStep? get _activeStep {
+    for (final step in widget.todaySteps) {
+      if (!step.isCompleted) return step;
+    }
+    return null;
+  }
+
+  String get _recommendedZone {
+    if (_energy == 'low' || _emotion == 'low' || _difficulty == 'hard') return 'comfort';
+    if (_energy == 'high' && _emotion != 'anxious' && _availableMinutes >= 45 && _difficulty != 'hard') return 'stretch';
+    return 'stretch';
+  }
+
+  String get _recommendedAction {
+    final step = _activeStep;
+    if (step == null) return '选择一个目标，做 2 分钟可以留下痕迹的动作。';
+    if (_recommendedZone == 'comfort' || _availableMinutes <= 5) return step.minimumStandard.trim().isEmpty ? '只开始 2 分钟：${step.title}' : step.minimumStandard;
+    if (_availableMinutes >= 45 && _energy == 'high') return step.stretchStandard.trim().isEmpty ? step.recommendedStandard : step.stretchStandard;
+    return step.simplifiedStandard.trim().isEmpty ? step.recommendedStandard : step.simplifiedStandard;
+  }
+
+  Future<void> _createRitual() async {
+    final goal = _activeGoal;
+    if (goal == null) return;
+    final trigger = TextEditingController(text: _activeStep?.startTrigger.isNotEmpty == true ? _activeStep!.startTrigger : '晚饭后坐到桌前时');
+    final action = TextEditingController(text: _activeStep?.minimumStandard.isNotEmpty == true ? _activeStep!.minimumStandard : '打开材料并做 2 分钟');
+    final reward = TextEditingController(text: '完成后记录一句“我实际做了什么”');
+    final environment = TextEditingController(text: '提前把材料放到可见位置，并关闭一个干扰入口');
+    final friction = TextEditingController(text: '如果太累，就自动降级为只做 2 分钟');
+    var minutes = 5;
+    try {
+      final save = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(builder: (context, setLocalState) => AlertDialog(
+          title: const Text('创建低阻力努力仪式'),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('目标：${goal.goalTitle}', style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 10),
+            TextField(controller: trigger, decoration: const InputDecoration(labelText: '当我在什么时间/场景', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: action, decoration: const InputDecoration(labelText: '我会做什么最小行动', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<int>(value: minutes, decoration: const InputDecoration(labelText: '最小持续时间', border: OutlineInputBorder()), items: const [2, 5, 10, 15].map((v) => DropdownMenuItem(value: v, child: Text('$v 分钟'))).toList(), onChanged: (v) => setLocalState(() => minutes = v ?? 5)),
+            const SizedBox(height: 10),
+            TextField(controller: reward, decoration: const InputDecoration(labelText: '完成后的奖励或记录', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: environment, decoration: const InputDecoration(labelText: '环境设计', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: friction, decoration: const InputDecoration(labelText: '阻力预案 / 自动降级', border: OutlineInputBorder())),
+          ])),
+          actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存仪式'))],
+        )),
+      );
+      if (save != true) return;
+      await _dao.saveRitual(goalId: goal.goalId, triggerText: trigger.text, minimumAction: action.text, minimumMinutes: minutes, rewardOrRecord: reward.text, environmentDesign: environment.text, frictionPlan: friction.text);
+      await _load();
+    } finally {
+      trigger.dispose(); action.dispose(); reward.dispose(); environment.dispose(); friction.dispose();
+    }
+  }
+
+  Future<void> _recordEffort({String effortType = 'goal'}) async {
+    final goal = _activeGoal;
+    if (goal == null) return;
+    final defaultInvestment = effortType == 'relationship'
+        ? '为一段重要关系做一次认真倾听、感谢、见面安排或非防御性沟通'
+        : effortType == 'deep_work'
+            ? '选择准备、沉浸、孵化、洞察、打磨中的一个阶段，留下一个可核对产出'
+            : effortType == 'recovery'
+                ? '进行一段有边界的散步、休息或睡眠恢复，并记录回来后的变化'
+                : (_activeStep?.title ?? _recommendedAction);
+    final investment = TextEditingController(text: defaultInvestment);
+    final obstacle = TextEditingController();
+    final strategy = TextEditingController(text: effortType == 'deep_work' ? '停止继续收集资料，先做 25 分钟输出并标注一个问题' : '把行动缩小，并使用固定触发器开始');
+    final progress = TextEditingController();
+    final next = TextEditingController(text: _activeStep?.minimumStandard ?? '明天先做 2 分钟');
+    final learning = TextEditingController();
+    final identity = TextEditingController();
+    final gratitude = TextEditingController();
+    var minutes = _availableMinutes;
+    var zone = _recommendedZone;
+    var joy = 3;
+    var depth = 3;
+    var changed = false;
+    try {
+      final save = await showDialog<bool>(context: context, builder: (context) => StatefulBuilder(builder: (context, setLocalState) => AlertDialog(
+        title: Text(effortType == 'relationship' ? '记录关系投入' : effortType == 'deep_work' ? '记录深度努力循环' : '努力账本 · Time-In'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: investment, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: '今天我实际投入了什么', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<int>(value: minutes, decoration: const InputDecoration(labelText: '有意义投入时长', border: OutlineInputBorder()), items: const [2, 5, 15, 25, 45, 90].map((v) => DropdownMenuItem(value: v, child: Text('$v 分钟'))).toList(), onChanged: (v) => setLocalState(() => minutes = v ?? 5)),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(value: zone, decoration: const InputDecoration(labelText: '实际所在区域', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'comfort', child: Text('舒适区')), DropdownMenuItem(value: 'stretch', child: Text('拉伸区')), DropdownMenuItem(value: 'panic', child: Text('恐慌区'))], onChanged: (v) => setLocalState(() => zone = v ?? 'stretch')),
+          const SizedBox(height: 10),
+          TextField(controller: obstacle, decoration: const InputDecoration(labelText: '遇到的现实阻力', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: strategy, decoration: const InputDecoration(labelText: '我使用或调整了什么策略', border: OutlineInputBorder())),
+          CheckboxListTile(contentPadding: EdgeInsets.zero, value: changed, title: const Text('今天调整了策略'), onChanged: (v) => setLocalState(() => changed = v ?? false)),
+          TextField(controller: progress, decoration: const InputDecoration(labelText: '今天有什么可见的小进步', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: learning, decoration: const InputDecoration(labelText: 'Time-In：今天我学到了什么', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: identity, decoration: const InputDecoration(labelText: '哪个行动让我更像自己', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: gratitude, decoration: const InputDecoration(labelText: '值得感激的人或事', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: next, decoration: const InputDecoration(labelText: '明天最小一步', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          Row(children: [const Expanded(child: Text('努力中的愉悦感')), Text('$joy/5')]),
+          Slider(value: joy.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => joy = v.round())),
+          Row(children: [const Expanded(child: Text('反思深度')), Text('$depth/5')]),
+          Slider(value: depth.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => depth = v.round())),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存努力'))],
+      )));
+      if (save != true) return;
+      await _dao.addEffortEntry(goalId: goal.goalId, stepId: _activeStep?.stepId ?? '', effortMinutes: minutes, energyLevel: _energy, emotionState: _emotion, availableMinutes: _availableMinutes, zoneType: zone, effortType: effortType, investmentText: investment.text, obstacle: obstacle.text, strategyUsed: strategy.text, smallProgress: progress.text, nextMinimumStep: next.text, timeInLearning: learning.text, identityEvidence: identity.text, gratitudeText: gratitude.text, joyScore: joy, reflectionDepth: depth, strategyChanged: changed);
+      await _load();
+      await widget.onDataChanged();
+    } finally {
+      investment.dispose(); obstacle.dispose(); strategy.dispose(); progress.dispose(); next.dispose(); learning.dispose(); identity.dispose(); gratitude.dispose();
+    }
+  }
+
+  Future<void> _reframeEffortLanguage() async {
+    final ctrl = TextEditingController();
+    try {
+      final text = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+        title: const Text('把自我否定改成努力语言'),
+        content: TextField(controller: ctrl, minLines: 2, maxLines: 4, decoration: const InputDecoration(hintText: '例如：我又没坚持住，我就是太懒了。', border: OutlineInputBorder())),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('转换'))],
+      ));
+      if (text == null || text.isEmpty) return;
+      final result = await _ai.reframeEffortLanguage(text);
+      if (!mounted) return;
+      await showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('从身份评价回到可调整过程'), content: Text(result, style: const TextStyle(height: 1.55)), actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('我选择一个变量去调整'))]));
+    } finally {
+      ctrl.dispose();
+    }
+  }
+
+  Future<void> _generateResponsePaper() async {
+    final paper = await _ai.generateEffortResponsePaper(entries: _entries, rituals: _rituals);
+    if (!mounted) return;
+    setState(() => _responsePaper = paper);
+  }
+
+  Future<void> _justDoIt() async {
+    final goal = _activeGoal;
+    if (goal == null) return;
+    final step = _activeStep;
+    await _dao.createActionStep(
+      goalId: goal.goalId,
+      sourceTaskId: goal.sourceTaskId,
+      title: step == null ? '立即做一个 2 分钟可见动作' : '2分钟启动：${step.title}',
+      minimumStandard: step?.minimumStandard ?? '打开所需页面或材料，留下一个可见痕迹。',
+      simplifiedStandard: '计时 2 分钟，结束时保存、截图或写一句事实。',
+      recommendedStandard: step?.simplifiedStandard.isNotEmpty == true ? step!.simplifiedStandard : '完成 5 分钟并记录实际产出。',
+      stretchStandard: step?.recommendedStandard ?? '状态允许时继续 15 分钟。',
+      difficultyScore: 2,
+      zoneType: 'comfort',
+      plannedDate: _dao.todayDate(),
+      startTrigger: '现在点击后立即开始，不再继续准备。',
+      completionQuestion: '2分钟后留下了什么可以查看的痕迹？',
+      actionType: 'process',
+      experienceIntention: '练习让行动先发生，而不是证明自己足够强。',
+    );
+    await widget.onDataChanged();
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入 2 分钟启动行动。现在只需要让行动发生。')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    final goal = _activeGoal;
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 90), children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0F766E), Color(0xFF4F46E5)]), borderRadius: BorderRadius.circular(22)),
+          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('足下 · 有意义努力操作系统', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+            SizedBox(height: 8),
+            Text('努力不是痛苦忍耐，而是把“我想成为谁”落实为“今天我做什么”。不奖励完美连续，只记录投入、调整和重新回来。', style: TextStyle(color: Colors.white70, height: 1.5)),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        _EffortMetricCard(summary: _summary),
+        const SizedBox(height: 12),
+        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Stretch Zone Coach', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 6),
+          Text(goal == null ? '请先创建目标。' : '当前目标：${goal.goalTitle}', style: const TextStyle(color: Color(0xFF4B5563))),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            DropdownButton<String>(value: _energy, items: const [DropdownMenuItem(value: 'low', child: Text('精力低')), DropdownMenuItem(value: 'medium', child: Text('精力中')), DropdownMenuItem(value: 'high', child: Text('精力高'))], onChanged: (v) => setState(() => _energy = v ?? 'medium')),
+            DropdownButton<String>(value: _emotion, items: const [DropdownMenuItem(value: 'stable', child: Text('情绪稳定')), DropdownMenuItem(value: 'anxious', child: Text('焦虑')), DropdownMenuItem(value: 'low', child: Text('低落')), DropdownMenuItem(value: 'excited', child: Text('兴奋'))], onChanged: (v) => setState(() => _emotion = v ?? 'stable')),
+            DropdownButton<int>(value: _availableMinutes, items: const [5, 15, 45, 90].map((v) => DropdownMenuItem(value: v, child: Text('$v 分钟'))).toList(), onChanged: (v) => setState(() => _availableMinutes = v ?? 15)),
+            DropdownButton<String>(value: _difficulty, items: const [DropdownMenuItem(value: 'easy', child: Text('任务太容易')), DropdownMenuItem(value: 'right', child: Text('难度刚好')), DropdownMenuItem(value: 'hard', child: Text('任务太难'))], onChanged: (v) => setState(() => _difficulty = v ?? 'right')),
+          ]),
+          const Divider(height: 24),
+          Text(_recommendedZone == 'comfort' ? '保底行动' : '拉伸行动', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalBlue)),
+          const SizedBox(height: 6),
+          Text(_recommendedAction, style: const TextStyle(height: 1.45)),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            FilledButton.icon(onPressed: goal == null ? null : _justDoIt, icon: const Icon(Icons.play_arrow), label: const Text('进入 2 分钟行动优先模式')),
+            OutlinedButton.icon(onPressed: goal == null ? null : () => _recordEffort(), icon: const Icon(Icons.menu_book_outlined), label: const Text('记录努力 + Time-In')),
+          ]),
+        ]))),
+        const SizedBox(height: 12),
+        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Ritual Builder · 不靠意志力', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 6),
+          const Text('当我在【时间/场景】时，我会做【最小行动】，持续【最小时间】，完成后做【奖励/记录】。', style: TextStyle(height: 1.45, color: Color(0xFF4B5563))),
+          const SizedBox(height: 10),
+          FilledButton.tonalIcon(onPressed: goal == null ? null : _createRitual, icon: const Icon(Icons.repeat), label: const Text('创建一个努力仪式')),
+          ..._rituals.take(3).map((r) => ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.autorenew, color: _goalBlue), title: Text('当${r.triggerText}，我会${r.minimumAction}'), subtitle: Text('${r.minimumMinutes}分钟 · ${r.rewardOrRecord}\n阻力预案：${r.frictionPlan}'))),
+        ]))),
+        const SizedBox(height: 12),
+        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('努力不只用于事业', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(onPressed: goal == null ? null : () => _recordEffort(effortType: 'relationship'), icon: const Icon(Icons.favorite_border), label: const Text('关系投入')),
+            OutlinedButton.icon(onPressed: goal == null ? null : () => _recordEffort(effortType: 'deep_work'), icon: const Icon(Icons.psychology_outlined), label: const Text('深度工作循环')),
+            OutlinedButton.icon(onPressed: goal == null ? null : () => _recordEffort(effortType: 'recovery'), icon: const Icon(Icons.self_improvement), label: const Text('休息 / 孵化也记入过程')),
+          ]),
+        ]))),
+        const SizedBox(height: 12),
+        _EffortLanguageCard(onReframe: _reframeEffortLanguage),
+        const SizedBox(height: 12),
+        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('每周 Response Paper', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 6),
+          const Text('综合本周努力、失败反馈、有效仪式、拉伸区平衡、关系投入和下一步，不用完成率定义自己。', style: TextStyle(height: 1.45, color: Color(0xFF4B5563))),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(onPressed: _generateResponsePaper, icon: const Icon(Icons.auto_awesome), label: const Text('生成本周努力报告')),
+          if (_responsePaper.isNotEmpty) ...[const SizedBox(height: 10), Text(_responsePaper, style: const TextStyle(height: 1.55))],
+        ]))),
+        const SizedBox(height: 12),
+        if (_entries.isEmpty)
+          const _EmptyCard(text: '还没有努力记录。首日目标不是做很多，而是完成一次 2 分钟行动，并写一句 Time-In。')
+        else
+          ..._entries.take(7).map((entry) {
+            final progressText = entry.smallProgress.trim().isEmpty ? '' : '\n小进步：${entry.smallProgress}';
+            final returnText = entry.returnedAfterBreak ? '\n我又回来了：这次不是从零开始。' : '';
+            return Card(
+              child: ListTile(
+                leading: Icon(
+                  entry.returnedAfterBreak ? Icons.replay_circle_filled : Icons.directions_walk,
+                  color: entry.returnedAfterBreak ? Colors.green : _goalBlue,
+                ),
+                title: Text('${entry.effortTypeLabel} · ${entry.effortMinutes} 分钟 · ${entry.zoneLabel}'),
+                subtitle: Text('${entry.investmentText}$progressText$returnText'),
+              ),
+            );
+          }),
+      ]),
+    );
+  }
+}
+
+class _EffortMetricCard extends StatelessWidget {
+  const _EffortMetricCard({required this.summary});
+  final TodoGoalEffortSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget metric(String value, String label) => Expanded(child: Column(children: [Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _goalBlue)), Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)))]));
+    return Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('本周努力资产', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 12),
+      Row(children: [metric('${summary.meaningfulEfforts}', '有意义努力'), metric('${summary.effortMinutes}', '投入分钟'), metric('${summary.returnCount}', '回归次数'), metric('${summary.stretchCount}', '拉伸区行动')]),
+      const Divider(height: 24),
+      Text('反思 ${summary.reflectionCount} 次 · 策略调整 ${summary.strategyChangeCount} 次 · 关系投入 ${summary.relationshipInvestmentCount} 次 · 努力愉悦 ${summary.averageJoy.toStringAsFixed(1)}/5', style: const TextStyle(height: 1.45)),
+      if (summary.commonObstacle.isNotEmpty) Text('最常见阻力：${summary.commonObstacle}', style: const TextStyle(color: Color(0xFF92400E), fontWeight: FontWeight.w700)),
+    ])));
+  }
+}
+
+class _EffortLanguageCard extends StatelessWidget {
+  const _EffortLanguageCard({required this.onReframe});
+  final VoidCallback onReframe;
+  @override
+  Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text('Effort Language · 把身份否定改成可调整变量', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+    SizedBox(height: 8),
+    const _MiniLine(label: '“我不行”', text: '当前策略还没有产生需要的反馈。'),
+    const _MiniLine(label: '“我太懒”', text: '启动阻力可能过高，需要缩小动作或明确触发器。'),
+    const _MiniLine(label: '“我坚持不了”', text: '仪式还没有设计得足够自然，不等于你缺少品质。'),
+    const _MiniLine(label: '“我又失败了”', text: '新的数据出现了：现在可以调整难度、环境或路径。'),
+    const SizedBox(height: 10),
+    OutlinedButton.icon(onPressed: onReframe, icon: const Icon(Icons.psychology_alt_outlined), label: const Text('让 AI 转换我的原话')),
+  ])));
 }
