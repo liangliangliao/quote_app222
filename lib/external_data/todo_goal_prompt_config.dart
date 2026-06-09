@@ -108,20 +108,25 @@ class TodoGoalPromptConfig {
 今日最小行动：{{TODAY_ACTION}}
 原始任务背景：{{TASK_BODY}}
 
-必须严格按照问题解决过程展开：
-1. 问题定义：说明现状、期望状态、差距、边界、约束、利益相关者和可控范围。禁止把目标口号直接当成问题定义。
-2. 事实与假设：分别列出已知事实、合理推断、未知信息和关键假设；不得虚构数据。
-3. 根因分析：使用5 Why、鱼骨、约束理论、系统分析或因果链，区分症状、近因、根因和结构性因素；不确定根因应标为待验证假设。
-4. 目标与指标：给出可观察的成功指标、领先指标、滞后指标、时间范围和停止/转向条件。
-5. 多方案生成：至少3种原理不同的方案，不只是同一方案的强弱版本。可使用信息收集、流程优化、能力建设、环境设计、资源协作、实验验证、风险预案等手段。
-6. 方案比较：按有效性、证据强度、成本、时间、风险、可逆性、依赖条件和价值一致性进行客观比较。
-7. 验证优先：优先设计低成本、可逆的小实验来验证最关键假设，不直接投入高成本执行。
-8. 问题树：节点必须体现逻辑问题、事实、假设、所需证据和判断规则。树应从顶层问题依次展开为诊断问题、根因假设、验证实验、决策节点和执行动作。
-9. 用户自主选择：可给出暂定推荐，但必须说明推荐依据、证据局限、反例、何时切换方案，并邀请用户自行选择或组合方案。
-10. 以上是你的内部分析过程，不是页面课程。所有输出字段必须围绕当前用户的具体目标写成自然、简洁、可执行的中文；禁止直接向用户讲“5 Why、鱼骨、事实/假设、根因、科学方法”等概念。
-11. 每个方案必须让普通用户一眼看懂四件事：这条路具体怎么走、适合什么现实情况、先做哪个低成本尝试、看到什么结果后继续或换路。字段值不得包含 JSON/Map/数组文本或英文键名。
-12. 问题树不是术语树。节点标题要写成用户正在解决的具体障碍或要完成的具体动作；description 与 actionableStep 必须说明现实场景、动作和可观察结果。
-
+必须严格按照“证明题式问题求解”展开。目标不是生成鼓励性说辞，而是给出可检查的结论和从已知条件推导到结论的完整过程：
+1. 明确待求：把结果目标改写成可验证的目标状态，写清当前状态、目标状态、差距、时间边界与完成判据。
+2. 锁定已知条件：只能把用户输入、To Do 字段和已确认目标信息作为事实。凡未提供的数据、能力、资源、心理原因和外部环境，一律列为未知或待验证条件，禁止补写成事实。
+3. 建立求解条件：列出实现目标所必需的条件，并说明每个条件为什么必要；区分必要条件、可选条件、约束和风险边界。
+4. 构造推导链：从目标状态反向推导必须先解决的父问题，再把父问题递归分解为子问题，直到叶节点成为用户可在现实中直接执行且可验收的动作。
+5. 每一步必须有依据：每个节点都要写清它解决什么、由哪些已知条件或前置节点支持、完成后如何推动父问题、如何验收；不能出现与父问题没有推导关系的通用建议。
+6. 使用合适关系：
+   - sequence：必须按顺序完成；
+   - and：多个子问题必须全部解决，父问题才成立；
+   - or：多个替代路径任一成立即可；
+   - dependency：除父子关系外还依赖其他节点，用 dependencies 引用节点 id；
+   - network：存在交叉依赖时使用网状关系，不得强行画成单一路径。
+7. 生成至少3个原理不同的完整方案，而不是同一方案只改变强度：例如信息验证、能力建设、流程/环境重构、资源协作、风险控制等。每个方案标注舒适区、拉伸区或恐慌区，并客观比较有效性、成本、时间、风险、可逆性和适用条件。
+8. 每个方案都必须从初始状态覆盖到目标状态，至少包含3个层级和6个节点；至少2个叶节点必须是可执行动作。非叶节点不可伪装成行动，叶节点必须包含具体对象、场景/触发、动作、产出和验收标准。
+9. 根节点代表目标问题；中间节点代表阶段状态、必要条件、决策或子问题；叶节点代表直接行动。所有节点必须能沿父子或依赖关系回推到根节点，禁止孤立节点、循环依赖和无依据跳步。
+10. 对未知原因先设计低成本验证节点，再根据结果进入不同分支；不能直接断言用户缺乏能力、存在心理问题或某方法必然有效。
+11. 给出清晰答案：summary 要说明该方案如何从当前状态推进到目标状态；userChoiceGuidance 要说明在什么现实条件下选它，不能替用户决定。
+12. 用户选择主方案后，未选方案保留为备用；节点失败时优先在同一父问题下换叶节点、替代路径或备用方案。只有关键前提被证伪且局部修复无效时，才建议重构整套方案。
+13. 以上严谨结构用于系统求解和校验。用户可见文字仍要围绕具体目标，使用清楚的日常中文，不输出空泛理论课程、虚构案例或无法验证的断言。
 只输出 JSON：
 {
   "solutionPlans": [
@@ -131,20 +136,21 @@ class TodoGoalPromptConfig {
       "methodBasis": "用日常语言说明为什么这条路可能适合当前目标、还缺什么信息",
       "zoneType": "comfort/stretch/panic",
       "coreValueFocus": "与用户价值和自主选择的关系",
-      "summary": "方案机制与主要步骤摘要",
+      "summary": "明确答案：说明如何从当前状态经过哪些关键中间状态到达目标状态",
       "riskNotes": "风险、反例、适用边界和可能副作用",
-      "problemDefinition": "用一段自然语言说清用户现在卡在哪里、想改变什么、哪些现实限制必须考虑",
-      "knownFacts": "只写从用户输入能确认的具体情况，用自然语言，不使用已知事实作为标题",
-      "keyAssumptions": "写出开始前最需要向用户确认的现实问题，用自然语言",
-      "rootCauseAnalysis": "解释可能卡住用户的2-3个具体原因，以及如何用小行动分辨，不宣称已经诊断",
+      "problemDefinition": "待求问题：当前状态、目标状态、差距、边界、约束与完成判据",
+      "knownFacts": "已知条件：仅限输入中可确认的事实；不得把推测写成事实",
+      "keyAssumptions": "未知条件与待验证前提，以及前提错误会影响哪一步推导",
+      "rootCauseAnalysis": "候选原因、推导依据、相互关系和对应验证节点；不宣称未经验证的根因",
       "optionComparison": "直接说明这条路相对其他选择更适合谁、代价是什么、何时不该选",
-      "evidencePlan": "用户今天或本周可以做的低成本尝试，以及要记录什么结果",
+      "evidencePlan": "优先验证哪些未知条件、由哪个节点验证、记录什么结果以及如何影响后续分支",
       "successMetrics": "用用户看得懂的方式说明观察多久、出现什么变化算值得继续",
       "stopConditions": "出现什么具体情况时应该缩小行动、换路或寻求帮助",
       "userChoiceGuidance": "推荐依据、局限、不适用条件，以及用户如何自主选择或组合",
       "nodes": [
-        {"id":"root","parentId":"","relationType":"tree","nodeType":"problem","title":"先弄清目前最影响进展的卡点","description":"结合用户目标写出具体处境","logicQuestion":"此刻最值得先弄清的具体问题","knownFacts":"从用户输入能确认的情况","assumptions":"还需要向用户确认的情况","evidenceNeeded":"行动时需要留意或记录什么","decisionRule":"出现什么结果时继续或换路","acceptanceCriteria":"用户可理解的完成标准","actionableStep":"","zoneType":"stretch","difficultyScore":5,"estimatedMinutes":10,"sequenceOrder":0},
-        {"id":"test1","parentId":"root","relationType":"hypothesis_test","nodeType":"experiment","title":"先做一次低成本尝试","description":"说明这一步如何帮助用户判断下一步","logicQuestion":"这次尝试要帮助用户弄清什么","knownFacts":"","assumptions":"开始前仍不确定的情况","evidenceNeeded":"用户要观察的实际变化","decisionRule":"有效时怎样继续，无效时怎样调整","acceptanceCriteria":"明确、可观察的完成标准","actionableStep":"具体时间、地点、对象、动作和记录方式","zoneType":"stretch","difficultyScore":3,"estimatedMinutes":15,"sequenceOrder":1}
+        {"id":"root","parentId":"","relationType":"and","nodeType":"goal_state","title":"达到可验证的目标状态","description":"当前状态→关键中间状态→目标状态的完整求解结论","logicQuestion":"哪些必要条件全部成立时，目标才算实现","knownFacts":"仅写输入中确认的信息","assumptions":"尚未确认的前提","evidenceNeeded":"最终结果证据","decisionRule":"所有必要子问题完成后，用户评估根问题成功或失败","acceptanceCriteria":"明确的目标完成判据","actionableStep":"","dependencies":[],"zoneType":"stretch","difficultyScore":5,"estimatedMinutes":10,"sequenceOrder":0},
+        {"id":"condition1","parentId":"root","relationType":"sequence","nodeType":"sub_problem","title":"解决一个实现目标所必需的具体条件","description":"说明该条件为何是根问题的必要组成部分","logicQuestion":"这个条件不成立时，目标为什么无法实现","knownFacts":"支持该子问题的已知条件","assumptions":"需要验证的未知条件","evidenceNeeded":"该中间状态的证据","decisionRule":"子节点全部完成后再评估此父节点","acceptanceCriteria":"中间状态的可验证标准","actionableStep":"","dependencies":[],"zoneType":"stretch","difficultyScore":4,"estimatedMinutes":10,"sequenceOrder":1},
+        {"id":"action1","parentId":"condition1","relationType":"sequence","nodeType":"action","title":"完成一个不可再分的现实动作","description":"说明动作产出如何直接解决父问题","logicQuestion":"该产出是否足以推动父问题成立","knownFacts":"执行动作所需且已确认的条件","assumptions":"动作将验证的前提","evidenceNeeded":"可观察产出","decisionRule":"达到验收标准则成功，否则进入同父问题的替代步骤","acceptanceCriteria":"明确数量、质量或可观察结果","actionableStep":"在具体场景下，对具体对象执行具体动作并留下产出","dependencies":[],"zoneType":"stretch","difficultyScore":3,"estimatedMinutes":15,"sequenceOrder":2}
       ]
     }
   ]

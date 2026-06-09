@@ -884,7 +884,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
         userDecisionPrompt: goal.userDecisionPrompt,
       );
       final result = await _ai.generateProblemSolutions(task: task, analysis: analysis);
-      final keepExisting = result.usedFallback && _solutionPlans.isNotEmpty;
+      final keepExisting = result.usedFallback && result.rawResponse.trim().isEmpty && _solutionPlans.isNotEmpty;
       if (!keepExisting) {
         await _goalDao.clearSolutionPlans(goal.goalId);
         await _goalDao.saveSolutionPlansFromAnalysis(goalId: goal.goalId, sourceTaskId: goal.sourceTaskId, plans: result.plans);
@@ -898,7 +898,14 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
         modelName: result.modelLabel,
       );
       await _load();
-      _show(result.usedFallback ? (keepExisting ? 'AI方案请求未完成，已保留原有问题解决方案。' : 'AI方案请求未完成，已生成本地备用问题树。') : 'AI 已单独生成问题解决方案和问题树。');
+      final resultMessage = !result.usedFallback
+          ? 'AI 已生成通过结构校验的问题解决方案和问题树。'
+          : keepExisting
+              ? 'AI方案请求未完成，已保留原有问题解决方案。'
+              : result.rawResponse.trim().isNotEmpty
+                  ? 'AI返回未通过推导链校验，已改用完整的本地备用问题树。'
+                  : 'AI方案请求未完成，已生成完整的本地备用问题树。';
+      _show(resultMessage);
     } catch (e) {
       _show('生成问题解决方案失败：$e', isError: true);
     } finally {
@@ -943,9 +950,27 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     }
   }
 
+  bool _problemNodeReady(TodoGoalProblemNode node, {required bool forEvaluation}) {
+    final byId = <String, TodoGoalProblemNode>{for (final item in _selectedNodes) item.nodeId: item};
+    if (!node.dependencyNodeIds.every((id) => byId[id]?.isCompleted == true)) return false;
+    final parent = byId[node.parentNodeId];
+    if (parent?.relationType.toLowerCase() == 'sequence') {
+      final earlierSiblings = _selectedNodes.where((item) => item.parentNodeId == parent!.nodeId && item.sequenceOrder < node.sequenceOrder);
+      if (!earlierSiblings.every((item) => item.isCompleted)) return false;
+    }
+    final children = _selectedNodes.where((item) => item.parentNodeId == node.nodeId).toList();
+    if (!forEvaluation) return children.isEmpty && node.isActionable;
+    if (children.isEmpty) return true;
+    return node.relationType.toLowerCase() == 'or' ? children.any((child) => child.isCompleted) : children.every((child) => child.isCompleted);
+  }
+
   Future<void> _activateProblemNode(TodoGoalProblemNode node) async {
     final goal = _goal;
     if (goal == null || _busy) return;
+    if (!_problemNodeReady(node, forEvaluation: false)) {
+      _show('请先完成这个动作依赖的前置节点；只有最底层、可直接执行的动作才能加入今日行动。', isError: true);
+      return;
+    }
     setState(() => _busy = true);
     try {
       final stepId = await _goalDao.createStepFromProblemNode(node, sourceTaskId: goal.sourceTaskId);
@@ -962,6 +987,10 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
   Future<void> _markProblemNode(TodoGoalProblemNode node, String status) async {
     final goal = _goal;
     if (goal == null || _busy) return;
+    if (!_problemNodeReady(node, forEvaluation: true)) {
+      _show('这个父问题仍有前置或子问题未完成，请先从最底层动作开始。', isError: true);
+      return;
+    }
     final note = await _askText(
       title: status == 'failed' ? '这个节点为什么失败了？' : '这个节点成功完成了吗？',
       hint: status == 'failed' ? '写下现实阻力、卡住环节或失败事实，AI会据此给出重启指导和替代步骤。' : '可简单记录完成证据，例如：已做了什么、达到什么标准。',
@@ -969,6 +998,9 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     if (note == null) return;
     setState(() => _busy = true);
     try {
+      final parentMatches = _selectedNodes.where((item) => item.nodeId == node.parentNodeId).toList();
+      final parentProblem = parentMatches.isEmpty ? goal.goalTitle : parentMatches.first.title;
+      final reasoningBasis = <String>[node.description, node.logicQuestion].where((text) => text.trim().isNotEmpty).join('；');
       if (status == 'failed') {
         final recovery = await _ai.generateStepRecovery(
           goalTitle: goal.goalTitle,
@@ -979,6 +1011,9 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
           userResult: 'failure',
           userReflection: note,
           obstacle: note,
+          parentProblem: parentProblem,
+          reasoningBasis: reasoningBasis,
+          decisionRule: node.decisionRule,
         );
         final reviewJson = jsonEncode(recovery.toJson());
         await _goalDao.updateProblemNodeStatus(node.nodeId, 'failed', completionNote: note.trim(), aiReviewJson: reviewJson);
@@ -992,16 +1027,20 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
         );
         final chosen = await _chooseAlternativeStep(recovery.alternatives);
         if (chosen != null) {
+          await _goalDao.addAlternativeProblemNode(original: node, alternative: chosen);
           await _goalDao.createActionStep(
             goalId: goal.goalId,
             sourceTaskId: goal.sourceTaskId,
             title: chosen.title,
             minimumStandard: chosen.minimumStandard,
+            simplifiedStandard: chosen.minimumStandard,
             recommendedStandard: chosen.recommendedStandard,
-            stretchStandard: '如果仍然失败，回到备用步骤或切换备用方案；暂不轻易重构整个目标方案。',
+            stretchStandard: '如果仍然失败，先尝试复盘中保存的其他备用步骤，或切换备用方案；只有关键前提被证伪时才重构全方案。',
             difficultyScore: chosen.difficultyScore,
             zoneType: chosen.zoneType,
             plannedDate: _goalDao.todayDate(),
+            actionType: 'result',
+            experienceIntention: '验证这个替代步骤能否绕过原阻力，同时继续解决同一个父问题。',
           );
         }
         _show(chosen == null ? '已保存失败复盘与AI替代步骤。' : '已保存失败复盘，并把所选替代步骤加入今日行动。');
@@ -1015,6 +1054,9 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
           userResult: 'success',
           userReflection: note,
           obstacle: '',
+          parentProblem: parentProblem,
+          reasoningBasis: reasoningBasis,
+          decisionRule: node.decisionRule,
         );
         final reviewJson = jsonEncode(recovery.toJson());
         await _goalDao.updateProblemNodeStatus(node.nodeId, 'completed', completionNote: note.trim(), aiReviewJson: reviewJson);
@@ -1026,7 +1068,12 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
           userText: note.trim(),
           recovery: recovery,
         );
-        _show('已标记该子问题/节点成功，并保存AI复盘。');
+        if (node.parentNodeId.trim().isEmpty) {
+          await _goalDao.updateGoalStatus(goal.goalId, 'completed');
+          _show('根问题已通过验收：所有必要子问题已逐层回推完成，目标已标记为实现。');
+        } else {
+          _show('已标记该子问题成功。请继续回到它的父问题进行验收。');
+        }
       }
       await _load();
     } catch (e) {
@@ -2794,8 +2841,8 @@ class _SolutionPlanCard extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (plan.summary.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.route_outlined, title: '这条路怎么走', text: plan.summary),
-            if (plan.evidencePlan.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_circle_outline, title: '可以先试的一小步', text: plan.evidencePlan),
+            if (plan.summary.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.route_outlined, title: '方案结论：怎样从现状走到目标', text: plan.summary),
+            if (plan.evidencePlan.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_circle_outline, title: '第一轮需要验证什么', text: plan.evidencePlan),
             if (plan.successMetrics.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.visibility_outlined, title: '怎样知道它值得继续', text: plan.successMetrics),
             if (plan.riskNotes.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.warning_amber_outlined, title: '选择前需要考虑', text: plan.riskNotes),
           ]),
@@ -2840,20 +2887,22 @@ class _ProblemNodeTreeCard extends StatelessWidget {
       }
     }
     final roots = nodes.where((n) => n.parentNodeId.trim().isEmpty || !ids.contains(n.parentNodeId)).toList();
+    final nodesById = <String, TodoGoalProblemNode>{for (final node in nodes) node.nodeId: node};
     final completed = nodes.where((n) => n.isCompleted).length;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: const Color(0xFFF4F6FF), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE0E7FF))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('把“${plan.title}”拆成可以验证的步骤', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
+        Text('解题过程：把“${plan.title}”逐层推导到现实动作', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
         const SizedBox(height: 4),
-        Text('已验证 $completed / ${nodes.length} 步。先处理眼前能行动或能确认的一步，再根据结果决定继续还是换路。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
+        Text('已解决 $completed / ${nodes.length} 个问题节点。请从没有未完成前置条件的最底层动作开始；叶节点成功后，再逐层评估父问题，直到根问题成立。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
         const SizedBox(height: 8),
         ...roots.map((n) => _ProblemNodeTreeNode(
               node: n,
               depth: 0,
               childrenByParent: childrenByParent,
+              nodesById: nodesById,
               onActivateNode: onActivateNode,
               onMarkNode: onMarkNode,
             )),
@@ -2863,16 +2912,28 @@ class _ProblemNodeTreeCard extends StatelessWidget {
 }
 
 class _ProblemNodeTreeNode extends StatelessWidget {
-  const _ProblemNodeTreeNode({required this.node, required this.depth, required this.childrenByParent, required this.onActivateNode, required this.onMarkNode});
+  const _ProblemNodeTreeNode({required this.node, required this.depth, required this.childrenByParent, required this.nodesById, required this.onActivateNode, required this.onMarkNode});
   final TodoGoalProblemNode node;
   final int depth;
   final Map<String, List<TodoGoalProblemNode>> childrenByParent;
+  final Map<String, TodoGoalProblemNode> nodesById;
   final ValueChanged<TodoGoalProblemNode> onActivateNode;
   final void Function(TodoGoalProblemNode node, String status) onMarkNode;
 
   @override
   Widget build(BuildContext context) {
     final children = (childrenByParent[node.nodeId] ?? const <TodoGoalProblemNode>[]).where((n) => n.nodeId != node.nodeId).toList();
+    final dependenciesReady = node.dependencyNodeIds.every((id) => nodesById[id]?.isCompleted == true);
+    final dependencyTitles = node.dependencyNodeIds.map((id) => nodesById[id]?.title ?? '').where((title) => title.isNotEmpty).toList(growable: false);
+    final parent = nodesById[node.parentNodeId];
+    final siblings = <TodoGoalProblemNode>[];
+    if (parent != null) siblings.addAll(childrenByParent[parent.nodeId] ?? const <TodoGoalProblemNode>[]);
+    siblings.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
+    final previousSiblingsReady = parent?.relationType.toLowerCase() != 'sequence' || siblings.where((sibling) => sibling.sequenceOrder < node.sequenceOrder).every((sibling) => sibling.isCompleted);
+    final childrenReady = children.isEmpty
+        ? true
+        : (node.relationType.toLowerCase() == 'or' ? children.any((child) => child.isCompleted) : children.every((child) => child.isCompleted));
+    final ready = dependenciesReady && previousSiblingsReady && childrenReady;
     final indent = (depth * 16.0).clamp(0.0, 80.0).toDouble();
     return Padding(
       padding: EdgeInsets.only(left: indent, top: 8),
@@ -2887,6 +2948,15 @@ class _ProblemNodeTreeNode extends StatelessWidget {
               Expanded(child: Text(node.title, style: TextStyle(fontWeight: FontWeight.w900, color: _goalInk, decoration: node.isCompleted ? TextDecoration.lineThrough : null))),
               _NodeStatusChip(status: node.status),
             ]),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(spacing: 6, runSpacing: 6, children: [
+                _LogicRelationChip(label: node.relationLabel),
+                if (node.dependencyNodeIds.isNotEmpty) _LogicRelationChip(label: '依赖 ${node.dependencyNodeIds.length} 个前置节点'),
+                if (!ready && !node.isCompleted) const _LogicRelationChip(label: '等待前置问题完成', waiting: true),
+              ]),
+            ),
+            if (dependencyTitles.isNotEmpty) _MiniLine(label: '还需要先完成', text: dependencyTitles.join('、')),
             if (node.description.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_humanizeAiText(node.description), style: const TextStyle(color: Color(0xFF4B5563), height: 1.4))),
             if (node.actionableStep.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_arrow_rounded, title: '现在可以做', text: node.actionableStep),
             if (node.acceptanceCriteria.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.flag_outlined, title: '做到这里就够', text: node.acceptanceCriteria),
@@ -2908,9 +2978,9 @@ class _ProblemNodeTreeNode extends StatelessWidget {
             if (node.aiReviewJson.trim().isNotEmpty) _NodeAiReviewBox(reviewJson: node.aiReviewJson),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              if (node.isActionable) OutlinedButton.icon(onPressed: node.isCompleted ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
-              OutlinedButton.icon(onPressed: node.isCompleted ? null : () => onMarkNode(node, 'completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('这一步有效')),
-              OutlinedButton.icon(onPressed: node.isFailed ? null : () => onMarkNode(node, 'failed'), icon: const Icon(Icons.tune_outlined), label: const Text('遇到阻碍')),
+              if (node.isActionable && children.isEmpty) OutlinedButton.icon(onPressed: node.isCompleted || !ready ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
+              OutlinedButton.icon(onPressed: node.isCompleted || !ready ? null : () => onMarkNode(node, 'completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('成功')),
+              OutlinedButton.icon(onPressed: node.isFailed || !ready ? null : () => onMarkNode(node, 'failed'), icon: const Icon(Icons.cancel_outlined), label: const Text('失败')),
             ]),
           ]),
         ),
@@ -2918,6 +2988,7 @@ class _ProblemNodeTreeNode extends StatelessWidget {
               node: child,
               depth: depth + 1,
               childrenByParent: childrenByParent,
+              nodesById: nodesById,
               onActivateNode: onActivateNode,
               onMarkNode: onMarkNode,
             )),
@@ -2929,6 +3000,22 @@ class _ProblemNodeTreeNode extends StatelessWidget {
     if (n.nodeType == 'action') return Icons.touch_app_outlined;
     if (n.nodeType == 'sub_problem') return Icons.subdirectory_arrow_right;
     return Icons.account_tree_outlined;
+  }
+}
+
+class _LogicRelationChip extends StatelessWidget {
+  const _LogicRelationChip({required this.label, this.waiting = false});
+  final String label;
+  final bool waiting;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = waiting ? Colors.orange.shade800 : const Color(0xFF53639D);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withOpacity(0.2))),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11)),
+    );
   }
 }
 

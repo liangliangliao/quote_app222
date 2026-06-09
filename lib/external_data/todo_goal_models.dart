@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 int _toInt(Object? value) {
   if (value is int) return value;
   if (value is num) return value.toInt();
@@ -810,6 +812,41 @@ class TodoGoalProblemNode {
   bool get isActionable => actionableStep.trim().isNotEmpty || nodeType == 'action';
   String get displayAction => actionableStep.trim().isEmpty ? title : actionableStep.trim();
 
+  List<String> get dependencyNodeIds {
+    final raw = dependenciesJson.trim();
+    if (raw.isEmpty) return const <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((value) => value.toString().trim()).where((value) => value.isNotEmpty).toList(growable: false);
+      }
+    } catch (_) {
+      // Legacy AI responses may have stored Dart-style list strings.
+    }
+    return raw
+        .replaceAll(RegExp(r'^[\[\{]+|[\]\}]+$'), '')
+        .split(RegExp(r'[,，、|]'))
+        .map((value) => value.replaceAll(RegExp(r'''^[\s"']+|[\s"']+$'''), '').trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String get relationLabel {
+    switch (relationType.trim().toLowerCase()) {
+      case 'and':
+        return '全部子问题都要解决';
+      case 'or':
+        return '任选一条有效路径';
+      case 'sequence':
+        return '按顺序推进';
+      case 'dependency':
+      case 'network':
+        return '存在交叉依赖';
+      default:
+        return '父子分解';
+    }
+  }
+
   factory TodoGoalProblemNode.fromMap(Map<String, Object?> row) => TodoGoalProblemNode(
         nodeId: (row['node_id'] ?? '').toString(),
         goalId: (row['goal_id'] ?? '').toString(),
@@ -853,7 +890,7 @@ class TodoGoalProblemNode {
         difficultyScore: _readJsonIntAny(json, const <String>['difficultyScore', 'difficulty_score', 'difficulty', '难度', '难度分'], 5),
         estimatedMinutes: _readJsonIntAny(json, const <String>['estimatedMinutes', 'estimated_minutes', 'minutes', 'durationMinutes', '预计分钟', '耗时分钟'], 5),
         sequenceOrder: _readJsonIntAny(json, const <String>['sequenceOrder', 'sequence_order', 'sortOrder', 'sort_order', 'order', '顺序'], sequenceOrder),
-        dependenciesJson: _readJsonDynamic(json, const <String>['dependencies', 'dependenciesJson', 'dependencies_json', '依赖'])?.toString() ?? '',
+        dependenciesJson: _encodeJsonField(_readJsonDynamic(json, const <String>['dependencies', 'dependenciesJson', 'dependencies_json', '依赖'])),
         status: 'not_started',
         completionNote: '',
         aiReviewJson: '',
@@ -963,6 +1000,13 @@ class TodoGoalStepRecoveryResult {
         'modelLabel': modelLabel,
         'usedFallback': usedFallback,
       };
+}
+
+
+String _encodeJsonField(Object? value) {
+  if (value == null) return '';
+  if (value is List || value is Map) return jsonEncode(value);
+  return value.toString().trim();
 }
 
 Object? _readJsonDynamic(Map<String, dynamic> json, List<String> keys) {

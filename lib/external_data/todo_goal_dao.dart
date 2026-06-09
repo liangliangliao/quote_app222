@@ -1036,11 +1036,15 @@ class TodoGoalDao {
     if (nodes.isEmpty) return;
     final tempToReal = <String, String>{};
     for (var i = 0; i < nodes.length; i++) {
+      final tempId = nodes[i].tempNodeId.trim().isEmpty ? 'node_${i + 1}' : nodes[i].tempNodeId.trim();
+      tempToReal[tempId] = newId('todo_node_${i + 1}');
+    }
+    for (var i = 0; i < nodes.length; i++) {
       final n = nodes[i];
-      final nodeId = newId('todo_node_${i + 1}');
       final tempId = n.tempNodeId.trim().isEmpty ? 'node_${i + 1}' : n.tempNodeId.trim();
-      tempToReal[tempId] = nodeId;
+      final nodeId = tempToReal[tempId]!;
       final parent = n.tempParentNodeId.trim().isEmpty ? '' : (tempToReal[n.tempParentNodeId.trim()] ?? '');
+      final dependencies = n.dependencyNodeIds.map((id) => tempToReal[id] ?? id).where((id) => id.isNotEmpty).toList(growable: false);
       final nodeValues = <String, Object?>{
         'node_id': nodeId,
         'goal_id': goalId,
@@ -1056,7 +1060,7 @@ class TodoGoalDao {
         'difficulty_score': n.difficultyScore.clamp(1, 10).toInt(),
         'estimated_minutes': n.estimatedMinutes <= 0 ? 5 : n.estimatedMinutes,
         'sequence_order': n.sequenceOrder == 0 ? i : n.sequenceOrder,
-        'dependencies_json': n.dependenciesJson,
+        'dependencies_json': jsonEncode(dependencies),
         'logic_question': n.logicQuestion,
         'known_facts': n.knownFacts,
         'assumptions': n.assumptions,
@@ -1115,7 +1119,7 @@ class TodoGoalDao {
   Future<void> selectSolutionPlan({required String goalId, required String solutionId}) async {
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
-    await db.update('goal_solution_plans', <String, Object?>{'is_selected': 0, 'updated_at_ms': now}, where: 'goal_id = ?', whereArgs: [goalId]);
+    await db.update('goal_solution_plans', <String, Object?>{'is_selected': 0, 'status': 'candidate', 'updated_at_ms': now}, where: 'goal_id = ? AND status != ?', whereArgs: [goalId, 'archived']);
     await db.update('goal_solution_plans', <String, Object?>{'is_selected': 1, 'status': 'selected', 'updated_at_ms': now}, where: 'solution_id = ? AND goal_id = ?', whereArgs: [solutionId, goalId]);
   }
 
@@ -1150,6 +1154,54 @@ class TodoGoalDao {
       where: 'node_id = ?',
       whereArgs: [nodeId],
     );
+  }
+
+  Future<String> addAlternativeProblemNode({
+    required TodoGoalProblemNode original,
+    required TodoGoalAlternativeStep alternative,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final maxRows = await db.rawQuery(
+      'SELECT COALESCE(MAX(sequence_order), 0) AS max_order FROM goal_problem_nodes WHERE solution_id = ?',
+      <Object?>[original.solutionId],
+    );
+    final maxOrder = maxRows.isEmpty ? 0 : _toLocalInt(maxRows.first['max_order']);
+    final nodeId = newId('todo_node_alternative');
+    await db.update(
+      'goal_problem_nodes',
+      <String, Object?>{'relation_type': 'or', 'updated_at_ms': now},
+      where: 'node_id = ?',
+      whereArgs: <Object?>[original.nodeId],
+    );
+    await db.insert('goal_problem_nodes', <String, Object?>{
+      'node_id': nodeId,
+      'goal_id': original.goalId,
+      'solution_id': original.solutionId,
+      'parent_node_id': original.nodeId,
+      'relation_type': 'or',
+      'node_type': 'action',
+      'title': alternative.title,
+      'description': alternative.rationale,
+      'acceptance_criteria': alternative.minimumStandard,
+      'actionable_step': alternative.title,
+      'zone_type': _normalizeZone(alternative.zoneType),
+      'difficulty_score': alternative.difficultyScore.clamp(1, 10).toInt(),
+      'estimated_minutes': 5,
+      'sequence_order': maxOrder + 1,
+      'dependencies_json': original.dependenciesJson,
+      'logic_question': '这个替代动作能否在不改变父问题的前提下，绕过刚才的具体阻力？',
+      'known_facts': '原步骤未达到验收标准，用户已经记录了具体结果。',
+      'assumptions': alternative.rationale,
+      'evidence_needed': '是否开始、实际产出、是否绕过原阻力，以及对父问题的推进证据。',
+      'decision_rule': '达到最低标准则保留为当前路径；仍失败则尝试其他备用步骤或切换备用方案，暂不重构全方案。',
+      'status': 'in_progress',
+      'completion_note': '从失败复盘中选出的替代步骤',
+      'ai_review_json': '',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    });
+    return nodeId;
   }
 
   Future<String> createStepFromProblemNode(TodoGoalProblemNode node, {String sourceTaskId = ''}) async {

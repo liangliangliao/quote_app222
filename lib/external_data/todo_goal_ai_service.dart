@@ -137,10 +137,10 @@ class TodoGoalAiService {
       final raw = await _ai.generateText(
         prompt: prompt,
         purpose: 'microsoft_todo.goal_problem_solutions',
-        systemPrompt: '你是严谨、务实、客观的科学问题解决分析器。区分事实、推断、假设和未知；使用根因分析、方案比较和验证实验；不得替用户做最终选择。只输出合法JSON。',
-        maxTokens: 6500,
+        systemPrompt: '你是严谨的现实问题求解器。像完成证明题一样，只使用给定事实，把目标状态反向分解为必要条件、子问题和可验收叶节点；每一步必须有推导依据，未知信息必须先验证，禁止虚构事实、空泛建议和逻辑跳步。生成原理不同的主备方案，但不得替用户选择。只输出合法JSON。',
+        maxTokens: 9000,
         expectJson: true,
-        temperature: 0.35,
+        temperature: 0.2,
       );
       if (raw.trim().isEmpty) return fallback();
       final parsed = _extractJsonObject(raw);
@@ -148,11 +148,13 @@ class TodoGoalAiService {
       var plans = _readPlans(parsed);
       if (plans.isEmpty) plans = _readPlans(_resolveAnalysisPayload(parsed));
       if (plans.isEmpty) return fallback();
+      final checked = _buildRigorousPlanSet(plans, fallbackPlans);
       return TodoGoalSolutionGenerationResult(
-        plans: plans,
-        provider: state['provider'] ?? 'ai',
+        plans: checked.plans,
+        provider: checked.usedFallback ? 'hybrid' : (state['provider'] ?? 'ai'),
         modelLabel: state['label'] ?? 'AI',
         rawResponse: raw,
+        usedFallback: checked.usedFallback,
       );
     } catch (_) {
       return fallback();
@@ -278,6 +280,9 @@ $reflectionText
     required String userResult,
     required String userReflection,
     required String obstacle,
+    String parentProblem = '',
+    String reasoningBasis = '',
+    String decisionRule = '',
   }) async {
     final state = await getGlobalAiState();
     final fallback = _fallbackRecovery(
@@ -297,6 +302,9 @@ $reflectionText
 深层意义：$deepMeaning
 过程价值：$processValue
 当前步骤：$actionTitle
+它正在解决的父问题：${parentProblem.trim().isEmpty ? '未提供' : parentProblem.trim()}
+本步骤为何能推动父问题：${reasoningBasis.trim().isEmpty ? '未提供' : reasoningBasis.trim()}
+原判断规则：${decisionRule.trim().isEmpty ? '未提供' : decisionRule.trim()}
 最低标准：$minimumStandard
 用户选择结果：$userResult
 用户过程记录：${userReflection.trim().isEmpty ? '未填写' : userReflection.trim()}
@@ -304,9 +312,10 @@ $reflectionText
 
 请根据科学问题解决原则输出：
 1. 先列出已观察事实，再区分可能原因与待验证假设；成功时提炼可复用条件，失败时指出问题发生在哪个更小环节。
-2. 如何重启当前子问题，优先缩小、换路径、换环境、降低阻力，而不是立刻推翻整套方案。
-3. 给出3个机制不同的替代步骤，说明各自适用条件、代价和风险，不能替用户选择；必须符合目标价值体系：目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌。
-4. 给出验证关键假设的低成本实验和判断规则。只有证据显示原方案方向错误时才提醒重构；最终由用户选择继续、换路或暂停。
+2. 定位失败发生在当前动作内部、前置条件、依赖节点还是父问题推导关系，不能用泛化心理标签解释。
+3. 如何重启当前子问题，优先缩小、换路径、换环境、补前置条件，而不是立刻推翻整套方案。
+4. 给出3个机制不同、但仍然解决同一父问题的替代步骤。每个替代步骤必须说明它如何绕过本次具体阻力、产出什么证据、适用条件、代价和风险，不能只是改写原句。
+5. 给出验证关键前提的低成本实验和判断规则。只有关键前提被证伪、同一父问题下的多个替代步骤均失败，或推导链与目标无关时，才建议重构全方案；最终由用户选择继续、换路、切备用方案或暂停。
 
 只输出JSON：
 {
@@ -640,6 +649,95 @@ $reflectionText
     );
   }
 
+  ({List<TodoGoalSolutionPlan> plans, bool usedFallback}) _buildRigorousPlanSet(
+    List<TodoGoalSolutionPlan> aiPlans,
+    List<TodoGoalSolutionPlan> fallbackPlans,
+  ) {
+    final valid = aiPlans.where(_isRigorousPlan).toList(growable: false);
+    final result = <TodoGoalSolutionPlan>[];
+    final usedMethods = <String>{};
+    final fullyFallback = valid.isEmpty;
+    for (final zone in const <String>['comfort', 'stretch', 'panic']) {
+      TodoGoalSolutionPlan? candidate;
+      for (final plan in valid) {
+        final methodKey = plan.methodName.trim().toLowerCase();
+        if (plan.zoneType == zone && !result.contains(plan) && methodKey.isNotEmpty && !usedMethods.contains(methodKey)) {
+          candidate = plan;
+          break;
+        }
+      }
+      if (candidate == null) {
+        candidate = fallbackPlans.firstWhere((plan) => plan.zoneType == zone);
+      }
+      result.add(candidate);
+      usedMethods.add(candidate.methodName.trim().toLowerCase());
+    }
+    return (plans: result, usedFallback: fullyFallback);
+  }
+
+  bool _isRigorousPlan(TodoGoalSolutionPlan plan) {
+    if (plan.title.trim().isEmpty ||
+        plan.summary.trim().isEmpty ||
+        plan.problemDefinition.trim().isEmpty ||
+        plan.knownFacts.trim().isEmpty ||
+        plan.keyAssumptions.trim().isEmpty ||
+        plan.userChoiceGuidance.trim().isEmpty ||
+        plan.nodes.length < 6) {
+      return false;
+    }
+    final nodesById = <String, TodoGoalProblemNode>{};
+    for (final node in plan.nodes) {
+      final id = node.tempNodeId.trim();
+      if (id.isEmpty || nodesById.containsKey(id)) return false;
+      nodesById[id] = node;
+    }
+    final roots = plan.nodes.where((node) => node.tempParentNodeId.trim().isEmpty).toList(growable: false);
+    if (roots.length != 1) return false;
+    const logicalRelations = <String>{'and', 'or', 'sequence', 'dependency', 'network'};
+    if (!plan.nodes.any((node) => logicalRelations.contains(node.relationType.trim().toLowerCase()))) return false;
+    final children = <String, List<TodoGoalProblemNode>>{};
+    for (final node in plan.nodes) {
+      final id = node.tempNodeId.trim();
+      final parent = node.tempParentNodeId.trim();
+      if (parent.isNotEmpty) {
+        if (!nodesById.containsKey(parent) || parent == id) return false;
+        children.putIfAbsent(parent, () => <TodoGoalProblemNode>[]).add(node);
+      }
+      for (final dependency in node.dependencyNodeIds) {
+        if (!nodesById.containsKey(dependency) || dependency == id) return false;
+      }
+      if (node.title.trim().isEmpty || node.acceptanceCriteria.trim().isEmpty || node.logicQuestion.trim().isEmpty || node.decisionRule.trim().isEmpty) {
+        return false;
+      }
+    }
+    var maxDepth = 0;
+    var actionableLeaves = 0;
+    final visiting = <String>{};
+    final visited = <String>{};
+    bool walk(String id, int depth) {
+      if (!visiting.add(id)) return false;
+      final node = nodesById[id];
+      if (node == null) return false;
+      maxDepth = depth > maxDepth ? depth : maxDepth;
+      final descendants = children[id] ?? const <TodoGoalProblemNode>[];
+      if (descendants.isEmpty) {
+        if (!node.isActionable || node.actionableStep.trim().isEmpty || node.evidenceNeeded.trim().isEmpty) return false;
+        actionableLeaves++;
+      } else if (node.actionableStep.trim().isNotEmpty) {
+        return false;
+      }
+      for (final child in descendants) {
+        if (!walk(child.tempNodeId.trim(), depth + 1)) return false;
+      }
+      visiting.remove(id);
+      visited.add(id);
+      return true;
+    }
+    if (!walk(roots.first.tempNodeId.trim(), 0)) return false;
+    return visited.length == plan.nodes.length && maxDepth >= 2 && actionableLeaves >= 2;
+  }
+
+
   List<TodoGoalSolutionPlan> _fallbackPlans(String goalTitle, String actionTitle) {
     return <TodoGoalSolutionPlan>[
       TodoGoalSolutionPlan(
@@ -732,116 +830,185 @@ $reflectionText
   List<TodoGoalProblemNode> _fallbackNodes(String goalTitle, String actionTitle, String zone) {
     final difficulty = zone == 'panic' ? 8 : (zone == 'comfort' ? 2 : 5);
     final minutes = zone == 'panic' ? 45 : (zone == 'comfort' ? 2 : 10);
+    TodoGoalProblemNode node({
+      required String id,
+      String parentId = '',
+      required String relation,
+      required String type,
+      required String title,
+      required String description,
+      required String criteria,
+      String action = '',
+      required String question,
+      required String facts,
+      required String assumptions,
+      required String evidence,
+      required String rule,
+      List<String> dependencies = const <String>[],
+      required int order,
+      int? duration,
+    }) {
+      return TodoGoalProblemNode(
+        nodeId: '',
+        goalId: '',
+        solutionId: '',
+        parentNodeId: '',
+        relationType: relation,
+        nodeType: type,
+        title: title,
+        description: description,
+        acceptanceCriteria: criteria,
+        actionableStep: action,
+        zoneType: zone,
+        difficultyScore: difficulty,
+        estimatedMinutes: duration ?? minutes,
+        sequenceOrder: order,
+        dependenciesJson: jsonEncode(dependencies),
+        status: 'not_started',
+        completionNote: '',
+        aiReviewJson: '',
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        tempNodeId: id,
+        tempParentNodeId: parentId,
+        logicQuestion: question,
+        knownFacts: facts,
+        assumptions: assumptions,
+        evidenceNeeded: evidence,
+        decisionRule: rule,
+      );
+    }
+
     return <TodoGoalProblemNode>[
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'problem',
-        title: '先说清“$goalTitle”现在具体卡在哪里',
-        description: '先把想达到的状态、当前差距和现实限制说具体。',
-        acceptanceCriteria: '能说清目标状态，并看到至少一个现实中的证据。',
-        actionableStep: '',
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: minutes,
-        sequenceOrder: 0,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'root',
-        logicQuestion: '现实差距是什么，哪些部分可控，最关键的不确定性是什么？',
-        knownFacts: '用户表达了目标“$goalTitle”。',
-        assumptions: '目标值得继续、且存在可通过行动改变的因素；均待用户与证据确认。',
-        evidenceNeeded: '当前状态、期望标准、期限、资源、约束和利益相关者信息。',
-        decisionRule: '先补齐影响路径选择的关键信息，再决定进入诊断、实验或执行分支。',
+      node(
+        id: 'root',
+        relation: 'and',
+        type: 'goal_state',
+        title: '实现“$goalTitle”的可验证目标状态',
+        description: '从当前状态出发，先确认现实差距，再准备必要条件、执行关键动作并验证结果。',
+        criteria: '用户确认所有必要子问题均已解决，并出现目标结果要求的现实证据。',
+        question: '哪些必要条件全部成立时，“$goalTitle”才算真正实现？',
+        facts: '用户已经明确表达目标“$goalTitle”。',
+        assumptions: '具体期限、资源、能力基础和目标完成标准仍需用户确认。',
+        evidence: '目标结果、时间范围以及用户认可的完成证据。',
+        rule: '三个阶段问题都完成后，再由用户评估根问题成功或失败。',
+        order: 0,
       ),
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'sub_problem',
-        title: '找到今天能够开始的一步',
-        description: '把抽象目标落到一个可观察动作。',
-        acceptanceCriteria: '存在一个2-10分钟内能开始的动作。',
-        actionableStep: '',
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: minutes,
-        sequenceOrder: 1,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'entry',
-        tempParentNodeId: 'root',
-        logicQuestion: '当前最大约束是启动、能力、资源、环境还是目标方向？',
-        knownFacts: '现有行动入口为“$actionTitle”。',
-        assumptions: '该入口足够小且与结果存在因果联系。',
-        evidenceNeeded: '实际开始时间、卡点、完成结果和过程记录。',
-        decisionRule: '若能启动但无有效反馈，转向能力/路径诊断；若不能启动，继续降低阻力。',
+      node(
+        id: 'baseline',
+        parentId: 'root',
+        relation: 'sequence',
+        type: 'sub_problem',
+        title: '确认当前状态与目标差距',
+        description: '先取得真实起点，避免根据未确认的信息直接制定方案。',
+        criteria: '写清当前状态、目标状态、期限、已有资源和一个主要阻力。',
+        question: '当前状态与目标状态之间，最先需要确认的差距是什么？',
+        facts: '目前只有目标标题和候选行动可用。',
+        assumptions: '候选行动“$actionTitle”与目标存在直接关系，但仍需验证。',
+        evidence: '用户填写的现状、期限、资源和阻力记录。',
+        rule: '信息足以判断下一步时进入准备阶段；信息不足则继续补充，不虚构结论。',
+        order: 1,
       ),
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'action',
-        title: '先试一次：$actionTitle',
-        description: '先做最低标准，做完记录事实和过程体验。',
-        acceptanceCriteria: zone == 'comfort' ? '只做2分钟即可。' : '完成5-10分钟，并留下一个事实记录。',
-        actionableStep: actionTitle,
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: minutes,
-        sequenceOrder: 2,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'first_action',
-        tempParentNodeId: 'entry',
-        logicQuestion: '执行该动作能否产生支持或否定关键假设的证据？',
-        knownFacts: '这是当前可用的最小实验动作。',
-        assumptions: '完成动作会提供比继续思考更多的现实信息。',
-        evidenceNeeded: '是否开始、实际耗时、产出、阻力和下一步信息。',
-        decisionRule: '达到验收标准则保留或小幅升级；未达到则分析具体环节并换实验。',
+      node(
+        id: 'baseline_action',
+        parentId: 'baseline',
+        relation: 'sequence',
+        type: 'action',
+        title: '写下目标起点与完成标准',
+        description: '这份记录为后续步骤提供已知条件。',
+        criteria: '至少写出当前状态、希望达到的状态、期限和一个可观察完成标准。',
+        action: '用5分钟写下：我现在在哪里、要到哪里、何时完成、看到什么算完成。',
+        question: '这些信息是否足以判断下一步，而不是继续猜测？',
+        facts: '目标“$goalTitle”已被提出。',
+        assumptions: '用户能够通过简短记录补齐最关键的信息。',
+        evidence: '一段包含起点、目标状态、期限和完成标准的文字。',
+        rule: '四项信息齐全则成功；缺哪一项就只补哪一项。',
+        order: 2,
+        duration: zone == 'comfort' ? 2 : 5,
       ),
-      TodoGoalProblemNode(
-        nodeId: '',
-        goalId: '',
-        solutionId: '',
-        parentNodeId: '',
-        relationType: 'tree',
-        nodeType: 'sub_problem',
-        title: '根据这次结果决定下一步',
-        description: '看这一步是否带来实际变化；有效就继续，遇到阻碍就缩小或换一种走法。',
-        acceptanceCriteria: '复盘中至少得到一个替代步骤或下一步。',
-        actionableStep: '完成后记录：发生了什么、哪里卡住、下一次准备怎样调整。',
-        zoneType: zone,
-        difficultyScore: difficulty,
-        estimatedMinutes: 5,
-        sequenceOrder: 3,
-        dependenciesJson: '',
-        status: 'not_started',
-        completionNote: '',
-        aiReviewJson: '',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        tempNodeId: 'review',
-        tempParentNodeId: 'root',
+      node(
+        id: 'prepare',
+        parentId: 'root',
+        relation: 'and',
+        type: 'sub_problem',
+        title: '准备执行目标所需的最低条件',
+        description: '只处理会直接阻止关键行动的条件，不无限准备。',
+        criteria: '执行关键行动所必需的工具、材料、时间和环境均达到最低可用状态。',
+        question: '缺少哪一个条件会让关键行动无法发生？',
+        facts: '候选关键行动是“$actionTitle”。',
+        assumptions: '主要阻力可以通过一次最小准备动作降低。',
+        evidence: '工具、材料、时间段或协作对象已经就位。',
+        rule: '最低条件具备即停止准备并进入执行；非必要准备不继续扩张。',
+        dependencies: const <String>['baseline_action'],
+        order: 3,
+      ),
+      node(
+        id: 'prepare_action',
+        parentId: 'prepare',
+        relation: 'sequence',
+        type: 'action',
+        title: '移除一个最直接的执行阻力',
+        description: '只选择当前证据最明确、能立刻处理的一个阻力。',
+        criteria: '完成一个能让“$actionTitle”更容易开始的环境、工具或时间安排。',
+        action: '根据起点记录，准备一个必要工具、材料或固定时间段，并立即放到可使用状态。',
+        question: '这个调整是否直接降低了关键行动的开始成本？',
+        facts: '起点记录已经指出一个主要阻力。',
+        assumptions: '处理该阻力会提高关键行动发生的可能性。',
+        evidence: '可看到已准备的工具、材料、日程或环境变化。',
+        rule: '阻力被实际移除则成功；没有变化则选择同一父问题下的另一准备动作。',
+        dependencies: const <String>['baseline_action'],
+        order: 4,
+      ),
+      node(
+        id: 'execute_action',
+        parentId: 'prepare',
+        relation: 'sequence',
+        type: 'action',
+        title: '执行一次关键目标动作',
+        description: '用一次现实行动验证当前路径能否产生与目标有关的进展。',
+        criteria: zone == 'comfort' ? '执行2分钟并留下一个可观察产出。' : '执行5-10分钟并留下一个可观察产出。',
+        action: actionTitle,
+        question: '这次行动是否产生了能推动“$goalTitle”的实际产出？',
+        facts: '起点和最低准备条件已经完成。',
+        assumptions: '当前候选行动能够产生与目标直接相关的反馈。',
+        evidence: '实际耗时、完成产出、遇到的具体阻力和下一步信息。',
+        rule: '达到验收标准则进入验证阶段；失败则在同一父问题下选择替代动作，不立即推翻整套方案。',
+        dependencies: const <String>['baseline_action', 'prepare_action'],
+        order: 5,
+      ),
+      node(
+        id: 'verify',
+        parentId: 'root',
+        relation: 'dependency',
+        type: 'sub_problem',
+        title: '验证这条路径是否真的推动目标',
+        description: '比较行动前后变化，决定继续、调整或切换备用方案。',
+        criteria: '能够根据行动证据说明继续、调整或换路的理由。',
+        question: '现有结果支持继续当前路径，还是说明某个前提不成立？',
+        facts: '关键行动已产生一次现实结果。',
+        assumptions: '一次结果足以决定下一小步，但通常不足以证明整个方案必然有效。',
+        evidence: '行动产出、阻力记录和与目标标准的差距变化。',
+        rule: '有正向变化则继续；局部失败则换叶节点；关键前提被证伪时再考虑备用方案。',
+        dependencies: const <String>['execute_action'],
+        order: 6,
+      ),
+      node(
+        id: 'verify_action',
+        parentId: 'verify',
+        relation: 'sequence',
+        type: 'action',
+        title: '记录结果并决定下一小步',
+        description: '把成功或失败转换成下一次求解信息。',
+        criteria: '记录实际结果、与验收标准的差距，以及下一次继续或替换的具体动作。',
+        action: '用3分钟记录：发生了什么、哪一步有效或失败、下一次继续什么或替换什么。',
+        question: '这份记录能否明确支持下一次决策？',
+        facts: '本轮行动结果已经发生。',
+        assumptions: '如实记录能减少重复试错。',
+        evidence: '一条包含结果、差距和下一动作的复盘记录。',
+        rule: '能明确下一动作则成功；仍无法判断时补一次低成本验证，不直接重构全方案。',
+        dependencies: const <String>['execute_action'],
+        order: 7,
+        duration: 3,
       ),
     ];
   }
