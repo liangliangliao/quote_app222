@@ -952,7 +952,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
 
   bool _problemNodeReady(TodoGoalProblemNode node, {required bool forEvaluation}) {
     final byId = <String, TodoGoalProblemNode>{for (final item in _selectedNodes) item.nodeId: item};
-    if (!node.dependencyNodeIds.every((id) => byId[id]?.isCompleted == true)) return false;
+    if (!node.resolvedDependencyNodeIds.every((id) => byId[id]?.isCompleted == true)) return false;
     final parent = byId[node.parentNodeId];
     if (parent?.relationType.toLowerCase() == 'sequence') {
       final earlierSiblings = _selectedNodes.where((item) => item.parentNodeId == parent!.nodeId && item.sequenceOrder < node.sequenceOrder);
@@ -2926,8 +2926,8 @@ class _ProblemNodeTreeNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final children = (childrenByParent[node.nodeId] ?? const <TodoGoalProblemNode>[]).where((n) => n.nodeId != node.nodeId).toList();
-    final dependenciesReady = node.dependencyNodeIds.every((id) => nodesById[id]?.isCompleted == true);
-    final dependencyTitles = node.dependencyNodeIds.map((id) => nodesById[id]?.title ?? '').where((title) => title.isNotEmpty).toList(growable: false);
+    final dependenciesReady = node.resolvedDependencyNodeIds.every((id) => nodesById[id]?.isCompleted == true);
+    final dependencyTitles = node.resolvedDependencyNodeIds.map((id) => nodesById[id]?.title ?? '').where((title) => title.isNotEmpty).toList(growable: false);
     final parent = nodesById[node.parentNodeId];
     final siblings = <TodoGoalProblemNode>[];
     if (parent != null) siblings.addAll(childrenByParent[parent.nodeId] ?? const <TodoGoalProblemNode>[]);
@@ -2954,8 +2954,8 @@ class _ProblemNodeTreeNode extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Wrap(spacing: 6, runSpacing: 6, children: [
-                _LogicRelationChip(label: node.relationLabel),
-                if (node.dependencyNodeIds.isNotEmpty) _LogicRelationChip(label: '依赖 ${node.dependencyNodeIds.length} 个前置节点'),
+                _LogicRelationChip(label: node.relationTypeLabel),
+                if (node.resolvedDependencyNodeIds.isNotEmpty) _LogicRelationChip(label: '依赖 ${node.resolvedDependencyNodeIds.length} 个前置节点'),
                 if (!ready && !node.isCompleted) const _LogicRelationChip(label: '等待前置问题完成', waiting: true),
               ]),
             ),

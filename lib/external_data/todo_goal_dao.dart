@@ -1054,7 +1054,7 @@ class TodoGoalDao {
       final tempId = n.tempNodeId.trim().isEmpty ? 'node_${i + 1}' : n.tempNodeId.trim();
       final nodeId = tempToReal[tempId]!;
       final parent = n.tempParentNodeId.trim().isEmpty ? '' : (tempToReal[n.tempParentNodeId.trim()] ?? '');
-      final dependencies = n.dependencyNodeIds.map((id) => tempToReal[id] ?? id).where((id) => id.isNotEmpty).toList(growable: false);
+      final dependencies = n.resolvedDependencyNodeIds.map((id) => tempToReal[id] ?? id).where((id) => id.isNotEmpty).toList(growable: false);
       final nodeValues = <String, Object?>{
         'node_id': nodeId,
         'goal_id': goalId,

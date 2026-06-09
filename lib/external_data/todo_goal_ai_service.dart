@@ -727,7 +727,7 @@ $reflectionText
         if (!nodesById.containsKey(parent) || parent == id) return false;
         children.putIfAbsent(parent, () => <TodoGoalProblemNode>[]).add(node);
       }
-      for (final dependency in node.dependencyNodeIds) {
+      for (final dependency in node.resolvedDependencyNodeIds) {
         if (!nodesById.containsKey(dependency) || dependency == id) return false;
       }
       if (node.title.trim().isEmpty || node.acceptanceCriteria.trim().isEmpty || node.logicQuestion.trim().isEmpty || node.decisionRule.trim().isEmpty) {
