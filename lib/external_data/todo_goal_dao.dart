@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
 import 'todo_dao.dart';
+import 'todo_failure_growth_models.dart';
 import 'todo_goal_models.dart';
 import 'todo_models.dart';
 
@@ -225,6 +226,32 @@ class TodoGoalDao {
         status TEXT DEFAULT 'active',
         created_at_ms INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_failure_growth_loops (
+        loop_id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL,
+        linked_step_id TEXT,
+        event_text TEXT NOT NULL,
+        emotion_text TEXT,
+        automatic_thought TEXT,
+        feared_outcome TEXT,
+        pattern_code TEXT,
+        pattern_label TEXT,
+        fact_statement TEXT,
+        growth_reframe TEXT,
+        learning_signal TEXT,
+        recovery_plan TEXT,
+        experiment_title TEXT,
+        minimum_standard TEXT,
+        reflection_question TEXT,
+        value_statement TEXT,
+        result_text TEXT,
+        next_revision TEXT,
+        status TEXT DEFAULT 'active',
+        created_at_ms INTEGER NOT NULL,
+        completed_at_ms INTEGER DEFAULT 0
       )
     ''');
     await db.execute('''
@@ -997,10 +1024,130 @@ class TodoGoalDao {
     });
   }
 
+  Future<List<TodoFailureGrowthLoop>> listFailureGrowthLoops({int limit = 30}) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT l.*, COALESCE(g.goal_title, '') AS goal_title
+      FROM goal_failure_growth_loops l
+      LEFT JOIN goal_profiles g ON g.goal_id = l.goal_id
+      ORDER BY CASE WHEN l.status = 'completed' THEN 1 ELSE 0 END, l.created_at_ms DESC
+      LIMIT ?
+    ''', <Object?>[limit]);
+    return rows.map(TodoFailureGrowthLoop.fromMap).toList();
+  }
+
+  Future<TodoFailureGrowthMetrics> failureGrowthMetrics() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT
+        COUNT(*) AS attempts,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS reflections,
+        SUM(CASE WHEN TRIM(COALESCE(result_text, '')) != '' THEN 1 ELSE 0 END) AS feedback_samples,
+        SUM(CASE WHEN TRIM(COALESCE(next_revision, '')) != '' THEN 1 ELSE 0 END) AS revisions,
+        SUM(CASE WHEN status = 'completed' AND completed_at_ms - created_at_ms >= 86400000 THEN 1 ELSE 0 END) AS restarts,
+        SUM(CASE WHEN status != 'completed' THEN 1 ELSE 0 END) AS active_experiments
+      FROM goal_failure_growth_loops
+    ''');
+    final row = rows.isEmpty ? const <String, Object?>{} : rows.first;
+    return TodoFailureGrowthMetrics(
+      attempts: _toLocalInt(row['attempts']),
+      reflections: _toLocalInt(row['reflections']),
+      feedbackSamples: _toLocalInt(row['feedback_samples']),
+      revisions: _toLocalInt(row['revisions']),
+      restarts: _toLocalInt(row['restarts']),
+      activeExperiments: _toLocalInt(row['active_experiments']),
+    );
+  }
+
+  Future<String> saveFailureGrowthLoop({
+    required String goalId,
+    required String linkedStepId,
+    required String eventText,
+    required String emotionText,
+    required String automaticThought,
+    required String fearedOutcome,
+    required TodoFailureGrowthDraft draft,
+  }) async {
+    final db = await _db;
+    final id = newId('failure_growth_loop');
+    await db.insert('goal_failure_growth_loops', <String, Object?>{
+      'loop_id': id,
+      'goal_id': goalId,
+      'linked_step_id': linkedStepId,
+      'event_text': eventText.trim(),
+      'emotion_text': emotionText.trim(),
+      'automatic_thought': automaticThought.trim(),
+      'feared_outcome': fearedOutcome.trim(),
+      'pattern_code': draft.patternCode,
+      'pattern_label': draft.patternLabel,
+      'fact_statement': draft.factStatement,
+      'growth_reframe': draft.growthReframe,
+      'learning_signal': draft.learningSignal,
+      'recovery_plan': draft.recoveryPlan,
+      'experiment_title': draft.experimentTitle,
+      'minimum_standard': draft.minimumStandard,
+      'reflection_question': draft.reflectionQuestion,
+      'value_statement': draft.valueStatement,
+      'result_text': '',
+      'next_revision': '',
+      'status': 'active',
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      'completed_at_ms': 0,
+    });
+    return id;
+  }
+
+  Future<void> completeFailureGrowthLoop({
+    required TodoFailureGrowthLoop loop,
+    required String resultText,
+    required String nextRevision,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.update(
+        'goal_failure_growth_loops',
+        <String, Object?>{
+          'result_text': resultText.trim(),
+          'next_revision': nextRevision.trim(),
+          'status': 'completed',
+          'completed_at_ms': now,
+        },
+        where: 'loop_id = ?',
+        whereArgs: <Object?>[loop.loopId],
+      );
+      if (loop.linkedStepId.trim().isNotEmpty) {
+        await txn.update(
+          'goal_action_steps',
+          <String, Object?>{'status': 'completed', 'completed_at_ms': now, 'updated_at_ms': now},
+          where: 'step_id = ?',
+          whereArgs: <Object?>[loop.linkedStepId],
+        );
+      }
+      await txn.insert('goal_reflections', <String, Object?>{
+        'reflection_id': newId('failure_growth_reflection'),
+        'goal_id': loop.goalId,
+        'step_id': loop.linkedStepId,
+        'reflection_date': todayDate(),
+        'what_done': loop.experimentTitle,
+        'why_done': loop.valueStatement,
+        'process_experience': resultText.trim(),
+        'obstacle': loop.patternLabel,
+        'tomorrow_next_step': nextRevision.trim(),
+        'ai_summary': '失败不是人格结论。本次已获得反馈，并把它转化为下一版行动。',
+        'mood_score': 0,
+        'meaning_score': 4,
+        'process_score': 5,
+        'created_at_ms': now,
+      });
+    });
+  }
+
   Future<void> clearAllGoalModuleData() async {
     final db = await _db;
     await db.transaction((txn) async {
       for (final table in const <String>[
+        'goal_failure_growth_loops',
         'goal_effort_entries',
         'goal_rituals',
         'goal_step_reviews',

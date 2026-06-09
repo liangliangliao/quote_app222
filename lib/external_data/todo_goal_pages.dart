@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'todo_dao.dart';
+import 'todo_failure_growth_page.dart';
 import 'todo_goal_ai_service.dart';
 import 'todo_goal_dao.dart';
 import 'todo_goal_models.dart';
@@ -49,7 +50,7 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _load().then((_) async {
       final id = widget.initialTaskId;
       if (id != null && id.trim().isNotEmpty) {
@@ -362,7 +363,7 @@ ${quote.translation}
     if (_busy) return;
     final ok = await _confirmDanger(
       title: '清除全部目标模块数据？',
-      message: '这会删除“向峰而行/To Do目标实践系统”的目标卡、今日行动、复盘、AI分析、问题解决方案和写回链接，并恢复默认提示词。不会删除 Microsoft To Do 原始同步任务。',
+      message: '这会删除“向峰而行/To Do目标实践系统”的目标卡、今日行动、失败成长回路、复盘、AI分析、问题解决方案和写回链接，并恢复默认提示词。不会删除 Microsoft To Do 原始同步任务。',
       actionText: '清除并恢复默认',
     );
     if (!ok) return;
@@ -429,6 +430,7 @@ ${quote.translation}
             Tab(text: '我的山峰'),
             Tab(text: '山路行动'),
             Tab(text: '过程复盘'),
+            Tab(text: '失败成长'),
             Tab(text: 'AI教练'),
             Tab(text: '价值罗盘'),
             Tab(text: '足下努力'),
@@ -465,6 +467,7 @@ ${quote.translation}
                     _buildTransformTab(),
                     _buildTodayTab(),
                     _buildReviewTab(),
+                    TodoFailureGrowthPage(dao: _goalDao, goals: _goals, onDataChanged: _load),
                     _buildCoachTab(),
                     _buildCompassTab(),
                     _EffortOperatingSystemTab(goals: _goals, todaySteps: _todaySteps, onDataChanged: _load),
