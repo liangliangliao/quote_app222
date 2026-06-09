@@ -734,6 +734,8 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
   bool _loading = true;
   bool _busy = false;
   String _loadError = '';
+  String _solutionGenerationStatus = '';
+  double _solutionGenerationProgress = 0;
 
   @override
   void initState() {
@@ -828,7 +830,11 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     final goal = _goal;
     final task = _sourceTask;
     if (goal == null || task == null || _busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _solutionGenerationStatus = '准备分批生成问题解决方案…';
+      _solutionGenerationProgress = 0;
+    });
     try {
       final primaryStep = _steps.isEmpty ? null : _steps.first;
       TodoGoalActionStep? processStep;
@@ -883,7 +889,17 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
         recommendationRationale: goal.recommendationRationale,
         userDecisionPrompt: goal.userDecisionPrompt,
       );
-      final result = await _ai.generateProblemSolutions(task: task, analysis: analysis);
+      final result = await _ai.generateProblemSolutions(
+        task: task,
+        analysis: analysis,
+        onProgress: (message, completedBatches, totalBatches) {
+          if (!mounted) return;
+          setState(() {
+            _solutionGenerationStatus = message;
+            _solutionGenerationProgress = totalBatches <= 0 ? 0.0 : (completedBatches / totalBatches).clamp(0.0, 1.0).toDouble();
+          });
+        },
+      );
       final keepExisting = result.usedFallback && result.rawResponse.trim().isEmpty && _solutionPlans.isNotEmpty;
       if (!keepExisting) {
         await _goalDao.clearSolutionPlans(goal.goalId);
@@ -899,17 +915,23 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
       );
       await _load();
       final resultMessage = !result.usedFallback
-          ? 'AI 已生成通过结构校验的问题解决方案和问题树。'
+          ? 'AI 已分 4 批生成并校验三套问题解决方案。'
           : keepExisting
-              ? 'AI方案请求未完成，已保留原有问题解决方案。'
+              ? '分批请求未取得可用结果，已保留原有问题解决方案。'
               : result.rawResponse.trim().isNotEmpty
-                  ? 'AI返回未通过推导链校验，已改用完整的本地备用问题树。'
-                  : 'AI方案请求未完成，已生成完整的本地备用问题树。';
+                  ? '分批生成已完成；个别批次未通过校验，已只替换该批为本地备用方案。'
+                  : 'AI 当前不可用，已生成完整的本地备用问题树。';
       _show(resultMessage);
     } catch (e) {
       _show('生成问题解决方案失败：$e', isError: true);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _solutionGenerationStatus = '';
+          _solutionGenerationProgress = 0;
+        });
+      }
     }
   }
 
@@ -1239,6 +1261,21 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('目标详情'),
+        bottom: _solutionGenerationStatus.isEmpty
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(52),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                  color: const Color(0xFFF5F7FF),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(_solutionGenerationStatus, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(value: _solutionGenerationProgress.clamp(0.0, 1.0).toDouble()),
+                  ]),
+                ),
+              ),
         actions: [
           IconButton(onPressed: _busy || _sourceTask == null ? null : _reanalyze, tooltip: 'AI 重新分析目标卡', icon: const Icon(Icons.auto_awesome)),
           IconButton(onPressed: _busy || _sourceTask == null ? null : _generateProblemSolutions, tooltip: '单独生成AI问题解决方案', icon: const Icon(Icons.account_tree_outlined)),
