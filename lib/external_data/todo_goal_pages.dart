@@ -736,6 +736,8 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
   bool _loading = true;
   bool _busy = false;
   String _loadError = '';
+  String _solutionGenerationStatus = '';
+  double _solutionGenerationProgress = 0;
 
   @override
   void initState() {
@@ -1275,6 +1277,21 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('目标详情'),
+        bottom: _solutionGenerationStatus.isEmpty
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(52),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                  color: const Color(0xFFF5F7FF),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(_solutionGenerationStatus, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(value: _solutionGenerationProgress.clamp(0.0, 1.0).toDouble()),
+                  ]),
+                ),
+              ),
         actions: [
           IconButton(onPressed: _busy || _sourceTask == null ? null : _reanalyze, tooltip: 'AI 重新分析目标卡', icon: const Icon(Icons.auto_awesome)),
           IconButton(onPressed: _busy || _sourceTask == null ? null : _generateProblemSolutions, tooltip: '生成三条路线概览', icon: const Icon(Icons.account_tree_outlined)),
