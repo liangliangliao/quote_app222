@@ -205,6 +205,18 @@ class TodoGoalReviewResult {
     this.usedFallback = false,
     this.nextStepOptions = '',
     this.decisionPrompt = '',
+    this.factReflection = '',
+    this.bodySignal = '',
+    this.cognitionPattern = '',
+    this.emotionLabel = '',
+    this.growthPattern = '',
+    this.valueQuestion = '',
+    this.feedbackInsight = '',
+    this.authenticExpression = '',
+    this.actionExperiment = '',
+    this.actionWhen = '',
+    this.actionEvidence = '',
+    this.followUpQuestion = '',
   });
 
   final String summary;
@@ -218,6 +230,18 @@ class TodoGoalReviewResult {
   final bool usedFallback;
   final String nextStepOptions;
   final String decisionPrompt;
+  final String factReflection;
+  final String bodySignal;
+  final String cognitionPattern;
+  final String emotionLabel;
+  final String growthPattern;
+  final String valueQuestion;
+  final String feedbackInsight;
+  final String authenticExpression;
+  final String actionExperiment;
+  final String actionWhen;
+  final String actionEvidence;
+  final String followUpQuestion;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'summary': summary,
@@ -230,6 +254,18 @@ class TodoGoalReviewResult {
         'usedFallback': usedFallback,
         'nextStepOptions': nextStepOptions,
         'decisionPrompt': decisionPrompt,
+        'factReflection': factReflection,
+        'bodySignal': bodySignal,
+        'cognitionPattern': cognitionPattern,
+        'emotionLabel': emotionLabel,
+        'growthPattern': growthPattern,
+        'valueQuestion': valueQuestion,
+        'feedbackInsight': feedbackInsight,
+        'authenticExpression': authenticExpression,
+        'actionExperiment': actionExperiment,
+        'actionWhen': actionWhen,
+        'actionEvidence': actionEvidence,
+        'followUpQuestion': followUpQuestion,
       };
 }
 
@@ -515,6 +551,20 @@ class TodoGoalReflection {
     required this.processScore,
     required this.createdAtMs,
     this.goalTitle = '',
+    this.bodySignal = '',
+    this.emotionLabel = '',
+    this.cognition = '',
+    this.authenticTruth = '',
+    this.feedbackSource = '',
+    this.feedbackContent = '',
+    this.feedbackLearning = '',
+    this.corePattern = '',
+    this.coreValue = '',
+    this.actionExperiment = '',
+    this.actionWhen = '',
+    this.actionEvidence = '',
+    this.followUpQuestion = '',
+    this.reviewMode = 'daily',
   });
 
   final String reflectionId;
@@ -532,6 +582,20 @@ class TodoGoalReflection {
   final int processScore;
   final int createdAtMs;
   final String goalTitle;
+  final String bodySignal;
+  final String emotionLabel;
+  final String cognition;
+  final String authenticTruth;
+  final String feedbackSource;
+  final String feedbackContent;
+  final String feedbackLearning;
+  final String corePattern;
+  final String coreValue;
+  final String actionExperiment;
+  final String actionWhen;
+  final String actionEvidence;
+  final String followUpQuestion;
+  final String reviewMode;
 
   factory TodoGoalReflection.fromMap(Map<String, Object?> row) => TodoGoalReflection(
         reflectionId: (row['reflection_id'] ?? '').toString(),
@@ -549,6 +613,20 @@ class TodoGoalReflection {
         processScore: _toInt(row['process_score']),
         createdAtMs: _toInt(row['created_at_ms']),
         goalTitle: (row['goal_title'] ?? '').toString(),
+        bodySignal: (row['body_signal'] ?? '').toString(),
+        emotionLabel: (row['emotion_label'] ?? '').toString(),
+        cognition: (row['cognition'] ?? '').toString(),
+        authenticTruth: (row['authentic_truth'] ?? '').toString(),
+        feedbackSource: (row['feedback_source'] ?? '').toString(),
+        feedbackContent: (row['feedback_content'] ?? '').toString(),
+        feedbackLearning: (row['feedback_learning'] ?? '').toString(),
+        corePattern: (row['core_pattern'] ?? '').toString(),
+        coreValue: (row['core_value'] ?? '').toString(),
+        actionExperiment: (row['action_experiment'] ?? '').toString(),
+        actionWhen: (row['action_when'] ?? '').toString(),
+        actionEvidence: (row['action_evidence'] ?? '').toString(),
+        followUpQuestion: (row['follow_up_question'] ?? '').toString(),
+        reviewMode: (row['review_mode'] ?? 'daily').toString(),
       );
 }
 

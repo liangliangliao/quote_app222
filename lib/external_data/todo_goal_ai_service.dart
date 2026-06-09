@@ -343,7 +343,9 @@ $ritualText''',
     final state = await getGlobalAiState();
     TodoGoalWeeklySummaryResult fallback() => TodoGoalWeeklySummaryResult(
           alignmentInsight: goals.isEmpty ? '本周还没有可分析的目标。' : '本周共有 ${goals.length} 个目标，其中 ${goals.where((goal) => goal.selfConcordanceScore >= 70).length} 个自我一致度较高。',
-          processInsight: reflections.isEmpty ? '还没有过程复盘证据。' : '本周留下了 ${reflections.length} 条过程复盘，这些记录比单纯完成率更能说明真实成长。',
+          processInsight: reflections.isEmpty
+              ? '还没有过程复盘证据。'
+              : '本周留下了 ${reflections.length} 条复盘、${reflections.where((item) => item.feedbackContent.trim().isNotEmpty).length} 次反馈消化和 ${reflections.where((item) => item.actionExperiment.trim().isNotEmpty).length} 个行动实验。这些真实证据比单纯完成率更能说明成长。',
           valueEvidence: goals.expand((goal) => goal.coreValueList).take(5).join('、'),
           adjustmentAdvice: goals.any((goal) => goal.externalPressureScore >= 70) ? '优先调整外部压力过高的目标：缩短承诺周期、降低强度或重新绑定价值。' : '保持能带来意义感和投入感的行动方式。',
           nextWeekFocus: '选择一个最自我一致的目标，每天只保留一个可以开始的最低行动。',
@@ -353,9 +355,9 @@ $ritualText''',
         );
     if (state['available'] != '1') return fallback();
     final goalText = goals.take(12).map((goal) => '- ${goal.goalTitle}｜自我一致${goal.selfConcordanceScore}｜外部压力${goal.externalPressureScore}｜过程幸福${goal.processHappinessScore}｜价值${goal.coreValues}').join('\n');
-    final reflectionText = reflections.take(20).map((reflection) => '- ${reflection.reflectionDate} ${reflection.goalTitle}｜意义${reflection.meaningScore}/5｜过程${reflection.processScore}/5｜${reflection.processExperience}').join('\n');
+    final reflectionText = reflections.take(20).map((reflection) => '- ${reflection.reflectionDate} ${reflection.goalTitle}｜模式:${reflection.reviewMode}｜身体:${reflection.bodySignal}｜情绪:${reflection.emotionLabel}｜解释:${reflection.cognition}｜真实:${reflection.authenticTruth}｜反馈学习:${reflection.feedbackLearning}｜模式:${reflection.corePattern}｜价值:${reflection.coreValue}｜行动实验:${reflection.actionExperiment}｜意义${reflection.meaningScore}/5｜过程${reflection.processScore}/5').join('\n');
     final prompt = '''
-你是促进用户自主判断的积极心理学目标教练。请生成“过程与自我一致”周总结，不以完成率羞辱用户，也不替用户决定下周目标。区分记录事实、你的推断和待用户确认的问题；调整建议至少给出多种可能性及适用条件。
+你是温和、诚实、结构化、行动导向的复盘伙伴。请生成“过程与自我一致”成长周报：识别高频情绪、场景、认知/回避模式、核心价值、反馈接纳、真实表达与行动实验趋势。不以完成率羞辱用户，不做心理诊断，也不替用户决定下周目标。区分记录事实、你的推断和待用户确认的问题；调整建议至少给出多种可能性及适用条件，并落到一个低成本现实行动。
 目标：
 $goalText
 本周复盘：
@@ -396,6 +398,14 @@ $reflectionText
     required String actionTitle,
     required bool completed,
     required String userReflection,
+    String bodySignal = '',
+    String emotionLabel = '',
+    String cognition = '',
+    String authenticTruth = '',
+    String feedbackContent = '',
+    String feedbackLearning = '',
+    String coreValue = '',
+    String reviewMode = 'daily',
   }) async {
     final state = await getGlobalAiState();
     final fallback = _fallbackReview(
@@ -418,9 +428,25 @@ $reflectionText
       completed: completed,
       userReflection: userReflection,
     );
+    final reflectiveContext = '''
+
+【复行 · 结构化真实记录】
+复盘模式：$reviewMode
+B 身体信号：$bodySignal
+D 情绪命名：$emotionLabel
+C 当时解释：$cognition
+未表达的真实：$authenticTruth
+收到/请求的反馈：$feedbackContent
+用户认为可用的信息：$feedbackLearning
+想守护的价值：$coreValue
+
+请以“温和、诚实、结构化、行动导向的复盘伙伴”回应。先接住情绪，再区分事实与解释，识别但不武断定义模式，提出价值问题，最后生成一个 5 分钟内可开始、包含时间/对象/场景、可验证且允许 60 分完成的小行动。反馈不是审判；不得诊断、羞辱、替用户断言他人有错或只做空泛安慰。
+除原字段外，JSON 必须包含：
+{"factReflection":"事实澄清","bodySignal":"身体线索","cognitionPattern":"认知解释","emotionLabel":"情绪命名","growthPattern":"待用户确认的高频模式","valueQuestion":"价值冲突或追问","feedbackInsight":"事实/评价/可用信息/不必吸收","authenticExpression":"温和真实的替代表达","actionExperiment":"一个具体小行动","actionWhen":"明确时间对象场景","actionEvidence":"完成证据","followUpQuestion":"行动后验证问题"}
+''';
     try {
       final raw = await _ai.generateText(
-        prompt: prompt,
+        prompt: '$prompt$reflectiveContext',
         purpose: 'microsoft_todo.goal_review',
         systemPrompt: templates.systemPrompt,
         maxTokens: 1400,
@@ -437,6 +463,18 @@ $reflectionText
         encouragement: _read(parsed, 'encouragement', fallback.encouragement),
         nextStepOptions: _read(parsed, 'nextStepOptions', fallback.nextStepOptions),
         decisionPrompt: _read(parsed, 'decisionPrompt', fallback.decisionPrompt),
+        factReflection: _read(parsed, 'factReflection', fallback.factReflection),
+        bodySignal: _read(parsed, 'bodySignal', fallback.bodySignal),
+        cognitionPattern: _read(parsed, 'cognitionPattern', fallback.cognitionPattern),
+        emotionLabel: _read(parsed, 'emotionLabel', fallback.emotionLabel),
+        growthPattern: _read(parsed, 'growthPattern', fallback.growthPattern),
+        valueQuestion: _read(parsed, 'valueQuestion', fallback.valueQuestion),
+        feedbackInsight: _read(parsed, 'feedbackInsight', fallback.feedbackInsight),
+        authenticExpression: _read(parsed, 'authenticExpression', fallback.authenticExpression),
+        actionExperiment: _read(parsed, 'actionExperiment', fallback.actionExperiment),
+        actionWhen: _read(parsed, 'actionWhen', fallback.actionWhen),
+        actionEvidence: _read(parsed, 'actionEvidence', fallback.actionEvidence),
+        followUpQuestion: _read(parsed, 'followUpQuestion', fallback.followUpQuestion),
         provider: state['provider'] ?? 'ai',
         modelLabel: state['label'] ?? 'AI',
         rawResponse: raw,
@@ -769,6 +807,18 @@ $reflectionText
           ? '选项A：重复最低行动巩固；选项B：只增加一个小变量；选项C：先复盘最有效的条件。'
           : '选项A：缩小到2分钟；选项B：更换时间或环境；选项C：先收集导致卡住的信息。',
       decisionPrompt: '哪一种下一步最符合你明天的精力、现实条件和真正需要？你也可以提出第四种。',
+      factReflection: '先只保留可被观察或复述的事实，不把一次结果扩大成对自己的整体判断。',
+      bodySignal: '身体反应是预警信息，不是软弱证据；留意最先紧绷、发热或沉重的位置。',
+      cognitionPattern: userReflection.trim().isEmpty ? '当时你如何解释这件事，仍需要由你补充确认。' : '尝试区分：发生的事实，与脑中关于失败、认可或关系的解释。',
+      emotionLabel: completed ? '可能同时有轻松、投入或不确定，请以你的真实命名为准。' : '可能有失落、焦虑或内疚，请以你的真实感受为准。',
+      growthPattern: completed ? '待确认：哪些条件帮助你从想法进入了行动？' : '待确认：卡住是否与回避冲突、害怕评价、过度准备或行动过大有关？',
+      valueQuestion: '这件事里，你真正想守护的是成长、真实、连接、自由、责任，还是别的价值？',
+      feedbackInsight: '只吸收具体、可验证、能帮助下一次调整的信息；主观评价不需要全盘接受。',
+      authenticExpression: '可以用“我注意到……我真实的想法/需要是……我愿意尝试……”表达，而不攻击或讨好。',
+      actionExperiment: '明天做一个 5 分钟内可开始、允许只完成 60 分的现实实验。',
+      actionWhen: '明天第一次进入相关场景时，先完成最低版本。',
+      actionEvidence: '留下一句话、一次发送记录、一个具体产出或一条现实反馈。',
+      followUpQuestion: '实际结果真的像我担心的那样吗？我获得了什么新信息？',
       provider: provider,
       modelLabel: modelLabel,
       usedFallback: true,
