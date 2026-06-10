@@ -13,11 +13,31 @@ class TodoGoalOriginalQuote {
   final String productUse;
 }
 
-const String todoGoalCentralTheme = '目标不是幸福的终点，而是让人有方向地投入当下。';
+const String todoGoalCentralTheme = '真实面对旧模式，保留内在价值，进入适度不适，用持续行动创造新的自我证据。';
 
-const String todoGoalSubTheme = '真正有生命力的目标，不是外部压力制造的待办清单，而是与个人价值、兴趣、热情和真实需要相一致，并能转化为今天一个可开始的小行动。';
+const String todoGoalSubTheme = 'ChangePath 不承诺速成，也不让理解停留在 App 内。每个同步任务、目标、日记与复盘都要进入同一条改变闭环：觉察旧模式、澄清具体行为、识别阻力、设计拉伸区行动、回到现实、复盘并沉淀自我证据。';
 
 const List<TodoGoalValuePrinciple> todoGoalCoreValues = <TodoGoalValuePrinciple>[
+  TodoGoalValuePrinciple(
+    title: '反 Quick Fix',
+    description: '改变是训练，不是刺激；系统不承诺短期逆袭，而是帮助用户完成今天一个可验证的真实行动。',
+    actionQuestion: '今天哪个小行动能成为新路径的一次重复？',
+  ),
+  TodoGoalValuePrinciple(
+    title: 'ABC 一起更新',
+    description: '情绪、行为与认知互相影响。既看见感受和身体信号，也记录实际行为，并用行动后的现实反馈更新解释。',
+    actionQuestion: '我感受到什么、如何解释、实际做了什么，行动后又看见了什么？',
+  ),
+  TodoGoalValuePrinciple(
+    title: '保留价值，改变极端模式',
+    description: '旧模式常在保护责任、关系、安全或卓越。改变不是消灭旧的自己，而是保留价值、降低僵化和代价。',
+    actionQuestion: '这个旧模式在保护什么？我怎样保留价值但换一种行为？',
+  ),
+  TodoGoalValuePrinciple(
+    title: '行动成为自我证据',
+    description: '任务完成不是终点。每次行动都要回答它削弱了哪个旧信念、正在形成怎样的新身份叙事。',
+    actionQuestion: '这个行动证明了我是怎样的人？',
+  ),
   TodoGoalValuePrinciple(
     title: '目标解放当下',
     description: '目标的作用不是把幸福推迟到未来，而是提供方向感，让今天不再迷茫，让人更能看见此刻过程中的价值。',
