@@ -1205,7 +1205,13 @@ class TodoGoalDao {
   Future<void> clearAllGoalModuleData() async {
     final db = await _db;
     await db.transaction((txn) async {
+      final existingRows = await txn.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
+      final existingTables = existingRows.map((row) => (row['name'] ?? '').toString()).toSet();
       for (final table in const <String>[
+        'change_behavior_experiments',
+        'change_abc_journals',
+        'change_self_evidence',
+        'change_action_cards',
         'goal_failure_growth_loops',
         'goal_effort_entries',
         'goal_rituals',
@@ -1218,7 +1224,7 @@ class TodoGoalDao {
         'goal_action_steps',
         'goal_profiles',
       ]) {
-        await txn.delete(table);
+        if (existingTables.contains(table)) await txn.delete(table);
       }
     });
   }

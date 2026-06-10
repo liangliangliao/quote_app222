@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'change_path_page.dart';
 import 'todo_dao.dart';
 import 'todo_failure_growth_page.dart';
 import 'todo_goal_ai_service.dart';
@@ -437,6 +438,11 @@ ${quote.translation}
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'ChangePath 改变训练',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePathPage())).then((_) => _load()),
+            icon: const Icon(Icons.route_outlined),
+          ),
           IconButton(
             tooltip: '提示词配置位置',
             onPressed: () => _show('AI 提示词请到：外部数据同步 → 右上角统一配置 → To Do 目标实践系统 AI 提示词 中统一配置。'),
@@ -4488,7 +4494,6 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
     final next = TextEditingController(text: _activeStep?.minimumStandard ?? '明天先做 2 分钟');
     final learning = TextEditingController();
     final identity = TextEditingController();
-    final gratitude = TextEditingController();
     var minutes = _availableMinutes;
     var zone = _recommendedZone;
     var joy = 3;
@@ -4514,8 +4519,6 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
           const SizedBox(height: 10),
           TextField(controller: identity, decoration: const InputDecoration(labelText: '哪个行动让我更像自己', border: OutlineInputBorder())),
           const SizedBox(height: 10),
-          TextField(controller: gratitude, decoration: const InputDecoration(labelText: '值得感激的人或事', border: OutlineInputBorder())),
-          const SizedBox(height: 10),
           TextField(controller: next, decoration: const InputDecoration(labelText: '明天最小一步', border: OutlineInputBorder())),
           const SizedBox(height: 10),
           Row(children: [const Expanded(child: Text('努力中的愉悦感')), Text('$joy/5')]),
@@ -4526,11 +4529,11 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
         actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存努力'))],
       )));
       if (save != true) return;
-      await _dao.addEffortEntry(goalId: goal.goalId, stepId: _activeStep?.stepId ?? '', effortMinutes: minutes, energyLevel: _energy, emotionState: _emotion, availableMinutes: _availableMinutes, zoneType: zone, effortType: effortType, investmentText: investment.text, obstacle: obstacle.text, strategyUsed: strategy.text, smallProgress: progress.text, nextMinimumStep: next.text, timeInLearning: learning.text, identityEvidence: identity.text, gratitudeText: gratitude.text, joyScore: joy, reflectionDepth: depth, strategyChanged: changed);
+      await _dao.addEffortEntry(goalId: goal.goalId, stepId: _activeStep?.stepId ?? '', effortMinutes: minutes, energyLevel: _energy, emotionState: _emotion, availableMinutes: _availableMinutes, zoneType: zone, effortType: effortType, investmentText: investment.text, obstacle: obstacle.text, strategyUsed: strategy.text, smallProgress: progress.text, nextMinimumStep: next.text, timeInLearning: learning.text, identityEvidence: identity.text, gratitudeText: '', joyScore: joy, reflectionDepth: depth, strategyChanged: changed);
       await _load();
       await widget.onDataChanged();
     } finally {
-      investment.dispose(); obstacle.dispose(); strategy.dispose(); progress.dispose(); next.dispose(); learning.dispose(); identity.dispose(); gratitude.dispose();
+      investment.dispose(); obstacle.dispose(); strategy.dispose(); progress.dispose(); next.dispose(); learning.dispose(); identity.dispose();
     }
   }
 
