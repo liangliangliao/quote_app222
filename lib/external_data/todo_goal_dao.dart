@@ -7,6 +7,7 @@ import 'todo_dao.dart';
 import 'todo_failure_growth_models.dart';
 import 'todo_goal_models.dart';
 import 'todo_models.dart';
+import 'todo_raisebase_models.dart';
 
 class TodoGoalDao {
   Future<Database> get _db async {
@@ -292,6 +293,37 @@ class TodoGoalDao {
         reflection_depth INTEGER DEFAULT 0,
         strategy_changed INTEGER DEFAULT 0,
         returned_after_break INTEGER DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_raisebase_belief_maps (
+        map_id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL,
+        goal_title TEXT,
+        limiting_belief TEXT,
+        reality_evidence TEXT,
+        exaggerated_part TEXT,
+        alternative_belief TEXT,
+        minimum_action TEXT,
+        controllable_factor TEXT,
+        environment_cue TEXT,
+        obstacle_plan TEXT,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_raisebase_check_ins (
+        check_in_id TEXT PRIMARY KEY,
+        goal_id TEXT,
+        check_in_date TEXT NOT NULL,
+        reality_text TEXT,
+        possibility_text TEXT,
+        mood_score INTEGER DEFAULT 0,
+        coping_score INTEGER DEFAULT 0,
+        self_efficacy_score INTEGER DEFAULT 0,
+        evidence_text TEXT,
         created_at_ms INTEGER NOT NULL
       )
     ''');
@@ -1202,12 +1234,75 @@ class TodoGoalDao {
     });
   }
 
+  Future<String> saveRaiseBaseBeliefMap(TodoRaiseBaseBeliefMap map) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = map.mapId.trim().isEmpty ? newId('raisebase_belief') : map.mapId.trim();
+    await db.insert('goal_raisebase_belief_maps', <String, Object?>{
+      'map_id': id,
+      'goal_id': map.goalId,
+      'goal_title': map.goalTitle,
+      'limiting_belief': map.limitingBelief,
+      'reality_evidence': map.realityEvidence,
+      'exaggerated_part': map.exaggeratedPart,
+      'alternative_belief': map.alternativeBelief,
+      'minimum_action': map.minimumAction,
+      'controllable_factor': map.controllableFactor,
+      'environment_cue': map.environmentCue,
+      'obstacle_plan': map.obstaclePlan,
+      'created_at_ms': map.createdAtMs > 0 ? map.createdAtMs : now,
+      'updated_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    return id;
+  }
+
+  Future<List<TodoRaiseBaseBeliefMap>> listRaiseBaseBeliefMaps({int limit = 20}) async {
+    final db = await _db;
+    final rows = await db.query('goal_raisebase_belief_maps', orderBy: 'updated_at_ms DESC', limit: limit);
+    return rows.map(TodoRaiseBaseBeliefMap.fromMap).toList(growable: false);
+  }
+
+  Future<String> addRaiseBaseCheckIn({
+    String goalId = '',
+    required String realityText,
+    required String possibilityText,
+    required int moodScore,
+    required int copingScore,
+    required int selfEfficacyScore,
+    required String evidenceText,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = newId('raisebase_checkin');
+    await db.insert('goal_raisebase_check_ins', <String, Object?>{
+      'check_in_id': id,
+      'goal_id': goalId,
+      'check_in_date': todayDate(),
+      'reality_text': realityText.trim(),
+      'possibility_text': possibilityText.trim(),
+      'mood_score': moodScore.clamp(1, 5),
+      'coping_score': copingScore.clamp(1, 5),
+      'self_efficacy_score': selfEfficacyScore.clamp(1, 5),
+      'evidence_text': evidenceText.trim(),
+      'created_at_ms': now,
+    });
+    return id;
+  }
+
+  Future<List<TodoRaiseBaseCheckIn>> listRaiseBaseCheckIns({int limit = 30}) async {
+    final db = await _db;
+    final rows = await db.query('goal_raisebase_check_ins', orderBy: 'created_at_ms DESC', limit: limit);
+    return rows.map(TodoRaiseBaseCheckIn.fromMap).toList(growable: false);
+  }
+
   Future<void> clearAllGoalModuleData() async {
     final db = await _db;
     await db.transaction((txn) async {
       final existingRows = await txn.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
       final existingTables = existingRows.map((row) => (row['name'] ?? '').toString()).toSet();
       for (final table in const <String>[
+        'goal_raisebase_check_ins',
+        'goal_raisebase_belief_maps',
         'change_behavior_experiments',
         'change_abc_journals',
         'change_self_evidence',

@@ -12,6 +12,7 @@ import 'todo_goal_models.dart';
 import 'todo_goal_prompt_config.dart';
 import 'todo_goal_value_system.dart';
 import 'todo_models.dart';
+import 'todo_raisebase_page.dart';
 import 'todo_service.dart';
 
 const _goalBlue = Color(0xFF5E72C3);
@@ -51,7 +52,7 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    _tabController = TabController(length: 9, vsync: this);
     _load().then((_) async {
       final id = widget.initialTaskId;
       if (id != null && id.trim().isNotEmpty) {
@@ -435,6 +436,7 @@ ${quote.translation}
             Tab(text: 'AI教练'),
             Tab(text: '价值罗盘'),
             Tab(text: '足下努力'),
+            Tab(text: '向上基线'),
           ],
         ),
         actions: [
@@ -477,6 +479,16 @@ ${quote.translation}
                     _buildCoachTab(),
                     _buildCompassTab(),
                     _EffortOperatingSystemTab(goals: _goals, todaySteps: _todaySteps, onDataChanged: _load),
+                    TodoRaiseBasePage(
+                      dao: _goalDao,
+                      goals: _goals,
+                      todaySteps: _todaySteps,
+                      reflections: _reflections,
+                      onOpenActions: () => _tabController.animateTo(2),
+                      onOpenFailure: () => _tabController.animateTo(4),
+                      onOpenReview: () => _tabController.animateTo(3),
+                      onDataChanged: _load,
+                    ),
                   ],
                 ),
                 if (_busy)
