@@ -12,6 +12,7 @@ import 'todo_goal_models.dart';
 import 'todo_goal_prompt_config.dart';
 import 'todo_goal_value_system.dart';
 import 'todo_models.dart';
+import 'todo_raisebase_page.dart';
 import 'todo_service.dart';
 
 const _goalBlue = Color(0xFF5E72C3);

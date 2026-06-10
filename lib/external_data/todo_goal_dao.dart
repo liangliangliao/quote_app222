@@ -7,6 +7,7 @@ import 'todo_dao.dart';
 import 'todo_failure_growth_models.dart';
 import 'todo_goal_models.dart';
 import 'todo_models.dart';
+import 'todo_raisebase_models.dart';
 
 class TodoGoalDao {
   Future<Database> get _db async {
