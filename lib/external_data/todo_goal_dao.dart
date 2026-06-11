@@ -7,6 +7,7 @@ import 'todo_dao.dart';
 import 'todo_failure_growth_models.dart';
 import 'todo_goal_models.dart';
 import 'todo_models.dart';
+import 'todo_meaning_models.dart';
 import 'todo_raisebase_models.dart';
 
 class TodoGoalDao {
@@ -492,6 +493,62 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_step_reviews', 'selected_alternative_json', 'TEXT');
     await _addColumnIfMissing(db, 'goal_step_reviews', 'restructured_plan_id', 'TEXT');
     await _addColumnIfMissing(db, 'goal_step_reviews', 'created_at_ms', 'INTEGER DEFAULT 0');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_meaning_compass_snapshots (
+        snapshot_id TEXT PRIMARY KEY,
+        situation TEXT,
+        unavoidable_question TEXT,
+        recurring_responsibility TEXT,
+        waiting_person TEXT,
+        unique_task TEXT,
+        avoided_responsibility TEXT,
+        primary_path TEXT DEFAULT 'creation',
+        responsibility_clarity INTEGER DEFAULT 0,
+        future_anchor_strength INTEGER DEFAULT 0,
+        self_transcendence INTEGER DEFAULT 0,
+        attitude_freedom INTEGER DEFAULT 0,
+        current_meaning_question TEXT,
+        next_response TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_meaning_future_anchors (
+        anchor_id TEXT PRIMARY KEY,
+        anchor_type TEXT DEFAULT 'work',
+        title TEXT NOT NULL,
+        why_text TEXT,
+        today_how TEXT,
+        status TEXT DEFAULT 'active',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_meaning_archive (
+        entry_id TEXT PRIMARY KEY,
+        entry_type TEXT DEFAULT 'completed',
+        title TEXT NOT NULL,
+        evidence TEXT,
+        happened_on TEXT,
+        goal_id TEXT DEFAULT '',
+        step_id TEXT DEFAULT '',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_meaning_hardships (
+        record_id TEXT PRIMARY KEY,
+        situation TEXT NOT NULL,
+        controllability TEXT DEFAULT 'partial',
+        controllable_part TEXT,
+        remaining_choice TEXT,
+        dignified_action TEXT,
+        support_needed TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
 
     await _repairLegacySolutionPlanAliases(db);
     await _repairGoalRuntimeIds(db);
@@ -1387,6 +1444,10 @@ class TodoGoalDao {
       final existingRows = await txn.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
       final existingTables = existingRows.map((row) => (row['name'] ?? '').toString()).toSet();
       for (final table in const <String>[
+        'goal_meaning_hardships',
+        'goal_meaning_archive',
+        'goal_meaning_future_anchors',
+        'goal_meaning_compass_snapshots',
         'goal_raisebase_check_ins',
         'goal_raisebase_belief_maps',
         'change_behavior_experiments',
@@ -2078,4 +2139,120 @@ class TodoGoalDao {
       lowPainLowGainCount: lowPainLowGain,
     );
   }
+
+  Future<void> saveMeaningCompassSnapshot(TodoMeaningCompassSnapshot snapshot) async {
+    final db = await _db;
+    await db.insert('goal_meaning_compass_snapshots', <String, Object?>{
+      'snapshot_id': snapshot.snapshotId,
+      'situation': snapshot.situation,
+      'unavoidable_question': snapshot.unavoidableQuestion,
+      'recurring_responsibility': snapshot.recurringResponsibility,
+      'waiting_person': snapshot.waitingPerson,
+      'unique_task': snapshot.uniqueTask,
+      'avoided_responsibility': snapshot.avoidedResponsibility,
+      'primary_path': snapshot.primaryPath,
+      'responsibility_clarity': snapshot.responsibilityClarity,
+      'future_anchor_strength': snapshot.futureAnchorStrength,
+      'self_transcendence': snapshot.selfTranscendence,
+      'attitude_freedom': snapshot.attitudeFreedom,
+      'current_meaning_question': snapshot.currentMeaningQuestion,
+      'next_response': snapshot.nextResponse,
+      'created_at_ms': snapshot.createdAtMs,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<TodoMeaningCompassSnapshot?> latestMeaningCompassSnapshot() async {
+    final db = await _db;
+    final rows = await db.query('goal_meaning_compass_snapshots', orderBy: 'created_at_ms DESC', limit: 1);
+    return rows.isEmpty ? null : TodoMeaningCompassSnapshot.fromMap(rows.first);
+  }
+
+  Future<String> addMeaningFutureAnchor({
+    required String anchorType,
+    required String title,
+    required String whyText,
+    required String todayHow,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = newId('meaning_anchor');
+    await db.insert('goal_meaning_future_anchors', <String, Object?>{
+      'anchor_id': id,
+      'anchor_type': anchorType,
+      'title': title.trim(),
+      'why_text': whyText.trim(),
+      'today_how': todayHow.trim(),
+      'status': 'active',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    });
+    return id;
+  }
+
+  Future<List<TodoMeaningFutureAnchor>> listMeaningFutureAnchors({int limit = 20}) async {
+    final db = await _db;
+    final rows = await db.query('goal_meaning_future_anchors', where: "status = 'active'", orderBy: 'created_at_ms DESC', limit: limit);
+    return rows.map(TodoMeaningFutureAnchor.fromMap).toList(growable: false);
+  }
+
+  Future<String> addMeaningArchiveEntry({
+    required String entryType,
+    required String title,
+    required String evidence,
+    required String happenedOn,
+    String goalId = '',
+    String stepId = '',
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = newId('meaning_archive');
+    await db.insert('goal_meaning_archive', <String, Object?>{
+      'entry_id': id,
+      'entry_type': entryType,
+      'title': title.trim(),
+      'evidence': evidence.trim(),
+      'happened_on': happenedOn.trim(),
+      'goal_id': goalId,
+      'step_id': stepId,
+      'created_at_ms': now,
+    });
+    return id;
+  }
+
+  Future<List<TodoMeaningArchiveEntry>> listMeaningArchive({int limit = 30}) async {
+    final db = await _db;
+    final rows = await db.query('goal_meaning_archive', orderBy: 'created_at_ms DESC', limit: limit);
+    return rows.map(TodoMeaningArchiveEntry.fromMap).toList(growable: false);
+  }
+
+  Future<String> addMeaningHardship({
+    required String situation,
+    required String controllability,
+    required String controllablePart,
+    required String remainingChoice,
+    required String dignifiedAction,
+    required String supportNeeded,
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = newId('meaning_hardship');
+    await db.insert('goal_meaning_hardships', <String, Object?>{
+      'record_id': id,
+      'situation': situation.trim(),
+      'controllability': controllability,
+      'controllable_part': controllablePart.trim(),
+      'remaining_choice': remainingChoice.trim(),
+      'dignified_action': dignifiedAction.trim(),
+      'support_needed': supportNeeded.trim(),
+      'created_at_ms': now,
+    });
+    return id;
+  }
+
+  Future<List<TodoMeaningHardshipRecord>> listMeaningHardships({int limit = 20}) async {
+    final db = await _db;
+    final rows = await db.query('goal_meaning_hardships', orderBy: 'created_at_ms DESC', limit: limit);
+    return rows.map(TodoMeaningHardshipRecord.fromMap).toList(growable: false);
+  }
+
 }
