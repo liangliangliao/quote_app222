@@ -12,6 +12,7 @@ import 'todo_goal_models.dart';
 import 'todo_goal_prompt_config.dart';
 import 'todo_goal_value_system.dart';
 import 'todo_models.dart';
+import 'todo_meaning_page.dart';
 import 'todo_raisebase_page.dart';
 import 'todo_service.dart';
 
@@ -225,7 +226,7 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 9, vsync: this);
+    _tabController = TabController(length: 10, vsync: this);
     _load().then((_) async {
       final id = widget.initialTaskId;
       if (id != null && id.trim().isNotEmpty) {
@@ -538,7 +539,7 @@ ${quote.translation}
     if (_busy) return;
     final ok = await _confirmDanger(
       title: '清除全部目标模块数据？',
-      message: '这会删除“向峰而行/To Do目标实践系统”的目标卡、今日行动、失败成长回路、复盘、AI分析、问题解决方案和写回链接，并恢复默认提示词。不会删除 Microsoft To Do 原始同步任务。',
+      message: '这会删除“向峰而行/To Do目标实践系统”的目标卡、今日行动、意义罗盘、未来支点、意义档案、困境记录、失败成长回路、复盘、AI分析、问题解决方案和写回链接，并恢复默认提示词。不会删除 Microsoft To Do 原始同步任务。',
       actionText: '清除并恢复默认',
     );
     if (!ok) return;
@@ -607,7 +608,8 @@ ${quote.translation}
             Tab(text: '过程复盘'),
             Tab(text: '失败成长'),
             Tab(text: 'AI教练'),
-            Tab(text: '价值罗盘'),
+            Tab(text: '意义罗盘'),
+            Tab(text: '价值校准'),
             Tab(text: '足下努力'),
             Tab(text: '向上基线'),
           ],
@@ -650,6 +652,16 @@ ${quote.translation}
                     _buildReviewTab(),
                     TodoFailureGrowthPage(dao: _goalDao, goals: _goals, onDataChanged: _load),
                     _buildCoachTab(),
+                    TodoMeaningCompassPage(
+                      dao: _goalDao,
+                      goals: _goals,
+                      todaySteps: _todaySteps,
+                      reflections: _reflections,
+                      onOpenGoals: () => _tabController.animateTo(1),
+                      onOpenToday: () => _tabController.animateTo(2),
+                      onOpenReview: () => _tabController.animateTo(3),
+                      onDataChanged: _load,
+                    ),
                     _buildCompassTab(),
                     _EffortOperatingSystemTab(goals: _goals, todaySteps: _todaySteps, onDataChanged: _load),
                     TodoRaiseBasePage(
@@ -823,7 +835,7 @@ ${quote.translation}
             onClarify: () => _tabController.animateTo(1),
             onAction: () => _tabController.animateTo(2),
             onReview: () => _tabController.animateTo(3),
-            onCompass: () => _tabController.animateTo(5),
+            onCompass: () => _tabController.animateTo(6),
             onOpenGoal: activeGoal == null
                 ? null
                 : () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalDetailPage(goalId: activeGoal.goalId))).then((_) => _load()),
