@@ -18,6 +18,179 @@ import 'todo_service.dart';
 const _goalBlue = Color(0xFF5E72C3);
 const _goalInk = Color(0xFF22223B);
 
+Future<void> _recordActionEffortWithDialog({
+  required BuildContext context,
+  required TodoGoalDao dao,
+  required TodoGoalActionStep step,
+  String mode = 'effort',
+}) async {
+  var minutes = mode == 'focus' ? 25 : (mode == 'return' ? 2 : (step.difficultyScore <= 3 ? 5 : 15));
+  var pain = mode == 'return' ? 2 : 0;
+  var gain = mode == 'return' ? 3 : 0;
+  var painType = 'growth';
+  var returnKind = mode == 'return' ? 'attention' : (mode == 'focus' ? 'attention' : '');
+  var attentionReturns = mode == 'focus' ? 1 : 0;
+  var strategyChanged = false;
+  final obstacle = TextEditingController();
+  final progress = TextEditingController(text: step.completionQuestion.trim().isEmpty ? '' : step.completionQuestion);
+  final learning = TextEditingController();
+  final reframe = TextEditingController(text: mode == 'return' ? '我发现偏离，然后用一个更小动作回来。' : '判断这是成长性不适、无效消耗，还是需要恢复。');
+  final trigger = TextEditingController(text: mode == 'return' ? '从分心/拖延/情绪波动中回到：${step.title}' : '');
+  try {
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setLocalState) => AlertDialog(
+        title: Text(mode == 'focus' ? '正念专注：${step.title}' : (mode == 'return' ? '带我回到这条行动' : '记录这条行动的足下努力')),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('父目标：${step.goalTitle}', style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text('行动：${step.title}', style: const TextStyle(height: 1.35)),
+          if (step.hasSourceProblemNode) const Padding(padding: EdgeInsets.only(top: 6), child: Text('这条行动已连接问题树节点，记录会反向汇总到节点与目标。', style: TextStyle(color: Color(0xFF0F766E), fontWeight: FontWeight.w800))),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(value: minutes, decoration: const InputDecoration(labelText: '投入时间', border: OutlineInputBorder()), items: const [2, 5, 15, 25, 45, 90].map((v) => DropdownMenuItem(value: v, child: Text('$v 分钟'))).toList(), onChanged: (v) => setLocalState(() => minutes = v ?? minutes)),
+          const SizedBox(height: 10),
+          Row(children: [const Expanded(child: Text('Pain：行动中有多不适')), Text('$pain/5')]),
+          Slider(value: pain.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => pain = v.round())),
+          Row(children: [const Expanded(child: Text('Gain：这一步有多成长/有意义')), Text('$gain/5')]),
+          Slider(value: gain.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => gain = v.round())),
+          DropdownButtonFormField<String>(value: painType, decoration: const InputDecoration(labelText: '痛感类型', border: OutlineInputBorder()), items: const [
+            DropdownMenuItem(value: 'growth', child: Text('成长性不适')),
+            DropdownMenuItem(value: 'panic', child: Text('恐慌性压力')),
+            DropdownMenuItem(value: 'meaningless', child: Text('无意义消耗')),
+            DropdownMenuItem(value: 'danger', child: Text('危险信号')),
+            DropdownMenuItem(value: 'none', child: Text('低痛感')),
+          ], onChanged: (v) => setLocalState(() => painType = v ?? 'growth')),
+          const SizedBox(height: 10),
+          TextField(controller: reframe, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: 'Pain Reframe / 调整判断', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(value: returnKind, decoration: const InputDecoration(labelText: '回归类型', border: OutlineInputBorder()), items: const [
+            DropdownMenuItem(value: '', child: Text('只是普通推进')),
+            DropdownMenuItem(value: 'attention', child: Text('分心后回来')),
+            DropdownMenuItem(value: 'emotion', child: Text('情绪波动后回来')),
+            DropdownMenuItem(value: 'break', child: Text('中断后重新开始')),
+            DropdownMenuItem(value: 'pain', child: Text('合理不适中继续')),
+          ], onChanged: (v) => setLocalState(() => returnKind = v ?? '')),
+          const SizedBox(height: 10),
+          TextField(controller: trigger, decoration: const InputDecoration(labelText: '我是从哪里把自己带回来的', border: OutlineInputBorder())),
+          Row(children: [const Expanded(child: Text('分心/偏离后的回归次数')), Text('$attentionReturns')]),
+          Slider(value: attentionReturns.toDouble(), min: 0, max: 10, divisions: 10, onChanged: (v) => setLocalState(() => attentionReturns = v.round())),
+          TextField(controller: obstacle, decoration: const InputDecoration(labelText: '阻力/分心源', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: progress, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: '留下了什么可见证据', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: learning, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: 'Time-In：我学到了什么', border: OutlineInputBorder())),
+          CheckboxListTile(contentPadding: EdgeInsets.zero, value: strategyChanged, title: const Text('我调整了策略 / 降低了任务'), onChanged: (v) => setLocalState(() => strategyChanged = v ?? false)),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存到足下努力'))],
+      )),
+    );
+    if (save != true) return;
+    await dao.recordActionEffort(
+      step: step,
+      effortMinutes: minutes,
+      painScore: pain,
+      gainScore: gain,
+      painType: painType,
+      painReframe: reframe.text,
+      returnKind: returnKind,
+      returnTrigger: trigger.text,
+      attentionReturnCount: attentionReturns,
+      mindfulMinutes: mode == 'focus' ? minutes : 0,
+      obstacle: obstacle.text,
+      smallProgress: progress.text,
+      timeInLearning: learning.text,
+      strategyChanged: strategyChanged,
+    );
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('已把这条行动写入足下努力账本，并反向汇总到目标/节点。')));
+  } finally {
+    obstacle.dispose(); progress.dispose(); learning.dispose(); reframe.dispose(); trigger.dispose();
+  }
+}
+
+Future<void> _recordProblemNodeEffortWithDialog({
+  required BuildContext context,
+  required TodoGoalDao dao,
+  required TodoGoalProblemNode node,
+}) async {
+  var minutes = node.estimatedMinutes <= 0 ? 5 : node.estimatedMinutes.clamp(2, 90).toInt();
+  var pain = 0;
+  var gain = 0;
+  var painType = 'growth';
+  var returnKind = '';
+  var attentionReturns = 0;
+  final obstacle = TextEditingController();
+  final progress = TextEditingController(text: node.actionOutput);
+  final learning = TextEditingController(text: node.logicQuestion);
+  final reframe = TextEditingController(text: '这个节点的痛感将用于判断：继续、降级、替换路径，还是重查父问题。');
+  final trigger = TextEditingController();
+  try {
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setLocalState) => AlertDialog(
+        title: const Text('在问题树节点上记录足下努力'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('节点：${node.title}', style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 6),
+          Text('行动：${node.displayAction}', style: const TextStyle(height: 1.35)),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(value: minutes, decoration: const InputDecoration(labelText: '投入时间', border: OutlineInputBorder()), items: const [2, 5, 15, 25, 45, 90].map((v) => DropdownMenuItem(value: v, child: Text('$v 分钟'))).toList(), onChanged: (v) => setLocalState(() => minutes = v ?? minutes)),
+          const SizedBox(height: 10),
+          Row(children: [const Expanded(child: Text('Pain')), Text('$pain/5')]),
+          Slider(value: pain.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => pain = v.round())),
+          Row(children: [const Expanded(child: Text('Gain')), Text('$gain/5')]),
+          Slider(value: gain.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => gain = v.round())),
+          DropdownButtonFormField<String>(value: painType, decoration: const InputDecoration(labelText: '痛感类型', border: OutlineInputBorder()), items: const [
+            DropdownMenuItem(value: 'growth', child: Text('成长性不适')),
+            DropdownMenuItem(value: 'panic', child: Text('恐慌性压力')),
+            DropdownMenuItem(value: 'meaningless', child: Text('无意义消耗')),
+            DropdownMenuItem(value: 'danger', child: Text('危险信号')),
+            DropdownMenuItem(value: 'none', child: Text('低痛感')),
+          ], onChanged: (v) => setLocalState(() => painType = v ?? 'growth')),
+          const SizedBox(height: 10),
+          TextField(controller: reframe, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: 'Pain Reframe', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(value: returnKind, decoration: const InputDecoration(labelText: '回归类型', border: OutlineInputBorder()), items: const [
+            DropdownMenuItem(value: '', child: Text('普通推进')),
+            DropdownMenuItem(value: 'attention', child: Text('分心后回来')),
+            DropdownMenuItem(value: 'emotion', child: Text('情绪波动后回来')),
+            DropdownMenuItem(value: 'break', child: Text('中断后重新开始')),
+            DropdownMenuItem(value: 'pain', child: Text('合理不适中继续')),
+          ], onChanged: (v) => setLocalState(() => returnKind = v ?? '')),
+          const SizedBox(height: 10),
+          TextField(controller: trigger, decoration: const InputDecoration(labelText: '我是从哪里回来的', border: OutlineInputBorder())),
+          Row(children: [const Expanded(child: Text('回归次数')), Text('$attentionReturns')]),
+          Slider(value: attentionReturns.toDouble(), min: 0, max: 10, divisions: 10, onChanged: (v) => setLocalState(() => attentionReturns = v.round())),
+          TextField(controller: obstacle, decoration: const InputDecoration(labelText: '节点阻力/证据缺口', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: progress, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: '节点产出/证据', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: learning, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: '这个节点让我看清什么', border: OutlineInputBorder())),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存节点努力'))],
+      )),
+    );
+    if (save != true) return;
+    await dao.recordProblemNodeEffort(
+      node: node,
+      effortMinutes: minutes,
+      painScore: pain,
+      gainScore: gain,
+      painType: painType,
+      painReframe: reframe.text,
+      returnKind: returnKind,
+      returnTrigger: trigger.text,
+      attentionReturnCount: attentionReturns,
+      obstacle: obstacle.text,
+      smallProgress: progress.text,
+      timeInLearning: learning.text,
+    );
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('已把节点努力写回问题树与目标洞察。')));
+  } finally {
+    obstacle.dispose(); progress.dispose(); learning.dispose(); reframe.dispose(); trigger.dispose();
+  }
+}
+
+
 class TodoGoalHomePage extends StatefulWidget {
   const TodoGoalHomePage({super.key, this.initialTaskId});
   final String? initialTaskId;
@@ -608,6 +781,9 @@ ${quote.translation}
         onStart: _startStep,
         onMakeSmaller: _makeStepSmaller,
         onReview: (step) => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalReviewPage(step: step))).then((_) => _load()),
+        onRecordEffort: (step) async { await _recordActionEffortWithDialog(context: context, dao: _goalDao, step: step); await _load(); },
+        onBringBack: (step) async { await _recordActionEffortWithDialog(context: context, dao: _goalDao, step: step, mode: 'return'); await _load(); },
+        onMindfulFocus: (step) async { await _recordActionEffortWithDialog(context: context, dao: _goalDao, step: step, mode: 'focus'); await _load(); },
         onWriteBack: (step) => step.writeBackToTodo || _busy ? null : () => _writeStepBack(step),
       );
     }).toList();
@@ -1375,6 +1551,7 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                       onGenerateTree: _generateProblemTree,
                       onActivateNode: _activateProblemNode,
                       onMarkNode: _markProblemNode,
+                      onRecordNodeEffort: (node) async { await _recordProblemNodeEffortWithDialog(context: context, dao: _goalDao, node: node); await _load(); },
                     ),
                     const SizedBox(height: 12),
                     _InfoBlock(title: '深层意义：这个目标为什么值得今天投入', text: goal.deepMeaning),
@@ -1391,6 +1568,9 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                         goalTitle: goal.goalTitle,
                         steps: _steps,
                         onTapStep: (s) => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalReviewPage(step: s))).then((_) => _load()),
+                        onRecordEffort: (s) async { await _recordActionEffortWithDialog(context: context, dao: _goalDao, step: s); await _load(); },
+                        onBringBack: (s) async { await _recordActionEffortWithDialog(context: context, dao: _goalDao, step: s, mode: 'return'); await _load(); },
+                        onMindfulFocus: (s) async { await _recordActionEffortWithDialog(context: context, dao: _goalDao, step: s, mode: 'focus'); await _load(); },
                       ),
                   ],
                 ),
@@ -1488,6 +1668,20 @@ class _TodoGoalReviewPageState extends State<TodoGoalReviewPage> {
         feedbackLearning: _feedbackLearningCtrl.text,
         coreValue: _valueCtrl.text,
         reviewMode: _reviewMode,
+      );
+      await _goalDao.recordActionEffort(
+        step: widget.step,
+        effortMinutes: 0,
+        painScore: _completed ? 2 : 4,
+        gainScore: ((_meaningScore + _processScore) / 2).round().clamp(0, 5).toInt(),
+        painType: _completed ? 'growth' : (_resultStatus == 'blocked' ? 'panic' : 'meaningless'),
+        painReframe: _completed ? '复盘显示这一步有成长证据，继续保留在行动链条中。' : '复盘显示当前行动需要降级、替换路径或重新判断父问题。',
+        returnKind: _completed ? '' : 'break',
+        returnTrigger: _completed ? '' : '从未完成/受阻中回到下一步设计。',
+        obstacle: _obstacleCtrl.text.trim(),
+        smallProgress: _whatCtrl.text.trim().isEmpty ? widget.step.title : _whatCtrl.text.trim(),
+        timeInLearning: _reflectionCtrl.text.trim(),
+        strategyChanged: !_completed,
       );
       TodoGoalStepRecoveryResult? recovery;
       if (!_completed) {
@@ -2796,6 +2990,9 @@ class _TodayGoalTreeCard extends StatelessWidget {
     required this.onStart,
     required this.onMakeSmaller,
     required this.onReview,
+    required this.onRecordEffort,
+    required this.onBringBack,
+    required this.onMindfulFocus,
     required this.onWriteBack,
   });
 
@@ -2805,6 +3002,9 @@ class _TodayGoalTreeCard extends StatelessWidget {
   final ValueChanged<TodoGoalActionStep> onStart;
   final ValueChanged<TodoGoalActionStep> onMakeSmaller;
   final ValueChanged<TodoGoalActionStep> onReview;
+  final ValueChanged<TodoGoalActionStep> onRecordEffort;
+  final ValueChanged<TodoGoalActionStep> onBringBack;
+  final ValueChanged<TodoGoalActionStep> onMindfulFocus;
   final VoidCallback? Function(TodoGoalActionStep step) onWriteBack;
 
   @override
@@ -2849,6 +3049,9 @@ class _TodayGoalTreeCard extends StatelessWidget {
                 onStart: onStart,
                 onMakeSmaller: onMakeSmaller,
                 onReview: onReview,
+                onRecordEffort: onRecordEffort,
+                onBringBack: onBringBack,
+                onMindfulFocus: onMindfulFocus,
                 onWriteBack: onWriteBack,
               )),
         ]),
@@ -2866,6 +3069,9 @@ class _TodayTreeStepNode extends StatelessWidget {
     required this.onStart,
     required this.onMakeSmaller,
     required this.onReview,
+    required this.onRecordEffort,
+    required this.onBringBack,
+    required this.onMindfulFocus,
     required this.onWriteBack,
   });
 
@@ -2876,6 +3082,9 @@ class _TodayTreeStepNode extends StatelessWidget {
   final ValueChanged<TodoGoalActionStep> onStart;
   final ValueChanged<TodoGoalActionStep> onMakeSmaller;
   final ValueChanged<TodoGoalActionStep> onReview;
+  final ValueChanged<TodoGoalActionStep> onRecordEffort;
+  final ValueChanged<TodoGoalActionStep> onBringBack;
+  final ValueChanged<TodoGoalActionStep> onMindfulFocus;
   final VoidCallback? Function(TodoGoalActionStep step) onWriteBack;
 
   @override
@@ -2899,6 +3108,9 @@ class _TodayTreeStepNode extends StatelessWidget {
               onStart: () => onStart(step),
               onMakeSmaller: () => onMakeSmaller(step),
               onReview: () => onReview(step),
+              onRecordEffort: () => onRecordEffort(step),
+              onBringBack: () => onBringBack(step),
+              onMindfulFocus: () => onMindfulFocus(step),
               onWriteBack: onWriteBack(step),
             ),
           ),
@@ -2911,6 +3123,9 @@ class _TodayTreeStepNode extends StatelessWidget {
               onStart: onStart,
               onMakeSmaller: onMakeSmaller,
               onReview: onReview,
+              onRecordEffort: onRecordEffort,
+              onBringBack: onBringBack,
+              onMindfulFocus: onMindfulFocus,
               onWriteBack: onWriteBack,
             )),
       ]),
@@ -2944,11 +3159,39 @@ class _RelationPathCard extends StatelessWidget {
   }
 }
 
+
+class _ActionEffortBridgeCard extends StatelessWidget {
+  const _ActionEffortBridgeCard({required this.step});
+  final TodoGoalActionStep step;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasNode = step.hasSourceProblemNode;
+    final color = hasNode ? const Color(0xFF0F766E) : const Color(0xFF4F46E5);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: color.withOpacity(0.07), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.18))),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.hub_outlined, color: color, size: 18),
+        const SizedBox(width: 8),
+        Expanded(child: Text(
+          '${hasNode ? '已连接问题树节点：这条行动的 Pain-Gain、回归与正念专注会反向验证节点。' : '已连接目标：这条行动的努力记录会进入目标周报与足下洞察。'}\n${step.effortLedgerLine}',
+          style: TextStyle(color: color, height: 1.35, fontWeight: FontWeight.w800),
+        )),
+      ]),
+    );
+  }
+}
+
 class _GoalStepTreeCard extends StatelessWidget {
-  const _GoalStepTreeCard({required this.goalTitle, required this.steps, required this.onTapStep});
+  const _GoalStepTreeCard({required this.goalTitle, required this.steps, required this.onTapStep, required this.onRecordEffort, required this.onBringBack, required this.onMindfulFocus});
   final String goalTitle;
   final List<TodoGoalActionStep> steps;
   final ValueChanged<TodoGoalActionStep> onTapStep;
+  final ValueChanged<TodoGoalActionStep> onRecordEffort;
+  final ValueChanged<TodoGoalActionStep> onBringBack;
+  final ValueChanged<TodoGoalActionStep> onMindfulFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -2974,7 +3217,7 @@ class _GoalStepTreeCard extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('从父目标向下看，每个子步骤都能看到自己承接的父步骤。这样复盘时就不会只看到零散任务，而能看见行动链条。', style: TextStyle(color: Color(0xFF6B7280), height: 1.4)),
           const SizedBox(height: 8),
-          ...roots.map((s) => _GoalStepTreeNode(step: s, depth: 0, childrenByParent: childrenByParent, onTapStep: onTapStep)),
+          ...roots.map((s) => _GoalStepTreeNode(step: s, depth: 0, childrenByParent: childrenByParent, onTapStep: onTapStep, onRecordEffort: onRecordEffort, onBringBack: onBringBack, onMindfulFocus: onMindfulFocus)),
         ]),
       ),
     );
@@ -2982,11 +3225,14 @@ class _GoalStepTreeCard extends StatelessWidget {
 }
 
 class _GoalStepTreeNode extends StatelessWidget {
-  const _GoalStepTreeNode({required this.step, required this.depth, required this.childrenByParent, required this.onTapStep});
+  const _GoalStepTreeNode({required this.step, required this.depth, required this.childrenByParent, required this.onTapStep, required this.onRecordEffort, required this.onBringBack, required this.onMindfulFocus});
   final TodoGoalActionStep step;
   final int depth;
   final Map<String, List<TodoGoalActionStep>> childrenByParent;
   final ValueChanged<TodoGoalActionStep> onTapStep;
+  final ValueChanged<TodoGoalActionStep> onRecordEffort;
+  final ValueChanged<TodoGoalActionStep> onBringBack;
+  final ValueChanged<TodoGoalActionStep> onMindfulFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -2998,21 +3244,30 @@ class _GoalStepTreeNode extends StatelessWidget {
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Icon(Icons.subdirectory_arrow_right, size: 18, color: Color(0xFF64748B)),
           const SizedBox(width: 6),
-          Expanded(child: _ActionStepListTile(step: step, onTap: () => onTapStep(step))),
+          Expanded(child: _ActionStepListTile(
+            step: step,
+            onTap: () => onTapStep(step),
+            onRecordEffort: () => onRecordEffort(step),
+            onBringBack: () => onBringBack(step),
+            onMindfulFocus: () => onMindfulFocus(step),
+          )),
         ]),
-        ...children.map((child) => _GoalStepTreeNode(step: child, depth: depth + 1, childrenByParent: childrenByParent, onTapStep: onTapStep)),
+        ...children.map((child) => _GoalStepTreeNode(step: child, depth: depth + 1, childrenByParent: childrenByParent, onTapStep: onTapStep, onRecordEffort: onRecordEffort, onBringBack: onBringBack, onMindfulFocus: onMindfulFocus)),
       ]),
     );
   }
 }
 
 class _TodayStepCard extends StatelessWidget {
-  const _TodayStepCard({required this.step, this.onToggle, this.onStart, this.onMakeSmaller, this.onReview, this.onWriteBack, this.showGoalSubtitle = true});
+  const _TodayStepCard({required this.step, this.onToggle, this.onStart, this.onMakeSmaller, this.onReview, this.onRecordEffort, this.onBringBack, this.onMindfulFocus, this.onWriteBack, this.showGoalSubtitle = true});
   final TodoGoalActionStep step;
   final VoidCallback? onToggle;
   final VoidCallback? onStart;
   final VoidCallback? onMakeSmaller;
   final VoidCallback? onReview;
+  final VoidCallback? onRecordEffort;
+  final VoidCallback? onBringBack;
+  final VoidCallback? onMindfulFocus;
   final VoidCallback? onWriteBack;
   final bool showGoalSubtitle;
 
@@ -3058,6 +3313,8 @@ class _TodayStepCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _RelationPathCard(step: step),
+          const SizedBox(height: 8),
+          _ActionEffortBridgeCard(step: step),
           if (step.minimumStandard.trim().isNotEmpty) _MiniLine(label: '最低版', text: step.minimumStandard),
           if (step.simplifiedStandard.trim().isNotEmpty) _MiniLine(label: '简化版', text: step.simplifiedStandard),
           if (step.recommendedStandard.trim().isNotEmpty) _MiniLine(label: '标准版', text: step.recommendedStandard),
@@ -3065,9 +3322,12 @@ class _TodayStepCard extends StatelessWidget {
           if (step.experienceIntention.trim().isNotEmpty) _MiniLine(label: '今日 AI 提问', text: step.experienceIntention),
           if (step.processValue.trim().isNotEmpty) _MiniLine(label: '做时观察', text: step.processValue),
           const SizedBox(height: 10),
-          if (onStart != null || onMakeSmaller != null || onReview != null || onWriteBack != null)
+          if (onStart != null || onMakeSmaller != null || onReview != null || onRecordEffort != null || onBringBack != null || onMindfulFocus != null || onWriteBack != null)
             Wrap(spacing: 8, runSpacing: 8, children: [
               if (onStart != null) FilledButton.icon(onPressed: step.isCompleted ? null : onStart, icon: const Icon(Icons.play_arrow), label: const Text('开始5分钟')),
+              if (onRecordEffort != null) FilledButton.tonalIcon(onPressed: onRecordEffort, icon: const Icon(Icons.directions_walk), label: const Text('记录足下努力')),
+              if (onBringBack != null) OutlinedButton.icon(onPressed: onBringBack, icon: const Icon(Icons.keyboard_return), label: const Text('带我回来')),
+              if (onMindfulFocus != null) OutlinedButton.icon(onPressed: onMindfulFocus, icon: const Icon(Icons.timer_outlined), label: const Text('正念专注')),
               if (onMakeSmaller != null) OutlinedButton.icon(onPressed: step.isCompleted ? null : onMakeSmaller, icon: const Icon(Icons.remove_circle_outline), label: const Text('缩小一步')),
               if (onReview != null) OutlinedButton.icon(onPressed: onReview, icon: const Icon(Icons.rate_review_outlined), label: const Text('复盘生成下一步')),
               if (onWriteBack != null) OutlinedButton.icon(onPressed: onWriteBack, icon: Icon(step.writeBackToTodo ? Icons.cloud_done_outlined : Icons.cloud_upload_outlined), label: Text(step.writeBackToTodo ? '已写回 To Do' : '写回 To Do')),
@@ -3079,22 +3339,38 @@ class _TodayStepCard extends StatelessWidget {
 }
 
 class _ActionStepListTile extends StatelessWidget {
-  const _ActionStepListTile({required this.step, required this.onTap});
+  const _ActionStepListTile({required this.step, required this.onTap, required this.onRecordEffort, required this.onBringBack, required this.onMindfulFocus});
   final TodoGoalActionStep step;
   final VoidCallback onTap;
+  final VoidCallback onRecordEffort;
+  final VoidCallback onBringBack;
+  final VoidCallback onMindfulFocus;
 
   @override
   Widget build(BuildContext context) {
     final relationLine = step.hasParentStep ? '父步骤：${step.parentLabel}' : '父目标：${step.parentLabel}';
     final minimumLine = step.minimumStandard.isEmpty ? '开始5分钟即可' : step.minimumStandard;
     return Card(
-      child: ListTile(
-        leading: Icon(step.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: step.isCompleted ? Colors.green.shade700 : _goalBlue),
-        title: Text(step.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text('${step.actionTypeLabel} · $relationLine\n最低版：$minimumLine'),
-        isThreeLine: true,
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ListTile(
+            leading: Icon(step.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: step.isCompleted ? Colors.green.shade700 : _goalBlue),
+            title: Text(step.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text('${step.actionTypeLabel} · $relationLine\n最低版：$minimumLine\n${step.effortLedgerLine}'),
+            isThreeLine: true,
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onTap,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.tonalIcon(onPressed: onRecordEffort, icon: const Icon(Icons.directions_walk, size: 18), label: const Text('记录努力')),
+              OutlinedButton.icon(onPressed: onBringBack, icon: const Icon(Icons.keyboard_return, size: 18), label: const Text('回到此步')),
+              OutlinedButton.icon(onPressed: onMindfulFocus, icon: const Icon(Icons.timer_outlined, size: 18), label: const Text('正念专注')),
+            ]),
+          ),
+        ]),
       ),
     );
   }
@@ -3110,6 +3386,7 @@ class _SolutionPlanBoard extends StatelessWidget {
     required this.onGenerateTree,
     required this.onActivateNode,
     required this.onMarkNode,
+    required this.onRecordNodeEffort,
   });
 
   final String goalTitle;
@@ -3119,6 +3396,7 @@ class _SolutionPlanBoard extends StatelessWidget {
   final ValueChanged<TodoGoalSolutionPlan> onGenerateTree;
   final ValueChanged<TodoGoalProblemNode> onActivateNode;
   final void Function(TodoGoalProblemNode node, String status) onMarkNode;
+  final ValueChanged<TodoGoalProblemNode> onRecordNodeEffort;
 
   @override
   Widget build(BuildContext context) {
@@ -3126,7 +3404,7 @@ class _SolutionPlanBoard extends StatelessWidget {
       return const _PlainValueCard(
         icon: Icons.account_tree_outlined,
         title: '还没有为这个目标设计行动路径',
-        text: '先点击右上角“路线概览”，只请求三条候选方案。概览生成后，再在你想深入的方案上手动点击“生成这棵问题树”。',
+        text: '先点击右上角“路线概览”，只生成几条候选路径。AI会展示问题定义、判断依据、适用条件和参考案例，但不会替你选；你可以只展开最想验证的一条问题树。',
       );
     }
     final selectedPlans = plans.where((p) => p.isSelected).toList();
@@ -3144,7 +3422,7 @@ class _SolutionPlanBoard extends StatelessWidget {
             Expanded(child: Text('怎样更实际地推进“$goalTitle”', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _goalInk))),
           ]),
           const SizedBox(height: 6),
-          const Text('下面先展示几条不同走法的概览。系统不会连续请求全部问题树；请只在你想深入的方案上手动生成，也可以逐个生成后再比较。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
+          const Text('下面先展示几条不同走法的概览。它们不是标准答案，而是供你比较的候选假设：请结合自己的真实需要、成本、风险和参考案例，手动选择要深入验证的问题树。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
           const SizedBox(height: 12),
           ...plans.map((p) => _SolutionPlanCard(
                 plan: p,
@@ -3153,13 +3431,14 @@ class _SolutionPlanBoard extends StatelessWidget {
               )),
           const SizedBox(height: 12),
           if (selected == null)
-            const _EmptyCard(text: '先不用急着选。比较每条路是否适合你目前的现实条件，以及你愿意先承担哪一种成本，再选一条做小范围尝试。')
+            const _EmptyCard(text: '先不用急着选。把每条路当成“待验证假设”：比较它解决的是不是你真正需要、代价是否可承受、失败后是否容易调整，再选一条做小范围尝试。')
           else
             _ProblemNodeTreeCard(
               plan: selected,
               nodes: nodes,
               onActivateNode: onActivateNode,
               onMarkNode: onMarkNode,
+              onRecordNodeEffort: onRecordNodeEffort,
             ),
         ]),
       ),
@@ -3198,13 +3477,13 @@ class _SolutionPlanCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: Wrap(spacing: 8, runSpacing: 6, children: [
             OutlinedButton.icon(onPressed: onGenerateTree, icon: const Icon(Icons.account_tree_outlined, size: 18), label: const Text('生成这棵问题树')),
-            if (onSelect != null) TextButton(onPressed: onSelect, child: const Text('选择为主方案')),
+            if (onSelect != null) TextButton(onPressed: onSelect, child: const Text('标记为当前试行方案')),
           ]),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (plan.summary.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.route_outlined, title: '方案结论：怎样从现状走到目标', text: plan.summary),
+            if (plan.summary.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.route_outlined, title: '候选路径：怎样从现状走到目标', text: plan.summary),
             if (plan.evidencePlan.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_circle_outline, title: '第一轮需要验证什么', text: plan.evidencePlan),
             if (plan.successMetrics.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.visibility_outlined, title: '怎样知道它值得继续', text: plan.successMetrics),
             if (plan.riskNotes.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.warning_amber_outlined, title: '选择前需要考虑', text: plan.riskNotes),
@@ -3213,14 +3492,15 @@ class _SolutionPlanCard extends StatelessWidget {
         ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 12),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          title: const Text('为什么可能适合你', style: TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
-          subtitle: const Text('展开查看判断依据；这些内容仍需要你结合实际确认。'),
+          title: const Text('判断依据、案例与适用条件', style: TextStyle(fontWeight: FontWeight.w800, color: _goalInk)),
+          subtitle: const Text('展开查看事实、假设、边界和参考案例；最终仍由你结合实际确认。'),
           children: [
             if (plan.problemDefinition.trim().isNotEmpty) _MiniLine(label: 'AI理解的当前难题', text: plan.problemDefinition),
             if (plan.knownFacts.trim().isNotEmpty) _MiniLine(label: '从你的描述中能确认', text: plan.knownFacts),
             if (plan.keyAssumptions.trim().isNotEmpty) _MiniLine(label: '开始前还要问清', text: plan.keyAssumptions),
             if (plan.rootCauseAnalysis.trim().isNotEmpty) _MiniLine(label: '可能卡住你的地方', text: plan.rootCauseAnalysis),
             if (plan.optionComparison.trim().isNotEmpty) _MiniLine(label: '它更适合什么情况', text: plan.optionComparison),
+            if (plan.referenceCases.trim().isNotEmpty) _MiniLine(label: '参考案例', text: plan.referenceCases),
             if (plan.stopConditions.trim().isNotEmpty) _MiniLine(label: '什么时候应该换路', text: plan.stopConditions),
             if (plan.userChoiceGuidance.trim().isNotEmpty) _MiniLine(label: '你可以怎样判断', text: plan.userChoiceGuidance),
           ],
@@ -3231,11 +3511,12 @@ class _SolutionPlanCard extends StatelessWidget {
 }
 
 class _ProblemNodeTreeCard extends StatelessWidget {
-  const _ProblemNodeTreeCard({required this.plan, required this.nodes, required this.onActivateNode, required this.onMarkNode});
+  const _ProblemNodeTreeCard({required this.plan, required this.nodes, required this.onActivateNode, required this.onMarkNode, required this.onRecordNodeEffort});
   final TodoGoalSolutionPlan plan;
   final List<TodoGoalProblemNode> nodes;
   final ValueChanged<TodoGoalProblemNode> onActivateNode;
   final void Function(TodoGoalProblemNode node, String status) onMarkNode;
+  final ValueChanged<TodoGoalProblemNode> onRecordNodeEffort;
 
   @override
   Widget build(BuildContext context) {
@@ -3257,9 +3538,9 @@ class _ProblemNodeTreeCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: const Color(0xFFF4F6FF), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE0E7FF))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('解题过程：把“${plan.title}”逐层推导到现实动作', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
+        Text('问题解决树：把“${plan.title}”逐层推导到现实动作', style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk, fontSize: 16)),
         const SizedBox(height: 4),
-        Text('已解决 $completed / ${nodes.length} 个问题节点。请从没有未完成前置条件的最底层动作开始；叶节点成功后，再逐层评估父问题，直到根问题成立。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
+        Text('已验证 $completed / ${nodes.length} 个问题节点。请从没有未完成前置条件的最底层动作开始；叶节点产生证据后，再逐层评估父问题是否成立。失败不是定论，而是更新假设、替代路径或验收标准的反馈。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
         const SizedBox(height: 8),
         ...roots.map((n) => _ProblemNodeTreeNode(
               node: n,
@@ -3268,6 +3549,7 @@ class _ProblemNodeTreeCard extends StatelessWidget {
               nodesById: nodesById,
               onActivateNode: onActivateNode,
               onMarkNode: onMarkNode,
+              onRecordNodeEffort: onRecordNodeEffort,
             )),
       ]),
     );
@@ -3275,13 +3557,14 @@ class _ProblemNodeTreeCard extends StatelessWidget {
 }
 
 class _ProblemNodeTreeNode extends StatelessWidget {
-  const _ProblemNodeTreeNode({required this.node, required this.depth, required this.childrenByParent, required this.nodesById, required this.onActivateNode, required this.onMarkNode});
+  const _ProblemNodeTreeNode({required this.node, required this.depth, required this.childrenByParent, required this.nodesById, required this.onActivateNode, required this.onMarkNode, required this.onRecordNodeEffort});
   final TodoGoalProblemNode node;
   final int depth;
   final Map<String, List<TodoGoalProblemNode>> childrenByParent;
   final Map<String, TodoGoalProblemNode> nodesById;
   final ValueChanged<TodoGoalProblemNode> onActivateNode;
   final void Function(TodoGoalProblemNode node, String status) onMarkNode;
+  final ValueChanged<TodoGoalProblemNode> onRecordNodeEffort;
 
   @override
   Widget build(BuildContext context) {
@@ -3320,6 +3603,7 @@ class _ProblemNodeTreeNode extends StatelessWidget {
               ]),
             ),
             if (dependencyTitles.isNotEmpty) _MiniLine(label: '还需要先完成', text: dependencyTitles.join('、')),
+            _MiniLine(label: '足下闭环', text: node.effortLedgerLine),
             if (node.description.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_humanizeAiText(node.description), style: const TextStyle(color: Color(0xFF4B5563), height: 1.4))),
             if (node.actionableStep.trim().isNotEmpty) _FriendlyTextBlock(icon: Icons.play_arrow_rounded, title: '现在可以做', text: node.actionableStep),
             if (node.isActionable && !node.hasConcreteActionContract)
@@ -3351,6 +3635,7 @@ class _ProblemNodeTreeNode extends StatelessWidget {
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               if (node.isActionable && children.isEmpty) OutlinedButton.icon(onPressed: node.isCompleted || !ready || !node.hasConcreteActionContract ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
+              if (node.isActionable) FilledButton.tonalIcon(onPressed: !ready ? null : () => onRecordNodeEffort(node), icon: const Icon(Icons.directions_walk), label: const Text('记录节点努力')),
               OutlinedButton.icon(onPressed: node.isCompleted || !ready ? null : () => onMarkNode(node, 'completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('成功')),
               OutlinedButton.icon(onPressed: node.isFailed || !ready ? null : () => onMarkNode(node, 'failed'), icon: const Icon(Icons.cancel_outlined), label: const Text('失败')),
             ]),
@@ -3363,6 +3648,7 @@ class _ProblemNodeTreeNode extends StatelessWidget {
               nodesById: nodesById,
               onActivateNode: onActivateNode,
               onMarkNode: onMarkNode,
+              onRecordNodeEffort: onRecordNodeEffort,
             )),
       ]),
     );
@@ -4498,7 +4784,11 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
             ? '选择准备、沉浸、孵化、洞察、打磨中的一个阶段，留下一个可核对产出'
             : effortType == 'recovery'
                 ? '进行一段有边界的散步、休息或睡眠恢复，并记录回来后的变化'
-                : (_activeStep?.title ?? _recommendedAction);
+                : effortType == 'mindful_return'
+                    ? '觉察到偏离，然后用 2 分钟把自己带回一个最小行动'
+                    : effortType == 'mindful_focus'
+                        ? '进行一轮正念专注：允许走神，记录觉察与回来的次数'
+                        : (_activeStep?.title ?? _recommendedAction);
     final investment = TextEditingController(text: defaultInvestment);
     final obstacle = TextEditingController();
     final strategy = TextEditingController(text: effortType == 'deep_work' ? '停止继续收集资料，先做 25 分钟输出并标注一个问题' : '把行动缩小，并使用固定触发器开始');
@@ -4506,25 +4796,70 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
     final next = TextEditingController(text: _activeStep?.minimumStandard ?? '明天先做 2 分钟');
     final learning = TextEditingController();
     final identity = TextEditingController();
-    var minutes = _availableMinutes;
-    var zone = _recommendedZone;
+    final painReframe = TextEditingController(text: '先判断这是成长性不适、恐慌性压力还是无意义消耗，再选择继续、降级或恢复。');
+    final returnTrigger = TextEditingController(text: effortType == 'mindful_return' ? '我觉察到分心、拖延或中断，并选择回来。' : '');
+    var minutes = effortType == 'mindful_return' ? 2 : _availableMinutes;
+    var zone = effortType == 'mindful_return' ? 'comfort' : _recommendedZone;
     var joy = 3;
     var depth = 3;
+    var pain = effortType == 'recovery' ? 1 : 3;
+    var gain = 3;
+    var painType = effortType == 'recovery' ? 'none' : 'growth';
+    var returnKind = effortType == 'mindful_return' ? 'attention' : '';
+    var attentionReturns = effortType == 'mindful_return' ? 1 : 0;
+    var mindfulMinutes = effortType == 'mindful_return' || effortType == 'mindful_focus' ? minutes : 0;
+    var recoveryMinutes = effortType == 'recovery' ? minutes : 0;
     var changed = false;
     try {
       final save = await showDialog<bool>(context: context, builder: (context) => StatefulBuilder(builder: (context, setLocalState) => AlertDialog(
-        title: Text(effortType == 'relationship' ? '记录关系投入' : effortType == 'deep_work' ? '记录深度努力循环' : '努力账本 · Time-In'),
+        title: Text(effortType == 'relationship'
+            ? '记录关系投入'
+            : effortType == 'deep_work'
+                ? '记录深度努力循环'
+                : effortType == 'recovery'
+                    ? '记录恢复与孵化'
+                    : effortType == 'mindful_return'
+                        ? 'Bring It Back · 正念回归'
+                        : effortType == 'mindful_focus'
+                            ? 'Mindful Focus · 正念专注'
+                            : '努力账本 · Time-In'),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: investment, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: '今天我实际投入了什么', border: OutlineInputBorder())),
           const SizedBox(height: 10),
-          DropdownButtonFormField<int>(value: minutes, decoration: const InputDecoration(labelText: '有意义投入时长', border: OutlineInputBorder()), items: const [2, 5, 15, 25, 45, 90].map((v) => DropdownMenuItem(value: v, child: Text('$v 分钟'))).toList(), onChanged: (v) => setLocalState(() => minutes = v ?? 5)),
+          DropdownButtonFormField<int>(value: minutes, decoration: const InputDecoration(labelText: '有意义投入时长', border: OutlineInputBorder()), items: const [2, 5, 15, 25, 45, 90].map((v) => DropdownMenuItem(value: v, child: Text('$v 分钟'))).toList(), onChanged: (v) => setLocalState(() { minutes = v ?? 5; if (effortType == 'mindful_return' || effortType == 'mindful_focus') mindfulMinutes = minutes; if (effortType == 'recovery') recoveryMinutes = minutes; })),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(value: zone, decoration: const InputDecoration(labelText: '实际所在区域', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'comfort', child: Text('舒适区')), DropdownMenuItem(value: 'stretch', child: Text('拉伸区')), DropdownMenuItem(value: 'panic', child: Text('恐慌区'))], onChanged: (v) => setLocalState(() => zone = v ?? 'stretch')),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(value: painType, decoration: const InputDecoration(labelText: 'Pain 类型：No Pain, No Gain 的校准', border: OutlineInputBorder()), items: const [
+            DropdownMenuItem(value: 'none', child: Text('低痛感 / 保持流动')),
+            DropdownMenuItem(value: 'growth', child: Text('成长性不适：值得小步推进')),
+            DropdownMenuItem(value: 'panic', child: Text('恐慌性压力：需要降级')),
+            DropdownMenuItem(value: 'meaningless', child: Text('无意义消耗：重查目标/方法')),
+            DropdownMenuItem(value: 'danger', child: Text('危险信号：停止并寻求支持')),
+          ], onChanged: (v) => setLocalState(() => painType = v ?? 'growth')),
+          const SizedBox(height: 8),
+          Row(children: [const Expanded(child: Text('Pain：今天有多不适')), Text('$pain/5')]),
+          Slider(value: pain.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => pain = v.round())),
+          Row(children: [const Expanded(child: Text('Gain：今天有多有意义/成长')), Text('$gain/5')]),
+          Slider(value: gain.toDouble(), min: 0, max: 5, divisions: 5, onChanged: (v) => setLocalState(() => gain = v.round())),
+          TextField(controller: painReframe, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: 'Pain Reframe：这个不适该继续、降级还是恢复？', border: OutlineInputBorder())),
           const SizedBox(height: 10),
           TextField(controller: obstacle, decoration: const InputDecoration(labelText: '遇到的现实阻力', border: OutlineInputBorder())),
           const SizedBox(height: 10),
           TextField(controller: strategy, decoration: const InputDecoration(labelText: '我使用或调整了什么策略', border: OutlineInputBorder())),
           CheckboxListTile(contentPadding: EdgeInsets.zero, value: changed, title: const Text('今天调整了策略'), onChanged: (v) => setLocalState(() => changed = v ?? false)),
+          DropdownButtonFormField<String>(value: returnKind, decoration: const InputDecoration(labelText: '是否发生“回来”的训练', border: OutlineInputBorder()), items: const [
+            DropdownMenuItem(value: '', child: Text('没有特别记录')),
+            DropdownMenuItem(value: 'attention', child: Text('分心后回来')),
+            DropdownMenuItem(value: 'emotion', child: Text('情绪波动后回来')),
+            DropdownMenuItem(value: 'break', child: Text('中断后重新开始')),
+            DropdownMenuItem(value: 'pain', child: Text('合理不适中继续')),
+          ], onChanged: (v) => setLocalState(() => returnKind = v ?? '')),
+          const SizedBox(height: 10),
+          TextField(controller: returnTrigger, decoration: const InputDecoration(labelText: '回归触发：我从哪里把自己带回来', border: OutlineInputBorder())),
+          const SizedBox(height: 8),
+          Row(children: [const Expanded(child: Text('分心/偏离后的回归次数')), Text('$attentionReturns')]),
+          Slider(value: attentionReturns.toDouble(), min: 0, max: 10, divisions: 10, onChanged: (v) => setLocalState(() => attentionReturns = v.round())),
           TextField(controller: progress, decoration: const InputDecoration(labelText: '今天有什么可见的小进步', border: OutlineInputBorder())),
           const SizedBox(height: 10),
           TextField(controller: learning, decoration: const InputDecoration(labelText: 'Time-In：今天我学到了什么', border: OutlineInputBorder())),
@@ -4541,12 +4876,51 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
         actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存努力'))],
       )));
       if (save != true) return;
-      await _dao.addEffortEntry(goalId: goal.goalId, stepId: _activeStep?.stepId ?? '', effortMinutes: minutes, energyLevel: _energy, emotionState: _emotion, availableMinutes: _availableMinutes, zoneType: zone, effortType: effortType, investmentText: investment.text, obstacle: obstacle.text, strategyUsed: strategy.text, smallProgress: progress.text, nextMinimumStep: next.text, timeInLearning: learning.text, identityEvidence: identity.text, gratitudeText: '', joyScore: joy, reflectionDepth: depth, strategyChanged: changed);
+      await _dao.addEffortEntry(
+        goalId: goal.goalId,
+        stepId: _activeStep?.stepId ?? '',
+        nodeId: _activeStep?.sourceNodeId ?? '',
+        sourceObjectType: _activeStep?.hasSourceProblemNode == true ? 'problem_node_daily_action' : (effortType == 'goal' ? 'daily_action' : effortType),
+        effortMinutes: minutes,
+        energyLevel: _energy,
+        emotionState: _emotion,
+        availableMinutes: _availableMinutes,
+        zoneType: zone,
+        effortType: effortType,
+        investmentText: investment.text,
+        obstacle: obstacle.text,
+        strategyUsed: strategy.text,
+        smallProgress: progress.text,
+        nextMinimumStep: next.text,
+        timeInLearning: learning.text,
+        identityEvidence: identity.text,
+        gratitudeText: '',
+        joyScore: joy,
+        reflectionDepth: depth,
+        strategyChanged: changed,
+        painScore: pain,
+        gainScore: gain,
+        painType: painType,
+        painReframe: painReframe.text,
+        returnKind: returnKind,
+        returnTrigger: returnTrigger.text,
+        attentionReturnCount: attentionReturns,
+        mindfulMinutes: mindfulMinutes,
+        recoveryMinutes: recoveryMinutes,
+      );
       await _load();
       await widget.onDataChanged();
     } finally {
-      investment.dispose(); obstacle.dispose(); strategy.dispose(); progress.dispose(); next.dispose(); learning.dispose(); identity.dispose();
+      investment.dispose(); obstacle.dispose(); strategy.dispose(); progress.dispose(); next.dispose(); learning.dispose(); identity.dispose(); painReframe.dispose(); returnTrigger.dispose();
     }
+  }
+
+  Future<void> _bringItBack() async {
+    await _recordEffort(effortType: 'mindful_return');
+  }
+
+  Future<void> _recordMindfulFocus() async {
+    await _recordEffort(effortType: 'mindful_focus');
   }
 
   Future<void> _reframeEffortLanguage() async {
@@ -4609,11 +4983,20 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
           child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('足下 · 有意义努力操作系统', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
             SizedBox(height: 8),
-            Text('努力不是痛苦忍耐，而是把“我想成为谁”落实为“今天我做什么”。不奖励完美连续，只记录投入、调整和重新回来。', style: TextStyle(color: Colors.white70, height: 1.5)),
+            Text('No Pain, No Gain；No Return, No Growth。努力不是迷恋痛苦，而是在有意义的拉伸中，分心后回来、中断后回来、痛苦中校准再行动。', style: TextStyle(color: Colors.white70, height: 1.5)),
           ]),
         ),
         const SizedBox(height: 12),
         _EffortMetricCard(summary: _summary),
+        const SizedBox(height: 12),
+        _PainGainMapCard(summary: _summary),
+        const SizedBox(height: 12),
+        _EffortTodayActionBridgeCard(
+          todaySteps: widget.todaySteps,
+          onRecord: (step) async { await _recordActionEffortWithDialog(context: context, dao: _dao, step: step); await _load(); await widget.onDataChanged(); },
+          onReturn: (step) async { await _recordActionEffortWithDialog(context: context, dao: _dao, step: step, mode: 'return'); await _load(); await widget.onDataChanged(); },
+          onFocus: (step) async { await _recordActionEffortWithDialog(context: context, dao: _dao, step: step, mode: 'focus'); await _load(); await widget.onDataChanged(); },
+        ),
         const SizedBox(height: 12),
         Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Stretch Zone Coach', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
@@ -4633,6 +5016,8 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton.icon(onPressed: goal == null ? null : _justDoIt, icon: const Icon(Icons.play_arrow), label: const Text('进入 2 分钟行动优先模式')),
+            FilledButton.tonalIcon(onPressed: goal == null ? null : _bringItBack, icon: const Icon(Icons.keyboard_return), label: const Text('带我回来')),
+            OutlinedButton.icon(onPressed: goal == null ? null : _recordMindfulFocus, icon: const Icon(Icons.timer_outlined), label: const Text('正念专注钟')),
             OutlinedButton.icon(onPressed: goal == null ? null : () => _recordEffort(), icon: const Icon(Icons.menu_book_outlined), label: const Text('记录努力 + Time-In')),
           ]),
         ]))),
@@ -4672,7 +5057,8 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
         else
           ..._entries.take(7).map((entry) {
             final progressText = entry.smallProgress.trim().isEmpty ? '' : '\n小进步：${entry.smallProgress}';
-            final returnText = entry.returnedAfterBreak ? '\n我又回来了：这次不是从零开始。' : '';
+            final returnText = entry.isReturnEvent ? '\n我又回来了：${entry.returnTrigger.trim().isEmpty ? '这次不是从零开始。' : entry.returnTrigger}' : '';
+            final painText = entry.painScore > 0 || entry.gainScore > 0 ? '\nPain ${entry.painScore}/5 · Gain ${entry.gainScore}/5 · ${entry.painGainQuadrantLabel}' : '';
             return Card(
               child: ListTile(
                 leading: Icon(
@@ -4680,12 +5066,51 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
                   color: entry.returnedAfterBreak ? Colors.green : _goalBlue,
                 ),
                 title: Text('${entry.effortTypeLabel} · ${entry.effortMinutes} 分钟 · ${entry.zoneLabel}'),
-                subtitle: Text('${entry.investmentText}$progressText$returnText'),
+                subtitle: Text('${entry.investmentText}$progressText$returnText$painText'),
               ),
             );
           }),
       ]),
     );
+  }
+}
+
+
+class _EffortTodayActionBridgeCard extends StatelessWidget {
+  const _EffortTodayActionBridgeCard({required this.todaySteps, required this.onRecord, required this.onReturn, required this.onFocus});
+  final List<TodoGoalActionStep> todaySteps;
+  final ValueChanged<TodoGoalActionStep> onRecord;
+  final ValueChanged<TodoGoalActionStep> onReturn;
+  final ValueChanged<TodoGoalActionStep> onFocus;
+
+  @override
+  Widget build(BuildContext context) {
+    final openSteps = todaySteps.where((step) => !step.isCompleted).toList(growable: false);
+    return Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('今日行动 × 足下努力桥接', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 6),
+      const Text('这里不是另一个努力入口；它直接读取今日行动树。每一次 Pain-Gain、回归或正念专注都会写回对应行动、问题树节点和目标周报。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
+      const SizedBox(height: 10),
+      if (openSteps.isEmpty)
+        const _EmptyCard(text: '今日没有未完成行动。可以先去“山路行动”生成或加入一个问题树节点。')
+      else
+        ...openSteps.take(5).map((step) => Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE2E8F0))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(step.title, style: const TextStyle(fontWeight: FontWeight.w900, color: _goalInk)),
+            const SizedBox(height: 4),
+            Text('${step.goalTitle}\n${step.effortLedgerLine}', style: const TextStyle(color: Color(0xFF64748B), height: 1.35)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.tonalIcon(onPressed: () => onRecord(step), icon: const Icon(Icons.directions_walk), label: const Text('记录努力')),
+              OutlinedButton.icon(onPressed: () => onReturn(step), icon: const Icon(Icons.keyboard_return), label: const Text('带我回来')),
+              OutlinedButton.icon(onPressed: () => onFocus(step), icon: const Icon(Icons.timer_outlined), label: const Text('正念专注')),
+            ]),
+          ]),
+        )),
+    ])));
   }
 }
 
@@ -4700,9 +5125,57 @@ class _EffortMetricCard extends StatelessWidget {
       const Text('本周努力资产', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
       const SizedBox(height: 12),
       Row(children: [metric('${summary.meaningfulEfforts}', '有意义努力'), metric('${summary.effortMinutes}', '投入分钟'), metric('${summary.returnCount}', '回归次数'), metric('${summary.stretchCount}', '拉伸区行动')]),
+      const SizedBox(height: 12),
+      Row(children: [metric('${summary.attentionReturnCount}', '分心后回来'), metric('${summary.mindfulPracticeCount}', '正念练习'), metric('${summary.mindfulMinutes}', '正念分钟'), metric('${summary.recoveryMinutes}', '恢复分钟')]),
       const Divider(height: 24),
-      Text('反思 ${summary.reflectionCount} 次 · 策略调整 ${summary.strategyChangeCount} 次 · 关系投入 ${summary.relationshipInvestmentCount} 次 · 努力愉悦 ${summary.averageJoy.toStringAsFixed(1)}/5', style: const TextStyle(height: 1.45)),
+      Text('反思 ${summary.reflectionCount} 次 · 策略调整 ${summary.strategyChangeCount} 次 · 明智调整 ${summary.wiseAdjustmentCount} 次 · 关系投入 ${summary.relationshipInvestmentCount} 次 · 努力愉悦 ${summary.averageJoy.toStringAsFixed(1)}/5', style: const TextStyle(height: 1.45)),
       if (summary.commonObstacle.isNotEmpty) Text('最常见阻力：${summary.commonObstacle}', style: const TextStyle(color: Color(0xFF92400E), fontWeight: FontWeight.w700)),
+    ])));
+  }
+}
+
+class _PainGainMapCard extends StatelessWidget {
+  const _PainGainMapCard({required this.summary});
+  final TodoGoalEffortSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget quadrant(String title, int count, String hint) => Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE5E7EB))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('$count', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _goalBlue)),
+          const SizedBox(height: 4),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(hint, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), height: 1.3)),
+        ]),
+      ),
+    );
+    return Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Pain-Gain Map · No Pain, No Gain 的校准器', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 6),
+      const Text('不是越痛越好，而是识别：哪些不适带来成长，哪些痛苦需要降级、恢复或重查意义。', style: TextStyle(color: Color(0xFF4B5563), height: 1.45)),
+      const SizedBox(height: 12),
+      Row(children: [
+        Expanded(child: Text('平均 Pain ${summary.averagePain.toStringAsFixed(1)}/5', style: const TextStyle(fontWeight: FontWeight.w800))),
+        Expanded(child: Text('平均 Gain ${summary.averageGain.toStringAsFixed(1)}/5', style: const TextStyle(fontWeight: FontWeight.w800))),
+      ]),
+      const SizedBox(height: 12),
+      Row(children: [
+        quadrant('高痛低成长', summary.highPainLowGainCount, '无效消耗，先调整'),
+        const SizedBox(width: 8),
+        quadrant('高痛高成长', summary.highPainHighGainCount, '深度拉伸，配恢复'),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        quadrant('低痛低成长', summary.lowPainLowGainCount, '可能太舒适'),
+        const SizedBox(width: 8),
+        quadrant('低痛高成长', summary.lowPainHighGainCount, '可持续资产'),
+      ]),
+      const SizedBox(height: 10),
+      Text(summary.painGainGuidance, style: const TextStyle(height: 1.45, color: Color(0xFF374151), fontWeight: FontWeight.w700)),
     ])));
   }
 }

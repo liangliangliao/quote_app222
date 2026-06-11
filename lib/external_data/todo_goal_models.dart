@@ -6,6 +6,12 @@ int _toInt(Object? value) {
   return int.tryParse(value?.toString() ?? '') ?? 0;
 }
 
+double _toDouble(Object? value) {
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
 bool _toBool(Object? value) {
   if (value is bool) return value;
   if (value is num) return value.toInt() == 1;
@@ -448,6 +454,13 @@ class TodoGoalActionStep {
     this.completionQuestion = '',
     this.actionType = 'result',
     this.experienceIntention = '',
+    this.sourceNodeId = '',
+    this.effortCount = 0,
+    this.totalEffortMinutes = 0,
+    this.returnCount = 0,
+    this.averagePain = 0,
+    this.averageGain = 0,
+    this.lastEffortAtMs = 0,
   });
 
   final String stepId;
@@ -481,6 +494,33 @@ class TodoGoalActionStep {
   final String completionQuestion;
   final String actionType;
   final String experienceIntention;
+  final String sourceNodeId;
+  final int effortCount;
+  final int totalEffortMinutes;
+  final int returnCount;
+  final double averagePain;
+  final double averageGain;
+  final int lastEffortAtMs;
+
+  bool get hasSourceProblemNode => sourceNodeId.trim().isNotEmpty;
+  bool get hasEffortLedger => effortCount > 0;
+  String get effortLedgerLine {
+    if (!hasEffortLedger) return '还没有记录足下努力';
+    final pain = averagePain <= 0 ? '-' : averagePain.toStringAsFixed(1);
+    final gain = averageGain <= 0 ? '-' : averageGain.toStringAsFixed(1);
+    return '足下证据：$effortCount 次 · $totalEffortMinutes 分钟 · 回归 $returnCount 次 · Pain $pain / Gain $gain';
+  }
+
+  String get actionTypeForEffort {
+    switch (actionType) {
+      case 'process':
+        return 'process_action';
+      case 'value':
+        return 'value_action';
+      default:
+        return 'goal_action';
+    }
+  }
 
   String get actionTypeLabel {
     switch (actionType) {
@@ -531,6 +571,13 @@ class TodoGoalActionStep {
         completionQuestion: (row['completion_question'] ?? '').toString(),
         actionType: (row['action_type'] ?? 'result').toString(),
         experienceIntention: (row['experience_intention'] ?? '').toString(),
+        sourceNodeId: (row['source_node_id'] ?? row['node_id'] ?? '').toString(),
+        effortCount: _toInt(row['effort_count']),
+        totalEffortMinutes: _toInt(row['total_effort_minutes']),
+        returnCount: _toInt(row['return_count']),
+        averagePain: _toDouble(row['average_pain']),
+        averageGain: _toDouble(row['average_gain']),
+        lastEffortAtMs: _toInt(row['last_effort_at_ms']),
       );
 }
 
@@ -683,6 +730,7 @@ class TodoGoalSolutionPlan {
     this.successMetrics = '',
     this.stopConditions = '',
     this.userChoiceGuidance = '',
+    this.referenceCases = '',
   });
 
   final String solutionId;
@@ -711,6 +759,7 @@ class TodoGoalSolutionPlan {
   final String successMetrics;
   final String stopConditions;
   final String userChoiceGuidance;
+  final String referenceCases;
 
   bool get isComfort => zoneType == 'comfort';
   bool get isStretch => zoneType == 'stretch';
@@ -743,6 +792,7 @@ class TodoGoalSolutionPlan {
         successMetrics: (row['success_metrics'] ?? '').toString(),
         stopConditions: (row['stop_conditions'] ?? '').toString(),
         userChoiceGuidance: (row['user_choice_guidance'] ?? '').toString(),
+        referenceCases: (row['reference_cases'] ?? '').toString(),
       );
 
   factory TodoGoalSolutionPlan.fromJson(Map<String, dynamic> json, {int sortOrder = 0}) {
@@ -773,12 +823,12 @@ class TodoGoalSolutionPlan {
       solutionId: '',
       goalId: '',
       sourceTaskId: '',
-      title: _readJsonTextAny(json, const <String>['title', 'planTitle', 'plan_title', 'planName', 'plan_name', 'name', '方案名称', '方案标题', '标题'], '问题解决方案'),
+      title: _readJsonTextAny(json, const <String>['title', 'planTitle', 'plan_title', 'planName', 'plan_name', 'name', 'solutionTitle', 'solution_title', 'problemToSolve', 'problem_to_solve', 'targetProblem', 'target_problem', '待解决问题', '方案名称', '方案标题', '标题'], '问题解决方案'),
       methodName: _readJsonTextAny(json, const <String>['methodName', 'method_name', 'scientificMethod', 'scientific_method', 'method', '方法', '科学方法', '问题解决方法'], '科学问题解决法'),
       methodBasis: _readJsonTextAny(json, const <String>['methodBasis', 'method_basis', 'basis', 'scientificBasis', 'scientific_basis', '依据', '科学依据', '方法依据'], '问题分解、执行意图、反馈调节'),
       zoneType: _normalizeZoneValue(_readJsonTextAny(json, const <String>['zoneType', 'zone_type', 'zone', 'difficultyZone', 'difficulty_zone', '区域', '难度区间'], 'stretch')),
       coreValueFocus: _readJsonTextAny(json, const <String>['coreValueFocus', 'core_value_focus', 'valueFocus', 'value_focus', '核心价值', '价值焦点', '价值体系体现'], '目标服务当下、过程重于抵达、自我和谐、拉伸而非恐慌'),
-      summary: _readJsonTextAny(json, const <String>['summary', 'planSummary', 'plan_summary', '摘要', '方案摘要'], ''),
+      summary: _readJsonTextAny(json, const <String>['summary', 'planSummary', 'plan_summary', 'solutionConclusion', 'solution_conclusion', 'conclusion', 'approachSummary', 'approach_summary', '候选路径', '方案结论', '摘要', '方案摘要'], ''),
       riskNotes: _readJsonTextAny(json, const <String>['riskNotes', 'risk_notes', 'riskNote', 'risk_note', 'risks', '风险', '风险说明', '适用边界'], ''),
       isSelected: false,
       status: 'candidate',
@@ -787,15 +837,16 @@ class TodoGoalSolutionPlan {
       createdAtMs: 0,
       updatedAtMs: 0,
       nodes: nodes,
-      problemDefinition: _readJsonTextAny(json, const <String>['problemDefinition', 'problem_definition', '问题定义'], ''),
-      knownFacts: _readJsonTextAny(json, const <String>['knownFacts', 'known_facts', '已知事实'], ''),
-      keyAssumptions: _readJsonTextAny(json, const <String>['keyAssumptions', 'key_assumptions', '关键假设'], ''),
-      rootCauseAnalysis: _readJsonTextAny(json, const <String>['rootCauseAnalysis', 'root_cause_analysis', '根因分析'], ''),
-      optionComparison: _readJsonTextAny(json, const <String>['optionComparison', 'option_comparison', '方案比较'], ''),
-      evidencePlan: _readJsonTextAny(json, const <String>['evidencePlan', 'evidence_plan', '证据计划'], ''),
-      successMetrics: _readJsonTextAny(json, const <String>['successMetrics', 'success_metrics', '成功指标'], ''),
-      stopConditions: _readJsonTextAny(json, const <String>['stopConditions', 'stop_conditions', '停止条件'], ''),
-      userChoiceGuidance: _readJsonTextAny(json, const <String>['userChoiceGuidance', 'user_choice_guidance', '用户选择建议'], ''),
+      problemDefinition: _readJsonTextAny(json, const <String>['problemDefinition', 'problem_definition', 'problemToSolve', 'problem_to_solve', 'targetProblem', 'target_problem', 'problem', '待求问题', '待解决问题', '问题定义'], ''),
+      knownFacts: _readJsonTextAny(json, const <String>['knownFacts', 'known_facts', 'knownBasis', 'known_basis', 'basis', 'knownConditions', 'known_conditions', '已知依据', '已知条件', '已知事实'], ''),
+      keyAssumptions: _readJsonTextAny(json, const <String>['keyAssumptions', 'key_assumptions', 'assumptions', 'hypotheses', 'hypothesis', '待验证假设', '关键假设'], ''),
+      rootCauseAnalysis: _readJsonTextAny(json, const <String>['rootCauseAnalysis', 'root_cause_analysis', 'causeAnalysis', 'cause_analysis', 'reasoning', 'rationale', '原因分析', '根因分析'], ''),
+      optionComparison: _readJsonTextAny(json, const <String>['optionComparison', 'option_comparison', 'comparison', 'tradeoff', 'tradeoffs', '适用条件比较', '方案比较'], ''),
+      evidencePlan: _readJsonTextAny(json, const <String>['evidencePlan', 'evidence_plan', 'evidenceNeeded', 'evidence_needed', 'evidenceToCollect', 'evidence_to_collect', 'validationPlan', 'validation_plan', '验证计划', '证据需求', '证据计划'], ''),
+      successMetrics: _readJsonTextAny(json, const <String>['successMetrics', 'success_metrics', 'acceptanceCriteria', 'acceptance_criteria', 'criteria', 'validationCriteria', 'validation_criteria', '完成判据', '验收标准', '成功指标'], ''),
+      stopConditions: _readJsonTextAny(json, const <String>['stopConditions', 'stop_conditions', 'exitCriteria', 'exit_criteria', 'riskBoundary', 'risk_boundary', '何时停止', '切换条件', '停止条件'], ''),
+      userChoiceGuidance: _readJsonTextAny(json, const <String>['userChoiceGuidance', 'user_choice_guidance', 'choiceGuidance', 'choice_guidance', 'decisionRule', 'decision_rule', 'selectionGuidance', 'selection_guidance', '如何判断', '接下来怎么判断', '用户选择建议'], ''),
+      referenceCases: _readJsonTextAny(json, const <String>['referenceCases', 'reference_cases', 'similarCases', 'similar_cases', 'caseExamples', 'case_examples', '参考案例', '案例', '启发案例'], ''),
     );
   }
 
@@ -823,6 +874,7 @@ class TodoGoalSolutionPlan {
         'successMetrics': successMetrics,
         'stopConditions': stopConditions,
         'userChoiceGuidance': userChoiceGuidance,
+        'referenceCases': referenceCases,
       };
 }
 
@@ -860,6 +912,12 @@ class TodoGoalProblemNode {
     this.actionObject = '',
     this.actionProcedure = '',
     this.actionOutput = '',
+    this.linkedStepCount = 0,
+    this.effortCount = 0,
+    this.totalEffortMinutes = 0,
+    this.returnCount = 0,
+    this.averagePain = 0,
+    this.averageGain = 0,
   });
 
   final String nodeId;
@@ -894,11 +952,25 @@ class TodoGoalProblemNode {
   final String actionObject;
   final String actionProcedure;
   final String actionOutput;
+  final int linkedStepCount;
+  final int effortCount;
+  final int totalEffortMinutes;
+  final int returnCount;
+  final double averagePain;
+  final double averageGain;
 
   bool get isCompleted => status == 'completed';
   bool get isFailed => status == 'failed';
   bool get isActionable => actionableStep.trim().isNotEmpty || nodeType == 'action';
   bool get hasConcreteActionContract => actionWhen.trim().isNotEmpty && actionWhere.trim().isNotEmpty && actionObject.trim().isNotEmpty && actionProcedure.trim().isNotEmpty && actionOutput.trim().isNotEmpty && acceptanceCriteria.trim().isNotEmpty;
+  bool get hasLinkedDailyAction => linkedStepCount > 0;
+  bool get hasEffortLedger => effortCount > 0;
+  String get effortLedgerLine {
+    if (!hasEffortLedger && !hasLinkedDailyAction) return '还没有进入足下努力闭环';
+    final pain = averagePain <= 0 ? '-' : averagePain.toStringAsFixed(1);
+    final gain = averageGain <= 0 ? '-' : averageGain.toStringAsFixed(1);
+    return '行动闭环：今日行动 $linkedStepCount 个 · 努力 $effortCount 次 · $totalEffortMinutes 分钟 · 回归 $returnCount 次 · Pain $pain / Gain $gain';
+  }
   String get displayAction => actionableStep.trim().isEmpty ? title : actionableStep.trim();
   String get concreteActionText => <String>[
         '时间/触发：$actionWhen',
@@ -974,6 +1046,12 @@ class TodoGoalProblemNode {
         actionObject: (row['action_object'] ?? '').toString(),
         actionProcedure: (row['action_procedure'] ?? '').toString(),
         actionOutput: (row['action_output'] ?? '').toString(),
+        linkedStepCount: _toInt(row['linked_step_count']),
+        effortCount: _toInt(row['effort_count']),
+        totalEffortMinutes: _toInt(row['total_effort_minutes']),
+        returnCount: _toInt(row['return_count']),
+        averagePain: _toDouble(row['average_pain']),
+        averageGain: _toDouble(row['average_gain']),
       );
 
   factory TodoGoalProblemNode.fromJson(Map<String, dynamic> json, {int sequenceOrder = 0}) => TodoGoalProblemNode(
@@ -981,12 +1059,12 @@ class TodoGoalProblemNode {
         goalId: '',
         solutionId: '',
         parentNodeId: '',
-        relationType: _readJsonTextAny(json, const <String>['relationType', 'relation_type', 'relation', '关系类型'], 'tree'),
+        relationType: _readJsonTextAny(json, const <String>['relationType', 'relation_type', 'relation', 'logicRelation', 'logic_relation', '关系类型'], 'tree'),
         nodeType: _readJsonTextAny(json, const <String>['nodeType', 'node_type', 'type', '节点类型', '类型'], 'problem'),
-        title: _readJsonTextAny(json, const <String>['title', 'nodeTitle', 'node_title', 'name', '标题', '节点标题', '子问题'], '子问题'),
-        description: _readJsonTextAny(json, const <String>['description', 'desc', '说明', '描述'], ''),
-        acceptanceCriteria: _readJsonTextAny(json, const <String>['acceptanceCriteria', 'acceptance_criteria', 'doneCriteria', 'done_criteria', 'completionCriteria', '完成标准', '验收标准'], '能用事实判断是否完成'),
-        actionableStep: _readJsonTextAny(json, const <String>['actionableStep', 'actionable_step', 'action', 'step', '具体行动', '可执行动作', '行动', '最小行动'], ''),
+        title: _readJsonTextAny(json, const <String>['title', 'nodeTitle', 'node_title', 'name', 'problemToSolve', 'problem_to_solve', 'question', 'problem', 'objective', '目标问题', '待解决问题', '标题', '节点标题', '子问题'], '子问题'),
+        description: _readJsonTextAny(json, const <String>['description', 'desc', 'problemToSolve', 'problem_to_solve', 'rationale', 'reasoning', 'why', '说明', '描述', '推导依据'], ''),
+        acceptanceCriteria: _readJsonTextAny(json, const <String>['acceptanceCriteria', 'acceptance_criteria', 'doneCriteria', 'done_criteria', 'completionCriteria', 'successCriteria', 'success_criteria', 'validationCriteria', 'validation_criteria', 'criteria', 'completionQuestion', '完成标准', '验收标准', '成功标准'], '能用事实判断是否完成'),
+        actionableStep: _readJsonTextAny(json, const <String>['actionableStep', 'actionable_step', 'action', 'step', 'actionTitle', 'action_title', 'actionSummary', 'action_summary', '具体行动', '可执行动作', '行动', '最小行动'], ''),
         zoneType: _normalizeZoneValue(_readJsonTextAny(json, const <String>['zoneType', 'zone_type', 'zone', '难度区间', '区域'], 'stretch')),
         difficultyScore: _readJsonIntAny(json, const <String>['difficultyScore', 'difficulty_score', 'difficulty', '难度', '难度分'], 5),
         estimatedMinutes: _readJsonIntAny(json, const <String>['estimatedMinutes', 'estimated_minutes', 'minutes', 'durationMinutes', '预计分钟', '耗时分钟'], 5),
@@ -999,16 +1077,16 @@ class TodoGoalProblemNode {
         updatedAtMs: 0,
         tempNodeId: _readJsonTextAny(json, const <String>['id', 'nodeId', 'node_id', '节点ID'], ''),
         tempParentNodeId: _readJsonTextAny(json, const <String>['parentId', 'parentNodeId', 'parent_node_id', 'parent_id', '父节点ID'], ''),
-        logicQuestion: _readJsonTextAny(json, const <String>['logicQuestion', 'logic_question', '逻辑问题'], ''),
-        knownFacts: _readJsonTextAny(json, const <String>['knownFacts', 'known_facts', '已知事实'], ''),
-        assumptions: _readJsonTextAny(json, const <String>['assumptions', '假设'], ''),
-        evidenceNeeded: _readJsonTextAny(json, const <String>['evidenceNeeded', 'evidence_needed', '所需证据'], ''),
-        decisionRule: _readJsonTextAny(json, const <String>['decisionRule', 'decision_rule', '判断规则'], ''),
-        actionWhen: _readJsonTextAny(json, const <String>['actionWhen', 'action_when', 'when', '时间触发', '时间', '触发'], ''),
-        actionWhere: _readJsonTextAny(json, const <String>['actionWhere', 'action_where', 'where', '地点工具', '地点', '工具'], ''),
+        logicQuestion: _readJsonTextAny(json, const <String>['logicQuestion', 'logic_question', 'question', 'problemToSolve', 'problem_to_solve', 'judgementQuestion', 'judgmentQuestion', 'validationQuestion', '验证问题', '判断问题', '逻辑问题'], ''),
+        knownFacts: _readJsonTextAny(json, const <String>['knownFacts', 'known_facts', 'knownBasis', 'known_basis', 'basis', 'knownConditions', 'known_conditions', '已知依据', '已知条件', '已知事实'], ''),
+        assumptions: _readJsonTextAny(json, const <String>['assumptions', 'keyAssumptions', 'key_assumptions', 'hypotheses', 'hypothesis', '待验证假设', '关键假设', '假设'], ''),
+        evidenceNeeded: _readJsonTextAny(json, const <String>['evidenceNeeded', 'evidence_needed', 'evidencePlan', 'evidence_plan', 'evidence', 'evidenceToCollect', 'evidence_to_collect', 'validationEvidence', 'validation_evidence', '证据需求', '验证证据', '所需证据'], ''),
+        decisionRule: _readJsonTextAny(json, const <String>['decisionRule', 'decision_rule', 'rule', 'howToJudge', 'how_to_judge', 'evaluationRule', 'evaluation_rule', 'nextDecision', 'next_decision', '接下来怎么判断', '验证规则', '判断规则'], ''),
+        actionWhen: _readJsonTextAny(json, const <String>['actionWhen', 'action_when', 'when', 'time', 'trigger', '时间触发', '时间', '触发'], ''),
+        actionWhere: _readJsonTextAny(json, const <String>['actionWhere', 'action_where', 'where', 'place', 'tool', 'tools', '地点工具', '地点', '工具'], ''),
         actionObject: _readJsonTextAny(json, const <String>['actionObject', 'action_object', 'object', '行动对象', '对象'], ''),
-        actionProcedure: _readJsonTextAny(json, const <String>['actionProcedure', 'action_procedure', 'procedure', 'steps', '操作步骤', '步骤'], ''),
-        actionOutput: _readJsonTextAny(json, const <String>['actionOutput', 'action_output', 'output', 'deliverable', '产出物', '产出'], ''),
+        actionProcedure: _readJsonTextAny(json, const <String>['actionProcedure', 'action_procedure', 'procedure', 'steps', 'process', '操作步骤', '步骤'], ''),
+        actionOutput: _readJsonTextAny(json, const <String>['actionOutput', 'action_output', 'output', 'deliverable', 'artifact', 'evidenceOutput', 'evidence_output', '产出物', '产出', '完成产出'], ''),
       );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -1153,8 +1231,37 @@ String _readJsonText(Map<String, dynamic> json, String key, String fallback) {
 
 String _readJsonTextAny(Map<String, dynamic> json, List<String> keys, String fallback) {
   final value = _readJsonDynamic(json, keys);
-  final text = value == null ? '' : value.toString().trim();
+  final text = _jsonValueToReadableText(value).trim();
   return text.isEmpty ? fallback : text;
+}
+
+String _jsonValueToReadableText(Object? value) {
+  if (value == null) return '';
+  if (value is String) return value.trim();
+  if (value is num || value is bool) return value.toString();
+  if (value is List) {
+    return value
+        .map(_jsonValueToReadableText)
+        .where((text) => text.trim().isNotEmpty)
+        .join('\n');
+  }
+  if (value is Map) {
+    final preferred = <String>['text', 'content', 'title', 'summary', 'case', 'description', 'example'];
+    for (final key in preferred) {
+      if (value.containsKey(key)) {
+        final text = _jsonValueToReadableText(value[key]);
+        if (text.trim().isNotEmpty) return text.trim();
+      }
+    }
+    return value.entries
+        .map((entry) {
+          final text = _jsonValueToReadableText(entry.value);
+          return text.trim().isEmpty ? '' : '${entry.key}：$text';
+        })
+        .where((text) => text.trim().isNotEmpty)
+        .join('；');
+  }
+  return value.toString().trim();
 }
 
 int _readJsonIntAny(Map<String, dynamic> json, List<String> keys, int fallback) {
@@ -1166,7 +1273,9 @@ int _readJsonIntAny(Map<String, dynamic> json, List<String> keys, int fallback) 
 
 List<dynamic> _readJsonListAny(Map<String, dynamic> json, List<String> keys) {
   final value = _readJsonDynamic(json, keys);
-  return value is List ? value : <dynamic>[];
+  if (value is List) return value;
+  if (value is Map) return value.values.toList(growable: false);
+  return <dynamic>[];
 }
 
 String _normalizeZoneValue(String value) {
@@ -1249,7 +1358,21 @@ class TodoGoalEffortEntry {
     required this.strategyChanged,
     required this.returnedAfterBreak,
     required this.createdAtMs,
+    this.painScore = 0,
+    this.gainScore = 0,
+    this.painType = '',
+    this.painReframe = '',
+    this.returnKind = '',
+    this.returnTrigger = '',
+    this.attentionReturnCount = 0,
+    this.mindfulMinutes = 0,
+    this.recoveryMinutes = 0,
     this.goalTitle = '',
+    this.nodeId = '',
+    this.ritualId = '',
+    this.sourceObjectType = 'goal',
+    this.stepTitle = '',
+    this.nodeTitle = '',
   });
 
   final String entryId;
@@ -1275,14 +1398,62 @@ class TodoGoalEffortEntry {
   final bool strategyChanged;
   final bool returnedAfterBreak;
   final int createdAtMs;
+  final int painScore;
+  final int gainScore;
+  final String painType;
+  final String painReframe;
+  final String returnKind;
+  final String returnTrigger;
+  final int attentionReturnCount;
+  final int mindfulMinutes;
+  final int recoveryMinutes;
   final String goalTitle;
+  final String nodeId;
+  final String ritualId;
+  final String sourceObjectType;
+  final String stepTitle;
+  final String nodeTitle;
+
+  String get sourceContextLabel {
+    if (stepTitle.trim().isNotEmpty) return '每日行动：$stepTitle';
+    if (nodeTitle.trim().isNotEmpty) return '问题树节点：$nodeTitle';
+    if (ritualId.trim().isNotEmpty) return '努力仪式';
+    if (goalTitle.trim().isNotEmpty) return '目标：$goalTitle';
+    return '目标系统';
+  }
 
   String get zoneLabel => zoneType == 'comfort' ? '舒适区' : (zoneType == 'panic' ? '恐慌区' : '拉伸区');
+  String get painTypeLabel {
+    switch (painType) {
+      case 'growth': return '成长性不适';
+      case 'panic': return '恐慌性压力';
+      case 'meaningless': return '无意义消耗';
+      case 'danger': return '危险信号';
+      case 'none': return '低痛感';
+      default: return painType.isEmpty ? '未标注痛感' : painType;
+    }
+  }
+
+  String get painGainQuadrantLabel {
+    final highPain = painScore >= 4;
+    final highGain = gainScore >= 4;
+    if (highPain && highGain) return '高痛高成长 · 深度拉伸区';
+    if (highPain && !highGain) return '高痛低成长 · 需要调整';
+    if (!highPain && highGain) return '低痛高成长 · 理想流动区';
+    return '低痛低成长 · 可能太舒适';
+  }
+
+  bool get isReturnEvent => returnedAfterBreak || returnKind.trim().isNotEmpty || attentionReturnCount > 0 || effortType == 'mindful_return';
+  bool get isMindfulPractice => effortType == 'mindful_return' || effortType == 'mindful_focus' || mindfulMinutes > 0 || attentionReturnCount > 0;
+  bool get isWiseAdjustment => strategyChanged || painType == 'panic' || painType == 'meaningless' || painType == 'danger';
+
   String get effortTypeLabel {
     switch (effortType) {
       case 'relationship': return '关系投入';
       case 'deep_work': return '深度努力';
       case 'recovery': return '恢复与孵化';
+      case 'mindful_return': return '正念回归';
+      case 'mindful_focus': return '正念专注';
       default: return '目标行动';
     }
   }
@@ -1311,7 +1482,21 @@ class TodoGoalEffortEntry {
         strategyChanged: _toInt(row['strategy_changed']) == 1,
         returnedAfterBreak: _toInt(row['returned_after_break']) == 1,
         createdAtMs: _toInt(row['created_at_ms']),
+        painScore: _toInt(row['pain_score']),
+        gainScore: _toInt(row['gain_score']),
+        painType: (row['pain_type'] ?? '').toString(),
+        painReframe: (row['pain_reframe'] ?? '').toString(),
+        returnKind: (row['return_kind'] ?? '').toString(),
+        returnTrigger: (row['return_trigger'] ?? '').toString(),
+        attentionReturnCount: _toInt(row['attention_return_count']),
+        mindfulMinutes: _toInt(row['mindful_minutes']),
+        recoveryMinutes: _toInt(row['recovery_minutes']),
         goalTitle: (row['goal_title'] ?? '').toString(),
+        nodeId: (row['node_id'] ?? '').toString(),
+        ritualId: (row['ritual_id'] ?? '').toString(),
+        sourceObjectType: (row['source_object_type'] ?? 'goal').toString(),
+        stepTitle: (row['step_title'] ?? '').toString(),
+        nodeTitle: (row['node_title'] ?? '').toString(),
       );
 }
 
@@ -1326,6 +1511,17 @@ class TodoGoalEffortSummary {
     required this.relationshipInvestmentCount,
     required this.averageJoy,
     required this.commonObstacle,
+    this.averagePain = 0,
+    this.averageGain = 0,
+    this.attentionReturnCount = 0,
+    this.mindfulPracticeCount = 0,
+    this.mindfulMinutes = 0,
+    this.recoveryMinutes = 0,
+    this.wiseAdjustmentCount = 0,
+    this.highPainLowGainCount = 0,
+    this.lowPainHighGainCount = 0,
+    this.highPainHighGainCount = 0,
+    this.lowPainLowGainCount = 0,
   });
 
   final int meaningfulEfforts;
@@ -1337,4 +1533,23 @@ class TodoGoalEffortSummary {
   final int relationshipInvestmentCount;
   final double averageJoy;
   final String commonObstacle;
+  final double averagePain;
+  final double averageGain;
+  final int attentionReturnCount;
+  final int mindfulPracticeCount;
+  final int mindfulMinutes;
+  final int recoveryMinutes;
+  final int wiseAdjustmentCount;
+  final int highPainLowGainCount;
+  final int lowPainHighGainCount;
+  final int highPainHighGainCount;
+  final int lowPainLowGainCount;
+
+  String get painGainGuidance {
+    if (highPainLowGainCount > 0) return '本周出现高痛低成长：优先降级任务、重查目标意义或补恢复。';
+    if (highPainHighGainCount > 0) return '本周有深度拉伸：保留挑战，同时安排恢复，避免把努力变成透支。';
+    if (lowPainLowGainCount > lowPainHighGainCount && lowPainLowGainCount > 0) return '本周可能偏舒适：给一个目标增加一点可承受挑战。';
+    if (lowPainHighGainCount > 0) return '本周出现低痛高成长：把这个仪式固化，它是可持续努力资产。';
+    return '先记录 Pain-Gain，系统才能区分成长性不适和无效消耗。';
+  }
 }

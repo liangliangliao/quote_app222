@@ -126,11 +126,12 @@ class TodoGoalAiService {
       final raw = await _ai.generateText(
         prompt: '''$context
 本次只生成三条问题解决“方案概览”，不要生成 nodes、problemTree、步骤或行动树。
-分别提供 comfort、stretch、panic 三条原理不同的候选路径。每条只填写：title、methodName、methodBasis、zoneType、coreValueFocus、summary、riskNotes、problemDefinition、knownFacts、keyAssumptions、rootCauseAnalysis、optionComparison、evidencePlan、successMetrics、stopConditions、userChoiceGuidance。
+分别提供 comfort、stretch、panic 三条原理不同的候选路径。每条只填写：title、methodName、methodBasis、zoneType、coreValueFocus、summary、riskNotes、problemDefinition、knownFacts、keyAssumptions、rootCauseAnalysis、optionComparison、evidencePlan、successMetrics、stopConditions、userChoiceGuidance、referenceCases。
+每条方案必须把“它可能适合什么需要”写成待用户确认的假设，并给出1-2个具体参考案例帮助用户打开思路；案例只能启发，不能当作用户必须照做的结论。
 用户稍后会手动点击某条方案，再单独请求该方案的问题树。不得提前生成节点，不得替用户选择。
 只输出合法 JSON：{"solutionPlans":[{...},{...},{...}]}。''',
         purpose: 'microsoft_todo.goal_solution_outlines',
-        systemPrompt: '你是严谨的现实问题求解器。本次只比较三条方案概览，不生成任何问题树节点，不虚构事实，不替用户选择。只输出合法JSON。',
+        systemPrompt: '你是严谨的现实问题求解器和决策支持教练。本次只比较三条方案概览，不生成任何问题树节点，不虚构事实，不替用户选择；用事实、假设、适用条件、代价、参考案例帮助用户自行判断。只输出合法JSON。',
         maxTokens: 3000,
         expectJson: true,
         temperature: 0.2,
@@ -201,10 +202,14 @@ ${jsonEncode(_withoutProblemNodes(outline).toJson())}
 - 根节点到可执行叶节点至少三层，总节点建议 6-12 个。
 - 父节点必须能由子问题完成结果逻辑回推；dependencies 只引用本次节点 id。
 - action 叶节点必须返回 actionWhen、actionWhere、actionObject、actionProcedure、actionOutput、acceptanceCriteria、evidenceNeeded。
+- 每个非叶节点都要写清待解决问题、已知依据、关键假设、证据需求、决策规则；不得把建议当标准答案。
+- 方案层必须保留或补充 referenceCases：给出1-2个具体参考案例，说明相似目标在不同需要下会走不同路径。
 - 叶节点必须是现实中可以立即执行和验收的动作；信息不足时生成具体的信息获取动作，不得虚构事实。
+- 必须使用下面的标准包裹结构，不能把 nodes/problemTree 直接放在根对象，也不能只返回节点数组：
+{"solutionPlans":[{"title":"","methodName":"","methodBasis":"","zoneType":"$zone","summary":"","problemDefinition":"","knownFacts":"","keyAssumptions":"","evidencePlan":"","successMetrics":"","stopConditions":"","userChoiceGuidance":"","referenceCases":"","nodes":[{"id":"root","parentId":"","relationType":"and","nodeType":"goal_state","title":"","description":"","logicQuestion":"","knownFacts":"","assumptions":"","evidenceNeeded":"","decisionRule":"","acceptanceCriteria":"","dependencies":[]},{"id":"a1","parentId":"root","relationType":"sequence","nodeType":"action","title":"","description":"","logicQuestion":"","knownFacts":"","assumptions":"","evidenceNeeded":"","decisionRule":"","acceptanceCriteria":"","actionableStep":"","actionWhen":"","actionWhere":"","actionObject":"","actionProcedure":"","actionOutput":"","dependencies":[]}]}]}
 只输出合法 JSON。''',
         purpose: 'microsoft_todo.goal_solution_tree_$zone',
-        systemPrompt: '你是严谨的现实问题求解器。本次只展开用户手动指定的一条候选方案。像证明题一样给出父子推导和现实动作，不生成其他方案。只输出合法JSON。',
+        systemPrompt: '你是严谨的现实问题求解器和决策支持教练。本次只展开用户手动指定的一条候选方案。像证明题一样给出父子推导、判断依据、参考案例和现实动作；不替用户选择，不生成其他方案。只输出合法JSON。',
         maxTokens: 6000,
         expectJson: true,
         temperature: 0.2,
@@ -213,12 +218,20 @@ ${jsonEncode(_withoutProblemNodes(outline).toJson())}
       var candidates = _readPlans(parsed);
       if (candidates.isEmpty) candidates = _readPlans(_resolveAnalysisPayload(parsed));
       for (final candidate in candidates) {
-        if (candidate.zoneType == zone && _isRigorousPlan(candidate)) {
+        final normalized = _repairGeneratedTreePlan(
+          candidate: candidate,
+          outline: outline,
+          analysis: analysis,
+          zone: zone,
+        );
+        final isStrictlyValid = _isRigorousPlan(normalized);
+        if (normalized.zoneType == zone && (isStrictlyValid || _isRecoverableTreePlan(normalized))) {
           return TodoGoalSolutionGenerationResult(
-            plans: <TodoGoalSolutionPlan>[candidate],
-            provider: state['provider'] ?? 'ai',
+            plans: <TodoGoalSolutionPlan>[normalized],
+            provider: isStrictlyValid ? (state['provider'] ?? 'ai') : 'hybrid',
             modelLabel: state['label'] ?? 'AI',
             rawResponse: raw,
+            usedFallback: !isStrictlyValid,
           );
         }
       }
@@ -276,6 +289,7 @@ ${jsonEncode(_withoutProblemNodes(outline).toJson())}
         successMetrics: plan.successMetrics,
         stopConditions: plan.stopConditions,
         userChoiceGuidance: plan.userChoiceGuidance,
+        referenceCases: plan.referenceCases,
       );
 
   Future<String> reframeEffortLanguage(String userText) async {
@@ -308,24 +322,26 @@ ${jsonEncode(_withoutProblemNodes(outline).toJson())}
   Future<String> generateEffortResponsePaper({required List<TodoGoalEffortEntry> entries, required List<TodoGoalRitual> rituals}) async {
     if (entries.isEmpty) return '本周还没有努力记录。先完成一次 2 分钟行动并写一句 Time-In，周报才有真实证据。';
     final state = await getGlobalAiState();
-    final evidence = entries.take(30).map((e) => '${e.effortDate}｜${e.goalTitle}｜${e.effortMinutes}分钟｜${e.zoneLabel}｜投入:${e.investmentText}｜阻力:${e.obstacle}｜策略:${e.strategyUsed}｜学习:${e.timeInLearning}｜回归:${e.returnedAfterBreak}').join('\n');
+    final evidence = entries.take(30).map((e) => '${e.effortDate}｜${e.sourceContextLabel}｜${e.effortMinutes}分钟｜${e.zoneLabel}｜类型:${e.effortTypeLabel}｜Pain:${e.painScore}/5｜Gain:${e.gainScore}/5｜痛感:${e.painTypeLabel}｜象限:${e.painGainQuadrantLabel}｜投入:${e.investmentText}｜阻力:${e.obstacle}｜策略:${e.strategyUsed}｜PainReframe:${e.painReframe}｜学习:${e.timeInLearning}｜回归:${e.isReturnEvent}｜回归触发:${e.returnTrigger}｜分心后回来:${e.attentionReturnCount}').join('\n');
     final ritualText = rituals.take(10).map((r) => '${r.goalTitle}｜触发:${r.triggerText}｜行动:${r.minimumAction}｜预案:${r.frictionPlan}').join('\n');
     String fallback() {
       final minutes = entries.fold<int>(0, (sum, e) => sum + e.effortMinutes);
-      final returns = entries.where((e) => e.returnedAfterBreak).length;
+      final returns = entries.where((e) => e.isReturnEvent).length;
       final stretch = entries.where((e) => e.zoneType == 'stretch').length;
-      return '本周你留下了 ${entries.length} 次有意义努力、共 $minutes 分钟，其中 $stretch 次处在拉伸区，$returns 次是在中断后重新回来。下周不要同时增加所有强度：保留一个有效触发器，把最常见阻力对应的行动再缩小一级。';
+      final attentionReturns = entries.fold<int>(0, (sum, e) => sum + e.attentionReturnCount);
+      final highPainLowGain = entries.where((e) => e.painScore >= 4 && e.gainScore < 4).length;
+      return '本周你留下了 ${entries.length} 次有意义努力、共 $minutes 分钟，其中 $stretch 次处在拉伸区，$returns 次完成了“回来”，分心/偏离后回来 $attentionReturns 次。${highPainLowGain > 0 ? '有 $highPainLowGain 次高痛低成长，先降级或重查意义。' : '继续记录 Pain-Gain，用证据区分成长性不适和无效消耗。'}下周保留一个有效触发器，并把最常见阻力对应的行动再缩小一级。';
     }
     if (state['available'] != '1') return fallback();
     try {
       final raw = await _ai.generateText(
-        prompt: '''请根据以下真实记录写一篇简短的个人 Response Paper：本周最重要的努力、失败提供的反馈、有效仪式、拉伸区是否平衡、努力中的愉悦与关系投入、需要重新定义的目标、下周一个最重要行动。区分事实与推断，不用完成率羞辱用户，不虚构记录。
+        prompt: '''请根据以下真实记录写一篇简短的个人 Response Paper：本周最重要的努力、失败提供的反馈、有效仪式、拉伸区是否平衡、Pain-Gain 是否健康、哪些痛感值得继续、哪些高痛低成长需要调整、正念回归/分心后回来能力、努力中的愉悦与关系投入、哪些行动树/问题树节点产生了真实证据、需要重新定义的目标、下周一个最重要行动。区分事实与推断，不用完成率羞辱用户，不虚构记录。
 努力记录：
 $evidence
 仪式：
 $ritualText''',
         purpose: 'microsoft_todo.effort_response_paper',
-        systemPrompt: '你是积极心理学行动教练，把一周努力证据综合为可内化、可调整的 Response Paper。使用自然中文，不输出JSON。',
+        systemPrompt: '你是积极心理学行动教练，把一周努力证据综合为可内化、可调整的 Response Paper。必须融合 No Pain No Gain 的合理拉伸、Pain-Gain 校准、正念式回来、仪式化行动与恢复节奏，并明确指出努力记录对应的目标、每日行动或问题树节点。使用自然中文，不输出JSON。',
         maxTokens: 1200,
         expectJson: false,
         temperature: 0.4,
@@ -1006,6 +1022,7 @@ C 当时解释：$cognition
         successMetrics: '看到提示后能开始，并且你越来越能说清具体卡点，而不是只觉得“我不行”。',
         stopConditions: '若多次可启动但目标仍无进展，或发现核心问题是知识、资源或方向，则切换方案。',
         userChoiceGuidance: '若你当前精力低且最大问题是开始，可优先考虑；若存在硬性期限或专业能力缺口，不应只用微行动。',
+        referenceCases: '案例A：有人想准备面试但迟迟不动，先只打开简历并标出一处可改内容，发现真正卡点是“不知道岗位要求”，于是转入信息收集。\n案例B：有人想恢复运动，先做2分钟热身而不是完整训练，连续三天后确认启动阻力下降，再逐步增加。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'comfort'),
       ),
       TodoGoalSolutionPlan(
@@ -1034,6 +1051,7 @@ C 当时解释：$cognition
         successMetrics: '每次尝试后都更清楚什么有效、什么无效，并且能看到一个与目标相关的实际变化。',
         stopConditions: '若证据否定核心因果链、成本超过收益或目标不再符合价值，应暂停并重定义问题。',
         userChoiceGuidance: '适合愿意用事实逐步判断、又不希望过度冲刺的情况；这是暂定推荐，不是自动选择。',
+        referenceCases: '案例A：有人想3个月换工作，不先海投，而是先用10分钟保存3个岗位、提炼共同要求，再决定补作品集还是练面试。\n案例B：有人想提升学习成绩，先记录错题类型和复习时间，再判断是知识漏洞、练习不足还是考试策略问题。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'stretch'),
       ),
       TodoGoalSolutionPlan(
@@ -1062,6 +1080,7 @@ C 当时解释：$cognition
         successMetrics: '在限定周期内产生关键结果，同时睡眠、健康和错误率保持在可接受范围。',
         stopConditions: '出现健康恶化、错误率显著增加、连续失败或紧急性被证伪时立即降级。',
         userChoiceGuidance: '仅在真实紧急、代价明确且你知情同意时考虑；默认不应作为长期方案。',
+        referenceCases: '案例A：有人明天必须交材料，先确认最低可交付版本、截止时间和求助对象，再集中45分钟产出草稿。\n案例B：有人误把模糊焦虑当成紧急期限，核实后发现没有硬截止，于是退回拉伸区，避免用恐慌驱动长期目标。',
         nodes: _fallbackNodes(goalTitle, actionTitle, 'panic'),
       ),
     ];
@@ -1284,12 +1303,218 @@ C 当时解释：$cognition
   }
 
 
+  bool _looksLikeSingleProblemPlan(Map<String, dynamic> map) {
+    const nodeKeys = <String>{
+      'nodes',
+      'problemNodes',
+      'problem_nodes',
+      'problemTree',
+      'problem_tree',
+      'tree',
+      'steps',
+      '问题树',
+      '问题节点',
+      '节点',
+      '步骤',
+    };
+    if (nodeKeys.any(map.containsKey)) return true;
+    const planOnlyKeys = <String>{
+      'problemDefinition',
+      'problem_definition',
+      'problemToSolve',
+      'problem_to_solve',
+      'knownFacts',
+      'known_facts',
+      'knownBasis',
+      'known_basis',
+      'keyAssumptions',
+      'key_assumptions',
+      'referenceCases',
+      'reference_cases',
+    };
+    final planSignals = planOnlyKeys.where(map.containsKey).length;
+    return planSignals >= 2 && !_hasMeaningfulAnalysis(map);
+  }
+
+  TodoGoalSolutionPlan _repairGeneratedTreePlan({
+    required TodoGoalSolutionPlan candidate,
+    required TodoGoalSolutionPlan outline,
+    required TodoGoalAnalysisResult analysis,
+    required String zone,
+  }) {
+    String firstNonEmpty(List<String> values, [String fallback = '']) {
+      for (final value in values) {
+        final text = value.trim();
+        if (text.isNotEmpty) return text;
+      }
+      return fallback;
+    }
+
+    final title = firstNonEmpty(<String>[candidate.title, outline.title], '问题解决路径');
+    final problemDefinition = firstNonEmpty(<String>[candidate.problemDefinition, outline.problemDefinition, candidate.title, title], '把目标“${analysis.goalTitle}”转化为可验证、可执行、可复盘的现实问题。');
+    final knownFacts = firstNonEmpty(<String>[candidate.knownFacts, outline.knownFacts, analysis.coreValues, analysis.processGoal], '已知用户已经确认了目标方向；资源、时间、能力和外部约束仍需通过行动验证。');
+    final assumptions = firstNonEmpty(<String>[candidate.keyAssumptions, outline.keyAssumptions, analysis.obstacleSummary], '当前路径只是候选假设，需要用低成本行动验证是否符合真实需要。');
+    final evidencePlan = firstNonEmpty(<String>[candidate.evidencePlan, outline.evidencePlan], '记录每个叶节点的产出、耗时、阻力和是否推动父问题成立。');
+    final userChoiceGuidance = firstNonEmpty(<String>[candidate.userChoiceGuidance, outline.userChoiceGuidance], '请把这棵树当作待验证的候选路径：先做最底层动作，再根据证据保留、调整或切换。');
+
+    return TodoGoalSolutionPlan(
+      solutionId: candidate.solutionId,
+      goalId: candidate.goalId,
+      sourceTaskId: candidate.sourceTaskId,
+      title: title,
+      methodName: firstNonEmpty(<String>[candidate.methodName, outline.methodName], '问题树验证法'),
+      methodBasis: firstNonEmpty(<String>[candidate.methodBasis, outline.methodBasis], '从目标状态反推必要条件，再用可验收行动验证关键假设。'),
+      zoneType: zone,
+      coreValueFocus: firstNonEmpty(<String>[candidate.coreValueFocus, outline.coreValueFocus, analysis.coreValues], '尊重用户真实需要，由用户根据证据自行判断。'),
+      summary: firstNonEmpty(<String>[candidate.summary, outline.summary], '这是一条候选问题解决路径，用来帮助你从当前状态逐步验证并接近目标状态。'),
+      riskNotes: firstNonEmpty(<String>[candidate.riskNotes, outline.riskNotes], '若行动产出不能推动父问题成立，应缩小动作、换替代路径或回到方案比较。'),
+      isSelected: candidate.isSelected || outline.isSelected,
+      status: candidate.status.trim().isEmpty ? 'candidate' : candidate.status,
+      sortOrder: candidate.sortOrder,
+      rawJson: candidate.rawJson,
+      createdAtMs: candidate.createdAtMs,
+      updatedAtMs: candidate.updatedAtMs,
+      problemDefinition: problemDefinition,
+      knownFacts: knownFacts,
+      keyAssumptions: assumptions,
+      rootCauseAnalysis: firstNonEmpty(<String>[candidate.rootCauseAnalysis, outline.rootCauseAnalysis], '先不假定唯一根因；用底层行动结果区分信息不足、能力缺口、环境阻力或目标定义问题。'),
+      optionComparison: firstNonEmpty(<String>[candidate.optionComparison, outline.optionComparison], '这条路径可先小规模验证；若成本过高或证据不支持，再与其他候选方案比较。'),
+      evidencePlan: evidencePlan,
+      successMetrics: firstNonEmpty(<String>[candidate.successMetrics, outline.successMetrics], '至少一个叶节点留下可核对产出，并能说明它如何推动父问题。'),
+      stopConditions: firstNonEmpty(<String>[candidate.stopConditions, outline.stopConditions], '关键假设被证伪、连续无产出或成本明显超过收益时，暂停并重定义问题。'),
+      userChoiceGuidance: userChoiceGuidance,
+      referenceCases: firstNonEmpty(<String>[candidate.referenceCases, outline.referenceCases], '案例：有人把“找工作”先拆成岗位信息验证、作品证据和投递反馈三类小实验；另一个人则先确认自己真正想换的是行业、岗位还是工作方式。'),
+      nodes: _repairGeneratedTreeNodes(
+        candidate.nodes,
+        zone: zone,
+        planProblem: problemDefinition,
+        planFacts: knownFacts,
+        planAssumptions: assumptions,
+        planEvidence: evidencePlan,
+      ),
+    );
+  }
+
+  List<TodoGoalProblemNode> _repairGeneratedTreeNodes(
+    List<TodoGoalProblemNode> nodes, {
+    required String zone,
+    required String planProblem,
+    required String planFacts,
+    required String planAssumptions,
+    required String planEvidence,
+  }) {
+    String firstNonEmpty(List<String> values, [String fallback = '']) {
+      for (final value in values) {
+        final text = value.trim();
+        if (text.isNotEmpty) return text;
+      }
+      return fallback;
+    }
+
+    String normalizedRelation(TodoGoalProblemNode node, bool isRoot) {
+      final raw = node.relationType.trim().toLowerCase();
+      const allowed = <String>{'and', 'or', 'sequence', 'dependency', 'network'};
+      if (allowed.contains(raw)) return raw;
+      if (isRoot) return 'and';
+      if (node.nodeType.trim().toLowerCase() == 'action' || node.actionProcedure.trim().isNotEmpty) return 'sequence';
+      return 'and';
+    }
+
+    final repaired = <TodoGoalProblemNode>[];
+    for (var i = 0; i < nodes.length; i++) {
+      final node = nodes[i];
+      final isRoot = i == 0 || node.tempParentNodeId.trim().isEmpty && node.parentNodeId.trim().isEmpty;
+      final nodeTypeRaw = node.nodeType.trim().toLowerCase();
+      final hasActionContract = node.actionWhen.trim().isNotEmpty ||
+          node.actionWhere.trim().isNotEmpty ||
+          node.actionObject.trim().isNotEmpty ||
+          node.actionProcedure.trim().isNotEmpty ||
+          node.actionOutput.trim().isNotEmpty ||
+          node.actionableStep.trim().isNotEmpty;
+      final nodeType = nodeTypeRaw == 'action' || (!isRoot && hasActionContract && node.actionProcedure.trim().isNotEmpty) ? 'action' : (nodeTypeRaw.isEmpty || nodeTypeRaw == 'tree' ? (isRoot ? 'goal_state' : 'sub_problem') : node.nodeType);
+      final title = firstNonEmpty(<String>[node.title == '子问题' ? '' : node.title, node.logicQuestion, node.actionableStep], isRoot ? planProblem : '待验证子问题 ${i + 1}');
+      final isAction = nodeType.trim().toLowerCase() == 'action';
+      final actionWhen = isAction ? firstNonEmpty(<String>[node.actionWhen], '今天打开目标详情页后，预留10分钟') : node.actionWhen;
+      final actionWhere = isAction ? firstNonEmpty(<String>[node.actionWhere], '手机或电脑上的当前目标执行入口') : node.actionWhere;
+      final actionObject = isAction ? firstNonEmpty(<String>[node.actionObject], '节点“$title”对应的材料、页面或沟通对象') : node.actionObject;
+      final actionProcedure = isAction
+          ? firstNonEmpty(<String>[node.actionProcedure], '打开执行入口；计时10分钟；完成节点“$title”的第一个可见动作；保存记录或截图')
+          : node.actionProcedure;
+      final actionOutput = isAction ? firstNonEmpty(<String>[node.actionOutput], '一条记录、截图或完成数量') : node.actionOutput;
+      final acceptance = firstNonEmpty(<String>[
+        node.acceptanceCriteria == '能用事实判断是否完成' ? '' : node.acceptanceCriteria,
+        isAction && actionOutput.trim().isNotEmpty ? '留下$actionOutput，并能判断是否推动父问题' : '',
+      ], isRoot ? '所有必要子问题完成后，能用证据判断目标状态是否成立。' : '能用事实判断该子问题是否成立。');
+      final actionSummary = isAction ? firstNonEmpty(<String>[node.actionableStep, title], title) : node.actionableStep;
+      repaired.add(TodoGoalProblemNode(
+        nodeId: node.nodeId,
+        goalId: node.goalId,
+        solutionId: node.solutionId,
+        parentNodeId: node.parentNodeId,
+        relationType: normalizedRelation(node, isRoot),
+        nodeType: nodeType,
+        title: title,
+        description: firstNonEmpty(<String>[node.description, title], title),
+        acceptanceCriteria: acceptance,
+        actionableStep: actionSummary,
+        zoneType: zone,
+        difficultyScore: node.difficultyScore <= 0 ? 5 : node.difficultyScore.clamp(1, 10).toInt(),
+        estimatedMinutes: node.estimatedMinutes <= 0 ? (isAction ? 10 : 5) : node.estimatedMinutes,
+        sequenceOrder: node.sequenceOrder == 0 ? i : node.sequenceOrder,
+        dependenciesJson: node.dependenciesJson,
+        status: node.status.trim().isEmpty ? 'not_started' : node.status,
+        completionNote: node.completionNote,
+        aiReviewJson: node.aiReviewJson,
+        createdAtMs: node.createdAtMs,
+        updatedAtMs: node.updatedAtMs,
+        tempNodeId: firstNonEmpty(<String>[node.tempNodeId, node.nodeId], isRoot ? 'root' : 'n${i + 1}'),
+        tempParentNodeId: isRoot ? '' : node.tempParentNodeId,
+        logicQuestion: firstNonEmpty(<String>[node.logicQuestion], isAction ? '这个行动产出是否足以推动父问题成立？' : '这个子问题成立后能否回推父问题？'),
+        knownFacts: firstNonEmpty(<String>[node.knownFacts], planFacts),
+        assumptions: firstNonEmpty(<String>[node.assumptions], planAssumptions),
+        evidenceNeeded: firstNonEmpty(<String>[node.evidenceNeeded, actionOutput], planEvidence),
+        decisionRule: firstNonEmpty(<String>[node.decisionRule], isAction ? '达到验收标准则通过；否则记录阻力，并尝试同一父问题下的替代动作。' : '子节点全部达到验收标准后，再判断该父问题是否成立。'),
+        actionWhen: actionWhen,
+        actionWhere: actionWhere,
+        actionObject: actionObject,
+        actionProcedure: actionProcedure,
+        actionOutput: actionOutput,
+      ));
+    }
+    return repaired;
+  }
+
+  bool _isRecoverableTreePlan(TodoGoalSolutionPlan plan) {
+    if (plan.nodes.length < 3) return false;
+    final ids = <String>{};
+    for (final node in plan.nodes) {
+      final id = node.tempNodeId.trim();
+      if (id.isEmpty || ids.contains(id)) return false;
+      ids.add(id);
+    }
+    final roots = plan.nodes.where((node) => node.tempParentNodeId.trim().isEmpty).toList(growable: false);
+    if (roots.isEmpty) return false;
+    for (final node in plan.nodes) {
+      final parent = node.tempParentNodeId.trim();
+      if (parent.isNotEmpty && !ids.contains(parent)) return false;
+      for (final dependency in node.resolvedDependencyNodeIds) {
+        if (!ids.contains(dependency)) return false;
+      }
+    }
+    return plan.nodes.any((node) => node.isActionable && node.hasConcreteActionContract && _isConcreteActionNode(node));
+  }
+
   List<TodoGoalSolutionPlan> _readPlans(Map<String, dynamic> map) {
     final value = _readDynamic(map, const <String>[
       'solutionPlans',
       'solution_plans',
+      'solutionPlan',
+      'solution_plan',
+      'selectedSolutionPlan',
+      'selected_solution_plan',
       'solutions',
       'plans',
+      'plan',
       'problemSolvingPlans',
       'problem_solving_plans',
       'problemSolutions',
@@ -1320,17 +1545,30 @@ C 当时解释：$cognition
         addPlan(value[i], i);
       }
     } else if (value is Map<String, dynamic>) {
-      var i = 0;
-      for (final entry in value.entries) {
-        addPlan(entry.value, i, fallbackTitle: entry.key);
-        i++;
+      if (_looksLikeSingleProblemPlan(value)) {
+        addPlan(value, 0);
+      } else {
+        var i = 0;
+        for (final entry in value.entries) {
+          addPlan(entry.value, i, fallbackTitle: entry.key);
+          i++;
+        }
       }
     } else if (value is Map) {
-      var i = 0;
-      for (final entry in value.entries) {
-        addPlan(entry.value, i, fallbackTitle: entry.key.toString());
-        i++;
+      final converted = Map<String, dynamic>.from(value);
+      if (_looksLikeSingleProblemPlan(converted)) {
+        addPlan(converted, 0);
+      } else {
+        var i = 0;
+        for (final entry in value.entries) {
+          addPlan(entry.value, i, fallbackTitle: entry.key.toString());
+          i++;
+        }
       }
+    }
+
+    if (plans.isEmpty && _looksLikeSingleProblemPlan(map)) {
+      addPlan(map, 0);
     }
 
     if (plans.isEmpty) {
@@ -1371,39 +1609,79 @@ C 当时解释：$cognition
   }
 
   Map<String, dynamic> _extractJsonObject(String raw) {
-    var text = raw.trim();
-    if (text.isEmpty) return <String, dynamic>{};
-    text = text
-        .replaceAll(RegExp(r'^```json', multiLine: true), '')
-        .replaceAll(RegExp(r'^```', multiLine: true), '')
-        .replaceAll(RegExp(r'```$', multiLine: true), '')
-        .trim();
+    String cleanFence(String input) {
+      return input
+          .trim()
+          .replaceAll(RegExp(r'^```json', multiLine: true), '')
+          .replaceAll(RegExp(r'^```', multiLine: true), '')
+          .replaceAll(RegExp(r'```$', multiLine: true), '')
+          .trim();
+    }
+
     Map<String, dynamic> convert(Object? decoded) {
       if (decoded is Map<String, dynamic>) return decoded;
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
       if (decoded is List && decoded.isNotEmpty) {
+        final maps = <Map<String, dynamic>>[];
         for (final item in decoded) {
-          if (item is Map<String, dynamic>) return item;
-          if (item is Map) return Map<String, dynamic>.from(item);
+          if (item is Map<String, dynamic>) {
+            maps.add(item);
+          } else if (item is Map) {
+            maps.add(Map<String, dynamic>.from(item));
+          }
         }
+        if (maps.isEmpty) return <String, dynamic>{};
+        if (maps.length == 1) return maps.first;
+        final looksLikeNodeList = maps.every((m) => m.containsKey('id') || m.containsKey('parentId') || m.containsKey('parent_id') || m.containsKey('nodeType') || m.containsKey('node_type') || m.containsKey('actionWhen') || m.containsKey('problemToSolve'));
+        return looksLikeNodeList ? <String, dynamic>{'nodes': maps} : <String, dynamic>{'solutionPlans': maps};
       }
       return <String, dynamic>{};
     }
 
-    try {
-      final converted = convert(jsonDecode(text));
-      if (converted.isNotEmpty) return converted;
-    } catch (_) {}
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      try {
-        final converted = convert(jsonDecode(text.substring(start, end + 1)));
-        if (converted.isNotEmpty) return converted;
-      } catch (_) {}
+    final initial = cleanFence(raw);
+    if (initial.isEmpty) return <String, dynamic>{};
+    final candidates = <String>[initial];
+    if (initial.contains(r'\"') || initial.contains(r'\n')) {
+      candidates.add(cleanFence(initial.replaceAll(r'\"', '"').replaceAll(r'\n', '\n')));
+    }
+
+    for (var round = 0; round < 3; round++) {
+      final snapshot = List<String>.from(candidates);
+      for (final candidate in snapshot) {
+        final text = cleanFence(candidate);
+        if (text.isEmpty) continue;
+        try {
+          final decoded = jsonDecode(text);
+          if (decoded is String) {
+            final inner = cleanFence(decoded);
+            if (inner.isNotEmpty && !candidates.contains(inner)) candidates.add(inner);
+            continue;
+          }
+          final converted = convert(decoded);
+          if (converted.isNotEmpty) return converted;
+        } catch (_) {}
+        final start = text.indexOf('{');
+        final end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+          final sliced = text.substring(start, end + 1);
+          try {
+            final decoded = jsonDecode(sliced);
+            if (decoded is String) {
+              final inner = cleanFence(decoded);
+              if (inner.isNotEmpty && !candidates.contains(inner)) candidates.add(inner);
+              continue;
+            }
+            final converted = convert(decoded);
+            if (converted.isNotEmpty) return converted;
+          } catch (_) {}
+          final unescaped = sliced.replaceAll(r'\"', '"').replaceAll(r'\n', '\n');
+          if (unescaped != sliced && !candidates.contains(unescaped)) candidates.add(unescaped);
+        }
+      }
     }
     return <String, dynamic>{};
   }
+
 
   Map<String, dynamic> _resolveAnalysisPayload(Map<String, dynamic> root) {
     if (_hasMeaningfulAnalysis(root) || _readPlans(root).isNotEmpty) return root;

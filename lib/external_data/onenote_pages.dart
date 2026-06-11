@@ -377,7 +377,7 @@ class _GoalAiPromptConfigCard extends StatelessWidget {
             const SizedBox(height: 10),
             _PromptEditorTile(title: '系统提示词', subtitle: '控制 AI 的身份、语气和输出格式。', controller: systemCtrl, minLines: 4, maxLines: 10),
             _PromptEditorTile(title: '任务转目标提示词', subtitle: '用于把 Microsoft To Do 任务转化为方向、意义、过程价值和今日最小行动。', controller: taskCtrl, minLines: 8, maxLines: 18),
-            _PromptEditorTile(title: '独立问题解决方案提示词', subtitle: '仅用于单独生成多套方案和问题树，不与目标分析共用请求。', controller: solutionCtrl, minLines: 8, maxLines: 18),
+            _PromptEditorTile(title: '独立问题解决方案提示词', subtitle: '用于把目标当作现实问题来定义、推导、比较方案、生成问题树和参考案例；AI只做决策支持，不替用户选择。', controller: solutionCtrl, minLines: 8, maxLines: 18),
             _PromptEditorTile(title: '每日复盘提示词', subtitle: '用于把完成/未完成记录转化为过程洞察和明日最小一步。', controller: reviewCtrl, minLines: 8, maxLines: 18),
             const SizedBox(height: 10),
             Wrap(

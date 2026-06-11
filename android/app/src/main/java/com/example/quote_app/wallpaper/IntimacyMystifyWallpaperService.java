@@ -92,6 +92,10 @@ import javax.microedition.khronos.egl.EGLSurface;
  *     开场显形改用真实秒级淡入，避免天级周期的 3% 淡入造成长时间黑屏；
  *     光笔改为“书写—停笔—余痕淡出—再落笔”的呼吸节奏，不再无休止连续划线；
  *     每笔完整 reveal 当前艺术形体，并在笔迹周围生成扇翼、花瓣、开放环、晶体切面、星链、光幕肋纹等结构。
+ * 28) V91 慢下来/回到此刻：仅校准主体光笔的时间感。拉长落笔、品味、余白三段，降低曲线推进、
+ *     色彩流动、相机旋转与快节奏脉动，让动画更像一口一口体验人生、品味过程、回到当下。
+ * 29) V93 修复“画笔未完整创作就停止”：延长单次创作窗口，解除曲线完成度与残影窗口/penSec 的错误绑定，
+ *     让每一笔按标准化完整进度走到终点；笔迹淡去不再触发画笔停工，只在完整后保留短暂回味。
  * 4) 保留天级宏观周期：分离最大，吸引/同步主要，临界较少，释放/余韵最少；所有比例和 1～365 天周期可配置.
  *
  * 动画只以抽象线条关系表达分离、吸引、同步、临界、释放、余韵，不出现任何具象身体或露骨画面。
@@ -219,8 +223,10 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
         private float cycleAfterglowDurationSec = 24f;
         private float cycleCriticalDurationSec = 60f;
         private float lastVisualSec = -1f;
-        // V176 笔尖轨迹缓冲（环形数组，存最近 TRAIL_CAP 帧的笔尖位置+属性）
-        private static final int TRAIL_CAP = 300;
+        // V176/V91 笔尖轨迹缓冲（环形数组，存最近 TRAIL_CAP 帧的笔尖位置+属性）。
+        // V93：继续拉长历史窗口，避免长创作窗口下旧段过早离开路径缓冲，
+        // 让“正在画完一整笔”的连续性不被残影寿命截断。
+        private static final int TRAIL_CAP = 1440;
         private final float[] trailX    = new float[TRAIL_CAP];
         private final float[] trailY    = new float[TRAIL_CAP];
         private final float[] trailR    = new float[TRAIL_CAP]; // 红
@@ -245,7 +251,7 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
         private float wallpaperYOffset = 0.5f;
 
         GLRenderThread(Context context, SurfaceHolder holder, boolean enginePreview) {
-            super("IntimacyMystifyGLRendererV90ReferencePenArtWithPauses");
+            super("IntimacyMystifyGLRendererV92MindfulBrushBreath");
             this.context = context.getApplicationContext();
             this.holder = holder;
             this.enginePreview = enginePreview;
@@ -1947,56 +1953,83 @@ private boolean initStrokeByArtMotif(StrokeEvent s, int side, Phase phase) {
         }
 
         private float continuousPenBaseDrawForFade() {
-            // V108：把一次“创作”拉长成连续过程，避免几秒一次随机跳位造成“东一下西一下”。
-            return lerp(11.20f, 7.60f, clamp(cfg.randomness, 0f, 1f)) * (cfg.powerSave ? 1.08f : 1.0f);
+            // V93：把“每一笔真正画完”放在第一优先级。
+            // V92 只有二十多秒，同时又降低 penSec 与曲线频率，数学曲线还没走完整就进入停顿。
+            // 这里显著延长单次创作窗口，让用户能看见从落笔、展开、品味到完整收束的全过程。
+            return lerp(86.0f, 64.0f, clamp(cfg.randomness, 0f, 1f)) * (cfg.powerSave ? 1.12f : 1.0f);
         }
 
         private float continuousPenBasePauseForFade() {
-            // V108：几乎取消停顿，旧痕只靠 FBO 退去，不再做完成态展示。
-            return lerp(0.12f, 0.00f, clamp(cfg.randomness, 0f, 1f));
+            // V93：停顿只作为“完成之后的轻微回味”，不再承担清场职责。
+            // 这样旧笔迹淡去时，下一笔已经很快接上，不会出现“笔迹消失=画笔停工”的感觉。
+            return lerp(0.75f, 0.35f, clamp(cfg.randomness, 0f, 1f));
+        }
+
+        private float mindfulPenMotionScale() {
+            // V93：保留慢下来，但不再把“完整性”交给这个速度因子决定；
+            // 曲线完成度由 completeBrushProgress()/curveCompletionTurns() 单独保证。
+            return lerp(0.46f, 0.62f, clamp(cfg.randomness, 0f, 1f));
+        }
+
+        private float completeBrushProgress(float raw) {
+            // 起笔慢、中段舒展、收笔慢，但无论多慢，raw=1 时必须抵达完整创作终点。
+            raw = clamp(raw, 0f, 1f);
+            float eased = smoother(raw);
+            float linger = 0.035f * (float)Math.sin(Math.PI * raw); // 中段略有“品味过程”的停留
+            return clamp(eased + linger * (1f - Math.abs(2f * raw - 1f) * 0.55f), 0f, 1f);
+        }
+
+        private float curveCompletionTurns(int curveType, int gesture) {
+            // V93：不同曲线闭合所需参数长度不同。此前按 trailSec/penSec 推导频率，
+            // 低速后经常只画到一半。现在直接规定“这一笔必须走完”的参数圈数。
+            if (curveType == 2) return 2.0f;        // 1 : 1.5 李萨如需要 4π 才回到完整语句
+            if (curveType == 7) return 2.0f;        // 无理近似螺线多走一圈，视觉上才完整
+            if (curveType == 9) return 1.65f;       // 自由叠加不求闭合，但要完成足够长的创作句子
+            if (curveType == 16 || curveType == 17 || curveType == 19) return 1.55f;
+            if (curveType >= 10) return 1.08f + 0.18f * stableHash01(gesture, 28177);
+            return 1.0f + 0.26f * stableHash01(gesture, 28179);
         }
 
         private float subjectPhaseFeedbackFade(float drawSec) {
             // V173：完全重写 fade 曲线，支持"从无到有"的历史积累。
             //
             // 原版 fade 最高 0.875（@60fps → 1秒后历史仅剩3%），历史根本来不及积累。
-            // 新版按 raw 进度分三段：
-            //   积累期（0→0.70）：fade=0.972~0.978，历史缓慢积累，形成从无到有的轨迹面
-            //   鼎盛期（0.70→0.82）：fade=0.960~0.972，历史层最丰富，形体最完整
-            //   消散期（0.82→1.00）：fade=0.820→0.650，旧痕迹快速消散，形成"先画先消失"
-            //   停顿期（slot>drawBudget）：fade=0.550，快速清场，为下一个 gesture 准备
+            // V93 按 raw 进度重新分三段：
+            //   积累期（0→0.78）：高 fade，历史缓慢积累，形成从无到有的轨迹面
+            //   完整创作期（0.78→0.96）：继续保留旧段，让整笔能够被看完整
+            //   轻收束期（0.96→1.00）：只轻微退场，不再提前清空；停顿期也保留余辉等待下一笔接上
             float baseDraw  = continuousPenBaseDrawForFade();
             float basePause = continuousPenBasePauseForFade();
             float period    = Math.max(3.0f, baseDraw + basePause);
             float liveSec   = drawSec + 0.86f;
             int   gesture   = Math.max(0, (int)Math.floor(liveSec / period));
             float slot      = liveSec - gesture * period;
-            float drawBudget = baseDraw * (0.975f + 0.04f * stableHash01(gesture, 8987));
-            drawBudget = clamp(drawBudget, period * 0.955f, period * 0.998f);
+            float drawBudget = baseDraw * (0.940f + 0.050f * stableHash01(gesture, 8987));
+            // V93：绘制预算几乎覆盖整个创作窗口；停顿只在完整画完之后出现。
+            drawBudget = clamp(drawBudget, period - basePause * 1.08f, period - basePause * 0.35f);
 
-            // 停顿期：快速清场（为下一个 gesture 的"从无到有"让出干净黑场）
+            // 完成后的回味期：不再快速清场。保留足够余辉，让下一笔接上前画面仍有生命。
             if (slot >= drawBudget) {
                 float restRaw = clamp((slot - drawBudget) / Math.max(0.001f, period - drawBudget), 0f, 1f);
-                return cfg.powerSave ? 0.520f : lerp(0.550f, 0.620f, cfg.trail) - 0.060f * restRaw;
+                float restEase = smoother(restRaw);
+                if (cfg.powerSave) return lerp(0.940f, 0.900f, restEase);
+                return lerp(0.978f + 0.010f * cfg.trail, 0.960f + 0.020f * cfg.trail, restEase);
             }
 
             float raw = clamp(slot / Math.max(0.001f, drawBudget), 0f, 1f);
 
-            // 积累期：高 fade，让每帧画的线条缓慢积累，形成"从一笔到丰满形体"
-            float accumulate = smoother(clamp(raw / 0.70f, 0f, 1f));        // 0→1 在 0~70%
-            float dissolve   = smoother(clamp((raw - 0.78f) / 0.22f, 0f, 1f)); // 0→1 在 78~100%
+            // 积累期：高 fade，让完整笔迹在长创作过程中留得住；只在最后 4% 轻轻退场。
+            float accumulate = smoother(clamp(raw / 0.78f, 0f, 1f));
+            float dissolve   = smoother(clamp((raw - 0.96f) / 0.04f, 0f, 1f));
 
-            // fade 曲线：积累期高（0.974），消散期低（0.820→0.640）
-            // V176d：trail粒子靠FBO留存，需要较高fade
-            // 积累期高fade → 轨迹留住慢慢积累；消散期降低 → 旧痕迹自然消亡
-            float fadeAccum    = cfg.powerSave ? 0.950f : lerp(0.960f, 0.972f, cfg.trail);
-            float fadePeak     = cfg.powerSave ? 0.942f : lerp(0.952f, 0.965f, cfg.trail);
-            float fadeDissolve = cfg.powerSave ? 0.720f : lerp(0.740f, 0.800f, cfg.trail);
+            float fadeAccum    = cfg.powerSave ? 0.958f : lerp(0.974f, 0.986f, cfg.trail);
+            float fadePeak     = cfg.powerSave ? 0.954f : lerp(0.970f, 0.982f, cfg.trail);
+            float fadeDissolve = cfg.powerSave ? 0.900f : lerp(0.925f, 0.955f, cfg.trail);
 
             float f = lerp(fadeAccum, fadePeak, accumulate);
             f = lerp(f, fadeDissolve, dissolve);
 
-            return clamp(f, 0.52f, 0.975f);
+            return clamp(f, 0.82f, 0.988f);
         }
 
         private void drawContinuousPenDrawingSubject(float drawSec, float local, Phase phase, float intensity, float tension) {
@@ -2042,17 +2075,26 @@ private boolean initStrokeByArtMotif(StrokeEvent s, int side, Phase phase) {
             }
 
             // ── 时间轴（与 subjectPhaseFeedbackFade 完全对齐，避免FBO被意外清空）──
-            float baseDraw  = lerp(11.20f,7.60f,clamp(cfg.randomness,0f,1f))*(cfg.powerSave?1.08f:1.0f);
-            float basePause = lerp(0.12f,0.00f,clamp(cfg.randomness,0f,1f));
+            float baseDraw  = continuousPenBaseDrawForFade();
+            float basePause = continuousPenBasePauseForFade();
             float period    = Math.max(3.0f, baseDraw+basePause);
             int   gesture   = Math.max(0,(int)Math.floor(liveSec/period));
             float slot      = liveSec-gesture*period;
-            float budget    = baseDraw*(0.975f+0.04f*stableHash01(gesture,8987));
-            budget = clamp(budget, period*0.955f, period*0.998f);
+            float budget    = baseDraw*(0.940f+0.050f*stableHash01(gesture,8987));
+            // V93：只有完整画完以后才允许进入短暂停笔；绘制阶段不再提前 return。
+            budget = clamp(budget, period-basePause*1.08f, period-basePause*0.35f);
             if(slot>=budget) return;
             float raw=clamp(slot/budget,0f,1f);
-            if(raw>0.97f) return;
             if(gesture!=trailGesture){trailHead=0;trailSize=0;trailGesture=gesture;}
+
+            // V93：呼吸节奏只改变“观看速度感”，不能再影响曲线是否走完。
+            float rawBreath = clamp(raw, 0f, 1f);
+            float creationProgress = completeBrushProgress(rawBreath);
+            float middleBloom = smoother((float)Math.sin(Math.PI * rawBreath));
+            float beginHold = 1f - 0.10f * (1f - smoother(clamp(rawBreath / 0.14f, 0f, 1f)));
+            float endHold   = 1f - 0.08f * smoother(clamp((rawBreath - 0.88f) / 0.12f, 0f, 1f));
+            float savorEase = (0.66f + 0.34f * middleBloom) * beginHold * endHold;
+            float penSec = slot * mindfulPenMotionScale() * savorEase;
 
             // ── 阶段包络 ──
             float phaseIn =smoother(clamp((drawSec-phase.start)/1.5f,0f,1f));
@@ -2064,11 +2106,11 @@ private boolean initStrokeByArtMotif(StrokeEvent s, int side, Phase phase) {
             int   g         = gesture;
             int   artMode   = (int)(stableHash01(g,25001)*8);
             float hueBase   = stableHash01(g,25003);
-            float hueSpd    = 0.006f+0.012f*stableHash01(g,25005);
+            float hueSpd    = 0.0012f+0.0028f*stableHash01(g,25005);
             int   curveType = (int)(stableHash01(g,27001)*20); // 0~19
             boolean is3D    = (curveType >= 10);
             // 摄像机（3D曲线用，缓慢旋转产生动态立体感）
-            float camYaw    = stableHash01(g,28001)*6.2831853f + liveSec*0.013f;
+            float camYaw    = stableHash01(g,28001)*6.2831853f + penSec*0.0038f;
             float camPitch  = (0.22f+0.40f*stableHash01(g,28003))*(float)Math.PI;
             float cy=(float)Math.cos(camYaw), sy_=(float)Math.sin(camYaw);
             float cp=(float)Math.cos(camPitch), sp=(float)Math.sin(camPitch);
@@ -2077,16 +2119,15 @@ private boolean initStrokeByArtMotif(StrokeEvent s, int side, Phase phase) {
             float shadowLen = 0f; // 后续用lw计算
 
             // ── 节奏 ──
-            float rSlow=0.5f+0.5f*(float)Math.sin(liveSec*(0.05f+0.04f*stableHash01(g,25011))*6.28f+stableHash01(g,25013)*6.28f);
-            float rMid =0.5f+0.5f*(float)Math.sin(liveSec*(0.18f+0.22f*stableHash01(g,25021))*6.28f+stableHash01(g,25023)*6.28f);
-            float rFast=0.5f+0.5f*(float)Math.sin(liveSec*(1.20f+1.50f*stableHash01(g,25031))*6.28f+stableHash01(g,25033)*6.28f);
-            float rhythm=rSlow*0.60f+rMid*0.28f+rFast*0.12f;
+            float rSlow=0.5f+0.5f*(float)Math.sin(penSec*(0.014f+0.020f*stableHash01(g,25011))*6.28f+stableHash01(g,25013)*6.28f);
+            float rMid =0.5f+0.5f*(float)Math.sin(penSec*(0.048f+0.070f*stableHash01(g,25021))*6.28f+stableHash01(g,25023)*6.28f);
+            float rFast=0.5f+0.5f*(float)Math.sin(penSec*(0.18f+0.30f*stableHash01(g,25031))*6.28f+stableHash01(g,25033)*6.28f);
+            float rhythm=rSlow*0.82f+rMid*0.15f+rFast*0.03f;
 
-            // ── 频率：trail窗口内完成0.8~1.4个图形 ──
-            float trailSec    = TRAIL_CAP/60f;
-            float fBase       = (0.80f+0.60f*stableHash01(g,27003))/trailSec
-                              * (0.85f+0.30f*stableHash01(g,27005));
-            float theta=liveSec*fBase*6.2831853f;
+            // ── 完整度：按 gesture 的总预算完成完整图形，而不是按残影窗口/penSec 估算。
+            float targetTurns = curveCompletionTurns(curveType, g);
+            float theta = creationProgress * targetTurns * 6.2831853f;
+            float fBase = targetTurns / Math.max(0.001f, budget); // 只供少数自由叠加分支做相对速度参考
             float phX=stableHash01(g,27011)*6.28f, phY=stableHash01(g,27013)*6.28f, phZ=stableHash01(g,27014)*6.28f;
             float ampX=0.78f+0.18f*stableHash01(g,27015), ampY=0.72f+0.22f*stableHash01(g,27017);
             float rotA=stableHash01(g,27019)*6.28f;
@@ -2105,7 +2146,7 @@ private boolean initStrokeByArtMotif(StrokeEvent s, int side, Phase phase) {
                 case 6:{float R2=0.60f+0.20f*stableHash01(g,27051),rr2=0.06f+0.12f*stableHash01(g,27053),d2=0.35f+0.45f*stableHash01(g,27055),rt2=(R2+rr2)/Math.max(0.01f,rr2);rawX=ampX*((R2+rr2)*(float)Math.cos(theta)-d2*(float)Math.cos(rt2*theta+phX));rawY=ampY*((R2+rr2)*(float)Math.sin(theta)-d2*(float)Math.sin(rt2*theta+phY));break;}
                 case 7:{float R3=0.50f+0.30f*stableHash01(g,27061),rr3=0.08f+0.18f*stableHash01(g,27063),d3=0.20f+0.40f*stableHash01(g,27065),irr=1.4142f+0.30f*stableHash01(g,27067);rawX=ampX*((R3-rr3)*(float)Math.cos(theta)+d3*(float)Math.cos(irr*theta+phX));rawY=ampY*((R3-rr3)*(float)Math.sin(theta)-d3*(float)Math.sin(irr*theta+phY));break;}
                 case 8:{float a8=0.35f+0.45f*stableHash01(g,27071),b8=0.25f+0.55f*stableHash01(g,27073);rawX=ampX*(float)Math.sin(theta+phX)*(float)Math.cos(a8*theta);rawY=ampY*(float)Math.sin(theta+phY)*(float)Math.cos(b8*theta);break;}
-                case 9:{float fY9=fBase*(1.618f+0.20f*stableHash01(g,27081)),fX9=fBase*(1.414f+0.20f*stableHash01(g,27083)),wA=0.60f+0.25f*stableHash01(g,27085),wB=1f-wA;rawX=ampX*(wA*(float)Math.sin(theta+phX)+wB*(float)Math.sin(fX9*liveSec*6.28f+phX*1.3f));rawY=ampY*(wA*(float)Math.sin(fY9*liveSec*6.28f+phY)+wB*(float)Math.sin(fBase*1.5f*liveSec*6.28f+phY*0.8f));break;}
+                case 9:{float wA=0.60f+0.25f*stableHash01(g,27085),wB=1f-wA;rawX=ampX*(wA*(float)Math.sin(theta+phX)+wB*(float)Math.sin(theta*(1.414f+0.20f*stableHash01(g,27083))+phX*1.3f));rawY=ampY*(wA*(float)Math.sin(theta*(1.618f+0.20f*stableHash01(g,27081))+phY)+wB*(float)Math.sin(theta*1.5f+phY*0.8f));break;}
 
                 // ─── 3D曲线（10~19，经摄像机投影）───
                 default:{
@@ -2186,20 +2227,21 @@ private boolean initStrokeByArtMotif(StrokeEvent s, int side, Phase phase) {
             float tipY=clamp(H*0.5f+rY*(H*0.5f-padY), padY, H-padY);
 
             // ── 生命包络 ──
-            float birthA=smoother(clamp(raw/0.05f,0f,1f));
-            float deathA=1f-smoother(clamp((raw-0.82f)/0.18f,0f,1f));
+            float birthA=smoother(clamp(raw/0.085f,0f,1f));
+            // V93：不再在 86% 处让画笔提前“死掉”；末端仍保持可见，确保最后一段也被画出来。
+            float deathA=1f-0.22f*smoother(clamp((raw-0.965f)/0.035f,0f,1f));
             float lifeA=birthA*deathA*stageA;
             if(lifeA<0.005f) return;
 
             // ── 笔画属性 ──
-            float hue=fract(hueBase+liveSec*hueSpd);
+            float hue=fract(hueBase+penSec*hueSpd);
             float sat=0.68f+0.28f*rhythm;
-            float peakEnv=(float)Math.pow(Math.sin(Math.PI*Math.min(raw/0.82f,1f)),0.4f);
+            float peakEnv=(float)Math.pow(Math.sin(Math.PI*Math.min(raw/0.86f,1f)),0.46f);
             float lwBase=minDim*(0.0048f+0.0028f*cfg.ribbonWidth);
             float lwScale;
             switch(artMode){case 1:lwScale=2.0f+1.5f*(1f-rhythm);break;case 2:lwScale=3.2f+2.0f*rSlow;break;case 6:lwScale=1.4f+4.5f*(1f-rhythm);break;default:lwScale=1.0f+0.7f*(1f-rhythm);break;}
             float lw=Math.max(1.5f,lwBase*lwScale*(0.55f+0.45f*peakEnv));
-            float val=0.82f+0.14f*peakEnv+0.06f*rFast;
+            float val=0.80f+0.16f*peakEnv+0.035f*rFast;
             float[] rgb=hsvToRgb(hue,sat,val);
             rgb[0]=Math.max(rgb[0],0.25f);rgb[1]=Math.max(rgb[1],0.55f);rgb[2]=Math.max(rgb[2],0.65f);
 

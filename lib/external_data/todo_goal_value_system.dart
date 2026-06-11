@@ -13,9 +13,9 @@ class TodoGoalOriginalQuote {
   final String productUse;
 }
 
-const String todoGoalCentralTheme = '真实面对旧模式，保留内在价值，进入适度不适，用持续行动创造新的自我证据。';
+const String todoGoalCentralTheme = '真实面对旧模式，保留内在价值，进入有意义的拉伸；在分心、痛苦和中断后正念回归，用持续行动创造新的自我证据。';
 
-const String todoGoalSubTheme = 'ChangePath 不承诺速成，也不让理解停留在 App 内。每个同步任务、目标、日记与复盘都要进入同一条改变闭环：觉察旧模式、澄清具体行为、识别阻力、设计拉伸区行动、回到现实、复盘并沉淀自我证据。';
+const String todoGoalSubTheme = 'ChangePath 不承诺速成，也不让理解停留在 App 内。每个同步任务、目标、问题树节点、行动树步骤、每日行动、仪式、关系投入、正念专注与复盘都要进入同一条努力闭环：觉察旧模式、澄清具体行为、识别 Pain 类型、设计拉伸区行动、分心后回来、中断后回来、复盘 Pain-Gain 并沉淀自我证据。足下努力不是独立模块，而是整个 Todo 目标价值系统的执行证据层。';
 
 const List<TodoGoalValuePrinciple> todoGoalCoreValues = <TodoGoalValuePrinciple>[
   TodoGoalValuePrinciple(
@@ -57,6 +57,26 @@ const List<TodoGoalValuePrinciple> todoGoalCoreValues = <TodoGoalValuePrinciple>
     title: '承诺创造行动',
     description: '目标必须落到现实行为中。写下目标、公开承诺、确定日期、拆成下一步，才能从想法进入生活。',
     actionQuestion: '我现在5分钟内能做的最小真实行动是什么？',
+  ),
+  TodoGoalValuePrinciple(
+    title: 'No Pain, No Gain 但不迷恋痛苦',
+    description: '成长包含合理不适，但高痛苦不自动等于高成长。系统必须区分成长性不适、恐慌性压力、无意义消耗和危险信号。',
+    actionQuestion: '今天的痛感是值得继续的小拉伸，还是需要降级、恢复或重新定义？',
+  ),
+  TodoGoalValuePrinciple(
+    title: '正念式回归',
+    description: '努力不是永不分心、永不中断，而是发现偏离后一次次把注意力、行动和价值带回来。',
+    actionQuestion: '我刚刚从哪里偏离了？现在能用哪个 2 分钟动作把自己带回来？',
+  ),
+  TodoGoalValuePrinciple(
+    title: '行动树与努力账本同源',
+    description: '每个目标、问题树节点、行动树步骤和每日行动都必须能直接记录努力证据；努力记录要反向汇总到节点、父步骤和目标，而不是停留在孤立页面。',
+    actionQuestion: '这一次努力对应哪个目标、哪个问题节点、哪条今日行动？它更新了哪个判断？',
+  ),
+  TodoGoalValuePrinciple(
+    title: 'Pain-Gain 校准',
+    description: '每次努力同时记录不适和成长，避免把无效痛苦包装成自律，也避免因合理挑战而过早放弃。',
+    actionQuestion: '这次行动是高痛低成长、高痛高成长、低痛高成长，还是低痛低成长？',
   ),
   TodoGoalValuePrinciple(
     title: '拉伸而非恐慌',
@@ -111,6 +131,24 @@ const List<TodoGoalValuePractice> todoGoalPracticeMap = <TodoGoalValuePractice>[
     aiAction: '不催促完成整件事，只提醒现在能做的一个可观察动作。',
   ),
   TodoGoalValuePractice(
+    title: '带我回来',
+    trigger: '当用户分心、拖延、情绪乱或连续中断时',
+    userAction: '先命名偏离，再选择一个 2 分钟回归动作，不追回进度。',
+    aiAction: '把“我失败了”改写成“我正在训练回来的能力”，并写入努力账本的 return 指标。',
+  ),
+  TodoGoalValuePractice(
+    title: '把努力写回行动树',
+    trigger: '当用户在今日行动、问题树节点或足下努力页记录一次努力时',
+    userAction: '选择它对应的具体行动或节点，而不是只记录一条泛泛的努力。',
+    aiAction: '把 effort_entry 同时绑定 goal_id、step_id、node_id，并把 Pain-Gain、Return Count 汇总回目标、行动和问题树。',
+  ),
+  TodoGoalValuePractice(
+    title: '记录 Pain-Gain',
+    trigger: '当用户完成、部分完成或放弃一个行动时',
+    userAction: '同时给 Pain 与 Gain 打分，并标记痛感类型。',
+    aiAction: '根据四象限建议继续、降级、恢复或重查目标意义。',
+  ),
+  TodoGoalValuePractice(
     title: '复盘生成下一步',
     trigger: '当用户完成、部分完成或没有完成时',
     userAction: '记录事实、过程体验和阻力，并让明日行动更小一步。',
@@ -123,6 +161,8 @@ const List<String> todoGoalTodayPracticeQuestions = <String>[
   '过程：做这一步时，我可以体验或练习什么？',
   '行动：现在 5 分钟内，我能开始哪个可观察动作？',
   '难度：它是在拉伸区，还是已经让我想逃？',
+  'Pain-Gain：这个不适带来了成长，还是只是消耗？',
+  '回归：我今天有没有从分心、拖延、情绪或中断中回来一次？',
   '复盘：做完后，我能留下什么事实记录？',
 ];
 
@@ -171,6 +211,18 @@ const List<TodoGoalOriginalQuote> todoGoalTranslatedQuotes = <TodoGoalOriginalQu
     translation: '当我们追求自己热爱的事情时，我们会更有动力、更愿意努力、更可能投入全部。与其说“不痛苦就没有收获”，不如说：带着愉悦做得更好。',
     productUse: '用于今日行动和写回 To Do 的说明，提醒用户把任务设计得既真实又可持续。',
   ),
+  TodoGoalOriginalQuote(
+    key: 'no_pain_no_gain',
+    title: '没有有意义的拉伸，就没有真正的成长',
+    translation: 'No Pain, No Gain 的产品化含义不是越痛苦越好，而是合理挑战、真实投入和可恢复节奏共同带来成长。',
+    productUse: '用于 Pain-Gain Map、拉伸区任务和高痛低成长提醒，避免鸡血式自虐。',
+  ),
+  TodoGoalOriginalQuote(
+    key: 'bring_it_back',
+    title: '走神后回来，这就是练习',
+    translation: '正念练习不是从不走神，而是走神后发现它，并把注意力带回来。努力系统也一样：分心后回来，中断后回来，失败后回来。',
+    productUse: '用于“带我回来”按钮、正念专注钟和 Return Count，替代连续打卡羞耻。',
+  ),
 ];
 
 
@@ -183,11 +235,11 @@ TodoGoalOriginalQuote todoGoalQuoteFor(String key) {
 
 
 const Map<String, List<String>> todoGoalQuoteMomentKeys = <String, List<String>>{
-  'entry': <String>['present', 'journey', 'clarity', 'joy', 'along'],
+  'entry': <String>['present', 'journey', 'clarity', 'joy', 'along', 'no_pain_no_gain', 'bring_it_back'],
   'transform': <String>['self_concordance', 'clarity', 'self_journey', 'joy'],
-  'today': <String>['journey', 'present', 'joy', 'along'],
+  'today': <String>['journey', 'present', 'joy', 'along', 'no_pain_no_gain', 'bring_it_back'],
   'detail': <String>['self_journey', 'self_concordance', 'clarity', 'journey'],
-  'review': <String>['along', 'journey', 'clarity', 'present'],
+  'review': <String>['along', 'journey', 'clarity', 'present', 'no_pain_no_gain', 'bring_it_back'],
   'write_back': <String>['joy', 'journey', 'along', 'present'],
 };
 
@@ -226,6 +278,8 @@ const List<String> todoGoalRealityLoop = <String>[
   '校准自我和谐：这是我真正关心的事，还是外部压力和焦虑？',
   '设计过程：今天这一小步本身有什么值得体验的地方？',
   '落地行动：把目标拆成5分钟内可开始的最小真实行为。',
+  '正念回归：分心、拖延或中断时，不追回进度，先做2分钟把自己带回来。',
+  'Pain-Gain：记录不适和成长，判断继续、降级、恢复或重查意义。',
   '复盘强化：记录做了什么、过程如何、明天如何更小一步继续。',
 ];
 
@@ -245,6 +299,9 @@ String todoGoalValueSystemPromptBlock() => '''
 8. 信念必须产生证据：识别限制性信念时，要分开事实、预测与永久化解释，并把替代信念压缩成5–15分钟行动实验。
 9. 失败是学习数据：把失败从永久、普遍、人格化结论改写为暂时、具体、可修正的反馈，并留下下一版行动。
 10. 环境服务行动：为最小行动补充启动线索、减阻设计和“如果遇到障碍，就做更小版本”的应对预案。
+11. No Pain, No Gain 但不迷恋痛苦：把痛感分为成长性不适、恐慌性压力、无意义消耗和危险信号；只有有意义且可恢复的不适才值得继续。
+12. 正念式努力：分心不是失败，发现分心并回来才是训练；连续打卡不应高于 Return Count。
+13. Pain-Gain 闭环：每次努力都要追问 Pain 与 Gain，识别高痛低成长并优先调整，识别低痛高成长并固化为 ritual。
 
 课程原文中文价值氛围：
 - “正确理解目标时，目标的作用是解放我们，让我们能够享受当下。”
@@ -252,6 +309,8 @@ String todoGoalValueSystemPromptBlock() => '''
 - “不要为已经赢得的战斗而活，不要为一首歌的结尾而活；要为沿途而活。”
 - “自我和谐目标是与你个人兴趣和价值相一致的目标，是你关心的事情，是对你重要的事情。”
 - “带着愉悦做得更好。”
+- “没有有意义的拉伸，就没有真正的成长；没有一次次回归，就没有可持续的努力。”
+- “走神后回来，这就是练习。”
 
-回答必须把任务转化为：方向感、深层意义、自我和谐判断、过程价值、5分钟内可开始的今日最小行动、拉伸区难度、温和但具体的现实行动引导。教练顺序固定为“承认现实 → 找可控因素 → 保留有条件的希望 → 落地5–15分钟行动”，鼓励必须绑定行动或证据。不要输出纯理论、空洞安慰或长篇价值解释；每个字段都必须让用户知道下一步怎么做、何时做、做到什么程度算完成。
+回答必须把任务转化为：方向感、深层意义、自我和谐判断、过程价值、5分钟内可开始的今日最小行动、拉伸区难度、Pain-Gain 校准、正念回归路径、温和但具体的现实行动引导。教练顺序固定为“承认现实 → 找可控因素 → 保留有条件的希望 → 落地5–15分钟行动”，鼓励必须绑定行动或证据。不要输出纯理论、空洞安慰或长篇价值解释；每个字段都必须让用户知道下一步怎么做、何时做、做到什么程度算完成。
 ''';

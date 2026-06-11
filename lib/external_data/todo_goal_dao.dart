@@ -66,6 +66,7 @@ class TodoGoalDao {
         step_id TEXT PRIMARY KEY,
         goal_id TEXT NOT NULL,
         source_task_id TEXT,
+        source_node_id TEXT DEFAULT '',
         parent_step_id TEXT DEFAULT '',
         step_level INTEGER DEFAULT 1,
         sort_order INTEGER DEFAULT 0,
@@ -169,6 +170,7 @@ class TodoGoalDao {
         success_metrics TEXT,
         stop_conditions TEXT,
         user_choice_guidance TEXT,
+        reference_cases TEXT,
         is_selected INTEGER DEFAULT 0,
         status TEXT DEFAULT 'candidate',
         sort_order INTEGER DEFAULT 0,
@@ -274,6 +276,9 @@ class TodoGoalDao {
         entry_id TEXT PRIMARY KEY,
         goal_id TEXT NOT NULL,
         step_id TEXT,
+        node_id TEXT DEFAULT '',
+        ritual_id TEXT DEFAULT '',
+        source_object_type TEXT DEFAULT 'goal',
         effort_date TEXT NOT NULL,
         effort_minutes INTEGER DEFAULT 0,
         energy_level TEXT DEFAULT 'medium',
@@ -293,6 +298,15 @@ class TodoGoalDao {
         reflection_depth INTEGER DEFAULT 0,
         strategy_changed INTEGER DEFAULT 0,
         returned_after_break INTEGER DEFAULT 0,
+        pain_score INTEGER DEFAULT 0,
+        gain_score INTEGER DEFAULT 0,
+        pain_type TEXT DEFAULT '',
+        pain_reframe TEXT DEFAULT '',
+        return_kind TEXT DEFAULT '',
+        return_trigger TEXT DEFAULT '',
+        attention_return_count INTEGER DEFAULT 0,
+        mindful_minutes INTEGER DEFAULT 0,
+        recovery_minutes INTEGER DEFAULT 0,
         created_at_ms INTEGER NOT NULL
       )
     ''');
@@ -383,6 +397,24 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_reflections', 'follow_up_question', 'TEXT');
     await _addColumnIfMissing(db, 'goal_reflections', 'review_mode', "TEXT DEFAULT 'daily'");
 
+    // Footsteps effort OS: Pain-Gain, No Pain No Gain reframe, mindful
+    // return and focus metrics are persisted in the same effort ledger so
+    // goals, steps, rituals, relationships and weekly reviews can share them.
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'pain_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'gain_score', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'pain_type', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'pain_reframe', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'return_kind', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'return_trigger', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'attention_return_count', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'mindful_minutes', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'recovery_minutes', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_action_steps', 'source_node_id', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'node_id', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'ritual_id', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'source_object_type', "TEXT DEFAULT 'goal'");
+
+    await _addColumnIfMissing(db, 'goal_action_steps', 'source_node_id', "TEXT DEFAULT ''");
     await _addColumnIfMissing(db, 'goal_solution_plans', 'solution_id', "TEXT DEFAULT ''");
     await _addColumnIfMissing(db, 'goal_solution_plans', 'goal_id', "TEXT DEFAULT ''");
 
@@ -414,6 +446,7 @@ class TodoGoalDao {
     await _addColumnIfMissing(db, 'goal_solution_plans', 'success_metrics', 'TEXT');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'stop_conditions', 'TEXT');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'user_choice_guidance', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_solution_plans', 'reference_cases', 'TEXT');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'is_selected', 'INTEGER DEFAULT 0');
     await _addColumnIfMissing(db, 'goal_solution_plans', 'status', "TEXT DEFAULT 'candidate'");
     await _addColumnIfMissing(db, 'goal_solution_plans', 'sort_order', 'INTEGER DEFAULT 0');
@@ -639,7 +672,13 @@ class TodoGoalDao {
              COALESCE(g.deep_meaning, '') AS deep_meaning,
              COALESCE(g.process_value, '') AS process_value,
              COALESCE(g.source_list_id, '') AS source_list_id,
-             COALESCE(p.title, '') AS parent_step_title
+             COALESCE(p.title, '') AS parent_step_title,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS effort_count,
+             COALESCE((SELECT SUM(e.effort_minutes) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS total_effort_minutes,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE (e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)) AND (e.returned_after_break = 1 OR COALESCE(e.return_kind, '') != '' OR e.attention_return_count > 0)), 0) AS return_count,
+             COALESCE((SELECT AVG(NULLIF(e.pain_score, 0)) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS average_pain,
+             COALESCE((SELECT AVG(NULLIF(e.gain_score, 0)) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS average_gain,
+             COALESCE((SELECT MAX(e.created_at_ms) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS last_effort_at_ms
       FROM goal_action_steps s
       LEFT JOIN goal_profiles g ON g.goal_id = s.goal_id
       LEFT JOIN goal_action_steps p ON p.step_id = s.parent_step_id
@@ -779,6 +818,7 @@ class TodoGoalDao {
     String? plannedDate,
     String plannedTime = '',
     String parentStepId = '',
+    String sourceNodeId = '',
     int? stepLevel,
     int sortOrder = 0,
     String actionPlace = '',
@@ -804,6 +844,7 @@ class TodoGoalDao {
       'step_id': stepId,
       'goal_id': goalId,
       'source_task_id': sourceTaskId,
+      'source_node_id': sourceNodeId.trim(),
       'parent_step_id': normalizedParentId,
       'step_level': normalizedLevel.clamp(1, 9).toInt(),
       'sort_order': sortOrder,
@@ -844,7 +885,13 @@ class TodoGoalDao {
              COALESCE(g.deep_meaning, '') AS deep_meaning,
              COALESCE(g.process_value, '') AS process_value,
              COALESCE(g.source_list_id, '') AS source_list_id,
-             COALESCE(p.title, '') AS parent_step_title
+             COALESCE(p.title, '') AS parent_step_title,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS effort_count,
+             COALESCE((SELECT SUM(e.effort_minutes) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS total_effort_minutes,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE (e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)) AND (e.returned_after_break = 1 OR COALESCE(e.return_kind, '') != '' OR e.attention_return_count > 0)), 0) AS return_count,
+             COALESCE((SELECT AVG(NULLIF(e.pain_score, 0)) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS average_pain,
+             COALESCE((SELECT AVG(NULLIF(e.gain_score, 0)) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS average_gain,
+             COALESCE((SELECT MAX(e.created_at_ms) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS last_effort_at_ms
       FROM goal_action_steps s
       LEFT JOIN goal_profiles g ON g.goal_id = s.goal_id
       LEFT JOIN goal_action_steps p ON p.step_id = s.parent_step_id
@@ -859,7 +906,13 @@ class TodoGoalDao {
     final today = todayDate();
     final rows = await db.rawQuery('''
       SELECT s.*, g.goal_title, g.deep_meaning, g.process_value, g.source_list_id,
-             COALESCE(p.title, '') AS parent_step_title
+             COALESCE(p.title, '') AS parent_step_title,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS effort_count,
+             COALESCE((SELECT SUM(e.effort_minutes) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS total_effort_minutes,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE (e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)) AND (e.returned_after_break = 1 OR COALESCE(e.return_kind, '') != '' OR e.attention_return_count > 0)), 0) AS return_count,
+             COALESCE((SELECT AVG(NULLIF(e.pain_score, 0)) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS average_pain,
+             COALESCE((SELECT AVG(NULLIF(e.gain_score, 0)) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS average_gain,
+             COALESCE((SELECT MAX(e.created_at_ms) FROM goal_effort_entries e WHERE e.step_id = s.step_id OR (COALESCE(s.source_node_id, '') != '' AND e.node_id = s.source_node_id)), 0) AS last_effort_at_ms
       FROM goal_action_steps s
       LEFT JOIN goal_profiles g ON g.goal_id = s.goal_id
       LEFT JOIN goal_action_steps p ON p.step_id = s.parent_step_id
@@ -948,30 +1001,63 @@ class TodoGoalDao {
   Future<void> updateStepStatus(String stepId, String status) async {
     final db = await _db;
     final normalized = status.trim().isEmpty ? 'not_started' : status.trim();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query('goal_action_steps', columns: ['source_node_id'], where: 'step_id = ?', whereArgs: [stepId], limit: 1);
+    final sourceNodeId = rows.isEmpty ? '' : (rows.first['source_node_id'] ?? '').toString().trim();
     await db.update(
       'goal_action_steps',
       <String, Object?>{
         'status': normalized,
-        'completed_at_ms': normalized == 'completed' ? DateTime.now().millisecondsSinceEpoch : 0,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+        'completed_at_ms': normalized == 'completed' ? now : 0,
+        'updated_at_ms': now,
       },
       where: 'step_id = ?',
       whereArgs: [stepId],
     );
+    if (sourceNodeId.isNotEmpty) {
+      final nodeStatus = normalized == 'completed'
+          ? 'completed'
+          : (normalized == 'failed' || normalized == 'blocked' ? 'failed' : 'in_progress');
+      await db.update(
+        'goal_problem_nodes',
+        <String, Object?>{
+          'status': nodeStatus,
+          'completion_note': '由每日行动状态同步：$normalized',
+          'updated_at_ms': now,
+        },
+        where: 'node_id = ?',
+        whereArgs: [sourceNodeId],
+      );
+    }
   }
 
   Future<void> completeStep(String stepId, {bool completed = true}) async {
     final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query('goal_action_steps', columns: ['source_node_id'], where: 'step_id = ?', whereArgs: [stepId], limit: 1);
+    final sourceNodeId = rows.isEmpty ? '' : (rows.first['source_node_id'] ?? '').toString().trim();
     await db.update(
       'goal_action_steps',
       <String, Object?>{
         'status': completed ? 'completed' : 'not_started',
-        'completed_at_ms': completed ? DateTime.now().millisecondsSinceEpoch : 0,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+        'completed_at_ms': completed ? now : 0,
+        'updated_at_ms': now,
       },
       where: 'step_id = ?',
       whereArgs: [stepId],
     );
+    if (sourceNodeId.isNotEmpty) {
+      await db.update(
+        'goal_problem_nodes',
+        <String, Object?>{
+          'status': completed ? 'completed' : 'in_progress',
+          'completion_note': completed ? '已由今日行动完成自动同步' : '今日行动恢复为未完成',
+          'updated_at_ms': now,
+        },
+        where: 'node_id = ?',
+        whereArgs: [sourceNodeId],
+      );
+    }
   }
 
   Future<void> markStepWrittenBack({required String stepId, required String remoteTaskId}) async {
@@ -1356,6 +1442,7 @@ class TodoGoalDao {
         'success_metrics': plan.successMetrics,
         'stop_conditions': plan.stopConditions,
         'user_choice_guidance': plan.userChoiceGuidance,
+        'reference_cases': plan.referenceCases,
         'is_selected': 0,
         'status': 'candidate',
         'sort_order': plan.sortOrder == 0 ? i : plan.sortOrder,
@@ -1418,6 +1505,7 @@ class TodoGoalDao {
           'success_metrics': plan.successMetrics,
           'stop_conditions': plan.stopConditions,
           'user_choice_guidance': plan.userChoiceGuidance,
+          'reference_cases': plan.referenceCases,
           'raw_json': jsonEncode(plan.toJson()),
           'updated_at_ms': now,
         },
@@ -1533,12 +1621,18 @@ class TodoGoalDao {
 
   Future<List<TodoGoalProblemNode>> listProblemNodes({required String solutionId}) async {
     final db = await _db;
-    final rows = await db.query(
-      'goal_problem_nodes',
-      where: 'solution_id = ?',
-      whereArgs: [solutionId],
-      orderBy: "COALESCE(parent_node_id, '') ASC, sequence_order ASC, created_at_ms ASC",
-    );
+    final rows = await db.rawQuery('''
+      SELECT n.*,
+             COALESCE((SELECT COUNT(*) FROM goal_action_steps s WHERE s.source_node_id = n.node_id), 0) AS linked_step_count,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS effort_count,
+             COALESCE((SELECT SUM(e.effort_minutes) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS total_effort_minutes,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE (e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)) AND (e.returned_after_break = 1 OR COALESCE(e.return_kind, '') != '' OR e.attention_return_count > 0)), 0) AS return_count,
+             COALESCE((SELECT AVG(NULLIF(e.pain_score, 0)) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS average_pain,
+             COALESCE((SELECT AVG(NULLIF(e.gain_score, 0)) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS average_gain
+      FROM goal_problem_nodes n
+      WHERE n.solution_id = ?
+      ORDER BY COALESCE(n.parent_node_id, '') ASC, n.sequence_order ASC, n.created_at_ms ASC
+    ''', [solutionId]);
     return rows.map(TodoGoalProblemNode.fromMap).toList();
   }
 
@@ -1551,17 +1645,30 @@ class TodoGoalDao {
   Future<void> updateProblemNodeStatus(String nodeId, String status, {String completionNote = '', String aiReviewJson = ''}) async {
     final db = await _db;
     final normalized = status.trim().isEmpty ? 'not_started' : status.trim();
+    final now = DateTime.now().millisecondsSinceEpoch;
     await db.update(
       'goal_problem_nodes',
       <String, Object?>{
         'status': normalized,
         'completion_note': completionNote,
         if (aiReviewJson.trim().isNotEmpty) 'ai_review_json': aiReviewJson,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+        'updated_at_ms': now,
       },
       where: 'node_id = ?',
       whereArgs: [nodeId],
     );
+    if (normalized == 'completed' || normalized == 'failed') {
+      await db.update(
+        'goal_action_steps',
+        <String, Object?>{
+          'status': normalized == 'completed' ? 'completed' : 'blocked',
+          'completed_at_ms': normalized == 'completed' ? now : 0,
+          'updated_at_ms': now,
+        },
+        where: 'source_node_id = ? AND status != ?',
+        whereArgs: [nodeId, 'completed'],
+      );
+    }
   }
 
   Future<String> addAlternativeProblemNode({
@@ -1621,6 +1728,7 @@ class TodoGoalDao {
     return createActionStep(
       goalId: node.goalId,
       sourceTaskId: sourceTaskId,
+      sourceNodeId: node.nodeId,
       title: node.displayAction,
       minimumStandard: node.acceptanceCriteria.trim().isEmpty ? '完成明确产出并可现场核对。' : node.acceptanceCriteria,
       simplifiedStandard: node.actionOutput.trim().isEmpty ? node.acceptanceCriteria : '至少留下：${node.actionOutput}',
@@ -1632,6 +1740,8 @@ class TodoGoalDao {
       actionPlace: node.actionWhere,
       startTrigger: node.actionWhen,
       completionQuestion: '是否已经得到“${node.actionOutput}”，并达到“${node.acceptanceCriteria}”？',
+      actionType: 'result',
+      experienceIntention: '这一步来自问题树节点。行动后请记录 Pain-Gain、分心后回归和可见证据，反向验证这个节点是否真的推进了父问题。',
       sortOrder: node.sequenceOrder,
     );
   }
@@ -1710,6 +1820,9 @@ class TodoGoalDao {
   Future<String> addEffortEntry({
     required String goalId,
     String stepId = '',
+    String nodeId = '',
+    String ritualId = '',
+    String sourceObjectType = 'goal',
     required int effortMinutes,
     required String energyLevel,
     required String emotionState,
@@ -1727,17 +1840,31 @@ class TodoGoalDao {
     required int joyScore,
     required int reflectionDepth,
     required bool strategyChanged,
+    int painScore = 0,
+    int gainScore = 0,
+    String painType = '',
+    String painReframe = '',
+    String returnKind = '',
+    String returnTrigger = '',
+    int attentionReturnCount = 0,
+    int mindfulMinutes = 0,
+    int recoveryMinutes = 0,
   }) async {
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
     final recent = await db.query('goal_effort_entries', columns: ['created_at_ms'], where: 'goal_id = ?', whereArgs: [goalId], orderBy: 'created_at_ms DESC', limit: 1);
     final lastAt = recent.isEmpty ? 0 : _toLocalInt(recent.first['created_at_ms']);
-    final returned = lastAt > 0 && now - lastAt >= const Duration(hours: 24).inMilliseconds;
+    final normalizedReturnKind = returnKind.trim();
+    final returned = (lastAt > 0 && now - lastAt >= const Duration(hours: 24).inMilliseconds) ||
+        normalizedReturnKind.isNotEmpty || attentionReturnCount > 0 || effortType == 'mindful_return';
     final id = newId('goal_effort');
     await db.insert('goal_effort_entries', <String, Object?>{
       'entry_id': id,
       'goal_id': goalId,
       'step_id': stepId,
+      'node_id': nodeId.trim(),
+      'ritual_id': ritualId.trim(),
+      'source_object_type': sourceObjectType.trim().isEmpty ? 'goal' : sourceObjectType.trim(),
       'effort_date': todayDate(),
       'effort_minutes': effortMinutes.clamp(0, 1440),
       'energy_level': energyLevel,
@@ -1757,23 +1884,152 @@ class TodoGoalDao {
       'reflection_depth': reflectionDepth.clamp(0, 5),
       'strategy_changed': strategyChanged ? 1 : 0,
       'returned_after_break': returned ? 1 : 0,
+      'pain_score': painScore.clamp(0, 5),
+      'gain_score': gainScore.clamp(0, 5),
+      'pain_type': painType.trim(),
+      'pain_reframe': painReframe.trim(),
+      'return_kind': normalizedReturnKind,
+      'return_trigger': returnTrigger.trim(),
+      'attention_return_count': attentionReturnCount.clamp(0, 99),
+      'mindful_minutes': mindfulMinutes.clamp(0, 1440),
+      'recovery_minutes': recoveryMinutes.clamp(0, 1440),
       'created_at_ms': now,
     });
     return id;
   }
 
-  Future<List<TodoGoalEffortEntry>> listEffortEntries({int days = 7, int limit = 100}) async {
+  Future<List<TodoGoalEffortEntry>> listEffortEntries({int days = 7, int limit = 100, String goalId = '', String stepId = '', String nodeId = ''}) async {
     final db = await _db;
     final since = DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
+    final whereParts = <String>['e.created_at_ms >= ?'];
+    final args = <Object?>[since];
+    if (goalId.trim().isNotEmpty) { whereParts.add('e.goal_id = ?'); args.add(goalId.trim()); }
+    if (stepId.trim().isNotEmpty) { whereParts.add('e.step_id = ?'); args.add(stepId.trim()); }
+    if (nodeId.trim().isNotEmpty) { whereParts.add('e.node_id = ?'); args.add(nodeId.trim()); }
+    args.add(limit);
     final rows = await db.rawQuery('''
-      SELECT e.*, COALESCE(g.goal_title, '') AS goal_title
+      SELECT e.*, COALESCE(g.goal_title, '') AS goal_title,
+             COALESCE(s.title, '') AS step_title,
+             COALESCE(n.title, '') AS node_title
       FROM goal_effort_entries e
       LEFT JOIN goal_profiles g ON g.goal_id = e.goal_id
-      WHERE e.created_at_ms >= ?
+      LEFT JOIN goal_action_steps s ON s.step_id = e.step_id
+      LEFT JOIN goal_problem_nodes n ON n.node_id = e.node_id
+      WHERE ${whereParts.join(' AND ')}
       ORDER BY e.created_at_ms DESC
       LIMIT ?
-    ''', [since, limit]);
+    ''', args);
     return rows.map(TodoGoalEffortEntry.fromMap).toList();
+  }
+
+
+  Future<String> recordActionEffort({
+    required TodoGoalActionStep step,
+    int effortMinutes = 5,
+    int painScore = 0,
+    int gainScore = 0,
+    String painType = '',
+    String painReframe = '',
+    String returnKind = '',
+    String returnTrigger = '',
+    int attentionReturnCount = 0,
+    int mindfulMinutes = 0,
+    int recoveryMinutes = 0,
+    String obstacle = '',
+    String strategyUsed = '',
+    String smallProgress = '',
+    String timeInLearning = '',
+    bool strategyChanged = false,
+  }) async {
+    final id = await addEffortEntry(
+      goalId: step.goalId,
+      stepId: step.stepId,
+      nodeId: step.sourceNodeId,
+      sourceObjectType: step.hasSourceProblemNode ? 'problem_node_daily_action' : 'daily_action',
+      effortMinutes: effortMinutes,
+      energyLevel: 'medium',
+      emotionState: 'stable',
+      availableMinutes: effortMinutes <= 0 ? 5 : effortMinutes,
+      zoneType: step.zoneType,
+      effortType: step.actionTypeForEffort,
+      investmentText: step.title,
+      obstacle: obstacle,
+      strategyUsed: strategyUsed,
+      smallProgress: smallProgress.trim().isEmpty ? step.completionQuestion : smallProgress,
+      nextMinimumStep: step.minimumStandard,
+      timeInLearning: timeInLearning,
+      identityEvidence: step.processValue,
+      gratitudeText: '',
+      joyScore: 0,
+      reflectionDepth: timeInLearning.trim().isEmpty ? 0 : 2,
+      strategyChanged: strategyChanged,
+      painScore: painScore,
+      gainScore: gainScore,
+      painType: painType,
+      painReframe: painReframe,
+      returnKind: returnKind,
+      returnTrigger: returnTrigger,
+      attentionReturnCount: attentionReturnCount,
+      mindfulMinutes: mindfulMinutes,
+      recoveryMinutes: recoveryMinutes,
+    );
+    if (effortMinutes > 0 && !step.isCompleted) {
+      await updateStepStatus(step.stepId, 'in_progress');
+      if (step.sourceNodeId.trim().isNotEmpty) {
+        await updateProblemNodeStatus(step.sourceNodeId, 'in_progress', completionNote: '今日行动已有足下努力记录');
+      }
+    }
+    return id;
+  }
+
+  Future<String> recordProblemNodeEffort({
+    required TodoGoalProblemNode node,
+    int effortMinutes = 5,
+    int painScore = 0,
+    int gainScore = 0,
+    String painType = '',
+    String painReframe = '',
+    String returnKind = '',
+    String returnTrigger = '',
+    int attentionReturnCount = 0,
+    String obstacle = '',
+    String strategyUsed = '',
+    String smallProgress = '',
+    String timeInLearning = '',
+    bool strategyChanged = false,
+  }) async {
+    final id = await addEffortEntry(
+      goalId: node.goalId,
+      stepId: '',
+      nodeId: node.nodeId,
+      sourceObjectType: 'problem_node',
+      effortMinutes: effortMinutes,
+      energyLevel: 'medium',
+      emotionState: 'stable',
+      availableMinutes: effortMinutes <= 0 ? 5 : effortMinutes,
+      zoneType: node.zoneType,
+      effortType: 'problem_node_action',
+      investmentText: node.displayAction,
+      obstacle: obstacle,
+      strategyUsed: strategyUsed,
+      smallProgress: smallProgress.trim().isEmpty ? node.actionOutput : smallProgress,
+      nextMinimumStep: node.acceptanceCriteria,
+      timeInLearning: timeInLearning,
+      identityEvidence: node.logicQuestion,
+      gratitudeText: '',
+      joyScore: 0,
+      reflectionDepth: timeInLearning.trim().isEmpty ? 0 : 2,
+      strategyChanged: strategyChanged,
+      painScore: painScore,
+      gainScore: gainScore,
+      painType: painType,
+      painReframe: painReframe,
+      returnKind: returnKind,
+      returnTrigger: returnTrigger,
+      attentionReturnCount: attentionReturnCount,
+    );
+    await updateProblemNodeStatus(node.nodeId, 'in_progress', completionNote: '已直接在问题树节点上记录足下努力');
+    return id;
   }
 
   Future<TodoGoalEffortSummary> getEffortSummary({int days = 7}) async {
@@ -1792,16 +2048,34 @@ class TodoGoalDao {
       }
     }
     final joyTotal = entries.fold<int>(0, (sum, item) => sum + item.joyScore);
+    final painMarked = entries.where((item) => item.painScore > 0 || item.gainScore > 0).toList(growable: false);
+    final painTotal = painMarked.fold<int>(0, (sum, item) => sum + item.painScore);
+    final gainTotal = painMarked.fold<int>(0, (sum, item) => sum + item.gainScore);
+    final highPainLowGain = entries.where((item) => item.painScore >= 4 && item.gainScore < 4).length;
+    final lowPainHighGain = entries.where((item) => item.painScore < 4 && item.gainScore >= 4).length;
+    final highPainHighGain = entries.where((item) => item.painScore >= 4 && item.gainScore >= 4).length;
+    final lowPainLowGain = painMarked.where((item) => item.painScore < 4 && item.gainScore < 4).length;
     return TodoGoalEffortSummary(
       meaningfulEfforts: entries.length,
       effortMinutes: entries.fold<int>(0, (sum, item) => sum + item.effortMinutes),
-      returnCount: entries.where((item) => item.returnedAfterBreak).length,
+      returnCount: entries.where((item) => item.isReturnEvent).length,
       stretchCount: entries.where((item) => item.zoneType == 'stretch').length,
       reflectionCount: entries.where((item) => item.timeInLearning.trim().isNotEmpty).length,
       strategyChangeCount: entries.where((item) => item.strategyChanged).length,
       relationshipInvestmentCount: entries.where((item) => item.effortType == 'relationship').length,
       averageJoy: entries.isEmpty ? 0 : joyTotal / entries.length,
       commonObstacle: commonObstacle,
+      averagePain: painMarked.isEmpty ? 0 : painTotal / painMarked.length,
+      averageGain: painMarked.isEmpty ? 0 : gainTotal / painMarked.length,
+      attentionReturnCount: entries.fold<int>(0, (sum, item) => sum + item.attentionReturnCount),
+      mindfulPracticeCount: entries.where((item) => item.isMindfulPractice).length,
+      mindfulMinutes: entries.fold<int>(0, (sum, item) => sum + item.mindfulMinutes),
+      recoveryMinutes: entries.fold<int>(0, (sum, item) => sum + item.recoveryMinutes),
+      wiseAdjustmentCount: entries.where((item) => item.isWiseAdjustment).length,
+      highPainLowGainCount: highPainLowGain,
+      lowPainHighGainCount: lowPainHighGain,
+      highPainHighGainCount: highPainHighGain,
+      lowPainLowGainCount: lowPainLowGain,
     );
   }
 }
