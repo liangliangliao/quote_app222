@@ -1080,6 +1080,7 @@ class _PhaseRatioSummary extends StatelessWidget {
 
 class _HeroPreview extends StatelessWidget {
   const _HeroPreview({
+    super.key,
     required this.seconds,
     required this.style,
     required this.intimacy,
