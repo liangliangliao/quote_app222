@@ -11,6 +11,7 @@ import 'todo_goal_dao.dart';
 import 'todo_goal_models.dart';
 import 'todo_goal_prompt_config.dart';
 import 'todo_goal_value_system.dart';
+import 'todo_goal_will_page.dart';
 import 'todo_models.dart';
 import 'todo_meaning_page.dart';
 import 'todo_raisebase_page.dart';
@@ -417,8 +418,13 @@ class _TodoGoalHomePageState extends State<TodoGoalHomePage> with SingleTickerPr
       }
     }
     await _goalDao.updateStepStatus(step.stepId, 'in_progress');
+    final goal = await _goalDao.getGoal(step.goalId);
     await _load();
     _show(intention.isEmpty ? '已进入 5 分钟行动：先开始，不要求一次完成。' : '已进入 5 分钟行动。今天留意：$intention');
+    if (goal != null && mounted) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalWillCenterPage(goal: goal, step: step)));
+      if (mounted) await _load();
+    }
   }
 
   Future<void> _makeStepSmaller(TodoGoalActionStep step) async {
@@ -764,6 +770,15 @@ ${quote.translation}
         children: [
           const _TodayJourneyIntroCard(),
           const SizedBox(height: 12),
+          _TodayWillCenterCard(
+            goal: _primaryActiveGoal,
+            step: _firstOpenTodayStep,
+            onOpen: (goal, step) async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalWillCenterPage(goal: goal, step: step)));
+              if (mounted) await _load();
+            },
+          ),
+          const SizedBox(height: 12),
           _ContextualQuoteCard(momentTitle: '行动前提示', momentKey: 'today', quote: todoGoalQuoteForMoment('today'), actionText: todoGoalQuoteActionForMoment('today')),
           const SizedBox(height: 12),
           const _TodayValueChecklistCard(),
@@ -925,6 +940,61 @@ ${quote.translation}
     );
   }
 
+}
+
+class _TodayWillCenterCard extends StatelessWidget {
+  const _TodayWillCenterCard({required this.goal, required this.step, required this.onOpen});
+
+  final TodoGoalProfile? goal;
+  final TodoGoalActionStep? step;
+  final Future<void> Function(TodoGoalProfile goal, TodoGoalActionStep? step) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentGoal = goal;
+    if (currentGoal == null) {
+      return const _EmptyCard(text: '今日意志中心等待一个活跃目标。先把外部 To Do 转化为目标与价值，再进入行动观念训练。');
+    }
+    final action = step?.title.trim().isNotEmpty == true ? step!.title : '选择一个今日最小行动';
+    final minimum = step?.minimumStandard.trim().isNotEmpty == true ? step!.minimumStandard : '先执行一个可观察的身体动作';
+    final obstacle = currentGoal.obstacleSummary.trim().isEmpty ? '等待识别当前最强阻碍观念' : currentGoal.obstacleSummary.split(RegExp(r'[\n，,；;、]+')).first;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: const Color(0xFF25342F), borderRadius: BorderRadius.circular(22)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('今日意识主导权', style: TextStyle(color: Color(0xFFD9B56D), fontWeight: FontWeight.w900)),
+        const SizedBox(height: 10),
+        Text(action, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, height: 1.3)),
+        const SizedBox(height: 10),
+        _WillCenterLine(label: '核心价值', value: currentGoal.coreValues.trim().isEmpty ? currentGoal.valueGoal : currentGoal.coreValues),
+        _WillCenterLine(label: '最小行动', value: minimum),
+        _WillCenterLine(label: '最大阻碍', value: obstacle),
+        const _WillCenterLine(label: '训练目标', value: '让行动观念保持 5 分钟；分心后每拉回一次，都计入意志训练。'),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFD9B56D), foregroundColor: const Color(0xFF25342F)),
+          onPressed: () => onOpen(currentGoal, step),
+          icon: const Icon(Icons.center_focus_strong),
+          label: const Text('进入意志中心'),
+        ),
+      ]),
+    );
+  }
+}
+
+class _WillCenterLine extends StatelessWidget {
+  const _WillCenterLine({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: RichText(text: TextSpan(style: const TextStyle(color: Color(0xFFD8E4DF), height: 1.4), children: [
+          TextSpan(text: '$label：', style: const TextStyle(color: Color(0xFFD9B56D), fontWeight: FontWeight.w800)),
+          TextSpan(text: value.trim().isEmpty ? '待澄清' : value),
+        ])),
+      );
 }
 
 class TodoGoalDetailPage extends StatefulWidget {
@@ -1476,6 +1546,19 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
     }
   }
 
+  Future<void> _openWillCenter([TodoGoalActionStep? step]) async {
+    final goal = _goal;
+    if (goal == null) return;
+    TodoGoalActionStep? selectedStep = step;
+    if (selectedStep == null) {
+      for (final item in _steps) {
+        if (!item.isCompleted) { selectedStep = item; break; }
+      }
+    }
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalWillCenterPage(goal: goal, step: selectedStep)));
+    if (mounted) await _load();
+  }
+
   void _show(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message), backgroundColor: isError ? Colors.red.shade700 : null));
@@ -1555,6 +1638,12 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                     ],
                     _GoalPracticePanel(goal: goal, stepCount: _steps.length, openStepCount: _steps.where((s) => !s.isCompleted).length),
                     const SizedBox(height: 12),
+                    _TodoGoalWillEngineCard(
+                      goal: goal,
+                      step: _steps.where((s) => !s.isCompleted).isEmpty ? null : _steps.firstWhere((s) => !s.isCompleted),
+                      onOpen: _openWillCenter,
+                    ),
+                    const SizedBox(height: 12),
                     _SolutionPlanBoard(
                       goalTitle: goal.goalTitle,
                       plans: _solutionPlans,
@@ -1586,6 +1675,45 @@ class _TodoGoalDetailPageState extends State<TodoGoalDetailPage> {
                       ),
                   ],
                 ),
+    );
+  }
+}
+
+class _TodoGoalWillEngineCard extends StatelessWidget {
+  const _TodoGoalWillEngineCard({required this.goal, required this.step, required this.onOpen});
+
+  final TodoGoalProfile goal;
+  final TodoGoalActionStep? step;
+  final Future<void> Function([TodoGoalActionStep? step]) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final action = step?.title.trim().isNotEmpty == true ? step!.title : '从目标中选择一个 5 分钟最小行动';
+    final minimum = step?.minimumStandard.trim().isNotEmpty == true ? step!.minimumStandard : '先执行一个可观察的身体动作';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF243B35), Color(0xFF36584F)]),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Icon(Icons.psychology_alt_outlined, color: Color(0xFFE9C77B)), SizedBox(width: 8), Text('足下意志 · 目标行动引擎', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900))]),
+        const SizedBox(height: 10),
+        Text('核心价值：${goal.coreValues.trim().isEmpty ? goal.valueGoal : goal.coreValues}', style: const TextStyle(color: Color(0xFFE9C77B), fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text('行动观念：$action', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text('最低版本：$minimum', style: const TextStyle(color: Color(0xFFD8E4DF), height: 1.4)),
+        const SizedBox(height: 12),
+        const Text('看见观念冲突 → 保持注意力 → 预演第一身体动作 → 五分钟启动 → 意志复盘 → 习惯化', style: TextStyle(color: Color(0xFFBFD0CA), height: 1.45)),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE9C77B), foregroundColor: const Color(0xFF243B35)),
+          onPressed: () => onOpen(step),
+          icon: const Icon(Icons.play_arrow_rounded),
+          label: const Text('进入今日意志中心'),
+        ),
+      ]),
     );
   }
 }
