@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quote_app/external_data/james_will_training_models.dart';
 import 'package:quote_app/external_data/todo_goal_models.dart';
 import 'package:quote_app/external_data/todo_goal_will_bridge.dart';
 
@@ -63,5 +64,15 @@ void main() {
     expect(idea.obstacleIdeas, contains('想刷手机'));
     expect(idea.competitionItems.map((item) => item.type), containsAll(<String>['行动观念', '阻碍观念', '价值观念']));
     expect(idea.attentionAnchor, contains('不重新审判整个目标'));
+  });
+
+  test('AI refresh can preserve the stable Todo association identity', () {
+    final original = TodoGoalWillBridge().project(goal: goal, step: step);
+    final generated = JamesWillActionIdea.local(goal: 'AI 改写后的目标');
+    final refreshed = generated.preserveIdentityOf(original);
+
+    expect(refreshed.id, original.id);
+    expect(refreshed.createdAtMs, original.createdAtMs);
+    expect(refreshed.actionIdea, generated.actionIdea);
   });
 }

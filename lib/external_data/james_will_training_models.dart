@@ -210,6 +210,28 @@ class JamesWillActionIdea {
     );
   }
 
+  JamesWillActionIdea preserveIdentityOf(JamesWillActionIdea source) => JamesWillActionIdea(
+        id: source.id,
+        originalGoal: originalGoal,
+        goalNote: goalNote,
+        coreValue: coreValue,
+        actionIdea: actionIdea,
+        firstBodyAction: firstBodyAction,
+        minimumAction: minimumAction,
+        fiveMinuteVersion: fiveMinuteVersion,
+        attentionAnchor: attentionAnchor,
+        obstacleIdeas: obstacleIdeas,
+        replacementIdeas: replacementIdeas,
+        competitionItems: competitionItems,
+        coachMessage: coachMessage,
+        aiProvider: aiProvider,
+        aiModelLabel: aiModelLabel,
+        aiUsedFallback: aiUsedFallback,
+        status: source.status,
+        createdAtMs: source.createdAtMs,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+
   factory JamesWillActionIdea.fromMap(Map<String, Object?> map) {
     final competition = <JamesWillCompetitionItem>[];
     try {
