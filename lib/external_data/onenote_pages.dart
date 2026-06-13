@@ -11,6 +11,10 @@ import 'todo_dao.dart';
 import 'todo_goal_dao.dart';
 import 'todo_goal_prompt_config.dart';
 import 'todo_pages.dart';
+import 'james_will_training_dao.dart';
+import 'james_will_training_page.dart';
+import 'james_will_training_practice_dao.dart';
+import 'james_will_training_stage3_dao.dart';
 
 class ExternalDataSyncHomePage extends StatefulWidget {
   const ExternalDataSyncHomePage({super.key});
@@ -36,6 +40,9 @@ class _ExternalDataSyncHomePageState extends State<ExternalDataSyncHomePage> {
     await _dao.ensureTables();
     await TodoDao().ensureTables();
     await TodoGoalDao().ensureTables();
+    await JamesWillTrainingDao().ensureTables();
+    await JamesWillTrainingPracticeDao().ensureTables();
+    await JamesWillTrainingStage3Dao().ensureTables();
     final auth = await _auth.currentAuth();
     if (!mounted) return;
     setState(() => _account = (auth?['display_name'] ?? '').toString());
@@ -99,7 +106,7 @@ class _ExternalDataSyncHomePageState extends State<ExternalDataSyncHomePage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text('此页只保留 Microsoft 登录/退出与 Note、To Do 两个入口。重定向 URI、Base64 SHA1、API 日志等配置已移入右上角“统一配置”。', style: TextStyle(color: Color(0xFF6B7280))),
+                  const Text('此页包含 Microsoft 登录/退出与 Note、足下意志、To Do 三个入口。重定向 URI、Base64 SHA1、API 日志等配置已移入右上角“统一配置”。', style: TextStyle(color: Color(0xFF6B7280))),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -128,6 +135,13 @@ class _ExternalDataSyncHomePageState extends State<ExternalDataSyncHomePage> {
             title: 'Microsoft OneNote / Note',
             subtitle: '按笔记本名称或分区名称同步；按 笔记本 → 分区 → 页面 → 附件 原始结构分页展示。',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OneNoteSyncPage())),
+          ),
+          const SizedBox(height: 10),
+          _EntryCard(
+            icon: Icons.psychology_alt_outlined,
+            title: '足下意志 · 行动观念训练',
+            subtitle: '已集成到外部数据同步首页 · 完整落地：目标 → 行动观念 → 观念竞争 → 决定封存 → 五分钟启动 → 意志复盘 → 习惯建筑 → 每周报告 → 价值地图 → 7天实验。',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JamesWillTrainingHomePage())),
           ),
           const SizedBox(height: 10),
           _EntryCard(
