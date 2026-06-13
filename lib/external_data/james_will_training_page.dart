@@ -232,10 +232,11 @@ class _JamesWillActionIdeaDetailPageState extends State<JamesWillActionIdeaDetai
     if (idea == null || _busy) return;
     setState(() => _busy = true);
     try {
-      final updated = await _ai.generateActionIdea(goal: idea.originalGoal, note: idea.goalNote);
+      final generated = await _ai.generateActionIdea(goal: idea.originalGoal, note: idea.goalNote);
+      final updated = generated.preserveIdentityOf(idea);
       await _dao.upsertActionIdea(updated);
       await _load();
-      _show(updated.aiUsedFallback ? '已刷新为本地行动观念卡。' : 'AI 已刷新行动观念卡。');
+      _show(updated.aiUsedFallback ? '已刷新为本地行动观念卡，并保留原目标关联。' : 'AI 已刷新行动观念卡，并保留原目标关联。');
     } catch (e) {
       _show('刷新失败：$e', error: true);
     } finally {
@@ -645,6 +646,20 @@ class _JamesWillFiveMinuteStarterPageState extends State<JamesWillFiveMinuteStar
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _saving
+                ? null
+                : () {
+                    setState(() {
+                      _recoveries += 1;
+                      _remaining = _remaining.clamp(0, 30).toInt();
+                      _coach = '“想放弃”的观念可以继续存在。现在不和它争论，只让“再保持 30 秒”暂时取得主导，并回到第一身体动作。';
+                    });
+                  },
+            icon: const Icon(Icons.anchor_outlined),
+            label: const Text('我想放弃：努力压舱 30 秒'),
           ),
           const SizedBox(height: 10),
           Row(
