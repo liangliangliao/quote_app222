@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../platform/intimacy_wallpaper_bridge.dart';
+import '../services/unified_ai_service.dart';
 
 class TouchMystifyWallpaperPage extends StatefulWidget {
   const TouchMystifyWallpaperPage({super.key});
@@ -22,6 +23,13 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   Duration _elapsed = Duration.zero;
 
   int _style = 0;
+  String _wallpaperMode = 'mystify';
+  String _calligraphyStyle = 'kaishu';
+  double _calligraphySpeed = 0.55;
+  bool _generatingCalligraphy = false;
+  final TextEditingController _calligraphyController = TextEditingController(
+    text: '行到水穷处，坐看云起时。',
+  );
   double _intimacy = 0.72;
   double _randomness = 0.66;
   double _ribbonWidth = 0.62;
@@ -51,6 +59,7 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   double _afterglowMinSec = 20.0;
   double _afterglowMaxSec = 90.0;
   int _previewSeed = 7;
+  double _calligraphyPreviewStartedAt = 0;
   bool _waitingForSystemApply = false;
   Timer? _configSyncDebounce;
 
@@ -63,12 +72,37 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     _ticker = createTicker((elapsed) {
       setState(() => _elapsed = elapsed);
     })..start();
+    _loadSavedWallpaperChoice();
+  }
+
+  Future<void> _loadSavedWallpaperChoice() async {
+    final config = await IntimacyWallpaperBridge.getConfig();
+    if (!mounted || config.isEmpty) return;
+    final savedMode = config['wallpaperMode'] as String?;
+    final savedText = config['calligraphyText'] as String?;
+    final savedStyle = config['calligraphyStyle'] as String?;
+    final savedSpeed = (config['calligraphySpeed'] as num?)?.toDouble();
+    setState(() {
+      if (savedMode == 'mystify' || savedMode == 'calligraphy') {
+        _wallpaperMode = savedMode!;
+      }
+      if (savedText != null && savedText.trim().isNotEmpty) {
+        _calligraphyController.text = savedText;
+      }
+      if (savedStyle == 'kaishu' || savedStyle == 'xingshu' || savedStyle == 'caoshu') {
+        _calligraphyStyle = savedStyle!;
+      }
+      if (savedSpeed != null) {
+        _calligraphySpeed = savedSpeed.clamp(0.15, 1.0).toDouble();
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _configSyncDebounce?.cancel();
+    _calligraphyController.dispose();
     _ticker.dispose();
     super.dispose();
   }
@@ -137,6 +171,12 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   Future<bool> _saveCurrentConfig({required bool resetSeed, bool showSnack = false}) async {
     final ok = await IntimacyWallpaperBridge.saveConfig(
       style: _style,
+      wallpaperMode: _wallpaperMode,
+      calligraphyText: _calligraphyController.text.trim().isEmpty
+          ? '行到水穷处，坐看云起时。'
+          : _calligraphyController.text.trim(),
+      calligraphyStyle: _calligraphyStyle,
+      calligraphySpeed: _calligraphySpeed,
       intimacy: _intimacy,
       randomness: _randomness,
       ribbonWidth: _ribbonWidth,
@@ -219,10 +259,46 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     await _saveCurrentConfig(resetSeed: true, showSnack: true);
   }
 
-  void _randomizePreview() {
+  Future<void> _generateClassicText() async {
+    if (_generatingCalligraphy) return;
+    setState(() => _generatingCalligraphy = true);
+    try {
+      final result = await UnifiedAiService().generateText(
+        prompt: '请随机选择一句适合动态壁纸书写的中国经典名言、名句或诗词。要求：正文不超过28个汉字；有出处时在下一行用“——作者《作品》”标注；不要解释，不要使用引号或Markdown。',
+        purpose: 'touch_wallpaper.calligraphy_classic',
+        systemPrompt: '你是中国古典文学与名言选句助手，只返回准确、凝练、适合书法展示的经典原文及简短出处。不要杜撰。',
+        maxTokens: 120,
+        temperature: 0.9,
+      );
+      if (!mounted) return;
+      final cleaned = result
+          .replaceAll(RegExp(r'^```(?:text)?\s*|\s*```$'), '')
+          .replaceAll(RegExp(r'^[“"]|[”"]$'), '')
+          .trim();
+      if (cleaned.isEmpty) {
+        throw Exception('未获取到内容，请先在全局 AI 设置中配置可用模型。');
+      }
+      setState(() {
+        _calligraphyController.text = cleaned.length > 80 ? cleaned.substring(0, 80) : cleaned;
+        _calligraphyController.selection = TextSelection.collapsed(offset: _calligraphyController.text.length);
+      });
+      _scheduleConfigSync();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 获取失败：$error')));
+    } finally {
+      if (mounted) setState(() => _generatingCalligraphy = false);
+    }
+  }
+
+  void _refreshPreview() {
     setState(() {
-      _previewSeed = math.Random().nextInt(999999);
-      _randomness = (0.42 + math.Random().nextDouble() * 0.48).clamp(0.0, 1.0).toDouble();
+      if (_wallpaperMode == 'calligraphy') {
+        _calligraphyPreviewStartedAt = _elapsed.inMilliseconds / 1000.0;
+      } else {
+        _previewSeed = math.Random().nextInt(999999);
+        _randomness = (0.42 + math.Random().nextDouble() * 0.48).clamp(0.0, 1.0).toDouble();
+      }
     });
     _saveCurrentConfig(resetSeed: true);
   }
@@ -233,36 +309,126 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     return Scaffold(
       backgroundColor: const Color(0xFF050714),
       appBar: AppBar(
-        title: const Text('触摸 · Mystify 亲密艺术壁纸'),
+        title: const Text('触摸 · 动态艺术壁纸'),
         backgroundColor: const Color(0xFF050714),
         foregroundColor: Colors.white,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          _HeroPreview(
-            seconds: seconds,
-            style: _style,
-            intimacy: _intimacy,
-            randomness: _randomness,
-            ribbonWidth: _ribbonWidth,
-            trail: _trail,
-            fullScreenCoverage: _fullScreenCoverage,
-            bubbles: _bubbles,
-            ratioSeparation: _ratioSeparation,
-            ratioAttraction: _ratioAttraction,
-            ratioSync: _ratioSync,
-            ratioCritical: _ratioCritical,
-            ratioRelease: _ratioRelease,
-            ratioAfterglow: _ratioAfterglow,
-            criticalMinSec: _criticalMinSec,
-            criticalMaxSec: _criticalMaxSec,
-            releaseMinSec: _releaseMinSec,
-            releaseMaxSec: _releaseMaxSec,
-            afterglowMinSec: _afterglowMinSec,
-            afterglowMaxSec: _afterglowMaxSec,
-            seed: _previewSeed,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 420),
+            child: _wallpaperMode == 'calligraphy'
+                ? _CalligraphyPreview(
+                    key: const ValueKey('calligraphy'),
+                    seconds: math.max(0.0, seconds - _calligraphyPreviewStartedAt).toDouble(),
+                    text: _calligraphyController.text,
+                    style: _calligraphyStyle,
+                    speed: _calligraphySpeed,
+                  )
+                : _HeroPreview(
+                    key: const ValueKey('mystify'),
+                    seconds: seconds,
+                    style: _style,
+                    intimacy: _intimacy,
+                    randomness: _randomness,
+                    ribbonWidth: _ribbonWidth,
+                    trail: _trail,
+                    fullScreenCoverage: _fullScreenCoverage,
+                    bubbles: _bubbles,
+                    ratioSeparation: _ratioSeparation,
+                    ratioAttraction: _ratioAttraction,
+                    ratioSync: _ratioSync,
+                    ratioCritical: _ratioCritical,
+                    ratioRelease: _ratioRelease,
+                    ratioAfterglow: _ratioAfterglow,
+                    criticalMinSec: _criticalMinSec,
+                    criticalMaxSec: _criticalMaxSec,
+                    releaseMinSec: _releaseMinSec,
+                    releaseMaxSec: _releaseMaxSec,
+                    afterglowMinSec: _afterglowMinSec,
+                    afterglowMaxSec: _afterglowMaxSec,
+                    seed: _previewSeed,
+                  ),
           ),
+          const SizedBox(height: 16),
+          _SectionCard(
+            title: '选择真正应用的动态壁纸',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'mystify', icon: Icon(Icons.auto_awesome), label: Text('潮汐光迹')),
+                    ButtonSegment(value: 'calligraphy', icon: Icon(Icons.gesture), label: Text('书法书写')),
+                  ],
+                  selected: {_wallpaperMode},
+                  onSelectionChanged: (value) => _updateConfigPreview(() => _wallpaperMode = value.first),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _wallpaperMode == 'mystify'
+                      ? '保留当前已经实现的动画壁纸，所有效果和参数均保持不变。'
+                      : '书法模式会在黑色宣纸氛围中逐字落墨；保存后，系统中的同一个动态壁纸服务会即时切换。',
+                  style: const TextStyle(color: Colors.white60, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          if (_wallpaperMode == 'calligraphy') ...[
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '书写内容与笔体',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _calligraphyController,
+                    minLines: 2,
+                    maxLines: 4,
+                    maxLength: 80,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: '自定义书写内容',
+                      hintText: '输入名言、诗句或你想每天看见的话',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) {
+                      setState(() {});
+                      _scheduleConfigSync();
+                    },
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _generatingCalligraphy ? null : _generateClassicText,
+                      icon: _generatingCalligraphy
+                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(_generatingCalligraphy ? 'AI 正在选句…' : 'AI 获取经典名言 / 诗词'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: const [
+                      ('kaishu', '楷书'), ('xingshu', '行书'), ('caoshu', '草书'),
+                    ].map((item) => ChoiceChip(
+                      label: Text(item.$2),
+                      selected: _calligraphyStyle == item.$1,
+                      onSelected: (_) => _updateConfigPreview(() => _calligraphyStyle = item.$1),
+                    )).toList(),
+                  ),
+                  _SliderRow(
+                    label: '落笔速度',
+                    value: _calligraphySpeed,
+                    description: '控制文字逐笔显现与停顿节奏。',
+                    onChanged: (value) => _updateConfigPreview(() => _calligraphySpeed = value),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _IntroCard(),
           const SizedBox(height: 16),
@@ -506,9 +672,9 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _randomizePreview,
+                  onPressed: _refreshPreview,
                   icon: const Icon(Icons.auto_awesome),
-                  label: const Text('随机新构图'),
+                  label: Text(_wallpaperMode == 'calligraphy' ? '重新落墨' : '随机新构图'),
                 ),
               ),
               const SizedBox(width: 10),
@@ -551,6 +717,317 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   }
 }
 
+class _CalligraphyPreview extends StatelessWidget {
+  const _CalligraphyPreview({
+    super.key,
+    required this.seconds,
+    required this.text,
+    required this.style,
+    required this.speed,
+  });
+
+  final double seconds;
+  final String text;
+  final String style;
+  final double speed;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = text.trim().isEmpty ? '行到水穷处，坐看云起时。' : text.trim();
+    final runeCount = content.runes.length;
+    final cycleSeconds = math.max(7.0, runeCount * (0.48 - speed * 0.27) + 4.0).toDouble();
+    final progress = (seconds % cycleSeconds) / cycleSeconds;
+    final label = switch (style) {
+      'caoshu' => '草书',
+      'xingshu' => '行书',
+      _ => '楷书',
+    };
+
+    return AspectRatio(
+      aspectRatio: 9 / 14,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(-0.25, -0.4),
+              radius: 1.25,
+              colors: [Color(0xFF18201E), Color(0xFF080B0C), Colors.black],
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(child: CustomPaint(painter: _RicePaperPainter(seconds))),
+              Positioned(
+                top: 20,
+                left: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFB73535).withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('$label · 动态落墨', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+              ),
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(38, 62, 38, 44),
+                  child: CustomPaint(
+                    painter: _CalligraphyWritingPainter(
+                      text: content,
+                      style: style,
+                      progress: (progress / 0.78).clamp(0.0, 1.0).toDouble(),
+                      opacity: progress > 0.92
+                          ? ((1 - progress) / 0.08).clamp(0.0, 1.0).toDouble()
+                          : 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalligraphyWritingPainter extends CustomPainter {
+  const _CalligraphyWritingPainter({
+    required this.text,
+    required this.style,
+    required this.progress,
+    required this.opacity,
+  });
+
+  final String text;
+  final String style;
+  final double progress;
+  final double opacity;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final runes = text.runes.where((rune) => !String.fromCharCode(rune).trim().isEmpty).take(40).toList();
+    if (runes.isEmpty) return;
+    final maxRows = math.min(10, math.max(1, (runes.length / 3).ceil()));
+    final columns = math.max(1, (runes.length / maxRows).ceil());
+    final cellWidth = math.min(58.0, size.width / math.max(1, columns)).toDouble();
+    final cellHeight = math.min(58.0, size.height / math.max(1, maxRows)).toDouble();
+    final fontSize = math.min(cellWidth * 0.76, cellHeight * 0.78).toDouble();
+    final firstX = size.width * 0.5 + (columns - 1) * cellWidth * 0.5;
+    final firstY = math.max(12.0, (size.height - maxRows * cellHeight) * 0.5).toDouble();
+    final characterProgress = progress * runes.length;
+
+    for (var index = 0; index < runes.length; index++) {
+      final local = (characterProgress - index).clamp(0.0, 1.0).toDouble();
+      if (local <= 0) continue;
+      final row = index % maxRows;
+      final column = index ~/ maxRows;
+      final center = Offset(firstX - column * cellWidth, firstY + row * cellHeight + cellHeight * 0.5);
+      _paintGlyph(canvas, String.fromCharCode(runes[index]), runes[index], center, fontSize, local);
+      if (index > 0 && row > 0 && style != 'kaishu') {
+        _paintLigature(canvas, center.translate(0, -cellHeight), center, runes[index], local);
+      }
+    }
+  }
+
+  void _paintGlyph(Canvas canvas, String glyph, int codePoint, Offset center, double fontSize, double progress) {
+    final bounds = Rect.fromCenter(center: center, width: fontSize * 1.35, height: fontSize * 1.35);
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: glyph,
+        style: TextStyle(
+          color: Color.fromRGBO(242, 232, 210, opacity),
+          fontFamily: style == 'kaishu' ? 'serif' : 'sans-serif',
+          fontStyle: style == 'caoshu' ? FontStyle.italic : FontStyle.normal,
+          fontWeight: style == 'kaishu' ? FontWeight.w700 : FontWeight.w400,
+          fontSize: fontSize,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    if (progress >= 0.995) {
+      _paintStyledText(canvas, textPainter, codePoint, center);
+      return;
+    }
+    canvas.saveLayer(bounds, Paint());
+    final strokeCount = style == 'kaishu' ? 9 : (style == 'xingshu' ? 7 : 5);
+    final scaled = progress * strokeCount;
+    for (var stroke = 0; stroke < strokeCount; stroke++) {
+      final strokeProgress = (scaled - stroke).clamp(0.0, 1.0).toDouble();
+      if (strokeProgress <= 0) continue;
+      _paintRevealStroke(canvas, bounds, codePoint, stroke, strokeCount, strokeProgress);
+    }
+
+    final glyphLayer = Paint()..blendMode = BlendMode.srcIn;
+    canvas.saveLayer(bounds, glyphLayer);
+    _paintStyledText(canvas, textPainter, codePoint, center);
+    canvas.restore();
+    canvas.restore();
+    _paintBrushTip(canvas, bounds, codePoint, progress);
+  }
+
+  void _paintStyledText(Canvas canvas, TextPainter textPainter, int codePoint, Offset center) {
+    canvas.save();
+    if (style == 'xingshu') {
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(((codePoint % 7) - 3) * 0.012);
+      canvas.translate(-center.dx, -center.dy);
+    } else if (style == 'caoshu') {
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(-0.09 + (codePoint % 9) * 0.018);
+      canvas.scale(0.82, 1.08);
+      canvas.translate(-center.dx, -center.dy);
+    }
+    textPainter.paint(canvas, center - Offset(textPainter.width / 2, textPainter.height / 2));
+    canvas.restore();
+  }
+
+  void _paintRevealStroke(
+    Canvas canvas,
+    Rect box,
+    int codePoint,
+    int stroke,
+    int strokeCount,
+    double progress,
+  ) {
+    final pattern = (codePoint * 31 + stroke * 17) % 6;
+    final lane = (stroke + 0.55) / strokeCount;
+    final endpoints = _strokeEndpoints(box, pattern, lane);
+    final curve = box.width * (style == 'caoshu' ? 0.22 : (style == 'xingshu' ? 0.12 : 0.035));
+    final control = Offset(
+      (endpoints.$1.dx + endpoints.$2.dx) * 0.5 + math.sin(codePoint * 0.13 + stroke) * curve,
+      (endpoints.$1.dy + endpoints.$2.dy) * 0.5 + math.cos(codePoint * 0.11 + stroke) * curve,
+    );
+    final t = _smooth(progress);
+    final target = Offset(
+      _quadratic(endpoints.$1.dx, control.dx, endpoints.$2.dx, t),
+      _quadratic(endpoints.$1.dy, control.dy, endpoints.$2.dy, t),
+    );
+    final path = Path()
+      ..moveTo(endpoints.$1.dx, endpoints.$1.dy)
+      ..quadraticBezierTo(
+        _lerp(endpoints.$1.dx, control.dx, t),
+        _lerp(endpoints.$1.dy, control.dy, t),
+        target.dx,
+        target.dy,
+      );
+    final width = box.width * (style == 'kaishu' ? 0.24 : (style == 'xingshu' ? 0.20 : 0.17));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeCap = style == 'kaishu' ? StrokeCap.square : StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = width * (0.82 + 0.25 * math.sin(stroke * 2.1 + codePoint)),
+    );
+  }
+
+  (Offset, Offset) _strokeEndpoints(Rect box, int pattern, double lane) {
+    final left = box.left + box.width * 0.08;
+    final right = box.right - box.width * 0.08;
+    final top = box.top + box.height * 0.08;
+    final bottom = box.bottom - box.height * 0.10;
+    return switch (pattern) {
+      0 => (Offset(left, _lerp(top, bottom, lane)), Offset(right, _lerp(top, bottom, lane) + box.height * 0.04)),
+      1 => (
+          Offset(_lerp(left, right, lane), top),
+          Offset(_lerp(left, right, lane) - box.width * 0.04, bottom),
+        ),
+      2 => (Offset(left, top + box.height * lane * 0.55), Offset(right, bottom - box.height * (1 - lane) * 0.35)),
+      3 => (Offset(right, top + box.height * lane * 0.45), Offset(left, bottom - box.height * (1 - lane) * 0.50)),
+      4 => (Offset(box.center.dx, top), Offset(_lerp(left, right, lane), bottom)),
+      _ => (
+          Offset(_lerp(left, right, lane), box.center.dy),
+          Offset(lane < 0.5 ? left : right, lane < 0.5 ? top : bottom),
+        ),
+    };
+  }
+
+  void _paintBrushTip(Canvas canvas, Rect box, int codePoint, double progress) {
+    final strokeCount = style == 'kaishu' ? 9 : (style == 'xingshu' ? 7 : 5);
+    final scaled = progress * strokeCount;
+    final stroke = math.min(strokeCount - 1, math.max(0, scaled.floor()));
+    final local = (scaled - stroke).clamp(0.0, 1.0).toDouble();
+    final endpoints = _strokeEndpoints(box, (codePoint * 31 + stroke * 17) % 6, (stroke + 0.55) / strokeCount);
+    final curve = box.width * (style == 'caoshu' ? 0.22 : (style == 'xingshu' ? 0.12 : 0.035));
+    final control = Offset(
+      (endpoints.$1.dx + endpoints.$2.dx) * 0.5 + math.sin(codePoint * 0.13 + stroke) * curve,
+      (endpoints.$1.dy + endpoints.$2.dy) * 0.5 + math.cos(codePoint * 0.11 + stroke) * curve,
+    );
+    final t = _smooth(local);
+    final point = Offset(
+      _quadratic(endpoints.$1.dx, control.dx, endpoints.$2.dx, t),
+      _quadratic(endpoints.$1.dy, control.dy, endpoints.$2.dy, t),
+    );
+    final radius = box.width * (style == 'kaishu' ? 0.055 : 0.042);
+    canvas.drawOval(
+      Rect.fromCenter(center: point, width: radius * 1.24, height: radius * 2),
+      Paint()..color = Color.fromRGBO(246, 238, 218, opacity * 0.92),
+    );
+  }
+
+  void _paintLigature(Canvas canvas, Offset from, Offset to, int codePoint, double progress) {
+    final start = from.translate((codePoint & 1) == 0 ? 5 : -4, (to.dy - from.dy) * 0.22);
+    final end = Offset(to.dx, _lerp(start.dy, to.dy - 16, _smooth(progress)));
+    final path = Path()
+      ..moveTo(start.dx, start.dy)
+      ..cubicTo(start.dx + 12, _lerp(start.dy, end.dy, 0.30), end.dx - 12, _lerp(start.dy, end.dy, 0.70), end.dx, end.dy);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Color.fromRGBO(223, 216, 198, opacity * (style == 'caoshu' ? 0.52 : 0.32))
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = style == 'caoshu' ? 2.6 : 1.6,
+    );
+  }
+
+  double _smooth(double value) => value * value * (3 - 2 * value);
+  double _quadratic(double a, double b, double c, double t) {
+    final u = 1 - t;
+    return u * u * a + 2 * u * t * b + t * t * c;
+  }
+
+  double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+  @override
+  bool shouldRepaint(covariant _CalligraphyWritingPainter oldDelegate) {
+    return oldDelegate.text != text ||
+        oldDelegate.style != style ||
+        oldDelegate.progress != progress ||
+        oldDelegate.opacity != opacity;
+  }
+}
+
+class _RicePaperPainter extends CustomPainter {
+  const _RicePaperPainter(this.seconds);
+  final double seconds;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..strokeWidth = 0.6;
+    for (var i = 0; i < 26; i++) {
+      final y = (i * 47.0 + math.sin(seconds * 0.12 + i) * 8) % size.height;
+      paint.color = Color.fromRGBO(190, 205, 194, 0.025 + (i % 3) * 0.008);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y + math.sin(i * 1.7) * 18), paint);
+    }
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [const Color(0x2234D399), Colors.transparent],
+      ).createShader(Rect.fromCircle(
+        center: Offset(size.width * (0.5 + math.sin(seconds * 0.18) * 0.18), size.height * 0.52),
+        radius: size.width * 0.55,
+      ));
+    canvas.drawRect(Offset.zero & size, glow);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RicePaperPainter oldDelegate) => oldDelegate.seconds != seconds;
+}
+
 class _IntroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -562,7 +1039,7 @@ class _IntroCard extends StatelessWidget {
         border: Border.all(color: Colors.white.withOpacity(0.10)),
       ),
       child: const Text(
-        '设计思想：V41 继续只重做主体阶段形体：把主体从沿中心线加宽的飘带，改成参考视频里从黑场/屏幕边缘展开的单侧扇形薄膜与折叠光幕；宽端被裁切，膜面沿弯曲折脊收束到尖钩，绿/紫/青/金色肋纹贴面汇聚。释放阶段与余韵阶段保持现有硬震屏释放和逐帧水晶泡逻辑不变。',
+        '现在可在“潮汐光迹”和“书法书写”两种动态壁纸之间自由切换。原有 Mystify 动画、阶段节奏和参数完整保留；书法模式支持自定义内容、AI 经典选句、楷书/行书/草书与落笔速度。保存后，当前系统动态壁纸会读取新选择并即时更新。',
         style: TextStyle(color: Colors.white70, height: 1.55),
       ),
     );
@@ -794,6 +1271,7 @@ class _PhaseRatioSummary extends StatelessWidget {
 
 class _HeroPreview extends StatelessWidget {
   const _HeroPreview({
+    super.key,
     required this.seconds,
     required this.style,
     required this.intimacy,
