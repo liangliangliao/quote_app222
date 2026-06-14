@@ -69,6 +69,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
   List<ProviderCatalogOption> _resembleModelOptions = <ProviderCatalogOption>[];
   List<ProviderCatalogOption> _minimaxVoiceOptions = <ProviderCatalogOption>[];
   List<ProviderCatalogOption> _minimaxModelOptions = <ProviderCatalogOption>[];
+  List<ProviderCatalogOption> _microsoftVoiceOptions = <ProviderCatalogOption>[];
   VoiceProfile? _selectedVoice;
   String _ttsVoiceSource = 'premade';
   String _ttsProvider = VoiceProviderSettings.defaultProvider;
@@ -486,7 +487,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         setState(() => _resembleVoiceOptions = voices);
         _toast('已获取 ${voices.length} 个 Resemble AI 声音');
       } else if (_ttsProvider == 'microsoft') {
-        _toast('Microsoft Neural Voice 请在 API 配置中填写 voice name，例如 zh-CN-XiaoxiaoNeural');
+        final voices = await _multiService.listMicrosoftVoices(
+          apiKey: _microsoftApiKeyCtrl.text.trim(),
+          region: _microsoftRegionCtrl.text.trim(),
+        );
+        if (!mounted) return;
+        setState(() => _microsoftVoiceOptions = voices);
+        _toast('已获取 ${voices.length} 个 Microsoft Neural Voice');
       } else if (_ttsProvider == 'minimax') {
         final voices = await _multiService.listMiniMaxVoices(apiKey: _minimaxApiKeyCtrl.text.trim());
         if (!mounted) return;
@@ -580,7 +587,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         );
         if (File(path).existsSync()) {
           await _player.stop();
-          await _player.play(DeviceFileSource(path));
+          await _player.play(BytesSource(await File(path).readAsBytes()));
         }
         _toast('Microsoft 语音已生成并保存');
         return;
@@ -949,6 +956,32 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
               TextField(controller: _microsoftRecognitionEndpointCtrl, decoration: const InputDecoration(labelText: 'STT Endpoint（可留空自动生成）', helperText: '支持 Azure 自定义语音识别 Endpoint', border: OutlineInputBorder())),
               const SizedBox(height: 8),
               TextField(controller: _microsoftVoiceCtrl, decoration: const InputDecoration(labelText: 'Neural Voice', helperText: '默认 zh-CN-XiaoxiaoNeural', border: OutlineInputBorder())),
+              if (_microsoftVoiceOptions.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _microsoftVoiceOptions.length,
+                    itemBuilder: (context, index) {
+                      final voice = _microsoftVoiceOptions[index];
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(_microsoftVoiceCtrl.text.trim() == voice.id ? Icons.radio_button_checked : Icons.radio_button_off),
+                        title: Text(voice.displayName),
+                        subtitle: voice.subtitle.trim().isEmpty ? Text(voice.id) : Text('${voice.id}\n${voice.subtitle}'),
+                        isThreeLine: voice.subtitle.trim().isNotEmpty,
+                        onTap: () => setState(() {
+                          _microsoftVoiceCtrl.text = voice.id;
+                          final locale = voice.extra['locale'] ?? '';
+                          if (locale.isNotEmpty) _microsoftLanguageCtrl.text = locale;
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               TextField(controller: _microsoftLanguageCtrl, decoration: const InputDecoration(labelText: 'TTS / STT 语言', helperText: '例如 zh-CN、en-US', border: OutlineInputBorder())),
               const SizedBox(height: 8),

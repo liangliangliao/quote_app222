@@ -133,6 +133,45 @@ class MultiProviderTtsService {
     return true;
   }
 
+  Future<List<ProviderCatalogOption>> listMicrosoftVoices({
+    String? apiKey,
+    String? region,
+  }) async {
+    final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '').trim();
+    final location = (region ?? await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion).trim();
+    if (key.isEmpty) throw StateError('请先填写 Microsoft Speech API Key');
+    if (location.isEmpty) throw StateError('请先填写 Microsoft Speech Region / Location');
+    final uri = Uri.parse('https://$location.tts.speech.microsoft.com/cognitiveservices/voices/list');
+    final response = await http.get(uri, headers: {
+      'Ocp-Apim-Subscription-Key': key,
+      'Accept': 'application/json',
+    }).timeout(const Duration(seconds: 45));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('获取 Microsoft 声音列表失败：HTTP ${response.statusCode} ${response.body}');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) return const <ProviderCatalogOption>[];
+    return decoded.whereType<Map>().map((raw) {
+      final item = Map<String, dynamic>.from(raw);
+      final id = (item['ShortName'] ?? item['Name'] ?? '').toString();
+      final locale = (item['Locale'] ?? '').toString();
+      final localName = (item['LocalName'] ?? item['DisplayName'] ?? id).toString();
+      final gender = (item['Gender'] ?? '').toString();
+      final styles = item['StyleList'] is List ? (item['StyleList'] as List).join('、') : '';
+      return ProviderCatalogOption(
+        id: id,
+        name: '$localName${locale.isEmpty ? '' : ' · $locale'}',
+        category: gender,
+        description: styles.isEmpty ? gender : '$gender · 风格：$styles',
+        extra: {
+          'locale': locale,
+          'gender': gender,
+          'voiceType': (item['VoiceType'] ?? '').toString(),
+        },
+      );
+    }).where((voice) => voice.id.isNotEmpty).toList();
+  }
+
   Future<String> synthesizeMicrosoftToFile({
     required String text,
     String? apiKey,
@@ -155,9 +194,9 @@ class MultiProviderTtsService {
     final escaped = const HtmlEscape().convert(text);
     final ratePercent = ((rate - 1) * 100).round();
     final pitchPercent = pitch.round();
-    final volumePercent = (volume.clamp(0.0, 1.0) * 100).round();
+    final volumeDb = ((volume.clamp(0.0, 1.0) - 1) * 20).round();
     final ssml = '<speak version="1.0" xml:lang="$locale"><voice name="$selectedVoice">'
-        '<prosody rate="$ratePercent%" pitch="$pitchPercent%" volume="$volumePercent%">$escaped</prosody>'
+        '<prosody rate="${ratePercent >= 0 ? '+' : ''}$ratePercent%" pitch="${pitchPercent >= 0 ? '+' : ''}$pitchPercent%" volume="${volumeDb >= 0 ? '+' : ''}${volumeDb}dB">$escaped</prosody>'
         '</voice></speak>';
     final response = await http.post(uri, headers: {
       'Ocp-Apim-Subscription-Key': key,
@@ -171,7 +210,22 @@ class MultiProviderTtsService {
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory(p.join(dir.path, 'voice_lab_audio'));
     await folder.create(recursive: true);
-    final ext = format.contains('riff') || format.contains('wav') ? 'wav' : 'mp3';
+    if (response.bodyBytes.length < 128) {
+      throw StateError('Microsoft TTS 返回的音频数据过短（${response.bodyBytes.length} bytes）');
+    }
+    final contentType = (response.headers['content-type'] ?? '').toLowerCase();
+    final bytes = response.bodyBytes;
+    final isWave = contentType.contains('wav') ||
+        contentType.contains('riff') ||
+        (bytes.length >= 4 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46);
+    final isMp3 = contentType.contains('mpeg') ||
+        contentType.contains('mp3') ||
+        (bytes.length >= 3 && bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) ||
+        (bytes.length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0);
+    if (!isWave && !isMp3) {
+      throw StateError('Microsoft TTS 返回了无法识别的音频格式：${contentType.isEmpty ? 'unknown' : contentType}');
+    }
+    final ext = isWave ? 'wav' : 'mp3';
     final file = File(p.join(folder.path, 'microsoft_${DateTime.now().millisecondsSinceEpoch}.$ext'));
     await file.writeAsBytes(response.bodyBytes, flush: true);
     return file.path;

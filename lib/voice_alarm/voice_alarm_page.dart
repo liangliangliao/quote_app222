@@ -1,12 +1,11 @@
-import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 
 import '../data/kv_dao.dart';
+import '../voice_lab/eleven_labs_service.dart';
 import '../voice_lab/multi_provider_tts_service.dart';
 
 class VoiceAlarmPage extends StatefulWidget {
@@ -19,9 +18,9 @@ class VoiceAlarmPage extends StatefulWidget {
 class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   final _text = TextEditingController(text: '早上好，新的一天开始了。愿你平静、专注、充满力量。');
   final _tts = MultiProviderTtsService();
+  final _elevenLabs = ElevenLabsService();
   final _kv = KeyValueDao();
-  final _player = AudioPlayer();
-  final _notifications = FlutterLocalNotificationsPlugin();
+  static const _native = MethodChannel('com.example.quote_app/voice_alarm');
   TimeOfDay _time = TimeOfDay.now();
   String _provider = 'microsoft';
   String? _customMusic;
@@ -29,13 +28,10 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   bool _vibrate = true;
   bool _systemMusic = true;
   bool _saving = false;
-  Timer? _timer;
 
   @override
   void dispose() {
-    _timer?.cancel();
     _text.dispose();
-    _player.dispose();
     super.dispose();
   }
 
@@ -59,9 +55,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     }
     setState(() => _saving = true);
     try {
-      if (_provider == 'microsoft') {
-        _generatedVoice = await _tts.synthesizeMicrosoftToFile(text: _text.text.trim());
+      final hasPermission = await _native.invokeMethod<bool>('hasExactAlarmPermission') ?? true;
+      if (!hasPermission) {
+        await _native.invokeMethod<void>('requestExactAlarmPermission');
+        _toast('请在系统页面允许“闹钟和提醒”，返回后再次点击保存');
+        return;
       }
+      _generatedVoice = await _generateVoiceFile();
       final when = _nextTime();
       await _kv.setString('voice_alarm.time', when.toIso8601String());
       await _kv.setString('voice_alarm.text', _text.text.trim());
@@ -70,30 +70,12 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       await _kv.setString('voice_alarm.music_file', _customMusic ?? '');
       await _kv.setString('voice_alarm.vibrate', _vibrate ? '1' : '0');
       await _kv.setString('voice_alarm.system_music', _systemMusic ? '1' : '0');
-
-      const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-      await _notifications.initialize(const InitializationSettings(android: android));
-      await _notifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-      await _notifications.show(
-        74001,
-        '语音闹钟已设置',
-        '${when.month}月${when.day}日 ${TimeOfDay.fromDateTime(when).format(context)} · $_provider',
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            'voice_alarm_schedule',
-            '语音闹钟',
-            channelDescription: '语音闹钟设置与到点提醒',
-            importance: Importance.high,
-            priority: Priority.high,
-            enableVibration: _vibrate,
-          ),
-        ),
-      );
-      _timer?.cancel();
-      _timer = Timer(when.difference(DateTime.now()), _ring);
-      _toast('已设置语音闹钟；保持 App 运行时将自动朗读，系统通知用于后台提醒');
+      final payload = _payload();
+      await _native.invokeMethod<void>('schedule', {
+        'atMs': when.millisecondsSinceEpoch,
+        'payload': payload,
+      });
+      _toast('已注册 Android 系统精确闹钟；App 在后台或进程被清理后仍可响铃');
       setState(() {});
     } catch (e) {
       _toast('设置失败：$e');
@@ -102,40 +84,58 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     }
   }
 
-  Future<void> _ring() async {
-    if (_customMusic != null && File(_customMusic!).existsSync()) {
-      await _player.play(DeviceFileSource(_customMusic!));
+  Future<String> _generateVoiceFile() async {
+    final text = _text.text.trim();
+    if (_provider == 'microsoft') {
+      return _tts.synthesizeMicrosoftToFile(text: text);
     }
-    if (_generatedVoice != null && File(_generatedVoice!).existsSync()) {
-      await _player.play(DeviceFileSource(_generatedVoice!));
-    }
-    if (mounted) {
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('语音闹钟'),
-          content: Text(_text.text),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _timer = Timer(const Duration(minutes: 5), _ring);
-                _toast('将在 5 分钟后再次提醒');
-              },
-              child: const Text('5分钟后再次提醒'),
-            ),
-            FilledButton(
-              onPressed: () {
-                _player.stop();
-                Navigator.pop(context);
-              },
-              child: const Text('关闭闹钟'),
-            ),
-          ],
-        ),
+    if (_provider == 'resemble') {
+      final voiceUuid = (await _kv.getString(VoiceProviderSettings.resembleVoiceUuid) ?? '').trim();
+      if (voiceUuid.isEmpty) throw StateError('请先在“语音与美好的祝福配置”中选择 Resemble voice_uuid');
+      final audio = await _tts.synthesizeResembleAndSave(
+        text: text,
+        voiceUuid: voiceUuid,
+        voiceDisplayName: await _kv.getString(VoiceProviderSettings.resembleVoiceName) ?? 'Resemble AI',
+        moduleName: 'voice_alarm_resemble',
       );
+      return audio.audioFilePath;
     }
+    if (_provider == 'minimax') {
+      final voiceId = (await _kv.getString(VoiceProviderSettings.minimaxVoiceId) ?? VoiceProviderSettings.defaultMiniMaxVoiceId).trim();
+      final audio = await _tts.synthesizeMiniMaxAndSave(
+        text: text,
+        voiceId: voiceId,
+        voiceDisplayName: await _kv.getString(VoiceProviderSettings.minimaxVoiceName) ?? VoiceProviderSettings.defaultMiniMaxVoiceName,
+        moduleName: 'voice_alarm_minimax',
+      );
+      return audio.audioFilePath;
+    }
+    final voiceId = (await _kv.getString(ElevenLabsSettings.presetVoiceId) ?? ElevenLabsSettings.defaultPresetVoiceId).trim();
+    final audio = await _elevenLabs.synthesizeAndSaveByVoiceId(
+      text: text,
+      voiceId: voiceId,
+      voiceSource: 'premade',
+      voiceDisplayName: await _kv.getString(ElevenLabsSettings.presetVoiceName) ?? ElevenLabsSettings.defaultPresetVoiceName,
+      moduleName: 'voice_alarm_elevenlabs',
+    );
+    return audio.audioFilePath;
+  }
+
+  Future<void> _ring() async {
+    await _native.invokeMethod<void>('testRing', {'payload': _payload()});
+  }
+
+  String _payload() {
+    return jsonEncode({
+      'text': _text.text.trim(),
+      'provider': _provider,
+      'voicePath': _generatedVoice ?? '',
+      'musicPath': _customMusic ?? '',
+      'vibrate': _vibrate,
+      'systemMusic': _systemMusic,
+      'hour': _time.hour,
+      'minute': _time.minute,
+    });
   }
 
   void _toast(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -212,6 +212,30 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(onPressed: _ring, icon: const Icon(Icons.play_arrow), label: const Text('立即测试闹钟与稍后提醒')),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await _native.invokeMethod<void>('snooze', {'payload': _payload()});
+                    await _native.invokeMethod<void>('stopRing');
+                    _toast('已通过 Android 系统设置为 5 分钟后再次提醒');
+                  },
+                  icon: const Icon(Icons.snooze),
+                  label: const Text('5分钟后提醒'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _native.invokeMethod<void>('stopRing'),
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('停止响铃'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
