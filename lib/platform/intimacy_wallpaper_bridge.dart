@@ -9,6 +9,13 @@ class IntimacyWallpaperBridge {
 
   static Future<bool> saveConfig({
     required int style,
+    required String wallpaperMode,
+    required String calligraphyText,
+    required String calligraphyStyle,
+    required double calligraphySpeed,
+    required String calligraphyStrokeData,
+    required String calligraphyPlaylist,
+    required String calligraphyAiHistory,
     required double intimacy,
     required double randomness,
     required double ribbonWidth,
@@ -42,6 +49,13 @@ class IntimacyWallpaperBridge {
     if (!isAndroid) return false;
     final ok = await _channel.invokeMethod<bool>('saveConfig', <String, dynamic>{
       'style': style,
+      'wallpaperMode': wallpaperMode,
+      'calligraphyText': calligraphyText,
+      'calligraphyStyle': calligraphyStyle,
+      'calligraphySpeed': calligraphySpeed,
+      'calligraphyStrokeData': calligraphyStrokeData,
+      'calligraphyPlaylist': calligraphyPlaylist,
+      'calligraphyAiHistory': calligraphyAiHistory,
       'intimacy': intimacy,
       'randomness': randomness,
       'ribbonWidth': ribbonWidth,
@@ -73,6 +87,16 @@ class IntimacyWallpaperBridge {
       'resetSeed': resetSeed,
     });
     return ok == true;
+  }
+
+  static Future<Map<String, dynamic>> getConfig() async {
+    if (!isAndroid) return <String, dynamic>{};
+    try {
+      return await _channel.invokeMapMethod<String, dynamic>('getConfig') ??
+          <String, dynamic>{};
+    } catch (_) {
+      return <String, dynamic>{};
+    }
   }
 
   static Future<bool> setLiveWallpaperDirect() async {

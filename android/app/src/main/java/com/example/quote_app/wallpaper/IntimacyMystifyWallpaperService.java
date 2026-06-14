@@ -3,9 +3,15 @@ package com.example.quote_app.wallpaper;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.opengl.GLES20;
+import android.opengl.GLUtils;
 import android.os.SystemClock;
 import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
@@ -14,7 +20,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Random;
 
 import javax.microedition.khronos.egl.EGL10;
@@ -22,6 +30,9 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.egl.EGLContext;
 import javax.microedition.khronos.egl.EGLDisplay;
 import javax.microedition.khronos.egl.EGLSurface;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * 发现之旅/触摸：Mystify 亲密艺术动态壁纸。
@@ -204,6 +215,10 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
 
         private int textureProgram = 0;
         private int colorProgram = 0;
+        private int calligraphyTexture = 0;
+        private Bitmap calligraphyBitmap;
+        private long lastCalligraphyUploadMs = 0L;
+        private final Map<Integer, CalligraphyStrokeGlyph> calligraphyStrokeGlyphs = new HashMap<>();
         private int[] fbo = new int[]{0, 0};
         private int[] tex = new int[]{0, 0};
         private int readIndex = 0;
@@ -392,6 +407,10 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
 
         private void renderFrame(long nowMs, float dt) {
             if (!fboReady) return;
+            if ("calligraphy".equals(cfg.wallpaperMode)) {
+                renderCalligraphyFrame(nowMs);
+                return;
+            }
             ensureCycleState(false);
 
             // V25：新增“调试循环模式”。
@@ -535,6 +554,241 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             int tmp = readIndex;
             readIndex = writeIndex;
             writeIndex = tmp;
+        }
+
+        private void renderCalligraphyFrame(long nowMs) {
+            if (calligraphyTexture == 0) {
+                int[] ids = new int[1];
+                GLES20.glGenTextures(1, ids, 0);
+                calligraphyTexture = ids[0];
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, calligraphyTexture);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            }
+            if (calligraphyBitmap == null || calligraphyBitmap.isRecycled()) {
+                calligraphyBitmap = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
+                lastCalligraphyUploadMs = 0L;
+            }
+            if (nowMs - lastCalligraphyUploadMs >= (cfg.powerSave ? 150L : 70L)) {
+                drawCalligraphyBitmap(calligraphyBitmap, nowMs);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, calligraphyTexture);
+                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, calligraphyBitmap, 0);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+                lastCalligraphyUploadMs = nowMs;
+            }
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+            GLES20.glViewport(0, 0, width, height);
+            GLES20.glDisable(GLES20.GL_BLEND);
+            GLES20.glClearColor(0f, 0f, 0f, 1f);
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            drawBitmapTexture(calligraphyTexture);
+        }
+
+        private void drawCalligraphyBitmap(Bitmap bitmap, long nowMs) {
+            Canvas canvas = new Canvas(bitmap);
+            int w = bitmap.getWidth();
+            int h = bitmap.getHeight();
+            canvas.drawColor(Color.rgb(5, 8, 8));
+
+            Paint fiber = new Paint(Paint.ANTI_ALIAS_FLAG);
+            long fiberSeed = prefs.getLong("seed", 7L);
+            Random fibers = new Random(fiberSeed);
+            for (int i = 0; i < 52; i++) {
+                fiber.setColor(Color.argb(8 + i % 5, 170, 190, 174));
+                fiber.setStrokeWidth(0.7f + fibers.nextFloat());
+                float y = fibers.nextFloat() * h;
+                canvas.drawLine(0f, y, w, y + (fibers.nextFloat() - 0.5f) * 34f, fiber);
+            }
+
+            float seconds = (nowMs - startMs) / 1000f;
+            CalligraphyWork activeWork = resolveCalligraphyWork(seconds);
+            String content = activeWork.text;
+            if (content.length() == 0) content = "行到水穷处，坐看云起时。";
+            int[] codePoints = content.codePoints().filter(cp -> !Character.isWhitespace(cp)).limit(80).toArray();
+            float secondsPerCharacter = 1.35f - activeWork.speed * 0.72f;
+            float writingDuration = Math.max(3.5f, codePoints.length * secondsPerCharacter);
+            float cycle = writingDuration + 4.2f;
+            float local = activeWork.localSeconds % cycle;
+            float shownFloat = Math.min(codePoints.length, local / secondsPerCharacter);
+            int shown = Math.min(codePoints.length, (int)Math.ceil(shownFloat));
+            float fadeOut = local > writingDuration + 2.8f
+                    ? clamp(1f - (local - writingDuration - 2.8f) / 1.4f, 0f, 1f) : 1f;
+
+            Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+            String family = "kaishu".equals(activeWork.style) ? "serif" : "sans-serif";
+            int typefaceStyle = "kaishu".equals(activeWork.style) ? Typeface.BOLD : Typeface.NORMAL;
+            ink.setTypeface(Typeface.create(family, typefaceStyle));
+            ink.setTextAlign(Paint.Align.CENTER);
+            ink.setTextSize("caoshu".equals(activeWork.style) ? 92f : 82f);
+            ink.setFakeBoldText("kaishu".equals(activeWork.style));
+            ink.setTextSkewX("caoshu".equals(activeWork.style) ? -0.28f
+                    : ("xingshu".equals(activeWork.style) ? -0.12f : 0f));
+            ink.setShadowLayer(18f, 0f, 2f, Color.argb(95, 60, 230, 190));
+
+            final int maxColumns = 5;
+            final int rows = Math.max(1, Math.min(16, (int)Math.ceil(codePoints.length / (float)maxColumns)));
+            final int cols = Math.max(1, (int)Math.ceil(codePoints.length / (float)rows));
+            final float rowGap = Math.min(108f, (h - 250f) / Math.max(1f, rows - 0.35f));
+            final float colGap = Math.min(126f, (w - 130f) / Math.max(1f, cols));
+            ink.setTextSize(Math.min(ink.getTextSize(), Math.min(rowGap * 0.82f, colGap * 0.78f)));
+            final float firstX = w * 0.5f + (cols - 1) * colGap * 0.5f;
+            final float firstY = 132f;
+            for (int i = 0; i < shown; i++) {
+                int col = i / rows;
+                int row = i % rows;
+                float x = firstX - col * colGap;
+                float y = firstY + row * rowGap;
+                float characterProgress = clamp(shownFloat - i, 0f, 1f);
+                CalligraphyStrokeGlyph strokeGlyph = calligraphyStrokeGlyphs.get(codePoints[i]);
+                if (strokeGlyph != null && !strokeGlyph.medians.isEmpty()) {
+                    drawRealStrokeOrderGlyph(canvas, strokeGlyph, x, y, ink.getTextSize(), characterProgress, fadeOut, activeWork.style);
+                } else {
+                    // Never invent a fake stroke order. If no verified data was
+                    // downloaded, show the complete glyph as an explicit fallback.
+                    ink.setColor(Color.argb((int)(242f * fadeOut * characterProgress), 240, 231, 209));
+                    drawStyledCalligraphyText(
+                            canvas,
+                            new String(Character.toChars(codePoints[i])),
+                            codePoints[i],
+                            x,
+                            y,
+                            ink.getTextSize(),
+                            ink,
+                            activeWork.style
+                    );
+                }
+            }
+
+            Paint seal = new Paint(Paint.ANTI_ALIAS_FLAG);
+            seal.setStyle(Paint.Style.STROKE);
+            seal.setStrokeWidth(5f);
+            seal.setColor(Color.argb((int)(205 * fadeOut), 181, 50, 50));
+            canvas.drawRect(52f, h - 142f, 126f, h - 68f, seal);
+            seal.setStyle(Paint.Style.FILL);
+            seal.setTextAlign(Paint.Align.CENTER);
+            seal.setTypeface(Typeface.create("serif", Typeface.BOLD));
+            seal.setTextSize(27f);
+            canvas.drawText("静", 89f, h - 95f, seal);
+        }
+
+        private CalligraphyWork resolveCalligraphyWork(float seconds) {
+            ArrayList<CalligraphyWork> works = new ArrayList<>();
+            try {
+                JSONArray source = new JSONArray(cfg.calligraphyPlaylist == null ? "[]" : cfg.calligraphyPlaylist);
+                for (int i = 0; i < source.length(); i++) {
+                    JSONObject item = source.optJSONObject(i);
+                    if (item == null) continue;
+                    String text = item.optString("text", "").trim();
+                    if (text.isEmpty()) continue;
+                    works.add(new CalligraphyWork(
+                            text,
+                            item.optString("style", "kaishu"),
+                            clamp((float)item.optDouble("speed", 0.55), 0.15f, 1f),
+                            0f
+                    ));
+                }
+            } catch (Throwable ignored) {
+                works.clear();
+            }
+            if (works.isEmpty()) {
+                return new CalligraphyWork(
+                        cfg.calligraphyText == null ? "行到水穷处，坐看云起时。" : cfg.calligraphyText.trim(),
+                        cfg.calligraphyStyle,
+                        cfg.calligraphySpeed,
+                        seconds
+                );
+            }
+            float total = 0f;
+            for (CalligraphyWork work : works) total += work.duration();
+            float cursor = total <= 0f ? 0f : seconds % total;
+            for (CalligraphyWork work : works) {
+                if (cursor < work.duration()) {
+                    return new CalligraphyWork(work.text, work.style, work.speed, cursor);
+                }
+                cursor -= work.duration();
+            }
+            CalligraphyWork first = works.get(0);
+            return new CalligraphyWork(first.text, first.style, first.speed, 0f);
+        }
+
+        private void drawRealStrokeOrderGlyph(Canvas canvas, CalligraphyStrokeGlyph glyph, float centerX, float baseline,
+                                              float size, float progress, float fade, String style) {
+            float boxLeft = centerX - size * 0.50f;
+            float boxTop = baseline - size * 0.92f;
+            float scale = size / 1024f;
+            int strokeCount = glyph.medians.size();
+            float scaledProgress = progress * strokeCount;
+            Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setStyle(Paint.Style.STROKE);
+            strokePaint.setStrokeJoin(Paint.Join.ROUND);
+            strokePaint.setStrokeCap("kaishu".equals(style) ? Paint.Cap.SQUARE : Paint.Cap.ROUND);
+            strokePaint.setColor(Color.argb((int)(242f * fade), 240, 231, 209));
+            float baseWidth = "kaishu".equals(style) ? size * 0.105f
+                    : ("xingshu".equals(style) ? size * 0.082f : size * 0.068f);
+            float lastX = centerX;
+            float lastY = baseline;
+            boolean hasTip = false;
+            for (int strokeIndex = 0; strokeIndex < strokeCount; strokeIndex++) {
+                float strokeProgress = clamp(scaledProgress - strokeIndex, 0f, 1f);
+                if (strokeProgress <= 0f) break;
+                ArrayList<float[]> median = glyph.medians.get(strokeIndex);
+                if (median.size() < 2) continue;
+                float totalLength = 0f;
+                for (int point = 1; point < median.size(); point++) {
+                    float dx = median.get(point)[0] - median.get(point - 1)[0];
+                    float dy = median.get(point)[1] - median.get(point - 1)[1];
+                    totalLength += (float)Math.hypot(dx, dy);
+                }
+                float targetLength = totalLength * smooth(strokeProgress);
+                float consumed = 0f;
+                Path path = new Path();
+                float[] first = median.get(0);
+                path.moveTo(boxLeft + first[0] * scale, boxTop + (1024f - first[1]) * scale);
+                for (int point = 1; point < median.size(); point++) {
+                    float[] previous = median.get(point - 1);
+                    float[] current = median.get(point);
+                    float segment = (float)Math.hypot(current[0] - previous[0], current[1] - previous[1]);
+                    float remaining = targetLength - consumed;
+                    if (remaining <= 0f) break;
+                    float ratio = segment <= 0.001f ? 1f : clamp(remaining / segment, 0f, 1f);
+                    float px = lerp(previous[0], current[0], ratio);
+                    float py = lerp(previous[1], current[1], ratio);
+                    lastX = boxLeft + px * scale;
+                    lastY = boxTop + (1024f - py) * scale;
+                    path.lineTo(lastX, lastY);
+                    consumed += segment * ratio;
+                    if (ratio < 0.999f) break;
+                }
+                float pressure = 0.88f + 0.16f * (float)Math.sin(strokeIndex * 1.7f + progress * Math.PI);
+                strokePaint.setStrokeWidth(baseWidth * pressure);
+                // Use the same verified median path and pressure model as the
+                // Flutter preview. Revealing SVG outlines with a wide SRC_IN
+                // mask produced vendor-dependent white bars on real wallpaper.
+                canvas.drawPath(path, strokePaint);
+                if (strokeProgress < 0.999f) hasTip = true;
+            }
+            if (hasTip) {
+                Paint tip = new Paint(Paint.ANTI_ALIAS_FLAG);
+                tip.setColor(Color.argb((int)(235f * fade), 248, 240, 220));
+                float radius = baseWidth * 0.56f;
+                canvas.drawOval(new RectF(lastX - radius * 0.58f, lastY - radius, lastX + radius * 0.58f, lastY + radius), tip);
+            }
+        }
+
+        private void drawStyledCalligraphyText(Canvas canvas, String glyph, int codePoint, float x, float baseline,
+                                               float size, Paint glyphPaint, String style) {
+            canvas.save();
+            if ("xingshu".equals(style)) {
+                canvas.rotate(((codePoint % 7) - 3) * 0.75f, x, baseline - size * 0.42f);
+                canvas.scale(0.94f, 1.02f, x, baseline);
+            } else if ("caoshu".equals(style)) {
+                canvas.rotate(-5f + (codePoint % 9) * 1.15f, x, baseline - size * 0.42f);
+                canvas.scale(0.82f, 1.08f, x, baseline);
+            }
+            canvas.drawText(glyph, x, baseline, glyphPaint);
+            canvas.restore();
         }
 
         private void spawnAccordingToPhase(Phase phase, float sec) {
@@ -9518,6 +9772,35 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
         }
 
+        private void drawBitmapTexture(int textureId) {
+            float[] verts = new float[]{
+                    -1f, -1f, 0f, 1f,
+                     1f, -1f, 1f, 1f,
+                    -1f,  1f, 0f, 0f,
+                     1f,  1f, 1f, 0f
+            };
+            GLES20.glUseProgram(textureProgram);
+            int aPos = GLES20.glGetAttribLocation(textureProgram, "aPosition");
+            int aTex = GLES20.glGetAttribLocation(textureProgram, "aTexCoord");
+            int uTex = GLES20.glGetUniformLocation(textureProgram, "uTexture");
+            int uFade = GLES20.glGetUniformLocation(textureProgram, "uFade");
+            FloatBuffer buf = makeFloatBuffer(verts);
+            buf.position(0);
+            GLES20.glEnableVertexAttribArray(aPos);
+            GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 16, buf);
+            buf.position(2);
+            GLES20.glEnableVertexAttribArray(aTex);
+            GLES20.glVertexAttribPointer(aTex, 2, GLES20.GL_FLOAT, false, 16, buf);
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId);
+            GLES20.glUniform1i(uTex, 0);
+            GLES20.glUniform1f(uFade, 1f);
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+            GLES20.glDisableVertexAttribArray(aPos);
+            GLES20.glDisableVertexAttribArray(aTex);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        }
+
         private int createProgram(String vs, String fs) {
             int v = compileShader(GLES20.GL_VERTEX_SHADER, vs);
             int f = compileShader(GLES20.GL_FRAGMENT_SHADER, fs);
@@ -9568,6 +9851,12 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
         private void releaseGl() {
             try {
                 deleteFbos();
+                if (calligraphyTexture != 0) {
+                    GLES20.glDeleteTextures(1, new int[]{calligraphyTexture}, 0);
+                    calligraphyTexture = 0;
+                }
+                if (calligraphyBitmap != null && !calligraphyBitmap.isRecycled()) calligraphyBitmap.recycle();
+                calligraphyBitmap = null;
                 if (textureProgram != 0) GLES20.glDeleteProgram(textureProgram);
                 if (colorProgram != 0) GLES20.glDeleteProgram(colorProgram);
                 if (egl != null && eglDisplay != null) {
@@ -9735,13 +10024,58 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
                     + ":" + Math.round(cfg.afterglowMinSec) + ":" + Math.round(cfg.afterglowMaxSec);
         }
 
+        private void parseCalligraphyStrokeData(String json) {
+            calligraphyStrokeGlyphs.clear();
+            if (json == null || json.length() < 4) return;
+            try {
+                JSONObject root = new JSONObject(json);
+                Iterator<String> characters = root.keys();
+                while (characters.hasNext()) {
+                    String character = characters.next();
+                    if (character == null || character.codePointCount(0, character.length()) != 1) continue;
+                    JSONObject source = root.optJSONObject(character);
+                    if (source == null) continue;
+                    JSONArray sourceMedians = source.optJSONArray("medians");
+                    if (sourceMedians == null) continue;
+                    CalligraphyStrokeGlyph glyph = new CalligraphyStrokeGlyph();
+                    for (int strokeIndex = 0; strokeIndex < sourceMedians.length(); strokeIndex++) {
+                        JSONArray sourceStroke = sourceMedians.optJSONArray(strokeIndex);
+                        if (sourceStroke == null) continue;
+                        ArrayList<float[]> median = new ArrayList<>();
+                        for (int pointIndex = 0; pointIndex < sourceStroke.length(); pointIndex++) {
+                            JSONArray point = sourceStroke.optJSONArray(pointIndex);
+                            if (point == null || point.length() < 2) continue;
+                            median.add(new float[]{(float)point.optDouble(0), (float)point.optDouble(1)});
+                        }
+                        if (median.size() >= 2) glyph.medians.add(median);
+                    }
+                    if (!glyph.medians.isEmpty()) {
+                        calligraphyStrokeGlyphs.put(character.codePointAt(0), glyph);
+                    }
+                }
+            } catch (Throwable ignored) {
+                calligraphyStrokeGlyphs.clear();
+            }
+        }
+
         private void readConfig(boolean force) {
             long now = SystemClock.elapsedRealtime();
             if (!force && !configDirty && now - lastConfigRead < 500L) return;
             lastConfigRead = now;
             configDirty = false;
             String oldVisualSignature = visualConfigSignature;
+            String oldCalligraphyStrokeData = cfg.calligraphyStrokeData;
             cfg.style = prefs.getInt("style", 0);
+            cfg.wallpaperMode = prefs.getString("wallpaperMode", "mystify");
+            cfg.calligraphyText = prefs.getString("calligraphyText", "行到水穷处，坐看云起时。");
+            cfg.calligraphyStyle = prefs.getString("calligraphyStyle", "kaishu");
+            cfg.calligraphySpeed = clamp(prefs.getFloat("calligraphySpeed", 0.55f), 0.15f, 1f);
+            cfg.calligraphyStrokeData = prefs.getString("calligraphyStrokeData", "{}");
+            cfg.calligraphyPlaylist = prefs.getString("calligraphyPlaylist", "[]");
+            if (cfg.calligraphyStrokeData == null) cfg.calligraphyStrokeData = "{}";
+            if (force || !cfg.calligraphyStrokeData.equals(oldCalligraphyStrokeData)) {
+                parseCalligraphyStrokeData(cfg.calligraphyStrokeData);
+            }
             cfg.intimacy = prefs.getFloat("intimacy", 0.72f);
             cfg.randomness = prefs.getFloat("randomness", 0.66f);
             cfg.ribbonWidth = prefs.getFloat("ribbonWidth", 0.62f);
@@ -9786,7 +10120,9 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
         }
 
         private String buildVisualConfigSignature() {
-            return cfg.style + ":" + Math.round(cfg.intimacy * 1000f)
+            return cfg.wallpaperMode + ":" + cfg.calligraphyText + ":" + cfg.calligraphyStyle
+                    + ":" + cfg.calligraphyStrokeData.hashCode() + ":" + cfg.calligraphyPlaylist.hashCode()
+                    + ":" + Math.round(cfg.calligraphySpeed * 1000f) + ":" + cfg.style + ":" + Math.round(cfg.intimacy * 1000f)
                     + ":" + Math.round(cfg.randomness * 1000f)
                     + ":" + Math.round(cfg.ribbonWidth * 1000f)
                     + ":" + Math.round(cfg.trail * 1000f)
@@ -9912,6 +10248,12 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
 
     static final class Config {
         int style = 0;
+        String wallpaperMode = "mystify";
+        String calligraphyText = "行到水穷处，坐看云起时。";
+        String calligraphyStyle = "kaishu";
+        float calligraphySpeed = 0.55f;
+        String calligraphyStrokeData = "{}";
+        String calligraphyPlaylist = "[]";
         float intimacy = 0.72f;
         float randomness = 0.66f;
         float ribbonWidth = 0.62f;
@@ -9940,6 +10282,29 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
         float releaseMaxSec = 24f;
         float afterglowMinSec = 20f;
         float afterglowMaxSec = 90f;
+    }
+
+    static final class CalligraphyStrokeGlyph {
+        final ArrayList<ArrayList<float[]>> medians = new ArrayList<>();
+    }
+
+    static final class CalligraphyWork {
+        final String text;
+        final String style;
+        final float speed;
+        final float localSeconds;
+
+        CalligraphyWork(String text, String style, float speed, float localSeconds) {
+            this.text = text;
+            this.style = style;
+            this.speed = speed;
+            this.localSeconds = localSeconds;
+        }
+
+        float duration() {
+            int count = (int)text.codePoints().filter(cp -> !Character.isWhitespace(cp)).limit(80).count();
+            return Math.max(3.5f, count * (1.35f - speed * 0.72f)) + 4.2f;
+        }
     }
 
     static final class CyclePlan {
