@@ -14,7 +14,17 @@ import 'voice_lab_models.dart';
 /// Voice/TTS provider keys shared by the “语音与美好的祝福” module.
 /// Existing ElevenLabs keys are kept in ElevenLabsSettings for backwards compatibility.
 class VoiceProviderSettings {
-  static const provider = 'voice_lab.tts_provider'; // elevenlabs / resemble / minimax
+  static const provider = 'voice_lab.tts_provider'; // elevenlabs / resemble / minimax / microsoft
+
+  static const microsoftApiKey = 'microsoft_speech.api_key';
+  static const microsoftRegion = 'microsoft_speech.region';
+  static const microsoftEndpoint = 'microsoft_speech.endpoint';
+  static const microsoftVoice = 'microsoft_speech.voice';
+  static const microsoftLanguage = 'microsoft_speech.language';
+  static const microsoftOutputFormat = 'microsoft_speech.output_format';
+  static const microsoftRecognitionEndpoint = 'microsoft_speech.recognition_endpoint';
+  static const microsoftProfanity = 'microsoft_speech.profanity';
+  static const microsoftContinuousListening = 'microsoft_speech.continuous_listening';
 
   static const resembleApiKey = 'resemble.api_key';
   static const resembleVoiceUuid = 'resemble.voice_uuid';
@@ -64,6 +74,10 @@ class VoiceProviderSettings {
   static const defaultMiniMaxModel = 'speech-2.8-hd';
   static const defaultMiniMaxVoiceId = 'Chinese_Mandarin_Ordinary';
   static const defaultMiniMaxVoiceName = 'MiniMax 普通中文声音';
+  static const defaultMicrosoftRegion = 'eastasia';
+  static const defaultMicrosoftVoice = 'zh-CN-XiaoxiaoNeural';
+  static const defaultMicrosoftLanguage = 'zh-CN';
+  static const defaultMicrosoftOutputFormat = 'audio-24khz-48kbitrate-mono-mp3';
 }
 
 class MultiProviderTtsService {
@@ -76,8 +90,184 @@ class MultiProviderTtsService {
 
   Future<String> getProvider() async {
     final raw = (await _kvDao.getString(VoiceProviderSettings.provider) ?? VoiceProviderSettings.defaultProvider).trim();
-    if (raw == 'resemble' || raw == 'minimax' || raw == 'elevenlabs') return raw;
+    if (raw == 'resemble' || raw == 'minimax' || raw == 'microsoft' || raw == 'elevenlabs') return raw;
     return VoiceProviderSettings.defaultProvider;
+  }
+
+  String microsoftTtsEndpoint(String region, String customEndpoint) {
+    final custom = customEndpoint.trim();
+    if (custom.isNotEmpty) return custom;
+    return 'https://${region.trim()}.tts.speech.microsoft.com/cognitiveservices/v1';
+  }
+
+  String microsoftRecognitionEndpoint(String region, String language, String customEndpoint) {
+    final custom = customEndpoint.trim();
+    if (custom.isNotEmpty) return custom;
+    return 'https://${region.trim()}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1'
+        '?language=${Uri.encodeQueryComponent(language)}&format=detailed';
+  }
+
+  Future<bool> testMicrosoftConnection({
+    String? apiKey,
+    String? region,
+    String? endpoint,
+  }) async {
+    final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '').trim();
+    final location = (region ?? await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion).trim();
+    if (key.isEmpty) throw StateError('请先填写 Microsoft Speech API Key');
+    if (location.isEmpty && (endpoint ?? '').trim().isEmpty) throw StateError('请填写 Azure Region / Location 或自定义 Endpoint');
+    final uri = Uri.parse(microsoftTtsEndpoint(location, endpoint ?? ''));
+    final response = await http.post(
+      uri,
+      headers: {
+        'Ocp-Apim-Subscription-Key': key,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': VoiceProviderSettings.defaultMicrosoftOutputFormat,
+        'User-Agent': 'quote_app',
+      },
+      body: '<speak version="1.0" xml:lang="zh-CN"><voice name="${VoiceProviderSettings.defaultMicrosoftVoice}">连接测试</voice></speak>',
+    ).timeout(const Duration(seconds: 40));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('Microsoft Speech 测试失败：HTTP ${response.statusCode} ${response.body}');
+    }
+    return true;
+  }
+
+  Future<List<ProviderCatalogOption>> listMicrosoftVoices({
+    String? apiKey,
+    String? region,
+  }) async {
+    final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '').trim();
+    final location = (region ?? await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion).trim();
+    if (key.isEmpty) throw StateError('请先填写 Microsoft Speech API Key');
+    if (location.isEmpty) throw StateError('请先填写 Microsoft Speech Region / Location');
+    final uri = Uri.parse('https://$location.tts.speech.microsoft.com/cognitiveservices/voices/list');
+    final response = await http.get(uri, headers: {
+      'Ocp-Apim-Subscription-Key': key,
+      'Accept': 'application/json',
+    }).timeout(const Duration(seconds: 45));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('获取 Microsoft 声音列表失败：HTTP ${response.statusCode} ${response.body}');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) return const <ProviderCatalogOption>[];
+    return decoded.whereType<Map>().map((raw) {
+      final item = Map<String, dynamic>.from(raw);
+      final id = (item['ShortName'] ?? item['Name'] ?? '').toString();
+      final locale = (item['Locale'] ?? '').toString();
+      final localName = (item['LocalName'] ?? item['DisplayName'] ?? id).toString();
+      final gender = (item['Gender'] ?? '').toString();
+      final styles = item['StyleList'] is List ? (item['StyleList'] as List).join('、') : '';
+      return ProviderCatalogOption(
+        id: id,
+        name: '$localName${locale.isEmpty ? '' : ' · $locale'}',
+        category: gender,
+        description: styles.isEmpty ? gender : '$gender · 风格：$styles',
+        extra: {
+          'locale': locale,
+          'gender': gender,
+          'voiceType': (item['VoiceType'] ?? '').toString(),
+        },
+      );
+    }).where((voice) => voice.id.isNotEmpty).toList();
+  }
+
+  Future<String> synthesizeMicrosoftToFile({
+    required String text,
+    String? apiKey,
+    String? region,
+    String? endpoint,
+    String? voice,
+    String? language,
+    String? outputFormat,
+    double rate = 1,
+    double pitch = 0,
+    double volume = 1,
+  }) async {
+    final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '').trim();
+    final location = (region ?? await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion).trim();
+    final selectedVoice = (voice ?? await _kvDao.getString(VoiceProviderSettings.microsoftVoice) ?? VoiceProviderSettings.defaultMicrosoftVoice).trim();
+    final locale = (language ?? await _kvDao.getString(VoiceProviderSettings.microsoftLanguage) ?? VoiceProviderSettings.defaultMicrosoftLanguage).trim();
+    final format = (outputFormat ?? await _kvDao.getString(VoiceProviderSettings.microsoftOutputFormat) ?? VoiceProviderSettings.defaultMicrosoftOutputFormat).trim();
+    if (key.isEmpty) throw StateError('未配置 Microsoft Speech API Key');
+    final uri = Uri.parse(microsoftTtsEndpoint(location, endpoint ?? await _kvDao.getString(VoiceProviderSettings.microsoftEndpoint) ?? ''));
+    final escaped = const HtmlEscape().convert(text);
+    final ratePercent = ((rate - 1) * 100).round();
+    final pitchPercent = pitch.round();
+    final volumeDb = ((volume.clamp(0.0, 1.0) - 1) * 20).round();
+    final ssml = '<speak version="1.0" xml:lang="$locale"><voice name="$selectedVoice">'
+        '<prosody rate="${ratePercent >= 0 ? '+' : ''}$ratePercent%" pitch="${pitchPercent >= 0 ? '+' : ''}$pitchPercent%" volume="${volumeDb >= 0 ? '+' : ''}${volumeDb}dB">$escaped</prosody>'
+        '</voice></speak>';
+    final response = await http.post(uri, headers: {
+      'Ocp-Apim-Subscription-Key': key,
+      'Content-Type': 'application/ssml+xml',
+      'X-Microsoft-OutputFormat': format,
+      'User-Agent': 'quote_app',
+    }, body: ssml).timeout(const Duration(seconds: 90));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('Microsoft TTS 失败：HTTP ${response.statusCode} ${response.body}');
+    }
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory(p.join(dir.path, 'voice_lab_audio'));
+    await folder.create(recursive: true);
+    if (response.bodyBytes.length < 128) {
+      throw StateError('Microsoft TTS 返回的音频数据过短（${response.bodyBytes.length} bytes）');
+    }
+    final contentType = (response.headers['content-type'] ?? '').toLowerCase();
+    final bytes = response.bodyBytes;
+    final isWave = contentType.contains('wav') ||
+        contentType.contains('riff') ||
+        (bytes.length >= 4 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46);
+    final isMp3 = contentType.contains('mpeg') ||
+        contentType.contains('mp3') ||
+        (bytes.length >= 3 && bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) ||
+        (bytes.length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0);
+    if (!isWave && !isMp3) {
+      throw StateError('Microsoft TTS 返回了无法识别的音频格式：${contentType.isEmpty ? 'unknown' : contentType}');
+    }
+    final ext = isWave ? 'wav' : 'mp3';
+    final file = File(p.join(folder.path, 'microsoft_${DateTime.now().millisecondsSinceEpoch}.$ext'));
+    await file.writeAsBytes(response.bodyBytes, flush: true);
+    return file.path;
+  }
+
+  Future<String> recognizeMicrosoftWav({
+    required List<int> wavBytes,
+    String? apiKey,
+    String? region,
+    String? endpoint,
+    String? language,
+    String profanity = 'masked',
+  }) async {
+    final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '').trim();
+    final location = (region ?? await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion).trim();
+    final locale = (language ?? await _kvDao.getString(VoiceProviderSettings.microsoftLanguage) ?? VoiceProviderSettings.defaultMicrosoftLanguage).trim();
+    if (key.isEmpty) throw StateError('未配置 Microsoft Speech API Key');
+    final uri = Uri.parse(microsoftRecognitionEndpoint(
+      location,
+      locale,
+      endpoint ?? await _kvDao.getString(VoiceProviderSettings.microsoftRecognitionEndpoint) ?? '',
+    )).replace(queryParameters: {
+      ...Uri.parse(microsoftRecognitionEndpoint(location, locale, endpoint ?? '')).queryParameters,
+      'profanity': profanity,
+    });
+    final response = await http.post(uri, headers: {
+      'Ocp-Apim-Subscription-Key': key,
+      'Content-Type': 'audio/wav; codecs=audio/pcm; samplerate=16000',
+      'Accept': 'application/json',
+    }, body: wavBytes).timeout(const Duration(seconds: 60));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('Microsoft STT 失败：HTTP ${response.statusCode} ${response.body}');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map) {
+      final best = decoded['NBest'];
+      final bestText = best is List && best.isNotEmpty && best.first is Map
+          ? (best.first as Map)['Display']
+          : null;
+      return (decoded['DisplayText'] ?? decoded['Text'] ?? bestText ?? '').toString();
+    }
+    return '';
   }
 
   Future<bool> isAutoSaveEnabled() async {

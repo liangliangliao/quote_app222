@@ -176,6 +176,21 @@
             android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <receiver
+            android:name=".VoiceAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <receiver
+            android:name=".VoiceAlarmActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".VoiceAlarmRingingService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <activity
             android:name=".BehaviorPresetRingtonePickActivity"
             android:exported="false"
