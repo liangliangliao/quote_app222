@@ -486,20 +486,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         setState(() => _resembleVoiceOptions = voices);
         _toast('已获取 ${voices.length} 个 Resemble AI 声音');
       } else if (_ttsProvider == 'microsoft') {
-        final path = await _multiService.synthesizeMicrosoftToFile(
-          text: text,
-          apiKey: _microsoftApiKeyCtrl.text.trim(),
-          region: _microsoftRegionCtrl.text.trim(),
-          endpoint: _microsoftEndpointCtrl.text.trim(),
-          voice: _microsoftVoiceCtrl.text.trim(),
-          language: _microsoftLanguageCtrl.text.trim(),
-          outputFormat: _microsoftOutputFormatCtrl.text.trim(),
-          rate: _ttsSpeed,
-        );
-        await _player.stop();
-        await _player.play(DeviceFileSource(path));
-        _toast('Microsoft 语音已生成并保存');
-        return;
+        _toast('Microsoft Neural Voice 请在 API 配置中填写 voice name，例如 zh-CN-XiaoxiaoNeural');
       } else if (_ttsProvider == 'minimax') {
         final voices = await _multiService.listMiniMaxVoices(apiKey: _minimaxApiKeyCtrl.text.trim());
         if (!mounted) return;
@@ -580,6 +567,24 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
     try {
       final seedText = _seedCtrl.text.trim();
       final parsedSeed = seedText.isEmpty ? null : int.tryParse(seedText);
+      if (_ttsProvider == 'microsoft') {
+        final path = await _multiService.synthesizeMicrosoftToFile(
+          text: text,
+          apiKey: _microsoftApiKeyCtrl.text.trim(),
+          region: _microsoftRegionCtrl.text.trim(),
+          endpoint: _microsoftEndpointCtrl.text.trim(),
+          voice: _microsoftVoiceCtrl.text.trim(),
+          language: _microsoftLanguageCtrl.text.trim(),
+          outputFormat: _microsoftOutputFormatCtrl.text.trim(),
+          rate: _ttsSpeed,
+        );
+        if (File(path).existsSync()) {
+          await _player.stop();
+          await _player.play(DeviceFileSource(path));
+        }
+        _toast('Microsoft 语音已生成并保存');
+        return;
+      }
       TtsAudioFile audio;
       if (_ttsProvider == 'resemble') {
         final selected = _ttsVoiceSource == 'cloned' && _selectedVoice?.provider == 'resemble' ? _selectedVoice : null;
