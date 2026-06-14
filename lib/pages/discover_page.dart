@@ -38,6 +38,7 @@ import 'mood_insights_page.dart';
 import '../diary/notebook_list_page.dart';
 import '../diary/diary_dao.dart';
 import '../data/db.dart';
+import '../voice_alarm/voice_alarm_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2715,6 +2716,36 @@ Widget _buildEmotionPieChart() {
                                 ),
                               );
                             },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F7F7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.alarm_on_outlined, size: 20, color: Color(0xFF7C3AED)),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('语音闹钟', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                SizedBox(height: 2),
+                                Text('预设时间、朗读内容、语音服务商、震动与音乐，支持5分钟后再次提醒', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Color(0xFF666666))),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right),
+                            onPressed: () => Navigator.of(context).push(
+                              CupertinoPageRoute(builder: (_) => const VoiceAlarmPage()),
+                            ),
                           ),
                         ],
                       ),
