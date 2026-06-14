@@ -176,6 +176,30 @@
             android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <receiver
+            android:name=".VoiceAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <receiver
+            android:name=".VoiceAlarmActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".VoiceAlarmRingingService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <activity
+            android:name=".VoiceAlarmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.example.quote_app.voiceAlarm"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTask"
+            android:theme="@style/BehaviorObservationPresetAlarmTheme" />
+
         <activity
             android:name=".BehaviorPresetRingtonePickActivity"
             android:exported="false"
