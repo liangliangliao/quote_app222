@@ -54,6 +54,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
   final TextEditingController _minimaxSampleRateCtrl = TextEditingController(text: '32000');
   final TextEditingController _minimaxBitrateCtrl = TextEditingController(text: '128000');
   final TextEditingController _minimaxLanguageBoostCtrl = TextEditingController(text: 'auto');
+  final TextEditingController _microsoftApiKeyCtrl = TextEditingController();
+  final TextEditingController _microsoftRegionCtrl = TextEditingController(text: VoiceProviderSettings.defaultMicrosoftRegion);
+  final TextEditingController _microsoftEndpointCtrl = TextEditingController();
+  final TextEditingController _microsoftRecognitionEndpointCtrl = TextEditingController();
+  final TextEditingController _microsoftVoiceCtrl = TextEditingController(text: VoiceProviderSettings.defaultMicrosoftVoice);
+  final TextEditingController _microsoftLanguageCtrl = TextEditingController(text: VoiceProviderSettings.defaultMicrosoftLanguage);
+  final TextEditingController _microsoftOutputFormatCtrl = TextEditingController(text: VoiceProviderSettings.defaultMicrosoftOutputFormat);
 
   List<VoiceProfile> _voices = <VoiceProfile>[];
   List<ElevenLabsVoiceOption> _voiceOptions = <ElevenLabsVoiceOption>[];
@@ -148,6 +155,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
     _minimaxSampleRateCtrl.dispose();
     _minimaxBitrateCtrl.dispose();
     _minimaxLanguageBoostCtrl.dispose();
+    _microsoftApiKeyCtrl.dispose();
+    _microsoftRegionCtrl.dispose();
+    _microsoftEndpointCtrl.dispose();
+    _microsoftRecognitionEndpointCtrl.dispose();
+    _microsoftVoiceCtrl.dispose();
+    _microsoftLanguageCtrl.dispose();
+    _microsoftOutputFormatCtrl.dispose();
     _player.dispose();
     super.dispose();
   }
@@ -156,7 +170,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
 
 
   void _selectProvider(String provider) {
-    final normalized = <String>['elevenlabs', 'resemble', 'minimax'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
+    final normalized = <String>['elevenlabs', 'resemble', 'minimax', 'microsoft'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
     setState(() {
       _ttsProvider = normalized;
       final providerVoices = _voices.where((v) => v.provider == normalized).toList();
@@ -210,6 +224,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       final minimaxVmPitch = await _kvDao.getString(VoiceProviderSettings.minimaxVoiceModifyPitch);
       final minimaxVmIntensity = await _kvDao.getString(VoiceProviderSettings.minimaxVoiceModifyIntensity);
       final minimaxVmTimbre = await _kvDao.getString(VoiceProviderSettings.minimaxVoiceModifyTimbre);
+      final microsoftApiKey = await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '';
+      final microsoftRegion = await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion;
+      final microsoftEndpoint = await _kvDao.getString(VoiceProviderSettings.microsoftEndpoint) ?? '';
+      final microsoftRecognitionEndpoint = await _kvDao.getString(VoiceProviderSettings.microsoftRecognitionEndpoint) ?? '';
+      final microsoftVoice = await _kvDao.getString(VoiceProviderSettings.microsoftVoice) ?? VoiceProviderSettings.defaultMicrosoftVoice;
+      final microsoftLanguage = await _kvDao.getString(VoiceProviderSettings.microsoftLanguage) ?? VoiceProviderSettings.defaultMicrosoftLanguage;
+      final microsoftOutputFormat = await _kvDao.getString(VoiceProviderSettings.microsoftOutputFormat) ?? VoiceProviderSettings.defaultMicrosoftOutputFormat;
       final model = await _kvDao.getString(ElevenLabsSettings.defaultModel) ?? ElevenLabsSettings.defaultTtsModel;
       final out = await _kvDao.getString(ElevenLabsSettings.outputFormat) ?? ElevenLabsSettings.defaultOutputFormat;
       final autoSave = await _kvDao.getString(ElevenLabsSettings.autoSaveAudio);
@@ -253,7 +274,14 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       if (!mounted) return;
       setState(() {
         _apiKeyCtrl.text = apiKey;
-        _ttsProvider = <String>['elevenlabs', 'resemble', 'minimax'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
+        _ttsProvider = <String>['elevenlabs', 'resemble', 'minimax', 'microsoft'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
+        _microsoftApiKeyCtrl.text = microsoftApiKey;
+        _microsoftRegionCtrl.text = microsoftRegion;
+        _microsoftEndpointCtrl.text = microsoftEndpoint;
+        _microsoftRecognitionEndpointCtrl.text = microsoftRecognitionEndpoint;
+        _microsoftVoiceCtrl.text = microsoftVoice;
+        _microsoftLanguageCtrl.text = microsoftLanguage;
+        _microsoftOutputFormatCtrl.text = microsoftOutputFormat;
         _resembleApiKeyCtrl.text = resembleApiKey;
         _resembleVoiceUuidCtrl.text = resembleVoiceUuid;
         _resembleVoiceNameCtrl.text = resembleVoiceName;
@@ -372,6 +400,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       await _kvDao.setString(VoiceProviderSettings.minimaxVoiceModifyPitch, _minimaxVoiceModifyPitch.toString());
       await _kvDao.setString(VoiceProviderSettings.minimaxVoiceModifyIntensity, _minimaxVoiceModifyIntensity.toString());
       await _kvDao.setString(VoiceProviderSettings.minimaxVoiceModifyTimbre, _minimaxVoiceModifyTimbre.toString());
+      await _kvDao.setString(VoiceProviderSettings.microsoftApiKey, _microsoftApiKeyCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.microsoftRegion, _microsoftRegionCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.microsoftEndpoint, _microsoftEndpointCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.microsoftRecognitionEndpoint, _microsoftRecognitionEndpointCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.microsoftVoice, _microsoftVoiceCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.microsoftLanguage, _microsoftLanguageCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.microsoftOutputFormat, _microsoftOutputFormatCtrl.text.trim());
       await _kvDao.setString(ElevenLabsSettings.apiKey, _apiKeyCtrl.text.trim());
       await _kvDao.setString(ElevenLabsSettings.defaultModel, _modelCtrl.text.trim().isEmpty ? ElevenLabsSettings.defaultTtsModel : _modelCtrl.text.trim());
       await _kvDao.setString(ElevenLabsSettings.outputFormat, _outputFormatCtrl.text.trim().isEmpty ? ElevenLabsSettings.defaultOutputFormat : _outputFormatCtrl.text.trim());
@@ -427,6 +462,9 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       } else if (_ttsProvider == 'minimax') {
         await _multiService.testMiniMaxConnection(apiKey: _minimaxApiKeyCtrl.text.trim(), endpoint: _minimaxEndpointCtrl.text.trim());
         _toast('MiniMax API Key 可用');
+      } else if (_ttsProvider == 'microsoft') {
+        await _multiService.testMicrosoftConnection(apiKey: _microsoftApiKeyCtrl.text.trim(), region: _microsoftRegionCtrl.text.trim(), endpoint: _microsoftEndpointCtrl.text.trim());
+        _toast('Microsoft Speech API Key、Region 与 Endpoint 可用');
       } else {
         await _service.testConnection();
         _toast('ElevenLabs API Key 可用');
@@ -447,6 +485,8 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         if (!mounted) return;
         setState(() => _resembleVoiceOptions = voices);
         _toast('已获取 ${voices.length} 个 Resemble AI 声音');
+      } else if (_ttsProvider == 'microsoft') {
+        _toast('Microsoft Neural Voice 请在 API 配置中填写 voice name，例如 zh-CN-XiaoxiaoNeural');
       } else if (_ttsProvider == 'minimax') {
         final voices = await _multiService.listMiniMaxVoices(apiKey: _minimaxApiKeyCtrl.text.trim());
         if (!mounted) return;
@@ -527,6 +567,24 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
     try {
       final seedText = _seedCtrl.text.trim();
       final parsedSeed = seedText.isEmpty ? null : int.tryParse(seedText);
+      if (_ttsProvider == 'microsoft') {
+        final path = await _multiService.synthesizeMicrosoftToFile(
+          text: text,
+          apiKey: _microsoftApiKeyCtrl.text.trim(),
+          region: _microsoftRegionCtrl.text.trim(),
+          endpoint: _microsoftEndpointCtrl.text.trim(),
+          voice: _microsoftVoiceCtrl.text.trim(),
+          language: _microsoftLanguageCtrl.text.trim(),
+          outputFormat: _microsoftOutputFormatCtrl.text.trim(),
+          rate: _ttsSpeed,
+        );
+        if (File(path).existsSync()) {
+          await _player.stop();
+          await _player.play(DeviceFileSource(path));
+        }
+        _toast('Microsoft 语音已生成并保存');
+        return;
+      }
       TtsAudioFile audio;
       if (_ttsProvider == 'resemble') {
         final selected = _ttsVoiceSource == 'cloned' && _selectedVoice?.provider == 'resemble' ? _selectedVoice : null;
@@ -770,6 +828,14 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
               subtitle: const Text('适合中文、多情绪、超长停顿 <#x#>、速度/音量/音调/音效和快速克隆声音。'),
               onChanged: (v) => _selectProvider(v ?? 'minimax'),
             ),
+            RadioListTile<String>(
+              contentPadding: EdgeInsets.zero,
+              value: 'microsoft',
+              groupValue: _ttsProvider,
+              title: const Text('Microsoft Azure Speech'),
+              subtitle: const Text('支持 Neural TTS、SSML、区域/自定义 Endpoint，以及语音转文字和持续监听配置。'),
+              onChanged: (v) => _selectProvider(v ?? 'microsoft'),
+            ),
           ],
         ),
       ),
@@ -872,6 +938,27 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
                 }),
                 icon: const Icon(Icons.spa_outlined),
                 label: const Text('套用 Resemble 冥想音质推荐'),
+              ),
+            ] else if (_ttsProvider == 'microsoft') ...[
+              TextField(controller: _microsoftApiKeyCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Microsoft Speech API Key', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _microsoftRegionCtrl, decoration: const InputDecoration(labelText: 'Region / Location', helperText: '例如 eastasia、southeastasia；必须与 Azure Speech 资源一致', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _microsoftEndpointCtrl, decoration: const InputDecoration(labelText: 'TTS Endpoint（可留空自动生成）', helperText: '留空使用 https://{region}.tts.speech.microsoft.com/cognitiveservices/v1', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _microsoftRecognitionEndpointCtrl, decoration: const InputDecoration(labelText: 'STT Endpoint（可留空自动生成）', helperText: '支持 Azure 自定义语音识别 Endpoint', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _microsoftVoiceCtrl, decoration: const InputDecoration(labelText: 'Neural Voice', helperText: '默认 zh-CN-XiaoxiaoNeural', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _microsoftLanguageCtrl, decoration: const InputDecoration(labelText: 'TTS / STT 语言', helperText: '例如 zh-CN、en-US', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _microsoftOutputFormatCtrl, decoration: const InputDecoration(labelText: 'X-Microsoft-OutputFormat', helperText: '默认 audio-24khz-48kbitrate-mono-mp3', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.hearing_outlined),
+                title: Text('语音转文字与持续监听'),
+                subtitle: Text('已保存识别 Endpoint、语言和密钥。持续监听采用短句自动续听，避免移动端系统静默超时；麦克风权限会在实际使用时申请。'),
               ),
             ] else ...[
               TextField(controller: _minimaxApiKeyCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'MiniMax API Key', border: OutlineInputBorder())),
@@ -1617,6 +1704,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
     return switch (provider) {
       'resemble' => 'Resemble AI',
       'minimax' => 'MiniMax',
+      'microsoft' => 'Microsoft Azure Speech',
       _ => 'ElevenLabs',
     };
   }
