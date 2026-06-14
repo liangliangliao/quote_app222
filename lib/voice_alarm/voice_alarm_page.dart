@@ -24,7 +24,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   TimeOfDay _time = TimeOfDay.now();
   String _provider = 'microsoft';
   String? _customMusic;
+  String? _backgroundImage;
   String? _generatedVoice;
+  double _speed = 1.0;
+  double _pauseSeconds = 0.6;
+  String _scene = 'natural_dialogue';
+  String _emotion = 'calm';
+  final _voiceId = TextEditingController();
   bool _vibrate = true;
   bool _systemMusic = true;
   bool _saving = false;
@@ -32,6 +38,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   @override
   void dispose() {
     _text.dispose();
+    _voiceId.dispose();
     super.dispose();
   }
 
@@ -46,6 +53,12 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     final result = await FilePicker.platform.pickFiles(type: FileType.audio);
     final path = result?.files.single.path;
     if (path != null && mounted) setState(() => _customMusic = path);
+  }
+
+  Future<void> _pickBackground() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    final path = result?.files.single.path;
+    if (path != null && mounted) setState(() => _backgroundImage = path);
   }
 
   Future<void> _schedule() async {
@@ -87,42 +100,80 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Future<String> _generateVoiceFile() async {
     final text = _text.text.trim();
     if (_provider == 'microsoft') {
-      return _tts.synthesizeMicrosoftToFile(text: text);
+      return _tts.synthesizeMicrosoftToFile(
+        text: text,
+        voice: _voiceId.text.trim().isEmpty ? null : _voiceId.text.trim(),
+        rate: _speed,
+        pauseSeconds: _pauseSeconds,
+        style: _emotion == 'none' ? '' : _emotion,
+      );
     }
     if (_provider == 'resemble') {
-      final voiceUuid = (await _kv.getString(VoiceProviderSettings.resembleVoiceUuid) ?? '').trim();
+      final voiceUuid = _voiceId.text.trim().isNotEmpty
+          ? _voiceId.text.trim()
+          : (await _kv.getString(VoiceProviderSettings.resembleVoiceUuid) ?? '').trim();
       if (voiceUuid.isEmpty) throw StateError('请先在“语音与美好的祝福配置”中选择 Resemble voice_uuid');
+      final allowed = await _tts.listResembleVoices();
+      if (!allowed.any((voice) => voice.id == voiceUuid)) {
+        throw StateError('当前 Resemble Token 无权使用 voice_uuid=$voiceUuid。请回到语音配置页查询声音，并选择当前 Token 返回的声音。');
+      }
       final audio = await _tts.synthesizeResembleAndSave(
         text: text,
         voiceUuid: voiceUuid,
         voiceDisplayName: await _kv.getString(VoiceProviderSettings.resembleVoiceName) ?? 'Resemble AI',
         moduleName: 'voice_alarm_resemble',
+        speed: _speed,
+        scene: _scene,
+        meditationAutoPauses: _pauseSeconds > 0,
+        meditationSentenceBreakSec: _pauseSeconds,
+        meditationParagraphBreakSec: (_pauseSeconds * 1.6).clamp(0.2, 5.0).toDouble(),
+        meditationTone: _emotion,
       );
       return audio.audioFilePath;
     }
     if (_provider == 'minimax') {
-      final voiceId = (await _kv.getString(VoiceProviderSettings.minimaxVoiceId) ?? VoiceProviderSettings.defaultMiniMaxVoiceId).trim();
+      final voiceId = _voiceId.text.trim().isNotEmpty
+          ? _voiceId.text.trim()
+          : (await _kv.getString(VoiceProviderSettings.minimaxVoiceId) ?? VoiceProviderSettings.defaultMiniMaxVoiceId).trim();
       final audio = await _tts.synthesizeMiniMaxAndSave(
         text: text,
         voiceId: voiceId,
         voiceDisplayName: await _kv.getString(VoiceProviderSettings.minimaxVoiceName) ?? VoiceProviderSettings.defaultMiniMaxVoiceName,
         moduleName: 'voice_alarm_minimax',
+        speed: _speed,
+        emotion: _emotion,
+        scene: _scene,
+        meditationAutoPauses: _pauseSeconds > 0,
+        meditationSentenceBreakSec: _pauseSeconds,
       );
       return audio.audioFilePath;
     }
-    final voiceId = (await _kv.getString(ElevenLabsSettings.presetVoiceId) ?? ElevenLabsSettings.defaultPresetVoiceId).trim();
+    final voiceId = _voiceId.text.trim().isNotEmpty
+        ? _voiceId.text.trim()
+        : (await _kv.getString(ElevenLabsSettings.presetVoiceId) ?? ElevenLabsSettings.defaultPresetVoiceId).trim();
     final audio = await _elevenLabs.synthesizeAndSaveByVoiceId(
       text: text,
       voiceId: voiceId,
       voiceSource: 'premade',
       voiceDisplayName: await _kv.getString(ElevenLabsSettings.presetVoiceName) ?? ElevenLabsSettings.defaultPresetVoiceName,
       moduleName: 'voice_alarm_elevenlabs',
+      speed: _speed,
+      scene: _scene,
+      pauseMode: _pauseSeconds > 0 ? 'punctuation' : 'none',
     );
     return audio.audioFilePath;
   }
 
   Future<void> _ring() async {
-    await _native.invokeMethod<void>('testRing', {'payload': _payload()});
+    setState(() => _saving = true);
+    try {
+      _generatedVoice = await _generateVoiceFile();
+      await _native.invokeMethod<void>('testRing', {'payload': _payload()});
+    } catch (e) {
+      _toast('测试失败：$e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   String _payload() {
@@ -131,10 +182,16 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'provider': _provider,
       'voicePath': _generatedVoice ?? '',
       'musicPath': _customMusic ?? '',
+      'backgroundPath': _backgroundImage ?? '',
       'vibrate': _vibrate,
       'systemMusic': _systemMusic,
       'hour': _time.hour,
       'minute': _time.minute,
+      'speed': _speed,
+      'pauseSeconds': _pauseSeconds,
+      'scene': _scene,
+      'emotion': _emotion,
+      'voiceId': _voiceId.text.trim(),
     });
   }
 
@@ -188,6 +245,44 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 ),
                 const SizedBox(height: 8),
                 const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。当前版本会为微软服务预先生成闹钟语音。', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _voiceId,
+                  decoration: const InputDecoration(
+                    labelText: '闹钟专用声音 ID（可留空）',
+                    helperText: 'Microsoft 可填写 Neural Voice；其他服务商留空时使用美好祝福模块当前声音',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('语速 ${_speed.toStringAsFixed(2)}×'),
+                Slider(value: _speed, min: 0.5, max: 1.5, divisions: 20, onChanged: (value) => setState(() => _speed = value)),
+                Text('句末停顿 ${_pauseSeconds.toStringAsFixed(1)} 秒'),
+                Slider(value: _pauseSeconds, min: 0, max: 3, divisions: 30, onChanged: (value) => setState(() => _pauseSeconds = value)),
+                DropdownButtonFormField<String>(
+                  value: _scene,
+                  decoration: const InputDecoration(labelText: '场景匹配', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'natural_dialogue', child: Text('自然对话')),
+                    DropdownMenuItem(value: 'morning_blessing', child: Text('清晨祝福')),
+                    DropdownMenuItem(value: 'meditation_relax', child: Text('冥想放松')),
+                    DropdownMenuItem(value: 'energetic', child: Text('活力唤醒')),
+                  ],
+                  onChanged: (value) => setState(() => _scene = value ?? 'natural_dialogue'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _emotion,
+                  decoration: const InputDecoration(labelText: '情绪 / 风格', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'none', child: Text('默认')),
+                    DropdownMenuItem(value: 'calm', child: Text('平静 calm')),
+                    DropdownMenuItem(value: 'cheerful', child: Text('愉快 cheerful')),
+                    DropdownMenuItem(value: 'gentle', child: Text('温柔 gentle')),
+                    DropdownMenuItem(value: 'excited', child: Text('振奋 excited')),
+                  ],
+                  onChanged: (value) => setState(() => _emotion = value ?? 'calm'),
+                ),
               ]),
             ),
           ),
@@ -201,6 +296,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 subtitle: Text(_customMusic == null ? '未选择' : _customMusic!.split('/').last),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _pickMusic,
+              ),
+              ListTile(
+                leading: const Icon(Icons.image_outlined),
+                title: const Text('全屏闹钟背景图片'),
+                subtitle: Text(_backgroundImage == null ? '未选择，使用默认渐变背景' : _backgroundImage!.split('/').last),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _pickBackground,
               ),
             ]),
           ),

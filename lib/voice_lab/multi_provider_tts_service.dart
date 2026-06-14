@@ -96,7 +96,7 @@ class MultiProviderTtsService {
 
   String microsoftTtsEndpoint(String region, String customEndpoint) {
     final custom = customEndpoint.trim();
-    if (custom.isNotEmpty) return custom;
+    if (custom.contains('/cognitiveservices/v1')) return custom;
     return 'https://${region.trim()}.tts.speech.microsoft.com/cognitiveservices/v1';
   }
 
@@ -129,6 +129,9 @@ class MultiProviderTtsService {
     ).timeout(const Duration(seconds: 40));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('Microsoft Speech 测试失败：HTTP ${response.statusCode} ${response.body}');
+    }
+    if (response.bodyBytes.isEmpty) {
+      throw StateError('Microsoft Speech Endpoint 返回成功状态但没有音频。请清空自定义 Endpoint，并确认 Region 与 Azure Speech 资源一致。');
     }
     return true;
   }
@@ -183,6 +186,8 @@ class MultiProviderTtsService {
     double rate = 1,
     double pitch = 0,
     double volume = 1,
+    double pauseSeconds = 0,
+    String style = '',
   }) async {
     final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '').trim();
     final location = (region ?? await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion).trim();
@@ -191,19 +196,35 @@ class MultiProviderTtsService {
     final format = (outputFormat ?? await _kvDao.getString(VoiceProviderSettings.microsoftOutputFormat) ?? VoiceProviderSettings.defaultMicrosoftOutputFormat).trim();
     if (key.isEmpty) throw StateError('未配置 Microsoft Speech API Key');
     final uri = Uri.parse(microsoftTtsEndpoint(location, endpoint ?? await _kvDao.getString(VoiceProviderSettings.microsoftEndpoint) ?? ''));
-    final escaped = const HtmlEscape().convert(text);
+    var escaped = const HtmlEscape().convert(text);
+    if (pauseSeconds > 0) {
+      final breakTag = '<break time="${pauseSeconds.clamp(0.1, 5.0).toStringAsFixed(1)}s"/>';
+      escaped = escaped.replaceAllMapped(RegExp(r'([。！？!?；;])'), (match) => '${match.group(1)}$breakTag');
+    }
     final ratePercent = ((rate - 1) * 100).round();
     final pitchPercent = pitch.round();
     final volumeDb = ((volume.clamp(0.0, 1.0) - 1) * 20).round();
-    final ssml = '<speak version="1.0" xml:lang="$locale"><voice name="$selectedVoice">'
-        '<prosody rate="${ratePercent >= 0 ? '+' : ''}$ratePercent%" pitch="${pitchPercent >= 0 ? '+' : ''}$pitchPercent%" volume="${volumeDb >= 0 ? '+' : ''}${volumeDb}dB">$escaped</prosody>'
-        '</voice></speak>';
-    final response = await http.post(uri, headers: {
+    final prosody = '<prosody rate="${ratePercent >= 0 ? '+' : ''}$ratePercent%" pitch="${pitchPercent >= 0 ? '+' : ''}$pitchPercent%" volume="${volumeDb >= 0 ? '+' : ''}${volumeDb}dB">$escaped</prosody>';
+    final styled = style.trim().isEmpty ? prosody : '<mstts:express-as style="${const HtmlEscape().convert(style.trim())}">$prosody</mstts:express-as>';
+    String buildSsml(String content) =>
+        '<speak version="1.0" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="$locale"><voice name="$selectedVoice">$content</voice></speak>';
+    Future<http.Response> send(Uri target, String body) => http.post(target, headers: {
       'Ocp-Apim-Subscription-Key': key,
       'Content-Type': 'application/ssml+xml',
       'X-Microsoft-OutputFormat': format,
       'User-Agent': 'quote_app',
-    }, body: ssml).timeout(const Duration(seconds: 90));
+    }, body: body).timeout(const Duration(seconds: 90));
+    var response = await send(uri, buildSsml(styled));
+    if ((response.statusCode < 200 || response.statusCode >= 300) && style.trim().isNotEmpty) {
+      response = await send(uri, buildSsml(prosody));
+    }
+    final regionalUri = Uri.parse(microsoftTtsEndpoint(location, ''));
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300 &&
+        response.bodyBytes.isEmpty &&
+        uri != regionalUri) {
+      response = await send(regionalUri, buildSsml(prosody));
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('Microsoft TTS 失败：HTTP ${response.statusCode} ${response.body}');
     }
@@ -211,7 +232,8 @@ class MultiProviderTtsService {
     final folder = Directory(p.join(dir.path, 'voice_lab_audio'));
     await folder.create(recursive: true);
     if (response.bodyBytes.length < 128) {
-      throw StateError('Microsoft TTS 返回的音频数据过短（${response.bodyBytes.length} bytes）');
+      final requestId = response.headers['x-requestid'] ?? response.headers['x-request-id'] ?? '无';
+      throw StateError('Microsoft TTS 未返回有效音频（${response.bodyBytes.length} bytes）。请确认 Region 与语音资源一致；Endpoint 可留空让系统自动生成。requestId=$requestId');
     }
     final contentType = (response.headers['content-type'] ?? '').toLowerCase();
     final bytes = response.bodyBytes;
@@ -387,6 +409,9 @@ class MultiProviderTtsService {
       body: _shortBody(resp.body),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      if (resp.statusCode == 401 || resp.statusCode == 403) {
+        throw StateError('Resemble Token 无效或无权访问声音列表。请重新复制 API Token，并确认所选 voice_uuid 属于当前账号/团队。');
+      }
       throw StateError('获取 Resemble 声音列表失败：HTTP ${resp.statusCode} ${resp.body}');
     }
     final decoded = jsonDecode(resp.body);
@@ -724,6 +749,9 @@ class MultiProviderTtsService {
       resp = await _postResembleSynthesize(uri, apiKey, fallbackBody, retry: true);
     }
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      if (resp.statusCode == 401 || resp.statusCode == 403) {
+        throw StateError('Resemble TTS 未授权：当前 Token 无效，或无权使用 voice_uuid=$cleanVoice。请在配置页重新查询并选择当前 Token 返回的声音。');
+      }
       throw StateError('Resemble TTS 失败：HTTP ${resp.statusCode} ${resp.body}');
     }
     final bytes = _extractResembleAudioBytes(resp);

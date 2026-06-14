@@ -27,7 +27,7 @@ class VoiceAlarmRingingService : Service() {
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
     private const val EXTRA_PAYLOAD = "payload"
-    private const val CHANNEL_ID = "voice_alarm_ringing_v2"
+    private const val CHANNEL_ID = "voice_alarm_ringing_v3"
     private const val NOTIFICATION_ID = 974002
 
     @JvmStatic
@@ -81,14 +81,16 @@ class VoiceAlarmRingingService : Service() {
       notificationManager.createNotificationChannel(
         NotificationChannel(CHANNEL_ID, "语音闹钟响铃", NotificationManager.IMPORTANCE_HIGH).apply {
           description = "即使 App 在后台或进程未运行，也会播放语音闹钟并震动"
-          enableVibration(false)
+          enableVibration(true)
+          vibrationPattern = longArrayOf(0, 900, 350, 900, 350, 1400)
           setSound(null, null)
           lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         },
       )
     }
-    val launchIntent = (packageManager.getLaunchIntentForPackage(packageName) ?: Intent(this, MainActivity::class.java)).apply {
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    val launchIntent = Intent(this, VoiceAlarmActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      putExtra("payload", payload)
     }
     val contentIntent = PendingIntent.getActivity(
       this,
@@ -123,6 +125,7 @@ class VoiceAlarmRingingService : Service() {
       .setPriority(NotificationCompat.PRIORITY_MAX)
       .setCategory(NotificationCompat.CATEGORY_ALARM)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setVibrate(longArrayOf(0, 900, 350, 900, 350, 1400))
       .setOngoing(true)
       .setAutoCancel(false)
       .setContentIntent(contentIntent)
@@ -135,6 +138,7 @@ class VoiceAlarmRingingService : Service() {
     } else {
       startForeground(NOTIFICATION_ID, notification)
     }
+    try { contentIntent.send() } catch (_: Throwable) {}
   }
 
   private fun acquireWakeLock() {
@@ -156,8 +160,15 @@ class VoiceAlarmRingingService : Service() {
         @Suppress("DEPRECATION")
         getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
       }
-      val pattern = longArrayOf(0, 800, 450, 800, 450, 1200)
-      if (Build.VERSION.SDK_INT >= 26) vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+      val pattern = longArrayOf(0, 900, 350, 900, 350, 1400)
+      val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
+      if (Build.VERSION.SDK_INT >= 26) {
+        val effect = VibrationEffect.createWaveform(pattern, amplitudes, 0)
+        vibrator?.vibrate(
+          effect,
+          AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
+        )
+      }
       else {
         @Suppress("DEPRECATION")
         vibrator?.vibrate(pattern, 0)
