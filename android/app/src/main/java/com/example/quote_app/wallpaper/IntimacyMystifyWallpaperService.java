@@ -7,6 +7,9 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.opengl.GLES20;
@@ -599,7 +602,7 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             if (content.length() == 0) content = "行到水穷处，坐看云起时。";
             int[] codePoints = content.codePoints().filter(cp -> !Character.isWhitespace(cp)).limit(80).toArray();
             float seconds = (nowMs - startMs) / 1000f;
-            float secondsPerCharacter = 0.72f - cfg.calligraphySpeed * 0.48f;
+            float secondsPerCharacter = 1.35f - cfg.calligraphySpeed * 0.72f;
             float writingDuration = Math.max(3.5f, codePoints.length * secondsPerCharacter);
             float cycle = writingDuration + 4.2f;
             float local = seconds % cycle;
@@ -609,13 +612,8 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                     ? clamp(1f - (local - writingDuration - 2.8f) / 1.4f, 0f, 1f) : 1f;
 
             Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
-            String family = "serif";
-            int typefaceStyle = Typeface.NORMAL;
-            if ("xingshu".equals(cfg.calligraphyStyle)) family = "cursive";
-            if ("caoshu".equals(cfg.calligraphyStyle)) {
-                family = "cursive";
-                typefaceStyle = Typeface.ITALIC;
-            }
+            String family = "kaishu".equals(cfg.calligraphyStyle) ? "serif" : "sans-serif";
+            int typefaceStyle = "kaishu".equals(cfg.calligraphyStyle) ? Typeface.BOLD : Typeface.NORMAL;
             ink.setTypeface(Typeface.create(family, typefaceStyle));
             ink.setTextAlign(Paint.Align.CENTER);
             ink.setTextSize("caoshu".equals(cfg.calligraphyStyle) ? 92f : 82f);
@@ -637,9 +635,21 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 int row = i % rows;
                 float x = firstX - col * colGap;
                 float y = firstY + row * rowGap;
-                float newestAlpha = i == shown - 1 ? clamp(shownFloat - (shown - 1), 0.18f, 1f) : 1f;
-                ink.setColor(Color.argb((int)(242f * newestAlpha * fadeOut), 240, 231, 209));
-                canvas.drawText(new String(Character.toChars(codePoints[i])), x, y, ink);
+                float characterProgress = clamp(shownFloat - i, 0f, 1f);
+                drawAnimatedCalligraphyGlyph(
+                        canvas,
+                        new String(Character.toChars(codePoints[i])),
+                        codePoints[i],
+                        x,
+                        y,
+                        ink,
+                        characterProgress,
+                        fadeOut,
+                        cfg.calligraphyStyle
+                );
+                if (i > 0 && row > 0 && characterProgress > 0.08f && !"kaishu".equals(cfg.calligraphyStyle)) {
+                    drawCalligraphyLigature(canvas, x, y - rowGap, x, y, codePoints[i], characterProgress, fadeOut, cfg.calligraphyStyle);
+                }
             }
 
             Paint seal = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -652,6 +662,155 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             seal.setTypeface(Typeface.create("serif", Typeface.BOLD));
             seal.setTextSize(27f);
             canvas.drawText("静", 89f, h - 95f, seal);
+        }
+
+        private void drawAnimatedCalligraphyGlyph(Canvas canvas, String glyph, int codePoint, float x, float baseline,
+                                                   Paint glyphPaint, float progress, float fade, String style) {
+            if (progress <= 0f) return;
+            glyphPaint.setColor(Color.argb((int)(242f * fade), 240, 231, 209));
+            float size = glyphPaint.getTextSize();
+            float top = baseline - size * 0.92f;
+            RectF bounds = new RectF(x - size * 0.62f, top - size * 0.08f, x + size * 0.62f, baseline + size * 0.22f);
+            if (progress >= 0.995f) {
+                drawStyledCalligraphyText(canvas, glyph, codePoint, x, baseline, size, glyphPaint, style);
+                return;
+            }
+            int layer = canvas.saveLayer(bounds, null);
+
+            Paint reveal = new Paint(Paint.ANTI_ALIAS_FLAG);
+            reveal.setColor(Color.WHITE);
+            reveal.setStyle(Paint.Style.STROKE);
+            reveal.setStrokeCap("kaishu".equals(style) ? Paint.Cap.SQUARE : Paint.Cap.ROUND);
+            reveal.setStrokeJoin(Paint.Join.ROUND);
+            int strokeCount = "kaishu".equals(style) ? 9 : ("xingshu".equals(style) ? 7 : 5);
+            float scaled = progress * strokeCount;
+            for (int stroke = 0; stroke < strokeCount; stroke++) {
+                float strokeProgress = clamp(scaled - stroke, 0f, 1f);
+                if (strokeProgress <= 0f) continue;
+                drawGlyphRevealStroke(canvas, reveal, bounds, codePoint, stroke, strokeCount, strokeProgress, style);
+            }
+
+            glyphPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+            drawStyledCalligraphyText(canvas, glyph, codePoint, x, baseline, size, glyphPaint, style);
+            glyphPaint.setXfermode(null);
+            canvas.restoreToCount(layer);
+
+            drawCalligraphyBrushTip(canvas, bounds, codePoint, progress, style, fade);
+        }
+
+        private void drawStyledCalligraphyText(Canvas canvas, String glyph, int codePoint, float x, float baseline,
+                                               float size, Paint glyphPaint, String style) {
+            canvas.save();
+            if ("xingshu".equals(style)) {
+                canvas.rotate(((codePoint % 7) - 3) * 0.75f, x, baseline - size * 0.42f);
+                canvas.scale(0.94f, 1.02f, x, baseline);
+            } else if ("caoshu".equals(style)) {
+                canvas.rotate(-5f + (codePoint % 9) * 1.15f, x, baseline - size * 0.42f);
+                canvas.scale(0.82f, 1.08f, x, baseline);
+            }
+            canvas.drawText(glyph, x, baseline, glyphPaint);
+            canvas.restore();
+        }
+
+        private void drawGlyphRevealStroke(Canvas canvas, Paint paint, RectF box, int codePoint, int stroke,
+                                           int strokeCount, float progress, String style) {
+            int pattern = Math.floorMod(codePoint * 31 + stroke * 17, 6);
+            float lane = (stroke + 0.55f) / strokeCount;
+            float left = box.left + box.width() * 0.08f;
+            float right = box.right - box.width() * 0.08f;
+            float top = box.top + box.height() * 0.08f;
+            float bottom = box.bottom - box.height() * 0.10f;
+            float sx;
+            float sy;
+            float ex;
+            float ey;
+            if (pattern == 0) {
+                sx = left; sy = lerp(top, bottom, lane); ex = right; ey = sy + box.height() * 0.04f;
+            } else if (pattern == 1) {
+                sx = lerp(left, right, lane); sy = top; ex = sx - box.width() * 0.04f; ey = bottom;
+            } else if (pattern == 2) {
+                sx = left; sy = top + box.height() * lane * 0.55f; ex = right; ey = bottom - box.height() * (1f - lane) * 0.35f;
+            } else if (pattern == 3) {
+                sx = right; sy = top + box.height() * lane * 0.45f; ex = left; ey = bottom - box.height() * (1f - lane) * 0.50f;
+            } else if (pattern == 4) {
+                sx = box.centerX(); sy = top; ex = lerp(left, right, lane); ey = bottom;
+            } else {
+                sx = lerp(left, right, lane); sy = box.centerY(); ex = lane < 0.5f ? left : right; ey = lane < 0.5f ? top : bottom;
+            }
+            float curve = ("caoshu".equals(style) ? 0.22f : ("xingshu".equals(style) ? 0.12f : 0.035f)) * box.width();
+            float mx = (sx + ex) * 0.5f + (float)Math.sin(codePoint * 0.13f + stroke) * curve;
+            float my = (sy + ey) * 0.5f + (float)Math.cos(codePoint * 0.11f + stroke) * curve;
+            float t = smooth(progress);
+            float tx = quadratic(sx, mx, ex, t);
+            float ty = quadratic(sy, my, ey, t);
+            Path path = new Path();
+            path.moveTo(sx, sy);
+            path.quadTo(lerp(sx, mx, t), lerp(sy, my, t), tx, ty);
+            float baseWidth = box.width() * ("kaishu".equals(style) ? 0.24f : ("xingshu".equals(style) ? 0.20f : 0.17f));
+            paint.setStrokeWidth(baseWidth * (0.82f + 0.25f * (float)Math.sin(stroke * 2.1f + codePoint)));
+            canvas.drawPath(path, paint);
+            if (!"kaishu".equals(style)) {
+                paint.setStrokeWidth(baseWidth * 0.42f);
+                canvas.drawLine(tx, ty, tx + (ex - sx) * 0.08f, ty + (ey - sy) * 0.08f, paint);
+            }
+        }
+
+        private void drawCalligraphyBrushTip(Canvas canvas, RectF box, int codePoint, float progress, String style, float fade) {
+            int strokeCount = "kaishu".equals(style) ? 9 : ("xingshu".equals(style) ? 7 : 5);
+            float scaled = progress * strokeCount;
+            int stroke = Math.min(strokeCount - 1, Math.max(0, (int)Math.floor(scaled)));
+            float local = clamp(scaled - stroke, 0f, 1f);
+            int pattern = Math.floorMod(codePoint * 31 + stroke * 17, 6);
+            float lane = (stroke + 0.55f) / strokeCount;
+            float[] endpoints = glyphStrokeEndpoints(box, pattern, lane);
+            float curve = ("caoshu".equals(style) ? 0.22f : ("xingshu".equals(style) ? 0.12f : 0.035f)) * box.width();
+            float mx = (endpoints[0] + endpoints[2]) * 0.5f + (float)Math.sin(codePoint * 0.13f + stroke) * curve;
+            float my = (endpoints[1] + endpoints[3]) * 0.5f + (float)Math.cos(codePoint * 0.11f + stroke) * curve;
+            float t = smooth(local);
+            float x = quadratic(endpoints[0], mx, endpoints[2], t);
+            float y = quadratic(endpoints[1], my, endpoints[3], t);
+            Paint tip = new Paint(Paint.ANTI_ALIAS_FLAG);
+            tip.setColor(Color.argb((int)(220f * fade), 246, 238, 218));
+            float radius = box.width() * ("kaishu".equals(style) ? 0.055f : 0.042f);
+            canvas.drawOval(new RectF(x - radius * 0.62f, y - radius, x + radius * 0.62f, y + radius), tip);
+        }
+
+        private float[] glyphStrokeEndpoints(RectF box, int pattern, float lane) {
+            float left = box.left + box.width() * 0.08f;
+            float right = box.right - box.width() * 0.08f;
+            float top = box.top + box.height() * 0.08f;
+            float bottom = box.bottom - box.height() * 0.10f;
+            switch (pattern) {
+                case 0: return new float[]{left, lerp(top, bottom, lane), right, lerp(top, bottom, lane) + box.height() * 0.04f};
+                case 1: {
+                    float x = lerp(left, right, lane);
+                    return new float[]{x, top, x - box.width() * 0.04f, bottom};
+                }
+                case 2: return new float[]{left, top + box.height() * lane * 0.55f, right, bottom - box.height() * (1f - lane) * 0.35f};
+                case 3: return new float[]{right, top + box.height() * lane * 0.45f, left, bottom - box.height() * (1f - lane) * 0.50f};
+                case 4: return new float[]{box.centerX(), top, lerp(left, right, lane), bottom};
+                default: return new float[]{lerp(left, right, lane), box.centerY(), lane < 0.5f ? left : right, lane < 0.5f ? top : bottom};
+            }
+        }
+
+        private void drawCalligraphyLigature(Canvas canvas, float fromX, float fromY, float toX, float toY,
+                                             int codePoint, float progress, float fade, String style) {
+            Paint connector = new Paint(Paint.ANTI_ALIAS_FLAG);
+            connector.setStyle(Paint.Style.STROKE);
+            connector.setStrokeCap(Paint.Cap.ROUND);
+            connector.setStrokeWidth("caoshu".equals(style) ? 4.6f : 2.8f);
+            connector.setColor(Color.argb((int)(fade * ("caoshu".equals(style) ? 135f : 82f)), 223, 216, 198));
+            float startY = fromY + (toY - fromY) * 0.22f;
+            float endY = lerp(startY, toY - 30f, smooth(progress));
+            Path path = new Path();
+            path.moveTo(fromX + ((codePoint & 1) == 0 ? 9f : -7f), startY);
+            path.cubicTo(fromX + 24f, lerp(startY, endY, 0.30f), toX - 22f, lerp(startY, endY, 0.70f), toX, endY);
+            canvas.drawPath(path, connector);
+        }
+
+        private static float quadratic(float a, float b, float c, float t) {
+            float u = 1f - t;
+            return u * u * a + 2f * u * t * b + t * t * c;
         }
 
         private void spawnAccordingToPhase(Phase phase, float sec) {
