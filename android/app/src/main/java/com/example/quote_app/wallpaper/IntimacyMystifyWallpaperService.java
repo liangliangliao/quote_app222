@@ -6,11 +6,8 @@ import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.opengl.GLES20;
@@ -607,28 +604,29 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 canvas.drawLine(0f, y, w, y + (fibers.nextFloat() - 0.5f) * 34f, fiber);
             }
 
-            String content = cfg.calligraphyText == null ? "行到水穷处，坐看云起时。" : cfg.calligraphyText.trim();
+            float seconds = (nowMs - startMs) / 1000f;
+            CalligraphyWork activeWork = resolveCalligraphyWork(seconds);
+            String content = activeWork.text;
             if (content.length() == 0) content = "行到水穷处，坐看云起时。";
             int[] codePoints = content.codePoints().filter(cp -> !Character.isWhitespace(cp)).limit(80).toArray();
-            float seconds = (nowMs - startMs) / 1000f;
-            float secondsPerCharacter = 1.35f - cfg.calligraphySpeed * 0.72f;
+            float secondsPerCharacter = 1.35f - activeWork.speed * 0.72f;
             float writingDuration = Math.max(3.5f, codePoints.length * secondsPerCharacter);
             float cycle = writingDuration + 4.2f;
-            float local = seconds % cycle;
+            float local = activeWork.localSeconds % cycle;
             float shownFloat = Math.min(codePoints.length, local / secondsPerCharacter);
             int shown = Math.min(codePoints.length, (int)Math.ceil(shownFloat));
             float fadeOut = local > writingDuration + 2.8f
                     ? clamp(1f - (local - writingDuration - 2.8f) / 1.4f, 0f, 1f) : 1f;
 
             Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
-            String family = "kaishu".equals(cfg.calligraphyStyle) ? "serif" : "sans-serif";
-            int typefaceStyle = "kaishu".equals(cfg.calligraphyStyle) ? Typeface.BOLD : Typeface.NORMAL;
+            String family = "kaishu".equals(activeWork.style) ? "serif" : "sans-serif";
+            int typefaceStyle = "kaishu".equals(activeWork.style) ? Typeface.BOLD : Typeface.NORMAL;
             ink.setTypeface(Typeface.create(family, typefaceStyle));
             ink.setTextAlign(Paint.Align.CENTER);
-            ink.setTextSize("caoshu".equals(cfg.calligraphyStyle) ? 92f : 82f);
-            ink.setFakeBoldText("kaishu".equals(cfg.calligraphyStyle));
-            ink.setTextSkewX("caoshu".equals(cfg.calligraphyStyle) ? -0.28f
-                    : ("xingshu".equals(cfg.calligraphyStyle) ? -0.12f : 0f));
+            ink.setTextSize("caoshu".equals(activeWork.style) ? 92f : 82f);
+            ink.setFakeBoldText("kaishu".equals(activeWork.style));
+            ink.setTextSkewX("caoshu".equals(activeWork.style) ? -0.28f
+                    : ("xingshu".equals(activeWork.style) ? -0.12f : 0f));
             ink.setShadowLayer(18f, 0f, 2f, Color.argb(95, 60, 230, 190));
 
             final int maxColumns = 5;
@@ -647,7 +645,7 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 float characterProgress = clamp(shownFloat - i, 0f, 1f);
                 CalligraphyStrokeGlyph strokeGlyph = calligraphyStrokeGlyphs.get(codePoints[i]);
                 if (strokeGlyph != null && !strokeGlyph.medians.isEmpty()) {
-                    drawRealStrokeOrderGlyph(canvas, strokeGlyph, x, y, ink.getTextSize(), characterProgress, fadeOut, cfg.calligraphyStyle);
+                    drawRealStrokeOrderGlyph(canvas, strokeGlyph, x, y, ink.getTextSize(), characterProgress, fadeOut, activeWork.style);
                 } else {
                     // Never invent a fake stroke order. If no verified data was
                     // downloaded, show the complete glyph as an explicit fallback.
@@ -660,7 +658,7 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                             y,
                             ink.getTextSize(),
                             ink,
-                            cfg.calligraphyStyle
+                            activeWork.style
                     );
                 }
             }
@@ -677,6 +675,46 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             canvas.drawText("静", 89f, h - 95f, seal);
         }
 
+        private CalligraphyWork resolveCalligraphyWork(float seconds) {
+            ArrayList<CalligraphyWork> works = new ArrayList<>();
+            try {
+                JSONArray source = new JSONArray(cfg.calligraphyPlaylist == null ? "[]" : cfg.calligraphyPlaylist);
+                for (int i = 0; i < source.length(); i++) {
+                    JSONObject item = source.optJSONObject(i);
+                    if (item == null) continue;
+                    String text = item.optString("text", "").trim();
+                    if (text.isEmpty()) continue;
+                    works.add(new CalligraphyWork(
+                            text,
+                            item.optString("style", "kaishu"),
+                            clamp((float)item.optDouble("speed", 0.55), 0.15f, 1f),
+                            0f
+                    ));
+                }
+            } catch (Throwable ignored) {
+                works.clear();
+            }
+            if (works.isEmpty()) {
+                return new CalligraphyWork(
+                        cfg.calligraphyText == null ? "行到水穷处，坐看云起时。" : cfg.calligraphyText.trim(),
+                        cfg.calligraphyStyle,
+                        cfg.calligraphySpeed,
+                        seconds
+                );
+            }
+            float total = 0f;
+            for (CalligraphyWork work : works) total += work.duration();
+            float cursor = total <= 0f ? 0f : seconds % total;
+            for (CalligraphyWork work : works) {
+                if (cursor < work.duration()) {
+                    return new CalligraphyWork(work.text, work.style, work.speed, cursor);
+                }
+                cursor -= work.duration();
+            }
+            CalligraphyWork first = works.get(0);
+            return new CalligraphyWork(first.text, first.style, first.speed, 0f);
+        }
+
         private void drawRealStrokeOrderGlyph(Canvas canvas, CalligraphyStrokeGlyph glyph, float centerX, float baseline,
                                               float size, float progress, float fade, String style) {
             float boxLeft = centerX - size * 0.50f;
@@ -691,14 +729,6 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             strokePaint.setColor(Color.argb((int)(242f * fade), 240, 231, 209));
             float baseWidth = "kaishu".equals(style) ? size * 0.105f
                     : ("xingshu".equals(style) ? size * 0.082f : size * 0.068f);
-            Paint shapePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            shapePaint.setStyle(Paint.Style.FILL);
-            shapePaint.setColor(Color.argb((int)(242f * fade), 240, 231, 209));
-            Matrix shapeMatrix = new Matrix();
-            shapeMatrix.setScale(scale, -scale);
-            shapeMatrix.postTranslate(boxLeft, boxTop + size);
-            RectF glyphBounds = new RectF(boxLeft, boxTop, boxLeft + size, boxTop + size);
-
             float lastX = centerX;
             float lastY = baseline;
             boolean hasTip = false;
@@ -735,28 +765,10 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 }
                 float pressure = 0.88f + 0.16f * (float)Math.sin(strokeIndex * 1.7f + progress * Math.PI);
                 strokePaint.setStrokeWidth(baseWidth * pressure);
-                Path sourceShape = strokeIndex < glyph.shapes.size() ? glyph.shapes.get(strokeIndex) : null;
-                if (sourceShape != null) {
-                    Path shape = new Path(sourceShape);
-                    shape.transform(shapeMatrix);
-                    if (strokeProgress >= 0.999f) {
-                        canvas.drawPath(shape, shapePaint);
-                    } else {
-                        int layer = canvas.saveLayer(glyphBounds, null);
-                        Paint mask = new Paint(strokePaint);
-                        // The median is only the brush center. A wider mask
-                        // reveals the licensed full stroke outline underneath.
-                        mask.setColor(Color.WHITE);
-                        mask.setStrokeWidth(Math.max(baseWidth * 2.2f, size * 0.16f));
-                        canvas.drawPath(path, mask);
-                        shapePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-                        canvas.drawPath(shape, shapePaint);
-                        shapePaint.setXfermode(null);
-                        canvas.restoreToCount(layer);
-                    }
-                } else {
-                    canvas.drawPath(path, strokePaint);
-                }
+                // Use the same verified median path and pressure model as the
+                // Flutter preview. Revealing SVG outlines with a wide SRC_IN
+                // mask produced vendor-dependent white bars on real wallpaper.
+                canvas.drawPath(path, strokePaint);
                 if (strokeProgress < 0.999f) hasTip = true;
             }
             if (hasTip) {
@@ -10028,14 +10040,6 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
                     JSONArray sourceMedians = source.optJSONArray("medians");
                     if (sourceMedians == null) continue;
                     CalligraphyStrokeGlyph glyph = new CalligraphyStrokeGlyph();
-                    JSONArray sourceShapes = source.optJSONArray("strokes");
-                    if (sourceShapes != null) {
-                        for (int strokeIndex = 0; strokeIndex < sourceShapes.length(); strokeIndex++) {
-                            String pathData = sourceShapes.optString(strokeIndex, "");
-                            Path shape = pathData.isEmpty() ? null : PathParser.createPathFromPathData(pathData);
-                            glyph.shapes.add(shape);
-                        }
-                    }
                     for (int strokeIndex = 0; strokeIndex < sourceMedians.length(); strokeIndex++) {
                         JSONArray sourceStroke = sourceMedians.optJSONArray(strokeIndex);
                         if (sourceStroke == null) continue;
@@ -10069,6 +10073,7 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
             cfg.calligraphyStyle = prefs.getString("calligraphyStyle", "kaishu");
             cfg.calligraphySpeed = clamp(prefs.getFloat("calligraphySpeed", 0.55f), 0.15f, 1f);
             cfg.calligraphyStrokeData = prefs.getString("calligraphyStrokeData", "{}");
+            cfg.calligraphyPlaylist = prefs.getString("calligraphyPlaylist", "[]");
             if (cfg.calligraphyStrokeData == null) cfg.calligraphyStrokeData = "{}";
             if (force || !cfg.calligraphyStrokeData.equals(oldCalligraphyStrokeData)) {
                 parseCalligraphyStrokeData(cfg.calligraphyStrokeData);
@@ -10118,7 +10123,7 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
 
         private String buildVisualConfigSignature() {
             return cfg.wallpaperMode + ":" + cfg.calligraphyText + ":" + cfg.calligraphyStyle
-                    + ":" + cfg.calligraphyStrokeData.hashCode()
+                    + ":" + cfg.calligraphyStrokeData.hashCode() + ":" + cfg.calligraphyPlaylist.hashCode()
                     + ":" + Math.round(cfg.calligraphySpeed * 1000f) + ":" + cfg.style + ":" + Math.round(cfg.intimacy * 1000f)
                     + ":" + Math.round(cfg.randomness * 1000f)
                     + ":" + Math.round(cfg.ribbonWidth * 1000f)
@@ -10250,6 +10255,7 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
         String calligraphyStyle = "kaishu";
         float calligraphySpeed = 0.55f;
         String calligraphyStrokeData = "{}";
+        String calligraphyPlaylist = "[]";
         float intimacy = 0.72f;
         float randomness = 0.66f;
         float ribbonWidth = 0.62f;
@@ -10282,7 +10288,25 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
 
     static final class CalligraphyStrokeGlyph {
         final ArrayList<ArrayList<float[]>> medians = new ArrayList<>();
-        final ArrayList<Path> shapes = new ArrayList<>();
+    }
+
+    static final class CalligraphyWork {
+        final String text;
+        final String style;
+        final float speed;
+        final float localSeconds;
+
+        CalligraphyWork(String text, String style, float speed, float localSeconds) {
+            this.text = text;
+            this.style = style;
+            this.speed = speed;
+            this.localSeconds = localSeconds;
+        }
+
+        float duration() {
+            int count = (int)text.codePoints().filter(cp -> !Character.isWhitespace(cp)).limit(80).count();
+            return Math.max(3.5f, count * (1.35f - speed * 0.72f)) + 4.2f;
+        }
     }
 
     static final class CyclePlan {

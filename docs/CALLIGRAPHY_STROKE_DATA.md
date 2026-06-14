@@ -11,6 +11,15 @@
 当前文本涉及的字符，并把结果缓存到 Android 动态壁纸偏好中，因此桌面壁纸
 后续可以离线播放。
 
+为降低偶发下载失败，客户端会在 jsDelivr 与 unpkg 两个镜像之间切换，按
+4 字一组限流并进行三轮退避重试；已经成功的单字采用增量缓存，不会被一次
+不完整的网络请求覆盖。全部汉字获取成功的句子会加入最多 12 条的本地轮播
+队列，真实壁纸按保存顺序循环书写，设置页可一键清空队列与笔顺缓存。
+
+Flutter 预览和 Android 真实壁纸统一绘制 `medians` 运笔中线并使用相同笔锋
+宽度。Android 不再通过宽蒙版揭示 SVG 外轮廓，因为部分厂商的 Canvas/GPU
+会把该离屏混合层错误呈现为白色粗线条。
+
 Hanzi Writer 源码使用 MIT License。Hanzi Writer Data / Make Me a Hanzi
 图形数据来自 Arphic PL KaitiM GB 与 Arphic PL UKai，并按 Arphic Public
 License 再分发。具体许可说明以两个上游仓库中的许可证文件为准。

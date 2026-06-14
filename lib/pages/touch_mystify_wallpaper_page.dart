@@ -31,6 +31,9 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   bool _generatingCalligraphy = false;
   bool _loadingStrokeData = false;
   String _calligraphyStrokeData = '{}';
+  List<Map<String, dynamic>> _calligraphyPlaylist = [];
+  List<String> _calligraphyAiHistory = [];
+  List<String> _failedStrokeCharacters = [];
   String _strokeDataText = '';
   final TextEditingController _calligraphyController = TextEditingController(
     text: '行到水穷处，坐看云起时。',
@@ -88,6 +91,8 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     final savedStyle = config['calligraphyStyle'] as String?;
     final savedSpeed = (config['calligraphySpeed'] as num?)?.toDouble();
     final savedStrokeData = config['calligraphyStrokeData'] as String?;
+    final savedPlaylist = config['calligraphyPlaylist'] as String?;
+    final savedAiHistory = config['calligraphyAiHistory'] as String?;
     setState(() {
       if (savedMode == 'mystify' || savedMode == 'calligraphy') {
         _wallpaperMode = savedMode!;
@@ -105,6 +110,8 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
         _calligraphyStrokeData = savedStrokeData;
         _strokeDataText = _calligraphyController.text.trim();
       }
+      _calligraphyPlaylist = _decodeObjectList(savedPlaylist);
+      _calligraphyAiHistory = _decodeStringList(savedAiHistory);
     });
   }
 
@@ -181,6 +188,7 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   Future<bool> _saveCurrentConfig({required bool resetSeed, bool showSnack = false}) async {
     if (resetSeed && _wallpaperMode == 'calligraphy') {
       await _prepareRealStrokeData();
+      _rememberCurrentCalligraphy();
     }
     final ok = await IntimacyWallpaperBridge.saveConfig(
       style: _style,
@@ -191,6 +199,8 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
       calligraphyStyle: _calligraphyStyle,
       calligraphySpeed: _calligraphySpeed,
       calligraphyStrokeData: _calligraphyStrokeData,
+      calligraphyPlaylist: jsonEncode(_calligraphyPlaylist),
+      calligraphyAiHistory: jsonEncode(_calligraphyAiHistory),
       intimacy: _intimacy,
       randomness: _randomness,
       ribbonWidth: _ribbonWidth,
@@ -231,42 +241,58 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
 
   Future<void> _prepareRealStrokeData() async {
     final text = _calligraphyController.text.trim();
-    if (text.isEmpty || (_strokeDataText == text && _calligraphyStrokeData != '{}')) return;
+    if (text.isEmpty) return;
     if (mounted) setState(() => _loadingStrokeData = true);
     final characters = text.runes
         .map(String.fromCharCode)
         .where((character) => RegExp(r'[\u3400-\u9fff]').hasMatch(character))
         .toSet()
-        .take(40);
-    final data = <String, dynamic>{};
-    for (final character in characters) {
-      try {
-        final uri = Uri.parse(
-          'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${Uri.encodeComponent(character)}.json',
-        );
-        final response = await http.get(uri).timeout(const Duration(seconds: 12));
-        if (response.statusCode != 200) continue;
-        final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-        if (decoded is Map<String, dynamic> &&
-            decoded['strokes'] is List &&
-            decoded['medians'] is List) {
-          data[character] = decoded;
-        }
-      } catch (_) {
-        // Keep already downloaded characters. Missing characters use the
-        // complete-glyph fallback instead of fabricated/random stroke order.
+        .take(80)
+        .toList();
+    final data = _decodeStrokeCache(_calligraphyStrokeData);
+    final missing = characters.where((character) => !_validStrokeEntry(data[character])).toList();
+    for (var offset = 0; offset < missing.length; offset += 4) {
+      final batch = missing.skip(offset).take(4);
+      final results = await Future.wait(batch.map((character) async =>
+          MapEntry(character, await _fetchStrokeCharacter(character))));
+      for (final result in results) {
+        if (result.value != null) data[result.key] = result.value;
       }
     }
     _calligraphyStrokeData = jsonEncode(data);
     _strokeDataText = text;
+    _failedStrokeCharacters =
+        characters.where((character) => !_validStrokeEntry(data[character])).toList();
     if (!mounted) return;
     setState(() => _loadingStrokeData = false);
-    final missing = characters.length - data.length;
-    if (missing > 0) {
+    if (_failedStrokeCharacters.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已载入 ${data.length} 个汉字的标准笔顺；$missing 个字符无数据，将使用完整字形显示。')),
+        SnackBar(content: Text('已缓存 ${characters.length - _failedStrokeCharacters.length} 个汉字；'
+            '${_failedStrokeCharacters.join('、')} 暂未取得数据，可点击“重试缺失笔顺”。')),
       );
     }
+  }
+
+  Future<Map<String, dynamic>?> _fetchStrokeCharacter(String character) async {
+    final encoded = Uri.encodeComponent(character);
+    final urls = [
+      'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/$encoded.json',
+      'https://unpkg.com/hanzi-writer-data@2.0.1/$encoded.json',
+    ];
+    for (var attempt = 0; attempt < 3; attempt++) {
+      for (final url in urls) {
+        try {
+          final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+          if (response.statusCode != 200) continue;
+          final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+          if (_validStrokeEntry(decoded)) return decoded as Map<String, dynamic>;
+        } catch (_) {
+          // Try the mirror and then retry with backoff.
+        }
+      }
+      await Future<void>.delayed(Duration(milliseconds: 350 * (attempt + 1) * (attempt + 1)));
+    }
+    return null;
   }
 
   Future<void> _saveAndOpen() async {
@@ -317,24 +343,38 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     if (_generatingCalligraphy) return;
     setState(() => _generatingCalligraphy = true);
     try {
-      final result = await UnifiedAiService().generateText(
-        prompt: '请随机选择一句适合动态壁纸书写的中国经典名言、名句或诗词。要求：正文不超过28个汉字；有出处时在下一行用“——作者《作品》”标注；不要解释，不要使用引号或Markdown。',
-        purpose: 'touch_wallpaper.calligraphy_classic',
-        systemPrompt: '你是中国古典文学与名言选句助手，只返回准确、凝练、适合书法展示的经典原文及简短出处。不要杜撰。',
-        maxTokens: 120,
-        temperature: 0.9,
-      );
+      String cleaned = '';
+      for (var attempt = 0; attempt < 4; attempt++) {
+        final recent = _calligraphyAiHistory.reversed.take(20).join('；');
+        final result = await UnifiedAiService().generateText(
+          prompt:
+              '请随机选择一句适合动态壁纸书写的中国经典名言、名句或诗词。要求：正文不超过28个汉字；有出处时在下一行用“——作者《作品》”标注；不要解释，不要使用引号或Markdown。'
+              '${recent.isEmpty ? '' : '不得与以下历史内容相同或近似：$recent'}',
+          purpose: 'touch_wallpaper.calligraphy_classic',
+          systemPrompt:
+              '你是中国古典文学与名言选句助手，只返回准确、凝练、适合书法展示的经典原文及简短出处。不要杜撰。',
+          maxTokens: 120,
+          temperature: 0.9,
+        );
+        cleaned = result
+            .replaceAll(RegExp(r'^```(?:text)?\s*|\s*```$'), '')
+            .replaceAll(RegExp(r'^[“"]|[”"]$'), '')
+            .trim();
+        if (cleaned.isNotEmpty && !_isRecentAiDuplicate(cleaned)) break;
+        cleaned = '';
+      }
       if (!mounted) return;
-      final cleaned = result
-          .replaceAll(RegExp(r'^```(?:text)?\s*|\s*```$'), '')
-          .replaceAll(RegExp(r'^[“"]|[”"]$'), '')
-          .trim();
       if (cleaned.isEmpty) {
-        throw Exception('未获取到内容，请先在全局 AI 设置中配置可用模型。');
+        throw Exception('连续获取到重复或空内容，请稍后再试。');
       }
       setState(() {
         _calligraphyController.text = cleaned.length > 80 ? cleaned.substring(0, 80) : cleaned;
         _calligraphyController.selection = TextSelection.collapsed(offset: _calligraphyController.text.length);
+        _calligraphyAiHistory = [..._calligraphyAiHistory, cleaned];
+        if (_calligraphyAiHistory.length > 40) {
+          _calligraphyAiHistory =
+              _calligraphyAiHistory.sublist(_calligraphyAiHistory.length - 40);
+        }
       });
       _scheduleConfigSync();
     } catch (error) {
@@ -342,6 +382,69 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 获取失败：$error')));
     } finally {
       if (mounted) setState(() => _generatingCalligraphy = false);
+    }
+  }
+
+  void _rememberCurrentCalligraphy() {
+    final text = _calligraphyController.text.trim();
+    if (text.isEmpty || _failedStrokeCharacters.isNotEmpty) return;
+    _calligraphyPlaylist.removeWhere((item) => item['text'] == text);
+    _calligraphyPlaylist.add({'text': text, 'style': _calligraphyStyle, 'speed': _calligraphySpeed});
+    if (_calligraphyPlaylist.length > 12) {
+      _calligraphyPlaylist = _calligraphyPlaylist.sublist(_calligraphyPlaylist.length - 12);
+    }
+  }
+
+  Future<void> _clearCalligraphyCache() async {
+    setState(() {
+      _calligraphyPlaylist = [];
+      _calligraphyStrokeData = '{}';
+      _strokeDataText = '';
+      _failedStrokeCharacters = [];
+    });
+    await _saveCurrentConfig(resetSeed: false, showSnack: true);
+  }
+
+  bool _isRecentAiDuplicate(String value) {
+    final normalized = _normalizeQuote(value);
+    return _calligraphyAiHistory.any((item) {
+      final old = _normalizeQuote(item);
+      return old == normalized || old.contains(normalized) || normalized.contains(old);
+    });
+  }
+
+  String _normalizeQuote(String value) =>
+      value.replaceAll(RegExp(r'[\s，。！？；：、“”‘’《》—\-]'), '');
+
+  static Map<String, dynamic> _decodeStrokeCache(String source) {
+    try {
+      final decoded = jsonDecode(source);
+      return decoded is Map<String, dynamic> ? Map<String, dynamic>.from(decoded) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static bool _validStrokeEntry(dynamic value) =>
+      value is Map<String, dynamic> && value['medians'] is List && (value['medians'] as List).isNotEmpty;
+
+  static List<Map<String, dynamic>> _decodeObjectList(String? source) {
+    try {
+      final decoded = jsonDecode(source ?? '[]');
+      return decoded is List
+          ? decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+          : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static List<String> _decodeStringList(String? source) {
+    try {
+      final decoded = jsonDecode(source ?? '[]');
+      return decoded is List ? decoded.whereType<String>().toList() : [];
+    } catch (_) {
+      return [];
     }
   }
 
@@ -406,6 +509,60 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                     seed: _previewSeed,
                   ),
           ),
+          if (_wallpaperMode == 'calligraphy') ...[
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '书写内容与笔体',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _calligraphyController,
+                    minLines: 2,
+                    maxLines: 4,
+                    maxLength: 80,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: '自定义书写内容',
+                      hintText: '输入名言、诗句或你想每天看见的话',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) {
+                      setState(() {});
+                      _scheduleConfigSync();
+                    },
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _generatingCalligraphy ? null : _generateClassicText,
+                      icon: _generatingCalligraphy
+                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(_generatingCalligraphy ? 'AI 正在选句…' : 'AI 获取经典名言 / 诗词'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: const [
+                      ('kaishu', '楷书'), ('xingshu', '行书'), ('caoshu', '草书'),
+                    ].map((item) => ChoiceChip(
+                      label: Text(item.$2),
+                      selected: _calligraphyStyle == item.$1,
+                      onSelected: (_) => _updateConfigPreview(() => _calligraphyStyle = item.$1),
+                    )).toList(),
+                  ),
+                  _SliderRow(
+                    label: '落笔速度',
+                    value: _calligraphySpeed,
+                    description: '控制文字逐笔显现与停顿节奏。',
+                    onChanged: (value) => _updateConfigPreview(() => _calligraphySpeed = value),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _SectionCard(
             title: '选择真正应用的动态壁纸',
@@ -465,6 +622,30 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                     style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
                   ),
                   const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _loadingStrokeData ? null : _prepareRealStrokeData,
+                        icon: const Icon(Icons.sync),
+                        label: Text(_failedStrokeCharacters.isEmpty ? '检查并缓存笔顺' : '重试缺失笔顺'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _calligraphyPlaylist.isEmpty && _calligraphyStrokeData == '{}'
+                            ? null
+                            : _clearCalligraphyCache,
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: const Text('一键清空缓存'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '本地轮播已保存 ${_calligraphyPlaylist.length} 条完整书法。每次点击保存会加入队列，真实壁纸会依次循环书写；仅在全部汉字笔顺取得成功后加入。',
+                    style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -500,86 +681,6 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: '选择真正应用的动态壁纸',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'mystify', icon: Icon(Icons.auto_awesome), label: Text('潮汐光迹')),
-                    ButtonSegment(value: 'calligraphy', icon: Icon(Icons.gesture), label: Text('书法书写')),
-                  ],
-                  selected: {_wallpaperMode},
-                  onSelectionChanged: (value) => _updateConfigPreview(() => _wallpaperMode = value.first),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _wallpaperMode == 'mystify'
-                      ? '保留当前已经实现的动画壁纸，所有效果和参数均保持不变。'
-                      : '书法模式会在黑色宣纸氛围中逐字落墨；保存后，系统中的同一个动态壁纸服务会即时切换。',
-                  style: const TextStyle(color: Colors.white60, height: 1.4),
-                ),
-              ],
-            ),
-          ),
-          if (_wallpaperMode == 'calligraphy') ...[
-            const SizedBox(height: 12),
-            _SectionCard(
-              title: '书写内容与笔体',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: _calligraphyController,
-                    minLines: 2,
-                    maxLines: 4,
-                    maxLength: 80,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: '自定义书写内容',
-                      hintText: '输入名言、诗句或你想每天看见的话',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) {
-                      setState(() {});
-                      _scheduleConfigSync();
-                    },
-                  ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _generatingCalligraphy ? null : _generateClassicText,
-                      icon: _generatingCalligraphy
-                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.auto_awesome),
-                      label: Text(_generatingCalligraphy ? 'AI 正在选句…' : 'AI 获取经典名言 / 诗词'),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: const [
-                      ('kaishu', '楷书'), ('xingshu', '行书'), ('caoshu', '草书'),
-                    ].map((item) => ChoiceChip(
-                      label: Text(item.$2),
-                      selected: _calligraphyStyle == item.$1,
-                      onSelected: (_) => _updateConfigPreview(() => _calligraphyStyle = item.$1),
-                    )).toList(),
-                  ),
-                  _SliderRow(
-                    label: '落笔速度',
-                    value: _calligraphySpeed,
-                    description: '控制文字逐笔显现与停顿节奏。',
-                    onChanged: (value) => _updateConfigPreview(() => _calligraphySpeed = value),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          _IntroCard(),
           const SizedBox(height: 16),
           _SectionCard(
             title: '视觉风格',
@@ -1127,24 +1228,6 @@ class _RicePaperPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RicePaperPainter oldDelegate) => oldDelegate.seconds != seconds;
-}
-
-class _IntroCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        color: Colors.white.withOpacity(0.08),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
-      child: const Text(
-        '现在可在“潮汐光迹”和“书法书写”两种动态壁纸之间自由切换。原有 Mystify 动画、阶段节奏和参数完整保留；书法模式支持自定义内容、AI 经典选句、楷书/行书/草书与落笔速度。保存后，当前系统动态壁纸会读取新选择并即时更新。',
-        style: TextStyle(color: Colors.white70, height: 1.55),
-      ),
-    );
-  }
 }
 
 class _SectionCard extends StatelessWidget {
