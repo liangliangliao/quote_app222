@@ -509,6 +509,60 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                     seed: _previewSeed,
                   ),
           ),
+          if (_wallpaperMode == 'calligraphy') ...[
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '书写内容与笔体',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _calligraphyController,
+                    minLines: 2,
+                    maxLines: 4,
+                    maxLength: 80,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: '自定义书写内容',
+                      hintText: '输入名言、诗句或你想每天看见的话',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) {
+                      setState(() {});
+                      _scheduleConfigSync();
+                    },
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _generatingCalligraphy ? null : _generateClassicText,
+                      icon: _generatingCalligraphy
+                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(_generatingCalligraphy ? 'AI 正在选句…' : 'AI 获取经典名言 / 诗词'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: const [
+                      ('kaishu', '楷书'), ('xingshu', '行书'), ('caoshu', '草书'),
+                    ].map((item) => ChoiceChip(
+                      label: Text(item.$2),
+                      selected: _calligraphyStyle == item.$1,
+                      onSelected: (_) => _updateConfigPreview(() => _calligraphyStyle = item.$1),
+                    )).toList(),
+                  ),
+                  _SliderRow(
+                    label: '落笔速度',
+                    value: _calligraphySpeed,
+                    description: '控制文字逐笔显现与停顿节奏。',
+                    onChanged: (value) => _updateConfigPreview(() => _calligraphySpeed = value),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _SectionCard(
             title: '选择真正应用的动态壁纸',
