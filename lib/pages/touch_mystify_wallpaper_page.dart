@@ -871,7 +871,9 @@ class _CalligraphyWritingPainter extends CustomPainter {
   void _paintStyledText(Canvas canvas, TextPainter textPainter, int codePoint, Offset center) {
     canvas.save();
     if (style == 'xingshu') {
-      canvas.rotate(((codePoint % 7) - 3) * 0.012, center.dx, center.dy);
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(((codePoint % 7) - 3) * 0.012);
+      canvas.translate(-center.dx, -center.dy);
     } else if (style == 'caoshu') {
       canvas.translate(center.dx, center.dy);
       canvas.rotate(-0.09 + (codePoint % 9) * 0.018);
