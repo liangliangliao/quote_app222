@@ -27,6 +27,7 @@ object IntimacyWallpaperChannel {
                         editor.putString("calligraphyText", (call.argument<String>("calligraphyText") ?: "行到水穷处，坐看云起时。").take(80))
                         editor.putString("calligraphyStyle", call.argument<String>("calligraphyStyle") ?: "kaishu")
                         editor.putFloat("calligraphySpeed", numberArg(call, "calligraphySpeed", 0.55).toFloat().coerceIn(0.15f, 1f))
+                        editor.putString("calligraphyStrokeData", call.argument<String>("calligraphyStrokeData") ?: "{}")
                         editor.putFloat("intimacy", numberArg(call, "intimacy", 0.72).toFloat().coerceIn(0f, 1f))
                         editor.putFloat("randomness", numberArg(call, "randomness", 0.72).toFloat().coerceIn(0f, 1f))
                         editor.putFloat("ribbonWidth", numberArg(call, "ribbonWidth", 0.48).toFloat().coerceIn(0f, 1f))
@@ -72,7 +73,8 @@ object IntimacyWallpaperChannel {
                             "wallpaperMode" to (prefs.getString("wallpaperMode", "mystify") ?: "mystify"),
                             "calligraphyText" to (prefs.getString("calligraphyText", "行到水穷处，坐看云起时。") ?: "行到水穷处，坐看云起时。"),
                             "calligraphyStyle" to (prefs.getString("calligraphyStyle", "kaishu") ?: "kaishu"),
-                            "calligraphySpeed" to prefs.getFloat("calligraphySpeed", 0.55f).toDouble()
+                            "calligraphySpeed" to prefs.getFloat("calligraphySpeed", 0.55f).toDouble(),
+                            "calligraphyStrokeData" to (prefs.getString("calligraphyStrokeData", "{}") ?: "{}")
                         ))
                     }
                     "setLiveWallpaperDirect" -> {

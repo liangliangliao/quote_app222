@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui';
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 import '../platform/intimacy_wallpaper_bridge.dart';
 import '../services/unified_ai_service.dart';
@@ -27,6 +29,9 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   String _calligraphyStyle = 'kaishu';
   double _calligraphySpeed = 0.55;
   bool _generatingCalligraphy = false;
+  bool _loadingStrokeData = false;
+  String _calligraphyStrokeData = '{}';
+  String _strokeDataText = '';
   final TextEditingController _calligraphyController = TextEditingController(
     text: '行到水穷处，坐看云起时。',
   );
@@ -82,6 +87,7 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     final savedText = config['calligraphyText'] as String?;
     final savedStyle = config['calligraphyStyle'] as String?;
     final savedSpeed = (config['calligraphySpeed'] as num?)?.toDouble();
+    final savedStrokeData = config['calligraphyStrokeData'] as String?;
     setState(() {
       if (savedMode == 'mystify' || savedMode == 'calligraphy') {
         _wallpaperMode = savedMode!;
@@ -94,6 +100,10 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
       }
       if (savedSpeed != null) {
         _calligraphySpeed = savedSpeed.clamp(0.15, 1.0).toDouble();
+      }
+      if (savedStrokeData != null && savedStrokeData.isNotEmpty) {
+        _calligraphyStrokeData = savedStrokeData;
+        _strokeDataText = _calligraphyController.text.trim();
       }
     });
   }
@@ -169,6 +179,9 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   }
 
   Future<bool> _saveCurrentConfig({required bool resetSeed, bool showSnack = false}) async {
+    if (resetSeed && _wallpaperMode == 'calligraphy') {
+      await _prepareRealStrokeData();
+    }
     final ok = await IntimacyWallpaperBridge.saveConfig(
       style: _style,
       wallpaperMode: _wallpaperMode,
@@ -177,6 +190,7 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
           : _calligraphyController.text.trim(),
       calligraphyStyle: _calligraphyStyle,
       calligraphySpeed: _calligraphySpeed,
+      calligraphyStrokeData: _calligraphyStrokeData,
       intimacy: _intimacy,
       randomness: _randomness,
       ribbonWidth: _ribbonWidth,
@@ -213,6 +227,46 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
       );
     }
     return ok;
+  }
+
+  Future<void> _prepareRealStrokeData() async {
+    final text = _calligraphyController.text.trim();
+    if (text.isEmpty || (_strokeDataText == text && _calligraphyStrokeData != '{}')) return;
+    if (mounted) setState(() => _loadingStrokeData = true);
+    final characters = text.runes
+        .map(String.fromCharCode)
+        .where((character) => RegExp(r'[\u3400-\u9fff]').hasMatch(character))
+        .toSet()
+        .take(40);
+    final data = <String, dynamic>{};
+    for (final character in characters) {
+      try {
+        final uri = Uri.parse(
+          'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${Uri.encodeComponent(character)}.json',
+        );
+        final response = await http.get(uri).timeout(const Duration(seconds: 12));
+        if (response.statusCode != 200) continue;
+        final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+        if (decoded is Map<String, dynamic> &&
+            decoded['strokes'] is List &&
+            decoded['medians'] is List) {
+          data[character] = decoded;
+        }
+      } catch (_) {
+        // Keep already downloaded characters. Missing characters use the
+        // complete-glyph fallback instead of fabricated/random stroke order.
+      }
+    }
+    _calligraphyStrokeData = jsonEncode(data);
+    _strokeDataText = text;
+    if (!mounted) return;
+    setState(() => _loadingStrokeData = false);
+    final missing = characters.length - data.length;
+    if (missing > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已载入 ${data.length} 个汉字的标准笔顺；$missing 个字符无数据，将使用完整字形显示。')),
+      );
+    }
   }
 
   Future<void> _saveAndOpen() async {
@@ -325,6 +379,7 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                     text: _calligraphyController.text,
                     style: _calligraphyStyle,
                     speed: _calligraphySpeed,
+                    strokeData: _calligraphyStrokeData,
                   )
                 : _HeroPreview(
                     key: const ValueKey('mystify'),
@@ -351,6 +406,100 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                     seed: _previewSeed,
                   ),
           ),
+          const SizedBox(height: 16),
+          _SectionCard(
+            title: '选择真正应用的动态壁纸',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'mystify', icon: Icon(Icons.auto_awesome), label: Text('潮汐光迹')),
+                    ButtonSegment(value: 'calligraphy', icon: Icon(Icons.gesture), label: Text('书法书写')),
+                  ],
+                  selected: {_wallpaperMode},
+                  onSelectionChanged: (value) => _updateConfigPreview(() => _wallpaperMode = value.first),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _wallpaperMode == 'mystify'
+                      ? '保留当前已经实现的动画壁纸，所有效果和参数均保持不变。'
+                      : '书法模式会在黑色宣纸氛围中逐字落墨；保存后，系统中的同一个动态壁纸服务会即时切换。',
+                  style: const TextStyle(color: Colors.white60, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          if (_wallpaperMode == 'calligraphy') ...[
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '书写内容与笔体',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _calligraphyController,
+                    minLines: 2,
+                    maxLines: 4,
+                    maxLength: 80,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: '自定义书写内容',
+                      hintText: '输入名言、诗句或你想每天看见的话',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) {
+                      setState(() {
+                        _strokeDataText = '';
+                      });
+                      _scheduleConfigSync();
+                    },
+                  ),
+                  if (_loadingStrokeData)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: LinearProgressIndicator(),
+                    ),
+                  const Text(
+                    '保存书法壁纸时会联网获取 Hanzi Writer / Make Me a Hanzi 标准笔顺，并缓存到本机供真实壁纸离线使用；无笔顺数据的字符不会生成伪笔画。',
+                    style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _generatingCalligraphy ? null : _generateClassicText,
+                      icon: _generatingCalligraphy
+                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(_generatingCalligraphy ? 'AI 正在选句…' : 'AI 获取经典名言 / 诗词'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: const [
+                      ('kaishu', '标准楷书'), ('xingshu', '行书笔意'), ('caoshu', '草书笔意'),
+                    ].map((item) => ChoiceChip(
+                      label: Text(item.$2),
+                      selected: _calligraphyStyle == item.$1,
+                      onSelected: (_) => _updateConfigPreview(() => _calligraphyStyle = item.$1),
+                    )).toList(),
+                  ),
+                  _SliderRow(
+                    label: '落笔速度',
+                    value: _calligraphySpeed,
+                    description: '控制文字逐笔显现与停顿节奏。',
+                    onChanged: (value) => _updateConfigPreview(() => _calligraphySpeed = value),
+                  ),
+                  const Text(
+                    '说明：标准笔顺数据提供楷书字形的真实笔画顺序。行书、草书需要专门的书家字形与运笔数据库；当前“行书笔意/草书笔意”仅改变笔锋和节奏，不再宣称为标准行草字帖。',
+                    style: TextStyle(color: Colors.amberAccent, fontSize: 12, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _SectionCard(
             title: '选择真正应用的动态壁纸',
@@ -724,12 +873,14 @@ class _CalligraphyPreview extends StatelessWidget {
     required this.text,
     required this.style,
     required this.speed,
+    required this.strokeData,
   });
 
   final double seconds;
   final String text;
   final String style;
   final double speed;
+  final String strokeData;
 
   @override
   Widget build(BuildContext context) {
@@ -777,6 +928,7 @@ class _CalligraphyPreview extends StatelessWidget {
                     painter: _CalligraphyWritingPainter(
                       text: content,
                       style: style,
+                      strokeData: strokeData,
                       progress: (progress / 0.78).clamp(0.0, 1.0).toDouble(),
                       opacity: progress > 0.92
                           ? ((1 - progress) / 0.08).clamp(0.0, 1.0).toDouble()
@@ -797,17 +949,26 @@ class _CalligraphyWritingPainter extends CustomPainter {
   const _CalligraphyWritingPainter({
     required this.text,
     required this.style,
+    required this.strokeData,
     required this.progress,
     required this.opacity,
   });
 
   final String text;
   final String style;
+  final String strokeData;
   final double progress;
   final double opacity;
 
   @override
   void paint(Canvas canvas, Size size) {
+    Map<String, dynamic> verifiedData = const {};
+    try {
+      final decoded = jsonDecode(strokeData);
+      if (decoded is Map<String, dynamic>) verifiedData = decoded;
+    } catch (_) {
+      verifiedData = const {};
+    }
     final runes = text.runes.where((rune) => !String.fromCharCode(rune).trim().isEmpty).take(40).toList();
     if (runes.isEmpty) return;
     final maxRows = math.min(10, math.max(1, (runes.length / 3).ceil()));
@@ -825,47 +986,93 @@ class _CalligraphyWritingPainter extends CustomPainter {
       final row = index % maxRows;
       final column = index ~/ maxRows;
       final center = Offset(firstX - column * cellWidth, firstY + row * cellHeight + cellHeight * 0.5);
-      _paintGlyph(canvas, String.fromCharCode(runes[index]), runes[index], center, fontSize, local);
-      if (index > 0 && row > 0 && style != 'kaishu') {
-        _paintLigature(canvas, center.translate(0, -cellHeight), center, runes[index], local);
+      final character = String.fromCharCode(runes[index]);
+      final source = verifiedData[character];
+      if (source is Map<String, dynamic> && source['medians'] is List) {
+        _paintVerifiedStrokeGlyph(canvas, source['medians'] as List, center, fontSize, local);
+      } else {
+        _paintFallbackGlyph(canvas, character, runes[index], center, fontSize, local);
       }
     }
   }
 
-  void _paintGlyph(Canvas canvas, String glyph, int codePoint, Offset center, double fontSize, double progress) {
-    final bounds = Rect.fromCenter(center: center, width: fontSize * 1.35, height: fontSize * 1.35);
-    final textPainter = TextPainter(
+  void _paintVerifiedStrokeGlyph(Canvas canvas, List medians, Offset center, double size, double progress) {
+    if (medians.isEmpty) return;
+    final boxLeft = center.dx - size * 0.5;
+    final boxTop = center.dy - size * 0.5;
+    final scale = size / 1024;
+    final scaled = progress * medians.length;
+    final paint = Paint()
+      ..color = Color.fromRGBO(242, 232, 210, opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = style == 'kaishu' ? StrokeCap.square : StrokeCap.round
+      ..strokeWidth = size * (style == 'kaishu' ? 0.105 : (style == 'xingshu' ? 0.082 : 0.068));
+    Offset? tip;
+    for (var strokeIndex = 0; strokeIndex < medians.length; strokeIndex++) {
+      final local = (scaled - strokeIndex).clamp(0.0, 1.0).toDouble();
+      if (local <= 0) break;
+      final sourceStroke = medians[strokeIndex];
+      if (sourceStroke is! List || sourceStroke.length < 2) continue;
+      final points = <Offset>[];
+      for (final sourcePoint in sourceStroke) {
+        if (sourcePoint is List && sourcePoint.length >= 2) {
+          final x = (sourcePoint[0] as num).toDouble();
+          final y = (sourcePoint[1] as num).toDouble();
+          points.add(Offset(boxLeft + x * scale, boxTop + (1024 - y) * scale));
+        }
+      }
+      if (points.length < 2) continue;
+      var total = 0.0;
+      for (var point = 1; point < points.length; point++) {
+        total += (points[point] - points[point - 1]).distance;
+      }
+      final target = total * _smooth(local);
+      var consumed = 0.0;
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      tip = points.first;
+      for (var point = 1; point < points.length; point++) {
+        final segment = (points[point] - points[point - 1]).distance;
+        final remaining = target - consumed;
+        if (remaining <= 0) break;
+        final ratio = segment <= 0.001 ? 1.0 : (remaining / segment).clamp(0.0, 1.0).toDouble();
+        tip = Offset.lerp(points[point - 1], points[point], ratio)!;
+        path.lineTo(tip.dx, tip.dy);
+        consumed += segment * ratio;
+        if (ratio < 0.999) break;
+      }
+      canvas.drawPath(path, paint);
+    }
+    if (tip != null && progress < 0.999) {
+      final radius = paint.strokeWidth * 0.55;
+      canvas.drawOval(
+        Rect.fromCenter(center: tip, width: radius * 1.16, height: radius * 2),
+        Paint()..color = Color.fromRGBO(248, 240, 220, opacity),
+      );
+    }
+  }
+
+  void _paintFallbackGlyph(
+    Canvas canvas,
+    String glyph,
+    int codePoint,
+    Offset center,
+    double fontSize,
+    double progress,
+  ) {
+    final painter = TextPainter(
       text: TextSpan(
         text: glyph,
         style: TextStyle(
-          color: Color.fromRGBO(242, 232, 210, opacity),
+          color: Color.fromRGBO(242, 232, 210, opacity * progress),
           fontFamily: style == 'kaishu' ? 'serif' : 'sans-serif',
-          fontStyle: style == 'caoshu' ? FontStyle.italic : FontStyle.normal,
           fontWeight: style == 'kaishu' ? FontWeight.w700 : FontWeight.w400,
           fontSize: fontSize,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    if (progress >= 0.995) {
-      _paintStyledText(canvas, textPainter, codePoint, center);
-      return;
-    }
-    canvas.saveLayer(bounds, Paint());
-    final strokeCount = style == 'kaishu' ? 9 : (style == 'xingshu' ? 7 : 5);
-    final scaled = progress * strokeCount;
-    for (var stroke = 0; stroke < strokeCount; stroke++) {
-      final strokeProgress = (scaled - stroke).clamp(0.0, 1.0).toDouble();
-      if (strokeProgress <= 0) continue;
-      _paintRevealStroke(canvas, bounds, codePoint, stroke, strokeCount, strokeProgress);
-    }
-
-    final glyphLayer = Paint()..blendMode = BlendMode.srcIn;
-    canvas.saveLayer(bounds, glyphLayer);
-    _paintStyledText(canvas, textPainter, codePoint, center);
-    canvas.restore();
-    canvas.restore();
-    _paintBrushTip(canvas, bounds, codePoint, progress);
+    _paintStyledText(canvas, painter, codePoint, center);
   }
 
   void _paintStyledText(Canvas canvas, TextPainter textPainter, int codePoint, Offset center) {
@@ -884,119 +1091,13 @@ class _CalligraphyWritingPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintRevealStroke(
-    Canvas canvas,
-    Rect box,
-    int codePoint,
-    int stroke,
-    int strokeCount,
-    double progress,
-  ) {
-    final pattern = (codePoint * 31 + stroke * 17) % 6;
-    final lane = (stroke + 0.55) / strokeCount;
-    final endpoints = _strokeEndpoints(box, pattern, lane);
-    final curve = box.width * (style == 'caoshu' ? 0.22 : (style == 'xingshu' ? 0.12 : 0.035));
-    final control = Offset(
-      (endpoints.$1.dx + endpoints.$2.dx) * 0.5 + math.sin(codePoint * 0.13 + stroke) * curve,
-      (endpoints.$1.dy + endpoints.$2.dy) * 0.5 + math.cos(codePoint * 0.11 + stroke) * curve,
-    );
-    final t = _smooth(progress);
-    final target = Offset(
-      _quadratic(endpoints.$1.dx, control.dx, endpoints.$2.dx, t),
-      _quadratic(endpoints.$1.dy, control.dy, endpoints.$2.dy, t),
-    );
-    final path = Path()
-      ..moveTo(endpoints.$1.dx, endpoints.$1.dy)
-      ..quadraticBezierTo(
-        _lerp(endpoints.$1.dx, control.dx, t),
-        _lerp(endpoints.$1.dy, control.dy, t),
-        target.dx,
-        target.dy,
-      );
-    final width = box.width * (style == 'kaishu' ? 0.24 : (style == 'xingshu' ? 0.20 : 0.17));
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeCap = style == 'kaishu' ? StrokeCap.square : StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = width * (0.82 + 0.25 * math.sin(stroke * 2.1 + codePoint)),
-    );
-  }
-
-  (Offset, Offset) _strokeEndpoints(Rect box, int pattern, double lane) {
-    final left = box.left + box.width * 0.08;
-    final right = box.right - box.width * 0.08;
-    final top = box.top + box.height * 0.08;
-    final bottom = box.bottom - box.height * 0.10;
-    return switch (pattern) {
-      0 => (Offset(left, _lerp(top, bottom, lane)), Offset(right, _lerp(top, bottom, lane) + box.height * 0.04)),
-      1 => (
-          Offset(_lerp(left, right, lane), top),
-          Offset(_lerp(left, right, lane) - box.width * 0.04, bottom),
-        ),
-      2 => (Offset(left, top + box.height * lane * 0.55), Offset(right, bottom - box.height * (1 - lane) * 0.35)),
-      3 => (Offset(right, top + box.height * lane * 0.45), Offset(left, bottom - box.height * (1 - lane) * 0.50)),
-      4 => (Offset(box.center.dx, top), Offset(_lerp(left, right, lane), bottom)),
-      _ => (
-          Offset(_lerp(left, right, lane), box.center.dy),
-          Offset(lane < 0.5 ? left : right, lane < 0.5 ? top : bottom),
-        ),
-    };
-  }
-
-  void _paintBrushTip(Canvas canvas, Rect box, int codePoint, double progress) {
-    final strokeCount = style == 'kaishu' ? 9 : (style == 'xingshu' ? 7 : 5);
-    final scaled = progress * strokeCount;
-    final stroke = math.min(strokeCount - 1, math.max(0, scaled.floor()));
-    final local = (scaled - stroke).clamp(0.0, 1.0).toDouble();
-    final endpoints = _strokeEndpoints(box, (codePoint * 31 + stroke * 17) % 6, (stroke + 0.55) / strokeCount);
-    final curve = box.width * (style == 'caoshu' ? 0.22 : (style == 'xingshu' ? 0.12 : 0.035));
-    final control = Offset(
-      (endpoints.$1.dx + endpoints.$2.dx) * 0.5 + math.sin(codePoint * 0.13 + stroke) * curve,
-      (endpoints.$1.dy + endpoints.$2.dy) * 0.5 + math.cos(codePoint * 0.11 + stroke) * curve,
-    );
-    final t = _smooth(local);
-    final point = Offset(
-      _quadratic(endpoints.$1.dx, control.dx, endpoints.$2.dx, t),
-      _quadratic(endpoints.$1.dy, control.dy, endpoints.$2.dy, t),
-    );
-    final radius = box.width * (style == 'kaishu' ? 0.055 : 0.042);
-    canvas.drawOval(
-      Rect.fromCenter(center: point, width: radius * 1.24, height: radius * 2),
-      Paint()..color = Color.fromRGBO(246, 238, 218, opacity * 0.92),
-    );
-  }
-
-  void _paintLigature(Canvas canvas, Offset from, Offset to, int codePoint, double progress) {
-    final start = from.translate((codePoint & 1) == 0 ? 5 : -4, (to.dy - from.dy) * 0.22);
-    final end = Offset(to.dx, _lerp(start.dy, to.dy - 16, _smooth(progress)));
-    final path = Path()
-      ..moveTo(start.dx, start.dy)
-      ..cubicTo(start.dx + 12, _lerp(start.dy, end.dy, 0.30), end.dx - 12, _lerp(start.dy, end.dy, 0.70), end.dx, end.dy);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Color.fromRGBO(223, 216, 198, opacity * (style == 'caoshu' ? 0.52 : 0.32))
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = style == 'caoshu' ? 2.6 : 1.6,
-    );
-  }
-
   double _smooth(double value) => value * value * (3 - 2 * value);
-  double _quadratic(double a, double b, double c, double t) {
-    final u = 1 - t;
-    return u * u * a + 2 * u * t * b + t * t * c;
-  }
-
-  double _lerp(double a, double b, double t) => a + (b - a) * t;
 
   @override
   bool shouldRepaint(covariant _CalligraphyWritingPainter oldDelegate) {
     return oldDelegate.text != text ||
         oldDelegate.style != style ||
+        oldDelegate.strokeData != strokeData ||
         oldDelegate.progress != progress ||
         oldDelegate.opacity != opacity;
   }
