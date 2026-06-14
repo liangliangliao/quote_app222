@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,10 @@ import 'package:flutter/services.dart';
 import '../data/kv_dao.dart';
 import '../voice_lab/eleven_labs_service.dart';
 import '../voice_lab/multi_provider_tts_service.dart';
+import '../voice_lab/voice_lab_dao.dart';
+import '../voice_lab/voice_lab_models.dart';
+import '../services/unified_ai_service.dart';
+import '../services/global_ai_settings.dart';
 
 class VoiceAlarmPage extends StatefulWidget {
   const VoiceAlarmPage({super.key});
@@ -20,6 +25,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   final _tts = MultiProviderTtsService();
   final _elevenLabs = ElevenLabsService();
   final _kv = KeyValueDao();
+  final _voiceDao = VoiceLabDao();
+  final _ai = UnifiedAiService();
+  final _aiSettings = GlobalAiSettings();
   static const _native = MethodChannel('com.example.quote_app/voice_alarm');
   TimeOfDay _time = TimeOfDay.now();
   String _provider = 'microsoft';
@@ -34,6 +42,30 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   bool _vibrate = true;
   bool _systemMusic = true;
   bool _saving = false;
+  bool _loading = true;
+  String _mode = 'morning';
+  String _frequency = 'daily';
+  Set<int> _weekdays = {1, 2, 3, 4, 5, 6, 7};
+  double _voiceVolume = 1.0;
+  double _musicVolume = 0.4;
+  double _stability = 0.55;
+  double _styleStrength = 0.25;
+  double _pitch = 0;
+  bool _resembleHd = true;
+  List<Map<String, String>> _savedVoices = [];
+  List<VoiceProfile> _voiceProfiles = [];
+  final Map<String, List<Map<String, String>>> _catalogRecommendations = {};
+  String? _selectedSavedVoicePath;
+  List<String> _textHistory = [];
+
+  static const _morningDefault = '早上好，新的一天开始了。愿你平静、专注、充满力量。';
+  static const _nightDefault = '晚安，今天辛苦了。放下未完成的事，安心休息，愿你拥有宁静的睡眠。';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMode('morning');
+  }
 
   @override
   void dispose() {
@@ -46,7 +78,126 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     final now = DateTime.now();
     var value = DateTime(now.year, now.month, now.day, _time.hour, _time.minute);
     if (!value.isAfter(now)) value = value.add(const Duration(days: 1));
+    final allowed = _effectiveWeekdays();
+    var guard = 0;
+    while (!allowed.contains(value.weekday) && guard < 8) {
+      value = value.add(const Duration(days: 1));
+      guard++;
+    }
     return value;
+  }
+
+  String get _configKey => 'voice_alarm.config.$_mode';
+  String get _historyKey => 'voice_alarm.text_history.$_mode';
+
+  Future<void> _loadMode(String mode) async {
+    setState(() {
+      _loading = true;
+      _mode = mode;
+    });
+    final raw = await _kv.getString('voice_alarm.config.$mode');
+    final historyRaw = await _kv.getString('voice_alarm.text_history.$mode');
+    final audios = await _voiceDao.listTtsAudio();
+    final generatedRaw = await _kv.getString('voice_alarm.generated_audio');
+    final profiles = await _voiceDao.listVoiceProfiles();
+    final data = raw == null || raw.isEmpty ? <String, dynamic>{} : Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    final history = historyRaw == null || historyRaw.isEmpty ? <String>[] : List<String>.from(jsonDecode(historyRaw) as List);
+    if (!mounted) return;
+    setState(() {
+      _voiceProfiles = profiles;
+      _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
+      _provider = (data['provider'] ?? 'microsoft').toString();
+      final recommendations = _recommendedVoices(_provider, mode);
+      _voiceId.text = (data['voiceId'] ?? (recommendations.isEmpty ? '' : recommendations.first['id'])).toString();
+      _speed = (data['speed'] as num?)?.toDouble() ?? (mode == 'morning' ? 1.05 : 0.88);
+      _pauseSeconds = (data['pauseSeconds'] as num?)?.toDouble() ?? (mode == 'morning' ? 0.35 : 0.9);
+      _scene = (data['scene'] ?? (mode == 'morning' ? 'morning_blessing' : 'meditation_relax')).toString();
+      _emotion = (data['emotion'] ?? (mode == 'morning' ? 'cheerful' : 'calm')).toString();
+      _frequency = (data['frequency'] ?? 'daily').toString();
+      _weekdays = (data['weekdays'] is List ? (data['weekdays'] as List).map((e) => (e as num).toInt()).toSet() : {1, 2, 3, 4, 5, 6, 7});
+      _voiceVolume = (data['voiceVolume'] as num?)?.toDouble() ?? 1;
+      _musicVolume = (data['musicVolume'] as num?)?.toDouble() ?? 0.4;
+      _stability = (data['stability'] as num?)?.toDouble() ?? 0.55;
+      _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
+      _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
+      _resembleHd = data['resembleHd'] as bool? ?? true;
+      _vibrate = data['vibrate'] as bool? ?? true;
+      _systemMusic = data['systemMusic'] as bool? ?? true;
+      final savedTime = DateTime.tryParse((data['time'] ?? '').toString());
+      if (savedTime != null) _time = TimeOfDay.fromDateTime(savedTime);
+      _customMusic = data['musicPath']?.toString().isEmpty == false ? data['musicPath'].toString() : null;
+      _backgroundImage = data['backgroundPath']?.toString().isEmpty == false ? data['backgroundPath'].toString() : null;
+      _selectedSavedVoicePath = data['savedVoicePath']?.toString().isEmpty == false ? data['savedVoicePath'].toString() : null;
+      final generated = generatedRaw == null || generatedRaw.isEmpty
+          ? <Map<String, String>>[]
+          : (jsonDecode(generatedRaw) as List).whereType<Map>().map((e) => Map<String, String>.from(e)).toList();
+      _savedVoices = [
+        ...generated.where((a) => File(a['path'] ?? '').existsSync()),
+        ...audios.where((a) => a.moduleName.startsWith('voice_alarm_') && File(a.audioFilePath).existsSync()).map((a) => {
+              'path': a.audioFilePath,
+              'label': '${a.voiceDisplayName} · ${a.sourceText}',
+            }),
+      ];
+      _textHistory = history;
+      _loading = false;
+    });
+    await _refreshProviderRecommendations();
+  }
+
+  Future<void> _refreshProviderRecommendations() async {
+    try {
+      List<Map<String, String>> options = [];
+      if (_provider == 'resemble') {
+        final voices = await _tts.listResembleVoices(pageSize: 100);
+        final chinese = voices.where((v) => '${v.name} ${v.description} ${v.extra['language'] ?? ''}'.toLowerCase().contains(RegExp(r'zh|chinese|mandarin|中文'))).toList();
+        options = (chinese.isEmpty ? voices : chinese).take(2).map((v) => {'id': v.id, 'name': '${v.name} · 当前 Token 已授权'}).toList();
+      } else if (_provider == 'elevenlabs') {
+        final voices = await _elevenLabs.listVoices(search: 'Chinese');
+        options = voices.take(2).map((v) => {'id': v.voiceId, 'name': '${v.name} · 中文/多语言'}).toList();
+      }
+      if (options.isNotEmpty && mounted) setState(() => _catalogRecommendations[_provider] = options);
+    } catch (_) {
+      // 保留本地声音档案推荐；API 凭据错误会在实际保存/测试时显示明确错误。
+    }
+  }
+
+  List<Map<String, String>> _recommendedVoices(String provider, String mode) {
+    if (provider == 'microsoft') {
+      return mode == 'morning'
+          ? const [
+              {'id': 'zh-CN-XiaoxiaoNeural', 'name': '晓晓 · 明亮自然'},
+              {'id': 'zh-CN-YunxiNeural', 'name': '云希 · 青年活力'},
+            ]
+          : const [
+              {'id': 'zh-CN-XiaoyiNeural', 'name': '晓伊 · 柔和女声'},
+              {'id': 'zh-CN-YunyangNeural', 'name': '云扬 · 沉稳男声'},
+            ];
+    }
+    if (provider == 'minimax') {
+      return mode == 'morning'
+          ? const [
+              {'id': 'female-shaonv', 'name': '少女中文女声 · 清亮早安'},
+              {'id': 'presenter_male', 'name': '主持人中文男声 · 清晰唤醒'},
+            ]
+          : const [
+              {'id': 'audiobook_female_1', 'name': '有声书中文女声 · 舒缓晚安'},
+              {'id': 'male-qn-qingse', 'name': '青涩中文男声 · 温和陪伴'},
+            ];
+    }
+    final catalog = _catalogRecommendations[provider] ?? const <Map<String, String>>[];
+    if (catalog.length >= 2) return catalog.take(2).toList();
+    final matched = _voiceProfiles.where((profile) => profile.provider == provider).take(2).map((profile) {
+      return {'id': profile.elevenlabsVoiceId, 'name': '${profile.displayName} · 中文/多语言'};
+    }).toList();
+    if (matched.length >= 2) return matched;
+    return [
+      ...matched,
+      {'id': _voiceId.text, 'name': provider == 'resemble' ? '当前账号授权中文声音' : '当前配置中文/多语言声音'},
+      {'id': '', 'name': '请在美好祝福配置中再添加一个中文声音'},
+    ].where((item) => item['id']!.isNotEmpty).fold<List<Map<String, String>>>([], (list, item) {
+      if (!list.any((existing) => existing['id'] == item['id'])) list.add(item);
+      return list;
+    });
   }
 
   Future<void> _pickMusic() async {
@@ -74,7 +225,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         _toast('请在系统页面允许“闹钟和提醒”，返回后再次点击保存');
         return;
       }
-      _generatedVoice = await _generateVoiceFile();
+      _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
+      if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
       final when = _nextTime();
       await _kv.setString('voice_alarm.time', when.toIso8601String());
       await _kv.setString('voice_alarm.text', _text.text.trim());
@@ -83,6 +235,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       await _kv.setString('voice_alarm.music_file', _customMusic ?? '');
       await _kv.setString('voice_alarm.vibrate', _vibrate ? '1' : '0');
       await _kv.setString('voice_alarm.system_music', _systemMusic ? '1' : '0');
+      final config = _payloadMap()
+        ..['savedVoicePath'] = _selectedSavedVoicePath ?? ''
+        ..['time'] = when.toIso8601String();
+      await _kv.setString(_configKey, jsonEncode(config));
+      final text = _text.text.trim();
+      _textHistory = <String>[text, ..._textHistory.where((item) => item != text)].take(20).toList();
+      await _kv.setString(_historyKey, jsonEncode(_textHistory));
       final payload = _payload();
       await _native.invokeMethod<void>('schedule', {
         'atMs': when.millisecondsSinceEpoch,
@@ -104,6 +263,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         text: text,
         voice: _voiceId.text.trim().isEmpty ? null : _voiceId.text.trim(),
         rate: _speed,
+        pitch: _pitch,
         pauseSeconds: _pauseSeconds,
         style: _emotion == 'none' ? '' : _emotion,
       );
@@ -128,6 +288,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         meditationSentenceBreakSec: _pauseSeconds,
         meditationParagraphBreakSec: (_pauseSeconds * 1.6).clamp(0.2, 5.0).toDouble(),
         meditationTone: _emotion,
+        useHd: _resembleHd,
       );
       return audio.audioFilePath;
     }
@@ -142,6 +303,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         moduleName: 'voice_alarm_minimax',
         speed: _speed,
         emotion: _emotion,
+        pitch: _pitch.round(),
         scene: _scene,
         meditationAutoPauses: _pauseSeconds > 0,
         meditationSentenceBreakSec: _pauseSeconds,
@@ -158,16 +320,34 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       voiceDisplayName: await _kv.getString(ElevenLabsSettings.presetVoiceName) ?? ElevenLabsSettings.defaultPresetVoiceName,
       moduleName: 'voice_alarm_elevenlabs',
       speed: _speed,
+      stability: _stability,
+      style: _styleStrength,
       scene: _scene,
       pauseMode: _pauseSeconds > 0 ? 'punctuation' : 'none',
     );
     return audio.audioFilePath;
   }
 
+  Future<void> _rememberGeneratedVoice(String path) async {
+    final raw = await _kv.getString('voice_alarm.generated_audio');
+    final current = raw == null || raw.isEmpty
+        ? <Map<String, String>>[]
+        : (jsonDecode(raw) as List).whereType<Map>().map((e) => Map<String, String>.from(e)).toList();
+    final next = <Map<String, String>>[
+      {
+        'path': path,
+        'label': '${_mode == 'morning' ? '早安' : '晚安'} · $_provider · ${_text.text.trim()}',
+      },
+      ...current.where((item) => item['path'] != path),
+    ].take(40).toList();
+    await _kv.setString('voice_alarm.generated_audio', jsonEncode(next));
+  }
+
   Future<void> _ring() async {
     setState(() => _saving = true);
     try {
-      _generatedVoice = await _generateVoiceFile();
+      _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
+      if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
       await _native.invokeMethod<void>('testRing', {'payload': _payload()});
     } catch (e) {
       _toast('测试失败：$e');
@@ -177,7 +357,11 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   String _payload() {
-    return jsonEncode({
+    return jsonEncode(_payloadMap());
+  }
+
+  Map<String, dynamic> _payloadMap() {
+    return {
       'text': _text.text.trim(),
       'provider': _provider,
       'voicePath': _generatedVoice ?? '',
@@ -192,7 +376,37 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'scene': _scene,
       'emotion': _emotion,
       'voiceId': _voiceId.text.trim(),
-    });
+      'mode': _mode,
+      'frequency': _frequency,
+      'weekdays': _effectiveWeekdays().toList()..sort(),
+      'voiceVolume': _voiceVolume,
+      'musicVolume': _musicVolume,
+      'stability': _stability,
+      'styleStrength': _styleStrength,
+      'pitch': _pitch,
+      'resembleHd': _resembleHd,
+    };
+  }
+
+  Set<int> _effectiveWeekdays() {
+    if (_frequency == 'weekdays') return {1, 2, 3, 4, 5};
+    if (_frequency == 'daily') return {1, 2, 3, 4, 5, 6, 7};
+    return _weekdays;
+  }
+
+  Future<void> _generateAiText() async {
+    setState(() => _saving = true);
+    try {
+      final template = await _aiSettings.getVoiceAlarmContentPrompt();
+      final prompt = template.replaceAll('{{mode}}', _mode == 'morning' ? '早上起床' : '晚上睡觉');
+      final result = await _ai.generateText(prompt: prompt, purpose: 'voice_alarm.content', maxTokens: 300, temperature: 0.8);
+      if (result.trim().isEmpty) throw StateError('AI 未返回内容，请检查全局 AI 配置');
+      setState(() => _text.text = result.trim());
+    } catch (e) {
+      _toast('AI 生成失败：$e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   void _toast(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -202,9 +416,20 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     final next = _nextTime();
     return Scaffold(
       appBar: AppBar(title: const Text('语音闹钟')),
-      body: ListView(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'morning', icon: Icon(Icons.wb_sunny_outlined), label: Text('早上起床')),
+              ButtonSegment(value: 'night', icon: Icon(Icons.bedtime_outlined), label: Text('晚上睡觉')),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (value) => _loadMode(value.first),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -231,6 +456,19 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 const Text('语音内容与服务商', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 TextField(controller: _text, maxLines: 4, decoration: const InputDecoration(labelText: '到点朗读内容', border: OutlineInputBorder())),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(onPressed: () => setState(() => _text.text = _mode == 'morning' ? _morningDefault : _nightDefault), child: const Text('使用默认内容')),
+                    TextButton.icon(onPressed: _saving ? null : _generateAiText, icon: const Icon(Icons.auto_awesome), label: const Text('AI 生成')),
+                    if (_textHistory.isNotEmpty)
+                      PopupMenuButton<String>(
+                        onSelected: (value) => setState(() => _text.text = value),
+                        itemBuilder: (_) => _textHistory.map((item) => PopupMenuItem(value: item, child: Text(item, maxLines: 2, overflow: TextOverflow.ellipsis))).toList(),
+                        child: const Padding(padding: EdgeInsets.all(8), child: Text('历史内容')),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: _provider,
@@ -241,7 +479,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     DropdownMenuItem(value: 'resemble', child: Text('Resemble AI')),
                     DropdownMenuItem(value: 'minimax', child: Text('MiniMax')),
                   ],
-                  onChanged: (value) => setState(() => _provider = value ?? 'microsoft'),
+                  onChanged: (value) {
+                    setState(() {
+                      _provider = value ?? 'microsoft';
+                      final recommendations = _recommendedVoices(_provider, _mode);
+                      _voiceId.text = recommendations.isEmpty ? '' : recommendations.first['id'] ?? '';
+                      _selectedSavedVoicePath = null;
+                    });
+                    _refreshProviderRecommendations();
+                  },
                 ),
                 const SizedBox(height: 8),
                 const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。当前版本会为微软服务预先生成闹钟语音。', style: TextStyle(color: Colors.black54)),
@@ -254,6 +500,28 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _recommendedVoices(_provider, _mode).any((v) => v['id'] == _voiceId.text) ? _voiceId.text : null,
+                  decoration: InputDecoration(labelText: '${_mode == 'morning' ? '早安' : '晚安'}推荐中文声音（2个）', border: const OutlineInputBorder()),
+                  items: _recommendedVoices(_provider, _mode)
+                      .where((v) => (v['id'] ?? '').isNotEmpty)
+                      .map((v) => DropdownMenuItem(value: v['id'], child: Text(v['name'] ?? v['id']!)))
+                      .toList(),
+                  onChanged: (value) => setState(() => _voiceId.text = value ?? ''),
+                ),
+                if (_savedVoices.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                  value: _savedVoices.any((a) => a['path'] == _selectedSavedVoicePath) ? _selectedSavedVoicePath : '',
+                    decoration: const InputDecoration(labelText: '复用本地已生成语音', border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('不复用，按当前配置重新生成')),
+                      ..._savedVoices.take(30).map((a) => DropdownMenuItem(value: a['path'], child: Text(a['label'] ?? a['path'] ?? '', overflow: TextOverflow.ellipsis))),
+                    ],
+                    onChanged: (value) => setState(() => _selectedSavedVoicePath = (value ?? '').isEmpty ? null : value),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Text('语速 ${_speed.toStringAsFixed(2)}×'),
                 Slider(value: _speed, min: 0.5, max: 1.5, divisions: 20, onChanged: (value) => setState(() => _speed = value)),
@@ -283,11 +551,59 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   ],
                   onChanged: (value) => setState(() => _emotion = value ?? 'calm'),
                 ),
+                const SizedBox(height: 8),
+                if (_provider == 'microsoft') ...[
+                  Text('Microsoft 音调 ${_pitch.round()}%'),
+                  Slider(value: _pitch, min: -20, max: 20, divisions: 40, onChanged: (value) => setState(() => _pitch = value)),
+                  const Text('Azure 使用 Neural Voice、SSML 语速/音调/停顿与支持的 speaking style；不支持的 style 会自动回退普通语气。', style: TextStyle(color: Colors.black54)),
+                ] else if (_provider == 'elevenlabs') ...[
+                  Text('ElevenLabs 稳定度 ${_stability.toStringAsFixed(2)}'),
+                  Slider(value: _stability, min: 0, max: 1, divisions: 20, onChanged: (value) => setState(() => _stability = value)),
+                  Text('风格强度 ${_styleStrength.toStringAsFixed(2)}'),
+                  Slider(value: _styleStrength, min: 0, max: 1, divisions: 20, onChanged: (value) => setState(() => _styleStrength = value)),
+                ] else if (_provider == 'resemble') ...[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Resemble HD 合成'),
+                    subtitle: const Text('同时使用当前 Token 授权 voice_uuid、SSML 停顿、语速和冥想语气参数'),
+                    value: _resembleHd,
+                    onChanged: (value) => setState(() => _resembleHd = value),
+                  ),
+                ] else ...[
+                  Text('MiniMax 音调 ${_pitch.round()}'),
+                  Slider(value: _pitch, min: -12, max: 12, divisions: 24, onChanged: (value) => setState(() => _pitch = value)),
+                  const Text('MiniMax 使用 speed、pitch、emotion、中文 voice_id 与场景停顿参数。', style: TextStyle(color: Colors.black54)),
+                ],
               ]),
             ),
           ),
           Card(
             child: Column(children: [
+              ListTile(
+                title: const Text('重复频率'),
+                subtitle: DropdownButton<String>(
+                  value: _frequency,
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(value: 'daily', child: Text('每天')),
+                    DropdownMenuItem(value: 'weekdays', child: Text('工作日（周一至周五）')),
+                    DropdownMenuItem(value: 'custom', child: Text('自定义星期')),
+                  ],
+                  onChanged: (value) => setState(() => _frequency = value ?? 'daily'),
+                ),
+              ),
+              if (_frequency == 'custom')
+                Wrap(
+                  spacing: 4,
+                  children: List.generate(7, (index) {
+                    final day = index + 1;
+                    return FilterChip(
+                      label: Text('周${const ['一', '二', '三', '四', '五', '六', '日'][index]}'),
+                      selected: _weekdays.contains(day),
+                      onSelected: (selected) => setState(() => selected ? _weekdays.add(day) : _weekdays.remove(day)),
+                    );
+                  }),
+                ),
               SwitchListTile(title: const Text('震动'), subtitle: const Text('同时启用系统通知震动'), value: _vibrate, onChanged: (value) => setState(() => _vibrate = value)),
               SwitchListTile(title: const Text('系统闹钟音乐'), subtitle: const Text('未选择自定义音乐时使用系统提醒通道'), value: _systemMusic, onChanged: (value) => setState(() => _systemMusic = value)),
               ListTile(
@@ -303,6 +619,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 subtitle: Text(_backgroundImage == null ? '未选择，使用默认渐变背景' : _backgroundImage!.split('/').last),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _pickBackground,
+              ),
+              ListTile(
+                title: Text('语音音量 ${(_voiceVolume * 100).round()}%'),
+                subtitle: Slider(value: _voiceVolume, min: 0, max: 1, divisions: 20, onChanged: (value) => setState(() => _voiceVolume = value)),
+              ),
+              ListTile(
+                title: Text('背景音乐音量 ${(_musicVolume * 100).round()}%'),
+                subtitle: Slider(value: _musicVolume, min: 0, max: 1, divisions: 20, onChanged: (value) => setState(() => _musicVolume = value)),
               ),
             ]),
           ),

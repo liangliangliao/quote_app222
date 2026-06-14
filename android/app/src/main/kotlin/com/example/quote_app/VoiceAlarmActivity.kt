@@ -50,9 +50,13 @@ class VoiceAlarmActivity : Activity() {
       root.addView(image, FrameLayout.LayoutParams(-1, -1))
       root.addView(View(this).apply { setBackgroundColor(0x88000000.toInt()) }, FrameLayout.LayoutParams(-1, -1))
     } else {
+      val morning = data.optString("mode", "morning") == "morning"
       root.background = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFF312E81.toInt(), 0xFF7C3AED.toInt(), 0xFFDB2777.toInt()),
+        if (morning)
+          intArrayOf(0xFFF59E0B.toInt(), 0xFFFB7185.toInt(), 0xFF7C3AED.toInt())
+        else
+          intArrayOf(0xFF0F172A.toInt(), 0xFF312E81.toInt(), 0xFF1D4ED8.toInt()),
       )
     }
     val panel = LinearLayout(this).apply {

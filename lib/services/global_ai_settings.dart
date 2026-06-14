@@ -25,10 +25,30 @@ class GlobalAiSettings {
   static const String meditationRecommendationPromptKey = 'meditation_recommendation_prompt';
   static const String meditationUploadPausePromptKey = 'meditation_upload_pause_prompt';
   static const String behaviorPresetDailyReviewAiPromptKey = 'behavior_preset_daily_review_ai_prompt';
+  static const String voiceAlarmContentPromptKey = 'voice_alarm.ai_prompt';
 
   final ConfigDao _configDao = ConfigDao();
   final KeyValueDao _kvDao = KeyValueDao();
   final GoalSettingRemoteSync _remoteSync = GoalSettingRemoteSync();
+
+  String get defaultVoiceAlarmContentPrompt =>
+      '请为{{mode}}语音闹钟写一段自然、温暖、适合中文朗读的内容。只输出朗读正文，50到100字，不要标题。早安内容应积极但不过度兴奋；晚安内容应舒缓、接纳且不制造压力。';
+
+  Future<String> getVoiceAlarmContentPrompt() => _getLocalPrompt(
+        key: voiceAlarmContentPromptKey,
+        fallback: defaultVoiceAlarmContentPrompt,
+      );
+
+  Future<void> saveVoiceAlarmContentPrompt(String prompt) => _saveLocalPrompt(
+        key: voiceAlarmContentPromptKey,
+        fallback: defaultVoiceAlarmContentPrompt,
+        value: prompt,
+      );
+
+  Future<Map<String, String>> inspectVoiceAlarmContentPromptState() => _inspectLocalPrompt(
+        key: voiceAlarmContentPromptKey,
+        fallback: defaultVoiceAlarmContentPrompt,
+      );
 
   Future<Map<String, String>> getState() async {
     final global = await _configDao.getOne();

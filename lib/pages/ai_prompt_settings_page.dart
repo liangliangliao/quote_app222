@@ -54,6 +54,14 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
 
   List<_PromptModule> get _modules => <_PromptModule>[
         const _PromptModule(
+          id: 'voice_alarm',
+          name: '发现之旅 / 语音闹钟',
+          description: '早上起床与晚上睡觉闹钟的 AI 朗读文案生成提示词。',
+          items: <_PromptItem>[
+            _PromptItem(id: 'voice_alarm_content', name: '语音闹钟朗读内容生成'),
+          ],
+        ),
+        const _PromptModule(
           id: 'goal_setting',
           name: '目标训练模块',
           description: '目标训练课程理解、行动生成、行动闭环总结等 AI 子功能提示词。',
@@ -209,6 +217,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.defaultMovieAnalysisPrompt;
       case 'behavior_preset_daily_review_ai':
         return _settings.defaultBehaviorPresetDailyReviewAiPrompt;
+      case 'voice_alarm_content':
+        return _settings.defaultVoiceAlarmContentPrompt;
       case 'drawer_header':
         return _settings.defaultDrawerHeaderPrompt;
       case 'life_note_analysis':
@@ -245,6 +255,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.inspectMovieAnalysisPromptState();
       case 'behavior_preset_daily_review_ai':
         return _settings.inspectBehaviorPresetDailyReviewAiPromptState();
+      case 'voice_alarm_content':
+        return _settings.inspectVoiceAlarmContentPromptState();
       case 'drawer_header':
         return _settings.inspectDrawerHeaderPromptState();
       case 'life_note_analysis':
@@ -281,6 +293,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.saveMovieAnalysisPrompt(value);
       case 'behavior_preset_daily_review_ai':
         return _settings.saveBehaviorPresetDailyReviewAiPrompt(value);
+      case 'voice_alarm_content':
+        return _settings.saveVoiceAlarmContentPrompt(value);
       case 'drawer_header':
         return _settings.saveDrawerHeaderPrompt(value);
       case 'life_note_analysis':

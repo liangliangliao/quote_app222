@@ -176,15 +176,15 @@ class VoiceAlarmRingingService : Service() {
     }
     val musicPath = data.optString("musicPath", "")
     if (musicPath.isNotBlank() && File(musicPath).isFile) {
-      musicPlayer = createPlayer(Uri.fromFile(File(musicPath)), true, 0.4f)
+      musicPlayer = createPlayer(Uri.fromFile(File(musicPath)), true, data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f))
     } else if (data.optBoolean("systemMusic", true)) {
       val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-      if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, 0.4f)
+      if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f))
     }
     val voicePath = data.optString("voicePath", "")
     if (voicePath.isNotBlank() && File(voicePath).isFile) {
-      voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = 1f)
+      voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f))
     }
   }
 

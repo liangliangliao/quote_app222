@@ -203,11 +203,11 @@ class MultiProviderTtsService {
     }
     final ratePercent = ((rate - 1) * 100).round();
     final pitchPercent = pitch.round();
-    final volumeDb = ((volume.clamp(0.0, 1.0) - 1) * 20).round();
-    final prosody = '<prosody rate="${ratePercent >= 0 ? '+' : ''}$ratePercent%" pitch="${pitchPercent >= 0 ? '+' : ''}$pitchPercent%" volume="${volumeDb >= 0 ? '+' : ''}${volumeDb}dB">$escaped</prosody>';
+    final volumePercent = ((volume.clamp(0.0, 1.0) - 1) * 100).round();
+    final prosody = '<prosody rate="${ratePercent >= 0 ? '+' : ''}$ratePercent%" pitch="${pitchPercent >= 0 ? '+' : ''}$pitchPercent%" volume="${volumePercent >= 0 ? '+' : ''}$volumePercent%">$escaped</prosody>';
     final styled = style.trim().isEmpty ? prosody : '<mstts:express-as style="${const HtmlEscape().convert(style.trim())}">$prosody</mstts:express-as>';
     String buildSsml(String content) =>
-        '<speak version="1.0" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="$locale"><voice name="$selectedVoice">$content</voice></speak>';
+        '<speak version="1.0" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="$locale"><voice name="$selectedVoice">$content</voice></speak>';
     Future<http.Response> send(Uri target, String body) => http.post(target, headers: {
       'Ocp-Apim-Subscription-Key': key,
       'Content-Type': 'application/ssml+xml',
