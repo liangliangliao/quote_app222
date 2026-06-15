@@ -72,6 +72,23 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
             _PromptItem(id: 'shame_scene_healthyResponsibility', name: '场景：健康责任训练'),
             _PromptItem(id: 'shame_scene_todoGoal', name: '场景：Todo 目标羞耻转化'),
             _PromptItem(id: 'shame_scene_dailyReview', name: '场景：每日复盘'),
+            _PromptItem(id: 'shame_scene_shameCompass', name: '场景：羞耻罗盘识别'),
+            _PromptItem(
+              id: 'shame_scene_positiveAffectRecovery',
+              name: '场景：积极情感恢复',
+            ),
+            _PromptItem(
+              id: 'shame_scene_visibilityTraining',
+              name: '场景：被看见训练',
+            ),
+            _PromptItem(
+              id: 'shame_scene_avoidanceIntervention',
+              name: '场景：回避与冲动干预',
+            ),
+            _PromptItem(
+              id: 'shame_scene_bodyIntimacy',
+              name: '场景：身体与亲密羞耻',
+            ),
             _PromptItem(id: 'shame_output_common', name: '输出格式：通用结构'),
             _PromptItem(id: 'shame_output_first_aid', name: '输出格式：羞耻急救卡'),
             _PromptItem(id: 'shame_output_action_tree', name: '输出格式：Todo 行动树'),

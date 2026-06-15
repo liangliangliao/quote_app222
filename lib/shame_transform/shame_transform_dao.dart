@@ -29,7 +29,10 @@ class ShameTransformDao {
         fallback_action TEXT NOT NULL DEFAULT '',
         evidence_sentence TEXT NOT NULL DEFAULT '',
         linked_goal_id TEXT NOT NULL DEFAULT '',
-        action_completed INTEGER NOT NULL DEFAULT 0
+        action_completed INTEGER NOT NULL DEFAULT 0,
+        positive_affect TEXT NOT NULL DEFAULT '',
+        blocking_point TEXT NOT NULL DEFAULT '',
+        compass_direction TEXT NOT NULL DEFAULT ''
       )
     ''');
     await _ensureColumns(db, 'shame_events', {
@@ -39,6 +42,9 @@ class ShameTransformDao {
       'not_user_responsibility': "TEXT NOT NULL DEFAULT ''",
       'fallback_action': "TEXT NOT NULL DEFAULT ''",
       'action_completed': 'INTEGER NOT NULL DEFAULT 0',
+      'positive_affect': "TEXT NOT NULL DEFAULT ''",
+      'blocking_point': "TEXT NOT NULL DEFAULT ''",
+      'compass_direction': "TEXT NOT NULL DEFAULT ''",
     });
     await _copyLegacyResponsibilityColumns(db);
 
@@ -73,9 +79,21 @@ class ShameTransformDao {
         action TEXT NOT NULL,
         identity_evidence TEXT NOT NULL,
         value_anchor TEXT NOT NULL,
-        source_event_id TEXT NOT NULL
+        source_event_id TEXT NOT NULL,
+        shame_risk TEXT NOT NULL DEFAULT '',
+        ability_reflected TEXT NOT NULL DEFAULT '',
+        positive_affect_restored TEXT NOT NULL DEFAULT '',
+        difficulty TEXT NOT NULL DEFAULT '低',
+        shareable_joy INTEGER NOT NULL DEFAULT 0
       )
     ''');
+    await _ensureColumns(db, 'shame_evidence', {
+      'shame_risk': "TEXT NOT NULL DEFAULT ''",
+      'ability_reflected': "TEXT NOT NULL DEFAULT ''",
+      'positive_affect_restored': "TEXT NOT NULL DEFAULT ''",
+      'difficulty': "TEXT NOT NULL DEFAULT '低'",
+      'shareable_joy': 'INTEGER NOT NULL DEFAULT 0',
+    });
   }
 
   Future<void> _ensureColumns(
@@ -231,6 +249,34 @@ class ShameTransformDao {
       ),
       'evidence': await count('shame_evidence'),
       'goals': await count('shame_goal_profiles'),
+      'visibility': await count(
+        'shame_events',
+        "AND scene = 'visibilityTraining' AND action_completed = 1",
+      ),
+      'affectRecovery': await count(
+        'shame_evidence',
+        "AND positive_affect_restored != ''",
+      ),
+    };
+  }
+
+  Future<Map<String, int>> weeklyCompassMetrics() async {
+    final db = await _database();
+    final since = DateTime.now()
+        .subtract(const Duration(days: 7))
+        .millisecondsSinceEpoch;
+    final rows = await db.rawQuery(
+      '''
+      SELECT compass_direction, COUNT(*) AS total
+      FROM shame_events
+      WHERE created_at >= ? AND compass_direction != ''
+      GROUP BY compass_direction
+      ''',
+      [since],
+    );
+    return {
+      for (final row in rows)
+        '${row['compass_direction']}': (row['total'] as num?)?.toInt() ?? 0,
     };
   }
 }
