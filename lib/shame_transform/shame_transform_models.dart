@@ -11,6 +11,11 @@ enum ShameScene {
   healthyResponsibility,
   todoGoal,
   dailyReview,
+  shameCompass,
+  positiveAffectRecovery,
+  visibilityTraining,
+  avoidanceIntervention,
+  bodyIntimacy,
 }
 
 extension ShameSceneMeta on ShameScene {
@@ -27,6 +32,11 @@ extension ShameSceneMeta on ShameScene {
         ShameScene.healthyResponsibility => '健康责任训练',
         ShameScene.todoGoal => 'Todo 目标羞耻转化',
         ShameScene.dailyReview => '每日羞耻转化复盘',
+        ShameScene.shameCompass => '羞耻罗盘识别',
+        ShameScene.positiveAffectRecovery => '恢复兴趣与喜悦',
+        ShameScene.visibilityTraining => '被看见训练',
+        ShameScene.avoidanceIntervention => '回避与冲动干预',
+        ShameScene.bodyIntimacy => '身体与亲密羞耻',
       };
 
   String get inputPrompt => switch (this) {
@@ -40,6 +50,11 @@ extension ShameSceneMeta on ShameScene {
         ShameScene.healthyResponsibility => '具体发生了什么行为？它给谁造成了什么影响？',
         ShameScene.todoGoal => '写下 Todo 或目标，以及它让你怎样评价自己。',
         ShameScene.dailyReview => '今天哪个时刻触发了羞耻？你做了或没做什么？',
+        ShameScene.shameCompass => '羞耻出现后，你是缩回去、自责、回避，还是反击？',
+        ShameScene.positiveAffectRecovery => '你原本对什么有一点兴趣、喜悦、好奇或靠近的愿望？',
+        ShameScene.visibilityTraining => '你想让谁看见什么真实内容？最担心发生什么？',
+        ShameScene.avoidanceIntervention => '你正在用什么行为逃开？它让你暂时不用感受什么？',
+        ShameScene.bodyIntimacy => '身体、亲密、需要或被拒绝中的哪一部分让你想隐藏？',
       };
 }
 
@@ -61,6 +76,9 @@ class ShameEvent {
   final String evidenceSentence;
   final String linkedGoalId;
   final bool actionCompleted;
+  final String positiveAffect;
+  final String blockingPoint;
+  final String compassDirection;
 
   const ShameEvent({
     required this.id,
@@ -80,6 +98,9 @@ class ShameEvent {
     required this.evidenceSentence,
     this.linkedGoalId = '',
     this.actionCompleted = false,
+    this.positiveAffect = '',
+    this.blockingPoint = '',
+    this.compassDirection = '',
   });
 
   Map<String, Object?> toMap() => {
@@ -100,6 +121,9 @@ class ShameEvent {
         'evidence_sentence': evidenceSentence,
         'linked_goal_id': linkedGoalId,
         'action_completed': actionCompleted ? 1 : 0,
+        'positive_affect': positiveAffect,
+        'blocking_point': blockingPoint,
+        'compass_direction': compassDirection,
       };
 
   factory ShameEvent.fromMap(Map<String, Object?> map) {
@@ -125,6 +149,9 @@ class ShameEvent {
       evidenceSentence: '${map['evidence_sentence'] ?? ''}',
       linkedGoalId: '${map['linked_goal_id'] ?? ''}',
       actionCompleted: (map['action_completed'] as num?)?.toInt() == 1,
+      positiveAffect: '${map['positive_affect'] ?? ''}',
+      blockingPoint: '${map['blocking_point'] ?? ''}',
+      compassDirection: '${map['compass_direction'] ?? ''}',
     );
   }
 }
@@ -224,6 +251,11 @@ class EvidenceItem {
   final String identityEvidence;
   final String valueAnchor;
   final String sourceEventId;
+  final String shameRisk;
+  final String abilityReflected;
+  final String positiveAffectRestored;
+  final String difficulty;
+  final bool shareableJoy;
 
   const EvidenceItem({
     required this.id,
@@ -232,6 +264,11 @@ class EvidenceItem {
     required this.identityEvidence,
     required this.valueAnchor,
     required this.sourceEventId,
+    this.shameRisk = '',
+    this.abilityReflected = '',
+    this.positiveAffectRestored = '',
+    this.difficulty = '低',
+    this.shareableJoy = false,
   });
 
   Map<String, Object?> toMap() => {
@@ -241,6 +278,11 @@ class EvidenceItem {
         'identity_evidence': identityEvidence,
         'value_anchor': valueAnchor,
         'source_event_id': sourceEventId,
+        'shame_risk': shameRisk,
+        'ability_reflected': abilityReflected,
+        'positive_affect_restored': positiveAffectRestored,
+        'difficulty': difficulty,
+        'shareable_joy': shareableJoy ? 1 : 0,
       };
 
   factory EvidenceItem.fromMap(Map<String, Object?> map) => EvidenceItem(
@@ -250,6 +292,11 @@ class EvidenceItem {
         identityEvidence: '${map['identity_evidence'] ?? ''}',
         valueAnchor: '${map['value_anchor'] ?? ''}',
         sourceEventId: '${map['source_event_id'] ?? ''}',
+        shameRisk: '${map['shame_risk'] ?? ''}',
+        abilityReflected: '${map['ability_reflected'] ?? ''}',
+        positiveAffectRestored: '${map['positive_affect_restored'] ?? ''}',
+        difficulty: '${map['difficulty'] ?? '低'}',
+        shareableJoy: (map['shareable_joy'] as num?)?.toInt() == 1,
       );
 }
 
@@ -260,6 +307,7 @@ class ShameActionOption {
   final String difficulty;
   final String timeRequired;
   final String evidenceAfterDone;
+  final String shameExposureLevel;
 
   const ShameActionOption({
     required this.name,
@@ -268,6 +316,7 @@ class ShameActionOption {
     required this.difficulty,
     required this.timeRequired,
     required this.evidenceAfterDone,
+    this.shameExposureLevel = '低',
   });
 
   factory ShameActionOption.fromJson(Map<String, dynamic> json) =>
@@ -278,6 +327,7 @@ class ShameActionOption {
         difficulty: '${json['difficulty'] ?? '低'}',
         timeRequired: '${json['time_required'] ?? ''}',
         evidenceAfterDone: '${json['evidence_after_done'] ?? ''}',
+        shameExposureLevel: '${json['shame_exposure_level'] ?? '低'}',
       );
 }
 
@@ -314,6 +364,23 @@ class ShameAiResult {
   final String userChoicePrompt;
   final List<Map<String, dynamic>> problemTree;
   final List<Map<String, dynamic>> actionTree;
+  final List<String> originalPositiveAffects;
+  final String originalDesire;
+  final String blockingPoint;
+  final String shameTrigger;
+  final String selfContraction;
+  final String compassPrimary;
+  final String compassSecondary;
+  final List<String> compassEvidence;
+  final String compassShortTermFunction;
+  final String compassLongTermCost;
+  final String compassTurningAction;
+  final String prideAction;
+  final String prideShameRisk;
+  final String prideAbility;
+  final String pridePositiveAffect;
+  final String healthyPrideSentence;
+  final String falsePrideWarning;
 
   const ShameAiResult({
     required this.scene,
@@ -348,6 +415,23 @@ class ShameAiResult {
     required this.userChoicePrompt,
     this.problemTree = const [],
     this.actionTree = const [],
+    this.originalPositiveAffects = const [],
+    this.originalDesire = '',
+    this.blockingPoint = '',
+    this.shameTrigger = '',
+    this.selfContraction = '',
+    this.compassPrimary = '暂无法判断',
+    this.compassSecondary = '无',
+    this.compassEvidence = const [],
+    this.compassShortTermFunction = '',
+    this.compassLongTermCost = '',
+    this.compassTurningAction = '',
+    this.prideAction = '',
+    this.prideShameRisk = '',
+    this.prideAbility = '',
+    this.pridePositiveAffect = '',
+    this.healthyPrideSentence = '',
+    this.falsePrideWarning = '',
   });
 
   factory ShameAiResult.fromJson(
@@ -360,6 +444,9 @@ class ShameAiResult {
     final reframe = _map(json['reframe']);
     final minimum = _map(json['today_minimum_action']);
     final externalization = _map(json['voice_externalization']);
+    final affect = _map(json['affect_analysis']);
+    final compass = _map(json['shame_compass']);
+    final pride = _map(json['true_pride_record']);
     final sceneName = '${json['scene_key'] ?? ''}';
     final scene = ShameScene.values.firstWhere(
       (value) => value.key == sceneName,
@@ -407,6 +494,23 @@ class ShameAiResult {
       userChoicePrompt: '${json['user_choice_prompt'] ?? ''}',
       problemTree: _mapList(json['problem_tree']),
       actionTree: _mapList(json['action_tree']),
+      originalPositiveAffects: _strings(affect['original_positive_affect']),
+      originalDesire: '${affect['original_desire'] ?? ''}',
+      blockingPoint: '${affect['blocking_point'] ?? ''}',
+      shameTrigger: '${affect['shame_trigger'] ?? ''}',
+      selfContraction: '${affect['self_contraction'] ?? ''}',
+      compassPrimary: '${compass['primary_direction'] ?? '暂无法判断'}',
+      compassSecondary: '${compass['secondary_direction'] ?? '无'}',
+      compassEvidence: _strings(compass['evidence']),
+      compassShortTermFunction: '${compass['short_term_function'] ?? ''}',
+      compassLongTermCost: '${compass['long_term_cost'] ?? ''}',
+      compassTurningAction: '${compass['turning_action'] ?? ''}',
+      prideAction: '${pride['completed_or_possible_action'] ?? ''}',
+      prideShameRisk: '${pride['shame_risk_endured'] ?? ''}',
+      prideAbility: '${pride['ability_reflected'] ?? ''}',
+      pridePositiveAffect: '${pride['positive_affect_restored'] ?? ''}',
+      healthyPrideSentence: '${pride['healthy_pride_sentence'] ?? ''}',
+      falsePrideWarning: '${pride['false_pride_warning'] ?? ''}',
     );
   }
 }

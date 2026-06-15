@@ -224,6 +224,23 @@ $specializedOutput
               },
             ]
           : const [],
+      originalPositiveAffects: const ['表达', '能力', '被看见'],
+      originalDesire: '你原本想参与、完成、表达或获得一个真实回应。',
+      blockingPoint: '失败、评价或不确定性打断了原本的靠近。',
+      shameTrigger: '事件被扩大成了对整个人价值的判断。',
+      selfContraction: '想隐藏、停止表达，或用自责避免继续暴露。',
+      compassPrimary: '攻击自己',
+      compassSecondary: '退缩',
+      compassEvidence: const ['把困难改写成整个人没有价值', '想停止行动或隐藏'],
+      compassShortTermFunction: '试图先批评自己，以避免再次被评价。',
+      compassLongTermCost: '削弱行动感，也让真实需要和兴趣更难被看见。',
+      compassTurningAction: '把人格评价改写为一个具体困难，再完成低风险版本。',
+      prideAction: isGoal ? '完成目标的10分钟版本' : '写下一句事实并采取一个小行动',
+      prideShameRisk: '允许自己不完美、可能被评价或暂时不会。',
+      prideAbility: '现实澄清、承受不适与继续行动。',
+      pridePositiveAffect: '恢复一点兴趣、能力感与表达。',
+      healthyPrideSentence: '我没有靠压低别人证明价值，而是带着不舒服完成了真实行动。',
+      falsePrideWarning: '不需要比较、炫耀或表现完美；只记录事实与能力推进。',
     );
   }
 }
