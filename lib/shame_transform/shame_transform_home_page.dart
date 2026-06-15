@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../external_data/todo_goal_pages.dart';
+import '../external_data/todo_dao.dart';
+import '../external_data/todo_models.dart';
+import '../pages/ai_prompt_settings_page.dart';
 import 'shame_transform_ai_service.dart';
 import 'shame_transform_dao.dart';
 import 'shame_transform_models.dart';
@@ -102,11 +105,22 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
                     builder: (_) => GoalShameProfilesPage(dao: _dao),
                   ),
                 );
+              } else if (value == 'prompts') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiPromptSettingsPage(
+                      initialModuleId: 'shame_transform',
+                      initialPromptId: 'shame_global',
+                    ),
+                  ),
+                );
               }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'voices', child: Text('内在批判声音卡')),
               PopupMenuItem(value: 'goals', child: Text('目标羞耻画像')),
+              PopupMenuItem(value: 'prompts', child: Text('配置本模块 AI 提示词')),
             ],
           ),
         ],
@@ -547,6 +561,7 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
   final TextEditingController _input = TextEditingController();
   final ShameTransformAiService _ai = ShameTransformAiService();
   final ShameTransformDao _dao = ShameTransformDao();
+  final TodoDao _todoDao = TodoDao();
   final Set<String> _emotions = {};
   final Set<String> _bodyReactions = {};
   double _intensity = 5;
@@ -554,6 +569,7 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
   ShameAiResult? _result;
   String _relationshipMode = '';
   String _deniedPart = '';
+  TodoTaskRecord? _selectedTodo;
 
   @override
   void dispose() {
@@ -607,6 +623,7 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
         minimumAction: result.minimumAction,
         fallbackAction: result.fallbackAction,
         evidenceSentence: result.evidenceSentence,
+        linkedGoalId: _selectedTodo?.taskId ?? '',
       ),
     );
     if (widget.scene == ShameScene.innerCritic) {
@@ -659,6 +676,7 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
           if (widget.scene == ShameScene.relationshipBoundary)
             _relationshipBranch(),
           if (widget.scene == ShameScene.deniedPart) _deniedPartPicker(),
+          if (widget.scene == ShameScene.todoGoal) _todoPicker(),
           Text(
             widget.scene.inputPrompt,
             style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
@@ -724,9 +742,129 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
               icon: const Icon(Icons.bookmark_add_outlined),
               label: const Text('保存转化与今日行动'),
             ),
+            if (widget.scene == ShameScene.todoGoal && _selectedTodo != null)
+              OutlinedButton.icon(
+                onPressed: _writeMinimumActionToTodo,
+                icon: const Icon(Icons.playlist_add),
+                label: const Text('把最小行动写回所选 Todo'),
+              ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _todoPicker() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE6DDD2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.task_alt, color: _ink),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _selectedTodo == null
+                  ? '可从已同步的 Microsoft To Do 中选择目标'
+                  : '${_selectedTodo!.listDisplayName} · ${_selectedTodo!.title}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton(
+            onPressed: _searchTodo,
+            child: Text(_selectedTodo == null ? '选择' : '更换'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _searchTodo() async {
+    final queryController = TextEditingController();
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('搜索 Microsoft To Do'),
+        content: TextField(
+          controller: queryController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '输入任务标题关键词',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, queryController.text),
+            child: const Text('搜索'),
+          ),
+        ],
+      ),
+    );
+    queryController.dispose();
+    if (query == null || query.trim().isEmpty || !mounted) return;
+    final tasks = await _todoDao.searchTasks(query, limit: 50);
+    if (!mounted) return;
+    final selected = await showModalBottomSheet<TodoTaskRecord>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: tasks.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(28),
+                child: Text('没有找到匹配任务。请先在外部数据同步中同步 Microsoft To Do。'),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: tasks.length,
+                itemBuilder: (_, index) {
+                  final task = tasks[index];
+                  return ListTile(
+                    title: Text(task.title),
+                    subtitle: Text(task.listDisplayName),
+                    trailing: task.isCompleted
+                        ? const Icon(Icons.check_circle_outline)
+                        : null,
+                    onTap: () => Navigator.pop(sheetContext, task),
+                  );
+                },
+              ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _selectedTodo = selected;
+      _input.text = [
+        selected.title,
+        if (selected.bodyText.trim().isNotEmpty) selected.bodyText.trim(),
+      ].join('\n');
+    });
+  }
+
+  Future<void> _writeMinimumActionToTodo() async {
+    final task = _selectedTodo;
+    final result = _result;
+    if (task == null || result == null) return;
+    await _todoDao.upsertLocalChecklistItem(
+      listId: task.listId,
+      taskId: task.taskId,
+      title: result.minimumAction,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已作为检查步骤写回 Todo，等待下次同步。')),
     );
   }
 
@@ -867,6 +1005,12 @@ class ShameResultView extends StatelessWidget {
           _threeLayers(),
           Icons.call_split,
         ),
+        if (result.shamePatterns.isNotEmpty)
+          _card(
+            '可能的羞耻模式',
+            '${result.shamePatterns.join('、')}\n\n这是理解当前反应的可能路径，不是对你的诊断或标签。',
+            Icons.category_outlined,
+          ),
         _card(
           '毒性羞耻 → 健康羞耻',
           '原声音：${result.toxicVersion}\n\n健康改写：${result.healthyVersion}\n\n${result.identitySentence}',

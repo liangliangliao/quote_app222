@@ -289,6 +289,7 @@ class ShameAiResult {
   final List<String> emotions;
   final List<String> bodyReactions;
   final List<String> toxicLanguages;
+  final List<String> shamePatterns;
   final String healthyMessage;
   final List<String> facts;
   final List<String> interpretations;
@@ -322,6 +323,7 @@ class ShameAiResult {
     required this.emotions,
     required this.bodyReactions,
     required this.toxicLanguages,
+    required this.shamePatterns,
     required this.healthyMessage,
     required this.facts,
     required this.interpretations,
@@ -379,6 +381,7 @@ class ShameAiResult {
       emotions: _strings(core['emotion']),
       bodyReactions: _strings(core['body_reaction']),
       toxicLanguages: _strings(core['toxic_shame_language']),
+      shamePatterns: _strings(core['shame_patterns']),
       healthyMessage: '${core['healthy_shame_message'] ?? ''}',
       facts: _strings(factStory['facts']),
       interpretations: _strings(factStory['interpretations']),
