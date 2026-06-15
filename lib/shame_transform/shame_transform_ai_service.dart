@@ -66,7 +66,7 @@ class ShameTransformAiService {
     required List<String> bodyReactions,
     required String relationshipMode,
     required String deniedPart,
-  }) {
+  }) async {
     final variables = _variables(
       scene: scene,
       input: input,
