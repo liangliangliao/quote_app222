@@ -114,6 +114,13 @@ class ShameTransformDao {
         shareable INTEGER NOT NULL DEFAULT 0
       )
     ''');
+    await _ensureColumns(db, 'shame_evidence', {
+      'shame_risk': "TEXT NOT NULL DEFAULT ''",
+      'ability_reflected': "TEXT NOT NULL DEFAULT ''",
+      'positive_affect_restored': "TEXT NOT NULL DEFAULT ''",
+      'difficulty': "TEXT NOT NULL DEFAULT '低'",
+      'shareable_joy': 'INTEGER NOT NULL DEFAULT 0',
+    });
   }
 
   Future<void> _ensureColumns(
