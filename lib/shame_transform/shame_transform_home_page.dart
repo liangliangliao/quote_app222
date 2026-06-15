@@ -29,6 +29,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
   List<ShameEvent> _events = const [];
   List<EvidenceItem> _evidence = const [];
   Map<String, int> _metrics = const {};
+  Map<String, int> _compassMetrics = const {};
   bool _loading = true;
 
   @override
@@ -42,12 +43,14 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       _dao.listEvents(limit: 12),
       _dao.listEvidence(),
       _dao.weeklyMetrics(),
+      _dao.weeklyCompassMetrics(),
     ]);
     if (!mounted) return;
     setState(() {
       _events = values[0] as List<ShameEvent>;
       _evidence = values[1] as List<EvidenceItem>;
       _metrics = values[2] as Map<String, int>;
+      _compassMetrics = values[3] as Map<String, int>;
       _loading = false;
     });
   }
@@ -105,6 +108,13 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
                     builder: (_) => GoalShameProfilesPage(dao: _dao),
                   ),
                 );
+              } else if (value == 'selfMap') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ShameSelfMapPage(dao: _dao),
+                  ),
+                );
               } else if (value == 'prompts') {
                 Navigator.push(
                   context,
@@ -119,7 +129,8 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'voices', child: Text('内在批判声音卡')),
-              PopupMenuItem(value: 'goals', child: Text('目标羞耻画像')),
+              PopupMenuItem(value: 'goals', child: Text('Todo 目标羞耻画像 V2')),
+              PopupMenuItem(value: 'selfMap', child: Text('长期自我图谱')),
               PopupMenuItem(value: 'prompts', child: Text('配置本模块 AI 提示词')),
             ],
           ),
@@ -136,11 +147,19 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
                   const SizedBox(height: 14),
                   _buildWeeklyLoop(),
                   const SizedBox(height: 14),
+                  _buildAffectDashboard(),
+                  const SizedBox(height: 14),
+                  _buildCompassDashboard(),
+                  const SizedBox(height: 14),
                   _buildTodayAction(),
                   const SizedBox(height: 24),
                   _sectionTitle('现在需要什么？', '先选场景，不要求一次完成所有分析'),
                   const SizedBox(height: 12),
                   _buildPrimaryActions(),
+                  const SizedBox(height: 24),
+                  _sectionTitle('积极情感恢复', '找回兴趣、喜悦、连接与被看见的生命力'),
+                  const SizedBox(height: 12),
+                  _buildRecoveryActions(),
                   const SizedBox(height: 24),
                   _sectionTitle('深入修复与整合', '从来源、关系与责任中恢复真实自我'),
                   const SizedBox(height: 12),
@@ -148,7 +167,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
                   const SizedBox(height: 24),
                   _buildEveningReview(),
                   const SizedBox(height: 24),
-                  _sectionTitle('最近的行动证据', '价值不是靠一次表现决定，而由真实行动持续建立'),
+                  _sectionTitle('真实骄傲资产', '记录承受的羞耻风险、恢复的情感与真实能力'),
                   const SizedBox(height: 10),
                   if (_evidence.isEmpty && _events.isEmpty)
                     _emptyEvidence()
@@ -171,7 +190,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'HEALING SHAME · 从羞耻到行动',
+            'SHAME COMPASS · TRUE PRIDE',
             style: TextStyle(
               color: Color(0xFFA9D5C7),
               fontSize: 12,
@@ -181,7 +200,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
           ),
           SizedBox(height: 14),
           Text(
-            '我不是错误本身',
+            '我可以被看见，也可以行动',
             style: TextStyle(
               color: Colors.white,
               fontSize: 29,
@@ -190,7 +209,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
           ),
           SizedBox(height: 8),
           Text(
-            '我是有限但有价值的人。我能看见羞耻、承担责任、保护边界，并做一个现实小行动。',
+            '看见我原本在乎什么、羞耻如何让自我收缩，再用一个可承受的行动恢复兴趣、连接与真实骄傲。',
             style: TextStyle(
               color: Colors.white70,
               height: 1.55,
@@ -206,6 +225,9 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
     final actions = _metrics['actions'] ?? 0;
     final events = _metrics['events'] ?? 0;
     final evidence = _metrics['evidence'] ?? 0;
+    final visibility = _metrics['visibility'] ?? 0;
+    final affectRecovery = _metrics['affectRecovery'] ?? 0;
+    final microJoy = _metrics['microJoy'] ?? 0;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -228,6 +250,16 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
               _metric('$actions', '完成行动'),
               _arrow(),
               _metric('$evidence', '沉淀证据'),
+            ],
+          ),
+          const Divider(height: 24),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(label: Text('被看见训练 $visibility 次')),
+              Chip(label: Text('恢复兴趣/喜悦 $affectRecovery 次')),
+              Chip(label: Text('微喜悦 $microJoy 条')),
             ],
           ),
         ],
@@ -302,7 +334,149 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
     );
   }
 
+  Widget _buildAffectDashboard() {
+    final now = DateTime.now();
+    final todayStart =
+        DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final todayEvents =
+        _events.where((event) => event.createdAt >= todayStart).toList();
+    final latest = todayEvents.isEmpty ? null : todayEvents.first;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6D9),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('今日情感仪表盘',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+          const SizedBox(height: 10),
+          Text('主要情感：${latest?.emotion.isNotEmpty == true ? latest!.emotion : '等待记录'}'),
+          Text('积极情感：${latest?.positiveAffect.isNotEmpty == true ? latest!.positiveAffect : '等待定位'}'),
+          Text('羞耻强度：${latest?.intensity ?? 0} / 10'),
+          Text('罗盘方向：${latest?.compassDirection.isNotEmpty == true ? latest!.compassDirection : '等待识别'}'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompassDashboard() {
+    const directions = ['退缩', '攻击自己', '回避', '攻击他人'];
+    final primary = directions.fold<String>(
+      '',
+      (best, item) => (_compassMetrics[item] ?? 0) >
+              (best.isEmpty ? -1 : (_compassMetrics[best] ?? 0))
+          ? item
+          : best,
+    );
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE6DDD2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('本周羞耻罗盘',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: directions
+                .map((item) => Chip(label: Text('$item ${_compassMetrics[item] ?? 0} 次')))
+                .toList(),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            primary.isEmpty || (_compassMetrics[primary] ?? 0) == 0
+                ? '记录一次触发，开始看见自动防御如何保护你。'
+                : '本周更常使用“$primary”。下一步不是责怪它，而是练习一次可承受的转向。',
+            style: const TextStyle(color: _muted, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _completeAction(ShameEvent event) async {
+    final risk = TextEditingController(text: event.compassDirection);
+    final ability = TextEditingController();
+    final restored = TextEditingController(text: event.positiveAffect);
+    var difficulty = '中';
+    var shareable = false;
+    final review = await showDialog<Map<String, Object>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+            title: const Text('形成真实骄傲资产'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: risk,
+                    decoration:
+                        const InputDecoration(labelText: '我承受了什么羞耻风险？'),
+                  ),
+                  TextField(
+                    controller: ability,
+                    decoration:
+                        const InputDecoration(labelText: '这个行动体现了什么能力？'),
+                  ),
+                  TextField(
+                    controller: restored,
+                    decoration:
+                        const InputDecoration(labelText: '恢复了什么兴趣、喜悦或连接？'),
+                  ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: '低', label: Text('低难度')),
+                      ButtonSegment(value: '中', label: Text('中难度')),
+                      ButtonSegment(value: '高', label: Text('高难度')),
+                    ],
+                    selected: {difficulty},
+                    onSelectionChanged: (value) =>
+                        setDialogState(() => difficulty = value.first),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: shareable,
+                    onChanged: (value) =>
+                        setDialogState(() => shareable = value ?? false),
+                    title: const Text('这份喜悦可以分享给安全的人'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('稍后'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, {
+                  'risk': risk.text.trim(),
+                  'ability': ability.text.trim(),
+                  'restored': restored.text.trim(),
+                  'difficulty': difficulty,
+                  'shareable': shareable,
+                }),
+                child: const Text('保存资产'),
+              ),
+            ],
+          ),
+      ),
+    );
+    risk.dispose();
+    ability.dispose();
+    restored.dispose();
+    if (review == null) return;
     await _dao.setActionCompleted(event.id, true);
     final now = DateTime.now().millisecondsSinceEpoch;
     await _dao.saveEvidence(
@@ -313,6 +487,11 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
         identityEvidence: event.evidenceSentence,
         valueAnchor: '我可以在不完美时行动',
         sourceEventId: event.id,
+        shameRisk: '${review['risk'] ?? ''}',
+        abilityReflected: '${review['ability'] ?? ''}',
+        positiveAffectRestored: '${review['restored'] ?? ''}',
+        difficulty: '${review['difficulty'] ?? '中'}',
+        shareableJoy: review['shareable'] == true,
       ),
     );
     await _load();
@@ -355,9 +534,176 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
           const Color(0xFFFFEDBD),
           () => _openScene(ShameScene.todoGoal),
         ),
+        _entry(
+          Icons.explore_outlined,
+          '羞耻罗盘识别',
+          '看见退缩、自责、回避或攻击',
+          const Color(0xFFDDEFE9),
+          () => _openScene(ShameScene.shameCompass),
+        ),
+        _entry(
+          Icons.hide_source_outlined,
+          '我正在逃避',
+          '把冲动缩小为 5 分钟接触动作',
+          const Color(0xFFF4DFE5),
+          () => _openScene(ShameScene.avoidanceIntervention),
+        ),
       ],
     );
   }
+
+  Widget _buildRecoveryActions() => Column(
+        children: [
+          _recoveryTile(
+            ShameScene.positiveAffectRecovery,
+            Icons.emoji_objects_outlined,
+            '恢复兴趣与喜悦',
+            '不逼自己自信，只恢复一点好奇和生命力',
+          ),
+          _recoveryTile(
+            ShameScene.visibilityTraining,
+            Icons.visibility_outlined,
+            '被看见训练',
+            '从只对自己真实，到向安全关系表达',
+          ),
+          _recoveryTile(
+            ShameScene.bodyIntimacy,
+            Icons.favorite_border,
+            '身体与亲密羞耻',
+            '理解身体、需要、亲近、被拒绝与边界',
+          ),
+          Card(
+            elevation: 0,
+            color: Colors.white,
+            margin: const EdgeInsets.only(bottom: 9),
+            child: ListTile(
+              onTap: _recordMicroJoy,
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFFFFF1C9),
+                child: Icon(Icons.wb_sunny_outlined, color: _ink),
+              ),
+              title: const Text(
+                '微喜悦记录',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: const Text('记录稍微舒服的一刻，以及如何低成本重复'),
+              trailing: const Icon(Icons.add),
+            ),
+          ),
+        ],
+      );
+
+  Future<void> _recordMicroJoy() async {
+    final moment = TextEditingController();
+    final source = TextEditingController();
+    final repeat = TextEditingController();
+    var before = 0.0;
+    var after = 1.0;
+    var shareable = false;
+    final record = await showDialog<MicroJoyRecord>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('记录一刻微喜悦'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: moment,
+                  decoration:
+                      const InputDecoration(labelText: '哪一刻稍微舒服了一点？'),
+                ),
+                TextField(
+                  controller: source,
+                  decoration:
+                      const InputDecoration(labelText: '它来自什么场景或体验？'),
+                ),
+                TextField(
+                  controller: repeat,
+                  decoration:
+                      const InputDecoration(labelText: '可以怎样低成本重复？'),
+                ),
+                const SizedBox(height: 12),
+                Text('积极情感：${before.round()} → ${after.round()}'),
+                RangeSlider(
+                  values: RangeValues(before, after),
+                  min: 0,
+                  max: 10,
+                  divisions: 10,
+                  onChanged: (value) => setDialogState(() {
+                    before = value.start;
+                    after = value.end;
+                  }),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: shareable,
+                  onChanged: (value) =>
+                      setDialogState(() => shareable = value ?? false),
+                  title: const Text('我愿意把这份喜悦分享给安全的人'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (moment.text.trim().isEmpty) return;
+                final now = DateTime.now().millisecondsSinceEpoch;
+                Navigator.pop(
+                  dialogContext,
+                  MicroJoyRecord(
+                    id: 'micro_joy_$now',
+                    createdAt: now,
+                    moment: moment.text.trim(),
+                    source: source.text.trim(),
+                    repeatAction: repeat.text.trim(),
+                    affectBefore: before.round(),
+                    affectAfter: after.round(),
+                    shareable: shareable,
+                  ),
+                );
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    moment.dispose();
+    source.dispose();
+    repeat.dispose();
+    if (record == null) return;
+    await _dao.saveMicroJoy(record);
+    await _load();
+  }
+
+  Widget _recoveryTile(
+    ShameScene scene,
+    IconData icon,
+    String title,
+    String subtitle,
+  ) =>
+      Card(
+        elevation: 0,
+        color: Colors.white,
+        margin: const EdgeInsets.only(bottom: 9),
+        child: ListTile(
+          onTap: () => _openScene(scene),
+          leading: CircleAvatar(
+            backgroundColor: const Color(0xFFFFF1C9),
+            child: Icon(icon, color: _ink),
+          ),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_right),
+        ),
+      );
 
   Widget _buildDeepActions() {
     final items = [
@@ -559,21 +905,33 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
   static const deniedParts = ['愤怒的我', '想被爱的我', '脆弱的我', '想逃避的我', '有欲望的我', '想成功的我', '害怕失败的我', '想被认可的我'];
 
   final TextEditingController _input = TextEditingController();
+  final TextEditingController _originalWant = TextEditingController();
+  final TextEditingController _approachTarget = TextEditingController();
+  final TextEditingController _expression = TextEditingController();
+  final TextEditingController _expectedResponse = TextEditingController();
+  final TextEditingController _contractionMoment = TextEditingController();
   final ShameTransformAiService _ai = ShameTransformAiService();
   final ShameTransformDao _dao = ShameTransformDao();
   final TodoDao _todoDao = TodoDao();
   final Set<String> _emotions = {};
   final Set<String> _bodyReactions = {};
+  final Set<String> _positiveAffects = {};
   double _intensity = 5;
   bool _busy = false;
   ShameAiResult? _result;
   String _relationshipMode = '';
   String _deniedPart = '';
   TodoTaskRecord? _selectedTodo;
+  int _visibilityLevel = 1;
 
   @override
   void dispose() {
     _input.dispose();
+    _originalWant.dispose();
+    _approachTarget.dispose();
+    _expression.dispose();
+    _expectedResponse.dispose();
+    _contractionMoment.dispose();
     super.dispose();
   }
 
@@ -587,7 +945,7 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
     setState(() => _busy = true);
     final result = await _ai.analyze(
       scene: widget.scene,
-      input: _input.text.trim(),
+      input: _composedInput(),
       intensity: _intensity.round(),
       emotions: _emotions.toList(),
       bodyReactions: _bodyReactions.toList(),
@@ -599,6 +957,27 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
       _result = result;
       _busy = false;
     });
+  }
+
+  String _composedInput() {
+    final details = <String>[
+      _input.text.trim(),
+      if (_positiveAffects.isNotEmpty)
+        '用户选择的积极情感：${_positiveAffects.join('、')}',
+      if (_originalWant.text.trim().isNotEmpty)
+        '我原本想要：${_originalWant.text.trim()}',
+      if (_approachTarget.text.trim().isNotEmpty)
+        '我原本想靠近：${_approachTarget.text.trim()}',
+      if (_expression.text.trim().isNotEmpty)
+        '我原本想表达：${_expression.text.trim()}',
+      if (_expectedResponse.text.trim().isNotEmpty)
+        '我期待的回应：${_expectedResponse.text.trim()}',
+      if (_contractionMoment.text.trim().isNotEmpty)
+        '我开始缩回去的时刻：${_contractionMoment.text.trim()}',
+      if (widget.scene == ShameScene.visibilityTraining)
+        '本次被看见训练等级：$_visibilityLevel级',
+    ];
+    return details.join('\n');
   }
 
   Future<void> _save() async {
@@ -624,6 +1003,9 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
         fallbackAction: result.fallbackAction,
         evidenceSentence: result.evidenceSentence,
         linkedGoalId: _selectedTodo?.taskId ?? '',
+        positiveAffect: result.originalPositiveAffects.join('、'),
+        blockingPoint: result.blockingPoint,
+        compassDirection: result.compassPrimary,
       ),
     );
     if (widget.scene == ShameScene.innerCritic) {
@@ -651,6 +1033,10 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
           actionTreeJson: jsonEncode(result.actionTree),
           dailyAction: result.minimumAction,
           evidenceSentence: result.evidenceSentence,
+          positiveAffect: result.originalPositiveAffects.join('、'),
+          shameRisks: result.prideShameRisk,
+          compassRisks:
+              [result.compassPrimary, result.compassSecondary].join(' + '),
         ),
       );
     }
@@ -677,6 +1063,8 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
             _relationshipBranch(),
           if (widget.scene == ShameScene.deniedPart) _deniedPartPicker(),
           if (widget.scene == ShameScene.todoGoal) _todoPicker(),
+          if (widget.scene == ShameScene.visibilityTraining)
+            _visibilityLevelPicker(),
           Text(
             widget.scene.inputPrompt,
             style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
@@ -696,6 +1084,10 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
               ),
             ),
           ),
+          if (widget.scene != ShameScene.firstAid) ...[
+            const SizedBox(height: 16),
+            _positiveAffectInput(),
+          ],
           const SizedBox(height: 16),
           Text(
             '当前羞耻强度 ${_intensity.round()} / 10',
@@ -780,6 +1172,100 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
             onPressed: _searchTodo,
             child: Text(_selectedTodo == null ? '选择' : '更换'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _positiveAffectInput() {
+    const affects = ['兴趣', '喜悦', '表达', '连接', '能力', '亲密', '被看见'];
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBED),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE8DFC4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '积极情感被阻断 · 轻量定位',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: affects
+                .map(
+                  (affect) => FilterChip(
+                    label: Text(affect),
+                    selected: _positiveAffects.contains(affect),
+                    onSelected: (selected) => setState(() {
+                      selected
+                          ? _positiveAffects.add(affect)
+                          : _positiveAffects.remove(affect);
+                    }),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 8),
+          _compactField(_originalWant, '1. 我原本想要什么？'),
+          _compactField(_approachTarget, '2. 我原本想靠近谁或什么？'),
+          _compactField(_expression, '3. 我原本想表达什么？'),
+          _compactField(_expectedResponse, '4. 我期待怎样的回应？'),
+          _compactField(_contractionMoment, '5. 哪一刻我突然想隐藏、逃跑或反击？'),
+        ],
+      ),
+    );
+  }
+
+  Widget _compactField(TextEditingController controller, String label) =>
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: label,
+            filled: true,
+            fillColor: Colors.white,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      );
+
+  Widget _visibilityLevelPicker() {
+    const labels = ['只给自己看', '向 AI 表达', '向安全的人表达一句', '现实关系中小展示'];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9E7F6),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '选择本次被看见训练等级',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          ...List.generate(labels.length, (index) {
+            final level = index + 1;
+            return RadioListTile<int>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: level,
+              groupValue: _visibilityLevel,
+              onChanged: (value) =>
+                  setState(() => _visibilityLevel = value ?? 1),
+              title: Text('$level级 · ${labels[index]}'),
+              subtitle: Text('羞耻风险：${level <= 2 ? '低' : level == 3 ? '中' : '高'}'),
+            );
+          }),
         ],
       ),
     );
@@ -1001,6 +1487,15 @@ class ShameResultView extends StatelessWidget {
       children: [
         _card('核心锚点', result.valueAnchor, Icons.anchor),
         _card(
+          '积极情感被阻断',
+          '原本积极情感：${result.originalPositiveAffects.join('、')}\n'
+              '原本想要：${result.originalDesire}\n'
+              '阻断点：${result.blockingPoint}\n'
+              '羞耻触发：${result.shameTrigger}\n'
+              '自我收缩：${result.selfContraction}',
+          Icons.bolt_outlined,
+        ),
+        _card(
           '事实 / 解释 / 身份审判',
           _threeLayers(),
           Icons.call_split,
@@ -1011,6 +1506,16 @@ class ShameResultView extends StatelessWidget {
             '${result.shamePatterns.join('、')}\n\n这是理解当前反应的可能路径，不是对你的诊断或标签。',
             Icons.category_outlined,
           ),
+        _card(
+          '羞耻罗盘',
+          '主方向：${result.compassPrimary}\n'
+              '次方向：${result.compassSecondary}\n'
+              '依据：${result.compassEvidence.join('；')}\n\n'
+              '短期保护：${result.compassShortTermFunction}\n'
+              '长期代价：${result.compassLongTermCost}\n'
+              '转向行动：${result.compassTurningAction}',
+          Icons.explore_outlined,
+        ),
         _card(
           '毒性羞耻 → 健康羞耻',
           '原声音：${result.toxicVersion}\n\n健康改写：${result.healthyVersion}\n\n${result.identitySentence}',
@@ -1037,6 +1542,16 @@ class ShameResultView extends StatelessWidget {
           '今日最小行动',
           '${result.minimumAction}\n\n时间：${result.minimumTime}\n完成标准：${result.successStandard}\n更小版本：${result.fallbackAction}',
           Icons.directions_walk,
+        ),
+        _card(
+          '真实骄傲预演',
+          '行动：${result.prideAction}\n'
+              '承受风险：${result.prideShameRisk}\n'
+              '体现能力：${result.prideAbility}\n'
+              '恢复情感：${result.pridePositiveAffect}\n\n'
+              '${result.healthyPrideSentence}\n'
+              '提醒：${result.falsePrideWarning}',
+          Icons.workspace_premium_outlined,
         ),
         _card('行动后证据', result.evidenceSentence, Icons.verified_outlined),
         if (result.reflectionQuestions.isNotEmpty)
@@ -1089,7 +1604,8 @@ class ShameResultView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${option.name} · ${option.difficulty} · ${option.timeRequired}',
+                      '${option.name} · 难度${option.difficulty} · '
+                      '羞耻暴露${option.shameExposureLevel} · ${option.timeRequired}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     Text(option.purpose, style: const TextStyle(color: _muted)),
@@ -1190,13 +1706,13 @@ class _ShameEvidenceWallPageState extends State<ShameEvidenceWallPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _paper,
-      appBar: AppBar(title: const Text('羞耻证据墙'), backgroundColor: _paper),
+      appBar: AppBar(title: const Text('真实骄傲资产库'), backgroundColor: _paper),
       body: _items.isEmpty
           ? const Center(
               child: Padding(
                 padding: EdgeInsets.all(30),
                 child: Text(
-                  '证据墙只记录真实行动。\n先完成一个最小行动，再回来写下：这一步证明了什么？',
+                  '真实骄傲只记录真实行动。\n先完成一个最小行动，再回来写下：我承受了什么风险、体现了什么能力？',
                   textAlign: TextAlign.center,
                   style: TextStyle(height: 1.6, color: _muted),
                 ),
@@ -1234,6 +1750,15 @@ class _ShameEvidenceWallPageState extends State<ShameEvidenceWallPage> {
                       ),
                       const SizedBox(height: 7),
                       Text('我做了：${item.action}'),
+                      if (item.shameRisk.isNotEmpty)
+                        Text('承受的羞耻风险：${item.shameRisk}'),
+                      if (item.abilityReflected.isNotEmpty)
+                        Text('体现的能力：${item.abilityReflected}'),
+                      if (item.positiveAffectRestored.isNotEmpty)
+                        Text('恢复的积极情感：${item.positiveAffectRestored}'),
+                      Text('行动难度：${item.difficulty}'),
+                      if (item.shareableJoy)
+                        const Text('喜悦分享：可以向安全的人分享'),
                       const SizedBox(height: 5),
                       Text(
                         item.valueAnchor,
@@ -1392,6 +1917,9 @@ class GoalShameProfilesPage extends StatelessWidget {
                 subtitle: Text('今日：${profile.dailyAction}'),
                 children: [
                   _profileSection('触发的羞耻', profile.shameTriggers),
+                  _profileSection('目标背后的积极情感', profile.positiveAffect),
+                  _profileSection('主要羞耻风险', profile.shameRisks),
+                  _profileSection('羞耻罗盘风险', profile.compassRisks),
                   _profileSection('非羞耻化目标', profile.nonShameGoal),
                   _profileSection(
                     '问题树',
@@ -1400,10 +1928,8 @@ class GoalShameProfilesPage extends StatelessWidget {
                         .join('\n'),
                   ),
                   _profileSection(
-                    '行动树',
-                    actions
-                        .map((node) => '• ${node['action_area'] ?? node['title'] ?? '行动节点'}')
-                        .join('\n'),
+                    '羞耻暴露行动梯度',
+                    actions.map(_actionTreeSummary).join('\n\n'),
                   ),
                   _profileSection('完成后证据', profile.evidenceSentence),
                 ],
@@ -1428,6 +1954,28 @@ class GoalShameProfilesPage extends StatelessWidget {
     }
   }
 
+  static String _actionTreeSummary(Map<String, dynamic> node) {
+    final title = node['action_area'] ?? node['title'] ?? '行动节点';
+    final rawActions = node['actions'];
+    if (rawActions is! List || rawActions.isEmpty) return '• $title';
+    final children = rawActions.map((raw) {
+      if (raw is Map) {
+        final action = Map<String, dynamic>.from(raw);
+        final actionTitle = action['title'] ?? action['action'] ?? '小行动';
+        final exposure = action['shame_exposure_level'] ?? '待确认';
+        final risk = action['shame_risk'] ?? '';
+        final pride = action['healthy_pride_sentence'] ??
+            action['evidence_sentence'] ??
+            '';
+        return '  - $actionTitle｜暴露：$exposure'
+            '${risk.toString().isEmpty ? '' : '｜风险：$risk'}'
+            '${pride.toString().isEmpty ? '' : '\n    真实骄傲：$pride'}';
+      }
+      return '  - $raw';
+    }).join('\n');
+    return '• $title\n$children';
+  }
+
   Widget _profileSection(String title, String content) => Padding(
         padding: const EdgeInsets.only(top: 12),
         child: Align(
@@ -1443,6 +1991,83 @@ class GoalShameProfilesPage extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      );
+}
+
+class ShameSelfMapPage extends StatelessWidget {
+  final ShameTransformDao dao;
+
+  const ShameSelfMapPage({super.key, required this.dao});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _paper,
+      appBar: AppBar(title: const Text('长期自我图谱'), backgroundColor: _paper),
+      body: FutureBuilder<List<SelfMapDimension>>(
+        future: dao.selfMap(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final dimensions = snapshot.data!;
+          return ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              const Text(
+                '自我不是一次分析的结论，而是在羞耻与真实骄傲经验中持续形成。',
+                style: TextStyle(color: _muted, height: 1.5),
+              ),
+              const SizedBox(height: 14),
+              ...dimensions.map(
+                (dimension) => Card(
+                  elevation: 0,
+                  color: Colors.white,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ExpansionTile(
+                    title: Text(
+                      dimension.name,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    subtitle: Text(
+                      '成长等级 ${dimension.growthLevel}/5 · '
+                      '${dimension.evidenceCount} 条真实骄傲',
+                    ),
+                    childrenPadding:
+                        const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    children: [
+                      LinearProgressIndicator(
+                        value: dimension.growthLevel / 5,
+                        color: const Color(0xFF568275),
+                        backgroundColor: const Color(0xFFE4ECE9),
+                      ),
+                      const SizedBox(height: 12),
+                      _selfMapLine('常见罗盘', dimension.commonCompass),
+                      _selfMapLine('最近旧脚本', dimension.oldScript),
+                      _selfMapLine('新的健康脚本', dimension.newScript),
+                      _selfMapLine('最近真实骄傲', dimension.latestPride),
+                      _selfMapLine(
+                        '积累',
+                        '${dimension.eventCount} 次触发 · '
+                            '${dimension.evidenceCount} 次行动证据',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _selfMapLine(String title, String content) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text('$title：$content', style: const TextStyle(height: 1.45)),
         ),
       );
 }

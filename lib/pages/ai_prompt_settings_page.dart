@@ -59,7 +59,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         const _PromptModule(
           id: 'shame_transform',
           name: '足下真实自我 · 羞耻转化',
-          description: '统一配置全局价值宪法、10 个场景引导及通用/急救/行动树输出格式。修改后下一次 AI 转化立即生效。',
+          description:
+              '统一配置全局价值宪法、15 个场景引导及通用/急救/行动树输出格式。修改后下一次 AI 转化立即生效。',
           items: <_PromptItem>[
             _PromptItem(id: 'shame_global', name: '全局价值层 Prompt'),
             _PromptItem(id: 'shame_scene_firstAid', name: '场景：羞耻急救'),
@@ -72,6 +73,23 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
             _PromptItem(id: 'shame_scene_healthyResponsibility', name: '场景：健康责任训练'),
             _PromptItem(id: 'shame_scene_todoGoal', name: '场景：Todo 目标羞耻转化'),
             _PromptItem(id: 'shame_scene_dailyReview', name: '场景：每日复盘'),
+            _PromptItem(id: 'shame_scene_shameCompass', name: '场景：羞耻罗盘识别'),
+            _PromptItem(
+              id: 'shame_scene_positiveAffectRecovery',
+              name: '场景：积极情感恢复',
+            ),
+            _PromptItem(
+              id: 'shame_scene_visibilityTraining',
+              name: '场景：被看见训练',
+            ),
+            _PromptItem(
+              id: 'shame_scene_avoidanceIntervention',
+              name: '场景：回避与冲动干预',
+            ),
+            _PromptItem(
+              id: 'shame_scene_bodyIntimacy',
+              name: '场景：身体与亲密羞耻',
+            ),
             _PromptItem(id: 'shame_output_common', name: '输出格式：通用结构'),
             _PromptItem(id: 'shame_output_first_aid', name: '输出格式：羞耻急救卡'),
             _PromptItem(id: 'shame_output_action_tree', name: '输出格式：Todo 行动树'),
