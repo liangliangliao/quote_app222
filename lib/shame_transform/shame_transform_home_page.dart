@@ -1161,22 +1161,22 @@ class ShameResultView extends StatelessWidget {
             result.blockingPoint.trim().isNotEmpty)
           _card(
             '积极情感被阻断',
-            '原本积极情感：${result.originalPositiveAffects.join('、')}
-原本想靠近/表达：${result.originalDesire}
-阻断点：${result.blockingPoint}
-羞耻触发：${result.shameTrigger}
-自我收缩：${result.selfContractions.join('、')}',
+            '原本积极情感：${result.originalPositiveAffects.join('、')}\n'
+            '原本想靠近/表达：${result.originalDesire}\n'
+            '阻断点：${result.blockingPoint}\n'
+            '羞耻触发：${result.shameTrigger}\n'
+            '自我收缩：${result.selfContractions.join('、')}',
             Icons.local_florist_outlined,
           ),
         if (result.compassPrimary.trim().isNotEmpty)
           _card(
             '羞耻罗盘',
-            '主方向：${result.compassPrimary}
-次方向：${result.compassSecondary}
-依据：${result.compassEvidence.join('；')}
-短期保护：${result.compassShortFunction}
-长期代价：${result.compassLongCost}
-转向：${result.compassTurningDirection}',
+            '主方向：${result.compassPrimary}\n'
+            '次方向：${result.compassSecondary}\n'
+            '依据：${result.compassEvidence.join('；')}\n'
+            '短期保护：${result.compassShortFunction}\n'
+            '长期代价：${result.compassLongCost}\n'
+            '转向：${result.compassTurningDirection}',
             Icons.explore_outlined,
           ),
         _card(
@@ -1210,11 +1210,11 @@ class ShameResultView extends StatelessWidget {
         if (result.truePrideSentence.trim().isNotEmpty)
           _card(
             '真实骄傲资产',
-            '行动：${result.truePrideAction}
-承受：${result.difficultyCarried}
-能力：${result.abilityReflected}
-恢复：${result.positiveAffectRestored}
-真实骄傲：${result.truePrideSentence}',
+            '行动：${result.truePrideAction}\n'
+            '承受：${result.difficultyCarried}\n'
+            '能力：${result.abilityReflected}\n'
+            '恢复：${result.positiveAffectRestored}\n'
+            '真实骄傲：${result.truePrideSentence}',
             Icons.workspace_premium_outlined,
           ),
         if (result.safetyNote.trim().isNotEmpty && result.safetyNote != '无明显紧急风险')
