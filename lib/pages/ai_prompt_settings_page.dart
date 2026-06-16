@@ -59,7 +59,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         const _PromptModule(
           id: 'shame_transform',
           name: '足下真实自我 · 羞耻转化',
-          description: '统一配置全局价值宪法、10 个场景引导及通用/急救/行动树输出格式。修改后下一次 AI 转化立即生效。',
+          description: '统一配置双价值体系（毒性羞耻转化 × 羞耻罗盘/真实骄傲）、15 个场景引导及输出格式。修改后下一次 AI 转化立即生效。',
           items: <_PromptItem>[
             _PromptItem(id: 'shame_global', name: '全局价值层 Prompt'),
             _PromptItem(id: 'shame_scene_firstAid', name: '场景：羞耻急救'),
@@ -72,9 +72,15 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
             _PromptItem(id: 'shame_scene_healthyResponsibility', name: '场景：健康责任训练'),
             _PromptItem(id: 'shame_scene_todoGoal', name: '场景：Todo 目标羞耻转化'),
             _PromptItem(id: 'shame_scene_dailyReview', name: '场景：每日复盘'),
+            _PromptItem(id: 'shame_scene_shameCompass', name: '场景：羞耻罗盘识别'),
+            _PromptItem(id: 'shame_scene_affectRecovery', name: '场景：积极情感恢复'),
+            _PromptItem(id: 'shame_scene_beingSeenTraining', name: '场景：被看见训练'),
+            _PromptItem(id: 'shame_scene_truePrideReview', name: '场景：真实骄傲复盘'),
+            _PromptItem(id: 'shame_scene_shameScript', name: '场景：羞耻脚本地图'),
             _PromptItem(id: 'shame_output_common', name: '输出格式：通用结构'),
             _PromptItem(id: 'shame_output_first_aid', name: '输出格式：羞耻急救卡'),
             _PromptItem(id: 'shame_output_action_tree', name: '输出格式：Todo 行动树'),
+            _PromptItem(id: 'shame_json_repair', name: '异常恢复：JSON 格式修复'),
           ],
         ),
         const _PromptModule(
@@ -359,6 +365,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         MapEntry('{{body_reactions}}', '用户选择的身体反应。'),
         MapEntry('{{relationship_mode}}', '关系场景分支。'),
         MapEntry('{{denied_part}}', '用户选择的被否认自我部分。'),
+        MapEntry('{{raw_response}}', '首次 AI 调用返回但尚未成功解析的原始文本。'),
       ];
     }
     switch (id) {

@@ -1,10 +1,9 @@
-import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
+import '../utils/deepseek_logger.dart';
 import 'shame_transform_models.dart';
 import 'shame_transform_prompt_config.dart';
 
 class ShameTransformAiService {
-  final GlobalAiSettings _settings = GlobalAiSettings();
   final UnifiedAiService _ai = UnifiedAiService();
   final ShameTransformPromptConfig _prompts = ShameTransformPromptConfig();
 
@@ -17,9 +16,17 @@ class ShameTransformAiService {
     String relationshipMode = '',
     String deniedPart = '',
   }) async {
-    final state = await _settings.getState();
-    if (state['available'] != '1') {
-      return _fallback(scene, input, emotions, bodyReactions);
+    final config = await _ai.resolveGlobalConfig();
+    if (!config.available) {
+      return _fallback(
+        scene,
+        input,
+        emotions,
+        bodyReactions,
+        provider: config.provider,
+        modelLabel: config.label,
+        reason: '当前全局 AI 提供商 ${config.label} 没有可用密钥。请在设置页完成全局 AI 配置。',
+      );
     }
     final prompt = await _buildPrompt(
       scene: scene,
@@ -43,8 +50,9 @@ class ShameTransformAiService {
       await _prompts.getPrompt(ShameTransformPromptConfig.globalId),
       variables,
     );
+    String raw = '';
     try {
-      final raw = await _ai.generateText(
+      raw = await _ai.generateText(
         prompt: prompt,
         purpose: 'shame_transform.${scene.key}',
         systemPrompt: systemPrompt,
@@ -52,9 +60,105 @@ class ShameTransformAiService {
         expectJson: true,
         temperature: 0.3,
       );
-      return ShameAiResult.fromJson(extractJsonObject(raw), scene);
+      if (raw.trim().isEmpty) {
+        return _fallback(
+          scene,
+          input,
+          emotions,
+          bodyReactions,
+          provider: config.provider,
+          modelLabel: config.label,
+          reason: 'AI 接口返回了空内容。请到日志页查看 ${config.label} 请求记录。',
+        );
+      }
+      try {
+        final result = ShameAiResult.fromJson(
+          extractJsonObject(raw),
+          scene,
+        ).copyWithSource(
+          usedFallback: false,
+          provider: config.provider,
+          modelLabel: config.label,
+          rawResponse: raw,
+        );
+        if (result.hasMeaningfulAiContent) return result;
+      } catch (_) {
+        // Continue with one JSON normalization attempt below.
+      }
+      final repairedRaw = await _repairJson(
+        raw: raw,
+        scene: scene,
+        config: config,
+      );
+      if (repairedRaw.trim().isNotEmpty) {
+        final repaired = ShameAiResult.fromJson(
+          extractJsonObject(repairedRaw),
+          scene,
+        ).copyWithSource(
+          usedFallback: false,
+          provider: config.provider,
+          modelLabel: config.label,
+          rawResponse: repairedRaw,
+        );
+        if (repaired.hasMeaningfulAiContent) return repaired;
+      }
+      return _fallback(
+        scene,
+        input,
+        emotions,
+        bodyReactions,
+        provider: config.provider,
+        modelLabel: config.label,
+        reason: 'AI 已返回内容，但缺少事件事实、健康改写、最小行动或证据句，自动修复后仍无法完整解析。',
+        rawResponse: raw,
+      );
+    } catch (error, stackTrace) {
+      await DeepSeekLogger.logError(
+        module: 'shame_transform.${scene.key}',
+        endpoint: config.endpoint,
+        error: error,
+        stackTrace: stackTrace,
+        provider: config.provider,
+        model: config.model,
+      );
+      return _fallback(
+        scene,
+        input,
+        emotions,
+        bodyReactions,
+        provider: config.provider,
+        modelLabel: config.label,
+        reason: 'AI 请求或结果解析失败：$error',
+        rawResponse: raw,
+      );
+    }
+  }
+
+  Future<String> _repairJson({
+    required String raw,
+    required ShameScene scene,
+    required UnifiedAiResolvedConfig config,
+  }) async {
+    try {
+      final template = await _prompts.getPrompt(
+        ShameTransformPromptConfig.jsonRepairId,
+      );
+      final repairPrompt = _prompts.render(template, {
+        'scene': scene.title,
+        'scene_key': scene.key,
+        'raw_response': raw,
+      });
+      return await _ai.generateText(
+        prompt: repairPrompt,
+        purpose: 'shame_transform.${scene.key}.json_repair',
+        maxTokens: scene == ShameScene.todoGoal ? 5200 : 3400,
+        expectJson: true,
+        temperature: 0.1,
+        forcedProvider: config.provider,
+        forcedModel: config.model,
+      );
     } catch (_) {
-      return _fallback(scene, input, emotions, bodyReactions);
+      return '';
     }
   }
 
@@ -141,12 +245,16 @@ $specializedOutput
     ShameScene scene,
     String input,
     List<String> emotions,
-    List<String> bodyReactions,
-  ) {
+    List<String> bodyReactions, {
+    required String provider,
+    required String modelLabel,
+    required String reason,
+    String rawResponse = '',
+  }) {
     final isGoal = scene == ShameScene.todoGoal;
     return ShameAiResult(
       scene: scene,
-      valueAnchor: '我不是错误本身',
+      valueAnchor: '我不是错误本身，也不是羞耻里的自动防御反应本身',
       summary: input,
       eventFact: input,
       emotions: emotions,
@@ -175,6 +283,9 @@ $specializedOutput
           difficulty: '低',
           timeRequired: '2分钟',
           evidenceAfterDone: '我能看见事实，而不是立刻相信羞耻。',
+          shameExposureLevel: '低',
+          compassRisk: '攻击自己',
+          truePrideAfterDone: '我承受了看见事实的不舒服，没有继续用身份审判吞没自己。',
         ),
         ShameActionOption(
           name: '现实修复',
@@ -183,6 +294,9 @@ $specializedOutput
           difficulty: '低',
           timeRequired: '10分钟',
           evidenceAfterDone: '我可以不完美地行动。',
+          shameExposureLevel: '低',
+          compassRisk: '回避',
+          truePrideAfterDone: '我带着不完美推进了现实，而不是等到完全不怕才行动。',
         ),
       ],
       minimumAction: isGoal ? '把目标改写成一个10分钟可完成的任务' : '写下一句不带评价的事实',
@@ -196,6 +310,30 @@ $specializedOutput
       ],
       evidenceSentence: '今天我没有继续隐藏，我把羞耻还原成了一个可以处理的现实问题。',
       userChoicePrompt: '你想先做“事实分离”，还是“现实修复”？',
+      originalPositiveAffects: const ['表达', '连接', '行动欲望'],
+      originalDesire: '你可能原本想表达、靠近、完成或获得回应；这需要由你确认。',
+      blockingPoint: '积极情感在评价、失败、拒绝或没有回应的瞬间被打断。',
+      shameTrigger: '事件被解释为“我整个人不好”的瞬间。',
+      selfContractions: const ['想退缩', '想回避', '自责'],
+      compassPrimary: isGoal ? '回避' : '攻击自己',
+      compassSecondary: '退缩',
+      compassEvidence: const ['出现身份化自责或想隐藏/拖延的倾向'],
+      compassShortFunction: '短期减少暴露、失败或被评价的痛感。',
+      compassLongCost: '长期可能减少连接、学习、表达和真实行动机会。',
+      compassTurningDirection: '从自动防御转向一个低风险、可验证的小行动。',
+      interestRecoveryAction: '用2分钟接触原本想做的事情，不评价成果。',
+      joyRecoveryAction: '记录一个身体上稍微放松或舒服的瞬间。',
+      connectionAction: '向安全对象或 AI 表达一句真实感受，不要求解释完整。',
+      exposureLevel: '低',
+      affectRecoveryWhy: '羞耻会切断兴趣、喜悦和连接；小行动让积极情感重新有入口。',
+      minimumShameRisk: '承受一点点不完美、被看见或面对现实的风险。',
+      minimumTruePrideStandard: '不是结果完美，而是带着羞耻仍完成一次现实推进。',
+      truePrideAction: isGoal ? '把目标改写成一个10分钟可完成的任务' : '写下一句不带评价的事实',
+      difficultyCarried: '承受了羞耻和不想面对的感觉。',
+      abilityReflected: '事实分离、情绪承受、低风险行动的能力。',
+      positiveAffectRestored: '行动感、表达感或一点点连接。',
+      truePrideSentence: '我不是等到完全不羞耻才行动，而是在羞耻中完成了一步真实推进。',
+      safetyNote: '无明显紧急风险；如出现自伤、伤人或现实危险，请优先联系可信任的人、当地紧急服务或专业支持。',
       problemTree: isGoal
           ? const [
               {
@@ -224,6 +362,11 @@ $specializedOutput
               },
             ]
           : const [],
+      usedFallback: true,
+      provider: provider,
+      modelLabel: modelLabel,
+      fallbackReason: reason,
+      rawResponse: rawResponse,
     );
   }
 }

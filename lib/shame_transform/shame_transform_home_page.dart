@@ -29,6 +29,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
   List<ShameEvent> _events = const [];
   List<EvidenceItem> _evidence = const [];
   Map<String, int> _metrics = const {};
+  Map<String, int> _compassMetrics = const {};
   bool _loading = true;
 
   @override
@@ -42,12 +43,14 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       _dao.listEvents(limit: 12),
       _dao.listEvidence(),
       _dao.weeklyMetrics(),
+      _dao.compassMetrics(),
     ]);
     if (!mounted) return;
     setState(() {
       _events = values[0] as List<ShameEvent>;
       _evidence = values[1] as List<EvidenceItem>;
       _metrics = values[2] as Map<String, int>;
+      _compassMetrics = values[3] as Map<String, int>;
       _loading = false;
     });
   }
@@ -136,6 +139,8 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
                   const SizedBox(height: 14),
                   _buildWeeklyLoop(),
                   const SizedBox(height: 14),
+                  _buildCompassMap(),
+                  const SizedBox(height: 14),
                   _buildTodayAction(),
                   const SizedBox(height: 24),
                   _sectionTitle('现在需要什么？', '先选场景，不要求一次完成所有分析'),
@@ -181,7 +186,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
           ),
           SizedBox(height: 14),
           Text(
-            '我不是错误本身',
+            '我不是错误本身，也不是羞耻里的自动反应',
             style: TextStyle(
               color: Colors.white,
               fontSize: 29,
@@ -190,7 +195,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
           ),
           SizedBox(height: 8),
           Text(
-            '我是有限但有价值的人。我能看见羞耻、承担责任、保护边界，并做一个现实小行动。',
+            '我可以看见羞耻如何打断兴趣、喜悦、表达和连接；我能承担责任、保护边界、恢复行动，并从真实能力中形成骄傲。',
             style: TextStyle(
               color: Colors.white70,
               height: 1.55,
@@ -227,9 +232,48 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
               _arrow(),
               _metric('$actions', '完成行动'),
               _arrow(),
-              _metric('$evidence', '沉淀证据'),
+              _metric('$evidence', '真实骄傲'),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompassMap() {
+    final entries = _compassMetrics.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final dominant = entries.isEmpty || entries.first.value == 0
+        ? '暂无'
+        : entries.first.key;
+    final suggestion = switch (dominant) {
+      '退缩' => '练习重新连接：回复一句简短消息或写下一句事实。',
+      '攻击自己' => '把自责转成具体责任：只写一个可承担部分。',
+      '回避' => '练习温和接触：延迟回避 5 分钟，做任务的 5 分钟版。',
+      '攻击他人' => '把攻击句改成边界句：只表达事实、感受、需要和边界。',
+      _ => '先完成一次事件记录，观察羞耻后的自动反应。',
+    };
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE6DDD2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('本周羞耻罗盘', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: ['退缩', '攻击自己', '回避', '攻击他人'].map((key) {
+              return Chip(label: Text('$key：${_compassMetrics[key] ?? 0}'));
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          Text('主导方向：$dominant · $suggestion', style: const TextStyle(color: _muted, height: 1.45)),
         ],
       ),
     );
@@ -311,8 +355,13 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
         createdAt: now,
         action: event.minimumAction,
         identityEvidence: event.evidenceSentence,
-        valueAnchor: '我可以在不完美时行动',
+        valueAnchor: '我可以在不完美时行动，并从真实能力中形成骄傲',
         sourceEventId: event.id,
+        shameRiskCarried: event.shameTrigger,
+        compassTurn: event.compassPrimary.isEmpty ? '' : '${event.compassPrimary} → 行动',
+        positiveAffectRestored: event.positiveAffect,
+        abilityReflected: event.abilityReflected,
+        truePrideSentence: event.truePridePotential,
       ),
     );
     await _load();
@@ -355,6 +404,34 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
           const Color(0xFFFFEDBD),
           () => _openScene(ShameScene.todoGoal),
         ),
+        _entry(
+          Icons.explore_outlined,
+          '羞耻罗盘识别',
+          '识别退缩、自责、回避或攻击他人',
+          const Color(0xFFE8F5EE),
+          () => _openScene(ShameScene.shameCompass),
+        ),
+        _entry(
+          Icons.local_florist_outlined,
+          '积极情感恢复',
+          '恢复兴趣、喜悦、表达和连接',
+          const Color(0xFFF4E6FF),
+          () => _openScene(ShameScene.affectRecovery),
+        ),
+        _entry(
+          Icons.visibility_outlined,
+          '被看见训练',
+          '分级承受真实自我被看见',
+          const Color(0xFFE1F2FF),
+          () => _openScene(ShameScene.beingSeenTraining),
+        ),
+        _entry(
+          Icons.workspace_premium_outlined,
+          '真实骄傲复盘',
+          '把完成行动沉淀为能力资产',
+          const Color(0xFFFFF0D6),
+          () => _openScene(ShameScene.truePrideReview),
+        ),
       ],
     );
   }
@@ -366,6 +443,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       (ShameScene.deniedPart, Icons.pie_chart_outline, '整合愤怒、需要、脆弱与欲望'),
       (ShameScene.relationshipBoundary, Icons.people_alt_outlined, '被羞辱、做错或不敢表达需要'),
       (ShameScene.healthyResponsibility, Icons.balance_outlined, '不自毁，也不逃避责任'),
+      (ShameScene.shameScript, Icons.map_outlined, '旧脚本 → 新脚本 → 行动实验'),
     ];
     return Column(
       children: items
@@ -624,6 +702,18 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
         fallbackAction: result.fallbackAction,
         evidenceSentence: result.evidenceSentence,
         linkedGoalId: _selectedTodo?.taskId ?? '',
+        positiveAffect: result.originalPositiveAffects.join('、'),
+        originalDesire: result.originalDesire,
+        blockingPoint: result.blockingPoint,
+        shameTrigger: result.shameTrigger,
+        selfContraction: result.selfContractions.join('、'),
+        compassPrimary: result.compassPrimary,
+        compassSecondary: result.compassSecondary,
+        compassShortFunction: result.compassShortFunction,
+        compassLongCost: result.compassLongCost,
+        truePridePotential: result.truePrideSentence,
+        abilityReflected: result.abilityReflected,
+        seenRiskLevel: result.exposureLevel,
       ),
     );
     if (widget.scene == ShameScene.innerCritic) {
@@ -651,6 +741,40 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
           actionTreeJson: jsonEncode(result.actionTree),
           dailyAction: result.minimumAction,
           evidenceSentence: result.evidenceSentence,
+          goalPositiveAffect: result.originalPositiveAffects.join('、'),
+          goalShameRisksJson: jsonEncode(result.toxicLanguages),
+          compassRisksJson: jsonEncode(result.compassEvidence),
+          exposureLadderJson: jsonEncode(result.actionTree),
+          truePrideStandard: result.minimumTruePrideStandard,
+        ),
+      );
+    }
+    if (widget.scene == ShameScene.shameScript) {
+      await _dao.saveShameScript(
+        ShameScript(
+          id: 'script_$now',
+          createdAt: now,
+          oldScript: result.toxicVersion.isEmpty ? _input.text.trim() : result.toxicVersion,
+          triggerScene: result.shameTrigger,
+          protectionFunction: result.protectionIntent,
+          longTermCost: result.compassLongCost,
+          newScript: result.healthyVersion,
+          experimentAction: result.minimumAction,
+          reviewEvidence: result.truePrideSentence.isEmpty ? result.evidenceSentence : result.truePrideSentence,
+        ),
+      );
+    }
+    if (widget.scene == ShameScene.affectRecovery) {
+      await _dao.saveAffectRecoveryLog(
+        AffectRecoveryLog(
+          id: 'affect_$now',
+          createdAt: now,
+          affectType: result.originalPositiveAffects.join('、'),
+          blockedByShame: result.blockingPoint,
+          recoveryAction: result.interestRecoveryAction,
+          microJoy: result.joyRecoveryAction,
+          sharedOrNot: result.connectionAction.trim().isNotEmpty,
+          truePrideAfterAction: result.truePrideSentence,
         ),
       );
     }
@@ -737,6 +861,26 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
             const SizedBox(height: 22),
             ShameResultView(result: _result!),
             const SizedBox(height: 12),
+            if (_result!.usedFallback)
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _analyze,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重新调用 AI'),
+              ),
+            if (_result!.usedFallback)
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiPromptSettingsPage(
+                      initialModuleId: 'shame_transform',
+                      initialPromptId: 'shame_global',
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.tune),
+                label: const Text('检查本模块提示词配置'),
+              ),
             FilledButton.tonalIcon(
               onPressed: _save,
               icon: const Icon(Icons.bookmark_add_outlined),
@@ -999,6 +1143,7 @@ class ShameResultView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        _sourceCard(context),
         _card('核心锚点', result.valueAnchor, Icons.anchor),
         _card(
           '事实 / 解释 / 身份审判',
@@ -1010,6 +1155,29 @@ class ShameResultView extends StatelessWidget {
             '可能的羞耻模式',
             '${result.shamePatterns.join('、')}\n\n这是理解当前反应的可能路径，不是对你的诊断或标签。',
             Icons.category_outlined,
+          ),
+        if (result.originalPositiveAffects.isNotEmpty ||
+            result.originalDesire.trim().isNotEmpty ||
+            result.blockingPoint.trim().isNotEmpty)
+          _card(
+            '积极情感被阻断',
+            '原本积极情感：${result.originalPositiveAffects.join('、')}
+原本想靠近/表达：${result.originalDesire}
+阻断点：${result.blockingPoint}
+羞耻触发：${result.shameTrigger}
+自我收缩：${result.selfContractions.join('、')}',
+            Icons.local_florist_outlined,
+          ),
+        if (result.compassPrimary.trim().isNotEmpty)
+          _card(
+            '羞耻罗盘',
+            '主方向：${result.compassPrimary}
+次方向：${result.compassSecondary}
+依据：${result.compassEvidence.join('；')}
+短期保护：${result.compassShortFunction}
+长期代价：${result.compassLongCost}
+转向：${result.compassTurningDirection}',
+            Icons.explore_outlined,
           ),
         _card(
           '毒性羞耻 → 健康羞耻',
@@ -1039,6 +1207,18 @@ class ShameResultView extends StatelessWidget {
           Icons.directions_walk,
         ),
         _card('行动后证据', result.evidenceSentence, Icons.verified_outlined),
+        if (result.truePrideSentence.trim().isNotEmpty)
+          _card(
+            '真实骄傲资产',
+            '行动：${result.truePrideAction}
+承受：${result.difficultyCarried}
+能力：${result.abilityReflected}
+恢复：${result.positiveAffectRestored}
+真实骄傲：${result.truePrideSentence}',
+            Icons.workspace_premium_outlined,
+          ),
+        if (result.safetyNote.trim().isNotEmpty && result.safetyNote != '无明显紧急风险')
+          _card('安全提示', result.safetyNote, Icons.health_and_safety_outlined),
         if (result.reflectionQuestions.isNotEmpty)
           _card(
             '今晚复盘',
@@ -1052,6 +1232,73 @@ class ShameResultView extends StatelessWidget {
         if (result.userChoicePrompt.trim().isNotEmpty)
           _card('由你选择', result.userChoicePrompt, Icons.touch_app_outlined),
       ],
+    );
+  }
+
+  Widget _sourceCard(BuildContext context) {
+    final fallback = result.usedFallback;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: fallback ? const Color(0xFFFFF4E5) : const Color(0xFFE8F5EE),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: fallback
+              ? const Color(0xFFF3B562)
+              : const Color(0xFF84B8A5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                fallback ? Icons.warning_amber_rounded : Icons.cloud_done_outlined,
+                color: fallback
+                    ? const Color(0xFF9A5B00)
+                    : const Color(0xFF376C5C),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  fallback
+                      ? '本次显示本地兜底结果'
+                      : '本次结果来自 ${result.modelLabel.isEmpty ? 'AI' : result.modelLabel}',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+          if (fallback && result.fallbackReason.trim().isNotEmpty) ...[
+            const SizedBox(height: 7),
+            Text(
+              result.fallbackReason,
+              style: const TextStyle(height: 1.4, color: Color(0xFF704600)),
+            ),
+          ],
+          if (result.rawResponse.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (_) => SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+                    child: SingleChildScrollView(
+                      child: SelectableText(result.rawResponse),
+                    ),
+                  ),
+                ),
+              ),
+              child: const Text('查看 AI 原始输出'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1095,7 +1342,7 @@ class ShameResultView extends StatelessWidget {
                     Text(option.purpose, style: const TextStyle(color: _muted)),
                     ...option.steps.map((step) => Text('• $step')),
                     Text(
-                      '完成证据：${option.evidenceAfterDone}',
+                      '完成证据：${option.evidenceAfterDone}\n暴露等级：${option.shameExposureLevel} · 罗盘风险：${option.compassRisk}\n真实骄傲：${option.truePrideAfterDone}',
                       style: const TextStyle(fontSize: 12, color: Color(0xFF568275)),
                     ),
                   ],
@@ -1234,6 +1481,16 @@ class _ShameEvidenceWallPageState extends State<ShameEvidenceWallPage> {
                       ),
                       const SizedBox(height: 7),
                       Text('我做了：${item.action}'),
+                      if (item.truePrideSentence.trim().isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text('真实骄傲：${item.truePrideSentence}'),
+                      ],
+                      if (item.abilityReflected.trim().isNotEmpty)
+                        Text('体现能力：${item.abilityReflected}'),
+                      if (item.compassTurn.trim().isNotEmpty)
+                        Text('罗盘转向：${item.compassTurn}'),
+                      if (item.positiveAffectRestored.trim().isNotEmpty)
+                        Text('恢复情感：${item.positiveAffectRestored}'),
                       const SizedBox(height: 5),
                       Text(
                         item.valueAnchor,
@@ -1405,6 +1662,9 @@ class GoalShameProfilesPage extends StatelessWidget {
                         .map((node) => '• ${node['action_area'] ?? node['title'] ?? '行动节点'}')
                         .join('\n'),
                   ),
+                  _profileSection('目标背后的积极情感', profile.goalPositiveAffect),
+                  _profileSection('羞耻暴露阶梯', profile.exposureLadderJson),
+                  _profileSection('真实骄傲标准', profile.truePrideStandard),
                   _profileSection('完成后证据', profile.evidenceSentence),
                 ],
               );
