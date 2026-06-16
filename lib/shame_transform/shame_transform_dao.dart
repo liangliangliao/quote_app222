@@ -131,6 +131,89 @@ class ShameTransformDao {
         review_evidence TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS shame_naming_records (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        primary_name TEXT NOT NULL DEFAULT '',
+        secondary_names TEXT NOT NULL DEFAULT '',
+        shame_texture TEXT NOT NULL DEFAULT '',
+        body_signals TEXT NOT NULL DEFAULT '',
+        language_signals TEXT NOT NULL DEFAULT '',
+        dignity_wound TEXT NOT NULL DEFAULT '',
+        belonging_rupture TEXT NOT NULL DEFAULT '',
+        being_seen_fear TEXT NOT NULL DEFAULT '',
+        naming_sentence TEXT NOT NULL DEFAULT '',
+        source_event_id TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS shame_bind_records (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        bound_part TEXT NOT NULL DEFAULT '',
+        normal_need TEXT NOT NULL DEFAULT '',
+        shame_contamination TEXT NOT NULL DEFAULT '',
+        immature_expression TEXT NOT NULL DEFAULT '',
+        mature_expression TEXT NOT NULL DEFAULT '',
+        unbinding_action TEXT NOT NULL DEFAULT '',
+        reclaiming_sentence TEXT NOT NULL DEFAULT '',
+        source_event_id TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS bridge_repair_records (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        relationship_expectation TEXT NOT NULL DEFAULT '',
+        rupture_point TEXT NOT NULL DEFAULT '',
+        internalized_message TEXT NOT NULL DEFAULT '',
+        repair_possibility TEXT NOT NULL DEFAULT '',
+        caring_repair_direction TEXT NOT NULL DEFAULT '',
+        boundary_sentence TEXT NOT NULL DEFAULT '',
+        source_event_id TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS identity_card_records (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        old_identity_script TEXT NOT NULL DEFAULT '',
+        shame_name TEXT NOT NULL DEFAULT '',
+        experience_reframe TEXT NOT NULL DEFAULT '',
+        reclaimed_self_part TEXT NOT NULL DEFAULT '',
+        new_identity_statement TEXT NOT NULL DEFAULT '',
+        evidence_sentence TEXT NOT NULL DEFAULT '',
+        true_pride_sentence TEXT NOT NULL DEFAULT '',
+        source_event_id TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cultural_shame_records (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        shame_standard TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT '',
+        impact TEXT NOT NULL DEFAULT '',
+        new_standard TEXT NOT NULL DEFAULT '',
+        anti_shame_action TEXT NOT NULL DEFAULT '',
+        source_event_id TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS avoidance_cycle_records (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        shame_before TEXT NOT NULL DEFAULT '',
+        avoidance_behavior TEXT NOT NULL DEFAULT '',
+        short_function TEXT NOT NULL DEFAULT '',
+        secondary_shame TEXT NOT NULL DEFAULT '',
+        replacement_action TEXT NOT NULL DEFAULT '',
+        recovery_action TEXT NOT NULL DEFAULT '',
+        source_event_id TEXT NOT NULL DEFAULT ''
+      )
+    ''');
     await db.execute('''
       CREATE TABLE IF NOT EXISTS affect_recovery_logs (
         id TEXT PRIMARY KEY,
@@ -178,6 +261,73 @@ class ShameTransformDao {
         WHERE not_user_responsibility = '' AND not_responsibility != ''
       ''');
     }
+  }
+
+
+  Future<List<ShameNamingRecord>> listShameNamingRecords() async {
+    final db = await _database();
+    final rows = await db.query('shame_naming_records', orderBy: 'created_at DESC');
+    return rows.map(ShameNamingRecord.fromMap).toList();
+  }
+
+  Future<void> saveShameNamingRecord(ShameNamingRecord record) async {
+    final db = await _database();
+    await db.insert('shame_naming_records', record.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<ShameBindRecord>> listShameBindRecords() async {
+    final db = await _database();
+    final rows = await db.query('shame_bind_records', orderBy: 'created_at DESC');
+    return rows.map(ShameBindRecord.fromMap).toList();
+  }
+
+  Future<void> saveShameBindRecord(ShameBindRecord record) async {
+    final db = await _database();
+    await db.insert('shame_bind_records', record.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<BridgeRepairRecord>> listBridgeRepairRecords() async {
+    final db = await _database();
+    final rows = await db.query('bridge_repair_records', orderBy: 'created_at DESC');
+    return rows.map(BridgeRepairRecord.fromMap).toList();
+  }
+
+  Future<void> saveBridgeRepairRecord(BridgeRepairRecord record) async {
+    final db = await _database();
+    await db.insert('bridge_repair_records', record.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<IdentityCardRecord>> listIdentityCardRecords() async {
+    final db = await _database();
+    final rows = await db.query('identity_card_records', orderBy: 'created_at DESC');
+    return rows.map(IdentityCardRecord.fromMap).toList();
+  }
+
+  Future<void> saveIdentityCardRecord(IdentityCardRecord record) async {
+    final db = await _database();
+    await db.insert('identity_card_records', record.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<CulturalShameRecord>> listCulturalShameRecords() async {
+    final db = await _database();
+    final rows = await db.query('cultural_shame_records', orderBy: 'created_at DESC');
+    return rows.map(CulturalShameRecord.fromMap).toList();
+  }
+
+  Future<void> saveCulturalShameRecord(CulturalShameRecord record) async {
+    final db = await _database();
+    await db.insert('cultural_shame_records', record.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<AvoidanceCycleRecord>> listAvoidanceCycleRecords() async {
+    final db = await _database();
+    final rows = await db.query('avoidance_cycle_records', orderBy: 'created_at DESC');
+    return rows.map(AvoidanceCycleRecord.fromMap).toList();
+  }
+
+  Future<void> saveAvoidanceCycleRecord(AvoidanceCycleRecord record) async {
+    final db = await _database();
+    await db.insert('avoidance_cycle_records', record.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<ShameEvent>> listEvents({int? limit}) async {

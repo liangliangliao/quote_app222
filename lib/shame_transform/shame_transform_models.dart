@@ -512,6 +512,316 @@ class AffectRecoveryLog {
       );
 }
 
+
+class ShameNamingRecord {
+  final String id;
+  final int createdAt;
+  final String primaryName;
+  final String secondaryNames;
+  final String shameTexture;
+  final String bodySignals;
+  final String languageSignals;
+  final String dignityWound;
+  final String belongingRupture;
+  final String beingSeenFear;
+  final String namingSentence;
+  final String sourceEventId;
+
+  const ShameNamingRecord({
+    required this.id,
+    required this.createdAt,
+    required this.primaryName,
+    required this.secondaryNames,
+    required this.shameTexture,
+    required this.bodySignals,
+    required this.languageSignals,
+    required this.dignityWound,
+    required this.belongingRupture,
+    required this.beingSeenFear,
+    required this.namingSentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'primary_name': primaryName,
+        'secondary_names': secondaryNames,
+        'shame_texture': shameTexture,
+        'body_signals': bodySignals,
+        'language_signals': languageSignals,
+        'dignity_wound': dignityWound,
+        'belonging_rupture': belongingRupture,
+        'being_seen_fear': beingSeenFear,
+        'naming_sentence': namingSentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory ShameNamingRecord.fromMap(Map<String, Object?> map) =>
+      ShameNamingRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        primaryName: '${map['primary_name'] ?? ''}',
+        secondaryNames: '${map['secondary_names'] ?? ''}',
+        shameTexture: '${map['shame_texture'] ?? ''}',
+        bodySignals: '${map['body_signals'] ?? ''}',
+        languageSignals: '${map['language_signals'] ?? ''}',
+        dignityWound: '${map['dignity_wound'] ?? ''}',
+        belongingRupture: '${map['belonging_rupture'] ?? ''}',
+        beingSeenFear: '${map['being_seen_fear'] ?? ''}',
+        namingSentence: '${map['naming_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class ShameBindRecord {
+  final String id;
+  final int createdAt;
+  final String boundPart;
+  final String normalNeed;
+  final String shameContamination;
+  final String immatureExpression;
+  final String matureExpression;
+  final String unbindingAction;
+  final String reclaimingSentence;
+  final String sourceEventId;
+
+  const ShameBindRecord({
+    required this.id,
+    required this.createdAt,
+    required this.boundPart,
+    required this.normalNeed,
+    required this.shameContamination,
+    required this.immatureExpression,
+    required this.matureExpression,
+    required this.unbindingAction,
+    required this.reclaimingSentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'bound_part': boundPart,
+        'normal_need': normalNeed,
+        'shame_contamination': shameContamination,
+        'immature_expression': immatureExpression,
+        'mature_expression': matureExpression,
+        'unbinding_action': unbindingAction,
+        'reclaiming_sentence': reclaimingSentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory ShameBindRecord.fromMap(Map<String, Object?> map) => ShameBindRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        boundPart: '${map['bound_part'] ?? ''}',
+        normalNeed: '${map['normal_need'] ?? ''}',
+        shameContamination: '${map['shame_contamination'] ?? ''}',
+        immatureExpression: '${map['immature_expression'] ?? ''}',
+        matureExpression: '${map['mature_expression'] ?? ''}',
+        unbindingAction: '${map['unbinding_action'] ?? ''}',
+        reclaimingSentence: '${map['reclaiming_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class BridgeRepairRecord {
+  final String id;
+  final int createdAt;
+  final String relationshipExpectation;
+  final String rupturePoint;
+  final String internalizedMessage;
+  final String repairPossibility;
+  final String caringRepairDirection;
+  final String boundarySentence;
+  final String sourceEventId;
+
+  const BridgeRepairRecord({
+    required this.id,
+    required this.createdAt,
+    required this.relationshipExpectation,
+    required this.rupturePoint,
+    required this.internalizedMessage,
+    required this.repairPossibility,
+    required this.caringRepairDirection,
+    required this.boundarySentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'relationship_expectation': relationshipExpectation,
+        'rupture_point': rupturePoint,
+        'internalized_message': internalizedMessage,
+        'repair_possibility': repairPossibility,
+        'caring_repair_direction': caringRepairDirection,
+        'boundary_sentence': boundarySentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory BridgeRepairRecord.fromMap(Map<String, Object?> map) =>
+      BridgeRepairRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        relationshipExpectation: '${map['relationship_expectation'] ?? ''}',
+        rupturePoint: '${map['rupture_point'] ?? ''}',
+        internalizedMessage: '${map['internalized_message'] ?? ''}',
+        repairPossibility: '${map['repair_possibility'] ?? ''}',
+        caringRepairDirection: '${map['caring_repair_direction'] ?? ''}',
+        boundarySentence: '${map['boundary_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class IdentityCardRecord {
+  final String id;
+  final int createdAt;
+  final String oldIdentityScript;
+  final String shameName;
+  final String experienceReframe;
+  final String reclaimedSelfPart;
+  final String newIdentityStatement;
+  final String evidenceSentence;
+  final String truePrideSentence;
+  final String sourceEventId;
+
+  const IdentityCardRecord({
+    required this.id,
+    required this.createdAt,
+    required this.oldIdentityScript,
+    required this.shameName,
+    required this.experienceReframe,
+    required this.reclaimedSelfPart,
+    required this.newIdentityStatement,
+    required this.evidenceSentence,
+    required this.truePrideSentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'old_identity_script': oldIdentityScript,
+        'shame_name': shameName,
+        'experience_reframe': experienceReframe,
+        'reclaimed_self_part': reclaimedSelfPart,
+        'new_identity_statement': newIdentityStatement,
+        'evidence_sentence': evidenceSentence,
+        'true_pride_sentence': truePrideSentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory IdentityCardRecord.fromMap(Map<String, Object?> map) =>
+      IdentityCardRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        oldIdentityScript: '${map['old_identity_script'] ?? ''}',
+        shameName: '${map['shame_name'] ?? ''}',
+        experienceReframe: '${map['experience_reframe'] ?? ''}',
+        reclaimedSelfPart: '${map['reclaimed_self_part'] ?? ''}',
+        newIdentityStatement: '${map['new_identity_statement'] ?? ''}',
+        evidenceSentence: '${map['evidence_sentence'] ?? ''}',
+        truePrideSentence: '${map['true_pride_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class CulturalShameRecord {
+  final String id;
+  final int createdAt;
+  final String shameStandard;
+  final String source;
+  final String impact;
+  final String newStandard;
+  final String antiShameAction;
+  final String sourceEventId;
+
+  const CulturalShameRecord({
+    required this.id,
+    required this.createdAt,
+    required this.shameStandard,
+    required this.source,
+    required this.impact,
+    required this.newStandard,
+    required this.antiShameAction,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'shame_standard': shameStandard,
+        'source': source,
+        'impact': impact,
+        'new_standard': newStandard,
+        'anti_shame_action': antiShameAction,
+        'source_event_id': sourceEventId,
+      };
+
+  factory CulturalShameRecord.fromMap(Map<String, Object?> map) =>
+      CulturalShameRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        shameStandard: '${map['shame_standard'] ?? ''}',
+        source: '${map['source'] ?? ''}',
+        impact: '${map['impact'] ?? ''}',
+        newStandard: '${map['new_standard'] ?? ''}',
+        antiShameAction: '${map['anti_shame_action'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class AvoidanceCycleRecord {
+  final String id;
+  final int createdAt;
+  final String shameBefore;
+  final String avoidanceBehavior;
+  final String shortFunction;
+  final String secondaryShame;
+  final String replacementAction;
+  final String recoveryAction;
+  final String sourceEventId;
+
+  const AvoidanceCycleRecord({
+    required this.id,
+    required this.createdAt,
+    required this.shameBefore,
+    required this.avoidanceBehavior,
+    required this.shortFunction,
+    required this.secondaryShame,
+    required this.replacementAction,
+    required this.recoveryAction,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'shame_before': shameBefore,
+        'avoidance_behavior': avoidanceBehavior,
+        'short_function': shortFunction,
+        'secondary_shame': secondaryShame,
+        'replacement_action': replacementAction,
+        'recovery_action': recoveryAction,
+        'source_event_id': sourceEventId,
+      };
+
+  factory AvoidanceCycleRecord.fromMap(Map<String, Object?> map) =>
+      AvoidanceCycleRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        shameBefore: '${map['shame_before'] ?? ''}',
+        avoidanceBehavior: '${map['avoidance_behavior'] ?? ''}',
+        shortFunction: '${map['short_function'] ?? ''}',
+        secondaryShame: '${map['secondary_shame'] ?? ''}',
+        replacementAction: '${map['replacement_action'] ?? ''}',
+        recoveryAction: '${map['recovery_action'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
 class ShameActionOption {
   final String name;
   final String purpose;

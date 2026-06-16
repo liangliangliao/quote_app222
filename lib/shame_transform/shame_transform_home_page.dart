@@ -125,6 +125,48 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
                     builder: (_) => AffectRecoveryLogPage(dao: _dao),
                   ),
                 );
+              } else if (value == 'naming') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => KaufmanArchivePage(dao: _dao, mode: 'naming'),
+                  ),
+                );
+              } else if (value == 'bind') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => KaufmanArchivePage(dao: _dao, mode: 'bind'),
+                  ),
+                );
+              } else if (value == 'bridge') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => KaufmanArchivePage(dao: _dao, mode: 'bridge'),
+                  ),
+                );
+              } else if (value == 'identity') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => KaufmanArchivePage(dao: _dao, mode: 'identity'),
+                  ),
+                );
+              } else if (value == 'culture') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => KaufmanArchivePage(dao: _dao, mode: 'culture'),
+                  ),
+                );
+              } else if (value == 'avoidance') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => KaufmanArchivePage(dao: _dao, mode: 'avoidance'),
+                  ),
+                );
               } else if (value == 'prompts') {
                 Navigator.push(
                   context,
@@ -142,6 +184,14 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
               PopupMenuItem(value: 'goals', child: Text('目标羞耻画像')),
               PopupMenuItem(value: 'scripts', child: Text('羞耻脚本地图')),
               PopupMenuItem(value: 'affect', child: Text('积极情感恢复日志')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'naming', child: Text('羞耻命名词典')),
+              PopupMenuItem(value: 'bind', child: Text('羞耻绑定档案')),
+              PopupMenuItem(value: 'bridge', child: Text('关系桥梁修复档案')),
+              PopupMenuItem(value: 'identity', child: Text('身份重建卡片')),
+              PopupMenuItem(value: 'culture', child: Text('文化/社会羞耻档案')),
+              PopupMenuItem(value: 'avoidance', child: Text('回避/拖延循环档案')),
+              PopupMenuDivider(),
               PopupMenuItem(value: 'prompts', child: Text('配置本模块 AI 提示词')),
             ],
           ),
@@ -758,6 +808,7 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
         newIdentityStatement: result.newIdentityStatement,
       ),
     );
+    await _saveKaufmanArchives(result, now, eventId);
     if (widget.scene == ShameScene.innerCritic) {
       await _dao.saveInnerVoice(
         InnerVoice(
@@ -825,6 +876,120 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
       const SnackBar(content: Text('已保存。完成最小行动后，可在首页沉淀为证据。')),
     );
     Navigator.pop(context);
+  }
+
+
+  Future<void> _saveKaufmanArchives(
+    ShameAiResult result,
+    int now,
+    String eventId,
+  ) async {
+    if (result.primaryShameName.trim().isNotEmpty ||
+        result.namingSentence.trim().isNotEmpty) {
+      await _dao.saveShameNamingRecord(
+        ShameNamingRecord(
+          id: 'naming_$now',
+          createdAt: now,
+          primaryName: result.primaryShameName,
+          secondaryNames: result.secondaryShameNames.join('、'),
+          shameTexture: result.shameTexture.join('、'),
+          bodySignals: result.shameBodySignals.join('、'),
+          languageSignals: result.shameLanguageSignals.join('、'),
+          dignityWound: result.dignityWound,
+          belongingRupture: result.belongingRupture,
+          beingSeenFear: result.beingSeenFear,
+          namingSentence: result.namingSentence,
+          sourceEventId: eventId,
+        ),
+      );
+    }
+    if (result.boundPart.trim().isNotEmpty ||
+        result.unbindingAction.trim().isNotEmpty) {
+      await _dao.saveShameBindRecord(
+        ShameBindRecord(
+          id: 'bind_$now',
+          createdAt: now,
+          boundPart: result.boundPart,
+          normalNeed: result.normalNeed,
+          shameContamination: result.shameContamination,
+          immatureExpression: result.immatureExpression,
+          matureExpression: result.matureExpression,
+          unbindingAction: result.unbindingAction,
+          reclaimingSentence: result.reclaimingSentence,
+          sourceEventId: eventId,
+        ),
+      );
+    }
+    if (result.bridgeRupturePoint.trim().isNotEmpty ||
+        result.caringRepairDirection.trim().isNotEmpty) {
+      await _dao.saveBridgeRepairRecord(
+        BridgeRepairRecord(
+          id: 'bridge_$now',
+          createdAt: now,
+          relationshipExpectation: result.relationshipExpectation,
+          rupturePoint: result.bridgeRupturePoint,
+          internalizedMessage: result.internalizedMessage,
+          repairPossibility: result.repairPossibility,
+          caringRepairDirection: result.caringRepairDirection,
+          boundarySentence: result.boundarySentence,
+          sourceEventId: eventId,
+        ),
+      );
+    }
+    if (result.newIdentityStatement.trim().isNotEmpty ||
+        result.oldIdentityScript.trim().isNotEmpty) {
+      await _dao.saveIdentityCardRecord(
+        IdentityCardRecord(
+          id: 'identity_$now',
+          createdAt: now,
+          oldIdentityScript: result.oldIdentityScript,
+          shameName: result.identityShameName.isEmpty
+              ? result.primaryShameName
+              : result.identityShameName,
+          experienceReframe: result.identityExperienceReframe,
+          reclaimedSelfPart: result.reclaimedSelfPart,
+          newIdentityStatement: result.newIdentityStatement,
+          evidenceSentence: result.identityEvidenceSentence.isEmpty
+              ? result.evidenceSentence
+              : result.identityEvidenceSentence,
+          truePrideSentence: result.identityTruePrideSentence.isEmpty
+              ? result.truePrideSentence
+              : result.identityTruePrideSentence,
+          sourceEventId: eventId,
+        ),
+      );
+    }
+    if (widget.scene == ShameScene.culturalShame) {
+      await _dao.saveCulturalShameRecord(
+        CulturalShameRecord(
+          id: 'cultural_$now',
+          createdAt: now,
+          shameStandard: result.toxicVersion.isEmpty
+              ? result.primaryShameName
+              : result.toxicVersion,
+          source: result.sourceVoice,
+          impact: result.shameFitExplanation,
+          newStandard: result.healthyVersion,
+          antiShameAction: result.minimumAction,
+          sourceEventId: eventId,
+        ),
+      );
+    }
+    if (widget.scene == ShameScene.avoidanceCycle) {
+      await _dao.saveAvoidanceCycleRecord(
+        AvoidanceCycleRecord(
+          id: 'avoidance_$now',
+          createdAt: now,
+          shameBefore: result.shameTrigger,
+          avoidanceBehavior: result.compassPrimary,
+          shortFunction: result.compassShortFunction,
+          secondaryShame: result.toxicVersion,
+          replacementAction: result.fallbackAction,
+          recoveryAction: result.minimumAction,
+          sourceEventId: eventId,
+        ),
+      );
+    }
   }
 
   @override
@@ -1815,6 +1980,217 @@ class AffectRecoveryLogPage extends StatelessWidget {
                     Text('是否含连接动作：${log.sharedOrNot ? '是' : '否'}'),
                     const Divider(height: 22),
                     Text('真实骄傲：${log.truePrideAfterAction}', style: const TextStyle(color: Color(0xFF477166), fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+class _KaufmanArchiveEntry {
+  final int createdAt;
+  final String title;
+  final String body;
+
+  const _KaufmanArchiveEntry({
+    required this.createdAt,
+    required this.title,
+    required this.body,
+  });
+}
+
+class KaufmanArchivePage extends StatelessWidget {
+  final ShameTransformDao dao;
+  final String mode;
+
+  const KaufmanArchivePage({super.key, required this.dao, required this.mode});
+
+  String get _title => switch (mode) {
+        'naming' => '羞耻命名词典',
+        'bind' => '羞耻绑定档案',
+        'bridge' => '关系桥梁修复档案',
+        'identity' => '身份重建卡片',
+        'culture' => '文化/社会羞耻档案',
+        'avoidance' => '回避/拖延循环档案',
+        _ => 'Kaufman 关怀之桥档案',
+      };
+
+  String get _emptyText => switch (mode) {
+        'naming' => '还没有羞耻命名记录。先完成一次“识别并命名羞耻”，把难受准确命名出来。',
+        'bind' => '还没有羞耻绑定档案。先完成一次“羞耻绑定解码”，看见羞耻污染了什么正常需要。',
+        'bridge' => '还没有关系桥梁修复档案。先完成一次“关系桥梁修复”，记录期待、断裂点和关怀修复方向。',
+        'identity' => '还没有身份重建卡。先完成一次“身份重建卡”，把旧身份脚本改写成新身份声明。',
+        'culture' => '还没有文化/社会羞耻档案。先完成一次“文化/社会羞耻识别”，区分个人责任和外部羞耻标准。',
+        'avoidance' => '还没有回避/拖延循环档案。先完成一次“逃避/拖延羞耻循环”，记录二级羞耻和恢复动作。',
+        _ => '还没有档案。',
+      };
+
+  Future<List<_KaufmanArchiveEntry>> _loadEntries() async {
+    if (mode == 'naming') {
+      final rows = await dao.listShameNamingRecords();
+      return rows
+          .map(
+            (item) => _KaufmanArchiveEntry(
+              createdAt: item.createdAt,
+              title: item.primaryName.isEmpty ? '未命名羞耻' : item.primaryName,
+              body: '次级：${item.secondaryNames}\n'
+                  '质地：${item.shameTexture}\n'
+                  '身体信号：${item.bodySignals}\n'
+                  '语言信号：${item.languageSignals}\n'
+                  '尊严刺痛：${item.dignityWound}\n'
+                  '连接断裂：${item.belongingRupture}\n'
+                  '害怕被看见：${item.beingSeenFear}\n\n'
+                  '命名句：${item.namingSentence}',
+            ),
+          )
+          .toList();
+    }
+    if (mode == 'bind') {
+      final rows = await dao.listShameBindRecords();
+      return rows
+          .map(
+            (item) => _KaufmanArchiveEntry(
+              createdAt: item.createdAt,
+              title: item.boundPart.isEmpty ? '未命名绑定' : item.boundPart,
+              body: '正常需要：${item.normalNeed}\n'
+                  '羞耻污染：${item.shameContamination}\n'
+                  '不成熟表达：${item.immatureExpression}\n'
+                  '成熟表达：${item.matureExpression}\n'
+                  '解绑定行动：${item.unbindingAction}\n\n'
+                  '重新认领：${item.reclaimingSentence}',
+            ),
+          )
+          .toList();
+    }
+    if (mode == 'bridge') {
+      final rows = await dao.listBridgeRepairRecords();
+      return rows
+          .map(
+            (item) => _KaufmanArchiveEntry(
+              createdAt: item.createdAt,
+              title: item.rupturePoint.isEmpty ? '关系桥梁断裂' : item.rupturePoint,
+              body: '关系期待：${item.relationshipExpectation}\n'
+                  '内化信息：${item.internalizedMessage}\n'
+                  '修复可能性：${item.repairPossibility}\n'
+                  '关怀修复方向：${item.caringRepairDirection}\n'
+                  '边界句：${item.boundarySentence}',
+            ),
+          )
+          .toList();
+    }
+    if (mode == 'identity') {
+      final rows = await dao.listIdentityCardRecords();
+      return rows
+          .map(
+            (item) => _KaufmanArchiveEntry(
+              createdAt: item.createdAt,
+              title: item.newIdentityStatement.isEmpty
+                  ? '身份重建卡'
+                  : item.newIdentityStatement,
+              body: '旧脚本：${item.oldIdentityScript}\n'
+                  '羞耻命名：${item.shameName}\n'
+                  '经验化改写：${item.experienceReframe}\n'
+                  '重新认领：${item.reclaimedSelfPart}\n'
+                  '行动证据：${item.evidenceSentence}\n'
+                  '真实骄傲：${item.truePrideSentence}',
+            ),
+          )
+          .toList();
+    }
+    if (mode == 'culture') {
+      final rows = await dao.listCulturalShameRecords();
+      return rows
+          .map(
+            (item) => _KaufmanArchiveEntry(
+              createdAt: item.createdAt,
+              title: item.shameStandard.isEmpty ? '文化/社会羞耻标准' : item.shameStandard,
+              body: '来源：${item.source}\n'
+                  '影响：${item.impact}\n'
+                  '新评价标准：${item.newStandard}\n'
+                  '反羞耻行动：${item.antiShameAction}',
+            ),
+          )
+          .toList();
+    }
+    final rows = await dao.listAvoidanceCycleRecords();
+    return rows
+        .map(
+          (item) => _KaufmanArchiveEntry(
+            createdAt: item.createdAt,
+            title: item.avoidanceBehavior.isEmpty
+                ? '回避/拖延羞耻循环'
+                : item.avoidanceBehavior,
+            body: '行为前羞耻：${item.shameBefore}\n'
+                '短期功能：${item.shortFunction}\n'
+                '二级羞耻：${item.secondaryShame}\n'
+                '10分钟替代：${item.replacementAction}\n'
+                '恢复行动：${item.recoveryAction}',
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _paper,
+      appBar: AppBar(title: Text(_title), backgroundColor: _paper),
+      body: FutureBuilder<List<_KaufmanArchiveEntry>>(
+        future: _loadEntries(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final entries = snapshot.data!;
+          if (entries.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(30),
+                child: Text(
+                  _emptyText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(height: 1.6, color: _muted),
+                ),
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(18),
+            itemCount: entries.length,
+            itemBuilder: (_, index) {
+              final entry = entries[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DateFormat('yyyy年M月d日').format(
+                        DateTime.fromMillisecondsSinceEpoch(entry.createdAt),
+                      ),
+                      style: const TextStyle(fontSize: 12, color: _muted),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      entry.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 17,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(entry.body, style: const TextStyle(height: 1.45)),
                   ],
                 ),
               );
