@@ -11,6 +11,7 @@ enum ShameScene {
   healthyResponsibility,
   todoGoal,
   dailyReview,
+  shameIdentification,
   shameCompass,
   affectRecovery,
   beingSeenTraining,
@@ -32,6 +33,7 @@ extension ShameSceneMeta on ShameScene {
         ShameScene.healthyResponsibility => '健康责任训练',
         ShameScene.todoGoal => 'Todo 目标羞耻转化',
         ShameScene.dailyReview => '每日羞耻转化复盘',
+        ShameScene.shameIdentification => '羞耻识别评估',
         ShameScene.shameCompass => '羞耻罗盘识别',
         ShameScene.affectRecovery => '积极情感恢复',
         ShameScene.beingSeenTraining => '被看见训练',
@@ -50,6 +52,7 @@ extension ShameSceneMeta on ShameScene {
         ShameScene.healthyResponsibility => '具体发生了什么行为？它给谁造成了什么影响？',
         ShameScene.todoGoal => '写下 Todo 或目标，以及它让你怎样评价自己。',
         ShameScene.dailyReview => '今天哪个时刻触发了羞耻？你做了或没做什么？',
+        ShameScene.shameIdentification => '描述你的行为、态度、身体反应和脑中声音，让 AI 评估它与羞耻概念的一致程度。',
         ShameScene.shameCompass => '羞耻后你最自然的反应是什么：退缩、自责、回避，还是攻击他人？',
         ShameScene.affectRecovery => '你原本想靠近、表达、学习、连接或享受什么？它在哪里被打断了？',
         ShameScene.beingSeenTraining => '你希望哪一部分真实自我逐步被看见？现在最担心什么？',
@@ -88,6 +91,11 @@ class ShameEvent {
   final String truePridePotential;
   final String abilityReflected;
   final String seenRiskLevel;
+  final String shameFitLevel;
+  final String shameFitExplanation;
+  final String shameBehaviorSignals;
+  final String shameAttitudeSignals;
+  final String nonShamePossibilities;
 
   const ShameEvent({
     required this.id,
@@ -119,6 +127,11 @@ class ShameEvent {
     this.truePridePotential = '',
     this.abilityReflected = '',
     this.seenRiskLevel = '',
+    this.shameFitLevel = '',
+    this.shameFitExplanation = '',
+    this.shameBehaviorSignals = '',
+    this.shameAttitudeSignals = '',
+    this.nonShamePossibilities = '',
   });
 
   Map<String, Object?> toMap() => {
@@ -151,6 +164,11 @@ class ShameEvent {
         'true_pride_potential': truePridePotential,
         'ability_reflected': abilityReflected,
         'seen_risk_level': seenRiskLevel,
+        'shame_fit_level': shameFitLevel,
+        'shame_fit_explanation': shameFitExplanation,
+        'shame_behavior_signals': shameBehaviorSignals,
+        'shame_attitude_signals': shameAttitudeSignals,
+        'non_shame_possibilities': nonShamePossibilities,
       };
 
   factory ShameEvent.fromMap(Map<String, Object?> map) {
@@ -188,6 +206,11 @@ class ShameEvent {
       truePridePotential: '${map['true_pride_potential'] ?? ''}',
       abilityReflected: '${map['ability_reflected'] ?? ''}',
       seenRiskLevel: '${map['seen_risk_level'] ?? ''}',
+      shameFitLevel: '${map['shame_fit_level'] ?? ''}',
+      shameFitExplanation: '${map['shame_fit_explanation'] ?? ''}',
+      shameBehaviorSignals: '${map['shame_behavior_signals'] ?? ''}',
+      shameAttitudeSignals: '${map['shame_attitude_signals'] ?? ''}',
+      nonShamePossibilities: '${map['non_shame_possibilities'] ?? ''}',
     );
   }
 }
@@ -495,6 +518,15 @@ class ShameAiResult {
   final List<String> toxicLanguages;
   final List<String> shamePatterns;
   final String healthyMessage;
+  final String shameFitLevel;
+  final String shameFitScore;
+  final String shameFitExplanation;
+  final List<String> shameBehaviorSignals;
+  final List<String> shameAttitudeSignals;
+  final List<String> shameBodySignals;
+  final List<String> shameLanguageSignals;
+  final List<String> nonShamePossibilities;
+  final String identificationSummary;
   final List<String> facts;
   final List<String> interpretations;
   final List<String> identityJudgments;
@@ -558,6 +590,15 @@ class ShameAiResult {
     required this.toxicLanguages,
     required this.shamePatterns,
     required this.healthyMessage,
+    this.shameFitLevel = '',
+    this.shameFitScore = '',
+    this.shameFitExplanation = '',
+    this.shameBehaviorSignals = const [],
+    this.shameAttitudeSignals = const [],
+    this.shameBodySignals = const [],
+    this.shameLanguageSignals = const [],
+    this.nonShamePossibilities = const [],
+    this.identificationSummary = '',
     required this.facts,
     required this.interpretations,
     required this.identityJudgments,
@@ -617,6 +658,7 @@ class ShameAiResult {
     ShameScene fallbackScene,
   ) {
     final core = _map(json['core_recognition']);
+    final identification = _map(json['shame_identification']);
     final factStory = _map(json['fact_vs_story']);
     final responsibility = _map(json['responsibility_boundary']);
     final reframe = _map(json['reframe']);
@@ -649,6 +691,15 @@ class ShameAiResult {
       toxicLanguages: _strings(core['toxic_shame_language']),
       shamePatterns: _strings(core['shame_patterns']),
       healthyMessage: '${core['healthy_shame_message'] ?? ''}',
+      shameFitLevel: '${identification['fit_level'] ?? ''}',
+      shameFitScore: '${identification['fit_score'] ?? ''}',
+      shameFitExplanation: '${identification['fit_explanation'] ?? ''}',
+      shameBehaviorSignals: _strings(identification['behavior_signals']),
+      shameAttitudeSignals: _strings(identification['attitude_signals']),
+      shameBodySignals: _strings(identification['body_signals']),
+      shameLanguageSignals: _strings(identification['language_signals']),
+      nonShamePossibilities: _strings(identification['non_shame_possibilities']),
+      identificationSummary: '${identification['identification_summary'] ?? ''}',
       facts: _strings(factStory['facts']),
       interpretations: _strings(factStory['interpretations']),
       identityJudgments: _strings(factStory['identity_judgments']),
@@ -717,6 +768,15 @@ class ShameAiResult {
         toxicLanguages: toxicLanguages,
         shamePatterns: shamePatterns,
         healthyMessage: healthyMessage,
+        shameFitLevel: shameFitLevel,
+        shameFitScore: shameFitScore,
+        shameFitExplanation: shameFitExplanation,
+        shameBehaviorSignals: shameBehaviorSignals,
+        shameAttitudeSignals: shameAttitudeSignals,
+        shameBodySignals: shameBodySignals,
+        shameLanguageSignals: shameLanguageSignals,
+        nonShamePossibilities: nonShamePossibilities,
+        identificationSummary: identificationSummary,
         facts: facts,
         interpretations: interpretations,
         identityJudgments: identityJudgments,
@@ -773,6 +833,8 @@ class ShameAiResult {
 
   bool get hasMeaningfulAiContent =>
       eventFact.trim().isNotEmpty &&
+      shameFitLevel.trim().isNotEmpty &&
+      identificationSummary.trim().isNotEmpty &&
       healthyVersion.trim().isNotEmpty &&
       minimumAction.trim().isNotEmpty &&
       evidenceSentence.trim().isNotEmpty;

@@ -51,6 +51,11 @@ class ShameTransformDao {
       'true_pride_potential': "TEXT NOT NULL DEFAULT ''",
       'ability_reflected': "TEXT NOT NULL DEFAULT ''",
       'seen_risk_level': "TEXT NOT NULL DEFAULT ''",
+      'shame_fit_level': "TEXT NOT NULL DEFAULT ''",
+      'shame_fit_explanation': "TEXT NOT NULL DEFAULT ''",
+      'shame_behavior_signals': "TEXT NOT NULL DEFAULT ''",
+      'shame_attitude_signals': "TEXT NOT NULL DEFAULT ''",
+      'non_shame_possibilities': "TEXT NOT NULL DEFAULT ''",
     });
     await _copyLegacyResponsibilityColumns(db);
 

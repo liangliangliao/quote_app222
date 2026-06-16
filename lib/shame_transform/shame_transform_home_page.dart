@@ -396,6 +396,13 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       childAspectRatio: 1.03,
       children: [
         _entry(
+          Icons.psychology_alt_outlined,
+          '识别这是不是羞耻',
+          '评估行为、态度、身体和语言是否高度符合羞耻',
+          const Color(0xFFE8F5EE),
+          () => _openScene(ShameScene.shameIdentification),
+        ),
+        _entry(
           Icons.spa_outlined,
           '1 分钟急救',
           '强烈羞耻时先稳定身体，不急着分析',
@@ -733,6 +740,11 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
         truePridePotential: result.truePrideSentence,
         abilityReflected: result.abilityReflected,
         seenRiskLevel: result.exposureLevel,
+        shameFitLevel: result.shameFitLevel,
+        shameFitExplanation: result.shameFitExplanation,
+        shameBehaviorSignals: result.shameBehaviorSignals.join('；'),
+        shameAttitudeSignals: result.shameAttitudeSignals.join('；'),
+        nonShamePossibilities: result.nonShamePossibilities.join('；'),
       ),
     );
     if (widget.scene == ShameScene.innerCritic) {
@@ -873,7 +885,7 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
                   )
                 : const Icon(Icons.auto_awesome),
             label: Text(
-              _busy ? '正在把身份审判还原为现实问题…' : '开始结构化转化',
+              _busy ? '正在识别羞耻一致性并结构化转化…' : '开始羞耻识别与结构化转化',
             ),
           ),
           if (_result != null) ...[
@@ -1160,10 +1172,27 @@ class ShameResultView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shameFitScoreText = result.shameFitScore.isEmpty
+        ? '未提供'
+        : result.shameFitScore;
     return Column(
       children: [
         _sourceCard(context),
         _card('核心锚点', result.valueAnchor, Icons.anchor),
+        if (result.shameFitLevel.trim().isNotEmpty ||
+            result.identificationSummary.trim().isNotEmpty)
+          _card(
+            '羞耻识别评估',
+            '一致程度：${result.shameFitLevel} · 分数：$shameFitScoreText\n'
+            '识别结论：${result.identificationSummary}\n'
+            '原因：${result.shameFitExplanation}\n\n'
+            '行为信号：${result.shameBehaviorSignals.join('；')}\n'
+            '态度信号：${result.shameAttitudeSignals.join('；')}\n'
+            '身体信号：${result.shameBodySignals.join('；')}\n'
+            '语言信号：${result.shameLanguageSignals.join('；')}\n\n'
+            '也可能不是羞耻：${result.nonShamePossibilities.join('；')}',
+            Icons.psychology_alt_outlined,
+          ),
         _card(
           '事实 / 解释 / 身份审判',
           _threeLayers(),

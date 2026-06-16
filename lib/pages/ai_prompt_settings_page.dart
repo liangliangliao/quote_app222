@@ -59,7 +59,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         const _PromptModule(
           id: 'shame_transform',
           name: '足下真实自我 · 羞耻转化',
-          description: '统一配置双价值体系（毒性羞耻转化 × 羞耻罗盘/真实骄傲）、15 个场景引导及输出格式。修改后下一次 AI 转化立即生效。',
+          description: '统一配置双价值体系（毒性羞耻转化 × 羞耻罗盘/真实骄傲）、16 个场景引导及输出格式。修改后下一次 AI 转化立即生效。',
           items: <_PromptItem>[
             _PromptItem(id: 'shame_global', name: '全局价值层 Prompt'),
             _PromptItem(id: 'shame_scene_firstAid', name: '场景：羞耻急救'),
@@ -72,6 +72,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
             _PromptItem(id: 'shame_scene_healthyResponsibility', name: '场景：健康责任训练'),
             _PromptItem(id: 'shame_scene_todoGoal', name: '场景：Todo 目标羞耻转化'),
             _PromptItem(id: 'shame_scene_dailyReview', name: '场景：每日复盘'),
+            _PromptItem(id: 'shame_scene_shameIdentification', name: '场景：羞耻识别评估'),
             _PromptItem(id: 'shame_scene_shameCompass', name: '场景：羞耻罗盘识别'),
             _PromptItem(id: 'shame_scene_affectRecovery', name: '场景：积极情感恢复'),
             _PromptItem(id: 'shame_scene_beingSeenTraining', name: '场景：被看见训练'),

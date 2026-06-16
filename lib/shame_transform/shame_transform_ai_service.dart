@@ -109,7 +109,7 @@ class ShameTransformAiService {
         bodyReactions,
         provider: config.provider,
         modelLabel: config.label,
-        reason: 'AI 已返回内容，但缺少事件事实、健康改写、最小行动或证据句，自动修复后仍无法完整解析。',
+        reason: 'AI 已返回内容，但缺少羞耻一致性识别、事件事实、健康改写、最小行动或证据句，自动修复后仍无法完整解析。',
         rawResponse: raw,
       );
     } catch (error, stackTrace) {
@@ -189,6 +189,12 @@ scene_key：${scene.key}
 用户选择的身体反应：${bodyReactions.join('、')}
 关系分支：$relationshipMode
 被否认的自我部分：$deniedPart
+
+强制前置任务：无论当前是什么场景，你都必须先围绕两套核心价值体系完成 shame_identification：
+1. Bradshaw 线：判断用户是否把具体事件、行为、失败、关系反馈或需要扩大成“我整个人有问题”的身份化羞耻。
+2. Nathanson 线：判断用户的兴趣、喜悦、表达、连接、学习、展示或被看见是否被阻断，并观察是否出现退缩、攻击自己、回避、攻击他人的羞耻罗盘反应。
+3. 给出 fit_level（高/中/低/暂无法判断）和 fit_score（0-100），列出行为、态度、身体、语言信号，并列出可能不是羞耻的替代解释。
+4. 不要把一致性分数当作诊断，只作为“当前描述与羞耻概念的匹配度”。
 ''';
     final scenePrompt = _prompts.render(
       await _prompts.getPrompt(
@@ -262,6 +268,15 @@ $specializedOutput
       toxicLanguages: const ['把一次事件扩大成整个人的价值判断'],
       shamePatterns: const ['身份化羞耻'],
       healthyMessage: '这件事可以提醒我承担、学习或保护边界，但不需要审判整个人。',
+      shameFitLevel: '中',
+      shameFitScore: '60',
+      shameFitExplanation: '本地兜底只能根据身份化语言和回避/自责倾向初步判断；它提示当前内容与羞耻概念部分一致，但不是诊断。',
+      shameBehaviorSignals: const ['想隐藏、想逃避或难以开始'],
+      shameAttitudeSignals: const ['把事件解释为整个人不够好'],
+      shameBodySignals: bodyReactions,
+      shameLanguageSignals: const ['我整个人都不行', '我没有价值'],
+      nonShamePossibilities: const ['也可能包含焦虑、悲伤、疲劳、现实压力或价值冲突，需要由用户确认'],
+      identificationSummary: '这更像“羞耻参与其中”，但仍需要区分事实、解释和其他情绪。',
       facts: [input],
       interpretations: const ['别人一定会否定我——这是需要核实的解释'],
       identityJudgments: const ['我整个人都不行'],
