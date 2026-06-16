@@ -51,6 +51,7 @@ import 'external_data/onenote_pages.dart';
 import 'life_note_module/life_note_home_page.dart';
 import 'semantic_consistency/semantic_consistency_page.dart';
 import 'behavior_tracking/behavior_tracking_home_page.dart';
+import 'shame_transform/shame_transform_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -391,6 +392,13 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
+    _DrawerEntrySpec(
+      icon: Icons.volunteer_activism_outlined,
+      title: '足下真实自我',
+      subtitle: '羞耻触发 → 责任边界 → 现实行动 → 身份证据',
+      badgeText: '从羞耻到有尊严的行动',
+      pageBuilder: (_) => const ShameTransformHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.account_balance_outlined,
       title: '中国传统文化与哲学思想',
