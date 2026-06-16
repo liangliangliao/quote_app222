@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/global_ai_settings.dart';
+import '../shame_transform/shame_transform_prompt_config.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -18,6 +19,8 @@ class AiPromptSettingsPage extends StatefulWidget {
 
 class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final GlobalAiSettings _settings = GlobalAiSettings();
+  final ShameTransformPromptConfig _shamePrompts =
+      ShameTransformPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -53,6 +56,41 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<_PromptModule> get _modules => <_PromptModule>[
+        const _PromptModule(
+          id: 'shame_transform',
+          name: '足下真实自我 · 羞耻转化',
+          description: '统一配置三价值体系（毒性羞耻转化 × 羞耻罗盘/真实骄傲 × Kaufman 关怀之桥）、23 个场景引导及输出格式。修改后下一次 AI 转化立即生效。',
+          items: <_PromptItem>[
+            _PromptItem(id: 'shame_global', name: '全局价值层 Prompt'),
+            _PromptItem(id: 'shame_scene_firstAid', name: '场景：羞耻急救'),
+            _PromptItem(id: 'shame_scene_eventRecord', name: '场景：羞耻事件记录'),
+            _PromptItem(id: 'shame_scene_healthyTransformation', name: '场景：健康羞耻转化'),
+            _PromptItem(id: 'shame_scene_innerChild', name: '场景：内在小孩修复'),
+            _PromptItem(id: 'shame_scene_innerCritic', name: '场景：内在批判声音外化'),
+            _PromptItem(id: 'shame_scene_deniedPart', name: '场景：被否认自我部分整合'),
+            _PromptItem(id: 'shame_scene_relationshipBoundary', name: '场景：关系边界与修复'),
+            _PromptItem(id: 'shame_scene_healthyResponsibility', name: '场景：健康责任训练'),
+            _PromptItem(id: 'shame_scene_todoGoal', name: '场景：Todo 目标羞耻转化'),
+            _PromptItem(id: 'shame_scene_dailyReview', name: '场景：每日复盘'),
+            _PromptItem(id: 'shame_scene_shameIdentification', name: '场景：羞耻识别评估'),
+            _PromptItem(id: 'shame_scene_shameNaming', name: '场景：识别并命名羞耻'),
+            _PromptItem(id: 'shame_scene_shameBinding', name: '场景：羞耻绑定解码'),
+            _PromptItem(id: 'shame_scene_bridgeRepair', name: '场景：关系桥梁修复'),
+            _PromptItem(id: 'shame_scene_culturalShame', name: '场景：文化/社会羞耻识别'),
+            _PromptItem(id: 'shame_scene_avoidanceCycle', name: '场景：逃避/拖延羞耻循环'),
+            _PromptItem(id: 'shame_scene_identityRebuild', name: '场景：身份重建卡'),
+            _PromptItem(id: 'shame_scene_shameDictionary', name: '场景：羞耻语言词典'),
+            _PromptItem(id: 'shame_scene_shameCompass', name: '场景：羞耻罗盘识别'),
+            _PromptItem(id: 'shame_scene_affectRecovery', name: '场景：积极情感恢复'),
+            _PromptItem(id: 'shame_scene_beingSeenTraining', name: '场景：被看见训练'),
+            _PromptItem(id: 'shame_scene_truePrideReview', name: '场景：真实骄傲复盘'),
+            _PromptItem(id: 'shame_scene_shameScript', name: '场景：羞耻脚本地图'),
+            _PromptItem(id: 'shame_output_common', name: '输出格式：通用结构'),
+            _PromptItem(id: 'shame_output_first_aid', name: '输出格式：羞耻急救卡'),
+            _PromptItem(id: 'shame_output_action_tree', name: '输出格式：Todo 行动树'),
+            _PromptItem(id: 'shame_json_repair', name: '异常恢复：JSON 格式修复'),
+          ],
+        ),
         const _PromptModule(
           id: 'voice_alarm',
           name: '发现之旅 / 语音闹钟',
@@ -202,6 +240,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   String _defaultPrompt(String id) {
+    if (id.startsWith('shame_')) {
+      return _shamePrompts.defaultFor(id);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.defaultGoalSettingActionPrompt;
@@ -240,6 +281,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<Map<String, String>> _inspectPrompt(String id) {
+    if (id.startsWith('shame_')) {
+      return _shamePrompts.inspectPrompt(id);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.inspectGoalSettingActionPromptState();
@@ -278,6 +322,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<void> _savePromptById(String id, String value) {
+    if (id.startsWith('shame_')) {
+      return _shamePrompts.savePrompt(id, value);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.saveGoalSettingActionPrompt(value);
@@ -316,6 +363,19 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<MapEntry<String, String>> _params(String id) {
+    if (id.startsWith('shame_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{scene}}', '当前羞耻转化场景名称。'),
+        MapEntry('{{scene_key}}', '场景稳定标识。'),
+        MapEntry('{{intensity}}', '用户选择的羞耻强度，0-10。'),
+        MapEntry('{{user_input}}', '用户输入的原始事件、目标或批判语言。'),
+        MapEntry('{{emotions}}', '用户选择的情绪标签。'),
+        MapEntry('{{body_reactions}}', '用户选择的身体反应。'),
+        MapEntry('{{relationship_mode}}', '关系场景分支。'),
+        MapEntry('{{denied_part}}', '用户选择的被否认自我部分。'),
+        MapEntry('{{raw_response}}', '首次 AI 调用返回但尚未成功解析的原始文本。'),
+      ];
+    }
     switch (id) {
       case 'goal_action':
         return const <MapEntry<String, String>>[
