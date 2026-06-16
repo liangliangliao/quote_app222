@@ -30,6 +30,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
   List<EvidenceItem> _evidence = const [];
   Map<String, int> _metrics = const {};
   Map<String, int> _compassMetrics = const {};
+  Map<String, int> _compassMetrics30 = const {};
   bool _loading = true;
 
   @override
@@ -44,6 +45,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       _dao.listEvidence(),
       _dao.weeklyMetrics(),
       _dao.compassMetrics(),
+      _dao.compassMetrics(days: 30),
     ]);
     if (!mounted) return;
     setState(() {
@@ -51,6 +53,7 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       _evidence = values[1] as List<EvidenceItem>;
       _metrics = values[2] as Map<String, int>;
       _compassMetrics = values[3] as Map<String, int>;
+      _compassMetrics30 = values[4] as Map<String, int>;
       _loading = false;
     });
   }
@@ -108,6 +111,20 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
                     builder: (_) => GoalShameProfilesPage(dao: _dao),
                   ),
                 );
+              } else if (value == 'scripts') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ShameScriptLibraryPage(dao: _dao),
+                  ),
+                );
+              } else if (value == 'affect') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AffectRecoveryLogPage(dao: _dao),
+                  ),
+                );
               } else if (value == 'prompts') {
                 Navigator.push(
                   context,
@@ -123,6 +140,8 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'voices', child: Text('内在批判声音卡')),
               PopupMenuItem(value: 'goals', child: Text('目标羞耻画像')),
+              PopupMenuItem(value: 'scripts', child: Text('羞耻脚本地图')),
+              PopupMenuItem(value: 'affect', child: Text('积极情感恢复日志')),
               PopupMenuItem(value: 'prompts', child: Text('配置本模块 AI 提示词')),
             ],
           ),
@@ -263,17 +282,17 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('本周羞耻罗盘', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+          const Text('羞耻罗盘地图', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: ['退缩', '攻击自己', '回避', '攻击他人'].map((key) {
-              return Chip(label: Text('$key：${_compassMetrics[key] ?? 0}'));
+              return Chip(label: Text('$key：7天 ${_compassMetrics[key] ?? 0} / 30天 ${_compassMetrics30[key] ?? 0}'));
             }).toList(),
           ),
           const SizedBox(height: 8),
-          Text('主导方向：$dominant · $suggestion', style: const TextStyle(color: _muted, height: 1.45)),
+          Text('7天主导方向：$dominant · $suggestion', style: const TextStyle(color: _muted, height: 1.45)),
         ],
       ),
     );
@@ -1571,6 +1590,134 @@ class InnerVoiceLibraryPage extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+class ShameScriptLibraryPage extends StatelessWidget {
+  final ShameTransformDao dao;
+
+  const ShameScriptLibraryPage({super.key, required this.dao});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _paper,
+      appBar: AppBar(title: const Text('羞耻脚本地图'), backgroundColor: _paper),
+      body: FutureBuilder<List<ShameScript>>(
+        future: dao.listShameScripts(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final scripts = snapshot.data!;
+          if (scripts.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(30),
+                child: Text(
+                  '还没有脚本地图。先完成一次“羞耻脚本地图”，把旧脚本改写成新脚本和行动实验。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(height: 1.6, color: _muted),
+                ),
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(18),
+            itemCount: scripts.length,
+            itemBuilder: (_, index) {
+              final script = scripts[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('旧脚本：${script.oldScript}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    Text('触发场景：${script.triggerScene}'),
+                    Text('保护功能：${script.protectionFunction}'),
+                    Text('长期代价：${script.longTermCost}'),
+                    const Divider(height: 22),
+                    Text('新脚本：${script.newScript}', style: const TextStyle(color: Color(0xFF477166), fontWeight: FontWeight.w800)),
+                    Text('行动实验：${script.experimentAction}'),
+                    Text('复盘证据：${script.reviewEvidence}'),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class AffectRecoveryLogPage extends StatelessWidget {
+  final ShameTransformDao dao;
+
+  const AffectRecoveryLogPage({super.key, required this.dao});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _paper,
+      appBar: AppBar(title: const Text('积极情感恢复日志'), backgroundColor: _paper),
+      body: FutureBuilder<List<AffectRecoveryLog>>(
+        future: dao.listAffectRecoveryLogs(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final logs = snapshot.data!;
+          if (logs.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(30),
+                child: Text(
+                  '还没有恢复日志。先完成一次“积极情感恢复”，记录兴趣、喜悦或连接如何重新出现。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(height: 1.6, color: _muted),
+                ),
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(18),
+            itemCount: logs.length,
+            itemBuilder: (_, index) {
+              final log = logs[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('恢复类型：${log.affectType}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    Text('被羞耻阻断：${log.blockedByShame}'),
+                    Text('恢复动作：${log.recoveryAction}'),
+                    Text('微喜悦：${log.microJoy}'),
+                    Text('是否含连接动作：${log.sharedOrNot ? '是' : '否'}'),
+                    const Divider(height: 22),
+                    Text('真实骄傲：${log.truePrideAfterAction}', style: const TextStyle(color: Color(0xFF477166), fontWeight: FontWeight.w800)),
                   ],
                 ),
               );

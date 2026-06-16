@@ -282,6 +282,15 @@ class ShameTransformDao {
     );
   }
 
+  Future<List<AffectRecoveryLog>> listAffectRecoveryLogs() async {
+    final db = await _database();
+    final rows = await db.query(
+      'affect_recovery_logs',
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(AffectRecoveryLog.fromMap).toList();
+  }
+
   Future<void> saveAffectRecoveryLog(AffectRecoveryLog log) async {
     final db = await _database();
     await db.insert(
