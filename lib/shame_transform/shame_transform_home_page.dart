@@ -397,10 +397,10 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       children: [
         _entry(
           Icons.psychology_alt_outlined,
-          '识别这是不是羞耻',
-          '评估行为、态度、身体和语言是否高度符合羞耻',
+          '识别并命名羞耻',
+          '判断是否像羞耻，并命名暴露/失败/能力/关系等羞耻',
           const Color(0xFFE8F5EE),
-          () => _openScene(ShameScene.shameIdentification),
+          () => _openScene(ShameScene.shameNaming),
         ),
         _entry(
           Icons.spa_outlined,
@@ -467,8 +467,14 @@ class _ShameTransformHomePageState extends State<ShameTransformHomePage> {
       (ShameScene.innerChild, Icons.child_care_outlined, '把过去的自己接回来'),
       (ShameScene.innerCritic, Icons.record_voice_over_outlined, '留下保护，拿掉羞辱'),
       (ShameScene.deniedPart, Icons.pie_chart_outline, '整合愤怒、需要、脆弱与欲望'),
+      (ShameScene.shameBinding, Icons.link_off_outlined, '羞耻绑定了什么需要或自我部分'),
       (ShameScene.relationshipBoundary, Icons.people_alt_outlined, '被羞辱、做错或不敢表达需要'),
+      (ShameScene.bridgeRepair, Icons.handshake_outlined, '关系期待、桥梁断裂与关怀修复'),
       (ShameScene.healthyResponsibility, Icons.balance_outlined, '不自毁，也不逃避责任'),
+      (ShameScene.culturalShame, Icons.public_outlined, '识别家庭/社会/文化羞耻标准'),
+      (ShameScene.avoidanceCycle, Icons.loop_outlined, '回避、成瘾或拖延背后的二级羞耻'),
+      (ShameScene.identityRebuild, Icons.badge_outlined, '旧身份脚本 → 新身份声明'),
+      (ShameScene.shameDictionary, Icons.menu_book_outlined, '学习准确命名内在经验'),
       (ShameScene.shameScript, Icons.map_outlined, '旧脚本 → 新脚本 → 行动实验'),
     ];
     return Column(
@@ -745,6 +751,11 @@ class _ShameTransformFlowPageState extends State<ShameTransformFlowPage> {
         shameBehaviorSignals: result.shameBehaviorSignals.join('；'),
         shameAttitudeSignals: result.shameAttitudeSignals.join('；'),
         nonShamePossibilities: result.nonShamePossibilities.join('；'),
+        primaryShameName: result.primaryShameName,
+        namingSentence: result.namingSentence,
+        boundPart: result.boundPart,
+        bridgeRupturePoint: result.bridgeRupturePoint,
+        newIdentityStatement: result.newIdentityStatement,
       ),
     );
     if (widget.scene == ShameScene.innerCritic) {
@@ -1193,6 +1204,58 @@ class ShameResultView extends StatelessWidget {
             '也可能不是羞耻：${result.nonShamePossibilities.join('；')}',
             Icons.psychology_alt_outlined,
           ),
+        if (result.primaryShameName.trim().isNotEmpty ||
+            result.namingSentence.trim().isNotEmpty)
+          _card(
+            '羞耻命名',
+            '主羞耻名称：${result.primaryShameName}\n'
+            '次级羞耻：${result.secondaryShameNames.join('、')}\n'
+            '羞耻质地：${result.shameTexture.join('、')}\n'
+            '尊严刺痛：${result.dignityWound}\n'
+            '连接断裂：${result.belongingRupture}\n'
+            '害怕被看见：${result.beingSeenFear}\n\n'
+            '命名句：${result.namingSentence}\n'
+            '命名把握：${result.namingConfidence}',
+            Icons.label_important_outline,
+          ),
+        if (result.boundPart.trim().isNotEmpty ||
+            result.unbindingAction.trim().isNotEmpty)
+          _card(
+            '羞耻绑定解码',
+            '绑定部分：${result.boundPart}\n'
+            '正常需要：${result.normalNeed}\n'
+            '羞耻污染：${result.shameContamination}\n'
+            '不成熟表达：${result.immatureExpression}\n'
+            '成熟表达：${result.matureExpression}\n'
+            '解绑定行动：${result.unbindingAction}\n\n'
+            '重新认领：${result.reclaimingSentence}',
+            Icons.link_off_outlined,
+          ),
+        if (result.bridgeRelevant.trim().isNotEmpty ||
+            result.bridgeRupturePoint.trim().isNotEmpty)
+          _card(
+            '关系桥梁修复',
+            '是否相关：${result.bridgeRelevant}\n'
+            '关系期待：${result.relationshipExpectation}\n'
+            '桥梁断裂点：${result.bridgeRupturePoint}\n'
+            '内化信息：${result.internalizedMessage}\n'
+            '修复可能性：${result.repairPossibility}\n'
+            '关怀修复方向：${result.caringRepairDirection}',
+            Icons.handshake_outlined,
+          ),
+        if (result.newIdentityStatement.trim().isNotEmpty ||
+            result.oldIdentityScript.trim().isNotEmpty)
+          _card(
+            '身份重建卡',
+            '旧身份脚本：${result.oldIdentityScript}\n'
+            '羞耻命名：${result.identityShameName}\n'
+            '经验化改写：${result.identityExperienceReframe}\n'
+            '重新认领：${result.reclaimedSelfPart}\n'
+            '新身份声明：${result.newIdentityStatement}\n'
+            '行动证据：${result.identityEvidenceSentence}\n'
+            '真实骄傲：${result.identityTruePrideSentence}',
+            Icons.badge_outlined,
+          ),
         _card(
           '事实 / 解释 / 身份审判',
           _threeLayers(),
@@ -1265,8 +1328,13 @@ class ShameResultView extends StatelessWidget {
             '真实骄傲：${result.truePrideSentence}',
             Icons.workspace_premium_outlined,
           ),
-        if (result.safetyNote.trim().isNotEmpty && result.safetyNote != '无明显紧急风险')
-          _card('安全提示', result.safetyNote, Icons.health_and_safety_outlined),
+        if (result.riskNote.trim().isNotEmpty ||
+            (result.safetyNote.trim().isNotEmpty && result.safetyNote != '无明显紧急风险'))
+          _card(
+            '安全检查',
+            '紧急风险：${result.safetyHasUrgentRisk.isEmpty ? '暂无法判断' : result.safetyHasUrgentRisk}\n${result.riskNote.isNotEmpty ? result.riskNote : result.safetyNote}',
+            Icons.health_and_safety_outlined,
+          ),
         if (result.reflectionQuestions.isNotEmpty)
           _card(
             '今晚复盘',

@@ -59,7 +59,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         const _PromptModule(
           id: 'shame_transform',
           name: '足下真实自我 · 羞耻转化',
-          description: '统一配置双价值体系（毒性羞耻转化 × 羞耻罗盘/真实骄傲）、16 个场景引导及输出格式。修改后下一次 AI 转化立即生效。',
+          description: '统一配置三价值体系（毒性羞耻转化 × 羞耻罗盘/真实骄傲 × Kaufman 关怀之桥）、23 个场景引导及输出格式。修改后下一次 AI 转化立即生效。',
           items: <_PromptItem>[
             _PromptItem(id: 'shame_global', name: '全局价值层 Prompt'),
             _PromptItem(id: 'shame_scene_firstAid', name: '场景：羞耻急救'),
@@ -73,6 +73,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
             _PromptItem(id: 'shame_scene_todoGoal', name: '场景：Todo 目标羞耻转化'),
             _PromptItem(id: 'shame_scene_dailyReview', name: '场景：每日复盘'),
             _PromptItem(id: 'shame_scene_shameIdentification', name: '场景：羞耻识别评估'),
+            _PromptItem(id: 'shame_scene_shameNaming', name: '场景：识别并命名羞耻'),
+            _PromptItem(id: 'shame_scene_shameBinding', name: '场景：羞耻绑定解码'),
+            _PromptItem(id: 'shame_scene_bridgeRepair', name: '场景：关系桥梁修复'),
+            _PromptItem(id: 'shame_scene_culturalShame', name: '场景：文化/社会羞耻识别'),
+            _PromptItem(id: 'shame_scene_avoidanceCycle', name: '场景：逃避/拖延羞耻循环'),
+            _PromptItem(id: 'shame_scene_identityRebuild', name: '场景：身份重建卡'),
+            _PromptItem(id: 'shame_scene_shameDictionary', name: '场景：羞耻语言词典'),
             _PromptItem(id: 'shame_scene_shameCompass', name: '场景：羞耻罗盘识别'),
             _PromptItem(id: 'shame_scene_affectRecovery', name: '场景：积极情感恢复'),
             _PromptItem(id: 'shame_scene_beingSeenTraining', name: '场景：被看见训练'),

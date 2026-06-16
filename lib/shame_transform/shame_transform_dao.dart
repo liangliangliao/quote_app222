@@ -56,6 +56,11 @@ class ShameTransformDao {
       'shame_behavior_signals': "TEXT NOT NULL DEFAULT ''",
       'shame_attitude_signals': "TEXT NOT NULL DEFAULT ''",
       'non_shame_possibilities': "TEXT NOT NULL DEFAULT ''",
+      'primary_shame_name': "TEXT NOT NULL DEFAULT ''",
+      'naming_sentence': "TEXT NOT NULL DEFAULT ''",
+      'bound_part': "TEXT NOT NULL DEFAULT ''",
+      'bridge_rupture_point': "TEXT NOT NULL DEFAULT ''",
+      'new_identity_statement': "TEXT NOT NULL DEFAULT ''",
     });
     await _copyLegacyResponsibilityColumns(db);
 

@@ -190,11 +190,13 @@ scene_key：${scene.key}
 关系分支：$relationshipMode
 被否认的自我部分：$deniedPart
 
-强制前置任务：无论当前是什么场景，你都必须先围绕两套核心价值体系完成 shame_identification：
-1. Bradshaw 线：判断用户是否把具体事件、行为、失败、关系反馈或需要扩大成“我整个人有问题”的身份化羞耻。
-2. Nathanson 线：判断用户的兴趣、喜悦、表达、连接、学习、展示或被看见是否被阻断，并观察是否出现退缩、攻击自己、回避、攻击他人的羞耻罗盘反应。
-3. 给出 fit_level（高/中/低/暂无法判断）和 fit_score（0-100），列出行为、态度、身体、语言信号，并列出可能不是羞耻的替代解释。
-4. 不要把一致性分数当作诊断，只作为“当前描述与羞耻概念的匹配度”。
+强制前置任务：无论当前是什么场景，你都必须先围绕三套核心价值体系完成“识别羞耻 + 命名羞耻”：
+1. safety_check：先判断是否存在自伤、伤人、暴力或现实危险。
+2. Bradshaw 线：判断用户是否把具体事件、行为、失败、关系反馈或需要扩大成“我整个人有问题”的身份化羞耻。
+3. Nathanson 线：判断用户的兴趣、喜悦、表达、连接、学习、展示或被看见是否被阻断，并观察是否出现退缩、攻击自己、回避、攻击他人的羞耻罗盘反应。
+4. Kaufman 线：判断羞耻是否来自人际桥梁断裂、是否被语言/图像/记忆内化为身份、是否绑定了愤怒、依赖、身体、金钱、亲密、表达、被看见或成功等需要。
+5. 必须输出 shame_identification 与 shame_naming：fit_level、fit_score、行为/态度/身体/语言信号、非羞耻可能性、主羞耻名称、次级羞耻名称、羞耻质地和 naming_sentence。
+6. 不要把一致性分数当作诊断，只作为“当前描述与羞耻概念的匹配度”；命名也必须标注为当前描述的匹配，而不是人格标签。
 ''';
     final scenePrompt = _prompts.render(
       await _prompts.getPrompt(
@@ -277,6 +279,36 @@ $specializedOutput
       shameLanguageSignals: const ['我整个人都不行', '我没有价值'],
       nonShamePossibilities: const ['也可能包含焦虑、悲伤、疲劳、现实压力或价值冲突，需要由用户确认'],
       identificationSummary: '这更像“羞耻参与其中”，但仍需要区分事实、解释和其他情绪。',
+      safetyHasUrgentRisk: '否',
+      riskNote: '无明显紧急风险；如出现自伤、伤人或现实危险，请优先联系可信任的人、当地紧急服务或专业支持。',
+      primaryShameName: isGoal ? '能力羞耻' : '身份羞耻',
+      secondaryShameNames: const ['失败羞耻', '被看见羞耻'],
+      shameTexture: const ['暴露感', '不配感', '想隐藏'],
+      dignityWound: '一次表现、反馈或关系事件刺痛了“我是否有价值”的位置。',
+      belongingRupture: '担心自己不被回应、不被接住或不被群体接纳。',
+      beingSeenFear: '害怕不足、失败、需要或不完美被看见。',
+      namingSentence: '我正在经历一种羞耻，而不是我整个人有问题。',
+      namingConfidence: '中',
+      boundPart: '被看见的需要与对能力/关系回应的期待',
+      normalNeed: '想被回应、想做成事、想被尊重和想获得支持，都是正常需要。',
+      shameContamination: '羞耻把这些需要污染成“我太麻烦、太差或不配”。',
+      immatureExpression: '可能表现为自责、回避、讨好或把自己关起来。',
+      matureExpression: '把需要说成具体请求，把责任落到可执行步骤，而不是审判整个人。',
+      unbindingAction: '写下一个正常需要，并提出一个很小、可被拒绝的请求或行动。',
+      reclaimingSentence: '我可以重新拥有这个需要，而不把它等同于缺陷。',
+      bridgeRelevant: '暂无法判断',
+      relationshipExpectation: '可能期待被回应、被理解或被尊重；需要由你确认。',
+      bridgeRupturePoint: '可能在没有回应、被评价、被拒绝或被比较的瞬间断裂。',
+      internalizedMessage: '我不值得、我不够好或我不该被看见。',
+      repairPossibility: '暂无法判断',
+      caringRepairDirection: '先用非攻击语言澄清事实、感受与期待，再判断是否修复或设边界。',
+      oldIdentityScript: '我有问题 / 我不够好',
+      identityShameName: isGoal ? '能力羞耻' : '身份羞耻',
+      identityExperienceReframe: '我在某类评价、失败或关系断裂场景中容易经历羞耻。',
+      reclaimedSelfPart: '想被看见、想获得回应、想学习和想修复的部分。',
+      newIdentityStatement: '我是一个正在学习命名羞耻、承担具体责任并继续行动的人。',
+      identityEvidenceSentence: '我没有把羞耻完全等同于自己，而是写下事实并选择一步行动。',
+      identityTruePrideSentence: '我承受了羞耻并完成一次现实推进，这是真实骄傲的来源。',
       facts: [input],
       interpretations: const ['别人一定会否定我——这是需要核实的解释'],
       identityJudgments: const ['我整个人都不行'],
