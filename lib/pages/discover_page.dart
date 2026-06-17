@@ -39,6 +39,7 @@ import '../diary/notebook_list_page.dart';
 import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
+import '../self_discovery/self_discovery_home_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2745,6 +2746,36 @@ Widget _buildEmotionPieChart() {
                             icon: const Icon(Icons.chevron_right),
                             onPressed: () => Navigator.of(context).push(
                               CupertinoPageRoute(builder: (_) => const VoiceAlarmPage()),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F7F7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.travel_explore_outlined, size: 20, color: Color(0xFF6D28D9)),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('自我发现', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                SizedBox(height: 2),
+                                Text('进入 4 大子模块，先用“足下一致行动系统”把拖延转化为 1 美元行动', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Color(0xFF666666))),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right),
+                            onPressed: () => Navigator.of(context).push(
+                              CupertinoPageRoute(builder: (_) => const SelfDiscoveryHomePage()),
                             ),
                           ),
                         ],
