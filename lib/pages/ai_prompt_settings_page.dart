@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/global_ai_settings.dart';
 import '../shame_transform/shame_transform_prompt_config.dart';
+import '../consistency_action/consistency_action_prompt_config.dart';
+import '../consistency_action/consistency_action_service.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -21,6 +23,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final GlobalAiSettings _settings = GlobalAiSettings();
   final ShameTransformPromptConfig _shamePrompts =
       ShameTransformPromptConfig();
+  final ConsistencyActionService _consistencyPrompts = ConsistencyActionService();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -56,6 +59,23 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<_PromptModule> get _modules => <_PromptModule>[
+        const _PromptModule(
+          id: 'consistency_action',
+          name: '足下一致行动系统',
+          description: '统一配置认知失调、最小充分行动、行动承诺、行动后解释、外部奖励降噪与合理化警报等 AI 提示词。',
+          items: <_PromptItem>[
+            _PromptItem(id: 'ca_global', name: '全局价值层 Prompt'),
+            _PromptItem(id: 'ca_scene_value_compass', name: '场景：价值罗盘'),
+            _PromptItem(id: 'ca_scene_dollar_action', name: '场景：目标转化为1美元行动'),
+            _PromptItem(id: 'ca_scene_dissonance', name: '场景：认知失调分析'),
+            _PromptItem(id: 'ca_scene_pre_action', name: '场景：行动前抗犹豫引导'),
+            _PromptItem(id: 'ca_scene_post_action', name: '场景：行动后自我解释'),
+            _PromptItem(id: 'ca_scene_reward_noise', name: '场景：外部奖励降噪'),
+            _PromptItem(id: 'ca_scene_rationalization', name: '场景：自我欺骗与合理化识别'),
+            _PromptItem(id: 'ca_scene_weekly_report', name: '场景：价值一致性报告'),
+            _PromptItem(id: 'ca_output_common', name: '输出格式：通用结构'),
+          ],
+        ),
         const _PromptModule(
           id: 'shame_transform',
           name: '足下真实自我 · 羞耻转化',
@@ -243,6 +263,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('shame_')) {
       return _shamePrompts.defaultFor(id);
     }
+    if (id.startsWith('ca_')) {
+      return ConsistencyActionPromptConfig.defaults[id] ?? '';
+    }
     switch (id) {
       case 'goal_action':
         return _settings.defaultGoalSettingActionPrompt;
@@ -283,6 +306,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   Future<Map<String, String>> _inspectPrompt(String id) {
     if (id.startsWith('shame_')) {
       return _shamePrompts.inspectPrompt(id);
+    }
+    if (id.startsWith('ca_')) {
+      return _consistencyPrompts.inspectPrompt(id);
     }
     switch (id) {
       case 'goal_action':
@@ -325,6 +351,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('shame_')) {
       return _shamePrompts.savePrompt(id, value);
     }
+    if (id.startsWith('ca_')) {
+      return _consistencyPrompts.savePrompt(id, value);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.saveGoalSettingActionPrompt(value);
@@ -363,6 +392,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<MapEntry<String, String>> _params(String id) {
+    if (id.startsWith('ca_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{user_input}}', '用户输入的目标、拖延、逃避、内耗或行动复盘文本。'),
+        MapEntry('{{scene}}', '当前一致行动业务场景。'),
+        MapEntry('{{records_json}}', '用户历史行动证据卡 JSON（如调用方提供）。'),
+      ];
+    }
     if (id.startsWith('shame_')) {
       return const <MapEntry<String, String>>[
         MapEntry('{{scene}}', '当前羞耻转化场景名称。'),
