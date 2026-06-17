@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/global_ai_settings.dart';
 import '../shame_transform/shame_transform_prompt_config.dart';
+import '../consistency_action_prompt_config.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -21,6 +22,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final GlobalAiSettings _settings = GlobalAiSettings();
   final ShameTransformPromptConfig _shamePrompts =
       ShameTransformPromptConfig();
+  final ConsistencyActionPromptConfig _consistencyPrompts =
+      ConsistencyActionPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -89,6 +92,21 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
             _PromptItem(id: 'shame_output_first_aid', name: '输出格式：羞耻急救卡'),
             _PromptItem(id: 'shame_output_action_tree', name: '输出格式：Todo 行动树'),
             _PromptItem(id: 'shame_json_repair', name: '异常恢复：JSON 格式修复'),
+          ],
+        ),
+        const _PromptModule(
+          id: 'consistency_action',
+          name: '足下一致行动系统',
+          description: '统一配置认知失调、最小充分理由、1美元行动、行动解释、奖励降噪与合理化警报等 AI 提示词。修改后下一次 AI 引导立即生效。',
+          items: <_PromptItem>[
+            _PromptItem(id: 'consistency_global', name: '全局价值层 Prompt'),
+            _PromptItem(id: 'consistency_scene_goal_to_one_dollar_action', name: '场景：目标转化为 1 美元行动'),
+            _PromptItem(id: 'consistency_scene_dissonance_analysis', name: '场景：认知失调分析'),
+            _PromptItem(id: 'consistency_scene_anti_hesitation', name: '场景：行动前抗犹豫'),
+            _PromptItem(id: 'consistency_scene_post_action_explanation', name: '场景：行动后自我解释'),
+            _PromptItem(id: 'consistency_scene_reward_denoise', name: '场景：外部奖励降噪'),
+            _PromptItem(id: 'consistency_scene_rationalization_warning', name: '场景：自我欺骗与合理化识别'),
+            _PromptItem(id: 'consistency_output_format', name: '输出格式 Prompt'),
           ],
         ),
         const _PromptModule(
@@ -243,6 +261,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('shame_')) {
       return _shamePrompts.defaultFor(id);
     }
+    if (id.startsWith('consistency_')) {
+      return _consistencyPrompts.defaultFor(id);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.defaultGoalSettingActionPrompt;
@@ -284,6 +305,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('shame_')) {
       return _shamePrompts.inspectPrompt(id);
     }
+    if (id.startsWith('consistency_')) {
+      return _consistencyPrompts.inspectPrompt(id);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.inspectGoalSettingActionPromptState();
@@ -324,6 +348,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   Future<void> _savePromptById(String id, String value) {
     if (id.startsWith('shame_')) {
       return _shamePrompts.savePrompt(id, value);
+    }
+    if (id.startsWith('consistency_')) {
+      return _consistencyPrompts.savePrompt(id, value);
     }
     switch (id) {
       case 'goal_action':
@@ -374,6 +401,17 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         MapEntry('{{relationship_mode}}', '关系场景分支。'),
         MapEntry('{{denied_part}}', '用户选择的被否认自我部分。'),
         MapEntry('{{raw_response}}', '首次 AI 调用返回但尚未成功解析的原始文本。'),
+      ];
+    }
+    if (id.startsWith('consistency_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{scene}}', '当前 AI 引导场景：目标转行动、失调分析、抗犹豫、行动后解释、奖励降噪或合理化警报。'),
+        MapEntry('{{user_goal}}', '用户输入的目标、愿望、任务或困扰。'),
+        MapEntry('{{user_values}}', '用户输入或勾选的核心价值。'),
+        MapEntry('{{actual_behavior}}', '用户描述的实际行为或逃避模式。'),
+        MapEntry('{{self_explanation}}', '用户当前对自己的解释。'),
+        MapEntry('{{one_dollar_action}}', '当前候选 1 美元行动。'),
+        MapEntry('{{external_rewards}}', '用户正在依赖的提醒、积分、打卡、排名、监督或惩罚等外部理由。'),
       ];
     }
     switch (id) {

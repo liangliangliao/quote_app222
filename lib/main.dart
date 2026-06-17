@@ -52,6 +52,7 @@ import 'life_note_module/life_note_home_page.dart';
 import 'semantic_consistency/semantic_consistency_page.dart';
 import 'behavior_tracking/behavior_tracking_home_page.dart';
 import 'shame_transform/shame_transform_home_page.dart';
+import 'consistency_action_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -392,6 +393,13 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
+    _DrawerEntrySpec(
+      icon: Icons.route_outlined,
+      title: '足下一致行动系统',
+      subtitle: '价值澄清 → 失调识别 → 1美元行动 → 身份证据',
+      badgeText: '用最小行动制造真实证据',
+      pageBuilder: (_) => const ConsistencyActionHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.volunteer_activism_outlined,
       title: '足下真实自我',
