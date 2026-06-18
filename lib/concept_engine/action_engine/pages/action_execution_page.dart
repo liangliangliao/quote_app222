@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../cognitive_consistency/cognitive_consistency_home_page.dart';
+import '../../../cognitive_consistency/cognitive_consistency_source_status_card.dart';
+
 import '../../cabins/training_cabin_models.dart';
 import '../../cabins/training_intro_page.dart';
 import '../../concept_engine_dao.dart';
@@ -95,6 +98,42 @@ class _ActionExecutionPageState extends State<ActionExecutionPage> {
       );
     });
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已把当前步骤缩小为最小可执行版本。')));
+  }
+
+
+  Future<void> _openCognitiveConsistency({int initialTabIndex = 1}) async {
+    final step = _currentPlanStep;
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CognitiveConsistencyHomePage(
+          initialTabIndex: initialTabIndex,
+          initialGoal: widget.plan.goal.trim().isEmpty ? widget.plan.concept : widget.plan.goal,
+          initialContext: '概念行动引擎步骤：${step.text}\n行动链：${widget.plan.title}\n概念：${widget.plan.concept}\n直接指令：${step.directInstruction ?? ''}\n执行提示：${step.executionHint ?? ''}\n完成信号：${step.doneSignal ?? ''}',
+          initialValues: step.tags.join('；'),
+          sourceType: 'concept_action_step',
+          sourceId: '${widget.plan.planId}:${step.id}',
+        ),
+      ),
+    );
+    if (!mounted || changed != true) return;
+    final markDone = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('一致行动已产生变化'),
+        content: const Text('是否把当前概念行动步骤同步标记为完成？如果只是生成方案但没有实际执行，请选择“暂不”。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('暂不')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('标记完成')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (markDone == true && !_finished) {
+      await _completeStep();
+    } else {
+      setState(() {});
+    }
   }
 
   Future<void> _openFrictionSheet() async {
@@ -361,7 +400,18 @@ class _ActionExecutionPageState extends State<ActionExecutionPage> {
               OutlinedButton.icon(onPressed: _openFrictionSheet, icon: const Icon(Icons.warning_amber_outlined), label: const Text('我卡住了')),
               OutlinedButton.icon(onPressed: _shrinkStep, icon: const Icon(Icons.compress), label: const Text('缩小一步')),
               OutlinedButton.icon(onPressed: _skipToNext, icon: const Icon(Icons.skip_next), label: const Text('暂时跳过')),
+              OutlinedButton.icon(onPressed: () => _openCognitiveConsistency(), icon: const Icon(Icons.sync_alt_outlined), label: const Text('一致行动')),
+              OutlinedButton.icon(onPressed: () => _openCognitiveConsistency(initialTabIndex: 5), icon: const Icon(Icons.card_giftcard_outlined), label: const Text('奖励降噪')),
+              OutlinedButton.icon(onPressed: () => _openCognitiveConsistency(initialTabIndex: 6), icon: const Icon(Icons.fact_check_outlined), label: const Text('诚实校验')),
             ],
+          ),
+          const SizedBox(height: 12),
+          CcSourceEvidenceStatusCard(
+            sourceType: 'concept_action_step',
+            sourceId: '${widget.plan.planId}:${_currentPlanStep.id}',
+            initialGoal: widget.plan.goal.trim().isEmpty ? widget.plan.concept : widget.plan.goal,
+            initialContext: '概念行动引擎步骤：${_currentPlanStep.text}\n行动链：${widget.plan.title}\n概念：${widget.plan.concept}',
+            initialValues: _currentPlanStep.tags.join('；'),
           ),
           const SizedBox(height: 16),
           Container(

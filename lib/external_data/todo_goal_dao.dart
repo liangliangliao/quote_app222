@@ -1697,6 +1697,24 @@ class TodoGoalDao {
     return rows.map(TodoGoalProblemNode.fromMap).toList();
   }
 
+  Future<TodoGoalProblemNode?> getProblemNode(String nodeId) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT n.*,
+             COALESCE((SELECT COUNT(*) FROM goal_action_steps s WHERE s.source_node_id = n.node_id), 0) AS linked_step_count,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS effort_count,
+             COALESCE((SELECT SUM(e.effort_minutes) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS total_effort_minutes,
+             COALESCE((SELECT COUNT(*) FROM goal_effort_entries e WHERE (e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)) AND (e.returned_after_break = 1 OR COALESCE(e.return_kind, '') != '' OR e.attention_return_count > 0)), 0) AS return_count,
+             COALESCE((SELECT AVG(NULLIF(e.pain_score, 0)) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS average_pain,
+             COALESCE((SELECT AVG(NULLIF(e.gain_score, 0)) FROM goal_effort_entries e WHERE e.node_id = n.node_id OR e.step_id IN (SELECT s.step_id FROM goal_action_steps s WHERE s.source_node_id = n.node_id)), 0) AS average_gain
+      FROM goal_problem_nodes n
+      WHERE n.node_id = ?
+      LIMIT 1
+    ''', [nodeId]);
+    if (rows.isEmpty) return null;
+    return TodoGoalProblemNode.fromMap(rows.first);
+  }
+
   Future<List<TodoGoalProblemNode>> listSelectedProblemNodes(String goalId) async {
     final selected = await getSelectedSolutionPlan(goalId);
     if (selected == null) return <TodoGoalProblemNode>[];

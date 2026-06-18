@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../cognitive_consistency/cognitive_consistency_home_page.dart';
+import '../cognitive_consistency/cognitive_consistency_source_status_card.dart';
+
 import 'goal_dao.dart';
 import 'goal_models.dart';
 
@@ -84,6 +87,43 @@ class _GoalActionRunnerPageState extends State<GoalActionRunnerPage> {
     );
   }
 
+
+  Future<void> _openCognitiveConsistency({int initialTabIndex = 1}) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CognitiveConsistencyHomePage(
+          initialTabIndex: initialTabIndex,
+          initialGoal: widget.action.actionTitle,
+          initialContext: '目标模块行动：${widget.action.actionTitle}\n行动目的：${widget.action.goalOfAction}\n步骤：${widget.action.steps.join('；')}\n失败备用方案：${widget.action.failurePlan}',
+          initialValues: '${widget.conceptTitle}；${widget.segmentTitle}',
+          sourceType: 'goal_module_action',
+          sourceId: widget.action.actionId,
+        ),
+      ),
+    );
+    if (!mounted || changed != true) return;
+    final markDone = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('一致行动已产生变化'),
+        content: const Text('是否把这条目标模块行动同步标记为完成？如果只是生成方案但没有实际执行，请选择“暂不”。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('暂不')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('标记完成')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (markDone == true) {
+      setState(() => _checks = List<bool>.filled(widget.action.steps.length, true));
+      await _persistDraft();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已同步标记目标模块行动完成。')));
+    } else {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     _reflection.dispose();
@@ -165,6 +205,27 @@ class _GoalActionRunnerPageState extends State<GoalActionRunnerPage> {
                 Text('当前完成度：${(progress * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w700)),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
+          _card(
+            title: '一致行动辅助',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('当这条行动卡住、过度依赖打卡或出现合理化解释时，可以直接进入足下一致行动，把它转为 1 美元行动并沉淀证据。', style: TextStyle(color: Color(0xFF6B7280), height: 1.45)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                OutlinedButton.icon(onPressed: () => _openCognitiveConsistency(), icon: const Icon(Icons.sync_alt_outlined), label: const Text('一致行动')),
+                OutlinedButton.icon(onPressed: () => _openCognitiveConsistency(initialTabIndex: 5), icon: const Icon(Icons.card_giftcard_outlined), label: const Text('奖励降噪')),
+                OutlinedButton.icon(onPressed: () => _openCognitiveConsistency(initialTabIndex: 6), icon: const Icon(Icons.fact_check_outlined), label: const Text('诚实校验')),
+              ]),
+              const SizedBox(height: 10),
+              CcSourceEvidenceStatusCard(
+                sourceType: 'goal_module_action',
+                sourceId: widget.action.actionId,
+                initialGoal: widget.action.actionTitle,
+                initialContext: '目标模块行动：${widget.action.actionTitle}\n行动目的：${widget.action.goalOfAction}\n步骤：${widget.action.steps.join('；')}',
+                initialValues: '${widget.conceptTitle}；${widget.segmentTitle}',
+              ),
+            ]),
           ),
           const SizedBox(height: 12),
           _card(

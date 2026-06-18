@@ -7,6 +7,7 @@ import '../external_data/todo_goal_pages.dart';
 import '../external_data/todo_dao.dart';
 import '../external_data/todo_models.dart';
 import '../pages/ai_prompt_settings_page.dart';
+import '../cognitive_consistency/cognitive_consistency_home_page.dart';
 import 'shame_transform_ai_service.dart';
 import 'shame_transform_dao.dart';
 import 'shame_transform_models.dart';
@@ -1158,6 +1159,16 @@ class ShameResultView extends StatelessWidget {
 
   const ShameResultView({super.key, required this.result});
 
+  String _stableTrueSelfResultId() {
+    final raw = [result.scene.key, result.summary, result.eventFact, result.toxicVersion, result.healthyVersion, result.minimumAction].join('|');
+    var hash = 2166136261;
+    for (final unit in raw.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 16777619) & 0x7fffffff;
+    }
+    return 'shame_result_${result.scene.key}_$hash';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1220,6 +1231,7 @@ class ShameResultView extends StatelessWidget {
         if (result.actionTree.isNotEmpty)
           _treeCard('行动树', result.actionTree),
         if (result.actionOptions.isNotEmpty) _actionOptions(),
+        _toCognitiveConsistencyCard(context),
         _card(
           '今日最小行动',
           '${result.minimumAction}\n\n时间：${result.minimumTime}\n完成标准：${result.successStandard}\n更小版本：${result.fallbackAction}',
@@ -1251,6 +1263,50 @@ class ShameResultView extends StatelessWidget {
         if (result.userChoicePrompt.trim().isNotEmpty)
           _card('由你选择', result.userChoicePrompt, Icons.touch_app_outlined),
       ],
+    );
+  }
+
+  Widget _toCognitiveConsistencyCard(BuildContext context) {
+    final bridgeContext = [
+      '羞耻/真实自我事件：${result.summary}',
+      '毒性羞耻语言：${result.toxicVersion}',
+      '健康羞耻改写：${result.healthyVersion}',
+      '责任边界：我承担 ${result.userResponsibilities.join('；')}；我不背负 ${result.notUserResponsibilities.join('；')}',
+      '今日最小行动：${result.minimumAction}',
+      '真实骄傲标准：${result.truePrideSentence}',
+    ].where((e) => e.trim().isNotEmpty).join('\n');
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Icon(Icons.compare_arrows_outlined, color: Color(0xFFB45309)), SizedBox(width: 8), Expanded(child: Text('转入足下一致行动', style: TextStyle(fontWeight: FontWeight.w900)))]),
+        const SizedBox(height: 8),
+        const Text('把当前羞耻/真实自我结果带入责任—后果雷达、价值—行为距离训练和 1 美元行动，避免只停留在理解层。', style: TextStyle(color: Color(0xFF92400E), height: 1.45)),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CognitiveConsistencyHomePage(
+                initialGoal: result.valueAnchor,
+                initialContext: bridgeContext,
+                initialValues: result.valueAnchor,
+                sourceType: 'shame_transform_result',
+                sourceId: _stableTrueSelfResultId(),
+                initialTabIndex: 2,
+              ),
+            ),
+          ),
+          icon: const Icon(Icons.bolt_outlined),
+          label: const Text('转为一致行动 / 1美元行动'),
+        ),
+      ]),
     );
   }
 

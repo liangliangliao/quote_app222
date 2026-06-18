@@ -3,6 +3,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../cognitive_consistency/cognitive_consistency_home_page.dart';
+import '../cognitive_consistency/cognitive_consistency_dao.dart';
+import '../cognitive_consistency/cognitive_consistency_models.dart';
+
 import 'change_path_page.dart';
 import 'todo_dao.dart';
 import 'todo_failure_growth_page.dart';
@@ -19,6 +23,69 @@ import 'todo_service.dart';
 
 const _goalBlue = Color(0xFF5E72C3);
 const _goalInk = Color(0xFF22223B);
+
+
+Future<void> _openCognitiveConsistencyForStep(BuildContext context, TodoGoalActionStep step, {int initialTabIndex = 1}) async {
+  final changed = await Navigator.push<bool>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => CognitiveConsistencyHomePage(
+        initialTabIndex: initialTabIndex,
+        initialGoal: step.goalTitle,
+        initialContext: 'Todo行动步骤：${step.title}\n最低标准：${step.minimumStandard}\n简化标准：${step.simplifiedStandard}\n完成问题：${step.completionQuestion}',
+        initialValues: [step.processValue, step.experienceIntention].where((e) => e.trim().isNotEmpty).join('；'),
+        sourceType: 'todo_goal_step',
+        sourceId: step.stepId,
+      ),
+    ),
+  );
+  if (changed == true) await _refreshTodoGoalAfterCc(context);
+}
+
+Future<void> _openCognitiveConsistencyForProblemNode(BuildContext context, TodoGoalProblemNode node, {int initialTabIndex = 1}) async {
+  final changed = await Navigator.push<bool>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => CognitiveConsistencyHomePage(
+        initialTabIndex: initialTabIndex,
+        initialGoal: node.title,
+        initialContext: '问题树节点：${node.title}\n类型：${node.nodeType}\n可执行动作：${node.displayAction}\n验收标准：${node.acceptanceCriteria}\n需要证据：${node.evidenceNeeded}\n当前说明：${node.description}',
+        initialValues: [node.logicQuestion, node.decisionRule, node.knownFacts].where((e) => e.trim().isNotEmpty).join('；'),
+        sourceType: 'todo_problem_node',
+        sourceId: node.nodeId,
+      ),
+    ),
+  );
+  if (changed == true) await _refreshTodoGoalAfterCc(context);
+}
+
+Future<void> _refreshTodoGoalAfterCc(BuildContext context) async {
+  if (!context.mounted) return;
+  final element = context as Element;
+  var reloaded = false;
+  element.markNeedsBuild();
+  element.visitAncestorElements((ancestor) {
+    ancestor.markNeedsBuild();
+    if (ancestor is StatefulElement) {
+      final state = ancestor.state;
+      if (state is _TodoGoalHomePageState) {
+        state._load();
+        reloaded = true;
+        return false;
+      }
+      if (state is _TodoGoalDetailPageState) {
+        state._load();
+        reloaded = true;
+        return false;
+      }
+    }
+    return true;
+  });
+  if (!reloaded) {
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (context.mounted) element.markNeedsBuild();
+  }
+}
 
 Future<void> _recordActionEffortWithDialog({
   required BuildContext context,
@@ -3455,6 +3522,8 @@ class _TodayStepCard extends StatelessWidget {
           _RelationPathCard(step: step),
           const SizedBox(height: 8),
           _ActionEffortBridgeCard(step: step),
+          const SizedBox(height: 8),
+          _CcSourceEvidenceStatus(sourceType: 'todo_goal_step', sourceId: step.stepId),
           if (step.minimumStandard.trim().isNotEmpty) _MiniLine(label: '最低版', text: step.minimumStandard),
           if (step.simplifiedStandard.trim().isNotEmpty) _MiniLine(label: '简化版', text: step.simplifiedStandard),
           if (step.recommendedStandard.trim().isNotEmpty) _MiniLine(label: '标准版', text: step.recommendedStandard),
@@ -3470,6 +3539,21 @@ class _TodayStepCard extends StatelessWidget {
               if (onMindfulFocus != null) OutlinedButton.icon(onPressed: onMindfulFocus, icon: const Icon(Icons.timer_outlined), label: const Text('正念专注')),
               if (onMakeSmaller != null) OutlinedButton.icon(onPressed: step.isCompleted ? null : onMakeSmaller, icon: const Icon(Icons.remove_circle_outline), label: const Text('缩小一步')),
               if (onReview != null) OutlinedButton.icon(onPressed: onReview, icon: const Icon(Icons.rate_review_outlined), label: const Text('复盘生成下一步')),
+              OutlinedButton.icon(
+                onPressed: () => _openCognitiveConsistencyForStep(context, step),
+                icon: const Icon(Icons.sync_alt_outlined),
+                label: const Text('一致行动'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openCognitiveConsistencyForStep(context, step, initialTabIndex: 5),
+                icon: const Icon(Icons.card_giftcard_outlined),
+                label: const Text('奖励降噪'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openCognitiveConsistencyForStep(context, step, initialTabIndex: 6),
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('诚实校验'),
+              ),
               if (onWriteBack != null) OutlinedButton.icon(onPressed: onWriteBack, icon: Icon(step.writeBackToTodo ? Icons.cloud_done_outlined : Icons.cloud_upload_outlined), label: Text(step.writeBackToTodo ? '已写回 To Do' : '写回 To Do')),
             ]),
         ]),
@@ -3503,11 +3587,18 @@ class _ActionStepListTile extends StatelessWidget {
             onTap: onTap,
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: _CcSourceEvidenceStatus(sourceType: 'todo_goal_step', sourceId: step.stepId),
+          ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Wrap(spacing: 8, runSpacing: 8, children: [
               FilledButton.tonalIcon(onPressed: onRecordEffort, icon: const Icon(Icons.directions_walk, size: 18), label: const Text('记录努力')),
               OutlinedButton.icon(onPressed: onBringBack, icon: const Icon(Icons.keyboard_return, size: 18), label: const Text('回到此步')),
               OutlinedButton.icon(onPressed: onMindfulFocus, icon: const Icon(Icons.timer_outlined, size: 18), label: const Text('正念专注')),
+              OutlinedButton.icon(onPressed: () => _openCognitiveConsistencyForStep(context, step), icon: const Icon(Icons.sync_alt_outlined, size: 18), label: const Text('一致行动')),
+              OutlinedButton.icon(onPressed: () => _openCognitiveConsistencyForStep(context, step, initialTabIndex: 5), icon: const Icon(Icons.card_giftcard_outlined, size: 18), label: const Text('奖励降噪')),
+              OutlinedButton.icon(onPressed: () => _openCognitiveConsistencyForStep(context, step, initialTabIndex: 6), icon: const Icon(Icons.fact_check_outlined, size: 18), label: const Text('诚实校验')),
             ]),
           ),
         ]),
@@ -3682,6 +3773,8 @@ class _ProblemNodeTreeCard extends StatelessWidget {
         const SizedBox(height: 4),
         Text('已验证 $completed / ${nodes.length} 个问题节点。请从没有未完成前置条件的最底层动作开始；叶节点产生证据后，再逐层评估父问题是否成立。失败不是定论，而是更新假设、替代路径或验收标准的反馈。', style: const TextStyle(color: Color(0xFF4B5563), height: 1.4)),
         const SizedBox(height: 8),
+        _ProblemEvidenceMapCard(nodes: nodes),
+        const SizedBox(height: 8),
         ...roots.map((n) => _ProblemNodeTreeNode(
               node: n,
               depth: 0,
@@ -3692,6 +3785,63 @@ class _ProblemNodeTreeCard extends StatelessWidget {
               onRecordNodeEffort: onRecordNodeEffort,
             )),
       ]),
+    );
+  }
+}
+
+
+class _ProblemEvidenceMapCard extends StatelessWidget {
+  const _ProblemEvidenceMapCard({required this.nodes});
+  final List<TodoGoalProblemNode> nodes;
+
+  Future<Map<String, CcSourceEvidenceSummary>> _load() async {
+    final dao = CognitiveConsistencyDao();
+    return dao.evidenceStatusForSources(<({String sourceType, String sourceId})>[
+      for (final node in nodes) (sourceType: 'todo_problem_node', sourceId: node.nodeId),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (nodes.isEmpty) return const SizedBox.shrink();
+    final parentIds = nodes.map((n) => n.parentNodeId.trim()).where((id) => id.isNotEmpty).toSet();
+    final leafNodes = nodes.where((n) => !parentIds.contains(n.nodeId)).toList(growable: false);
+    return FutureBuilder<Map<String, CcSourceEvidenceSummary>>(
+      future: _load(),
+      builder: (context, snapshot) {
+        final map = snapshot.data ?? const <String, CcSourceEvidenceSummary>{};
+        final evidenceNodeCount = nodes.where((n) => (map['todo_problem_node|${n.nodeId}']?.count ?? 0) > 0).length;
+        final leafEvidenceCount = leafNodes.where((n) => (map['todo_problem_node|${n.nodeId}']?.count ?? 0) > 0).length;
+        final total = nodes.length;
+        final leafTotal = leafNodes.length;
+        final nodePercent = total == 0 ? 0 : ((evidenceNodeCount * 100) / total).round();
+        final leafPercent = leafTotal == 0 ? 0 : ((leafEvidenceCount * 100) / leafTotal).round();
+        final noEvidence = nodes.where((n) => (map['todo_problem_node|${n.nodeId}']?.count ?? 0) == 0).take(3).toList(growable: false);
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFFFF),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE0E7FF)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: const [
+              Icon(Icons.account_tree_outlined, size: 18, color: Color(0xFF4F46E5)),
+              SizedBox(width: 6),
+              Expanded(child: Text('一致行动证据地图', style: TextStyle(fontWeight: FontWeight.w900, color: _goalInk))),
+            ]),
+            const SizedBox(height: 6),
+            Text('节点证据覆盖：$evidenceNodeCount / $total（$nodePercent%）｜叶节点证据覆盖：$leafEvidenceCount / $leafTotal（$leafPercent%）', style: const TextStyle(fontSize: 12, color: Color(0xFF4B5563), height: 1.35)),
+            const SizedBox(height: 6),
+            LinearProgressIndicator(value: total == 0 ? 0 : evidenceNodeCount / total),
+            if (noEvidence.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('优先转化为行动证据：${noEvidence.map((n) => n.title).join('、')}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.35)),
+            ],
+          ]),
+        );
+      },
     );
   }
 }
@@ -3773,9 +3923,26 @@ class _ProblemNodeTreeNode extends StatelessWidget {
               ),
             if (node.aiReviewJson.trim().isNotEmpty) _NodeAiReviewBox(reviewJson: node.aiReviewJson),
             const SizedBox(height: 8),
+            _CcSourceEvidenceStatus(sourceType: 'todo_problem_node', sourceId: node.nodeId),
+            const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               if (node.isActionable && children.isEmpty) OutlinedButton.icon(onPressed: node.isCompleted || !ready || !node.hasConcreteActionContract ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
               if (node.isActionable) FilledButton.tonalIcon(onPressed: !ready ? null : () => onRecordNodeEffort(node), icon: const Icon(Icons.directions_walk), label: const Text('记录节点努力')),
+              OutlinedButton.icon(
+                onPressed: !ready ? null : () => _openCognitiveConsistencyForProblemNode(context, node, initialTabIndex: 1),
+                icon: const Icon(Icons.sync_alt_outlined),
+                label: Text(node.isActionable ? '一致行动' : '失调分析'),
+              ),
+              OutlinedButton.icon(
+                onPressed: !ready ? null : () => _openCognitiveConsistencyForProblemNode(context, node, initialTabIndex: 5),
+                icon: const Icon(Icons.card_giftcard_outlined),
+                label: const Text('奖励降噪'),
+              ),
+              OutlinedButton.icon(
+                onPressed: !ready ? null : () => _openCognitiveConsistencyForProblemNode(context, node, initialTabIndex: 6),
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('诚实校验'),
+              ),
               OutlinedButton.icon(onPressed: node.isCompleted || !ready ? null : () => onMarkNode(node, 'completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('成功')),
               OutlinedButton.icon(onPressed: node.isFailed || !ready ? null : () => onMarkNode(node, 'failed'), icon: const Icon(Icons.cancel_outlined), label: const Text('失败')),
             ]),
@@ -3798,6 +3965,294 @@ class _ProblemNodeTreeNode extends StatelessWidget {
     if (n.nodeType == 'action') return Icons.touch_app_outlined;
     if (n.nodeType == 'sub_problem') return Icons.subdirectory_arrow_right;
     return Icons.account_tree_outlined;
+  }
+}
+
+
+class _CcSourceEvidenceData {
+  const _CcSourceEvidenceData({required this.count, required this.latestAction, required this.latestAtMs, required this.values});
+  final int count;
+  final String latestAction;
+  final int latestAtMs;
+  final List<String> values;
+}
+
+class _CcSourceEvidenceDetailData {
+  const _CcSourceEvidenceDetailData({required this.rows, required this.sessions});
+  final List<CcEvidenceRecord> rows;
+  final Map<String, CcSession> sessions;
+}
+
+class _CcSourceEvidenceStatus extends StatelessWidget {
+  const _CcSourceEvidenceStatus({required this.sourceType, required this.sourceId});
+  final String sourceType;
+  final String sourceId;
+
+  Future<_CcSourceEvidenceData> _load() async {
+    final dao = CognitiveConsistencyDao();
+    final map = await dao.evidenceStatusForSources(<({String sourceType, String sourceId})>[
+      (sourceType: sourceType, sourceId: sourceId),
+    ]);
+    final summary = map['$sourceType|$sourceId'];
+    return _CcSourceEvidenceData(
+      count: summary?.count ?? 0,
+      latestAction: summary?.latestAction ?? '',
+      latestAtMs: summary?.latestAtMs ?? 0,
+      values: summary?.values ?? const <String>[],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (sourceType.trim().isEmpty || sourceId.trim().isEmpty) return const SizedBox.shrink();
+    return FutureBuilder<_CcSourceEvidenceData>(
+      future: _load(),
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        final count = data?.count ?? 0;
+        final hasEvidence = count > 0;
+        final valueText = (data?.values ?? const <String>[]).take(3).join('、');
+        final latestText = (data?.latestAction ?? '').trim();
+        final latestAt = data?.latestAtMs ?? 0;
+        final daysSince = latestAt <= 0 ? 999 : DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(latestAt)).inDays;
+        final smartHint = !hasEvidence
+            ? '智能触发：这条节点还没有行动证据。优先点“一致行动”生成最小行动；如果反复拖延，点“诚实校验”；如果只是靠打卡/压力推进，点“奖励降噪”。'
+            : (daysSince >= 7
+                ? '智能触发：这条节点已有 $count 条证据，但最近 $daysSince 天没有新证据，建议生成一个新的 1 美元行动。'
+                : (count >= 3
+                    ? '智能触发：这里已有多条一致行动证据，可以点开做复盘，生成下一步行动或价值一致性报告。'
+                    : '智能触发：已有证据，下一次卡住时可以继续从旧解释/新解释里生成下一步。'));
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: hasEvidence
+              ? () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => _CcSourceEvidenceDetailPage(sourceType: sourceType, sourceId: sourceId)),
+                  )
+              : null,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: hasEvidence ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: hasEvidence ? const Color(0xFFBFDBFE) : const Color(0xFFE5E7EB)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(hasEvidence ? Icons.verified_outlined : Icons.sync_alt_outlined, size: 18, color: hasEvidence ? const Color(0xFF2563EB) : const Color(0xFF64748B)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(hasEvidence ? '一致行动证据 $count 条 · 点击查看' : '暂无一致行动证据', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13))),
+                if (hasEvidence) const Icon(Icons.chevron_right, size: 18, color: Color(0xFF2563EB)),
+              ]),
+              if (valueText.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('关联价值：$valueText', style: const TextStyle(fontSize: 12, color: Color(0xFF1D4ED8), fontWeight: FontWeight.w700))),
+              if (latestText.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('最近证据：$latestText', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.35))),
+              Padding(padding: const EdgeInsets.only(top: 4), child: Text(smartHint, style: TextStyle(fontSize: 12, color: hasEvidence ? const Color(0xFF2563EB) : const Color(0xFF64748B), height: 1.35))),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+class _CcSourceEvidenceDetailPage extends StatelessWidget {
+  const _CcSourceEvidenceDetailPage({required this.sourceType, required this.sourceId});
+  final String sourceType;
+  final String sourceId;
+
+  Future<_CcSourceEvidenceDetailData> _load() async {
+    final dao = CognitiveConsistencyDao();
+    final rows = await dao.recentEvidence(limit: 100, sourceType: sourceType, sourceId: sourceId);
+    final sessions = <String, CcSession>{};
+    for (final row in rows) {
+      final sid = row.sessionId.trim();
+      if (sid.isEmpty || sessions.containsKey(sid)) continue;
+      final session = await dao.sessionById(sid);
+      if (session != null) sessions[sid] = session;
+    }
+    return _CcSourceEvidenceDetailData(rows: rows, sessions: sessions);
+  }
+
+  String _date(int ms) {
+    if (ms <= 0) return '';
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+  }
+
+  Future<void> _createTodoFollowUpFromEvidence(BuildContext context, CcEvidenceRecord evidence, CcPlanResult? radar) async {
+    if (sourceType != 'todo_goal_step') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('只有 Todo 行动来源才能直接生成 Todo 下一步。')));
+      return;
+    }
+    final goalDao = TodoGoalDao();
+    final parent = await goalDao.getActionStep(sourceId);
+    if (parent == null) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('未找到原 Todo 行动，无法生成下一步。')));
+      return;
+    }
+    final title = (radar?.nextStep.trim().isNotEmpty ?? false)
+        ? radar!.nextStep.trim()
+        : '继续：${evidence.completedAction}';
+    final newStepId = await goalDao.createActionStep(
+      goalId: parent.goalId,
+      sourceTaskId: parent.sourceTaskId,
+      title: title,
+      minimumStandard: title,
+      simplifiedStandard: title,
+      recommendedStandard: title,
+      stretchStandard: '根据上一条一致行动证据继续升级；如果阻力变大，回到最小充分行动。',
+      difficultyScore: parent.difficultyScore.clamp(1, 5).toInt(),
+      zoneType: parent.zoneType,
+      plannedDate: goalDao.todayDate(),
+      parentStepId: parent.stepId,
+      sourceNodeId: parent.sourceNodeId,
+      actionType: 'value',
+      experienceIntention: '由一致行动证据 ${evidence.evidenceId} 复盘生成：${evidence.newStory}',
+      completionQuestion: '我是否完成了由上一条证据延伸出来的下一步？',
+    );
+    final ccDao = CognitiveConsistencyDao();
+    final labels = evidence.valueLink.split(RegExp(r'[、，,;；|\n]+')).map((e) => e.trim()).where((e) => e.isNotEmpty && e.length <= 16).toList(growable: false);
+    final values = await ccDao.ensureValueProfilesForLabels(labels);
+    if (values.isNotEmpty) {
+      await ccDao.mergeSourceValueLinks(sourceType: 'todo_goal_step', sourceId: newStepId, values: values, relationType: 'evidence_follow_up');
+    }
+    await ccDao.saveActionTraceLink(fromType: 'evidence', fromId: evidence.evidenceId, toType: 'todo_goal_step', toId: newStepId, relationType: 'evidence_created_follow_up_todo');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已生成 Todo 下一步：$title')));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CognitiveConsistencyHomePage(
+            initialTabIndex: 1,
+            initialGoal: evidence.userGoal,
+            initialContext: '从证据复盘继续执行 Todo 下一步：$title\n上一条证据：${evidence.completedAction}\n旧解释：${evidence.oldStory}\n新解释：${evidence.newStory}',
+            initialValues: evidence.valueLink,
+            sourceType: 'todo_goal_step',
+            sourceId: newStepId,
+          ),
+        ),
+      );
+    }
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('一致行动证据复盘')),
+      body: FutureBuilder<_CcSourceEvidenceDetailData>(
+        future: _load(),
+        builder: (context, snapshot) {
+          final data = snapshot.data;
+          final rows = data?.rows ?? const <CcEvidenceRecord>[];
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (rows.isEmpty) {
+            return const Center(child: Text('暂无一致行动证据。'));
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: rows.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final e = rows[index];
+              final session = data?.sessions[e.sessionId];
+              final radar = session?.result;
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(e.completedAction, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    const SizedBox(height: 6),
+                    Text('时间：${_date(e.createdAtMs)} · ${e.effortMinutes} 分钟 · 难度 ${e.difficultyScore}/5', style: const TextStyle(color: Color(0xFF64748B))),
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 6, runSpacing: 6, children: [
+                      if (e.evidenceCategory.trim().isNotEmpty) Chip(label: Text('证据分类 ${e.evidenceCategory}')),
+                      if (session != null) Chip(label: Text('AI场景 ${session.originScene.isEmpty ? session.sceneType : session.originScene}')),
+                      if (e.rewardSource.trim().isNotEmpty) const Chip(label: Text('来自奖励降噪')),
+                      if (sourceType == 'todo_goal_step') const Chip(label: Text('已绑定 Todo')),
+                      if (sourceType == 'todo_problem_node') const Chip(label: Text('已绑定问题树')),
+                    ]),
+                    if (e.valueLink.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('关联价值：${e.valueLink}', style: const TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.w700))),
+                    if (radar != null && radar.coreConflict.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text('核心冲突：${radar.coreConflict}', style: const TextStyle(height: 1.4, fontWeight: FontWeight.w700))),
+                    if (radar != null && radar.dissonancePoint.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text('当时失调点：${radar.dissonancePoint}', style: const TextStyle(height: 1.4))),
+                    if (radar != null && radar.repairAction.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('当时修复动作：${radar.repairAction}', style: const TextStyle(height: 1.4))),
+                    if (e.oldStory.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('打破旧解释：${e.oldStory}')),
+                    if (e.newStory.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('新解释：${e.newStory}', style: const TextStyle(height: 1.4))),
+                    if (e.userReflection.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('行动反思：${e.userReflection}', style: const TextStyle(height: 1.4))),
+                    if (radar != null && radar.rawResponse.trim().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        title: const Text('查看原始 AI 输出 / Session JSON', style: TextStyle(fontWeight: FontWeight.w800)),
+                        children: [SelectableText(radar.rawResponse, style: const TextStyle(height: 1.35))],
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CognitiveConsistencyHomePage(
+                              initialTabIndex: 1,
+                              initialGoal: e.userGoal,
+                              initialContext: '基于上一条一致行动证据继续：${e.completedAction}\n旧解释：${e.oldStory}\n新解释：${e.newStory}\n下一步：${radar?.nextStep ?? ''}',
+                              initialValues: e.valueLink,
+                              sourceType: sourceType,
+                              sourceId: sourceId,
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(Icons.sync_alt_outlined, size: 18),
+                        label: const Text('继续生成下一步'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CognitiveConsistencyHomePage(
+                              initialTabIndex: 7,
+                              initialGoal: e.userGoal,
+                              initialContext: '请围绕这条证据做复盘：${e.completedAction}\n${e.newStory}',
+                              initialValues: e.valueLink,
+                              sourceType: sourceType,
+                              sourceId: sourceId,
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(Icons.assessment_outlined, size: 18),
+                        label: const Text('生成复盘报告'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _createTodoFollowUpFromEvidence(context, e, radar),
+                        icon: const Icon(Icons.playlist_add_outlined, size: 18),
+                        label: const Text('转成 Todo 下一步'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final dao = CognitiveConsistencyDao();
+                          await dao.saveEffectivePattern(evidence: e);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已沉淀为有效模式：后续可在同价值/同旧解释中复用。')));
+                          }
+                        },
+                        icon: const Icon(Icons.star_border_outlined, size: 18),
+                        label: const Text('标记有效模式'),
+                      ),
+                    ]),
+                  ]),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }
 

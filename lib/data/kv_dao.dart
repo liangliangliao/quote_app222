@@ -8,7 +8,12 @@ import 'db.dart';
 class KeyValueDao {
   Future<String?> getString(String key) async {
     final db = await AppDatabase.instance();
-    final rows = await db.query('notify_config', where: 'key = ?', whereArgs: [key], limit: 1);
+    final rows = await db.query(
+      'notify_config',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     final v = rows.first['value'];
     return v?.toString();
@@ -21,5 +26,21 @@ class KeyValueDao {
       {'key': key, 'value': value},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<List<Map<String, String>>> keyValuesWithPrefix(String prefix) async {
+    final db = await AppDatabase.instance();
+    final rows = await db.query(
+      'notify_config',
+      where: 'key LIKE ?',
+      whereArgs: <Object?>['$prefix%'],
+      orderBy: 'key DESC',
+    );
+    return rows
+        .map((r) => <String, String>{
+              'key': (r['key'] ?? '').toString(),
+              'value': (r['value'] ?? '').toString(),
+            })
+        .toList(growable: false);
   }
 }

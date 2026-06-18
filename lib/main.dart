@@ -52,6 +52,7 @@ import 'life_note_module/life_note_home_page.dart';
 import 'semantic_consistency/semantic_consistency_page.dart';
 import 'behavior_tracking/behavior_tracking_home_page.dart';
 import 'shame_transform/shame_transform_home_page.dart';
+import 'cognitive_consistency/cognitive_consistency_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -392,6 +393,13 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
+    _DrawerEntrySpec(
+      icon: Icons.sync_alt_outlined,
+      title: '足下一致行动',
+      subtitle: '认知失调雷达 → 1美元行动 → 行动陪伴 → 身份证据 → 价值一致性报告',
+      badgeText: '用最小行动制造真实证据',
+      pageBuilder: (_) => const CognitiveConsistencyHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.volunteer_activism_outlined,
       title: '足下真实自我',

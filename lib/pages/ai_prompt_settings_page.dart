@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/global_ai_settings.dart';
 import '../shame_transform/shame_transform_prompt_config.dart';
+import '../cognitive_consistency/cognitive_consistency_prompt_config.dart';
+import '../cognitive_consistency/cognitive_consistency_models.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -21,6 +23,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final GlobalAiSettings _settings = GlobalAiSettings();
   final ShameTransformPromptConfig _shamePrompts =
       ShameTransformPromptConfig();
+  final CognitiveConsistencyPromptConfig _ccPrompts =
+      CognitiveConsistencyPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -30,6 +34,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   String _sourceLabel = '';
   String _sourceNote = '';
   String _effectiveTemplate = '';
+  List<CcPromptBackupRecord> _ccBackups = <CcPromptBackupRecord>[];
+  bool _backupLoading = false;
 
   @override
   void initState() {
@@ -81,6 +87,28 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
             _PromptItem(id: 'shame_output_first_aid', name: '输出格式：羞耻急救卡'),
             _PromptItem(id: 'shame_output_action_tree', name: '输出格式：Todo 行动树'),
             _PromptItem(id: 'shame_json_repair', name: '异常恢复：JSON 格式修复'),
+          ],
+        ),
+
+        const _PromptModule(
+          id: 'cognitive_consistency',
+          name: '足下一致行动 · 认知失调',
+          description: '统一配置认知失调/最小充分理由/1美元行动/行动后自我解释/身份证据账本/价值一致性报告的三层 AI 提示词。',
+          items: <_PromptItem>[
+            _PromptItem(id: 'cc_global', name: '全局价值层 Prompt'),
+            _PromptItem(id: 'cc_scene_target_to_action', name: '场景：目标转化为 1 美元行动'),
+            _PromptItem(id: 'cc_scene_dissonance_analysis', name: '场景：认知失调分析'),
+            _PromptItem(id: 'cc_scene_pre_action', name: '场景：行动前抗犹豫引导'),
+            _PromptItem(id: 'cc_scene_post_action', name: '场景：行动后自我解释'),
+            _PromptItem(id: 'cc_scene_external_reward', name: '场景：外部奖励降噪'),
+            _PromptItem(id: 'cc_scene_self_deception', name: '场景：自我欺骗与合理化识别'),
+            _PromptItem(id: 'cc_scene_weekly_report', name: '场景：价值一致性报告'),
+            _PromptItem(id: 'cc_scene_value_relation', name: '场景：多价值协同 / 冲突分析'),
+            _PromptItem(id: 'cc_scene_information_avoidance', name: '场景：信息回避挑战'),
+            _PromptItem(id: 'cc_scene_identity_conflict', name: '场景：身份冲突重构'),
+            _PromptItem(id: 'cc_scene_daily_review', name: '场景：每日一致性复盘'),
+            _PromptItem(id: 'cc_scene_temperature_review', name: '场景：失调温度计复盘'),
+            _PromptItem(id: 'cc_output_common', name: '输出格式：通用 JSON 结构'),
           ],
         ),
         const _PromptModule(
@@ -176,12 +204,18 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       _effectiveTemplate = value;
       _sourceLabel = inspected['sourceLabel'] ?? '当前模板';
       _sourceNote = inspected['note'] ?? '';
+      if (_promptId.startsWith('cc_')) {
+        _ccBackups = await _ccPrompts.listBackups(_promptId);
+      } else {
+        _ccBackups = <CcPromptBackupRecord>[];
+      }
     } catch (e) {
       final fallback = _defaultPrompt(_promptId);
       _templateCtrl.text = fallback;
       _effectiveTemplate = fallback;
       _sourceLabel = '加载失败，显示源码默认模板';
       _sourceNote = e.toString();
+      _ccBackups = <CcPromptBackupRecord>[];
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -206,6 +240,20 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     await _savePromptById(_promptId, def);
     await _loadPrompt();
     _toast('已恢复源码默认模板');
+  }
+
+  Future<void> _restoreCcBackup(CcPromptBackupRecord backup) async {
+    if (!_promptId.startsWith('cc_')) return;
+    setState(() => _backupLoading = true);
+    try {
+      await _ccPrompts.restoreBackup(_promptId, backup.key);
+      await _loadPrompt();
+      _toast('已恢复历史备份：${backup.displayTime}');
+    } catch (e) {
+      _toast('恢复备份失败：$e');
+    } finally {
+      if (mounted) setState(() => _backupLoading = false);
+    }
   }
 
   void _onModuleChanged(String? id) {
@@ -234,6 +282,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   String _defaultPrompt(String id) {
     if (id.startsWith('shame_')) {
       return _shamePrompts.defaultFor(id);
+    }
+    if (id.startsWith('cc_')) {
+      return _ccPrompts.defaultFor(id);
     }
     switch (id) {
       case 'goal_action':
@@ -276,6 +327,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('shame_')) {
       return _shamePrompts.inspectPrompt(id);
     }
+    if (id.startsWith('cc_')) {
+      return _ccPrompts.inspectPrompt(id);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.inspectGoalSettingActionPromptState();
@@ -316,6 +370,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   Future<void> _savePromptById(String id, String value) {
     if (id.startsWith('shame_')) {
       return _shamePrompts.savePrompt(id, value);
+    }
+    if (id.startsWith('cc_')) {
+      return _ccPrompts.savePrompt(id, value);
     }
     switch (id) {
       case 'goal_action':
@@ -366,6 +423,33 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         MapEntry('{{relationship_mode}}', '关系场景分支。'),
         MapEntry('{{denied_part}}', '用户选择的被否认自我部分。'),
         MapEntry('{{raw_response}}', '首次 AI 调用返回但尚未成功解析的原始文本。'),
+      ];
+    }
+    if (id.startsWith('cc_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{user_goal}}', '用户输入的目标、愿望或想做但一直拖延的事情。'),
+        MapEntry('{{user_context}}', '用户当前状态、阻力、内耗或现实背景。'),
+        MapEntry('{{user_values}}', '用户手动填写或系统提取的价值/身份方向。'),
+        MapEntry('{{recent_evidence}}', '最近身份证据账本记录摘要。'),
+        MapEntry('{{today}}', '客户端今天日期。'),
+        MapEntry('{{user_event}}', '用户描述的失调、拖延、逃避或自我矛盾事件。'),
+        MapEntry('{{one_dollar_action}}', '当前 1 美元行动。'),
+        MapEntry('{{hesitation}}', '行动前犹豫、拖延或想放弃的具体内容。'),
+        MapEntry('{{value_link}}', '行动连接到的价值或身份方向。'),
+        MapEntry('{{completed_action}}', '用户实际完成的行动。'),
+        MapEntry('{{user_reflection}}', '行动后体验、阻力、感受和证据记录。'),
+        MapEntry('{{old_story}}', '这次行动要松动的旧解释或旧模式。'),
+        MapEntry('{{reward_context}}', '用户对打卡、积分、监督、奖惩等外部理由的描述。'),
+        MapEntry('{{user_explanation}}', '用户可能用于降低失调的解释。'),
+        MapEntry('{{known_facts}}', '与解释相关的可确认事实。'),
+        MapEntry('{{recent_records_json}}', '最近行动证据记录 JSON。'),
+        MapEntry('{{report_range}}', '价值一致性报告的时间范围。'),
+        MapEntry('{{modern_profile_json}}', 'V18 现代认知失调画像 JSON：失调类型、强度、温度、验证任务、自我完整等。'),
+        MapEntry('{{daily_reviews_json}}', '最近每日一致性复盘 JSON。'),
+        MapEntry('{{before_temperature}}', '行动前失调温度计结构化记录。'),
+        MapEntry('{{after_temperature}}', '行动后失调温度计结构化记录。'),
+        MapEntry('{{dissonance_types}}', '本次相关认知失调类型。'),
+        MapEntry('{{growth_explanation}}', '本次成长性解释。'),
       ];
     }
     switch (id) {
@@ -567,6 +651,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
                 ),
                 const SizedBox(height: 16),
                 _statusCard(),
+                const SizedBox(height: 10),
+                _ccBackupRestoreCard(),
                 const SizedBox(height: 16),
                 _sectionTitle('当前提示词模板（可修改）'),
                 const SizedBox(height: 6),
@@ -644,6 +730,56 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           const SizedBox(height: 8),
           Text('当前模块：${_currentModule.name}', style: const TextStyle(fontSize: 12)),
           Text('当前子功能：${_currentPrompt.name}', style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _ccBackupRestoreCard() {
+    if (!_promptId.startsWith('cc_')) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('历史备份 / 自定义 Prompt 恢复', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text(
+            '一致行动模块升级 Prompt 时会备份旧模板。这里可以恢复旧的自定义版本，避免升级后丢失个人调校。',
+            style: TextStyle(fontSize: 12, color: Color(0xFF78350F)),
+          ),
+          const SizedBox(height: 8),
+          if (_backupLoading) const LinearProgressIndicator(),
+          if (_ccBackups.isEmpty)
+            const Text('暂无可恢复备份。', style: TextStyle(fontSize: 12, color: Colors.grey))
+          else
+            ..._ccBackups.take(5).map(
+              (backup) => Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${backup.displayTime} · ${backup.preview}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _backupLoading ? null : () => _restoreCcBackup(backup),
+                      child: const Text('恢复'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
