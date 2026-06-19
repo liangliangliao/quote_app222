@@ -879,7 +879,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
           children: [
             const Text('文字转语音服务商', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
-            const Text('可在 ElevenLabs、Resemble AI、MiniMax 之间自由切换；三者都可使用克隆声音档案，并共享语音文件库、下载、删除、缓存和冥想场景参数。', style: TextStyle(color: Colors.grey)),
+            const Text('可在 ElevenLabs、Resemble AI、MiniMax、Microsoft Azure Speech、讯飞语音之间自由切换；可共享语音文件库、下载、删除、缓存和冥想场景参数。', style: TextStyle(color: Colors.grey)),
             RadioListTile<String>(
               contentPadding: EdgeInsets.zero,
               value: 'elevenlabs',
@@ -903,6 +903,14 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
               title: const Text('MiniMax'),
               subtitle: const Text('适合中文、多情绪、超长停顿 <#x#>、速度/音量/音调/音效和快速克隆声音。'),
               onChanged: (v) => _selectProvider(v ?? 'minimax'),
+            ),
+            RadioListTile<String>(
+              contentPadding: EdgeInsets.zero,
+              value: 'iflytek',
+              groupValue: _ttsProvider,
+              title: const Text('讯飞语音'),
+              subtitle: const Text('支持讯飞开放平台 TTS 参数、发音人 vcn、音频编码，以及 STT Endpoint/语言/方言配置。'),
+              onChanged: (v) => _selectProvider(v ?? 'iflytek'),
             ),
             RadioListTile<String>(
               contentPadding: EdgeInsets.zero,

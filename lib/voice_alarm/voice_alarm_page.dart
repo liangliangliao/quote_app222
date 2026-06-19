@@ -32,6 +32,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   static const _native = MethodChannel('com.example.quote_app/voice_alarm');
   TimeOfDay _time = TimeOfDay.now();
   String _provider = 'microsoft';
+  String _sttProvider = 'microsoft';
   String? _customMusic;
   String? _backgroundImage;
   String? _generatedVoice;
@@ -110,6 +111,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _voiceProfiles = profiles;
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
       _provider = (data['provider'] ?? 'microsoft').toString();
+      _sttProvider = (data['sttProvider'] ?? 'microsoft').toString() == 'iflytek' ? 'iflytek' : 'microsoft';
       final recommendations = _recommendedVoices(_provider, mode);
       _voiceId.text = (data['voiceId'] ?? (recommendations.isEmpty ? '' : recommendations.first['id'])).toString();
       _speed = (data['speed'] as num?)?.toDouble() ?? (mode == 'morning' ? 1.05 : 0.88);
@@ -409,6 +411,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     return {
       'text': _text.text.trim(),
       'provider': _provider,
+      'sttProvider': _sttProvider,
       'voicePath': _generatedVoice ?? '',
       'musicPath': _customMusic ?? '',
       'backgroundPath': _backgroundImage ?? '',
@@ -539,6 +542,17 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 ),
                 const SizedBox(height: 8),
                 const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。支持 Microsoft、ElevenLabs、Resemble、MiniMax 与讯飞语音预生成闹钟语音。', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'microsoft', label: Text('微软识别'), icon: Icon(Icons.cloud_outlined)),
+                    ButtonSegment(value: 'iflytek', label: Text('讯飞识别'), icon: Icon(Icons.record_voice_over_outlined)),
+                  ],
+                  selected: {_sttProvider},
+                  onSelectionChanged: (value) => setState(() => _sttProvider = value.first),
+                ),
+                const SizedBox(height: 8),
+                const Text('实时语音转文字服务选择会随闹钟保存；请先在“语音与美好的祝福配置”中填好对应 Microsoft 或讯飞 STT 参数。全屏页会把该选择与对应参数一同带入闹钟 payload，用于实时转文字与 AI 对话链路。', style: TextStyle(color: Colors.black54)),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _voiceId,

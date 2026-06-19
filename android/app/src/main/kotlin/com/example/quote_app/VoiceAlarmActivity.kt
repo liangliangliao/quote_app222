@@ -148,12 +148,15 @@ class VoiceAlarmActivity : Activity() {
     }
     recognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
       setRecognitionListener(object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) { listening = true; transcriptView?.append("\n正在聆听…") }
+        override fun onReadyForSpeech(params: Bundle?) { listening = true; updateListeningStatus() }
         override fun onResults(results: Bundle?) {
           listening = false
           handleSpeech(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty())
         }
-        override fun onPartialResults(partialResults: Bundle?) { }
+        override fun onPartialResults(partialResults: Bundle?) {
+          val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+          if (partial.isNotBlank()) transcriptView?.text = "你：$partial\n（正在识别，继续说完即可…）"
+        }
         override fun onError(error: Int) {
           listening = false
           if (!speaking && !aiBusy) listenAgain(700)
@@ -168,6 +171,13 @@ class VoiceAlarmActivity : Activity() {
     listenAgain(300)
   }
 
+
+  private fun updateListeningStatus() {
+    val current = transcriptView?.text?.toString().orEmpty()
+    val base = current.lineSequence().filter { it.isNotBlank() && !it.contains("正在聆听") }.take(8).joinToString("\n")
+    transcriptView?.text = if (base.isBlank()) "正在聆听…" else "$base\n正在聆听…"
+  }
+
   private fun listenAgain(delayMs: Long = 0L) {
     if (destroyed || speaking || aiBusy || listening) return
     transcriptView?.postDelayed({
@@ -176,7 +186,10 @@ class VoiceAlarmActivity : Activity() {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 6000L)
         putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
       }
       try {
@@ -212,8 +225,9 @@ class VoiceAlarmActivity : Activity() {
       }
       aiAwake -> askAi(text)
       else -> {
-        transcriptView?.append("\n提示：请先说“小名小名”或“你好AI”唤醒 AI；也可以直接说“关闭闹钟 / 延迟五分钟”。")
-        listenAgain(500)
+        // 用户可能直接开始提问；非指令语音默认视为一次 AI 对话，唤醒词仍可用但不再强制。
+        aiAwake = true
+        askAi(text)
       }
     }
   }
