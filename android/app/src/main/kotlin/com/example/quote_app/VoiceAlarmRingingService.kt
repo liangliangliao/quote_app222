@@ -31,6 +31,8 @@ class VoiceAlarmRingingService : Service() {
     private const val EXTRA_PAYLOAD = "payload"
     private const val CHANNEL_ID = "voice_alarm_ringing_v3"
     private const val NOTIFICATION_ID = 974002
+    const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
+    const val ACTION_VOICE_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_END"
 
     @JvmStatic
     fun start(context: Context, payload: String) {
@@ -202,7 +204,7 @@ class VoiceAlarmRingingService : Service() {
     if (voicePath.isBlank() || !File(voicePath).isFile) return
     try { voicePlayer?.stop() } catch (_: Throwable) {}
     try { voicePlayer?.release() } catch (_: Throwable) {}
-    voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f))
+    voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f), notifyVoice = true)
   }
 
   private fun scheduleVoiceReplay(data: JSONObject) {
@@ -216,7 +218,7 @@ class VoiceAlarmRingingService : Service() {
     replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
   }
 
-  private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f): MediaPlayer? {
+  private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f, notifyVoice: Boolean = false): MediaPlayer? {
     return try {
       MediaPlayer().apply {
         setAudioAttributes(
@@ -228,7 +230,13 @@ class VoiceAlarmRingingService : Service() {
         setDataSource(this@VoiceAlarmRingingService, uri)
         isLooping = looping
         setVolume(volume, volume)
-        setOnPreparedListener { it.start() }
+        setOnPreparedListener {
+          if (notifyVoice) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
+          it.start()
+        }
+        setOnCompletionListener {
+          if (notifyVoice) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+        }
         setOnErrorListener { player, _, _ ->
           try { player.release() } catch (_: Throwable) {}
           true
@@ -246,6 +254,7 @@ class VoiceAlarmRingingService : Service() {
     try { musicPlayer?.stop() } catch (_: Throwable) {}
     try { musicPlayer?.release() } catch (_: Throwable) {}
     try { vibrator?.cancel() } catch (_: Throwable) {}
+    if (voicePlayer != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
     voicePlayer = null
     musicPlayer = null
     vibrator = null

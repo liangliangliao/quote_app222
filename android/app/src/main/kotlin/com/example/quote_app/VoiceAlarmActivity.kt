@@ -1,12 +1,17 @@
 package com.example.quote_app
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
+import android.content.IntentFilter
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -41,6 +46,21 @@ class VoiceAlarmActivity : Activity() {
   @Volatile private var speaking = false
   @Volatile private var aiBusy = false
   private val conversation = mutableListOf<Pair<String, String>>()
+  private val speechHandler = Handler(Looper.getMainLooper())
+  private val speechBuffer = StringBuilder()
+  private var processSpeechRunnable: Runnable? = null
+  @Volatile private var suppressRecognitionUntil = 0L
+  private val alarmPlaybackReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      when (intent?.action) {
+        VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_START -> suppressForAlarmPlayback(30_000L)
+        VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_END -> {
+          suppressRecognitionUntil = System.currentTimeMillis() + 900L
+          listenAgain(1000)
+        }
+      }
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -70,6 +90,7 @@ class VoiceAlarmActivity : Activity() {
       }
     }
     setContentView(buildContent())
+    registerAlarmPlaybackReceiver()
     startVoiceAssistant()
   }
 
@@ -151,15 +172,21 @@ class VoiceAlarmActivity : Activity() {
         override fun onReadyForSpeech(params: Bundle?) { listening = true; updateListeningStatus() }
         override fun onResults(results: Bundle?) {
           listening = false
-          handleSpeech(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty())
+          onSpeechChunk(
+            results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty(),
+            finalChunk = true,
+          )
         }
         override fun onPartialResults(partialResults: Bundle?) {
-          val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-          if (partial.isNotBlank()) transcriptView?.text = "你：$partial\n（正在识别，继续说完即可…）"
+          onSpeechChunk(
+            partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty(),
+            finalChunk = false,
+          )
         }
         override fun onError(error: Int) {
           listening = false
-          if (!speaking && !aiBusy) listenAgain(700)
+          if (speechBuffer.isNotBlank()) scheduleBufferedSpeechProcessing(900)
+          else if (!speaking && !aiBusy && !isAlarmPlaybackSuppressed()) listenAgain(700)
         }
         override fun onBeginningOfSpeech() {}
         override fun onEndOfSpeech() { listening = false }
@@ -179,9 +206,9 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun listenAgain(delayMs: Long = 0L) {
-    if (destroyed || speaking || aiBusy || listening) return
+    if (destroyed || speaking || aiBusy || listening || isAlarmPlaybackSuppressed()) return
     transcriptView?.postDelayed({
-      if (destroyed || speaking || aiBusy || listening) return@postDelayed
+      if (destroyed || speaking || aiBusy || listening || isAlarmPlaybackSuppressed()) return@postDelayed
       val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
@@ -201,6 +228,60 @@ class VoiceAlarmActivity : Activity() {
       }
     }, delayMs)
   }
+
+  private fun registerAlarmPlaybackReceiver() {
+    val filter = IntentFilter().apply {
+      addAction(VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_START)
+      addAction(VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_END)
+    }
+    if (Build.VERSION.SDK_INT >= 33) registerReceiver(alarmPlaybackReceiver, filter, RECEIVER_NOT_EXPORTED) else registerReceiver(alarmPlaybackReceiver, filter)
+  }
+
+  private fun suppressForAlarmPlayback(durationMs: Long) {
+    suppressRecognitionUntil = maxOf(suppressRecognitionUntil, System.currentTimeMillis() + durationMs)
+    try { recognizer?.cancel() } catch (_: Throwable) {}
+    listening = false
+    processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
+    speechBuffer.clear()
+    if (speechBuffer.isBlank()) transcriptView?.text = "闹钟语音播报中，暂不把播报内容发送给 AI…"
+  }
+
+  private fun isAlarmPlaybackSuppressed(): Boolean = System.currentTimeMillis() < suppressRecognitionUntil
+
+  private fun onSpeechChunk(chunk: String, finalChunk: Boolean) {
+    val text = chunk.trim()
+    if (text.isBlank()) return
+    if (isAlarmPlaybackSuppressed() || isLikelyAlarmPlayback(text)) {
+      suppressForAlarmPlayback(2000L)
+      return
+    }
+    appendSpeechChunk(text)
+    transcriptView?.text = "你：${speechBuffer}\n（正在识别，继续说完即可…）"
+    scheduleBufferedSpeechProcessing(if (finalChunk) 1200 else 2200)
+  }
+
+  private fun appendSpeechChunk(text: String) {
+    val current = speechBuffer.toString()
+    if (current.contains(text)) return
+    if (text.contains(current) && current.isNotBlank()) {
+      speechBuffer.clear()
+      speechBuffer.append(text)
+      return
+    }
+    if (speechBuffer.isNotBlank()) speechBuffer.append(' ')
+    speechBuffer.append(text)
+  }
+
+  private fun scheduleBufferedSpeechProcessing(delayMs: Long) {
+    processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
+    processSpeechRunnable = Runnable {
+      val merged = speechBuffer.toString().trim()
+      speechBuffer.clear()
+      if (merged.isNotBlank()) handleSpeech(merged) else listenAgain(300)
+    }
+    speechHandler.postDelayed(processSpeechRunnable!!, delayMs)
+  }
+
 
   private fun handleSpeech(rawText: String) {
     val text = rawText.trim()
@@ -376,6 +457,8 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onDestroy() {
     destroyed = true
+    processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
+    try { unregisterReceiver(alarmPlaybackReceiver) } catch (_: Throwable) {}
     try { recognizer?.destroy() } catch (_: Throwable) {}
     try { tts?.shutdown() } catch (_: Throwable) {}
     recognizer = null
