@@ -61,6 +61,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   String? _selectedSavedVoicePath;
   List<String> _textHistory = [];
   Map<String, dynamic> _alarmAiConfig = <String, dynamic>{};
+  String _alarmAiSystemPrompt = '';
 
   static const _morningDefault = '早上好，新的一天开始了。愿你平静、专注、充满力量。';
   static const _nightDefault = '晚安，今天辛苦了。放下未完成的事，安心休息，愿你拥有宁静的睡眠。';
@@ -233,6 +234,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Future<void> _refreshAlarmAiConfig() async {
     try {
       final cfg = await _ai.resolveGlobalConfig();
+      _alarmAiSystemPrompt = _mode == 'night'
+          ? await _aiSettings.getVoiceAlarmNightAssistantPrompt()
+          : await _aiSettings.getVoiceAlarmMorningAssistantPrompt();
       _alarmAiConfig = <String, dynamic>{
         'provider': cfg.provider,
         'model': cfg.model,
@@ -435,6 +439,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'resembleHd': _resembleHd,
       'replayIntervalSeconds': _replayIntervalSeconds,
       'aiConfig': _alarmAiConfig,
+      'aiSystemPrompt': _alarmAiSystemPrompt,
     };
   }
 

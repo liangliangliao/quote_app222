@@ -205,18 +205,23 @@ class VoiceAlarmActivity : Activity() {
   private fun handleSpeech(rawText: String) {
     val text = rawText.trim()
     if (text.isBlank()) { listenAgain(300); return }
+    if (isLikelyAlarmPlayback(text)) {
+      transcriptView?.text = "已忽略闹钟播报回声，继续聆听用户语音…"
+      listenAgain(500)
+      return
+    }
     transcriptView?.text = "你：$text"
     when {
       isStopCommand(text) -> {
         speak("好的，已关闭闹钟。", "alarm_stop", restart = false)
         VoiceAlarmRingingService.stop(this)
-        transcriptView?.postDelayed({ finishAndRemoveTask() }, 450)
+        transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
       isSnoozeCommand(text) -> {
         speak("好的，五分钟后再次提醒。", "alarm_snooze", restart = false)
         VoiceAlarmScheduler.snooze(this, payload, 5)
         VoiceAlarmRingingService.stop(this)
-        transcriptView?.postDelayed({ finishAndRemoveTask() }, 450)
+        transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
       isWakeCommand(text) -> {
         aiAwake = true
@@ -231,6 +236,18 @@ class VoiceAlarmActivity : Activity() {
       }
     }
   }
+
+  private fun isLikelyAlarmPlayback(text: String): Boolean {
+    val alarmText = try { JSONObject(payload).optString("text", "") } catch (_: Throwable) { "" }
+    val a = normalizeSpeechText(alarmText)
+    val b = normalizeSpeechText(text)
+    if (a.length < 8 || b.length < 8) return false
+    if (a.contains(b) || b.contains(a.take(24))) return true
+    val common = b.windowed(2, 1).count { a.contains(it) }
+    return common >= (b.length / 2).coerceAtLeast(8)
+  }
+
+  private fun normalizeSpeechText(value: String): String = value.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() || it in '\u4e00'..'\u9fff' }
 
   private fun isStopCommand(text: String): Boolean = listOf("关闭", "停止", "关掉", "结束闹钟", "停掉闹钟", "不响了").any { text.contains(it) }
 
@@ -284,6 +301,12 @@ class VoiceAlarmActivity : Activity() {
     }
   }
 
+  private fun resolveSystemPrompt(): String {
+    val fromPayload = try { JSONObject(payload).optString("aiSystemPrompt", "") } catch (_: Throwable) { "" }
+    if (fromPayload.isNotBlank()) return fromPayload
+    return "你是一个正在全屏闹钟界面中陪伴用户的中文语音 AI。回答要简短、自然、适合朗读，通常不超过80字。用户可以说关闭闹钟或延迟五分钟。"
+  }
+
   private fun callAi(cfg: JSONObject, userText: String): String {
     val provider = cfg.optString("provider", "deepseek")
     val endpoint = cfg.optString("endpoint", "")
@@ -291,7 +314,7 @@ class VoiceAlarmActivity : Activity() {
     val model = cfg.optString("model", "")
     if (endpoint.isBlank() || apiKey.isBlank() || model.isBlank()) return "AI 配置不完整，请回到设置页重新保存闹钟。"
     val messages = JSONArray().apply {
-      put(JSONObject().put("role", "system").put("content", "你是一个正在全屏闹钟界面中陪伴用户的中文语音 AI。回答要简短、自然、适合朗读，通常不超过80字。不要说你无法控制闹钟；用户可说关闭闹钟或延迟五分钟。"))
+      put(JSONObject().put("role", "system").put("content", resolveSystemPrompt()))
       for ((role, content) in conversation.takeLast(10)) put(JSONObject().put("role", role).put("content", content))
       put(JSONObject().put("role", "user").put("content", userText))
     }

@@ -89,7 +89,7 @@ class VoiceProviderSettings {
   static const defaultMicrosoftVoice = 'zh-CN-XiaoxiaoNeural';
   static const defaultMicrosoftLanguage = 'zh-CN';
   static const defaultMicrosoftOutputFormat = 'audio-24khz-48kbitrate-mono-mp3';
-  static const defaultIflytekEndpoint = 'https://tts-api.xfyun.cn/v2/tts';
+  static const defaultIflytekEndpoint = 'wss://tts-api.xfyun.cn/v2/tts';
   static const defaultIflytekSttEndpoint = 'https://iat-api.xfyun.cn/v2/iat';
   static const defaultIflytekVoiceName = 'xiaoyan';
   static const defaultIflytekAudioEncoding = 'lame';
@@ -160,27 +160,17 @@ class MultiProviderTtsService {
     final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.iflytekApiKey) ?? '').trim();
     final secret = (apiSecret ?? await _kvDao.getString(VoiceProviderSettings.iflytekApiSecret) ?? '').trim();
     if (id.isEmpty || key.isEmpty || secret.isEmpty) throw StateError('请先填写讯飞开放平台 AppID、APIKey、APISecret');
-    final url = (endpoint ?? await _kvDao.getString(VoiceProviderSettings.iflytekEndpoint) ?? VoiceProviderSettings.defaultIflytekEndpoint).trim();
+    final rawEndpoint = (endpoint ?? await _kvDao.getString(VoiceProviderSettings.iflytekEndpoint) ?? VoiceProviderSettings.defaultIflytekEndpoint).trim();
     final vcn = (voiceName ?? await _kvDao.getString(VoiceProviderSettings.iflytekVoiceName) ?? VoiceProviderSettings.defaultIflytekVoiceName).trim();
     final aue = (encoding ?? await _kvDao.getString(VoiceProviderSettings.iflytekAudioEncoding) ?? VoiceProviderSettings.defaultIflytekAudioEncoding).trim();
-    final auf = 'audio/L16;rate=${(sampleRate ?? await _kvDao.getString(VoiceProviderSettings.iflytekSampleRate) ?? VoiceProviderSettings.defaultIflytekSampleRate).trim()}';
-    final uri = Uri.parse(url);
-    final date = HttpDate.format(DateTime.now().toUtc());
-    final signatureOrigin = 'host: ${uri.host}\ndate: $date\nPOST ${uri.path} HTTP/1.1';
-    final hmacSha256 = Hmac(sha256, utf8.encode(secret));
-    final signature = base64Encode(hmacSha256.convert(utf8.encode(signatureOrigin)).bytes);
-    final authorizationOrigin = 'api_key="$key", algorithm="hmac-sha256", headers="host date request-line", signature="$signature"';
-    final authed = uri.replace(queryParameters: {
-      ...uri.queryParameters,
-      'authorization': base64Encode(utf8.encode(authorizationOrigin)),
-      'date': date,
-      'host': uri.host,
-    });
-    final body = {
+    final rate = (sampleRate ?? await _kvDao.getString(VoiceProviderSettings.iflytekSampleRate) ?? VoiceProviderSettings.defaultIflytekSampleRate).trim();
+    final endpointUri = _iflytekWebSocketEndpoint(rawEndpoint);
+    final authUri = _iflytekSignedWebSocketUri(endpointUri, apiKey: key, apiSecret: secret);
+    final payload = <String, dynamic>{
       'common': {'app_id': id},
       'business': {
         'aue': aue,
-        'auf': auf,
+        'auf': 'audio/L16;rate=$rate',
         'vcn': vcn,
         'tte': 'UTF8',
         'speed': ((speed.clamp(0.5, 2.0) - 0.5) / 1.5 * 100).round().clamp(0, 100),
@@ -189,21 +179,57 @@ class MultiProviderTtsService {
       },
       'data': {'status': 2, 'text': base64Encode(utf8.encode(cleanText))},
     };
-    final resp = await http.post(authed, headers: {'Content-Type': 'application/json'}, body: jsonEncode(body)).timeout(const Duration(seconds: 90));
-    if (resp.statusCode < 200 || resp.statusCode >= 300) throw StateError('讯飞 TTS 失败：HTTP ${resp.statusCode} ${resp.body}');
-    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
-    final code = (decoded['code'] as num?)?.toInt() ?? -1;
-    if (code != 0) throw StateError('讯飞 TTS 失败：${decoded['message'] ?? resp.body}');
-    final audio = ((decoded['data'] as Map?)?['audio'] ?? '').toString();
-    if (audio.isEmpty) throw StateError('讯飞 TTS 未返回音频：${resp.body}');
-    final bytes = base64Decode(audio);
+    final chunks = <int>[];
+    WebSocket? socket;
+    try {
+      socket = await WebSocket.connect(authUri.toString()).timeout(const Duration(seconds: 20));
+      socket.add(jsonEncode(payload));
+      await for (final event in socket.timeout(const Duration(seconds: 120))) {
+        final raw = event is List<int> ? utf8.decode(event) : event.toString();
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        final code = (decoded['code'] as num?)?.toInt() ?? -1;
+        if (code != 0) throw StateError('讯飞 TTS 失败：${decoded['message'] ?? raw}');
+        final data = decoded['data'];
+        if (data is Map) {
+          final audio = (data['audio'] ?? '').toString();
+          if (audio.isNotEmpty) chunks.addAll(base64Decode(audio));
+          final status = (data['status'] as num?)?.toInt() ?? 0;
+          if (status == 2) break;
+        }
+      }
+    } finally {
+      try { await socket?.close(); } catch (_) {}
+    }
+    if (chunks.isEmpty) throw StateError('讯飞 TTS 未返回音频，请检查 AppID/APIKey/APISecret、发音人 vcn 和 Endpoint');
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory(p.join(dir.path, 'voice_lab_audio'));
     await folder.create(recursive: true);
-    final ext = aue == 'raw' ? 'pcm' : (aue == 'lame' ? 'mp3' : aue);
+    final ext = aue == 'raw' ? 'pcm' : (aue == 'lame' ? 'mp3' : aue.replaceAll('-', '_'));
     final file = File(p.join(folder.path, 'iflytek_${DateTime.now().millisecondsSinceEpoch}.$ext'));
-    await file.writeAsBytes(bytes, flush: true);
+    await file.writeAsBytes(chunks, flush: true);
     return file.path;
+  }
+
+  Uri _iflytekWebSocketEndpoint(String endpoint) {
+    final raw = endpoint.trim().isEmpty ? VoiceProviderSettings.defaultIflytekEndpoint : endpoint.trim();
+    final uri = Uri.parse(raw);
+    final scheme = uri.scheme == 'https' ? 'wss' : (uri.scheme == 'http' ? 'ws' : uri.scheme);
+    return uri.replace(scheme: scheme.isEmpty ? 'wss' : scheme, path: uri.path.isEmpty ? '/v2/tts' : uri.path);
+  }
+
+  Uri _iflytekSignedWebSocketUri(Uri endpoint, {required String apiKey, required String apiSecret}) {
+    final date = HttpDate.format(DateTime.now().toUtc());
+    final path = endpoint.hasQuery ? '${endpoint.path}?${endpoint.query}' : endpoint.path;
+    final signatureOrigin = 'host: ${endpoint.host}\ndate: $date\nGET $path HTTP/1.1';
+    final hmacSha256 = Hmac(sha256, utf8.encode(apiSecret));
+    final signature = base64Encode(hmacSha256.convert(utf8.encode(signatureOrigin)).bytes);
+    final authorizationOrigin = 'api_key="$apiKey", algorithm="hmac-sha256", headers="host date request-line", signature="$signature"';
+    return endpoint.replace(queryParameters: <String, String>{
+      ...endpoint.queryParameters,
+      'authorization': base64Encode(utf8.encode(authorizationOrigin)),
+      'date': date,
+      'host': endpoint.host,
+    });
   }
 
   Future<bool> testMicrosoftConnection({
