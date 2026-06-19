@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../data/kv_dao.dart';
 import '../voice_lab/eleven_labs_service.dart';
@@ -31,6 +32,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   static const _native = MethodChannel('com.example.quote_app/voice_alarm');
   TimeOfDay _time = TimeOfDay.now();
   String _provider = 'microsoft';
+  String _sttProvider = 'microsoft';
   String? _customMusic;
   String? _backgroundImage;
   String? _generatedVoice;
@@ -51,12 +53,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   double _stability = 0.55;
   double _styleStrength = 0.25;
   double _pitch = 0;
+  int _replayIntervalSeconds = 60;
   bool _resembleHd = true;
   List<Map<String, String>> _savedVoices = [];
   List<VoiceProfile> _voiceProfiles = [];
   final Map<String, List<Map<String, String>>> _catalogRecommendations = {};
   String? _selectedSavedVoicePath;
   List<String> _textHistory = [];
+  Map<String, dynamic> _alarmAiConfig = <String, dynamic>{};
 
   static const _morningDefault = '早上好，新的一天开始了。愿你平静、专注、充满力量。';
   static const _nightDefault = '晚安，今天辛苦了。放下未完成的事，安心休息，愿你拥有宁静的睡眠。';
@@ -107,6 +111,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _voiceProfiles = profiles;
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
       _provider = (data['provider'] ?? 'microsoft').toString();
+      _sttProvider = (data['sttProvider'] ?? 'microsoft').toString() == 'iflytek' ? 'iflytek' : 'microsoft';
       final recommendations = _recommendedVoices(_provider, mode);
       _voiceId.text = (data['voiceId'] ?? (recommendations.isEmpty ? '' : recommendations.first['id'])).toString();
       _speed = (data['speed'] as num?)?.toDouble() ?? (mode == 'morning' ? 1.05 : 0.88);
@@ -120,6 +125,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _stability = (data['stability'] as num?)?.toDouble() ?? 0.55;
       _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
       _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
+      _replayIntervalSeconds = (data['replayIntervalSeconds'] as num?)?.toInt() ?? 60;
       _resembleHd = data['resembleHd'] as bool? ?? true;
       _vibrate = data['vibrate'] as bool? ?? true;
       _systemMusic = data['systemMusic'] as bool? ?? true;
@@ -212,6 +218,34 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     if (path != null && mounted) setState(() => _backgroundImage = path);
   }
 
+  Future<bool> _ensureVoiceInteractionReady() async {
+    final mic = await Permission.microphone.status;
+    if (!mic.isGranted) {
+      final requested = await Permission.microphone.request();
+      if (!requested.isGranted) {
+        _toast('语音唤醒、AI 对话和语音关闭闹钟需要麦克风权限；请授权后重新保存闹钟');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _refreshAlarmAiConfig() async {
+    try {
+      final cfg = await _ai.resolveGlobalConfig();
+      _alarmAiConfig = <String, dynamic>{
+        'provider': cfg.provider,
+        'model': cfg.model,
+        'endpoint': cfg.endpoint,
+        'apiKey': cfg.apiKey,
+        'available': cfg.available,
+        'label': cfg.label,
+      };
+    } catch (_) {
+      _alarmAiConfig = <String, dynamic>{'available': false};
+    }
+  }
+
   Future<void> _schedule() async {
     if (_text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
@@ -225,6 +259,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         _toast('请在系统页面允许“闹钟和提醒”，返回后再次点击保存');
         return;
       }
+      if (!await _ensureVoiceInteractionReady()) return;
+      await _refreshAlarmAiConfig();
       _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
       if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
       final when = _nextTime();
@@ -292,6 +328,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       );
       return audio.audioFilePath;
     }
+    if (_provider == 'iflytek') {
+      return _tts.synthesizeIflytekToFile(
+        text: text,
+        voiceName: _voiceId.text.trim().isEmpty ? null : _voiceId.text.trim(),
+        speed: _speed,
+        pitch: _pitch,
+        volume: _voiceVolume,
+      );
+    }
     if (_provider == 'minimax') {
       final voiceId = _voiceId.text.trim().isNotEmpty
           ? _voiceId.text.trim()
@@ -346,6 +391,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Future<void> _ring() async {
     setState(() => _saving = true);
     try {
+      if (!await _ensureVoiceInteractionReady()) return;
+      await _refreshAlarmAiConfig();
       _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
       if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
       await _native.invokeMethod<void>('testRing', {'payload': _payload()});
@@ -364,6 +411,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     return {
       'text': _text.text.trim(),
       'provider': _provider,
+      'sttProvider': _sttProvider,
       'voicePath': _generatedVoice ?? '',
       'musicPath': _customMusic ?? '',
       'backgroundPath': _backgroundImage ?? '',
@@ -385,6 +433,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'styleStrength': _styleStrength,
       'pitch': _pitch,
       'resembleHd': _resembleHd,
+      'replayIntervalSeconds': _replayIntervalSeconds,
+      'aiConfig': _alarmAiConfig,
     };
   }
 
@@ -478,6 +528,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     DropdownMenuItem(value: 'elevenlabs', child: Text('ElevenLabs')),
                     DropdownMenuItem(value: 'resemble', child: Text('Resemble AI')),
                     DropdownMenuItem(value: 'minimax', child: Text('MiniMax')),
+                    DropdownMenuItem(value: 'iflytek', child: Text('讯飞语音')),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -490,7 +541,18 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   },
                 ),
                 const SizedBox(height: 8),
-                const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。当前版本会为微软服务预先生成闹钟语音。', style: TextStyle(color: Colors.black54)),
+                const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。支持 Microsoft、ElevenLabs、Resemble、MiniMax 与讯飞语音预生成闹钟语音。', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'microsoft', label: Text('微软识别'), icon: Icon(Icons.cloud_outlined)),
+                    ButtonSegment(value: 'iflytek', label: Text('讯飞识别'), icon: Icon(Icons.record_voice_over_outlined)),
+                  ],
+                  selected: {_sttProvider},
+                  onSelectionChanged: (value) => setState(() => _sttProvider = value.first),
+                ),
+                const SizedBox(height: 8),
+                const Text('实时语音转文字服务选择会随闹钟保存；请先在“语音与美好的祝福配置”中填好对应 Microsoft 或讯飞 STT 参数。全屏页会把该选择与对应参数一同带入闹钟 payload，用于实时转文字与 AI 对话链路。', style: TextStyle(color: Colors.black54)),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _voiceId,
@@ -569,10 +631,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     value: _resembleHd,
                     onChanged: (value) => setState(() => _resembleHd = value),
                   ),
-                ] else ...[
+                ] else if (_provider == 'minimax') ...[
                   Text('MiniMax 音调 ${_pitch.round()}'),
                   Slider(value: _pitch, min: -12, max: 12, divisions: 24, onChanged: (value) => setState(() => _pitch = value)),
                   const Text('MiniMax 使用 speed、pitch、emotion、中文 voice_id 与场景停顿参数。', style: TextStyle(color: Colors.black54)),
+                ] else ...[
+                  Text('讯飞音调 ${_pitch.round()}'),
+                  Slider(value: _pitch, min: -20, max: 20, divisions: 40, onChanged: (value) => setState(() => _pitch = value)),
+                  const Text('讯飞语音使用美好祝福配置页中的 AppID / APIKey / APISecret / Endpoint，并支持闹钟专用发音人 vcn。', style: TextStyle(color: Colors.black54)),
                 ],
               ]),
             ),
@@ -619,6 +685,10 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 subtitle: Text(_backgroundImage == null ? '未选择，使用默认渐变背景' : _backgroundImage!.split('/').last),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _pickBackground,
+              ),
+              ListTile(
+                title: Text('闹钟语音重播间隔 $_replayIntervalSeconds 秒'),
+                subtitle: Slider(value: _replayIntervalSeconds.toDouble(), min: 15, max: 300, divisions: 19, onChanged: (value) => setState(() => _replayIntervalSeconds = value.round())),
               ),
               ListTile(
                 title: Text('语音音量 ${(_voiceVolume * 100).round()}%'),
