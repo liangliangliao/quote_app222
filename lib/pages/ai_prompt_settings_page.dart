@@ -147,6 +147,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           description: '早上起床与晚上睡觉闹钟的 AI 朗读文案生成提示词。',
           items: <_PromptItem>[
             _PromptItem(id: 'voice_alarm_content', name: '语音闹钟朗读内容生成'),
+            _PromptItem(id: 'voice_alarm_morning_assistant', name: '起床闹钟 AI 对话方案'),
+            _PromptItem(id: 'voice_alarm_night_assistant', name: '睡眠闹钟 AI 对话方案'),
           ],
         ),
         const _PromptModule(
@@ -419,6 +421,10 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.defaultBehaviorPresetDailyReviewAiPrompt;
       case 'voice_alarm_content':
         return _settings.defaultVoiceAlarmContentPrompt;
+      case 'voice_alarm_morning_assistant':
+        return _settings.defaultVoiceAlarmMorningAssistantPrompt;
+      case 'voice_alarm_night_assistant':
+        return _settings.defaultVoiceAlarmNightAssistantPrompt;
       case 'drawer_header':
         return _settings.defaultDrawerHeaderPrompt;
       case 'life_note_analysis':
@@ -466,6 +472,10 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.inspectBehaviorPresetDailyReviewAiPromptState();
       case 'voice_alarm_content':
         return _settings.inspectVoiceAlarmContentPromptState();
+      case 'voice_alarm_morning_assistant':
+        return _settings.inspectVoiceAlarmMorningAssistantPromptState();
+      case 'voice_alarm_night_assistant':
+        return _settings.inspectVoiceAlarmNightAssistantPromptState();
       case 'drawer_header':
         return _settings.inspectDrawerHeaderPromptState();
       case 'life_note_analysis':
@@ -513,6 +523,10 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         return _settings.saveBehaviorPresetDailyReviewAiPrompt(value);
       case 'voice_alarm_content':
         return _settings.saveVoiceAlarmContentPrompt(value);
+      case 'voice_alarm_morning_assistant':
+        return _settings.saveVoiceAlarmMorningAssistantPrompt(value);
+      case 'voice_alarm_night_assistant':
+        return _settings.saveVoiceAlarmNightAssistantPrompt(value);
       case 'drawer_header':
         return _settings.saveDrawerHeaderPrompt(value);
       case 'life_note_analysis':
