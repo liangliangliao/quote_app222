@@ -13,7 +13,9 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -52,6 +54,9 @@ class VoiceAlarmRingingService : Service() {
   private var vibrator: Vibrator? = null
   private var wakeLock: PowerManager.WakeLock? = null
   private var originalAlarmVolume: Int? = null
+  private val replayHandler = Handler(Looper.getMainLooper())
+  private var replayRunnable: Runnable? = null
+  private var currentPayload: String = "{}"
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -63,12 +68,15 @@ class VoiceAlarmRingingService : Service() {
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: "{}"
     startForegroundAlarm(payload)
     acquireWakeLock()
+    currentPayload = payload
     startSignals(payload)
     return START_STICKY
   }
 
   override fun onDestroy() {
     stopSignals()
+    replayRunnable?.let { replayHandler.removeCallbacks(it) }
+    replayRunnable = null
     try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Throwable) {}
     wakeLock = null
     restoreAlarmVolume()
@@ -184,8 +192,28 @@ class VoiceAlarmRingingService : Service() {
     }
     val voicePath = data.optString("voicePath", "")
     if (voicePath.isNotBlank() && File(voicePath).isFile) {
-      voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f))
+      playVoiceOnce(data)
+      scheduleVoiceReplay(data)
     }
+  }
+
+  private fun playVoiceOnce(data: JSONObject) {
+    val voicePath = data.optString("voicePath", "")
+    if (voicePath.isBlank() || !File(voicePath).isFile) return
+    try { voicePlayer?.stop() } catch (_: Throwable) {}
+    try { voicePlayer?.release() } catch (_: Throwable) {}
+    voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f))
+  }
+
+  private fun scheduleVoiceReplay(data: JSONObject) {
+    replayRunnable?.let { replayHandler.removeCallbacks(it) }
+    val seconds = data.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
+    replayRunnable = Runnable {
+      val latest = try { JSONObject(currentPayload) } catch (_: Throwable) { data }
+      playVoiceOnce(latest)
+      scheduleVoiceReplay(latest)
+    }
+    replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
   }
 
   private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f): MediaPlayer? {
