@@ -10,6 +10,7 @@ import 'todo_dao.dart';
 import 'todo_models.dart';
 import 'todo_service.dart';
 import 'todo_goal_pages.dart';
+import '../sustainable_excellence/sustainable_excellence_home_page.dart';
 
 const _todoBlue = Color(0xFF5E72C3);
 const _todoBg = Color(0xFFF7F7FA);
@@ -380,6 +381,34 @@ class _TodoGoalTransformButton extends StatelessWidget {
         const Text('AI 会先判断它是否通向你真正关心的生活，再提炼方向、深层意义、沿途价值，并生成今天5分钟内能开始的最小行动。', style: TextStyle(color: Color(0xFF4B5563), height: 1.35)),
         const SizedBox(height: 10),
         Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: onTap, icon: const Icon(Icons.auto_awesome), label: const Text('AI 按核心价值转化'))),
+      ]),
+    );
+  }
+}
+
+
+
+class _TodoSustainableExcellenceButton extends StatelessWidget {
+  const _TodoSustainableExcellenceButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDFA),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF99F6E4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('转入可持续卓越实验室', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF134E4A))),
+        const SizedBox(height: 5),
+        const Text('把这个 Todo 转为“压力—恢复—失败学习—过程享受”的行动实验，支持执行页、失败复盘和下一步 Todo 写回。', style: TextStyle(color: Color(0xFF0F766E), height: 1.35)),
+        const SizedBox(height: 10),
+        Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: onTap, icon: const Icon(Icons.all_inclusive), label: const Text('进入卓越实验'))),
       ]),
     );
   }
@@ -1671,6 +1700,34 @@ class _TodoTaskDetailPageState extends State<TodoTaskDetailPage> {
                 _TodoGoalTransformButton(
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoGoalHomePage(initialTaskId: t.taskId))).then((_) => _load()),
                 ),
+                const SizedBox(height: 10),
+                _TodoSustainableExcellenceButton(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SustainableExcellenceHomePage(
+                        initialInput: t.title,
+                        source: 'todo',
+                        extraContext: jsonEncode(<String, Object?>{
+                          'source_todo_id': t.taskId,
+                          'source_list_id': t.listId,
+                          'body': t.bodyText,
+                          'checklist': _checklist.map((e) => e.title).toList(),
+                          'due_date_time': t.dueDateTime,
+                          'due_time_zone': t.dueTimeZone,
+                          'reminder_on': t.isReminderOn,
+                          'reminder_date_time': t.reminderDateTime,
+                          'reminder_time_zone': t.reminderTimeZone,
+                          'importance': t.importance,
+                          'recurrence_json': t.recurrenceJson,
+                          'categories_json': t.categoriesJson,
+                          'is_my_day': t.isMyDay,
+                        }),
+                      ),
+                    ),
+                  ).then((_) => _load()),
+                ),
+
                 if (_checklist.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   ..._checklist.map((s) => ListTile(

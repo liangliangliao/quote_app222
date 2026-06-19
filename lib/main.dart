@@ -53,6 +53,8 @@ import 'semantic_consistency/semantic_consistency_page.dart';
 import 'behavior_tracking/behavior_tracking_home_page.dart';
 import 'shame_transform/shame_transform_home_page.dart';
 import 'cognitive_consistency/cognitive_consistency_home_page.dart';
+import 'realistic_optimism_module/realistic_optimism_home_page.dart';
+import 'sustainable_excellence/sustainable_excellence_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -394,11 +396,32 @@ class _RootShellState extends State<RootShell> {
 
   List<_DrawerEntrySpec> _drawerEntries() => [
     _DrawerEntrySpec(
-      icon: Icons.sync_alt_outlined,
-      title: '足下一致行动',
-      subtitle: '认知失调雷达 → 1美元行动 → 行动陪伴 → 身份证据 → 价值一致性报告',
-      badgeText: '用最小行动制造真实证据',
-      pageBuilder: (_) => const CognitiveConsistencyHomePage(),
+      icon: Icons.all_inclusive,
+      title: '可持续卓越实验室',
+      subtitle: '目标实验 → 压力恢复 → 失败学习 → 完美主义转卓越 → 过程享受 → 成长证据',
+      badgeText: '压力有恢复，失败可学习，卓越不是完美',
+      pageBuilder: (_) => const SustainableExcellenceHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.lightbulb_outline,
+      title: '现实乐观信念行动系统',
+      subtitle: '四分钟墙 → 现实校准 → 期待重构 → 环境启动 → 行动实验 → 失败复盘 → 基线上移',
+      badgeText: '信念不是魔法，而是行动发动机',
+      pageBuilder: (_) => const RealisticOptimismHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.hub_outlined,
+      title: '足下认知一致性',
+      subtitle: '源书工作台 → 不一致雷达 → 自我辩护镜子 → 现实检验 → 承诺行动 → 成长档案',
+      badgeText: '在矛盾中看见自己，在行动中重建一致',
+      pageBuilder: (_) => const CognitiveConsistencyHomePage(initialTabIndex: 8),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.psychology_alt_outlined,
+      title: '认知失调解决方法中心',
+      subtitle: '行为一致化 → 解释重评 → 现实接触 → 反态度实验 → 责任修复 → 人际平衡',
+      badgeText: '直接选择方法，把矛盾转成行动证据',
+      pageBuilder: (_) => const CognitiveConsistencyHomePage(initialTabIndex: 9),
     ),
     _DrawerEntrySpec(
       icon: Icons.volunteer_activism_outlined,

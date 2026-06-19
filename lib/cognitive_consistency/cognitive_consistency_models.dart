@@ -1,3 +1,43 @@
+import 'dart:convert';
+
+Map<String, dynamic> _sourcebookFromRaw(dynamic raw) {
+  final text = (raw ?? '').toString().trim();
+  if (text.isEmpty) return const <String, dynamic>{};
+  String cleaned = text;
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned
+        .replaceFirst(RegExp(r'^```(?:json)?\s*', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'\s*```\s*$', multiLine: true), '')
+        .trim();
+  }
+  try {
+    final decoded = jsonDecode(cleaned);
+    if (decoded is Map) {
+      final sourcebook = decoded['sourcebookAnalysis'] ??
+          decoded['sourcebook_analysis'] ??
+          decoded['sourcebook'] ??
+          decoded['sourcebookCase'];
+      if (sourcebook is Map) return Map<String, dynamic>.from(sourcebook);
+    }
+  } catch (_) {
+    final start = cleaned.indexOf('{');
+    final end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        final decoded = jsonDecode(cleaned.substring(start, end + 1));
+        if (decoded is Map) {
+          final sourcebook = decoded['sourcebookAnalysis'] ??
+              decoded['sourcebook_analysis'] ??
+              decoded['sourcebook'] ??
+              decoded['sourcebookCase'];
+          if (sourcebook is Map) return Map<String, dynamic>.from(sourcebook);
+        }
+      } catch (_) {}
+    }
+  }
+  return const <String, dynamic>{};
+}
+
 
 class CcActionVariant {
   final String actionType;
@@ -310,6 +350,7 @@ class CcPlanResult {
   final CcInformationAvoidanceBranches informationAvoidanceBranches;
   final CcIdentityDialogue identityDialogue;
   final String dailyReviewSeed;
+  final CcSourcebookAnalysis sourcebookAnalysis;
 
   final String provider;
   final String modelLabel;
@@ -397,6 +438,7 @@ class CcPlanResult {
     this.informationAvoidanceBranches = const CcInformationAvoidanceBranches(),
     this.identityDialogue = const CcIdentityDialogue(),
     this.dailyReviewSeed = '',
+    this.sourcebookAnalysis = const CcSourcebookAnalysis(),
     required this.provider,
     required this.modelLabel,
     required this.rawResponse,
@@ -484,6 +526,7 @@ class CcPlanResult {
     CcInformationAvoidanceBranches? informationAvoidanceBranches,
     CcIdentityDialogue? identityDialogue,
     String? dailyReviewSeed,
+    CcSourcebookAnalysis? sourcebookAnalysis,
     String? provider,
     String? modelLabel,
     String? rawResponse,
@@ -570,6 +613,7 @@ class CcPlanResult {
       informationAvoidanceBranches: informationAvoidanceBranches ?? this.informationAvoidanceBranches,
       identityDialogue: identityDialogue ?? this.identityDialogue,
       dailyReviewSeed: dailyReviewSeed ?? this.dailyReviewSeed,
+      sourcebookAnalysis: sourcebookAnalysis ?? this.sourcebookAnalysis,
       provider: provider ?? this.provider,
       modelLabel: modelLabel ?? this.modelLabel,
       rawResponse: rawResponse ?? this.rawResponse,
@@ -658,6 +702,7 @@ class CcPlanResult {
         'informationAvoidanceBranches': informationAvoidanceBranches.toJson(),
         'identityDialogue': identityDialogue.toJson(),
         'dailyReviewSeed': dailyReviewSeed,
+        'sourcebookAnalysis': sourcebookAnalysis.toJson(),
         'provider': provider,
         'modelLabel': modelLabel,
         'rawResponse': rawResponse,
@@ -745,6 +790,7 @@ class CcPlanResult {
         informationAvoidanceBranches: CcInformationAvoidanceBranches.fromJson(json['informationAvoidanceBranches'] ?? json['informationAvoidance'], fallbackText: (json['informationAvoidance'] ?? '').toString()),
         identityDialogue: CcIdentityDialogue.fromJson(json['identityDialogue'] ?? json['identityConflict'], fallbackText: (json['identityConflict'] ?? '').toString()),
         dailyReviewSeed: (json['dailyReviewSeed'] ?? '').toString(),
+        sourcebookAnalysis: CcSourcebookAnalysis.fromUnknown(json['sourcebookAnalysis'] ?? _sourcebookFromRaw(json['rawResponse'])),
         provider: (json['provider'] ?? '').toString(),
         modelLabel: (json['modelLabel'] ?? '').toString(),
         rawResponse: (json['rawResponse'] ?? '').toString(),
@@ -1288,4 +1334,120 @@ class CcV18SessionDetails {
     this.selfStillValue = '',
     this.selfNextProof = '',
   });
+}
+
+// V24 sourcebook/resolution typed wrapper models. The UI still accepts resilient Map payloads
+// for backward compatibility, but these types document and stabilize the formal
+// sourcebook practice-loop boundary.
+class CcSourcebookAnalysis {
+  final String currentStage;
+  final Map<String, dynamic> cognitiveStructureMap;
+  final Map<String, dynamic> conflictTypeRouting;
+  final Map<String, dynamic> psychologicalFunction;
+  final Map<String, dynamic> valueLayers;
+  final Map<String, dynamic> alternativeInterpretations;
+  final List<dynamic> protectedSelfImage;
+  final List<dynamic> defensePatterns;
+  final List<dynamic> realityTestingQuestions;
+  final List<dynamic> userChoiceOptions;
+  final List<dynamic> reflectionQuestions;
+  final Map<String, dynamic> interpersonalBalance;
+  final Map<String, dynamic> counterAttitudinalExperiment;
+  final Map<String, dynamic> commitmentAction;
+  final String integratedSelfStatement;
+
+  const CcSourcebookAnalysis({
+    this.currentStage = '',
+    this.cognitiveStructureMap = const <String, dynamic>{},
+    this.conflictTypeRouting = const <String, dynamic>{},
+    this.psychologicalFunction = const <String, dynamic>{},
+    this.valueLayers = const <String, dynamic>{},
+    this.alternativeInterpretations = const <String, dynamic>{},
+    this.protectedSelfImage = const <dynamic>[],
+    this.defensePatterns = const <dynamic>[],
+    this.realityTestingQuestions = const <dynamic>[],
+    this.userChoiceOptions = const <dynamic>[],
+    this.reflectionQuestions = const <dynamic>[],
+    this.interpersonalBalance = const <String, dynamic>{},
+    this.counterAttitudinalExperiment = const <String, dynamic>{},
+    this.commitmentAction = const <String, dynamic>{},
+    this.integratedSelfStatement = '',
+  });
+
+  static Map<String, dynamic> _map(dynamic value) => value is Map ? Map<String, dynamic>.from(value) : const <String, dynamic>{};
+  static List<dynamic> _list(dynamic value) => value is List ? List<dynamic>.from(value) : const <dynamic>[];
+  static CcSourcebookAnalysis fromUnknown(dynamic value) {
+    if (value is Map) return CcSourcebookAnalysis.fromMap(Map<String, dynamic>.from(value));
+    if (value is String && value.trim().isNotEmpty) {
+      return CcSourcebookAnalysis.fromMap(_sourcebookFromRaw(value));
+    }
+    return const CcSourcebookAnalysis();
+  }
+
+  factory CcSourcebookAnalysis.fromMap(Map<String, dynamic> map) => CcSourcebookAnalysis(
+        currentStage: (map['currentStage'] ?? map['current_stage'] ?? '').toString(),
+        cognitiveStructureMap: _map(map['cognitiveStructureMap'] ?? map['cognitive_structure_map']),
+        conflictTypeRouting: _map(map['conflictTypeRouting'] ?? map['conflict_type_routing']),
+        psychologicalFunction: _map(map['psychologicalFunction'] ?? map['psychological_function']),
+        valueLayers: _map(map['valueLayers'] ?? map['value_layers']),
+        alternativeInterpretations: _map(map['alternativeInterpretations'] ?? map['alternative_interpretations']),
+        protectedSelfImage: _list(map['protectedSelfImage'] ?? map['protected_self_image']),
+        defensePatterns: _list(map['defensePatterns'] ?? map['defense_patterns']),
+        realityTestingQuestions: _list(map['realityTestingQuestions'] ?? map['reality_testing_questions']),
+        userChoiceOptions: _list(map['userChoiceOptions'] ?? map['user_choice_options']),
+        reflectionQuestions: _list(map['reflectionQuestions'] ?? map['reflection_questions']),
+        interpersonalBalance: _map(map['interpersonalBalance'] ?? map['interpersonal_balance']),
+        counterAttitudinalExperiment: _map(map['counterAttitudinalExperiment'] ?? map['counter_attitudinal_experiment']),
+        commitmentAction: _map(map['commitmentAction'] ?? map['commitment_action']),
+        integratedSelfStatement: (map['integratedSelfStatement'] ?? map['integrated_self_statement'] ?? '').toString(),
+      );
+
+  bool get isEmpty => toJson().entries.every((e) {
+        final v = e.value;
+        if (v is String) return v.trim().isEmpty;
+        if (v is Map || v is List) return (v as dynamic).isEmpty == true;
+        return v == null;
+      });
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'currentStage': currentStage,
+        'protectedSelfImage': protectedSelfImage,
+        'defensePatterns': defensePatterns,
+        'cognitiveStructureMap': cognitiveStructureMap,
+        'conflictTypeRouting': conflictTypeRouting,
+        'psychologicalFunction': psychologicalFunction,
+        'valueLayers': valueLayers,
+        'alternativeInterpretations': alternativeInterpretations,
+        'realityTestingQuestions': realityTestingQuestions,
+        'userChoiceOptions': userChoiceOptions,
+        'reflectionQuestions': reflectionQuestions,
+        'interpersonalBalance': interpersonalBalance,
+        'counterAttitudinalExperiment': counterAttitudinalExperiment,
+        'commitmentAction': commitmentAction,
+        'integratedSelfStatement': integratedSelfStatement,
+      };
+}
+
+class CcSourcebookCaseDetail {
+  final String sessionId;
+  final Map<String, dynamic> caseMap;
+  final List<dynamic> nodes;
+  final List<dynamic> edges;
+  final List<dynamic> evidence;
+
+  const CcSourcebookCaseDetail({
+    this.sessionId = '',
+    this.caseMap = const <String, dynamic>{},
+    this.nodes = const <dynamic>[],
+    this.edges = const <dynamic>[],
+    this.evidence = const <dynamic>[],
+  });
+
+  factory CcSourcebookCaseDetail.fromMap(String sessionId, Map<String, dynamic> map) => CcSourcebookCaseDetail(
+        sessionId: sessionId,
+        caseMap: map['case'] is Map ? Map<String, dynamic>.from(map['case'] as Map) : const <String, dynamic>{},
+        nodes: map['nodes'] is List ? List<dynamic>.from(map['nodes'] as List) : const <dynamic>[],
+        edges: map['edges'] is List ? List<dynamic>.from(map['edges'] as List) : const <dynamic>[],
+        evidence: map['evidence'] is List ? List<dynamic>.from(map['evidence'] as List) : const <dynamic>[],
+      );
 }

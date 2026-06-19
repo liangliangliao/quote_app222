@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,7 @@ import 'cognitive_consistency_ai_service.dart';
 import 'cognitive_consistency_dao.dart';
 import 'cognitive_consistency_models.dart';
 import 'cognitive_consistency_prompt_config.dart';
+import 'cognitive_consistency_sourcebook_case_list_page.dart';
 
 class CognitiveConsistencyHomePage extends StatefulWidget {
   const CognitiveConsistencyHomePage({
@@ -139,6 +141,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
   bool _preTemperatureLogged = false;
   Map<String, List<CcDissonanceTemperatureLog>> _temperatureByEvidenceId = <String, List<CcDissonanceTemperatureLog>>{};
   Map<String, CcV18SessionDetails> _v18DetailsBySessionId = <String, CcV18SessionDetails>{};
+  Map<String, Map<String, dynamic>> _sourcebookDetailsBySessionId = <String, Map<String, dynamic>>{};
   List<CcDailyConsistencyReview> _dailyReviews = <CcDailyConsistencyReview>[];
   List<CcValueConsistencySnapshot> _valueSnapshots = <CcValueConsistencySnapshot>[];
   Map<String, CcTemperatureReviewItem> _temperatureReviewByEvidenceId = <String, CcTemperatureReviewItem>{};
@@ -159,7 +162,15 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
   final _dailyGrowthCtrl = TextEditingController();
   final _dailyRepairCtrl = TextEditingController();
   final _dailyTomorrowCtrl = TextEditingController();
+  final _resolutionSituationCtrl = TextEditingController();
   String _selectedCategory = 'start';
+  String _resolutionMethodFilter = 'all';
+  String _activeResolutionMethodUsageId = '';
+  String _activeResolutionMethodWorkflowId = '';
+  String _activeSourcebookDraftSessionId = '';
+  String _lastDissonanceDiagnosisType = '';
+  List<String> _recommendedResolutionMethodIds = <String>[];
+  List<Map<String, dynamic>> _resolutionMethodUsages = <Map<String, dynamic>>[];
   Timer? _timer;
 
   static const Map<String, String> _categoryLabels = <String, String>{
@@ -174,10 +185,204 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
     'identity': '新身份证据',
   };
 
+
+  static final List<Map<String, dynamic>> _dissonanceResolutionMethods = <Map<String, dynamic>>[
+    <String, dynamic>{
+      'id': 'behavior_alignment',
+      'title': '改变行为：用最小行动重建一致',
+      'shortTitle': '行为一致化',
+      'category': '直接降低失调',
+      'source': 'Festinger 认知失调降低机制 / 产品行动契约',
+      'supportLevel': 'direct_mechanism',
+      'sceneKey': 'hypocrisy_change',
+      'when': '当你认同某个价值，但现实行为一直偏离它；例如想成长却持续逃避、拖延、沉迷。',
+      'core': '不先争论自己到底是不是“自律/负责/努力”，而是先留下一个足够小、可完成、可观察的行动证据。',
+      'risk': '行动设计过大，会重新变成逃避、自责和二次失调。',
+      'quickAction': '选择一个 5-15 分钟的小行动，今天完成并写入证据账本。',
+      'steps': <String>[
+        '写出我认同的价值或标准。',
+        '写出最近一次具体偏离行为，不做人格评价。',
+        '把行动缩小到今天 5-15 分钟可完成。',
+        '完成后记录：这条证据支持了什么新的自我理解。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'belief_reframe',
+      'title': '改变解释：把自我辩护改成更准确的整合解释',
+      'shortTitle': '解释重评',
+      'category': '直接降低失调',
+      'source': '失调降低机制 / 源书动态整合 / 价值分层',
+      'supportLevel': 'theoretical_translation',
+      'sceneKey': 'value_layering',
+      'when': '当你不停解释、证明、合理化，或者把承认问题等同于否定整个人。',
+      'core': '保留真实价值，修正过度僵硬的身份信念，把外围解释放回可检验的位置。',
+      'risk': '解释重评不是给自己找更漂亮的借口，必须连接现实检验和行动证据。',
+      'quickAction': '写出一句：我仍然重视____，同时承认____，今天从____开始。',
+      'steps': <String>[
+        '区分核心价值、身份信念、外围解释。',
+        '找出最像自我辩护的一句话。',
+        '把它改写为更准确、更可行动的表达。',
+        '用一个现实小行动检验新解释。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'add_integrating_cognition',
+      'title': '添加新认知：把冲突放进更大的意义结构',
+      'shortTitle': '补充整合认知',
+      'category': '直接降低失调',
+      'source': '认知一致性理论 / 平衡与整合',
+      'supportLevel': 'theoretical_translation',
+      'sceneKey': 'cognitive_structure_map',
+      'when': '当两个想法看似互相矛盾，但你需要更完整地理解现实，而不是粗暴删除其中一个。',
+      'core': '加入新的事实、限制条件、情境差异和成长意义，让结构更完整，而不是强行否认冲突。',
+      'risk': '新认知如果脱离事实，也可能变成新的合理化。',
+      'quickAction': '补充一个以前忽略的事实，并标注它支持、反对或限制哪个旧判断。',
+      'steps': <String>[
+        '列出当前冲突的两个认知节点。',
+        '补充第三个事实或情境条件。',
+        '判断它让冲突变弱、变清楚，还是需要进一步验证。',
+        '形成一句新的整合性表达。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'reduce_rigidity',
+      'title': '降低绝对化：把“必须如此”改成可调整标准',
+      'shortTitle': '去绝对化',
+      'category': '直接降低失调',
+      'source': '重要性调节 / 自我标准地图',
+      'supportLevel': 'theoretical_translation',
+      'sceneKey': 'self_standard_map',
+      'when': '当你用过度僵硬的标准审判自己：我必须成功、不能犯错、不能后退。',
+      'core': '保留标准中的价值，降低羞辱性、绝对化和不可行动部分。',
+      'risk': '降低重要性不等于摆烂，而是把标准改到能执行、能复盘。',
+      'quickAction': '把一句“我必须/我完了”改成一句“我重视____，下一步是____”。',
+      'steps': <String>[
+        '写出正在审判自己的标准。',
+        '判断它来自价值、家庭、群体、理想自我还是恐惧。',
+        '保留价值，删除羞辱性绝对化。',
+        '生成一个更现实的新标准。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'information_contact',
+      'title': '接触反方证据：打破选择性信息回避',
+      'shortTitle': '现实接触',
+      'category': '现实检验',
+      'source': '选择性信息接触 / 现实检验',
+      'supportLevel': 'direct_mechanism',
+      'sceneKey': 'information_avoidance',
+      'when': '当你只看支持自己说法的信息，回避账单、反馈、结果、反对证据。',
+      'core': '把可怕信息降级为最小接触任务，让现实重新进入系统。',
+      'risk': '一次性接触太多信息会导致崩溃和二次回避。',
+      'quickAction': '只看一个数据、一个反馈或一个反方证据，并记录真实结果。',
+      'steps': <String>[
+        '写出我正在回避的信息。',
+        '写出我害怕它说明什么。',
+        '选择一个最低风险的接触方式。',
+        '记录实际结果与想象灾难的差异。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'counter_attitudinal_experiment',
+      'title': '反态度小实验：证明旧信念不是绝对事实',
+      'shortTitle': '反态度实验',
+      'category': '现实检验',
+      'source': '反态度行为 / 角色扮演与态度改变 / 行动证据',
+      'supportLevel': 'direct_mechanism',
+      'sceneKey': 'counter_attitudinal_experiment',
+      'when': '当你被“我做不到、我没有行动力、我不敢表达”这类旧信念困住。',
+      'core': '设计一个与旧信念相反、低风险、可观察的小行为，用事实松动旧信念。',
+      'risk': '实验不是证明你彻底改变，而是证明旧信念不是 100% 绝对。',
+      'quickAction': '做一个 5-15 分钟反方向行动，完成后给旧信念松动程度打分。',
+      'steps': <String>[
+        '写出限制性旧信念。',
+        '说明它保护了什么。',
+        '设计一个相反方向的小行为。',
+        '行动后记录：旧信念哪里被松动了。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'choice_recheck',
+      'title': '重新评估选择：区分坚持、修正、暂停和退出',
+      'shortTitle': '选择再评估',
+      'category': '现实检验',
+      'source': '决策后失调 / 沉没成本复盘',
+      'supportLevel': 'direct_mechanism',
+      'sceneKey': 'choice_recheck',
+      'when': '当你已经做出选择，却反复证明自己没选错，或者因为投入太多不敢转向。',
+      'core': '把“证明过去正确”改成“判断今天是否仍有现实价值”。',
+      'risk': '为了减少后悔而继续投入，可能扩大损失。',
+      'quickAction': '列出继续、调整、暂停、退出四条路径，并做一个低成本验证。',
+      'steps': <String>[
+        '写出已选择项与未选择项。',
+        '列出新证据，而不是只重复当初理由。',
+        '判断继续是否创造新价值。',
+        '选择一个低成本验证行动。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'responsibility_repair',
+      'title': '责任修复：把内疚转成可修复行动',
+      'shortTitle': '责任修复',
+      'category': '修复整合',
+      'source': '责任—后果雷达 / 行动修复',
+      'supportLevel': 'theoretical_translation',
+      'sceneKey': 'responsibility_radar',
+      'when': '当你在后悔、内疚、过度自责或逃避责任之间摇摆。',
+      'core': '区分真实责任、非本人责任、过度背责和可修复部分，只对可修复部分行动。',
+      'risk': '全怪自己会瘫痪，全怪环境会逃避。',
+      'quickAction': '写出一个可补偿、可道歉、可修正、可预防的小行动。',
+      'steps': <String>[
+        '列事实后果，不扩展人格评价。',
+        '区分可选择、可预见、可控制部分。',
+        '标出真实责任与过度背责。',
+        '执行一个修复性小行动。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'interpersonal_balance',
+      'title': '人际平衡：区分人、观点、关系和边界',
+      'shortTitle': '人际平衡',
+      'category': '修复整合',
+      'source': 'Heider / Newcomb 平衡理论',
+      'supportLevel': 'direct_mechanism',
+      'sceneKey': 'interpersonal_balance',
+      'when': '当关系、观点、价值或群体身份纠缠在一起，让你无法表达真实态度。',
+      'core': '看清“我—他人—对象/观点/事件”的三角结构，选择沟通、边界或接受局部不一致。',
+      'risk': '为了关系压抑真实，或为了立场否定整个人，都会扩大失衡。',
+      'quickAction': '完成一次低风险澄清：我尊重你，但我对这件事的看法是____。',
+      'steps': <String>[
+        '写出我对对方的态度。',
+        '写出我和对方共同涉及的对象/观点。',
+        '标出失衡点。',
+        '选择沟通澄清或边界表达小行动。',
+      ],
+    },
+    <String, dynamic>{
+      'id': 'self_integrity',
+      'title': '自我完整性：先保护核心价值，再面对现实',
+      'shortTitle': '自我完整性',
+      'category': '修复整合',
+      'source': '自我完整性 / 真实自我桥接 / 产品核心价值体系',
+      'supportLevel': 'product_extension',
+      'sceneKey': 'identity_conflict',
+      'when': '当现实反馈威胁自尊，让你想逃避、否认、攻击或合理化。',
+      'core': '先确认自己不等于一次失败，再从核心价值出发面对一个现实事实。',
+      'risk': '只做自我安慰、不接触现实，会变成新的防御。',
+      'quickAction': '写出一个不依赖成功的核心价值，然后面对一个小事实。',
+      'steps': <String>[
+        '确认我不是这一次失败本身。',
+        '写出仍值得保留的核心价值。',
+        '面对一个小现实事实。',
+        '留下一个新身份证据行动。',
+      ],
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 8, vsync: this, initialIndex: widget.initialTabIndex.clamp(0, 7).toInt());
+    _tabs = TabController(length: 10, vsync: this, initialIndex: widget.initialTabIndex.clamp(0, 9).toInt());
     _goalCtrl.text = widget.initialGoal;
     _contextCtrl.text = widget.initialContext;
     _valuesCtrl.text = widget.initialValues;
@@ -239,6 +444,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
     _dailyGrowthCtrl.dispose();
     _dailyRepairCtrl.dispose();
     _dailyTomorrowCtrl.dispose();
+    _resolutionSituationCtrl.dispose();
     super.dispose();
   }
 
@@ -282,8 +488,10 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
     final identityTransitionByEvidenceId = await _dao.identityTransitionsForEvidenceIds(allEvidence.map((e) => e.evidenceId));
     final selfIntegrityStats = await _dao.selfIntegrityStats();
     final v18DetailsBySessionId = await _dao.v18DetailsForSessionIds(allEvidence.map((e) => e.sessionId));
+    final sourcebookDetailsBySessionId = await _dao.sourcebookCaseDetailsForSessionIds(sessions.map((s) => s.sessionId));
     final dailyReviews = await _dao.recentDailyConsistencyReviews(limit: 14);
     final valueSnapshots = await _dao.buildValueConsistencySnapshots();
+    final resolutionMethodUsages = await _dao.recentResolutionMethodUsages(limit: 30);
     if (!mounted) return;
     setState(() {
       _evidence = evidence;
@@ -306,8 +514,10 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
       _identityTransitionByEvidenceId = identityTransitionByEvidenceId;
       _selfIntegrityStats = selfIntegrityStats;
       _v18DetailsBySessionId = v18DetailsBySessionId;
+      _sourcebookDetailsBySessionId = sourcebookDetailsBySessionId;
       _dailyReviews = dailyReviews;
       _valueSnapshots = valueSnapshots;
+      _resolutionMethodUsages = resolutionMethodUsages;
     });
   }
 
@@ -331,6 +541,16 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         originScene: 'target_to_action',
       );
       await _linkPlanSessionValues(result);
+      if (_activeResolutionMethodUsageId.trim().isNotEmpty && result.sessionId.trim().isNotEmpty) {
+        await _dao.updateResolutionMethodUsage(
+          usageId: _activeResolutionMethodUsageId,
+          sessionId: result.sessionId,
+          caseId: 'case_${result.sessionId}',
+          methodWorkflowId: _activeResolutionMethodWorkflowId,
+          dissonanceType: _lastDissonanceDiagnosisType,
+          status: 'analysis_generated',
+        );
+      }
       if (!mounted) return;
       setState(() {
         _applyPlan(
@@ -385,6 +605,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         originScene: 'dissonance_analysis',
       );
       await _linkPlanSessionValues(result);
+      await _bindActiveResolutionMethodUsageToPlan(result);
       if (!mounted) return;
       setState(() {
         _applyPlan(
@@ -395,6 +616,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         );
         _status = result.usedFallback ? '已生成本地失调分析兜底方案。' : 'AI 已完成认知失调分析，并已保存 session 链路。';
       });
+      await _load();
     } catch (e) {
       if (!mounted) return;
       setState(() => _status = '分析失败：$e');
@@ -413,6 +635,12 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
     'self_standard_map': '自我标准地图',
     'information_avoidance': '信息回避挑战',
     'identity_conflict': '身份冲突重构',
+    'cognitive_structure_map': '认知结构地图',
+    'conflict_type_router': '矛盾类型分流器',
+    'psychological_function': '心理功能分析器',
+    'value_layering': '核心/外围分层',
+    'interpersonal_balance': '人际平衡分析',
+    'counter_attitudinal_experiment': '反态度行为实验',
   };
 
   List<Map<String, String>> _specialFieldMeta(String key) {
@@ -480,6 +708,48 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
           {'label': '旧身份在保护什么', 'hint': '避免失败、羞耻、冲突、失控或失去关系'},
           {'label': '新身份最小行动', 'hint': '今天能留下的新身份小证据'},
         ];
+      case 'cognitive_structure_map':
+        return const [
+          {'label': '我说/相信/重视什么', 'hint': '把表层想法、价值或判断写出来'},
+          {'label': '我实际做了什么', 'hint': '具体行为，不写人格评价'},
+          {'label': '我希望维持的自我形象', 'hint': '理性、努力、善良、负责、没选错等'},
+          {'label': '现实反馈或关系证据', 'hint': '现实结果、他人反馈、数据或后果'},
+        ];
+      case 'conflict_type_router':
+        return const [
+          {'label': '当前矛盾事件', 'hint': '纠结、后悔、拖延、冲突或内耗'},
+          {'label': '最冲突的两部分', 'hint': '例如价值 vs 行为、自我形象 vs 现实反馈'},
+          {'label': '最刺痛的情绪', 'hint': '内疚、焦虑、羞耻、愤怒、后悔等'},
+          {'label': '我希望得到的方向', 'hint': '继续、调整、退出、沟通、验证、行动'},
+        ];
+      case 'psychological_function':
+        return const [
+          {'label': '当前想法/行为/态度', 'hint': '我一直这样想/这样做/这样解释'},
+          {'label': '它短期帮我避免了什么', 'hint': '失败感、羞耻、焦虑、冲突、不确定'},
+          {'label': '它曾经有什么好处', 'hint': '曾经保护过我什么'},
+          {'label': '它现在带来的代价', 'hint': '限制行动、关系、成长、现实感或责任'},
+        ];
+      case 'value_layering':
+        return const [
+          {'label': '我真正不想放弃的核心价值', 'hint': '成长、诚实、责任、自由、尊严、健康、关系等'},
+          {'label': '我对自己的身份定义', 'hint': '我必须证明自己没错/我不能失败/我是努力的人'},
+          {'label': '我现在给出的解释或理由', 'hint': '太晚了、没状态、别人也这样、已经投入很多'},
+          {'label': '今天可以验证的小行动', 'hint': '一个 5-15 分钟、可完成的行动'},
+        ];
+      case 'interpersonal_balance':
+        return const [
+          {'label': '我与对方的关系/态度', 'hint': '喜欢、尊重、依赖、反感、矛盾等'},
+          {'label': '我们共同涉及的对象/观点/事件', 'hint': '这件事、某个价值、某个选择或某个第三方'},
+          {'label': '我对这个对象的态度', 'hint': '支持、反对、重视、讨厌、犹豫'},
+          {'label': '对方对这个对象的态度', 'hint': '他/她/他们怎么看'},
+        ];
+      case 'counter_attitudinal_experiment':
+        return const [
+          {'label': '限制性旧信念', 'hint': '例如我没有行动力/我不敢表达/我坚持不了'},
+          {'label': '这个信念保护了什么', 'hint': '避免失败、避免被评价、避免失望'},
+          {'label': '一个相反方向的小行为', 'hint': '5-15 分钟内可以做的低风险动作'},
+          {'label': '行动后观察问题', 'hint': '这次行动能说明旧信念哪里不是绝对事实'},
+        ];
       default:
         return const [];
     }
@@ -541,6 +811,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         sourceId: _activeSourceId.trim().isNotEmpty ? _activeSourceId : widget.sourceId,
       );
       await _linkPlanSessionValues(result);
+      await _bindActiveResolutionMethodUsageToPlan(result);
       if (!mounted) return;
       setState(() {
         _specialPlan = result;
@@ -860,7 +1131,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
     nextCtrl.dispose();
   }
 
-  Future<void> _quickCreateTodoActionFromText(String title, String detail, {String actionType = 'value'}) async {
+  Future<void> _quickCreateTodoActionFromText(String title, String detail, {String actionType = 'value', Future<void> Function(String stepId)? afterCreated}) async {
     final cleanTitle = title.trim();
     if (cleanTitle.isEmpty) {
       _toast('没有可写入的行动。');
@@ -914,6 +1185,9 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
       completionQuestion: '我是否完成了这个后续行动，并留下现实证据？',
     );
     await _dao.saveActionTraceLink(fromType: 'cc_followup_action', fromId: cleanTitle, toType: 'todo_goal_step', toId: stepId, relationType: 'followup_written_to_todo');
+    if (afterCreated != null) {
+      await afterCreated(stepId);
+    }
     _toast('已写入 Todo。');
   }
 
@@ -1099,6 +1373,19 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
       if (_activeValueInsightId.trim().isNotEmpty) {
         await _dao.updateValueRelationInsightLink(insightId: _activeValueInsightId, linkedEvidenceId: evidenceId);
         await _dao.saveActionTraceLink(fromType: 'value_relation_insight', fromId: _activeValueInsightId, toType: 'evidence', toId: evidenceId, relationType: 'insight_validated_by_evidence');
+      }
+      if (_activeResolutionMethodUsageId.trim().isNotEmpty) {
+        await _dao.updateResolutionMethodUsage(
+          usageId: _activeResolutionMethodUsageId,
+          sessionId: plan.sessionId,
+          caseId: plan.sessionId.trim().isNotEmpty ? 'case_${plan.sessionId}' : '',
+          evidenceId: evidenceId,
+          status: 'evidence_saved',
+          producedEvidence: true,
+          reducedDissonance: _afterClarityScore >= _beforeActionWillingnessScore || _afterDiscomfortScore < _beforeDiscomfortScore,
+        );
+        _activeResolutionMethodUsageId = '';
+        _activeResolutionMethodWorkflowId = '';
       }
       await _syncTrueSelfEvidenceIfNeeded(
         plan: plan,
@@ -2291,7 +2578,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
       },
       child: Scaffold(
       appBar: AppBar(
-        title: const Text('足下一致行动'),
+        title: const Text('足下认知一致性'),
         actions: [
           IconButton(
             tooltip: 'AI 提示词配置',
@@ -2316,6 +2603,8 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
             Tab(text: '奖励降噪'),
             Tab(text: '诚实校验'),
             Tab(text: '一致性报告'),
+            Tab(text: '源书工作台'),
+            Tab(text: '解决方法'),
           ],
         ),
       ),
@@ -2330,6 +2619,8 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
           _buildRewardTab(),
           _buildSelfCheckTab(),
           _buildReportTab(),
+          _buildSourcebookWorkbenchTab(),
+          _buildDissonanceResolutionMethodsTab(),
         ],
       ),
     ));
@@ -2344,6 +2635,8 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
       (label: '奖励降噪', icon: Icons.card_giftcard_outlined, tab: 5),
       (label: '诚实校验', icon: Icons.fact_check_outlined, tab: 6),
       (label: '一致性报告', icon: Icons.assessment_outlined, tab: 7),
+      (label: '源书工作台', icon: Icons.hub_outlined, tab: 8),
+      (label: '解决方法', icon: Icons.psychology_alt_outlined, tab: 9),
     ];
     return Card(
       color: const Color(0xFFFFFBEB),
@@ -2352,7 +2645,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('功能入口', style: TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 6),
-          const Text('顶部标签栏可以左右滑动。也可以从这里直接进入已补充的奖励降噪、诚实校验、价值报告等功能。', style: TextStyle(height: 1.45, color: Color(0xFF6B7280))),
+          const Text('顶部标签栏可以左右滑动。也可以从这里直接进入源书工作台、解决方法、失调雷达、专项场景、奖励降噪、诚实校验、价值报告等功能。', style: TextStyle(height: 1.45, color: Color(0xFF6B7280))),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -2449,6 +2742,887 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
       _valueInsight = '';
       _status = '已批量选择 ${ids.length} 个预设价值。可以扫描协同/冲突、带入失调雷达，或直接生成 1 美元行动。';
     });
+  }
+
+  void _openWorkbenchScene(String sceneKey) {
+    setState(() {
+      _specialSceneKey = sceneKey;
+      _specialPlan = null;
+      _specialField1Ctrl.clear();
+      _specialField2Ctrl.clear();
+      _specialField3Ctrl.clear();
+      _specialField4Ctrl.clear();
+    });
+    _tabs.animateTo(2);
+  }
+
+  Widget _workbenchSceneButton({
+    required String sceneKey,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openWorkbenchScene(sceneKey),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFC7D2FE)),
+                ),
+                child: Icon(icon, color: const Color(0xFF4F46E5)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 5),
+                  Text(subtitle, style: const TextStyle(height: 1.4, color: Color(0xFF64748B))),
+                ]),
+              ),
+              const Icon(Icons.chevron_right, color: Color(0xFF94A3B8)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+
+  String _newResolutionWorkflowId(String methodId) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return 'mw_${now}_${(methodId.trim() + _resolutionSituationCtrl.text.trim()).hashCode.abs()}';
+  }
+
+  String _sourcebookSupportLabel(String level) {
+    switch (level.trim()) {
+      case 'direct_mechanism':
+        return '原书直接机制';
+      case 'theoretical_translation':
+        return '源书理论转译';
+      case 'product_extension':
+        return '产品化扩展';
+      default:
+        return '理论转译';
+    }
+  }
+
+  String _diagnoseDissonanceType(String input) {
+    final text = input.toLowerCase();
+    bool hasAny(List<String> keys) => keys.any((k) => text.contains(k.toLowerCase()));
+    if (hasAny(['不敢看', '回避信息', '反馈', '现实', '证据', '结果'])) return 'selective_information_avoidance';
+    if (hasAny(['后悔', '选择', '沉没成本', '投入', '放弃', '选错'])) return 'post_decision_or_sunk_cost';
+    if (hasAny(['关系', '对方', '边界', '沟通', '家人', '朋友'])) return 'interpersonal_balance_conflict';
+    if (hasAny(['内疚', '责任', '亏欠', '伤害', '补救', '道歉'])) return 'responsibility_consequence_conflict';
+    if (hasAny(['自尊', '羞耻', '身份', '价值感', '我不配', '否定自己'])) return 'self_integrity_threat';
+    if (hasAny(['旧信念', '我不行', '做不到', '没能力', '不可能'])) return 'counter_attitudinal_belief_lock';
+    if (hasAny(['必须', '一定', '完了', '标准', '应该', '失败'])) return 'rigid_self_standard_conflict';
+    if (hasAny(['拖延', '逃避', '没做', '行动', '沉迷', '执行', '自律'])) return 'value_behavior_gap';
+    if (hasAny(['解释', '借口', '合理化', '证明'])) return 'defensive_explanation_loop';
+    return 'mixed_cognitive_dissonance';
+  }
+
+  String _diagnosisLabel(String type) {
+    switch (type.trim()) {
+      case 'selective_information_avoidance': return '选择性信息回避';
+      case 'post_decision_or_sunk_cost': return '决策后失调/沉没成本';
+      case 'interpersonal_balance_conflict': return '人际三角失衡';
+      case 'responsibility_consequence_conflict': return '责任—后果失调';
+      case 'self_integrity_threat': return '自我完整性受威胁';
+      case 'counter_attitudinal_belief_lock': return '旧信念锁定';
+      case 'rigid_self_standard_conflict': return '僵硬自我标准冲突';
+      case 'value_behavior_gap': return '价值—行为距离';
+      case 'defensive_explanation_loop': return '防御性解释循环';
+      default: return '混合型认知失调';
+    }
+  }
+
+  List<String> _methodCombinationForDiagnosis(String type) {
+    switch (type.trim()) {
+      case 'self_integrity_threat':
+        return const <String>['self_integrity', 'information_contact', 'counter_attitudinal_experiment', 'behavior_alignment'];
+      case 'selective_information_avoidance':
+        return const <String>['self_integrity', 'information_contact', 'add_integrating_cognition', 'behavior_alignment'];
+      case 'post_decision_or_sunk_cost':
+        return const <String>['choice_recheck', 'belief_reframe', 'behavior_alignment'];
+      case 'interpersonal_balance_conflict':
+        return const <String>['interpersonal_balance', 'belief_reframe', 'behavior_alignment'];
+      case 'value_behavior_gap':
+        return const <String>['behavior_alignment', 'counter_attitudinal_experiment', 'belief_reframe'];
+      default:
+        return const <String>['add_integrating_cognition', 'belief_reframe', 'behavior_alignment'];
+    }
+  }
+
+  Future<void> _bindActiveResolutionMethodUsageToPlan(CcPlanResult result, {String status = 'analysis_generated'}) async {
+    final usageId = _activeResolutionMethodUsageId.trim();
+    if (usageId.isEmpty || result.sessionId.trim().isEmpty) return;
+    await _dao.updateResolutionMethodUsage(
+      usageId: usageId,
+      sessionId: result.sessionId,
+      caseId: 'case_${result.sessionId}',
+      methodWorkflowId: _activeResolutionMethodWorkflowId,
+      dissonanceType: _lastDissonanceDiagnosisType,
+      status: status,
+    );
+  }
+
+  Future<void> _startFullSourcebookCaseDraft() async {
+    final summary = _structuredDissonanceInput().trim().isEmpty
+        ? (_resolutionSituationCtrl.text.trim().isEmpty ? '新的认知失调案例' : _resolutionSituationCtrl.text.trim())
+        : _structuredDissonanceInput().trim();
+    final sid = await _dao.createSourcebookCaseDraft(
+      eventSummary: summary,
+      sourceType: _activeSourceType.trim().isNotEmpty ? _activeSourceType : widget.sourceType,
+      sourceId: _activeSourceId.trim().isNotEmpty ? _activeSourceId : widget.sourceId,
+      initialStage: 'input',
+    );
+    _activeSourcebookDraftSessionId = sid;
+    await _load();
+    if (!mounted) return;
+    _tabs.animateTo(1);
+    _toast('已创建源书案例草稿，请从失调事件输入开始推进。');
+  }
+
+  List<Map<String, dynamic>> _filteredResolutionMethods() {
+    final filter = _resolutionMethodFilter.trim();
+    final methods = _dissonanceResolutionMethods.where((m) {
+      if (filter.isEmpty || filter == 'all') return true;
+      final category = _methodText(m, 'category');
+      final id = _methodText(m, 'id');
+      final scene = _methodText(m, 'sceneKey');
+      final text = '${_methodText(m, 'title')} ${_methodText(m, 'when')} ${_methodText(m, 'core')}'.toLowerCase();
+      switch (filter) {
+        case 'action':
+          return id.contains('behavior') || id.contains('counter') || scene.contains('experiment') || text.contains('行动');
+        case 'explanation':
+          return id.contains('reframe') || id.contains('add_') || text.contains('解释') || text.contains('认知');
+        case 'reality':
+          return id.contains('information') || id.contains('choice') || scene.contains('information') || text.contains('证据') || text.contains('现实');
+        case 'relationship':
+          return id.contains('interpersonal') || scene.contains('interpersonal') || text.contains('关系');
+        case 'identity':
+          return id.contains('self') || scene.contains('identity') || text.contains('身份') || text.contains('自我');
+        default:
+          return category.contains(filter) || id.contains(filter);
+      }
+    }).toList(growable: false);
+    if (_recommendedResolutionMethodIds.isEmpty) return methods;
+    final order = <String, int>{for (var i = 0; i < _recommendedResolutionMethodIds.length; i++) _recommendedResolutionMethodIds[i]: i};
+    methods.sort((a, b) => (order[_methodText(a, 'id')] ?? 99).compareTo(order[_methodText(b, 'id')] ?? 99));
+    return methods;
+  }
+
+  int _scoreResolutionMethod(Map<String, dynamic> method, String input) {
+    final id = _methodText(method, 'id');
+    final scene = _methodText(method, 'sceneKey');
+    final text = input.toLowerCase();
+    var score = 0;
+    void hit(List<String> keys, int value) {
+      for (final k in keys) {
+        if (text.contains(k.toLowerCase())) score += value;
+      }
+    }
+    if (id == 'behavior_alignment') hit(['拖延', '逃避', '没做', '行动', '自律', '努力', '沉迷', '执行'], 4);
+    if (id == 'belief_reframe') hit(['解释', '借口', '合理化', '证明', '否定自己', '自责'], 4);
+    if (id == 'add_integrating_cognition') hit(['矛盾', '冲突', '一方面', '另一方面', '复杂', '不知道'], 3);
+    if (id == 'reduce_rigidity') hit(['必须', '一定', '完了', '应该', '标准', '不配', '失败'], 4);
+    if (id == 'information_contact') hit(['不敢看', '回避信息', '反方', '证据', '现实', '害怕知道'], 5);
+    if (id == 'counter_attitudinal_experiment') hit(['旧信念', '我不行', '做不到', '没能力', '不可能', '实验'], 5);
+    if (id == 'choice_recheck') hit(['后悔', '选择', '沉没成本', '投入', '放弃', '选错'], 5);
+    if (id == 'responsibility_repair') hit(['内疚', '责任', '亏欠', '补救', '道歉', '伤害'], 5);
+    if (id == 'interpersonal_balance') hit(['关系', '对方', '边界', '沟通', '人际', '朋友', '家人'], 5);
+    if (id == 'self_integrity') hit(['自尊', '羞耻', '自我', '身份', '价值感', '完整'], 5);
+    if (score == 0 && (_methodText(method, 'when') + _methodText(method, 'core')).contains(input.trim())) score += 1;
+    if (scene == _specialSceneKey) score += 1;
+    return score;
+  }
+
+  void _recommendResolutionMethods() {
+    final input = _resolutionSituationCtrl.text.trim().isEmpty
+        ? [_goalCtrl.text, _contextCtrl.text, _specialCtrl.text].where((e) => e.trim().isNotEmpty).join('\n')
+        : _resolutionSituationCtrl.text.trim();
+    if (input.trim().isEmpty) {
+      _toast('请先描述当前认知失调、矛盾或卡住点。');
+      return;
+    }
+    final diagnosis = _diagnoseDissonanceType(input);
+    final scored = _dissonanceResolutionMethods
+        .map((m) => <String, dynamic>{'id': _methodText(m, 'id'), 'score': _scoreResolutionMethod(m, input)})
+        .where((m) => (m['score'] as int) > 0)
+        .toList(growable: false)
+      ..sort((a, b) => (b['score'] as int).compareTo(a['score'] as int));
+    final ids = scored.take(3).map((m) => (m['id'] ?? '').toString()).where((e) => e.isNotEmpty).toList(growable: false);
+    setState(() {
+      _lastDissonanceDiagnosisType = diagnosis;
+      _recommendedResolutionMethodIds = ids.isEmpty ? _methodCombinationForDiagnosis(diagnosis).take(3).toList(growable: false) : ids;
+      _resolutionMethodFilter = 'all';
+    });
+    _toast('已识别为：${_diagnosisLabel(diagnosis)}，并推荐 ${_recommendedResolutionMethodIds.length} 个解决方法。');
+  }
+
+  Widget _buildDissonanceResolutionMethodsTab() {
+    final methods = _filteredResolutionMethods();
+    final recommended = _recommendedResolutionMethodIds
+        .map((id) => _dissonanceResolutionMethods.where((m) => _methodText(m, 'id') == id).toList(growable: false))
+        .where((list) => list.isNotEmpty)
+        .map((list) => list.first)
+        .toList(growable: false);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          color: const Color(0xFFFFFBEB),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Row(children: [Icon(Icons.psychology_alt_outlined, color: Color(0xFFD97706)), SizedBox(width: 8), Expanded(child: Text('认知失调解决引擎', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)))]),
+              const SizedBox(height: 8),
+              const Text(
+                '这里不只是方法目录，而是“诊断当前失调 → 推荐方法 → 生成行动契约/Todo → 留下证据 → 复盘方法有效性”的统一入口。',
+                style: TextStyle(height: 1.45, color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _resolutionSituationCtrl,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: '当前卡住点 / 认知失调描述',
+                  hintText: '例如：我明明重视成长，却总是逃避；我害怕看现实反馈；我后悔之前投入太多又不甘心放弃……',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                FilledButton.icon(onPressed: _recommendResolutionMethods, icon: const Icon(Icons.auto_awesome_outlined), label: const Text('诊断并推荐方法')),
+                OutlinedButton.icon(onPressed: () => setState(() => _recommendedResolutionMethodIds = <String>[]), icon: const Icon(Icons.clear_all_outlined), label: const Text('清空推荐')),
+              ]),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _methodFilterChip('all', '全部'),
+                  _methodFilterChip('action', '行动导向'),
+                  _methodFilterChip('explanation', '解释/认知'),
+                  _methodFilterChip('reality', '现实检验'),
+                  _methodFilterChip('relationship', '关系边界'),
+                  _methodFilterChip('identity', '身份/自我'),
+                ],
+              ),
+            ]),
+          ),
+        ),
+        if (recommended.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _infoCard('推荐优先使用的方法', '当前诊断：${_diagnosisLabel(_lastDissonanceDiagnosisType)}。下面 1-3 个方法是根据失调类型与关键词做出的本地推荐。它不是替你决定，而是帮你减少盲目选择，最终仍由你判断。', Icons.recommend_outlined),
+          _resolutionMethodCombinationCard(),
+          ...recommended.map(_dissonanceResolutionMethodCard),
+          const Divider(height: 24),
+        ],
+        const SizedBox(height: 10),
+        ...methods.map(_dissonanceResolutionMethodCard),
+        const SizedBox(height: 10),
+        _resolutionMethodUsageHistoryCard(),
+      ],
+    );
+  }
+
+  Widget _methodFilterChip(String value, String label) {
+    return FilterChip(
+      selected: _resolutionMethodFilter == value,
+      label: Text(label),
+      onSelected: (_) => setState(() => _resolutionMethodFilter = value),
+    );
+  }
+
+  Widget _resolutionMethodUsageHistoryCard() {
+    if (_resolutionMethodUsages.isEmpty) {
+      return _emptyCard('方法使用档案', '你使用某个解决方法、写入 Todo、生成行动契约或完成复盘后，会在这里沉淀为长期方法画像。');
+    }
+    return Card(
+      color: const Color(0xFFF8FAFC),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [Icon(Icons.history_edu_outlined, color: Color(0xFF475569)), SizedBox(width: 8), Expanded(child: Text('最近使用的方法', style: TextStyle(fontWeight: FontWeight.w900)))]),
+          const SizedBox(height: 8),
+          ..._resolutionMethodUsages.take(8).map((u) {
+            final title = (u['method_title'] ?? u['method_id'] ?? '').toString();
+            final status = (u['status'] ?? '').toString();
+            final score = (u['effect_score'] ?? 0).toString();
+            final usageId = (u['usage_id'] ?? '').toString();
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text('状态：$status　效果评分：$score/10', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                if (((u['review_text'] ?? '').toString()).trim().isNotEmpty) Text((u['review_text'] ?? '').toString(), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Color(0xFF475569))),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(onPressed: usageId.isEmpty ? null : () => _reviewResolutionMethodUsage(u), icon: const Icon(Icons.rate_review_outlined, size: 16), label: const Text('复盘')),
+                ),
+              ]),
+            );
+          }),
+        ]),
+      ),
+    );
+  }
+
+
+  Widget _resolutionMethodCombinationCard() {
+    if (_lastDissonanceDiagnosisType.trim().isEmpty) return const SizedBox.shrink();
+    final ids = _methodCombinationForDiagnosis(_lastDissonanceDiagnosisType);
+    final titles = ids.map((id) {
+      final found = _dissonanceResolutionMethods.where((m) => _methodText(m, 'id') == id).toList(growable: false);
+      return found.isEmpty ? id : _methodText(found.first, 'shortTitle');
+    }).where((e) => e.trim().isNotEmpty).toList(growable: false);
+    if (titles.isEmpty) return const SizedBox.shrink();
+    return Card(
+      color: const Color(0xFFF0FDF4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [Icon(Icons.schema_outlined, color: Color(0xFF059669)), SizedBox(width: 8), Expanded(child: Text('推荐方法组合', style: TextStyle(fontWeight: FontWeight.w900)))]),
+          const SizedBox(height: 6),
+          Text('类型：${_diagnosisLabel(_lastDissonanceDiagnosisType)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(titles.join(' → '), style: const TextStyle(height: 1.45, color: Color(0xFF166534))),
+          const SizedBox(height: 6),
+          const Text('组合意义：先降低自我威胁和盲区，再进入现实检验或小行动，最后把方法落实为行动证据。', style: TextStyle(fontSize: 12, color: Color(0xFF166534), height: 1.35)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _dissonanceResolutionMethodCard(Map<String, dynamic> method) {
+    final title = _methodText(method, 'title');
+    final shortTitle = _methodText(method, 'shortTitle');
+    final category = _methodText(method, 'category');
+    final source = _methodText(method, 'source');
+    final supportLevel = _methodText(method, 'supportLevel');
+    final when = _methodText(method, 'when');
+    final core = _methodText(method, 'core');
+    final risk = _methodText(method, 'risk');
+    final quickAction = _methodText(method, 'quickAction');
+    final methodId = _methodText(method, 'id');
+    final isRecommended = _recommendedResolutionMethodIds.contains(methodId);
+    final steps = _methodSteps(method);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: isRecommended ? const Color(0xFFFFFBEB) : null,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(isRecommended ? Icons.recommend_outlined : Icons.auto_fix_high_outlined, color: isRecommended ? const Color(0xFFD97706) : const Color(0xFF4F46E5)),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title.isEmpty ? shortTitle : title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              if (category.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Text(category, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)))),
+            ])),
+          ]),
+          if (source.isNotEmpty) _miniLine('理论来源', source),
+          _miniLine('来源性质', _sourcebookSupportLabel(supportLevel)),
+          if (when.isNotEmpty) _miniLine('适用场景', when),
+          if (core.isNotEmpty) _miniLine('核心机制', core),
+          if (risk.isNotEmpty) _miniLine('风险提醒', risk),
+          if (steps.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            const Text('操作步骤', style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            ...steps.take(6).toList().asMap().entries.map((e) => Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Text('${e.key + 1}. ${e.value}', style: const TextStyle(height: 1.35)),
+            )),
+          ],
+          if (quickAction.isNotEmpty) _miniLine('最小行动', quickAction),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            FilledButton.icon(
+              onPressed: () => _useDissonanceResolutionMethod(method),
+              icon: const Icon(Icons.open_in_new_outlined),
+              label: const Text('使用此方法'),
+            ),
+            OutlinedButton.icon(
+              onPressed: quickAction.isEmpty ? null : () => _writeResolutionMethodToTodo(method),
+              icon: const Icon(Icons.playlist_add_outlined),
+              label: const Text('写入 Todo'),
+            ),
+            OutlinedButton.icon(
+              onPressed: quickAction.isEmpty ? null : () => _createResolutionMethodContract(method),
+              icon: const Icon(Icons.assignment_turned_in_outlined),
+              label: const Text('生成行动契约'),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  String _methodText(Map<String, dynamic> method, String key) {
+    return (method[key] ?? '').toString().trim();
+  }
+
+  List<String> _methodSteps(Map<String, dynamic> method) {
+    final raw = method['steps'];
+    if (raw is List) {
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList(growable: false);
+    }
+    return const <String>[];
+  }
+
+  Future<void> _useDissonanceResolutionMethod(Map<String, dynamic> method) async {
+    final sceneKey = _methodText(method, 'sceneKey').isEmpty ? 'cognitive_structure_map' : _methodText(method, 'sceneKey');
+    final title = _methodText(method, 'title');
+    final methodId = _methodText(method, 'id');
+    final workflowId = _newResolutionWorkflowId(methodId);
+    _activeResolutionMethodWorkflowId = workflowId;
+    final usageId = await _dao.saveResolutionMethodUsage(
+      methodId: methodId,
+      methodTitle: title,
+      sourceType: _activeSourceType.trim().isNotEmpty ? _activeSourceType : widget.sourceType,
+      sourceId: _activeSourceId.trim().isNotEmpty ? _activeSourceId : widget.sourceId,
+      selectedReason: _resolutionSituationCtrl.text,
+      enteredSceneKey: sceneKey,
+      methodWorkflowId: workflowId,
+      dissonanceType: _lastDissonanceDiagnosisType.trim().isEmpty ? _diagnoseDissonanceType(_resolutionSituationCtrl.text) : _lastDissonanceDiagnosisType,
+      sourcebookSupportLevel: _methodText(method, 'supportLevel'),
+      status: 'entered_scene',
+    );
+    _activeResolutionMethodUsageId = usageId;
+    _prefillSpecialFieldsForResolutionMethod(method, sceneKey);
+    await _load();
+    if (!mounted) return;
+    _tabs.animateTo(2);
+    _toast('已进入对应专项场景：${_specialSceneLabels[sceneKey] ?? sceneKey}');
+  }
+
+  void _prefillSpecialFieldsForResolutionMethod(Map<String, dynamic> method, String sceneKey) {
+    final title = _methodText(method, 'title');
+    final when = _methodText(method, 'when');
+    final core = _methodText(method, 'core');
+    final risk = _methodText(method, 'risk');
+    final quickAction = _methodText(method, 'quickAction');
+    final situation = _resolutionSituationCtrl.text.trim();
+    setState(() {
+      _specialSceneKey = sceneKey;
+      _specialPlan = null;
+      _specialCtrl.text = [
+        if (situation.isNotEmpty) '当前失调：$situation',
+        if (title.isNotEmpty) '我想使用的方法：$title',
+        if (when.isNotEmpty) '适用场景：$when',
+        if (core.isNotEmpty) '核心机制：$core',
+        if (risk.isNotEmpty) '风险提醒：$risk',
+        if (quickAction.isNotEmpty) '最小行动：$quickAction',
+      ].join('\n');
+      switch (sceneKey) {
+        case 'counter_attitudinal_experiment':
+          _specialField1Ctrl.text = situation.isNotEmpty ? situation : '限制性旧信念';
+          _specialField2Ctrl.text = core;
+          _specialField3Ctrl.text = quickAction;
+          _specialField4Ctrl.text = '完成后观察：旧信念是否松动？现实发生了什么？';
+          break;
+        case 'interpersonal_balance':
+          _specialField1Ctrl.text = situation;
+          _specialField2Ctrl.text = '共同涉及的观点/事件';
+          _specialField3Ctrl.text = '我对该对象的态度';
+          _specialField4Ctrl.text = '对方对该对象的态度/我需要表达的边界';
+          break;
+        case 'value_layering':
+          _specialField1Ctrl.text = core;
+          _specialField2Ctrl.text = '我正在保护的身份定义';
+          _specialField3Ctrl.text = risk;
+          _specialField4Ctrl.text = quickAction;
+          break;
+        case 'information_avoidance':
+          _specialField1Ctrl.text = situation;
+          _specialField2Ctrl.text = '我回避的反方证据/现实反馈';
+          _specialField3Ctrl.text = risk;
+          _specialField4Ctrl.text = quickAction;
+          break;
+        case 'choice_recheck':
+        case 'sunk_cost':
+          _specialField1Ctrl.text = situation;
+          _specialField2Ctrl.text = '我已经投入/不甘心放弃的部分';
+          _specialField3Ctrl.text = risk;
+          _specialField4Ctrl.text = quickAction;
+          break;
+        case 'responsibility_radar':
+          _specialField1Ctrl.text = situation;
+          _specialField2Ctrl.text = '我真实可负责的部分';
+          _specialField3Ctrl.text = '我可能过度背责/逃避的部分';
+          _specialField4Ctrl.text = quickAction;
+          break;
+        case 'hypocrisy_change':
+          _specialField1Ctrl.text = core.isNotEmpty ? core : '我认同的价值';
+          _specialField2Ctrl.text = situation;
+          _specialField3Ctrl.text = when;
+          _specialField4Ctrl.text = quickAction;
+          break;
+        case 'self_standard_map':
+          _specialField1Ctrl.text = situation;
+          _specialField2Ctrl.text = '这个标准来自：价值、家庭/社会期待或理想自我';
+          _specialField3Ctrl.text = risk;
+          _specialField4Ctrl.text = quickAction.isEmpty ? '把标准改写为可行动的新标准' : quickAction;
+          break;
+        case 'identity_conflict':
+          _specialField1Ctrl.text = '旧身份/旧解释：$situation';
+          _specialField2Ctrl.text = '新身份：更真实、更可行动的我';
+          _specialField3Ctrl.text = core;
+          _specialField4Ctrl.text = quickAction;
+          break;
+        case 'cognitive_structure_map':
+          _specialField1Ctrl.text = core;
+          _specialField2Ctrl.text = situation;
+          _specialField3Ctrl.text = risk;
+          _specialField4Ctrl.text = quickAction;
+          break;
+        default:
+          _specialField1Ctrl.text = core;
+          _specialField2Ctrl.text = when;
+          _specialField3Ctrl.text = risk;
+          _specialField4Ctrl.text = quickAction;
+      }
+    });
+  }
+
+  Future<void> _writeResolutionMethodToTodo(Map<String, dynamic> method) async {
+    final methodId = _methodText(method, 'id');
+    final title = _methodText(method, 'title');
+    final quickAction = _methodText(method, 'quickAction');
+    if (quickAction.isEmpty) {
+      _toast('这个方法还没有可写入的最小行动。');
+      return;
+    }
+    final usageId = await _dao.saveResolutionMethodUsage(
+      methodId: methodId,
+      methodTitle: title,
+      sourceType: _activeSourceType.trim().isNotEmpty ? _activeSourceType : widget.sourceType,
+      sourceId: _activeSourceId.trim().isNotEmpty ? _activeSourceId : widget.sourceId,
+      selectedReason: _resolutionSituationCtrl.text,
+      enteredSceneKey: _methodText(method, 'sceneKey'),
+      methodWorkflowId: _newResolutionWorkflowId(methodId),
+      dissonanceType: _lastDissonanceDiagnosisType.trim().isEmpty ? _diagnoseDissonanceType(_resolutionSituationCtrl.text) : _lastDissonanceDiagnosisType,
+      sourcebookSupportLevel: _methodText(method, 'supportLevel'),
+      status: 'todo_requested',
+    );
+    await _quickCreateTodoActionFromText(
+      quickAction,
+      title.isEmpty ? '认知失调解决方法' : title,
+      actionType: 'dissonance_resolution_method',
+      afterCreated: (stepId) async {
+        await _dao.updateResolutionMethodUsage(usageId: usageId, todoStepId: stepId, status: 'todo_created');
+        await _dao.saveActionTraceLink(fromType: 'cc_resolution_method', fromId: methodId, toType: 'todo_goal_step', toId: stepId, relationType: 'method_written_to_todo');
+      },
+    );
+    await _load();
+  }
+
+  Future<void> _createResolutionMethodContract(Map<String, dynamic> method) async {
+    final methodId = _methodText(method, 'id');
+    final title = _methodText(method, 'title');
+    final quickAction = _methodText(method, 'quickAction');
+    final usageId = await _dao.saveResolutionMethodUsage(
+      methodId: methodId,
+      methodTitle: title,
+      sourceType: _activeSourceType.trim().isNotEmpty ? _activeSourceType : widget.sourceType,
+      sourceId: _activeSourceId.trim().isNotEmpty ? _activeSourceId : widget.sourceId,
+      selectedReason: _resolutionSituationCtrl.text,
+      enteredSceneKey: _methodText(method, 'sceneKey'),
+      methodWorkflowId: _newResolutionWorkflowId(methodId),
+      dissonanceType: _lastDissonanceDiagnosisType.trim().isEmpty ? _diagnoseDissonanceType(_resolutionSituationCtrl.text) : _lastDissonanceDiagnosisType,
+      sourcebookSupportLevel: _methodText(method, 'supportLevel'),
+      status: 'contract_requested',
+    );
+    await _dao.createSourcebookContractFromMethod(
+      methodId: methodId,
+      methodTitle: title,
+      minimalAction: quickAction,
+      coreValue: _methodText(method, 'core'),
+      currentBehavior: _resolutionSituationCtrl.text,
+      completionStandard: '完成这个方法对应的最小行动，并记录它是否降低了失调。',
+      fallbackPlan: '如果阻力太大，把行动缩小到 2 分钟版本，但仍要留下一个现实证据。',
+      reflectionQuestions: '这个方法是否帮助我更接近事实、价值和行动？它有没有变成新的合理化？',
+      usageId: usageId,
+    );
+    await _load();
+    _tabs.animateTo(8);
+    _toast('已生成源书行动契约，可在源书工作台/案例列表中继续推进。');
+  }
+
+  Future<void> _reviewResolutionMethodUsage(Map<String, dynamic> usage) async {
+    final usageId = (usage['usage_id'] ?? '').toString();
+    if (usageId.trim().isEmpty) return;
+    final reviewCtrl = TextEditingController(text: (usage['review_text'] ?? '').toString());
+    final riskCtrl = TextEditingController(text: (usage['risk_note'] ?? '').toString());
+    final nextCtrl = TextEditingController(text: (usage['next_use_suggestion'] ?? '').toString());
+    var score = int.tryParse((usage['effect_score'] ?? '0').toString()) ?? 0;
+    var reduced = ((usage['reduced_dissonance'] ?? 0).toString() == '1');
+    var produced = ((usage['produced_evidence'] ?? 0).toString() == '1');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('复盘方法有效性'),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text((usage['method_title'] ?? usage['method_id'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 10),
+            TextField(controller: reviewCtrl, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '这个方法如何影响了本次失调？', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: riskCtrl, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: '有没有被误用成合理化/逃避？', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: nextCtrl, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: '下次是否继续使用/如何调整？', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            Row(children: [const Text('效果评分'), Expanded(child: Slider(value: score.toDouble(), min: 0, max: 10, divisions: 10, label: '$score', onChanged: (v) => setDialogState(() => score = v.round())))]),
+            CheckboxListTile(value: reduced, onChanged: (v) => setDialogState(() => reduced = v ?? reduced), title: const Text('它确实降低/转化了失调')),
+            CheckboxListTile(value: produced, onChanged: (v) => setDialogState(() => produced = v ?? produced), title: const Text('它产生了现实行动证据')),
+          ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('保存复盘')),
+          ],
+        ),
+      ),
+    );
+    if (saved == true) {
+      var evidenceId = (usage['evidence_id'] ?? '').toString().trim();
+      if (produced && evidenceId.isEmpty) {
+        final methodTitle = (usage['method_title'] ?? usage['method_id'] ?? '认知失调解决方法').toString();
+        final sessionId = (usage['session_id'] ?? '').toString();
+        evidenceId = await _dao.saveEvidence(
+          sessionId: sessionId,
+          userGoal: _resolutionSituationCtrl.text.trim().isEmpty ? methodTitle : _resolutionSituationCtrl.text.trim(),
+          plannedAction: methodTitle,
+          completedAction: '完成方法复盘：$methodTitle',
+          userReflection: reviewCtrl.text.trim().isEmpty ? '该方法产生了现实行动证据。' : reviewCtrl.text.trim(),
+          evidenceLabel: '方法复盘证据：$methodTitle',
+          valueLink: _valuesCtrl.text,
+          oldStory: '旧解释：只能靠想清楚才能改变。',
+          newStory: '新证据：我可以选择一种方法，行动或检验后再复盘其效果。',
+          evidenceCategory: 'review',
+          identityDirection: 'method_based_integrator',
+          rewardSource: 'dissonance_resolution_method_review',
+          sourceType: 'cc_resolution_method_usage',
+          sourceId: usageId,
+          dissonanceReductionMode: reduced ? 'method_review_with_evidence' : 'method_review_needs_more_evidence',
+          effortMinutes: 1,
+          difficultyScore: 1,
+        );
+      }
+      await _dao.updateResolutionMethodUsage(
+        usageId: usageId,
+        evidenceId: evidenceId,
+        status: 'reviewed',
+        reviewText: reviewCtrl.text,
+        riskNote: riskCtrl.text,
+        nextUseSuggestion: nextCtrl.text,
+        effectScore: score,
+        reducedDissonance: reduced,
+        producedEvidence: produced,
+      );
+      if (_activeResolutionMethodUsageId == usageId) {
+        _activeResolutionMethodUsageId = '';
+        _activeResolutionMethodWorkflowId = '';
+      }
+      await _load();
+      _toast('已保存方法复盘${evidenceId.isNotEmpty ? '，并写入证据账本。' : '。'}');
+    }
+    reviewCtrl.dispose();
+    riskCtrl.dispose();
+    nextCtrl.dispose();
+  }
+
+  Widget _buildSourcebookWorkbenchTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFEEF2FF), Color(0xFFFFFBEB)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: Color(0xFFC7D2FE)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+            Text('源书工作台：从矛盾信号到行动一致', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: Color(0xFF1E1B4B))),
+            SizedBox(height: 8),
+            Text('基于《Theories of Cognitive Consistency: A Sourcebook》：不把矛盾当作失败，也不急着合理化，而是把信念、行为、自我形象、关系和现实反馈放在一起，区分自我保护与现实修正，最后落到一个可执行承诺。', style: TextStyle(height: 1.5, color: Color(0xFF475569))),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        _infoCard('完整闭环', '发现不一致 → 绘制认知结构 → 判断矛盾类型 → 识别自我辩护 → 分析心理功能 → 区分核心价值/身份信念/外围解释 → 接触反方证据 → 设计反态度小实验 → 签订一致性行动契约 → 保存证据并复盘整合。', Icons.route_outlined, emphasize: true),
+        _sourcebookFlowCard(),
+        Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.icon(onPressed: _startFullSourcebookCaseDraft, icon: const Icon(Icons.play_circle_outline), label: const Text('开始一个完整源书案例')),
+              OutlinedButton.icon(onPressed: _showAllSourcebookCases, icon: const Icon(Icons.folder_open_outlined), label: const Text('查看全部源书案例')),
+              OutlinedButton.icon(onPressed: () => _tabs.animateTo(9), icon: const Icon(Icons.psychology_alt_outlined), label: const Text('查看解决方法')),
+            ]),
+          ),
+        ),
+        _sourcebookRecentCaseCard(),
+        _infoCard('解决方法已单独成库', '如果你现在不是想从理论流程开始，而是想直接选择一种处理认知失调的方法，可以进入“解决方法”Tab。每个方法都会跳转到对应专项场景，并继续连接行动契约、Todo 与证据账本。', Icons.auto_fix_high_outlined),
+        _infoCard('AI 的角色边界', 'AI 不替你做最终选择，也不把你定义为懒惰、失败或自欺。它提供结构化分析、多种解释、判断标准、低风险现实检验和最小行动，最终选择权交还给你。', Icons.psychology_alt_outlined),
+        const SizedBox(height: 6),
+        const Text('核心功能入口', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        _workbenchSceneButton(
+          sceneKey: 'cognitive_structure_map',
+          icon: Icons.account_tree_outlined,
+          title: '认知结构地图',
+          subtitle: '把信念、态度、行为、自我形象、关系和现实反馈拆成节点，看到哪里一致、哪里冲突。',
+        ),
+        _workbenchSceneButton(
+          sceneKey: 'conflict_type_router',
+          icon: Icons.call_split_outlined,
+          title: '矛盾类型分流器',
+          subtitle: '区分信念冲突、价值—行为冲突、自我—现实冲突、角色冲突、决策后失调。',
+        ),
+        _workbenchSceneButton(
+          sceneKey: 'psychological_function',
+          icon: Icons.shield_outlined,
+          title: '心理功能分析器',
+          subtitle: '不只判断想法对错，而是看它保护了什么、回避了什么、过去怎样帮助你、现在怎样限制你。',
+        ),
+        _workbenchSceneButton(
+          sceneKey: 'value_layering',
+          icon: Icons.layers_outlined,
+          title: '核心价值 / 身份信念 / 外围解释',
+          subtitle: '保留真正核心价值，松动过度僵硬的身份信念，检验临时解释与借口。',
+        ),
+        _workbenchSceneButton(
+          sceneKey: 'choice_recheck',
+          icon: Icons.alt_route_outlined,
+          title: '决策后失调工作台',
+          subtitle: '处理选择后的后悔、沉没成本、努力合理化和“必须证明我没选错”的冲动。',
+        ),
+        _workbenchSceneButton(
+          sceneKey: 'information_avoidance',
+          icon: Icons.visibility_outlined,
+          title: '选择性信息接触训练',
+          subtitle: '识别只看支持性证据的循环，把反方证据降级成低风险现实接触行动。',
+        ),
+        _workbenchSceneButton(
+          sceneKey: 'interpersonal_balance',
+          icon: Icons.people_alt_outlined,
+          title: '人际平衡分析器',
+          subtitle: '分析“我—他人—对象/观点/事件”三角关系，区分人、观点、边界和沟通。',
+        ),
+        _workbenchSceneButton(
+          sceneKey: 'counter_attitudinal_experiment',
+          icon: Icons.science_outlined,
+          title: '反态度行为实验',
+          subtitle: '用一个 5-15 分钟的小行动证明旧自我叙事不是绝对事实。',
+        ),
+        Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('行动与档案闭环', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                OutlinedButton.icon(onPressed: () => _tabs.animateTo(3), icon: const Icon(Icons.timer_outlined, size: 18), label: const Text('一致性行动契约')),
+                OutlinedButton.icon(onPressed: () => _tabs.animateTo(4), icon: const Icon(Icons.inventory_2_outlined, size: 18), label: const Text('一致性成长档案')),
+                OutlinedButton.icon(onPressed: () => _tabs.animateTo(7), icon: const Icon(Icons.assessment_outlined, size: 18), label: const Text('长期报告')),
+                OutlinedButton.icon(onPressed: () => _tabs.animateTo(1), icon: const Icon(Icons.radar_outlined, size: 18), label: const Text('快速失调雷达')),
+              ]),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+
+  Widget _sourcebookFlowCard() {
+    const stages = <String>['输入事件', '认知地图', '矛盾分流', '自我辩护', '心理功能', '价值分层', '现实检验', '行动契约', '复盘整合'];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: const Color(0xFFF8FAFC),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [Icon(Icons.schema_outlined, color: Color(0xFF4F46E5)), SizedBox(width: 8), Text('源书连续流程引擎', style: TextStyle(fontWeight: FontWeight.w900))]),
+          const SizedBox(height: 8),
+          const Text('每个分析结果都会保存为一个 sourcebook case，并同步沉淀认知节点、冲突边、价值分层、用户选择、行动契约与验证任务。', style: TextStyle(height: 1.45, color: Color(0xFF475569))),
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, children: stages.map(_pill).toList()),
+        ]),
+      ),
+    );
+  }
+
+  Widget _sourcebookRecentCaseCard() {
+    const sourcebookKeys = <String>{
+      'cognitive_structure_map', 'conflict_type_router', 'psychological_function', 'value_layering',
+      'interpersonal_balance', 'counter_attitudinal_experiment', 'choice_recheck', 'sunk_cost',
+      'information_avoidance', 'identity_conflict', 'dissonance_analysis', 'target_to_action'
+    };
+    final cases = _sessions.where((s) => sourcebookKeys.contains(s.sceneType)).take(5).toList(growable: false);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [Icon(Icons.folder_copy_outlined, color: Color(0xFF0F766E)), SizedBox(width: 8), Text('最近源书案例档案', style: TextStyle(fontWeight: FontWeight.w900))]),
+          const SizedBox(height: 8),
+          if (cases.isEmpty)
+            const Text('暂无源书案例。点击下方任一入口，生成后会自动进入案例档案。', style: TextStyle(color: Color(0xFF6B7280)))
+          else
+            ...cases.map((s) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text('${_specialSceneLabels[s.sceneType] ?? s.sceneType}｜${s.userGoal}', maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(_sourcebookIntegratedText(s.result), maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: Wrap(spacing: 4, children: [
+                IconButton(tooltip: '打开完整案例档案', icon: const Icon(Icons.folder_open_outlined), onPressed: () => _showSourcebookCaseDetail(s.result)),
+                IconButton(tooltip: '进入场景继续分析', icon: const Icon(Icons.chevron_right), onPressed: () {
+                  setState(() {
+                    _specialSceneKey = s.sceneType;
+                    _specialPlan = s.result;
+                    _applyPlan(s.result);
+                  });
+                  _tabs.animateTo(2);
+                }),
+              ]),
+              onTap: () => _showSourcebookCaseDetail(s.result),
+            )),
+        ]),
+      ),
+    );
+  }
+
+
+  Future<void> _showAllSourcebookCases() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => const CcSourcebookCaseListPage()),
+    );
+    if (mounted) await _load();
   }
 
   Widget _buildValueCompassTab() {
@@ -2834,6 +4008,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         if (_hasModernResponsibility(plan)) _responsibilityBoundaryCard(plan),
         if (_hasSelfStandards(plan)) _selfStandardsCard(plan),
         if (_hasRationalizationMap(plan)) _rationalizationMapCard(plan),
+        if (_hasSourcebookStructuredResult(plan)) _sourcebookStructuredResultCard(plan),
         if (_hasSpecialStructuredResult(plan)) _specialStructuredResultCard(plan),
         if (_hasTrueSelfBridge(plan)) _trueSelfBridgeCard(plan),
         _infoCard('二、这不是失败，而是改变入口', plan.changeEntry, Icons.door_front_door_outlined),
@@ -2848,6 +4023,14 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         Row(children: [
           Expanded(child: FilledButton.icon(onPressed: () => _activatePlan(plan, rewardSource: rewardSource, sourceType: sourceType, sourceId: sourceId), icon: const Icon(Icons.play_arrow), label: const Text('设为当前行动并进入陪伴'))),
         ]),
+        if (plan.sessionId.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(onPressed: () => _confirmSourcebookAnalysis(plan, 'confirmed'), icon: const Icon(Icons.check_circle_outline, size: 18), label: const Text('确认分析基本准确')),
+            OutlinedButton.icon(onPressed: () => _confirmSourcebookAnalysis(plan, 'partial'), icon: const Icon(Icons.tune_outlined, size: 18), label: const Text('部分准确，后续修正')),
+            OutlinedButton.icon(onPressed: () => _confirmSourcebookAnalysis(plan, 'needs_revision'), icon: const Icon(Icons.edit_note_outlined, size: 18), label: const Text('需要重新修正')),
+          ]),
+        ],
       ],
     );
   }
@@ -3043,6 +4226,606 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
         p.protectiveFunction.trim().isNotEmpty ||
         p.longTermCost.trim().isNotEmpty ||
         p.honestReframe.trim().isNotEmpty;
+  }
+
+
+  Map<String, dynamic> _planJson(CcPlanResult p) {
+    final raw = p.rawResponse.trim();
+    if (raw.isEmpty) return const <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    try {
+      final start = raw.indexOf('{');
+      final end = raw.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        final decoded = jsonDecode(raw.substring(start, end + 1));
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return const <String, dynamic>{};
+  }
+
+  Map<String, dynamic> _mapDyn(dynamic value) => value is Map ? Map<String, dynamic>.from(value) : const <String, dynamic>{};
+  List<dynamic> _listDyn(dynamic value) => value is List ? value : const <dynamic>[];
+
+  String _textDyn(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    if (value is List) return value.map(_textDyn).where((e) => e.isNotEmpty).join('、');
+    if (value is Map) {
+      return value.entries.map((e) => '${e.key}：${_textDyn(e.value)}').where((e) => !e.endsWith('：')).join('\n');
+    }
+    return value.toString().trim();
+  }
+
+  Map<String, dynamic> _sourcebookMap(CcPlanResult p) {
+    final parsed = _planJson(p);
+    final sourcebook = _mapDyn(parsed['sourcebookAnalysis']);
+    final merged = <String, dynamic>{...(sourcebook.isEmpty ? parsed : sourcebook)};
+    final detail = _sourcebookDetailsBySessionId[p.sessionId.trim()];
+    if (detail != null && detail.isNotEmpty) {
+      final caseMap = _mapDyn(detail['case']);
+      if (caseMap.isNotEmpty) {
+        merged['currentStage'] = _textDyn(caseMap['current_stage']).isNotEmpty ? _textDyn(caseMap['current_stage']) : merged['currentStage'];
+        merged['userConfirmation'] = _textDyn(caseMap['user_confirmation']);
+        merged['integratedSelfStatement'] = _textDyn(caseMap['integrated_self_statement']).isNotEmpty ? _textDyn(caseMap['integrated_self_statement']) : merged['integratedSelfStatement'];
+      }
+      final nodes = _listDyn(detail['nodes']);
+      final edges = _listDyn(detail['edges']);
+      if (nodes.isNotEmpty || edges.isNotEmpty) {
+        merged['cognitiveStructureMap'] = <String, dynamic>{'nodes': nodes, 'edges': edges};
+      }
+      final vl = _mapDyn(detail['valueLayers']);
+      if (vl.isNotEmpty) {
+        merged['valueLayers'] = <String, dynamic>{
+          'coreValues': _textDyn(vl['core_values']),
+          'identityBeliefs': _textDyn(vl['identity_beliefs']),
+          'peripheralExplanations': _textDyn(vl['peripheral_explanations']),
+          'keepItems': _textDyn(vl['keep_items']),
+          'loosenItems': _textDyn(vl['loosen_items']),
+          'testItems': _textDyn(vl['test_items']),
+          'integratedStatement': _textDyn(vl['integrated_statement']),
+        };
+      }
+      final choices = _listDyn(detail['choices']);
+      if (choices.isNotEmpty) merged['userChoiceOptions'] = choices;
+      final interpersonal = _mapDyn(detail['interpersonalBalance']);
+      if (interpersonal.isNotEmpty) merged['interpersonalBalance'] = interpersonal;
+      final experiment = _mapDyn(detail['counterExperiment']);
+      if (experiment.isNotEmpty) merged['counterAttitudinalExperiment'] = experiment;
+      final contract = _mapDyn(detail['commitmentContract']);
+      if (contract.isNotEmpty) merged['commitmentAction'] = contract;
+      final protectedSelf = _listDyn(detail['protectedSelfImage']);
+      if (protectedSelf.isNotEmpty) merged['protectedSelfImage'] = protectedSelf;
+      final defensePatterns = _listDyn(detail['defensePatterns']);
+      if (defensePatterns.isNotEmpty) merged['defensePatterns'] = defensePatterns;
+      final confirmations = _listDyn(detail['confirmations']);
+      if (confirmations.isNotEmpty) merged['confirmations'] = confirmations;
+      final evidence = _listDyn(detail['evidence']);
+      if (evidence.isNotEmpty) merged['caseEvidence'] = evidence;
+      final verification = _listDyn(detail['verificationTasks']);
+      if (verification.isNotEmpty) merged['caseVerificationTasks'] = verification;
+    }
+    return merged;
+  }
+
+  String _sourcebookIntegratedText(CcPlanResult p) {
+    final m = _sourcebookMap(p);
+    final layers = _mapDyn(m['valueLayers']);
+    final direct = _textDyn(m['integratedSelfStatement']);
+    if (direct.isNotEmpty) return direct;
+    final layered = _textDyn(layers['integratedStatement']);
+    if (layered.isNotEmpty) return layered;
+    return p.honestReframe.trim().isNotEmpty ? p.honestReframe.trim() : p.postActionExplanation;
+  }
+
+  bool _hasSourcebookStructuredResult(CcPlanResult p) {
+    final m = _sourcebookMap(p);
+    return _mapDyn(m['cognitiveStructureMap']).isNotEmpty ||
+        _mapDyn(m['conflictTypeRouting']).isNotEmpty ||
+        _mapDyn(m['psychologicalFunction']).isNotEmpty ||
+        _mapDyn(m['valueLayers']).isNotEmpty ||
+        _mapDyn(m['alternativeInterpretations']).isNotEmpty ||
+        _listDyn(m['userChoiceOptions']).isNotEmpty ||
+        _mapDyn(m['interpersonalBalance']).isNotEmpty ||
+        _mapDyn(m['counterAttitudinalExperiment']).isNotEmpty ||
+        _mapDyn(m['commitmentAction']).isNotEmpty ||
+        _listDyn(m['protectedSelfImage']).isNotEmpty ||
+        _listDyn(m['defensePatterns']).isNotEmpty ||
+        _listDyn(m['realityTestingQuestions']).isNotEmpty ||
+        _textDyn(m['integratedSelfStatement']).isNotEmpty;
+  }
+
+  Widget _sourcebookStructuredResultCard(CcPlanResult p) {
+    final m = _sourcebookMap(p);
+    final map = _mapDyn(m['cognitiveStructureMap']);
+    final nodes = _listDyn(map['nodes']);
+    final edges = _listDyn(map['edges']);
+    final routing = _mapDyn(m['conflictTypeRouting']);
+    final function = _mapDyn(m['psychologicalFunction']);
+    final layers = _mapDyn(m['valueLayers']);
+    final alternatives = _mapDyn(m['alternativeInterpretations']);
+    final interpersonal = _mapDyn(m['interpersonalBalance']);
+    final experiment = _mapDyn(m['counterAttitudinalExperiment']);
+    final contract = _mapDyn(m['commitmentAction']);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: const Color(0xFFFFFBEB),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [Icon(Icons.hub_outlined, color: Color(0xFFD97706)), SizedBox(width: 8), Expanded(child: Text('V25 认知失调解决引擎结果', style: TextStyle(fontWeight: FontWeight.w900)))]),
+          const SizedBox(height: 8),
+          if (_listDyn(m['protectedSelfImage']).isNotEmpty) _miniLine('被保护的自我形象', _textDyn(m['protectedSelfImage'])),
+          if (_listDyn(m['defensePatterns']).isNotEmpty) _miniLine('自我辩护/防御模式', _textDyn(m['defensePatterns'])),
+          if (nodes.isNotEmpty) _sourcebookNodeStatusCard(p, nodes),
+          if (edges.isNotEmpty) _sourcebookEdgeStatusCard(p, edges),
+          if (_listDyn(routing['types']).isNotEmpty) _sourcebookSubCard('矛盾类型分流', Icons.call_split_outlined, _listDyn(routing['types']).map((e) => _textDyn(e)).where((e) => e.isNotEmpty).toList()),
+          if (function.isNotEmpty) _sourcebookKeyValueCard('心理功能分析', function),
+          if (layers.isNotEmpty) _sourcebookKeyValueCard('核心价值 / 身份信念 / 外围解释', layers),
+          if (alternatives.isNotEmpty) _sourcebookKeyValueCard('三种可能解释', alternatives),
+          if (_listDyn(m['realityTestingQuestions']).isNotEmpty) _sourcebookSubCard('现实检验问题', Icons.fact_check_outlined, _listDyn(m['realityTestingQuestions']).map(_textDyn).where((e) => e.isNotEmpty).toList()),
+          if (_listDyn(m['userChoiceOptions']).isNotEmpty) _sourcebookChoiceOptionsCard(p, _listDyn(m['userChoiceOptions'])),
+          if (interpersonal.isNotEmpty) _sourcebookInterpersonalCard(p, interpersonal),
+          if (experiment.isNotEmpty) _sourcebookCounterExperimentCard(p, experiment),
+          if (contract.isNotEmpty) _sourcebookContractCard(p, contract),
+          if (_listDyn(m['reflectionQuestions']).isNotEmpty) _sourcebookSubCard('复盘问题', Icons.rate_review_outlined, _listDyn(m['reflectionQuestions']).map(_textDyn).where((e) => e.isNotEmpty).toList()),
+          if (_sourcebookIntegratedText(p).trim().isNotEmpty) _miniLine('新的整合性表达', _sourcebookIntegratedText(p)),
+        ]),
+      ),
+    );
+  }
+
+
+  Widget _sourcebookNodeStatusCard(CcPlanResult p, List<dynamic> nodes) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Icon(Icons.account_tree_outlined, size: 18, color: Color(0xFFD97706)), SizedBox(width: 6), Text('认知结构节点｜可确认/修正', style: TextStyle(fontWeight: FontWeight.w900))]),
+        const SizedBox(height: 6),
+        ...nodes.take(10).map((raw) {
+          final n = _mapDyn(raw);
+          final id = _textDyn(n['node_id']);
+          final title = _textDyn(n['label']).isNotEmpty ? _textDyn(n['label']) : _textDyn(n['nodeType']);
+          final content = _textDyn(n['content']).isNotEmpty ? _textDyn(n['content']) : _textDyn(raw);
+          final status = _textDyn(n['user_status']).isEmpty ? 'ai_generated' : _textDyn(n['user_status']);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _miniLine('$title｜$status', content),
+              if (id.isNotEmpty) Wrap(spacing: 6, runSpacing: 4, children: [
+                TextButton.icon(onPressed: () => _updateNodeStatus(id, 'confirmed'), icon: const Icon(Icons.check, size: 16), label: const Text('准确')),
+                TextButton.icon(onPressed: () => _editSourcebookNodeDialog(n), icon: const Icon(Icons.edit_outlined, size: 16), label: const Text('需修正')),
+                TextButton.icon(onPressed: () => _updateNodeStatus(id, 'rejected'), icon: const Icon(Icons.close, size: 16), label: const Text('不成立')),
+              ]),
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  Widget _sourcebookEdgeStatusCard(CcPlanResult p, List<dynamic> edges) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Icon(Icons.compare_arrows_outlined, size: 18, color: Color(0xFFD97706)), SizedBox(width: 6), Text('冲突/一致关系边｜可确认/修正', style: TextStyle(fontWeight: FontWeight.w900))]),
+        const SizedBox(height: 6),
+        ...edges.take(10).map((raw) {
+          final e = _mapDyn(raw);
+          final id = _textDyn(e['edge_id']);
+          final from = _textDyn(e['from_label']).isNotEmpty ? _textDyn(e['from_label']) : _textDyn(e['from']);
+          final to = _textDyn(e['to_label']).isNotEmpty ? _textDyn(e['to_label']) : _textDyn(e['to']);
+          final relation = _textDyn(e['relation_type']).isNotEmpty ? _textDyn(e['relation_type']) : _textDyn(e['relationType']);
+          final desc = _textDyn(e['description']);
+          final status = _textDyn(e['user_status']).isEmpty ? 'ai_generated' : _textDyn(e['user_status']);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _miniLine('$from → $to｜$relation｜$status', desc),
+              if (id.isNotEmpty) Wrap(spacing: 6, runSpacing: 4, children: [
+                TextButton.icon(onPressed: () => _updateEdgeStatus(id, 'confirmed'), icon: const Icon(Icons.check, size: 16), label: const Text('准确')),
+                TextButton.icon(onPressed: () => _editSourcebookEdgeDialog(e), icon: const Icon(Icons.edit_outlined, size: 16), label: const Text('需修正')),
+                TextButton.icon(onPressed: () => _updateEdgeStatus(id, 'rejected'), icon: const Icon(Icons.close, size: 16), label: const Text('不成立')),
+              ]),
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  Widget _sourcebookChoiceOptionsCard(CcPlanResult p, List<dynamic> options) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Icon(Icons.touch_app_outlined, size: 18, color: Color(0xFFD97706)), SizedBox(width: 6), Text('用户自主选择区｜AI 给方向，选择权交还给用户', style: TextStyle(fontWeight: FontWeight.w900))]),
+        const SizedBox(height: 6),
+        ...options.map((raw) {
+          final m = _mapDyn(raw);
+          final id = _textDyn(m['choice_id']);
+          final label = _textDyn(m['label']).isNotEmpty ? _textDyn(m['label']) : '可选方向';
+          final desc = _textDyn(m['description']);
+          final action = _textDyn(m['next_action']).isNotEmpty ? _textDyn(m['next_action']) : _textDyn(m['nextAction']);
+          final selected = _textDyn(m['selected']) == '1' || m['selected'] == 1 || m['selected'] == true;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: selected ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _miniLine(selected ? '已选择：$label' : label, desc),
+              if (action.isNotEmpty) _miniLine('下一步', action),
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                if (id.isNotEmpty) TextButton.icon(onPressed: () => _selectSourcebookChoice(id), icon: const Icon(Icons.check_circle_outline, size: 16), label: const Text('选择这个方向')),
+                if (action.isNotEmpty) TextButton.icon(onPressed: () => _quickCreateTodoActionFromText(action, label, actionType: 'sourcebook_choice_action'), icon: const Icon(Icons.playlist_add_outlined, size: 16), label: const Text('写入 Todo')),
+              ]),
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  Widget _sourcebookContractCard(CcPlanResult p, Map<String, dynamic> data) {
+    final id = _textDyn(data['contract_id']);
+    final action = _textDyn(data['minimal_repair_action']).isNotEmpty ? _textDyn(data['minimal_repair_action']) : _textDyn(data['minimalRepairAction']);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('一致性行动契约｜可执行、可完成、可复盘', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF92400E))),
+        const SizedBox(height: 6),
+        _sourcebookKeyValueCard('契约内容', data),
+        Wrap(spacing: 8, runSpacing: 6, children: [
+          if (action.isNotEmpty) TextButton.icon(onPressed: () => _activateSourcebookContract(p, data), icon: const Icon(Icons.play_arrow_outlined, size: 16), label: const Text('设为当前行动')),
+          if (action.isNotEmpty) TextButton.icon(onPressed: () => _quickCreateTodoActionFromText(action, '源书行动契约', actionType: 'sourcebook_contract'), icon: const Icon(Icons.playlist_add_outlined, size: 16), label: const Text('写入 Todo')),
+          if (id.isNotEmpty) TextButton.icon(onPressed: () => _completeSourcebookContractDialog(id, action), icon: const Icon(Icons.task_alt_outlined, size: 16), label: const Text('完成并写入证据')),
+          if (id.isNotEmpty) TextButton.icon(onPressed: () => _reviewIncompleteSourcebookContractDialog(id, status: 'failed'), icon: const Icon(Icons.report_problem_outlined, size: 16), label: const Text('未完成复盘')),
+          if (id.isNotEmpty) TextButton.icon(onPressed: () => _reviewIncompleteSourcebookContractDialog(id, status: 'adjusted'), icon: const Icon(Icons.tune_outlined, size: 16), label: const Text('调整/降级')),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _sourcebookCounterExperimentCard(CcPlanResult p, Map<String, dynamic> data) {
+    final id = _textDyn(data['experiment_id']);
+    final action = _textDyn(data['experiment_action']).isNotEmpty ? _textDyn(data['experiment_action']) : _textDyn(data['experimentAction']);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('反态度行为实验｜用小行动松动旧信念', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF92400E))),
+        const SizedBox(height: 6),
+        _sourcebookKeyValueCard('实验内容', data),
+        Wrap(spacing: 8, runSpacing: 6, children: [
+          if (action.isNotEmpty) TextButton.icon(onPressed: () => _quickCreateTodoActionFromText(action, '反态度行为实验', actionType: 'counter_attitudinal_experiment'), icon: const Icon(Icons.playlist_add_outlined, size: 16), label: const Text('写入 Todo')),
+          if (id.isNotEmpty) TextButton.icon(onPressed: () => _reviewCounterExperimentDialog(id), icon: const Icon(Icons.rate_review_outlined, size: 16), label: const Text('实验复盘')),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _sourcebookInterpersonalCard(CcPlanResult p, Map<String, dynamic> data) {
+    final id = _textDyn(data['record_id']);
+    final action = _textDyn(data['boundary_action']).isNotEmpty ? _textDyn(data['boundary_action']) : _textDyn(data['boundaryAction']);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('人际平衡分析｜从三角失衡走向边界/沟通行动', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF92400E))),
+        const SizedBox(height: 6),
+        _sourcebookKeyValueCard('人际结构', data),
+        Wrap(spacing: 8, runSpacing: 6, children: [
+          if (action.isNotEmpty) TextButton.icon(onPressed: () => _quickCreateTodoActionFromText(action, '人际边界/沟通行动', actionType: 'interpersonal_balance_action'), icon: const Icon(Icons.playlist_add_outlined, size: 16), label: const Text('写入沟通/边界行动')),
+          if (id.isNotEmpty) TextButton.icon(onPressed: () => _completeInterpersonalActionDialog(id), icon: const Icon(Icons.task_alt_outlined, size: 16), label: const Text('记录沟通结果')),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _sourcebookSubCard(String title, IconData icon, List<String> lines) {
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 18, color: const Color(0xFFD97706)), const SizedBox(width: 6), Text(title, style: const TextStyle(fontWeight: FontWeight.w900))]),
+        const SizedBox(height: 6),
+        ...lines.map((e) => Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('• $e', style: const TextStyle(height: 1.35)))),
+      ]),
+    );
+  }
+
+  Widget _sourcebookKeyValueCard(String title, Map<String, dynamic> data) {
+    final entries = data.entries.where((e) => _textDyn(e.value).isNotEmpty).toList(growable: false);
+    if (entries.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF92400E))),
+        const SizedBox(height: 6),
+        ...entries.map((e) => _miniLine(e.key.toString(), _textDyn(e.value))),
+      ]),
+    );
+  }
+
+
+  Future<void> _updateNodeStatus(String nodeId, String status) async {
+    await _dao.updateSourcebookNodeUserStatus(nodeId: nodeId, status: status);
+    _toast(status == 'confirmed' ? '已确认该节点准确。' : status == 'rejected' ? '已标记该节点不成立。' : '已标记该节点需要修正。');
+    await _load();
+  }
+
+  Future<void> _updateEdgeStatus(String edgeId, String status) async {
+    await _dao.updateSourcebookEdgeUserStatus(edgeId: edgeId, status: status);
+    _toast(status == 'confirmed' ? '已确认该关系准确。' : status == 'rejected' ? '已标记该关系不成立。' : '已标记该关系需要修正。');
+    await _load();
+  }
+
+
+  Future<void> _editSourcebookNodeDialog(Map<String, dynamic> node) async {
+    final id = _textDyn(node['node_id']);
+    if (id.isEmpty) return;
+    final labelCtrl = TextEditingController(text: _textDyn(node['label']));
+    final typeCtrl = TextEditingController(text: _textDyn(node['node_type']).isNotEmpty ? _textDyn(node['node_type']) : _textDyn(node['nodeType']));
+    final contentCtrl = TextEditingController(text: _textDyn(node['content']));
+    final noteCtrl = TextEditingController(text: _textDyn(node['user_note']));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修正认知节点'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: labelCtrl, decoration: const InputDecoration(labelText: '节点标题')),
+          const SizedBox(height: 8),
+          TextField(controller: typeCtrl, decoration: const InputDecoration(labelText: '节点类型 belief/value/behavior/self/relation/evidence')),
+          const SizedBox(height: 8),
+          TextField(controller: contentCtrl, maxLines: 3, decoration: const InputDecoration(labelText: '用户修正版内容')),
+          const SizedBox(height: 8),
+          TextField(controller: noteCtrl, maxLines: 2, decoration: const InputDecoration(labelText: '修正原因/备注')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('保存修正')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _dao.updateSourcebookNodeUserStatus(nodeId: id, status: 'revised', note: noteCtrl.text, label: labelCtrl.text, content: contentCtrl.text, nodeType: typeCtrl.text);
+      _toast('已保存节点修正版。');
+      await _load();
+    }
+    labelCtrl.dispose(); typeCtrl.dispose(); contentCtrl.dispose(); noteCtrl.dispose();
+  }
+
+  Future<void> _editSourcebookEdgeDialog(Map<String, dynamic> edge) async {
+    final id = _textDyn(edge['edge_id']);
+    if (id.isEmpty) return;
+    final relationCtrl = TextEditingController(text: _textDyn(edge['relation_type']).isNotEmpty ? _textDyn(edge['relation_type']) : _textDyn(edge['relationType']));
+    final descCtrl = TextEditingController(text: _textDyn(edge['description']));
+    final noteCtrl = TextEditingController(text: _textDyn(edge['user_note']));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修正关系边'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: relationCtrl, decoration: const InputDecoration(labelText: '关系类型 consistent / inconsistent / uncertain')),
+          const SizedBox(height: 8),
+          TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: '用户修正版关系说明')),
+          const SizedBox(height: 8),
+          TextField(controller: noteCtrl, maxLines: 2, decoration: const InputDecoration(labelText: '修正原因/备注')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('保存修正')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _dao.updateSourcebookEdgeUserStatus(edgeId: id, status: 'revised', note: noteCtrl.text, relationType: relationCtrl.text, description: descCtrl.text);
+      _toast('已保存关系边修正版。');
+      await _load();
+    }
+    relationCtrl.dispose(); descCtrl.dispose(); noteCtrl.dispose();
+  }
+
+  Future<void> _selectSourcebookChoice(String choiceId) async {
+    await _dao.selectSourcebookChoice(choiceId);
+    _toast('已选择该方向，并把案例推进到行动契约阶段。');
+    await _load();
+  }
+
+  Future<void> _activateSourcebookContract(CcPlanResult p, Map<String, dynamic> data) async {
+    final action = _textDyn(data['minimal_repair_action']).isNotEmpty ? _textDyn(data['minimal_repair_action']) : _textDyn(data['minimalRepairAction']);
+    final coreValue = _textDyn(data['core_value']).isNotEmpty ? _textDyn(data['core_value']) : _textDyn(data['coreValue']);
+    if (action.isEmpty) {
+      _toast('行动契约里还没有可执行行动。');
+      return;
+    }
+    final activated = p.copyWith(
+      oneDollarAction: action,
+      valueLink: coreValue.isNotEmpty ? coreValue : p.valueLink,
+      evidenceLabel: '完成源书一致性行动契约',
+      evidenceCategory: 'responsibility',
+      oldStory: _textDyn(data['current_inconsistent_behavior']).isNotEmpty ? _textDyn(data['current_inconsistent_behavior']) : p.oldStory,
+    );
+    final contractId = _textDyn(data['contract_id']);
+    if (contractId.isNotEmpty) {
+      await _dao.updateSourcebookContractStatus(contractId: contractId, status: 'in_progress');
+    }
+    _activatePlan(activated, sourceType: 'cc_sourcebook_contract', sourceId: contractId);
+    await _load();
+  }
+
+  Future<void> _completeSourcebookContractDialog(String contractId, String defaultAction) async {
+    final actionCtrl = TextEditingController(text: defaultAction);
+    final reflectionCtrl = TextEditingController();
+    final minutesCtrl = TextEditingController(text: '3');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('完成源书行动契约'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: actionCtrl, maxLines: 3, decoration: const InputDecoration(labelText: '实际完成的行动')),
+          const SizedBox(height: 8),
+          TextField(controller: reflectionCtrl, maxLines: 3, decoration: const InputDecoration(labelText: '复盘：它如何连接价值与行为？')),
+          const SizedBox(height: 8),
+          TextField(controller: minutesCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '行动分钟数')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('保存证据')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _dao.completeSourcebookContractAsEvidence(
+      contractId: contractId,
+      completedAction: actionCtrl.text,
+      reflection: reflectionCtrl.text,
+      effortMinutes: int.tryParse(minutesCtrl.text.trim()) ?? 0,
+      difficultyScore: _difficultyScore,
+    );
+    actionCtrl.dispose();
+    reflectionCtrl.dispose();
+    minutesCtrl.dispose();
+    _toast('已完成行动契约，并写入行动证据账本。');
+    await _load();
+  }
+
+
+  Future<void> _reviewIncompleteSourcebookContractDialog(String contractId, {required String status}) async {
+    final reflectionCtrl = TextEditingController();
+    final fallbackCtrl = TextEditingController(text: status == 'adjusted' ? '降级为 2 分钟版本，先完成最小可见动作。' : '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(status == 'adjusted' ? '调整/降级行动契约' : '未完成行动契约复盘'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: reflectionCtrl, maxLines: 3, decoration: const InputDecoration(labelText: '发生了什么？阻力/失调信号是什么？')),
+          const SizedBox(height: 8),
+          if (status == 'adjusted') TextField(controller: fallbackCtrl, maxLines: 2, decoration: const InputDecoration(labelText: '新的降级/替代方案')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('保存复盘')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _dao.markSourcebookContractIncomplete(contractId: contractId, status: status, reflection: reflectionCtrl.text, fallbackPlan: fallbackCtrl.text);
+    reflectionCtrl.dispose(); fallbackCtrl.dispose();
+    _toast(status == 'adjusted' ? '已记录调整/降级，并写入学习证据。' : '已记录未完成复盘，并写入学习证据。');
+    await _load();
+  }
+
+  Future<void> _reviewCounterExperimentDialog(String experimentId) async {
+    final resultCtrl = TextEditingController();
+    final beliefCtrl = TextEditingController();
+    var score = 5;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('反态度实验复盘'),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: resultCtrl, maxLines: 3, decoration: const InputDecoration(labelText: '实验结果观察')),
+            const SizedBox(height: 8),
+            TextField(controller: beliefCtrl, maxLines: 2, decoration: const InputDecoration(labelText: '新的更准确自我信念')),
+            const SizedBox(height: 8),
+            Text('旧信念松动程度：$score/10'),
+            Slider(value: score.toDouble(), min: 0, max: 10, divisions: 10, label: '$score', onChanged: (v) => setDialogState(() => score = v.round())),
+          ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('保存复盘')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await _dao.updateCounterAttitudinalExperimentReview(experimentId: experimentId, result: resultCtrl.text, beliefShiftScore: score, updatedBelief: beliefCtrl.text);
+    resultCtrl.dispose();
+    beliefCtrl.dispose();
+    _toast('已保存反态度实验复盘。');
+    await _load();
+  }
+
+  Future<void> _completeInterpersonalActionDialog(String recordId) async {
+    final resultCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('记录人际沟通/边界结果'),
+        content: TextField(controller: resultCtrl, maxLines: 4, decoration: const InputDecoration(labelText: '对方反应、关系变化、边界是否更清楚')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('保存')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _dao.updateInterpersonalBalanceAction(recordId: recordId, status: 'completed', result: resultCtrl.text);
+    resultCtrl.dispose();
+    _toast('已保存人际平衡行动结果。');
+    await _load();
+  }
+
+  void _showSourcebookCaseDetail(CcPlanResult p) {
+    final detail = _sourcebookDetailsBySessionId[p.sessionId.trim()] ?? const <String, dynamic>{};
+    final m = _sourcebookMap(p);
+    final nodes = _listDyn(m['cognitiveStructureMap'] is Map ? _mapDyn(m['cognitiveStructureMap'])['nodes'] : detail['nodes']);
+    final edges = _listDyn(m['cognitiveStructureMap'] is Map ? _mapDyn(m['cognitiveStructureMap'])['edges'] : detail['edges']);
+    final evidence = _listDyn(m['caseEvidence']);
+    final verifications = _listDyn(m['caseVerificationTasks']);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('源书案例详情'),
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _miniLine('当前阶段', _textDyn(m['currentStage']).isEmpty ? 'structure_map' : _textDyn(m['currentStage'])),
+            _miniLine('用户确认', _textDyn(m['userConfirmation']).isEmpty ? 'pending' : _textDyn(m['userConfirmation'])),
+            _miniLine('事件摘要', p.eventSummary.isNotEmpty ? p.eventSummary : p.coreConflict),
+            if (nodes.isNotEmpty) _sourcebookSubCard('认知节点', Icons.account_tree_outlined, nodes.take(20).map(_textDyn).where((e) => e.isNotEmpty).toList()),
+            if (edges.isNotEmpty) _sourcebookSubCard('关系边', Icons.compare_arrows_outlined, edges.take(20).map(_textDyn).where((e) => e.isNotEmpty).toList()),
+            if (_mapDyn(m['valueLayers']).isNotEmpty) _sourcebookKeyValueCard('价值分层', _mapDyn(m['valueLayers'])),
+            if (_listDyn(m['userChoiceOptions']).isNotEmpty) _sourcebookChoiceOptionsCard(p, _listDyn(m['userChoiceOptions'])),
+            if (_mapDyn(m['commitmentAction']).isNotEmpty) _sourcebookContractCard(p, _mapDyn(m['commitmentAction'])),
+            if (evidence.isNotEmpty) _sourcebookSubCard('行动证据', Icons.inventory_2_outlined, evidence.map(_textDyn).where((e) => e.isNotEmpty).toList()),
+            if (verifications.isNotEmpty) _sourcebookSubCard('现实验证任务', Icons.fact_check_outlined, verifications.map(_textDyn).where((e) => e.isNotEmpty).toList()),
+            if (_sourcebookIntegratedText(p).isNotEmpty) _miniLine('整合性表达', _sourcebookIntegratedText(p)),
+          ])),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+      ),
+    );
+  }
+
+  Future<void> _confirmSourcebookAnalysis(CcPlanResult plan, String level) async {
+    final sid = plan.sessionId.trim();
+    if (sid.isEmpty) {
+      _toast('当前分析还没有生成 session，无法确认。');
+      return;
+    }
+    await _dao.saveSourcebookConfirmation(sessionId: sid, confirmationLevel: level);
+    if (!mounted) return;
+    _toast(level == 'confirmed' ? '已确认分析基本准确。' : level == 'partial' ? '已记录：部分准确，后续可修正。' : '已记录：需要重新修正。');
+    await _load();
   }
 
   bool _hasSpecialStructuredResult(CcPlanResult p) {
@@ -3291,6 +5074,12 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
       'self_standard_map': '描述一个你正在用某种标准评价、审判或否定自己的情境。',
       'information_avoidance': '描述你不敢看的结果、反馈、账单、数据、成绩、体检、消息或反对证据。',
       'identity_conflict': '描述旧身份和新身份的拉扯，例如逃避者与行动者、讨好者与有边界的人。',
+      'cognitive_structure_map': '把信念、行为、自我形象、关系和现实反馈放到同一张地图里看。',
+      'conflict_type_router': '把当前矛盾分流为信念冲突、价值—行为冲突、自我冲突、角色冲突、决策后失调等。',
+      'psychological_function': '分析某个想法/行为正在保护什么、回避什么、维持什么，以及未来代价。',
+      'value_layering': '区分核心价值、身份信念和外围解释，避免把临时借口误当成人生真理。',
+      'interpersonal_balance': '分析“我—他人—对象/观点/事件”的三角关系，寻找可承受的人际平衡。',
+      'counter_attitudinal_experiment': '设计一个低风险反态度行为，用行动证明旧自我叙事不是绝对事实。',
     };
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -4276,6 +6065,21 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
     final topNewIdentityCounts = (data['topNewIdentityCounts'] is Map) ? Map<String, dynamic>.from(data['topNewIdentityCounts'] as Map) : <String, dynamic>{};
     final last7 = (data['last7'] is Map) ? Map<String, dynamic>.from(data['last7'] as Map) : <String, dynamic>{};
     final last30 = (data['last30'] is Map) ? Map<String, dynamic>.from(data['last30'] as Map) : <String, dynamic>{};
+    final sourcebookCoreValueCounts = (data['sourcebookCoreValueCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookCoreValueCounts'] as Map) : <String, dynamic>{};
+    final sourcebookIdentityBeliefCounts = (data['sourcebookIdentityBeliefCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookIdentityBeliefCounts'] as Map) : <String, dynamic>{};
+    final sourcebookPeripheralExplanationCounts = (data['sourcebookPeripheralExplanationCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookPeripheralExplanationCounts'] as Map) : <String, dynamic>{};
+    final sourcebookChoiceCounts = (data['sourcebookChoiceCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookChoiceCounts'] as Map) : <String, dynamic>{};
+    final sourcebookSelectedChoiceCounts = (data['sourcebookSelectedChoiceCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookSelectedChoiceCounts'] as Map) : <String, dynamic>{};
+    final sourcebookContractStatusCounts = (data['sourcebookContractStatusCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookContractStatusCounts'] as Map) : <String, dynamic>{};
+    final sourcebookCounterOldBeliefCounts = (data['sourcebookCounterOldBeliefCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookCounterOldBeliefCounts'] as Map) : <String, dynamic>{};
+    final sourcebookInterpersonalImbalanceCounts = (data['sourcebookInterpersonalImbalanceCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookInterpersonalImbalanceCounts'] as Map) : <String, dynamic>{};
+    final sourcebookProtectedSelfCounts = (data['sourcebookProtectedSelfCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookProtectedSelfCounts'] as Map) : <String, dynamic>{};
+    final sourcebookDefensePatternCounts = (data['sourcebookDefensePatternCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookDefensePatternCounts'] as Map) : <String, dynamic>{};
+    final sourcebookTriggerStatusCounts = (data['sourcebookTriggerStatusCounts'] is Map) ? Map<String, dynamic>.from(data['sourcebookTriggerStatusCounts'] as Map) : <String, dynamic>{};
+    final resolutionMethodCounts = (data['resolutionMethodCounts'] is Map) ? Map<String, dynamic>.from(data['resolutionMethodCounts'] as Map) : <String, dynamic>{};
+    final resolutionMethodStatusCounts = (data['resolutionMethodStatusCounts'] is Map) ? Map<String, dynamic>.from(data['resolutionMethodStatusCounts'] as Map) : <String, dynamic>{};
+    final resolutionMethodDissonanceCounts = (data['resolutionMethodDissonanceCounts'] is Map) ? Map<String, dynamic>.from(data['resolutionMethodDissonanceCounts'] as Map) : <String, dynamic>{};
+    final resolutionMethodSupportCounts = (data['resolutionMethodSupportCounts'] is Map) ? Map<String, dynamic>.from(data['resolutionMethodSupportCounts'] as Map) : <String, dynamic>{};
     final sessions = (data['sessions'] ?? 0).toString();
     final events = (data['events'] ?? 0).toString();
     final evidence = (data['evidence'] ?? 0).toString();
@@ -4285,6 +6089,11 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
     final dailyReviewCount = (data['dailyReviewCount'] ?? 0).toString();
     final identityTransitionCount = (data['identityTransitionCount'] ?? 0).toString();
     final informationRepairActionCount = (data['informationRepairActionCount'] ?? 0).toString();
+    final sourcebookCaseCount = (data['sourcebookCaseCount'] ?? 0).toString();
+    final resolutionMethodTodoCount = (data['resolutionMethodTodoCount'] ?? 0).toString();
+    final resolutionMethodEvidenceCount = (data['resolutionMethodEvidenceCount'] ?? 0).toString();
+    final resolutionMethodContractCount = (data['resolutionMethodContractCount'] ?? 0).toString();
+    final resolutionMethodAverageEffect = (data['resolutionMethodAverageEffect'] ?? 0).toString();
     final repairedSessions = (data['repairedSessions'] ?? 0).toString();
     final ratio = (data['actionRepairRatio'] ?? 0).toString();
     return Card(
@@ -4307,6 +6116,11 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
             _pill('每日复盘 $dailyReviewCount'),
             _pill('身份转换 $identityTransitionCount'),
             _pill('信息后续行动 $informationRepairActionCount'),
+            _pill('源书案例 $sourcebookCaseCount'),
+            _pill('方法转Todo $resolutionMethodTodoCount'),
+            _pill('方法行动契约 $resolutionMethodContractCount'),
+            _pill('方法产生证据 $resolutionMethodEvidenceCount'),
+            _pill('方法平均效果 $resolutionMethodAverageEffect'),
           ]),
           const SizedBox(height: 10),
           if (last7.isNotEmpty) _mapPills('最近7天趋势', last7, maxItems: 5),
@@ -4323,6 +6137,21 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
           if (topOldIdentityCounts.isNotEmpty) _mapPills('常见旧身份', topOldIdentityCounts, maxItems: 6),
           if (topNewIdentityCounts.isNotEmpty) _mapPills('常见新身份', topNewIdentityCounts, maxItems: 6),
           if (_selfIntegrityStats.isNotEmpty) _mapPills('自我完整长期画像', _selfIntegrityStats, maxItems: 8),
+          if (sourcebookProtectedSelfCounts.isNotEmpty) _mapPills('高频被保护自我形象', sourcebookProtectedSelfCounts, maxItems: 8),
+          if (sourcebookDefensePatternCounts.isNotEmpty) _mapPills('高频自我辩护/防御模式', sourcebookDefensePatternCounts, maxItems: 8),
+          if (sourcebookCoreValueCounts.isNotEmpty) _mapPills('源书高频核心价值', sourcebookCoreValueCounts, maxItems: 8),
+          if (sourcebookIdentityBeliefCounts.isNotEmpty) _mapPills('源书高频身份信念', sourcebookIdentityBeliefCounts, maxItems: 8),
+          if (sourcebookPeripheralExplanationCounts.isNotEmpty) _mapPills('源书高频外围解释', sourcebookPeripheralExplanationCounts, maxItems: 8),
+          if (sourcebookChoiceCounts.isNotEmpty) _mapPills('源书可选方向分布', sourcebookChoiceCounts, maxItems: 8),
+          if (sourcebookSelectedChoiceCounts.isNotEmpty) _mapPills('源书已选择路径', sourcebookSelectedChoiceCounts, maxItems: 8),
+          if (sourcebookContractStatusCounts.isNotEmpty) _mapPills('源书行动契约状态', sourcebookContractStatusCounts, maxItems: 8),
+          if (sourcebookCounterOldBeliefCounts.isNotEmpty) _mapPills('反态度实验旧信念', sourcebookCounterOldBeliefCounts, maxItems: 8),
+          if (sourcebookInterpersonalImbalanceCounts.isNotEmpty) _mapPills('人际失衡高频点', sourcebookInterpersonalImbalanceCounts, maxItems: 8),
+          if (sourcebookTriggerStatusCounts.isNotEmpty) _mapPills('源书触发建议状态', sourcebookTriggerStatusCounts, maxItems: 8),
+          if (resolutionMethodCounts.isNotEmpty) _mapPills('认知失调解决方法使用', resolutionMethodCounts, maxItems: 10),
+          if (resolutionMethodStatusCounts.isNotEmpty) _mapPills('解决方法闭环状态', resolutionMethodStatusCounts, maxItems: 8),
+          if (resolutionMethodDissonanceCounts.isNotEmpty) _mapPills('方法—失调类型分布', resolutionMethodDissonanceCounts, maxItems: 8),
+          if (resolutionMethodSupportCounts.isNotEmpty) _mapPills('方法来源性质', resolutionMethodSupportCounts, maxItems: 8),
           if (rationalizationCounts.isNotEmpty) _mapPills('常见合理化', rationalizationCounts, maxItems: 8),
           if (standardCounts.isNotEmpty) _mapPills('自我标准触发', standardCounts),
           if (triggerCounts.isNotEmpty) _mapPills('责任—后果风险', triggerCounts),
@@ -4353,7 +6182,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
   Future<void> _forceUpgradePrompts() async {
     await _promptConfig.ensureCurrentVersion(force: true);
     if (!mounted) return;
-    _toast('已恢复/升级为 V18.5 数据反哺决策闭环 Prompt，并备份旧自定义模板。');
+    _toast('已恢复/升级为 V25 认知失调解决引擎 Prompt，并备份旧自定义模板。');
   }
 
   Widget _buildReportTab() {
@@ -4371,7 +6200,7 @@ class _CognitiveConsistencyHomePageState extends State<CognitiveConsistencyHomeP
             child: OutlinedButton.icon(
               onPressed: _forceUpgradePrompts,
               icon: const Icon(Icons.upgrade_outlined),
-              label: const Text('一键升级/恢复 V18.5 Prompt 模板'),
+              label: const Text('一键升级/恢复 V24 解法中心 Prompt 模板'),
             ),
           ),
           const SizedBox(height: 12),

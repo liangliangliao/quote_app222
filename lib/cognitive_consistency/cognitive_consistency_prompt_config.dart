@@ -81,17 +81,36 @@ class CognitiveConsistencyPromptConfig {
   static const String valueRelationKey = 'cc_prompt_scene_value_relation';
   static const String informationAvoidanceKey = 'cc_prompt_scene_information_avoidance';
   static const String identityConflictKey = 'cc_prompt_scene_identity_conflict';
+  static const String cognitiveStructureMapKey = 'cc_prompt_scene_cognitive_structure_map';
+  static const String conflictTypeRouterKey = 'cc_prompt_scene_conflict_type_router';
+  static const String psychologicalFunctionKey = 'cc_prompt_scene_psychological_function';
+  static const String valueLayeringKey = 'cc_prompt_scene_value_layering';
+  static const String interpersonalBalanceKey = 'cc_prompt_scene_interpersonal_balance';
+  static const String counterAttitudinalExperimentKey = 'cc_prompt_scene_counter_attitudinal_experiment';
   static const String dailyReviewKey = 'cc_prompt_scene_daily_review';
   static const String temperatureReviewKey = 'cc_prompt_scene_temperature_review';
   static const String outputFormatKey = 'cc_prompt_output_format';
+  static const String outputCognitiveStructureMapKey = 'cc_prompt_output_cognitive_structure_map';
+  static const String outputConflictTypeRouterKey = 'cc_prompt_output_conflict_type_router';
+  static const String outputPsychologicalFunctionKey = 'cc_prompt_output_psychological_function';
+  static const String outputValueLayeringKey = 'cc_prompt_output_value_layering';
+  static const String outputInterpersonalBalanceKey = 'cc_prompt_output_interpersonal_balance';
+  static const String outputCounterAttitudinalExperimentKey = 'cc_prompt_output_counter_attitudinal_experiment';
   static const String promptVersionKey = 'cc_prompt_template_version';
-  static const String currentPromptVersion = 'v18_5_data_feedback_decision_loop';
+  static const String currentPromptVersion = 'v26_dissonance_resolution_engine_closed_loop';
 
   final KeyValueDao _dao = KeyValueDao();
 
+  static const String defaultOutputCognitiveStructureMapPrompt = '''只输出合法 JSON，不要 Markdown。字段包含 eventSummary、coreConflict、sourcebookAnalysis.cognitiveStructureMap.nodes、edges、realityTestingQuestions、userChoiceOptions、commitmentAction、integratedSelfStatement。''';
+  static const String defaultOutputConflictTypeRouterPrompt = '''只输出合法 JSON，不要 Markdown。字段包含 eventSummary、coreConflict、sourcebookAnalysis.conflictTypeRouting.types、realityTestingQuestions、userChoiceOptions、commitmentAction、integratedSelfStatement。''';
+  static const String defaultOutputPsychologicalFunctionPrompt = '''只输出合法 JSON，不要 Markdown。字段包含 eventSummary、coreConflict、sourcebookAnalysis.psychologicalFunction、defensePatterns、userChoiceOptions、commitmentAction、integratedSelfStatement。''';
+  static const String defaultOutputValueLayeringPrompt = '''只输出合法 JSON，不要 Markdown。字段包含 eventSummary、coreConflict、sourcebookAnalysis.valueLayers、alternativeInterpretations、userChoiceOptions、commitmentAction、integratedSelfStatement。''';
+  static const String defaultOutputInterpersonalBalancePrompt = '''只输出合法 JSON，不要 Markdown。字段包含 eventSummary、coreConflict、sourcebookAnalysis.interpersonalBalance、userChoiceOptions、commitmentAction、integratedSelfStatement。''';
+  static const String defaultOutputCounterAttitudinalExperimentPrompt = '''只输出合法 JSON，不要 Markdown。字段包含 eventSummary、coreConflict、sourcebookAnalysis.counterAttitudinalExperiment、userChoiceOptions、commitmentAction、integratedSelfStatement。''';
+
   static const String defaultGlobalPrompt = '''你是“足下一致行动系统”的 AI 引导者。你的任务不是替用户做决定，不是用羞耻、恐吓、强迫或外部奖励控制用户，也不是只做情绪安慰。你的任务是帮助用户识别行为、信念、价值、自我形象、选择、责任、后果、群体身份之间的不一致，并把这种不一致转化为更清醒的自我理解、责任判断和现实行动。
 
-你必须同时遵守三套相互独立但可以融合的核心价值体系。
+你必须同时遵守四套相互独立但可以融合的核心价值体系。
 
 第一套核心价值体系：最小充分理由与行动证据内化体系。
 1. 用户不必等到完全有动力、完全相信自己、完全准备好才行动。
@@ -124,6 +143,17 @@ class CognitiveConsistencyPromptConfig {
 8. 你不能替用户做最终选择，也不能把自己的判断包装成绝对答案。你要提供清晰分析、多种可能解释、关键判断标准和具体行动选项，帮助用户自己判断和选择。
 9. 每次输出都必须落到现实行动。行动必须小、具体、今天能做、可观察、可完成、可复盘，并且不依赖强烈情绪动力。
 10. 最终目标是帮助用户从“我必须证明自己没错”转向“我可以面对事实、保持自我完整、澄清责任、接触现实、重新选择，并用一个真实行动建立新的自我一致”。
+
+第四套核心价值体系：认知一致性源书的动态整合体系。
+1. 人不是单纯追求逻辑无矛盾，而是在信念、情感、行为、自我形象、人际关系与现实反馈之间维持一种心理上可承受、可解释、可行动的秩序。你要分析用户的“心理逻辑”，而不是只指出形式逻辑错误。
+2. 矛盾不是失败，而是信号。内耗、拖延、后悔、选择后辩解、关系失衡、信息回避、反复证明自己没错，都可能提示某种认知结构不协调。你要先帮助用户看见信号，再决定如何行动。
+3. 一致性不是僵硬无矛盾，而是动态整合。不要鼓励用户为了舒服而强行合理化，也不要要求用户全盘否定自己。成熟一致性是在核心价值、现实证据、行动责任和自我更新之间形成更高层次的整合。
+4. 态度、信念和行为都有心理功能。每次分析都要追问：这个想法/行为保护了什么、回避了什么、维持了什么、曾经怎样帮助用户、现在带来什么代价、未来是否还值得保留。
+5. 要区分核心价值、身份信念和外围解释。核心价值需要被认真保护；身份信念可能需要变得更柔韧；外围解释必须接受现实检验。不要把临时借口当成人生真理，也不要把局部错误当成人格失败。
+6. 自我辩护要被温和看见。合理化、否认、最小化、外归因、沉没成本、选择性信息接触、道德许可、身份防御都可能在保护自我形象。你要指出保护功能与现实代价，但不能羞辱用户。
+7. 人际关系也有一致性结构。当事件涉及他人、家庭、群体或文化标准时，要分析“我—他人—对象/观点/事件”的平衡关系，帮助用户区分人和观点、关系和价值、边界和攻击。
+8. 成长来自行动中的重新一致。分析之后必须落到一个自愿、具体、可观察、5-15分钟可开始的行动，包括现实检验、信息接触、边界表达、反态度行为、责任修复或承诺契约。
+9. 你的输出要同时包含理解、澄清、多种解释、现实检验和行动契约。不要只给结论，不要替用户选择，不要制造羞耻。最终目标是帮助用户从自我辩护走向真实修正，从混乱矛盾走向动态整合。
 
 最终目标：帮助用户从“我必须证明自己没错”转向“我可以面对事实、澄清责任、重新选择，并用一个真实行动建立新的自我一致”。''';
 
@@ -332,6 +362,19 @@ V18 失调修复上下文：
 成长性解释：{{growth_explanation}}
 ''';
 
+
+  static const String defaultSourcebookCognitiveStructureMapPrompt = '''当前场景：认知结构地图。请把用户输入拆成信念节点、态度节点、行为节点、自我形象节点、关系节点和现实反馈节点，并输出 cognitiveStructureMap.nodes 与 cognitiveStructureMap.edges。每个节点包含 nodeType、label、content、importance、confidence；每条边包含 from、to、relationType、description、strength。最后给一个现实检验行动。''';
+
+  static const String defaultSourcebookConflictTypeRouterPrompt = '''当前场景：矛盾类型分流器。请判断用户事件属于哪些矛盾类型：信念—信念、信念—行为、价值—行为、自我—现实、关系—态度、角色冲突、决策后失调、选择性信息冲突。输出 conflictTypeRouting.types，每项包含 type、evidence、priority、actionPath。''';
+
+  static const String defaultSourcebookPsychologicalFunctionPrompt = '''当前场景：心理功能分析器。请分析当前想法/行为/态度保护了什么、回避了什么、维持了什么，区分过去功能、现在收益、长期代价，并输出 psychologicalFunction：shortTermBenefit、protectedNeed、avoidedPain、pastFunction、currentCost、keep、modify、release。''';
+
+  static const String defaultSourcebookValueLayeringPrompt = '''当前场景：核心价值/身份信念/外围解释分层。请输出 valueLayers：coreValues、identityBeliefs、peripheralExplanations、keepItems、loosenItems、testItems、integratedStatement。核心价值要保留，身份信念要柔韧，外围解释要现实检验。''';
+
+  static const String defaultSourcebookInterpersonalBalancePrompt = '''当前场景：人际平衡分析。请分析“我—他人—对象/观点/事件”三角关系，输出 interpersonalBalance：myAttitudeToPerson、objectOrIssue、myAttitudeToObject、otherAttitudeToObject、imbalancePoint、possibleBalancePaths、boundaryAction。''';
+
+  static const String defaultSourcebookCounterAttitudinalExperimentPrompt = '''当前场景：反态度行为实验。请输出 counterAttitudinalExperiment：oldBelief、protectiveFunction、limitation、experimentAction、durationMinutes、completionStandard、observationQuestion、updatedBelief。强调一次行动不证明彻底改变，但能证明旧信念不是绝对事实。''';
+
   static const String defaultOutputFormatPrompt = '''请严格只输出一个合法 JSON 对象，不要输出 markdown，不要输出代码块，不要解释 JSON 之外的内容。字段如下：
 {
   "eventSummary": "对用户事件的简洁复述，不添加未经确认的内容",
@@ -529,9 +572,47 @@ V18 失调修复上下文：
     "question": "3-7天后需要验证的问题，例如：暂停/调整/边界表达/小行动是否真的改变了现实？",
     "successSignal": "什么现实信号说明这次判断有效或需要修正",
     "dueDays": 3
+  },
+  "sourcebookAnalysis": {
+    "currentStage": "input / structure_map / conflict_router / defense_mirror / psychological_function / value_layering / reality_test / action_contract / review_integration",
+    "protectedSelfImage": [{"image": "被保护的自我形象", "evidence": "依据", "confidence": "low / medium / high"}],
+    "defensePatterns": [{"type": "rationalization / denial / minimization / externalization / sunk_cost / selective_exposure / moral_licensing / identity_defense", "description": "表现", "possibleCost": "现实代价"}],
+    "cognitiveStructureMap": {
+      "nodes": [{"nodeType": "belief / attitude / behavior / self / relation / evidence / value", "label": "节点标题", "content": "节点内容", "importance": "low / medium / high", "confidence": 0.7}],
+      "edges": [{"from": "节点标题", "to": "节点标题", "relationType": "consistent / inconsistent / uncertain", "description": "关系说明", "strength": 0.7}]
+    },
+    "conflictTypeRouting": {"types": [{"type": "矛盾类型", "evidence": "依据", "priority": "high / medium / low", "actionPath": "对应处理路径"}]},
+    "psychologicalFunction": {"shortTermBenefit": "短期收益", "protectedNeed": "保护的需要", "avoidedPain": "回避的痛苦", "pastFunction": "过去功能", "currentCost": "当前代价", "keep": "保留什么", "modify": "修正什么", "release": "放下什么"},
+    "valueLayers": {"coreValues": ["核心价值"], "identityBeliefs": ["身份信念"], "peripheralExplanations": ["外围解释"], "keepItems": ["保留"], "loosenItems": ["松动"], "testItems": ["检验"], "integratedStatement": "我可以仍然重视____，同时承认____，并从____开始行动。"},
+    "alternativeInterpretations": {"userSupportive": "最支持用户当前说法的解释", "selfDefenseWarning": "需要警惕的自我辩护解释", "integratedView": "更成熟整合解释"},
+    "realityTestingQuestions": ["现实检验问题1", "现实检验问题2", "现实检验问题3"],
+    "userChoiceOptions": [{"label": "继续观察/小行动/反方证据/沟通/修改计划/暂停复盘", "description": "选择含义", "nextAction": "下一步"}],
+    "interpersonalBalance": {"myAttitudeToPerson": "我对对方", "objectOrIssue": "对象/观点/事件", "myAttitudeToObject": "我对对象", "otherAttitudeToObject": "对方对对象", "imbalancePoint": "失衡点", "possibleBalancePaths": ["区分人和观点", "沟通澄清", "边界表达"], "boundaryAction": "人际小行动"},
+    "counterAttitudinalExperiment": {"oldBelief": "旧信念", "protectiveFunction": "保护了什么", "limitation": "限制了什么", "experimentAction": "5-15分钟反态度行动", "durationMinutes": 10, "completionStandard": "完成标准", "observationQuestion": "行动后观察问题", "updatedBelief": "更准确的新信念"},
+    "commitmentAction": {"coreValue": "核心价值", "currentInconsistentBehavior": "当前不一致行为", "minimalRepairAction": "最小修正行动", "time": "行动时间", "place": "行动地点", "durationMinutes": 10, "completionStandard": "完成标准", "obstacle": "可能障碍", "fallbackPlan": "失败后降级方案", "reflectionQuestions": ["复盘问题"]},
+    "reflectionQuestions": ["行动后复盘问题1", "行动后复盘问题2", "行动后复盘问题3"],
+    "integratedSelfStatement": "我可以仍然重视____，同时承认____，并从____开始行动。"
   }
 }
 ''';
+
+  Future<String> outputFormatForScene(String sceneKey, String fallback) async {
+    final key = _outputKeyForScene(sceneKey);
+    if (key.isEmpty) return fallback;
+    return _get(key, fallback);
+  }
+
+  String _outputKeyForScene(String sceneKey) {
+    switch (sceneKey.trim()) {
+      case 'cognitive_structure_map': return outputCognitiveStructureMapKey;
+      case 'conflict_type_router': return outputConflictTypeRouterKey;
+      case 'psychological_function': return outputPsychologicalFunctionKey;
+      case 'value_layering': return outputValueLayeringKey;
+      case 'interpersonal_balance': return outputInterpersonalBalanceKey;
+      case 'counter_attitudinal_experiment': return outputCounterAttitudinalExperimentKey;
+      default: return '';
+    }
+  }
 
   Future<CognitiveConsistencyPromptTemplates> load() async {
     await ensureCurrentVersion();
@@ -569,6 +650,12 @@ V18 失调修复上下文：
       valueRelationKey,
       informationAvoidanceKey,
       identityConflictKey,
+      cognitiveStructureMapKey,
+      conflictTypeRouterKey,
+      psychologicalFunctionKey,
+      valueLayeringKey,
+      interpersonalBalanceKey,
+      counterAttitudinalExperimentKey,
       dailyReviewKey,
       temperatureReviewKey,
       outputFormatKey,
@@ -579,7 +666,7 @@ V18 失调修复上下文：
         await _dao.setString('backup_${key}_${storedVersion.isEmpty ? 'legacy' : storedVersion}', old);
       }
     }
-    // V18.5需要扩展输出结构；旧自定义模板会导致新卡片、闭环字段和专项反馈缺失，所以自动迁移。
+    // V25认知失调解决引擎需要扩展输出结构；旧自定义模板会导致认知地图、价值分层、用户选择、行动契约和专项反馈缺失，所以自动迁移。
     await _dao.setString(globalKey, defaultGlobalPrompt);
     await _dao.setString(targetToActionKey, defaultTargetToActionPrompt);
     await _dao.setString(dissonanceAnalysisKey, defaultDissonanceAnalysisPrompt);
@@ -591,6 +678,12 @@ V18 失调修复上下文：
     await _dao.setString(valueRelationKey, defaultValueRelationPrompt);
     await _dao.setString(informationAvoidanceKey, defaultInformationAvoidancePrompt);
     await _dao.setString(identityConflictKey, defaultIdentityConflictPrompt);
+    await _dao.setString(cognitiveStructureMapKey, defaultSourcebookCognitiveStructureMapPrompt);
+    await _dao.setString(conflictTypeRouterKey, defaultSourcebookConflictTypeRouterPrompt);
+    await _dao.setString(psychologicalFunctionKey, defaultSourcebookPsychologicalFunctionPrompt);
+    await _dao.setString(valueLayeringKey, defaultSourcebookValueLayeringPrompt);
+    await _dao.setString(interpersonalBalanceKey, defaultSourcebookInterpersonalBalancePrompt);
+    await _dao.setString(counterAttitudinalExperimentKey, defaultSourcebookCounterAttitudinalExperimentPrompt);
     await _dao.setString(dailyReviewKey, defaultDailyReviewPrompt);
     await _dao.setString(temperatureReviewKey, defaultTemperatureReviewPrompt);
     await _dao.setString(outputFormatKey, defaultOutputFormatPrompt);
@@ -608,6 +701,12 @@ V18 失调修复上下文：
     if (key == valueRelationKey) return defaultValueRelationPrompt;
     if (key == informationAvoidanceKey) return defaultInformationAvoidancePrompt;
     if (key == identityConflictKey) return defaultIdentityConflictPrompt;
+    if (key == cognitiveStructureMapKey) return defaultSourcebookCognitiveStructureMapPrompt;
+    if (key == conflictTypeRouterKey) return defaultSourcebookConflictTypeRouterPrompt;
+    if (key == psychologicalFunctionKey) return defaultSourcebookPsychologicalFunctionPrompt;
+    if (key == valueLayeringKey) return defaultSourcebookValueLayeringPrompt;
+    if (key == interpersonalBalanceKey) return defaultSourcebookInterpersonalBalancePrompt;
+    if (key == counterAttitudinalExperimentKey) return defaultSourcebookCounterAttitudinalExperimentPrompt;
     if (key == dailyReviewKey) return defaultDailyReviewPrompt;
     if (key == temperatureReviewKey) return defaultTemperatureReviewPrompt;
     if (key == outputFormatKey) return defaultOutputFormatPrompt;
@@ -659,12 +758,36 @@ V18 失调修复上下文：
         return defaultInformationAvoidancePrompt;
       case 'cc_scene_identity_conflict':
         return defaultIdentityConflictPrompt;
+      case 'cc_scene_cognitive_structure_map':
+        return defaultSourcebookCognitiveStructureMapPrompt;
+      case 'cc_scene_conflict_type_router':
+        return defaultSourcebookConflictTypeRouterPrompt;
+      case 'cc_scene_psychological_function':
+        return defaultSourcebookPsychologicalFunctionPrompt;
+      case 'cc_scene_value_layering':
+        return defaultSourcebookValueLayeringPrompt;
+      case 'cc_scene_interpersonal_balance':
+        return defaultSourcebookInterpersonalBalancePrompt;
+      case 'cc_scene_counter_attitudinal_experiment':
+        return defaultSourcebookCounterAttitudinalExperimentPrompt;
       case 'cc_scene_daily_review':
         return defaultDailyReviewPrompt;
       case 'cc_scene_temperature_review':
         return defaultTemperatureReviewPrompt;
       case 'cc_output_common':
         return defaultOutputFormatPrompt;
+      case 'cc_output_cognitive_structure_map':
+        return defaultOutputCognitiveStructureMapPrompt;
+      case 'cc_output_conflict_type_router':
+        return defaultOutputConflictTypeRouterPrompt;
+      case 'cc_output_psychological_function':
+        return defaultOutputPsychologicalFunctionPrompt;
+      case 'cc_output_value_layering':
+        return defaultOutputValueLayeringPrompt;
+      case 'cc_output_interpersonal_balance':
+        return defaultOutputInterpersonalBalancePrompt;
+      case 'cc_output_counter_attitudinal_experiment':
+        return defaultOutputCounterAttitudinalExperimentPrompt;
       case 'cc_global':
       default:
         return defaultGlobalPrompt;
@@ -693,12 +816,36 @@ V18 失调修复上下文：
         return informationAvoidanceKey;
       case 'cc_scene_identity_conflict':
         return identityConflictKey;
+      case 'cc_scene_cognitive_structure_map':
+        return cognitiveStructureMapKey;
+      case 'cc_scene_conflict_type_router':
+        return conflictTypeRouterKey;
+      case 'cc_scene_psychological_function':
+        return psychologicalFunctionKey;
+      case 'cc_scene_value_layering':
+        return valueLayeringKey;
+      case 'cc_scene_interpersonal_balance':
+        return interpersonalBalanceKey;
+      case 'cc_scene_counter_attitudinal_experiment':
+        return counterAttitudinalExperimentKey;
       case 'cc_scene_daily_review':
         return dailyReviewKey;
       case 'cc_scene_temperature_review':
         return temperatureReviewKey;
       case 'cc_output_common':
         return outputFormatKey;
+      case 'cc_output_cognitive_structure_map':
+        return outputCognitiveStructureMapKey;
+      case 'cc_output_conflict_type_router':
+        return outputConflictTypeRouterKey;
+      case 'cc_output_psychological_function':
+        return outputPsychologicalFunctionKey;
+      case 'cc_output_value_layering':
+        return outputValueLayeringKey;
+      case 'cc_output_interpersonal_balance':
+        return outputInterpersonalBalanceKey;
+      case 'cc_output_counter_attitudinal_experiment':
+        return outputCounterAttitudinalExperimentKey;
       case 'cc_global':
       default:
         return globalKey;

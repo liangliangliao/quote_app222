@@ -1,0 +1,3 @@
+v24.2 - cognitive consistency sourcebook build fix
+- Fix missing _sourcebookFromRaw in cognitive_consistency_models.dart
+- Make CcSourcebookAnalysis.fromUnknown parse raw JSON strings safely

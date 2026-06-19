@@ -204,6 +204,35 @@ class CognitiveConsistencyDao {
     ''');
 
     await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_dissonance_resolution_method_usages (
+        usage_id TEXT PRIMARY KEY,
+        method_id TEXT NOT NULL,
+        method_title TEXT,
+        session_id TEXT,
+        case_id TEXT,
+        source_type TEXT,
+        source_id TEXT,
+        selected_reason TEXT,
+        entered_scene_key TEXT,
+        todo_step_id TEXT,
+        evidence_id TEXT,
+        contract_id TEXT,
+        method_workflow_id TEXT,
+        dissonance_type TEXT,
+        sourcebook_support_level TEXT,
+        status TEXT DEFAULT 'selected',
+        review_text TEXT,
+        effect_score INTEGER DEFAULT 0,
+        reduced_dissonance INTEGER DEFAULT 0,
+        produced_evidence INTEGER DEFAULT 0,
+        risk_note TEXT,
+        next_use_suggestion TEXT,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS cc_dissonance_events (
         session_id TEXT PRIMARY KEY,
         event_summary TEXT,
@@ -482,6 +511,170 @@ class CognitiveConsistencyDao {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_protected_self_images (
+        image_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        image TEXT,
+        evidence TEXT,
+        confidence TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_defense_pattern_records (
+        pattern_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        pattern_type TEXT,
+        description TEXT,
+        possible_cost TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_sourcebook_cases (
+        case_id TEXT PRIMARY KEY,
+        session_id TEXT UNIQUE,
+        scene_type TEXT,
+        event_summary TEXT,
+        current_stage TEXT,
+        user_confirmation TEXT,
+        integrated_self_statement TEXT,
+        source_type TEXT,
+        source_id TEXT,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_cognition_nodes (
+        node_id TEXT PRIMARY KEY,
+        case_id TEXT,
+        session_id TEXT,
+        node_type TEXT,
+        label TEXT,
+        content TEXT,
+        importance TEXT,
+        confidence REAL DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_conflict_edges (
+        edge_id TEXT PRIMARY KEY,
+        case_id TEXT,
+        session_id TEXT,
+        from_label TEXT,
+        to_label TEXT,
+        relation_type TEXT,
+        description TEXT,
+        strength REAL DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_user_confirmations (
+        confirmation_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        confirmation_level TEXT,
+        note TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_value_layer_records (
+        record_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        core_values TEXT,
+        identity_beliefs TEXT,
+        peripheral_explanations TEXT,
+        keep_items TEXT,
+        loosen_items TEXT,
+        test_items TEXT,
+        integrated_statement TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_user_choice_records (
+        choice_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        label TEXT,
+        description TEXT,
+        next_action TEXT,
+        selected INTEGER DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_interpersonal_balance_records (
+        record_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        my_attitude_to_person TEXT,
+        object_or_issue TEXT,
+        my_attitude_to_object TEXT,
+        other_attitude_to_object TEXT,
+        imbalance_point TEXT,
+        possible_balance_paths TEXT,
+        boundary_action TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_counter_attitudinal_experiments (
+        experiment_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        old_belief TEXT,
+        protective_function TEXT,
+        limitation TEXT,
+        experiment_action TEXT,
+        duration_minutes INTEGER DEFAULT 0,
+        completion_standard TEXT,
+        observation_question TEXT,
+        updated_belief TEXT,
+        completed_result TEXT,
+        belief_shift_score INTEGER DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cc_commitment_action_contracts (
+        contract_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        case_id TEXT,
+        core_value TEXT,
+        current_inconsistent_behavior TEXT,
+        minimal_repair_action TEXT,
+        action_time TEXT,
+        action_place TEXT,
+        duration_minutes INTEGER DEFAULT 0,
+        completion_standard TEXT,
+        obstacle TEXT,
+        fallback_plan TEXT,
+        reflection_questions TEXT,
+        status TEXT DEFAULT 'draft',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+
     await _ensureColumn(db, 'cc_evidence_records', 'evidence_category', "TEXT DEFAULT 'start'");
     await _ensureColumn(db, 'cc_evidence_records', 'identity_direction', 'TEXT');
     await _ensureColumn(db, 'cc_evidence_records', 'reward_source', 'TEXT');
@@ -507,6 +700,49 @@ class CognitiveConsistencyDao {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_identity_transition_evidence ON cc_identity_transition_records(evidence_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_identity_transition_session ON cc_identity_transition_records(session_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_identity_transition_created ON cc_identity_transition_records(created_at_ms)');
+    await _ensureColumn(db, 'cc_cognition_nodes', 'sort_order', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_conflict_edges', 'sort_order', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_trigger_suggestions', 'status', "TEXT DEFAULT 'active'");
+    await _ensureColumn(db, 'cc_trigger_suggestions', 'updated_at_ms', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'status', "TEXT DEFAULT 'selected'");
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'todo_step_id', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'evidence_id', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'contract_id', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'method_workflow_id', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'dissonance_type', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'sourcebook_support_level', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'review_text', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'effect_score', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'reduced_dissonance', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'produced_evidence', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'risk_note', 'TEXT');
+    await _ensureColumn(db, 'cc_dissonance_resolution_method_usages', 'next_use_suggestion', 'TEXT');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_resolution_usage_method ON cc_dissonance_resolution_method_usages(method_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_resolution_usage_session ON cc_dissonance_resolution_method_usages(session_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_resolution_usage_status ON cc_dissonance_resolution_method_usages(status)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_resolution_usage_workflow ON cc_dissonance_resolution_method_usages(method_workflow_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_resolution_usage_contract ON cc_dissonance_resolution_method_usages(contract_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_resolution_usage_dissonance ON cc_dissonance_resolution_method_usages(dissonance_type)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_protected_self_session ON cc_protected_self_images(session_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_defense_patterns_session ON cc_defense_pattern_records(session_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_sourcebook_case_session ON cc_sourcebook_cases(session_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_nodes_session ON cc_cognition_nodes(session_id)');
+    await _ensureColumn(db, 'cc_conflict_edges', 'from_node_id', 'TEXT');
+    await _ensureColumn(db, 'cc_conflict_edges', 'to_node_id', 'TEXT');
+    await _ensureColumn(db, 'cc_cognition_nodes', 'user_status', "TEXT DEFAULT 'ai_generated'");
+    await _ensureColumn(db, 'cc_cognition_nodes', 'user_note', 'TEXT');
+    await _ensureColumn(db, 'cc_conflict_edges', 'user_status', "TEXT DEFAULT 'ai_generated'");
+    await _ensureColumn(db, 'cc_conflict_edges', 'user_note', 'TEXT');
+    await _ensureColumn(db, 'cc_user_choice_records', 'selected_at_ms', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_interpersonal_balance_records', 'action_status', "TEXT DEFAULT 'suggested'");
+    await _ensureColumn(db, 'cc_interpersonal_balance_records', 'action_result', 'TEXT');
+    await _ensureColumn(db, 'cc_interpersonal_balance_records', 'updated_at_ms', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'cc_counter_attitudinal_experiments', 'updated_at_ms', 'INTEGER DEFAULT 0');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_edges_session ON cc_conflict_edges(session_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_edges_from_node ON cc_conflict_edges(from_node_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_edges_to_node ON cc_conflict_edges(to_node_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_value_layers_session ON cc_value_layer_records(session_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_choices_session ON cc_user_choice_records(session_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_daily_review_date ON cc_daily_consistency_reviews(date_label)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_temp_logs_evidence_phase ON cc_dissonance_temperature_logs(evidence_id, phase)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_cc_temp_logs_session_pending ON cc_dissonance_temperature_logs(session_id, phase, evidence_id)');
@@ -688,6 +924,7 @@ class CognitiveConsistencyDao {
     await _saveSelfStandardItems(db, sessionId, result, parsed, createdAtMs);
     await _saveSpecialSceneItems(db, sessionId, sceneType, result, parsed, createdAtMs);
     await _saveV18GrowthConsistencyDetails(db, sessionId, result, parsed, createdAtMs);
+    await _saveSourcebookStructuredDetails(db, sessionId, sceneType, result, parsed, sourceType, sourceId, createdAtMs);
     await _createVerificationTaskIfNeeded(db, sessionId, sceneType, result, createdAtMs);
   }
 
@@ -713,6 +950,11 @@ class CognitiveConsistencyDao {
   Map<String, dynamic> _mapFrom(dynamic value) {
     if (value is Map) return Map<String, dynamic>.from(value);
     return const <String, dynamic>{};
+  }
+
+  List<dynamic> _listFrom(dynamic value) {
+    if (value is List) return value;
+    return const <dynamic>[];
   }
 
   String _str(dynamic value) {
@@ -778,6 +1020,549 @@ class CognitiveConsistencyDao {
   }
 
   int _asScore(dynamic value) => _asTotalScore(value);
+
+  Map<String, dynamic> _sourcebookMap(Map<String, dynamic> parsed) {
+    final sourcebook = _mapFrom(parsed['sourcebookAnalysis']);
+    return sourcebook.isEmpty ? parsed : sourcebook;
+  }
+
+
+  Future<void> _saveSourcebookProtectedSelfAndDefense(Database db, String sessionId, String caseId, Map<String, dynamic> sourcebook, int createdAtMs) async {
+    await db.delete('cc_protected_self_images', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    await db.delete('cc_defense_pattern_records', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+
+    final protectedItems = _listFrom(sourcebook['protectedSelfImage']).toList();
+    if (protectedItems.isEmpty) {
+      final imageText = _str(sourcebook['protectedSelfImage']);
+      if (imageText.isNotEmpty) protectedItems.add(<String, Object?>{'image': imageText, 'evidence': '', 'confidence': 'medium'});
+    }
+    var imageIndex = 0;
+    for (final raw in protectedItems) {
+      final m = _mapFrom(raw);
+      final image = _str(m.isEmpty ? raw : (m['image'] ?? m['label'] ?? m['selfImage']));
+      if (image.isEmpty) continue;
+      await db.insert('cc_protected_self_images', <String, Object?>{
+        'image_id': 'psi_${sessionId}_${imageIndex}_${image.hashCode.abs()}',
+        'session_id': sessionId,
+        'case_id': caseId,
+        'image': image,
+        'evidence': _str(m['evidence'] ?? m['reason']),
+        'confidence': _str(m['confidence']).isNotEmpty ? _str(m['confidence']) : 'medium',
+        'created_at_ms': createdAtMs,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      imageIndex++;
+    }
+
+    final defenseItems = _listFrom(sourcebook['defensePatterns']).toList();
+    if (defenseItems.isEmpty) {
+      final function = _mapFrom(sourcebook['psychologicalFunction']);
+      final desc = _str(function['shortTermBenefit'] ?? function['pastFunction'] ?? function['protectedNeed']);
+      final cost = _str(function['currentCost'] ?? function['limitation']);
+      if (desc.isNotEmpty || cost.isNotEmpty) {
+        defenseItems.add(<String, Object?>{'type': 'psychological_function', 'description': desc, 'possibleCost': cost});
+      }
+    }
+    var patternIndex = 0;
+    for (final raw in defenseItems) {
+      final m = _mapFrom(raw);
+      final type = _str(m.isEmpty ? '' : (m['type'] ?? m['patternType'] ?? m['pattern_type']));
+      final desc = _str(m.isEmpty ? raw : (m['description'] ?? m['pattern'] ?? m['evidence']));
+      final cost = _str(m['possibleCost'] ?? m['cost'] ?? m['longTermCost']);
+      if (type.isEmpty && desc.isEmpty && cost.isEmpty) continue;
+      final sig = '${type}|${desc}|${cost}';
+      await db.insert('cc_defense_pattern_records', <String, Object?>{
+        'pattern_id': 'dpr_${sessionId}_${patternIndex}_${sig.hashCode.abs()}',
+        'session_id': sessionId,
+        'case_id': caseId,
+        'pattern_type': type.isEmpty ? 'defense_pattern' : type,
+        'description': desc,
+        'possible_cost': cost,
+        'created_at_ms': createdAtMs,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      patternIndex++;
+    }
+  }
+
+  Future<void> _saveSourcebookStructuredDetails(
+    Database db,
+    String sessionId,
+    String sceneType,
+    CcPlanResult result,
+    Map<String, dynamic> parsed,
+    String sourceType,
+    String sourceId,
+    int createdAtMs,
+  ) async {
+    final sourcebook = _sourcebookMap(parsed);
+    final caseId = 'case_$sessionId';
+    final currentStage = _str(sourcebook['currentStage']).isNotEmpty ? _str(sourcebook['currentStage']) : 'structure_map';
+    final integrated = _str(sourcebook['integratedSelfStatement']).isNotEmpty
+        ? _str(sourcebook['integratedSelfStatement'])
+        : _str(_mapFrom(sourcebook['valueLayers'])['integratedStatement']);
+    await db.insert(
+      'cc_sourcebook_cases',
+      <String, Object?>{
+        'case_id': caseId,
+        'session_id': sessionId,
+        'scene_type': sceneType,
+        'event_summary': result.eventSummary.trim().isNotEmpty ? result.eventSummary : result.coreConflict,
+        'current_stage': currentStage,
+        'user_confirmation': 'pending',
+        'integrated_self_statement': integrated,
+        'source_type': sourceType,
+        'source_id': sourceId,
+        'created_at_ms': createdAtMs,
+        'updated_at_ms': createdAtMs,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await _saveSourcebookProtectedSelfAndDefense(db, sessionId, caseId, sourcebook, createdAtMs);
+    await _saveSourcebookNodesAndEdges(db, sessionId, caseId, result, sourcebook, parsed, createdAtMs);
+    await _saveSourcebookValueLayers(db, sessionId, caseId, sourcebook, createdAtMs);
+    await _saveSourcebookChoices(db, sessionId, caseId, sourcebook, createdAtMs);
+    await _saveSourcebookInterpersonalBalance(db, sessionId, caseId, sourcebook, createdAtMs);
+    await _saveSourcebookCounterExperiment(db, sessionId, caseId, sourcebook, createdAtMs);
+    await _saveSourcebookCommitmentAction(db, sessionId, caseId, result, sourcebook, createdAtMs);
+  }
+
+  Future<void> _saveSourcebookNodesAndEdges(Database db, String sessionId, String caseId, CcPlanResult result, Map<String, dynamic> sourcebook, Map<String, dynamic> parsed, int createdAtMs) async {
+    await db.delete('cc_cognition_nodes', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    await db.delete('cc_conflict_edges', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    final map = _mapFrom(sourcebook['cognitiveStructureMap']).isNotEmpty ? _mapFrom(sourcebook['cognitiveStructureMap']) : _mapFrom(parsed['cognitiveStructureMap']);
+    final nodes = _listFrom(map['nodes']).toList();
+    if (nodes.isEmpty) {
+      nodes.addAll(<Map<String, Object?>>[
+        if (result.believedValue.trim().isNotEmpty) <String, Object?>{'nodeType': 'value', 'label': '我相信/重视', 'content': result.believedValue, 'importance': 'high', 'confidence': 0.6},
+        if (result.actualBehavior.trim().isNotEmpty) <String, Object?>{'nodeType': 'behavior', 'label': '实际行为', 'content': result.actualBehavior, 'importance': 'high', 'confidence': 0.6},
+        if (result.selfExplanation.trim().isNotEmpty) <String, Object?>{'nodeType': 'belief', 'label': '自我解释', 'content': result.selfExplanation, 'importance': 'medium', 'confidence': 0.6},
+        if (result.dissonancePoint.trim().isNotEmpty) <String, Object?>{'nodeType': 'evidence', 'label': '不一致点', 'content': result.dissonancePoint, 'importance': 'high', 'confidence': 0.6},
+      ]);
+    }
+    var index = 0;
+    final nodeIdByLabel = <String, String>{};
+    for (final raw in nodes) {
+      final node = _mapFrom(raw);
+      if (node.isEmpty) continue;
+      final label = _str(node['label']).isNotEmpty ? _str(node['label']) : '节点${index + 1}';
+      final content = _str(node['content']).isNotEmpty ? _str(node['content']) : _str(raw);
+      if (content.isEmpty && label.trim().isEmpty) continue;
+      final nodeId = 'node_${sessionId}_${index}_${label.hashCode.abs()}';
+      nodeIdByLabel[label] = nodeId;
+      await db.insert('cc_cognition_nodes', <String, Object?>{
+        'node_id': nodeId,
+        'case_id': caseId,
+        'session_id': sessionId,
+        'node_type': _str(node['nodeType']).isNotEmpty ? _str(node['nodeType']) : 'belief',
+        'label': label,
+        'content': content,
+        'importance': _str(node['importance']).isNotEmpty ? _str(node['importance']) : 'medium',
+        'confidence': _asConfidence(node['confidence']),
+        'user_status': 'ai_generated',
+        'user_note': '',
+        'sort_order': index,
+        'created_at_ms': createdAtMs,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      index++;
+    }
+    final edges = _listFrom(map['edges']).toList();
+    if (edges.isEmpty && result.believedValue.trim().isNotEmpty && result.actualBehavior.trim().isNotEmpty) {
+      edges.add(<String, Object?>{'from': '我相信/重视', 'to': '实际行为', 'relationType': 'inconsistent', 'description': result.dissonancePoint, 'strength': 0.7});
+    }
+    var edgeIndex = 0;
+    for (final raw in edges) {
+      final edge = _mapFrom(raw);
+      if (edge.isEmpty) continue;
+      final from = _str(edge['from']);
+      final to = _str(edge['to']);
+      final desc = _str(edge['description']);
+      if (from.isEmpty && to.isEmpty && desc.isEmpty) continue;
+      await db.insert('cc_conflict_edges', <String, Object?>{
+        'edge_id': 'edge_${sessionId}_${edgeIndex}_${('$from|$to').hashCode.abs()}',
+        'case_id': caseId,
+        'session_id': sessionId,
+        'from_node_id': nodeIdByLabel[from] ?? '',
+        'to_node_id': nodeIdByLabel[to] ?? '',
+        'from_label': from,
+        'to_label': to,
+        'relation_type': _str(edge['relationType']).isNotEmpty ? _str(edge['relationType']) : 'uncertain',
+        'description': desc,
+        'strength': _asConfidence(edge['strength']),
+        'user_status': 'ai_generated',
+        'user_note': '',
+        'sort_order': edgeIndex,
+        'created_at_ms': createdAtMs,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      edgeIndex++;
+    }
+  }
+
+  Future<void> _saveSourcebookValueLayers(Database db, String sessionId, String caseId, Map<String, dynamic> sourcebook, int createdAtMs) async {
+    await db.delete('cc_value_layer_records', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    final v = _mapFrom(sourcebook['valueLayers']);
+    if (v.isEmpty) return;
+    await db.insert('cc_value_layer_records', <String, Object?>{
+      'record_id': 'vl_$sessionId', 'session_id': sessionId, 'case_id': caseId,
+      'core_values': _str(v['coreValues']), 'identity_beliefs': _str(v['identityBeliefs']), 'peripheral_explanations': _str(v['peripheralExplanations']),
+      'keep_items': _str(v['keepItems']), 'loosen_items': _str(v['loosenItems']), 'test_items': _str(v['testItems']),
+      'integrated_statement': _str(v['integratedStatement']).isNotEmpty ? _str(v['integratedStatement']) : _str(sourcebook['integratedSelfStatement']),
+      'created_at_ms': createdAtMs,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> _saveSourcebookChoices(Database db, String sessionId, String caseId, Map<String, dynamic> sourcebook, int createdAtMs) async {
+    await db.delete('cc_user_choice_records', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    final options = _listFrom(sourcebook['userChoiceOptions']);
+    var index = 0;
+    for (final raw in options) {
+      final m = _mapFrom(raw);
+      if (m.isEmpty) continue;
+      await db.insert('cc_user_choice_records', <String, Object?>{
+        'choice_id': 'choice_${sessionId}_$index', 'session_id': sessionId, 'case_id': caseId,
+        'label': _str(m['label']), 'description': _str(m['description']), 'next_action': _str(m['nextAction']), 'selected': 0, 'created_at_ms': createdAtMs,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      index++;
+    }
+  }
+
+  Future<void> _saveSourcebookInterpersonalBalance(Database db, String sessionId, String caseId, Map<String, dynamic> sourcebook, int createdAtMs) async {
+    await db.delete('cc_interpersonal_balance_records', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    final b = _mapFrom(sourcebook['interpersonalBalance']);
+    if (b.isEmpty) return;
+    await db.insert('cc_interpersonal_balance_records', <String, Object?>{
+      'record_id': 'ib_$sessionId', 'session_id': sessionId, 'case_id': caseId,
+      'my_attitude_to_person': _str(b['myAttitudeToPerson']), 'object_or_issue': _str(b['objectOrIssue']),
+      'my_attitude_to_object': _str(b['myAttitudeToObject']), 'other_attitude_to_object': _str(b['otherAttitudeToObject']),
+      'imbalance_point': _str(b['imbalancePoint']), 'possible_balance_paths': _str(b['possibleBalancePaths']), 'boundary_action': _str(b['boundaryAction']),
+      'created_at_ms': createdAtMs,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> _saveSourcebookCounterExperiment(Database db, String sessionId, String caseId, Map<String, dynamic> sourcebook, int createdAtMs) async {
+    await db.delete('cc_counter_attitudinal_experiments', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    final e = _mapFrom(sourcebook['counterAttitudinalExperiment']);
+    if (e.isEmpty) return;
+    await db.insert('cc_counter_attitudinal_experiments', <String, Object?>{
+      'experiment_id': 'cae_$sessionId', 'session_id': sessionId, 'case_id': caseId,
+      'old_belief': _str(e['oldBelief']), 'protective_function': _str(e['protectiveFunction']), 'limitation': _str(e['limitation']),
+      'experiment_action': _str(e['experimentAction']), 'duration_minutes': _asTotalScore(e['durationMinutes']).clamp(0, 120).toInt(),
+      'completion_standard': _str(e['completionStandard']), 'observation_question': _str(e['observationQuestion']), 'updated_belief': _str(e['updatedBelief']),
+      'completed_result': '', 'belief_shift_score': 0, 'created_at_ms': createdAtMs,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> _saveSourcebookCommitmentAction(Database db, String sessionId, String caseId, CcPlanResult result, Map<String, dynamic> sourcebook, int createdAtMs) async {
+    await db.delete('cc_commitment_action_contracts', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    final a = _mapFrom(sourcebook['commitmentAction']);
+    final hasContract = a.isNotEmpty || result.oneDollarAction.trim().isNotEmpty || result.minimumAction.trim().isNotEmpty;
+    if (!hasContract) return;
+    await db.insert('cc_commitment_action_contracts', <String, Object?>{
+      'contract_id': 'contract_$sessionId', 'session_id': sessionId, 'case_id': caseId,
+      'core_value': _str(a['coreValue']).isNotEmpty ? _str(a['coreValue']) : result.valueLink,
+      'current_inconsistent_behavior': _str(a['currentInconsistentBehavior']).isNotEmpty ? _str(a['currentInconsistentBehavior']) : result.actualBehavior,
+      'minimal_repair_action': _str(a['minimalRepairAction']).isNotEmpty ? _str(a['minimalRepairAction']) : (result.minimumAction.trim().isNotEmpty ? result.minimumAction : result.oneDollarAction),
+      'action_time': _str(a['time']), 'action_place': _str(a['place']), 'duration_minutes': _asTotalScore(a['durationMinutes']).clamp(0, 120).toInt(),
+      'completion_standard': _str(a['completionStandard']).isNotEmpty ? _str(a['completionStandard']) : result.minimumActionVariant.completionCriteria,
+      'obstacle': _str(a['obstacle']), 'fallback_plan': _str(a['fallbackPlan']),
+      'reflection_questions': _str(a['reflectionQuestions']).isNotEmpty ? _str(a['reflectionQuestions']) : _str(sourcebook['reflectionQuestions']),
+      'status': 'draft', 'created_at_ms': createdAtMs, 'updated_at_ms': createdAtMs,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<String> saveSourcebookConfirmation({required String sessionId, required String confirmationLevel, String note = ''}) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final caseId = 'case_${sessionId.trim()}';
+    final id = 'confirm_${sessionId}_$now';
+    await db.insert('cc_user_confirmations', <String, Object?>{
+      'confirmation_id': id, 'session_id': sessionId.trim(), 'case_id': caseId,
+      'confirmation_level': confirmationLevel.trim().isEmpty ? 'confirmed' : confirmationLevel.trim(),
+      'note': note.trim(), 'created_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.update('cc_sourcebook_cases', <String, Object?>{
+      'user_confirmation': confirmationLevel.trim().isEmpty ? 'confirmed' : confirmationLevel.trim(), 'updated_at_ms': now,
+    }, where: 'session_id = ?', whereArgs: <Object?>[sessionId.trim()]);
+    return id;
+  }
+
+
+  Future<Map<String, dynamic>> sourcebookCaseDetail(String sessionId) async {
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return <String, dynamic>{};
+    final db = await _db;
+    final caseRows = await db.query('cc_sourcebook_cases', where: 'session_id = ?', whereArgs: <Object?>[sid], limit: 1);
+    final caseMap = caseRows.isEmpty ? <String, Object?>{} : caseRows.first;
+    final nodes = await db.query('cc_cognition_nodes', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'sort_order ASC, created_at_ms ASC');
+    final edges = await db.query('cc_conflict_edges', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'sort_order ASC, created_at_ms ASC');
+    final valueRows = await db.query('cc_value_layer_records', where: 'session_id = ?', whereArgs: <Object?>[sid], limit: 1);
+    final choiceRows = await db.query('cc_user_choice_records', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'created_at_ms ASC');
+    final interpersonalRows = await db.query('cc_interpersonal_balance_records', where: 'session_id = ?', whereArgs: <Object?>[sid], limit: 1);
+    final experimentRows = await db.query('cc_counter_attitudinal_experiments', where: 'session_id = ?', whereArgs: <Object?>[sid], limit: 1);
+    final contractRows = await db.query('cc_commitment_action_contracts', where: 'session_id = ?', whereArgs: <Object?>[sid], limit: 1);
+    final confirmations = await db.query('cc_user_confirmations', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'created_at_ms DESC', limit: 20);
+    final protectedSelf = await db.query('cc_protected_self_images', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'created_at_ms ASC');
+    final defensePatterns = await db.query('cc_defense_pattern_records', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'created_at_ms ASC');
+    final evidence = await db.query('cc_evidence_records', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'created_at_ms DESC', limit: 20);
+    final verification = await db.query('cc_verification_tasks', where: 'session_id = ?', whereArgs: <Object?>[sid], orderBy: 'created_at_ms DESC', limit: 20);
+    final methodUsages = await db.query('cc_dissonance_resolution_method_usages', where: 'session_id = ? OR case_id = ?', whereArgs: <Object?>[sid, 'case_$sid'], orderBy: 'updated_at_ms DESC, created_at_ms DESC', limit: 20);
+    return <String, dynamic>{
+      'case': Map<String, dynamic>.from(caseMap),
+      'nodes': nodes.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'edges': edges.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'valueLayers': valueRows.isEmpty ? <String, dynamic>{} : Map<String, dynamic>.from(valueRows.first),
+      'choices': choiceRows.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'interpersonalBalance': interpersonalRows.isEmpty ? <String, dynamic>{} : Map<String, dynamic>.from(interpersonalRows.first),
+      'counterExperiment': experimentRows.isEmpty ? <String, dynamic>{} : Map<String, dynamic>.from(experimentRows.first),
+      'commitmentContract': contractRows.isEmpty ? <String, dynamic>{} : Map<String, dynamic>.from(contractRows.first),
+      'confirmations': confirmations.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'protectedSelfImage': protectedSelf.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'defensePatterns': defensePatterns.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'evidence': evidence.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'verificationTasks': verification.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+      'resolutionMethodUsages': methodUsages.map((e) => Map<String, dynamic>.from(e)).toList(growable: false),
+    };
+  }
+
+  Future<Map<String, Map<String, dynamic>>> sourcebookCaseDetailsForSessionIds(Iterable<String> sessionIds) async {
+    final result = <String, Map<String, dynamic>>{};
+    for (final sid in sessionIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet()) {
+      final detail = await sourcebookCaseDetail(sid);
+      if (detail.isNotEmpty && ((detail['case'] is Map && (detail['case'] as Map).isNotEmpty) || (detail['nodes'] is List && (detail['nodes'] as List).isNotEmpty))) {
+        result[sid] = detail;
+      }
+    }
+    return result;
+  }
+
+  Future<void> updateSourcebookNodeUserStatus({required String nodeId, required String status, String note = '', String label = '', String content = '', String nodeType = ''}) async {
+    final id = nodeId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    await db.update('cc_cognition_nodes', <String, Object?>{
+      'user_status': status.trim().isEmpty ? 'confirmed' : status.trim(),
+      'user_note': note.trim(),
+      if (label.trim().isNotEmpty) 'label': label.trim(),
+      if (content.trim().isNotEmpty) 'content': content.trim(),
+      if (nodeType.trim().isNotEmpty) 'node_type': nodeType.trim(),
+    }, where: 'node_id = ?', whereArgs: <Object?>[id]);
+  }
+
+  Future<void> updateSourcebookEdgeUserStatus({required String edgeId, required String status, String note = '', String description = '', String relationType = ''}) async {
+    final id = edgeId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    await db.update('cc_conflict_edges', <String, Object?>{
+      'user_status': status.trim().isEmpty ? 'confirmed' : status.trim(),
+      'user_note': note.trim(),
+      if (description.trim().isNotEmpty) 'description': description.trim(),
+      if (relationType.trim().isNotEmpty) 'relation_type': relationType.trim(),
+    }, where: 'edge_id = ?', whereArgs: <Object?>[id]);
+  }
+
+  Future<void> selectSourcebookChoice(String choiceId) async {
+    final id = choiceId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query('cc_user_choice_records', where: 'choice_id = ?', whereArgs: <Object?>[id], limit: 1);
+    if (rows.isEmpty) return;
+    final sid = (rows.first['session_id'] ?? '').toString();
+    await db.update('cc_user_choice_records', <String, Object?>{'selected': 0}, where: 'session_id = ?', whereArgs: <Object?>[sid]);
+    await db.update('cc_user_choice_records', <String, Object?>{'selected': 1, 'selected_at_ms': now}, where: 'choice_id = ?', whereArgs: <Object?>[id]);
+    final nextAction = (rows.first['next_action'] ?? '').toString().trim();
+    if (nextAction.isNotEmpty) {
+      final existing = await db.query('cc_commitment_action_contracts', where: 'session_id = ?', whereArgs: <Object?>[sid], limit: 1);
+      final contract = <String, Object?>{
+        'session_id': sid,
+        'case_id': (rows.first['case_id'] ?? 'case_$sid').toString(),
+        'minimal_repair_action': nextAction,
+        'status': 'selected',
+        'updated_at_ms': now,
+      };
+      if (existing.isEmpty) {
+        await db.insert('cc_commitment_action_contracts', <String, Object?>{
+          'contract_id': 'contract_$sid',
+          ...contract,
+          'core_value': (rows.first['label'] ?? '').toString(),
+          'current_inconsistent_behavior': (rows.first['description'] ?? '').toString(),
+          'action_time': '',
+          'action_place': '',
+          'duration_minutes': 10,
+          'completion_standard': '完成这个最小下一步，并记录实际体验。',
+          'obstacle': '',
+          'fallback_plan': '如果阻力太大，就降级为 2 分钟版本。',
+          'reflection_questions': '它是否让价值与行为更接近？',
+          'created_at_ms': now,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      } else {
+        await db.update('cc_commitment_action_contracts', contract, where: 'session_id = ?', whereArgs: <Object?>[sid]);
+      }
+    }
+    await db.update('cc_sourcebook_cases', <String, Object?>{'current_stage': 'action_contract', 'updated_at_ms': now}, where: 'session_id = ?', whereArgs: <Object?>[sid]);
+  }
+
+  Future<void> updateSourcebookContractStatus({required String contractId, required String status}) async {
+    final id = contractId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    await db.update('cc_commitment_action_contracts', <String, Object?>{
+      'status': status.trim().isEmpty ? 'draft' : status.trim(),
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, where: 'contract_id = ?', whereArgs: <Object?>[id]);
+  }
+
+
+  Future<void> markSourcebookContractIncomplete({required String contractId, required String status, String reflection = '', String fallbackPlan = ''}) async {
+    final id = contractId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query('cc_commitment_action_contracts', where: 'contract_id = ?', whereArgs: <Object?>[id], limit: 1);
+    if (rows.isEmpty) return;
+    final c = rows.first;
+    final sid = (c['session_id'] ?? '').toString();
+    await db.update('cc_commitment_action_contracts', <String, Object?>{
+      'status': status.trim().isEmpty ? 'failed' : status.trim(),
+      if (fallbackPlan.trim().isNotEmpty) 'fallback_plan': fallbackPlan.trim(),
+      'updated_at_ms': now,
+    }, where: 'contract_id = ?', whereArgs: <Object?>[id]);
+    await db.insert('cc_evidence_records', <String, Object?>{
+      'evidence_id': 'ev_contract_review_${now}_${id.hashCode.abs()}',
+      'session_id': sid,
+      'user_goal': '源书行动契约复盘',
+      'planned_action': (c['minimal_repair_action'] ?? '').toString(),
+      'completed_action': status == 'adjusted' ? '调整/降级行动契约' : '未完成行动契约并完成复盘',
+      'user_reflection': reflection.trim(),
+      'evidence_label': status == 'adjusted' ? '调整源书行动契约' : '复盘未完成源书行动契约',
+      'value_link': (c['core_value'] ?? '').toString(),
+      'old_story': (c['current_inconsistent_behavior'] ?? '').toString(),
+      'new_story': '失败或阻力也提供现实信息，可用来调整下一步行动。',
+      'evidence_category': 'learning',
+      'identity_direction': '能从失调和失败中修正行动的人',
+      'reward_source': 'sourcebook_contract_review',
+      'source_type': 'cc_sourcebook_contract',
+      'source_id': id,
+      'created_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.update('cc_sourcebook_cases', <String, Object?>{'current_stage': 'review_integration', 'updated_at_ms': now}, where: 'session_id = ?', whereArgs: <Object?>[sid]);
+  }
+
+  Future<String> completeSourcebookContractAsEvidence({
+    required String contractId,
+    required String completedAction,
+    String reflection = '',
+    int effortMinutes = 0,
+    int difficultyScore = 2,
+  }) async {
+    final id = contractId.trim();
+    if (id.isEmpty) return '';
+    final db = await _db;
+    final rows = await db.query('cc_commitment_action_contracts', where: 'contract_id = ?', whereArgs: <Object?>[id], limit: 1);
+    if (rows.isEmpty) return '';
+    final c = rows.first;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final sid = (c['session_id'] ?? '').toString();
+    final action = completedAction.trim().isNotEmpty ? completedAction.trim() : (c['minimal_repair_action'] ?? '').toString();
+    final evidenceId = 'ev_contract_${now}_${id.hashCode.abs()}';
+    await db.insert('cc_evidence_records', <String, Object?>{
+      'evidence_id': evidenceId,
+      'session_id': sid,
+      'user_goal': '源书一致性行动契约',
+      'planned_action': (c['minimal_repair_action'] ?? '').toString(),
+      'completed_action': action,
+      'user_reflection': reflection.trim(),
+      'evidence_label': '完成源书行动契约',
+      'value_link': (c['core_value'] ?? '').toString(),
+      'old_story': (c['current_inconsistent_behavior'] ?? '').toString(),
+      'new_story': '我用一个具体行动把核心价值与现实行为重新连接。',
+      'evidence_category': 'responsibility',
+      'identity_direction': '用行动重建一致的人',
+      'reward_source': 'sourcebook_contract',
+      'source_type': 'cc_sourcebook_contract',
+      'source_id': id,
+      'effort_minutes': effortMinutes,
+      'difficulty_score': difficultyScore,
+      'started_at_ms': now,
+      'ended_at_ms': now,
+      'created_at_ms': now,
+      'dissonance_reduction_mode': 'action_repair',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.update('cc_commitment_action_contracts', <String, Object?>{'status': 'completed', 'updated_at_ms': now}, where: 'contract_id = ?', whereArgs: <Object?>[id]);
+    await db.update('cc_sourcebook_cases', <String, Object?>{'current_stage': 'review_integration', 'updated_at_ms': now}, where: 'session_id = ?', whereArgs: <Object?>[sid]);
+    return evidenceId;
+  }
+
+  Future<void> updateCounterAttitudinalExperimentReview({required String experimentId, required String result, required int beliefShiftScore, String updatedBelief = ''}) async {
+    final id = experimentId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    await db.update('cc_counter_attitudinal_experiments', <String, Object?>{
+      'completed_result': result.trim(),
+      'belief_shift_score': beliefShiftScore.clamp(0, 10).toInt(),
+      if (updatedBelief.trim().isNotEmpty) 'updated_belief': updatedBelief.trim(),
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, where: 'experiment_id = ?', whereArgs: <Object?>[id]);
+    final rows = await db.query('cc_counter_attitudinal_experiments', where: 'experiment_id = ?', whereArgs: <Object?>[id], limit: 1);
+    if (rows.isNotEmpty && result.trim().isNotEmpty) {
+      final e = rows.first;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert('cc_evidence_records', <String, Object?>{
+        'evidence_id': 'ev_counter_${now}_${id.hashCode.abs()}',
+        'session_id': (e['session_id'] ?? '').toString(),
+        'user_goal': '反态度行为实验',
+        'planned_action': (e['experiment_action'] ?? '').toString(),
+        'completed_action': result.trim(),
+        'user_reflection': '旧信念松动程度：${beliefShiftScore.clamp(0, 10).toInt()}/10；新信念：${updatedBelief.trim().isEmpty ? (e['updated_belief'] ?? '') : updatedBelief.trim()}',
+        'evidence_label': '完成反态度行为实验',
+        'value_link': '',
+        'old_story': (e['old_belief'] ?? '').toString(),
+        'new_story': updatedBelief.trim().isEmpty ? (e['updated_belief'] ?? '').toString() : updatedBelief.trim(),
+        'evidence_category': 'identity',
+        'identity_direction': '能用小行动松动旧信念的人',
+        'reward_source': 'counter_attitudinal_experiment',
+        'source_type': 'cc_counter_attitudinal_experiment',
+        'source_id': id,
+        'created_at_ms': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    final sidRows = await db.query('cc_counter_attitudinal_experiments', where: 'experiment_id = ?', whereArgs: <Object?>[id], limit: 1);
+    if (sidRows.isNotEmpty) {
+      await db.update('cc_sourcebook_cases', <String, Object?>{'current_stage': 'review_integration', 'updated_at_ms': DateTime.now().millisecondsSinceEpoch}, where: 'session_id = ?', whereArgs: <Object?>[(sidRows.first['session_id'] ?? '').toString()]);
+    }
+  }
+
+  Future<void> updateInterpersonalBalanceAction({required String recordId, required String status, String result = ''}) async {
+    final id = recordId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    await db.update('cc_interpersonal_balance_records', <String, Object?>{
+      'action_status': status.trim().isEmpty ? 'suggested' : status.trim(),
+      'action_result': result.trim(),
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, where: 'record_id = ?', whereArgs: <Object?>[id]);
+    final rows = await db.query('cc_interpersonal_balance_records', where: 'record_id = ?', whereArgs: <Object?>[id], limit: 1);
+    if (rows.isNotEmpty && result.trim().isNotEmpty) {
+      final r = rows.first;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert('cc_evidence_records', <String, Object?>{
+        'evidence_id': 'ev_interpersonal_${now}_${id.hashCode.abs()}',
+        'session_id': (r['session_id'] ?? '').toString(),
+        'user_goal': '人际平衡/边界行动',
+        'planned_action': (r['boundary_action'] ?? '').toString(),
+        'completed_action': result.trim(),
+        'user_reflection': '我尝试把人、观点、边界区分开，并记录真实关系反馈。',
+        'evidence_label': '完成人际平衡行动',
+        'value_link': '',
+        'old_story': (r['imbalance_point'] ?? '').toString(),
+        'new_story': '我可以在保留关系的同时表达边界与真实态度。',
+        'evidence_category': 'relationship',
+        'identity_direction': '能在人际关系中保持真实与边界的人',
+        'reward_source': 'interpersonal_balance',
+        'source_type': 'cc_interpersonal_balance',
+        'source_id': id,
+        'created_at_ms': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
 
   Future<void> _saveV18GrowthConsistencyDetails(
     Database db,
@@ -1011,6 +1796,7 @@ class CognitiveConsistencyDao {
     int createdAtMs,
   ) async {
     await db.delete('cc_special_scene_items', where: 'session_id = ?', whereArgs: <Object?>[sessionId]);
+    final sourcebook = _sourcebookMap(parsed);
     final sections = <String, dynamic>{
       'choicePaths': parsed['choicePaths'],
       'sunkCostCheck': parsed['sunkCostCheck'],
@@ -1019,6 +1805,14 @@ class CognitiveConsistencyDao {
       'vicariousDissonance': parsed['vicariousDissonance'],
       'informationAvoidance': parsed['informationAvoidance'],
       'identityConflict': parsed['identityConflict'],
+      'cognitiveStructureMap': sourcebook['cognitiveStructureMap'],
+      'conflictTypeRouting': sourcebook['conflictTypeRouting'],
+      'psychologicalFunction': sourcebook['psychologicalFunction'],
+      'valueLayers': sourcebook['valueLayers'],
+      'alternativeInterpretations': sourcebook['alternativeInterpretations'],
+      'interpersonalBalance': sourcebook['interpersonalBalance'],
+      'counterAttitudinalExperiment': sourcebook['counterAttitudinalExperiment'],
+      'commitmentAction': sourcebook['commitmentAction'],
     };
     final fallbackSections = <String, String>{
       'choicePaths': result.choicePaths,
@@ -1028,6 +1822,14 @@ class CognitiveConsistencyDao {
       'vicariousDissonance': result.vicariousDissonance,
       'informationAvoidance': result.informationAvoidance,
       'identityConflict': result.identityConflict,
+      'cognitiveStructureMap': result.dissonancePoint,
+      'conflictTypeRouting': result.dissonanceTypes,
+      'psychologicalFunction': result.protectiveFunction,
+      'valueLayers': result.valueLink,
+      'alternativeInterpretations': result.honestReframe,
+      'interpersonalBalance': result.groupConflict,
+      'counterAttitudinalExperiment': result.identityConflict,
+      'commitmentAction': result.minimumAction.trim().isNotEmpty ? result.minimumAction : result.oneDollarAction,
     };
     var index = 0;
     for (final entry in sections.entries) {
@@ -1080,6 +1882,12 @@ class CognitiveConsistencyDao {
         'self_standard_map',
         'information_avoidance',
         'identity_conflict',
+        'cognitive_structure_map',
+        'conflict_type_router',
+        'psychological_function',
+        'value_layering',
+        'interpersonal_balance',
+        'counter_attitudinal_experiment',
       }.contains(sceneType);
 
   Future<void> _createVerificationTaskIfNeeded(
@@ -1653,6 +2461,10 @@ class CognitiveConsistencyDao {
     String sessionId = '',
     String todoStepId = '',
     String evidenceId = '',
+    String contractId = '',
+    String methodWorkflowId = '',
+    String dissonanceType = '',
+    String sourcebookSupportLevel = '',
     String status = '',
     String suggestedAction = '',
   }) async {
@@ -1965,25 +2777,301 @@ class CognitiveConsistencyDao {
   }) async {
     final type = sourceType.trim();
     final id = sourceId.trim();
+    final trigger = triggerType.trim().isEmpty ? 'sourcebook_hint' : triggerType.trim();
     if (type.isEmpty || id.isEmpty || message.trim().isEmpty) return '';
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
-    final suggestionId = 'trg_${now}_${(type + id + triggerType + message).hashCode.abs()}';
+    final existing = await db.query(
+      'cc_trigger_suggestions',
+      where: 'source_type = ? AND source_id = ? AND trigger_type = ? AND status = ?',
+      whereArgs: <Object?>[type, id, trigger, 'active'],
+      orderBy: 'updated_at_ms DESC, created_at_ms DESC',
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      final existingId = (existing.first['suggestion_id'] ?? '').toString();
+      await db.update('cc_trigger_suggestions', <String, Object?>{
+        'message': message.trim(),
+        'recommended_tab': recommendedTab.trim(),
+        'severity': severity,
+        'updated_at_ms': now,
+      }, where: 'suggestion_id = ?', whereArgs: <Object?>[existingId]);
+      return existingId;
+    }
+    final suggestionId = 'trg_${now}_${(type + id + trigger).hashCode.abs()}';
     await db.insert(
       'cc_trigger_suggestions',
       <String, Object?>{
         'suggestion_id': suggestionId,
         'source_type': type,
         'source_id': id,
-        'trigger_type': triggerType.trim(),
+        'trigger_type': trigger,
         'message': message.trim(),
         'recommended_tab': recommendedTab.trim(),
         'severity': severity,
+        'status': 'active',
         'created_at_ms': now,
+        'updated_at_ms': now,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     return suggestionId;
+  }
+
+  Future<void> updateTriggerSuggestionStatus({required String suggestionId, required String status}) async {
+    final id = suggestionId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    await db.update('cc_trigger_suggestions', <String, Object?>{
+      'status': status.trim().isEmpty ? 'resolved' : status.trim(),
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, where: 'suggestion_id = ?', whereArgs: <Object?>[id]);
+  }
+
+  Future<List<Map<String, dynamic>>> allSourcebookCaseDetails({int limit = 200, String stage = ''}) async {
+    final db = await _db;
+    final rows = await db.query(
+      'cc_sourcebook_cases',
+      where: stage.trim().isEmpty ? null : 'current_stage = ?',
+      whereArgs: stage.trim().isEmpty ? null : <Object?>[stage.trim()],
+      orderBy: 'updated_at_ms DESC, created_at_ms DESC',
+      limit: limit,
+    );
+    final result = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      final sid = (row['session_id'] ?? '').toString();
+      if (sid.trim().isEmpty) continue;
+      final detail = await sourcebookCaseDetail(sid);
+      if (detail.isNotEmpty) result.add(detail);
+    }
+    return result;
+  }
+
+
+  Future<String> saveResolutionMethodUsage({
+    required String methodId,
+    String methodTitle = '',
+    String sessionId = '',
+    String caseId = '',
+    String sourceType = '',
+    String sourceId = '',
+    String selectedReason = '',
+    String enteredSceneKey = '',
+    String todoStepId = '',
+    String evidenceId = '',
+    String contractId = '',
+    String methodWorkflowId = '',
+    String dissonanceType = '',
+    String sourcebookSupportLevel = '',
+    String status = 'selected',
+  }) async {
+    final mid = methodId.trim();
+    if (mid.isEmpty) return '';
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final workflowId = methodWorkflowId.trim().isEmpty ? 'mw_${now}_${(mid + sessionId + sourceType + sourceId + enteredSceneKey).hashCode.abs()}' : methodWorkflowId.trim();
+    final usageId = 'musage_${now}_${(mid + sessionId + sourceType + sourceId + enteredSceneKey + workflowId).hashCode.abs()}';
+    await db.insert('cc_dissonance_resolution_method_usages', <String, Object?>{
+      'usage_id': usageId,
+      'method_id': mid,
+      'method_title': methodTitle.trim(),
+      'session_id': sessionId.trim(),
+      'case_id': caseId.trim(),
+      'source_type': sourceType.trim(),
+      'source_id': sourceId.trim(),
+      'selected_reason': selectedReason.trim(),
+      'entered_scene_key': enteredSceneKey.trim(),
+      'todo_step_id': todoStepId.trim(),
+      'evidence_id': evidenceId.trim(),
+      'contract_id': contractId.trim(),
+      'method_workflow_id': workflowId,
+      'dissonance_type': dissonanceType.trim(),
+      'sourcebook_support_level': sourcebookSupportLevel.trim(),
+      'status': status.trim().isEmpty ? 'selected' : status.trim(),
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await saveActionTraceLink(fromType: 'cc_resolution_method', fromId: mid, toType: 'cc_resolution_method_usage', toId: usageId, relationType: 'method_usage_created');
+    if (sessionId.trim().isNotEmpty) {
+      await saveActionTraceLink(fromType: 'cc_resolution_method_usage', fromId: usageId, toType: 'cc_session', toId: sessionId.trim(), relationType: 'method_used_for_session');
+    }
+    if (todoStepId.trim().isNotEmpty) {
+      await saveActionTraceLink(fromType: 'cc_resolution_method_usage', fromId: usageId, toType: 'todo_goal_step', toId: todoStepId.trim(), relationType: 'method_written_to_todo');
+    }
+    if (evidenceId.trim().isNotEmpty) {
+      await saveActionTraceLink(fromType: 'cc_resolution_method_usage', fromId: usageId, toType: 'evidence', toId: evidenceId.trim(), relationType: 'method_generated_evidence');
+    }
+    return usageId;
+  }
+
+  Future<void> updateResolutionMethodUsage({
+    required String usageId,
+    String sessionId = '',
+    String caseId = '',
+    String todoStepId = '',
+    String evidenceId = '',
+    String contractId = '',
+    String methodWorkflowId = '',
+    String dissonanceType = '',
+    String sourcebookSupportLevel = '',
+    String status = '',
+    String reviewText = '',
+    int? effectScore,
+    bool? reducedDissonance,
+    bool? producedEvidence,
+    String riskNote = '',
+    String nextUseSuggestion = '',
+  }) async {
+    final id = usageId.trim();
+    if (id.isEmpty) return;
+    final db = await _db;
+    final values = <String, Object?>{
+      if (sessionId.trim().isNotEmpty) 'session_id': sessionId.trim(),
+      if (caseId.trim().isNotEmpty) 'case_id': caseId.trim(),
+      if (todoStepId.trim().isNotEmpty) 'todo_step_id': todoStepId.trim(),
+      if (evidenceId.trim().isNotEmpty) 'evidence_id': evidenceId.trim(),
+      if (contractId.trim().isNotEmpty) 'contract_id': contractId.trim(),
+      if (methodWorkflowId.trim().isNotEmpty) 'method_workflow_id': methodWorkflowId.trim(),
+      if (dissonanceType.trim().isNotEmpty) 'dissonance_type': dissonanceType.trim(),
+      if (sourcebookSupportLevel.trim().isNotEmpty) 'sourcebook_support_level': sourcebookSupportLevel.trim(),
+      if (status.trim().isNotEmpty) 'status': status.trim(),
+      if (reviewText.trim().isNotEmpty) 'review_text': reviewText.trim(),
+      if (effectScore != null) 'effect_score': effectScore.clamp(0, 10),
+      if (reducedDissonance != null) 'reduced_dissonance': reducedDissonance ? 1 : 0,
+      if (producedEvidence != null) 'produced_evidence': producedEvidence ? 1 : 0,
+      if (riskNote.trim().isNotEmpty) 'risk_note': riskNote.trim(),
+      if (nextUseSuggestion.trim().isNotEmpty) 'next_use_suggestion': nextUseSuggestion.trim(),
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    };
+    if (values.length <= 1) return;
+    await db.update('cc_dissonance_resolution_method_usages', values, where: 'usage_id = ?', whereArgs: <Object?>[id]);
+    if (todoStepId.trim().isNotEmpty) {
+      await saveActionTraceLink(fromType: 'cc_resolution_method_usage', fromId: id, toType: 'todo_goal_step', toId: todoStepId.trim(), relationType: 'method_written_to_todo');
+    }
+    if (evidenceId.trim().isNotEmpty) {
+      await saveActionTraceLink(fromType: 'cc_resolution_method_usage', fromId: id, toType: 'evidence', toId: evidenceId.trim(), relationType: 'method_generated_evidence');
+    }
+    if (contractId.trim().isNotEmpty) {
+      await saveActionTraceLink(fromType: 'cc_resolution_method_usage', fromId: id, toType: 'cc_commitment_action_contract', toId: contractId.trim(), relationType: 'method_created_contract');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> recentResolutionMethodUsages({int limit = 30, String methodId = '', String status = ''}) async {
+    final db = await _db;
+    final where = <String>[];
+    final args = <Object?>[];
+    if (methodId.trim().isNotEmpty) {
+      where.add('method_id = ?');
+      args.add(methodId.trim());
+    }
+    if (status.trim().isNotEmpty) {
+      where.add('status = ?');
+      args.add(status.trim());
+    }
+    final rows = await db.query(
+      'cc_dissonance_resolution_method_usages',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'updated_at_ms DESC, created_at_ms DESC',
+      limit: limit,
+    );
+    return rows.map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  Future<void> createSourcebookContractFromMethod({
+    required String methodId,
+    required String methodTitle,
+    required String minimalAction,
+    String sessionId = '',
+    String caseId = '',
+    String coreValue = '',
+    String currentBehavior = '',
+    String completionStandard = '',
+    String fallbackPlan = '',
+    String reflectionQuestions = '',
+    String usageId = '',
+  }) async {
+    final action = minimalAction.trim();
+    if (action.isEmpty) return;
+    final sid = sessionId.trim().isEmpty ? 'method_${DateTime.now().millisecondsSinceEpoch}_${methodId.trim().hashCode.abs()}' : sessionId.trim();
+    final cid = caseId.trim().isEmpty ? 'case_$sid' : caseId.trim();
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert('cc_sourcebook_cases', <String, Object?>{
+      'case_id': cid,
+      'session_id': sid,
+      'event_summary': methodTitle.trim(),
+      'current_stage': 'action_contract',
+      'user_confirmation': 'method_selected',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    final contractId = 'contract_$sid';
+    await db.insert('cc_commitment_action_contracts', <String, Object?>{
+      'contract_id': contractId,
+      'session_id': sid,
+      'case_id': cid,
+      'core_value': coreValue.trim(),
+      'current_inconsistent_behavior': currentBehavior.trim(),
+      'minimal_repair_action': action,
+      'action_time': '',
+      'action_place': '',
+      'duration_minutes': 10,
+      'completion_standard': completionStandard.trim().isEmpty ? '完成这个最小行动，并记录现实反馈。' : completionStandard.trim(),
+      'obstacle': '',
+      'fallback_plan': fallbackPlan.trim().isEmpty ? '如果阻力太大，就降级为 2 分钟版本。' : fallbackPlan.trim(),
+      'reflection_questions': reflectionQuestions.trim().isEmpty ? '这个方法是否让价值、事实与行动更接近？它是否产生了现实证据？' : reflectionQuestions.trim(),
+      'status': 'method_selected',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    if (usageId.trim().isNotEmpty) {
+      await updateResolutionMethodUsage(usageId: usageId.trim(), sessionId: sid, caseId: cid, contractId: contractId, status: 'contract_created');
+      await saveActionTraceLink(fromType: 'cc_resolution_method_usage', fromId: usageId.trim(), toType: 'cc_sourcebook_case', toId: cid, relationType: 'method_created_case_contract');
+    }
+    await saveActionTraceLink(fromType: 'cc_resolution_method', fromId: methodId.trim(), toType: 'cc_sourcebook_case', toId: cid, relationType: 'method_created_case_contract');
+  }
+
+
+  Future<String> createSourcebookCaseDraft({
+    String eventSummary = '',
+    String sourceType = '',
+    String sourceId = '',
+    String initialStage = 'input',
+  }) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final seed = '${eventSummary.trim()}_${sourceType.trim()}_${sourceId.trim()}_$now';
+    final sid = 'sourcebook_draft_${now}_${seed.hashCode.abs()}';
+    final cid = 'case_$sid';
+    await db.insert('cc_sessions', <String, Object?>{
+      'session_id': sid,
+      'scene_type': 'sourcebook_case_draft',
+      'user_goal': eventSummary.trim(),
+      'user_context': eventSummary.trim(),
+      'user_values': '',
+      'result_json': '{}',
+      'provider': 'local',
+      'model_label': 'sourcebook_case_draft',
+      'status': 'draft',
+      'source_type': sourceType.trim(),
+      'source_id': sourceId.trim(),
+      'reward_source': '',
+      'origin_scene': 'sourcebook_case_wizard',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('cc_sourcebook_cases', <String, Object?>{
+      'case_id': cid,
+      'session_id': sid,
+      'event_summary': eventSummary.trim().isEmpty ? '未命名认知失调案例' : eventSummary.trim(),
+      'current_stage': initialStage.trim().isEmpty ? 'input' : initialStage.trim(),
+      'user_confirmation': 'draft',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await saveActionTraceLink(fromType: 'cc_sourcebook_case', fromId: cid, toType: 'cc_session', toId: sid, relationType: 'case_draft_created');
+    return sid;
   }
 
   Future<String> saveTrueSelfLink({
@@ -2346,6 +3434,54 @@ class CognitiveConsistencyDao {
     final reframeCount = await count('cc_consistency_reframe_items');
     final dailyReviewCount = await count('cc_daily_consistency_reviews');
 
+    Map<String, int> splitCountRows(List<Map<String, Object?>> rows, String column, {int maxItems = 10}) {
+      final counts = <String, int>{};
+      for (final row in rows) {
+        for (final raw in (row[column] ?? '').toString().split(RegExp(r'[、，,;；|/\n]+'))) {
+          final item = raw.trim();
+          if (item.isEmpty || item.length > 42) continue;
+          counts[item] = (counts[item] ?? 0) + 1;
+        }
+      }
+      final entries = counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      return <String, int>{for (final e in entries.take(maxItems)) e.key: e.value};
+    }
+    final sourcebookCaseCount = await count('cc_sourcebook_cases');
+    final valueLayerRows = await db.query('cc_value_layer_records', limit: limit, orderBy: 'created_at_ms DESC');
+    final sourcebookCoreValueCounts = splitCountRows(valueLayerRows, 'core_values');
+    final sourcebookIdentityBeliefCounts = splitCountRows(valueLayerRows, 'identity_beliefs');
+    final sourcebookPeripheralExplanationCounts = splitCountRows(valueLayerRows, 'peripheral_explanations');
+    final sourcebookChoiceCounts = await groupedCount('cc_user_choice_records', 'label', maxItems: 8);
+    final sourcebookChoiceSelectedRows = await db.rawQuery("""
+      SELECT label AS k, COUNT(*) AS c
+      FROM cc_user_choice_records
+      WHERE selected = 1 AND label IS NOT NULL AND TRIM(label) != ''
+      GROUP BY label
+      ORDER BY c DESC
+      LIMIT 8
+    """);
+    final sourcebookSelectedChoiceCounts = <String, int>{
+      for (final row in sourcebookChoiceSelectedRows) (row['k'] ?? '').toString(): _asInt(row['c']),
+    }..removeWhere((key, value) => key.trim().isEmpty || value <= 0);
+    final sourcebookContractStatusCounts = await groupedCount('cc_commitment_action_contracts', 'status', maxItems: 8);
+    final sourcebookCounterOldBeliefCounts = await groupedCount('cc_counter_attitudinal_experiments', 'old_belief', maxItems: 8);
+    final sourcebookInterpersonalImbalanceCounts = await groupedCount('cc_interpersonal_balance_records', 'imbalance_point', maxItems: 8);
+    final sourcebookProtectedSelfCounts = await groupedCount('cc_protected_self_images', 'image', maxItems: 8);
+    final sourcebookDefensePatternCounts = await groupedCount('cc_defense_pattern_records', 'pattern_type', maxItems: 8);
+    final sourcebookTriggerStatusCounts = await groupedCount('cc_trigger_suggestions', 'status', maxItems: 8);
+    final resolutionMethodCounts = await groupedCount('cc_dissonance_resolution_method_usages', 'method_title', maxItems: 10);
+    final resolutionMethodStatusCounts = await groupedCount('cc_dissonance_resolution_method_usages', 'status', maxItems: 8);
+    final resolutionMethodTodoRows = await db.rawQuery("SELECT COUNT(*) AS c FROM cc_dissonance_resolution_method_usages WHERE todo_step_id IS NOT NULL AND TRIM(todo_step_id) != ''");
+    final resolutionMethodEvidenceRows = await db.rawQuery("SELECT COUNT(*) AS c FROM cc_dissonance_resolution_method_usages WHERE evidence_id IS NOT NULL AND TRIM(evidence_id) != ''");
+    final resolutionMethodEffectRows = await db.rawQuery("SELECT AVG(effect_score) AS avg_score FROM cc_dissonance_resolution_method_usages WHERE effect_score > 0");
+    final resolutionMethodContractRows = await db.rawQuery("SELECT COUNT(*) AS c FROM cc_dissonance_resolution_method_usages WHERE contract_id IS NOT NULL AND TRIM(contract_id) != ''");
+    final resolutionMethodDissonanceCounts = await groupedCount('cc_dissonance_resolution_method_usages', 'dissonance_type', maxItems: 8);
+    final resolutionMethodSupportCounts = await groupedCount('cc_dissonance_resolution_method_usages', 'sourcebook_support_level', maxItems: 8);
+    final resolutionMethodTodoCount = resolutionMethodTodoRows.isEmpty ? 0 : _asInt(resolutionMethodTodoRows.first['c']);
+    final resolutionMethodEvidenceCount = resolutionMethodEvidenceRows.isEmpty ? 0 : _asInt(resolutionMethodEvidenceRows.first['c']);
+    final resolutionMethodContractCount = resolutionMethodContractRows.isEmpty ? 0 : _asInt(resolutionMethodContractRows.first['c']);
+    final resolutionMethodAverageEffect = resolutionMethodEffectRows.isEmpty ? 0 : (((resolutionMethodEffectRows.first['avg_score'] as num?) ?? 0).toDouble() * 10).round() / 10;
+
     return <String, dynamic>{
       'sessions': sessions,
       'events': events,
@@ -2373,6 +3509,26 @@ class CognitiveConsistencyDao {
       'topOldIdentityCounts': topOldIdentityCounts,
       'topNewIdentityCounts': topNewIdentityCounts,
       'informationRepairActionCount': informationRepairActionCount,
+      'sourcebookCaseCount': sourcebookCaseCount,
+      'sourcebookCoreValueCounts': sourcebookCoreValueCounts,
+      'sourcebookIdentityBeliefCounts': sourcebookIdentityBeliefCounts,
+      'sourcebookPeripheralExplanationCounts': sourcebookPeripheralExplanationCounts,
+      'sourcebookChoiceCounts': sourcebookChoiceCounts,
+      'sourcebookSelectedChoiceCounts': sourcebookSelectedChoiceCounts,
+      'sourcebookContractStatusCounts': sourcebookContractStatusCounts,
+      'sourcebookCounterOldBeliefCounts': sourcebookCounterOldBeliefCounts,
+      'sourcebookInterpersonalImbalanceCounts': sourcebookInterpersonalImbalanceCounts,
+      'sourcebookProtectedSelfCounts': sourcebookProtectedSelfCounts,
+      'sourcebookDefensePatternCounts': sourcebookDefensePatternCounts,
+      'sourcebookTriggerStatusCounts': sourcebookTriggerStatusCounts,
+      'resolutionMethodCounts': resolutionMethodCounts,
+      'resolutionMethodStatusCounts': resolutionMethodStatusCounts,
+      'resolutionMethodTodoCount': resolutionMethodTodoCount,
+      'resolutionMethodEvidenceCount': resolutionMethodEvidenceCount,
+      'resolutionMethodContractCount': resolutionMethodContractCount,
+      'resolutionMethodDissonanceCounts': resolutionMethodDissonanceCounts,
+      'resolutionMethodSupportCounts': resolutionMethodSupportCounts,
+      'resolutionMethodAverageEffect': resolutionMethodAverageEffect,
       'triggerCounts': <String, int>{
         '责任感/责任边界': responsibility,
         '可修复部分': repairable,
@@ -2977,6 +4133,18 @@ class CognitiveConsistencyDao {
     final db = await _db;
     await db.transaction((txn) async {
       for (final table in <String>[
+        'cc_dissonance_resolution_method_usages',
+        'cc_commitment_action_contracts',
+        'cc_counter_attitudinal_experiments',
+        'cc_interpersonal_balance_records',
+        'cc_user_choice_records',
+        'cc_value_layer_records',
+        'cc_user_confirmations',
+        'cc_conflict_edges',
+        'cc_cognition_nodes',
+        'cc_defense_pattern_records',
+        'cc_protected_self_images',
+        'cc_sourcebook_cases',
         'cc_identity_transition_records',
         'cc_information_contact_results',
         'cc_temperature_review_items',

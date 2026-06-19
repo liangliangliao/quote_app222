@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../pages/settings_page.dart';
+import '../sustainable_excellence/sustainable_excellence_home_page.dart';
 import 'positive_psych_ai_service.dart';
 import 'positive_psych_dao.dart';
 import 'positive_psych_models.dart';
@@ -261,6 +262,11 @@ class _PositivePsychModuleHomePageState extends State<PositivePsychModuleHomePag
           IconButton(
             icon: const Icon(Icons.psychology_alt_outlined),
             onPressed: _openPersonaSheet,
+          ),
+          IconButton(
+            tooltip: 'Lecture 14-16 实践实验室',
+            icon: const Icon(Icons.all_inclusive_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SustainableExcellenceHomePage(initialInput: '把 Lecture 14-16 的压力恢复、完美主义转卓越、享受过程落到今天行动', source: 'positive_psych_lecture_14_16', extraContext: '{"lecture":"14-16","themes":"stress_recovery,perfectionism,process_enjoyment"}'))),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),

@@ -460,7 +460,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const Text('AI 提示词统一配置中心', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 6),
           const Text(
-            '足下真实自我的全局价值层、10 个场景层、输出格式，以及目标训练、人生注解、电影角色实验室、发现之旅/看电影、首页侧栏等提示词都会集中到这里。进入后先选择模块，再选择 AI 子功能，即可查看默认模板、系统参数，并自由修改或恢复默认。',
+            '足下真实自我、认知一致性、可持续卓越实验室的全局价值层/场景层/输出格式，以及目标训练、人生注解、电影角色实验室、发现之旅/看电影、首页侧栏等提示词都会集中到这里。进入后先选择模块，再选择 AI 子功能，即可查看默认模板、系统参数，并自由修改或恢复默认。',
             style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.45),
           ),
           const SizedBox(height: 10),

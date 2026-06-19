@@ -114,6 +114,7 @@ class CognitiveConsistencyAiService {
     final evidence = await _recentEvidenceText();
     final templates = await _promptConfig.load();
     final sceneInstruction = await _configuredSpecialSceneInstruction(cleanScene);
+    final sceneOutputFormat = await _promptConfig.outputFormatForScene(cleanScene, _outputFormatForScene(cleanScene, templates.outputFormat));
     final prompt = '''$sceneInstruction
 
 用户输入：${_nonEmpty(userInput, '未填写')}
@@ -121,7 +122,7 @@ class CognitiveConsistencyAiService {
 最近行动证据：$evidence
 今天日期：${_today()}
 
-${templates.outputFormat}
+$sceneOutputFormat
 ''';
     return _runPlanScene(
       sceneType: cleanScene,
@@ -140,12 +141,58 @@ ${templates.outputFormat}
   }
 
 
+
+  int _maxTokensForScene(String sceneType) {
+    const focused = <String>{
+      'cognitive_structure_map',
+      'conflict_type_router',
+      'psychological_function',
+      'value_layering',
+      'interpersonal_balance',
+      'counter_attitudinal_experiment',
+      'information_avoidance',
+      'identity_conflict',
+    };
+    return focused.contains(sceneType) ? 1600 : 2400;
+  }
+
+  String _outputFormatForScene(String sceneKey, String commonOutputFormat) {
+    switch (sceneKey) {
+      case 'cognitive_structure_map':
+        return '''只输出合法 JSON，不要 Markdown。字段精简如下：
+{"eventSummary":"事件摘要","coreConflict":"核心冲突","sourcebookAnalysis":{"currentStage":"structure_map","protectedSelfImage":[{"image":"被保护的自我形象","evidence":"依据","confidence":"medium"}],"defensePatterns":[{"type":"rationalization","description":"表现","possibleCost":"代价"}],"cognitiveStructureMap":{"nodes":[{"nodeType":"belief/value/behavior/self/relation/evidence","label":"节点标题","content":"节点内容","importance":"high","confidence":0.7}],"edges":[{"from":"节点标题","to":"节点标题","relationType":"consistent/inconsistent/uncertain","description":"关系说明","strength":0.7}]},"realityTestingQuestions":["一个现实检验问题"],"userChoiceOptions":[{"label":"小行动","description":"为什么","nextAction":"下一步"}],"commitmentAction":{"minimalRepairAction":"最小修正行动","completionStandard":"完成标准","fallbackPlan":"失败降级方案"},"integratedSelfStatement":"新的整合性表达"}}''';
+      case 'conflict_type_router':
+        return '''只输出合法 JSON，不要 Markdown。字段精简如下：
+{"eventSummary":"事件摘要","coreConflict":"核心冲突","sourcebookAnalysis":{"currentStage":"conflict_router","conflictTypeRouting":{"types":[{"type":"矛盾类型","evidence":"依据","priority":"high/medium/low","actionPath":"处理路径"}]},"realityTestingQuestions":["现实检验问题"],"userChoiceOptions":[{"label":"路径选择","description":"含义","nextAction":"下一步"}],"commitmentAction":{"minimalRepairAction":"最小行动","completionStandard":"完成标准","fallbackPlan":"降级方案"},"integratedSelfStatement":"整合表达"}}''';
+      case 'psychological_function':
+        return '''只输出合法 JSON，不要 Markdown。字段精简如下：
+{"eventSummary":"事件摘要","coreConflict":"核心冲突","sourcebookAnalysis":{"currentStage":"psychological_function","psychologicalFunction":{"shortTermBenefit":"短期收益","protectedNeed":"保护的需要","avoidedPain":"回避的痛苦","pastFunction":"过去功能","currentCost":"当前代价","keep":"保留什么","modify":"修正什么","release":"放下什么"},"defensePatterns":[{"type":"identity_defense","description":"表现","possibleCost":"代价"}],"userChoiceOptions":[{"label":"小行动","description":"含义","nextAction":"下一步"}],"commitmentAction":{"minimalRepairAction":"最小行动","completionStandard":"完成标准","fallbackPlan":"降级方案"},"integratedSelfStatement":"整合表达"}}''';
+      case 'value_layering':
+        return '''只输出合法 JSON，不要 Markdown。字段精简如下：
+{"eventSummary":"事件摘要","coreConflict":"核心冲突","sourcebookAnalysis":{"currentStage":"value_layering","valueLayers":{"coreValues":["核心价值"],"identityBeliefs":["身份信念"],"peripheralExplanations":["外围解释"],"keepItems":["保留"],"loosenItems":["松动"],"testItems":["检验"],"integratedStatement":"整合表达"},"alternativeInterpretations":{"userSupportive":"支持性解释","selfDefenseWarning":"自我辩护风险","integratedView":"整合解释"},"userChoiceOptions":[{"label":"路径选择","description":"含义","nextAction":"下一步"}],"commitmentAction":{"minimalRepairAction":"最小行动","completionStandard":"完成标准","fallbackPlan":"降级方案"},"integratedSelfStatement":"整合表达"}}''';
+      case 'interpersonal_balance':
+        return '''只输出合法 JSON，不要 Markdown。字段精简如下：
+{"eventSummary":"事件摘要","coreConflict":"核心冲突","sourcebookAnalysis":{"currentStage":"reality_test","interpersonalBalance":{"myAttitudeToPerson":"我对对方","objectOrIssue":"对象/观点/事件","myAttitudeToObject":"我对对象","otherAttitudeToObject":"对方对对象","imbalancePoint":"失衡点","possibleBalancePaths":["区分人和观点","沟通澄清","边界表达"],"boundaryAction":"人际小行动"},"userChoiceOptions":[{"label":"沟通/边界行动","description":"含义","nextAction":"下一步"}],"commitmentAction":{"minimalRepairAction":"人际小行动","completionStandard":"完成标准","fallbackPlan":"降级方案"},"integratedSelfStatement":"整合表达"}}''';
+      case 'counter_attitudinal_experiment':
+        return '''只输出合法 JSON，不要 Markdown。字段精简如下：
+{"eventSummary":"事件摘要","coreConflict":"核心冲突","sourcebookAnalysis":{"currentStage":"action_contract","counterAttitudinalExperiment":{"oldBelief":"旧信念","protectiveFunction":"保护了什么","limitation":"限制了什么","experimentAction":"5-15分钟反态度行动","durationMinutes":10,"completionStandard":"完成标准","observationQuestion":"行动后观察问题","updatedBelief":"更准确新信念"},"userChoiceOptions":[{"label":"反态度实验","description":"含义","nextAction":"实验行动"}],"commitmentAction":{"minimalRepairAction":"实验行动","durationMinutes":10,"completionStandard":"完成标准","fallbackPlan":"降级方案"},"integratedSelfStatement":"整合表达"}}''';
+      default:
+        return commonOutputFormat;
+    }
+  }
+
   Future<String> _configuredSpecialSceneInstruction(String sceneKey) async {
-    final id = sceneKey == 'information_avoidance'
-        ? 'cc_scene_information_avoidance'
-        : sceneKey == 'identity_conflict'
-            ? 'cc_scene_identity_conflict'
-            : '';
+    const ids = <String, String>{
+      'information_avoidance': 'cc_scene_information_avoidance',
+      'identity_conflict': 'cc_scene_identity_conflict',
+      'cognitive_structure_map': 'cc_scene_cognitive_structure_map',
+      'conflict_type_router': 'cc_scene_conflict_type_router',
+      'psychological_function': 'cc_scene_psychological_function',
+      'value_layering': 'cc_scene_value_layering',
+      'interpersonal_balance': 'cc_scene_interpersonal_balance',
+      'counter_attitudinal_experiment': 'cc_scene_counter_attitudinal_experiment',
+    };
+    final id = ids[sceneKey] ?? '';
     if (id.isEmpty) return _specialSceneInstruction(sceneKey);
     try {
       final inspected = await _promptConfig.inspectPrompt(id);
@@ -176,6 +223,18 @@ ${templates.outputFormat}
         return '''当前场景：信息回避挑战。用户正在回避账单、结果、体检、成绩、关系反馈、目标进展、反对证据或其他现实信息。请识别回避的信息、威胁的自我形象、最害怕的结果、信息回避方式，并把反对信息降级为今天能接触的最小事实行动。核心不是审判用户，而是恢复现实接触和行动能力。''';
       case 'identity_conflict':
         return '''当前场景：身份冲突重构。用户处在旧身份与新身份之间，例如逃避者/行动者、受害者/负责者、讨好者/有边界的人。请识别旧身份保护什么、新身份召唤什么、用户害怕失去什么，并给出一个不粗暴否定旧身份、但能支持新身份的小行动。''';
+      case 'cognitive_structure_map':
+        return '''当前场景：认知结构地图。请把用户输入拆成信念节点、态度节点、行为节点、自我形象节点、关系节点和现实反馈节点，并说明哪些节点一致、哪些冲突、哪些仍需验证。重点体现“心理逻辑”而非形式逻辑：不要只指出用户矛盾，而要说明这种矛盾如何在用户心里暂时成立、保护了什么、又造成什么现实代价。最后落到一个最小现实检验行动。''';
+      case 'conflict_type_router':
+        return '''当前场景：矛盾类型分流器。请判断用户事件主要属于信念—信念冲突、信念—行为冲突、价值—行为冲突、自我—现实冲突、关系—态度冲突、角色冲突、决策后失调、选择性信息冲突中的哪几类。每类都要说明依据、强度、处理优先级和对应行动路径。不要替用户做最终选择。''';
+      case 'psychological_function':
+        return '''当前场景：心理功能分析器。请不要只判断想法/行为对错，而要分析它正在保护什么、回避什么、维持什么。请从自尊保护、焦虑缓冲、归属维护、责任转移、行动逃避、身份连续、希望维持等角度分析：过去功能、现在收益、长期代价、可保留部分、需要修正部分、可以放下部分。最后给一个保留核心保护但不继续逃避现实的小行动。''';
+      case 'value_layering':
+        return '''当前场景：核心价值/身份信念/外围解释分层。请把用户表达分为三层：真正值得保留的核心价值、可能过度僵硬的身份信念、需要现实检验的外围解释。请判断用户是否把临时借口误当成核心价值，或把承认错误等同于否定整个人。最后输出一句整合性表达：我可以仍然重视____，同时承认____，并从____开始行动。''';
+      case 'interpersonal_balance':
+        return '''当前场景：人际平衡分析。请基于 Heider/Newcomb 的平衡思想分析“我—他人—对象/观点/事件”的三角关系：我对对方的态度、我对对象的态度、对方对对象的态度、失衡点、是否把人和观点混在一起、是否为了维持关系压抑真实态度、是否为了维护自我立场过度否定对方。请给出可选平衡方式：区分人和观点、调整期待、沟通澄清、边界表达、接受局部不一致。最后落到一个人际小行动。''';
+      case 'counter_attitudinal_experiment':
+        return '''当前场景：反态度行为实验。用户存在一个限制性自我信念。请设计一个 5-15 分钟、低风险、可观察的反态度小行动。输出旧信念、它保护了什么、它限制了什么、小行动、完成标准、行动后观察问题，以及更准确的新信念。强调一次行动不能证明彻底改变，但可以证明旧信念不是绝对事实。''';
       default:
         return '''当前场景：现代认知失调专项分析。请围绕自由选择、负面后果、可预见性、责任边界、自我标准、合理化识别和行动修复输出结构化分析。''';
     }
@@ -201,6 +260,18 @@ ${templates.outputFormat}
         return '当前核心是用户可能正在通过不看结果、不听反馈、不查数据来减少短期不适，但长期会削弱现实接触和行动修正。';
       case 'identity_conflict':
         return '当前核心是旧身份在保护安全感，新身份在召唤价值行动；现在需要用小证据支持新身份，而不是强迫推翻旧自己。';
+      case 'cognitive_structure_map':
+        return '当前核心是把信念、行为、自我形象、关系和现实反馈放到同一张地图里，识别哪些关系正在制造心理不一致。';
+      case 'conflict_type_router':
+        return '当前核心是先判断矛盾类型，再选择处理路径；不是所有冲突都要用同一种方式解决。';
+      case 'psychological_function':
+        return '当前核心是理解这个想法或行为正在保护什么，同时评估它现在是否已经从保护变成限制。';
+      case 'value_layering':
+        return '当前核心是保留真正重要的核心价值，松动过度僵硬的身份信念，并让外围解释接受现实检验。';
+      case 'interpersonal_balance':
+        return '当前核心是分析我、他人、对象/观点/事件之间的三角失衡，区分人和观点、关系和边界。';
+      case 'counter_attitudinal_experiment':
+        return '当前核心是用一个低风险反态度行为，证明旧自我叙事不是绝对事实。';
       default:
         return '当前存在价值、行为、选择或后果之间的不一致，需要转化为一个现实行动。';
     }
@@ -226,6 +297,18 @@ ${templates.outputFormat}
         return '信息回避、只看支持证据、拖延查看结果、攻击反对证据、转移注意';
       case 'identity_conflict':
         return '旧身份保护、身份防御、害怕失败、害怕失去认同、未来幻想';
+      case 'cognitive_structure_map':
+        return '心理逻辑自洽、价值—行为冲突、自我形象防御、现实反馈回避';
+      case 'conflict_type_router':
+        return '矛盾类型混淆、把局部冲突扩大成人格判断、用单一路径处理复杂问题';
+      case 'psychological_function':
+        return '自尊保护、焦虑缓冲、身份连续、行动逃避、责任转移';
+      case 'value_layering':
+        return '把外围解释当核心价值、身份信念僵化、承认错误等于否定自我';
+      case 'interpersonal_balance':
+        return '人际平衡失调、把人和观点混同、关系压力、边界回避';
+      case 'counter_attitudinal_experiment':
+        return '限制性自我信念、行为证据不足、害怕失败、身份防御';
       default:
         return '认知失调、合理化、行动修复';
     }
@@ -638,7 +721,7 @@ ${templates.outputFormat}
           prompt: prompt,
           purpose: purpose,
           systemPrompt: systemPrompt,
-          maxTokens: 2400,
+          maxTokens: _maxTokensForScene(sceneType),
           expectJson: true,
           temperature: 0.25,
         );
@@ -688,6 +771,7 @@ ${templates.outputFormat}
     final identityConflictMap = _asMap(parsed['identityConflict']);
     final identityDialogueMap = _asMap(parsed['identityDialogue']);
     final dailyReviewSeed = _asMap(parsed['dailyReviewSeed']);
+    final sourcebookPayload = _asMap(parsed['sourcebookAnalysis']).isNotEmpty ? _asMap(parsed['sourcebookAnalysis']) : const <String, dynamic>{};
 
     final minimumActionVariant = _actionVariantFromMap(
       _asMap(actionSet['minimumAction']),
@@ -805,6 +889,7 @@ ${templates.outputFormat}
       informationAvoidanceBranches: informationAvoidanceBranches,
       identityDialogue: identityDialogue,
       dailyReviewSeed: _stringifySection(dailyReviewSeed, fallback.dailyReviewSeed),
+      sourcebookAnalysis: CcSourcebookAnalysis.fromMap(sourcebookPayload),
       provider: state['provider'] ?? 'ai',
       modelLabel: state['label'] ?? 'AI',
       rawResponse: raw,
@@ -876,6 +961,116 @@ $evidence''';
     return '【价值一致性报告｜$periodLabel】\n当前范围已沉淀 $total 条行动证据，累计约 $minutes 分钟，其中“中断后回来/分心后回来”的证据 $recovery 条。最值得保留的事实不是“你已经彻底改变”，而是：你已经多次用小行动打断完全不行动的旧模式。\n\n【主要价值方向】\n${values.isEmpty ? '暂未明确，可在下一次行动前补充价值。' : values}\n\n【V18 失调画像】\n高频失调类型：$typeSummary\n失调强度分布：$intensitySummary\n温度变化：$tempSummary\n温度复盘模式：$tempModeSummary\n信息接触结果：$informationSummary\n身份变化：旧身份 $identityOldSummary；新身份 $identityNewSummary\n验证任务：$verificationSummary\n每日复盘：\n$dailySummary\n\n【最有效的1美元行动】\n${latest.completedAction}\n\n【最常见的旧解释线索】\n${latest.oldStory.isEmpty ? '暂未记录。下一次行动后请写一句“它打破了什么旧解释”。' : latest.oldStory}\n\n【下一个最小充分行动】\n重复最近一次有效动作，或把它轻微升级 1 分钟。重点不是连续完美，而是再次制造真实证据。\n\n【风险提醒】\n不要因为行动很小就否定它；也不要把一次完成夸大成彻底改变。把它当成真实证据，继续积累。';
   }
 
+
+  String _fallbackSourcebookRaw({
+    required String scene,
+    required String goal,
+    required String values,
+    required String context,
+  }) {
+    final action = '打开与“$goal”直接相关的一个页面、一本书或一个工具，只做 3 分钟，并写下一句完成事实。';
+    return jsonEncode(<String, dynamic>{
+      'eventSummary': goal,
+      'coreConflict': '价值想前进，但当前行为证据不足。',
+      'sourcebookAnalysis': <String, dynamic>{
+        'currentStage': scene == 'interpersonal_balance'
+            ? 'interpersonal_balance'
+            : scene == 'counter_attitudinal_experiment'
+                ? 'counter_attitudinal_experiment'
+                : scene == 'value_layering'
+                    ? 'value_layering'
+                    : 'structure_map',
+        'protectedSelfImage': [
+          <String, dynamic>{'image': '我是重视$values的人', 'evidence': '用户明确提到相关价值或目标', 'confidence': 'medium'}
+        ],
+        'defensePatterns': [
+          <String, dynamic>{'type': 'waiting_for_motivation', 'description': '等待状态、动力或完整方案后再行动', 'possibleCost': '价值与行为继续断开'}
+        ],
+        'cognitiveStructureMap': <String, dynamic>{
+          'nodes': [
+            <String, dynamic>{'nodeType': 'value', 'label': '核心价值', 'content': values, 'importance': 'high', 'confidence': 0.7},
+            <String, dynamic>{'nodeType': 'behavior', 'label': '当前行为', 'content': context, 'importance': 'high', 'confidence': 0.6},
+            <String, dynamic>{'nodeType': 'self', 'label': '自我形象', 'content': '希望自己能靠近价值、持续行动', 'importance': 'medium', 'confidence': 0.6},
+            <String, dynamic>{'nodeType': 'evidence', 'label': '现实反馈', 'content': '还缺少稳定行动证据', 'importance': 'high', 'confidence': 0.6},
+          ],
+          'edges': [
+            <String, dynamic>{'from': '核心价值', 'to': '当前行为', 'relationType': 'inconsistent', 'description': '重视的方向与当前行为证据之间存在距离', 'strength': 0.7},
+            <String, dynamic>{'from': '自我形象', 'to': '现实反馈', 'relationType': 'uncertain', 'description': '旧自我评价需要通过小行动重新检验', 'strength': 0.5},
+          ],
+        },
+        'conflictTypeRouting': <String, dynamic>{
+          'types': [
+            <String, dynamic>{'type': 'value_behavior', 'evidence': '价值与行为证据未接上', 'priority': 'high', 'actionPath': '最小行动契约'},
+            <String, dynamic>{'type': 'self_reality', 'evidence': '自我形象需要现实证据支持', 'priority': 'medium', 'actionPath': '反态度小实验'},
+          ],
+        },
+        'psychologicalFunction': <String, dynamic>{
+          'shortTermBenefit': '减少压力和羞耻，暂时避免面对行动困难。',
+          'protectedNeed': '保护自尊、安全感和“我并非失败”的自我形象。',
+          'avoidedPain': '避免承认目标与行为之间的距离。',
+          'pastFunction': '曾经可能帮助用户在压力下缓冲痛苦。',
+          'currentCost': '长期会让行动证据不足，价值持续悬空。',
+          'keep': '保留对困难的理解。',
+          'modify': '把解释改成可验证的小行动。',
+          'release': '放下必须等完整动力才开始。',
+        },
+        'valueLayers': <String, dynamic>{
+          'coreValues': [values],
+          'identityBeliefs': ['我希望成为能靠近价值行动的人'],
+          'peripheralExplanations': ['没状态/没动力/还没准备好'],
+          'keepItems': ['核心价值和真实困难都要被看见'],
+          'loosenItems': ['必须状态很好才能开始'],
+          'testItems': ['3分钟行动是否能打破完全不行动'],
+          'integratedStatement': '我可以仍然重视$values，同时承认现在有阻力，并从3分钟真实行动开始。',
+        },
+        'alternativeInterpretations': <String, dynamic>{
+          'userSupportive': '用户确实有现实阻力，不应把困难等同于人格失败。',
+          'selfDefenseWarning': '如果一直等待状态，解释可能变成自我保护性回避。',
+          'integratedView': '承认阻力，同时用最小行动制造新证据。',
+        },
+        'realityTestingQuestions': ['完成3分钟后，不适是否下降一点？', '旧信念“我完全不能行动”是否仍然绝对成立？', '这个行动是否更接近核心价值？'],
+        'userChoiceOptions': [
+          <String, dynamic>{'label': '做一个小行动', 'description': '先留下价值—行为连接证据', 'nextAction': action},
+          <String, dynamic>{'label': '收集反方证据', 'description': '查看一个事实而不是继续想象', 'nextAction': '查看一个最小数据/反馈并记录'},
+          <String, dynamic>{'label': '继续观察', 'description': '暂不下结论，记录下一次同类冲突', 'nextAction': '今天记录一次冲突触发点'},
+        ],
+        'interpersonalBalance': <String, dynamic>{
+          'myAttitudeToPerson': '',
+          'objectOrIssue': scene == 'interpersonal_balance' ? goal : '',
+          'myAttitudeToObject': '',
+          'otherAttitudeToObject': '',
+          'imbalancePoint': scene == 'interpersonal_balance' ? '需要澄清人、观点和关系边界' : '',
+          'possibleBalancePaths': scene == 'interpersonal_balance' ? ['区分人和观点', '澄清边界', '接受局部不一致'] : [],
+          'boundaryAction': scene == 'interpersonal_balance' ? '写下一句温和边界表达' : '',
+        },
+        'counterAttitudinalExperiment': <String, dynamic>{
+          'oldBelief': scene == 'counter_attitudinal_experiment' ? goal : '我必须有动力才能开始',
+          'protectiveFunction': '避免失败感和羞耻。',
+          'limitation': '限制行动证据出现。',
+          'experimentAction': action,
+          'durationMinutes': 3,
+          'completionStandard': '留下一个可见记录',
+          'observationQuestion': '这次行动说明旧信念哪里不是绝对事实？',
+          'updatedBelief': '我在阻力中也可以完成一个足够小的动作。',
+        },
+        'commitmentAction': <String, dynamic>{
+          'coreValue': values,
+          'currentInconsistentBehavior': context,
+          'minimalRepairAction': action,
+          'time': '今天',
+          'place': '当前可行动的位置',
+          'durationMinutes': 3,
+          'completionStandard': '留下一个可见记录',
+          'obstacle': '没状态/抗拒/想继续分析',
+          'fallbackPlan': '只写一句话也算完成最低版本',
+          'reflectionQuestions': ['行动后我看见了什么？', '旧解释是否松动一点？', '下一步最小动作是什么？'],
+        },
+        'reflectionQuestions': ['我完成了什么事实？', '它打破了什么旧解释？', '我愿意如何微调下一步？'],
+        'integratedSelfStatement': '我可以仍然重视$values，同时承认现在有阻力，并从3分钟真实行动开始。',
+      },
+    });
+  }
+
   CcPlanResult _fallback(String userGoal, String userContext, String userValues, Map<String, String> state, {String scene = 'target'}) {
     final goal = userGoal.trim().isEmpty ? '这个目标' : userGoal.trim();
     final values = userValues.trim().isEmpty ? '成长、自由或责任' : userValues.trim();
@@ -939,7 +1134,7 @@ $evidence''';
       vicariousDissonance: scene == 'vicarious_dissonance' ? '区分我与群体的认同、群体行为是否代表我、我需要表达什么、不需要背负什么。' : '',
       todoWriteBackInsight: '回写 Todo 时应保留责任边界、自我标准、合理化类型与下一步修复行动，避免只写“完成了什么”。',
       dissonanceReductionMode: scene == 'dissonance' ? 'explanation_only' : 'action_repair',
-      verificationQuestion: scene == 'choice_recheck' || scene == 'sunk_cost' || scene == 'group_culture' || scene == 'vicarious_dissonance' || scene == 'hypocrisy_change' || scene == 'responsibility_radar' || scene == 'self_standard_map' || scene == 'information_avoidance' || scene == 'identity_conflict' || scene == 'dissonance' ? '现实验证：这次分析后的最小行动是否真的降低了失调、增强了清醒感，并让行为更接近价值？' : '',
+      verificationQuestion: scene == 'choice_recheck' || scene == 'sunk_cost' || scene == 'group_culture' || scene == 'vicarious_dissonance' || scene == 'hypocrisy_change' || scene == 'responsibility_radar' || scene == 'self_standard_map' || scene == 'information_avoidance' || scene == 'identity_conflict' || scene == 'cognitive_structure_map' || scene == 'conflict_type_router' || scene == 'psychological_function' || scene == 'value_layering' || scene == 'interpersonal_balance' || scene == 'counter_attitudinal_experiment' || scene == 'dissonance' ? '现实验证：这次分析后的最小行动是否真的降低了失调、增强了清醒感，并让行为更接近价值？' : '',
       verificationSuccessSignal: '出现一个可观察变化，或发现原判断需要修正。',
       verificationDueDays: 3,
       dissonanceTypes: scene == 'information_avoidance' ? '信息回避失调' : (scene == 'identity_conflict' ? '身份冲突失调' : '行为—价值失调、自我形象威胁型失调'),
@@ -977,11 +1172,20 @@ $evidence''';
       informationAvoidanceBranches: scene == 'information_avoidance' ? const CcInformationAvoidanceBranches(avoidedInformation: '尚未结构化说明', fearedResult: '担心看到刺痛结果', smallestContactAction: '今天只查看一个数据、一个反馈或一个结果', betterThanExpected: '保留事实，不继续灾难化，把它写成现实证据。', worseThanExpected: '只处理一个最小修复动作，不把结果等同于整个人失败。', ambiguous: '补充一个低成本信息源，而不是回到逃避。', nextInformationAction: '写下看到的一个事实') : const CcInformationAvoidanceBranches(),
       identityDialogue: scene == 'identity_conflict' ? const CcIdentityDialogue(oldIdentity: '旧身份', oldIdentityVoice: '我先躲开，至少不会立刻失败。', oldIdentityProtection: '保护安全感、避免失败或羞耻', newIdentity: '新身份', newIdentityVoice: '我不需要彻底变强，只需要留下一个新证据。', fearOfLoss: '害怕失去安全感或旧解释', newIdentityAction: '今天做一个新身份小证据', postActionIdentitySentence: '我不是彻底变强了，但我已经给新身份留下一条真实证据。') : const CcIdentityDialogue(),
       dailyReviewSeed: '今天最接近价值的行动是什么？今天最明显的不一致是什么？明天重复一个最小行动。',
+      sourcebookAnalysis: CcSourcebookAnalysis.fromMap(_sourcebookFromFallbackRaw(_fallbackSourcebookRaw(scene: scene, goal: goal, values: values, context: context))),
       provider: state['provider'] ?? 'local',
       modelLabel: state['label'] ?? '本地策略',
-      rawResponse: '',
+      rawResponse: _fallbackSourcebookRaw(scene: scene, goal: goal, values: values, context: context),
       usedFallback: true,
     );
+  }
+
+
+  Map<String, dynamic> _sourcebookFromFallbackRaw(String raw) {
+    final parsed = _extractJsonObject(raw);
+    final sourcebook = parsed['sourcebookAnalysis'];
+    if (sourcebook is Map) return Map<String, dynamic>.from(sourcebook);
+    return <String, dynamic>{};
   }
 
   Map<String, dynamic> _extractJsonObject(String raw) {

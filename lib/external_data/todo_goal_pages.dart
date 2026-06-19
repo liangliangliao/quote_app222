@@ -3465,6 +3465,94 @@ class _GoalStepTreeNode extends StatelessWidget {
   }
 }
 
+
+bool _sourcebookShouldHintForStep(TodoGoalActionStep step) {
+  if (step.isCompleted) return false;
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final ageDays = step.createdAtMs <= 0 ? 0 : ((now - step.createdAtMs) / Duration.millisecondsPerDay).floor();
+  final stalled = ageDays >= 3 && step.effortCount == 0;
+  final failed = step.status == 'failed' || step.status == 'blocked';
+  final highFriction = step.difficultyScore >= 4 && step.effortCount == 0;
+  return failed || stalled || highFriction;
+}
+
+bool _sourcebookShouldHintForProblemNode(TodoGoalProblemNode node, bool ready) {
+  if (node.isCompleted || !ready) return false;
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final ageDays = node.createdAtMs <= 0 ? 0 : ((now - node.createdAtMs) / Duration.millisecondsPerDay).floor();
+  final failed = node.isFailed;
+  final stuckAction = node.isActionable && !node.hasConcreteActionContract;
+  final noLoop = node.isActionable && ageDays >= 3 && node.effortCount == 0 && node.linkedStepCount == 0;
+  return failed || stuckAction || noLoop;
+}
+
+class _SourcebookAutoHintCard extends StatefulWidget {
+  const _SourcebookAutoHintCard({
+    required this.reason,
+    required this.onOpen,
+    this.sourceType = '',
+    this.sourceId = '',
+    this.triggerType = 'todo_sourcebook_hint',
+  });
+
+  final String reason;
+  final VoidCallback onOpen;
+  final String sourceType;
+  final String sourceId;
+  final String triggerType;
+
+  @override
+  State<_SourcebookAutoHintCard> createState() => _SourcebookAutoHintCardState();
+}
+
+class _SourcebookAutoHintCardState extends State<_SourcebookAutoHintCard> {
+  bool _saved = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _persistOnce();
+  }
+
+  Future<void> _persistOnce() async {
+    if (_saved || widget.sourceType.trim().isEmpty || widget.sourceId.trim().isEmpty) return;
+    _saved = true;
+    await CognitiveConsistencyDao().saveTriggerSuggestion(
+      sourceType: widget.sourceType,
+      sourceId: widget.sourceId,
+      triggerType: widget.triggerType,
+      message: widget.reason,
+      recommendedTab: '8',
+      severity: 2,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.hub_outlined, size: 18, color: Color(0xFFD97706)),
+          SizedBox(width: 6),
+          Expanded(child: Text('系统提示：这可能不是单纯时间管理问题', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF92400E)))),
+        ]),
+        const SizedBox(height: 6),
+        Text(widget.reason, style: const TextStyle(height: 1.35, color: Color(0xFF78350F))),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: widget.onOpen, icon: const Icon(Icons.sync_alt_outlined), label: const Text('进入源书工作台分析')),
+      ]),
+    );
+  }
+}
+
 class _TodayStepCard extends StatelessWidget {
   const _TodayStepCard({required this.step, this.onToggle, this.onStart, this.onMakeSmaller, this.onReview, this.onRecordEffort, this.onBringBack, this.onMindfulFocus, this.onWriteBack, this.showGoalSubtitle = true});
   final TodoGoalActionStep step;
@@ -3524,6 +3612,14 @@ class _TodayStepCard extends StatelessWidget {
           _ActionEffortBridgeCard(step: step),
           const SizedBox(height: 8),
           _CcSourceEvidenceStatus(sourceType: 'todo_goal_step', sourceId: step.stepId),
+          if (_sourcebookShouldHintForStep(step))
+            _SourcebookAutoHintCard(
+              sourceType: 'todo_goal_step',
+              sourceId: step.stepId,
+              triggerType: 'step_stuck_or_failed',
+              reason: '该行动出现失败、长时间无努力记录或难度过高时，常常意味着价值—行为不一致、自我防御、目标意义冲突或行动契约过大。建议用源书工作台拆解认知节点、冲突边和最小修正行动。',
+              onOpen: () => _openCognitiveConsistencyForStep(context, step, initialTabIndex: 8),
+            ),
           if (step.minimumStandard.trim().isNotEmpty) _MiniLine(label: '最低版', text: step.minimumStandard),
           if (step.simplifiedStandard.trim().isNotEmpty) _MiniLine(label: '简化版', text: step.simplifiedStandard),
           if (step.recommendedStandard.trim().isNotEmpty) _MiniLine(label: '标准版', text: step.recommendedStandard),
@@ -3543,6 +3639,11 @@ class _TodayStepCard extends StatelessWidget {
                 onPressed: () => _openCognitiveConsistencyForStep(context, step),
                 icon: const Icon(Icons.sync_alt_outlined),
                 label: const Text('一致行动'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openCognitiveConsistencyForStep(context, step, initialTabIndex: 8),
+                icon: const Icon(Icons.hub_outlined),
+                label: const Text('源书工作台'),
               ),
               OutlinedButton.icon(
                 onPressed: () => _openCognitiveConsistencyForStep(context, step, initialTabIndex: 5),
@@ -3924,6 +4025,14 @@ class _ProblemNodeTreeNode extends StatelessWidget {
             if (node.aiReviewJson.trim().isNotEmpty) _NodeAiReviewBox(reviewJson: node.aiReviewJson),
             const SizedBox(height: 8),
             _CcSourceEvidenceStatus(sourceType: 'todo_problem_node', sourceId: node.nodeId),
+            if (_sourcebookShouldHintForProblemNode(node, ready))
+              _SourcebookAutoHintCard(
+                sourceType: 'todo_problem_node',
+                sourceId: node.nodeId,
+                triggerType: 'problem_node_stuck_or_failed',
+                reason: '该问题节点出现失败、长期没有进入行动闭环，或仍缺少具体行动契约时，可能存在认知不一致、沉没成本、自我保护或目标意义冲突。建议先进入源书工作台做结构化分析，再决定下一步。',
+                onOpen: () => _openCognitiveConsistencyForProblemNode(context, node, initialTabIndex: 8),
+              ),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               if (node.isActionable && children.isEmpty) OutlinedButton.icon(onPressed: node.isCompleted || !ready || !node.hasConcreteActionContract ? null : () => onActivateNode(node), icon: const Icon(Icons.add_task_outlined), label: const Text('加入今日行动')),
@@ -3932,6 +4041,11 @@ class _ProblemNodeTreeNode extends StatelessWidget {
                 onPressed: !ready ? null : () => _openCognitiveConsistencyForProblemNode(context, node, initialTabIndex: 1),
                 icon: const Icon(Icons.sync_alt_outlined),
                 label: Text(node.isActionable ? '一致行动' : '失调分析'),
+              ),
+              OutlinedButton.icon(
+                onPressed: !ready ? null : () => _openCognitiveConsistencyForProblemNode(context, node, initialTabIndex: 8),
+                icon: const Icon(Icons.hub_outlined),
+                label: const Text('源书工作台'),
               ),
               OutlinedButton.icon(
                 onPressed: !ready ? null : () => _openCognitiveConsistencyForProblemNode(context, node, initialTabIndex: 5),
