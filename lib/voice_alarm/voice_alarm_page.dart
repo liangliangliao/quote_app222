@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../data/kv_dao.dart';
 import '../voice_lab/eleven_labs_service.dart';
@@ -58,6 +59,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   final Map<String, List<Map<String, String>>> _catalogRecommendations = {};
   String? _selectedSavedVoicePath;
   List<String> _textHistory = [];
+  Map<String, dynamic> _alarmAiConfig = <String, dynamic>{};
 
   static const _morningDefault = '早上好，新的一天开始了。愿你平静、专注、充满力量。';
   static const _nightDefault = '晚安，今天辛苦了。放下未完成的事，安心休息，愿你拥有宁静的睡眠。';
@@ -214,6 +216,34 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     if (path != null && mounted) setState(() => _backgroundImage = path);
   }
 
+  Future<bool> _ensureVoiceInteractionReady() async {
+    final mic = await Permission.microphone.status;
+    if (!mic.isGranted) {
+      final requested = await Permission.microphone.request();
+      if (!requested.isGranted) {
+        _toast('语音唤醒、AI 对话和语音关闭闹钟需要麦克风权限；请授权后重新保存闹钟');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _refreshAlarmAiConfig() async {
+    try {
+      final cfg = await _ai.resolveGlobalConfig();
+      _alarmAiConfig = <String, dynamic>{
+        'provider': cfg.provider,
+        'model': cfg.model,
+        'endpoint': cfg.endpoint,
+        'apiKey': cfg.apiKey,
+        'available': cfg.available,
+        'label': cfg.label,
+      };
+    } catch (_) {
+      _alarmAiConfig = <String, dynamic>{'available': false};
+    }
+  }
+
   Future<void> _schedule() async {
     if (_text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
@@ -227,6 +257,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         _toast('请在系统页面允许“闹钟和提醒”，返回后再次点击保存');
         return;
       }
+      if (!await _ensureVoiceInteractionReady()) return;
+      await _refreshAlarmAiConfig();
       _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
       if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
       final when = _nextTime();
@@ -357,6 +389,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Future<void> _ring() async {
     setState(() => _saving = true);
     try {
+      if (!await _ensureVoiceInteractionReady()) return;
+      await _refreshAlarmAiConfig();
       _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
       if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
       await _native.invokeMethod<void>('testRing', {'payload': _payload()});
@@ -397,6 +431,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'pitch': _pitch,
       'resembleHd': _resembleHd,
       'replayIntervalSeconds': _replayIntervalSeconds,
+      'aiConfig': _alarmAiConfig,
     };
   }
 
