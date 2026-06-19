@@ -527,7 +527,10 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         setState(() => _microsoftVoiceOptions = voices);
         _toast('已获取 ${voices.length} 个 Microsoft Neural Voice');
       } else if (_ttsProvider == 'iflytek') {
-        setState(() => _iflytekVoiceOptions = await _multiService.listIflytekVoices());
+        final voices = await _multiService.listIflytekVoices();
+        if (!mounted) return;
+        setState(() => _iflytekVoiceOptions = voices);
+        _toast('已加载 ${voices.length} 个讯飞推荐发音人');
       } else if (_ttsProvider == 'minimax') {
         final voices = await _multiService.listMiniMaxVoices(apiKey: _minimaxApiKeyCtrl.text.trim());
         if (!mounted) return;
