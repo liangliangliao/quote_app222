@@ -61,6 +61,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
   final TextEditingController _microsoftVoiceCtrl = TextEditingController(text: VoiceProviderSettings.defaultMicrosoftVoice);
   final TextEditingController _microsoftLanguageCtrl = TextEditingController(text: VoiceProviderSettings.defaultMicrosoftLanguage);
   final TextEditingController _microsoftOutputFormatCtrl = TextEditingController(text: VoiceProviderSettings.defaultMicrosoftOutputFormat);
+  final TextEditingController _iflytekAppIdCtrl = TextEditingController();
+  final TextEditingController _iflytekApiKeyCtrl = TextEditingController();
+  final TextEditingController _iflytekApiSecretCtrl = TextEditingController();
+  final TextEditingController _iflytekEndpointCtrl = TextEditingController(text: VoiceProviderSettings.defaultIflytekEndpoint);
+  final TextEditingController _iflytekSttEndpointCtrl = TextEditingController(text: VoiceProviderSettings.defaultIflytekSttEndpoint);
+  final TextEditingController _iflytekVoiceNameCtrl = TextEditingController(text: VoiceProviderSettings.defaultIflytekVoiceName);
+  final TextEditingController _iflytekSampleRateCtrl = TextEditingController(text: VoiceProviderSettings.defaultIflytekSampleRate);
 
   List<VoiceProfile> _voices = <VoiceProfile>[];
   List<ElevenLabsVoiceOption> _voiceOptions = <ElevenLabsVoiceOption>[];
@@ -70,6 +77,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
   List<ProviderCatalogOption> _minimaxVoiceOptions = <ProviderCatalogOption>[];
   List<ProviderCatalogOption> _minimaxModelOptions = <ProviderCatalogOption>[];
   List<ProviderCatalogOption> _microsoftVoiceOptions = <ProviderCatalogOption>[];
+  List<ProviderCatalogOption> _iflytekVoiceOptions = <ProviderCatalogOption>[];
   VoiceProfile? _selectedVoice;
   String _ttsVoiceSource = 'premade';
   String _ttsProvider = VoiceProviderSettings.defaultProvider;
@@ -171,7 +179,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
 
 
   void _selectProvider(String provider) {
-    final normalized = <String>['elevenlabs', 'resemble', 'minimax', 'microsoft'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
+    final normalized = <String>['elevenlabs', 'resemble', 'minimax', 'microsoft', 'iflytek'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
     setState(() {
       _ttsProvider = normalized;
       final providerVoices = _voices.where((v) => v.provider == normalized).toList();
@@ -232,6 +240,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       final microsoftVoice = await _kvDao.getString(VoiceProviderSettings.microsoftVoice) ?? VoiceProviderSettings.defaultMicrosoftVoice;
       final microsoftLanguage = await _kvDao.getString(VoiceProviderSettings.microsoftLanguage) ?? VoiceProviderSettings.defaultMicrosoftLanguage;
       final microsoftOutputFormat = await _kvDao.getString(VoiceProviderSettings.microsoftOutputFormat) ?? VoiceProviderSettings.defaultMicrosoftOutputFormat;
+      final iflytekAppId = await _kvDao.getString(VoiceProviderSettings.iflytekAppId) ?? '';
+      final iflytekApiKey = await _kvDao.getString(VoiceProviderSettings.iflytekApiKey) ?? '';
+      final iflytekApiSecret = await _kvDao.getString(VoiceProviderSettings.iflytekApiSecret) ?? '';
+      final iflytekEndpoint = await _kvDao.getString(VoiceProviderSettings.iflytekEndpoint) ?? VoiceProviderSettings.defaultIflytekEndpoint;
+      final iflytekSttEndpoint = await _kvDao.getString(VoiceProviderSettings.iflytekSttEndpoint) ?? VoiceProviderSettings.defaultIflytekSttEndpoint;
+      final iflytekVoiceName = await _kvDao.getString(VoiceProviderSettings.iflytekVoiceName) ?? VoiceProviderSettings.defaultIflytekVoiceName;
+      final iflytekSampleRate = await _kvDao.getString(VoiceProviderSettings.iflytekSampleRate) ?? VoiceProviderSettings.defaultIflytekSampleRate;
       final model = await _kvDao.getString(ElevenLabsSettings.defaultModel) ?? ElevenLabsSettings.defaultTtsModel;
       final out = await _kvDao.getString(ElevenLabsSettings.outputFormat) ?? ElevenLabsSettings.defaultOutputFormat;
       final autoSave = await _kvDao.getString(ElevenLabsSettings.autoSaveAudio);
@@ -275,7 +290,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       if (!mounted) return;
       setState(() {
         _apiKeyCtrl.text = apiKey;
-        _ttsProvider = <String>['elevenlabs', 'resemble', 'minimax', 'microsoft'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
+        _ttsProvider = <String>['elevenlabs', 'resemble', 'minimax', 'microsoft', 'iflytek'].contains(provider) ? provider : VoiceProviderSettings.defaultProvider;
         _microsoftApiKeyCtrl.text = microsoftApiKey;
         _microsoftRegionCtrl.text = microsoftRegion;
         _microsoftEndpointCtrl.text = microsoftEndpoint;
@@ -283,6 +298,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         _microsoftVoiceCtrl.text = microsoftVoice;
         _microsoftLanguageCtrl.text = microsoftLanguage;
         _microsoftOutputFormatCtrl.text = microsoftOutputFormat;
+        _iflytekAppIdCtrl.text = iflytekAppId;
+        _iflytekApiKeyCtrl.text = iflytekApiKey;
+        _iflytekApiSecretCtrl.text = iflytekApiSecret;
+        _iflytekEndpointCtrl.text = iflytekEndpoint;
+        _iflytekSttEndpointCtrl.text = iflytekSttEndpoint;
+        _iflytekVoiceNameCtrl.text = iflytekVoiceName;
+        _iflytekSampleRateCtrl.text = iflytekSampleRate;
         _resembleApiKeyCtrl.text = resembleApiKey;
         _resembleVoiceUuidCtrl.text = resembleVoiceUuid;
         _resembleVoiceNameCtrl.text = resembleVoiceName;
@@ -408,6 +430,13 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       await _kvDao.setString(VoiceProviderSettings.microsoftVoice, _microsoftVoiceCtrl.text.trim());
       await _kvDao.setString(VoiceProviderSettings.microsoftLanguage, _microsoftLanguageCtrl.text.trim());
       await _kvDao.setString(VoiceProviderSettings.microsoftOutputFormat, _microsoftOutputFormatCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.iflytekAppId, _iflytekAppIdCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.iflytekApiKey, _iflytekApiKeyCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.iflytekApiSecret, _iflytekApiSecretCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.iflytekEndpoint, _iflytekEndpointCtrl.text.trim().isEmpty ? VoiceProviderSettings.defaultIflytekEndpoint : _iflytekEndpointCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.iflytekSttEndpoint, _iflytekSttEndpointCtrl.text.trim().isEmpty ? VoiceProviderSettings.defaultIflytekSttEndpoint : _iflytekSttEndpointCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.iflytekVoiceName, _iflytekVoiceNameCtrl.text.trim().isEmpty ? VoiceProviderSettings.defaultIflytekVoiceName : _iflytekVoiceNameCtrl.text.trim());
+      await _kvDao.setString(VoiceProviderSettings.iflytekSampleRate, _iflytekSampleRateCtrl.text.trim().isEmpty ? VoiceProviderSettings.defaultIflytekSampleRate : _iflytekSampleRateCtrl.text.trim());
       await _kvDao.setString(ElevenLabsSettings.apiKey, _apiKeyCtrl.text.trim());
       await _kvDao.setString(ElevenLabsSettings.defaultModel, _modelCtrl.text.trim().isEmpty ? ElevenLabsSettings.defaultTtsModel : _modelCtrl.text.trim());
       await _kvDao.setString(ElevenLabsSettings.outputFormat, _outputFormatCtrl.text.trim().isEmpty ? ElevenLabsSettings.defaultOutputFormat : _outputFormatCtrl.text.trim());
@@ -463,6 +492,9 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       } else if (_ttsProvider == 'minimax') {
         await _multiService.testMiniMaxConnection(apiKey: _minimaxApiKeyCtrl.text.trim(), endpoint: _minimaxEndpointCtrl.text.trim());
         _toast('MiniMax API Key 可用');
+      } else if (_ttsProvider == 'iflytek') {
+        await _multiService.testIflytekConnection(appId: _iflytekAppIdCtrl.text.trim(), apiKey: _iflytekApiKeyCtrl.text.trim(), apiSecret: _iflytekApiSecretCtrl.text.trim(), endpoint: _iflytekEndpointCtrl.text.trim());
+        _toast('讯飞语音 AppID / APIKey / APISecret 可用');
       } else if (_ttsProvider == 'microsoft') {
         await _multiService.testMicrosoftConnection(apiKey: _microsoftApiKeyCtrl.text.trim(), region: _microsoftRegionCtrl.text.trim(), endpoint: _microsoftEndpointCtrl.text.trim());
         _toast('Microsoft Speech API Key、Region 与 Endpoint 可用');
@@ -494,6 +526,11 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         if (!mounted) return;
         setState(() => _microsoftVoiceOptions = voices);
         _toast('已获取 ${voices.length} 个 Microsoft Neural Voice');
+      } else if (_ttsProvider == 'iflytek') {
+        final voices = await _multiService.listIflytekVoices();
+        if (!mounted) return;
+        setState(() => _iflytekVoiceOptions = voices);
+        _toast('已加载 ${voices.length} 个讯飞推荐发音人');
       } else if (_ttsProvider == 'minimax') {
         final voices = await _multiService.listMiniMaxVoices(apiKey: _minimaxApiKeyCtrl.text.trim());
         if (!mounted) return;
@@ -530,6 +567,8 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
         if (!mounted) return;
         setState(() => _minimaxModelOptions = models);
         _toast('已获取 ${models.length} 个 MiniMax 模型');
+      } else if (_ttsProvider == 'iflytek') {
+        _toast('讯飞语音使用固定 WebAPI Endpoint，无需加载模型列表');
       } else {
         final models = await _service.listModels();
         if (!mounted) return;
@@ -574,6 +613,15 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
     try {
       final seedText = _seedCtrl.text.trim();
       final parsedSeed = seedText.isEmpty ? null : int.tryParse(seedText);
+      if (_ttsProvider == 'iflytek') {
+        final path = await _multiService.synthesizeIflytekToFile(text: text, appId: _iflytekAppIdCtrl.text.trim(), apiKey: _iflytekApiKeyCtrl.text.trim(), apiSecret: _iflytekApiSecretCtrl.text.trim(), endpoint: _iflytekEndpointCtrl.text.trim(), voiceName: _iflytekVoiceNameCtrl.text.trim(), sampleRate: _iflytekSampleRateCtrl.text.trim(), speed: _ttsSpeed, volume: _minimaxVolume, pitch: _minimaxPitch.toDouble());
+        if (File(path).existsSync()) {
+          await _player.stop();
+          await _player.play(BytesSource(await File(path).readAsBytes()));
+        }
+        _toast('讯飞语音已生成并保存');
+        return;
+      }
       if (_ttsProvider == 'microsoft') {
         final path = await _multiService.synthesizeMicrosoftToFile(
           text: text,
@@ -861,7 +909,22 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
             const SizedBox(height: 6),
             Text('当前只显示 $providerName 相关配置；切换服务商后，其他平台 API Key、模型、声音 ID 会自动隐藏，避免误操作。', style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 10),
-            if (_ttsProvider == 'elevenlabs') ...[
+            if (_ttsProvider == 'iflytek') ...[
+              TextField(controller: _iflytekAppIdCtrl, decoration: const InputDecoration(labelText: '讯飞 AppID', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _iflytekApiKeyCtrl, obscureText: true, decoration: const InputDecoration(labelText: '讯飞 APIKey', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _iflytekApiSecretCtrl, obscureText: true, decoration: const InputDecoration(labelText: '讯飞 APISecret', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _iflytekEndpointCtrl, decoration: const InputDecoration(labelText: 'TTS Endpoint', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _iflytekSttEndpointCtrl, decoration: const InputDecoration(labelText: '语音识别 STT Endpoint', border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _iflytekVoiceNameCtrl, decoration: const InputDecoration(labelText: '发音人 vcn', helperText: '如 xiaoyan / aisjiuxu / aisxping', border: OutlineInputBorder())),
+              if (_iflytekVoiceOptions.isNotEmpty) ..._iflytekVoiceOptions.map((v) => ListTile(title: Text(v.name), subtitle: Text(v.description), onTap: () => setState(() => _iflytekVoiceNameCtrl.text = v.id))),
+              const SizedBox(height: 8),
+              TextField(controller: _iflytekSampleRateCtrl, decoration: const InputDecoration(labelText: '采样率', helperText: '16000 或 8000', border: OutlineInputBorder())),
+            ] else if (_ttsProvider == 'elevenlabs') ...[
               TextField(
                 controller: _apiKeyCtrl,
                 obscureText: true,
@@ -1738,6 +1801,7 @@ class _VoiceLabHomePageState extends State<VoiceLabHomePage> {
       'resemble' => 'Resemble AI',
       'minimax' => 'MiniMax',
       'microsoft' => 'Microsoft Azure Speech',
+      'iflytek' => '讯飞语音',
       _ => 'ElevenLabs',
     };
   }

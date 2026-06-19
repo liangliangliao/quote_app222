@@ -14,7 +14,7 @@ import 'voice_lab_models.dart';
 /// Voice/TTS provider keys shared by the “语音与美好的祝福” module.
 /// Existing ElevenLabs keys are kept in ElevenLabsSettings for backwards compatibility.
 class VoiceProviderSettings {
-  static const provider = 'voice_lab.tts_provider'; // elevenlabs / resemble / minimax / microsoft
+  static const provider = 'voice_lab.tts_provider'; // elevenlabs / resemble / minimax / microsoft / iflytek
 
   static const microsoftApiKey = 'microsoft_speech.api_key';
   static const microsoftRegion = 'microsoft_speech.region';
@@ -63,6 +63,17 @@ class VoiceProviderSettings {
   static const minimaxVoiceModifyIntensity = 'minimax.voice_modify_intensity';
   static const minimaxVoiceModifyTimbre = 'minimax.voice_modify_timbre';
 
+  static const iflytekAppId = 'iflytek.app_id';
+  static const iflytekApiKey = 'iflytek.api_key';
+  static const iflytekApiSecret = 'iflytek.api_secret';
+  static const iflytekEndpoint = 'iflytek.endpoint';
+  static const iflytekVoiceName = 'iflytek.voice_name';
+  static const iflytekAudioEncoding = 'iflytek.audio_encoding';
+  static const iflytekSampleRate = 'iflytek.sample_rate';
+  static const iflytekLanguage = 'iflytek.language';
+  static const iflytekAccent = 'iflytek.accent';
+  static const iflytekSttEndpoint = 'iflytek.stt_endpoint';
+
   static const defaultProvider = 'elevenlabs';
   static const defaultResembleModel = ''; // empty = let Resemble choose the best model for the voice
   static const defaultResembleOutputFormat = 'mp3';
@@ -78,6 +89,13 @@ class VoiceProviderSettings {
   static const defaultMicrosoftVoice = 'zh-CN-XiaoxiaoNeural';
   static const defaultMicrosoftLanguage = 'zh-CN';
   static const defaultMicrosoftOutputFormat = 'audio-24khz-48kbitrate-mono-mp3';
+  static const defaultIflytekEndpoint = 'https://tts-api.xfyun.cn/v2/tts';
+  static const defaultIflytekSttEndpoint = 'https://iat-api.xfyun.cn/v2/iat';
+  static const defaultIflytekVoiceName = 'xiaoyan';
+  static const defaultIflytekAudioEncoding = 'lame';
+  static const defaultIflytekSampleRate = '16000';
+  static const defaultIflytekLanguage = 'zh_cn';
+  static const defaultIflytekAccent = 'mandarin';
 }
 
 class MultiProviderTtsService {
@@ -90,7 +108,7 @@ class MultiProviderTtsService {
 
   Future<String> getProvider() async {
     final raw = (await _kvDao.getString(VoiceProviderSettings.provider) ?? VoiceProviderSettings.defaultProvider).trim();
-    if (raw == 'resemble' || raw == 'minimax' || raw == 'microsoft' || raw == 'elevenlabs') return raw;
+    if (raw == 'resemble' || raw == 'minimax' || raw == 'microsoft' || raw == 'iflytek' || raw == 'elevenlabs') return raw;
     return VoiceProviderSettings.defaultProvider;
   }
 
@@ -105,6 +123,87 @@ class MultiProviderTtsService {
     if (custom.isNotEmpty) return custom;
     return 'https://${region.trim()}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1'
         '?language=${Uri.encodeQueryComponent(language)}&format=detailed';
+  }
+
+
+  Future<bool> testIflytekConnection({String? appId, String? apiKey, String? apiSecret, String? endpoint}) async {
+    await synthesizeIflytekToFile(text: '连接测试', appId: appId, apiKey: apiKey, apiSecret: apiSecret, endpoint: endpoint, forceNoCache: true);
+    return true;
+  }
+
+  Future<List<ProviderCatalogOption>> listIflytekVoices() async {
+    return const <ProviderCatalogOption>[
+      ProviderCatalogOption(id: 'xiaoyan', name: '讯飞小燕', category: 'standard', description: '普通话女声，适合祝福与闹钟'),
+      ProviderCatalogOption(id: 'aisjiuxu', name: '讯飞许久', category: 'standard', description: '普通话男声，沉稳清晰'),
+      ProviderCatalogOption(id: 'aisxping', name: '讯飞小萍', category: 'standard', description: '温柔女声，适合晚安'),
+      ProviderCatalogOption(id: 'aisjinger', name: '讯飞小婧', category: 'standard', description: '明亮女声，适合早安'),
+    ];
+  }
+
+  Future<String> synthesizeIflytekToFile({
+    required String text,
+    String? appId,
+    String? apiKey,
+    String? apiSecret,
+    String? endpoint,
+    String? voiceName,
+    String? encoding,
+    String? sampleRate,
+    double speed = 1.0,
+    double volume = 1.0,
+    double pitch = 0,
+    bool forceNoCache = false,
+  }) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) throw StateError('请输入需要转换成语音的文字');
+    final id = (appId ?? await _kvDao.getString(VoiceProviderSettings.iflytekAppId) ?? '').trim();
+    final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.iflytekApiKey) ?? '').trim();
+    final secret = (apiSecret ?? await _kvDao.getString(VoiceProviderSettings.iflytekApiSecret) ?? '').trim();
+    if (id.isEmpty || key.isEmpty || secret.isEmpty) throw StateError('请先填写讯飞开放平台 AppID、APIKey、APISecret');
+    final url = (endpoint ?? await _kvDao.getString(VoiceProviderSettings.iflytekEndpoint) ?? VoiceProviderSettings.defaultIflytekEndpoint).trim();
+    final vcn = (voiceName ?? await _kvDao.getString(VoiceProviderSettings.iflytekVoiceName) ?? VoiceProviderSettings.defaultIflytekVoiceName).trim();
+    final aue = (encoding ?? await _kvDao.getString(VoiceProviderSettings.iflytekAudioEncoding) ?? VoiceProviderSettings.defaultIflytekAudioEncoding).trim();
+    final auf = 'audio/L16;rate=${(sampleRate ?? await _kvDao.getString(VoiceProviderSettings.iflytekSampleRate) ?? VoiceProviderSettings.defaultIflytekSampleRate).trim()}';
+    final uri = Uri.parse(url);
+    final date = HttpDate.format(DateTime.now().toUtc());
+    final signatureOrigin = 'host: ${uri.host}\ndate: $date\nPOST ${uri.path} HTTP/1.1';
+    final hmacSha256 = Hmac(sha256, utf8.encode(secret));
+    final signature = base64Encode(hmacSha256.convert(utf8.encode(signatureOrigin)).bytes);
+    final authorizationOrigin = 'api_key="$key", algorithm="hmac-sha256", headers="host date request-line", signature="$signature"';
+    final authed = uri.replace(queryParameters: {
+      ...uri.queryParameters,
+      'authorization': base64Encode(utf8.encode(authorizationOrigin)),
+      'date': date,
+      'host': uri.host,
+    });
+    final body = {
+      'common': {'app_id': id},
+      'business': {
+        'aue': aue,
+        'auf': auf,
+        'vcn': vcn,
+        'tte': 'UTF8',
+        'speed': ((speed.clamp(0.5, 2.0) - 0.5) / 1.5 * 100).round().clamp(0, 100),
+        'volume': (volume.clamp(0.0, 1.0) * 100).round().clamp(0, 100),
+        'pitch': ((pitch.clamp(-20.0, 20.0) + 20) / 40 * 100).round().clamp(0, 100),
+      },
+      'data': {'status': 2, 'text': base64Encode(utf8.encode(cleanText))},
+    };
+    final resp = await http.post(authed, headers: {'Content-Type': 'application/json'}, body: jsonEncode(body)).timeout(const Duration(seconds: 90));
+    if (resp.statusCode < 200 || resp.statusCode >= 300) throw StateError('讯飞 TTS 失败：HTTP ${resp.statusCode} ${resp.body}');
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+    final code = (decoded['code'] as num?)?.toInt() ?? -1;
+    if (code != 0) throw StateError('讯飞 TTS 失败：${decoded['message'] ?? resp.body}');
+    final audio = ((decoded['data'] as Map?)?['audio'] ?? '').toString();
+    if (audio.isEmpty) throw StateError('讯飞 TTS 未返回音频：${resp.body}');
+    final bytes = base64Decode(audio);
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory(p.join(dir.path, 'voice_lab_audio'));
+    await folder.create(recursive: true);
+    final ext = aue == 'raw' ? 'pcm' : (aue == 'lame' ? 'mp3' : aue);
+    final file = File(p.join(folder.path, 'iflytek_${DateTime.now().millisecondsSinceEpoch}.$ext'));
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
   }
 
   Future<bool> testMicrosoftConnection({
