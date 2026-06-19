@@ -51,6 +51,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   double _stability = 0.55;
   double _styleStrength = 0.25;
   double _pitch = 0;
+  int _replayIntervalSeconds = 60;
   bool _resembleHd = true;
   List<Map<String, String>> _savedVoices = [];
   List<VoiceProfile> _voiceProfiles = [];
@@ -120,6 +121,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _stability = (data['stability'] as num?)?.toDouble() ?? 0.55;
       _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
       _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
+      _replayIntervalSeconds = (data['replayIntervalSeconds'] as num?)?.toInt() ?? 60;
       _resembleHd = data['resembleHd'] as bool? ?? true;
       _vibrate = data['vibrate'] as bool? ?? true;
       _systemMusic = data['systemMusic'] as bool? ?? true;
@@ -292,6 +294,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       );
       return audio.audioFilePath;
     }
+    if (_provider == 'iflytek') {
+      return _tts.synthesizeIflytekToFile(
+        text: text,
+        voiceName: _voiceId.text.trim().isEmpty ? null : _voiceId.text.trim(),
+        speed: _speed,
+        pitch: _pitch,
+        volume: _voiceVolume,
+      );
+    }
     if (_provider == 'minimax') {
       final voiceId = _voiceId.text.trim().isNotEmpty
           ? _voiceId.text.trim()
@@ -385,6 +396,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'styleStrength': _styleStrength,
       'pitch': _pitch,
       'resembleHd': _resembleHd,
+      'replayIntervalSeconds': _replayIntervalSeconds,
     };
   }
 
@@ -478,6 +490,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     DropdownMenuItem(value: 'elevenlabs', child: Text('ElevenLabs')),
                     DropdownMenuItem(value: 'resemble', child: Text('Resemble AI')),
                     DropdownMenuItem(value: 'minimax', child: Text('MiniMax')),
+                    DropdownMenuItem(value: 'iflytek', child: Text('讯飞语音')),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -490,7 +503,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   },
                 ),
                 const SizedBox(height: 8),
-                const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。当前版本会为微软服务预先生成闹钟语音。', style: TextStyle(color: Colors.black54)),
+                const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。支持 Microsoft、ElevenLabs、Resemble、MiniMax 与讯飞语音预生成闹钟语音。', style: TextStyle(color: Colors.black54)),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _voiceId,
@@ -569,10 +582,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     value: _resembleHd,
                     onChanged: (value) => setState(() => _resembleHd = value),
                   ),
-                ] else ...[
+                ] else if (_provider == 'minimax') ...[
                   Text('MiniMax 音调 ${_pitch.round()}'),
                   Slider(value: _pitch, min: -12, max: 12, divisions: 24, onChanged: (value) => setState(() => _pitch = value)),
                   const Text('MiniMax 使用 speed、pitch、emotion、中文 voice_id 与场景停顿参数。', style: TextStyle(color: Colors.black54)),
+                ] else ...[
+                  Text('讯飞音调 ${_pitch.round()}'),
+                  Slider(value: _pitch, min: -20, max: 20, divisions: 40, onChanged: (value) => setState(() => _pitch = value)),
+                  const Text('讯飞语音使用美好祝福配置页中的 AppID / APIKey / APISecret / Endpoint，并支持闹钟专用发音人 vcn。', style: TextStyle(color: Colors.black54)),
                 ],
               ]),
             ),
@@ -619,6 +636,10 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 subtitle: Text(_backgroundImage == null ? '未选择，使用默认渐变背景' : _backgroundImage!.split('/').last),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _pickBackground,
+              ),
+              ListTile(
+                title: Text('闹钟语音重播间隔 $_replayIntervalSeconds 秒'),
+                subtitle: Slider(value: _replayIntervalSeconds.toDouble(), min: 15, max: 300, divisions: 19, onChanged: (value) => setState(() => _replayIntervalSeconds = value.round())),
               ),
               ListTile(
                 title: Text('语音音量 ${(_voiceVolume * 100).round()}%'),
