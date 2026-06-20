@@ -82,7 +82,11 @@ class VoiceAlarmActivity : Activity() {
         VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_START -> suppressForAlarmPlayback(30_000L)
         VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_END -> {
           suppressRecognitionUntil = System.currentTimeMillis() + 900L
-          scheduleListeningAfterSuppression()
+          if (speechBuffer.isNotBlank()) {
+            scheduleBufferedSpeechProcessing(900)
+          } else {
+            scheduleListeningAfterSuppression()
+          }
         }
       }
     }
@@ -118,6 +122,44 @@ class VoiceAlarmActivity : Activity() {
     setContentView(buildContent())
     registerAlarmPlaybackReceiver()
     startVoiceAssistant()
+  }
+
+  override fun onResume() {
+    super.onResume()
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    when {
+      cloudSttActive && cloudSttThread?.isAlive != true -> {
+        cloudSttActive = false
+        startVoiceAssistant()
+      }
+      recognizer != null -> listenAgain(300)
+      recognizer == null && !cloudSttActive -> startVoiceAssistant()
+    }
+  }
+
+  override fun onStop() {
+    super.onStop()
+    // Keep the voice assistant alive while the alarm is ringing in the background.
+    // The foreground ringing service carries the microphone foreground-service type.
+  }
+
+  override fun onNewIntent(intent: Intent?) {
+    super.onNewIntent(intent)
+    if (intent != null) setIntent(intent)
+    val nextPayload = intent?.getStringExtra("payload")
+    if (!nextPayload.isNullOrBlank() && nextPayload != payload) {
+      payload = nextPayload
+      setContentView(buildContent())
+    }
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    if (cloudSttActive && cloudSttThread?.isAlive != true) {
+      cloudSttActive = false
+      startVoiceAssistant()
+    } else if (recognizer != null) {
+      listenAgain(200)
+    } else if (!cloudSttActive) {
+      startVoiceAssistant()
+    }
   }
 
   private fun buildContent(): View {

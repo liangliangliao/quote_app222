@@ -33,6 +33,8 @@ class VoiceAlarmRingingService : Service() {
     private const val EXTRA_POSTPONE_MS = "postponeMs"
     private const val CHANNEL_ID = "voice_alarm_ringing_v3"
     private const val NOTIFICATION_ID = 974002
+    private const val STATE_PREFS = "voice_alarm_ringing_state"
+    private const val KEY_ACTIVE_PAYLOAD = "activePayload"
     const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
     const val ACTION_VOICE_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_END"
     @Volatile private var activePayload: String? = null
@@ -55,12 +57,40 @@ class VoiceAlarmRingingService : Service() {
 
     @JvmStatic
     fun restoreFullScreenIfRinging(context: Context) {
-      val payload = activePayload ?: return
+      val payload = activePayload ?: readActivePayload(context) ?: return
       try {
         context.startActivity(Intent(context, VoiceAlarmActivity::class.java).apply {
           addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
           putExtra("payload", payload)
         })
+      } catch (_: Throwable) {}
+    }
+
+    private fun persistActivePayload(context: Context, payload: String) {
+      activePayload = payload
+      try {
+        context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+          .edit()
+          .putString(KEY_ACTIVE_PAYLOAD, payload)
+          .apply()
+      } catch (_: Throwable) {}
+    }
+
+    private fun readActivePayload(context: Context): String? {
+      return try {
+        context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE).getString(KEY_ACTIVE_PAYLOAD, null)
+      } catch (_: Throwable) {
+        null
+      }
+    }
+
+    private fun clearActivePayload(context: Context) {
+      activePayload = null
+      try {
+        context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+          .edit()
+          .remove(KEY_ACTIVE_PAYLOAD)
+          .apply()
       } catch (_: Throwable) {}
     }
 
@@ -89,7 +119,7 @@ class VoiceAlarmRingingService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action == ACTION_STOP) {
-      activePayload = null
+      clearActivePayload(this)
       stopSelf()
       return START_NOT_STICKY
     }
@@ -97,8 +127,8 @@ class VoiceAlarmRingingService : Service() {
       postponeVoiceReplay(intent.getLongExtra(EXTRA_POSTPONE_MS, 15_000L))
       return START_STICKY
     }
-    val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: "{}"
-    activePayload = payload
+    val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: activePayload ?: readActivePayload(this) ?: "{}"
+    persistActivePayload(this, payload)
     startForegroundAlarm(payload)
     acquireWakeLock()
     currentPayload = payload
