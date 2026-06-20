@@ -33,8 +33,11 @@ class VoiceAlarmRingingService : Service() {
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
     private const val ACTION_POSTPONE_VOICE_REPLAY = "com.example.quote_app.VOICE_ALARM_POSTPONE_VOICE_REPLAY"
+    private const val ACTION_SET_INTERACTION_ACTIVE = "com.example.quote_app.VOICE_ALARM_SET_INTERACTION_ACTIVE"
     private const val EXTRA_PAYLOAD = "payload"
     private const val EXTRA_POSTPONE_MS = "postponeMs"
+    private const val EXTRA_INTERACTION_ACTIVE = "interactionActive"
+    private const val EXTRA_INTERACTION_HOLD_MS = "interactionHoldMs"
     private const val CHANNEL_ID = "voice_alarm_ringing_v3"
     private const val NOTIFICATION_ID = 974002
     private const val STATE_PREFS = "voice_alarm_ringing_state"
@@ -124,6 +127,17 @@ class VoiceAlarmRingingService : Service() {
         })
       } catch (_: Throwable) {}
     }
+
+    @JvmStatic
+    fun setInteractionActive(context: Context, active: Boolean, holdMs: Long = 0L) {
+      try {
+        context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply {
+          action = ACTION_SET_INTERACTION_ACTIVE
+          putExtra(EXTRA_INTERACTION_ACTIVE, active)
+          putExtra(EXTRA_INTERACTION_HOLD_MS, holdMs)
+        })
+      } catch (_: Throwable) {}
+    }
   }
 
   private var voicePlayer: MediaPlayer? = null
@@ -140,6 +154,7 @@ class VoiceAlarmRingingService : Service() {
   private var replayRunnable: Runnable? = null
   private var currentPayload: String = "{}"
   private var voiceReplayBlockedUntil = 0L
+  private var voiceInteractionActiveUntil = 0L
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -151,6 +166,13 @@ class VoiceAlarmRingingService : Service() {
     }
     if (intent?.action == ACTION_POSTPONE_VOICE_REPLAY) {
       postponeVoiceReplay(intent.getLongExtra(EXTRA_POSTPONE_MS, 15_000L))
+      return START_STICKY
+    }
+    if (intent?.action == ACTION_SET_INTERACTION_ACTIVE) {
+      setVoiceInteractionActive(
+        intent.getBooleanExtra(EXTRA_INTERACTION_ACTIVE, false),
+        intent.getLongExtra(EXTRA_INTERACTION_HOLD_MS, 0L),
+      )
       return START_STICKY
     }
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: activePayload ?: readActivePayload(this) ?: "{}"
@@ -375,6 +397,11 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
+    replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
+  }
+
+  private fun latestVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
+    return try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
   }
 
   private fun scheduleVoiceReplay(initialData: JSONObject) {
@@ -383,7 +410,8 @@ class VoiceAlarmRingingService : Service() {
     val seconds = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
     replayRunnable = Runnable {
       val latest = latestVoiceReplayPayload(fallbackData)
-      val blockedMs = voiceReplayBlockedUntil - System.currentTimeMillis()
+      val blockedUntil = maxOf(voiceReplayBlockedUntil, voiceInteractionActiveUntil)
+      val blockedMs = blockedUntil - System.currentTimeMillis()
       if (blockedMs > 0) {
         replayHandler.postDelayed(replayRunnable!!, blockedMs.coerceAtLeast(1000L))
         return@Runnable
@@ -408,6 +436,17 @@ class VoiceAlarmRingingService : Service() {
     if (voicePlayer != null || alarmTts != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
     voicePlayer = null
     duckMusicFor(safePostponeMs.coerceAtMost(30_000L))
+  }
+
+  private fun setVoiceInteractionActive(active: Boolean, holdMs: Long) {
+    if (active) {
+      voiceInteractionActiveUntil = maxOf(
+        voiceInteractionActiveUntil,
+        System.currentTimeMillis() + holdMs.coerceIn(3000L, 180_000L),
+      )
+      return
+    }
+    voiceInteractionActiveUntil = System.currentTimeMillis() + holdMs.coerceIn(1000L, 15_000L)
   }
 
   private fun duckMusicFor(durationMs: Long) {

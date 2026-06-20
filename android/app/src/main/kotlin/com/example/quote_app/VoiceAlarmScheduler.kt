@@ -57,9 +57,8 @@ object VoiceAlarmScheduler {
     val operation = PendingIntent.getActivity(
       app,
       id,
-      Intent(app, VoiceAlarmActivity::class.java).apply {
-        action = "com.example.quote_app.VOICE_ALARM_FIRE_ACTIVITY"
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      Intent(app, VoiceAlarmReceiver::class.java).apply {
+        action = "com.example.quote_app.VOICE_ALARM_FIRE_PRIMARY"
         putExtra("payload", payload)
         putExtra("fromAlarmFire", true)
       },
@@ -107,15 +106,25 @@ object VoiceAlarmScheduler {
   fun cancel(context: Context) {
     val app = context.applicationContext
     for (id in intArrayOf(MORNING_ALARM_ID, NIGHT_ALARM_ID)) {
-      val alarmActivity = PendingIntent.getActivity(
+      val primaryReceiver = PendingIntent.getBroadcast(
+        app,
+        id,
+        Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_PRIMARY" },
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+      )
+      if (primaryReceiver != null) {
+        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(primaryReceiver)
+        primaryReceiver.cancel()
+      }
+      val legacyAlarmActivity = PendingIntent.getActivity(
         app,
         id,
         Intent(app, VoiceAlarmActivity::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_ACTIVITY" },
         PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
       )
-      if (alarmActivity != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(alarmActivity)
-        alarmActivity.cancel()
+      if (legacyAlarmActivity != null) {
+        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(legacyAlarmActivity)
+        legacyAlarmActivity.cancel()
       }
       val fallback = PendingIntent.getBroadcast(
         app,

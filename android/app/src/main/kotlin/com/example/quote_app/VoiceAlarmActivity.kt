@@ -76,6 +76,8 @@ class VoiceAlarmActivity : Activity() {
   private var iflytekSttClient: OkHttpClient? = null
   private var lastReplayPostponeSentAt = 0L
   private var lastReplayPostponeUntil = 0L
+  private var lastInteractionSignalAt = 0L
+  private var lastInteractionActive = false
   private var lastHandledSpeechNormalized = ""
   private var lastHandledSpeechAt = 0L
   private val alarmPlaybackReceiver = object : BroadcastReceiver() {
@@ -296,7 +298,10 @@ class VoiceAlarmActivity : Activity() {
           }
           else if (!speaking && !aiBusy) listenAgain(700)
         }
-        override fun onBeginningOfSpeech() { postponeAlarmVoiceReplay(30_000L) }
+        override fun onBeginningOfSpeech() {
+          markVoiceInteractionActive(45_000L)
+          postponeAlarmVoiceReplay(30_000L)
+        }
         override fun onEndOfSpeech() { listening = false }
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
@@ -720,6 +725,7 @@ class VoiceAlarmActivity : Activity() {
   private fun onSpeechChunk(chunk: String, finalChunk: Boolean) {
     val text = chunk.trim()
     if (text.isBlank()) return
+    markVoiceInteractionActive(if (finalChunk) 45_000L else 30_000L)
     postponeAlarmVoiceReplay(30_000L)
     if (isAlarmPlaybackSuppressed()) {
       if (isLikelyAlarmPlayback(text)) {
@@ -798,6 +804,7 @@ class VoiceAlarmActivity : Activity() {
   private fun handleSpeech(rawText: String) {
     val text = rawText.trim()
     if (text.isBlank()) { listenAgain(300); return }
+    markVoiceInteractionActive(90_000L)
     postponeAlarmVoiceReplay(20_000L)
     if (isLikelyAlarmPlayback(text)) {
       transcriptView?.text = "已忽略闹钟播报回声，继续聆听用户语音…"
@@ -826,11 +833,13 @@ class VoiceAlarmActivity : Activity() {
     }
     when {
       isStop -> {
+        markVoiceInteractionActive(10_000L)
         speak("好的，已关闭闹钟。", "alarm_stop", restart = false)
         VoiceAlarmRingingService.stop(this)
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
       isSnooze -> {
+        markVoiceInteractionActive(10_000L)
         speak("好的，五分钟后再次提醒。", "alarm_snooze", restart = false)
         VoiceAlarmScheduler.snooze(this, payload, 5)
         VoiceAlarmRingingService.stop(this)
@@ -893,6 +902,7 @@ class VoiceAlarmActivity : Activity() {
 
   private fun askAi(userText: String) {
     if (aiBusy) return
+    markVoiceInteractionActive(120_000L)
     postponeAlarmVoiceReplay(90_000L)
     val aiConfig = try { JSONObject(payload).optJSONObject("aiConfig") } catch (_: Throwable) { null }
     if (aiConfig == null || !aiConfig.optBoolean("available", false)) {
@@ -918,6 +928,7 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun speak(text: String, utteranceId: String, restart: Boolean = true) {
+    markVoiceInteractionActive(90_000L)
     postponeAlarmVoiceReplay(45_000L)
     try { recognizer?.cancel() } catch (_: Throwable) {}
     listening = false
@@ -928,6 +939,7 @@ class VoiceAlarmActivity : Activity() {
     if (result == null || result == TextToSpeech.ERROR) {
       synchronized(ttsRestartByUtterance) { ttsRestartByUtterance.remove(utteranceId) }
       speaking = false
+      markVoiceInteractionIdle(2000L)
       if (restart) listenAgain(500)
     }
   }
@@ -938,6 +950,7 @@ class VoiceAlarmActivity : Activity() {
     }
     speaking = false
     if (!success) postponeAlarmVoiceReplay(3000L)
+    markVoiceInteractionIdle(2000L)
     if (restart) runOnUiThread { listenAgain(500) }
   }
 
@@ -948,6 +961,22 @@ class VoiceAlarmActivity : Activity() {
     lastReplayPostponeSentAt = now
     lastReplayPostponeUntil = nextUntil
     VoiceAlarmRingingService.postponeVoiceReplay(this, postponeMs)
+  }
+
+  private fun markVoiceInteractionActive(holdMs: Long) {
+    val now = System.currentTimeMillis()
+    if (lastInteractionActive && now - lastInteractionSignalAt < 800L) return
+    lastInteractionActive = true
+    lastInteractionSignalAt = now
+    VoiceAlarmRingingService.setInteractionActive(this, true, holdMs)
+  }
+
+  private fun markVoiceInteractionIdle(holdMs: Long) {
+    val now = System.currentTimeMillis()
+    if (!lastInteractionActive && now - lastInteractionSignalAt < 800L) return
+    lastInteractionActive = false
+    lastInteractionSignalAt = now
+    VoiceAlarmRingingService.setInteractionActive(this, false, holdMs)
   }
 
   private fun resolveSystemPrompt(): String {
