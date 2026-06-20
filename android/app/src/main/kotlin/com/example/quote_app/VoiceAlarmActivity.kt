@@ -3,9 +3,13 @@ package com.example.quote_app
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -18,11 +22,26 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.TimeZone
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.Locale
+import java.util.Base64
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -49,14 +68,17 @@ class VoiceAlarmActivity : Activity() {
   private val speechHandler = Handler(Looper.getMainLooper())
   private val speechBuffer = StringBuilder()
   private var processSpeechRunnable: Runnable? = null
+  private var resumeListeningRunnable: Runnable? = null
   @Volatile private var suppressRecognitionUntil = 0L
+  @Volatile private var cloudSttActive = false
+  private var cloudSttThread: Thread? = null
   private val alarmPlaybackReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
       when (intent?.action) {
         VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_START -> suppressForAlarmPlayback(30_000L)
         VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_END -> {
           suppressRecognitionUntil = System.currentTimeMillis() + 900L
-          listenAgain(1000)
+          scheduleListeningAfterSuppression()
         }
       }
     }
@@ -163,6 +185,27 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun startVoiceAssistant() {
+    val sttConfig = try { JSONObject(payload).optJSONObject("sttConfig") } catch (_: Throwable) { null }
+    val selectedSttProvider = try { JSONObject(payload).optString("sttProvider", "native") } catch (_: Throwable) { "native" }
+    if (selectedSttProvider == "microsoft") {
+      val microsoftConfig = sttConfig?.optJSONObject("microsoft")
+      if (microsoftConfig != null && microsoftConfig.optString("apiKey", "").isNotBlank()) {
+        startMicrosoftCloudStt(microsoftConfig)
+        return
+      }
+      transcriptView?.text = "已选择微软语音识别，但缺少 Microsoft Speech API Key；暂时回退到系统识别。"
+    } else if (selectedSttProvider == "iflytek") {
+      val iflytekConfig = sttConfig?.optJSONObject("iflytek")
+      if (iflytekConfig != null &&
+        iflytekConfig.optString("appId", "").isNotBlank() &&
+        iflytekConfig.optString("apiKey", "").isNotBlank() &&
+        iflytekConfig.optString("apiSecret", "").isNotBlank()
+      ) {
+        startIflytekCloudStt(iflytekConfig)
+        return
+      }
+      transcriptView?.text = "已选择讯飞识别，但缺少 AppID/APIKey/APISecret；暂时回退到系统识别。"
+    }
     if (!SpeechRecognizer.isRecognitionAvailable(this)) {
       transcriptView?.text = "当前设备没有可用语音识别服务，可使用屏幕按钮。"
       return
@@ -176,6 +219,10 @@ class VoiceAlarmActivity : Activity() {
             results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty(),
             finalChunk = true,
           )
+          // Android SpeechRecognizer is utterance-based rather than a true
+          // continuous stream. Restart immediately after each final segment
+          // while the debounce timer keeps collecting subsequent segments.
+          if (!speaking && !aiBusy) listenAgain(150)
         }
         override fun onPartialResults(partialResults: Bundle?) {
           onSpeechChunk(
@@ -185,8 +232,11 @@ class VoiceAlarmActivity : Activity() {
         }
         override fun onError(error: Int) {
           listening = false
-          if (speechBuffer.isNotBlank()) scheduleBufferedSpeechProcessing(900)
-          else if (!speaking && !aiBusy && !isAlarmPlaybackSuppressed()) listenAgain(700)
+          if (speechBuffer.isNotBlank()) {
+            scheduleBufferedSpeechProcessing(2200)
+            if (!speaking && !aiBusy) listenAgain(350)
+          }
+          else if (!speaking && !aiBusy) listenAgain(700)
         }
         override fun onBeginningOfSpeech() {}
         override fun onEndOfSpeech() { listening = false }
@@ -198,6 +248,277 @@ class VoiceAlarmActivity : Activity() {
     listenAgain(300)
   }
 
+  private fun startMicrosoftCloudStt(cfg: JSONObject) {
+    if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+      transcriptView?.text = "微软云识别需要麦克风权限；请返回闹钟设置页授权后重新保存。"
+      return
+    }
+    cloudSttActive = true
+    transcriptView?.text = "微软云识别已启用，正在持续聆听…"
+    cloudSttThread = Thread {
+      while (!destroyed && cloudSttActive) {
+        if (speaking || aiBusy || isAlarmPlaybackSuppressed()) {
+          Thread.sleep(180)
+          continue
+        }
+        val pcm = recordPcmChunk(12000)
+        if (pcm.isEmpty() || destroyed || !cloudSttActive || speaking || aiBusy || isAlarmPlaybackSuppressed()) continue
+        val text = try { recognizeWithMicrosoft(cfg, pcm) } catch (t: Throwable) {
+          runOnUiThread { transcriptView?.text = "微软识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
+          ""
+        }
+        if (text.isNotBlank()) runOnUiThread { onSpeechChunk(text, finalChunk = true) }
+      }
+    }.apply {
+      name = "voice-alarm-microsoft-stt"
+      isDaemon = true
+      start()
+    }
+  }
+
+  private fun startIflytekCloudStt(cfg: JSONObject) {
+    if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+      transcriptView?.text = "讯飞云识别需要麦克风权限；请返回闹钟设置页授权后重新保存。"
+      return
+    }
+    cloudSttActive = true
+    transcriptView?.text = "讯飞流式识别已启用，正在持续聆听…"
+    cloudSttThread = Thread {
+      while (!destroyed && cloudSttActive) {
+        if (speaking || aiBusy || isAlarmPlaybackSuppressed()) {
+          Thread.sleep(180)
+          continue
+        }
+        val text = try { recognizeWithIflytekStreaming(cfg, 15000) } catch (t: Throwable) {
+          runOnUiThread { transcriptView?.text = "讯飞识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
+          ""
+        }
+        if (text.isNotBlank() && !destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed()) {
+          runOnUiThread { onSpeechChunk(text, finalChunk = true) }
+        }
+      }
+    }.apply {
+      name = "voice-alarm-iflytek-stt"
+      isDaemon = true
+      start()
+    }
+  }
+
+  private fun recordPcmChunk(durationMs: Int): ByteArray {
+    val sampleRate = 16000
+    val minBuffer = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+    if (minBuffer <= 0) return ByteArray(0)
+    val audioRecord = AudioRecord(
+      MediaRecorder.AudioSource.VOICE_RECOGNITION,
+      sampleRate,
+      AudioFormat.CHANNEL_IN_MONO,
+      AudioFormat.ENCODING_PCM_16BIT,
+      minBuffer * 2,
+    )
+    val out = ByteArrayOutputStream()
+    val buffer = ByteArray(minBuffer)
+    try {
+      audioRecord.startRecording()
+      val deadline = System.currentTimeMillis() + durationMs
+      while (!destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed() && System.currentTimeMillis() < deadline) {
+        val read = audioRecord.read(buffer, 0, buffer.size)
+        if (read > 0) out.write(buffer, 0, read)
+      }
+    } finally {
+      try { audioRecord.stop() } catch (_: Throwable) {}
+      try { audioRecord.release() } catch (_: Throwable) {}
+    }
+    return out.toByteArray()
+  }
+
+  private fun recognizeWithMicrosoft(cfg: JSONObject, pcm: ByteArray): String {
+    val region = cfg.optString("region", "eastasia").ifBlank { "eastasia" }
+    val language = cfg.optString("language", "zh-CN").ifBlank { "zh-CN" }
+    val endpoint = microsoftSttEndpoint(region, cfg.optString("endpoint", ""), language)
+    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+      requestMethod = "POST"
+      connectTimeout = 12000
+      readTimeout = 25000
+      doOutput = true
+      setRequestProperty("Ocp-Apim-Subscription-Key", cfg.optString("apiKey", ""))
+      setRequestProperty("Content-Type", "audio/wav; codecs=audio/pcm; samplerate=16000")
+      setRequestProperty("Accept", "application/json")
+    }
+    conn.outputStream.use { it.write(wavFromPcm(pcm, 16000)) }
+    val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+    val resp = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+    if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode} ${resp.take(120)}")
+    val obj = JSONObject(resp)
+    val display = obj.optString("DisplayText", "")
+    if (display.isNotBlank()) return display.trim()
+    val nBest = obj.optJSONArray("NBest")
+    return nBest?.optJSONObject(0)?.optString("Display", "")?.trim().orEmpty()
+  }
+
+  private fun recognizeWithIflytekStreaming(cfg: JSONObject, durationMs: Int): String {
+    val sampleRate = 16000
+    val minBuffer = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+    if (minBuffer <= 0) return ""
+    val chunkSize = 1280 // 40ms at 16kHz 16-bit mono; matches iFlytek IAT streaming recommendations.
+    val audioRecord = AudioRecord(
+      MediaRecorder.AudioSource.VOICE_RECOGNITION,
+      sampleRate,
+      AudioFormat.CHANNEL_IN_MONO,
+      AudioFormat.ENCODING_PCM_16BIT,
+      maxOf(minBuffer * 2, chunkSize * 2),
+    )
+    val opened = CountDownLatch(1)
+    val closed = CountDownLatch(1)
+    val text = StringBuilder()
+    var webSocket: WebSocket? = null
+    val client = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build()
+    val listener = object : WebSocketListener() {
+      override fun onOpen(webSocket: WebSocket, response: Response) {
+        opened.countDown()
+      }
+
+      override fun onMessage(webSocket: WebSocket, message: String) {
+        val piece = parseIflytekText(message)
+        if (piece.isNotBlank()) {
+          synchronized(text) {
+            val current = text.toString()
+            if (!current.endsWith(piece)) text.append(piece)
+          }
+          runOnUiThread { transcriptView?.text = "你：$text\n（讯飞流式识别中，继续说完即可…）" }
+        }
+        val code = try { JSONObject(message).optInt("code", 0) } catch (_: Throwable) { 0 }
+        if (code != 0) closed.countDown()
+      }
+
+      override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+        closed.countDown()
+      }
+
+      override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+        closed.countDown()
+      }
+    }
+    try {
+      webSocket = client.newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
+      if (!opened.await(5, TimeUnit.SECONDS)) return ""
+      audioRecord.startRecording()
+      val deadline = System.currentTimeMillis() + durationMs
+      var status = 0
+      val buffer = ByteArray(chunkSize)
+      while (!destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed() && System.currentTimeMillis() < deadline) {
+        val read = audioRecord.read(buffer, 0, buffer.size)
+        if (read > 0) {
+          webSocket.send(iflytekFrame(cfg, status, buffer.copyOf(read)))
+          status = 1
+          Thread.sleep(35)
+        }
+      }
+      webSocket.send(iflytekFrame(cfg, 2, ByteArray(0)))
+      closed.await(4, TimeUnit.SECONDS)
+    } finally {
+      try { audioRecord.stop() } catch (_: Throwable) {}
+      try { audioRecord.release() } catch (_: Throwable) {}
+      try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
+      client.dispatcher.executorService.shutdown()
+    }
+    return synchronized(text) { text.toString().trim() }
+  }
+
+  private fun iflytekFrame(cfg: JSONObject, status: Int, audio: ByteArray): String {
+    val data = JSONObject()
+      .put("status", status)
+      .put("format", "audio/L16;rate=16000")
+      .put("encoding", "raw")
+      .put("audio", Base64.getEncoder().encodeToString(audio))
+    val root = JSONObject()
+    if (status == 0) {
+      root.put("common", JSONObject().put("app_id", cfg.optString("appId", "")))
+      root.put(
+        "business",
+        JSONObject()
+          .put("language", cfg.optString("language", "zh_cn").ifBlank { "zh_cn" })
+          .put("domain", "iat")
+          .put("accent", cfg.optString("accent", "mandarin").ifBlank { "mandarin" })
+          .put("dwa", "wpgs"),
+      )
+    }
+    root.put("data", data)
+    return root.toString()
+  }
+
+  private fun parseIflytekText(message: String): String {
+    val result = try { JSONObject(message).optJSONObject("data")?.optJSONObject("result") } catch (_: Throwable) { null } ?: return ""
+    val words = result.optJSONArray("ws") ?: return ""
+    val out = StringBuilder()
+    for (i in 0 until words.length()) {
+      val candidates = words.optJSONObject(i)?.optJSONArray("cw") ?: continue
+      for (j in 0 until candidates.length()) {
+        val word = candidates.optJSONObject(j)?.optString("w", "") ?: ""
+        if (word.isNotBlank()) out.append(word)
+      }
+    }
+    return out.toString()
+  }
+
+  private fun iflytekSignedUrl(cfg: JSONObject): String {
+    val rawEndpoint = cfg.optString("endpoint", "wss://iat-api.xfyun.cn/v2/iat").ifBlank { "wss://iat-api.xfyun.cn/v2/iat" }
+    val endpoint = rawEndpoint.replace("https://", "wss://").replace("http://", "ws://")
+    val url = URL(endpoint.replace("wss://", "https://").replace("ws://", "http://"))
+    val host = url.host
+    val path = if (url.query.isNullOrBlank()) url.path else "${url.path}?${url.query}"
+    val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US).apply { timeZone = TimeZone.getTimeZone("GMT") }
+    val date = dateFormat.format(Date())
+    val signatureOrigin = "host: $host\ndate: $date\nGET $path HTTP/1.1"
+    val mac = Mac.getInstance("HmacSHA256").apply {
+      init(SecretKeySpec(cfg.optString("apiSecret", "").toByteArray(Charsets.UTF_8), "HmacSHA256"))
+    }
+    val signature = Base64.getEncoder().encodeToString(mac.doFinal(signatureOrigin.toByteArray(Charsets.UTF_8)))
+    val authorizationOrigin = "api_key=\"${cfg.optString("apiKey", "")}\", algorithm=\"hmac-sha256\", headers=\"host date request-line\", signature=\"$signature\""
+    val authorization = Base64.getEncoder().encodeToString(authorizationOrigin.toByteArray(Charsets.UTF_8))
+    val separator = if (endpoint.contains("?")) "&" else "?"
+    return "$endpoint$separator" +
+      "authorization=${URLEncoder.encode(authorization, "UTF-8")}" +
+      "&date=${URLEncoder.encode(date, "UTF-8")}" +
+      "&host=${URLEncoder.encode(host, "UTF-8")}"
+  }
+
+  private fun microsoftSttEndpoint(region: String, customEndpoint: String, language: String): String {
+    val base = customEndpoint.trim().ifBlank {
+      "https://$region.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1"
+    }
+    val separator = if (base.contains("?")) "&" else "?"
+    return "$base${separator}language=$language&format=detailed"
+  }
+
+  private fun wavFromPcm(pcm: ByteArray, sampleRate: Int): ByteArray {
+    val out = ByteArrayOutputStream()
+    val byteRate = sampleRate * 2
+    fun writeInt(value: Int) {
+      out.write(value and 0xff)
+      out.write((value shr 8) and 0xff)
+      out.write((value shr 16) and 0xff)
+      out.write((value shr 24) and 0xff)
+    }
+    fun writeShort(value: Int) {
+      out.write(value and 0xff)
+      out.write((value shr 8) and 0xff)
+    }
+    out.write("RIFF".toByteArray())
+    writeInt(36 + pcm.size)
+    out.write("WAVEfmt ".toByteArray())
+    writeInt(16)
+    writeShort(1)
+    writeShort(1)
+    writeInt(sampleRate)
+    writeInt(byteRate)
+    writeShort(2)
+    writeShort(16)
+    out.write("data".toByteArray())
+    writeInt(pcm.size)
+    out.write(pcm)
+    return out.toByteArray()
+  }
+
 
   private fun updateListeningStatus() {
     val current = transcriptView?.text?.toString().orEmpty()
@@ -206,9 +527,17 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun listenAgain(delayMs: Long = 0L) {
-    if (destroyed || speaking || aiBusy || listening || isAlarmPlaybackSuppressed()) return
+    if (destroyed || speaking || aiBusy || listening) return
+    if (isAlarmPlaybackSuppressed()) {
+      scheduleListeningAfterSuppression()
+      return
+    }
     transcriptView?.postDelayed({
-      if (destroyed || speaking || aiBusy || listening || isAlarmPlaybackSuppressed()) return@postDelayed
+      if (destroyed || speaking || aiBusy || listening) return@postDelayed
+      if (isAlarmPlaybackSuppressed()) {
+        scheduleListeningAfterSuppression()
+        return@postDelayed
+      }
       val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
@@ -229,6 +558,17 @@ class VoiceAlarmActivity : Activity() {
     }, delayMs)
   }
 
+  private fun scheduleListeningAfterSuppression(extraDelayMs: Long = 180L) {
+    if (destroyed || speaking || aiBusy || listening) return
+    resumeListeningRunnable?.let { speechHandler.removeCallbacks(it) }
+    val delayMs = (suppressRecognitionUntil - System.currentTimeMillis() + extraDelayMs).coerceAtLeast(extraDelayMs)
+    resumeListeningRunnable = Runnable {
+      resumeListeningRunnable = null
+      listenAgain(0)
+    }
+    speechHandler.postDelayed(resumeListeningRunnable!!, delayMs)
+  }
+
   private fun registerAlarmPlaybackReceiver() {
     val filter = IntentFilter().apply {
       addAction(VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_START)
@@ -244,6 +584,7 @@ class VoiceAlarmActivity : Activity() {
     processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
     speechBuffer.clear()
     if (speechBuffer.isBlank()) transcriptView?.text = "闹钟语音播报中，暂不把播报内容发送给 AI…"
+    scheduleListeningAfterSuppression()
   }
 
   private fun isAlarmPlaybackSuppressed(): Boolean = System.currentTimeMillis() < suppressRecognitionUntil
@@ -257,7 +598,15 @@ class VoiceAlarmActivity : Activity() {
     }
     appendSpeechChunk(text)
     transcriptView?.text = "你：${speechBuffer}\n（正在识别，继续说完即可…）"
-    scheduleBufferedSpeechProcessing(if (finalChunk) 1200 else 2200)
+    val shouldHandleQuickly = finalChunk && (isStopCommand(text) || isSnoozeCommand(text))
+    scheduleBufferedSpeechProcessing(
+      when {
+        shouldHandleQuickly -> 250
+        cloudSttActive && finalChunk -> 6500
+        finalChunk -> 2800
+        else -> 4200
+      },
+    )
   }
 
   private fun appendSpeechChunk(text: String) {
@@ -277,6 +626,8 @@ class VoiceAlarmActivity : Activity() {
     processSpeechRunnable = Runnable {
       val merged = speechBuffer.toString().trim()
       speechBuffer.clear()
+      try { recognizer?.cancel() } catch (_: Throwable) {}
+      listening = false
       if (merged.isNotBlank()) handleSpeech(merged) else listenAgain(300)
     }
     speechHandler.postDelayed(processSpeechRunnable!!, delayMs)
@@ -457,7 +808,10 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onDestroy() {
     destroyed = true
+    cloudSttActive = false
+    try { cloudSttThread?.interrupt() } catch (_: Throwable) {}
     processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
+    resumeListeningRunnable?.let { speechHandler.removeCallbacks(it) }
     try { unregisterReceiver(alarmPlaybackReceiver) } catch (_: Throwable) {}
     try { recognizer?.destroy() } catch (_: Throwable) {}
     try { tts?.shutdown() } catch (_: Throwable) {}

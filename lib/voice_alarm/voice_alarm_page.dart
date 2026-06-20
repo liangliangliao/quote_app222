@@ -62,6 +62,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   List<String> _textHistory = [];
   Map<String, dynamic> _alarmAiConfig = <String, dynamic>{};
   String _alarmAiSystemPrompt = '';
+  Map<String, dynamic> _alarmSttConfig = <String, dynamic>{};
 
   static const _morningDefault = '早上好，新的一天开始了。愿你平静、专注、充满力量。';
   static const _nightDefault = '晚安，今天辛苦了。放下未完成的事，安心休息，愿你拥有宁静的睡眠。';
@@ -248,6 +249,29 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     } catch (_) {
       _alarmAiConfig = <String, dynamic>{'available': false};
     }
+    await _refreshAlarmSttConfig();
+  }
+
+  Future<void> _refreshAlarmSttConfig() async {
+    final microsoftRegion = await _kv.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion;
+    final microsoftLanguage = await _kv.getString(VoiceProviderSettings.microsoftLanguage) ?? VoiceProviderSettings.defaultMicrosoftLanguage;
+    _alarmSttConfig = <String, dynamic>{
+      'provider': _sttProvider,
+      'microsoft': {
+        'apiKey': await _kv.getString(VoiceProviderSettings.microsoftApiKey) ?? '',
+        'region': microsoftRegion,
+        'endpoint': await _kv.getString(VoiceProviderSettings.microsoftRecognitionEndpoint) ?? '',
+        'language': microsoftLanguage,
+      },
+      'iflytek': {
+        'appId': await _kv.getString(VoiceProviderSettings.iflytekAppId) ?? '',
+        'apiKey': await _kv.getString(VoiceProviderSettings.iflytekApiKey) ?? '',
+        'apiSecret': await _kv.getString(VoiceProviderSettings.iflytekApiSecret) ?? '',
+        'endpoint': await _kv.getString(VoiceProviderSettings.iflytekSttEndpoint) ?? VoiceProviderSettings.defaultIflytekSttEndpoint,
+        'language': await _kv.getString(VoiceProviderSettings.iflytekLanguage) ?? VoiceProviderSettings.defaultIflytekLanguage,
+        'accent': await _kv.getString(VoiceProviderSettings.iflytekAccent) ?? VoiceProviderSettings.defaultIflytekAccent,
+      },
+    };
   }
 
   Future<void> _schedule() async {
@@ -440,6 +464,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'replayIntervalSeconds': _replayIntervalSeconds,
       'aiConfig': _alarmAiConfig,
       'aiSystemPrompt': _alarmAiSystemPrompt,
+      'sttConfig': _alarmSttConfig,
     };
   }
 
