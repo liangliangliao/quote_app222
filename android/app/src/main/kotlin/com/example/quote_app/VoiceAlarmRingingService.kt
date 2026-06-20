@@ -163,6 +163,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   override fun onDestroy() {
+    activePayload = null
     stopSignals()
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     replayRunnable = null
@@ -374,6 +375,11 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
+    // Direct-boot or first-unlock edge case: generated voice files may live in
+    // credential-protected app storage and be unreadable even though the alarm
+    // payload has been restored from device-protected storage.  Fall back to the
+    // platform TTS so the user still hears the alarm text instead of silent music.
+    speakAlarmTextOnce(data.optString("text", "语音闹钟时间到了"), volume)
   }
 
   private fun scheduleVoiceReplay(data: JSONObject) {
