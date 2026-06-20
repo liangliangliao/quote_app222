@@ -28,7 +28,9 @@ class VoiceAlarmRingingService : Service() {
   companion object {
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
+    private const val ACTION_POSTPONE_VOICE_REPLAY = "com.example.quote_app.VOICE_ALARM_POSTPONE_VOICE_REPLAY"
     private const val EXTRA_PAYLOAD = "payload"
+    private const val EXTRA_POSTPONE_MS = "postponeMs"
     private const val CHANNEL_ID = "voice_alarm_ringing_v3"
     private const val NOTIFICATION_ID = 974002
     const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
@@ -49,6 +51,16 @@ class VoiceAlarmRingingService : Service() {
         context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply { action = ACTION_STOP })
       } catch (_: Throwable) {}
     }
+
+    @JvmStatic
+    fun postponeVoiceReplay(context: Context, postponeMs: Long) {
+      try {
+        context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply {
+          action = ACTION_POSTPONE_VOICE_REPLAY
+          putExtra(EXTRA_POSTPONE_MS, postponeMs)
+        })
+      } catch (_: Throwable) {}
+    }
   }
 
   private var voicePlayer: MediaPlayer? = null
@@ -59,6 +71,7 @@ class VoiceAlarmRingingService : Service() {
   private val replayHandler = Handler(Looper.getMainLooper())
   private var replayRunnable: Runnable? = null
   private var currentPayload: String = "{}"
+  private var voiceReplayBlockedUntil = 0L
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -66,6 +79,10 @@ class VoiceAlarmRingingService : Service() {
     if (intent?.action == ACTION_STOP) {
       stopSelf()
       return START_NOT_STICKY
+    }
+    if (intent?.action == ACTION_POSTPONE_VOICE_REPLAY) {
+      postponeVoiceReplay(intent.getLongExtra(EXTRA_POSTPONE_MS, 15_000L))
+      return START_STICKY
     }
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: "{}"
     startForegroundAlarm(payload)
@@ -212,10 +229,23 @@ class VoiceAlarmRingingService : Service() {
     val seconds = data.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
     replayRunnable = Runnable {
       val latest = try { JSONObject(currentPayload) } catch (_: Throwable) { data }
+      val blockedMs = voiceReplayBlockedUntil - System.currentTimeMillis()
+      if (blockedMs > 0) {
+        replayHandler.postDelayed(replayRunnable!!, blockedMs.coerceAtLeast(1000L))
+        return@Runnable
+      }
       playVoiceOnce(latest)
       scheduleVoiceReplay(latest)
     }
     replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
+  }
+
+  private fun postponeVoiceReplay(postponeMs: Long) {
+    voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + postponeMs.coerceIn(1000L, 180_000L))
+    try { voicePlayer?.stop() } catch (_: Throwable) {}
+    try { voicePlayer?.release() } catch (_: Throwable) {}
+    if (voicePlayer != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+    voicePlayer = null
   }
 
   private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f, notifyVoice: Boolean = false): MediaPlayer? {

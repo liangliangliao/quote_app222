@@ -65,6 +65,7 @@ class VoiceAlarmActivity : Activity() {
   @Volatile private var speaking = false
   @Volatile private var aiBusy = false
   private val conversation = mutableListOf<Pair<String, String>>()
+  private val ttsRestartByUtterance = mutableMapOf<String, Boolean>()
   private val speechHandler = Handler(Looper.getMainLooper())
   private val speechBuffer = StringBuilder()
   private var processSpeechRunnable: Runnable? = null
@@ -72,6 +73,9 @@ class VoiceAlarmActivity : Activity() {
   @Volatile private var suppressRecognitionUntil = 0L
   @Volatile private var cloudSttActive = false
   private var cloudSttThread: Thread? = null
+  private var iflytekSttClient: OkHttpClient? = null
+  private var lastReplayPostponeSentAt = 0L
+  private var lastReplayPostponeUntil = 0L
   private val alarmPlaybackReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
       when (intent?.action) {
@@ -104,10 +108,10 @@ class VoiceAlarmActivity : Activity() {
         tts?.language = Locale.CHINA
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { speaking = true }
-          override fun onDone(utteranceId: String?) { speaking = false; runOnUiThread { listenAgain(500) } }
+          override fun onDone(utteranceId: String?) { handleTtsFinished(utteranceId, success = true) }
           @Deprecated("Deprecated in Java")
-          override fun onError(utteranceId: String?) { speaking = false; runOnUiThread { listenAgain(500) } }
-          override fun onError(utteranceId: String?, errorCode: Int) { speaking = false; runOnUiThread { listenAgain(500) } }
+          override fun onError(utteranceId: String?) { handleTtsFinished(utteranceId, success = false) }
+          override fun onError(utteranceId: String?, errorCode: Int) { handleTtsFinished(utteranceId, success = false) }
         })
       }
     }
@@ -261,6 +265,7 @@ class VoiceAlarmActivity : Activity() {
           Thread.sleep(180)
           continue
         }
+        postponeAlarmVoiceReplay(20_000L)
         val pcm = recordPcmChunk(12000)
         if (pcm.isEmpty() || destroyed || !cloudSttActive || speaking || aiBusy || isAlarmPlaybackSuppressed()) continue
         val text = try { recognizeWithMicrosoft(cfg, pcm) } catch (t: Throwable) {
@@ -289,6 +294,7 @@ class VoiceAlarmActivity : Activity() {
           Thread.sleep(180)
           continue
         }
+        postponeAlarmVoiceReplay(22_000L)
         val text = try { recognizeWithIflytekStreaming(cfg, 15000) } catch (t: Throwable) {
           runOnUiThread { transcriptView?.text = "讯飞识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
           ""
@@ -370,19 +376,28 @@ class VoiceAlarmActivity : Activity() {
     val opened = CountDownLatch(1)
     val closed = CountDownLatch(1)
     val text = StringBuilder()
+    val iflytekSegments = sortedMapOf<Int, String>()
     var webSocket: WebSocket? = null
-    val client = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build()
+    val client = getIflytekSttClient()
     val listener = object : WebSocketListener() {
       override fun onOpen(webSocket: WebSocket, response: Response) {
         opened.countDown()
       }
 
       override fun onMessage(webSocket: WebSocket, message: String) {
-        val piece = parseIflytekText(message)
-        if (piece.isNotBlank()) {
+        val piece = parseIflytekResult(message)
+        if (piece.text.isNotBlank()) {
           synchronized(text) {
-            val current = text.toString()
-            if (!current.endsWith(piece)) text.append(piece)
+            if (piece.replaceStart != null && piece.replaceEnd != null) {
+              for (sn in piece.replaceStart..piece.replaceEnd) iflytekSegments.remove(sn)
+            }
+            if (piece.sn >= 0) {
+              iflytekSegments[piece.sn] = piece.text
+              text.clear()
+              iflytekSegments.values.forEach { text.append(it) }
+            } else if (!text.endsWith(piece.text)) {
+              text.append(piece.text)
+            }
           }
           runOnUiThread { transcriptView?.text = "你：$text\n（讯飞流式识别中，继续说完即可…）" }
         }
@@ -419,9 +434,15 @@ class VoiceAlarmActivity : Activity() {
       try { audioRecord.stop() } catch (_: Throwable) {}
       try { audioRecord.release() } catch (_: Throwable) {}
       try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
-      client.dispatcher.executorService.shutdown()
     }
     return synchronized(text) { text.toString().trim() }
+  }
+
+  private fun getIflytekSttClient(): OkHttpClient {
+    return iflytekSttClient ?: OkHttpClient.Builder()
+      .readTimeout(0, TimeUnit.MILLISECONDS)
+      .build()
+      .also { iflytekSttClient = it }
   }
 
   private fun iflytekFrame(cfg: JSONObject, status: Int, audio: ByteArray): String {
@@ -446,9 +467,17 @@ class VoiceAlarmActivity : Activity() {
     return root.toString()
   }
 
-  private fun parseIflytekText(message: String): String {
-    val result = try { JSONObject(message).optJSONObject("data")?.optJSONObject("result") } catch (_: Throwable) { null } ?: return ""
-    val words = result.optJSONArray("ws") ?: return ""
+  private data class IflytekRecognitionPiece(
+    val sn: Int,
+    val text: String,
+    val replaceStart: Int?,
+    val replaceEnd: Int?,
+  )
+
+  private fun parseIflytekResult(message: String): IflytekRecognitionPiece {
+    val empty = IflytekRecognitionPiece(-1, "", null, null)
+    val result = try { JSONObject(message).optJSONObject("data")?.optJSONObject("result") } catch (_: Throwable) { null } ?: return empty
+    val words = result.optJSONArray("ws") ?: return IflytekRecognitionPiece(result.optInt("sn", -1), "", null, null)
     val out = StringBuilder()
     for (i in 0 until words.length()) {
       val candidates = words.optJSONObject(i)?.optJSONArray("cw") ?: continue
@@ -457,7 +486,13 @@ class VoiceAlarmActivity : Activity() {
         if (word.isNotBlank()) out.append(word)
       }
     }
-    return out.toString()
+    val range = result.optJSONArray("rg")
+    return IflytekRecognitionPiece(
+      sn = result.optInt("sn", -1),
+      text = out.toString(),
+      replaceStart = if (result.optString("pgs", "") == "rpl" && range != null && range.length() >= 2) range.optInt(0) else null,
+      replaceEnd = if (result.optString("pgs", "") == "rpl" && range != null && range.length() >= 2) range.optInt(1) else null,
+    )
   }
 
   private fun iflytekSignedUrl(cfg: JSONObject): String {
@@ -582,8 +617,12 @@ class VoiceAlarmActivity : Activity() {
     try { recognizer?.cancel() } catch (_: Throwable) {}
     listening = false
     processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
-    speechBuffer.clear()
-    if (speechBuffer.isBlank()) transcriptView?.text = "闹钟语音播报中，暂不把播报内容发送给 AI…"
+    if (speechBuffer.isBlank()) {
+      transcriptView?.text = "闹钟语音播报中，暂不把播报内容发送给 AI…"
+    } else {
+      transcriptView?.text = "闹钟语音播报中，已保留用户已说内容，播报结束后继续处理…\n你：$speechBuffer"
+      scheduleBufferedSpeechProcessing(durationMs + 900)
+    }
     scheduleListeningAfterSuppression()
   }
 
@@ -592,7 +631,19 @@ class VoiceAlarmActivity : Activity() {
   private fun onSpeechChunk(chunk: String, finalChunk: Boolean) {
     val text = chunk.trim()
     if (text.isBlank()) return
-    if (isAlarmPlaybackSuppressed() || isLikelyAlarmPlayback(text)) {
+    postponeAlarmVoiceReplay(18_000L)
+    if (isAlarmPlaybackSuppressed()) {
+      if (isLikelyAlarmPlayback(text)) {
+        suppressForAlarmPlayback(2000L)
+        return
+      }
+      appendSpeechChunk(text)
+      transcriptView?.text = "你：${speechBuffer}\n（闹钟播报中，已暂存用户语音，播报结束后发送…）"
+      val delayMs = (suppressRecognitionUntil - System.currentTimeMillis() + 900L).coerceAtLeast(900L)
+      scheduleBufferedSpeechProcessing(delayMs)
+      return
+    }
+    if (isLikelyAlarmPlayback(text)) {
       suppressForAlarmPlayback(2000L)
       return
     }
@@ -637,6 +688,7 @@ class VoiceAlarmActivity : Activity() {
   private fun handleSpeech(rawText: String) {
     val text = rawText.trim()
     if (text.isBlank()) { listenAgain(300); return }
+    postponeAlarmVoiceReplay(20_000L)
     if (isLikelyAlarmPlayback(text)) {
       transcriptView?.text = "已忽略闹钟播报回声，继续聆听用户语音…"
       listenAgain(500)
@@ -698,6 +750,7 @@ class VoiceAlarmActivity : Activity() {
 
   private fun askAi(userText: String) {
     if (aiBusy) return
+    postponeAlarmVoiceReplay(90_000L)
     val aiConfig = try { JSONObject(payload).optJSONObject("aiConfig") } catch (_: Throwable) { null }
     if (aiConfig == null || !aiConfig.optBoolean("available", false)) {
       val answer = "我已经被唤醒了，但当前闹钟没有可用的全局 AI 配置快照。请回到设置页配置 AI 后重新保存闹钟。你仍可说关闭闹钟或延迟五分钟。"
@@ -722,15 +775,36 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun speak(text: String, utteranceId: String, restart: Boolean = true) {
+    postponeAlarmVoiceReplay(45_000L)
     try { recognizer?.cancel() } catch (_: Throwable) {}
     listening = false
     speaking = true
+    synchronized(ttsRestartByUtterance) { ttsRestartByUtterance[utteranceId] = restart }
     val params = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId) }
     val result = tts?.speak(text.take(600), TextToSpeech.QUEUE_FLUSH, params, utteranceId)
-    if (result == null || result == TextToSpeech.ERROR || !restart) {
+    if (result == null || result == TextToSpeech.ERROR) {
+      synchronized(ttsRestartByUtterance) { ttsRestartByUtterance.remove(utteranceId) }
       speaking = false
       if (restart) listenAgain(500)
     }
+  }
+
+  private fun handleTtsFinished(utteranceId: String?, success: Boolean) {
+    val restart = synchronized(ttsRestartByUtterance) {
+      if (utteranceId == null) true else ttsRestartByUtterance.remove(utteranceId) ?: true
+    }
+    speaking = false
+    if (!success) postponeAlarmVoiceReplay(3000L)
+    if (restart) runOnUiThread { listenAgain(500) }
+  }
+
+  private fun postponeAlarmVoiceReplay(postponeMs: Long) {
+    val now = System.currentTimeMillis()
+    val nextUntil = now + postponeMs
+    if (nextUntil <= lastReplayPostponeUntil + 2000L && now - lastReplayPostponeSentAt < 1000L) return
+    lastReplayPostponeSentAt = now
+    lastReplayPostponeUntil = nextUntil
+    VoiceAlarmRingingService.postponeVoiceReplay(this, postponeMs)
   }
 
   private fun resolveSystemPrompt(): String {
@@ -810,6 +884,10 @@ class VoiceAlarmActivity : Activity() {
     destroyed = true
     cloudSttActive = false
     try { cloudSttThread?.interrupt() } catch (_: Throwable) {}
+    try { iflytekSttClient?.dispatcher?.executorService?.shutdown() } catch (_: Throwable) {}
+    try { iflytekSttClient?.connectionPool?.evictAll() } catch (_: Throwable) {}
+    iflytekSttClient = null
+    synchronized(ttsRestartByUtterance) { ttsRestartByUtterance.clear() }
     processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
     resumeListeningRunnable?.let { speechHandler.removeCallbacks(it) }
     try { unregisterReceiver(alarmPlaybackReceiver) } catch (_: Throwable) {}
