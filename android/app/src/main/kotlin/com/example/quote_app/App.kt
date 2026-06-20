@@ -371,6 +371,9 @@ class App : Application(), Application.ActivityLifecycleCallbacks {
         // 仅当“确实发生了解锁事件（last_user_present_ts 近期更新）但链路尚未触发”时，才允许在前台补偿一次。
         // 这样可避免“仅仅重新打开 App 也触发解锁轻提醒/地点规则提醒”的误触。
         try { maybeSynthesizeUnlockOnForeground(applicationContext, source = "activity_resumed") } catch (_: Throwable) {}
+        if (activity !is VoiceAlarmActivity) {
+            try { VoiceAlarmRingingService.restoreFullScreenIfRinging(applicationContext) } catch (_: Throwable) {}
+        }
     }
     override fun onActivityPaused(activity: Activity) {}
     override fun onActivityStopped(activity: Activity) {
