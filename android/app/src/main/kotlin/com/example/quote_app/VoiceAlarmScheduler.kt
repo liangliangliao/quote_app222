@@ -54,12 +54,14 @@ object VoiceAlarmScheduler {
     val id = alarmId(payload)
     val mode = if (id == NIGHT_ALARM_ID) "night" else "morning"
     val alarmManager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val operation = PendingIntent.getBroadcast(
+    val operation = PendingIntent.getActivity(
       app,
       id,
-      Intent(app, VoiceAlarmReceiver::class.java).apply {
-        action = "com.example.quote_app.VOICE_ALARM_FIRE"
+      Intent(app, VoiceAlarmActivity::class.java).apply {
+        action = "com.example.quote_app.VOICE_ALARM_FIRE_ACTIVITY"
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         putExtra("payload", payload)
+        putExtra("fromAlarmFire", true)
       },
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
@@ -105,20 +107,25 @@ object VoiceAlarmScheduler {
   fun cancel(context: Context) {
     val app = context.applicationContext
     for (id in intArrayOf(MORNING_ALARM_ID, NIGHT_ALARM_ID)) {
-      for ((requestCode, action) in arrayOf(
-        id to "com.example.quote_app.VOICE_ALARM_FIRE",
-        (id + EXACT_FALLBACK_OFFSET) to "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK",
-      )) {
-        val operation = PendingIntent.getBroadcast(
-          app,
-          requestCode,
-          Intent(app, VoiceAlarmReceiver::class.java).apply { this.action = action },
-          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-        )
-        if (operation != null) {
-          (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(operation)
-          operation.cancel()
-        }
+      val alarmActivity = PendingIntent.getActivity(
+        app,
+        id,
+        Intent(app, VoiceAlarmActivity::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_ACTIVITY" },
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+      )
+      if (alarmActivity != null) {
+        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(alarmActivity)
+        alarmActivity.cancel()
+      }
+      val fallback = PendingIntent.getBroadcast(
+        app,
+        id + EXACT_FALLBACK_OFFSET,
+        Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK" },
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+      )
+      if (fallback != null) {
+        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(fallback)
+        fallback.cancel()
       }
     }
     clearPersistedAlarms(app)

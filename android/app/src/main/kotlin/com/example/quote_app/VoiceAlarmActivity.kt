@@ -95,6 +95,7 @@ class VoiceAlarmActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     payload = intent?.getStringExtra("payload") ?: "{}"
+    handleAlarmFireIntent(intent)
     if (Build.VERSION.SDK_INT >= 27) {
       setShowWhenLocked(true)
       setTurnScreenOn(true)
@@ -151,6 +152,7 @@ class VoiceAlarmActivity : Activity() {
       payload = nextPayload
       setContentView(buildContent())
     }
+    handleAlarmFireIntent(intent)
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     if (cloudSttActive && cloudSttThread?.isAlive != true) {
       cloudSttActive = false
@@ -160,6 +162,14 @@ class VoiceAlarmActivity : Activity() {
     } else if (!cloudSttActive) {
       startVoiceAssistant()
     }
+  }
+
+  private fun handleAlarmFireIntent(intent: Intent?) {
+    if (intent?.getBooleanExtra("fromAlarmFire", false) != true) return
+    val firePayload = intent.getStringExtra("payload") ?: payload
+    if (VoiceAlarmFireGuard.shouldSkip(this, firePayload)) return
+    try { VoiceAlarmRingingService.start(this, firePayload) } catch (_: Throwable) {}
+    try { VoiceAlarmScheduler.scheduleNextDaily(this, firePayload) } catch (_: Throwable) {}
   }
 
   private fun buildContent(): View {
@@ -284,7 +294,7 @@ class VoiceAlarmActivity : Activity() {
           }
           else if (!speaking && !aiBusy) listenAgain(700)
         }
-        override fun onBeginningOfSpeech() {}
+        override fun onBeginningOfSpeech() { postponeAlarmVoiceReplay(18_000L) }
         override fun onEndOfSpeech() { listening = false }
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
@@ -312,7 +322,10 @@ class VoiceAlarmActivity : Activity() {
           Thread.sleep(1000)
           ByteArray(0)
         }
-        if (pcm.isEmpty() || destroyed || !cloudSttActive || speaking || aiBusy || isAlarmPlaybackSuppressed()) continue
+        // Do not discard already captured speech just because alarm playback
+        // started immediately after/during the chunk.  onSpeechChunk() already
+        // filters alarm echo and buffers real user speech until playback ends.
+        if (pcm.isEmpty() || destroyed || !cloudSttActive) continue
         val text = try { recognizeWithMicrosoft(cfg, pcm) } catch (t: Throwable) {
           runOnUiThread { transcriptView?.text = "微软识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
           ""
@@ -343,7 +356,11 @@ class VoiceAlarmActivity : Activity() {
           runOnUiThread { transcriptView?.text = "讯飞识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
           ""
         }
-        if (text.isNotBlank() && !destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed()) {
+        if (text.isNotBlank() && !destroyed && cloudSttActive) {
+          // If alarm playback interrupted the stream, still pass the recognized
+          // user text through the central buffering/filtering path instead of
+          // dropping it.  That path suppresses alarm echo and waits for playback
+          // completion before sending real user speech to AI.
           runOnUiThread { onSpeechChunk(text, finalChunk = true) }
         }
       }
@@ -376,13 +393,30 @@ class VoiceAlarmActivity : Activity() {
       val deadline = System.currentTimeMillis() + durationMs
       while (!destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed() && System.currentTimeMillis() < deadline) {
         val read = audioRecord.read(buffer, 0, buffer.size)
-        if (read > 0) out.write(buffer, 0, read)
+        if (read > 0) {
+          if (containsSpeechEnergy(buffer, read)) postponeAlarmVoiceReplay(18_000L)
+          out.write(buffer, 0, read)
+        }
       }
     } finally {
       try { audioRecord.stop() } catch (_: Throwable) {}
       try { audioRecord.release() } catch (_: Throwable) {}
     }
     return out.toByteArray()
+  }
+
+  private fun containsSpeechEnergy(buffer: ByteArray, read: Int): Boolean {
+    var peak = 0
+    var i = 0
+    val limit = read - 1
+    while (i < limit) {
+      val sample = (buffer[i].toInt() and 0xff) or (buffer[i + 1].toInt() shl 8)
+      val value = kotlin.math.abs(sample.toShort().toInt())
+      if (value > peak) peak = value
+      if (peak >= 900) return true
+      i += 2
+    }
+    return false
   }
 
   private fun recognizeWithMicrosoft(cfg: JSONObject, pcm: ByteArray): String {
@@ -475,6 +509,7 @@ class VoiceAlarmActivity : Activity() {
       while (!destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed() && System.currentTimeMillis() < deadline) {
         val read = audioRecord.read(buffer, 0, buffer.size)
         if (read > 0) {
+          if (containsSpeechEnergy(buffer, read)) postponeAlarmVoiceReplay(18_000L)
           webSocket.send(iflytekFrame(cfg, status, buffer.copyOf(read)))
           status = 1
           Thread.sleep(35)
