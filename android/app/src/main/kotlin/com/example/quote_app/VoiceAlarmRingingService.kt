@@ -134,6 +134,8 @@ class VoiceAlarmRingingService : Service() {
   private var vibrator: Vibrator? = null
   private var wakeLock: PowerManager.WakeLock? = null
   private var originalAlarmVolume: Int? = null
+  private var currentMusicVolume = 0.4f
+  private var musicRestoreRunnable: Runnable? = null
   private val replayHandler = Handler(Looper.getMainLooper())
   private var replayRunnable: Runnable? = null
   private var currentPayload: String = "{}"
@@ -165,6 +167,8 @@ class VoiceAlarmRingingService : Service() {
     stopSignals()
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     replayRunnable = null
+    musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
+    musicRestoreRunnable = null
     try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Throwable) {}
     wakeLock = null
     restoreAlarmVolume()
@@ -281,12 +285,13 @@ class VoiceAlarmRingingService : Service() {
       }
     }
     val musicPath = data.optString("musicPath", "")
+    currentMusicVolume = data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f)
     if (musicPath.isNotBlank() && File(musicPath).isFile) {
-      musicPlayer = createPlayer(Uri.fromFile(File(musicPath)), true, data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f))
+      musicPlayer = createPlayer(Uri.fromFile(File(musicPath)), true, currentMusicVolume)
     } else if (data.optBoolean("systemMusic", true)) {
       val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-      if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f))
+      if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, currentMusicVolume)
     }
     if (hasVoicePrompt(data)) {
       playVoiceOnce(data)
@@ -370,6 +375,11 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
+    // Direct-boot or first-unlock edge case: generated voice files may live in
+    // credential-protected app storage and be unreadable even though the alarm
+    // payload has been restored from device-protected storage.  Fall back to the
+    // platform TTS so the user still hears the alarm text instead of silent music.
+    speakAlarmTextOnce(data.optString("text", "语音闹钟时间到了"), volume)
   }
 
   private fun scheduleVoiceReplay(data: JSONObject) {
@@ -389,13 +399,26 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun postponeVoiceReplay(postponeMs: Long) {
-    voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + postponeMs.coerceIn(1000L, 180_000L))
+    val safePostponeMs = postponeMs.coerceIn(1000L, 180_000L)
+    voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + safePostponeMs)
     try { voicePlayer?.stop() } catch (_: Throwable) {}
     try { voicePlayer?.release() } catch (_: Throwable) {}
     try { alarmTts?.stop() } catch (_: Throwable) {}
     pendingAlarmTts = null
     if (voicePlayer != null || alarmTts != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
     voicePlayer = null
+    duckMusicFor(safePostponeMs.coerceAtMost(30_000L))
+  }
+
+  private fun duckMusicFor(durationMs: Long) {
+    val player = musicPlayer ?: return
+    try { player.setVolume(currentMusicVolume * 0.18f, currentMusicVolume * 0.18f) } catch (_: Throwable) { return }
+    musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
+    musicRestoreRunnable = Runnable {
+      musicRestoreRunnable = null
+      try { musicPlayer?.setVolume(currentMusicVolume, currentMusicVolume) } catch (_: Throwable) {}
+    }
+    replayHandler.postDelayed(musicRestoreRunnable!!, durationMs.coerceAtLeast(1000L))
   }
 
   private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f, notifyVoice: Boolean = false): MediaPlayer? {
@@ -442,6 +465,7 @@ class VoiceAlarmRingingService : Service() {
     alarmTtsReady = false
     pendingAlarmTts = null
     musicPlayer = null
+    currentMusicVolume = 0.4f
     vibrator = null
   }
 

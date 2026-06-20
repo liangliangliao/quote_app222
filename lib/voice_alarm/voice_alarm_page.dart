@@ -225,8 +225,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     if (!mic.isGranted) {
       final requested = await Permission.microphone.request();
       if (!requested.isGranted) {
-        _toast('语音唤醒、AI 对话和语音关闭闹钟需要麦克风权限；请授权后重新保存闹钟');
-        return false;
+        _toast('未授权麦克风：仍会保存并响铃，但语音唤醒、AI 对话和语音关闭闹钟将不可用');
+        return true;
       }
     }
     return true;
@@ -293,8 +293,16 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       }
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
-      _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-      if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
+      try {
+        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
+        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
+      } catch (e) {
+        // Voice file generation depends on third-party TTS credentials/network.
+        // Do not let that prevent the native alarm from being registered; the
+        // ringing service can read the alarm text with platform TTS as fallback.
+        _generatedVoice = null;
+        _toast('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟：$e');
+      }
       final when = _nextTime();
       await _kv.setString('voice_alarm.time', when.toIso8601String());
       await _kv.setString('voice_alarm.text', _text.text.trim());
@@ -425,8 +433,16 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     try {
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
-      _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-      if (_selectedSavedVoicePath == null) await _rememberGeneratedVoice(_generatedVoice!);
+      try {
+        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
+        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
+      } catch (e) {
+        // Voice file generation depends on third-party TTS credentials/network.
+        // Do not let that prevent the native alarm from being registered; the
+        // ringing service can read the alarm text with platform TTS as fallback.
+        _generatedVoice = null;
+        _toast('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟：$e');
+      }
       await _native.invokeMethod<void>('testRing', {'payload': _payload()});
     } catch (e) {
       _toast('测试失败：$e');

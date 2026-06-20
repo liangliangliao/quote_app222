@@ -76,6 +76,8 @@ class VoiceAlarmActivity : Activity() {
   private var iflytekSttClient: OkHttpClient? = null
   private var lastReplayPostponeSentAt = 0L
   private var lastReplayPostponeUntil = 0L
+  private var lastHandledSpeechNormalized = ""
+  private var lastHandledSpeechAt = 0L
   private val alarmPlaybackReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
       when (intent?.action) {
@@ -294,7 +296,7 @@ class VoiceAlarmActivity : Activity() {
           }
           else if (!speaking && !aiBusy) listenAgain(700)
         }
-        override fun onBeginningOfSpeech() { postponeAlarmVoiceReplay(18_000L) }
+        override fun onBeginningOfSpeech() { postponeAlarmVoiceReplay(30_000L) }
         override fun onEndOfSpeech() { listening = false }
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
@@ -394,7 +396,7 @@ class VoiceAlarmActivity : Activity() {
       while (!destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed() && System.currentTimeMillis() < deadline) {
         val read = audioRecord.read(buffer, 0, buffer.size)
         if (read > 0) {
-          if (containsSpeechEnergy(buffer, read)) postponeAlarmVoiceReplay(18_000L)
+          if (containsSpeechEnergy(buffer, read)) postponeAlarmVoiceReplay(30_000L)
           out.write(buffer, 0, read)
         }
       }
@@ -509,7 +511,7 @@ class VoiceAlarmActivity : Activity() {
       while (!destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed() && System.currentTimeMillis() < deadline) {
         val read = audioRecord.read(buffer, 0, buffer.size)
         if (read > 0) {
-          if (containsSpeechEnergy(buffer, read)) postponeAlarmVoiceReplay(18_000L)
+          if (containsSpeechEnergy(buffer, read)) postponeAlarmVoiceReplay(30_000L)
           webSocket.send(iflytekFrame(cfg, status, buffer.copyOf(read)))
           status = 1
           Thread.sleep(35)
@@ -718,7 +720,7 @@ class VoiceAlarmActivity : Activity() {
   private fun onSpeechChunk(chunk: String, finalChunk: Boolean) {
     val text = chunk.trim()
     if (text.isBlank()) return
-    postponeAlarmVoiceReplay(18_000L)
+    postponeAlarmVoiceReplay(30_000L)
     if (isAlarmPlaybackSuppressed()) {
       if (isLikelyAlarmPlayback(text)) {
         suppressForAlarmPlayback(2000L)
@@ -748,15 +750,36 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun appendSpeechChunk(text: String) {
-    val current = speechBuffer.toString()
-    if (current.contains(text)) return
-    if (text.contains(current) && current.isNotBlank()) {
-      speechBuffer.clear()
-      speechBuffer.append(text)
+    val clean = text.trim()
+    if (clean.isBlank()) return
+    val current = speechBuffer.toString().trim()
+    if (current.isBlank()) {
+      speechBuffer.append(clean)
       return
     }
-    if (speechBuffer.isNotBlank()) speechBuffer.append(' ')
-    speechBuffer.append(text)
+    val merged = mergeSpeechText(current, clean)
+    speechBuffer.clear()
+    speechBuffer.append(merged)
+  }
+
+  private fun mergeSpeechText(current: String, incoming: String): String {
+    val a = current.trim()
+    val b = incoming.trim()
+    val normalizedA = normalizeSpeechText(a)
+    val normalizedB = normalizeSpeechText(b)
+    if (normalizedB.isBlank()) return a
+    if (normalizedA.contains(normalizedB)) return a
+    if (normalizedB.contains(normalizedA)) return b
+
+    val compactA = a.replace(Regex("\\s+"), "")
+    val compactB = b.replace(Regex("\\s+"), "")
+    val maxOverlap = minOf(compactA.length, compactB.length, 32)
+    for (size in maxOverlap downTo 2) {
+      if (compactA.takeLast(size) == compactB.take(size)) {
+        return compactA + compactB.substring(size)
+      }
+    }
+    return "$a $b"
   }
 
   private fun scheduleBufferedSpeechProcessing(delayMs: Long) {
@@ -782,13 +805,32 @@ class VoiceAlarmActivity : Activity() {
       return
     }
     transcriptView?.text = "你：$text"
+    val isStop = isStopCommand(text)
+    val isSnooze = isSnoozeCommand(text)
+    if (!isStop && !isSnooze && aiBusy) {
+      appendSpeechChunk(text)
+      transcriptView?.append("\nAI 正在回复，已暂存你的新语音…")
+      scheduleBufferedSpeechProcessing(2500)
+      return
+    }
+    val normalizedForDedupe = normalizeSpeechText(text)
+    val now = System.currentTimeMillis()
+    if (!isStop && !isSnooze && normalizedForDedupe == lastHandledSpeechNormalized && now - lastHandledSpeechAt < 8000L) {
+      transcriptView?.append("\n已忽略重复识别片段，继续聆听…")
+      listenAgain(500)
+      return
+    }
+    if (!isStop && !isSnooze) {
+      lastHandledSpeechNormalized = normalizedForDedupe
+      lastHandledSpeechAt = now
+    }
     when {
-      isStopCommand(text) -> {
+      isStop -> {
         speak("好的，已关闭闹钟。", "alarm_stop", restart = false)
         VoiceAlarmRingingService.stop(this)
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
-      isSnoozeCommand(text) -> {
+      isSnooze -> {
         speak("好的，五分钟后再次提醒。", "alarm_snooze", restart = false)
         VoiceAlarmScheduler.snooze(this, payload, 5)
         VoiceAlarmRingingService.stop(this)
