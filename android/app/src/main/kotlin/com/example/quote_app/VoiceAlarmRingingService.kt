@@ -185,6 +185,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   override fun onDestroy() {
+    activePayload = null
     stopSignals()
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     replayRunnable = null
@@ -396,6 +397,49 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
+    pendingAlarmTts = cleanText to volume
+    if (alarmTts != null) return
+    alarmTts = TextToSpeech(this) { status ->
+      if (status == TextToSpeech.SUCCESS) {
+        alarmTtsReady = true
+        try { alarmTts?.language = Locale.CHINA } catch (_: Throwable) {}
+        if (Build.VERSION.SDK_INT >= 21) {
+          try {
+            alarmTts?.setAudioAttributes(
+              AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+            )
+          } catch (_: Throwable) {}
+        }
+        alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+          override fun onStart(utteranceId: String?) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
+          }
+          override fun onDone(utteranceId: String?) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+          }
+          @Deprecated("Deprecated in Java")
+          override fun onError(utteranceId: String?) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+          }
+          override fun onError(utteranceId: String?, errorCode: Int) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+          }
+        })
+        val pending = pendingAlarmTts
+        pendingAlarmTts = null
+        if (pending != null) {
+          Handler(Looper.getMainLooper()).post { speakAlarmTextOnce(pending.first, pending.second) }
+        }
+      } else {
+        alarmTtsReady = false
+        pendingAlarmTts = null
+        sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+      }
+    }
+    voiceInteractionActiveUntil = System.currentTimeMillis() + holdMs.coerceIn(1000L, 15_000L)
   }
 
   private fun scheduleVoiceReplay(initialData: JSONObject) {

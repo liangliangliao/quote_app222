@@ -54,12 +54,13 @@ object VoiceAlarmScheduler {
     val id = alarmId(payload)
     val mode = if (id == NIGHT_ALARM_ID) "night" else "morning"
     val alarmManager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val operation = PendingIntent.getBroadcast(
+    val operation = PendingIntent.getActivity(
       app,
       id,
       Intent(app, VoiceAlarmReceiver::class.java).apply {
         action = "com.example.quote_app.VOICE_ALARM_FIRE_PRIMARY"
         putExtra("payload", payload)
+        putExtra("fromAlarmFire", true)
       },
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
