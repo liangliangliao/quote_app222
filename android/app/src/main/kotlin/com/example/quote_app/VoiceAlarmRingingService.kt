@@ -185,6 +185,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   override fun onDestroy() {
+    activePayload = null
     stopSignals()
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     replayRunnable = null
@@ -396,6 +397,7 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
+    voiceInteractionActiveUntil = System.currentTimeMillis() + holdMs.coerceIn(1000L, 15_000L)
   }
 
   private fun scheduleVoiceReplay(initialData: JSONObject) {
