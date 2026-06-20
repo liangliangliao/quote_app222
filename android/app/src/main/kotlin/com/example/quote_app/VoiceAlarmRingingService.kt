@@ -163,6 +163,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   override fun onDestroy() {
+    activePayload = null
     stopSignals()
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     replayRunnable = null
