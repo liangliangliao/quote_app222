@@ -397,19 +397,15 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
-    replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
-  }
-
-  private fun latestVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
-    return try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
+    voiceInteractionActiveUntil = System.currentTimeMillis() + holdMs.coerceIn(1000L, 15_000L)
   }
 
   private fun scheduleVoiceReplay(initialData: JSONObject) {
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     val fallbackData = initialData
-    val seconds = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
+    val replayDelayMs = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600) * 1000L
     replayRunnable = Runnable {
-      val latest = latestVoiceReplayPayload(fallbackData)
+      val latest = resolveVoiceReplayPayload(fallbackData)
       val blockedUntil = maxOf(voiceReplayBlockedUntil, voiceInteractionActiveUntil)
       val blockedMs = blockedUntil - System.currentTimeMillis()
       if (blockedMs > 0) {
@@ -419,10 +415,10 @@ class VoiceAlarmRingingService : Service() {
       playVoiceOnce(latest)
       scheduleVoiceReplay(latest)
     }
-    replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
+    replayHandler.postDelayed(replayRunnable!!, replayDelayMs)
   }
 
-  private fun latestVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
+  private fun resolveVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
     return try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
   }
 
