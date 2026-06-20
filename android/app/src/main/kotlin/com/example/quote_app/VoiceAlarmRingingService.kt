@@ -397,23 +397,6 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
-    replayHandler.postDelayed(replayRunnable!!, replayDelayMs)
-  }
-
-  private fun resolveVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
-    return try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
-  }
-
-  private fun postponeVoiceReplay(postponeMs: Long) {
-    val safePostponeMs = postponeMs.coerceIn(1000L, 180_000L)
-    voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + safePostponeMs)
-    try { voicePlayer?.stop() } catch (_: Throwable) {}
-    try { voicePlayer?.release() } catch (_: Throwable) {}
-    try { alarmTts?.stop() } catch (_: Throwable) {}
-    pendingAlarmTts = null
-    if (voicePlayer != null || alarmTts != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
-    voicePlayer = null
-    duckMusicFor(safePostponeMs.coerceAtMost(30_000L))
   }
 
   private fun scheduleVoiceReplay(initialData: JSONObject) {
