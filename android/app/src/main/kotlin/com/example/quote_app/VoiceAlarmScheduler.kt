@@ -16,16 +16,21 @@ object VoiceAlarmScheduler {
   private const val NIGHT_ALARM_ID = 974002
   private const val EXACT_FALLBACK_OFFSET = 200
 
-  private fun protectedPrefs(context: Context): SharedPreferences {
+  private fun deviceProtectedPrefs(context: Context): SharedPreferences {
     val storageContext = if (Build.VERSION.SDK_INT >= 24) context.createDeviceProtectedStorageContext() else context
     return storageContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
   }
 
-  private fun credentialPrefs(context: Context): SharedPreferences =
+  private fun credentialProtectedPrefs(context: Context): SharedPreferences =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+  private fun persistedPrefs(context: Context): List<SharedPreferences> = listOf(
+    deviceProtectedPrefs(context),
+    credentialProtectedPrefs(context),
+  )
+
   private fun persistAlarm(context: Context, mode: String, payload: String, atMs: Long) {
-    for (prefs in listOf(protectedPrefs(context), credentialPrefs(context))) {
+    for (prefs: SharedPreferences in persistedPrefs(context)) {
       prefs.edit()
         .putString("${KEY_PAYLOAD}_$mode", payload)
         .putLong("${KEY_AT}_$mode", atMs)
@@ -34,30 +39,8 @@ object VoiceAlarmScheduler {
   }
 
   private fun clearPersistedAlarms(context: Context) {
-    protectedPrefs(context).edit().clear().apply()
-    credentialPrefs(context).edit().clear().apply()
-  }
-
-  private fun protectedPrefs(context: Context): SharedPreferences {
-    val storageContext = if (Build.VERSION.SDK_INT >= 24) context.createDeviceProtectedStorageContext() else context
-    return storageContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-  }
-
-  private fun credentialPrefs(context: Context): SharedPreferences =
-    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-  private fun persistAlarm(context: Context, mode: String, payload: String, atMs: Long) {
-    for (prefs in listOf(protectedPrefs(context), credentialPrefs(context))) {
-      prefs.edit()
-        .putString("${KEY_PAYLOAD}_$mode", payload)
-        .putLong("${KEY_AT}_$mode", atMs)
-        .apply()
-    }
-  }
-
-  private fun clearPersistedAlarms(context: Context) {
-    protectedPrefs(context).edit().clear().apply()
-    credentialPrefs(context).edit().clear().apply()
+    deviceProtectedPrefs(context).edit().clear().apply()
+    credentialProtectedPrefs(context).edit().clear().apply()
   }
 
   private fun alarmId(payload: String): Int {
@@ -171,13 +154,13 @@ object VoiceAlarmScheduler {
   @JvmStatic
   fun restore(context: Context) {
     for (mode in arrayOf("morning", "night")) {
-      val protected = protectedPrefs(context)
-      val credential = credentialPrefs(context)
-      val payload = protected.getString("${KEY_PAYLOAD}_$mode", null)
-        ?: credential.getString("${KEY_PAYLOAD}_$mode", null)
+      val devicePrefs = deviceProtectedPrefs(context)
+      val credentialPrefs = credentialProtectedPrefs(context)
+      val payload = devicePrefs.getString("${KEY_PAYLOAD}_$mode", null)
+        ?: credentialPrefs.getString("${KEY_PAYLOAD}_$mode", null)
         ?: continue
-      var at = protected.getLong("${KEY_AT}_$mode", 0L).takeIf { it > 0L }
-        ?: credential.getLong("${KEY_AT}_$mode", 0L)
+      var at = devicePrefs.getLong("${KEY_AT}_$mode", 0L).takeIf { it > 0L }
+        ?: credentialPrefs.getLong("${KEY_AT}_$mode", 0L)
       if (at <= System.currentTimeMillis()) {
         val obj = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
         val hour = obj.optInt("hour", 8)
