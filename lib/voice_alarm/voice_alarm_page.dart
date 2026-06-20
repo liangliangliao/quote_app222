@@ -283,9 +283,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     try {
       final hasPermission = await _native.invokeMethod<bool>('hasExactAlarmPermission') ?? true;
       if (!hasPermission) {
+        // Voice alarms use AlarmManager.setAlarmClock as the primary delivery
+        // path, which is allowed for alarm-clock style reminders even when the
+        // optional exact-alarm permission is not granted.  Do not abort saving
+        // here; otherwise users who skip the system permission page end up with
+        // no native alarm registered when the app process is later killed.
         await _native.invokeMethod<void>('requestExactAlarmPermission');
-        _toast('请在系统页面允许“闹钟和提醒”，返回后再次点击保存');
-        return;
+        _toast('将继续保存语音闹钟；授权“闹钟和提醒”可增强兜底精确触发能力');
       }
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
