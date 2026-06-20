@@ -35,6 +35,7 @@ class VoiceAlarmRingingService : Service() {
     private const val NOTIFICATION_ID = 974002
     const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
     const val ACTION_VOICE_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_END"
+    @Volatile private var activePayload: String? = null
 
     @JvmStatic
     fun start(context: Context, payload: String) {
@@ -49,6 +50,17 @@ class VoiceAlarmRingingService : Service() {
     fun stop(context: Context) {
       try {
         context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply { action = ACTION_STOP })
+      } catch (_: Throwable) {}
+    }
+
+    @JvmStatic
+    fun restoreFullScreenIfRinging(context: Context) {
+      val payload = activePayload ?: return
+      try {
+        context.startActivity(Intent(context, VoiceAlarmActivity::class.java).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+          putExtra("payload", payload)
+        })
       } catch (_: Throwable) {}
     }
 
@@ -77,6 +89,7 @@ class VoiceAlarmRingingService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action == ACTION_STOP) {
+      activePayload = null
       stopSelf()
       return START_NOT_STICKY
     }
@@ -85,6 +98,7 @@ class VoiceAlarmRingingService : Service() {
       return START_STICKY
     }
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: "{}"
+    activePayload = payload
     startForegroundAlarm(payload)
     acquireWakeLock()
     currentPayload = payload
@@ -93,6 +107,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   override fun onDestroy() {
+    activePayload = null
     stopSignals()
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     replayRunnable = null
@@ -160,7 +175,17 @@ class VoiceAlarmRingingService : Service() {
       .addAction(android.R.drawable.ic_media_pause, "5分钟后提醒", snoozeIntent)
       .addAction(android.R.drawable.ic_menu_close_clear_cancel, "关闭", stopIntent)
       .build()
-    if (Build.VERSION.SDK_INT >= 29) {
+    if (Build.VERSION.SDK_INT >= 30) {
+      try {
+        startForeground(
+          NOTIFICATION_ID,
+          notification,
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+        )
+      } catch (_: Throwable) {
+        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+      }
+    } else if (Build.VERSION.SDK_INT >= 29) {
       startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
     } else {
       startForeground(NOTIFICATION_ID, notification)

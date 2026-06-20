@@ -265,8 +265,11 @@ class VoiceAlarmActivity : Activity() {
           Thread.sleep(180)
           continue
         }
-        postponeAlarmVoiceReplay(20_000L)
-        val pcm = recordPcmChunk(12000)
+        val pcm = try { recordPcmChunk(12000) } catch (t: Throwable) {
+          runOnUiThread { transcriptView?.text = "微软录音启动失败：${t.message ?: t.javaClass.simpleName}；稍后重试…" }
+          Thread.sleep(1000)
+          ByteArray(0)
+        }
         if (pcm.isEmpty() || destroyed || !cloudSttActive || speaking || aiBusy || isAlarmPlaybackSuppressed()) continue
         val text = try { recognizeWithMicrosoft(cfg, pcm) } catch (t: Throwable) {
           runOnUiThread { transcriptView?.text = "微软识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
@@ -294,7 +297,6 @@ class VoiceAlarmActivity : Activity() {
           Thread.sleep(180)
           continue
         }
-        postponeAlarmVoiceReplay(22_000L)
         val text = try { recognizeWithIflytekStreaming(cfg, 15000) } catch (t: Throwable) {
           runOnUiThread { transcriptView?.text = "讯飞识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
           ""
@@ -321,10 +323,14 @@ class VoiceAlarmActivity : Activity() {
       AudioFormat.ENCODING_PCM_16BIT,
       minBuffer * 2,
     )
+    if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+      try { audioRecord.release() } catch (_: Throwable) {}
+      return ByteArray(0)
+    }
     val out = ByteArrayOutputStream()
     val buffer = ByteArray(minBuffer)
     try {
-      audioRecord.startRecording()
+      try { audioRecord.startRecording() } catch (_: Throwable) { return ByteArray(0) }
       val deadline = System.currentTimeMillis() + durationMs
       while (!destroyed && cloudSttActive && !speaking && !aiBusy && !isAlarmPlaybackSuppressed() && System.currentTimeMillis() < deadline) {
         val read = audioRecord.read(buffer, 0, buffer.size)
@@ -373,6 +379,10 @@ class VoiceAlarmActivity : Activity() {
       AudioFormat.ENCODING_PCM_16BIT,
       maxOf(minBuffer * 2, chunkSize * 2),
     )
+    if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+      try { audioRecord.release() } catch (_: Throwable) {}
+      return ""
+    }
     val opened = CountDownLatch(1)
     val closed = CountDownLatch(1)
     val text = StringBuilder()
@@ -416,7 +426,7 @@ class VoiceAlarmActivity : Activity() {
     try {
       webSocket = client.newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
       if (!opened.await(5, TimeUnit.SECONDS)) return ""
-      audioRecord.startRecording()
+      try { audioRecord.startRecording() } catch (_: Throwable) { return "" }
       val deadline = System.currentTimeMillis() + durationMs
       var status = 0
       val buffer = ByteArray(chunkSize)
@@ -733,12 +743,26 @@ class VoiceAlarmActivity : Activity() {
 
   private fun normalizeSpeechText(value: String): String = value.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() || it in '\u4e00'..'\u9fff' }
 
-  private fun isStopCommand(text: String): Boolean = listOf("关闭", "停止", "关掉", "结束闹钟", "停掉闹钟", "不响了").any { text.contains(it) }
+  private fun isStopCommand(text: String): Boolean {
+    val normalized = normalizeSpeechText(text)
+    return listOf("关闭", "停止", "关掉", "结束闹钟", "停掉闹钟", "不响了", "不要响", "别响").any {
+      text.contains(it) || normalized.contains(normalizeSpeechText(it))
+    }
+  }
 
-  private fun isSnoozeCommand(text: String): Boolean =
-    (listOf("延迟", "稍后", "等会", "再响", "贪睡", "小睡").any { text.contains(it) } &&
-      listOf("五分钟", "5分钟", "五 分钟", "5 分钟", "五分", "5分").any { text.contains(it) }) ||
-      text.contains("延迟五") || text.contains("延迟5")
+  private fun isSnoozeCommand(text: String): Boolean {
+    val normalized = normalizeSpeechText(text)
+    val hasSnoozeIntent = listOf("延迟", "延时", "推迟", "稍后", "等会", "再响", "贪睡", "小睡", "过会").any {
+      text.contains(it) || normalized.contains(normalizeSpeechText(it))
+    }
+    val hasFiveMinutes = listOf("五分钟", "5分钟", "五 分钟", "5 分钟", "五分", "5分", "五分钟后", "5分钟后").any {
+      text.contains(it) || normalized.contains(normalizeSpeechText(it))
+    }
+    return (hasSnoozeIntent && hasFiveMinutes) ||
+      normalized.contains("延迟五") || normalized.contains("延迟5") ||
+      normalized.contains("延时五") || normalized.contains("延时5") ||
+      normalized.contains("五分钟后提醒") || normalized.contains("5分钟后提醒")
+  }
 
   private fun isWakeCommand(text: String): Boolean = listOf("小名小名", "你好AI", "你好ai", "闹钟助手", "AI助手", "ai助手", "小名", "助手").any { text.contains(it) }
 

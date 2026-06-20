@@ -64,6 +64,7 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <!-- Allow url_launcher to resolve external browser handlers for https links. -->
@@ -189,7 +190,7 @@
             android:enabled="true"
             android:exported="false"
             android:stopWithTask="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback|microphone" />
         <activity
             android:name=".VoiceAlarmActivity"
             android:exported="false"
