@@ -26,6 +26,8 @@ class GlobalAiSettings {
   static const String meditationUploadPausePromptKey = 'meditation_upload_pause_prompt';
   static const String behaviorPresetDailyReviewAiPromptKey = 'behavior_preset_daily_review_ai_prompt';
   static const String voiceAlarmContentPromptKey = 'voice_alarm.ai_prompt';
+  static const String voiceAlarmMorningAssistantPromptKey = 'voice_alarm.morning_assistant_prompt';
+  static const String voiceAlarmNightAssistantPromptKey = 'voice_alarm.night_assistant_prompt';
 
   final ConfigDao _configDao = ConfigDao();
   final KeyValueDao _kvDao = KeyValueDao();
@@ -33,6 +35,12 @@ class GlobalAiSettings {
 
   String get defaultVoiceAlarmContentPrompt =>
       '请为{{mode}}语音闹钟写一段自然、温暖、适合中文朗读的内容。只输出朗读正文，50到100字，不要标题。早安内容应积极但不过度兴奋；晚安内容应舒缓、接纳且不制造压力。';
+
+  String get defaultVoiceAlarmMorningAssistantPrompt =>
+      '你是起床闹钟全屏界面里的中文语音 AI。目标是温和但坚定地帮助用户醒来、坐起、开始一天。回答必须适合语音播报，简短、具体、支持行动，不批评用户。用户可以说关闭闹钟或延迟五分钟；如果用户表达不想起床，请先共情，再给一个 10 秒内可执行的小动作。';
+
+  String get defaultVoiceAlarmNightAssistantPrompt =>
+      '你是睡眠闹钟全屏界面里的中文语音 AI。目标是帮助用户放下事务、降低唤醒度、进入睡前节奏。回答必须适合语音播报，简短、舒缓、低刺激，不制造压力。用户可以说关闭闹钟或延迟五分钟；如果用户焦虑或舍不得睡，请先接住感受，再给一个很小的放松动作。';
 
   Future<String> getVoiceAlarmContentPrompt() => _getLocalPrompt(
         key: voiceAlarmContentPromptKey,
@@ -48,6 +56,38 @@ class GlobalAiSettings {
   Future<Map<String, String>> inspectVoiceAlarmContentPromptState() => _inspectLocalPrompt(
         key: voiceAlarmContentPromptKey,
         fallback: defaultVoiceAlarmContentPrompt,
+      );
+
+  Future<String> getVoiceAlarmMorningAssistantPrompt() => _getLocalPrompt(
+        key: voiceAlarmMorningAssistantPromptKey,
+        fallback: defaultVoiceAlarmMorningAssistantPrompt,
+      );
+
+  Future<void> saveVoiceAlarmMorningAssistantPrompt(String prompt) => _saveLocalPrompt(
+        key: voiceAlarmMorningAssistantPromptKey,
+        fallback: defaultVoiceAlarmMorningAssistantPrompt,
+        value: prompt,
+      );
+
+  Future<Map<String, String>> inspectVoiceAlarmMorningAssistantPromptState() => _inspectLocalPrompt(
+        key: voiceAlarmMorningAssistantPromptKey,
+        fallback: defaultVoiceAlarmMorningAssistantPrompt,
+      );
+
+  Future<String> getVoiceAlarmNightAssistantPrompt() => _getLocalPrompt(
+        key: voiceAlarmNightAssistantPromptKey,
+        fallback: defaultVoiceAlarmNightAssistantPrompt,
+      );
+
+  Future<void> saveVoiceAlarmNightAssistantPrompt(String prompt) => _saveLocalPrompt(
+        key: voiceAlarmNightAssistantPromptKey,
+        fallback: defaultVoiceAlarmNightAssistantPrompt,
+        value: prompt,
+      );
+
+  Future<Map<String, String>> inspectVoiceAlarmNightAssistantPromptState() => _inspectLocalPrompt(
+        key: voiceAlarmNightAssistantPromptKey,
+        fallback: defaultVoiceAlarmNightAssistantPrompt,
       );
 
   Future<Map<String, String>> getState() async {
