@@ -13,6 +13,7 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -20,6 +21,9 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import java.util.Locale
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 import java.io.File
@@ -66,32 +70,49 @@ class VoiceAlarmRingingService : Service() {
       } catch (_: Throwable) {}
     }
 
+    private fun stateContexts(context: Context): List<Context> {
+      val app = context.applicationContext
+      return if (Build.VERSION.SDK_INT >= 24) {
+        listOf(app.createDeviceProtectedStorageContext(), app)
+      } else {
+        listOf(app)
+      }
+    }
+
     private fun persistActivePayload(context: Context, payload: String) {
       activePayload = payload
-      try {
-        context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
-          .edit()
-          .putString(KEY_ACTIVE_PAYLOAD, payload)
-          .apply()
-      } catch (_: Throwable) {}
+      for (storageContext in stateContexts(context)) {
+        try {
+          storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ACTIVE_PAYLOAD, payload)
+            .apply()
+        } catch (_: Throwable) {}
+      }
     }
 
     private fun readActivePayload(context: Context): String? {
-      return try {
-        context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE).getString(KEY_ACTIVE_PAYLOAD, null)
-      } catch (_: Throwable) {
-        null
+      for (storageContext in stateContexts(context)) {
+        val payload = try {
+          storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE).getString(KEY_ACTIVE_PAYLOAD, null)
+        } catch (_: Throwable) {
+          null
+        }
+        if (!payload.isNullOrBlank()) return payload
       }
+      return null
     }
 
     private fun clearActivePayload(context: Context) {
       activePayload = null
-      try {
-        context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
-          .edit()
-          .remove(KEY_ACTIVE_PAYLOAD)
-          .apply()
-      } catch (_: Throwable) {}
+      for (storageContext in stateContexts(context)) {
+        try {
+          storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_ACTIVE_PAYLOAD)
+            .apply()
+        } catch (_: Throwable) {}
+      }
     }
 
     @JvmStatic
@@ -107,6 +128,9 @@ class VoiceAlarmRingingService : Service() {
 
   private var voicePlayer: MediaPlayer? = null
   private var musicPlayer: MediaPlayer? = null
+  private var alarmTts: TextToSpeech? = null
+  private var alarmTtsReady = false
+  private var pendingAlarmTts: Pair<String, Float>? = null
   private var vibrator: Vibrator? = null
   private var wakeLock: PowerManager.WakeLock? = null
   private var originalAlarmVolume: Int? = null
@@ -264,19 +288,88 @@ class VoiceAlarmRingingService : Service() {
         ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
       if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f))
     }
-    val voicePath = data.optString("voicePath", "")
-    if (voicePath.isNotBlank() && File(voicePath).isFile) {
+    if (hasVoicePrompt(data)) {
       playVoiceOnce(data)
       scheduleVoiceReplay(data)
     }
   }
 
+  private fun hasVoicePrompt(data: JSONObject): Boolean {
+    val voicePath = data.optString("voicePath", "")
+    return (voicePath.isNotBlank() && File(voicePath).isFile) || data.optString("text", "").isNotBlank()
+  }
+
   private fun playVoiceOnce(data: JSONObject) {
     val voicePath = data.optString("voicePath", "")
-    if (voicePath.isBlank() || !File(voicePath).isFile) return
-    try { voicePlayer?.stop() } catch (_: Throwable) {}
-    try { voicePlayer?.release() } catch (_: Throwable) {}
-    voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f), notifyVoice = true)
+    val volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f)
+    if (voicePath.isNotBlank() && File(voicePath).isFile) {
+      try { voicePlayer?.stop() } catch (_: Throwable) {}
+      try { voicePlayer?.release() } catch (_: Throwable) {}
+      voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = volume, notifyVoice = true)
+      return
+    }
+    // Direct-boot or first-unlock edge case: generated voice files may live in
+    // credential-protected app storage and be unreadable even though the alarm
+    // payload has been restored from device-protected storage.  Fall back to the
+    // platform TTS so the user still hears the alarm text instead of silent music.
+    speakAlarmTextOnce(data.optString("text", "语音闹钟时间到了"), volume)
+  }
+
+  private fun speakAlarmTextOnce(text: String, volume: Float) {
+    val cleanText = text.trim().ifBlank { "语音闹钟时间到了" }
+    if (alarmTtsReady && alarmTts != null) {
+      val utteranceId = "alarm_tts_${System.currentTimeMillis()}"
+      val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
+      try {
+        sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
+        alarmTts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+      } catch (_: Throwable) {
+        sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+      }
+      return
+    }
+    pendingAlarmTts = cleanText to volume
+    if (alarmTts != null) return
+    alarmTts = TextToSpeech(this) { status ->
+      if (status == TextToSpeech.SUCCESS) {
+        alarmTtsReady = true
+        try { alarmTts?.language = Locale.CHINA } catch (_: Throwable) {}
+        if (Build.VERSION.SDK_INT >= 21) {
+          try {
+            alarmTts?.setAudioAttributes(
+              AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+            )
+          } catch (_: Throwable) {}
+        }
+        alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+          override fun onStart(utteranceId: String?) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
+          }
+          override fun onDone(utteranceId: String?) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+          }
+          @Deprecated("Deprecated in Java")
+          override fun onError(utteranceId: String?) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+          }
+          override fun onError(utteranceId: String?, errorCode: Int) {
+            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+          }
+        })
+        val pending = pendingAlarmTts
+        pendingAlarmTts = null
+        if (pending != null) {
+          Handler(Looper.getMainLooper()).post { speakAlarmTextOnce(pending.first, pending.second) }
+        }
+      } else {
+        alarmTtsReady = false
+        pendingAlarmTts = null
+        sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+      }
+    }
   }
 
   private fun scheduleVoiceReplay(data: JSONObject) {
@@ -299,7 +392,9 @@ class VoiceAlarmRingingService : Service() {
     voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + postponeMs.coerceIn(1000L, 180_000L))
     try { voicePlayer?.stop() } catch (_: Throwable) {}
     try { voicePlayer?.release() } catch (_: Throwable) {}
-    if (voicePlayer != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+    try { alarmTts?.stop() } catch (_: Throwable) {}
+    pendingAlarmTts = null
+    if (voicePlayer != null || alarmTts != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
     voicePlayer = null
   }
 
@@ -336,11 +431,16 @@ class VoiceAlarmRingingService : Service() {
   private fun stopSignals() {
     try { voicePlayer?.stop() } catch (_: Throwable) {}
     try { voicePlayer?.release() } catch (_: Throwable) {}
+    try { alarmTts?.stop() } catch (_: Throwable) {}
+    try { alarmTts?.shutdown() } catch (_: Throwable) {}
     try { musicPlayer?.stop() } catch (_: Throwable) {}
     try { musicPlayer?.release() } catch (_: Throwable) {}
     try { vibrator?.cancel() } catch (_: Throwable) {}
-    if (voicePlayer != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+    if (voicePlayer != null || alarmTts != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
     voicePlayer = null
+    alarmTts = null
+    alarmTtsReady = false
+    pendingAlarmTts = null
     musicPlayer = null
     vibrator = null
   }

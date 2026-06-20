@@ -180,6 +180,7 @@
         <receiver
             android:name=".VoiceAlarmReceiver"
             android:enabled="true"
+            android:directBootAware="true"
             android:exported="false" />
         <receiver
             android:name=".VoiceAlarmActionReceiver"
@@ -188,12 +189,14 @@
         <service
             android:name=".VoiceAlarmRingingService"
             android:enabled="true"
+            android:directBootAware="true"
             android:exported="false"
             android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback|microphone" />
         <activity
             android:name=".VoiceAlarmActivity"
             android:exported="false"
+            android:directBootAware="true"
             android:excludeFromRecents="true"
             android:taskAffinity="com.example.quote_app.voiceAlarm"
             android:showWhenLocked="true"
@@ -230,11 +233,13 @@
             <meta-data android:name="flutterEmbedding" android:value="2" />
 
     
-    <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
+    <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true" android:directBootAware="true">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED" />
             <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            <action android:name="android.intent.action.TIME_SET" />
+            <action android:name="android.intent.action.TIMEZONE_CHANGED" />
         </intent-filter>
         <intent-filter>
       <action android:name="com.example.quote_app.ALARM" />
