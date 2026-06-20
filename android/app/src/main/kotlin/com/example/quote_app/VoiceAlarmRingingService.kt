@@ -382,11 +382,12 @@ class VoiceAlarmRingingService : Service() {
     speakAlarmTextOnce(data.optString("text", "语音闹钟时间到了"), volume)
   }
 
-  private fun scheduleVoiceReplay(data: JSONObject) {
+  private fun scheduleVoiceReplay(initialData: JSONObject) {
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
-    val seconds = data.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
+    val fallbackData = initialData
+    val seconds = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
     replayRunnable = Runnable {
-      val latest = try { JSONObject(currentPayload) } catch (_: Throwable) { data }
+      val latest = try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
       val blockedMs = voiceReplayBlockedUntil - System.currentTimeMillis()
       if (blockedMs > 0) {
         replayHandler.postDelayed(replayRunnable!!, blockedMs.coerceAtLeast(1000L))
