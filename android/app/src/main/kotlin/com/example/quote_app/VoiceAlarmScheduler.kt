@@ -14,6 +14,29 @@ object VoiceAlarmScheduler {
   private const val KEY_AT = "at"
   private const val MORNING_ALARM_ID = 974001
   private const val NIGHT_ALARM_ID = 974002
+  private const val EXACT_FALLBACK_OFFSET = 200
+
+  private fun protectedPrefs(context: Context): SharedPreferences {
+    val storageContext = if (Build.VERSION.SDK_INT >= 24) context.createDeviceProtectedStorageContext() else context
+    return storageContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+  }
+
+  private fun credentialPrefs(context: Context): SharedPreferences =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+  private fun persistAlarm(context: Context, mode: String, payload: String, atMs: Long) {
+    for (prefs in listOf(protectedPrefs(context), credentialPrefs(context))) {
+      prefs.edit()
+        .putString("${KEY_PAYLOAD}_$mode", payload)
+        .putLong("${KEY_AT}_$mode", atMs)
+        .apply()
+    }
+  }
+
+  private fun clearPersistedAlarms(context: Context) {
+    protectedPrefs(context).edit().clear().apply()
+    credentialPrefs(context).edit().clear().apply()
+  }
 
   private fun protectedPrefs(context: Context): SharedPreferences {
     val storageContext = if (Build.VERSION.SDK_INT >= 24) context.createDeviceProtectedStorageContext() else context
@@ -64,6 +87,32 @@ object VoiceAlarmScheduler {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
     alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(atMs, showIntent), operation)
+
+    // Some OEM ROMs are aggressive about alarm-clock PendingIntent delivery when
+    // the process is cold. Keep setAlarmClock as the primary wakeup, and add a
+    // second exact/allow-while-idle alarm with a different request code as a
+    // best-effort fallback. VoiceAlarmReceiver de-duplicates near-simultaneous
+    // firings so the user does not get two ringing services.
+    val fallbackOperation = PendingIntent.getBroadcast(
+      app,
+      id + EXACT_FALLBACK_OFFSET,
+      Intent(app, VoiceAlarmReceiver::class.java).apply {
+        action = "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK"
+        putExtra("payload", payload)
+      },
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    try {
+      val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
+      if (canUseExact) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+          alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, fallbackOperation)
+        } else {
+          alarmManager.setExact(AlarmManager.RTC_WAKEUP, atMs, fallbackOperation)
+        }
+      }
+    } catch (_: Throwable) {}
+
     if (persist) {
       persistAlarm(app, mode, payload, atMs)
     }
@@ -73,15 +122,20 @@ object VoiceAlarmScheduler {
   fun cancel(context: Context) {
     val app = context.applicationContext
     for (id in intArrayOf(MORNING_ALARM_ID, NIGHT_ALARM_ID)) {
-      val operation = PendingIntent.getBroadcast(
-        app,
-        id,
-        Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE" },
-        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-      )
-      if (operation != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(operation)
-        operation.cancel()
+      for ((requestCode, action) in arrayOf(
+        id to "com.example.quote_app.VOICE_ALARM_FIRE",
+        (id + EXACT_FALLBACK_OFFSET) to "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK",
+      )) {
+        val operation = PendingIntent.getBroadcast(
+          app,
+          requestCode,
+          Intent(app, VoiceAlarmReceiver::class.java).apply { this.action = action },
+          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+        )
+        if (operation != null) {
+          (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(operation)
+          operation.cancel()
+        }
       }
     }
     clearPersistedAlarms(app)
