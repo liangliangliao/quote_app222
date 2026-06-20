@@ -375,11 +375,6 @@ class VoiceAlarmRingingService : Service() {
         sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
       }
     }
-    // Direct-boot or first-unlock edge case: generated voice files may live in
-    // credential-protected app storage and be unreadable even though the alarm
-    // payload has been restored from device-protected storage.  Fall back to the
-    // platform TTS so the user still hears the alarm text instead of silent music.
-    speakAlarmTextOnce(data.optString("text", "语音闹钟时间到了"), volume)
   }
 
   private fun scheduleVoiceReplay(initialData: JSONObject) {
@@ -387,7 +382,7 @@ class VoiceAlarmRingingService : Service() {
     val fallbackData = initialData
     val seconds = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
     replayRunnable = Runnable {
-      val latest = try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
+      val latest = latestVoiceReplayPayload(fallbackData)
       val blockedMs = voiceReplayBlockedUntil - System.currentTimeMillis()
       if (blockedMs > 0) {
         replayHandler.postDelayed(replayRunnable!!, blockedMs.coerceAtLeast(1000L))
@@ -397,6 +392,10 @@ class VoiceAlarmRingingService : Service() {
       scheduleVoiceReplay(latest)
     }
     replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
+  }
+
+  private fun latestVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
+    return try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
   }
 
   private fun postponeVoiceReplay(postponeMs: Long) {
