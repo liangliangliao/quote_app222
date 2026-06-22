@@ -54,6 +54,7 @@ class RealisticOptimismTrainingAiService {
           parsed['model_label'] = state['label'] ?? '统一 AI';
           parsed['created_at_ms'] = parsed['created_at_ms'] ?? now;
           parsed['updated_at_ms'] = now;
+          _applySafetyRouting(parsed);
           final record = RealisticOptimismTrainingRecord.fromJson(parsed);
           if (record.fiveMinuteAction.isNotEmpty || record.balancedInterpretation.isNotEmpty || record.validationText.isNotEmpty) {
             return RealisticOptimismTrainingAiResult(record: record, fromFallback: false);
@@ -200,6 +201,7 @@ class RealisticOptimismTrainingAiService {
       'updated_at_ms': now,
     };
     _applySceneFallback(payload, scene, text, action);
+    _applySafetyRouting(payload);
     return RealisticOptimismTrainingRecord.fromJson(payload);
   }
 
@@ -258,6 +260,65 @@ class RealisticOptimismTrainingAiService {
       default:
         break;
     }
+  }
+
+  void _applySafetyRouting(Map<String, dynamic> payload) {
+    Map<String, dynamic> map(String key) {
+      final value = payload[key];
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) {
+        final converted = Map<String, dynamic>.from(value);
+        payload[key] = converted;
+        return converted;
+      }
+      final created = <String, dynamic>{};
+      payload[key] = created;
+      return created;
+    }
+
+    final intensity = map('intensity_check');
+    final rawLevel = intensity['level']?.toString().trim();
+    final level = (rawLevel == null || rawLevel.isEmpty ? 'L1' : rawLevel).toUpperCase();
+    if (level != 'L3' && level != 'L4') return;
+
+    intensity['level'] = level;
+    intensity['allowed_intervention'] = level == 'L4'
+        ? <String>['安全支持', '联系现实中的可信任人员', '联系当地紧急服务或危机热线', '移除近处危险物']
+        : <String>['情绪稳定', '身体落地', '现实支持', '只做非常小的照顾性行动'];
+    intensity['blocked_intervention'] = <String>['强行感恩', '强行寻找意义', 'Benefit Finder 重构', '失败复盘逼问', '宏大行动计划'];
+
+    final emotion = map('emotion_validation');
+    emotion['validation_text'] = level == 'L4'
+        ? '你现在的痛苦需要被认真对待。当前最重要的不是训练乐观，而是先保证安全：请立刻联系身边可信任的人，或拨打当地紧急服务/危机热线；如果你在美国，可拨打或短信 988。'
+        : '这类痛苦可能已经很强，不适合马上要求自己积极、感恩或寻找意义。现在先承认它很重，并把目标缩小到稳定身体、减少刺激、联系现实支持。';
+
+    map('benefit_finder_layer')
+      ..['balanced_interpretation'] = level == 'L4'
+          ? '当前不做积极重构。安全风险出现时，第一优先级是让你不要独自承受，并尽快获得现实支持。'
+          : '当前先不把痛苦转成好处，也不急着找意义。更现实的回应是：这件事很重，先稳定和求助，等强度下降后再考虑事实-解释分离。'
+      ..['not_denied_pain'] = '系统已保留痛苦本身，不把它包装成好事。'
+      ..['possible_learning'] = <String>[]
+      ..['possible_meaning'] = <String>[];
+
+    map('process_action_plan')
+      ..['five_minute_action'] = level == 'L4'
+          ? '现在立刻离开危险物，联系一个可信任的人待在一起；如无法保证安全，请拨打当地紧急服务/危机热线。'
+          : '做 60 秒落地练习：双脚踩地，慢慢呼气 5 次，然后给一个可信任的人发一句“我现在很难受，能陪我一下吗”。'
+      ..['next_three_steps'] = level == 'L4'
+          ? <String>['把自己和危险物分开。', '联系可信任的人或紧急服务。', '在有人陪伴或专业支持前，不继续普通训练。']
+          : <String>['喝水或换到更安全安静的位置。', '写下“我现在只是先撑过这一段”。', '联系一个现实支持者或预约专业支持。']
+      ..['if_then_plan'] = level == 'L4'
+          ? <String>['如果我无法保证安全，那么立刻拨打当地紧急服务或危机热线。', '如果我不想打电话，那么先发短信给可信任的人说“请现在联系我”。']
+          : <String>['如果痛苦继续升高，那么暂停重构并联系现实支持。', '如果开始逼自己积极，那么提醒自己：现在只需要稳定，不需要解释。'];
+
+    map('gratitude_or_savoring')
+      ..['what_still_matters'] = <String>[]
+      ..['savoring_prompt'] = '当前先不做感恩或品味练习，等强度下降后再进行。'
+      ..['small_appreciation_action'] = '';
+
+    payload['final_user_message'] = level == 'L4'
+        ? '这一步不做普通训练：请优先保证安全，并立刻联系现实中的人或危机支持。'
+        : '现在先稳定，不急着积极；等强度下降后，再回到事实-解释分离和微行动。';
   }
 
   String _guessLevel(String text) {
