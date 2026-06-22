@@ -67,22 +67,6 @@ class RealisticOptimismDao {
       )
     ''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_ro_baseline_time ON realistic_optimism_baselines(ts_ms DESC)');
-
-    // Product-spec schema for the standalone "现实主义乐观训练系统".
-    // The current UI keeps rich AI payloads in realistic_optimism_cases, while
-    // these tables provide stable persistence targets for the full P0/P1 loop.
-    await db.execute('CREATE TABLE IF NOT EXISTS optimism_event (id TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT "", raw_event TEXT NOT NULL DEFAULT "", emotion TEXT NOT NULL DEFAULT "", emotion_intensity INTEGER NOT NULL DEFAULT 0, intensity_level TEXT NOT NULL DEFAULT "", automatic_interpretation TEXT NOT NULL DEFAULT "", created_at INTEGER NOT NULL)');
-    await db.execute('CREATE TABLE IF NOT EXISTS explanation_style_score (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, permanence_score INTEGER NOT NULL DEFAULT 0, pervasiveness_score INTEGER NOT NULL DEFAULT 0, personalization_score INTEGER NOT NULL DEFAULT 0, catastrophizing_score INTEGER NOT NULL DEFAULT 0, helplessness_score INTEGER NOT NULL DEFAULT 0, filtering_score INTEGER NOT NULL DEFAULT 0, balanced_reframe TEXT NOT NULL DEFAULT "")');
-    await db.execute('CREATE TABLE IF NOT EXISTS benefit_reframe (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, fault_finder_story TEXT NOT NULL DEFAULT "", benefit_finder_story TEXT NOT NULL DEFAULT "", uncontrollable_parts TEXT NOT NULL DEFAULT "[]", controllable_parts TEXT NOT NULL DEFAULT "[]", micro_action TEXT NOT NULL DEFAULT "")');
-    await db.execute('CREATE TABLE IF NOT EXISTS action_evidence (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, action TEXT NOT NULL DEFAULT "", completed INTEGER NOT NULL DEFAULT 0, completed_at INTEGER, evidence_text TEXT NOT NULL DEFAULT "", self_efficacy_score REAL NOT NULL DEFAULT 0)');
-    await db.execute('CREATE TABLE IF NOT EXISTS failure_immunity (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, predicted_pain REAL, actual_pain REAL, predicted_recovery TEXT NOT NULL DEFAULT "", actual_recovery TEXT NOT NULL DEFAULT "", worst_case_prediction TEXT NOT NULL DEFAULT "", actual_result TEXT NOT NULL DEFAULT "", antibody TEXT NOT NULL DEFAULT "")');
-    await db.execute('CREATE TABLE IF NOT EXISTS controlled_failure_challenge (id TEXT PRIMARY KEY, challenge_name TEXT NOT NULL DEFAULT "", risk_level TEXT NOT NULL DEFAULT "", safety_boundary TEXT NOT NULL DEFAULT "", predicted_pain REAL, actual_pain REAL, recovery_time TEXT NOT NULL DEFAULT "", lesson TEXT NOT NULL DEFAULT "", antibody TEXT NOT NULL DEFAULT "")');
-    await db.execute('CREATE TABLE IF NOT EXISTS gratitude_entry (id TEXT PRIMARY KEY, concrete_gratitude TEXT NOT NULL DEFAULT "", why_matters TEXT NOT NULL DEFAULT "", appreciation_action TEXT NOT NULL DEFAULT "", created_at INTEGER NOT NULL)');
-    await db.execute('CREATE TABLE IF NOT EXISTS savoring_entry (id TEXT PRIMARY KEY, moment_title TEXT NOT NULL DEFAULT "", sensory_detail TEXT NOT NULL DEFAULT "", body_feeling TEXT NOT NULL DEFAULT "", meaning TEXT NOT NULL DEFAULT "", created_at INTEGER NOT NULL)');
-    await db.execute('CREATE TABLE IF NOT EXISTS attention_prime (id TEXT PRIMARY KEY, value_word TEXT NOT NULL DEFAULT "", reminder TEXT NOT NULL DEFAULT "", widget_text TEXT NOT NULL DEFAULT "", benefit_question TEXT NOT NULL DEFAULT "", active INTEGER NOT NULL DEFAULT 0)');
-    await db.execute('CREATE TABLE IF NOT EXISTS anti_prime (id TEXT PRIMARY KEY, trigger_type TEXT NOT NULL DEFAULT "", trigger_name TEXT NOT NULL DEFAULT "", effect TEXT NOT NULL DEFAULT "", cleanup_action TEXT NOT NULL DEFAULT "", replacement_prime TEXT NOT NULL DEFAULT "")');
-    await db.execute('CREATE TABLE IF NOT EXISTS identity_evidence (id TEXT PRIMARY KEY, source_type TEXT NOT NULL DEFAULT "", source_id TEXT NOT NULL DEFAULT "", identity_type TEXT NOT NULL DEFAULT "", evidence_text TEXT NOT NULL DEFAULT "", identity_sentence TEXT NOT NULL DEFAULT "")');
-    await db.execute('CREATE TABLE IF NOT EXISTS happiness_baseline (id TEXT PRIMARY KEY, week_start TEXT NOT NULL DEFAULT "", happiness_score REAL NOT NULL DEFAULT 0, recovery_score REAL NOT NULL DEFAULT 0, agency_score REAL NOT NULL DEFAULT 0, permanence_frequency REAL NOT NULL DEFAULT 0, gratitude_sensitivity REAL NOT NULL DEFAULT 0, action_stability REAL NOT NULL DEFAULT 0)');
   }
 
   Future<void> upsertCase(RealisticOptimismCase item) async {

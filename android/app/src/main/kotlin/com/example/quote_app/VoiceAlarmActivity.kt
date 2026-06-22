@@ -101,6 +101,24 @@ class VoiceAlarmActivity : Activity() {
   private var cloudSttRecognizeThread: Thread? = null
   private val microsoftPcmQueue = LinkedBlockingDeque<ByteArray>(32)
   private var iflytekSttClient: OkHttpClient? = null
+  // Shared/continuous capture device for cloud STT. Previously every single
+  // utterance segment created and tore down its own AudioRecord, which leaves
+  // a real (device-dependent, often 50-300ms) hardware gap between segments.
+  // If the user starts the next sentence right after a short pause, the first
+  // word(s) can fall into that gap and never reach the recognizer at all.
+  // Keeping one AudioRecord alive across consecutive segments (and only
+  // recreating it when the required audio source actually changes, e.g.
+  // switching into/out of the alarm/TTS echo-guard window) removes that gap
+  // for the common case.
+  private var sharedCaptureRecord: AudioRecord? = null
+  private var sharedCaptureEffects: VoiceAudioEffects? = null
+  private var sharedCaptureIsPlaybackGuard: Boolean = false
+  // Tracks the position in `speechBuffer` where the most recently appended,
+  // not-yet-finalized chunk begins. Used by appendSpeechChunk() to make sure
+  // similarity-based "revise the draft" merging can only ever touch the tail
+  // contributed by the latest in-flight utterance, never text that was
+  // already committed by an earlier, separate utterance.
+  private var lastAppendedChunkStart: Int = 0
   private var lastReplayPostponeSentAt = 0L
   private var lastReplayPostponeUntil = 0L
   private var lastHandledSpeechNormalized = ""
@@ -337,6 +355,52 @@ class VoiceAlarmActivity : Activity() {
     cloudSttThread = null
     cloudSttRecognizeThread = null
     if (clearQueue) microsoftPcmQueue.clear()
+    releaseContinuousAudioRecord()
+  }
+
+  // Lazily creates (or reuses) a single AudioRecord that stays alive across
+  // consecutive utterance segments. Only torn down and recreated when the
+  // required audio source actually flips between normal VOICE_RECOGNITION
+  // capture and the stricter VOICE_COMMUNICATION echo-guard capture used
+  // during our own alarm/TTS playback, since AudioRecord's source can't be
+  // changed without recreating the instance.
+  private fun obtainContinuousAudioRecord(playbackGuard: Boolean): AudioRecord? {
+    val existing = sharedCaptureRecord
+    if (existing != null && existing.state == AudioRecord.STATE_INITIALIZED && sharedCaptureIsPlaybackGuard == playbackGuard) {
+      return existing
+    }
+    releaseContinuousAudioRecord()
+    val sampleRate = 16000
+    val minBuffer = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+    if (minBuffer <= 0) return null
+    val audioSource = if (playbackGuard) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION
+    val record = try {
+      AudioRecord(audioSource, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuffer * 4)
+    } catch (_: Throwable) { null } ?: return null
+    if (record.state != AudioRecord.STATE_INITIALIZED) {
+      try { record.release() } catch (_: Throwable) {}
+      return null
+    }
+    val effects = enableVoiceSeparationEffects(record.audioSessionId)
+    try {
+      record.startRecording()
+    } catch (_: Throwable) {
+      effects.release()
+      try { record.release() } catch (_: Throwable) {}
+      return null
+    }
+    sharedCaptureRecord = record
+    sharedCaptureEffects = effects
+    sharedCaptureIsPlaybackGuard = playbackGuard
+    return record
+  }
+
+  private fun releaseContinuousAudioRecord() {
+    try { sharedCaptureRecord?.stop() } catch (_: Throwable) {}
+    try { sharedCaptureRecord?.release() } catch (_: Throwable) {}
+    sharedCaptureEffects?.release()
+    sharedCaptureRecord = null
+    sharedCaptureEffects = null
   }
 
   private fun stopNativeRecognizer() {
@@ -526,23 +590,10 @@ class VoiceAlarmActivity : Activity() {
     val minBuffer = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
     if (minBuffer <= 0) return ByteArray(0)
     val playbackEchoGuard = isStrictPlaybackActiveForCapture()
-    val audioSource = if (playbackEchoGuard) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION
-    val audioRecord = AudioRecord(
-      audioSource,
-      sampleRate,
-      AudioFormat.CHANNEL_IN_MONO,
-      AudioFormat.ENCODING_PCM_16BIT,
-      minBuffer * 2,
-    )
-    if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-      try { audioRecord.release() } catch (_: Throwable) {}
-      return ByteArray(0)
-    }
+    val audioRecord = obtainContinuousAudioRecord(playbackEchoGuard) ?: return ByteArray(0)
     val out = ByteArrayOutputStream()
     val buffer = ByteArray(minBuffer)
-    val effects = enableVoiceSeparationEffects(audioRecord.audioSessionId)
     try {
-      try { audioRecord.startRecording() } catch (_: Throwable) { return ByteArray(0) }
       val endpoint = endpointingConfig()
       val deadline = System.currentTimeMillis() + durationMs
       val startDeadline = System.currentTimeMillis() + if (playbackEchoGuard) 1800L else maxOf(4500L, endpoint.minUtteranceMs + 1800L)
@@ -554,6 +605,13 @@ class VoiceAlarmActivity : Activity() {
       val preRollLimitBytes = sampleRate * 2 * (if (playbackEchoGuard || isPostPlaybackHandoffActive()) 1200 else 900) / 1000
       while (!destroyed && cloudSttActive && System.currentTimeMillis() < deadline) {
         val read = audioRecord.read(buffer, 0, buffer.size)
+        if (read < 0) {
+          // The shared recorder entered a bad state (e.g. audio focus loss).
+          // Drop it so the next call rebuilds a fresh one instead of looping
+          // on a permanently broken instance.
+          releaseContinuousAudioRecord()
+          break
+        }
         if (read > 0) {
           val now = System.currentTimeMillis()
           val dynamicPlaybackGuard = isStrictPlaybackActiveForCapture()
@@ -588,11 +646,13 @@ class VoiceAlarmActivity : Activity() {
       }
       val minBytes = ((sampleRate * 2L * 160L) / 1000L).toInt().coerceAtLeast(sampleRate * 2 / 10)
       if (!speechStarted || out.size() < minBytes) return ByteArray(0)
-    } finally {
-      try { audioRecord.stop() } catch (_: Throwable) {}
-      try { audioRecord.release() } catch (_: Throwable) {}
-      effects.release()
+    } catch (t: Throwable) {
+      releaseContinuousAudioRecord()
+      return ByteArray(0)
     }
+    // Intentionally do NOT stop/release the AudioRecord here: it is shared and
+    // kept alive across consecutive segments by obtainContinuousAudioRecord().
+    // It is torn down centrally in stopCloudStt()/releaseContinuousAudioRecord().
     return out.toByteArray()
   }
 
@@ -686,23 +746,9 @@ class VoiceAlarmActivity : Activity() {
 
   private fun recognizeWithIflytekStreaming(cfg: JSONObject, durationMs: Int): String {
     val sampleRate = 16000
-    val minBuffer = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-    if (minBuffer <= 0) return ""
     val chunkSize = 1280 // 40ms at 16kHz 16-bit mono; matches iFlytek IAT streaming recommendations.
     val playbackEchoGuard = isStrictPlaybackActiveForCapture()
-    val audioSource = if (playbackEchoGuard) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION
-    val audioRecord = AudioRecord(
-      audioSource,
-      sampleRate,
-      AudioFormat.CHANNEL_IN_MONO,
-      AudioFormat.ENCODING_PCM_16BIT,
-      maxOf(minBuffer * 2, chunkSize * 2),
-    )
-    if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-      try { audioRecord.release() } catch (_: Throwable) {}
-      return ""
-    }
-    val effects = enableVoiceSeparationEffects(audioRecord.audioSessionId)
+    val audioRecord = obtainContinuousAudioRecord(playbackEchoGuard) ?: return ""
     val opened = CountDownLatch(1)
     val closed = CountDownLatch(1)
     val text = StringBuilder()
@@ -782,7 +828,6 @@ class VoiceAlarmActivity : Activity() {
     try {
       webSocket = client.newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
       if (!opened.await(5, TimeUnit.SECONDS)) return ""
-      try { audioRecord.startRecording() } catch (_: Throwable) { return "" }
       val endpoint = endpointingConfig()
       val deadline = System.currentTimeMillis() + durationMs
       var status = 0
@@ -801,6 +846,10 @@ class VoiceAlarmActivity : Activity() {
       }
       while (!destroyed && cloudSttActive && System.currentTimeMillis() < deadline) {
         val read = audioRecord.read(buffer, 0, buffer.size)
+        if (read < 0) {
+          releaseContinuousAudioRecord()
+          break
+        }
         if (read > 0) {
           val now = System.currentTimeMillis()
           val dynamicPlaybackGuard = isStrictPlaybackActiveForCapture()
@@ -842,10 +891,12 @@ class VoiceAlarmActivity : Activity() {
         webSocket?.send(iflytekFrame(cfg, 2, ByteArray(0)))
         closed.await(4, TimeUnit.SECONDS)
       }
+    } catch (t: Throwable) {
+      releaseContinuousAudioRecord()
     } finally {
-      try { audioRecord.stop() } catch (_: Throwable) {}
-      try { audioRecord.release() } catch (_: Throwable) {}
-      effects.release()
+      // The AudioRecord itself is shared/continuous and intentionally left
+      // running (torn down centrally in stopCloudStt()); only the per-segment
+      // WebSocket is closed here.
       try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
     }
     return synchronized(text) { text.toString().trim() }
@@ -1351,6 +1402,7 @@ class VoiceAlarmActivity : Activity() {
       semanticHoldExtended = false
       lastTranscriptRevisionAt = 0L
       lastDraftTextNormalized = ""
+      lastAppendedChunkStart = 0
     }
   }
 
@@ -1433,27 +1485,61 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isLikelyNoise(text: String): Boolean {
     val normalized = normalizeSpeechText(text)
-    if (normalized.length <= 1) return true
-    if (normalized.length <= 2 && !isStopCommand(text) && !isSnoozeCommand(text) && !isWakeCommand(text)) return true
-    val fillers = listOf("嗯", "啊", "呃", "额", "哦", "喂", "哈", "唉", "呀")
-    if (normalized.length <= 3 && fillers.any { normalized == normalizeSpeechText(it) }) return true
+    if (normalized.isBlank()) return true
+    // Previously ANY result of length <= 2 was discarded unless it happened to
+    // match a stop/snooze/wake command. That silently swallowed extremely
+    // common, meaningful short Chinese replies such as "好的" "可以" "知道"
+    // "没事" "谢谢" "好" "对" "走" before they ever reached the speech buffer —
+    // a direct cause of "words the user said keep getting dropped". Only treat
+    // text as noise when it is exactly a bare filler/interjection with no
+    // other content, regardless of its character length.
+    val fillers = setOf(
+      "嗯", "啊", "呃", "额", "哦", "喂", "哈", "唉", "呀",
+      "嗯嗯", "啊啊", "呃呃", "哦哦", "哈哈", "呀呀", "诶", "噢", "唔",
+    )
+    if (fillers.contains(normalized)) return true
     return false
   }
 
   private fun appendSpeechChunk(text: String, finalChunk: Boolean = false) {
     val clean = text.trim()
     if (clean.isBlank()) return
-    val current = speechBuffer.toString().trim()
     val now = System.currentTimeMillis()
-    val merged = if (current.isBlank()) clean else mergeLiveDictationText(current, clean, finalChunk)
-    val normalizedMerged = normalizeSpeechText(merged)
-    if (current.isBlank()) {
+    val fullBefore = speechBuffer.toString()
+    if (fullBefore.isBlank()) {
       utteranceSessionStartedAt = now
       semanticHoldExtended = false
+      lastAppendedChunkStart = 0
     }
+    val safeStart = lastAppendedChunkStart.coerceIn(0, fullBefore.length)
+    val committedPrefix = fullBefore.substring(0, safeStart)
+    val revisableTail = fullBefore.substring(safeStart)
+
+    // Only the tail contributed by the most recent, still-in-flight chunk is
+    // ever eligible for similarity/containment-based "replace" merging (see
+    // mergeLiveDictationText). Everything before `safeStart` is content that a
+    // PREVIOUS call already finalized and is passed through mergeSpeechText,
+    // which only stitches a literal seam overlap or concatenates — it can
+    // never discard either side wholesale. This is what stops a later,
+    // textually-similar-but-unrelated sentence from silently erasing earlier
+    // user speech, which was the root cause of words/sentences disappearing.
+    val revisedTail = if (revisableTail.isBlank()) clean else mergeLiveDictationText(revisableTail, clean, finalChunk)
+    val merged = if (committedPrefix.isBlank()) revisedTail else mergeSpeechText(committedPrefix, revisedTail)
+
     speechBuffer.clear()
     speechBuffer.append(merged)
+
+    lastAppendedChunkStart = if (finalChunk) {
+      // Lock everything in. The next incoming chunk — whether the next
+      // independent cloud-STT utterance or a fresh native-recognizer session
+      // — is always brand-new content from here on.
+      merged.length
+    } else {
+      safeStart
+    }
+
     lastSpeechChunkAt = now
+    val normalizedMerged = normalizeSpeechText(merged)
     if (normalizedMerged != lastDraftTextNormalized) {
       lastDraftTextNormalized = normalizedMerged
       lastTranscriptRevisionAt = now
@@ -1491,12 +1577,24 @@ class VoiceAlarmActivity : Activity() {
   private fun mergeSpeechText(current: String, incoming: String): String {
     val a = current.trim()
     val b = incoming.trim()
+    if (b.isBlank()) return a
+    if (a.isBlank()) return b
     val normalizedA = normalizeSpeechText(a)
     val normalizedB = normalizeSpeechText(b)
+    if (normalizedA.isBlank()) return b
     if (normalizedB.isBlank()) return a
-    if (normalizedA.contains(normalizedB)) return a
-    if (normalizedB.contains(normalizedA)) return b
+    // Exact duplicate, e.g. a retried network call delivering the same
+    // utterance twice — safe to collapse to a single copy.
+    if (normalizedA == normalizedB) return if (b.length >= a.length) b else a
 
+    // Deliberately NOT using a whole-string "A contains B" / "B contains A"
+    // shortcut here. Two genuinely separate, unrelated utterances can easily
+    // share a short common phrase ("公园", "好的", "明天" ...). Discarding one
+    // side just because it textually overlaps with the other is exactly how
+    // real user speech silently disappeared from the transcript. Only a
+    // literal overlap sitting right at the seam between the two chunks (e.g.
+    // shared pre-roll audio causing the same boundary word to be transcribed
+    // twice) is safe to dedupe.
     val compactA = a.replace(Regex("\\s+"), "")
     val compactB = b.replace(Regex("\\s+"), "")
     val maxOverlap = minOf(compactA.length, compactB.length, 32)
@@ -1505,7 +1603,11 @@ class VoiceAlarmActivity : Activity() {
         return compactA + compactB.substring(size)
       }
     }
-    return "$a $b"
+    val lastA = a.lastOrNull()
+    val firstB = b.firstOrNull()
+    val needsSpacer = lastA != null && firstB != null &&
+      lastA.code < 128 && firstB.code < 128 && lastA.isLetterOrDigit() && firstB.isLetterOrDigit()
+    return if (needsSpacer) "$a $b" else "$a$b"
   }
 
   private fun scheduleBufferedSpeechProcessing(delayMs: Long) {

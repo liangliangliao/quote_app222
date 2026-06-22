@@ -54,6 +54,7 @@ import 'behavior_tracking/behavior_tracking_home_page.dart';
 import 'shame_transform/shame_transform_home_page.dart';
 import 'cognitive_consistency/cognitive_consistency_home_page.dart';
 import 'realistic_optimism_module/realistic_optimism_home_page.dart';
+import 'realistic_optimism_training/realistic_optimism_training_home_page.dart';
 import 'sustainable_excellence/sustainable_excellence_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
@@ -401,6 +402,13 @@ class _RootShellState extends State<RootShell> {
       subtitle: '目标实验 → 压力恢复 → 失败学习 → 完美主义转卓越 → 过程享受 → 成长证据',
       badgeText: '压力有恢复，失败可学习，卓越不是完美',
       pageBuilder: (_) => const SustainableExcellenceHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.auto_awesome_outlined,
+      title: '现实主义乐观训练系统',
+      subtitle: '强度分级 → 情绪允许 → 解释雷达 → 双镜头重构 → 5分钟行动 → 失败免疫 → 感恩品味 → 身份沉淀',
+      badgeText: 'Lecture 7-9 · 从 Fault Finder 到 Benefit Finder',
+      pageBuilder: (_) => const RealisticOptimismTrainingHomePage(),
     ),
     _DrawerEntrySpec(
       icon: Icons.lightbulb_outline,

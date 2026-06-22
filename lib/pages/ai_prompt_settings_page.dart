@@ -6,6 +6,7 @@ import '../shame_transform/shame_transform_prompt_config.dart';
 import '../cognitive_consistency/cognitive_consistency_prompt_config.dart';
 import '../cognitive_consistency/cognitive_consistency_models.dart';
 import '../sustainable_excellence/sustainable_excellence_prompt_config.dart';
+import '../realistic_optimism_training/realistic_optimism_training_prompt_config.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -28,6 +29,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final CognitiveConsistencyPromptConfig _ccPrompts =
       CognitiveConsistencyPromptConfig();
   final SustainableExcellencePromptConfig _sePrompts = SustainableExcellencePromptConfig();
+  final RealisticOptimismTrainingPromptConfig _rotPrompts = RealisticOptimismTrainingPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -142,6 +144,28 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           ],
         ),
         const _PromptModule(
+          id: 'realistic_optimism_training',
+          name: '现实主义乐观训练系统',
+          description: '统一配置 Lecture 7–9 独立模块的全局价值层、强度分级、事件重构、失败免疫、可控失败挑战、过程行动、Prime/Anti-Prime、感恩品味、身份沉淀、幸福基线周报与输出格式 Prompt。',
+          items: <_PromptItem>[
+            _PromptItem(id: 'rot_global', name: '全局价值层 Prompt'),
+            _PromptItem(id: 'rot_scene_intensity_check', name: '场景：事件强度分级'),
+            _PromptItem(id: 'rot_scene_event_reframe', name: '场景：今日事件重构'),
+            _PromptItem(id: 'rot_scene_emotion_container', name: '场景：Permission to Be Human 情绪容器'),
+            _PromptItem(id: 'rot_scene_explanation_radar', name: '场景：解释风格雷达'),
+            _PromptItem(id: 'rot_scene_dual_lens', name: '场景：Fault/Benefit 双镜头'),
+            _PromptItem(id: 'rot_scene_failure_immunity', name: '场景：失败免疫复盘'),
+            _PromptItem(id: 'rot_scene_controlled_failure_challenge', name: '场景：可控失败挑战'),
+            _PromptItem(id: 'rot_scene_process_action', name: '场景：过程模拟行动'),
+            _PromptItem(id: 'rot_scene_prime_design', name: '场景：注意力 Prime 设计'),
+            _PromptItem(id: 'rot_scene_anti_prime_cleanup', name: '场景：Anti-Prime 环境清理'),
+            _PromptItem(id: 'rot_scene_gratitude_savoring', name: '场景：感恩、品味与关系表达'),
+            _PromptItem(id: 'rot_scene_identity_evidence', name: '场景：身份沉淀'),
+            _PromptItem(id: 'rot_scene_weekly_baseline', name: '场景：幸福基线周报'),
+            _PromptItem(id: 'rot_output_common', name: '输出格式：现实主义乐观 JSON'),
+          ],
+        ),
+        const _PromptModule(
           id: 'voice_alarm',
           name: '发现之旅 / 语音闹钟',
           description: '早上起床与晚上睡觉闹钟的 AI 朗读文案生成提示词。',
@@ -240,6 +264,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         _ccBackups = await _ccPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('se_')) {
         _ccBackups = await _sePrompts.listBackups(_promptId);
+      } else if (_promptId.startsWith('rot_')) {
+        _ccBackups = await _rotPrompts.listBackups(_promptId);
       } else {
         _ccBackups = <CcPromptBackupRecord>[];
       }
@@ -273,6 +299,23 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         if (ok != true) return;
       }
     }
+    if (_promptId.startsWith('rot_')) {
+      final missing = _rotPrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
+      if (missing.isNotEmpty) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('关键占位符缺失'),
+            content: Text("当前模板缺少：${missing.join('、')}。保存后 AI 仍可调用，但上下文可能不完整。是否仍然保存？"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('返回修改')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('仍然保存')),
+            ],
+          ),
+        );
+        if (ok != true) return;
+      }
+    }
     setState(() => _saving = true);
     try {
       await _savePromptById(_promptId, _templateCtrl.text);
@@ -290,21 +333,25 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     setState(() => _templateCtrl.text = def);
     if (_promptId.startsWith('se_')) {
       await _sePrompts.clearPromptOverride(_promptId);
+    } else if (_promptId.startsWith('rot_')) {
+      await _rotPrompts.clearPromptOverride(_promptId);
     } else {
       await _savePromptById(_promptId, def);
     }
     await _loadPrompt();
-    _toast(_promptId.startsWith('se_') ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
+    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
   }
 
   Future<void> _restoreCcBackup(CcPromptBackupRecord backup) async {
-    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_')) return;
+    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_')) return;
     setState(() => _backupLoading = true);
     try {
       if (_promptId.startsWith('cc_')) {
         await _ccPrompts.restoreBackup(_promptId, backup.key);
-      } else {
+      } else if (_promptId.startsWith('se_')) {
         await _sePrompts.restoreBackup(_promptId, backup.key);
+      } else {
+        await _rotPrompts.restoreBackup(_promptId, backup.key);
       }
       await _loadPrompt();
       _toast('已恢复历史备份：${backup.displayTime}');
@@ -317,7 +364,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
 
   Future<void> _previewPrompt() async {
     final template = _templateCtrl.text;
-    final preview = _promptId.startsWith('se_')
+    final preview = _promptId.startsWith('rot_')
+        ? _rotPrompts.render(template, <String, String>{
+            'user_input': '今天我又没有学习，我感觉自己特别废，永远坚持不了。',
+            'scene': 'event_reframe',
+            'extra_context': '{"recent_actions":"昨天完成了5分钟行动","baseline":"恢复能力5/10"}',
+          })
+        : _promptId.startsWith('se_')
         ? _sePrompts.render(template, <String, String>{
             'user_goal': '完成一个重要但容易拖延的任务',
             'user_state': '压力偏高，担心做不好，迟迟没有开始。',
@@ -350,22 +403,26 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     );
   }
 
-  Future<void> _exportSePrompts() async {
-    if (!_promptId.startsWith('se_')) return;
-    final raw = await _sePrompts.exportPromptsJson();
+  Future<void> _exportModulePrompts() async {
+    if (!_promptId.startsWith('se_') && !_promptId.startsWith('rot_')) return;
+    final raw = _promptId.startsWith('rot_')
+        ? await _rotPrompts.exportPromptsJson()
+        : await _sePrompts.exportPromptsJson();
     await Clipboard.setData(ClipboardData(text: raw));
-    _toast('已复制可持续卓越 Prompt 配置 JSON。');
+    _toast(_promptId.startsWith('rot_') ? '已复制现实主义乐观训练 Prompt 配置 JSON。' : '已复制可持续卓越 Prompt 配置 JSON。');
   }
 
-  Future<void> _importSePrompts() async {
-    if (!_promptId.startsWith('se_')) return;
+  Future<void> _importModulePrompts() async {
+    if (!_promptId.startsWith('se_') && !_promptId.startsWith('rot_')) return;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final raw = (data?.text ?? '').trim();
     if (raw.isEmpty) { _toast('剪贴板为空。'); return; }
     try {
-      final count = await _sePrompts.importPromptsJson(raw);
+      final count = _promptId.startsWith('rot_')
+          ? await _rotPrompts.importPromptsJson(raw)
+          : await _sePrompts.importPromptsJson(raw);
       await _loadPrompt();
-      _toast('已导入 $count 个可持续卓越 Prompt。');
+      _toast(_promptId.startsWith('rot_') ? '已导入 $count 个现实主义乐观训练 Prompt。' : '已导入 $count 个可持续卓越 Prompt。');
     } catch (e) {
       _toast('导入失败：$e');
     }
@@ -403,6 +460,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     }
     if (id.startsWith('se_')) {
       return _sePrompts.defaultFor(id);
+    }
+    if (id.startsWith('rot_')) {
+      return _rotPrompts.defaultFor(id);
     }
     switch (id) {
       case 'goal_action':
@@ -455,6 +515,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('se_')) {
       return _sePrompts.inspectPrompt(id);
     }
+    if (id.startsWith('rot_')) {
+      return _rotPrompts.inspectPrompt(id);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.inspectGoalSettingActionPromptState();
@@ -506,6 +569,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('se_')) {
       return _sePrompts.savePrompt(id, value);
     }
+    if (id.startsWith('rot_')) {
+      return _rotPrompts.savePrompt(id, value);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.saveGoalSettingActionPrompt(value);
@@ -548,6 +614,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<MapEntry<String, String>> _params(String id) {
+    if (id.startsWith('rot_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{user_input}}', '用户在现实主义乐观训练系统输入的事件、目标、失败、拖延、感恩、环境困扰或复盘内容。'),
+        MapEntry('{{scene}}', '当前训练场景：intensity_check / event_reframe / emotion_container / explanation_radar / dual_lens / failure_immunity / controlled_failure_challenge / process_action / prime_design / anti_prime_cleanup / gratitude_savoring / identity_evidence / weekly_baseline。'),
+        MapEntry('{{extra_context}}', '系统汇总的最近训练记录、幸福基线、行动证据或来源 Todo 等额外上下文。'),
+      ];
+    }
     if (id.startsWith('se_')) {
       return const <MapEntry<String, String>>[
         MapEntry('{{user_goal}}', '用户输入的目标、Todo、拖延、失败或完美主义困扰。'),
@@ -850,13 +923,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
                       icon: const Icon(Icons.visibility_outlined),
                       label: const Text('预览拼接'),
                     ),
-                    if (_promptId.startsWith('se_')) OutlinedButton.icon(
-                      onPressed: _saving ? null : _exportSePrompts,
+                    if (_promptId.startsWith('se_') || _promptId.startsWith('rot_')) OutlinedButton.icon(
+                      onPressed: _saving ? null : _exportModulePrompts,
                       icon: const Icon(Icons.ios_share_outlined),
                       label: const Text('导出本模块 Prompt'),
                     ),
-                    if (_promptId.startsWith('se_')) OutlinedButton.icon(
-                      onPressed: _saving ? null : _importSePrompts,
+                    if (_promptId.startsWith('se_') || _promptId.startsWith('rot_')) OutlinedButton.icon(
+                      onPressed: _saving ? null : _importModulePrompts,
                       icon: const Icon(Icons.upload_file_outlined),
                       label: const Text('导入本模块 Prompt'),
                     ),
@@ -910,7 +983,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
 
 
   Widget _ccBackupRestoreCard() {
-    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_')) return const SizedBox.shrink();
+    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_')) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -924,7 +997,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           const Text('历史备份 / 自定义 Prompt 恢复', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           const Text(
-            '认知一致性与可持续卓越模块保存/恢复 Prompt 时会自动备份旧模板。这里可以恢复旧的自定义版本，避免升级或误改后丢失个人调校。',
+            '认知一致性、可持续卓越与现实主义乐观训练模块保存/恢复 Prompt 时会自动备份旧模板。这里可以恢复旧的自定义版本，避免升级或误改后丢失个人调校。',
             style: TextStyle(fontSize: 12, color: Color(0xFF78350F)),
           ),
           const SizedBox(height: 8),

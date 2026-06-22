@@ -728,7 +728,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   onSelectionChanged: (value) => setState(() => _sttProvider = value.first),
                 ),
                 const SizedBox(height: 8),
-                const Text('实时语音转文字服务选择会随闹钟保存。语音采用“全自动实时听写 + 动态修正 + 文本稳定 + 静音稳定”的提交模式：不再猜测用户是否说完，也不需要点击“说完了”。', style: TextStyle(color: Colors.black54)),
+                const Text('实时语音转文字服务选择会随闹钟保存。语音采用"全自动实时听写 + 文本稳定 + 静音稳定"的提交模式：不再猜测用户是否说完，也不需要点击"说完了"。', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 4),
+                Text(
+                  _sttProvider == 'iflytek'
+                      ? '讯飞识别支持真正的"动态修正"：说话过程中如果前面的字被识别错了，讯飞会实时把已显示的文字替换掉（类似输入法纠错），界面会提示"讯飞已动态修正"。'
+                      : 'Microsoft 识别目前是逐句一次性识别（REST），暂不支持实时动态修正——同一句话说完后不会再被改写。如果希望体验“边说边纠错”的效果，请切换到上方的"讯飞识别"。',
+                  style: const TextStyle(color: Colors.deepOrange, fontSize: 12.5),
+                ),
                 const SizedBox(height: 12),
                 Card(
                   color: Colors.blueGrey.withOpacity(0.06),
