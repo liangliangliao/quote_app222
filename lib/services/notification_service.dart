@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'native_guard.dart';
 import '../data/dao.dart';
 import '../pages/discover_page.dart';
+import '../realistic_optimism_training/realistic_optimism_training_home_page.dart';
 import '../health_diet/pages/today_meal_plan_page.dart';
 import '../health_diet/daily_share/daily_diet_share_page.dart';
 import '../health_diet/daily_share/daily_diet_review_page.dart';
@@ -58,9 +59,33 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateRealisticOptimismTraining(payload)) return;
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateRealisticOptimismTraining(String? payload) async {
+    final p = (payload ?? '').trim();
+    if (!p.startsWith('realistic_optimism_training')) return false;
+    final scene = p.contains(':') ? p.substring(p.indexOf(':') + 1).trim() : 'proactive_reminder';
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = p;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try { await NotificationService.handlePendingNotificationNavigation(); } catch (_) {}
+      });
+      return true;
+    }
+    nav.popUntil((route) => route.isFirst);
+    nav.push(MaterialPageRoute(
+      builder: (_) => RealisticOptimismTrainingHomePage(
+        scene: scene.isEmpty ? 'proactive_reminder' : scene,
+        initialInput: scene == 'daily_review' ? '请根据今天的记录做一次晚上复盘。' : '',
+      ),
+    ));
+    return true;
   }
 
   static Future<bool> _tryNavigateHealthDiet(String? payload) async {
@@ -163,6 +188,8 @@ class NotificationService {
           // Fallback to home if something fails
           SimpleBus.navHome();
           SimpleBus.pokeHome();
+        } else if (await NotificationService._tryNavigateRealisticOptimismTraining(p)) {
+          return;
         } else if (await NotificationService._tryNavigateHealthDiet(p)) {
           return;
         } else {
