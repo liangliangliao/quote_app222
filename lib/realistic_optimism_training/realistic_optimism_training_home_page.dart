@@ -151,6 +151,77 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
     return '【P2 Todo 自动桥接】以下是今天仍未完成的 Todo，请不要把它们简单判定为失败；请按最终方案转换为：情绪允许 → 事实/解释分离 → 解释风格雷达 → Fault/Benefit 双镜头 → 明日最小行动 → If-Then → 行动证据问题 → 可复用的 Todo 产物。\n$lines';
   }
 
+  Future<void> _createMonthlyReportTodo() async {
+    try {
+      final lists = await _todoDao.listLists();
+      final listId = lists.isNotEmpty ? lists.first.listId : await _todoDao.createLocalList('现实主义乐观行动');
+      final now = DateTime.now();
+      final monthText = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      await _todoDao.createLocalTask(
+        listId: listId,
+        title: '生成 $monthText 现实主义乐观周/月报',
+        bodyText: 'P2 周/月报复盘清单（$monthText）：\n1. 解释风格：永久化、人格化、灾难化是否下降？\n2. 行动证据：本周期完成了多少 5 分钟行动？\n3. 失败免疫：预测痛苦与实际痛苦差距如何？恢复时间是否缩短？\n4. 注意力环境：设置了哪些 Prime，清理了哪些 Anti-Prime？\n5. 感恩敏感：记录了哪些具体感恩、品味和关系表达？\n6. 身份成长：五类身份各新增了哪些证据？\n7. 下周期只选择一个训练重点。',
+        status: 'notStarted',
+        importance: 'normal',
+        isMyDay: true,
+      );
+      _toast('已创建周/月报复盘 Todo。');
+    } catch (e) {
+      _toast('创建周/月报 Todo 失败：$e');
+    }
+  }
+
+  Future<void> _createDailyReviewTodo() async {
+    try {
+      final lists = await _todoDao.listLists();
+      final listId = lists.isNotEmpty ? lists.first.listId : await _todoDao.createLocalList('现实主义乐观行动');
+      final today = DateTime.now();
+      final dateText = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      await _todoDao.createLocalTask(
+        listId: listId,
+        title: '今晚做一次现实主义乐观复盘',
+        bodyText: 'P2 每日复盘清单（$dateText）：\n1. 今天最需要重构的一件事是什么？\n2. 我陷入了哪种解释风格？\n3. 今天完成了哪个行动证据？\n4. 三件具体感恩分别是什么？\n5. 停留 30 秒品味一个微小好体验。\n6. 生成一句“我正在成为……”身份提醒。\n7. 设置明日 Prime。',
+        status: 'notStarted',
+        importance: 'normal',
+        isMyDay: true,
+      );
+      _toast('已创建今晚现实主义乐观复盘 Todo。');
+    } catch (e) {
+      _toast('创建复盘 Todo 失败：$e');
+    }
+  }
+
+  Future<void> _createTodoFromLatestP2Action() async {
+    if (_p2Rows.isEmpty) {
+      _toast('暂无可回写 Todo 的 P2 产物。');
+      return;
+    }
+    final source = _p2Rows.first;
+    final action = (source['next_action'] ?? source['summary'] ?? '').toString().trim();
+    if (action.isEmpty) {
+      _toast('最新 P2 产物没有可回写的下一步行动。');
+      return;
+    }
+    try {
+      final lists = await _todoDao.listLists();
+      final listId = lists.isNotEmpty ? lists.first.listId : await _todoDao.createLocalList('现实主义乐观行动');
+      final title = action.length > 40 ? '${action.substring(0, 40)}…' : action;
+      final artifactType = (source['artifact_type'] ?? '').toString();
+      final summary = (source['summary'] ?? '').toString();
+      await _todoDao.createLocalTask(
+        listId: listId,
+        title: title,
+        bodyText: '来自现实主义乐观训练 P2 产物：$artifactType\n\n摘要：$summary\n\n下一步行动：$action',
+        status: 'notStarted',
+        importance: 'normal',
+        isMyDay: true,
+      );
+      _toast('已把最新 P2 下一步行动写入“我的一天”Todo。');
+    } catch (e) {
+      _toast('回写 Todo 失败：$e');
+    }
+  }
+
   Future<void> _sendLatestP2Reminder() async {
     final reminder = _p2Rows.cast<Map<String, Object?>>().firstWhere(
       (row) => (row['artifact_type'] ?? '').toString() == 'proactive_reminder',
@@ -561,6 +632,8 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
           latestIdentity: latest?.identitySentence ?? '',
         ),
         const SizedBox(height: 12),
+        _IntensityDistributionCard(records: _records),
+        const SizedBox(height: 12),
         _ProductGapFixCard(onStart: () => _openGuidedFlow('event_reframe', '')),
         const SizedBox(height: 12),
         const _BoundValueFlowCard(),
@@ -708,6 +781,12 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
           body: '这里把行动、自我效能、失败恢复、Benefit Finder、感恩品味和 Prime / Anti-Prime 记录从训练闭环中抽取出来，帮助你看到“我做过、我恢复过、我珍惜过、我继续过”。',
         ),
         const SizedBox(height: 12),
+        _IdentityTypeBreakdownCard(records: _records),
+        const SizedBox(height: 12),
+        _FailureImmunityInsightCard(failureRows: _failureRows, challengeRows: _challengeRows),
+        const SizedBox(height: 12),
+        _GratitudeSensitivityInsightCard(records: _records, relationshipRows: _relationshipRows),
+        const SizedBox(height: 12),
         _EvidenceGroup(
           title: 'A. 我做成过 / 行动证据',
           empty: '暂无行动证据。完成一次 5 分钟行动后会出现在这里。',
@@ -790,6 +869,8 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
           body: '最终方案要求 Prime、Anti-Prime、关系感恩不只生成一次，还要能被回看、复制、复用，并进入能力档案。这里集中管理这些可反复使用的现实线索。',
         ),
         const SizedBox(height: 12),
+        _AttentionEnvironmentInsightCard(primeRows: _primeRows, antiPrimeRows: _antiPrimeRows),
+        const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
           OutlinedButton.icon(
             onPressed: () {
@@ -867,7 +948,9 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
           FilledButton.icon(onPressed: _openTodoBridgeFromToday, icon: const Icon(Icons.playlist_add_check_outlined), label: const Text('扫描今日 Todo 并转入训练')),
           OutlinedButton.icon(onPressed: () => open('todo_goal_bridge', '这个 Todo/目标没有完成：\n原因/卡点：\n请生成情绪允许、解释风格分析、Benefit Finder 和明日最小行动。'), icon: const Icon(Icons.task_alt_outlined), label: const Text('手动 Todo 未完成转入训练')),
           OutlinedButton.icon(onPressed: () => open('daily_review', '请根据今天的记录生成晚上复盘：事件、解释风格、行动证据、三件具体感恩、30秒品味、身份提醒、明日 Prime。'), icon: const Icon(Icons.nightlight_round), label: const Text('每日自动复盘')),
+          OutlinedButton.icon(onPressed: _createDailyReviewTodo, icon: const Icon(Icons.event_note_outlined), label: const Text('创建今晚复盘 Todo')),
           OutlinedButton.icon(onPressed: () => open('monthly_report', '请基于最近记录生成周/月报图表摘要：解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长。'), icon: const Icon(Icons.insights_outlined), label: const Text('周/月报图表')),
+          OutlinedButton.icon(onPressed: _createMonthlyReportTodo, icon: const Icon(Icons.event_repeat_outlined), label: const Text('创建周/月报 Todo')),
         ]),
         const SizedBox(height: 16),
         _InfoCard(
@@ -881,6 +964,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
           OutlinedButton.icon(onPressed: () => open('role_model_case', '请生成一个榜样案例：他/她如何经历失败、如何解释、如何恢复、如何行动，我今天能模仿哪一个最小动作？'), icon: const Icon(Icons.groups_outlined), label: const Text('生成榜样案例')),
           OutlinedButton.icon(onPressed: () => open('proactive_reminder', '请生成一个主动提醒方案：触发条件、推送文案、锁屏短句、小组件文字、一个 5 分钟行动线索。'), icon: const Icon(Icons.notifications_active_outlined), label: const Text('主动提醒文案')),
           OutlinedButton.icon(onPressed: _sendLatestP2Reminder, icon: const Icon(Icons.notification_add_outlined), label: const Text('发送测试提醒')),
+          OutlinedButton.icon(onPressed: _createTodoFromLatestP2Action, icon: const Icon(Icons.add_task_outlined), label: const Text('下一步行动写回 Todo')),
         ]),
         const SizedBox(height: 12),
         _MapRowsGroup(
@@ -1740,6 +1824,206 @@ class _EvidenceGroup extends StatelessWidget {
   }
 }
 
+
+class _IntensityDistributionCard extends StatelessWidget {
+  final List<RealisticOptimismTrainingRecord> records;
+  const _IntensityDistributionCard({required this.records});
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = <String, int>{'L1': 0, 'L2': 0, 'L3': 0, 'L4': 0};
+    for (final record in records) {
+      final level = record.intensityLevel.trim().toUpperCase();
+      counts[level] = (counts[level] ?? 0) + 1;
+    }
+    final safetyCount = (counts['L3'] ?? 0) + (counts['L4'] ?? 0);
+    final safetyText = safetyCount == 0
+        ? '目前没有高强度/安全风险记录；普通训练可以继续保持强度分级。'
+        : '已有 $safetyCount 条 L3/L4 记录；这些记录应优先稳定与现实支持，不进入普通积极重构。';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          const Text('事件强度分级分布', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+            for (final level in <String>['L1', 'L2', 'L3', 'L4']) Chip(label: Text('$level：${counts[level] ?? 0}')),
+          ]),
+          const SizedBox(height: 8),
+          Text(safetyText),
+        ]),
+      ),
+    );
+  }
+}
+
+class _GratitudeSensitivityInsightCard extends StatelessWidget {
+  final List<RealisticOptimismTrainingRecord> records;
+  final List<Map<String, Object?>> relationshipRows;
+  const _GratitudeSensitivityInsightCard({required this.records, required this.relationshipRows});
+
+  @override
+  Widget build(BuildContext context) {
+    final concrete = records.where((r) => r.whatStillMatters.any((e) => e.trim().length >= 6)).length;
+    final savoring = records.where((r) => r.savoringPrompt.trim().isNotEmpty).length;
+    final appreciation = records.where((r) => r.smallAppreciationAction.trim().isNotEmpty).length;
+    final relationships = relationshipRows.where((row) => (row['person'] ?? '').toString().trim().isNotEmpty).length;
+    final totalSignals = concrete + savoring + appreciation + relationships;
+    final nextAction = totalSignals == 0
+        ? '先写一件非常具体的小好事：包括画面、为什么重要、今天如何表达珍惜。'
+        : relationships == 0
+            ? '下一步补一次关系表达：选择一个人，生成轻量/具体/深度三种感谢。'
+            : '保持具体：下一条感恩必须包含对象、细节、重要性和珍惜行动。';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          const Text('感恩敏感度快照', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+            Chip(label: Text('具体感恩：$concrete')),
+            Chip(label: Text('30秒品味：$savoring')),
+            Chip(label: Text('珍惜行动：$appreciation')),
+            Chip(label: Text('关系表达：$relationships')),
+          ]),
+          const SizedBox(height: 8),
+          Text('下一步：$nextAction'),
+        ]),
+      ),
+    );
+  }
+}
+
+class _AttentionEnvironmentInsightCard extends StatelessWidget {
+  final List<Map<String, Object?>> primeRows;
+  final List<Map<String, Object?>> antiPrimeRows;
+  const _AttentionEnvironmentInsightCard({required this.primeRows, required this.antiPrimeRows});
+
+  @override
+  Widget build(BuildContext context) {
+    final activePrimeCount = primeRows.where((row) => (row['active'] ?? 1).toString() != '0').length;
+    final cleanupCount = antiPrimeRows.where((row) => (row['cleanup_action'] ?? '').toString().trim().isNotEmpty).length;
+    final latestValue = primeRows.isNotEmpty ? (primeRows.first['value_word'] ?? '').toString().trim() : '';
+    final latestCleanup = antiPrimeRows.isNotEmpty ? (antiPrimeRows.first['cleanup_action'] ?? '').toString().trim() : '';
+    final nextAction = cleanupCount == 0
+        ? '先清理一个最强 Anti-Prime：例如把最容易拖延的 App 从首页移走。'
+        : latestCleanup.isNotEmpty
+            ? '今天继续执行：$latestCleanup'
+            : '补一条具体清理动作，让注意力环境从提醒走向行动。';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          const Text('注意力环境指数快照', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+            Chip(label: Text('Prime：${primeRows.length}')),
+            Chip(label: Text('启用线索：$activePrimeCount')),
+            Chip(label: Text('Anti-Prime 清理：$cleanupCount')),
+            if (latestValue.isNotEmpty) Chip(label: Text('最新价值词：$latestValue')),
+          ]),
+          const SizedBox(height: 8),
+          Text('最小环境改造：$nextAction'),
+        ]),
+      ),
+    );
+  }
+}
+
+class _FailureImmunityInsightCard extends StatelessWidget {
+  final List<Map<String, Object?>> failureRows;
+  final List<Map<String, Object?>> challengeRows;
+  const _FailureImmunityInsightCard({required this.failureRows, required this.challengeRows});
+
+  double? _num(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final painGaps = <double>[];
+    var antibodyCount = 0;
+    for (final row in failureRows) {
+      final predicted = _num(row['predicted_pain']);
+      final actual = _num(row['actual_pain']);
+      if (predicted != null && actual != null) painGaps.add(predicted - actual);
+      if ((row['psychological_antibody'] ?? '').toString().trim().isNotEmpty) antibodyCount++;
+    }
+    for (final row in challengeRows) {
+      final predicted = _num(row['predicted_pain']);
+      final actual = _num(row['actual_pain']);
+      if (predicted != null && actual != null) painGaps.add(predicted - actual);
+      if ((row['psychological_antibody'] ?? '').toString().trim().isNotEmpty) antibodyCount++;
+    }
+    final avgGap = painGaps.isEmpty ? 0 : painGaps.reduce((a, b) => a + b) / painGaps.length;
+    final insight = painGaps.isEmpty
+        ? '还缺少“预测痛苦 vs 实际痛苦”的对照数据。下一次失败复盘后，补录实际痛苦与恢复时间。'
+        : avgGap >= 0
+            ? '平均看，实际痛苦比预测低 ${avgGap.toStringAsFixed(1)} 分；这可以成为“我比想象中更能承受”的心理抗体。'
+            : '平均看，实际痛苦比预测高 ${avgGap.abs().toStringAsFixed(1)} 分；下次需要更早降低风险、缩小挑战或寻求现实支持。';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          const Text('失败免疫指数快照', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+            Chip(label: Text('失败复盘：${failureRows.length}')),
+            Chip(label: Text('可控挑战：${challengeRows.length}')),
+            Chip(label: Text('心理抗体：$antibodyCount')),
+            Chip(label: Text('痛苦差距样本：${painGaps.length}')),
+          ]),
+          const SizedBox(height: 8),
+          Text(insight),
+        ]),
+      ),
+    );
+  }
+}
+
+class _IdentityTypeBreakdownCard extends StatelessWidget {
+  final List<RealisticOptimismTrainingRecord> records;
+  const _IdentityTypeBreakdownCard({required this.records});
+
+  @override
+  Widget build(BuildContext context) {
+    final targets = <String>[
+      '现实主义乐观者',
+      '行动证据积累者',
+      '失败后恢复者',
+      'Benefit Finder',
+      '感恩与珍惜者',
+    ];
+    final counts = <String, int>{for (final target in targets) target: 0};
+    for (final record in records) {
+      final type = record.identityType.trim();
+      if (type.isEmpty) continue;
+      final matched = targets.firstWhere(
+        (target) => type.contains(target) || target.contains(type),
+        orElse: () => type,
+      );
+      counts[matched] = (counts[matched] ?? 0) + 1;
+    }
+    final weakest = targets.reduce((a, b) => (counts[a] ?? 0) <= (counts[b] ?? 0) ? a : b);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          const Text('五类身份成长证据', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: targets.map((target) => Chip(label: Text('$target：${counts[target] ?? 0}'))).toList(growable: false),
+          ),
+          const SizedBox(height: 8),
+          Text('建议补齐：$weakest。下一次训练后，优先生成一条对应的身份提醒。'),
+        ]),
+      ),
+    );
+  }
+}
 
 class _TrainingIndexCard extends StatelessWidget {
   final RealisticOptimismTrainingStats stats;
