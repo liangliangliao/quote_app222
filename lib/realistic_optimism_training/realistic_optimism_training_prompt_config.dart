@@ -19,6 +19,7 @@ class RealisticOptimismTrainingPromptConfig {
   static const String gratitudeSavoringId = 'rot_scene_gratitude_savoring';
   static const String identityEvidenceId = 'rot_scene_identity_evidence';
   static const String weeklyBaselineId = 'rot_scene_weekly_baseline';
+  static const String p2DeliveryId = 'rot_scene_p2_delivery';
   static const String outputCommonId = 'rot_output_common';
 
   final KeyValueDao _kv = KeyValueDao();
@@ -396,6 +397,29 @@ controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_s
 输出必须符合统一 JSON 输出格式，并把 final_user_message 写成周报摘要。
 ''';
 
+
+
+  static const String p2DeliveryPrompt = r'''
+当前场景：P2 体验落地 / 系统联动能力。
+
+用户输入：
+{{user_input}}
+
+补充上下文：
+{{extra_context}}
+
+请先识别 scene：
+- todo_goal_bridge：把 Todo/目标失败或拖延转入现实主义乐观闭环，输出“未完成事件 → 情绪允许 → 解释风格 → Fault/Benefit → 明日最小行动 → 行动证据问题”。
+- daily_review：做晚上复盘，汇总今日事件、解释风格、行动证据、三件具体感恩、30秒品味、身份提醒和明日 Prime。
+- course_card：生成一张课程知识卡，必须包含核心概念、现实例子、一个练习问题、一个 5 分钟行动，不要变成鸡汤文章。
+- role_model_case：生成榜样案例卡，必须说明此人如何面对失败、如何解释、如何恢复、如何行动，以及用户可模仿的最小行为。
+- proactive_reminder：生成 AI 主动提醒/推送/锁屏文案，必须短、具体、非鸡汤，并包含触发条件、提醒句、行动线索。
+- monthly_report：生成周/月报结构，必须包含解释风格变化、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长和下周期训练重点。
+
+无论哪个 P2 场景，都必须遵守 L3/L4 安全分流；不要在高强度痛苦时强行感恩、意义化或挑战失败。
+输出仍必须符合统一 JSON。请把 P2 结果尽量放入 final_user_message、process_action_plan、prime、identity_evidence 和 gratitude_or_savoring 等现有字段，必要时可在 payload 中附加 p2_delivery 对象。
+''';
+
   static const String outputFormatPrompt = r'''
 请严格按照以下 JSON 结构输出，不要输出多余解释。
 
@@ -542,6 +566,8 @@ controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_s
         return identityEvidencePrompt;
       case weeklyBaselineId:
         return weeklyBaselinePrompt;
+      case p2DeliveryId:
+        return p2DeliveryPrompt;
       case outputCommonId:
       default:
         return outputFormatPrompt;
@@ -563,6 +589,7 @@ controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_s
         gratitudeSavoringId,
         identityEvidenceId,
         weeklyBaselineId,
+        p2DeliveryId,
         outputCommonId,
       ];
 
@@ -592,6 +619,13 @@ controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_s
         return identityEvidenceId;
       case 'weekly_baseline':
         return weeklyBaselineId;
+      case 'todo_goal_bridge':
+      case 'daily_review':
+      case 'course_card':
+      case 'role_model_case':
+      case 'proactive_reminder':
+      case 'monthly_report':
+        return p2DeliveryId;
       case 'event_reframe':
       default:
         return eventReframeId;
@@ -613,6 +647,7 @@ controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_s
       case gratitudeSavoringId:
       case identityEvidenceId:
       case weeklyBaselineId:
+      case p2DeliveryId:
         return const <String>['{{user_input}}', '{{extra_context}}'];
       default:
         return const <String>[];

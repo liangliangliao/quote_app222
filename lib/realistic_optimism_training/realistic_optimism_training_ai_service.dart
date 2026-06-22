@@ -54,7 +54,7 @@ class RealisticOptimismTrainingAiService {
           parsed['model_label'] = state['label'] ?? '统一 AI';
           parsed['created_at_ms'] = parsed['created_at_ms'] ?? now;
           parsed['updated_at_ms'] = now;
-          _applySafetyRouting(parsed);
+          _applySafetyRouting(parsed, userInput: userInput);
           final record = RealisticOptimismTrainingRecord.fromJson(parsed);
           if (record.fiveMinuteAction.isNotEmpty || record.balancedInterpretation.isNotEmpty || record.validationText.isNotEmpty) {
             return RealisticOptimismTrainingAiResult(record: record, fromFallback: false);
@@ -212,7 +212,7 @@ class RealisticOptimismTrainingAiService {
       'updated_at_ms': now,
     };
     _applySceneFallback(payload, scene, text, action);
-    _applySafetyRouting(payload);
+    _applySafetyRouting(payload, userInput: text);
     return RealisticOptimismTrainingRecord.fromJson(payload);
   }
 
@@ -268,12 +268,41 @@ class RealisticOptimismTrainingAiService {
       case 'weekly_baseline':
         payload['final_user_message'] = '本周不只看你是否开心，而看恢复能力、解释风格、行动证据、感恩敏感度和注意力环境是否在变强。';
         break;
+      case 'todo_goal_bridge':
+        map('process_action_plan')['five_minute_action'] = '把未完成的 Todo 缩小为明天 5 分钟内能完成的第一步，并写下一个 If-Then 应对。';
+        map('identity_evidence')['identity_type'] = '行动证据积累者';
+        map('identity_evidence')['identity_sentence'] = '我正在成为一个能把未完成转成下一次更小行动的人。';
+        payload['final_user_message'] = 'Todo 未完成不是人格判决；它会进入情绪允许、解释重构和明日最小行动。';
+        break;
+      case 'daily_review':
+        map('gratitude_or_savoring')['savoring_prompt'] = '选择今天一个具体好体验停留 30 秒，然后为明天设置一个 Prime。';
+        map('prime')['daily_value_word'] = '复盘';
+        map('prime')['lock_screen_sentence'] = '今天不必完美，但我要保存一个行动证据。';
+        payload['final_user_message'] = '今日复盘重点：看见解释风格、保存行动证据、具体感恩，并设置明日 Prime。';
+        break;
+      case 'course_card':
+        map('process_action_plan')['five_minute_action'] = '读完这张知识卡后，立刻把一个真实事件改写成“事实 + 解释 + 可控点”。';
+        payload['final_user_message'] = '课程知识卡必须落到一个练习问题和一个 5 分钟行动，而不是停留在概念。';
+        break;
+      case 'role_model_case':
+        map('benefit_finder_layer')['remaining_resources'] = <String>['有人也经历过失败后恢复。', '榜样案例可以提供替代证据。', '今天只模仿一个最小动作。'];
+        payload['final_user_message'] = '榜样不是用来比较，而是证明“失败后恢复并继续行动”有现实路径。';
+        break;
+      case 'proactive_reminder':
+        map('prime')['daily_value_word'] = '提醒';
+        map('prime')['lock_screen_sentence'] = '如果开始自责，就只做一个 5 分钟证据。';
+        map('prime')['benefit_finder_question'] = '这件事里还有哪个可控点？';
+        payload['final_user_message'] = '主动提醒应包含触发条件、短句和一个小行动线索。';
+        break;
+      case 'monthly_report':
+        payload['final_user_message'] = '本周期报告应同时看解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度和身份成长。';
+        break;
       default:
         break;
     }
   }
 
-  void _applySafetyRouting(Map<String, dynamic> payload) {
+  void _applySafetyRouting(Map<String, dynamic> payload, {String userInput = ''}) {
     Map<String, dynamic> map(String key) {
       final value = payload[key];
       if (value is Map<String, dynamic>) return value;
@@ -289,7 +318,9 @@ class RealisticOptimismTrainingAiService {
 
     final intensity = map('intensity_check');
     final rawLevel = intensity['level']?.toString().trim();
-    final level = (rawLevel == null || rawLevel.isEmpty ? 'L1' : rawLevel).toUpperCase();
+    final modelLevel = (rawLevel == null || rawLevel.isEmpty ? 'L1' : rawLevel).toUpperCase();
+    final inputLevel = userInput.trim().isEmpty ? 'L1' : _guessLevel(userInput);
+    final level = _moreSevereLevel(modelLevel, inputLevel);
     if (level != 'L3' && level != 'L4') return;
 
     intensity['level'] = level;
@@ -362,10 +393,28 @@ class RealisticOptimismTrainingAiService {
         : '现在先稳定，不急着积极；等强度下降后，再回到事实-解释分离和微行动。';
   }
 
+  String _moreSevereLevel(String first, String second) {
+    int rank(String level) {
+      switch (level.toUpperCase()) {
+        case 'L4':
+          return 4;
+        case 'L3':
+          return 3;
+        case 'L2':
+          return 2;
+        case 'L1':
+        default:
+          return 1;
+      }
+    }
+
+    return rank(second) > rank(first) ? second.toUpperCase() : first.toUpperCase();
+  }
+
   String _guessLevel(String text) {
-    final danger = <String>['不想活', '自杀', '伤害自己', '伤害别人', '杀了', '死了算了'];
+    final danger = <String>['不想活', '想死', '自杀', '轻生', '结束生命', '伤害自己', '伤害别人', '伤人', '杀人', '杀了', '割腕', '跳楼', '死了算了', '活着没意思', '不想存在'];
     if (danger.any(text.contains)) return 'L4';
-    final severe = <String>['创伤', '崩溃', '绝望', '活不下去', '重大失去', '分手', '亲人去世'];
+    final severe = <String>['创伤', '崩溃', '绝望', '活不下去', '撑不住', '重大失去', '亲密关系破裂', '分手', '亲人去世', '被侵犯', '长期痛苦'];
     if (severe.any(text.contains)) return 'L3';
     final medium = <String>['失败', '羞耻', '面试', '被否定', '争吵', '自责', '拖延', '坚持不了'];
     if (medium.any(text.contains)) return 'L2';
