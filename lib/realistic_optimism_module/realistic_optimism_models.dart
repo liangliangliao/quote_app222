@@ -216,7 +216,7 @@ class RealisticOptimismCase {
     return fromJson(m).copyWith(
       id: _str(row['id'], _str(m['id'])),
       source: _str(row['source'], _str(m['source'], 'manual')),
-      title: _str(row['title'], _str(m['title'], '现实乐观行动实验')),
+      title: _str(row['title'], _str(m['title'], '现实主义乐观训练')),
       createdAtMs: _int(row['created_at_ms'], _int(m['created_at_ms'])),
       updatedAtMs: _int(row['updated_at_ms'], _int(m['updated_at_ms'])),
     );
@@ -224,6 +224,9 @@ class RealisticOptimismCase {
 
   static RealisticOptimismCase fromJson(Map<String, dynamic> m) {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final finalModule = _map(m['intensity_check']).isNotEmpty || _map(m['benefit_finder_layer']).isNotEmpty;
+    if (finalModule) return _fromRealisticOptimismJson(m, now);
+
     final summary = _map(m['summary']);
     final belief = _map(m['belief_chain']);
     final reality = _map(m['reality_check']);
@@ -236,7 +239,7 @@ class RealisticOptimismCase {
     final original = _str(m['original_input']);
     final goal = _str(summary['user_goal'], _str(m['user_goal']));
     final oldBelief = _str(belief['old_belief'], _str(summary['main_belief']));
-    final title = _str(m['title'], goal.isEmpty ? '现实乐观行动实验' : goal);
+    final title = _str(m['title'], goal.isEmpty ? '现实主义乐观训练' : goal);
     return RealisticOptimismCase(
       id: _str(m['id'], 'ro_${now}_${original.hashCode.abs()}'),
       source: source,
@@ -246,7 +249,7 @@ class RealisticOptimismCase {
       coreProblem: _str(summary['core_problem']),
       mainBelief: _str(summary['main_belief'], oldBelief),
       riskLevel: _str(summary['risk_level'], 'medium'),
-      aiPosition: _str(summary['ai_position'], '现实乐观，不承诺结果，强调行动实验'),
+      aiPosition: _str(summary['ai_position'], '现实主义乐观：承认痛苦，分离事实与解释，用小行动建立证据'),
       oldBelief: oldBelief,
       facts: _stringList(belief['facts']),
       interpretations: _stringList(belief['interpretations']),
@@ -286,6 +289,93 @@ class RealisticOptimismCase {
       recommendedButNotForced: _str(choice['recommended_but_not_forced']),
       reflectionQuestion: _str(choice['reflection_question']),
       displayCards: _mapList(m['display_cards']),
+      provider: _str(m['provider'], 'local'),
+      modelLabel: _str(m['model_label'], '内置策略'),
+      createdAtMs: _int(m['created_at_ms'], now),
+      updatedAtMs: _int(m['updated_at_ms'], now),
+    );
+  }
+
+  static RealisticOptimismCase _fromRealisticOptimismJson(Map<String, dynamic> m, int now) {
+    final intensity = _map(m['intensity_check']);
+    final emotion = _map(m['emotion_validation']);
+    final facts = _map(m['fact_layer']);
+    final style = _map(m['interpretation_style']);
+    final fault = _map(m['fault_finder_layer']);
+    final benefit = _map(m['benefit_finder_layer']);
+    final agency = _map(m['agency_layer']);
+    final plan = _map(m['process_action_plan']);
+    final failure = _map(m['failure_immunity']);
+    final gratitude = _map(m['gratitude_or_savoring']);
+    final prime = _map(m['prime']);
+    final identity = _map(m['identity_evidence']);
+    final source = _str(m['source'], 'manual');
+    final original = _str(m['original_input'], _str(m['user_event_summary']));
+    final level = _str(intensity['level'], 'L1');
+    final auto = _str(style['automatic_interpretation']);
+    final five = _str(plan['five_minute_action']);
+    final balanced = _str(benefit['balanced_interpretation']);
+    final cards = <Map<String, dynamic>>[
+      <String, dynamic>{'title': '强度分级 $level', 'content': _str(intensity['reason']), 'type': 'intensity'},
+      <String, dynamic>{'title': '允许自己为人', 'content': _str(emotion['validation_text']), 'type': 'emotion'},
+      <String, dynamic>{'title': 'Fault Finder', 'content': _str(fault['fault_finder_story']), 'type': 'fault'},
+      <String, dynamic>{'title': 'Benefit Finder', 'content': balanced, 'type': 'benefit'},
+      <String, dynamic>{'title': '5 分钟行动证据', 'content': five, 'type': 'action'},
+      <String, dynamic>{'title': '今日 Prime', 'content': _str(prime['lock_screen_sentence']), 'type': 'priming'},
+    ];
+    return RealisticOptimismCase(
+      id: _str(m['id'], 'ro_${now}_${original.hashCode.abs()}'),
+      source: source,
+      title: _str(m['title'], '现实主义乐观训练'),
+      originalInput: original,
+      userGoal: _str(m['user_event_summary'], original),
+      coreProblem: _str(style['main_pattern'], _str(intensity['reason'])),
+      mainBelief: auto,
+      riskLevel: level,
+      aiPosition: '现实主义乐观：先判断强度，允许情绪，分离事实与解释，再用小行动建立证据。',
+      oldBelief: auto,
+      facts: _stringList(facts['objective_facts']),
+      interpretations: <String>[
+        if (auto.isNotEmpty) auto,
+        '主导模式：${_str(style['main_pattern'])}',
+        '永久化 ${_int(style['permanence_score'])}/10，普遍化 ${_int(style['pervasiveness_score'])}/10，人格化 ${_int(style['personalization_score'])}/10，灾难化 ${_int(style['catastrophizing_score'])}/10，无力化 ${_int(style['helplessness_score'])}/10，过滤化 ${_int(style['filtering_score'])}/10',
+      ],
+      hiddenAssumptions: _stringList(facts['unknowns_or_assumptions']),
+      behaviorEffects: <String>[_str(fault['likely_emotional_effect']), _str(fault['likely_behavioral_effect'])].where((e) => e.trim().isNotEmpty).toList(),
+      newRealisticBelief: balanced,
+      controllableFactors: _stringList(agency['controllable_actions']),
+      uncontrollableFactors: _stringList(agency['uncontrollable_parts']),
+      resources: _stringList(benefit['remaining_resources']),
+      risks: _stringList(intensity['blocked_intervention']),
+      realityConstraints: <String>[_str(benefit['not_denied_pain'])].where((e) => e.trim().isNotEmpty).toList(),
+      probabilityImprovers: _stringList(agency['influenceable_parts']),
+      neededState: _str(emotion['primary_emotion']),
+      positiveCues: <String>[_str(prime['daily_value_word']), _str(prime['benefit_finder_question'])].where((e) => e.trim().isNotEmpty).toList(),
+      phonePrompt: _str(prime['lock_screen_sentence']),
+      environmentChanges: <String>[_str(prime['anti_prime_cleanup_action'])].where((e) => e.trim().isNotEmpty).toList(),
+      antiPrimingCleanup: <String>[_str(prime['anti_prime_cleanup_action'])].where((e) => e.trim().isNotEmpty).toList(),
+      todayMinimumAction: five,
+      actionTime: '今天可用的 5 分钟',
+      actionPlace: '阻力最低、干扰最少的位置',
+      minimumSuccessStandard: '完成 5 分钟微行动并记录一条行动证据',
+      ifThenPlan: _stringList(plan['if_then_plan']).join('；'),
+      possibleObstacle: _str(fault['likely_behavioral_effect']),
+      fallbackAction: _stringList(plan['next_three_steps']).isNotEmpty ? _stringList(plan['next_three_steps']).first : five,
+      possibleFailure: _str(failure['predicted_recovery']),
+      nonHelpfulExplanation: _str(fault['fault_finder_story']),
+      realisticExplanation: balanced,
+      feedbackValue: _stringList(benefit['possible_learning']).join('；'),
+      nextAdjustment: _stringList(plan['next_three_steps']).join('；'),
+      avoidPattern: _str(style['main_pattern']),
+      comfortZoneAction: '先允许情绪存在 2 分钟，不急着积极。',
+      stretchZoneAction: five,
+      panicZoneAction: level == 'L3' || level == 'L4' ? '强行意义化、感恩或逼自己行动（已阻断）' : '一次性要求自己解决全部问题。',
+      recommendedAction: five,
+      selfPerceptionAfterAction: _str(identity['identity_sentence']),
+      options: _stringList(plan['next_three_steps']),
+      recommendedButNotForced: five,
+      reflectionQuestion: _str(gratitude['savoring_prompt'], _str(prime['benefit_finder_question'])),
+      displayCards: cards,
       provider: _str(m['provider'], 'local'),
       modelLabel: _str(m['model_label'], '内置策略'),
       createdAtMs: _int(m['created_at_ms'], now),

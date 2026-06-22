@@ -78,93 +78,146 @@ class RealisticOptimismAiService {
 
   RealisticOptimismCase _buildLocalCase({required String userInput, required String source, required String modelLabel}) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final text = userInput.trim().isEmpty ? '我想改变一个目标，但还没有写清楚。' : userInput.trim();
+    final text = userInput.trim().isEmpty ? '我想重新解释一个事件，但还没有写清楚。' : userInput.trim();
     final goal = _guessGoal(text);
     final oldBelief = _guessOldBelief(text);
-    final isAvoid = text.contains('拖延') || text.contains('逃避') || text.contains('不敢') || text.contains('怕');
-    final isFailure = text.contains('失败') || text.contains('没做到') || text.contains('又') || text.contains('坚持不了');
-    final risk = (text.contains('永远') || text.contains('彻底') || text.contains('完了')) ? 'high' : 'medium';
-    final newBelief = '我不能保证结果立刻改变，但可以把“$oldBelief”当作一个可检验的假设，通过一个很小的行动实验收集新证据。';
-    final minAction = _guessMinimumAction(goal, text);
-    final cards = <Map<String, dynamic>>[
-      <String, dynamic>{'title': '我的四分钟墙', 'content': oldBelief, 'type': 'belief'},
-      <String, dynamic>{'title': '现实乐观信念', 'content': newBelief, 'type': 'reality'},
-      <String, dynamic>{'title': '今日行动实验', 'content': minAction, 'type': 'action'},
-      <String, dynamic>{'title': '失败不是结论', 'content': '如果没做到，先记录具体条件，再把它当作系统反馈。', 'type': 'failure'},
-    ];
+    final level = _guessIntensityLevel(text);
+    final isSafety = level == 'L4';
+    final isHigh = level == 'L3';
+    final minAction = isSafety
+        ? '先把自己移动到更安全的位置，并联系当地紧急支持或可信任的人。'
+        : isHigh
+            ? '把手机放在手边，给一个可信任的人发一句“我现在很难受，能陪我一下吗？”'
+            : _guessMinimumAction(goal, text);
     final json = <String, dynamic>{
-      'module': 'realistic_optimism_lab',
-      'scene': '完整信念行动实验',
+      'module': 'realistic_optimism',
+      'scene': '事件重构与行动闭环',
       'source': source,
       'id': 'ro_${now}_${text.hashCode.abs()}',
-      'title': goal.isEmpty ? '现实乐观行动实验' : goal,
+      'title': '现实主义乐观训练：${goal.isEmpty ? '今日事件' : goal}',
       'original_input': text,
-      'summary': <String, dynamic>{
-        'user_goal': goal,
-        'core_problem': '限制性信念、旧失败记忆或环境阻力正在削弱开始行动的概率。',
-        'main_belief': oldBelief,
-        'risk_level': risk,
-        'ai_position': '现实乐观，不承诺结果，强调行动实验',
+      'intensity_check': <String, dynamic>{
+        'level': level,
+        'reason': _intensityReason(level),
+        'allowed_intervention': isSafety
+            ? <String>['安全支持', '联系现实支持', '降低当下风险']
+            : isHigh
+                ? <String>['情绪稳定', '承认痛苦', '现实支持', '非常小的稳定动作']
+                : <String>['情绪允许', '事实-解释分离', 'Benefit Finder 重构', '5 分钟微行动'],
+        'blocked_intervention': isSafety || isHigh
+            ? <String>['强行积极', '强行感恩', '要求立刻寻找意义', '高压力行动挑战']
+            : <String>['否认痛苦', '空泛口号', '一次性解决全部问题'],
       },
-      'belief_chain': <String, dynamic>{
-        'old_belief': oldBelief,
-        'facts': <String>['你已经清楚表达了想改变或推进的主题。', if (isFailure) '过去或今天确实出现过失败/中断/没做到的经验。'],
-        'interpretations': <String>['把过去或当前的困难解释成未来也会如此。', '把一次具体阻碍扩大成对能力或身份的判断。'],
-        'hidden_assumptions': <String>['必须有足够信心才可以开始。', '如果开始后失败，就证明自己不行。', '行动必须做得很完整才有意义。'],
-        'behavior_effects': <String>['开始前压力升高。', '更容易回避或拖延。', '失败后更容易自责而不是修正系统。'],
-        'new_realistic_belief': newBelief,
+      'user_event_summary': text,
+      'emotion_validation': <String, dynamic>{
+        'primary_emotion': _guessEmotion(text),
+        'validation_text': '你现在的感受可以被理解。它不是软弱或失败的证据，而是说明这件事对你有分量。我们不急着把它说成好事，先把事实、解释和一个很小的可控点分开。',
       },
-      'reality_check': <String, dynamic>{
-        'controllable_factors': <String>['行动门槛', '开始时间', '手机/环境干扰', '复盘方式', '下一步大小'],
-        'uncontrollable_factors': <String>['过去已经发生的失败', '短期内不能保证结果', '他人的评价和外部机会'],
-        'resources': <String>['今天可用的几分钟时间', '已有的目标意识', '可以记录和复盘的工具'],
-        'risks': <String>['目标过大', '完美主义', '失败后自我攻击', '环境线索继续诱发回避'],
-        'reality_constraints': <String>['不能期待一次行动就彻底改变长期模式。', '需要通过多次小实验累计证据。'],
-        'probability_improvers': <String>['降低最小行动标准', '提前布置环境', '失败后只改系统不骂自己', '用 if-then 计划处理阻碍'],
+      'fact_layer': <String, dynamic>{
+        'objective_facts': <String>['你记录了一个让自己受影响的事件或目标：$text', if (text.contains('没') || text.contains('失败') || text.contains('拖延')) '当前确实出现了未完成、失败或阻碍。'],
+        'unknowns_or_assumptions': <String>['这件事是否代表未来还没有证据。', '这件事是否等于人格失败还需要分离事实与解释。'],
       },
-      'priming_design': <String, dynamic>{
-        'needed_state': '低压力、可开始、愿意复盘',
-        'positive_cues': <String>['桌面放一张写有最小行动的纸条', '手机提醒语：先做5分钟，不评价结果', '开始前深呼吸一次并打开对应材料'],
-        'phone_prompt': '不是证明我行不行，而是收集一个新证据。',
-        'environment_changes': <String>['把行动材料提前放到可见位置', '把最容易分心的入口移出第一屏', '开始前只保留一个任务窗口'],
-        'anti_priming_cleanup': <String>['不要在床上启动任务', '不要一开始就打开高刺激 App', '不要用宏大计划替代第一步'],
+      'interpretation_style': <String, dynamic>{
+        'automatic_interpretation': oldBelief,
+        'permanence_score': text.contains('永远') || text.contains('总是') || text.contains('一直') ? 8 : 4,
+        'pervasiveness_score': text.contains('全部') || text.contains('什么都') || text.contains('所有') ? 8 : 4,
+        'personalization_score': text.contains('废') || text.contains('我不行') || text.contains('没价值') ? 8 : 5,
+        'catastrophizing_score': text.contains('完了') || text.contains('没救') || text.contains('彻底') ? 8 : 4,
+        'helplessness_score': text.contains('不能') || text.contains('无法') || text.contains('没办法') ? 7 : 4,
+        'filtering_score': 6,
+        'main_pattern': _mainPattern(text),
       },
-      'action_experiment': <String, dynamic>{
-        'today_minimum_action': minAction,
-        'time': '今天最早一个可用的 5 分钟',
-        'place': '能坐稳且干扰较少的地方',
-        'minimum_success_standard': '只要启动并留下 1 条记录就算成功',
-        'if_then_plan': '如果想逃避，就把行动缩小到 1 分钟，并先完成第一步。',
-        'possible_obstacle': isAvoid ? '害怕失败或想先逃避' : '觉得行动太小、没有意义',
-        'fallback_action': '只打开材料/写下一句话/完成 1 分钟，也算保留系统。',
+      'fault_finder_layer': <String, dynamic>{
+        'fault_finder_story': '$text = $oldBelief = 现在做也没有意义。',
+        'likely_emotional_effect': '更羞耻、更紧绷、更容易把痛苦理解成全部现实。',
+        'likely_behavioral_effect': '更容易逃避、拖延或放弃记录新的行动证据。',
       },
-      'failure_learning': <String, dynamic>{
-        'possible_failure': '今天没有启动或中途停止。',
-        'non_helpful_explanation': '我果然不行/我永远坚持不了。',
-        'realistic_explanation': '这说明当前行动门槛、时间或环境还不合适，不足以证明你整个人不行。',
-        'feedback_value': '失败暴露了系统阻力：任务大小、时间点、环境线索或情绪负荷。',
-        'next_adjustment': '下一轮把行动再缩小，并提前移除一个最强干扰。',
+      'benefit_finder_layer': <String, dynamic>{
+        'balanced_interpretation': isSafety || isHigh ? '这件事很重，当前重点不是证明乐观，而是先保证安全、获得支持、让情绪从最高点降下来。' : '这件事确实不舒服，也暴露了当前计划、环境或方法上的阻力；但它不是对你整个人或全部未来的最终判决。现在仍然可以用一个 5 分钟动作制造新证据。',
+        'not_denied_pain': '痛苦、羞耻、自责或失望不需要被否认。',
+        'possible_learning': <String>['目标可能需要缩小到可启动版本。', '解释方式会影响下一步行动。', '环境线索可能正在放大回避。'],
+        'remaining_resources': <String>['你还能记录事实。', '你还能选择一个很小的行动。', '你还能请求支持或调整环境。'],
+        'possible_meaning': isSafety || isHigh ? <String>[] : <String>['这次经历可以成为一次事实-解释分离训练。'],
       },
-      'cope_design': <String, dynamic>{
-        'avoid_pattern': isAvoid ? '用拖延/转移注意来短期减轻压力。' : '停留在思考和计划中，迟迟不进入现实反馈。',
-        'comfort_zone_action': '继续想一想、继续做完整计划。',
-        'stretch_zone_action': minAction,
-        'panic_zone_action': '一次性要求自己彻底改变或完成全部任务。',
-        'recommended_action': minAction,
-        'self_perception_after_action': '我正在成为一个能用小行动训练信念的人。',
+      'agency_layer': <String, dynamic>{
+        'uncontrollable_parts': <String>['已经发生的部分', '他人的即时评价', '短期内无法保证的结果'],
+        'influenceable_parts': <String>['行动门槛', '复盘方式', '环境干扰', '下一次开始的位置'],
+        'controllable_actions': <String>[minAction, '记录一条事实而不是人格评价', '移除一个最强 Anti-Prime'],
       },
-      'user_choice': <String, dynamic>{
-        'options': <String>[minAction, '只整理材料 1 分钟', '只写下失败后要复盘的一个问题'],
-        'recommended_but_not_forced': minAction,
-        'reflection_question': '如果这只是一次实验，而不是证明你行不行，你愿意先完成哪一步？',
+      'process_action_plan': <String, dynamic>{
+        'five_minute_action': minAction,
+        'next_three_steps': <String>['打开相关材料或支持渠道', '只完成第一小步', '记录“我在什么状态下仍然开始了”'],
+        'if_then_plan': <String>['如果出现“我不行”的念头，那么先把它写成“我现在遇到阻力”。', '如果 5 分钟也太难，那么缩小到 1 分钟。'],
       },
-      'display_cards': cards,
+      'failure_immunity': <String, dynamic>{
+        'predicted_pain': null,
+        'actual_pain': null,
+        'predicted_recovery': '可能会预测自己很久都恢复不了。',
+        'actual_recovery': '',
+        'psychological_antibody': isSafety || isHigh ? '我可以先寻求支持，而不是逼自己立刻积极。' : '我发现自己可以在不完美和自责中仍然做一个小动作。',
+      },
+      'gratitude_or_savoring': <String, dynamic>{
+        'what_still_matters': isSafety || isHigh ? <String>[] : <String>['今天仍然值得保留的一个小资源', '愿意重新开始的这 5 分钟'],
+        'savoring_prompt': isSafety || isHigh ? '先不用感恩；只需要找到一个能让身体稍微稳定的现实支持。' : '今天有没有一个微小的好体验，值得停留 30 秒？',
+        'small_appreciation_action': isSafety || isHigh ? '联系一个现实支持。' : '向帮助过你的人或今天的自己说一句具体感谢。',
+      },
+      'prime': <String, dynamic>{
+        'daily_value_word': isSafety || isHigh ? '稳定' : '行动',
+        'lock_screen_sentence': isSafety || isHigh ? '先安全，先支持，先降一点强度。' : '我可以痛苦，也可以做一个 5 分钟行动证据。',
+        'benefit_finder_question': '这件事里还有哪一个部分是我能影响的？',
+        'anti_prime_cleanup_action': '把最容易拖延或自我否定的入口从首页移走 24 小时。',
+      },
+      'identity_evidence': <String, dynamic>{
+        'specific_action': minAction,
+        'proved_capacity': isSafety || isHigh ? '在高强度痛苦中优先照顾安全和支持' : '在状态不完美时仍然开始',
+        'identity_type': isSafety || isHigh ? '失败后恢复者' : '行动证据积累者',
+        'identity_sentence': isSafety || isHigh ? '我正在成为一个痛苦时也会优先保护自己的人。' : '我正在成为一个不靠幻想，而靠行动建立信心的人。',
+      },
+      'final_user_message': isSafety ? '现在先不做普通训练。请优先确保你处在安全位置，并立刻联系当地紧急服务或可信任的人。' : '我们不把痛苦说成好事，也不让它成为全部现实。今天只需要先做一个很小的行动证据。',
       'provider': 'local',
       'model_label': modelLabel.isEmpty ? '内置策略' : modelLabel,
       'created_at_ms': now,
       'updated_at_ms': now,
     };
     return RealisticOptimismCase.fromJson(json);
+  }
+
+  String _guessIntensityLevel(String text) {
+    if (text.contains('自杀') || text.contains('不想活') || text.contains('伤害自己') || text.contains('伤害别人') || text.contains('杀')) return 'L4';
+    if (text.contains('创伤') || text.contains('绝望') || text.contains('重大失去') || text.contains('分手') || text.contains('离婚')) return 'L3';
+    if (text.contains('面试') || text.contains('争吵') || text.contains('被否定') || text.contains('自责') || text.contains('羞辱')) return 'L2';
+    return 'L1';
+  }
+
+  String _intensityReason(String level) {
+    switch (level) {
+      case 'L4':
+        return '输入中可能包含安全风险信号，需要优先安全支持。';
+      case 'L3':
+        return '事件可能涉及高强度痛苦、重大失去或疑似创伤，暂不适合强行积极重构。';
+      case 'L2':
+        return '事件包含明显痛苦、自责、冲突或失败感，适合先情绪允许，再温和重构。';
+      default:
+        return '事件更接近轻度挫折或拖延阻碍，可以进入事实-解释分离和微行动。';
+    }
+  }
+
+  String _guessEmotion(String text) {
+    if (text.contains('羞') || text.contains('丢脸')) return '羞耻';
+    if (text.contains('怕') || text.contains('担心')) return '害怕';
+    if (text.contains('气') || text.contains('愤怒')) return '愤怒';
+    if (text.contains('自责') || text.contains('废')) return '自责';
+    if (text.contains('失望') || text.contains('失败')) return '失望';
+    return '压力';
+  }
+
+  String _mainPattern(String text) {
+    if (text.contains('永远') || text.contains('一直') || text.contains('总是')) return '永久化';
+    if (text.contains('全部') || text.contains('什么都') || text.contains('所有')) return '普遍化';
+    if (text.contains('废') || text.contains('我不行') || text.contains('没价值')) return '人格化';
+    if (text.contains('完了') || text.contains('没救') || text.contains('彻底')) return '灾难化';
+    if (text.contains('没办法') || text.contains('无能为力')) return '无力化';
+    return '过滤化';
   }
 
   String _guessGoal(String text) {

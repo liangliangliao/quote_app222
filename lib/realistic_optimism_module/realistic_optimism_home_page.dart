@@ -71,7 +71,7 @@ class _RealisticOptimismHomePageState extends State<RealisticOptimismHomePage> {
   Future<void> _generate() async {
     final input = _inputCtrl.text.trim();
     if (input.isEmpty) {
-      _toast('请先写下一个目标、失败、拖延、担忧或限制性信念。');
+      _toast('请先写下一个事件、失败、拖延、自责、目标或需要重构的解释。');
       return;
     }
     setState(() => _generating = true);
@@ -98,8 +98,8 @@ class _RealisticOptimismHomePageState extends State<RealisticOptimismHomePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清空现实乐观模块数据？'),
-        content: const Text('将删除所有信念案例、行动日志、失败复盘和基线记录。该操作不可恢复。'),
+        title: const Text('清空现实主义乐观训练数据？'),
+        content: const Text('将删除所有事件重构、行动证据、失败免疫复盘和幸福基线记录。该操作不可恢复。'),
         actions: <Widget>[
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('清空')),
@@ -127,46 +127,46 @@ class _RealisticOptimismHomePageState extends State<RealisticOptimismHomePage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('记录今日基线'),
+          title: const Text('记录幸福基线'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                _DialogSlider(label: '情绪基线', value: mood, onChanged: (v) => setLocal(() => mood = v)),
-                _DialogSlider(label: '自尊感', value: esteem, onChanged: (v) => setLocal(() => esteem = v)),
-                _DialogSlider(label: '自我效能', value: efficacy, onChanged: (v) => setLocal(() => efficacy = v)),
+                _DialogSlider(label: '总体幸福感', value: mood, onChanged: (v) => setLocal(() => mood = v)),
+                _DialogSlider(label: '看见好东西能力', value: esteem, onChanged: (v) => setLocal(() => esteem = v)),
+                _DialogSlider(label: '可影响生活程度', value: efficacy, onChanged: (v) => setLocal(() => efficacy = v)),
                 Row(children: <Widget>[
-                  Expanded(child: _SmallCounter(label: 'cope 次数', value: cope, onMinus: () => setLocal(() => cope = (cope - 1).clamp(0, 99).toInt()), onPlus: () => setLocal(() => cope++))),
+                  Expanded(child: _SmallCounter(label: '恢复次数', value: cope, onMinus: () => setLocal(() => cope = (cope - 1).clamp(0, 99).toInt()), onPlus: () => setLocal(() => cope++))),
                   const SizedBox(width: 8),
-                  Expanded(child: _SmallCounter(label: 'avoid 次数', value: avoid, onMinus: () => setLocal(() => avoid = (avoid - 1).clamp(0, 99).toInt()), onPlus: () => setLocal(() => avoid++))),
+                  Expanded(child: _SmallCounter(label: '永久化次数', value: avoid, onMinus: () => setLocal(() => avoid = (avoid - 1).clamp(0, 99).toInt()), onPlus: () => setLocal(() => avoid++))),
                 ]),
                 CheckboxListTile(
                   value: minAction,
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (v) => setLocal(() => minAction = v ?? false),
-                  title: const Text('今天完成过最小行动'),
+                  title: const Text('今天完成过 5 分钟微行动'),
                 ),
                 CheckboxListTile(
                   value: review,
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (v) => setLocal(() => review = v ?? false),
-                  title: const Text('今天做过失败/阻碍复盘'),
+                  title: const Text('今天做过失败免疫复盘'),
                 ),
                 CheckboxListTile(
                   value: optimism,
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (v) => setLocal(() => optimism = v ?? false),
-                  title: const Text('今天使用过现实乐观解释'),
+                  title: const Text('今天使用过 Benefit Finder 重构'),
                 ),
                 TextField(
                   controller: noteCtrl,
                   minLines: 2,
                   maxLines: 4,
-                  decoration: const InputDecoration(labelText: '一句记录', hintText: '今天我更愿意面对的是……'),
+                  decoration: const InputDecoration(labelText: '一句记录', hintText: '本周/今天我恢复、行动或看见好的证据是……'),
                 ),
               ],
             ),
@@ -211,10 +211,10 @@ class _RealisticOptimismHomePageState extends State<RealisticOptimismHomePage> {
           controller: controller,
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
           children: const <Widget>[
-            Text('AI 三层 Prompt', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            Text('现实主义乐观三层 Prompt', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             SizedBox(height: 12),
             _PromptBlock(title: '全局价值层', body: RealisticOptimismPromptConfig.globalValuePrompt),
-            _PromptBlock(title: '场景层', body: '限制性信念扫描、现实校准、期待重构、环境启动、行动实验、失败解释、cope训练、基线复盘已合并到模块生成链路中。'),
+            _PromptBlock(title: '场景层', body: '事件强度分级、Permission to Be Human、事实-解释分离、解释风格雷达、Fault Finder/Benefit Finder、过程模拟行动、失败免疫、Prime/Anti-Prime、感恩品味、身份沉淀已合并到模块生成链路中。'),
             _PromptBlock(title: '输出格式层', body: RealisticOptimismPromptConfig.outputFormatPrompt),
           ],
         ),
@@ -231,7 +231,7 @@ class _RealisticOptimismHomePageState extends State<RealisticOptimismHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('现实乐观 · 信念行动系统'),
+        title: const Text('现实主义乐观仪表盘'),
         actions: <Widget>[
           IconButton(onPressed: _recordBaseline, icon: const Icon(Icons.insights_outlined), tooltip: '记录基线'),
           IconButton(onPressed: _showPromptSheet, icon: const Icon(Icons.integration_instructions_outlined), tooltip: '查看Prompt'),
@@ -268,7 +268,7 @@ class _RealisticOptimismHomePageState extends State<RealisticOptimismHomePage> {
                       const SizedBox(height: 14),
                       Row(
                         children: <Widget>[
-                          const Expanded(child: Text('最近的信念行动实验', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+                          const Expanded(child: Text('最近的事件重构与行动证据', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
                           TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('刷新')),
                         ],
                       ),
@@ -367,7 +367,7 @@ class _RealisticOptimismCaseDetailPageState extends State<RealisticOptimismCaseD
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('失败解释重构'),
+        title: const Text('失败免疫复盘'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -390,7 +390,7 @@ class _RealisticOptimismCaseDetailPageState extends State<RealisticOptimismCaseD
         ),
         actions: <Widget>[
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('生成复盘记录')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('生成免疫记录')),
         ],
       ),
     );
@@ -415,7 +415,7 @@ class _RealisticOptimismCaseDetailPageState extends State<RealisticOptimismCaseD
         createdAtMs: now,
       ));
       await _load();
-      _toast('已保存失败复盘');
+      _toast('已保存失败免疫复盘');
     }
   }
 
@@ -430,11 +430,11 @@ class _RealisticOptimismCaseDetailPageState extends State<RealisticOptimismCaseD
   Widget build(BuildContext context) {
     final item = widget.item;
     return Scaffold(
-      appBar: AppBar(title: Text(item.title.isEmpty ? '信念行动实验' : item.title)),
+      appBar: AppBar(title: Text(item.title.isEmpty ? '现实主义乐观训练' : item.title)),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _recordAction('done'),
         icon: const Icon(Icons.check_circle_outline),
-        label: const Text('记录行动'),
+        label: const Text('记录行动证据'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
@@ -443,31 +443,31 @@ class _RealisticOptimismCaseDetailPageState extends State<RealisticOptimismCaseD
           const SizedBox(height: 12),
           if (item.displayCards.isNotEmpty) _DisplayCards(cards: item.displayCards),
           const SizedBox(height: 12),
-          _Section(title: '1. 四分钟墙：限制性信念扫描', icon: Icons.wallpaper_outlined, children: <Widget>[
-            _KeyValue(label: '旧信念', value: item.oldBelief),
-            _KeyValue(label: '新现实乐观信念', value: item.newRealisticBelief),
+          _Section(title: '1. Permission to Be Human + 事实解释分离', icon: Icons.wallpaper_outlined, children: <Widget>[
+            _KeyValue(label: '自动解释', value: item.oldBelief),
+            _KeyValue(label: 'Benefit Finder 平衡解释', value: item.newRealisticBelief),
             _BulletList(title: '事实', items: item.facts),
             _BulletList(title: '解释', items: item.interpretations),
-            _BulletList(title: '隐含假设', items: item.hiddenAssumptions),
-            _BulletList(title: '行为影响', items: item.behaviorEffects),
+            _BulletList(title: '未知/假设', items: item.hiddenAssumptions),
+            _BulletList(title: 'Fault Finder 影响', items: item.behaviorEffects),
           ]),
-          _Section(title: '2. 现实校准器', icon: Icons.balance_outlined, children: <Widget>[
-            _BulletList(title: '可控因素', items: item.controllableFactors),
-            _BulletList(title: '不可控因素', items: item.uncontrollableFactors),
+          _Section(title: '2. 可控点提取', icon: Icons.balance_outlined, children: <Widget>[
+            _BulletList(title: '可控行动', items: item.controllableFactors),
+            _BulletList(title: '不可控行动', items: item.uncontrollableFactors),
             _BulletList(title: '资源', items: item.resources),
             _BulletList(title: '风险', items: item.risks),
             _BulletList(title: '现实约束', items: item.realityConstraints),
-            _BulletList(title: '提高概率的做法', items: item.probabilityImprovers),
+            _BulletList(title: '可影响部分', items: item.probabilityImprovers),
           ]),
-          _Section(title: '3. 皮格马利翁期待 + 积极启动环境', icon: Icons.auto_awesome_outlined, children: <Widget>[
-            _KeyValue(label: '需要启动的状态', value: item.neededState),
-            _KeyValue(label: '手机/壁纸提醒语', value: item.phonePrompt),
-            _BulletList(title: '积极启动线索', items: item.positiveCues),
-            _BulletList(title: '环境改变', items: item.environmentChanges),
-            _BulletList(title: '反启动清理', items: item.antiPrimingCleanup),
+          _Section(title: '3. 注意力 Prime / Anti-Prime', icon: Icons.auto_awesome_outlined, children: <Widget>[
+            _KeyValue(label: '当前情绪/需要承认的状态', value: item.neededState),
+            _KeyValue(label: '锁屏提醒语', value: item.phonePrompt),
+            _BulletList(title: '今日 Prime', items: item.positiveCues),
+            _BulletList(title: '最小环境改造', items: item.environmentChanges),
+            _BulletList(title: 'Anti-Prime 清理', items: item.antiPrimingCleanup),
           ]),
-          _Section(title: '4. 今日行动实验', icon: Icons.play_circle_outline, children: <Widget>[
-            _KeyValue(label: '最小行动', value: item.todayMinimumAction),
+          _Section(title: '4. 5 分钟微行动', icon: Icons.play_circle_outline, children: <Widget>[
+            _KeyValue(label: '5 分钟行动', value: item.todayMinimumAction),
             _KeyValue(label: '时间', value: item.actionTime),
             _KeyValue(label: '地点', value: item.actionPlace),
             _KeyValue(label: '最小成功标准', value: item.minimumSuccessStandard),
@@ -482,7 +482,7 @@ class _RealisticOptimismCaseDetailPageState extends State<RealisticOptimismCaseD
               ],
             ),
           ]),
-          _Section(title: '5. 失败解释重构', icon: Icons.replay_circle_filled_outlined, children: <Widget>[
+          _Section(title: '5. 失败免疫复盘', icon: Icons.replay_circle_filled_outlined, children: <Widget>[
             _KeyValue(label: '可能失败', value: item.possibleFailure),
             _KeyValue(label: '非有益解释', value: item.nonHelpfulExplanation),
             _KeyValue(label: '现实解释', value: item.realisticExplanation),
@@ -490,15 +490,15 @@ class _RealisticOptimismCaseDetailPageState extends State<RealisticOptimismCaseD
             _KeyValue(label: '下一轮调整', value: item.nextAdjustment),
             OutlinedButton.icon(onPressed: _addFailureReview, icon: const Icon(Icons.edit_note_outlined), label: const Text('写一次失败复盘')),
           ]),
-          _Section(title: '6. Cope 而不是 Avoid', icon: Icons.directions_run_outlined, children: <Widget>[
-            _KeyValue(label: '回避模式', value: item.avoidPattern),
-            _KeyValue(label: '舒适区行动', value: item.comfortZoneAction),
-            _KeyValue(label: '伸展区行动', value: item.stretchZoneAction),
-            _KeyValue(label: '恐慌区行动', value: item.panicZoneAction),
+          _Section(title: '6. 过程模拟与身份沉淀', icon: Icons.directions_run_outlined, children: <Widget>[
+            _KeyValue(label: '主要解释模式', value: item.avoidPattern),
+            _KeyValue(label: '情绪容器', value: item.comfortZoneAction),
+            _KeyValue(label: '5 分钟启动', value: item.stretchZoneAction),
+            _KeyValue(label: '需要阻断的做法', value: item.panicZoneAction),
             _KeyValue(label: '推荐但不强迫', value: item.recommendedAction),
-            _KeyValue(label: '行动后的自我知觉', value: item.selfPerceptionAfterAction),
-            _BulletList(title: '可选行动', items: item.options),
-            _KeyValue(label: '反思问题', value: item.reflectionQuestion),
+            _KeyValue(label: '身份提醒', value: item.selfPerceptionAfterAction),
+            _BulletList(title: '下一步', items: item.options),
+            _KeyValue(label: '品味/Benefit Finder 问题', value: item.reflectionQuestion),
           ]),
           if (_loading) const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())),
           if (!_loading) _LogsAndReviews(logs: _logs, reviews: _reviews),
@@ -520,9 +520,9 @@ class _HeroCard extends StatelessWidget {
         child: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('现实乐观 · 信念行动系统', style: TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.w900)),
+            Text('现实主义乐观仪表盘', style: TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.w900)),
             SizedBox(height: 8),
-            Text('识别限制性信念 → 校准现实 → 重构期待 → 设计环境启动 → 行动实验 → 失败复盘 → 提高幸福/自尊基线。', style: TextStyle(color: Colors.white70, height: 1.45)),
+            Text('事件强度分级 → 情绪允许 → 事实-解释分离 → Fault Finder/Benefit Finder → 5 分钟行动 → 行动证据 → 失败免疫 → 感恩品味 → 身份沉淀。', style: TextStyle(color: Colors.white70, height: 1.45)),
             SizedBox(height: 12),
             Text('相信不是替代行动，而是启动行动。', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
           ],
@@ -541,7 +541,7 @@ class _BuildCaseCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('开始一次信念行动实验', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const Text('开始一次现实主义乐观训练', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             const Text('写下一个目标、失败、拖延、担忧或“我做不到”的念头。AI 会把它转成完整实践闭环。', style: TextStyle(color: Colors.black54)),
             const SizedBox(height: 12),
@@ -560,7 +560,7 @@ class _BuildCaseCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: generating ? null : onGenerate,
                 icon: generating ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.auto_awesome),
-                label: Text(generating ? '正在生成完整闭环……' : '生成现实乐观行动闭环'),
+                label: Text(generating ? '正在生成完整闭环……' : '生成现实主义乐观闭环'),
               ),
             ),
           ],
@@ -594,9 +594,9 @@ class _Dashboard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (latest == null)
-            const Text('还没有基线记录。建议每天记录一次：情绪、自尊、自我效能、cope/avoid 次数。', style: TextStyle(color: Colors.black54))
+            const Text('还没有幸福基线记录。建议每周记录：幸福感、失败恢复、可影响生活程度、永久化频率、感恩敏感度、行动稳定性。', style: TextStyle(color: Colors.black54))
           else
-            Text('最近基线：情绪 ${latest.moodScore.toStringAsFixed(0)} / 自尊 ${latest.selfEsteemScore.toStringAsFixed(0)} / 效能 ${latest.selfEfficacyScore.toStringAsFixed(0)} · cope ${latest.copeCount} · avoid ${latest.avoidCount}', style: const TextStyle(color: Colors.black87)),
+            Text('最近基线：幸福感 ${latest.moodScore.toStringAsFixed(0)} / 看见好东西 ${latest.selfEsteemScore.toStringAsFixed(0)} / 可影响生活 ${latest.selfEfficacyScore.toStringAsFixed(0)} · 恢复 ${latest.copeCount} · 永久化 ${latest.avoidCount}', style: const TextStyle(color: Colors.black87)),
         ],
       ),
     );
@@ -608,14 +608,14 @@ class _ValueSystemMap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = <_MapItem>[
-      _MapItem(Icons.wallpaper_outlined, '四分钟墙', '限制性信念不是身份判决，而是可验证假设。'),
+      _MapItem(Icons.psychology_alt_outlined, '事实-解释分离', '事实是发生了什么，解释是我如何理解它。'),
       _MapItem(Icons.balance_outlined, '现实校准', '同时看见希望与事实，区分可控与不可控。'),
-      _MapItem(Icons.school_outlined, '期待重构', '像好老师一样看见潜能，并转成行为反馈。'),
-      _MapItem(Icons.auto_awesome_outlined, '环境启动', '用线索启动行动，而不是只靠意志硬撑。'),
-      _MapItem(Icons.play_circle_outline, '行动实验', '最小行动、时间地点、成功标准、if-then。'),
-      _MapItem(Icons.replay_circle_filled_outlined, '失败学习', '把永久化/普遍化/人格化转成反馈资料。'),
-      _MapItem(Icons.directions_run_outlined, 'Cope训练', '选择伸展区，而不是回避或恐慌区硬拼。'),
-      _MapItem(Icons.insights_outlined, '基线上移', '长期追踪恢复力、自尊、自我效能。'),
+      _MapItem(Icons.visibility_outlined, '双镜头重构', 'Fault Finder 看见痛苦，Benefit Finder 找到资源与下一步。'),
+      _MapItem(Icons.auto_awesome_outlined, 'Prime / Anti-Prime', '设计注意力环境，也清理削弱行动的启动源。'),
+      _MapItem(Icons.play_circle_outline, '过程模拟行动', '时间、地点、工具、前三步、障碍预演和 If-Then。'),
+      _MapItem(Icons.replay_circle_filled_outlined, '失败免疫', '失败会痛，但复盘和恢复会形成心理抗体。'),
+      _MapItem(Icons.directions_run_outlined, '5 分钟微行动', '不等待动力变好，先用小行动制造证据。'),
+      _MapItem(Icons.insights_outlined, '幸福基线追踪', '长期追踪恢复力、感恩敏感度、行动稳定性和解释风格。'),
     ];
     return _SurfaceCard(
       child: Column(
@@ -660,7 +660,7 @@ class _CaseListTile extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         child: ListTile(
           onTap: onTap,
-          title: Text(item.title.isEmpty ? '现实乐观行动实验' : item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+          title: Text(item.title.isEmpty ? '现实主义乐观训练' : item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
           subtitle: Text(item.newRealisticBelief.isEmpty ? item.oldBelief : item.newRealisticBelief, maxLines: 2, overflow: TextOverflow.ellipsis),
           leading: const CircleAvatar(backgroundColor: Color(0xFFE0E7FF), child: Icon(Icons.psychology_alt_outlined, color: Color(0xFF4338CA))),
           trailing: PopupMenuButton<String>(
@@ -683,7 +683,7 @@ class _DetailHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(item.title.isEmpty ? '现实乐观行动实验' : item.title, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+            Text(item.title.isEmpty ? '现实主义乐观训练' : item.title, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
             const SizedBox(height: 8),
             Text(item.coreProblem.isEmpty ? item.originalInput : item.coreProblem, style: const TextStyle(color: Colors.black87, height: 1.45)),
             const SizedBox(height: 12),
@@ -792,7 +792,7 @@ class _LogsAndReviews extends StatelessWidget {
           children: <Widget>[
             const Text('行动证据与复盘记录', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
             const SizedBox(height: 10),
-            if (logs.isEmpty && reviews.isEmpty) const Text('还没有记录。完成一次最小行动，或把一次失败转成反馈资料。', style: TextStyle(color: Colors.black54)),
+            if (logs.isEmpty && reviews.isEmpty) const Text('还没有记录。完成一次5 分钟行动，或把一次失败转成反馈资料。', style: TextStyle(color: Colors.black54)),
             ...logs.take(8).map((e) => ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -899,7 +899,7 @@ class _EmptyHistory extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(color: Colors.black.withOpacity(0.035), borderRadius: BorderRadius.circular(20)),
-        child: const Text('还没有信念行动实验。先从一个“我做不到/我失败了/我拖延了”的真实句子开始。', style: TextStyle(color: Colors.black54)),
+        child: const Text('还没有现实主义乐观训练。先从一个“我做不到/我失败了/我拖延了”的真实句子开始。', style: TextStyle(color: Colors.black54)),
       );
 }
 
