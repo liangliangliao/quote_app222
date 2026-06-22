@@ -16,6 +16,19 @@ class RealisticOptimismTrainingDao {
     }
   }
 
+  String _payloadString(Map<String, dynamic> payload, List<String> path, {String fallback = ''}) {
+    dynamic current = payload;
+    for (final key in path) {
+      if (current is Map && current.containsKey(key)) {
+        current = current[key];
+      } else {
+        return fallback;
+      }
+    }
+    final text = current?.toString().trim() ?? '';
+    return text.isEmpty ? fallback : text;
+  }
+
   Future<void> ensureTables() async {
     final db = await _db();
     await db.execute('''
@@ -99,6 +112,8 @@ class RealisticOptimismTrainingDao {
         predicted_recovery TEXT,
         actual_recovery TEXT,
         psychological_antibody TEXT,
+        worst_case_prediction TEXT,
+        actual_result TEXT,
         created_at_ms INTEGER NOT NULL
       )
     ''');
@@ -108,6 +123,7 @@ class RealisticOptimismTrainingDao {
         id TEXT PRIMARY KEY,
         record_id TEXT NOT NULL,
         challenge_name TEXT,
+        risk_level TEXT,
         safety_boundary TEXT,
         five_minute_action TEXT,
         predicted_pain REAL,
@@ -120,6 +136,9 @@ class RealisticOptimismTrainingDao {
         created_at_ms INTEGER NOT NULL
       )
     ''');
+    await _tryAddColumn(db, 'realistic_optimism_training_failure_immunity', 'worst_case_prediction TEXT');
+    await _tryAddColumn(db, 'realistic_optimism_training_failure_immunity', 'actual_result TEXT');
+    await _tryAddColumn(db, 'realistic_optimism_training_controlled_challenges', 'risk_level TEXT');
     await _tryAddColumn(db, 'realistic_optimism_training_controlled_challenges', 'actual_pain REAL');
     await _tryAddColumn(db, 'realistic_optimism_training_controlled_challenges', 'actual_result TEXT');
     await _tryAddColumn(db, 'realistic_optimism_training_controlled_challenges', 'recovery_time TEXT');
@@ -158,9 +177,13 @@ class RealisticOptimismTrainingDao {
         action TEXT,
         evidence_text TEXT,
         completed INTEGER NOT NULL DEFAULT 0,
+        completed_at_ms INTEGER,
+        self_efficacy_score REAL,
         created_at_ms INTEGER NOT NULL
       )
     ''');
+    await _tryAddColumn(db, 'realistic_optimism_training_actions', 'completed_at_ms INTEGER');
+    await _tryAddColumn(db, 'realistic_optimism_training_actions', 'self_efficacy_score REAL');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_rot_actions_record ON realistic_optimism_training_actions(record_id, created_at_ms DESC)');
 
     await db.execute('''
@@ -217,6 +240,29 @@ class RealisticOptimismTrainingDao {
       )
     ''');
 
+
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS realistic_optimism_training_p2_artifacts (
+        id TEXT PRIMARY KEY,
+        record_id TEXT,
+        artifact_type TEXT,
+        title TEXT,
+        trigger_text TEXT,
+        trigger_condition TEXT,
+        summary TEXT,
+        reuse_surface TEXT,
+        content_json TEXT,
+        next_action TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await _tryAddColumn(db, 'realistic_optimism_training_p2_artifacts', 'trigger_condition TEXT');
+    await _tryAddColumn(db, 'realistic_optimism_training_p2_artifacts', 'summary TEXT');
+    await _tryAddColumn(db, 'realistic_optimism_training_p2_artifacts', 'reuse_surface TEXT');
+
     await db.execute('''
       CREATE TABLE IF NOT EXISTS realistic_optimism_training_identity_evidence (
         id TEXT PRIMARY KEY,
@@ -234,6 +280,11 @@ class RealisticOptimismTrainingDao {
     final db = await _db();
     await ensureTables();
     await db.transaction((txn) async {
+      final isSafetyRouted = record.intensityLevel == 'L3' || record.intensityLevel == 'L4';
+      final isFailureScene = record.scene == 'failure_immunity' || record.scene == 'controlled_failure_challenge';
+      final isGratitudeScene = record.scene == 'gratitude_savoring';
+      final isPrimeScene = record.scene == 'prime_design' || record.scene == 'anti_prime_cleanup';
+      final isP2Scene = <String>{'todo_goal_bridge', 'daily_review', 'course_card', 'role_model_case', 'proactive_reminder', 'monthly_report'}.contains(record.scene);
       await txn.insert(
         'realistic_optimism_training_records',
         record.toRow(),
@@ -284,7 +335,7 @@ class RealisticOptimismTrainingDao {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      if (record.faultFinderStory.isNotEmpty || record.balancedInterpretation.isNotEmpty) {
+      if (!isSafetyRouted && (record.faultFinderStory.isNotEmpty || record.balancedInterpretation.isNotEmpty)) {
         await txn.insert(
           'realistic_optimism_training_benefit_reframes',
           <String, Object?>{
@@ -299,7 +350,7 @@ class RealisticOptimismTrainingDao {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      if (record.psychologicalAntibody.isNotEmpty || record.predictedRecovery.isNotEmpty || record.actualRecovery.isNotEmpty || record.predictedPain != null || record.actualPain != null) {
+      if (!isSafetyRouted && isFailureScene && (record.psychologicalAntibody.isNotEmpty || record.predictedRecovery.isNotEmpty || record.actualRecovery.isNotEmpty || record.predictedPain != null || record.actualPain != null)) {
         await txn.insert(
           'realistic_optimism_training_failure_immunity',
           <String, Object?>{
@@ -310,18 +361,21 @@ class RealisticOptimismTrainingDao {
             'predicted_recovery': record.predictedRecovery,
             'actual_recovery': record.actualRecovery,
             'psychological_antibody': record.psychologicalAntibody,
+            'worst_case_prediction': _payloadString(record.payload, <String>['failure_immunity', 'worst_case_prediction']),
+            'actual_result': _payloadString(record.payload, <String>['failure_immunity', 'actual_result']),
             'created_at_ms': record.createdAtMs,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      if (record.scene == 'controlled_failure_challenge') {
+      if (!isSafetyRouted && record.scene == 'controlled_failure_challenge') {
         await txn.insert(
           'realistic_optimism_training_controlled_challenges',
           <String, Object?>{
             'id': 'rot_cfc_${record.id}',
             'record_id': record.id,
             'challenge_name': record.eventSummary.isEmpty ? record.rawInput : record.eventSummary,
+            'risk_level': _payloadString(record.payload, <String>['controlled_failure_challenge', 'risk_level'], fallback: 'low'),
             'safety_boundary': record.finalUserMessage,
             'five_minute_action': record.fiveMinuteAction,
             'predicted_pain': record.predictedPain,
@@ -331,7 +385,7 @@ class RealisticOptimismTrainingDao {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      if (record.savoringPrompt.isNotEmpty || record.smallAppreciationAction.isNotEmpty) {
+      if (!isSafetyRouted && isGratitudeScene && (record.savoringPrompt.isNotEmpty || record.smallAppreciationAction.isNotEmpty)) {
         await txn.insert(
           'realistic_optimism_training_savoring_entries',
           <String, Object?>{
@@ -346,7 +400,7 @@ class RealisticOptimismTrainingDao {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      if (record.antiPrimeCleanupAction.isNotEmpty) {
+      if (!isSafetyRouted && record.scene == 'anti_prime_cleanup' && record.antiPrimeCleanupAction.isNotEmpty) {
         await txn.insert(
           'realistic_optimism_training_anti_primes',
           <String, Object?>{
@@ -362,7 +416,7 @@ class RealisticOptimismTrainingDao {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      if (record.whatStillMatters.isNotEmpty || record.smallAppreciationAction.isNotEmpty) {
+      if (!isSafetyRouted && isGratitudeScene && (record.whatStillMatters.isNotEmpty || record.smallAppreciationAction.isNotEmpty)) {
         await txn.insert(
           'realistic_optimism_training_gratitude_entries',
           <String, Object?>{
@@ -399,7 +453,7 @@ class RealisticOptimismTrainingDao {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      if (record.dailyValueWord.isNotEmpty || record.lockScreenSentence.isNotEmpty || record.antiPrimeCleanupAction.isNotEmpty) {
+      if (!isSafetyRouted && isPrimeScene && (record.dailyValueWord.isNotEmpty || record.lockScreenSentence.isNotEmpty || record.antiPrimeCleanupAction.isNotEmpty)) {
         await txn.insert(
           'realistic_optimism_training_primes',
           <String, Object?>{
@@ -416,7 +470,29 @@ class RealisticOptimismTrainingDao {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      if (record.identitySentence.isNotEmpty || record.provedCapacity.isNotEmpty) {
+      if (!isSafetyRouted && isP2Scene) {
+        final p2 = record.payload['p2_delivery'];
+        final p2Map = p2 is Map ? Map<String, dynamic>.from(p2) : <String, dynamic>{};
+        await txn.insert(
+          'realistic_optimism_training_p2_artifacts',
+          <String, Object?>{
+            'id': 'rot_p2_${record.id}',
+            'record_id': record.id,
+            'artifact_type': record.scene,
+            'title': (p2Map['title'] ?? '').toString().trim().isNotEmpty ? p2Map['title'].toString().trim() : (record.eventSummary.isEmpty ? record.scene : record.eventSummary),
+            'trigger_text': record.rawInput,
+            'trigger_condition': (p2Map['trigger_condition'] ?? '').toString().trim(),
+            'summary': (p2Map['summary'] ?? '').toString().trim(),
+            'reuse_surface': (p2Map['reuse_surface'] ?? '').toString().trim(),
+            'content_json': jsonEncode(p2Map.isEmpty ? record.payload : p2Map),
+            'next_action': record.fiveMinuteAction.isEmpty ? record.finalUserMessage : record.fiveMinuteAction,
+            'active': 1,
+            'created_at_ms': record.createdAtMs,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      if (!isSafetyRouted && (record.identitySentence.isNotEmpty || record.provedCapacity.isNotEmpty)) {
         await txn.insert(
           'realistic_optimism_training_identity_evidence',
           <String, Object?>{
@@ -465,6 +541,7 @@ class RealisticOptimismTrainingDao {
       await txn.delete('realistic_optimism_training_gratitude_entries', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_relationship_gratitude', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_primes', where: 'record_id=?', whereArgs: <Object?>[id]);
+      await txn.delete('realistic_optimism_training_p2_artifacts', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_identity_evidence', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_records', where: 'id=?', whereArgs: <Object?>[id]);
     });
@@ -487,6 +564,7 @@ class RealisticOptimismTrainingDao {
       await txn.delete('realistic_optimism_training_gratitude_entries');
       await txn.delete('realistic_optimism_training_relationship_gratitude');
       await txn.delete('realistic_optimism_training_primes');
+      await txn.delete('realistic_optimism_training_p2_artifacts');
       await txn.delete('realistic_optimism_training_identity_evidence');
       await txn.delete('realistic_optimism_training_records');
     });
@@ -592,6 +670,7 @@ class RealisticOptimismTrainingDao {
         'predicted_recovery': '',
         'actual_recovery': actualRecovery,
         'psychological_antibody': psychologicalAntibody.isEmpty ? actualResult : psychologicalAntibody,
+        'actual_result': actualResult,
         'created_at_ms': now,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -667,6 +746,12 @@ class RealisticOptimismTrainingDao {
     );
   }
 
+  Future<List<Map<String, Object?>>> listP2Artifacts({int limit = 40}) async {
+    final db = await _db();
+    await ensureTables();
+    return db.query('realistic_optimism_training_p2_artifacts', orderBy: 'created_at_ms DESC', limit: limit);
+  }
+
   Future<RealisticOptimismTrainingStats> stats() async {
     final db = await _db();
     await ensureTables();
@@ -687,6 +772,7 @@ class RealisticOptimismTrainingDao {
       relationshipGratitude: await count('realistic_optimism_training_relationship_gratitude'),
       eventIntensity: await count('realistic_optimism_training_event_intensity'),
       processPlans: await count('realistic_optimism_training_process_plans'),
+      p2Artifacts: await count('realistic_optimism_training_p2_artifacts'),
     );
   }
 }

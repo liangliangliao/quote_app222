@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../external_data/todo_dao.dart';
+import '../external_data/todo_models.dart';
 import '../pages/ai_prompt_settings_page.dart';
+import '../services/notification_service.dart';
 
 import 'realistic_optimism_training_ai_service.dart';
 import 'realistic_optimism_training_flow_page.dart';
@@ -31,6 +34,7 @@ class RealisticOptimismTrainingHomePage extends StatefulWidget {
 class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTrainingHomePage> {
   final RealisticOptimismTrainingDao _dao = RealisticOptimismTrainingDao();
   final RealisticOptimismTrainingAiService _ai = RealisticOptimismTrainingAiService();
+  final TodoDao _todoDao = TodoDao();
   final TextEditingController _inputCtrl = TextEditingController();
   bool _loading = true;
   bool _generating = false;
@@ -44,7 +48,8 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
   List<Map<String, Object?>> _relationshipRows = <Map<String, Object?>>[];
   List<Map<String, Object?>> _primeRows = <Map<String, Object?>>[];
   List<Map<String, Object?>> _antiPrimeRows = <Map<String, Object?>>[];
-  RealisticOptimismTrainingStats _stats = const RealisticOptimismTrainingStats(records: 0, actions: 0, baselines: 0, gratitude: 0, primes: 0, identity: 0, explanationScores: 0, benefitReframes: 0, failureImmunity: 0, controlledChallenges: 0, savoring: 0, antiPrimes: 0, relationshipGratitude: 0, eventIntensity: 0, processPlans: 0);
+  List<Map<String, Object?>> _p2Rows = <Map<String, Object?>>[];
+  RealisticOptimismTrainingStats _stats = const RealisticOptimismTrainingStats(records: 0, actions: 0, baselines: 0, gratitude: 0, primes: 0, identity: 0, explanationScores: 0, benefitReframes: 0, failureImmunity: 0, controlledChallenges: 0, savoring: 0, antiPrimes: 0, relationshipGratitude: 0, eventIntensity: 0, processPlans: 0, p2Artifacts: 0);
 
   @override
   void initState() {
@@ -73,6 +78,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
       final relationshipRows = await _dao.listRelationshipGratitude();
       final primeRows = await _dao.listPrimes();
       final antiPrimeRows = await _dao.listAntiPrimes();
+      final p2Rows = await _dao.listP2Artifacts();
       if (!mounted) return;
       setState(() {
         _records = records;
@@ -84,6 +90,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
         _relationshipRows = relationshipRows;
         _primeRows = primeRows;
         _antiPrimeRows = antiPrimeRows;
+        _p2Rows = p2Rows;
         _stats = stats;
         _loading = false;
       });
@@ -113,6 +120,51 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
       _toast('生成失败：$e');
     } finally {
       if (mounted) setState(() => _generating = false);
+    }
+  }
+
+
+  Future<void> _openTodoBridgeFromToday() async {
+    try {
+      final tasks = await _todoDao.listTasks('smart_myday', limit: 8);
+      if (tasks.isEmpty) {
+        _toast('今天没有可转入训练的未完成 Todo。');
+        return;
+      }
+      await _openGuidedFlow('todo_goal_bridge', _todoBridgePrompt(tasks));
+    } catch (e) {
+      _toast('读取 Todo 失败：$e');
+    }
+  }
+
+  String _todoBridgePrompt(List<TodoTaskRecord> tasks) {
+    final lines = tasks.take(5).map((task) {
+      final parts = <String>[
+        '- 标题：${task.title}',
+        if (task.listDisplayName.trim().isNotEmpty) '清单：${task.listDisplayName}',
+        if (task.dueDateTime.trim().isNotEmpty) '截止：${task.dueDateTime}',
+        if (task.importance == 'high') '重要性：高',
+        if (task.bodyText.trim().isNotEmpty) '备注：${task.bodyText.trim()}',
+      ];
+      return parts.join('；');
+    }).join('\n');
+    return '【P2 Todo 自动桥接】以下是今天仍未完成的 Todo，请不要把它们简单判定为失败；请按最终方案转换为：情绪允许 → 事实/解释分离 → 解释风格雷达 → Fault/Benefit 双镜头 → 明日最小行动 → If-Then → 行动证据问题 → 可复用的 Todo 产物。\n$lines';
+  }
+
+  Future<void> _sendLatestP2Reminder() async {
+    final reminder = _p2Rows.cast<Map<String, Object?>>().firstWhere(
+      (row) => (row['artifact_type'] ?? '').toString() == 'proactive_reminder',
+      orElse: () => _p2Rows.isNotEmpty ? _p2Rows.first : <String, Object?>{},
+    );
+    final title = (reminder['title'] ?? '').toString().trim().isEmpty ? '现实主义乐观提醒' : (reminder['title'] ?? '').toString().trim();
+    final body = (reminder['next_action'] ?? reminder['summary'] ?? '').toString().trim().isEmpty
+        ? '如果开始自责，就只做一个 5 分钟行动证据。'
+        : (reminder['next_action'] ?? reminder['summary']).toString().trim();
+    try {
+      await NotificationService.show(title: title, body: body, payload: 'realistic_optimism_training:proactive_reminder');
+      _toast('已发送一条现实主义乐观提醒');
+    } catch (e) {
+      _toast('发送提醒失败：$e');
     }
   }
 
@@ -426,7 +478,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('现实主义乐观训练系统'),
@@ -451,6 +503,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
               Tab(text: '能力档案'),
               Tab(text: '幸福基线'),
               Tab(text: '环境/表达'),
+              Tab(text: 'P2联动'),
               Tab(text: '设计蓝图'),
             ],
           ),
@@ -465,6 +518,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
                   _evidenceTab(theme),
                   _baselineTab(theme),
                   _environmentExpressionTab(theme),
+                  _p2DeliveryTab(theme),
                   _blueprintTab(theme),
                 ],
               ),
@@ -556,6 +610,12 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
             DropdownMenuItem(value: 'gratitude_savoring', child: Text('感恩与品味训练')),
             DropdownMenuItem(value: 'identity_evidence', child: Text('身份沉淀')),
             DropdownMenuItem(value: 'weekly_baseline', child: Text('幸福基线周报')),
+            DropdownMenuItem(value: 'todo_goal_bridge', child: Text('Todo/目标联动')),
+            DropdownMenuItem(value: 'daily_review', child: Text('每日自动复盘')),
+            DropdownMenuItem(value: 'course_card', child: Text('课程知识卡')),
+            DropdownMenuItem(value: 'role_model_case', child: Text('榜样案例库')),
+            DropdownMenuItem(value: 'proactive_reminder', child: Text('主动提醒文案')),
+            DropdownMenuItem(value: 'monthly_report', child: Text('周/月报图表')),
           ],
           onChanged: (v) => setState(() => _scene = v ?? 'event_reframe'),
         ),
@@ -698,6 +758,8 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
           body: '每周记录幸福感、恢复能力、可影响感、永久化频率、感恩敏感度和小行动稳定性。',
         ),
         const SizedBox(height: 12),
+        _TrainingIndexCard(stats: _stats),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -783,6 +845,54 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
     );
   }
 
+
+  Widget _p2DeliveryTab(ThemeData theme) {
+    void open(String scene, String input) => _openGuidedFlow(scene, input);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      children: <Widget>[
+        const RotCoreValueGuideCard(
+          title: 'P2 正式落地：从练习页走向系统联动',
+          body: 'P2 不再只是生成一句提醒，而是把 Todo、每日复盘、课程知识卡、榜样案例、主动提醒和周/月报都接入同一条现实主义乐观闭环。',
+          icon: Icons.hub_outlined,
+        ),
+        const SizedBox(height: 12),
+        _InfoCard(
+          icon: Icons.task_alt_outlined,
+          title: 'Todo / 目标系统联动',
+          body: '用于把“未完成”转成：情绪允许 → 解释风格 → Fault/Benefit → 明日最小行动 → 行动证据问题。',
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+          FilledButton.icon(onPressed: _openTodoBridgeFromToday, icon: const Icon(Icons.playlist_add_check_outlined), label: const Text('扫描今日 Todo 并转入训练')),
+          OutlinedButton.icon(onPressed: () => open('todo_goal_bridge', '这个 Todo/目标没有完成：\n原因/卡点：\n请生成情绪允许、解释风格分析、Benefit Finder 和明日最小行动。'), icon: const Icon(Icons.task_alt_outlined), label: const Text('手动 Todo 未完成转入训练')),
+          OutlinedButton.icon(onPressed: () => open('daily_review', '请根据今天的记录生成晚上复盘：事件、解释风格、行动证据、三件具体感恩、30秒品味、身份提醒、明日 Prime。'), icon: const Icon(Icons.nightlight_round), label: const Text('每日自动复盘')),
+          OutlinedButton.icon(onPressed: () => open('monthly_report', '请基于最近记录生成周/月报图表摘要：解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长。'), icon: const Icon(Icons.insights_outlined), label: const Text('周/月报图表')),
+        ]),
+        const SizedBox(height: 16),
+        _InfoCard(
+          icon: Icons.school_outlined,
+          title: '课程卡与榜样案例库',
+          body: '用于把 Lecture 7–9 的知识点、榜样恢复案例和“有人也做到过”的证据接入训练，而不是停留在抽象说明。',
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+          OutlinedButton.icon(onPressed: () => open('course_card', '请生成一张课程知识卡：主题是解释风格 / Benefit Finder / 失败免疫 / Prime / 感恩品味。'), icon: const Icon(Icons.menu_book_outlined), label: const Text('生成课程知识卡')),
+          OutlinedButton.icon(onPressed: () => open('role_model_case', '请生成一个榜样案例：他/她如何经历失败、如何解释、如何恢复、如何行动，我今天能模仿哪一个最小动作？'), icon: const Icon(Icons.groups_outlined), label: const Text('生成榜样案例')),
+          OutlinedButton.icon(onPressed: () => open('proactive_reminder', '请生成一个主动提醒方案：触发条件、推送文案、锁屏短句、小组件文字、一个 5 分钟行动线索。'), icon: const Icon(Icons.notifications_active_outlined), label: const Text('主动提醒文案')),
+          OutlinedButton.icon(onPressed: _sendLatestP2Reminder, icon: const Icon(Icons.notification_add_outlined), label: const Text('发送测试提醒')),
+        ]),
+        const SizedBox(height: 12),
+        _MapRowsGroup(
+          title: 'P2 产物库',
+          empty: '暂无 P2 产物。生成 Todo 联动、每日复盘、课程卡、榜样案例、主动提醒或周/月报后会出现在这里。',
+          rows: _p2Rows,
+          fieldLabels: const <String, String>{'artifact_type': '类型', 'title': '标题', 'trigger_condition': '触发条件', 'summary': '摘要', 'reuse_surface': '复用位置', 'next_action': '下一步', 'created_at_ms': '时间'},
+        ),
+      ],
+    );
+  }
+
   Widget _blueprintTab(ThemeData theme) {
     final items = <Map<String, String>>[
       {'title': '1. 事件强度分级', 'body': 'L1/L2/L3/L4，决定当前能否进行 Benefit Finding、感恩或失败复盘。'},
@@ -844,6 +954,8 @@ class _RealisticOptimismTrainingDetailPageState extends State<RealisticOptimismT
       action: widget.record.fiveMinuteAction,
       evidenceText: widget.record.identitySentence.isEmpty ? '我完成了一个小行动证据。' : widget.record.identitySentence,
       completed: true,
+      completedAtMs: now,
+      selfEfficacyScore: 6,
       createdAtMs: now,
     ));
     await _loadActions();
@@ -987,6 +1099,12 @@ class _ModuleGrid extends StatelessWidget {
       const _ModuleEntry(Icons.local_florist_outlined, '感恩与品味', '具体感恩、30秒 Savoring、关系表达', 'gratitude_savoring', '今天仍然有一件值得珍惜的小事：'),
       const _ModuleEntry(Icons.badge_outlined, '身份沉淀', '把实际行动转成“我正在成为……”的证据', 'identity_evidence', '我刚刚完成/恢复/珍惜/重新开始的一件小事是：'),
       const _ModuleEntry(Icons.show_chart_outlined, '幸福基线周报', '追踪恢复能力、解释风格、行动证据和感恩敏感度', 'weekly_baseline', '请根据最近记录生成本周现实主义乐观成长报告：'),
+      const _ModuleEntry(Icons.task_alt_outlined, 'Todo/目标联动', 'Todo 未完成后进入情绪、解释和明日最小行动闭环', 'todo_goal_bridge', '这个 Todo/目标没有完成：'),
+      const _ModuleEntry(Icons.nightlight_round, '每日自动复盘', '晚上汇总今日事件、证据、感恩、身份和明日 Prime', 'daily_review', '请根据今天的记录做一次晚上复盘：'),
+      const _ModuleEntry(Icons.menu_book_outlined, '课程知识卡', '把课程概念转成练习卡', 'course_card', '请生成一张现实主义乐观课程知识卡：'),
+      const _ModuleEntry(Icons.groups_outlined, '榜样案例库', '用榜样失败恢复案例补充“有人也做到过”', 'role_model_case', '请生成一个榜样案例，主题是：'),
+      const _ModuleEntry(Icons.notifications_active_outlined, '主动提醒文案', '生成推送/锁屏/小组件触发式提醒', 'proactive_reminder', '请为我生成一个主动提醒：'),
+      const _ModuleEntry(Icons.insights_outlined, '周/月报图表', '汇总趋势、指数和下周期重点', 'monthly_report', '请生成本月现实主义乐观训练趋势报告：'),
     ];
     return LayoutBuilder(
       builder: (ctx, c) {
@@ -1286,7 +1404,7 @@ class _ImplementationAuditCard extends StatelessWidget {
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[const Text('✓  '), Expanded(child: Text(e, style: const TextStyle(height: 1.35)))]),
               )),
           const SizedBox(height: 8),
-          Text('当前沉淀：强度分级 ${stats.eventIntensity}｜过程计划 ${stats.processPlans}｜解释雷达 ${stats.explanationScores}｜Benefit 重构 ${stats.benefitReframes}｜失败免疫 ${stats.failureImmunity}｜Savoring ${stats.savoring}｜Anti-Prime ${stats.antiPrimes}', style: TextStyle(color: Colors.grey.shade700)),
+          Text('当前沉淀：强度分级 ${stats.eventIntensity}｜过程计划 ${stats.processPlans}｜解释雷达 ${stats.explanationScores}｜Benefit 重构 ${stats.benefitReframes}｜失败免疫 ${stats.failureImmunity}｜Savoring ${stats.savoring}｜Anti-Prime ${stats.antiPrimes}｜P2 ${stats.p2Artifacts}', style: TextStyle(color: Colors.grey.shade700)),
         ]),
       ),
     );
@@ -1617,6 +1735,59 @@ class _EvidenceGroup extends StatelessWidget {
                   )),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+class _TrainingIndexCard extends StatelessWidget {
+  final RealisticOptimismTrainingStats stats;
+  const _TrainingIndexCard({required this.stats});
+
+  double _score(int numerator, int denominator) {
+    if (denominator <= 0) return 0;
+    return (numerator / denominator * 10).clamp(0, 10).toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final records = stats.records == 0 ? 1 : stats.records;
+    final explanationIndex = _score(stats.benefitReframes + stats.explanationScores, records * 2);
+    final actionIndex = _score(stats.actions + stats.processPlans, records * 2);
+    final failureIndex = _score(stats.failureImmunity + stats.controlledChallenges, records * 2);
+    final attentionIndex = _score(stats.primes + stats.antiPrimes, records * 2);
+    final gratitudeIndex = _score(stats.gratitude + stats.savoring + stats.relationshipGratitude, records * 3);
+    final identityIndex = _score(stats.identity, records);
+    final indexMap = <String, double>{
+      '解释风格': explanationIndex,
+      '行动证据': actionIndex,
+      '失败免疫': failureIndex,
+      '注意力环境': attentionIndex,
+      '感恩敏感': gratitudeIndex,
+      '身份成长': identityIndex,
+    };
+    final weakest = indexMap.entries.reduce((a, b) => a.value <= b.value ? a : b);
+    final nextFocus = weakest.value >= 8 ? '保持当前闭环，进入 P2 周/月报复盘。' : '优先训练${weakest.key}，先补一条对应证据。';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          const Text('训练指数快照', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+            _SmallScore(label: '解释风格', value: explanationIndex),
+            _SmallScore(label: '行动证据', value: actionIndex),
+            _SmallScore(label: '失败免疫', value: failureIndex),
+            _SmallScore(label: '注意力环境', value: attentionIndex),
+            _SmallScore(label: '感恩敏感', value: gratitudeIndex),
+            _SmallScore(label: '身份成长', value: identityIndex),
+          ]),
+          const SizedBox(height: 8),
+          Text('下一个训练重点：$nextFocus', style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text('指数基于当前本地记录自动估算，用于补齐 P1 指标系统；更精细的趋势图可由 P2 周/月报继续生成。', style: TextStyle(color: Colors.grey.shade700)),
+        ]),
       ),
     );
   }
