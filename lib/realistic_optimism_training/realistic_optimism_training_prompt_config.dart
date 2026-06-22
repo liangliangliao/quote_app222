@@ -19,6 +19,7 @@ class RealisticOptimismTrainingPromptConfig {
   static const String gratitudeSavoringId = 'rot_scene_gratitude_savoring';
   static const String identityEvidenceId = 'rot_scene_identity_evidence';
   static const String weeklyBaselineId = 'rot_scene_weekly_baseline';
+  static const String p2DeliveryId = 'rot_scene_p2_delivery';
   static const String outputCommonId = 'rot_output_common';
 
   final KeyValueDao _kv = KeyValueDao();
@@ -136,8 +137,8 @@ J. 感恩与品味：感恩不是逃避痛苦，而是完整现实感；要让�
 请将事件分为四类：
 L1 轻度挫折：可以直接做事实-解释分离、Benefit Finder 重构和微行动设计。
 L2 中度痛苦：先承认情绪，再温和重构，最后只给一个很小的行动。
-L3 高强度痛苦或疑似创伤：不要强行要求用户寻找好处、意义或感恩。先稳定情绪、承认痛苦、建议现实支持。
-L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强烈绝望，立即进入安全支持模式，不执行普通训练流程。
+L3 高强度痛苦或疑似创伤：不要强行要求用户寻找好处、意义、失败免疫或感恩。先稳定情绪、承认痛苦、建议现实支持；Benefit Finder 字段只能写“当前暂不重构”。
+L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强烈绝望，立即进入安全支持模式，不执行普通训练流程；行动只允许围绕“离开危险物、联系现实支持、联系紧急/危机资源”。
 
 输出必须仍然符合统一 JSON 输出格式。重点填充 intensity_check、emotion_validation、final_user_message；如 L3/L4，请将不适合的干预写入 blocked_intervention。
 ''';
@@ -268,7 +269,9 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
 4. 可以在今天或本周完成。
 5. 完成后可以复盘预测痛苦和实际痛苦。
 
-请在统一 JSON 中重点填充 process_action_plan、failure_immunity、identity_evidence，并在 final_user_message 中说明安全边界。不要鼓励危险或过度暴露。
+请在统一 JSON 中重点填充 controlled_failure_challenge、process_action_plan、failure_immunity、identity_evidence，并在 final_user_message 中说明安全边界。
+controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_steps 要写清执行步骤；pre_failure_questions / post_failure_questions 要覆盖预测痛苦、最坏预测、实际痛苦、恢复时间和心理抗体。
+不要鼓励危险、重大现实损失或过度暴露。
 ''';
 
   static const String processActionPrompt = r'''
@@ -394,6 +397,29 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
 输出必须符合统一 JSON 输出格式，并把 final_user_message 写成周报摘要。
 ''';
 
+
+
+  static const String p2DeliveryPrompt = r'''
+当前场景：P2 体验落地 / 系统联动能力。
+
+用户输入：
+{{user_input}}
+
+补充上下文：
+{{extra_context}}
+
+请先识别 scene：
+- todo_goal_bridge：把 Todo/目标失败或拖延转入现实主义乐观闭环，输出“未完成事件 → 情绪允许 → 解释风格 → Fault/Benefit → 明日最小行动 → 行动证据问题”。
+- daily_review：做晚上复盘，汇总今日事件、解释风格、行动证据、三件具体感恩、30秒品味、身份提醒和明日 Prime。
+- course_card：生成一张课程知识卡，必须包含核心概念、现实例子、一个练习问题、一个 5 分钟行动，不要变成鸡汤文章。
+- role_model_case：生成榜样案例卡，必须说明此人如何面对失败、如何解释、如何恢复、如何行动，以及用户可模仿的最小行为。
+- proactive_reminder：生成 AI 主动提醒/推送/锁屏文案，必须短、具体、非鸡汤，并包含触发条件、提醒句、行动线索。
+- monthly_report：生成周/月报结构，必须包含解释风格变化、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长和下周期训练重点。
+
+无论哪个 P2 场景，都必须遵守 L3/L4 安全分流；不要在高强度痛苦时强行感恩、意义化或挑战失败。
+输出仍必须符合统一 JSON。请把 P2 结果尽量放入 final_user_message、process_action_plan、prime、identity_evidence 和 gratitude_or_savoring 等现有字段，必要时可在 payload 中附加 p2_delivery 对象。
+''';
+
   static const String outputFormatPrompt = r'''
 请严格按照以下 JSON 结构输出，不要输出多余解释。
 
@@ -404,13 +430,13 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
 4. Fault Finder 必须说明它如何让用户情绪更重、行动更少；Benefit Finder 必须承认痛苦，同时指出仍存在的事实、资源、学习和可控点。
 5. 5 分钟行动必须具体到“做什么、在哪里/用什么、持续多久、完成标准是什么”，不能写“调整心态”“努力一点”。
 6. If-Then 必须写成“如果……那么……”的可执行句，覆盖拖延、情绪阻力、环境干扰。
-7. 失败免疫必须包含：预测痛苦/实际痛苦如何追踪、预测恢复/实际恢复如何记录、心理抗体一句话。
+7. 失败免疫必须包含：预测痛苦/实际痛苦如何追踪、预测恢复/实际恢复如何记录、心理抗体一句话；但 L3/L4 不做失败免疫复盘，只做稳定与支持。
 8. Prime 必须是可放到现实环境里的句子或线索，例如锁屏句、便签、桌面文字、手机首页清理动作，不要只写抽象价值。
 9. 身份沉淀必须基于具体行动或恢复证据，不得空泛夸奖。
 10. final_user_message 要像给用户的最后引导：简洁、有力量、非鸡汤，并指向下一步行动。
 
 {
-  "module": "realistic_optimism_training",
+  "module": "realistic_optimism",
   "scene": "",
   "core_value_reference": {
     "source_anchor": "从 Seligman/Biondi/Reivich/3Ms/Bargh/Langer/Edison-Simonton/Babe Ruth/VIA/感恩品味 中选择最贴合本次事件的 1-2 个锚点",
@@ -468,7 +494,18 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
     "actual_pain": null,
     "predicted_recovery": "",
     "actual_recovery": "",
+    "worst_case_prediction": "",
+    "actual_result": "",
     "psychological_antibody": ""
+  },
+  "controlled_failure_challenge": {
+    "challenge_name": "",
+    "risk_level": "low",
+    "safety_boundary": "",
+    "execution_steps": [],
+    "pre_failure_questions": [],
+    "post_failure_questions": [],
+    "possible_antibody": ""
   },
   "gratitude_or_savoring": {
     "what_still_matters": [],
@@ -529,6 +566,8 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
         return identityEvidencePrompt;
       case weeklyBaselineId:
         return weeklyBaselinePrompt;
+      case p2DeliveryId:
+        return p2DeliveryPrompt;
       case outputCommonId:
       default:
         return outputFormatPrompt;
@@ -550,6 +589,7 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
         gratitudeSavoringId,
         identityEvidenceId,
         weeklyBaselineId,
+        p2DeliveryId,
         outputCommonId,
       ];
 
@@ -579,6 +619,13 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
         return identityEvidenceId;
       case 'weekly_baseline':
         return weeklyBaselineId;
+      case 'todo_goal_bridge':
+      case 'daily_review':
+      case 'course_card':
+      case 'role_model_case':
+      case 'proactive_reminder':
+      case 'monthly_report':
+        return p2DeliveryId;
       case 'event_reframe':
       default:
         return eventReframeId;
@@ -600,6 +647,7 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
       case gratitudeSavoringId:
       case identityEvidenceId:
       case weeklyBaselineId:
+      case p2DeliveryId:
         return const <String>['{{user_input}}', '{{extra_context}}'];
       default:
         return const <String>[];

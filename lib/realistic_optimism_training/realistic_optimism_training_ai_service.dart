@@ -54,6 +54,7 @@ class RealisticOptimismTrainingAiService {
           parsed['model_label'] = state['label'] ?? '统一 AI';
           parsed['created_at_ms'] = parsed['created_at_ms'] ?? now;
           parsed['updated_at_ms'] = now;
+          _applySafetyRouting(parsed, userInput: userInput);
           final record = RealisticOptimismTrainingRecord.fromJson(parsed);
           if (record.fiveMinuteAction.isNotEmpty || record.balancedInterpretation.isNotEmpty || record.validationText.isNotEmpty) {
             return RealisticOptimismTrainingAiResult(record: record, fromFallback: false);
@@ -166,7 +167,18 @@ class RealisticOptimismTrainingAiService {
         'actual_pain': null,
         'predicted_recovery': '行动前可以预测：如果失败，我会痛苦多久？',
         'actual_recovery': '行动后再记录：实际多久开始恢复？',
+        'worst_case_prediction': '我担心最坏会发生什么？它的概率和可恢复性分别是多少？',
+        'actual_result': '行动后再记录真实发生的结果，而不是只记录脑中的灾难预测。',
         'psychological_antibody': '失败会痛，但它不必定义我；我可以从一次小复盘中恢复一点主动性。',
+      },
+      'controlled_failure_challenge': <String, dynamic>{
+        'challenge_name': '低风险不完美挑战',
+        'risk_level': 'low',
+        'safety_boundary': '不危险、不造成重大现实损失、可恢复、可复盘。',
+        'execution_steps': <String>['选择一个低风险场景。', '只暴露一个很小的不完美。', '完成后记录预测与实际差异。'],
+        'pre_failure_questions': <String>['我预测痛苦几分？', '我预测多久恢复？', '我最担心别人怎么看？'],
+        'post_failure_questions': <String>['实际痛苦几分？', '实际多久恢复？', '最坏结果真的发生了吗？'],
+        'possible_antibody': '我可以在低风险练习里训练承受不完美。',
       },
       'gratitude_or_savoring': <String, dynamic>{
         'what_still_matters': <String>['我仍然有重新开始的一个小入口。', '我愿意面对而不是完全逃开。', '今天仍然有某个值得停留的具体时刻。'],
@@ -200,6 +212,7 @@ class RealisticOptimismTrainingAiService {
       'updated_at_ms': now,
     };
     _applySceneFallback(payload, scene, text, action);
+    _applySafetyRouting(payload, userInput: text);
     return RealisticOptimismTrainingRecord.fromJson(payload);
   }
 
@@ -255,15 +268,153 @@ class RealisticOptimismTrainingAiService {
       case 'weekly_baseline':
         payload['final_user_message'] = '本周不只看你是否开心，而看恢复能力、解释风格、行动证据、感恩敏感度和注意力环境是否在变强。';
         break;
+      case 'todo_goal_bridge':
+        map('process_action_plan')['five_minute_action'] = '把未完成的 Todo 缩小为明天 5 分钟内能完成的第一步，并写下一个 If-Then 应对。';
+        map('identity_evidence')['identity_type'] = '行动证据积累者';
+        map('identity_evidence')['identity_sentence'] = '我正在成为一个能把未完成转成下一次更小行动的人。';
+        payload['final_user_message'] = 'Todo 未完成不是人格判决；它会进入情绪允许、解释重构和明日最小行动。';
+        break;
+      case 'daily_review':
+        map('gratitude_or_savoring')['savoring_prompt'] = '选择今天一个具体好体验停留 30 秒，然后为明天设置一个 Prime。';
+        map('prime')['daily_value_word'] = '复盘';
+        map('prime')['lock_screen_sentence'] = '今天不必完美，但我要保存一个行动证据。';
+        payload['final_user_message'] = '今日复盘重点：看见解释风格、保存行动证据、具体感恩，并设置明日 Prime。';
+        break;
+      case 'course_card':
+        map('process_action_plan')['five_minute_action'] = '读完这张知识卡后，立刻把一个真实事件改写成“事实 + 解释 + 可控点”。';
+        payload['final_user_message'] = '课程知识卡必须落到一个练习问题和一个 5 分钟行动，而不是停留在概念。';
+        break;
+      case 'role_model_case':
+        map('benefit_finder_layer')['remaining_resources'] = <String>['有人也经历过失败后恢复。', '榜样案例可以提供替代证据。', '今天只模仿一个最小动作。'];
+        payload['final_user_message'] = '榜样不是用来比较，而是证明“失败后恢复并继续行动”有现实路径。';
+        break;
+      case 'proactive_reminder':
+        map('prime')['daily_value_word'] = '提醒';
+        map('prime')['lock_screen_sentence'] = '如果开始自责，就只做一个 5 分钟证据。';
+        map('prime')['benefit_finder_question'] = '这件事里还有哪个可控点？';
+        payload['final_user_message'] = '主动提醒应包含触发条件、短句和一个小行动线索。';
+        break;
+      case 'monthly_report':
+        payload['final_user_message'] = '本周期报告应同时看解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度和身份成长。';
+        break;
       default:
         break;
     }
   }
 
+  void _applySafetyRouting(Map<String, dynamic> payload, {String userInput = ''}) {
+    Map<String, dynamic> map(String key) {
+      final value = payload[key];
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) {
+        final converted = Map<String, dynamic>.from(value);
+        payload[key] = converted;
+        return converted;
+      }
+      final created = <String, dynamic>{};
+      payload[key] = created;
+      return created;
+    }
+
+    final intensity = map('intensity_check');
+    final rawLevel = intensity['level']?.toString().trim();
+    final modelLevel = (rawLevel == null || rawLevel.isEmpty ? 'L1' : rawLevel).toUpperCase();
+    final inputLevel = userInput.trim().isEmpty ? 'L1' : _guessLevel(userInput);
+    final level = _moreSevereLevel(modelLevel, inputLevel);
+    if (level != 'L3' && level != 'L4') return;
+
+    intensity['level'] = level;
+    intensity['allowed_intervention'] = level == 'L4'
+        ? <String>['安全支持', '联系现实中的可信任人员', '联系当地紧急服务或危机热线', '移除近处危险物']
+        : <String>['情绪稳定', '身体落地', '现实支持', '只做非常小的照顾性行动'];
+    intensity['blocked_intervention'] = <String>['强行感恩', '强行寻找意义', 'Benefit Finder 重构', '失败复盘逼问', '宏大行动计划'];
+
+    final emotion = map('emotion_validation');
+    emotion['validation_text'] = level == 'L4'
+        ? '你现在的痛苦需要被认真对待。当前最重要的不是训练乐观，而是先保证安全：请立刻联系身边可信任的人，或拨打当地紧急服务/危机热线；如果你在美国，可拨打或短信 988。'
+        : '这类痛苦可能已经很强，不适合马上要求自己积极、感恩或寻找意义。现在先承认它很重，并把目标缩小到稳定身体、减少刺激、联系现实支持。';
+
+    map('benefit_finder_layer')
+      ..['balanced_interpretation'] = level == 'L4'
+          ? '当前不做积极重构。安全风险出现时，第一优先级是让你不要独自承受，并尽快获得现实支持。'
+          : '当前先不把痛苦转成好处，也不急着找意义。更现实的回应是：这件事很重，先稳定和求助，等强度下降后再考虑事实-解释分离。'
+      ..['not_denied_pain'] = '系统已保留痛苦本身，不把它包装成好事。'
+      ..['possible_learning'] = <String>[]
+      ..['possible_meaning'] = <String>[];
+
+    map('process_action_plan')
+      ..['five_minute_action'] = level == 'L4'
+          ? '现在立刻离开危险物，联系一个可信任的人待在一起；如无法保证安全，请拨打当地紧急服务/危机热线。'
+          : '做 60 秒落地练习：双脚踩地，慢慢呼气 5 次，然后给一个可信任的人发一句“我现在很难受，能陪我一下吗”。'
+      ..['next_three_steps'] = level == 'L4'
+          ? <String>['把自己和危险物分开。', '联系可信任的人或紧急服务。', '在有人陪伴或专业支持前，不继续普通训练。']
+          : <String>['喝水或换到更安全安静的位置。', '写下“我现在只是先撑过这一段”。', '联系一个现实支持者或预约专业支持。']
+      ..['if_then_plan'] = level == 'L4'
+          ? <String>['如果我无法保证安全，那么立刻拨打当地紧急服务或危机热线。', '如果我不想打电话，那么先发短信给可信任的人说“请现在联系我”。']
+          : <String>['如果痛苦继续升高，那么暂停重构并联系现实支持。', '如果开始逼自己积极，那么提醒自己：现在只需要稳定，不需要解释。'];
+
+    map('gratitude_or_savoring')
+      ..['what_still_matters'] = <String>[]
+      ..['savoring_prompt'] = '当前先不做感恩或品味练习，等强度下降后再进行。'
+      ..['small_appreciation_action'] = '';
+
+    map('failure_immunity')
+      ..['predicted_pain'] = null
+      ..['actual_pain'] = null
+      ..['predicted_recovery'] = ''
+      ..['actual_recovery'] = ''
+      ..['worst_case_prediction'] = ''
+      ..['actual_result'] = ''
+      ..['psychological_antibody'] = '';
+
+    map('controlled_failure_challenge')
+      ..['challenge_name'] = ''
+      ..['risk_level'] = ''
+      ..['safety_boundary'] = ''
+      ..['execution_steps'] = <String>[]
+      ..['pre_failure_questions'] = <String>[]
+      ..['post_failure_questions'] = <String>[]
+      ..['possible_antibody'] = '';
+
+    map('prime')
+      ..['daily_value_word'] = ''
+      ..['lock_screen_sentence'] = ''
+      ..['benefit_finder_question'] = ''
+      ..['anti_prime_cleanup_action'] = '';
+
+    map('identity_evidence')
+      ..['specific_action'] = ''
+      ..['proved_capacity'] = ''
+      ..['identity_type'] = ''
+      ..['identity_sentence'] = '';
+
+    payload['final_user_message'] = level == 'L4'
+        ? '这一步不做普通训练：请优先保证安全，并立刻联系现实中的人或危机支持。'
+        : '现在先稳定，不急着积极；等强度下降后，再回到事实-解释分离和微行动。';
+  }
+
+  String _moreSevereLevel(String first, String second) {
+    int rank(String level) {
+      switch (level.toUpperCase()) {
+        case 'L4':
+          return 4;
+        case 'L3':
+          return 3;
+        case 'L2':
+          return 2;
+        case 'L1':
+        default:
+          return 1;
+      }
+    }
+
+    return rank(second) > rank(first) ? second.toUpperCase() : first.toUpperCase();
+  }
+
   String _guessLevel(String text) {
-    final danger = <String>['不想活', '自杀', '伤害自己', '伤害别人', '杀了', '死了算了'];
+    final danger = <String>['不想活', '想死', '自杀', '轻生', '结束生命', '伤害自己', '伤害别人', '伤人', '杀人', '杀了', '割腕', '跳楼', '死了算了', '活着没意思', '不想存在'];
     if (danger.any(text.contains)) return 'L4';
-    final severe = <String>['创伤', '崩溃', '绝望', '活不下去', '重大失去', '分手', '亲人去世'];
+    final severe = <String>['创伤', '崩溃', '绝望', '活不下去', '撑不住', '重大失去', '亲密关系破裂', '分手', '亲人去世', '被侵犯', '长期痛苦'];
     if (severe.any(text.contains)) return 'L3';
     final medium = <String>['失败', '羞耻', '面试', '被否定', '争吵', '自责', '拖延', '坚持不了'];
     if (medium.any(text.contains)) return 'L2';
