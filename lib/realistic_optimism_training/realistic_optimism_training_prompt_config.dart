@@ -268,7 +268,9 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
 4. 可以在今天或本周完成。
 5. 完成后可以复盘预测痛苦和实际痛苦。
 
-请在统一 JSON 中重点填充 process_action_plan、failure_immunity、identity_evidence，并在 final_user_message 中说明安全边界。不要鼓励危险或过度暴露。
+请在统一 JSON 中重点填充 controlled_failure_challenge、process_action_plan、failure_immunity、identity_evidence，并在 final_user_message 中说明安全边界。
+controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_steps 要写清执行步骤；pre_failure_questions / post_failure_questions 要覆盖预测痛苦、最坏预测、实际痛苦、恢复时间和心理抗体。
+不要鼓励危险、重大现实损失或过度暴露。
 ''';
 
   static const String processActionPrompt = r'''
@@ -468,7 +470,18 @@ L4 安全风险：如果用户表达自伤、伤人、无法保证安全或强�
     "actual_pain": null,
     "predicted_recovery": "",
     "actual_recovery": "",
+    "worst_case_prediction": "",
+    "actual_result": "",
     "psychological_antibody": ""
+  },
+  "controlled_failure_challenge": {
+    "challenge_name": "",
+    "risk_level": "low",
+    "safety_boundary": "",
+    "execution_steps": [],
+    "pre_failure_questions": [],
+    "post_failure_questions": [],
+    "possible_antibody": ""
   },
   "gratitude_or_savoring": {
     "what_still_matters": [],

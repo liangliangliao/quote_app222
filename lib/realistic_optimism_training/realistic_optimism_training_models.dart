@@ -347,6 +347,8 @@ class RealisticOptimismTrainingActionEvidence {
   final String action;
   final String evidenceText;
   final bool completed;
+  final int? completedAtMs;
+  final double selfEfficacyScore;
   final int createdAtMs;
 
   const RealisticOptimismTrainingActionEvidence({
@@ -355,6 +357,8 @@ class RealisticOptimismTrainingActionEvidence {
     required this.action,
     required this.evidenceText,
     required this.completed,
+    this.completedAtMs,
+    this.selfEfficacyScore = 0,
     required this.createdAtMs,
   });
 
@@ -364,6 +368,8 @@ class RealisticOptimismTrainingActionEvidence {
         'action': action,
         'evidence_text': evidenceText,
         'completed': completed ? 1 : 0,
+        'completed_at_ms': completedAtMs,
+        'self_efficacy_score': selfEfficacyScore,
         'created_at_ms': createdAtMs,
       };
 
@@ -373,6 +379,8 @@ class RealisticOptimismTrainingActionEvidence {
         action: _s(row['action']),
         evidenceText: _s(row['evidence_text']),
         completed: _b(row['completed']),
+        completedAtMs: row['completed_at_ms'] == null ? null : _i(row['completed_at_ms']),
+        selfEfficacyScore: _d(row['self_efficacy_score']),
         createdAtMs: _i(row['created_at_ms']),
       );
 }

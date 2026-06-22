@@ -844,6 +844,8 @@ class _RealisticOptimismTrainingDetailPageState extends State<RealisticOptimismT
       action: widget.record.fiveMinuteAction,
       evidenceText: widget.record.identitySentence.isEmpty ? '我完成了一个小行动证据。' : widget.record.identitySentence,
       completed: true,
+      completedAtMs: now,
+      selfEfficacyScore: 6,
       createdAtMs: now,
     ));
     await _loadActions();

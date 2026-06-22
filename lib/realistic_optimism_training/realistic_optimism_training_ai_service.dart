@@ -167,7 +167,18 @@ class RealisticOptimismTrainingAiService {
         'actual_pain': null,
         'predicted_recovery': '行动前可以预测：如果失败，我会痛苦多久？',
         'actual_recovery': '行动后再记录：实际多久开始恢复？',
+        'worst_case_prediction': '我担心最坏会发生什么？它的概率和可恢复性分别是多少？',
+        'actual_result': '行动后再记录真实发生的结果，而不是只记录脑中的灾难预测。',
         'psychological_antibody': '失败会痛，但它不必定义我；我可以从一次小复盘中恢复一点主动性。',
+      },
+      'controlled_failure_challenge': <String, dynamic>{
+        'challenge_name': '低风险不完美挑战',
+        'risk_level': 'low',
+        'safety_boundary': '不危险、不造成重大现实损失、可恢复、可复盘。',
+        'execution_steps': <String>['选择一个低风险场景。', '只暴露一个很小的不完美。', '完成后记录预测与实际差异。'],
+        'pre_failure_questions': <String>['我预测痛苦几分？', '我预测多久恢复？', '我最担心别人怎么看？'],
+        'post_failure_questions': <String>['实际痛苦几分？', '实际多久恢复？', '最坏结果真的发生了吗？'],
+        'possible_antibody': '我可以在低风险练习里训练承受不完美。',
       },
       'gratitude_or_savoring': <String, dynamic>{
         'what_still_matters': <String>['我仍然有重新开始的一个小入口。', '我愿意面对而不是完全逃开。', '今天仍然有某个值得停留的具体时刻。'],
@@ -315,6 +326,36 @@ class RealisticOptimismTrainingAiService {
       ..['what_still_matters'] = <String>[]
       ..['savoring_prompt'] = '当前先不做感恩或品味练习，等强度下降后再进行。'
       ..['small_appreciation_action'] = '';
+
+    map('failure_immunity')
+      ..['predicted_pain'] = null
+      ..['actual_pain'] = null
+      ..['predicted_recovery'] = ''
+      ..['actual_recovery'] = ''
+      ..['worst_case_prediction'] = ''
+      ..['actual_result'] = ''
+      ..['psychological_antibody'] = '';
+
+    map('controlled_failure_challenge')
+      ..['challenge_name'] = ''
+      ..['risk_level'] = ''
+      ..['safety_boundary'] = ''
+      ..['execution_steps'] = <String>[]
+      ..['pre_failure_questions'] = <String>[]
+      ..['post_failure_questions'] = <String>[]
+      ..['possible_antibody'] = '';
+
+    map('prime')
+      ..['daily_value_word'] = ''
+      ..['lock_screen_sentence'] = ''
+      ..['benefit_finder_question'] = ''
+      ..['anti_prime_cleanup_action'] = '';
+
+    map('identity_evidence')
+      ..['specific_action'] = ''
+      ..['proved_capacity'] = ''
+      ..['identity_type'] = ''
+      ..['identity_sentence'] = '';
 
     payload['final_user_message'] = level == 'L4'
         ? '这一步不做普通训练：请优先保证安全，并立刻联系现实中的人或危机支持。'

@@ -1139,6 +1139,8 @@ If-Then：${_ifThenCtrl.text.trim()}
             ? (_evidenceCtrl.text.trim().isEmpty ? '我完成了一个小动作，积累了一条行动证据。' : _evidenceCtrl.text.trim())
             : (_notDoneCtrl.text.trim().isEmpty ? '我还没完成，但我已经看见了卡点，下一步会把行动缩小。' : _notDoneCtrl.text.trim()),
         completed: _actionCompleted,
+        completedAtMs: _actionCompleted ? now : null,
+        selfEfficacyScore: _actionCompleted ? 6 : 3,
         createdAtMs: now,
       ));
       if (!_actionCompleted) {
@@ -1646,6 +1648,8 @@ class _RotCoreBusinessFlowPageState extends State<RotCoreBusinessFlowPage> {
             ? (_evidenceCtrl.text.trim().isEmpty ? '我完成了一个小行动，积累了一条行动证据。' : _evidenceCtrl.text.trim())
             : '我还没有完成行动，但我已经看见卡点：${_obstacleCtrl.text.trim()}。下一步会把行动缩小。',
         completed: _completedAction,
+        completedAtMs: _completedAction ? now : null,
+        selfEfficacyScore: _completedAction ? 6 : 3,
         createdAtMs: now,
       ));
       if (!_completedAction) {
