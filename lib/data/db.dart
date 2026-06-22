@@ -298,8 +298,8 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
         movie_token TEXT,
         -- DeepSeek API key（用于 DeepSeek 翻译功能）
         deepseek_key TEXT,
-        -- DeepSeek 模型名称（默认为 deepseek-chat）
-        deepseek_model TEXT DEFAULT 'deepseek-chat',
+        -- DeepSeek 模型名称（默认为 deepseek-v4-pro）
+        deepseek_model TEXT DEFAULT 'deepseek-v4-pro',
         -- OpenRouter API key（用于通过 OpenRouter 调用聚合模型）
         openrouter_key TEXT,
         -- 运动进行时背景图片路径（本地文件）
@@ -409,7 +409,7 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
       'location_rules_enabled': 0,
       // DeepSeek defaults
       'deepseek_key': '',
-      'deepseek_model': 'deepseek-chat',
+      'deepseek_model': 'deepseek-v4-pro',
       // Initialize movie_token as null; the DAO will fall back to a default constant
       'movie_token': null
     });
@@ -1140,7 +1140,7 @@ await _addColumnIfMissing(db, 'configs', 'recent_hours', 'INTEGER DEFAULT 2');
 
     // DeepSeek columns: API key and model. These fields are used for DeepSeek translation service.
     await _addColumnIfMissing(db, 'configs', 'deepseek_key', 'TEXT');
-    await _addColumnIfMissing(db, 'configs', 'deepseek_model', "TEXT DEFAULT 'deepseek-chat'");
+    await _addColumnIfMissing(db, 'configs', 'deepseek_model', "TEXT DEFAULT 'deepseek-v4-pro'");
     await _addColumnIfMissing(db, 'configs', 'openrouter_key', 'TEXT');
     await _addColumnIfMissing(db, 'configs', 'sport_running_bg', 'TEXT');
     await _addColumnIfMissing(db, 'configs', 'sport_start_sound', 'TEXT');

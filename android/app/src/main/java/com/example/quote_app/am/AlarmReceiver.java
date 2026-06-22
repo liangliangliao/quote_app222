@@ -140,7 +140,7 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
             // 兜底：没有 uid 仍然发一个到点提醒
             String title = "提醒";
             String body = "到点了";
-            try { NotifyHelper.send(context.getApplicationContext(), id, title, body, null, null, null); } catch (Throwable ignore) {}
+            try { NotifyHelper.send(context.getApplicationContext(), id, title, body, null); } catch (Throwable ignore) {}
             return;
         }
 

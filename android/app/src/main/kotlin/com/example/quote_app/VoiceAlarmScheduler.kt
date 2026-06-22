@@ -15,6 +15,8 @@ object VoiceAlarmScheduler {
   private const val MORNING_ALARM_ID = 974001
   private const val NIGHT_ALARM_ID = 974002
   private const val EXACT_FALLBACK_OFFSET = 200
+  private const val SERVICE_FALLBACK_OFFSET = 400
+  private const val ACTIVITY_FALLBACK_OFFSET = 600
 
   private fun deviceProtectedPrefs(context: Context): SharedPreferences {
     val storageContext = if (Build.VERSION.SDK_INT >= 24) context.createDeviceProtectedStorageContext() else context
@@ -48,29 +50,103 @@ object VoiceAlarmScheduler {
     return if (mode == "night") NIGHT_ALARM_ID else MORNING_ALARM_ID
   }
 
+  private fun alarmFireIntent(app: Context, payload: String, actionName: String): Intent =
+    Intent(app, VoiceAlarmReceiver::class.java).apply {
+      action = actionName
+      addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+      putExtra("payload", payload)
+      putExtra("fromAlarmFire", true)
+    }
+
+  private fun alarmServiceIntent(app: Context, payload: String): Intent =
+    Intent(app, VoiceAlarmRingingService::class.java).apply {
+      action = "com.example.quote_app.VOICE_ALARM_START"
+      putExtra("payload", payload)
+      putExtra("fromAlarmFire", true)
+    }
+
+  private fun foregroundServicePendingIntent(app: Context, requestCode: Int, payload: String): PendingIntent {
+    val intent = alarmServiceIntent(app, payload)
+    return if (Build.VERSION.SDK_INT >= 26) {
+      PendingIntent.getForegroundService(
+        app,
+        requestCode,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    } else {
+      PendingIntent.getService(
+        app,
+        requestCode,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    }
+  }
+
+  private fun activityFallbackPendingIntent(app: Context, requestCode: Int, payload: String): PendingIntent {
+    val intent = Intent(app, VoiceAlarmActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      putExtra("payload", payload)
+      putExtra("fromAlarmFire", true)
+    }
+    return PendingIntent.getActivity(
+      app,
+      requestCode,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+  }
+
+
+  private fun scheduleBestEffortInexact(alarmManager: AlarmManager, atMs: Long, operation: PendingIntent) {
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, operation)
+      } else {
+        alarmManager.set(AlarmManager.RTC_WAKEUP, atMs, operation)
+      }
+    } catch (_: Throwable) {
+      try { alarmManager.set(AlarmManager.RTC_WAKEUP, atMs, operation) } catch (_: Throwable) {}
+    }
+  }
+
   @JvmStatic
   fun schedule(context: Context, atMs: Long, payload: String, persist: Boolean = true) {
     val app = context.applicationContext
     val id = alarmId(payload)
     val mode = if (id == NIGHT_ALARM_ID) "night" else "morning"
     val alarmManager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val operation = PendingIntent.getActivity(
+    // Do not use an Activity PendingIntent as the alarm delivery endpoint.
+    // Cold-start/background Activity launches are exactly where many OEM ROMs
+    // are most restrictive.  Deliver to a direct-boot-aware BroadcastReceiver
+    // first, then let the foreground ringing service post a full-screen alarm
+    // notification and open VoiceAlarmActivity when the system allows it.
+    val operation = PendingIntent.getBroadcast(
       app,
       id,
-      Intent(app, VoiceAlarmReceiver::class.java).apply {
-        action = "com.example.quote_app.VOICE_ALARM_FIRE_PRIMARY"
-        putExtra("payload", payload)
-        putExtra("fromAlarmFire", true)
-      },
+      alarmFireIntent(app, payload, "com.example.quote_app.VOICE_ALARM_FIRE"),
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
     val showIntent = PendingIntent.getActivity(
       app,
       id + 100,
-      app.packageManager.getLaunchIntentForPackage(app.packageName) ?: Intent(app, MainActivity::class.java),
+      Intent(app, VoiceAlarmActivity::class.java).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        putExtra("payload", payload)
+      },
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
-    alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(atMs, showIntent), operation)
+    try {
+      alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(atMs, showIntent), operation)
+    } catch (se: SecurityException) {
+      // Android 12+ can revoke exact-alarm privileges. Keep a best-effort
+      // inexact wakeup instead of throwing out of schedule(), otherwise the
+      // Flutter page may report “saved” failure and no persisted alarm remains.
+      scheduleBestEffortInexact(alarmManager, atMs, operation)
+    } catch (_: Throwable) {
+      scheduleBestEffortInexact(alarmManager, atMs, operation)
+    }
 
     // Some OEM ROMs are aggressive about alarm-clock PendingIntent delivery when
     // the process is cold. Keep setAlarmClock as the primary wakeup, and add a
@@ -80,22 +156,36 @@ object VoiceAlarmScheduler {
     val fallbackOperation = PendingIntent.getBroadcast(
       app,
       id + EXACT_FALLBACK_OFFSET,
-      Intent(app, VoiceAlarmReceiver::class.java).apply {
-        action = "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK"
-        putExtra("payload", payload)
-      },
+      alarmFireIntent(app, payload, "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK"),
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
+    val serviceFallbackOperation = foregroundServicePendingIntent(app, id + SERVICE_FALLBACK_OFFSET, payload)
+    val activityFallbackOperation = activityFallbackPendingIntent(app, id + ACTIVITY_FALLBACK_OFFSET, payload)
     try {
       val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
       if (canUseExact) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
           alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, fallbackOperation)
+          alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs + 1500L, serviceFallbackOperation)
+          alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs + 3000L, activityFallbackOperation)
         } else {
           alarmManager.setExact(AlarmManager.RTC_WAKEUP, atMs, fallbackOperation)
+          alarmManager.setExact(AlarmManager.RTC_WAKEUP, atMs + 1500L, serviceFallbackOperation)
+          alarmManager.setExact(AlarmManager.RTC_WAKEUP, atMs + 3000L, activityFallbackOperation)
         }
+      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        // Best-effort non-exact fallback for devices where the user has not yet
+        // granted the special exact-alarm access.  It may be delayed by Doze, but
+        // it avoids the silent "nothing was scheduled" failure mode.
+        scheduleBestEffortInexact(alarmManager, atMs, fallbackOperation)
+        scheduleBestEffortInexact(alarmManager, atMs + 1500L, serviceFallbackOperation)
+        scheduleBestEffortInexact(alarmManager, atMs + 3000L, activityFallbackOperation)
       }
-    } catch (_: Throwable) {}
+    } catch (_: Throwable) {
+      scheduleBestEffortInexact(alarmManager, atMs, fallbackOperation)
+      scheduleBestEffortInexact(alarmManager, atMs + 1500L, serviceFallbackOperation)
+      scheduleBestEffortInexact(alarmManager, atMs + 3000L, activityFallbackOperation)
+    }
 
     if (persist) {
       persistAlarm(app, mode, payload, atMs)
@@ -106,25 +196,15 @@ object VoiceAlarmScheduler {
   fun cancel(context: Context) {
     val app = context.applicationContext
     for (id in intArrayOf(MORNING_ALARM_ID, NIGHT_ALARM_ID)) {
-      val primaryReceiver = PendingIntent.getBroadcast(
+      val primary = PendingIntent.getBroadcast(
         app,
         id,
-        Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_PRIMARY" },
+        Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE" },
         PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
       )
-      if (primaryReceiver != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(primaryReceiver)
-        primaryReceiver.cancel()
-      }
-      val legacyAlarmActivity = PendingIntent.getActivity(
-        app,
-        id,
-        Intent(app, VoiceAlarmActivity::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_ACTIVITY" },
-        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-      )
-      if (legacyAlarmActivity != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(legacyAlarmActivity)
-        legacyAlarmActivity.cancel()
+      if (primary != null) {
+        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(primary)
+        primary.cancel()
       }
       val fallback = PendingIntent.getBroadcast(
         app,
@@ -135,6 +215,38 @@ object VoiceAlarmScheduler {
       if (fallback != null) {
         (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(fallback)
         fallback.cancel()
+      }
+      val serviceFallbackIntent = Intent(app, VoiceAlarmRingingService::class.java).apply {
+        action = "com.example.quote_app.VOICE_ALARM_START"
+      }
+      val serviceFallback = if (Build.VERSION.SDK_INT >= 26) {
+        PendingIntent.getForegroundService(
+          app,
+          id + SERVICE_FALLBACK_OFFSET,
+          serviceFallbackIntent,
+          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+        )
+      } else {
+        PendingIntent.getService(
+          app,
+          id + SERVICE_FALLBACK_OFFSET,
+          serviceFallbackIntent,
+          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+        )
+      }
+      if (serviceFallback != null) {
+        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(serviceFallback)
+        serviceFallback.cancel()
+      }
+      val activityFallback = PendingIntent.getActivity(
+        app,
+        id + ACTIVITY_FALLBACK_OFFSET,
+        Intent(app, VoiceAlarmActivity::class.java).apply { putExtra("fromAlarmFire", true) },
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+      )
+      if (activityFallback != null) {
+        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(activityFallback)
+        activityFallback.cancel()
       }
     }
     clearPersistedAlarms(app)

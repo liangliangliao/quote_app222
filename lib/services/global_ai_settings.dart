@@ -33,6 +33,14 @@ class GlobalAiSettings {
   final KeyValueDao _kvDao = KeyValueDao();
   final GoalSettingRemoteSync _remoteSync = GoalSettingRemoteSync();
 
+  String _normalizeDeepseekModel(String model) {
+    final m = model.trim();
+    if (m.isEmpty || m == 'deepseek-chat' || m == 'deepseek-reasoner') {
+      return 'deepseek-v4-pro';
+    }
+    return m;
+  }
+
   String get defaultVoiceAlarmContentPrompt =>
       '请为{{mode}}语音闹钟写一段自然、温暖、适合中文朗读的内容。只输出朗读正文，50到100字，不要标题。早安内容应积极但不过度兴奋；晚安内容应舒缓、接纳且不制造压力。';
 
@@ -120,7 +128,7 @@ class GlobalAiSettings {
             ? (openrouterModel.isEmpty ? 'openai/gpt-4.1-mini' : openrouterModel)
             : resolvedProvider == 'edenai'
                 ? (edenAiModel.isEmpty ? edenAiDefaultModel : edenAiModel)
-                : (deepseekModel.isEmpty ? 'deepseek-reasoner' : deepseekModel);
+                : (_normalizeDeepseekModel(deepseekModel.isEmpty ? 'deepseek-v4-pro' : deepseekModel));
     final available = resolvedProvider == 'openai'
         ? openaiKey.isNotEmpty
         : resolvedProvider == 'openrouter'
@@ -141,7 +149,7 @@ class GlobalAiSettings {
       'model': model,
       'display_model': displayModel,
       'openai_model': openaiModel.isEmpty ? 'gpt-5' : openaiModel,
-      'deepseek_model': deepseekModel.isEmpty ? 'deepseek-reasoner' : deepseekModel,
+      'deepseek_model': _normalizeDeepseekModel(deepseekModel.isEmpty ? 'deepseek-v4-pro' : deepseekModel),
       'openrouter_model': openrouterModel.isEmpty ? 'openai/gpt-4.1-mini' : openrouterModel,
       'edenai_model': edenAiModel.isEmpty ? edenAiDefaultModel : edenAiModel,
       'label': label,
@@ -1521,7 +1529,7 @@ ending_reflection''';
     } else if (normalizedProvider == 'edenai') {
       await _kvDao.setString(edenAiModelKey, model.trim().isEmpty ? edenAiDefaultModel : model.trim());
     } else {
-      await _kvDao.setString(deepSeekModelKey, model.trim().isEmpty ? 'deepseek-reasoner' : model.trim());
+      await _kvDao.setString(deepSeekModelKey, _normalizeDeepseekModel(model.trim().isEmpty ? 'deepseek-v4-pro' : model.trim()));
     }
   }
 
@@ -1548,6 +1556,6 @@ ending_reflection''';
       return model.isEmpty ? edenAiDefaultModel : model;
     }
     final model = ((await _kvDao.getString(deepSeekModelKey)) ?? await _configDao.getDeepseekModel()).trim();
-    return model.isEmpty ? 'deepseek-reasoner' : model;
+    return _normalizeDeepseekModel(model.isEmpty ? 'deepseek-v4-pro' : model);
   }
 }

@@ -63,6 +63,17 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Map<String, dynamic> _alarmAiConfig = <String, dynamic>{};
   String _alarmAiSystemPrompt = '';
   Map<String, dynamic> _alarmSttConfig = <String, dynamic>{};
+  String _speechPreset = 'balanced';
+  double _speechCompleteSilenceMs = 2400;
+  double _speechPossiblyCompleteSilenceMs = 1600;
+  double _speechMinUtteranceMs = 1400;
+  double _speechFinalCommitDelayMs = 2800;
+  double _speechPartialFallbackDelayMs = 5200;
+  double _speechSemanticExtraWaitMs = 0;
+  double _speechStableTextMs = 750;
+  double _speechMaxUtteranceMs = 22000;
+  double _speechMinCommitChars = 5;
+  bool _speechSemanticEndpointing = false;
 
   static const _morningDefault = '早上好，新的一天开始了。愿你平静、专注、充满力量。';
   static const _nightDefault = '晚安，今天辛苦了。放下未完成的事，安心休息，愿你拥有宁静的睡眠。';
@@ -128,6 +139,18 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
       _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
       _replayIntervalSeconds = (data['replayIntervalSeconds'] as num?)?.toInt() ?? 60;
+      final endpointing = data['voiceEndpointing'] is Map ? Map<String, dynamic>.from(data['voiceEndpointing'] as Map) : <String, dynamic>{};
+      _speechPreset = ['fast', 'balanced', 'complete', 'long'].contains((endpointing['preset'] ?? 'balanced').toString()) ? (endpointing['preset'] ?? 'balanced').toString() : 'balanced';
+      _speechCompleteSilenceMs = (endpointing['completeSilenceMs'] as num?)?.toDouble() ?? 2400;
+      _speechPossiblyCompleteSilenceMs = (endpointing['possiblyCompleteSilenceMs'] as num?)?.toDouble() ?? 1600;
+      _speechMinUtteranceMs = (endpointing['minUtteranceMs'] as num?)?.toDouble() ?? 1400;
+      _speechFinalCommitDelayMs = (endpointing['finalCommitDelayMs'] as num?)?.toDouble() ?? 2800;
+      _speechPartialFallbackDelayMs = (endpointing['partialFallbackDelayMs'] as num?)?.toDouble() ?? 5200;
+      _speechSemanticExtraWaitMs = (endpointing['semanticExtraWaitMs'] as num?)?.toDouble() ?? 0;
+      _speechStableTextMs = (endpointing['stableTextMs'] as num?)?.toDouble() ?? 750;
+      _speechMaxUtteranceMs = (endpointing['maxUtteranceMs'] as num?)?.toDouble() ?? 22000;
+      _speechMinCommitChars = (endpointing['minCommitChars'] as num?)?.toDouble() ?? 5;
+      _speechSemanticEndpointing = endpointing['semanticEndpointing'] as bool? ?? false;
       _resembleHd = data['resembleHd'] as bool? ?? true;
       _vibrate = data['vibrate'] as bool? ?? true;
       _systemMusic = data['systemMusic'] as bool? ?? true;
@@ -226,7 +249,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       final requested = await Permission.microphone.request();
       if (!requested.isGranted) {
         _toast('未授权麦克风：仍会保存并响铃，但语音唤醒、AI 对话和语音关闭闹钟将不可用');
-        return true;
+      }
+    }
+    final notification = await Permission.notification.status;
+    if (!notification.isGranted) {
+      final requested = await Permission.notification.request();
+      if (!requested.isGranted) {
+        _toast('未授权通知：仍会保存闹钟，但锁屏全屏通知和后台提醒可靠性会下降');
       }
     }
     return true;
@@ -274,22 +303,118 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     };
   }
 
+  void _applySpeechPreset(String preset) {
+    setState(() {
+      _speechPreset = preset;
+      switch (preset) {
+        case 'fast':
+          _speechCompleteSilenceMs = 900;
+          _speechPossiblyCompleteSilenceMs = 700;
+          _speechMinUtteranceMs = 500;
+          _speechFinalCommitDelayMs = 900;
+          _speechPartialFallbackDelayMs = 1800;
+          _speechSemanticExtraWaitMs = 0;
+          _speechStableTextMs = 500;
+          _speechMaxUtteranceMs = 12000;
+          _speechMinCommitChars = 1;
+          _speechSemanticEndpointing = false;
+          break;
+        case 'complete':
+          _speechCompleteSilenceMs = 2200;
+          _speechPossiblyCompleteSilenceMs = 1500;
+          _speechMinUtteranceMs = 800;
+          _speechFinalCommitDelayMs = 2100;
+          _speechPartialFallbackDelayMs = 3600;
+          _speechSemanticExtraWaitMs = 0;
+          _speechStableTextMs = 1000;
+          _speechMaxUtteranceMs = 35000;
+          _speechMinCommitChars = 1;
+          _speechSemanticEndpointing = false;
+          break;
+        case 'long':
+          _speechCompleteSilenceMs = 3200;
+          _speechPossiblyCompleteSilenceMs = 2200;
+          _speechMinUtteranceMs = 1000;
+          _speechFinalCommitDelayMs = 3200;
+          _speechPartialFallbackDelayMs = 5200;
+          _speechSemanticExtraWaitMs = 0;
+          _speechStableTextMs = 1400;
+          _speechMaxUtteranceMs = 60000;
+          _speechMinCommitChars = 1;
+          _speechSemanticEndpointing = false;
+          break;
+        default:
+          _speechPreset = 'balanced';
+          _speechCompleteSilenceMs = 1400;
+          _speechPossiblyCompleteSilenceMs = 1000;
+          _speechMinUtteranceMs = 600;
+          _speechFinalCommitDelayMs = 1300;
+          _speechPartialFallbackDelayMs = 2600;
+          _speechSemanticExtraWaitMs = 0;
+          _speechStableTextMs = 750;
+          _speechMaxUtteranceMs = 22000;
+          _speechMinCommitChars = 1;
+          _speechSemanticEndpointing = false;
+      }
+    });
+  }
+
+  Map<String, dynamic> _voiceEndpointingMap() {
+    final complete = _speechCompleteSilenceMs.round();
+    final possibly = _speechPossiblyCompleteSilenceMs.round().clamp(500, complete - 100).toInt();
+    final minUtterance = _speechMinUtteranceMs.round();
+    final commit = _speechFinalCommitDelayMs.round();
+    return {
+      'preset': _speechPreset,
+      'completeSilenceMs': complete,
+      'possiblyCompleteSilenceMs': possibly,
+      'minUtteranceMs': minUtterance,
+      'finalCommitDelayMs': commit,
+      'partialFallbackDelayMs': _speechPartialFallbackDelayMs.round().clamp(commit, 10000).toInt(),
+      'semanticExtraWaitMs': _speechSemanticExtraWaitMs.round(),
+      'stableTextMs': _speechStableTextMs.round().clamp(300, 3000).toInt(),
+      'maxUtteranceMs': _speechMaxUtteranceMs.round().clamp(8000, 60000).toInt(),
+      'minCommitChars': _speechMinCommitChars.round(),
+      'semanticEndpointing': false,
+    };
+  }
+
   Future<void> _schedule() async {
     if (_text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
+      return;
+    }
+    if (_effectiveWeekdays().isEmpty) {
+      _toast('请至少选择一个重复日期，否则闹钟没有可触发的日期');
       return;
     }
     setState(() => _saving = true);
     try {
       final hasPermission = await _native.invokeMethod<bool>('hasExactAlarmPermission') ?? true;
       if (!hasPermission) {
-        // Voice alarms use AlarmManager.setAlarmClock as the primary delivery
-        // path, which is allowed for alarm-clock style reminders even when the
-        // optional exact-alarm permission is not granted.  Do not abort saving
-        // here; otherwise users who skip the system permission page end up with
-        // no native alarm registered when the app process is later killed.
-        await _native.invokeMethod<void>('requestExactAlarmPermission');
-        _toast('将继续保存语音闹钟；授权“闹钟和提醒”可增强兜底精确触发能力');
+        await _native.invokeMethod<bool>('requestExactAlarmPermission');
+        _toast('将继续保存语音闹钟；授权“闹钟和提醒”可增强后台/熄屏准点触发能力');
+      }
+      final canFullScreen = await _native.invokeMethod<bool>('canUseFullScreenIntent') ?? true;
+      if (!canFullScreen) {
+        await _native.invokeMethod<bool>('requestFullScreenIntentPermission');
+        _toast('请允许“全屏通知/全屏提醒”，否则锁屏时可能只能显示通知横幅，无法自动弹出全屏闹钟');
+      }
+      // 不再在保存闹钟时主动弹出系统电量/省电策略页面。
+      // 这个页面在很多 ROM 上会打断用户保存流程，且容易被误解为 App 强制跳转。
+      // 闹钟仍会保存；如用户遇到被后台清理导致不响，可在说明/诊断入口中手动打开电池无限制、自启动、锁屏显示等设置。
+      try {
+        final ignoreBattery = await _native.invokeMethod<bool>('isIgnoringBatteryOptimizations') ?? true;
+        if (!ignoreBattery) {
+          _toast('已保存闹钟。若之后发现清理后台后不响，可手动把本应用设为电池“无限制/允许后台运行”。');
+        }
+      } catch (_) {
+        // 省电状态检查失败不影响闹钟保存。
+      }
+      final channelImportant = await _native.invokeMethod<bool>('isAlarmNotificationChannelImportant') ?? true;
+      if (!channelImportant) {
+        await _native.invokeMethod<bool>('openAlarmNotificationChannelSettings');
+        _toast('请把“语音闹钟响铃”通知类别设为高优先级/允许弹出，否则锁屏全屏闹钟可能被系统静默处理');
       }
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
@@ -323,7 +448,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         'atMs': when.millisecondsSinceEpoch,
         'payload': payload,
       });
-      _toast('已注册 Android 系统精确闹钟；App 在后台或进程被清理后仍可响铃');
+      _toast('已注册 Android 系统闹钟；进程被清理、后台、锁屏和重启后会尽力恢复提醒');
       setState(() {});
     } catch (e) {
       _toast('设置失败：$e');
@@ -485,6 +610,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'aiConfig': _alarmAiConfig,
       'aiSystemPrompt': _alarmAiSystemPrompt,
       'sttConfig': _alarmSttConfig,
+      'voiceEndpointing': _voiceEndpointingMap(),
     };
   }
 
@@ -602,7 +728,55 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   onSelectionChanged: (value) => setState(() => _sttProvider = value.first),
                 ),
                 const SizedBox(height: 8),
-                const Text('实时语音转文字服务选择会随闹钟保存；请先在“语音与美好的祝福配置”中填好对应 Microsoft 或讯飞 STT 参数。全屏页会把该选择与对应参数一同带入闹钟 payload，用于实时转文字与 AI 对话链路。', style: TextStyle(color: Colors.black54)),
+                const Text('实时语音转文字服务选择会随闹钟保存。语音采用“全自动实时听写 + 动态修正 + 文本稳定 + 静音稳定”的提交模式：不再猜测用户是否说完，也不需要点击“说完了”。', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 12),
+                Card(
+                  color: Colors.blueGrey.withOpacity(0.06),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: const [Icon(Icons.hearing_outlined), SizedBox(width: 8), Text('语音句段提交策略', style: TextStyle(fontWeight: FontWeight.bold))]),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _speechPreset,
+                        decoration: const InputDecoration(labelText: '体验预设', border: OutlineInputBorder()),
+                        items: const [
+                          DropdownMenuItem(value: 'fast', child: Text('极速自动提交：短指令')),
+                          DropdownMenuItem(value: 'balanced', child: Text('自然自动提交：默认推荐')),
+                          DropdownMenuItem(value: 'complete', child: Text('长句自动提交：连续表达')),
+                          DropdownMenuItem(value: 'long', child: Text('慢语速自动提交：停顿较多')),
+                        ],
+                        onChanged: (value) => _applySpeechPreset(value ?? 'balanced'),
+                      ),
+                      const Text('自动提交不再依赖“语义完整度猜测”；系统只看实时听写文本是否停止变化、麦克风是否进入稳定静音。', style: TextStyle(color: Colors.black54)),
+                      const SizedBox(height: 8),
+                      Text('自动提交静音 ${(_speechCompleteSilenceMs / 1000).toStringAsFixed(1)} 秒'),
+                      Slider(value: _speechCompleteSilenceMs, min: 700, max: 6000, divisions: 53, onChanged: (value) => setState(() {
+                        _speechCompleteSilenceMs = value;
+                        if (_speechPossiblyCompleteSilenceMs >= _speechCompleteSilenceMs) {
+                          _speechPossiblyCompleteSilenceMs = (_speechCompleteSilenceMs - 100).clamp(500, 5000).toDouble();
+                        }
+                      })),
+                      Text('候选静音阈值 ${(_speechPossiblyCompleteSilenceMs / 1000).toStringAsFixed(1)} 秒'),
+                      Slider(value: _speechPossiblyCompleteSilenceMs.clamp(500, (_speechCompleteSilenceMs - 100).clamp(500, 5000)).toDouble(), min: 500, max: (_speechCompleteSilenceMs - 100).clamp(500, 5000).toDouble(), divisions: 45, onChanged: (value) => setState(() => _speechPossiblyCompleteSilenceMs = value)),
+                      Text('AI 提交等待 ${(_speechFinalCommitDelayMs / 1000).toStringAsFixed(1)} 秒'),
+                      Slider(value: _speechFinalCommitDelayMs, min: 800, max: 8000, divisions: 72, onChanged: (value) => setState(() {
+                        _speechFinalCommitDelayMs = value;
+                        if (_speechPartialFallbackDelayMs < _speechFinalCommitDelayMs) _speechPartialFallbackDelayMs = _speechFinalCommitDelayMs;
+                      })),
+                      Text('文本稳定等待 ${(_speechStableTextMs / 1000).toStringAsFixed(1)} 秒'),
+                      Slider(value: _speechStableTextMs, min: 300, max: 3000, divisions: 27, onChanged: (value) => setState(() => _speechStableTextMs = value)),
+                      Text('Partial 兜底等待 ${(_speechPartialFallbackDelayMs / 1000).toStringAsFixed(1)} 秒'),
+                      Slider(value: _speechPartialFallbackDelayMs.clamp(_speechFinalCommitDelayMs, 10000).toDouble(), min: _speechFinalCommitDelayMs, max: 10000, divisions: 80, onChanged: (value) => setState(() => _speechPartialFallbackDelayMs = value)),
+                      Text('最短说话时长 ${(_speechMinUtteranceMs / 1000).toStringAsFixed(1)} 秒'),
+                      Slider(value: _speechMinUtteranceMs, min: 500, max: 6000, divisions: 55, onChanged: (value) => setState(() => _speechMinUtteranceMs = value)),
+                      Text('单段最长等待 ${(_speechMaxUtteranceMs / 1000).round()} 秒'),
+                      Slider(value: _speechMaxUtteranceMs, min: 8000, max: 60000, divisions: 52, onChanged: (value) => setState(() => _speechMaxUtteranceMs = value)),
+                      const Text('极短噪声过滤：1～2 个无意义语气词会被忽略，正常短句不会被字数拦截。', style: TextStyle(color: Colors.black54)),
+                      const Text('调大“自动提交静音 / 文本稳定等待 / AI提交等待”可减少碎片提交；调小则响应更快。系统会自动提交，不再要求用户点击确认。', style: TextStyle(color: Colors.black54)),
+                    ]),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _voiceId,

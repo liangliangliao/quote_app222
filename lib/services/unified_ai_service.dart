@@ -157,6 +157,18 @@ class UnifiedAiService {
   static const String edenAiChatCompletionsEndpoint = 'https://api.edenai.run/v3/chat/completions';
   static const String edenAiModelsEndpoint = 'https://api.edenai.run/v3/models';
 
+  static String _normalizeDeepseekModel(String model) {
+    final m = model.trim();
+    if (m.isEmpty || m == 'deepseek-chat' || m == 'deepseek-reasoner') {
+      return 'deepseek-v4-pro';
+    }
+    return m;
+  }
+
+  static bool _isDeepseekV4(String provider, String model) {
+    return provider.trim().toLowerCase() == 'deepseek' && model.trim().toLowerCase().startsWith('deepseek-v4');
+  }
+
   Future<UnifiedAiResolvedConfig> resolveGlobalConfig({String? forcedProvider, String? forcedModel}) async {
     final global = await _configDao.getOne();
     final state = forcedProvider == null && forcedModel == null
@@ -219,7 +231,8 @@ class UnifiedAiService {
       case 'deepseek':
       default:
         var model = deepSeekModel;
-        if (model.isEmpty) model = 'deepseek-reasoner';
+        if (model.isEmpty) model = 'deepseek-v4-pro';
+        model = _normalizeDeepseekModel(model);
         return UnifiedAiResolvedConfig(
           provider: 'deepseek',
           apiKey: deepSeekKey,
@@ -563,8 +576,10 @@ class UnifiedAiService {
         supportsFiles: _supportsFileInput(provider, model),
       )).toList(),
       'max_tokens': maxTokens,
-      if (temperature != null) 'temperature': temperature,
-      if (topP != null) 'top_p': topP,
+      if (_isDeepseekV4(provider, model)) 'thinking': <String, dynamic>{'type': 'enabled'},
+      if (_isDeepseekV4(provider, model)) 'reasoning_effort': 'high',
+      if (temperature != null && !_isDeepseekV4(provider, model)) 'temperature': temperature,
+      if (topP != null && !_isDeepseekV4(provider, model)) 'top_p': topP,
       if (provider == 'openrouter' && hasFileParts)
         'plugins': <Map<String, dynamic>>[
           <String, dynamic>{
@@ -693,8 +708,10 @@ class UnifiedAiService {
         <String, String>{'role': 'user', 'content': prompt},
       ],
       'max_tokens': maxTokens,
-      if (temperature != null) 'temperature': temperature,
-      if (topP != null) 'top_p': topP,
+      if (_isDeepseekV4(provider, model)) 'thinking': <String, dynamic>{'type': 'enabled'},
+      if (_isDeepseekV4(provider, model)) 'reasoning_effort': 'high',
+      if (temperature != null && !_isDeepseekV4(provider, model)) 'temperature': temperature,
+      if (topP != null && !_isDeepseekV4(provider, model)) 'top_p': topP,
       if (useResponseFormat) 'response_format': <String, dynamic>{'type': 'json_object'},
       // OpenRouter 上的部分深度思考/推理模型会先输出很长的
       // reasoning_content，而最终 content 为空或超时。严格 JSON 任务

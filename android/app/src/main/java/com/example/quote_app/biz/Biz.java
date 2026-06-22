@@ -69,7 +69,7 @@ public final class Biz {
         int id = t.uid != null ? t.uid.hashCode() : 10001;
         try {
             String avatarPath = (pickedAvatar != null && !pickedAvatar.isEmpty()) ? pickedAvatar : t.avatarPath;
-            NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath, null, null);
+            NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
             DbRepository.log(ctx, t.uid, "成功!");
             return true;
         } catch (Throwable e) {
@@ -92,7 +92,7 @@ public final class Biz {
         try {
             // 保持原有调用签名，避免工具链对参数名串的误处理
             String avatarPath = (pickedAvatar != null && !pickedAvatar.isEmpty()) ? pickedAvatar : t.avatarPath;
-            NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath, null, null);
+            NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
             DbRepository.log(ctx, t.uid, "成功!");
             return true;
         } catch (Throwable e) {
@@ -116,7 +116,7 @@ public final class Biz {
         try {
             // 保持原有调用签名，避免工具链对参数名串的误处理
             String avatarPath = (pickedAvatar != null && !pickedAvatar.isEmpty()) ? pickedAvatar : t.avatarPath;
-            NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath, null, null);
+            NotifyHelper.send(ctx.getApplicationContext(), id, title, content, avatarPath);
             DbRepository.log(ctx, t.uid, "成功!");
             return true;
         } catch (Throwable e) {

@@ -19,6 +19,14 @@ String _uid(String prefix){
 class ConfigDao {
   static const int defaultMoodCardDelayMs = 5000;
 
+  String _normalizeLegacyDeepseekModel(String model) {
+    final m = model.trim();
+    if (m.isEmpty || m == 'deepseek-chat' || m == 'deepseek-reasoner') {
+      return 'deepseek-v4-pro';
+    }
+    return m;
+  }
+
   Future<void> _ensureMoodCardPopupColumns(Database db) async {
     final info = await db.rawQuery("PRAGMA table_info(configs)");
     final cols = info.map((e) => e['name'] as String).toSet();
@@ -407,7 +415,7 @@ class ConfigDao {
   }
 
   /// 获取 DeepSeek 模型名称。
-  /// 如果未设置返回 'deepseek-chat'。
+  /// 如果未设置返回 'deepseek-v4-pro'。
 
   /// 获取 OpenRouter API 密钥。
   Future<String> getOpenRouterKey() async {
@@ -453,19 +461,19 @@ class ConfigDao {
     try {
       final db = await AppDatabase.instance();
       final rows = await db.query('configs', orderBy: 'id DESC', limit: 1);
-      if (rows.isEmpty) return 'deepseek-chat';
+      if (rows.isEmpty) return 'deepseek-v4-pro';
       final v = rows.first['deepseek_model'];
-      final s = (v ?? 'deepseek-chat').toString().trim();
-      return s.isEmpty ? 'deepseek-chat' : s;
+      final s = (v ?? 'deepseek-v4-pro').toString().trim();
+      return s.isEmpty ? 'deepseek-v4-pro' : _normalizeLegacyDeepseekModel(s);
     } catch (_) {
-      return 'deepseek-chat';
+      return 'deepseek-v4-pro';
     }
   }
 
   /// 设置 DeepSeek 模型名称。
-  /// 传入空字符串时将重置为默认模型 deepseek-chat。
+  /// 传入空字符串时将重置为默认模型 deepseek-v4-pro。
   Future<void> setDeepseekModel(String model) async {
-    final m = model.trim().isEmpty ? 'deepseek-chat' : model.trim();
+    final m = _normalizeLegacyDeepseekModel(model.trim().isEmpty ? 'deepseek-v4-pro' : model.trim());
     try {
       final db = await AppDatabase.instance();
       final rows = await db.query('configs', orderBy: 'id DESC', limit: 1);
@@ -479,7 +487,7 @@ class ConfigDao {
       if (e.toString().contains('no such column') && e.toString().contains('deepseek_model')) {
         try {
           final db = await AppDatabase.instance();
-          await db.execute("ALTER TABLE configs ADD COLUMN deepseek_model TEXT DEFAULT 'deepseek-chat'");
+          await db.execute("ALTER TABLE configs ADD COLUMN deepseek_model TEXT DEFAULT 'deepseek-v4-pro'");
           final rows2 = await db.query('configs', orderBy: 'id DESC', limit: 1);
           if (rows2.isEmpty) {
             await db.insert('configs', {'deepseek_model': m});

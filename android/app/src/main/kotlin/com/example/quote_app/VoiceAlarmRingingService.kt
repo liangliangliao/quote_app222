@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -33,15 +34,14 @@ class VoiceAlarmRingingService : Service() {
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
     private const val ACTION_POSTPONE_VOICE_REPLAY = "com.example.quote_app.VOICE_ALARM_POSTPONE_VOICE_REPLAY"
-    private const val ACTION_SET_INTERACTION_ACTIVE = "com.example.quote_app.VOICE_ALARM_SET_INTERACTION_ACTIVE"
     private const val EXTRA_PAYLOAD = "payload"
     private const val EXTRA_POSTPONE_MS = "postponeMs"
-    private const val EXTRA_INTERACTION_ACTIVE = "interactionActive"
-    private const val EXTRA_INTERACTION_DURATION_MS = "interactionDurationMs"
-    private const val CHANNEL_ID = "voice_alarm_ringing_v3"
+    const val CHANNEL_ID = "voice_alarm_ringing_v5"
     private const val NOTIFICATION_ID = 974002
     private const val STATE_PREFS = "voice_alarm_ringing_state"
     private const val KEY_ACTIVE_PAYLOAD = "activePayload"
+    private const val KEY_ACTIVE_AT = "activeAt"
+    private const val ACTIVE_PAYLOAD_TTL_MS = 12L * 60L * 60L * 1000L
     const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
     const val ACTION_VOICE_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_END"
     @Volatile private var activePayload: String? = null
@@ -57,9 +57,16 @@ class VoiceAlarmRingingService : Service() {
 
     @JvmStatic
     fun stop(context: Context) {
-      try {
-        context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply { action = ACTION_STOP })
-      } catch (_: Throwable) {}
+      // Clear persisted ringing state before attempting to stop.  Notification
+      // actions may be delivered while the app is backgrounded/locked, where a
+      // fresh startService(ACTION_STOP) can be rejected on Android O+.  stopService
+      // is safe and prevents stale activePayload from re-opening the full-screen
+      // alarm after the user has dismissed it.
+      clearActivePayload(context)
+      try { (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Throwable) {}
+      val intent = Intent(context, VoiceAlarmRingingService::class.java).apply { action = ACTION_STOP }
+      try { context.startService(intent) } catch (_: Throwable) {}
+      try { context.stopService(Intent(context, VoiceAlarmRingingService::class.java)) } catch (_: Throwable) {}
     }
 
     @JvmStatic
@@ -89,6 +96,7 @@ class VoiceAlarmRingingService : Service() {
           storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_ACTIVE_PAYLOAD, payload)
+            .putLong(KEY_ACTIVE_AT, System.currentTimeMillis())
             .apply()
         } catch (_: Throwable) {}
       }
@@ -96,12 +104,15 @@ class VoiceAlarmRingingService : Service() {
 
     private fun readActivePayload(context: Context): String? {
       for (storageContext in stateContexts(context)) {
-        val payload = try {
-          storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE).getString(KEY_ACTIVE_PAYLOAD, null)
-        } catch (_: Throwable) {
-          null
-        }
-        if (!payload.isNullOrBlank()) return payload
+        try {
+          val prefs = storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+          val activeAt = prefs.getLong(KEY_ACTIVE_AT, 0L)
+          val payload = prefs.getString(KEY_ACTIVE_PAYLOAD, null)
+          if (!payload.isNullOrBlank()) {
+            if (activeAt > 0L && System.currentTimeMillis() - activeAt <= ACTIVE_PAYLOAD_TTL_MS) return payload
+            try { prefs.edit().remove(KEY_ACTIVE_PAYLOAD).remove(KEY_ACTIVE_AT).apply() } catch (_: Throwable) {}
+          }
+        } catch (_: Throwable) {}
       }
       return null
     }
@@ -113,6 +124,7 @@ class VoiceAlarmRingingService : Service() {
           storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_ACTIVE_PAYLOAD)
+            .remove(KEY_ACTIVE_AT)
             .apply()
         } catch (_: Throwable) {}
       }
@@ -129,14 +141,33 @@ class VoiceAlarmRingingService : Service() {
     }
 
     @JvmStatic
-    fun setInteractionActive(context: Context, active: Boolean, interactionDurationMs: Long = 0L) {
-      try {
-        context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply {
-          action = ACTION_SET_INTERACTION_ACTIVE
-          putExtra(EXTRA_INTERACTION_ACTIVE, active)
-          putExtra(EXTRA_INTERACTION_DURATION_MS, interactionDurationMs)
-        })
-      } catch (_: Throwable) {}
+    fun ensureAlarmChannel(context: Context) {
+      if (Build.VERSION.SDK_INT < 26) return
+      val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      val existing = notificationManager.getNotificationChannel(CHANNEL_ID)
+      if (existing != null) return
+      notificationManager.createNotificationChannel(
+        NotificationChannel(CHANNEL_ID, "语音闹钟响铃", NotificationManager.IMPORTANCE_HIGH).apply {
+          description = "即使 App 在后台或进程未运行，也会播放语音闹钟并震动"
+          enableVibration(true)
+          vibrationPattern = longArrayOf(0, 900, 350, 900, 350, 1400)
+          setSound(null, null)
+          lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        },
+      )
+    }
+
+    @JvmStatic
+    fun isAlarmChannelImportantEnough(context: Context): Boolean {
+      if (Build.VERSION.SDK_INT < 26) return true
+      return try {
+        ensureAlarmChannel(context)
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channel = notificationManager.getNotificationChannel(CHANNEL_ID) ?: return true
+        channel.importance >= NotificationManager.IMPORTANCE_HIGH
+      } catch (_: Throwable) {
+        true
+      }
     }
   }
 
@@ -154,7 +185,13 @@ class VoiceAlarmRingingService : Service() {
   private var replayRunnable: Runnable? = null
   private var currentPayload: String = "{}"
   private var voiceReplayBlockedUntil = 0L
-  private var voiceInteractionActiveUntil = 0L
+  private var alarmVoicePlaybackActive = false
+  private var audioFocusRequest: Any? = null
+
+  private fun hasActiveSignalsFor(payload: String): Boolean {
+    if (currentPayload != payload) return false
+    return musicPlayer != null || voicePlayer != null || alarmTts != null || vibrator != null
+  }
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -168,20 +205,33 @@ class VoiceAlarmRingingService : Service() {
       postponeVoiceReplay(intent.getLongExtra(EXTRA_POSTPONE_MS, 15_000L))
       return START_STICKY
     }
-    if (intent?.action == ACTION_SET_INTERACTION_ACTIVE) {
-      setVoiceInteractionActive(
-        intent.getBooleanExtra(EXTRA_INTERACTION_ACTIVE, false),
-        intent.getLongExtra(EXTRA_INTERACTION_DURATION_MS, 0L),
-      )
-      return START_STICKY
-    }
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: activePayload ?: readActivePayload(this) ?: "{}"
+    val alreadyRingingSamePayload = hasActiveSignalsFor(payload)
     persistActivePayload(this, payload)
     startForegroundAlarm(payload)
     acquireWakeLock()
     currentPayload = payload
-    startSignals(payload)
+    if (intent?.getBooleanExtra("fromAlarmFire", false) == true) {
+      // Direct foreground-service fallback can be the only path that survives on
+      // aggressive OEM ROMs.  Make it self-contained by scheduling the next daily
+      // occurrence here too; repeated calls are idempotent because request codes
+      // are stable and FLAG_UPDATE_CURRENT is used.
+      try { VoiceAlarmScheduler.scheduleNextDaily(this, payload) } catch (_: Throwable) {}
+    }
+    if (!alreadyRingingSamePayload) {
+      startSignals(payload)
+    }
     return START_STICKY
+  }
+
+  override fun onTaskRemoved(rootIntent: Intent?) {
+    // Some launchers call this when the user swipes the full-screen alarm task
+    // away.  The service is declared stopWithTask=false, but re-post the
+    // foreground alarm notification and keep the audio/vibration alive as an
+    // additional OEM-ROM safeguard.
+    try { startForegroundAlarm(currentPayload) } catch (_: Throwable) {}
+    try { acquireWakeLock() } catch (_: Throwable) {}
+    super.onTaskRemoved(rootIntent)
   }
 
   override fun onDestroy() {
@@ -199,17 +249,7 @@ class VoiceAlarmRingingService : Service() {
 
   private fun startForegroundAlarm(payload: String) {
     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    if (Build.VERSION.SDK_INT >= 26) {
-      notificationManager.createNotificationChannel(
-        NotificationChannel(CHANNEL_ID, "语音闹钟响铃", NotificationManager.IMPORTANCE_HIGH).apply {
-          description = "即使 App 在后台或进程未运行，也会播放语音闹钟并震动"
-          enableVibration(true)
-          vibrationPattern = longArrayOf(0, 900, 350, 900, 350, 1400)
-          setSound(null, null)
-          lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-        },
-      )
-    }
+    ensureAlarmChannel(this)
     val launchIntent = Intent(this, VoiceAlarmActivity::class.java).apply {
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
       putExtra("payload", payload)
@@ -255,6 +295,7 @@ class VoiceAlarmRingingService : Service() {
       .addAction(android.R.drawable.ic_media_pause, "5分钟后提醒", snoozeIntent)
       .addAction(android.R.drawable.ic_menu_close_clear_cancel, "关闭", stopIntent)
       .build()
+    var foregroundStarted = false
     if (Build.VERSION.SDK_INT >= 30) {
       try {
         startForeground(
@@ -262,18 +303,44 @@ class VoiceAlarmRingingService : Service() {
           notification,
           ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
         )
+        foregroundStarted = true
       } catch (_: Throwable) {
-        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        try {
+          startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+          foregroundStarted = true
+        } catch (_: Throwable) {
+          try {
+            startForeground(NOTIFICATION_ID, notification)
+            foregroundStarted = true
+          } catch (_: Throwable) {}
+        }
       }
     } else if (Build.VERSION.SDK_INT >= 29) {
-      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+      try {
+        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        foregroundStarted = true
+      } catch (_: Throwable) {
+        try {
+          startForeground(NOTIFICATION_ID, notification)
+          foregroundStarted = true
+        } catch (_: Throwable) {}
+      }
     } else {
-      startForeground(NOTIFICATION_ID, notification)
+      try {
+        startForeground(NOTIFICATION_ID, notification)
+        foregroundStarted = true
+      } catch (_: Throwable) {}
+    }
+    if (!foregroundStarted) {
+      try { notificationManager.notify(NOTIFICATION_ID, notification) } catch (_: Throwable) {}
     }
     try { contentIntent.send() } catch (_: Throwable) {}
   }
 
   private fun acquireWakeLock() {
+    try {
+      if (wakeLock?.isHeld == true) return
+    } catch (_: Throwable) {}
     val manager = getSystemService(Context.POWER_SERVICE) as PowerManager
     wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "quote_app:voiceAlarm").apply {
       setReferenceCounted(false)
@@ -281,9 +348,22 @@ class VoiceAlarmRingingService : Service() {
     }
   }
 
+  private fun notifyVoicePlaybackStart() {
+    if (alarmVoicePlaybackActive) return
+    alarmVoicePlaybackActive = true
+    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
+  }
+
+  private fun notifyVoicePlaybackEnd() {
+    if (!alarmVoicePlaybackActive) return
+    alarmVoicePlaybackActive = false
+    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+  }
+
   private fun startSignals(payload: String) {
     stopSignals()
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
+    requestAlarmAudioFocus()
     ensureAudibleAlarmVolume()
     if (data.optBoolean("vibrate", true)) {
       vibrator = if (Build.VERSION.SDK_INT >= 31) {
@@ -333,7 +413,9 @@ class VoiceAlarmRingingService : Service() {
       try { voicePlayer?.stop() } catch (_: Throwable) {}
       try { voicePlayer?.release() } catch (_: Throwable) {}
       voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = volume, notifyVoice = true)
-      return
+      if (voicePlayer != null) return
+      // Corrupt/inaccessible custom voice file should not make the alarm silent.
+      // Fall through to platform TTS using the saved alarm text.
     }
     // Direct-boot or first-unlock edge case: generated voice files may live in
     // credential-protected app storage and be unreadable even though the alarm
@@ -348,10 +430,10 @@ class VoiceAlarmRingingService : Service() {
       val utteranceId = "alarm_tts_${System.currentTimeMillis()}"
       val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
       try {
-        sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
-        alarmTts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        val result = alarmTts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        if (result == null || result == TextToSpeech.ERROR) notifyVoicePlaybackEnd()
       } catch (_: Throwable) {
-        sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+        notifyVoicePlaybackEnd()
       }
       return
     }
@@ -373,17 +455,17 @@ class VoiceAlarmRingingService : Service() {
         }
         alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) {
-            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
+            notifyVoicePlaybackStart()
           }
           override fun onDone(utteranceId: String?) {
-            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+            notifyVoicePlaybackEnd()
           }
           @Deprecated("Deprecated in Java")
           override fun onError(utteranceId: String?) {
-            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+            notifyVoicePlaybackEnd()
           }
           override fun onError(utteranceId: String?, errorCode: Int) {
-            sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+            notifyVoicePlaybackEnd()
           }
         })
         val pending = pendingAlarmTts
@@ -394,7 +476,9 @@ class VoiceAlarmRingingService : Service() {
       } else {
         alarmTtsReady = false
         pendingAlarmTts = null
-        sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+        try { alarmTts?.shutdown() } catch (_: Throwable) {}
+        alarmTts = null
+        notifyVoicePlaybackEnd()
       }
     }
   }
@@ -402,11 +486,10 @@ class VoiceAlarmRingingService : Service() {
   private fun scheduleVoiceReplay(initialData: JSONObject) {
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     val fallbackData = initialData
-    val replayDelayMs = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600) * 1000L
+    val seconds = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
     replayRunnable = Runnable {
-      val latest = resolveVoiceReplayPayload(fallbackData)
-      val blockedUntil = maxOf(voiceReplayBlockedUntil, voiceInteractionActiveUntil)
-      val blockedMs = blockedUntil - System.currentTimeMillis()
+      val latest = latestVoiceReplayPayload(fallbackData)
+      val blockedMs = voiceReplayBlockedUntil - System.currentTimeMillis()
       if (blockedMs > 0) {
         replayHandler.postDelayed(replayRunnable!!, blockedMs.coerceAtLeast(1000L))
         return@Runnable
@@ -414,10 +497,10 @@ class VoiceAlarmRingingService : Service() {
       playVoiceOnce(latest)
       scheduleVoiceReplay(latest)
     }
-    replayHandler.postDelayed(replayRunnable!!, replayDelayMs)
+    replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
   }
 
-  private fun resolveVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
+  private fun latestVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
     return try { JSONObject(currentPayload) } catch (_: Throwable) { fallbackData }
   }
 
@@ -428,22 +511,9 @@ class VoiceAlarmRingingService : Service() {
     try { voicePlayer?.release() } catch (_: Throwable) {}
     try { alarmTts?.stop() } catch (_: Throwable) {}
     pendingAlarmTts = null
-    if (voicePlayer != null || alarmTts != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+    notifyVoicePlaybackEnd()
     voicePlayer = null
     duckMusicFor(safePostponeMs.coerceAtMost(30_000L))
-  }
-
-  private fun setVoiceInteractionActive(active: Boolean, interactionDurationMs: Long) {
-    if (active) {
-      val activeDurationMs = interactionDurationMs.coerceIn(3000L, 180_000L)
-      voiceInteractionActiveUntil = maxOf(
-        voiceInteractionActiveUntil,
-        System.currentTimeMillis() + activeDurationMs,
-      )
-      return
-    }
-    val idleDurationMs = interactionDurationMs.coerceIn(1000L, 15_000L)
-    voiceInteractionActiveUntil = System.currentTimeMillis() + idleDurationMs
   }
 
   private fun duckMusicFor(durationMs: Long) {
@@ -469,17 +539,24 @@ class VoiceAlarmRingingService : Service() {
         setDataSource(this@VoiceAlarmRingingService, uri)
         isLooping = looping
         setVolume(volume, volume)
-        setOnPreparedListener {
-          if (notifyVoice) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
-          it.start()
+        setOnPreparedListener { player ->
+          try {
+            if (notifyVoice) notifyVoicePlaybackStart()
+            player.start()
+          } catch (_: Throwable) {
+            if (notifyVoice) notifyVoicePlaybackEnd()
+            try { player.release() } catch (_: Throwable) {}
+          }
         }
         setOnCompletionListener {
-          if (notifyVoice) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+          if (notifyVoice) notifyVoicePlaybackEnd()
         }
         setOnErrorListener { player, _, _ ->
+          if (notifyVoice) notifyVoicePlaybackEnd()
           try { player.release() } catch (_: Throwable) {}
           true
         }
+        try { setWakeMode(this@VoiceAlarmRingingService, PowerManager.PARTIAL_WAKE_LOCK) } catch (_: Throwable) {}
         prepareAsync()
       }
     } catch (_: Throwable) {
@@ -495,7 +572,7 @@ class VoiceAlarmRingingService : Service() {
     try { musicPlayer?.stop() } catch (_: Throwable) {}
     try { musicPlayer?.release() } catch (_: Throwable) {}
     try { vibrator?.cancel() } catch (_: Throwable) {}
-    if (voicePlayer != null || alarmTts != null) sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+    notifyVoicePlaybackEnd()
     voicePlayer = null
     alarmTts = null
     alarmTtsReady = false
@@ -503,6 +580,42 @@ class VoiceAlarmRingingService : Service() {
     musicPlayer = null
     currentMusicVolume = 0.4f
     vibrator = null
+    abandonAlarmAudioFocus()
+  }
+
+
+  private fun requestAlarmAudioFocus() {
+    try {
+      val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+      if (Build.VERSION.SDK_INT >= 26) {
+        val attrs = AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_ALARM)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+          .build()
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+          .setAudioAttributes(attrs)
+          .setOnAudioFocusChangeListener { /* Alarm playback keeps running; user must dismiss/snooze. */ }
+          .build()
+        audio.requestAudioFocus(request)
+        audioFocusRequest = request
+      } else {
+        @Suppress("DEPRECATION")
+        audio.requestAudioFocus(null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+      }
+    } catch (_: Throwable) {}
+  }
+
+  private fun abandonAlarmAudioFocus() {
+    try {
+      val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+      if (Build.VERSION.SDK_INT >= 26) {
+        (audioFocusRequest as? AudioFocusRequest)?.let { audio.abandonAudioFocusRequest(it) }
+      } else {
+        @Suppress("DEPRECATION")
+        audio.abandonAudioFocus(null)
+      }
+    } catch (_: Throwable) {}
+    audioFocusRequest = null
   }
 
   private fun ensureAudibleAlarmVolume() {

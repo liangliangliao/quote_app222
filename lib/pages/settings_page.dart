@@ -125,8 +125,8 @@ class _SettingsPageState extends State<SettingsPage> {
   // endpoint. When the key is invalid or models cannot be fetched,
   // this list may remain empty.
   List<String> _deepseekModels = <String>[];
-  // Currently selected DeepSeek model. Defaults to 'deepseek-chat'.
-  String _selectedDeepseekModel = 'deepseek-chat';
+  // Currently selected DeepSeek model. Defaults to 'deepseek-v4-pro'.
+  String _selectedDeepseekModel = 'deepseek-v4-pro';
   // Whether the DeepSeek models list is being loaded.
   bool _loadingDeepseek = false;
   bool _loadingGlobalAiModels = false;
@@ -486,6 +486,21 @@ void showToast(String msg) {
     );
   }
 
+  static const List<String> _officialDeepseekModels = <String>[
+    'deepseek-v4-pro',
+    'deepseek-v4-flash',
+    'deepseek-chat',
+    'deepseek-reasoner',
+  ];
+
+  String _normalizeDeepseekUiModel(String model) {
+    final m = model.trim();
+    if (m.isEmpty || m == 'deepseek-chat' || m == 'deepseek-reasoner') {
+      return 'deepseek-v4-pro';
+    }
+    return m;
+  }
+
   /// Fetch the list of available DeepSeek models from the DeepSeek API.
   ///
   /// Requires that a non‑empty API key has been entered. When the key is
@@ -497,7 +512,7 @@ void showToast(String msg) {
       // No key: clear models and return.
       if (mounted) {
         setState(() {
-          _deepseekModels = <String>[];
+          _deepseekModels = List<String>.from(_officialDeepseekModels);
         });
       }
       return;
@@ -557,7 +572,7 @@ void showToast(String msg) {
         // Ensure UI updates even on failure.
         if (mounted) {
           setState(() {
-            _deepseekModels = <String>[];
+            _deepseekModels = List<String>.from(_officialDeepseekModels);
           });
         }
         return;
@@ -597,6 +612,9 @@ void showToast(String msg) {
       // De-duplicate while keeping stable order.
       final uniq = <String>[];
       final seen = <String>{};
+      for (final m in _officialDeepseekModels) {
+        if (seen.add(m)) uniq.add(m);
+      }
       for (final m in models) {
         if (seen.add(m)) uniq.add(m);
       }
@@ -604,7 +622,7 @@ void showToast(String msg) {
         setState(() {
           _deepseekModels = uniq;
           if (_deepseekModels.isNotEmpty && !_deepseekModels.contains(_selectedDeepseekModel)) {
-            _selectedDeepseekModel = _deepseekModels.first;
+            _selectedDeepseekModel = _officialDeepseekModels.first;
           }
         });
       }
@@ -1141,7 +1159,7 @@ Future<void> _clearSportMusicPlaylist() async {
     if (provider == 'edenai') {
       return _globalAiModelRaw.trim().isEmpty ? GlobalAiSettings.edenAiDefaultModel : _globalAiModelRaw.trim();
     }
-    return 'deepseek-reasoner';
+    return 'deepseek-v4-pro';
   }
 
   String _defaultCeEndpointForProvider(String provider) {
@@ -1396,9 +1414,9 @@ Future<void> _clearSportMusicPlaylist() async {
     }
     try {
       final dsModel = await _configDao.getDeepseekModel();
-      _selectedDeepseekModel = dsModel;
+      _selectedDeepseekModel = _normalizeDeepseekUiModel(dsModel);
     } catch (_) {
-      _selectedDeepseekModel = 'deepseek-chat';
+      _selectedDeepseekModel = 'deepseek-v4-pro';
     }
 
     try {
@@ -1639,9 +1657,9 @@ Future<void> _clearSportMusicPlaylist() async {
     // Persist DeepSeek API key and selected model. Even if no models were
     // fetched, persisting the key allows TranslationService to pick it up
     // immediately. Persisting the model ensures we store a valid value or
-    // default 'deepseek-chat'.
+    // default 'deepseek-v4-pro'.
     await _configDao.setDeepseekKey(_deepseekKeyCtrl.text.trim());
-    await _configDao.setDeepseekModel(_selectedDeepseekModel);
+    await _configDao.setDeepseekModel(_normalizeDeepseekUiModel(_selectedDeepseekModel));
     await _configDao.setOpenRouterKey(_openRouterKeyCtrl.text.trim());
     await _globalAiSettings.setEdenAiKey(_edenAiKeyCtrl.text.trim());
     await _globalAiSettings.save(
@@ -2320,12 +2338,12 @@ const Text('头像（用于通知图标）'),
                         // Persist immediately when user selects; this ensures
                         // TranslationService picks up the new model without
                         // requiring a full save. Errors are ignored.
-                        _configDao.setDeepseekModel(v);
+                        _configDao.setDeepseekModel(_normalizeDeepseekUiModel(v));
                       }
                     : null,
                 items: (_deepseekModels.isNotEmpty
                         ? _deepseekModels
-                        : <String>[_selectedDeepseekModel])
+                        : <String>{..._officialDeepseekModels, _selectedDeepseekModel}.toList())
                     .map<DropdownMenuItem<String>>((String m) {
                   return DropdownMenuItem<String>(
                     value: m,

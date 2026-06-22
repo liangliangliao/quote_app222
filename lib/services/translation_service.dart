@@ -37,7 +37,7 @@ class TranslationService {
       _model = (state['model'] ?? '').trim();
     } catch (_) {
       _provider = 'deepseek';
-      _model = 'deepseek-reasoner';
+      _model = 'deepseek-v4-pro';
     }
     _loaded = true;
   }
@@ -51,7 +51,7 @@ class TranslationService {
     }
 
     await _ensureConfig();
-    final cacheKey = _hashKey(model: '${_provider ?? 'deepseek'}:${_model ?? 'deepseek-reasoner'}', target: target, sourceText: text);
+    final cacheKey = _hashKey(model: '${_provider ?? 'deepseek'}:${_model ?? 'deepseek-v4-pro'}', target: target, sourceText: text);
     try {
       final dbCached = await _translationCacheDao.getTranslatedText(cacheKey);
       if (dbCached != null && dbCached.trim().isNotEmpty && dbCached.trim() != text.trim()) {
@@ -127,7 +127,7 @@ class TranslationService {
   Future<String?> _translateChunkOnce({required String chunk, required String target, required int attempt}) async {
     await _ensureConfig();
     final provider = _provider ?? 'deepseek';
-    final model = _model ?? 'deepseek-reasoner';
+    final model = _model ?? 'deepseek-v4-pro';
     final prompt = 'Translate the following text into ${_languageName(target)}. Return only the translation without explanation:\n$chunk';
     final translated = await _unifiedAiService.generateText(
       prompt: prompt,
@@ -146,7 +146,7 @@ class TranslationService {
   Future<String> _translateViaUnified({required String text, required String target}) async {
     await _ensureConfig();
     final provider = _provider ?? 'deepseek';
-    final model = _model ?? 'deepseek-reasoner';
+    final model = _model ?? 'deepseek-v4-pro';
 
     final resolved = await _unifiedAiService.resolveGlobalConfig(forcedProvider: provider, forcedModel: model);
     if (!resolved.available) return text;
@@ -193,7 +193,7 @@ class TranslationService {
     if (cached != null) return cached;
 
     await _ensureConfig();
-    final cacheKey = _hashKey(model: '${_provider ?? 'deepseek'}:${_model ?? 'deepseek-reasoner'}', target: target, sourceText: text);
+    final cacheKey = _hashKey(model: '${_provider ?? 'deepseek'}:${_model ?? 'deepseek-v4-pro'}', target: target, sourceText: text);
     try {
       final dbCached = await _translationCacheDao.getTranslatedText(cacheKey);
       if (dbCached != null && dbCached.trim().isNotEmpty) {
@@ -208,7 +208,7 @@ class TranslationService {
       try {
         await _translationCacheDao.put(
           cacheKey: cacheKey,
-          model: '${_provider ?? 'deepseek'}:${_model ?? 'deepseek-reasoner'}',
+          model: '${_provider ?? 'deepseek'}:${_model ?? 'deepseek-v4-pro'}',
           target: target,
           sourceText: text,
           translatedText: translated,
