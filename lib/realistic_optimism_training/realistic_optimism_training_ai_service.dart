@@ -199,6 +199,15 @@ class RealisticOptimismTrainingAiService {
         'benefit_finder_question': '这件事里，我还剩下哪一个可控点？',
         'anti_prime_cleanup_action': '把最容易让我拖延或比较的入口从手机首页移走。',
       },
+      'p2_delivery': <String, dynamic>{
+        'artifact_type': scene,
+        'title': '',
+        'trigger_condition': '',
+        'summary': '',
+        'sections': <String>[],
+        'next_action': '',
+        'reuse_surface': '',
+      },
       'identity_evidence': <String, dynamic>{
         'specific_action': action,
         'proved_capacity': '在状态并不完美时，仍然愿意用小行动收集新证据。',
@@ -269,32 +278,68 @@ class RealisticOptimismTrainingAiService {
         payload['final_user_message'] = '本周不只看你是否开心，而看恢复能力、解释风格、行动证据、感恩敏感度和注意力环境是否在变强。';
         break;
       case 'todo_goal_bridge':
+        map('p2_delivery')
+          ..['artifact_type'] = 'todo_goal_bridge'
+          ..['title'] = 'Todo 未完成转训练'
+          ..['trigger_condition'] = 'Todo 逾期、未完成或目标拖延'
+          ..['summary'] = '把未完成从失败标签转为情绪允许、解释重构和明日最小行动。'
+          ..['reuse_surface'] = 'Todo';
         map('process_action_plan')['five_minute_action'] = '把未完成的 Todo 缩小为明天 5 分钟内能完成的第一步，并写下一个 If-Then 应对。';
         map('identity_evidence')['identity_type'] = '行动证据积累者';
         map('identity_evidence')['identity_sentence'] = '我正在成为一个能把未完成转成下一次更小行动的人。';
         payload['final_user_message'] = 'Todo 未完成不是人格判决；它会进入情绪允许、解释重构和明日最小行动。';
         break;
       case 'daily_review':
+        map('p2_delivery')
+          ..['artifact_type'] = 'daily_review'
+          ..['title'] = '每日自动复盘'
+          ..['trigger_condition'] = '晚上或结束一天时'
+          ..['summary'] = '汇总事件、行动证据、感恩品味、身份提醒和明日 Prime。'
+          ..['reuse_surface'] = '首页/每日复盘';
         map('gratitude_or_savoring')['savoring_prompt'] = '选择今天一个具体好体验停留 30 秒，然后为明天设置一个 Prime。';
         map('prime')['daily_value_word'] = '复盘';
         map('prime')['lock_screen_sentence'] = '今天不必完美，但我要保存一个行动证据。';
         payload['final_user_message'] = '今日复盘重点：看见解释风格、保存行动证据、具体感恩，并设置明日 Prime。';
         break;
       case 'course_card':
+        map('p2_delivery')
+          ..['artifact_type'] = 'course_card'
+          ..['title'] = '现实主义乐观课程知识卡'
+          ..['trigger_condition'] = '用户学习课程概念或需要复习时'
+          ..['summary'] = '把概念变成现实例子、练习问题和 5 分钟行动。'
+          ..['reuse_surface'] = '课程知识卡';
         map('process_action_plan')['five_minute_action'] = '读完这张知识卡后，立刻把一个真实事件改写成“事实 + 解释 + 可控点”。';
         payload['final_user_message'] = '课程知识卡必须落到一个练习问题和一个 5 分钟行动，而不是停留在概念。';
         break;
       case 'role_model_case':
+        map('p2_delivery')
+          ..['artifact_type'] = 'role_model_case'
+          ..['title'] = '榜样失败恢复案例'
+          ..['trigger_condition'] = '用户需要“有人也做到过”的替代证据时'
+          ..['summary'] = '拆解榜样如何失败、解释、恢复、行动和可模仿行为。'
+          ..['reuse_surface'] = '榜样案例库';
         map('benefit_finder_layer')['remaining_resources'] = <String>['有人也经历过失败后恢复。', '榜样案例可以提供替代证据。', '今天只模仿一个最小动作。'];
         payload['final_user_message'] = '榜样不是用来比较，而是证明“失败后恢复并继续行动”有现实路径。';
         break;
       case 'proactive_reminder':
+        map('p2_delivery')
+          ..['artifact_type'] = 'proactive_reminder'
+          ..['title'] = '主动提醒文案'
+          ..['trigger_condition'] = '自责、拖延、睡前刷信息流或 Todo 逾期时'
+          ..['summary'] = '生成推送、锁屏、小组件可复用的短提醒和行动线索。'
+          ..['reuse_surface'] = '锁屏/小组件/推送';
         map('prime')['daily_value_word'] = '提醒';
         map('prime')['lock_screen_sentence'] = '如果开始自责，就只做一个 5 分钟证据。';
         map('prime')['benefit_finder_question'] = '这件事里还有哪个可控点？';
         payload['final_user_message'] = '主动提醒应包含触发条件、短句和一个小行动线索。';
         break;
       case 'monthly_report':
+        map('p2_delivery')
+          ..['artifact_type'] = 'monthly_report'
+          ..['title'] = '周/月报图表摘要'
+          ..['trigger_condition'] = '每周或每月回顾时'
+          ..['summary'] = '汇总解释风格、行动证据、失败恢复、注意力环境、感恩和身份成长趋势。'
+          ..['reuse_surface'] = '周报/月报';
         payload['final_user_message'] = '本周期报告应同时看解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度和身份成长。';
         break;
       default:
@@ -381,6 +426,15 @@ class RealisticOptimismTrainingAiService {
       ..['lock_screen_sentence'] = ''
       ..['benefit_finder_question'] = ''
       ..['anti_prime_cleanup_action'] = '';
+
+    map('p2_delivery')
+      ..['artifact_type'] = ''
+      ..['title'] = ''
+      ..['trigger_condition'] = ''
+      ..['summary'] = ''
+      ..['sections'] = <String>[]
+      ..['next_action'] = ''
+      ..['reuse_surface'] = '';
 
     map('identity_evidence')
       ..['specific_action'] = ''

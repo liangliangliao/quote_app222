@@ -449,6 +449,7 @@ class RealisticOptimismTrainingStats {
   final int relationshipGratitude;
   final int eventIntensity;
   final int processPlans;
+  final int p2Artifacts;
 
   const RealisticOptimismTrainingStats({
     required this.records,
@@ -466,5 +467,6 @@ class RealisticOptimismTrainingStats {
     this.relationshipGratitude = 0,
     this.eventIntensity = 0,
     this.processPlans = 0,
+    this.p2Artifacts = 0,
   });
 }

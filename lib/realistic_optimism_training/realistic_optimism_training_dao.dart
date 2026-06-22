@@ -240,6 +240,29 @@ class RealisticOptimismTrainingDao {
       )
     ''');
 
+
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS realistic_optimism_training_p2_artifacts (
+        id TEXT PRIMARY KEY,
+        record_id TEXT,
+        artifact_type TEXT,
+        title TEXT,
+        trigger_text TEXT,
+        trigger_condition TEXT,
+        summary TEXT,
+        reuse_surface TEXT,
+        content_json TEXT,
+        next_action TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+
+    await _tryAddColumn(db, 'realistic_optimism_training_p2_artifacts', 'trigger_condition TEXT');
+    await _tryAddColumn(db, 'realistic_optimism_training_p2_artifacts', 'summary TEXT');
+    await _tryAddColumn(db, 'realistic_optimism_training_p2_artifacts', 'reuse_surface TEXT');
+
     await db.execute('''
       CREATE TABLE IF NOT EXISTS realistic_optimism_training_identity_evidence (
         id TEXT PRIMARY KEY,
@@ -261,6 +284,7 @@ class RealisticOptimismTrainingDao {
       final isFailureScene = record.scene == 'failure_immunity' || record.scene == 'controlled_failure_challenge';
       final isGratitudeScene = record.scene == 'gratitude_savoring';
       final isPrimeScene = record.scene == 'prime_design' || record.scene == 'anti_prime_cleanup';
+      final isP2Scene = <String>{'todo_goal_bridge', 'daily_review', 'course_card', 'role_model_case', 'proactive_reminder', 'monthly_report'}.contains(record.scene);
       await txn.insert(
         'realistic_optimism_training_records',
         record.toRow(),
@@ -446,6 +470,28 @@ class RealisticOptimismTrainingDao {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+      if (!isSafetyRouted && isP2Scene) {
+        final p2 = record.payload['p2_delivery'];
+        final p2Map = p2 is Map ? Map<String, dynamic>.from(p2) : <String, dynamic>{};
+        await txn.insert(
+          'realistic_optimism_training_p2_artifacts',
+          <String, Object?>{
+            'id': 'rot_p2_${record.id}',
+            'record_id': record.id,
+            'artifact_type': record.scene,
+            'title': (p2Map['title'] ?? '').toString().trim().isNotEmpty ? p2Map['title'].toString().trim() : (record.eventSummary.isEmpty ? record.scene : record.eventSummary),
+            'trigger_text': record.rawInput,
+            'trigger_condition': (p2Map['trigger_condition'] ?? '').toString().trim(),
+            'summary': (p2Map['summary'] ?? '').toString().trim(),
+            'reuse_surface': (p2Map['reuse_surface'] ?? '').toString().trim(),
+            'content_json': jsonEncode(p2Map.isEmpty ? record.payload : p2Map),
+            'next_action': record.fiveMinuteAction.isEmpty ? record.finalUserMessage : record.fiveMinuteAction,
+            'active': 1,
+            'created_at_ms': record.createdAtMs,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
       if (!isSafetyRouted && (record.identitySentence.isNotEmpty || record.provedCapacity.isNotEmpty)) {
         await txn.insert(
           'realistic_optimism_training_identity_evidence',
@@ -495,6 +541,7 @@ class RealisticOptimismTrainingDao {
       await txn.delete('realistic_optimism_training_gratitude_entries', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_relationship_gratitude', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_primes', where: 'record_id=?', whereArgs: <Object?>[id]);
+      await txn.delete('realistic_optimism_training_p2_artifacts', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_identity_evidence', where: 'record_id=?', whereArgs: <Object?>[id]);
       await txn.delete('realistic_optimism_training_records', where: 'id=?', whereArgs: <Object?>[id]);
     });
@@ -517,6 +564,7 @@ class RealisticOptimismTrainingDao {
       await txn.delete('realistic_optimism_training_gratitude_entries');
       await txn.delete('realistic_optimism_training_relationship_gratitude');
       await txn.delete('realistic_optimism_training_primes');
+      await txn.delete('realistic_optimism_training_p2_artifacts');
       await txn.delete('realistic_optimism_training_identity_evidence');
       await txn.delete('realistic_optimism_training_records');
     });
@@ -698,6 +746,12 @@ class RealisticOptimismTrainingDao {
     );
   }
 
+  Future<List<Map<String, Object?>>> listP2Artifacts({int limit = 40}) async {
+    final db = await _db();
+    await ensureTables();
+    return db.query('realistic_optimism_training_p2_artifacts', orderBy: 'created_at_ms DESC', limit: limit);
+  }
+
   Future<RealisticOptimismTrainingStats> stats() async {
     final db = await _db();
     await ensureTables();
@@ -718,6 +772,7 @@ class RealisticOptimismTrainingDao {
       relationshipGratitude: await count('realistic_optimism_training_relationship_gratitude'),
       eventIntensity: await count('realistic_optimism_training_event_intensity'),
       processPlans: await count('realistic_optimism_training_process_plans'),
+      p2Artifacts: await count('realistic_optimism_training_p2_artifacts'),
     );
   }
 }

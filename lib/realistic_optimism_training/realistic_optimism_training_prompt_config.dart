@@ -417,7 +417,7 @@ controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_s
 - monthly_report：生成周/月报结构，必须包含解释风格变化、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长和下周期训练重点。
 
 无论哪个 P2 场景，都必须遵守 L3/L4 安全分流；不要在高强度痛苦时强行感恩、意义化或挑战失败。
-输出仍必须符合统一 JSON。请把 P2 结果尽量放入 final_user_message、process_action_plan、prime、identity_evidence 和 gratitude_or_savoring 等现有字段，必要时可在 payload 中附加 p2_delivery 对象。
+输出仍必须符合统一 JSON。请必须填充 p2_delivery 对象，并把 P2 结果同步放入 final_user_message、process_action_plan、prime、identity_evidence 和 gratitude_or_savoring 等现有字段，便于页面展示与产物库复用。
 ''';
 
   static const String outputFormatPrompt = r'''
@@ -525,6 +525,15 @@ controlled_failure_challenge.risk_level 必须是 low 或 very_low；execution_s
     "lock_screen_sentence": "",
     "benefit_finder_question": "",
     "anti_prime_cleanup_action": ""
+  },
+  "p2_delivery": {
+    "artifact_type": "todo_goal_bridge/daily_review/course_card/role_model_case/proactive_reminder/monthly_report",
+    "title": "",
+    "trigger_condition": "",
+    "summary": "",
+    "sections": [],
+    "next_action": "",
+    "reuse_surface": "Todo/首页/锁屏/小组件/周报/月报"
   },
   "identity_evidence": {
     "specific_action": "",
