@@ -43,6 +43,12 @@ class _RotGuidedTrainingFlowPageState extends State<RotGuidedTrainingFlowPage> {
     _RotScenario('gratitude_savoring', '感恩、品味与关系表达', Icons.local_florist_outlined, '具体感恩、30秒品味、轻量/具体/深度关系表达。'),
     _RotScenario('identity_evidence', '身份沉淀', Icons.badge_outlined, '把一次真实行动沉淀为“我正在成为……”的身份句。'),
     _RotScenario('weekly_baseline', '幸福基线周报', Icons.show_chart_outlined, '不是追求天天开心，而是追踪恢复能力和行动稳定性。'),
+    _RotScenario('todo_goal_bridge', 'Todo/目标联动', Icons.task_alt_outlined, '把未完成任务转入情绪允许、解释重构和明日最小行动。'),
+    _RotScenario('daily_review', '每日自动复盘', Icons.nightlight_round, '晚上汇总事件、行动证据、感恩品味、身份提醒和明日 Prime。'),
+    _RotScenario('course_card', '课程知识卡', Icons.menu_book_outlined, '把课程概念变成一张可练习的现实主义乐观知识卡。'),
+    _RotScenario('role_model_case', '榜样案例库', Icons.groups_outlined, '把榜样的失败解释、恢复行动和可模仿行为拆出来。'),
+    _RotScenario('proactive_reminder', '主动提醒文案', Icons.notifications_active_outlined, '生成推送、锁屏、小组件可用的触发式提醒。'),
+    _RotScenario('monthly_report', '周/月报图表', Icons.insights_outlined, '输出解释风格、行动证据、失败恢复和身份成长趋势。'),
   ];
 
   @override
@@ -144,6 +150,18 @@ class _RotGuidedTrainingFlowPageState extends State<RotGuidedTrainingFlowPage> {
         return '必须基于实际行动生成身份层证据，不要空泛夸奖。';
       case 'weekly_baseline':
         return '必须生成周报：解释风格变化、行动证据、失败恢复、感恩敏感度、下周训练重点。';
+      case 'todo_goal_bridge':
+        return '必须把 Todo 未完成转成情绪允许、解释风格、Fault/Benefit、明日最小行动和行动证据问题。';
+      case 'daily_review':
+        return '必须汇总今日事件、解释风格、行动证据、三件具体感恩、30秒品味、身份提醒和明日 Prime。';
+      case 'course_card':
+        return '必须生成课程知识卡：概念、现实例子、练习问题和 5 分钟行动。';
+      case 'role_model_case':
+        return '必须生成榜样案例：失败、解释、恢复、行动和用户可模仿的最小行为。';
+      case 'proactive_reminder':
+        return '必须生成主动提醒：触发条件、推送文案、锁屏短句、小组件文字和行动线索。';
+      case 'monthly_report':
+        return '必须生成周/月报图表结构：解释风格、行动证据、失败恢复、Prime、感恩和身份成长趋势。';
       default:
         return '必须完成事件重构完整闭环。';
     }
@@ -320,6 +338,26 @@ class _InputSection extends StatelessWidget {
         return const <_FieldSpec>[
           _FieldSpec('raw_event', '我刚刚做过/恢复过/珍惜过的一件事', '例如：虽然自责，但我打开文件改了一句话', 3),
           _FieldSpec('emotion', '当时我带着什么情绪完成它', '例如：焦虑、拖延、羞耻、失望', 2),
+        ];
+      case 'todo_goal_bridge':
+        return const <_FieldSpec>[
+          _FieldSpec('goal', '未完成的 Todo / 目标', '例如：写简历、学习英语、运动、投递工作', 2),
+          _FieldSpec('obstacle', '未完成的真实卡点', '例如：任务太大、害怕失败、手机干扰、没有状态', 3),
+          _FieldSpec('automatic_thought', '未完成后的自动解释', '例如：我永远坚持不了；我又失败了', 3),
+        ];
+      case 'daily_review':
+      case 'monthly_report':
+        return const <_FieldSpec>[
+          _FieldSpec('raw_event', '今天/本周期主要事件', '写下主要事件、未完成事项、完成的小行动', 4),
+          _FieldSpec('gratitude_object', '具体感恩或品味对象', '例如：一句支持、一个完成的小动作、一个环境细节', 3),
+          _FieldSpec('goal', '下周期想训练的重点', '例如：减少永久化、增加行动证据、清理 Anti-Prime', 2),
+        ];
+      case 'course_card':
+      case 'role_model_case':
+      case 'proactive_reminder':
+        return const <_FieldSpec>[
+          _FieldSpec('goal', '主题', '例如：解释风格、失败免疫、Benefit Finder、Prime、感恩品味', 2),
+          _FieldSpec('raw_event', '我的现实场景', '把知识卡/榜样/提醒应用到哪个真实场景？', 3),
         ];
       default:
         return const <_FieldSpec>[
