@@ -124,6 +124,28 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
   }
 
 
+  Future<void> _generateNextMissingP2Artifact() async {
+    const order = <String>[
+      'todo_goal_bridge',
+      'daily_review',
+      'course_card',
+      'role_model_case',
+      'proactive_reminder',
+      'monthly_report',
+    ];
+    final existing = _p2Rows.map((row) => (row['artifact_type'] ?? '').toString()).toSet();
+    final scene = order.firstWhere((item) => !existing.contains(item), orElse: () => 'monthly_report');
+    final templates = <String, String>{
+      'todo_goal_bridge': '请把一个未完成 Todo 转成现实主义乐观训练闭环：情绪允许、解释风格、Benefit Finder、明日最小行动。',
+      'daily_review': '请根据今天的记录生成晚上复盘：事件、行动证据、三件具体感恩、30秒品味、身份提醒、明日 Prime。',
+      'course_card': '请生成一张课程知识卡：主题是解释风格、Benefit Finder、失败免疫、Prime 或感恩品味。',
+      'role_model_case': '请生成一个榜样案例：如何经历失败、解释、恢复、行动，以及我今天可模仿的最小动作。',
+      'proactive_reminder': '请生成主动提醒方案：触发条件、推送文案、锁屏短句、小组件文字、5分钟行动线索。',
+      'monthly_report': '请生成周/月报摘要：解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长。',
+    };
+    await _openGuidedFlow(scene, templates[scene] ?? '请生成一个 P2 产物。');
+  }
+
   Future<void> _openTodoBridgeFromToday() async {
     try {
       final tasks = await _todoDao.listTasks('smart_myday', limit: 8);
@@ -149,6 +171,24 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
       return parts.join('；');
     }).join('\n');
     return '【P2 Todo 自动桥接】以下是今天仍未完成的 Todo，请不要把它们简单判定为失败；请按最终方案转换为：情绪允许 → 事实/解释分离 → 解释风格雷达 → Fault/Benefit 双镜头 → 明日最小行动 → If-Then → 行动证据问题 → 可复用的 Todo 产物。\n$lines';
+  }
+
+  Future<void> _createReminderRuleTodo() async {
+    try {
+      final lists = await _todoDao.listLists();
+      final listId = lists.isNotEmpty ? lists.first.listId : await _todoDao.createLocalList('现实主义乐观行动');
+      await _todoDao.createLocalTask(
+        listId: listId,
+        title: '设置一条现实主义乐观主动提醒规则',
+        bodyText: 'P2 主动提醒规则配置：\n1. 触发条件：例如 Todo 逾期、睡前刷信息流、自责超过 5 分钟。\n2. 提醒文案：必须短、具体、非鸡汤。\n3. 行动线索：只给一个 5 分钟动作。\n4. 复用位置：推送 / 锁屏短句 / 小组件文字 / Todo 顶部提示。\n5. 频率：每天、工作日、每周，或只在触发时。\n6. 关闭策略：如果连续 3 次忽略，就降低频率或重写文案。',
+        status: 'notStarted',
+        importance: 'normal',
+        isMyDay: true,
+      );
+      _toast('已创建主动提醒规则配置 Todo。');
+    } catch (e) {
+      _toast('创建提醒规则 Todo 失败：$e');
+    }
   }
 
   Future<void> _createMonthlyReportTodo() async {
@@ -220,6 +260,60 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
     } catch (e) {
       _toast('回写 Todo 失败：$e');
     }
+  }
+
+  Future<void> _copyP2VoiceInputTemplate() async {
+    const text = '现实主义乐观语音输入模板：\n1. 今天发生的客观事件是……\n2. 我现在最强烈的情绪是……身体感觉在……\n3. 我脑中自动出现的解释是……\n4. 这句话里可能有永久化/普遍化/人格化/灾难化/无力化/过滤化的是……\n5. 我还能控制的一个很小部分是……\n6. 我愿意先做的 5 分钟行动是……';
+    await Clipboard.setData(const ClipboardData(text: text));
+    _toast('已复制语音输入模板，可用系统语音键盘直接听写。');
+  }
+
+  Future<void> _copyLatestP2WidgetText() async {
+    final source = _p2Rows.isNotEmpty ? _p2Rows.first : <String, Object?>{};
+    final title = (source['title'] ?? '现实主义乐观提醒').toString().trim();
+    final action = (source['next_action'] ?? source['summary'] ?? '').toString().trim();
+    final text = action.isEmpty ? '我可以痛苦，也可以先做一个 5 分钟行动证据。' : action;
+    await Clipboard.setData(ClipboardData(text: '$title\n$text'));
+    _toast('已复制为锁屏/小组件短句');
+  }
+
+  Future<void> _copyP2OperatingDigest() async {
+    const labels = <String, String>{
+      'todo_goal_bridge': 'Todo桥接',
+      'daily_review': '每日复盘',
+      'course_card': '课程卡',
+      'role_model_case': '榜样案例',
+      'proactive_reminder': '主动提醒',
+      'monthly_report': '周/月报',
+    };
+    final counts = <String, int>{for (final key in labels.keys) key: 0};
+    final actions = <String>[];
+    for (final row in _p2Rows) {
+      final type = (row['artifact_type'] ?? '').toString();
+      if (counts.containsKey(type)) counts[type] = (counts[type] ?? 0) + 1;
+      final action = (row['next_action'] ?? row['summary'] ?? '').toString().trim();
+      if (action.isNotEmpty && actions.length < 3) actions.add(action);
+    }
+    final missing = labels.entries
+        .where((entry) => (counts[entry.key] ?? 0) == 0)
+        .map((entry) => entry.value)
+        .join('、');
+    final coverage = labels.entries
+        .map((entry) => '${entry.value}:${counts[entry.key] ?? 0}')
+        .join('｜');
+    final actionText = actions.isEmpty
+        ? '1. 先补一个 Todo 桥接或主动提醒产物'
+        : actions
+            .asMap()
+            .entries
+            .map((entry) => '${entry.key + 1}. ${entry.value}')
+            .join('\n');
+    final text = 'P2 运营摘要\n'
+        '覆盖度：$coverage\n'
+        '缺口：${missing.isEmpty ? '暂无，六类产物都有样本' : missing}\n'
+        '最近可执行动作：\n$actionText';
+    await Clipboard.setData(ClipboardData(text: text));
+    _toast('已复制 P2 运营摘要');
   }
 
   Future<void> _sendLatestP2Reminder() async {
@@ -963,9 +1057,29 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
           OutlinedButton.icon(onPressed: () => open('course_card', '请生成一张课程知识卡：主题是解释风格 / Benefit Finder / 失败免疫 / Prime / 感恩品味。'), icon: const Icon(Icons.menu_book_outlined), label: const Text('生成课程知识卡')),
           OutlinedButton.icon(onPressed: () => open('role_model_case', '请生成一个榜样案例：他/她如何经历失败、如何解释、如何恢复、如何行动，我今天能模仿哪一个最小动作？'), icon: const Icon(Icons.groups_outlined), label: const Text('生成榜样案例')),
           OutlinedButton.icon(onPressed: () => open('proactive_reminder', '请生成一个主动提醒方案：触发条件、推送文案、锁屏短句、小组件文字、一个 5 分钟行动线索。'), icon: const Icon(Icons.notifications_active_outlined), label: const Text('主动提醒文案')),
+          OutlinedButton.icon(onPressed: _createReminderRuleTodo, icon: const Icon(Icons.rule_outlined), label: const Text('创建提醒规则 Todo')),
+          OutlinedButton.icon(onPressed: _copyLatestP2WidgetText, icon: const Icon(Icons.copy_outlined), label: const Text('复制锁屏/小组件文案')),
+          OutlinedButton.icon(
+            onPressed: _copyP2OperatingDigest,
+            icon: const Icon(Icons.summarize_outlined),
+            label: const Text('复制P2运营摘要'),
+          ),
+          OutlinedButton.icon(onPressed: _copyP2VoiceInputTemplate, icon: const Icon(Icons.mic_none_outlined), label: const Text('复制语音输入模板')),
           OutlinedButton.icon(onPressed: _sendLatestP2Reminder, icon: const Icon(Icons.notification_add_outlined), label: const Text('发送测试提醒')),
           OutlinedButton.icon(onPressed: _createTodoFromLatestP2Action, icon: const Icon(Icons.add_task_outlined), label: const Text('下一步行动写回 Todo')),
         ]),
+        const SizedBox(height: 12),
+        _P2DeliveryCoverageCard(rows: _p2Rows),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _generateNextMissingP2Artifact,
+          icon: const Icon(Icons.auto_fix_high_outlined),
+          label: const Text('一键补齐缺失 P2 产物'),
+        ),
+        const SizedBox(height: 12),
+        _P2OperationalDigestCard(rows: _p2Rows),
+        const SizedBox(height: 12),
+        _P2ArtifactLibraryGroup(rows: _p2Rows),
         const SizedBox(height: 12),
         _MapRowsGroup(
           title: 'P2 产物库',
@@ -1824,6 +1938,175 @@ class _EvidenceGroup extends StatelessWidget {
   }
 }
 
+
+class _P2ArtifactLibraryGroup extends StatelessWidget {
+  final List<Map<String, Object?>> rows;
+  const _P2ArtifactLibraryGroup({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final libraryRows = rows.where((row) {
+      final type = (row['artifact_type'] ?? '').toString();
+      return type == 'course_card' || type == 'role_model_case';
+    }).toList(growable: false);
+    if (libraryRows.isEmpty) {
+      return const _InfoCard(
+        icon: Icons.local_library_outlined,
+        title: '课程卡 / 榜样案例库',
+        body: '暂无课程卡或榜样案例。先生成至少一张课程知识卡或一个榜样案例，就会在这里形成可复用资料库。',
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text(
+              '课程卡 / 榜样案例库',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            ...libraryRows.take(6).map((row) {
+              final type = (row['artifact_type'] ?? '').toString() == 'course_card'
+                  ? '课程卡'
+                  : '榜样案例';
+              final title = (row['title'] ?? '').toString().trim().isEmpty
+                  ? type
+                  : (row['title'] ?? '').toString().trim();
+              final summary =
+                  (row['summary'] ?? row['next_action'] ?? '').toString().trim();
+              final reuse = (row['reuse_surface'] ?? '').toString().trim();
+              return Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: Text(
+                  '$type｜$title${summary.isEmpty ? '' : '\n$summary'}${reuse.isEmpty ? '' : '\n复用位置：$reuse'}',
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _P2OperationalDigestCard extends StatelessWidget {
+  final List<Map<String, Object?>> rows;
+  const _P2OperationalDigestCard({required this.rows});
+
+  int _createdAt(Map<String, Object?> row) {
+    final raw = row['created_at_ms'];
+    if (raw is int) return raw;
+    return int.tryParse((raw ?? '').toString()) ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final dayMs = const Duration(days: 1).inMilliseconds;
+    final todayRows = rows.where((row) => nowMs - _createdAt(row) <= dayMs).length;
+    final weekRows = rows.where((row) => nowMs - _createdAt(row) <= dayMs * 7).length;
+    final monthRows = rows.where((row) => nowMs - _createdAt(row) <= dayMs * 30).length;
+    final actionRows = rows.where((row) {
+      return (row['next_action'] ?? row['summary'] ?? '').toString().trim().isNotEmpty;
+    }).length;
+    final reminders = rows.where((row) {
+      return (row['artifact_type'] ?? '').toString() == 'proactive_reminder';
+    }).length;
+    final reports = rows.where((row) {
+      return (row['artifact_type'] ?? '').toString() == 'monthly_report';
+    }).length;
+    final nextAction = rows
+        .map((row) => (row['next_action'] ?? row['summary'] ?? '').toString().trim())
+        .firstWhere((text) => text.isNotEmpty, orElse: () => '先补一个 Todo 桥接或主动提醒产物。');
+    final status = rows.isEmpty
+        ? '还未进入 P2 运营。先生成 Todo 桥接，再补每日复盘与主动提醒。'
+        : reminders == 0
+            ? '已有产物，但还缺主动提醒；优先补推送/锁屏/小组件触发规则。'
+            : reports == 0
+                ? '已有提醒闭环，但还缺周/月报；补一份趋势复盘，让 P2 可以持续迭代。'
+                : 'P2 已形成“产物→提醒→复盘”的基础运营闭环。';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('P2 运营看板', style: TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                Chip(label: Text('今日新增：$todayRows')),
+                Chip(label: Text('7天新增：$weekRows')),
+                Chip(label: Text('30天新增：$monthRows')),
+                Chip(label: Text('可行动产物：$actionRows')),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(status),
+            const SizedBox(height: 8),
+            Text('最近可执行动作：$nextAction'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _P2DeliveryCoverageCard extends StatelessWidget {
+  final List<Map<String, Object?>> rows;
+  const _P2DeliveryCoverageCard({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = <String, String>{
+      'todo_goal_bridge': 'Todo桥接',
+      'daily_review': '每日复盘',
+      'course_card': '课程卡',
+      'role_model_case': '榜样案例',
+      'proactive_reminder': '主动提醒',
+      'monthly_report': '周/月报',
+    };
+    final counts = <String, int>{for (final key in labels.keys) key: 0};
+    for (final row in rows) {
+      final type = (row['artifact_type'] ?? '').toString();
+      if (counts.containsKey(type)) counts[type] = (counts[type] ?? 0) + 1;
+    }
+    final missing = labels.keys.where((key) => (counts[key] ?? 0) == 0).toList(growable: false);
+    final completed = labels.length - missing.length;
+    final next = missing.isEmpty ? '六类 P2 产物都已有样本；下一步是做周/月趋势图和自动提醒规则。' : '下一步优先生成：${labels[missing.first]}。';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          const Text('P2 交付覆盖度', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Text('已覆盖 $completed / ${labels.length} 类产物'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: labels.entries
+                .map((entry) => Chip(label: Text('${entry.value}：${counts[entry.key] ?? 0}')))
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 8),
+          Text(next),
+        ]),
+      ),
+    );
+  }
+}
 
 class _IntensityDistributionCard extends StatelessWidget {
   final List<RealisticOptimismTrainingRecord> records;
