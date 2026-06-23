@@ -70,6 +70,18 @@ class RotCoreValueCopy {
         return '身份沉淀的价值';
       case 'weekly_baseline':
         return '幸福基线周报的价值';
+      case 'todo_goal_bridge':
+        return 'Todo/目标联动的价值';
+      case 'daily_review':
+        return '每日复盘的价值';
+      case 'course_card':
+        return '课程知识卡的价值';
+      case 'role_model_case':
+        return '榜样案例库的价值';
+      case 'proactive_reminder':
+        return '主动提醒的价值';
+      case 'monthly_report':
+        return '周/月报图表的价值';
       default:
         return '核心训练价值';
     }
@@ -103,6 +115,18 @@ class RotCoreValueCopy {
         return '身份不是靠口号建立，而是由一次次行动、恢复、珍惜和重新开始的证据积累出来。';
       case 'weekly_baseline':
         return '长期追踪解释风格、行动证据、失败恢复、Prime 和感恩敏感度，形成下一周只练一个重点。';
+      case 'todo_goal_bridge':
+        return 'Todo 没完成时不只显示失败，而是转入情绪允许、解释风格、Benefit Finder 和明日最小行动。';
+      case 'daily_review':
+        return '把一天的事件、行动证据、感恩品味、身份提醒和明日 Prime 自动串成复盘闭环。';
+      case 'course_card':
+        return '把 Lecture 7–9 的概念转成可读、可练、可行动的知识卡。';
+      case 'role_model_case':
+        return '用榜样案例训练“有人也恢复过、也重新行动过”的替代证据。';
+      case 'proactive_reminder':
+        return '把 AI 提醒落到触发条件、锁屏短句、小组件文案和一个行动线索。';
+      case 'monthly_report':
+        return '把周报/月报从文字总结升级为解释风格、行动证据、失败免疫和身份成长趋势。';
       default:
         return centerBody;
     }
@@ -1139,6 +1163,8 @@ If-Then：${_ifThenCtrl.text.trim()}
             ? (_evidenceCtrl.text.trim().isEmpty ? '我完成了一个小动作，积累了一条行动证据。' : _evidenceCtrl.text.trim())
             : (_notDoneCtrl.text.trim().isEmpty ? '我还没完成，但我已经看见了卡点，下一步会把行动缩小。' : _notDoneCtrl.text.trim()),
         completed: _actionCompleted,
+        completedAtMs: _actionCompleted ? now : null,
+        selfEfficacyScore: _actionCompleted ? 6 : 3,
         createdAtMs: now,
       ));
       if (!_actionCompleted) {
@@ -1646,6 +1672,8 @@ class _RotCoreBusinessFlowPageState extends State<RotCoreBusinessFlowPage> {
             ? (_evidenceCtrl.text.trim().isEmpty ? '我完成了一个小行动，积累了一条行动证据。' : _evidenceCtrl.text.trim())
             : '我还没有完成行动，但我已经看见卡点：${_obstacleCtrl.text.trim()}。下一步会把行动缩小。',
         completed: _completedAction,
+        completedAtMs: _completedAction ? now : null,
+        selfEfficacyScore: _completedAction ? 6 : 3,
         createdAtMs: now,
       ));
       if (!_completedAction) {
