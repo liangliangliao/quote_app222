@@ -123,6 +123,18 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
     }
   }
 
+  String _p2SceneTemplate(String scene) {
+    const templates = <String, String>{
+      'todo_goal_bridge': '请把一个未完成 Todo 转成现实主义乐观训练闭环：情绪允许、解释风格、Benefit Finder、明日最小行动。',
+      'daily_review': '请根据今天的记录生成晚上复盘：事件、行动证据、三件具体感恩、30秒品味、身份提醒、明日 Prime。',
+      'course_card': '请生成一张课程知识卡：主题是解释风格、Benefit Finder、失败免疫、Prime 或感恩品味。',
+      'role_model_case': '请生成一个榜样案例：如何经历失败、解释、恢复、行动，以及我今天可模仿的最小动作。',
+      'proactive_reminder': '请生成主动提醒方案：触发条件、推送文案、锁屏短句、小组件文字、5分钟行动线索。',
+      'monthly_report': '请生成周/月报摘要：解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长。',
+    };
+    return templates[scene] ?? '请生成一个 P2 产物。';
+  }
+
 
   Future<void> _generateNextMissingP2Artifact() async {
     const order = <String>[
@@ -135,15 +147,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
     ];
     final existing = _p2Rows.map((row) => (row['artifact_type'] ?? '').toString()).toSet();
     final scene = order.firstWhere((item) => !existing.contains(item), orElse: () => 'monthly_report');
-    final templates = <String, String>{
-      'todo_goal_bridge': '请把一个未完成 Todo 转成现实主义乐观训练闭环：情绪允许、解释风格、Benefit Finder、明日最小行动。',
-      'daily_review': '请根据今天的记录生成晚上复盘：事件、行动证据、三件具体感恩、30秒品味、身份提醒、明日 Prime。',
-      'course_card': '请生成一张课程知识卡：主题是解释风格、Benefit Finder、失败免疫、Prime 或感恩品味。',
-      'role_model_case': '请生成一个榜样案例：如何经历失败、解释、恢复、行动，以及我今天可模仿的最小动作。',
-      'proactive_reminder': '请生成主动提醒方案：触发条件、推送文案、锁屏短句、小组件文字、5分钟行动线索。',
-      'monthly_report': '请生成周/月报摘要：解释风格、行动证据、失败恢复、Prime/Anti-Prime、感恩敏感度、身份成长。',
-    };
-    await _openGuidedFlow(scene, templates[scene] ?? '请生成一个 P2 产物。');
+    await _openGuidedFlow(scene, _p2SceneTemplate(scene));
   }
 
   Future<void> _openTodoBridgeFromToday() async {
@@ -277,7 +281,7 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
     _toast('已复制为锁屏/小组件短句');
   }
 
-  Future<void> _copyP2OperatingDigest() async {
+  String _buildP2OperatingDigestText() {
     const labels = <String, String>{
       'todo_goal_bridge': 'Todo桥接',
       'daily_review': '每日复盘',
@@ -312,8 +316,33 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
         '覆盖度：$coverage\n'
         '缺口：${missing.isEmpty ? '暂无，六类产物都有样本' : missing}\n'
         '最近可执行动作：\n$actionText';
+    return text;
+  }
+
+  Future<void> _copyP2OperatingDigest() async {
+    final text = _buildP2OperatingDigestText();
     await Clipboard.setData(ClipboardData(text: text));
     _toast('已复制 P2 运营摘要');
+  }
+
+  Future<void> _createP2OperatingReviewTodo() async {
+    try {
+      final lists = await _todoDao.listLists();
+      final listId = lists.isNotEmpty
+          ? lists.first.listId
+          : await _todoDao.createLocalList('现实主义乐观行动');
+      await _todoDao.createLocalTask(
+        listId: listId,
+        title: '复盘 P2 运营摘要并补齐缺口',
+        bodyText: '${_buildP2OperatingDigestText()}\n\n请从缺口里只选一个，生成或执行一个 P2 产物。',
+        status: 'notStarted',
+        importance: 'normal',
+        isMyDay: true,
+      );
+      _toast('已创建 P2 运营复盘 Todo。');
+    } catch (e) {
+      _toast('创建 P2 运营复盘 Todo 失败：$e');
+    }
   }
 
   Future<void> _sendLatestP2Reminder() async {
@@ -1064,12 +1093,20 @@ class _RealisticOptimismTrainingHomePageState extends State<RealisticOptimismTra
             icon: const Icon(Icons.summarize_outlined),
             label: const Text('复制P2运营摘要'),
           ),
+          OutlinedButton.icon(
+            onPressed: _createP2OperatingReviewTodo,
+            icon: const Icon(Icons.fact_check_outlined),
+            label: const Text('创建P2复盘Todo'),
+          ),
           OutlinedButton.icon(onPressed: _copyP2VoiceInputTemplate, icon: const Icon(Icons.mic_none_outlined), label: const Text('复制语音输入模板')),
           OutlinedButton.icon(onPressed: _sendLatestP2Reminder, icon: const Icon(Icons.notification_add_outlined), label: const Text('发送测试提醒')),
           OutlinedButton.icon(onPressed: _createTodoFromLatestP2Action, icon: const Icon(Icons.add_task_outlined), label: const Text('下一步行动写回 Todo')),
         ]),
         const SizedBox(height: 12),
-        _P2DeliveryCoverageCard(rows: _p2Rows),
+        _P2DeliveryCoverageCard(
+          rows: _p2Rows,
+          onGenerate: (scene) => open(scene, _p2SceneTemplate(scene)),
+        ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: _generateNextMissingP2Artifact,
@@ -2065,7 +2102,8 @@ class _P2OperationalDigestCard extends StatelessWidget {
 
 class _P2DeliveryCoverageCard extends StatelessWidget {
   final List<Map<String, Object?>> rows;
-  const _P2DeliveryCoverageCard({required this.rows});
+  final ValueChanged<String> onGenerate;
+  const _P2DeliveryCoverageCard({required this.rows, required this.onGenerate});
 
   @override
   Widget build(BuildContext context) {
@@ -2102,6 +2140,20 @@ class _P2DeliveryCoverageCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(next),
+          if (missing.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: missing.take(3).map((scene) {
+                return OutlinedButton.icon(
+                  onPressed: () => onGenerate(scene),
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: Text('补${labels[scene]}'),
+                );
+              }).toList(growable: false),
+            ),
+          ],
         ]),
       ),
     );
