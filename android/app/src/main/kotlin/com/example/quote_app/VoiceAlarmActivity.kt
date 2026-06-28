@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v28_noise_resistant_short_turn_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：短句需有人声帧证据；噪声/播报干扰只停留在候选态，不循环缓存"
+  private val batchChatPipelineVersion = "chat_input_v29_immediate_post_playback_resume_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：播报结束保留已打开麦克风并快速恢复，短冷却后立即接收用户开头"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -215,12 +215,12 @@ class VoiceAlarmActivity : Activity() {
           alarmVoicePlaying = false
           alarmPlaybackWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
           alarmPlaybackWatchdogRunnable = null
-          markPostPlaybackHandoff()
-          resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报刚结束：非实时录音短暂冷却后立即恢复，避免漏掉你接下来说的话。", cooldownMs = 220L)
+          markPostPlaybackHandoff(700L)
+          resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报刚结束：非实时录音已保持就绪，短暂冷却后立即接收你接下来的开头。", cooldownMs = 80L, preserveOpenRecorder = true)
           if (speechBuffer.isNotBlank()) {
             scheduleBufferedSpeechProcessing(350L)
           }
-          listenAgain(40L)
+          listenAgain(0L)
         }
       }
     }
@@ -3555,8 +3555,8 @@ class VoiceAlarmActivity : Activity() {
     alarmPlaybackWatchdogRunnable = Runnable {
       alarmPlaybackWatchdogRunnable = null
       if (!alarmVoicePlaying) {
-        markPostPlaybackHandoff(durationMs = 700L)
-        batchSpeakerPlaybackBlockUntil = minOf(batchSpeakerPlaybackBlockUntil, System.currentTimeMillis() + 120L)
+        markPostPlaybackHandoff(durationMs = 500L)
+        batchSpeakerPlaybackBlockUntil = minOf(batchSpeakerPlaybackBlockUntil, System.currentTimeMillis() + 80L)
         logVoice("batch.initialPlaybackGate.failOpen", "no playback start broadcast during short guard; microphone reopened")
         setBatchStatus("闹钟播报启动保护已结束：现在可以说话；若听到播报仍在继续，请等播报结束再说。")
       }
@@ -3591,9 +3591,9 @@ class VoiceAlarmActivity : Activity() {
     alarmPlaybackWatchdogRunnable = Runnable {
       alarmPlaybackWatchdogRunnable = null
       alarmVoicePlaying = false
-      markPostPlaybackHandoff()
-      resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报同步保护超时结束：非实时录音短暂冷却后恢复。", cooldownMs = 220L)
-      listenAgain(40L)
+      markPostPlaybackHandoff(700L)
+      resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报同步保护超时结束：非实时录音已保持就绪，短暂冷却后恢复。", cooldownMs = 80L, preserveOpenRecorder = true)
+      listenAgain(0L)
     }
     speechHandler.postDelayed(alarmPlaybackWatchdogRunnable!!, estimatedAlarmVoiceWatchdogMs())
     logVoice("alarm.playback.stateSync", "synced already-active alarm voice playback from service state", mapOf("text" to logPreview(playbackText), "pipeline" to batchChatPipelineVersion))
@@ -3631,9 +3631,9 @@ class VoiceAlarmActivity : Activity() {
     alarmPlaybackWatchdogRunnable = Runnable {
       alarmVoicePlaying = false
       alarmPlaybackWatchdogRunnable = null
-      markPostPlaybackHandoff()
-      resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报状态超时结束：非实时录音立即恢复。", cooldownMs = 220L)
-      listenAgain(40L)
+      markPostPlaybackHandoff(700L)
+      resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报状态超时结束：非实时录音已保持就绪，立即恢复。", cooldownMs = 80L, preserveOpenRecorder = true)
+      listenAgain(0L)
     }
     speechHandler.postDelayed(alarmPlaybackWatchdogRunnable!!, estimatedAlarmVoiceWatchdogMs())
     suppressForAlarmPlayback(2500L)
@@ -3666,14 +3666,14 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isPostPlaybackHandoffActive(): Boolean = System.currentTimeMillis() < postPlaybackHandoffUntil
 
-  private fun markPostPlaybackHandoff(durationMs: Long = 4800L) {
+  private fun markPostPlaybackHandoff(durationMs: Long = 900L) {
     val now = System.currentTimeMillis()
     postPlaybackHandoffUntil = maxOf(postPlaybackHandoffUntil, now + durationMs)
-    // Playback has already ended, so do not keep the old strong/suppression gates
-    // alive for nearly a second.  A long gate right after TTS caused the user's
-    // first words after the speaker stopped to be missed or classified as echo.
-    strongPlaybackGateUntil = now + 180L
-    suppressRecognitionUntil = minOf(maxOf(suppressRecognitionUntil, now + 80L), now + 160L)
+    // Playback has already ended, so keep only a very short echo gate.  Longer
+    // handoff windows forced the stricter post-playback VAD for several seconds
+    // and caused the first words after播报 to be missed.
+    strongPlaybackGateUntil = now + 80L
+    suppressRecognitionUntil = minOf(maxOf(suppressRecognitionUntil, now + 40L), now + 90L)
   }
 
   private fun batchPlaybackBargeInEnabled(): Boolean = true
@@ -3690,15 +3690,15 @@ class VoiceAlarmActivity : Activity() {
     return speaking || alarmVoicePlaying || now < batchSpeakerPlaybackBlockUntil || now < suppressRecognitionUntil || now < strongPlaybackGateUntil
   }
 
-  private fun resetBatchCurrentCaptureForSpeakerPlayback(message: String? = null, cooldownMs: Long = 220L) {
+  private fun resetBatchCurrentCaptureForSpeakerPlayback(message: String? = null, cooldownMs: Long = 220L, preserveOpenRecorder: Boolean = false) {
     val now = System.currentTimeMillis()
-    batchSpeakerPlaybackEpoch += 1L
+    if (!preserveOpenRecorder) batchSpeakerPlaybackEpoch += 1L
     if (batchPlaybackBargeInEnabled()) {
       // 播报正在进行时需要较长的 speaker-mask 窗口；播报已经结束时只保留很短冷却，
       // 避免用户刚开口被 1.8s 固定窗口吃掉。无论哪种窗口，音频帧只用于打断检测，不写入 STT 文件。
       val guardMs = if (speaking || alarmVoicePlaying) maxOf(cooldownMs, 1800L) else cooldownMs.coerceAtMost(260L)
       batchPlaybackEchoGuardUntil = maxOf(batchPlaybackEchoGuardUntil, now + guardMs)
-      logVoice("batch.playbackEchoGuard", message ?: "batch playback echo guard active; speaker frames will be masked", mapOf("guardMs" to guardMs, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+      logVoice("batch.playbackEchoGuard", message ?: "batch playback echo guard active; speaker frames will be masked", mapOf("guardMs" to guardMs, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "preserveOpenRecorder" to preserveOpenRecorder, "pipeline" to batchChatPipelineVersion))
       if (selectedSttMode() == "batch") {
         runOnUiThread {
           if (!message.isNullOrBlank()) setBatchStatus((message ?: "") + " 播报帧不会写入转文字音频；检测到真人插话会先停止播报，再从干净音频重新录入。")
@@ -3826,15 +3826,15 @@ class VoiceAlarmActivity : Activity() {
       currentAppTtsStartedByEngine = false
     }
     speaking = false
-    markPostPlaybackHandoff()
-    resetBatchCurrentCaptureForSpeakerPlayback("AI 语音播报刚结束：非实时录音短暂冷却后立即恢复，避免漏掉你接下来说的话。", cooldownMs = 220L)
+    markPostPlaybackHandoff(700L)
+    resetBatchCurrentCaptureForSpeakerPlayback("AI 语音播报刚结束：非实时录音已保持就绪，短暂冷却后立即接收你接下来的开头。", cooldownMs = 80L, preserveOpenRecorder = true)
     if (speechBuffer.isNotBlank()) {
       scheduleBufferedSpeechProcessing(350L)
-      if (restart) runOnUiThread { listenAgain(40L) }
+      if (restart) runOnUiThread { listenAgain(0L) }
     } else if (processPendingAiUserSpeechIfReady()) {
-      if (restart) runOnUiThread { listenAgain(40L) }
+      if (restart) runOnUiThread { listenAgain(0L) }
     } else if (restart) {
-      runOnUiThread { listenAgain(40L) }
+      runOnUiThread { listenAgain(0L) }
     }
   }
 
