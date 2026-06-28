@@ -208,6 +208,12 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
               .toList(growable: false),
         ),
         _PromptModule(
+          id: SelfWorthAiPromptConfig.moduleId,
+          name: '真实自尊 SelfWorth AI',
+          description: '统一配置基于《哈佛大学公开课：幸福课》第21集后半与第22集的全局价值层、八大模块层、场景层、输出格式层 Prompt。修改后下一次本模块 AI 调用立即生效。',
+          items: SelfWorthAiPromptConfig.allIds.map((id) => _PromptItem(id: id, name: SelfWorthAiPromptConfig.labels[id] ?? id)).toList(growable: false),
+        ),
+        _PromptModule(
           id: DefenseCompassPromptConfig.moduleId,
           name: '自我防御罗盘 · Ego Defense Compass',
           description: '统一配置基于安娜·弗洛伊德《自我与防御机制》的全局价值层、完整场景层、输出格式层、结构化 JSON、行动生成、档案更新、关系对话和异常修复 Prompt。修改后下一次本模块 AI 调用立即生效。',
@@ -693,6 +699,23 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         if (ok != true) return;
       }
     }
+    if (_promptId.startsWith('sw_')) {
+      final missing = _swPrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
+      if (missing.isNotEmpty) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('关键占位符缺失'),
+            content: Text("当前模板缺少：${missing.join('、')}。保存后 AI 仍可调用，但上下文可能不完整。是否仍然保存？"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('返回修改')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('仍然保存')),
+            ],
+          ),
+        );
+        if (ok != true) return;
+      }
+    }
     setState(() => _saving = true);
     try {
       await _savePromptById(_promptId, _templateCtrl.text);
@@ -916,6 +939,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       id.startsWith('sw_');
 
   String _moduleExportLabel(String id) {
+    if (id.startsWith('sw_')) return '真实自尊 SelfWorth AI';
     if (id.startsWith('rpo_')) return '真实积极行动系统';
     if (id.startsWith('df_')) return '自我防御罗盘';
     if (id.startsWith('ac_')) return '成熟适应力罗盘';
@@ -931,6 +955,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<String> _exportCurrentPromptModuleJson() {
+    if (_promptId.startsWith('sw_')) return _swPrompts.exportPromptsJson();
     if (_promptId.startsWith('rpo_')) return _rpoPrompts.exportPromptsJson();
     if (_promptId.startsWith('df_')) return _dfPrompts.exportPromptsJson();
     if (_promptId.startsWith('ac_')) return _acPrompts.exportPromptsJson();
@@ -946,6 +971,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<int> _importCurrentPromptModuleJson(String raw) {
+    if (_promptId.startsWith('sw_')) return _swPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('rpo_')) return _rpoPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('df_')) return _dfPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('ac_')) return _acPrompts.importPromptsJson(raw);
@@ -1035,6 +1061,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('woop_')) {
       return _woopPrompts.defaultFor(id);
     }
+    if (id.startsWith('sw_')) {
+      return _swPrompts.defaultFor(id);
+    }
     if (id.startsWith('rpo_')) {
       return _rpoPrompts.defaultFor(id);
     }
@@ -1119,6 +1148,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('woop_')) {
       return _woopPrompts.inspectPrompt(id);
     }
+    if (id.startsWith('sw_')) {
+      return _swPrompts.inspectPrompt(id);
+    }
     if (id.startsWith('rpo_')) {
       return _rpoPrompts.inspectPrompt(id);
     }
@@ -1202,6 +1234,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     }
     if (id.startsWith('woop_')) {
       return _woopPrompts.savePrompt(id, value);
+    }
+    if (id.startsWith('sw_')) {
+      return _swPrompts.savePrompt(id, value);
     }
     if (id.startsWith('rpo_')) {
       return _rpoPrompts.savePrompt(id, value);

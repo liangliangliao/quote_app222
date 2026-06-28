@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v27_short_turn_endpoint_guard_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：保留播报后短句；尾音续写需连续强证据，避免环境声让缓存一直增长"
+  private val batchChatPipelineVersion = "chat_input_v28_noise_resistant_short_turn_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：短句需有人声帧证据；噪声/播报干扰只停留在候选态，不循环缓存"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1298,6 +1298,7 @@ class VoiceAlarmActivity : Activity() {
     var noiseRms = if (playbackEchoGuard) 120.0 else 24.0
     var lastLevel = AudioLevel(0, 0)
     var lastStatusUiAt = 0L
+    var lastEarlyValidationAt = 0L
     val preRoll = java.util.ArrayDeque<ByteArray>()
     var preRollBytes = 0
     val preRollLimitBytes = sampleRate * 2 * 1600 / 1000
@@ -1676,6 +1677,8 @@ class VoiceAlarmActivity : Activity() {
             autoArmStartHitCount >= maxOf(requiredHits * 2, 12) &&
             autoArmStrongVoiceLikeHitCount >= maxOf(requiredHits, 8) &&
             autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 68 &&
+            autoArmEndpointVoiceLikeHitCount >= maxOf(2, requiredHits / 4) &&
+            (speech || softSpeech) &&
             autoArmStartFirstAt > 0L &&
             now - autoArmStartFirstAt >= maxOf(minStartWindowMs, 900L)
           val rejectedTooMany = autoArmRejectedHitCount >= 4 && autoArmRejectedHitCount * 100 > autoArmStartHitCount * 24
@@ -1737,6 +1740,8 @@ class VoiceAlarmActivity : Activity() {
                 fallbackOut.write(frameInPreRoll)
               }
               utteranceFallbackStartByte = 0
+              lastSpeechAt = now
+              batchLastSpeechAt = now
               preRoll.clear()
               preRollBytes = 0
               logVoice("batch.vad.speechStart", "confirmed user speech start", mapOf("rms" to level.rms, "peak" to level.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "speech" to speech, "softSpeech" to softSpeech, "autoStart" to autoArmStartSpeech, "warmVoice" to autoArmWarmVoiceEnergy, "startHits" to autoArmStartHitCount, "requiredHits" to requiredHits, "startWindowMs" to (now - autoArmStartFirstAt).coerceAtLeast(0L), "voiceLikeHits" to autoArmVoiceLikeHitCount, "strongVoiceLikeHits" to autoArmStrongVoiceLikeHitCount, "endpointVoiceLikeHits" to autoArmEndpointVoiceLikeHitCount, "rejectedHits" to autoArmRejectedHitCount, "zcr" to autoArmVoiceShape.zcrPermille, "voicedScore" to autoArmVoiceShape.voicedScore, "crestX100" to autoArmVoiceShape.crestX100, "mode" to "auto_armed_balanced_chat_vad_manual_send_semantics"))
@@ -1783,14 +1788,16 @@ class VoiceAlarmActivity : Activity() {
             !batchSubmitInProgress &&
             speechStartedAt > 0L &&
             now - speechStartedAt >= 1200L &&
+            now - lastEarlyValidationAt >= 500L &&
             fallbackOut.size() >= minBytes &&
             fallbackOut.size() < sampleRate * 2 * 4200 / 1000 &&
             (lastSpeechAt == 0L || now - lastSpeechAt >= 1200L)
           ) {
+            lastEarlyValidationAt = now
             val earlyValidation = validateBatchAutoArmSpeechSegment(fallbackOut.toByteArray(), sampleRate, noiseRms)
-            val likelyShortUserUtterance = earlyValidation.bestPeak >= maxOf(3200, (noiseRms * 22.0).toInt()) ||
-              earlyValidation.bestRms >= maxOf(900, (noiseRms * 6.0).toInt()) ||
-              earlyValidation.voiceFrames >= 2
+            val likelyShortUserUtterance = earlyValidation.durationMs <= 5200L && (
+              earlyValidation.voiceFrames >= 2 || earlyValidation.strongFrames >= 1
+            )
             if (!earlyValidation.ok && likelyShortUserUtterance) {
               logVoice("batch.vad.falseStartEarlyKeep", "keep likely short user utterance despite early weak validation; let silence endpoint submit it", mapOf("reason" to earlyValidation.reason, "frames" to earlyValidation.frames, "voiceFrames" to earlyValidation.voiceFrames, "strongFrames" to earlyValidation.strongFrames, "durationMs" to earlyValidation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", fallbackOut.size() / (sampleRate * 2.0)), "bestRms" to earlyValidation.bestRms, "bestPeak" to earlyValidation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
             } else if (!earlyValidation.ok) {
@@ -1886,9 +1893,7 @@ class VoiceAlarmActivity : Activity() {
           if (speechStarted && autoSubmit && silenceReferenceAt > 0L && now - silenceReferenceAt >= effectiveAutoSilenceMs) {
             val validation = validateBatchAutoArmSpeechSegment(fallbackOut.toByteArray(), sampleRate, noiseRms)
             val likelyShortUserUtterance = validation.durationMs <= 6500L && (
-              validation.bestPeak >= maxOf(3200, (noiseRms * 22.0).toInt()) ||
-                validation.bestRms >= maxOf(900, (noiseRms * 6.0).toInt()) ||
-                validation.voiceFrames >= 2
+              validation.voiceFrames >= 2 || validation.strongFrames >= 1
             )
             if (!validation.ok && !likelyShortUserUtterance) {
               logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to validation.reason, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
@@ -2057,12 +2062,12 @@ class VoiceAlarmActivity : Activity() {
     // It follows voice-chat barge-in semantics: stronger-than-normal energy plus
     // basic voice shape, but not the extremely high close-mic threshold that made
     // later user turns disappear while the assistant was speaking.
-    val zcrLooksSpeech = shape.zcrPermille in 6..260
-    val crestLooksSpeech = shape.crestX100 in 115..3000
-    val voicedLooksSpeech = shape.voicedScore >= 8
-    val voiceShapeOk = crestLooksSpeech && (voicedLooksSpeech || zcrLooksSpeech)
-    val mediumBargeIn = level.rms >= maxOf(520.0, noiseRms * 5.0).toInt() && level.peak >= maxOf(1900, (noiseRms * 18.0).toInt())
-    val sharpBargeIn = level.peak >= maxOf(3600, (noiseRms * 32.0).toInt()) && level.rms >= maxOf(320.0, noiseRms * 3.2).toInt()
+    val zcrLooksSpeech = shape.zcrPermille in 10..210
+    val crestLooksSpeech = shape.crestX100 in 130..2400
+    val voicedLooksSpeech = shape.voicedScore >= 55
+    val voiceShapeOk = crestLooksSpeech && voicedLooksSpeech && zcrLooksSpeech
+    val mediumBargeIn = level.rms >= maxOf(900.0, noiseRms * 7.0).toInt() && level.peak >= maxOf(2600, (noiseRms * 24.0).toInt())
+    val sharpBargeIn = level.peak >= maxOf(5200, (noiseRms * 44.0).toInt()) && level.rms >= maxOf(700.0, noiseRms * 5.2).toInt()
     return voiceShapeOk && (mediumBargeIn || sharpBargeIn)
   }
 
