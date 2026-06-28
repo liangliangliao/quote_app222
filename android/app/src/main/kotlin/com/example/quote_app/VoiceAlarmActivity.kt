@@ -67,7 +67,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v14_chat_vad_noise_floor_gate_20260628"
+  private val batchChatPipelineVersion = "chat_input_v15_balanced_chat_vad_20260628"
   private val batchChatPipelineSummary = "自动待命单轮录音：空闲时自动监听，但必须通过声音形态/持续时间/能量三重确认后才建立本轮 utterance；未确认前不生成待提交音频"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -1492,10 +1492,16 @@ class VoiceAlarmActivity : Activity() {
           val autoArmVoiceShape = batchAudioVoiceShape(frame, read)
           val candidateLooksVoiceLike = candidateVoiceActivity && isBatchCandidateVoiceLike(autoArmVoiceShape, level, noiseRms, dynamicPlaybackGuard)
           val autoArmStartEnergy = hasBatchAutoArmStartSpeechEnergy(level, noiseRms, dynamicPlaybackGuard)
-          val autoArmVoiceLike = autoArmStartEnergy && isBatchAutoArmVoiceLike(autoArmVoiceShape, level, noiseRms)
+          val autoArmWarmVoiceEnergy = hasBatchAutoArmWarmVoiceEnergy(level, noiseRms, dynamicPlaybackGuard) && candidateLooksVoiceLike
+          val autoArmStartCandidate = autoArmStartEnergy || autoArmWarmVoiceEnergy
+          val autoArmVoiceLike = if (autoArmStartEnergy) {
+            isBatchAutoArmVoiceLike(autoArmVoiceShape, level, noiseRms)
+          } else {
+            autoArmWarmVoiceEnergy
+          }
           val autoArmEndpointVoiceLike = isBatchAutoArmEndpointVoiceLike(autoArmVoiceShape, level, noiseRms, dynamicPlaybackGuard)
-          val autoArmStartSpeech = autoArmStartEnergy && autoArmVoiceLike
-          if (!speechStarted && !softSpeech && !speech && !autoArmStartEnergy && level.rms < 180 && level.peak < 1200 && !dynamicPlaybackGuard) {
+          val autoArmStartSpeech = autoArmStartCandidate && autoArmVoiceLike
+          if (!speechStarted && !softSpeech && !speech && !autoArmStartCandidate && level.rms < 180 && level.peak < 1200 && !dynamicPlaybackGuard) {
             noiseRms = (noiseRms * 0.96 + level.rms.toDouble() * 0.04).coerceIn(10.0, 900.0)
           }
           if (!speechStarted) {
@@ -1503,7 +1509,7 @@ class VoiceAlarmActivity : Activity() {
             // v10：自动待命模式不能用普通 speech=true 直接确认“用户开始说话”。
             // 之前 rms≈300-600、peak≈800-1600 的环境声/残留声会被累计 2 帧后误判，
             // 于是明明没人说话也创建 18 秒录音。现在只有连续强开口证据才会建本轮 utterance。
-            if (autoArmStartEnergy) {
+            if (autoArmStartCandidate) {
               if (autoArmStartHitCount == 0) autoArmStartFirstAt = now
               autoArmStartHitCount += 1
               autoArmStartLastAt = now
@@ -1561,15 +1567,18 @@ class VoiceAlarmActivity : Activity() {
           // v13：采用“候选 -> 确认 -> 迟滞”的三段式。
           // 参考 WebRTC/服务端 VAD 的思想：连续窗口、人声形态和 padding/端点要分开处理；
           // 纯能量连续很久也只能是候选，不能变成 speech_started。
-          val requiredHits = if (isPostPlaybackHandoffActive()) 18 else 11
-          val minStartWindowMs = if (isPostPlaybackHandoffActive()) 950L else 620L
+          val requiredHits = if (isPostPlaybackHandoffActive()) 16 else 8
+          val minStartWindowMs = if (isPostPlaybackHandoffActive()) 900L else 480L
           val startWindowOk = autoArmStartFirstAt > 0L && (now - autoArmStartFirstAt) >= minStartWindowMs
-          val voiceLikeRatioOk = autoArmStartHitCount > 0 && autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 72
-          val strongVoiceShapeOk = autoArmStrongVoiceLikeHitCount >= maxOf(4, requiredHits / 3)
-          val endpointVoiceOk = autoArmEndpointVoiceLikeHitCount >= maxOf(5, requiredHits / 2)
+          val voiceLikeRatioOk = autoArmStartHitCount > 0 && autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 58
+          val strongVoiceShapeOk = autoArmStrongVoiceLikeHitCount >= maxOf(3, requiredHits / 3)
+          val endpointVoiceOk = autoArmEndpointVoiceLikeHitCount >= maxOf(4, requiredHits / 2)
+          val warmVoiceShapeOk =
+            autoArmVoiceLikeHitCount >= maxOf(5, requiredHits / 2) &&
+            autoArmEndpointVoiceLikeHitCount >= maxOf(5, requiredHits / 2)
           val rejectedTooMany = autoArmRejectedHitCount >= 4 && autoArmRejectedHitCount * 100 > autoArmStartHitCount * 24
           val confirmedSpeech = speechStarted ||
-            (autoArmStartSpeech && speechHitCount >= requiredHits && startWindowOk && voiceLikeRatioOk && strongVoiceShapeOk && endpointVoiceOk && !rejectedTooMany)
+            (autoArmStartSpeech && speechHitCount >= requiredHits && startWindowOk && voiceLikeRatioOk && (strongVoiceShapeOk || warmVoiceShapeOk) && endpointVoiceOk && !rejectedTooMany)
           if (softSpeech && softSpeechHitCount >= 2) {
             // 软声音只代表“有较明显声音输入”，不能直接确认为用户说话；
             // 否则底噪/口水音/残留播放声会持续刷新静音端点，导致永远不提交，
@@ -1625,7 +1634,7 @@ class VoiceAlarmActivity : Activity() {
               utteranceFallbackStartByte = 0
               preRoll.clear()
               preRollBytes = 0
-              logVoice("batch.vad.speechStart", "confirmed user speech start", mapOf("rms" to level.rms, "peak" to level.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "speech" to speech, "softSpeech" to softSpeech, "autoStart" to autoArmStartSpeech, "startHits" to autoArmStartHitCount, "requiredHits" to requiredHits, "startWindowMs" to (now - autoArmStartFirstAt).coerceAtLeast(0L), "voiceLikeHits" to autoArmVoiceLikeHitCount, "strongVoiceLikeHits" to autoArmStrongVoiceLikeHitCount, "endpointVoiceLikeHits" to autoArmEndpointVoiceLikeHitCount, "rejectedHits" to autoArmRejectedHitCount, "zcr" to autoArmVoiceShape.zcrPermille, "voicedScore" to autoArmVoiceShape.voicedScore, "crestX100" to autoArmVoiceShape.crestX100, "mode" to "auto_armed_reference_vad_gate_manual_send_semantics"))
+              logVoice("batch.vad.speechStart", "confirmed user speech start", mapOf("rms" to level.rms, "peak" to level.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "speech" to speech, "softSpeech" to softSpeech, "autoStart" to autoArmStartSpeech, "warmVoice" to autoArmWarmVoiceEnergy, "startHits" to autoArmStartHitCount, "requiredHits" to requiredHits, "startWindowMs" to (now - autoArmStartFirstAt).coerceAtLeast(0L), "voiceLikeHits" to autoArmVoiceLikeHitCount, "strongVoiceLikeHits" to autoArmStrongVoiceLikeHitCount, "endpointVoiceLikeHits" to autoArmEndpointVoiceLikeHitCount, "rejectedHits" to autoArmRejectedHitCount, "zcr" to autoArmVoiceShape.zcrPermille, "voicedScore" to autoArmVoiceShape.voicedScore, "crestX100" to autoArmVoiceShape.crestX100, "mode" to "auto_armed_balanced_chat_vad_manual_send_semantics"))
               runOnUiThread {
                 if (!batchSubmitInProgress) {
                   setBatchStatus("已检测到用户说话，非实时录音中…说完停顿后自动提交。")
@@ -1677,7 +1686,7 @@ class VoiceAlarmActivity : Activity() {
                 } else {
                   "可手动提交。"
                 }
-                logVoice("batch.vad.status", "batch VAD state", mapOf("state" to state, "rms" to lastLevel.rms, "peak" to lastLevel.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "speech" to speech, "soft" to softSpeech, "activity" to likelyVoiceActivity, "candidate" to candidateVoiceActivity, "candidateVoiceLike" to candidateLooksVoiceLike, "autoStartEnergy" to autoArmStartEnergy, "autoStartVoiceLike" to autoArmVoiceLike, "startHits" to autoArmStartHitCount, "voiceLikeHits" to autoArmVoiceLikeHitCount, "strongVoiceLikeHits" to autoArmStrongVoiceLikeHitCount, "rejectedHits" to autoArmRejectedHitCount, "requiredHits" to requiredHits, "zcr" to autoArmVoiceShape.zcrPermille, "voicedScore" to autoArmVoiceShape.voicedScore, "speechStarted" to speechStarted, "softStarted" to softSpeechStarted, "cachedSeconds" to String.format(Locale.US, "%.1f", cachedSec)))
+                logVoice("batch.vad.status", "batch VAD state", mapOf("state" to state, "rms" to lastLevel.rms, "peak" to lastLevel.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "speech" to speech, "soft" to softSpeech, "activity" to likelyVoiceActivity, "candidate" to candidateVoiceActivity, "candidateVoiceLike" to candidateLooksVoiceLike, "autoStartEnergy" to autoArmStartEnergy, "warmVoiceEnergy" to autoArmWarmVoiceEnergy, "autoStartVoiceLike" to autoArmVoiceLike, "startHits" to autoArmStartHitCount, "voiceLikeHits" to autoArmVoiceLikeHitCount, "strongVoiceLikeHits" to autoArmStrongVoiceLikeHitCount, "rejectedHits" to autoArmRejectedHitCount, "requiredHits" to requiredHits, "zcr" to autoArmVoiceShape.zcrPermille, "voicedScore" to autoArmVoiceShape.voicedScore, "speechStarted" to speechStarted, "softStarted" to softSpeechStarted, "cachedSeconds" to String.format(Locale.US, "%.1f", cachedSec)))
                 updateBatchSubmitButton(false, cachedSec)
                 if (speechStarted) {
                   setBatchStatus("非实时录音中：$state，已缓存 $cachedText 秒。$submitHint")
@@ -1805,6 +1814,18 @@ class VoiceAlarmActivity : Activity() {
       (level.peak >= strongPeak && level.rms >= companionRms)
   }
 
+  private fun hasBatchAutoArmWarmVoiceEnergy(level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
+    if (playbackGuard) return false
+    // v15：上一版只保留了强开口入口，较轻/离麦稍远的真人说话会一直停在“候选”。
+    // 这里补回聊天输入常用的 warm-up path：能量只需明显高于底噪，但必须由
+    // isBatchCandidateVoiceLike() 提供人声形态，且后续仍要通过连续窗口/endpoint 检查。
+    val rmsThreshold = maxOf(240.0, noiseRms * 2.8).toInt()
+    val peakThreshold = maxOf(1050, (noiseRms * 10.0).toInt())
+    val nearFieldPeak = maxOf(1750, (noiseRms * 18.0).toInt())
+    return (level.rms >= rmsThreshold && level.peak >= peakThreshold) ||
+      (level.peak >= nearFieldPeak && level.rms >= maxOf(190.0, noiseRms * 2.2).toInt())
+  }
+
   private fun hasBatchCandidateVoiceActivity(level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
     if (playbackGuard) return (level.rms >= 220 && level.peak >= 900) || level.peak >= 2600
     // “检测到声音输入”只代表麦克风有明显能量，不等于用户说话。
@@ -1819,13 +1840,13 @@ class VoiceAlarmActivity : Activity() {
     // ChatGPT/Grok/Claude 类语音输入不会把单帧音量当成 speech_started：
     // 音量只进入候选层，UI 也只有在“候选 + 基本人声形态”同时满足时才显示疑似人声。
     // 这能把截图中 rms≈145、peak≈580、voicedScore=0 的安静房间底噪留在“环境声/底噪”状态。
-    val aboveNoise = level.rms >= maxOf(180.0, noiseRms * 1.9).toInt() || level.peak >= maxOf(900, (noiseRms * 8.0).toInt())
+    val aboveNoise = level.rms >= maxOf(150.0, noiseRms * 1.55).toInt() || level.peak >= maxOf(760, (noiseRms * 6.5).toInt())
     if (!aboveNoise) return false
     val zcrLooksSpeech = shape.zcrPermille in 6..240
     val crestLooksSpeech = shape.crestX100 in 120..2800
     val voicedLooksSpeech = shape.voicedScore >= 10
-    val closeMicPeak = level.peak >= maxOf(2200, (noiseRms * 28.0).toInt()) && level.rms >= maxOf(260.0, noiseRms * 3.0).toInt()
-    return (crestLooksSpeech && (voicedLooksSpeech || zcrLooksSpeech) && level.rms >= maxOf(220.0, noiseRms * 2.4).toInt()) || closeMicPeak
+    val closeMicPeak = level.peak >= maxOf(1800, (noiseRms * 20.0).toInt()) && level.rms >= maxOf(210.0, noiseRms * 2.2).toInt()
+    return (crestLooksSpeech && (voicedLooksSpeech || zcrLooksSpeech) && level.rms >= maxOf(170.0, noiseRms * 1.75).toInt()) || closeMicPeak
   }
 
   private fun hasBatchLikelyVoiceActivity(level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
