@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v20_post_playback_strict_start_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后保留完整录音；长语音分块转写；播报刚结束只接受强开口，避免回声/尾音误触发缓存"
+  private val batchChatPipelineVersion = "chat_input_v22_iflytek_piece_merge_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后保留完整录音；长语音分块转写；讯飞多片段按 sn 合并并兜底保留完整长句"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1529,6 +1529,7 @@ class VoiceAlarmActivity : Activity() {
             autoArmWarmVoiceEnergy
           }
           val autoArmEndpointVoiceLike = isBatchAutoArmEndpointVoiceLike(autoArmVoiceShape, level, noiseRms, dynamicPlaybackGuard)
+          val autoArmContinuationVoiceLike = isBatchEndpointContinuationVoiceLike(autoArmVoiceShape, level, noiseRms, dynamicPlaybackGuard)
           val autoArmStartSpeech = autoArmStartCandidate && autoArmVoiceLike
           if (!speechStarted && !softSpeech && !speech && !autoArmStartCandidate && level.rms < 180 && level.peak < 1200 && !dynamicPlaybackGuard) {
             noiseRms = (noiseRms * 0.96 + level.rms.toDouble() * 0.04).coerceIn(10.0, 900.0)
@@ -1679,7 +1680,7 @@ class VoiceAlarmActivity : Activity() {
             out.write(buffer, 0, read)
             // 关键修复：speechStarted=true 只代表“这一段已经开始录用户语音”，不能每一帧都刷新 lastSpeechAt。
             // 否则环境底噪/持续输入会让静音倒计时永远归零，导致一直不自动提交。
-            if (autoArmEndpointVoiceLike) {
+            if (autoArmContinuationVoiceLike) {
               lastSpeechAt = now
               batchLastSpeechAt = now
               autoArmLastVoiceLikeAt = now
@@ -1739,6 +1740,7 @@ class VoiceAlarmActivity : Activity() {
           if (now - lastStatusUiAt >= 1200L) {
             lastStatusUiAt = now
             val cachedSec = fallbackOut.size() / (sampleRate * 2.0)
+            val effectiveSilenceMs = if (speechStarted && cachedSec >= 12.0) minOf(autoSilenceMs, 2500L) else autoSilenceMs
             runOnUiThread {
               if (!batchSubmitInProgress) {
                 val state = when {
@@ -1753,7 +1755,7 @@ class VoiceAlarmActivity : Activity() {
                   else -> 0L
                 }
                 val submitHint = if (autoSubmit && silenceReferenceAtForUi > 0L) {
-                  val left = ((autoSilenceMs - (now - silenceReferenceAtForUi)).coerceAtLeast(0L)) / 1000.0
+                  val left = ((effectiveSilenceMs - (now - silenceReferenceAtForUi)).coerceAtLeast(0L)) / 1000.0
                   "静音倒计时 ${String.format(Locale.CHINA, "%.1f", left)} 秒自动提交。"
                 } else if (autoSubmit && (activityStarted || candidateStarted)) {
                   "请继续正常说话；系统会在人声连续稳定后才开始录音。"
@@ -1783,9 +1785,10 @@ class VoiceAlarmActivity : Activity() {
             speechStarted && lastSpeechAt > 0L -> lastSpeechAt
             else -> 0L
           }
+          val effectiveAutoSilenceMs = if (speechStarted && fallbackOut.size() / (sampleRate * 2.0) >= 12.0) minOf(autoSilenceMs, 2500L) else autoSilenceMs
           // Disabled by design. ChatGPT / Claude / Grok style voice input records one complete user utterance
           // and sends that complete audio once. Local rolling split was the root cause of missing tails.
-          if (speechStarted && autoSubmit && silenceReferenceAt > 0L && now - silenceReferenceAt >= autoSilenceMs) {
+          if (speechStarted && autoSubmit && silenceReferenceAt > 0L && now - silenceReferenceAt >= effectiveAutoSilenceMs) {
             val validation = validateBatchAutoArmSpeechSegment(fallbackOut.toByteArray(), sampleRate, noiseRms)
             if (!validation.ok) {
               logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to validation.reason, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
@@ -1819,7 +1822,7 @@ class VoiceAlarmActivity : Activity() {
               runOnUiThread { setBatchStatus("自动监听待命：刚才的声音不像完整用户语音，已丢弃；请继续正常说话。") }
               continue
             }
-            logVoice("batch.record.autoSubmit", "user speech silence timeout reached", mapOf("silenceMs" to (now - silenceReferenceAt), "thresholdMs" to autoSilenceMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to batchCurrentCachedSeconds, "lastRms" to lastLevel.rms, "lastPeak" to lastLevel.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames))
+            logVoice("batch.record.autoSubmit", "user speech silence timeout reached", mapOf("silenceMs" to (now - silenceReferenceAt), "thresholdMs" to effectiveAutoSilenceMs, "configuredThresholdMs" to autoSilenceMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to batchCurrentCachedSeconds, "lastRms" to lastLevel.rms, "lastPeak" to lastLevel.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames))
             break
           }
         }
@@ -2403,6 +2406,19 @@ class VoiceAlarmActivity : Activity() {
     return energyOk && crestLooksSpeech && (voicedLooksSpeech || zcrLooksSpeech)
   }
 
+  private fun isBatchEndpointContinuationVoiceLike(shape: AudioVoiceShape, level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
+    if (playbackGuard) return false
+    // Starting a turn can be warm, but extending the tail should be stricter.
+    // Otherwise low-level room noise / keyboard / residual echo keeps refreshing
+    // lastSpeechAt and a 10-15s user utterance can grow into a 40s STT upload.
+    val zcrLooksSpeech = shape.zcrPermille in 8..220
+    val crestLooksSpeech = shape.crestX100 in 125..2400
+    val voicedLooksSpeech = shape.voicedScore >= 18
+    val strongSyllable = level.rms >= maxOf(760.0, noiseRms * 5.2).toInt() && level.peak >= maxOf(1900, (noiseRms * 13.0).toInt())
+    val strongPeak = level.peak >= maxOf(3000, (noiseRms * 22.0).toInt()) && level.rms >= maxOf(460.0, noiseRms * 3.4).toInt()
+    return crestLooksSpeech && (voicedLooksSpeech || zcrLooksSpeech) && (strongSyllable || strongPeak)
+  }
+
   private data class AutoArmSegmentValidation(
     val ok: Boolean,
     val reason: String,
@@ -2747,6 +2763,7 @@ class VoiceAlarmActivity : Activity() {
     val closed = CountDownLatch(1)
     val text = StringBuilder()
     val iflytekSegments = sortedMapOf<Int, String>()
+    val iflytekAppendOnlySegments = linkedMapOf<Int, String>()
     val iflytekProtectedReplaceRanges = mutableListOf<IntRange>()
     var webSocket: WebSocket? = null
     var errorMessage = ""
@@ -2760,18 +2777,40 @@ class VoiceAlarmActivity : Activity() {
       for (value in iflytekSegments.values) if (value.isNotBlank()) text.append(value)
       return text.toString().trim()
     }
+    fun rebuildIflytekAppendOnlyDraftLocked(): String =
+      iflytekAppendOnlySegments.toSortedMap().values.joinToString("").trim()
+
+    fun chooseIflytekBatchDraftLocked(): String {
+      val structured = rebuildIflytekDraftLocked()
+      val appendOnly = rebuildIflytekAppendOnlyDraftLocked()
+      if (appendOnly.length > structured.length + 2 && !structured.contains(appendOnly)) return appendOnly
+      return if (structured.isNotBlank()) structured else appendOnly
+    }
+
     fun applyIflytekPieceLocked(piece: IflytekRecognitionPiece): String {
       if (piece.text.isBlank()) return text.toString().trim()
       if (piece.isReplacement && piece.replaceStart != null && piece.replaceEnd != null) {
-        val range = piece.replaceStart..piece.replaceEnd
-        for (sn in range) iflytekSegments.remove(sn)
-        iflytekProtectedReplaceRanges.add(range)
+        // iFlytek can send one utterance as several sn packets, and may also
+        // send pgs=rpl dynamic-correction packets.  Treat rg as the old sn
+        // range to replace, insert the corrected text at the range start, and
+        // protect that range from late apd packets.  Without inserting the
+        // replacement at a stable key, later packets can make the final draft
+        // look like only the last message chunk survived.
+        val start = minOf(piece.replaceStart, piece.replaceEnd)
+        val end = maxOf(piece.replaceStart, piece.replaceEnd)
+        for (sn in start..end) iflytekSegments.remove(sn)
+        iflytekSegments[start] = piece.text
+        iflytekAppendOnlySegments[start] = piece.text
+        iflytekProtectedReplaceRanges.removeAll { it.first <= end && start <= it.last }
+        iflytekProtectedReplaceRanges.add(start..end)
+        return chooseIflytekBatchDraftLocked()
       }
       if (piece.sn >= 0) {
         val protectedByReplacement = iflytekProtectedReplaceRanges.any { piece.sn in it }
-        if (protectedByReplacement && !piece.isReplacement) return rebuildIflytekDraftLocked()
+        if (protectedByReplacement && !piece.isReplacement) return chooseIflytekBatchDraftLocked()
         iflytekSegments[piece.sn] = piece.text
-        return rebuildIflytekDraftLocked()
+        iflytekAppendOnlySegments[piece.sn] = piece.text
+        return chooseIflytekBatchDraftLocked()
       }
       val current = text.toString()
       if (!current.endsWith(piece.text)) text.append(piece.text)
@@ -2840,11 +2879,12 @@ class VoiceAlarmActivity : Activity() {
     val waitSeconds = ((pcm.size / (16000.0 * 2.0)) + 8.0).toLong().coerceIn(8L, 90L)
     val completed = closed.await(waitSeconds, TimeUnit.SECONDS)
     try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
-    val result = synchronized(text) { text.toString().trim() }
+    val result = synchronized(text) { chooseIflytekBatchDraftLocked() }
+    val appendOnlyResult = synchronized(text) { rebuildIflytekAppendOnlyDraftLocked() }
     logVoice(
       "stt.iflytek.batch.done",
       "iFlytek batch completed",
-      mapOf("completed" to completed, "messages" to messageCount, "pieces" to nonEmptyPieceCount, "pcmBytes" to pcm.size, "audioSeconds" to String.format(Locale.US, "%.2f", pcm.size / (16000.0 * 2.0)), "finalWithAudio" to sentFinalFrameWithAudio, "result" to logPreview(result), "error" to errorMessage),
+      mapOf("completed" to completed, "messages" to messageCount, "pieces" to nonEmptyPieceCount, "pcmBytes" to pcm.size, "audioSeconds" to String.format(Locale.US, "%.2f", pcm.size / (16000.0 * 2.0)), "finalWithAudio" to sentFinalFrameWithAudio, "appendChars" to appendOnlyResult.length, "appendResult" to logPreview(appendOnlyResult), "result" to logPreview(result), "error" to errorMessage),
     )
     if (result.isBlank()) {
       if (errorMessage.isNotBlank()) throw IllegalStateException(errorMessage)
