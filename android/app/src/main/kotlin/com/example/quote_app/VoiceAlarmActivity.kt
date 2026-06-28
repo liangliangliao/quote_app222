@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v15_balanced_chat_vad_20260628"
-  private val batchChatPipelineSummary = "自动待命单轮录音：空闲时自动监听，但必须通过声音形态/持续时间/能量三重确认后才建立本轮 utterance；未确认前不生成待提交音频"
+  private val batchChatPipelineVersion = "chat_input_v16_multi_turn_barge_in_vad_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：每轮完整音频单独转写；AI 思考/播报期间仍可监听下一句，确认用户插话后先停止播报再重新干净录音"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -994,19 +994,19 @@ class VoiceAlarmActivity : Activity() {
   private fun isBatchStrictSingleTurnBusy(): Boolean {
     if (selectedSttMode() != "batch") return false
     val now = System.currentTimeMillis()
+    val allowPlaybackBargeIn = batchPlaybackBargeInEnabled()
     return batchRecognitionInFlight ||
       batchSubmitInProgress ||
       batchPcmQueue.isNotEmpty() ||
       batchAwaitingAiCommit ||
-      aiBusy ||
-      speaking ||
-      alarmVoicePlaying ||
+      (!allowPlaybackBargeIn && speaking) ||
+      (!allowPlaybackBargeIn && alarmVoicePlaying) ||
       pendingAiUserText.isNotBlank() ||
       speechBuffer.toString().trim().isNotBlank() ||
-      now < batchSpeakerPlaybackBlockUntil ||
-      now < batchPlaybackEchoGuardUntil ||
-      now < suppressRecognitionUntil ||
-      now < strongPlaybackGateUntil
+      (!allowPlaybackBargeIn && now < batchSpeakerPlaybackBlockUntil) ||
+      (!allowPlaybackBargeIn && now < batchPlaybackEchoGuardUntil) ||
+      (!allowPlaybackBargeIn && now < suppressRecognitionUntil) ||
+      (!allowPlaybackBargeIn && now < strongPlaybackGateUntil)
   }
 
   private fun batchStrictSingleTurnBusyReason(): String {
@@ -1395,7 +1395,8 @@ class VoiceAlarmActivity : Activity() {
           if (dynamicPlaybackGuard) {
             // 聊天 App 式非实时输入的核心：App 自己的播报帧不能写入待转写音频。
             // 这里仍然读取麦克风、计算能量，只用于判断用户是否强插话；不把扬声器声音缓存到 fallback/out/preRoll。
-            val strongBargeIn = hasBatchSpeechEnergy(level, noiseRms, playbackGuard = true) && (speaking || alarmVoicePlaying)
+            val bargeInShape = batchAudioVoiceShape(frame, read)
+            val strongBargeIn = hasBatchBargeInSpeech(level, bargeInShape, noiseRms) && (speaking || alarmVoicePlaying)
             if (strongBargeIn) {
               logVoice("batch.bargeIn.detected", "strong user speech detected while app speaker is active; stop speaker and discard speaker frames before clean capture", mapOf("rms" to level.rms, "peak" to level.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
               interruptPlaybackForUserSpeech("用户插话")
@@ -1867,6 +1868,21 @@ class VoiceAlarmActivity : Activity() {
     val peakThreshold = maxOf(2600, (noiseRms * 42.0).toInt())
     return (level.rms >= rmsThreshold && level.peak >= peakCompanion) ||
       (level.peak >= peakThreshold && level.rms >= maxOf(150.0, noiseRms * 3.0).toInt())
+  }
+
+  private fun hasBatchBargeInSpeech(level: AudioLevel, shape: AudioVoiceShape, noiseRms: Double): Boolean {
+    // During our own TTS/alarm playback we still do not save microphone frames to STT.
+    // This gate only decides whether to stop playback and begin a clean capture.
+    // It follows voice-chat barge-in semantics: stronger-than-normal energy plus
+    // basic voice shape, but not the extremely high close-mic threshold that made
+    // later user turns disappear while the assistant was speaking.
+    val zcrLooksSpeech = shape.zcrPermille in 6..260
+    val crestLooksSpeech = shape.crestX100 in 115..3000
+    val voicedLooksSpeech = shape.voicedScore >= 8
+    val voiceShapeOk = crestLooksSpeech && (voicedLooksSpeech || zcrLooksSpeech)
+    val mediumBargeIn = level.rms >= maxOf(520.0, noiseRms * 5.0).toInt() && level.peak >= maxOf(1900, (noiseRms * 18.0).toInt())
+    val sharpBargeIn = level.peak >= maxOf(3600, (noiseRms * 32.0).toInt()) && level.rms >= maxOf(320.0, noiseRms * 3.2).toInt()
+    return voiceShapeOk && (mediumBargeIn || sharpBargeIn)
   }
 
   private fun hasBatchSoftSpeechEnergy(level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
@@ -3377,7 +3393,7 @@ class VoiceAlarmActivity : Activity() {
     suppressRecognitionUntil = minOf(maxOf(suppressRecognitionUntil, now + 80L), now + 160L)
   }
 
-  private fun batchPlaybackBargeInEnabled(): Boolean = false
+  private fun batchPlaybackBargeInEnabled(): Boolean = true
 
   private fun isBatchPlaybackEchoGuardActive(): Boolean {
     val now = System.currentTimeMillis()
