@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v19_false_start_fast_reset_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后保留完整录音；长语音分块转写；疑似误触发会在早期复核失败后快速清空缓存"
+  private val batchChatPipelineVersion = "chat_input_v20_post_playback_strict_start_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后保留完整录音；长语音分块转写；播报刚结束只接受强开口，避免回声/尾音误触发缓存"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1520,7 +1520,8 @@ class VoiceAlarmActivity : Activity() {
           val autoArmVoiceShape = batchAudioVoiceShape(frame, read)
           val candidateLooksVoiceLike = candidateVoiceActivity && isBatchCandidateVoiceLike(autoArmVoiceShape, level, noiseRms, dynamicPlaybackGuard)
           val autoArmStartEnergy = hasBatchAutoArmStartSpeechEnergy(level, noiseRms, dynamicPlaybackGuard)
-          val autoArmWarmVoiceEnergy = hasBatchAutoArmWarmVoiceEnergy(level, noiseRms, dynamicPlaybackGuard) && candidateLooksVoiceLike
+          val postPlaybackHandoffActive = isPostPlaybackHandoffActive()
+          val autoArmWarmVoiceEnergy = !postPlaybackHandoffActive && hasBatchAutoArmWarmVoiceEnergy(level, noiseRms, dynamicPlaybackGuard) && candidateLooksVoiceLike
           val autoArmStartCandidate = autoArmStartEnergy || autoArmWarmVoiceEnergy
           val autoArmVoiceLike = if (autoArmStartEnergy) {
             isBatchAutoArmVoiceLike(autoArmVoiceShape, level, noiseRms)
@@ -1595,8 +1596,8 @@ class VoiceAlarmActivity : Activity() {
           // v13：采用“候选 -> 确认 -> 迟滞”的三段式。
           // 参考 WebRTC/服务端 VAD 的思想：连续窗口、人声形态和 padding/端点要分开处理；
           // 纯能量连续很久也只能是候选，不能变成 speech_started。
-          val requiredHits = if (isPostPlaybackHandoffActive()) 16 else 8
-          val minStartWindowMs = if (isPostPlaybackHandoffActive()) 900L else 480L
+          val requiredHits = if (postPlaybackHandoffActive) 18 else 8
+          val minStartWindowMs = if (postPlaybackHandoffActive) 1200L else 480L
           val startWindowOk = autoArmStartFirstAt > 0L && (now - autoArmStartFirstAt) >= minStartWindowMs
           val voiceLikeRatioOk = autoArmStartHitCount > 0 && autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 58
           val strongVoiceShapeOk = autoArmStrongVoiceLikeHitCount >= maxOf(3, requiredHits / 3)
@@ -3499,7 +3500,7 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isPostPlaybackHandoffActive(): Boolean = System.currentTimeMillis() < postPlaybackHandoffUntil
 
-  private fun markPostPlaybackHandoff(durationMs: Long = 2600L) {
+  private fun markPostPlaybackHandoff(durationMs: Long = 4800L) {
     val now = System.currentTimeMillis()
     postPlaybackHandoffUntil = maxOf(postPlaybackHandoffUntil, now + durationMs)
     // Playback has already ended, so do not keep the old strong/suppression gates
