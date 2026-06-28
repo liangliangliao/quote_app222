@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v16_multi_turn_barge_in_vad_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：每轮完整音频单独转写；AI 思考/播报期间仍可监听下一句，确认用户插话后先停止播报再重新干净录音"
+  private val batchChatPipelineVersion = "chat_input_v17_preserve_confirmed_speech_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后即使播报/回声保护状态变化也先保留并提交当前录音；AI 思考/播报期间仍可监听下一句"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1267,6 +1267,15 @@ class VoiceAlarmActivity : Activity() {
           val now = System.currentTimeMillis()
           if (batchSpeakerPlaybackEpoch != captureEpoch) {
             val cachedBytes = fallbackOut.size()
+            if (speechStarted && cachedBytes >= minBytes) {
+              submittedByPlaybackInterrupt = true
+              logVoice("batch.capture.playbackEpochSubmit", "playback epoch changed after confirmed speech; submit cached user utterance instead of discarding it", mapOf("cachedBytes" to cachedBytes, "cachedSeconds" to batchCurrentCachedSeconds, "captureEpoch" to captureEpoch, "currentEpoch" to batchSpeakerPlaybackEpoch, "pipeline" to batchChatPipelineVersion))
+              runOnUiThread {
+                updateBatchSubmitButton(true, batchCurrentCachedSeconds)
+                setBatchStatus("检测到播报状态变化，但已捕获到你的语音：保留并提交刚才这段录音，避免漏掉长句。")
+              }
+              break
+            }
             releaseContinuousAudioRecord()
             fallbackOut.reset()
             out.reset()
@@ -1292,6 +1301,15 @@ class VoiceAlarmActivity : Activity() {
             // 上一版在这里把“播报期间录到的声音”当作 pre-playback speech 提交，
             // 导致闹钟提示词被讯飞完整转成用户文字。
             val cachedBeforeSwitch = fallbackOut.size()
+            if (speechStarted && cachedBeforeSwitch >= minBytes) {
+              submittedByPlaybackInterrupt = true
+              logVoice("batch.capture.speakerMaskSubmit", "playback guard became active after confirmed speech; submit cached user utterance before masking speaker frames", mapOf("cachedBytes" to cachedBeforeSwitch, "cachedSeconds" to batchCurrentCachedSeconds, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+              runOnUiThread {
+                updateBatchSubmitButton(true, batchCurrentCachedSeconds)
+                setBatchStatus("播报/回声保护已启动，但你的语音已确认：先提交当前录音，再屏蔽后续扬声器帧。")
+              }
+              break
+            }
             releaseContinuousAudioRecord()
             fallbackOut.reset()
             out.reset()
@@ -1427,6 +1445,15 @@ class VoiceAlarmActivity : Activity() {
               batchCurrentConfirmedSpeech = false
               runOnUiThread { setBatchStatus("检测到你在播报中说话：已停止播报并清空扬声器帧，正在重新干净录音。") }
               continue
+            }
+            if (speechStarted && fallbackOut.size() >= minBytes) {
+              submittedByPlaybackInterrupt = true
+              logVoice("batch.speakerFrame.masked.submit", "speaker/echo-guard frame arrived after confirmed speech; submit cached user utterance instead of resetting it", mapOf("rms" to level.rms, "peak" to level.peak, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to batchCurrentCachedSeconds, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+              runOnUiThread {
+                updateBatchSubmitButton(true, batchCurrentCachedSeconds)
+                setBatchStatus("检测到播报/回声帧，但已缓存到你的完整语音：正在提交当前录音，后续扬声器帧不会进入 STT。")
+              }
+              break
             }
             if (fallbackOut.size() > 0 || out.size() > 0 || preRollBytes > 0 || speechStarted || softSpeechStarted || activityStarted || candidateStarted) {
               logVoice("batch.speakerFrame.masked.reset", "speaker/echo-guard frame detected; discard current cache so prompt audio is not submitted as user speech", mapOf("rms" to level.rms, "peak" to level.peak, "cachedBytes" to fallbackOut.size(), "strictBytes" to out.size(), "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
@@ -1760,7 +1787,7 @@ class VoiceAlarmActivity : Activity() {
       batchCurrentStartedAt = 0L
       batchLastSpeechAt = 0L
     }
-    if (batchSpeakerPlaybackEpoch != captureEpoch) {
+    if (batchSpeakerPlaybackEpoch != captureEpoch && !submittedByPlaybackInterrupt) {
       val cachedBytes = fallbackOut.size()
       releaseContinuousAudioRecord()
       logVoice("batch.capture.invalidatedBeforeSubmit", "discard captured audio before upload because playback changed during this turn", mapOf("cachedBytes" to cachedBytes, "captureEpoch" to captureEpoch, "currentEpoch" to batchSpeakerPlaybackEpoch, "pipeline" to batchChatPipelineVersion))
@@ -1820,11 +1847,11 @@ class VoiceAlarmActivity : Activity() {
     // v15：上一版只保留了强开口入口，较轻/离麦稍远的真人说话会一直停在“候选”。
     // 这里补回聊天输入常用的 warm-up path：能量只需明显高于底噪，但必须由
     // isBatchCandidateVoiceLike() 提供人声形态，且后续仍要通过连续窗口/endpoint 检查。
-    val rmsThreshold = maxOf(240.0, noiseRms * 2.8).toInt()
-    val peakThreshold = maxOf(1050, (noiseRms * 10.0).toInt())
-    val nearFieldPeak = maxOf(1750, (noiseRms * 18.0).toInt())
+    val rmsThreshold = maxOf(220.0, noiseRms * 2.2).toInt()
+    val peakThreshold = maxOf(760, (noiseRms * 5.5).toInt())
+    val nearFieldPeak = maxOf(1200, (noiseRms * 9.0).toInt())
     return (level.rms >= rmsThreshold && level.peak >= peakThreshold) ||
-      (level.peak >= nearFieldPeak && level.rms >= maxOf(190.0, noiseRms * 2.2).toInt())
+      (level.peak >= nearFieldPeak && level.rms >= maxOf(180.0, noiseRms * 1.6).toInt())
   }
 
   private fun hasBatchCandidateVoiceActivity(level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
