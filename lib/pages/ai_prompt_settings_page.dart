@@ -16,6 +16,7 @@ import '../realistic_positivity_os/realistic_positivity_os_prompt_config.dart';
 import '../defense_compass/defense_compass_prompt_config.dart';
 import '../adaptation_compass/adaptation_compass_prompt_config.dart';
 import '../new_tablets/new_tablets_prompt_config.dart';
+import '../self_worth/self_worth_ai_prompt_config.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -48,6 +49,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final DefenseCompassPromptConfig _dfPrompts = DefenseCompassPromptConfig();
   final AdaptationCompassPromptConfig _acPrompts = AdaptationCompassPromptConfig();
   final NewTabletsPromptConfig _ntPrompts = NewTabletsPromptConfig();
+  final SelfWorthAiPromptConfig _swPrompts = SelfWorthAiPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -85,6 +87,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<_PromptModule> get _modules => <_PromptModule>[
+        _PromptModule(
+          id: SelfWorthAiPromptConfig.moduleId,
+          name: '自我价值 Self Worth',
+          description: '统一配置自我价值修复、比较松绑、失败后价值稳定等 Prompt。',
+          items: SelfWorthAiPromptConfig.allIds.map((id) => _PromptItem(id: id, name: SelfWorthAiPromptConfig.labels[id] ?? id)).toList(growable: false),
+        ),
+
         _PromptModule(
           id: NewTabletsPromptConfig.moduleId,
           name: '新榜 New Tablets',
@@ -498,6 +507,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         _ccBackups = await _acPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('nt_')) {
         _ccBackups = await _ntPrompts.listBackups(_promptId);
+      } else if (_promptId.startsWith('sw_')) {
+        _ccBackups = await _swPrompts.listBackups(_promptId);
       } else {
         _ccBackups = <CcPromptBackupRecord>[];
       }
@@ -647,6 +658,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         if (ok != true) return;
       }
     }
+    if (_promptId.startsWith('sw_')) {
+      final missing = _swPrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
+      if (missing.isNotEmpty) {
+        final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('关键占位符缺失'), content: Text("当前模板缺少：${missing.join('、')}。是否仍然保存？"), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('返回修改')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('仍然保存'))]));
+        if (ok != true) return;
+      }
+    }
     if (_promptId.startsWith('df_')) {
       final missing = _dfPrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
       if (missing.isNotEmpty) {
@@ -735,15 +753,17 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       await _acPrompts.clearPromptOverride(_promptId);
     } else if (_promptId.startsWith('nt_')) {
       await _ntPrompts.clearPromptOverride(_promptId);
+    } else if (_promptId.startsWith('sw_')) {
+      await _swPrompts.clearPromptOverride(_promptId);
     } else {
       await _savePromptById(_promptId, def);
     }
     await _loadPrompt();
-    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('nt_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
+    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('nt_') || _promptId.startsWith('sw_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
   }
 
   Future<void> _restoreCcBackup(CcPromptBackupRecord backup) async {
-    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('nt_')) return;
+    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('nt_') && !_promptId.startsWith('sw_')) return;
     setState(() => _backupLoading = true);
     try {
       if (_promptId.startsWith('cc_')) {
@@ -768,8 +788,10 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         await _dfPrompts.restoreBackup(_promptId, backup.key);
       } else if (_promptId.startsWith('ac_')) {
         await _acPrompts.restoreBackup(_promptId, backup.key);
-      } else {
+      } else if (_promptId.startsWith('nt_')) {
         await _ntPrompts.restoreBackup(_promptId, backup.key);
+      } else {
+        await _swPrompts.restoreBackup(_promptId, backup.key);
       }
       await _loadPrompt();
       _toast('已恢复历史备份：${backup.displayTime}');
@@ -782,7 +804,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
 
   Future<void> _previewPrompt() async {
     final template = _templateCtrl.text;
-    final preview = _promptId.startsWith('nt_')
+    final preview = _promptId.startsWith('sw_')
+        ? _swPrompts.render(template, <String, String>{
+            'user_input': '我一失败就觉得自己没有价值，别人都比我强。',
+            'profile_json': '{"anchors":["尊严","真实能力证据"]}',
+            'recent_context_json': '{"repairs":1}',
+          })
+        : _promptId.startsWith('nt_')
         ? _ntPrompts.render(template, <String, String>{
             'scene': 'procrastination',
             'user_input': '我今天又想偷懒，不想学习，但我又觉得自己很废物。',
@@ -907,7 +935,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       id.startsWith('rpo_') ||
       id.startsWith('df_') ||
       id.startsWith('ac_') ||
-      id.startsWith('nt_');
+      id.startsWith('nt_') ||
+      id.startsWith('sw_');
 
   String _moduleExportLabel(String id) {
     if (id.startsWith('sw_')) return '真实自尊 SelfWorth AI';
@@ -915,6 +944,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('df_')) return '自我防御罗盘';
     if (id.startsWith('ac_')) return '成熟适应力罗盘';
     if (id.startsWith('nt_')) return '新榜 New Tablets';
+    if (id.startsWith('sw_')) return '自我价值 Self Worth';
     if (id.startsWith('woop_')) return 'WOOP 行动引擎';
     if (id.startsWith('am_')) return 'ActionMind';
     if (id.startsWith('act_')) return '行愿 Compass';
@@ -930,6 +960,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (_promptId.startsWith('df_')) return _dfPrompts.exportPromptsJson();
     if (_promptId.startsWith('ac_')) return _acPrompts.exportPromptsJson();
     if (_promptId.startsWith('nt_')) return _ntPrompts.exportPromptsJson();
+    if (_promptId.startsWith('sw_')) return _swPrompts.exportPromptsJson();
     if (_promptId.startsWith('woop_')) return _woopPrompts.exportPromptsJson();
     if (_promptId.startsWith('am_')) return _amPrompts.exportPromptsJson();
     if (_promptId.startsWith('act_')) return _actPrompts.exportPromptsJson();
@@ -945,6 +976,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (_promptId.startsWith('df_')) return _dfPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('ac_')) return _acPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('nt_')) return _ntPrompts.importPromptsJson(raw);
+    if (_promptId.startsWith('sw_')) return _swPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('woop_')) return _woopPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('am_')) return _amPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('act_')) return _actPrompts.importPromptsJson(raw);
@@ -1044,6 +1076,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('nt_')) {
       return _ntPrompts.defaultFor(id);
     }
+    if (id.startsWith('sw_')) {
+      return _swPrompts.defaultFor(id);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.defaultGoalSettingActionPrompt;
@@ -1127,6 +1162,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     }
     if (id.startsWith('nt_')) {
       return _ntPrompts.inspectPrompt(id);
+    }
+    if (id.startsWith('sw_')) {
+      return _swPrompts.inspectPrompt(id);
     }
     switch (id) {
       case 'goal_action':
@@ -1212,6 +1250,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('nt_')) {
       return _ntPrompts.savePrompt(id, value);
     }
+    if (id.startsWith('sw_')) {
+      return _swPrompts.savePrompt(id, value);
+    }
     switch (id) {
       case 'goal_action':
         return _settings.saveGoalSettingActionPrompt(value);
@@ -1254,6 +1295,13 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<MapEntry<String, String>> _params(String id) {
+    if (id.startsWith('sw_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{user_input}}', '用户关于自我价值、自我否定、比较、失败或外部评价的输入。'),
+        MapEntry('{{profile_json}}', '自我价值相关档案 JSON。'),
+        MapEntry('{{recent_context_json}}', '近期自我价值修复记录摘要。'),
+      ];
+    }
     if (id.startsWith('nt_')) {
       return const <MapEntry<String, String>>[
         MapEntry('{{scene}}', '新榜场景：procrastination / bad_conscience / value_confusion / herd / commitment / past_regret / learning_output / old_tablet_scan / new_tablet_draft / daily_command / failure_repair / weekly_revaluation。'),
