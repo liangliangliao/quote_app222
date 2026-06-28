@@ -45,6 +45,10 @@ class VoiceAlarmRingingService : Service() {
     private const val STATE_PREFS = "voice_alarm_ringing_state"
     private const val KEY_ACTIVE_PAYLOAD = "activePayload"
     private const val KEY_ACTIVE_AT = "activeAt"
+    private const val KEY_VOICE_PLAYBACK_ACTIVE = "voicePlaybackActive"
+    private const val KEY_VOICE_PLAYBACK_TEXT = "voicePlaybackText"
+    private const val KEY_VOICE_PLAYBACK_AT = "voicePlaybackAt"
+    private const val VOICE_PLAYBACK_STATE_TTL_MS = 90_000L
     private const val ACTIVE_PAYLOAD_TTL_MS = 12L * 60L * 60L * 1000L
     const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
     const val ACTION_VOICE_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_END"
@@ -121,6 +125,35 @@ class VoiceAlarmRingingService : Service() {
       return null
     }
 
+    @JvmStatic
+    fun currentVoicePlaybackState(context: Context): Pair<Boolean, String> {
+      for (storageContext in stateContexts(context)) {
+        try {
+          val prefs = storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+          val active = prefs.getBoolean(KEY_VOICE_PLAYBACK_ACTIVE, false)
+          val activeAt = prefs.getLong(KEY_VOICE_PLAYBACK_AT, 0L)
+          val text = prefs.getString(KEY_VOICE_PLAYBACK_TEXT, "") ?: ""
+          if (active && activeAt > 0L && System.currentTimeMillis() - activeAt <= VOICE_PLAYBACK_STATE_TTL_MS) {
+            return true to text
+          }
+        } catch (_: Throwable) {}
+      }
+      return false to ""
+    }
+
+    private fun persistVoicePlaybackState(context: Context, active: Boolean, text: String) {
+      for (storageContext in stateContexts(context)) {
+        try {
+          storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_VOICE_PLAYBACK_ACTIVE, active)
+            .putString(KEY_VOICE_PLAYBACK_TEXT, if (active) text else "")
+            .putLong(KEY_VOICE_PLAYBACK_AT, if (active) System.currentTimeMillis() else 0L)
+            .apply()
+        } catch (_: Throwable) {}
+      }
+    }
+
     private fun clearActivePayload(context: Context) {
       activePayload = null
       for (storageContext in stateContexts(context)) {
@@ -129,6 +162,9 @@ class VoiceAlarmRingingService : Service() {
             .edit()
             .remove(KEY_ACTIVE_PAYLOAD)
             .remove(KEY_ACTIVE_AT)
+            .remove(KEY_VOICE_PLAYBACK_ACTIVE)
+            .remove(KEY_VOICE_PLAYBACK_TEXT)
+            .remove(KEY_VOICE_PLAYBACK_AT)
             .apply()
         } catch (_: Throwable) {}
       }
@@ -358,6 +394,7 @@ class VoiceAlarmRingingService : Service() {
   private fun notifyVoicePlaybackStart() {
     if (alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = true
+    persistVoicePlaybackState(this, true, currentVoiceText)
     logVoice("voicePlayback.start", "voice prompt playback started", mapOf("textLen" to currentVoiceText.length))
     sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName).putExtra("text", currentVoiceText))
   }
@@ -365,6 +402,7 @@ class VoiceAlarmRingingService : Service() {
   private fun notifyVoicePlaybackEnd() {
     if (!alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = false
+    persistVoicePlaybackState(this, false, currentVoiceText)
     logVoice("voicePlayback.end", "voice prompt playback ended", mapOf("textLen" to currentVoiceText.length))
     sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName).putExtra("text", currentVoiceText))
   }
