@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/kv_dao.dart';
 import '../pages/ai_prompt_settings_page.dart';
+import 'self_worth_ai_engine.dart';
 import 'self_worth_ai_prompt_config.dart';
 
 class SelfWorthAiHomePage extends StatefulWidget {
@@ -18,6 +19,7 @@ class _SelfWorthAiHomePageState extends State<SelfWorthAiHomePage> with TickerPr
 
   late final TabController _tab;
   final KeyValueDao _kv = KeyValueDao();
+  final SelfWorthAiEngine _engine = const SelfWorthAiEngine();
   final TextEditingController _eventCtrl = TextEditingController(text: '今天老板没有表扬我，我就开始怀疑自己是不是不够好。');
   final TextEditingController _reflectionCtrl = TextEditingController();
   String _scene = 'external_validation';
@@ -80,38 +82,6 @@ class _SelfWorthAiHomePageState extends State<SelfWorthAiHomePage> with TickerPr
     _JourneyWeek('第 4 周', '无条件自尊练习', ['不比较练习', '失败去人格化', '祝福别人成功', '自我接纳与身体照顾']),
   ];
 
-
-  static const _featureSpecs = <_FeatureSpec>[
-    _FeatureSpec('自尊地图', '自尊来源扫描', '识别认可、成就、关系、外貌、比较、内在标准与无条件接纳的相对权重。', ['别人不夸我时我是否怀疑自己？', '失败时我是否否定整个人？', '我是否仍能按价值行动？'], '生成自尊来源雷达与下周训练重点。'),
-    _FeatureSpec('自尊地图', '自尊稳定度记录', '每日/每周记录评价、成就、比较、真实表达和价值行动。', ['今天我是否被评价大幅影响？', '今天有没有真实表达？', '今天做了什么符合价值的行动？'], '更新稳定曲线，而不是排名分数。'),
-    _FeatureSpec('自尊地图', '依赖型触发器', '总结哪些人、场景、比较、失败与赞美最容易操控自我价值。', ['谁的沉默最影响我？', '我在哪些场景最讨好？', '哪种失败最让我羞耻？'], '生成依赖触发器与替代行动。'),
-    _FeatureSpec('自尊地图', '自尊画像报告', '输出主导模式、主要风险、当前优势与下周训练重点。', ['当前更像依赖型、独立型、转化中还是无条件萌芽？'], '生成每周自尊画像。'),
-    _FeatureSpec('三层自尊训练', '外界掌声依赖检测', '拆解事件事实、解释、价值托付对象与更独立解释。', ['我把价值交给了谁？', '我需要认可、理解还是成长反馈？'], '输出24小时认可戒断练习。'),
-    _FeatureSpec('三层自尊训练', '比较链拆解', '把“他成功=我失败”的链条拆成愿望与行动。', ['我在比较什么？', '对方成功真的减少我的价值吗？'], '输出祝福别人 + 回到自己行动。'),
-    _FeatureSpec('三层自尊训练', '内在标准卡片', '把诚实、责任、成长、身体尊重、真实需求转化为可执行行为。', ['即使没人知道我还愿意做吗？'], '生成内在标准卡。'),
-    _FeatureSpec('三层自尊训练', '过程胜利日志', '记录不依赖结果的胜利，如没有讨好、说真话、运动、拒绝不合理要求。', ['我今天在哪一点更真实、更稳定、更负责？'], '沉淀过程胜利。'),
-    _FeatureSpec('三层自尊训练', '失败后人格保护', '强制区分事实、行为、能力、人格、价值。', ['行为哪里可改？人格价值如何保护？'], '输出失败去人格化卡。'),
-    _FeatureSpec('真实关系实验室', '真实表达编辑器', '把讨好、压抑、表演表达改为真实但不攻击的表达。', ['我隐藏了什么真实情绪？', '我害怕对方如何反应？'], '生成可发送话术。'),
-    _FeatureSpec('真实关系实验室', '主动建设性回应', '识别被动破坏/主动破坏/被动建设/主动建设，并生成更好的回应。', ['我是否追问细节、放大喜悦、愿意庆祝？'], '输出积极事件回应。'),
-    _FeatureSpec('真实关系实验室', '冲突修复训练', '提醒冲突不等于失败，关键是修复、真实需求和积极互动基础。', ['我是在寻求被认可还是被了解？'], '生成修复行动。'),
-    _FeatureSpec('真实关系实验室', 'Love Boosters', '每天30秒关系行动：感谢、拥抱、关心短信、认真听、庆祝好消息。', ['今天我投入了哪个微小关系动作？'], '生成今日 Love Booster。'),
-    _FeatureSpec('六项自尊实践', '诚信练习', '减少小谎、表演、讨好、夸大与自我背叛。', ['今天有没有一句我本可以更诚实的话？'], '输出一句话修复。'),
-    _FeatureSpec('六项自尊实践', '情绪—需求—价值三段式', '把困扰拆成情绪、需求、价值与诚实表达。', ['我现在的情绪是什么？背后需要是什么？'], '输出觉察卡。'),
-    _FeatureSpec('六项自尊实践', '目标感练习', '检查目标来自真实价值还是外界期待。', ['即使没人知道我还愿意做吗？'], '生成价值—行动路线图。'),
-    _FeatureSpec('六项自尊实践', '责任练习', 'No one is coming：把抱怨转成可负责行动。', ['我无法控制什么？可以负责什么？'], '输出抱怨转行动。'),
-    _FeatureSpec('六项自尊实践', '自我接纳练习', '允许自己是人：接纳情绪，同时选择行动。', ['我能否不等完美才允许自己值得被爱？'], '输出自我接纳句。'),
-    _FeatureSpec('六项自尊实践', '自我主张练习', '练习说“不”和说“是”，承认边界与渴望。', ['我想拒绝什么？我想争取什么？'], '输出边界/争取话术。'),
-    _FeatureSpec('外部认可与比较戒断', '掌声成瘾识别', '识别反复查看消息、点赞、确认与短暂兴奋后空虚。', ['这个认可让我短暂感觉到什么？'], '输出认可戒断行动。'),
-    _FeatureSpec('外部认可与比较戒断', '比较 detox', '拆解比较对象，把羡慕转化为需求、目标与行动。', ['我是否拿幕后和别人高光比较？'], '输出比较转行动卡。'),
-    _FeatureSpec('外部认可与比较戒断', '身体羞耻重构', '拆解媒体标准、滤镜、商业营销、稀有样本和消费主义。', ['我是否把身体等同人格价值？'], '输出身体照顾行动。'),
-    _FeatureSpec('心理免疫与复原力', '批评处理器', '把批评分成有效反馈、情绪攻击、模糊评价、投射/偏见。', ['哪部分值得学习？哪部分不属于我？'], '输出批评免疫卡。'),
-    _FeatureSpec('心理免疫与复原力', '失败复原流程', '事实描述、情绪接纳、行为复盘、价值确认、下一步行动。', ['我失败了，但我不是失败者。'], '输出五步复原卡。'),
-    _FeatureSpec('心理免疫与复原力', '身体行动模块', '10分钟走路、拉伸、睡眠记录、呼吸练习、身体照顾承诺。', ['我如何照顾身体而非惩罚身体？'], '输出身体行动。'),
-    _FeatureSpec('价值目标与责任系统', '人生责任盘', '身体、关系、学习、工作、财务、创造、精神成长、休息、贡献九领域。', ['哪个问题我一直在等别人解决？'], '输出九宫格最小行动。'),
-    _FeatureSpec('价值目标与责任系统', '自我一致目标审查', '四重审查：真实价值、是否证明自己、无人知道仍愿意、是否更自由真实。', ['这个目标让我更有生命力吗？'], '输出自我一致目标。'),
-    _FeatureSpec('价值目标与责任系统', '每周责任复盘', '复盘承担责任、等待拯救、痛苦转行动、边界与下周一步。', ['我本周在哪件事上承担了责任？'], '输出责任周报。'),
-    _FeatureSpec('AI 场景教练', '三层 Prompt 工作流', '全局价值层 + 场景层 + 输出格式层，把现实事件转为行动。', ['当前属于哪个场景？需要哪种输出格式？'], '输出场景行动卡。'),
-  ];
 
   static const _moduleFilters = <String>['全部', '自尊地图', '三层自尊训练', '真实关系实验室', '六项自尊实践', '外部认可与比较戒断', '心理免疫与复原力', '价值目标与责任系统', 'AI 场景教练'];
 
@@ -425,9 +395,12 @@ $action
 
 
   Widget _featureConsole() {
-    final features = _featureSpecs.where((f) => _featureModuleFilter == '全部' || f.module == _featureModuleFilter).toList(growable: false);
+    final features = SelfWorthProductRegistry.features
+        .where((f) => _featureModuleFilter == '全部' || _registryModuleTitle(f.moduleId) == _featureModuleFilter)
+        .toList(growable: false);
     return ListView(padding: const EdgeInsets.all(16), children: [
-      _section('功能总控台', '这里把产品设计方案中的所有子功能拆成可进入、可提问、可生成行动卡、可沉淀证据的练习单元。'),
+      _section('功能总控台', '这里直接读取 self_worth_ai_engine.dart 的产品功能注册表，把产品设计方案中的全部子功能拆成可进入、可提问、可生成行动卡、可沉淀证据的练习单元。'),
+      _coverageAuditCard(),
       DropdownButtonFormField<String>(
         value: _featureModuleFilter,
         decoration: const InputDecoration(labelText: '按模块筛选', border: OutlineInputBorder()),
@@ -435,11 +408,45 @@ $action
         onChanged: (v) => setState(() => _featureModuleFilter = v ?? '全部'),
       ),
       const SizedBox(height: 12),
-      ...features.map(_featureCard),
+      ...features.map(_registryFeatureCard),
     ]);
   }
 
-  Widget _featureCard(_FeatureSpec f) => Card(
+
+  Widget _coverageAuditCard() {
+    final coverage = SelfWorthProductRegistry.coverageByModule();
+    final gaps = SelfWorthProductRegistry.coverageGaps();
+    final moduleTitles = {for (final m in SelfWorthProductRegistry.modules) m.id: m.title};
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22), side: const BorderSide(color: Color(0xFFE5E7EB))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('产品方案覆盖审计', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Text('已登记 ${SelfWorthProductRegistry.modules.length} 个一级模块、${SelfWorthProductRegistry.features.length} 个子功能；覆盖缺口：${gaps.isEmpty ? '0' : gaps.join('，')}。', style: const TextStyle(color: Color(0xFF334155))),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: coverage.entries.map((e) => Chip(label: Text('${moduleTitles[e.key] ?? e.key} · ${e.value}项'))).toList(growable: false),
+          ),
+        ]),
+      ),
+    );
+  }
+
+
+  String _registryModuleTitle(String moduleId) {
+    for (final module in SelfWorthProductRegistry.modules) {
+      if (module.id == moduleId) return module.title;
+    }
+    return moduleId;
+  }
+
+  Widget _registryFeatureCard(SelfWorthFeatureSpec f) => Card(
         elevation: 0,
         color: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22), side: const BorderSide(color: Color(0xFFE5E7EB))),
@@ -447,44 +454,34 @@ $action
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: const Color(0xFFEDE9FE), borderRadius: BorderRadius.circular(999)), child: Text(f.module, style: const TextStyle(color: Color(0xFF5B21B6), fontSize: 12, fontWeight: FontWeight.w800))),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: const Color(0xFFEDE9FE), borderRadius: BorderRadius.circular(999)), child: Text(_registryModuleTitle(f.moduleId), style: const TextStyle(color: Color(0xFF5B21B6), fontSize: 12, fontWeight: FontWeight.w800))),
               const Spacer(),
-              TextButton(onPressed: () => _startFeature(f), child: const Text('进入练习')),
+              TextButton(onPressed: () => _startRegistryFeature(f), child: const Text('进入练习')),
             ]),
             Text(f.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
             const SizedBox(height: 6),
-            Text(f.purpose, style: const TextStyle(color: Color(0xFF475569), height: 1.45)),
+            Text(f.goal, style: const TextStyle(color: Color(0xFF475569), height: 1.45)),
             const SizedBox(height: 8),
-            ...f.questions.map((q) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('• '), Expanded(child: Text(q, style: const TextStyle(color: Color(0xFF64748B))))])),
-            const SizedBox(height: 8),
-            Text('产出：${f.output}', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF334155))),
+            Text('输入：${f.inputs.join(' / ')}', style: const TextStyle(color: Color(0xFF64748B))),
+            const SizedBox(height: 4),
+            Text('AI步骤：${f.aiSteps.join(' → ')}', style: const TextStyle(color: Color(0xFF64748B))),
+            const SizedBox(height: 4),
+            Text('产出：${f.outputs.join(' / ')}', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF334155))),
+            const SizedBox(height: 4),
+            Text('行动：${f.actions.join(' / ')}', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF065F46))),
           ]),
         ),
       );
 
-  void _startFeature(_FeatureSpec f) {
-    final scene = _sceneForFeature(f);
+  void _startRegistryFeature(SelfWorthFeatureSpec f) {
+    final scene = _engine.sceneForFeature(f);
+    final input = '${f.title}：输入 ${f.inputs.join('、')}；目标 ${f.goal}。';
     setState(() {
       _scene = scene;
-      _eventCtrl.text = '${f.title}：${f.questions.join(' ')}';
-      _coachOutput = _buildCoachOutput(_eventCtrl.text, scene);
+      _eventCtrl.text = input;
+      _coachOutput = _engine.localActionCard(scene: scene, userInput: input, feature: f);
     });
     _tab.animateTo(3);
-  }
-
-  String _sceneForFeature(_FeatureSpec f) {
-    if (f.title.contains('失败')) return 'failure';
-    if (f.title.contains('关系') || f.title.contains('Love') || f.title.contains('冲突')) return 'relationship_conflict';
-    if (f.title.contains('比较') || f.title.contains('嫉妒')) return 'comparison';
-    if (f.title.contains('身体') || f.title.contains('外貌')) return 'body_shame';
-    if (f.title.contains('边界') || f.title.contains('自我主张')) return 'boundary';
-    if (f.title.contains('目标')) return 'goal_delay';
-    if (f.title.contains('接纳') || f.title.contains('情绪')) return 'self_acceptance';
-    if (f.title.contains('主动建设')) return 'active_constructive';
-    if (f.title.contains('诚信') || f.title.contains('真实表达')) return 'integrity';
-    if (f.title.contains('批评')) return 'criticism';
-    if (f.title.contains('责任') || f.title.contains('抱怨')) return 'responsibility_review';
-    return 'external_validation';
   }
 
   Widget _journeyPage() => ListView(padding: const EdgeInsets.all(16), children: [
@@ -590,13 +587,4 @@ class _EvidenceRecord {
       (json['text'] ?? '').toString(),
     );
   }
-}
-
-class _FeatureSpec {
-  final String module;
-  final String title;
-  final String purpose;
-  final List<String> questions;
-  final String output;
-  const _FeatureSpec(this.module, this.title, this.purpose, this.questions, this.output);
 }
