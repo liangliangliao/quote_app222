@@ -142,12 +142,12 @@ class _LogsPageState extends State<LogsPage> {
     final ts = _fmt((e['task_start_time'] ?? '') as String?);
     final titleMatch = RegExp(r'^【([^】]+?)(请求|响应|异常)】\[([^\]]+)\]').firstMatch(detail);
     final provider = titleMatch?.group(1) ??
-        _extractMeta(detail, 'Provider').ifEmpty(taskName.contains('OpenRouter') ? 'OpenRouter' : taskName.contains('OpenAI') ? 'OpenAI' : taskName.contains('Eden AI') || taskName.contains('EdenAI') ? 'Eden AI' : taskName.contains('DeepSeek') ? 'DeepSeek' : '系统');
+        _extractMeta(detail, 'Provider').ifEmpty(taskName.contains('OpenRouter') ? 'OpenRouter' : taskName.contains('OpenAI') ? 'OpenAI' : taskName.contains('Eden AI') || taskName.contains('EdenAI') ? 'Eden AI' : taskName.contains('xGrok') || taskName.contains('Grok') || taskName.contains('xAI') ? 'xGrok' : taskName.contains('Gemini') ? 'Gemini' : taskName.contains('DeepSeek') ? 'DeepSeek' : '系统');
     final module = titleMatch?.group(3) ?? (taskName.isEmpty ? '系统日志' : taskName);
     final model = _extractMeta(detail, 'Model');
     final traceId = _extractMeta(detail, 'TraceId');
     final sessionId = _extractMeta(detail, 'SessionId');
-    final isAi = provider == 'OpenAI' || provider == 'DeepSeek' || provider == 'OpenRouter' || provider == 'Eden AI' || provider.endsWith('-Proxy') || taskName.contains('OpenAI') || taskName.contains('DeepSeek') || taskName.contains('OpenRouter') || taskName.contains('Eden AI') || taskName.contains('EdenAI');
+    final isAi = provider == 'OpenAI' || provider == 'DeepSeek' || provider == 'OpenRouter' || provider == 'Eden AI' || provider == 'xGrok' || provider == 'Gemini' || provider.endsWith('-Proxy') || taskName.contains('OpenAI') || taskName.contains('DeepSeek') || taskName.contains('OpenRouter') || taskName.contains('Eden AI') || taskName.contains('EdenAI') || taskName.contains('xGrok') || taskName.contains('Grok') || taskName.contains('xAI') || taskName.contains('Gemini');
     final isError = detail.contains('【错误】') || detail.contains('异常') || detail.contains('Error:');
 
     _LogType type = _LogType.all;

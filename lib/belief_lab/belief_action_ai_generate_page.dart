@@ -148,7 +148,7 @@ class _BeliefActionAIGeneratePageState extends State<BeliefActionAIGeneratePage>
           if (_result == null) ...[
             const SizedBox(height: 10),
             Text(
-              '说明：\n- 本地模式不联网，适合先跑通结构。\n- 统一 AI 会读取设置页中的全局 AI 提供方、模型与版本（可为 OpenAI / DeepSeek / OpenRouter / Eden AI）；若未配置，将自动回退到本地生成。\n- 生成后建议“编辑后保存”，确保概念与行动完全一致。',
+              '说明：\n- 本地模式不联网，适合先跑通结构。\n- 统一 AI 会读取设置页中的全局 AI 提供方、模型与版本（可为 OpenAI / DeepSeek / OpenRouter / Eden AI / xGrok / Gemini）；若未配置，将自动回退到本地生成。\n- 生成后建议“编辑后保存”，确保概念与行动完全一致。',
               style: TextStyle(color: Colors.black.withOpacity(0.7), height: 1.35),
             ),
           ],

@@ -1,0 +1,5 @@
+quote_app_realistic_positivity_os_v2
+- Realistic Positivity OS V2 completion pass
+- All RPO AI prompts registered in Settings > AI Prompt Center
+- Runtime AI service now reads configurable prompts
+- Added daily routing recommendation, module workbench links, evidence completion loop, profile materialization, richer onboarding fields

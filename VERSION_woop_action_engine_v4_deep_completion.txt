@@ -1,0 +1,7 @@
+WOOP Action Engine V4 Deep Completion
+- Added manual WOOP wizard
+- Added target filter page
+- Added daily cockpit with check-ins and plan logs
+- Added review center
+- Added plan log and daily check-in tables/models/DAO
+- Extended workbench entries and card detail execution logging

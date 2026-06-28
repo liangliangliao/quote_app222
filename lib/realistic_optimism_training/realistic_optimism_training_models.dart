@@ -349,6 +349,10 @@ class RealisticOptimismTrainingActionEvidence {
   final bool completed;
   final int? completedAtMs;
   final double selfEfficacyScore;
+  final String sourceType;
+  final String sourceId;
+  final String todoTaskId;
+  final String dailyArtifactId;
   final int createdAtMs;
 
   const RealisticOptimismTrainingActionEvidence({
@@ -359,6 +363,10 @@ class RealisticOptimismTrainingActionEvidence {
     required this.completed,
     this.completedAtMs,
     this.selfEfficacyScore = 0,
+    this.sourceType = '',
+    this.sourceId = '',
+    this.todoTaskId = '',
+    this.dailyArtifactId = '',
     required this.createdAtMs,
   });
 
@@ -370,6 +378,10 @@ class RealisticOptimismTrainingActionEvidence {
         'completed': completed ? 1 : 0,
         'completed_at_ms': completedAtMs,
         'self_efficacy_score': selfEfficacyScore,
+        'source_type': sourceType,
+        'source_id': sourceId,
+        'todo_task_id': todoTaskId,
+        'daily_artifact_id': dailyArtifactId,
         'created_at_ms': createdAtMs,
       };
 
@@ -381,6 +393,10 @@ class RealisticOptimismTrainingActionEvidence {
         completed: _b(row['completed']),
         completedAtMs: row['completed_at_ms'] == null ? null : _i(row['completed_at_ms']),
         selfEfficacyScore: _d(row['self_efficacy_score']),
+        sourceType: _s(row['source_type']),
+        sourceId: _s(row['source_id']),
+        todoTaskId: _s(row['todo_task_id']),
+        dailyArtifactId: _s(row['daily_artifact_id']),
         createdAtMs: _i(row['created_at_ms']),
       );
 }
@@ -450,6 +466,8 @@ class RealisticOptimismTrainingStats {
   final int eventIntensity;
   final int processPlans;
   final int p2Artifacts;
+  final int sessions;
+  final int openSessions;
 
   const RealisticOptimismTrainingStats({
     required this.records,
@@ -468,5 +486,255 @@ class RealisticOptimismTrainingStats {
     this.eventIntensity = 0,
     this.processPlans = 0,
     this.p2Artifacts = 0,
+    this.sessions = 0,
+    this.openSessions = 0,
   });
+}
+
+
+
+class RealisticOptimismTrainingSession {
+  final String id;
+  final String status; // draft / active / completed / abandoned / safety_routed
+  final int currentStep;
+  final String initialScene;
+  final String entryScene;
+  final String level;
+  final double intensity;
+  final String emotion;
+  final String bodySignal;
+  final String eventText;
+  final String factText;
+  final String unknownText;
+  final String interpretationText;
+  final String controllableText;
+  final String actionText;
+  final String obstacleText;
+  final String ifThenText;
+  final bool actionCompleted;
+  final String evidenceText;
+  final String gratitudeText;
+  final String primeText;
+  final String identityText;
+  final String linkedRecordId;
+  final int createdAtMs;
+  final int updatedAtMs;
+
+  const RealisticOptimismTrainingSession({
+    required this.id,
+    this.status = 'draft',
+    this.currentStep = 0,
+    this.initialScene = 'event_reframe',
+    this.entryScene = '今天一件事',
+    this.level = 'L1',
+    this.intensity = 5,
+    this.emotion = '',
+    this.bodySignal = '',
+    this.eventText = '',
+    this.factText = '',
+    this.unknownText = '',
+    this.interpretationText = '',
+    this.controllableText = '',
+    this.actionText = '',
+    this.obstacleText = '',
+    this.ifThenText = '',
+    this.actionCompleted = true,
+    this.evidenceText = '',
+    this.gratitudeText = '',
+    this.primeText = '',
+    this.identityText = '',
+    this.linkedRecordId = '',
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  Map<String, Object?> toRow() => <String, Object?>{
+        'id': id,
+        'status': status,
+        'current_step': currentStep,
+        'initial_scene': initialScene,
+        'entry_scene': entryScene,
+        'level': level,
+        'intensity': intensity,
+        'emotion': emotion,
+        'body_signal': bodySignal,
+        'event_text': eventText,
+        'fact_text': factText,
+        'unknown_text': unknownText,
+        'interpretation_text': interpretationText,
+        'controllable_text': controllableText,
+        'action_text': actionText,
+        'obstacle_text': obstacleText,
+        'if_then_text': ifThenText,
+        'action_completed': actionCompleted ? 1 : 0,
+        'evidence_text': evidenceText,
+        'gratitude_text': gratitudeText,
+        'prime_text': primeText,
+        'identity_text': identityText,
+        'linked_record_id': linkedRecordId,
+        'created_at_ms': createdAtMs,
+        'updated_at_ms': updatedAtMs,
+      };
+
+  static RealisticOptimismTrainingSession fromRow(Map<String, Object?> row) => RealisticOptimismTrainingSession(
+        id: _s(row['id']),
+        status: _s(row['status'], 'draft'),
+        currentStep: _i(row['current_step']),
+        initialScene: _s(row['initial_scene'], 'event_reframe'),
+        entryScene: _s(row['entry_scene'], '今天一件事'),
+        level: _s(row['level'], 'L1'),
+        intensity: _d(row['intensity'], 5),
+        emotion: _s(row['emotion']),
+        bodySignal: _s(row['body_signal']),
+        eventText: _s(row['event_text']),
+        factText: _s(row['fact_text']),
+        unknownText: _s(row['unknown_text']),
+        interpretationText: _s(row['interpretation_text']),
+        controllableText: _s(row['controllable_text']),
+        actionText: _s(row['action_text']),
+        obstacleText: _s(row['obstacle_text']),
+        ifThenText: _s(row['if_then_text']),
+        actionCompleted: _b(row['action_completed'], true),
+        evidenceText: _s(row['evidence_text']),
+        gratitudeText: _s(row['gratitude_text']),
+        primeText: _s(row['prime_text']),
+        identityText: _s(row['identity_text']),
+        linkedRecordId: _s(row['linked_record_id']),
+        createdAtMs: _i(row['created_at_ms']),
+        updatedAtMs: _i(row['updated_at_ms']),
+      );
+
+  Map<String, dynamic> toDraftJson() => <String, dynamic>{
+        'id': id,
+        'status': status,
+        'current_step': currentStep,
+        'initial_scene': initialScene,
+        'entry_scene': entryScene,
+        'level': level,
+        'intensity': intensity,
+        'emotion': emotion,
+        'body_signal': bodySignal,
+        'event_text': eventText,
+        'fact_text': factText,
+        'unknown_text': unknownText,
+        'interpretation_text': interpretationText,
+        'controllable_text': controllableText,
+        'action_text': actionText,
+        'obstacle_text': obstacleText,
+        'if_then_text': ifThenText,
+        'action_completed': actionCompleted,
+        'evidence_text': evidenceText,
+        'gratitude_text': gratitudeText,
+        'prime_text': primeText,
+        'identity_text': identityText,
+        'linked_record_id': linkedRecordId,
+        'created_at_ms': createdAtMs,
+        'updated_at_ms': updatedAtMs,
+      };
+
+  RealisticOptimismTrainingSession copyWith({
+    String? id,
+    String? status,
+    int? currentStep,
+    String? initialScene,
+    String? entryScene,
+    String? level,
+    double? intensity,
+    String? emotion,
+    String? bodySignal,
+    String? eventText,
+    String? factText,
+    String? unknownText,
+    String? interpretationText,
+    String? controllableText,
+    String? actionText,
+    String? obstacleText,
+    String? ifThenText,
+    bool? actionCompleted,
+    String? evidenceText,
+    String? gratitudeText,
+    String? primeText,
+    String? identityText,
+    String? linkedRecordId,
+    int? createdAtMs,
+    int? updatedAtMs,
+  }) => RealisticOptimismTrainingSession(
+        id: id ?? this.id,
+        status: status ?? this.status,
+        currentStep: currentStep ?? this.currentStep,
+        initialScene: initialScene ?? this.initialScene,
+        entryScene: entryScene ?? this.entryScene,
+        level: level ?? this.level,
+        intensity: intensity ?? this.intensity,
+        emotion: emotion ?? this.emotion,
+        bodySignal: bodySignal ?? this.bodySignal,
+        eventText: eventText ?? this.eventText,
+        factText: factText ?? this.factText,
+        unknownText: unknownText ?? this.unknownText,
+        interpretationText: interpretationText ?? this.interpretationText,
+        controllableText: controllableText ?? this.controllableText,
+        actionText: actionText ?? this.actionText,
+        obstacleText: obstacleText ?? this.obstacleText,
+        ifThenText: ifThenText ?? this.ifThenText,
+        actionCompleted: actionCompleted ?? this.actionCompleted,
+        evidenceText: evidenceText ?? this.evidenceText,
+        gratitudeText: gratitudeText ?? this.gratitudeText,
+        primeText: primeText ?? this.primeText,
+        identityText: identityText ?? this.identityText,
+        linkedRecordId: linkedRecordId ?? this.linkedRecordId,
+        createdAtMs: createdAtMs ?? this.createdAtMs,
+        updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      );
+}
+
+class RotValueSourceAnchor {
+  final String id;
+  final String sourceName;
+  final String chapterOrLecture;
+  final String originalExcerpt;
+  final String summary;
+  final String coreValue;
+  final String usedInScenes;
+  final String promptInstruction;
+
+  const RotValueSourceAnchor({
+    required this.id,
+    required this.sourceName,
+    required this.chapterOrLecture,
+    required this.originalExcerpt,
+    required this.summary,
+    required this.coreValue,
+    required this.usedInScenes,
+    required this.promptInstruction,
+  });
+
+  Map<String, Object?> toRow() => <String, Object?>{
+        'id': id,
+        'source_name': sourceName,
+        'chapter_or_lecture': chapterOrLecture,
+        'original_excerpt': originalExcerpt,
+        'summary': summary,
+        'core_value': coreValue,
+        'used_in_scenes': usedInScenes,
+        'prompt_instruction': promptInstruction,
+      };
+
+  static RotValueSourceAnchor fromRow(Map<String, Object?> row) => RotValueSourceAnchor(
+        id: _s(row['id']),
+        sourceName: _s(row['source_name']),
+        chapterOrLecture: _s(row['chapter_or_lecture']),
+        originalExcerpt: _s(row['original_excerpt']),
+        summary: _s(row['summary']),
+        coreValue: _s(row['core_value']),
+        usedInScenes: _s(row['used_in_scenes']),
+        promptInstruction: _s(row['prompt_instruction']),
+      );
+}
+
+class RealisticOptimismTrainingValidationReport {
+  final bool ok;
+  final List<String> issues;
+  final String repairNote;
+
+  const RealisticOptimismTrainingValidationReport({required this.ok, required this.issues, this.repairNote = ''});
 }

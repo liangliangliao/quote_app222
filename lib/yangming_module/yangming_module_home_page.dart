@@ -773,7 +773,7 @@ class _OverviewPage extends StatelessWidget {
               const Text('王阳明《传习录》训练模块', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               Text(
-                '按照原 PRD 继续推进：27 段课程库、问题诊断、虚拟世界操练、现实行动、反思复盘，统一复用主应用现有全局 AI 配置（DeepSeek / OpenAI / OpenRouter / Eden AI）。\n\n${aiState['note'] ?? ''}',
+                '按照原 PRD 继续推进：27 段课程库、问题诊断、虚拟世界操练、现实行动、反思复盘，统一复用主应用现有全局 AI 配置（DeepSeek / OpenAI / OpenRouter / Eden AI / xGrok / Gemini）。\n\n${aiState['note'] ?? ''}',
                 style: const TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF4B5563)),
               ),
               const SizedBox(height: 14),

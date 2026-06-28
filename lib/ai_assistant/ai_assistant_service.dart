@@ -1030,6 +1030,14 @@ class AiAssistantService {
       return _looksLikeVisionModel(m) || m.contains('openai/') || m.contains('gpt-');
     }
 
+    if (p == 'gemini') {
+      return _looksLikeVisionModel(m) || m.contains('gemini');
+    }
+
+    if (p == 'xgrok') {
+      return m.contains('vision') || m.contains('grok-4') || m.contains('grok-3');
+    }
+
     return false;
   }
 
@@ -1039,6 +1047,8 @@ class AiAssistantService {
     if (p == 'deepseek') return false;
     if (p == 'openai') return true;
     if (p == 'edenai') return true;
+    if (p == 'gemini') return false;
+    if (p == 'xgrok') return false;
     if (p == 'openrouter') {
       // In this app OpenRouter file parts are only used for PDF parser support.
       // Leave it enabled for models that can at least accept file-parser input;
@@ -1243,11 +1253,13 @@ class AiAssistantService {
       final content = message.content.trim();
       final hasParts = message.parts.isNotEmpty;
       if (role.isEmpty || (content.isEmpty && !hasParts)) continue;
-      final partSignature = message.parts.map((p) => '${p.type}:${p.imageUrl ?? p.text ?? p.fileId ?? p.fileData ?? p.fileName ?? ''}').join('|');
+      String partSignatureOf(UnifiedAiContentPart part) =>
+          '${part.type}:${part.imageUrl ?? part.text ?? part.fileId ?? part.fileData ?? part.fileName ?? ''}';
+      final partSignature = message.parts.map(partSignatureOf).join('|');
       if (result.isNotEmpty &&
           result.last.role == role &&
           result.last.content == content &&
-          result.last.parts.map((p) => '${p.type}:${p.imageUrl ?? p.text ?? ''}').join('|') == partSignature) {
+          result.last.parts.map(partSignatureOf).join('|') == partSignature) {
         continue;
       }
       result.add(UnifiedAiChatMessage(role: role, content: content, parts: message.parts));

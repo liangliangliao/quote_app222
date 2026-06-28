@@ -1,0 +1,7 @@
+quote_app_realistic_optimism_training_v19_deep_scene_separation
+- 深度场景分离
+- AI payload 合并修复
+- L3/L4 安全结果页
+- 场景化输出校验
+- P2/可控失败专属详情区
+- 环境页与证据页层级修复

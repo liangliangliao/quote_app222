@@ -622,7 +622,11 @@ class ConceptEngineSessionRecord {
           ? 'OpenRouter'
           : provider == 'edenai'
               ? 'Eden AI'
-              : 'DeepSeek';
+              : provider == 'xgrok'
+                  ? 'xGrok'
+                  : provider == 'gemini'
+                      ? 'Gemini'
+                      : 'DeepSeek';
 
   Map<String, dynamic> get processMap {
     try {

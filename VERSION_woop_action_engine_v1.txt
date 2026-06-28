@@ -1,0 +1,2 @@
+WOOP_ACTION_ENGINE_V1
+新增独立 WOOP 行动引擎模块：心理对照、WOOP、if–then、失败复盘、障碍雷达、三层 Prompt、AI + 本地兜底。

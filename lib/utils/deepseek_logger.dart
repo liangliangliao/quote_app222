@@ -11,8 +11,11 @@ class DeepSeekLogger {
   static Map<String, String> _sanitizeHeaders(Map<String, String> headers) {
     final out = <String, String>{};
     headers.forEach((key, value) {
-      if (key.toLowerCase() == 'authorization') {
+      final lower = key.toLowerCase();
+      if (lower == 'authorization') {
         out[key] = 'Bearer ***REDACTED***';
+      } else if (lower == 'x-goog-api-key' || lower == 'x-api-key' || lower.contains('api-key')) {
+        out[key] = '***REDACTED***';
       } else {
         out[key] = value;
       }

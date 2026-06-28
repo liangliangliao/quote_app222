@@ -1,0 +1,7 @@
+WOOP Action Engine V7 - Product Gap Closure
+- Sourcebook course training
+- Trigger simulator
+- Next-action queue
+- Acceptance audit
+- Course progress table
+- Prompt center expanded

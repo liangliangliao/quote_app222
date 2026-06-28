@@ -1,0 +1,2 @@
+quote_app_mi_growth_navigator_v1_2_color_build_fix
+- Fixed Flutter build errors caused by non-existent Colors.black70 / black67 / black60 in mi_growth_home_page.dart.

@@ -156,12 +156,23 @@ class UnifiedAiService {
   static const String openAiResponsesEndpoint = 'https://api.openai.com/v1/responses';
   static const String edenAiChatCompletionsEndpoint = 'https://api.edenai.run/v3/chat/completions';
   static const String edenAiModelsEndpoint = 'https://api.edenai.run/v3/models';
+  static const String xGrokChatCompletionsEndpoint = 'https://api.x.ai/v1/chat/completions';
+  static const String xGrokModelsEndpoint = 'https://api.x.ai/v1/models';
+  static const String geminiChatCompletionsEndpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+  static const String geminiModelsEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models';
 
   static String _normalizeDeepseekModel(String model) {
     final m = model.trim();
     if (m.isEmpty || m == 'deepseek-chat' || m == 'deepseek-reasoner') {
       return 'deepseek-v4-pro';
     }
+    return m;
+  }
+
+
+  static String _normalizeGeminiModel(String model) {
+    final m = model.trim();
+    if (m.startsWith('models/')) return m.substring('models/'.length).trim();
     return m;
   }
 
@@ -192,7 +203,13 @@ class UnifiedAiService {
     final openRouterModel = ((forcedProvider == 'openrouter' ? forcedModel : null) ?? state['openrouter_model'] ?? state['model'] ?? '').trim();
 
     final edenAiKey = await _settings.getEdenAiKey();
-    final edenAiModel = ((forcedProvider == 'edenai' ? forcedModel : null) ?? state['edenai_model'] ?? state['model'] ?? GlobalAiSettings.edenAiDefaultModel).trim();
+    final edenAiModel = ((provider == 'edenai' ? forcedModel : null) ?? state['edenai_model'] ?? state['model'] ?? GlobalAiSettings.edenAiDefaultModel).trim();
+
+    final xGrokKey = await _settings.getXGrokKey();
+    final xGrokModel = ((provider == 'xgrok' ? forcedModel : null) ?? state['xgrok_model'] ?? state['model'] ?? GlobalAiSettings.xGrokDefaultModel).trim();
+
+    final geminiKey = await _settings.getGeminiKey();
+    final geminiModel = _normalizeGeminiModel(((provider == 'gemini' ? forcedModel : null) ?? state['gemini_model'] ?? state['model'] ?? GlobalAiSettings.geminiDefaultModel).trim());
 
     switch (provider) {
       case 'openai':
@@ -228,6 +245,28 @@ class UnifiedAiService {
           displayModel: model,
           available: edenAiKey.isNotEmpty,
         );
+      case 'xgrok':
+        final model = xGrokModel.isEmpty ? GlobalAiSettings.xGrokDefaultModel : xGrokModel;
+        return UnifiedAiResolvedConfig(
+          provider: 'xgrok',
+          apiKey: xGrokKey,
+          model: model,
+          endpoint: xGrokChatCompletionsEndpoint,
+          label: 'xGrok · $model',
+          displayModel: model,
+          available: xGrokKey.isNotEmpty,
+        );
+      case 'gemini':
+        final model = geminiModel.isEmpty ? GlobalAiSettings.geminiDefaultModel : geminiModel;
+        return UnifiedAiResolvedConfig(
+          provider: 'gemini',
+          apiKey: geminiKey,
+          model: model,
+          endpoint: geminiChatCompletionsEndpoint,
+          label: 'Gemini · $model',
+          displayModel: model,
+          available: geminiKey.isNotEmpty,
+        );
       case 'deepseek':
       default:
         var model = deepSeekModel;
@@ -255,13 +294,21 @@ class UnifiedAiService {
           ? openRouterModelsEndpoint
           : normalized == 'edenai'
               ? edenAiModelsEndpoint
-              : normalized == 'openai'
-                  ? openAiModelsEndpoint
-                  : deepSeekModelsEndpoint,
+              : normalized == 'xgrok'
+                  ? xGrokModelsEndpoint
+                  : normalized == 'gemini'
+                      // Gemini 的 OpenAI-compatible /openai/models 在部分账号/区域会返回
+                      // Google HTML 403。模型查询改走 Gemini 原生 Models API；聊天调用仍然
+                      // 使用 /v1beta/openai/chat/completions，保持统一的 OpenAI-compatible 调用链。
+                      ? '$geminiModelsEndpoint?pageSize=1000'
+                      : normalized == 'openai'
+                          ? openAiModelsEndpoint
+                          : deepSeekModelsEndpoint,
     );
     final headers = <String, String>{
-      'Authorization': 'Bearer ${cfg.apiKey}',
-      if (normalized == 'edenai') 'Accept': 'application/json',
+      if (normalized == 'gemini') 'x-goog-api-key': cfg.apiKey,
+      if (normalized != 'gemini') 'Authorization': 'Bearer ${cfg.apiKey}',
+      'Accept': 'application/json',
       if (normalized == 'edenai') 'Connection': 'close',
       if (normalized == 'openrouter') 'X-OpenRouter-Title': 'Quote App',
     };
@@ -287,7 +334,7 @@ class UnifiedAiService {
       );
       if (resp.statusCode < 200 || resp.statusCode >= 300) return <String>[];
       final decoded = jsonDecode(resp.body);
-      final list = _extractModelList(decoded);
+      final list = _extractModelList(decoded, provider: normalized);
       if (list.isEmpty) return <String>[];
       final uniq = <String>[];
       final seen = <String>{};
@@ -353,6 +400,8 @@ class UnifiedAiService {
     if ((cfg.provider == 'edenai' ||
             cfg.provider == 'openai' ||
             cfg.provider == 'openrouter' ||
+            cfg.provider == 'xgrok' ||
+            cfg.provider == 'gemini' ||
             cfg.provider == 'deepseek') &&
         effectiveTimeout < const Duration(seconds: 120)) {
       effectiveTimeout = const Duration(seconds: 120);
@@ -395,6 +444,24 @@ class UnifiedAiService {
       case 'edenai':
         return _callChatProvider(
           provider: 'edenai',
+          endpoint: cfg.endpoint,
+          apiKey: cfg.apiKey,
+          model: cfg.model,
+          prompt: prompt,
+          purpose: purpose,
+          systemPrompt: systemPrompt,
+          maxTokens: effectiveMaxTokens,
+          expectJson: expectJson,
+          temperature: effectiveTemperature,
+          topP: effectiveTopP,
+          timeout: effectiveTimeout,
+          retryCount: effectiveRetryCount,
+          retryDelayMs: effectiveRetryDelayMs,
+        );
+      case 'xgrok':
+      case 'gemini':
+        return _callChatProvider(
+          provider: cfg.provider,
           endpoint: cfg.endpoint,
           apiKey: cfg.apiKey,
           model: cfg.model,
@@ -477,6 +544,8 @@ class UnifiedAiService {
         );
       case 'openrouter':
       case 'edenai':
+      case 'xgrok':
+      case 'gemini':
       case 'deepseek':
       default:
         return _callChatProviderMessages(
@@ -744,6 +813,8 @@ class UnifiedAiService {
     if (p == 'openai') return _looksLikeVisionModel(m);
     if (p == 'openrouter') return _looksLikeVisionModel(m);
     if (p == 'edenai') return _looksLikeVisionModel(m) || m.contains('openai/') || m.contains('gpt-');
+    if (p == 'gemini') return _looksLikeVisionModel(m) || m.contains('gemini');
+    if (p == 'xgrok') return m.contains('vision') || m.contains('grok-4') || m.contains('grok-3');
     return false;
   }
 
@@ -753,6 +824,8 @@ class UnifiedAiService {
     if (p == 'openai') return true;
     if (p == 'openrouter') return true;
     if (p == 'edenai') return true;
+    if (p == 'gemini') return false;
+    if (p == 'xgrok') return false;
     return false;
   }
 
@@ -1192,7 +1265,8 @@ class UnifiedAiService {
     return true;
   }
 
-  static List<String> _extractModelList(dynamic decoded) {
+  static List<String> _extractModelList(dynamic decoded, {String provider = ''}) {
+    final normalizedProvider = _normalizeProvider(provider);
     List<dynamic>? list;
     if (decoded is Map<String, dynamic>) {
       if (decoded['data'] is List) {
@@ -1207,11 +1281,19 @@ class UnifiedAiService {
     if (list == null) return models;
     for (final item in list) {
       if (item is String) {
-        final v = item.trim();
+        final v = normalizedProvider == 'gemini' ? _normalizeGeminiModel(item) : item.trim();
         if (v.isNotEmpty) models.add(v);
       } else if (item is Map<String, dynamic>) {
-        final raw = item['id'] ?? item['slug'] ?? item['model'] ?? item['name'];
-        final v = (raw ?? '').toString().trim();
+        if (normalizedProvider == 'gemini') {
+          final methods = item['supportedGenerationMethods'];
+          if (methods is List && methods.isNotEmpty) {
+            final canGenerateContent = methods.map((e) => e.toString()).contains('generateContent');
+            if (!canGenerateContent) continue;
+          }
+        }
+        final raw = item['id'] ?? item['slug'] ?? item['model'] ?? item['baseModelId'] ?? item['name'];
+        var v = (raw ?? '').toString().trim();
+        if (normalizedProvider == 'gemini') v = _normalizeGeminiModel(v);
         if (v.isNotEmpty) models.add(v);
       }
     }
@@ -1223,6 +1305,8 @@ class UnifiedAiService {
     if (p == 'openai') return 'openai';
     if (p == 'openrouter') return 'openrouter';
     if (p == 'edenai') return 'edenai';
+    if (p == 'xgrok' || p == 'xai' || p == 'grok') return 'xgrok';
+    if (p == 'gemini' || p == 'google' || p == 'googleai') return 'gemini';
     return 'deepseek';
   }
 
@@ -1234,6 +1318,10 @@ class UnifiedAiService {
         return 'OpenRouter';
       case 'edenai':
         return 'Eden AI';
+      case 'xgrok':
+        return 'xGrok';
+      case 'gemini':
+        return 'Gemini';
       case 'deepseek':
       default:
         return 'DeepSeek';

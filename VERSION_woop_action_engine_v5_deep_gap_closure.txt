@@ -1,0 +1,5 @@
+woop_action_engine_v5_deep_gap_closure
+- 场景工具库升级为真实工作流
+- 新增个人化配置并注入 AI 上下文
+- 新增行动指标页面
+- 首页和菜单补齐入口

@@ -1,0 +1,7 @@
+woop_action_engine_v6_deep_closure
+- Adds onboarding flow
+- Adds action experiments table/model/DAO/page
+- Adds value alignment audit page
+- Adds full module data export
+- Adds V6 prompt center entries
+- Adds deep closure panel on home page

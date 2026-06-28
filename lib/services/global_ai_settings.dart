@@ -8,8 +8,14 @@ class GlobalAiSettings {
   static const String deepSeekModelKey = 'global_ai_model_deepseek';
   static const String openRouterModelKey = 'global_ai_model_openrouter';
   static const String edenAiModelKey = 'global_ai_model_edenai';
+  static const String xGrokModelKey = 'global_ai_model_xgrok';
+  static const String geminiModelKey = 'global_ai_model_gemini';
   static const String edenAiKeyKey = 'global_ai_edenai_key';
+  static const String xGrokKeyKey = 'global_ai_xgrok_key';
+  static const String geminiKeyKey = 'global_ai_gemini_key';
   static const String edenAiDefaultModel = 'openai/gpt-4o-mini';
+  static const String xGrokDefaultModel = 'grok-4.3';
+  static const String geminiDefaultModel = 'gemini-3.5-flash';
   static const String goalSettingUnderstandingPromptKey = 'goal_setting_understanding_prompt';
   static const String goalSettingActionPromptKey = 'goal_setting_action_prompt';
   static const String goalSettingLoopPromptKey = 'goal_setting_loop_prompt';
@@ -38,6 +44,13 @@ class GlobalAiSettings {
     if (m.isEmpty || m == 'deepseek-chat' || m == 'deepseek-reasoner') {
       return 'deepseek-v4-pro';
     }
+    return m;
+  }
+
+
+  String _normalizeGeminiModel(String model) {
+    final m = model.trim();
+    if (m.startsWith('models/')) return m.substring('models/'.length).trim();
     return m;
   }
 
@@ -104,45 +117,62 @@ class GlobalAiSettings {
     final openaiKey = (global['api_key'] ?? '').toString().trim();
     final openrouterKey = (await _configDao.getOpenRouterKey()).trim();
     final edenAiKey = await getEdenAiKey();
-    final provider = (((await _kvDao.getString(providerKey)) ?? '').trim().toLowerCase());
-    final resolvedProvider = provider == 'openai'
-        ? 'openai'
-        : provider == 'openrouter'
-            ? 'openrouter'
-            : provider == 'edenai'
-                ? 'edenai'
-                : provider == 'deepseek'
-                    ? 'deepseek'
-                    : (deepseekKey.isNotEmpty
-                        ? 'deepseek'
-                        : (openrouterKey.isNotEmpty
-                            ? 'openrouter'
-                            : (edenAiKey.isNotEmpty ? 'edenai' : 'openai')));
+    final xGrokKey = await getXGrokKey();
+    final geminiKey = await getGeminiKey();
+    final provider = _normalizeProviderKey((await _kvDao.getString(providerKey)) ?? '');
+    final resolvedProvider = provider == 'openai' ||
+            provider == 'openrouter' ||
+            provider == 'edenai' ||
+            provider == 'xgrok' ||
+            provider == 'gemini' ||
+            provider == 'deepseek'
+        ? provider
+        : (deepseekKey.isNotEmpty
+            ? 'deepseek'
+            : (openrouterKey.isNotEmpty
+                ? 'openrouter'
+                : (edenAiKey.isNotEmpty
+                    ? 'edenai'
+                    : (xGrokKey.isNotEmpty ? 'xgrok' : (geminiKey.isNotEmpty ? 'gemini' : 'openai')))));
     final deepseekModel = ((await _kvDao.getString(deepSeekModelKey)) ?? await _configDao.getDeepseekModel()).trim();
     final openaiModel = ((await _kvDao.getString(openAiModelKey)) ?? (global['model'] ?? 'gpt-5').toString()).trim();
     final openrouterModel = ((await _kvDao.getString(openRouterModelKey)) ?? 'openai/gpt-4.1-mini').trim();
     final edenAiModel = ((await _kvDao.getString(edenAiModelKey)) ?? edenAiDefaultModel).trim();
+    final xGrokModel = ((await _kvDao.getString(xGrokModelKey)) ?? xGrokDefaultModel).trim();
+    final geminiModel = _normalizeGeminiModel(((await _kvDao.getString(geminiModelKey)) ?? geminiDefaultModel).trim());
     final model = resolvedProvider == 'openai'
         ? (openaiModel.isEmpty ? 'gpt-5' : openaiModel)
         : resolvedProvider == 'openrouter'
             ? (openrouterModel.isEmpty ? 'openai/gpt-4.1-mini' : openrouterModel)
             : resolvedProvider == 'edenai'
                 ? (edenAiModel.isEmpty ? edenAiDefaultModel : edenAiModel)
-                : (_normalizeDeepseekModel(deepseekModel.isEmpty ? 'deepseek-v4-pro' : deepseekModel));
+                : resolvedProvider == 'xgrok'
+                    ? (xGrokModel.isEmpty ? xGrokDefaultModel : xGrokModel)
+                    : resolvedProvider == 'gemini'
+                        ? (geminiModel.isEmpty ? geminiDefaultModel : geminiModel)
+                        : (_normalizeDeepseekModel(deepseekModel.isEmpty ? 'deepseek-v4-pro' : deepseekModel));
     final available = resolvedProvider == 'openai'
         ? openaiKey.isNotEmpty
         : resolvedProvider == 'openrouter'
             ? openrouterKey.isNotEmpty
             : resolvedProvider == 'edenai'
                 ? edenAiKey.isNotEmpty
-                : deepseekKey.isNotEmpty;
+                : resolvedProvider == 'xgrok'
+                    ? xGrokKey.isNotEmpty
+                    : resolvedProvider == 'gemini'
+                        ? geminiKey.isNotEmpty
+                        : deepseekKey.isNotEmpty;
     final label = resolvedProvider == 'openai'
         ? 'OpenAI · $model'
         : resolvedProvider == 'openrouter'
             ? 'OpenRouter · $model'
             : resolvedProvider == 'edenai'
                 ? 'Eden AI · $model'
-                : 'DeepSeek · $model';
+                : resolvedProvider == 'xgrok'
+                    ? 'xGrok · $model'
+                    : resolvedProvider == 'gemini'
+                        ? 'Gemini · $model'
+                        : 'DeepSeek · $model';
     final displayModel = resolvedProvider == 'openrouter' ? 'openrouter / $model' : model;
     return <String, String>{
       'provider': resolvedProvider,
@@ -152,6 +182,8 @@ class GlobalAiSettings {
       'deepseek_model': _normalizeDeepseekModel(deepseekModel.isEmpty ? 'deepseek-v4-pro' : deepseekModel),
       'openrouter_model': openrouterModel.isEmpty ? 'openai/gpt-4.1-mini' : openrouterModel,
       'edenai_model': edenAiModel.isEmpty ? edenAiDefaultModel : edenAiModel,
+      'xgrok_model': xGrokModel.isEmpty ? xGrokDefaultModel : xGrokModel,
+      'gemini_model': geminiModel.isEmpty ? geminiDefaultModel : geminiModel,
       'label': label,
       'available': available ? '1' : '0',
       'note': '该配置由设置页统一管理，模块内只读。',
@@ -1504,6 +1536,17 @@ ending_reflection''';
       'note': '当前没有本地模板，实际使用的是应用内置默认模板。',
     };
   }
+  String _normalizeProviderKey(String provider) {
+    final raw = provider.trim().toLowerCase();
+    if (raw == 'openai') return 'openai';
+    if (raw == 'openrouter') return 'openrouter';
+    if (raw == 'edenai') return 'edenai';
+    if (raw == 'xgrok' || raw == 'xai' || raw == 'grok') return 'xgrok';
+    if (raw == 'gemini' || raw == 'google' || raw == 'googleai') return 'gemini';
+    if (raw == 'deepseek') return 'deepseek';
+    return '';
+  }
+
   Future<String> getEdenAiKey() async {
     return ((await _kvDao.getString(edenAiKeyKey)) ?? '').trim();
   }
@@ -1512,15 +1555,24 @@ ending_reflection''';
     await _kvDao.setString(edenAiKeyKey, key.trim());
   }
 
+  Future<String> getXGrokKey() async {
+    return ((await _kvDao.getString(xGrokKeyKey)) ?? '').trim();
+  }
+
+  Future<void> setXGrokKey(String key) async {
+    await _kvDao.setString(xGrokKeyKey, key.trim());
+  }
+
+  Future<String> getGeminiKey() async {
+    return ((await _kvDao.getString(geminiKeyKey)) ?? '').trim();
+  }
+
+  Future<void> setGeminiKey(String key) async {
+    await _kvDao.setString(geminiKeyKey, key.trim());
+  }
+
   Future<void> save({required String provider, required String model}) async {
-    final raw = provider.trim().toLowerCase();
-    final normalizedProvider = raw == 'openai'
-        ? 'openai'
-        : raw == 'openrouter'
-            ? 'openrouter'
-            : raw == 'edenai'
-                ? 'edenai'
-                : 'deepseek';
+    final normalizedProvider = _normalizeProviderKey(provider).isEmpty ? 'deepseek' : _normalizeProviderKey(provider);
     await _kvDao.setString(providerKey, normalizedProvider);
     if (normalizedProvider == 'openai') {
       await _kvDao.setString(openAiModelKey, model.trim().isEmpty ? 'gpt-5' : model.trim());
@@ -1528,20 +1580,18 @@ ending_reflection''';
       await _kvDao.setString(openRouterModelKey, model.trim().isEmpty ? 'openai/gpt-4.1-mini' : model.trim());
     } else if (normalizedProvider == 'edenai') {
       await _kvDao.setString(edenAiModelKey, model.trim().isEmpty ? edenAiDefaultModel : model.trim());
+    } else if (normalizedProvider == 'xgrok') {
+      await _kvDao.setString(xGrokModelKey, model.trim().isEmpty ? xGrokDefaultModel : model.trim());
+    } else if (normalizedProvider == 'gemini') {
+      final geminiModel = _normalizeGeminiModel(model.trim().isEmpty ? geminiDefaultModel : model.trim());
+      await _kvDao.setString(geminiModelKey, geminiModel.isEmpty ? geminiDefaultModel : geminiModel);
     } else {
       await _kvDao.setString(deepSeekModelKey, _normalizeDeepseekModel(model.trim().isEmpty ? 'deepseek-v4-pro' : model.trim()));
     }
   }
 
   Future<String> getModelForProvider(String provider) async {
-    final raw = provider.trim().toLowerCase();
-    final normalizedProvider = raw == 'openai'
-        ? 'openai'
-        : raw == 'openrouter'
-            ? 'openrouter'
-            : raw == 'edenai'
-                ? 'edenai'
-                : 'deepseek';
+    final normalizedProvider = _normalizeProviderKey(provider).isEmpty ? 'deepseek' : _normalizeProviderKey(provider);
     if (normalizedProvider == 'openai') {
       final global = await _configDao.getOne();
       final model = ((await _kvDao.getString(openAiModelKey)) ?? (global['model'] ?? 'gpt-5').toString()).trim();
@@ -1554,6 +1604,14 @@ ending_reflection''';
     if (normalizedProvider == 'edenai') {
       final model = ((await _kvDao.getString(edenAiModelKey)) ?? edenAiDefaultModel).trim();
       return model.isEmpty ? edenAiDefaultModel : model;
+    }
+    if (normalizedProvider == 'xgrok') {
+      final model = ((await _kvDao.getString(xGrokModelKey)) ?? xGrokDefaultModel).trim();
+      return model.isEmpty ? xGrokDefaultModel : model;
+    }
+    if (normalizedProvider == 'gemini') {
+      final model = _normalizeGeminiModel(((await _kvDao.getString(geminiModelKey)) ?? geminiDefaultModel).trim());
+      return model.isEmpty ? geminiDefaultModel : model;
     }
     final model = ((await _kvDao.getString(deepSeekModelKey)) ?? await _configDao.getDeepseekModel()).trim();
     return _normalizeDeepseekModel(model.isEmpty ? 'deepseek-v4-pro' : model);

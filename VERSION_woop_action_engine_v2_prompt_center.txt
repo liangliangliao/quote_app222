@@ -1,0 +1,5 @@
+quote_app_woop_action_engine_v2_prompt_center
+- WOOP AI prompts registered in Settings > AI Prompt Center
+- PromptConfig reads/writes ai_prompt.woop_action_engine.*
+- Added daily WOOP, wish map, obstacle radar, fantasy safe explore scenes
+- Added review-to-revision WOOP loop

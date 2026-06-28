@@ -14,7 +14,7 @@ import 'action_engine/models/action_engine_models.dart';
 import 'concept_engine_models.dart';
 
 class ConceptEngineRuntimeConfig {
-  final String provider; // deepseek / openai
+  final String provider; // deepseek / openai / openrouter / edenai / xgrok / gemini
   final String apiKey;
   final String endpoint;
   final String model;
@@ -82,7 +82,11 @@ class ConceptEngineRuntimeConfig {
           ? 'OpenRouter'
           : provider == 'edenai'
               ? 'Eden AI'
-              : 'DeepSeek';
+              : provider == 'xgrok'
+                  ? 'xGrok'
+                  : provider == 'gemini'
+                      ? 'Gemini'
+                      : 'DeepSeek';
   bool get useProxy => transportMode == 'proxy' && proxyEndpoint.trim().isNotEmpty;
 }
 
@@ -119,6 +123,8 @@ class ConceptEngineService {
     if (p == 'openai') return 'openai';
     if (p == 'openrouter') return 'openrouter';
     if (p == 'edenai') return 'edenai';
+    if (p == 'xgrok' || p == 'xai' || p == 'grok') return 'xgrok';
+    if (p == 'gemini' || p == 'google' || p == 'googleai') return 'gemini';
     return 'deepseek';
   }
 

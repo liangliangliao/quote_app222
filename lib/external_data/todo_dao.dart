@@ -884,6 +884,35 @@ class TodoDao {
     );
   }
 
+  Future<void> pauseTaskReminderForSafety({
+    required String taskId,
+    required String safetyLevel,
+    String localStatus = 'pending_update',
+  }) async {
+    final db = await _db;
+    final rows = await db.query('ms_todo_tasks', columns: ['local_status', 'body_text'], where: 'task_id = ?', whereArgs: [taskId], limit: 1);
+    if (rows.isEmpty) return;
+    final oldStatus = (rows.first['local_status'] ?? '').toString();
+    final nextStatus = taskId.startsWith('local_') || oldStatus == 'pending_create' ? 'pending_create' : localStatus;
+    final oldBody = (rows.first['body_text'] ?? '').toString();
+    final note = '\n\n[现实主义乐观训练安全降级] 当前为 $safetyLevel，普通训练提醒已暂停。请只保留稳定身体、联系现实支持和最小恢复入口。';
+    await db.update(
+      'ms_todo_tasks',
+      {
+        'is_reminder_on': 0,
+        'is_my_day': 0,
+        'reminder_date_time': '',
+        'body_text': oldBody.contains('现实主义乐观训练安全降级') ? oldBody : '$oldBody$note',
+        'local_status': nextStatus,
+        'last_modified_date_time': DateTime.now().toUtc().toIso8601String(),
+        'synced_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'task_id = ?',
+      whereArgs: [taskId],
+    );
+  }
+
+
 
   Future<void> markTaskDeleted(String taskId, {String localStatus = 'pending_delete'}) async {
     final db = await _db;

@@ -1,0 +1,4 @@
+mi_growth_prompt_center_v1_1
+- MI 成长向导所有 AI Prompt 接入设置页 AI 提示词统一配置中心。
+- 支持保存、恢复默认、历史备份、备份恢复、预览、导入、导出。
+- MI AI 服务运行时读取用户自定义 Prompt。

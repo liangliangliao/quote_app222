@@ -1,0 +1,6 @@
+WOOP Action Engine V3 - completion workbench and standalone module hardening
+
+- Adds complete product workbench pages for guide, scenes, wish map, obstacle radar, if-then plan library, and prompt coverage.
+- Fixes duplicate model constructor argument in V2.
+- Adds DAO methods for history, status grouping, deletion, recent reviews, and AI radar context.
+- Keeps all prompts configurable in app Settings -> AI Prompt Center under WOOP 行动引擎 · 愿望转行动.

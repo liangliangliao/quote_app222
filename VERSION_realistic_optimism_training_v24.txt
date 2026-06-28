@@ -1,0 +1,9 @@
+quote_app_realistic_optimism_training_v24_daily_state_machine_completion
+
+- Daily cockpit state machine completion
+- L3/L4 safety pause with generated todo reminder downgrade
+- daily_review gratitude/savoring persistence
+- overdue pending review card + 2-minute restart
+- action evidence source tracking
+- detail-page completion sync
+- personalized anti-prime cleanup

@@ -30,6 +30,10 @@ import org.json.JSONObject
 import java.io.File
 
 class VoiceAlarmRingingService : Service() {
+  private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
+    VoiceAlarmDebugLog.write(this, "service.$event", detail, data)
+  }
+
   companion object {
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
@@ -184,6 +188,7 @@ class VoiceAlarmRingingService : Service() {
   private val replayHandler = Handler(Looper.getMainLooper())
   private var replayRunnable: Runnable? = null
   private var currentPayload: String = "{}"
+  private var currentVoiceText: String = ""
   private var voiceReplayBlockedUntil = 0L
   private var alarmVoicePlaybackActive = false
   private var audioFocusRequest: Any? = null
@@ -196,6 +201,7 @@ class VoiceAlarmRingingService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    logVoice("onStartCommand", "service command", mapOf("action" to (intent?.action ?: ""), "startId" to startId))
     if (intent?.action == ACTION_STOP) {
       clearActivePayload(this)
       stopSelf()
@@ -207,6 +213,7 @@ class VoiceAlarmRingingService : Service() {
     }
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: activePayload ?: readActivePayload(this) ?: "{}"
     val alreadyRingingSamePayload = hasActiveSignalsFor(payload)
+    logVoice("start", "alarm service starting", mapOf("alreadyRingingSamePayload" to alreadyRingingSamePayload, "textLen" to (try { JSONObject(payload).optString("text", "").length } catch (_: Throwable) { 0 })))
     persistActivePayload(this, payload)
     startForegroundAlarm(payload)
     acquireWakeLock()
@@ -351,18 +358,21 @@ class VoiceAlarmRingingService : Service() {
   private fun notifyVoicePlaybackStart() {
     if (alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = true
-    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName))
+    logVoice("voicePlayback.start", "voice prompt playback started", mapOf("textLen" to currentVoiceText.length))
+    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName).putExtra("text", currentVoiceText))
   }
 
   private fun notifyVoicePlaybackEnd() {
     if (!alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = false
-    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName))
+    logVoice("voicePlayback.end", "voice prompt playback ended", mapOf("textLen" to currentVoiceText.length))
+    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName).putExtra("text", currentVoiceText))
   }
 
   private fun startSignals(payload: String) {
     stopSignals()
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
+    logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
     requestAlarmAudioFocus()
     ensureAudibleAlarmVolume()
     if (data.optBoolean("vibrate", true)) {
@@ -407,7 +417,9 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun playVoiceOnce(data: JSONObject) {
+    currentVoiceText = data.optString("text", "").trim()
     val voicePath = data.optString("voicePath", "")
+    logVoice("voice.playOnce", "playing voice prompt", mapOf("hasVoicePath" to voicePath.isNotBlank(), "textLen" to data.optString("text", "").length))
     val volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f)
     if (voicePath.isNotBlank() && File(voicePath).isFile) {
       try { voicePlayer?.stop() } catch (_: Throwable) {}
@@ -426,6 +438,8 @@ class VoiceAlarmRingingService : Service() {
 
   private fun speakAlarmTextOnce(text: String, volume: Float) {
     val cleanText = text.trim().ifBlank { "语音闹钟时间到了" }
+    currentVoiceText = cleanText
+    logVoice("voice.tts.speak", "platform alarm TTS requested", mapOf("textLen" to cleanText.length, "volume" to volume))
     if (alarmTtsReady && alarmTts != null) {
       val utteranceId = "alarm_tts_${System.currentTimeMillis()}"
       val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
@@ -455,16 +469,20 @@ class VoiceAlarmRingingService : Service() {
         }
         alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) {
+            logVoice("voice.tts.onStart", "alarm TTS started", mapOf("utteranceId" to (utteranceId ?: "")))
             notifyVoicePlaybackStart()
           }
           override fun onDone(utteranceId: String?) {
+            logVoice("voice.tts.onDone", "alarm TTS completed", mapOf("utteranceId" to (utteranceId ?: "")))
             notifyVoicePlaybackEnd()
           }
           @Deprecated("Deprecated in Java")
           override fun onError(utteranceId: String?) {
+            logVoice("voice.tts.onError", "alarm TTS error", mapOf("utteranceId" to (utteranceId ?: "")))
             notifyVoicePlaybackEnd()
           }
           override fun onError(utteranceId: String?, errorCode: Int) {
+            logVoice("voice.tts.onError", "alarm TTS error", mapOf("utteranceId" to (utteranceId ?: ""), "errorCode" to errorCode))
             notifyVoicePlaybackEnd()
           }
         })
@@ -541,17 +559,21 @@ class VoiceAlarmRingingService : Service() {
         setVolume(volume, volume)
         setOnPreparedListener { player ->
           try {
+            logVoice("media.prepared", "MediaPlayer prepared", mapOf("notifyVoice" to notifyVoice, "looping" to looping, "volume" to volume))
             if (notifyVoice) notifyVoicePlaybackStart()
             player.start()
-          } catch (_: Throwable) {
+          } catch (t: Throwable) {
+            logVoice("media.start.error", t.message ?: t.javaClass.simpleName, mapOf("notifyVoice" to notifyVoice))
             if (notifyVoice) notifyVoicePlaybackEnd()
             try { player.release() } catch (_: Throwable) {}
           }
         }
         setOnCompletionListener {
+          logVoice("media.completion", "MediaPlayer completed", mapOf("notifyVoice" to notifyVoice))
           if (notifyVoice) notifyVoicePlaybackEnd()
         }
-        setOnErrorListener { player, _, _ ->
+        setOnErrorListener { player, what, extra ->
+          logVoice("media.error", "MediaPlayer error", mapOf("notifyVoice" to notifyVoice, "what" to what, "extra" to extra))
           if (notifyVoice) notifyVoicePlaybackEnd()
           try { player.release() } catch (_: Throwable) {}
           true
@@ -565,6 +587,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun stopSignals() {
+    logVoice("signals.stop", "stopping alarm signals")
     try { voicePlayer?.stop() } catch (_: Throwable) {}
     try { voicePlayer?.release() } catch (_: Throwable) {}
     try { alarmTts?.stop() } catch (_: Throwable) {}

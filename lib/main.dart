@@ -56,6 +56,14 @@ import 'cognitive_consistency/cognitive_consistency_home_page.dart';
 import 'realistic_optimism_module/realistic_optimism_home_page.dart';
 import 'realistic_optimism_training/realistic_optimism_training_home_page.dart';
 import 'sustainable_excellence/sustainable_excellence_home_page.dart';
+import 'mi_growth/mi_growth_home_page.dart';
+import 'second_thought/second_thought_home_page.dart';
+import 'act_compass/act_compass_home_page.dart';
+import 'action_mind/action_mind_home_page.dart';
+import 'woop_action_engine/woop_action_engine_home_page.dart';
+import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
+import 'defense_compass/defense_compass_home_page.dart';
+import 'adaptation_compass/adaptation_compass_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -396,6 +404,63 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
+
+    _DrawerEntrySpec(
+      icon: Icons.change_circle_outlined,
+      title: '成熟适应力罗盘 · Adaptation Compass',
+      subtitle: '事件输入 → 防御识别 → 现实检查 → 成熟替代 → 关系修复 → 四维平衡 → 成人发展 → 生成性贡献 → 长期复盘',
+      badgeText: '基于 George E. Vaillant《Adaptation to Life》：把痛苦、冲突和防御转化为工作、爱、游戏、身体照顾与生成性行动',
+      pageBuilder: (_) => const AdaptationCompassHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.explore_outlined,
+      title: '自我防御罗盘 · Ego Defense Compass',
+      subtitle: '事件记录 → 自我三方地图 → 焦虑来源 → 防御机制 → 保护/代价 → 现实检验 → 小行动 → 月度成长报告',
+      badgeText: '基于安娜·弗洛伊德《自我与防御机制》：看见防御，不羞辱自己；理解防御，不被防御控制',
+      pageBuilder: (_) => const DefenseCompassHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.emoji_objects_outlined,
+      title: '真实积极行动系统 · Realistic Positivity OS',
+      subtitle: '真实看见 → 问题重构 → 感恩 → 允许为人 → 痛苦整合 → 价值绑定 → ABC行动 → Stretch Zone → 周整合',
+      badgeText: '基于《哈佛积极心理学》Lecture 9–10：把感恩与改变训练成现实行动系统',
+      pageBuilder: (_) => const RealisticPositivityOsHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.track_changes_outlined,
+      title: 'WOOP 行动引擎 · 愿望转行动',
+      subtitle: '愿望识别 → 最佳结果 → 内在障碍 → if–then 计划 → 24小时行动 → 失败复盘 → 继续/调整/放下',
+      badgeText: '基于 Rethinking Positive Thinking：梦想与现实相撞，障碍变成行动入口',
+      pageBuilder: (_) => const WoopActionEngineHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.psychology_alt_outlined,
+      title: 'ActionMind · 行动心理学引擎',
+      subtitle: '目标来源 → 目标内容 → 目标层级 → 心理对照 → if–then 执行意图 → 情绪资源 → 环境线索 → 社会互动 → 复盘整合',
+      badgeText: '基于 The Psychology of Action：把愿望变成真实行动系统',
+      pageBuilder: (_) => const ActionMindHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.self_improvement_outlined,
+      title: '行愿 Compass · ACT 心理灵活性',
+      subtitle: '心理灵活性雷达 → 每日三问 → AI ACT 教练 → 头脑故事识别 → 接纳训练 → 价值罗盘 → 承诺行动 → 行动复盘',
+      badgeText: '带着痛苦，走向价值；看见头脑，不把方向盘交给头脑',
+      pageBuilder: (_) => const ActCompassHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.psychology_alt_outlined,
+      title: '第二念 · 矛盾心理价值行动引擎',
+      subtitle: '四型矛盾 → Go/No 地图 → 内在委员会 → 价值澄清 → 全局画布 → 改变语言 → 行动实验 → 复盘整合',
+      badgeText: '基于 On Second Thought：在矛盾中看见价值，在行动中塑造自己',
+      pageBuilder: (_) => const SecondThoughtHomePage(),
+    ),
+    _DrawerEntrySpec(
+      icon: Icons.explore_outlined,
+      title: '向内生长 · MI 成长向导',
+      subtitle: '价值罗盘 → 参与聚焦唤起计划 → 改变语言 → 小步行动 → 温和复盘 → 帮助者训练',
+      badgeText: '基于动机式访谈：尊严、自主、伙伴关系、慈悲、赋能',
+      pageBuilder: (_) => const MiGrowthHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.all_inclusive,
       title: '可持续卓越实验室',
@@ -418,7 +483,7 @@ class _RootShellState extends State<RootShell> {
       pageBuilder: (_) => const RealisticOptimismHomePage(),
     ),
     _DrawerEntrySpec(
-      icon: Icons.hub_outlined,
+      icon: Icons.psychology_alt_outlined,
       title: '足下认知一致性',
       subtitle: '源书工作台 → 不一致雷达 → 自我辩护镜子 → 现实检验 → 承诺行动 → 成长档案',
       badgeText: '在矛盾中看见自己，在行动中重建一致',
@@ -510,7 +575,7 @@ class _RootShellState extends State<RootShell> {
       pageBuilder: (_) => const GoalThemeHomePage(),
     ),
     _DrawerEntrySpec(
-      icon: Icons.flag_circle_outlined,
+      icon: Icons.flag,
       title: '目标设定知行课',
       subtitle: '课程母本 → 深度理解 → 问题诊断 → 现实行动 → 复盘成长',
       badgeText: '基于泰勒·本沙哈尔老师创作',

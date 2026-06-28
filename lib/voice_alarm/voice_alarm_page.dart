@@ -33,6 +33,11 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   TimeOfDay _time = TimeOfDay.now();
   String _provider = 'microsoft';
   String _sttProvider = 'microsoft';
+  String _sttMode = 'realtime';
+  bool _batchAutoSubmit = true;
+  double _batchAutoSubmitSilenceMs = 5000;
+  double _batchMaxRecordMs = 60000;
+  bool _batchAutoCorrect = false;
   String? _customMusic;
   String? _backgroundImage;
   String? _generatedVoice;
@@ -124,7 +129,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _voiceProfiles = profiles;
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
       _provider = (data['provider'] ?? 'microsoft').toString();
-      _sttProvider = (data['sttProvider'] ?? 'microsoft').toString() == 'iflytek' ? 'iflytek' : 'microsoft';
+      final loadedSttProvider = (data['sttProvider'] ?? 'microsoft').toString();
+      _sttProvider = ['microsoft', 'iflytek', 'xai'].contains(loadedSttProvider) ? loadedSttProvider : 'microsoft';
+      final loadedSttMode = (data['sttMode'] ?? 'realtime').toString();
+      _sttMode = ['realtime', 'batch'].contains(loadedSttMode) ? loadedSttMode : 'realtime';
+      final batchStt = data['batchStt'] is Map ? Map<String, dynamic>.from(data['batchStt'] as Map) : <String, dynamic>{};
+      _batchAutoSubmit = batchStt['autoSubmit'] as bool? ?? true;
+      _batchAutoSubmitSilenceMs = (batchStt['autoSubmitSilenceMs'] as num?)?.toDouble() ?? 5000;
+      _batchMaxRecordMs = (batchStt['maxRecordMs'] as num?)?.toDouble() ?? 60000;
+      _batchAutoCorrect = batchStt['autoCorrect'] as bool? ?? false;
       final recommendations = _recommendedVoices(_provider, mode);
       _voiceId.text = (data['voiceId'] ?? (recommendations.isEmpty ? '' : recommendations.first['id'])).toString();
       _speed = (data['speed'] as num?)?.toDouble() ?? (mode == 'morning' ? 1.05 : 0.88);
@@ -300,6 +313,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         'language': await _kv.getString(VoiceProviderSettings.iflytekLanguage) ?? VoiceProviderSettings.defaultIflytekLanguage,
         'accent': await _kv.getString(VoiceProviderSettings.iflytekAccent) ?? VoiceProviderSettings.defaultIflytekAccent,
       },
+      'xai': {
+        'apiKey': await _aiSettings.getXGrokKey(),
+        'endpoint': await _kv.getString('xai.stt.endpoint') ?? 'https://api.x.ai/v1/stt',
+        'streamingEndpoint': await _kv.getString('xai.stt.streaming_endpoint') ?? 'wss://api.x.ai/v1/stt',
+        'language': await _kv.getString('xai.stt.language') ?? '',
+        'sampleRate': 16000,
+        'encoding': 'pcm',
+        'interimResults': true,
+      },
     };
   }
 
@@ -376,6 +398,23 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'maxUtteranceMs': _speechMaxUtteranceMs.round().clamp(8000, 60000).toInt(),
       'minCommitChars': _speechMinCommitChars.round(),
       'semanticEndpointing': false,
+    };
+  }
+
+  Map<String, dynamic> _batchSttMap() {
+    final silence = _batchAutoSubmitSilenceMs.round().clamp(800, 30000).toInt();
+    final maxRecord = _batchMaxRecordMs.round().clamp(5000, 300000).toInt();
+    // 长句不等到 maxRecord 才提交；但不要切得太碎，否则短片段更容易被服务商识别成残句。
+    final segmentMax = maxRecord < 30000 ? maxRecord : 30000;
+    return {
+      'mode': _sttMode,
+      'autoSubmit': _batchAutoSubmit,
+      'autoSubmitSilenceMs': silence,
+      'manualSubmit': true,
+      'maxRecordMs': maxRecord,
+      'segmentMaxMs': segmentMax,
+      'autoCorrect': _batchAutoCorrect,
+      'bestResult': true,
     };
   }
 
@@ -585,6 +624,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'text': _text.text.trim(),
       'provider': _provider,
       'sttProvider': _sttProvider,
+      'sttMode': _sttMode,
+      'batchStt': _batchSttMap(),
       'voicePath': _generatedVoice ?? '',
       'musicPath': _customMusic ?? '',
       'backgroundPath': _backgroundImage ?? '',
@@ -723,26 +764,77 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   segments: const [
                     ButtonSegment(value: 'microsoft', label: Text('微软识别'), icon: Icon(Icons.cloud_outlined)),
                     ButtonSegment(value: 'iflytek', label: Text('讯飞识别'), icon: Icon(Icons.record_voice_over_outlined)),
+                    ButtonSegment(value: 'xai', label: Text('xAI 识别'), icon: Icon(Icons.auto_awesome_outlined)),
                   ],
                   selected: {_sttProvider},
                   onSelectionChanged: (value) => setState(() => _sttProvider = value.first),
                 ),
                 const SizedBox(height: 8),
-                const Text('实时语音转文字服务选择会随闹钟保存。语音采用"全自动实时听写 + 文本稳定 + 静音稳定"的提交模式：不再猜测用户是否说完，也不需要点击"说完了"。', style: TextStyle(color: Colors.black54)),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'realtime', label: Text('实时识别'), icon: Icon(Icons.graphic_eq_outlined)),
+                    ButtonSegment(value: 'batch', label: Text('非实时录音识别'), icon: Icon(Icons.upload_file_outlined)),
+                  ],
+                  selected: {_sttMode},
+                  onSelectionChanged: (value) => setState(() => _sttMode = value.first),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _sttMode == 'batch'
+                      ? '非实时模式采用自动待命的聊天输入框逻辑：无需手动开启录音，空闲时自动监听；确认你开始说话后才保存本轮 utterance，说完静音或手动发送后只上传这一条完整录音。'
+                      : '实时模式会持续收音并边识别边显示候选文本；xAI 使用 WebSocket 流式 STT，讯飞支持动态修正，微软使用短句连续识别。',
+                  style: const TextStyle(color: Colors.black54),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   _sttProvider == 'iflytek'
-                      ? '讯飞识别支持真正的"动态修正"：说话过程中如果前面的字被识别错了，讯飞会实时把已显示的文字替换掉（类似输入法纠错），界面会提示"讯飞已动态修正"。'
-                      : 'Microsoft 识别目前是逐句一次性识别（REST），暂不支持实时动态修正——同一句话说完后不会再被改写。如果希望体验“边说边纠错”的效果，请切换到上方的"讯飞识别"。',
+                      ? '讯飞实时模式支持动态修正；非实时模式会录完整段后走 IAT 引擎，并使用 eos 后端点参数避免服务端在自然停顿处提前结束。'
+                      : _sttProvider == 'xai'
+                          ? 'xAI 支持 REST 文件转写和 WebSocket 实时转写；API Key 复用全局 xGrok/xAI 配置。非实时请求会自动忽略 xAI 不支持的 language 格式化参数，中文优先建议对比测试讯飞/微软。'
+                          : 'Microsoft 实时模式按短句连续识别；非实时模式会把完整录音一次提交给 Azure Speech detailed 识别，优先使用 NBest 最佳结果。',
                   style: const TextStyle(color: Colors.deepOrange, fontSize: 12.5),
                 ),
+                if (_sttMode == 'batch') ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    color: Colors.amber.withOpacity(0.08),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Row(children: const [Icon(Icons.mic_external_on_outlined), SizedBox(width: 8), Text('非实时录音提交策略', style: TextStyle(fontWeight: FontWeight.bold))]),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('无人声自动提交录音'),
+                          subtitle: Text('检测到用户停止说话 ${(_batchAutoSubmitSilenceMs / 1000).toStringAsFixed(1)} 秒后自动提交'),
+                          value: _batchAutoSubmit,
+                          onChanged: (value) => setState(() => _batchAutoSubmit = value),
+                        ),
+                        Text('自动提交静音时长 ${(_batchAutoSubmitSilenceMs / 1000).toStringAsFixed(1)} 秒'),
+                        Slider(value: _batchAutoSubmitSilenceMs, min: 1000, max: 15000, divisions: 28, onChanged: (value) => setState(() => _batchAutoSubmitSilenceMs = value)),
+                        Text('兜底最长录音 ${(_batchMaxRecordMs / 1000).round()} 秒'),
+                        Slider(value: _batchMaxRecordMs, min: 10000, max: 180000, divisions: 34, onChanged: (value) => setState(() => _batchMaxRecordMs = value)),
+                        const Text('严格单轮：不再滚动转写、不再后台排队、不再多段合并。用户说话前只保留很短预录音，确认开口后才建立本轮音频；说完静音后自动提交。', style: TextStyle(color: Colors.black54)),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('返回最佳结果并自动纠错'),
+                          subtitle: const Text('优先使用服务商 best/NBest/final 结果；如果已配置全局 AI，会对非实时转写做错别字、同音字和标点纠正。'),
+                          value: _batchAutoCorrect,
+                          onChanged: (value) => setState(() => _batchAutoCorrect = value),
+                        ),
+                        const Text('全屏闹钟页会显示“等待说话 / 已检测到声音 / 静音倒计时 / 识别中 / 识别完成 / 可重试”等状态；语音转文字结果保留在主文本区，不会被录音状态覆盖。', style: TextStyle(color: Colors.black54)),
+                        const SizedBox(height: 6),
+                        const Text('借鉴点：更接近按住说话/语音输入框的语义，但无需手动开始。VAD 只负责自动发现开口与结束；开口前长空白不进入上传音频，播报期间不录入 STT，服务端返回最终文字后才进入 AI。', style: TextStyle(color: Colors.black45, fontSize: 12.5)),
+                      ]),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Card(
                   color: Colors.blueGrey.withOpacity(0.06),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: const [Icon(Icons.hearing_outlined), SizedBox(width: 8), Text('语音句段提交策略', style: TextStyle(fontWeight: FontWeight.bold))]),
+                      Row(children: const [Icon(Icons.hearing_outlined), SizedBox(width: 8), Text('实时语音句段提交策略', style: TextStyle(fontWeight: FontWeight.bold))]),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         value: _speechPreset,
@@ -755,7 +847,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                         ],
                         onChanged: (value) => _applySpeechPreset(value ?? 'balanced'),
                       ),
-                      const Text('自动提交不再依赖“语义完整度猜测”；系统只看实时听写文本是否停止变化、麦克风是否进入稳定静音。', style: TextStyle(color: Colors.black54)),
+                      const Text('实时模式的自动提交不再依赖“语义完整度猜测”；系统只看听写文本是否停止变化、麦克风是否进入稳定静音。', style: TextStyle(color: Colors.black54)),
                       const SizedBox(height: 8),
                       Text('自动提交静音 ${(_speechCompleteSilenceMs / 1000).toStringAsFixed(1)} 秒'),
                       Slider(value: _speechCompleteSilenceMs, min: 700, max: 6000, divisions: 53, onChanged: (value) => setState(() {
@@ -780,7 +872,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                       Text('单段最长等待 ${(_speechMaxUtteranceMs / 1000).round()} 秒'),
                       Slider(value: _speechMaxUtteranceMs, min: 8000, max: 60000, divisions: 52, onChanged: (value) => setState(() => _speechMaxUtteranceMs = value)),
                       const Text('极短噪声过滤：1～2 个无意义语气词会被忽略，正常短句不会被字数拦截。', style: TextStyle(color: Colors.black54)),
-                      const Text('调大“自动提交静音 / 文本稳定等待 / AI提交等待”可减少碎片提交；调小则响应更快。系统会自动提交，不再要求用户点击确认。', style: TextStyle(color: Colors.black54)),
+                      const Text('调大“自动提交静音 / 文本稳定等待 / AI提交等待”可减少碎片提交；调小则响应更快。实时模式会自动提交，不要求用户点击确认。', style: TextStyle(color: Colors.black54)),
                     ]),
                   ),
                 ),

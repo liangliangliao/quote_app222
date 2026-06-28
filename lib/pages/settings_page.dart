@@ -80,6 +80,8 @@ class _SettingsPageState extends State<SettingsPage> {
   final _deepseekKeyCtrl = TextEditingController();
   final _openRouterKeyCtrl = TextEditingController();
   final _edenAiKeyCtrl = TextEditingController();
+  final _xGrokKeyCtrl = TextEditingController();
+  final _geminiKeyCtrl = TextEditingController();
   // 概念实践引擎配置（复用上方 DeepSeek 密钥）
   final _ceModelCtrl = TextEditingController();
   final _ceEndpointCtrl = TextEditingController();
@@ -394,6 +396,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _deepseekKeyCtrl.dispose();
     _openRouterKeyCtrl.dispose();
     _edenAiKeyCtrl.dispose();
+    _xGrokKeyCtrl.dispose();
+    _geminiKeyCtrl.dispose();
     _ceModelCtrl.dispose();
     _ceEndpointCtrl.dispose();
     _ceTimeoutCtrl.dispose();
@@ -460,7 +464,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const Text('AI 提示词统一配置中心', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 6),
           const Text(
-            '足下真实自我、认知一致性、可持续卓越实验室的全局价值层/场景层/输出格式，以及目标训练、人生注解、电影角色实验室、发现之旅/看电影、首页侧栏等提示词都会集中到这里。进入后先选择模块，再选择 AI 子功能，即可查看默认模板、系统参数，并自由修改或恢复默认。',
+            '真实积极行动系统、ActionMind、WOOP 行动引擎、第二念、向内生长 MI、足下真实自我、认知一致性、可持续卓越实验室的全局价值层/场景层/输出格式，以及目标训练、人生注解、电影角色实验室、发现之旅/看电影、首页侧栏等提示词都会集中到这里。进入后先选择模块，再选择 AI 子功能，即可查看默认模板、系统参数，并自由修改、恢复默认或导入导出。',
             style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.45),
           ),
           const SizedBox(height: 10),
@@ -646,10 +650,14 @@ void showToast(String msg) {
     }
     try {
       // 允许用户刚填完密钥后直接刷新模型列表；这里会先同步当前输入框中的密钥，
-      // 保证 OpenAI / DeepSeek / OpenRouter / Eden AI 的模型列表加载都读取设置页最新值。
+      // 保证 OpenAI / DeepSeek / OpenRouter / Eden AI / xGrok / Gemini 的模型列表加载都读取设置页最新值。
       final provider = _normalizeProviderKey(_globalAiProvider);
       if (provider == 'edenai') {
         await _globalAiSettings.setEdenAiKey(_edenAiKeyCtrl.text.trim());
+      } else if (provider == 'xgrok') {
+        await _globalAiSettings.setXGrokKey(_xGrokKeyCtrl.text.trim());
+      } else if (provider == 'gemini') {
+        await _globalAiSettings.setGeminiKey(_geminiKeyCtrl.text.trim());
       } else if (provider == 'openrouter') {
         await _configDao.setOpenRouterKey(_openRouterKeyCtrl.text.trim());
       } else if (provider == 'deepseek') {
@@ -1159,6 +1167,12 @@ Future<void> _clearSportMusicPlaylist() async {
     if (provider == 'edenai') {
       return _globalAiModelRaw.trim().isEmpty ? GlobalAiSettings.edenAiDefaultModel : _globalAiModelRaw.trim();
     }
+    if (provider == 'xgrok') {
+      return _globalAiModelRaw.trim().isEmpty ? GlobalAiSettings.xGrokDefaultModel : _globalAiModelRaw.trim();
+    }
+    if (provider == 'gemini') {
+      return _globalAiModelRaw.trim().isEmpty ? GlobalAiSettings.geminiDefaultModel : _globalAiModelRaw.trim();
+    }
     return 'deepseek-v4-pro';
   }
 
@@ -1172,6 +1186,12 @@ Future<void> _clearSportMusicPlaylist() async {
     }
     if (provider == 'edenai') {
       return UnifiedAiService.edenAiChatCompletionsEndpoint;
+    }
+    if (provider == 'xgrok') {
+      return UnifiedAiService.xGrokChatCompletionsEndpoint;
+    }
+    if (provider == 'gemini') {
+      return UnifiedAiService.geminiChatCompletionsEndpoint;
     }
     return 'https://api.deepseek.com/chat/completions';
   }
@@ -1199,6 +1219,8 @@ Future<void> _clearSportMusicPlaylist() async {
     if (p == 'openai') return 'openai';
     if (p == 'openrouter') return 'openrouter';
     if (p == 'edenai') return 'edenai';
+    if (p == 'xgrok' || p == 'xai' || p == 'grok') return 'xgrok';
+    if (p == 'gemini' || p == 'google' || p == 'googleai') return 'gemini';
     return 'deepseek';
   }
 
@@ -1210,6 +1232,10 @@ Future<void> _clearSportMusicPlaylist() async {
         return 'OpenRouter';
       case 'edenai':
         return 'Eden AI';
+      case 'xgrok':
+        return 'xGrok';
+      case 'gemini':
+        return 'Gemini';
       case 'deepseek':
       default:
         return 'DeepSeek';
@@ -1413,6 +1439,16 @@ Future<void> _clearSportMusicPlaylist() async {
       _edenAiKeyCtrl.text = '';
     }
     try {
+      _xGrokKeyCtrl.text = await _globalAiSettings.getXGrokKey();
+    } catch (_) {
+      _xGrokKeyCtrl.text = '';
+    }
+    try {
+      _geminiKeyCtrl.text = await _globalAiSettings.getGeminiKey();
+    } catch (_) {
+      _geminiKeyCtrl.text = '';
+    }
+    try {
       final dsModel = await _configDao.getDeepseekModel();
       _selectedDeepseekModel = _normalizeDeepseekUiModel(dsModel);
     } catch (_) {
@@ -1475,7 +1511,7 @@ Future<void> _clearSportMusicPlaylist() async {
       _globalRetryDelayMsCtrl.text = '';
     }
 
-    // 概念实践引擎配置：支持在 DeepSeek / OpenAI / OpenRouter / Eden AI 之间切换，并继承上方对应服务商密钥。
+    // 概念实践引擎配置：支持在 DeepSeek / OpenAI / OpenRouter / Eden AI / xGrok / Gemini 之间切换，并继承上方对应服务商密钥。
     try {
       _ceProvider = _globalAiProvider;
       _ceModelCtrl.text = _globalAiModelRaw.isEmpty ? _defaultCeModelForProvider(_ceProvider) : _globalAiModelRaw;
@@ -1662,6 +1698,8 @@ Future<void> _clearSportMusicPlaylist() async {
     await _configDao.setDeepseekModel(_normalizeDeepseekUiModel(_selectedDeepseekModel));
     await _configDao.setOpenRouterKey(_openRouterKeyCtrl.text.trim());
     await _globalAiSettings.setEdenAiKey(_edenAiKeyCtrl.text.trim());
+    await _globalAiSettings.setXGrokKey(_xGrokKeyCtrl.text.trim());
+    await _globalAiSettings.setGeminiKey(_geminiKeyCtrl.text.trim());
     await _globalAiSettings.save(
       provider: _globalAiProvider,
       model: _globalAiModelRaw.trim().isEmpty ? _globalAiModelCtrl.text.trim() : _globalAiModelRaw.trim(),
@@ -2377,6 +2415,30 @@ const Text('头像（用于通知图标）'),
         ),
 
         const SizedBox(height: 8),
+        const Text('xGrok 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+        TextField(
+          controller: _xGrokKeyCtrl,
+          enabled: _editingConfig,
+          obscureText: true,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            hintText: 'xAI / Grok API Key',
+          ),
+        ),
+
+        const SizedBox(height: 8),
+        const Text('Gemini 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+        TextField(
+          controller: _geminiKeyCtrl,
+          enabled: _editingConfig,
+          obscureText: true,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            hintText: 'Google AI Studio Gemini API Key',
+          ),
+        ),
+
+        const SizedBox(height: 8),
         const Text('YouTube Data API Key（全球音乐搜索）', style: TextStyle(fontWeight: FontWeight.bold)),
         TextField(
           controller: _youtubeApiKeyCtrl,
@@ -2438,7 +2500,7 @@ const Text('头像（用于通知图标）'),
         const Text('统一 AI 模型（供模块复用）', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         const Text(
-          '首页左侧菜单中的独立模块会统一读取这里的 AI 提供方与模型版本；模块内只展示，不单独配置。OpenAI 使用本页顶部 OpenAI 密钥，DeepSeek 使用本页 DeepSeek 密钥，OpenRouter 使用本页 OpenRouter 密钥，Eden AI 使用本页 Eden AI 密钥。',
+          '首页左侧菜单中的独立模块会统一读取这里的 AI 提供方与模型版本；模块内只展示，不单独配置。OpenAI 使用本页顶部 OpenAI 密钥，DeepSeek 使用本页 DeepSeek 密钥，OpenRouter 使用本页 OpenRouter 密钥，Eden AI 使用本页 Eden AI 密钥，xGrok 使用本页 xGrok 密钥，Gemini 使用本页 Gemini 密钥。',
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 8),
@@ -2467,6 +2529,8 @@ const Text('头像（用于通知图标）'),
             DropdownMenuItem(value: 'openai', child: Text('OpenAI')),
             DropdownMenuItem(value: 'openrouter', child: Text('OpenRouter')),
             DropdownMenuItem(value: 'edenai', child: Text('Eden AI')),
+            DropdownMenuItem(value: 'xgrok', child: Text('xGrok')),
+            DropdownMenuItem(value: 'gemini', child: Text('Gemini')),
           ],
         ),
         const SizedBox(height: 8),
@@ -2521,7 +2585,7 @@ const Text('头像（用于通知图标）'),
         const Text('全局 AI 请求关键参数', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         const Text(
-          '以下参数会作为全 app 的统一请求覆盖项。留空表示沿用各模块原本默认值；填写后会优先作用到 OpenAI、DeepSeek、OpenRouter、Eden AI 及其通过统一路径触发的模型调用。',
+          '以下参数会作为全 app 的统一请求覆盖项。留空表示沿用各模块原本默认值；填写后会优先作用到 OpenAI、DeepSeek、OpenRouter、Eden AI、xGrok、Gemini 及其通过统一路径触发的模型调用。',
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 8),
@@ -2640,7 +2704,7 @@ const Text('头像（用于通知图标）'),
           ),
           const SizedBox(height: 4),
           const Text(
-            '代理模式下，概念实践引擎优先请求你的后端 API，由后端再统一调用 DeepSeek / OpenAI / OpenRouter / Eden AI。这样更适合正式上线，便于保护密钥、统一日志与服务端规则控制。',
+            '代理模式下，概念实践引擎优先请求你的后端 API，由后端再统一调用 DeepSeek / OpenAI / OpenRouter / Eden AI / xGrok / Gemini。这样更适合正式上线，便于保护密钥、统一日志与服务端规则控制。',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 8),

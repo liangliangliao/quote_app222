@@ -188,7 +188,7 @@ class _ConceptEngineHomePageState extends State<ConceptEngineHomePage> {
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    '输入概念 → 生成直观解释 → 进入虚拟情境 → 多轮互动挑战 → 获得评分与复盘。\n\n本模块支持在设置页中选择 DeepSeek、OpenAI、OpenRouter 或 Eden AI，并统一读取对应密钥与模型配置。',
+                    '输入概念 → 生成直观解释 → 进入虚拟情境 → 多轮互动挑战 → 获得评分与复盘。\n\n本模块支持在设置页中选择 DeepSeek、OpenAI、OpenRouter、Eden AI、xGrok 或 Gemini，并统一读取对应密钥与模型配置。',
                     style: TextStyle(fontSize: 14, color: Color(0xFF4B5563), height: 1.45),
                   ),
                   const SizedBox(height: 14),
@@ -330,6 +330,18 @@ class _ConceptEngineHomePageState extends State<ConceptEngineHomePage> {
                           label: const Text('Eden AI'),
                           selected: _providerFilter == 'edenai',
                           onSelected: (_) => setState(() => _providerFilter = 'edenai'),
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('xGrok'),
+                          selected: _providerFilter == 'xgrok',
+                          onSelected: (_) => setState(() => _providerFilter = 'xgrok'),
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Gemini'),
+                          selected: _providerFilter == 'gemini',
+                          onSelected: (_) => setState(() => _providerFilter = 'gemini'),
                         ),
                         const SizedBox(width: 12),
                         Text('共 ${list.length} 条', style: const TextStyle(color: Color(0xFF6B7280))),
