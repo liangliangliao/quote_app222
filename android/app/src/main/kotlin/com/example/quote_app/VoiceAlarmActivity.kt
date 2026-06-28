@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v23_playback_state_sync_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后保留完整录音；长语音分块转写；同步闹钟播报状态，避免刚进页面把播报误当用户"
+  private val batchChatPipelineVersion = "chat_input_v24_fresh_alarm_state_reset_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后保留完整录音；长语音分块转写；每次全屏闹钟先重置上一轮语音/播放状态"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -230,6 +230,7 @@ class VoiceAlarmActivity : Activity() {
     super.onCreate(savedInstanceState)
     payload = intent?.getStringExtra("payload") ?: "{}"
     logVoice("activity.onCreate", "VoiceAlarmActivity created", mapOf("mode" to selectedSttMode(), "provider" to selectedSttProvider(), "logPath" to VoiceAlarmDebugLog.latestLogPath(this)))
+    resetVoiceRuntimeForFreshAlarm("activity_onCreate")
     if (Build.VERSION.SDK_INT >= 27) {
       setShowWhenLocked(true)
       setTurnScreenOn(true)
@@ -305,6 +306,7 @@ class VoiceAlarmActivity : Activity() {
     if (intent != null) setIntent(intent)
     val nextPayload = intent?.getStringExtra("payload")
     if (!nextPayload.isNullOrBlank() && nextPayload != payload) {
+      resetVoiceRuntimeForFreshAlarm("activity_onNewIntent_payload_changed")
       payload = nextPayload
       setContentView(buildContent())
     }
@@ -324,6 +326,7 @@ class VoiceAlarmActivity : Activity() {
     if (intent?.getBooleanExtra("fromAlarmFire", false) != true) return
     val firePayload = intent.getStringExtra("payload") ?: payload
     logVoice("alarm.fireIntent", "received", mapOf("mode" to selectedSttMode(), "provider" to selectedSttProvider()))
+    resetVoiceRuntimeForFreshAlarm("alarm_fire_intent")
     registerAlarmPlaybackReceiver()
     if (VoiceAlarmFireGuard.shouldSkip(this, firePayload)) {
       logVoice("alarm.fireIntent.skip", "VoiceAlarmFireGuard skipped duplicate alarm fire")
@@ -337,6 +340,66 @@ class VoiceAlarmActivity : Activity() {
       logVoice("alarm.service.start.error", t.message ?: t.javaClass.simpleName)
     }
     try { VoiceAlarmScheduler.scheduleNextDaily(this, firePayload) } catch (t: Throwable) { logVoice("alarm.scheduleNext.error", t.message ?: t.javaClass.simpleName) }
+  }
+
+  private fun resetVoiceRuntimeForFreshAlarm(reason: String) {
+    processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
+    resumeListeningRunnable?.let { speechHandler.removeCallbacks(it) }
+    alarmPlaybackWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
+    appTtsWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
+    ttsStartWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
+    aiBusyWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
+    pendingAiWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
+    processSpeechRunnable = null
+    resumeListeningRunnable = null
+    alarmPlaybackWatchdogRunnable = null
+    appTtsWatchdogRunnable = null
+    ttsStartWatchdogRunnable = null
+    aiBusyWatchdogRunnable = null
+    pendingAiWatchdogRunnable = null
+    pendingAiUserText = ""
+    pendingAiUserTextAt = 0L
+    pendingSpeakText = ""
+    pendingSpeakUtteranceId = ""
+    aiBusy = false
+    batchAwaitingAiCommit = false
+    batchRecognitionInFlight = false
+    batchSubmitInProgress = false
+    batchPcmQueue.clear()
+    microsoftPcmQueue.clear()
+    speechBuffer.clear()
+    speaking = false
+    alarmVoicePlaying = false
+    currentAppTtsUtteranceId = ""
+    currentAppTtsStartedByEngine = false
+    appTtsStartedAt = 0L
+    appPlaybackStartedAt = 0L
+    strongPlaybackGateUntil = 0L
+    suppressRecognitionUntil = 0L
+    postPlaybackHandoffUntil = 0L
+    batchSpeakerPlaybackBlockUntil = 0L
+    batchPlaybackEchoGuardUntil = 0L
+    batchSpeakerPlaybackEpoch += 1L
+    batchManualSubmitRequested = false
+    batchHasSpeech = false
+    batchCurrentBufferedBytes = 0
+    batchCurrentCachedSeconds = 0.0
+    batchCurrentSpeechDetected = false
+    batchCurrentConfirmedSpeech = false
+    batchCurrentStartedAt = 0L
+    batchLastSpeechAt = 0L
+    batchLastKnownStatus = ""
+    lastDraftTextNormalized = ""
+    lastAlarmSpokenText = ""
+    lastAssistantSpokenText = ""
+    lastHandledSpeechNormalized = ""
+    lastHandledSpeechAt = 0L
+    semanticHoldExtended = false
+    lastTranscriptRevisionAt = 0L
+    try { tts?.stop() } catch (_: Throwable) {}
+    stopNativeRecognizer()
+    releaseContinuousAudioRecord()
+    logVoice("voiceSession.reset", "reset runtime voice state for fresh alarm UI", mapOf("reason" to reason, "pipeline" to batchChatPipelineVersion))
   }
 
   private fun buildContent(): View {
