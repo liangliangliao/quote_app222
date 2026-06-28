@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v17_preserve_confirmed_speech_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后即使播报/回声保护状态变化也先保留并提交当前录音；AI 思考/播报期间仍可监听下一句"
+  private val batchChatPipelineVersion = "chat_input_v19_false_start_fast_reset_20260628"
+  private val batchChatPipelineSummary = "自动待命多轮录音：确认用户语音后保留完整录音；长语音分块转写；疑似误触发会在早期复核失败后快速清空缓存"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1686,6 +1686,55 @@ class VoiceAlarmActivity : Activity() {
           } else if (speechStarted) {
             out.write(buffer, 0, read)
           }
+          if (
+            speechStarted &&
+            !submittedManually &&
+            !batchSubmitInProgress &&
+            speechStartedAt > 0L &&
+            now - speechStartedAt >= 1200L &&
+            fallbackOut.size() >= minBytes &&
+            fallbackOut.size() < sampleRate * 2 * 4200 / 1000 &&
+            (lastSpeechAt == 0L || now - lastSpeechAt >= 1200L)
+          ) {
+            val earlyValidation = validateBatchAutoArmSpeechSegment(fallbackOut.toByteArray(), sampleRate, noiseRms)
+            if (!earlyValidation.ok) {
+              logVoice("batch.vad.falseStartEarlyReset", "early reset false-start capture so silent cache does not keep growing", mapOf("reason" to earlyValidation.reason, "frames" to earlyValidation.frames, "voiceFrames" to earlyValidation.voiceFrames, "strongFrames" to earlyValidation.strongFrames, "durationMs" to earlyValidation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", fallbackOut.size() / (sampleRate * 2.0)), "bestRms" to earlyValidation.bestRms, "bestPeak" to earlyValidation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
+              fallbackOut.reset()
+              out.reset()
+              preRoll.clear()
+              preRollBytes = 0
+              speechStarted = false
+              speechStartedAt = 0L
+              utteranceFallbackStartByte = -1
+              softSpeechStarted = false
+              activityStarted = false
+              candidateStarted = false
+              speechHitCount = 0
+              softSpeechHitCount = 0
+              activityHitCount = 0
+              candidateHitCount = 0
+              autoArmStartHitCount = 0
+              autoArmStartFirstAt = 0L
+              autoArmStartLastAt = 0L
+              autoArmVoiceLikeHitCount = 0
+              autoArmStrongVoiceLikeHitCount = 0
+              autoArmRejectedHitCount = 0
+              autoArmEndpointVoiceLikeHitCount = 0
+              autoArmLastVoiceLikeAt = 0L
+              lastSpeechAt = 0L
+              batchLastSpeechAt = 0L
+              batchHasSpeech = false
+              batchCurrentBufferedBytes = 0
+              batchCurrentCachedSeconds = 0.0
+              batchCurrentSpeechDetected = false
+              batchCurrentConfirmedSpeech = false
+              runOnUiThread {
+                updateBatchSubmitButton(false, 0.0)
+                setBatchStatus("自动监听待命：刚才像是环境声误触发，已清空缓存；请继续正常说话。")
+              }
+              continue
+            }
+          }
           if (now - lastStatusUiAt >= 1200L) {
             lastStatusUiAt = now
             val cachedSec = fallbackOut.size() / (sampleRate * 2.0)
@@ -2035,6 +2084,12 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun recognizeBatchWithProvider(provider: String, cfg: JSONObject, pcm: ByteArray): String {
+    val audioMs = pcmDurationMs(pcm)
+    if (provider == "iflytek" && audioMs >= 22_000L) {
+      val chunked = recognizeBatchByChunks(provider, cfg, pcm, reason = "iflytek_long_file_${audioMs}ms")
+      if (chunked.isNotBlank()) return chunked
+      logVoice("batch.chunk.primary.empty", "long iFlytek chunk transcription returned empty; fall back to single upload", mapOf("provider" to provider, "audioMs" to audioMs, "bytes" to pcm.size, "pipeline" to batchChatPipelineVersion))
+    }
     fun call(p: String, c: JSONObject): String = when (p) {
       "microsoft" -> recognizeWithMicrosoft(c, pcm)
       "iflytek" -> recognizeWithIflytekPcm(c, pcm)
@@ -2062,8 +2117,42 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun recognizeBatchByChunks(provider: String, cfg: JSONObject, pcm: ByteArray, reason: String): String {
-    logVoice("batch.chunk.retry.disabled", "chunk retry is disabled in chat-app pipeline", mapOf("provider" to provider, "reason" to reason, "bytes" to pcm.size, "pipeline" to batchChatPipelineVersion))
-    return ""
+    if (pcm.isEmpty()) return ""
+    val sampleRate = 16000
+    val bytesPerMs = sampleRate * 2 / 1000
+    val chunkMs = if (provider == "iflytek") 14_000 else 20_000
+    val overlapMs = if (provider == "iflytek") 650 else 450
+    val chunkBytes = (chunkMs * bytesPerMs / 2 * 2).coerceAtLeast(sampleRate * 2)
+    val overlapBytes = (overlapMs * bytesPerMs / 2 * 2).coerceAtLeast(0)
+    if (pcm.size <= chunkBytes) return ""
+    val totalMs = pcmDurationMs(pcm, sampleRate)
+    logVoice("batch.chunk.start", "transcribe long batch audio by complete-file chunks", mapOf("provider" to provider, "reason" to reason, "bytes" to pcm.size, "audioMs" to totalMs, "chunkMs" to chunkMs, "overlapMs" to overlapMs, "pipeline" to batchChatPipelineVersion))
+    fun callChunk(chunk: ByteArray): String = when (provider) {
+      "iflytek" -> recognizeWithIflytekPcm(cfg, chunk)
+      "microsoft" -> recognizeWithMicrosoft(cfg, chunk)
+      "xai" -> recognizeWithXaiRest(cfg, chunk)
+      else -> ""
+    }.trim()
+    val parts = mutableListOf<String>()
+    var start = 0
+    var index = 0
+    while (start < pcm.size && index < 12) {
+      val end = minOf(pcm.size, start + chunkBytes)
+      val chunk = pcm.copyOfRange(start, end)
+      val chunkText = try { callChunk(chunk) } catch (t: Throwable) {
+        logVoice("batch.chunk.error", t.message ?: t.javaClass.simpleName, mapOf("provider" to provider, "index" to index, "startMs" to (start / bytesPerMs), "endMs" to (end / bytesPerMs), "bytes" to chunk.size, "pipeline" to batchChatPipelineVersion))
+        ""
+      }
+      logVoice("batch.chunk.part", "chunk STT result", mapOf("provider" to provider, "index" to index, "startMs" to (start / bytesPerMs), "endMs" to (end / bytesPerMs), "chars" to chunkText.length, "text" to logPreview(chunkText), "pipeline" to batchChatPipelineVersion))
+      if (chunkText.isNotBlank()) parts.add(chunkText)
+      if (end >= pcm.size) break
+      val nextStart = (end - overlapBytes).coerceAtLeast(start + sampleRate * 2)
+      start = nextStart
+      index += 1
+    }
+    val merged = parts.fold("") { acc, part -> mergeSpeechText(acc, part) }.trim()
+    logVoice("batch.chunk.done", "chunked batch transcription completed", mapOf("provider" to provider, "reason" to reason, "chunks" to (index + 1), "parts" to parts.size, "chars" to merged.length, "text" to logPreview(merged), "pipeline" to batchChatPipelineVersion))
+    return merged
   }
 
   private fun isGenericAlarmPromptTranscript(normalized: String): Boolean {
