@@ -64,6 +64,7 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
+import 'new_tablets/new_tablets_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -405,6 +406,13 @@ class _RootShellState extends State<RootShell> {
 
   List<_DrawerEntrySpec> _drawerEntries() => [
 
+    _DrawerEntrySpec(
+      icon: Icons.workspace_premium_outlined,
+      title: '新榜 New Tablets',
+      subtitle: '旧榜扫描 → 价值重估 → 谁在命令我 → 今日超克 → 主权承诺 → 坏良心转化 → 为创造而学习',
+      badgeText: '尼采式自我超克、价值重估与主权个体训练系统：更能命令自己，更能创造价值',
+      pageBuilder: (_) => const NewTabletsHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.change_circle_outlined,
       title: '成熟适应力罗盘 · Adaptation Compass',
