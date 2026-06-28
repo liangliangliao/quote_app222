@@ -15,7 +15,8 @@ import '../woop_action_engine/woop_action_prompt_config.dart';
 import '../realistic_positivity_os/realistic_positivity_os_prompt_config.dart';
 import '../defense_compass/defense_compass_prompt_config.dart';
 import '../adaptation_compass/adaptation_compass_prompt_config.dart';
-import '../self_worth_ai/self_worth_ai_prompt_config.dart';
+import '../new_tablets/new_tablets_prompt_config.dart';
+import '../self_worth/self_worth_ai_prompt_config.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -47,6 +48,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final RealisticPositivityOsPromptConfig _rpoPrompts = RealisticPositivityOsPromptConfig();
   final DefenseCompassPromptConfig _dfPrompts = DefenseCompassPromptConfig();
   final AdaptationCompassPromptConfig _acPrompts = AdaptationCompassPromptConfig();
+  final NewTabletsPromptConfig _ntPrompts = NewTabletsPromptConfig();
   final SelfWorthAiPromptConfig _swPrompts = SelfWorthAiPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
@@ -503,6 +505,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         _ccBackups = await _dfPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('ac_')) {
         _ccBackups = await _acPrompts.listBackups(_promptId);
+      } else if (_promptId.startsWith('nt_')) {
+        _ccBackups = await _ntPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('sw_')) {
         _ccBackups = await _swPrompts.listBackups(_promptId);
       } else {
@@ -747,17 +751,19 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       await _dfPrompts.clearPromptOverride(_promptId);
     } else if (_promptId.startsWith('ac_')) {
       await _acPrompts.clearPromptOverride(_promptId);
+    } else if (_promptId.startsWith('nt_')) {
+      await _ntPrompts.clearPromptOverride(_promptId);
     } else if (_promptId.startsWith('sw_')) {
       await _swPrompts.clearPromptOverride(_promptId);
     } else {
       await _savePromptById(_promptId, def);
     }
     await _loadPrompt();
-    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('sw_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
+    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('nt_') || _promptId.startsWith('sw_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
   }
 
   Future<void> _restoreCcBackup(CcPromptBackupRecord backup) async {
-    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('sw_')) return;
+    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('nt_') && !_promptId.startsWith('sw_')) return;
     setState(() => _backupLoading = true);
     try {
       if (_promptId.startsWith('cc_')) {
@@ -782,6 +788,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         await _dfPrompts.restoreBackup(_promptId, backup.key);
       } else if (_promptId.startsWith('ac_')) {
         await _acPrompts.restoreBackup(_promptId, backup.key);
+      } else if (_promptId.startsWith('nt_')) {
+        await _ntPrompts.restoreBackup(_promptId, backup.key);
       } else {
         await _swPrompts.restoreBackup(_promptId, backup.key);
       }
@@ -798,11 +806,17 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     final template = _templateCtrl.text;
     final preview = _promptId.startsWith('sw_')
         ? _swPrompts.render(template, <String, String>{
-            'scene': 'external_validation',
-            'user_input': '我发完朋友圈后一直看点赞，没人回应时就觉得自己不重要。',
-            'profile_json': '{"dominant_pattern":"认可依赖","triggers":["沉默","比较"]}',
-            'recent_context_json': '{"actions":["24小时不查点赞"],"evidence":["完成一次真实表达"]}',
-            'course_name': SelfWorthAiPromptConfig.courseName,
+            'user_input': '我一失败就觉得自己没有价值，别人都比我强。',
+            'profile_json': '{"anchors":["尊严","真实能力证据"]}',
+            'recent_context_json': '{"repairs":1}',
+          })
+        : _promptId.startsWith('nt_')
+        ? _ntPrompts.render(template, <String, String>{
+            'scene': 'procrastination',
+            'user_input': '我今天又想偷懒，不想学习，但我又觉得自己很废物。',
+            'profile_json': '{"new_tablets":["可靠","创造"],"old_tablets":["必须被认可"]}',
+            'recent_context_json': '{"commitments":2,"repairs":1}',
+            'output_mode': 'standard',
           })
         : _promptId.startsWith('ac_')
         ? _acPrompts.render(template, <String, String>{
@@ -921,6 +935,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       id.startsWith('rpo_') ||
       id.startsWith('df_') ||
       id.startsWith('ac_') ||
+      id.startsWith('nt_') ||
       id.startsWith('sw_');
 
   String _moduleExportLabel(String id) {
@@ -1282,11 +1297,18 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   List<MapEntry<String, String>> _params(String id) {
     if (id.startsWith('sw_')) {
       return const <MapEntry<String, String>>[
-        MapEntry('{{scene}}', '真实自尊场景：external_validation / failure / relationship_conflict / comparison / body_shame / boundary / goal_delay / self_acceptance / active_constructive / integrity / criticism / responsibility_review / weekly_report / safety。'),
-        MapEntry('{{user_input}}', '用户本轮输入的现实事件、情绪、关系冲突、比较、外貌焦虑、批评、拖延、边界或真实表达内容。'),
-        MapEntry('{{profile_json}}', '本模块独立自尊档案：自尊来源、依赖触发器、内在标准、关系模式、身体羞耻触发、责任行动和稳定自尊证据。'),
-        MapEntry('{{recent_context_json}}', '近期行动卡、复盘、指标变化、过程胜利日志、认可戒断和关系修复记录摘要。'),
-        MapEntry('{{course_name}}', '课程名称：《哈佛大学公开课：幸福课》第21集后半与第22集。'),
+        MapEntry('{{user_input}}', '用户关于自我价值、自我否定、比较、失败或外部评价的输入。'),
+        MapEntry('{{profile_json}}', '自我价值相关档案 JSON。'),
+        MapEntry('{{recent_context_json}}', '近期自我价值修复记录摘要。'),
+      ];
+    }
+    if (id.startsWith('nt_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{scene}}', '新榜场景：procrastination / bad_conscience / value_confusion / herd / commitment / past_regret / learning_output / old_tablet_scan / new_tablet_draft / daily_command / failure_repair / weekly_revaluation。'),
+        MapEntry('{{user_input}}', '用户本轮输入的拖延、自责、价值迷茫、群体比较、承诺计划、过去后悔、学习无输出或复盘内容。'),
+        MapEntry('{{profile_json}}', '新榜模块独立档案：旧榜、新榜、主权承诺、坏良心改写、创造输出与可靠性指标。'),
+        MapEntry('{{recent_context_json}}', '最近今日命令、失败修复、每周重估、承诺兑现和创造输出摘要。'),
+        MapEntry('{{output_mode}}', '输出模式：standard / commitment / json。'),
       ];
     }
     if (id.startsWith('ac_')) {

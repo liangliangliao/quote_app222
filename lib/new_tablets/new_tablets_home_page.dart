@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../pages/ai_prompt_settings_page.dart';
+import 'new_tablets_ai_service.dart';
 import 'new_tablets_dao.dart';
 import 'new_tablets_prompt_config.dart';
 
@@ -15,8 +16,11 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
   int _tab = 0;
   final _input = TextEditingController(text: '我今天又想偷懒，不想学习，但我又觉得自己很废物。');
   final NewTabletsDao _dao = NewTabletsDao();
+  final NewTabletsAiService _aiService = NewTabletsAiService();
   late NewTabletsAnalysis _analysis = NewTabletsEngine.analyze(_input.text);
   bool _loadingState = true;
+  bool _aiLoading = false;
+  String _aiCoachText = '';
 
   List<OldTablet> _oldTablets = [
     OldTablet('必须被别人认可', '学校/社会', '焦虑、讨好、比较', '削弱生命，需打碎'),
@@ -40,6 +44,7 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
   ];
   List<DailyCommandRecord> _dailyCommands = <DailyCommandRecord>[];
   List<CreativeOutputRecord> _creativeOutputs = <CreativeOutputRecord>[];
+  List<NewTabletsPracticeRecord> _practiceRecords = <NewTabletsPracticeRecord>[];
 
   @override
   void initState() {
@@ -57,6 +62,7 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
       if (state.rewrites.isNotEmpty) _rewrites = state.rewrites;
       _dailyCommands = state.dailyCommands;
       _creativeOutputs = state.creativeOutputs;
+      _practiceRecords = state.practiceRecords;
       _loadingState = false;
     });
   }
@@ -69,6 +75,36 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
 
   void _runAnalysis() {
     setState(() => _analysis = NewTabletsEngine.analyze(_input.text));
+  }
+
+
+  Future<void> _runAiCoach() async {
+    final input = _input.text.trim();
+    if (input.isEmpty) {
+      _toast('请先输入一个真实状态');
+      return;
+    }
+    setState(() {
+      _aiLoading = true;
+      _analysis = NewTabletsEngine.analyze(input);
+      _aiCoachText = '';
+    });
+    final snapshot = NewTabletsState(
+      oldTablets: _oldTablets,
+      newTablets: _newTablets,
+      commitments: _commitments,
+      rewrites: _rewrites,
+      dailyCommands: _dailyCommands,
+      creativeOutputs: _creativeOutputs,
+      practiceRecords: _practiceRecords,
+    );
+    final text = await _aiService.generateCoachText(userInput: input, state: snapshot);
+    if (!mounted) return;
+    setState(() {
+      _aiLoading = false;
+      _aiCoachText = text.trim();
+    });
+    if (text.trim().isEmpty) _toast('当前 AI 未返回内容，已保留本地规则诊断');
   }
 
   Future<void> _saveTodayCommand() async {
@@ -139,6 +175,29 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
     setState(() => _creativeOutputs = next);
   }
 
+
+  Future<void> _startPractice(_PracticeSpec spec) async {
+    final result = await _askFields(spec.title, <String>['写下当前材料 / 困扰 / 目标']);
+    if (result == null) return;
+    final input = result.first;
+    final analysis = NewTabletsEngine.analyze('${spec.sceneHint}\n$input');
+    final record = NewTabletsPracticeRecord(
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      moduleId: spec.id,
+      moduleName: spec.title,
+      userInput: input,
+      diagnosis: analysis.diagnosis,
+      command: analysis.command,
+      minAction: analysis.action,
+      reviewQuestion: analysis.reviewQuestions.isEmpty ? spec.reviewQuestion : analysis.reviewQuestions.first,
+    );
+    final next = [record, ..._practiceRecords].take(120).toList(growable: false);
+    await _dao.savePracticeRecords(next);
+    if (!mounted) return;
+    setState(() => _practiceRecords = next);
+    _toast('已生成并保存「${spec.title}」训练卡');
+  }
+
   Future<List<String>?> _askFields(String title, List<String> labels) async {
     final ctrls = labels.map((_) => TextEditingController()).toList(growable: false);
     final result = await showDialog<List<String>>(
@@ -171,7 +230,7 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [_today(), _architecture(), _tablets(), _commitment(), _badConscience(), _flowsAndMetrics(), _coach()];
+    final pages = [_today(), _architecture(), _trainingWorkbench(), _tablets(), _commitment(), _badConscience(), _flowsAndMetrics(), _coach()];
     return Scaffold(
       backgroundColor: const Color(0xFF0B1020),
       appBar: AppBar(
@@ -215,7 +274,7 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
       );
 
   Widget _tabs() {
-    const items = ['今日命令', '九模块总览', '打碎与书写', '我能许诺', '罪感到责任', '流程指标', 'AI导师'];
+    const items = ['今日命令', '九模块总览', '训练工作台', '打碎与书写', '我能许诺', '罪感到责任', '流程指标', 'AI导师'];
     return SizedBox(
       height: 48,
       child: ListView.separated(
@@ -270,6 +329,25 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
           ['创造新榜', '我想让什么成为我生命的最高尺度？'],
         ]),
         _section('Prompt 配置已接入设置页', '本模块全部全局价值层、场景层、流程层、输出格式 Prompt 均注册到设置页 AI 提示词统一配置中心；点击右上角调节图标可自由修改，并在下一次 AI 生成时生效。', Icons.tune_outlined),
+      ]);
+
+
+  Widget _trainingWorkbench() => _scroll([
+        _section('训练工作台', '这里把产品设计方案中的九大模块变成可执行训练入口。每次训练都会保存为记录，而不是只展示理念。', Icons.dashboard_customize_outlined),
+        for (final spec in _practiceSpecs)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: const Color(0xFF111827), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [Icon(spec.icon, color: const Color(0xFFF97316)), const SizedBox(width: 10), Expanded(child: Text(spec.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)))]),
+              const SizedBox(height: 6),
+              Text(spec.description, style: const TextStyle(color: Color(0xFFE5E7EB), height: 1.45)),
+              const SizedBox(height: 10),
+              Align(alignment: Alignment.centerRight, child: FilledButton.tonal(onPressed: () => _startPractice(spec), child: const Text('开始训练'))),
+            ]),
+          ),
+        if (_practiceRecords.isNotEmpty) _matrix('最近训练记录', _practiceRecords.take(8).map((e) => [e.moduleName, '${e.command}｜${e.minAction}']).toList()),
       ]);
 
   Widget _tablets() => _scroll([
@@ -341,7 +419,12 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
           decoration: _inputDecoration('输入你的状态：拖延、自责、价值迷茫、群体比较、后悔或学习无输出'),
         ),
         const SizedBox(height: 10),
-        FilledButton.icon(onPressed: _runAnalysis, icon: const Icon(Icons.psychology_alt_outlined), label: const Text('生成尼采式行动诊断')),
+        Row(children: [
+          Expanded(child: OutlinedButton.icon(onPressed: _runAnalysis, icon: const Icon(Icons.offline_bolt_outlined), label: const Text('本地快速诊断'))),
+          const SizedBox(width: 10),
+          Expanded(child: FilledButton.icon(onPressed: _aiLoading ? null : _runAiCoach, icon: _aiLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.psychology_alt_outlined), label: Text(_aiLoading ? 'AI生成中' : 'AI导师生成'))),
+        ]),
+        if (_aiCoachText.isNotEmpty) _section('AI导师完整回应', _aiCoachText, Icons.auto_awesome_outlined),
         _section('1. 当前状态诊断', _analysis.diagnosis, Icons.search),
         _section('2. 尼采式映射', _analysis.mapping, Icons.menu_book_outlined),
         _matrix('3. 谁在命令你？', _analysis.commanders.map((e) => [e.name, e.state]).toList()),
@@ -406,6 +489,29 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
               ]))),
         ]),
       );
+}
+
+
+const List<_PracticeSpec> _practiceSpecs = <_PracticeSpec>[
+  _PracticeSpec('start', '我的新榜起点', '旧榜扫描、新榜草案与价值强度评分。', '别人认可 必须 成功', '这个价值来自哪里？', Icons.flag_circle_outlined),
+  _PracticeSpec('will', '谁在命令我？', '拆解内在冲动，把模糊愿望改写成主权命令。', '偷懒 拖延 不想 手机', '刚才是谁在命令你？', Icons.psychology_alt_outlined),
+  _PracticeSpec('overcome', '今日超克', '选择今天要超克的旧我，生成 5-30 分钟最小行动。', '拖延 逃避 无法开始', '哪个旧我被超克了一点？', Icons.bolt_outlined),
+  _PracticeSpec('promise', '我能许诺', '慢许诺、承诺降级、履约条件与失败修复。', '目标 计划 承诺 每天 30天', '这个承诺是否过大？', Icons.verified_outlined),
+  _PracticeSpec('conscience', '从罪感到责任', '识别坏良心，把自责改写成主权责任。', '废物 不配 自责 惩罚', '我是在修复，还是在惩罚？', Icons.transform_outlined),
+  _PracticeSpec('herd', '我正在服从谁？', '识别父母、社会、同龄人、算法和群体标准。', '别人 大家 父母 社会 认可', '这个目标是谁给我的？', Icons.groups_2_outlined),
+  _PracticeSpec('rewrite', '打碎与书写', '旧榜谱系追问与新榜写作。', '必须 不能 认可 失败', '我愿意为新榜付什么代价？', Icons.edit_note),
+  _PracticeSpec('past', '把过去变成材料', '过去事件重估、反怨恨与未来赋义。', '过去 后悔 浪费 当初', '未来行动如何重新赋义过去？', Icons.history_edu_outlined),
+  _PracticeSpec('forge', '为创造而学习', '输入—消化—输出与败坏胃检测。', '学习 阅读 看课 没有输出 信息', '今天的输出是什么？', Icons.auto_fix_high_outlined),
+];
+
+class _PracticeSpec {
+  final String id;
+  final String title;
+  final String description;
+  final String sceneHint;
+  final String reviewQuestion;
+  final IconData icon;
+  const _PracticeSpec(this.id, this.title, this.description, this.sceneHint, this.reviewQuestion, this.icon);
 }
 
 class NewTabletsEngine {

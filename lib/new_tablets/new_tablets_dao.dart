@@ -10,6 +10,7 @@ class NewTabletsDao {
   static const String _rewriteKey = '${_prefix}rewrites';
   static const String _dailyKey = '${_prefix}daily_commands';
   static const String _outputKey = '${_prefix}creative_outputs';
+  static const String _practiceKey = '${_prefix}practice_records';
 
   final KeyValueDao _kv = KeyValueDao();
 
@@ -31,6 +32,9 @@ class NewTabletsDao {
   Future<List<CreativeOutputRecord>> loadCreativeOutputs() async => _decodeList(await _kv.getString(_outputKey), CreativeOutputRecord.fromJson);
   Future<void> saveCreativeOutputs(List<CreativeOutputRecord> items) => _saveList(_outputKey, items.map((e) => e.toJson()).toList());
 
+  Future<List<NewTabletsPracticeRecord>> loadPracticeRecords() async => _decodeList(await _kv.getString(_practiceKey), NewTabletsPracticeRecord.fromJson);
+  Future<void> savePracticeRecords(List<NewTabletsPracticeRecord> items) => _saveList(_practiceKey, items.map((e) => e.toJson()).toList());
+
   Future<NewTabletsState> loadState() async => NewTabletsState(
     oldTablets: await loadOldTablets(),
     newTablets: await loadNewTablets(),
@@ -38,6 +42,7 @@ class NewTabletsDao {
     rewrites: await loadRewrites(),
     dailyCommands: await loadDailyCommands(),
     creativeOutputs: await loadCreativeOutputs(),
+    practiceRecords: await loadPracticeRecords(),
   );
 
   Future<void> _saveList(String key, List<Map<String, dynamic>> list) => _kv.setString(key, jsonEncode(list));
@@ -58,6 +63,7 @@ class NewTabletsState {
   final List<BadConscienceRewrite> rewrites;
   final List<DailyCommandRecord> dailyCommands;
   final List<CreativeOutputRecord> creativeOutputs;
+  final List<NewTabletsPracticeRecord> practiceRecords;
 
   const NewTabletsState({
     required this.oldTablets,
@@ -66,6 +72,7 @@ class NewTabletsState {
     required this.rewrites,
     required this.dailyCommands,
     required this.creativeOutputs,
+    required this.practiceRecords,
   });
 }
 
@@ -147,5 +154,50 @@ class CreativeOutputRecord {
     type: (json['type'] ?? '').toString(),
     title: (json['title'] ?? '').toString(),
     linkedNewTablet: (json['linkedNewTablet'] ?? '').toString(),
+  );
+}
+
+
+class NewTabletsPracticeRecord {
+  final int createdAtMs;
+  final String moduleId;
+  final String moduleName;
+  final String userInput;
+  final String diagnosis;
+  final String command;
+  final String minAction;
+  final String reviewQuestion;
+
+  const NewTabletsPracticeRecord({
+    required this.createdAtMs,
+    required this.moduleId,
+    required this.moduleName,
+    required this.userInput,
+    required this.diagnosis,
+    required this.command,
+    required this.minAction,
+    required this.reviewQuestion,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'createdAtMs': createdAtMs,
+    'moduleId': moduleId,
+    'moduleName': moduleName,
+    'userInput': userInput,
+    'diagnosis': diagnosis,
+    'command': command,
+    'minAction': minAction,
+    'reviewQuestion': reviewQuestion,
+  };
+
+  factory NewTabletsPracticeRecord.fromJson(Map<String, dynamic> json) => NewTabletsPracticeRecord(
+    createdAtMs: (json['createdAtMs'] is num) ? (json['createdAtMs'] as num).toInt() : int.tryParse((json['createdAtMs'] ?? '').toString()) ?? 0,
+    moduleId: (json['moduleId'] ?? '').toString(),
+    moduleName: (json['moduleName'] ?? '').toString(),
+    userInput: (json['userInput'] ?? '').toString(),
+    diagnosis: (json['diagnosis'] ?? '').toString(),
+    command: (json['command'] ?? '').toString(),
+    minAction: (json['minAction'] ?? '').toString(),
+    reviewQuestion: (json['reviewQuestion'] ?? '').toString(),
   );
 }
