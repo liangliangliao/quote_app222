@@ -2560,19 +2560,6 @@ class VoiceAlarmActivity : Activity() {
     return crestLooksSpeech && voicedLooksSpeech && zcrLooksSpeech && (strongSyllable || strongPeak)
   }
 
-  private fun isBatchEndpointContinuationVoiceLike(shape: AudioVoiceShape, level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
-    if (playbackGuard) return false
-    // Starting a turn can be warm, but extending the tail should be stricter.
-    // Otherwise low-level room noise / keyboard / residual echo keeps refreshing
-    // lastSpeechAt and a 10-15s user utterance can grow into a 40s STT upload.
-    val zcrLooksSpeech = shape.zcrPermille in 10..200
-    val crestLooksSpeech = shape.crestX100 in 130..2200
-    val voicedLooksSpeech = shape.voicedScore >= 55
-    val strongSyllable = level.rms >= maxOf(900.0, noiseRms * 6.2).toInt() && level.peak >= maxOf(2400, (noiseRms * 16.0).toInt())
-    val strongPeak = level.peak >= maxOf(3600, (noiseRms * 26.0).toInt()) && level.rms >= maxOf(650.0, noiseRms * 4.2).toInt()
-    return crestLooksSpeech && voicedLooksSpeech && zcrLooksSpeech && (strongSyllable || strongPeak)
-  }
-
   private data class AutoArmSegmentValidation(
     val ok: Boolean,
     val reason: String,

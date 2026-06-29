@@ -355,8 +355,6 @@ class _RootShellState extends State<RootShell> {
   final GlobalAiSettings _drawerAiSettings = GlobalAiSettings();
   final UnifiedAiService _drawerAiService = UnifiedAiService();
   final ScrollController _drawerScrollController = ScrollController();
-  final TextEditingController _drawerSearchController = TextEditingController();
-  String _drawerSearchQuery = '';
 
   void _resetDrawerScrollToTop() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
