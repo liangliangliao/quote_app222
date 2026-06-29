@@ -461,7 +461,7 @@ ${practices.isEmpty ? '- 暂无' : practices}
 
   Widget _flowGuides() => _scroll([
         _section('四条关键用户流程', '这里把首次使用、每日使用、失败修复、每周价值重估做成可执行向导。每次生成的流程卡都会进入训练记录。', Icons.route_outlined),
-        for (final spec in _flowGuideSpecs)
+        for (final spec in _flowGuides)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
@@ -659,7 +659,7 @@ ${practices.isEmpty ? '- 暂无' : practices}
 
 
 
-const List<_FlowGuideSpec> _flowGuideSpecs = <_FlowGuideSpec>[
+const List<_FlowGuideSpec> _flowGuides = <_FlowGuideSpec>[
   _FlowGuideSpec(
     id: 'flow_onboarding',
     title: '首次使用：旧榜地图 → 新榜草案 → 7天实验 → 主权承诺卡',

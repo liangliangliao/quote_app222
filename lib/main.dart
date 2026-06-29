@@ -64,7 +64,7 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
-import 'self_worth_ai/self_worth_ai_home_page.dart';
+import 'new_tablets/new_tablets_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -355,6 +355,8 @@ class _RootShellState extends State<RootShell> {
   final GlobalAiSettings _drawerAiSettings = GlobalAiSettings();
   final UnifiedAiService _drawerAiService = UnifiedAiService();
   final ScrollController _drawerScrollController = ScrollController();
+  final TextEditingController _drawerSearchController = TextEditingController();
+  String _drawerSearchQuery = '';
 
   void _resetDrawerScrollToTop() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -411,11 +413,11 @@ class _RootShellState extends State<RootShell> {
   List<_DrawerEntrySpec> _drawerEntries() => [
 
     _DrawerEntrySpec(
-      icon: Icons.self_improvement_outlined,
-      title: '真实自尊 SelfWorth AI',
-      subtitle: '自尊地图 → 三层自尊 → 真实关系 → 六项实践 → 认可戒断 → 复原力 → 责任目标 → AI场景教练',
-      badgeText: '基于《哈佛幸福课》第21集后半与第22集：从被认可走向被了解，用真实、责任、行动与接纳建立稳定自尊',
-      pageBuilder: (_) => const SelfWorthAiHomePage(),
+      icon: Icons.workspace_premium_outlined,
+      title: '新榜 New Tablets',
+      subtitle: '旧榜扫描 → 价值重估 → 谁在命令我 → 今日超克 → 主权承诺 → 坏良心转化 → 为创造而学习',
+      badgeText: '尼采式自我超克、价值重估与主权个体训练系统：更能命令自己，更能创造价值',
+      pageBuilder: (_) => const NewTabletsHomePage(),
     ),
     _DrawerEntrySpec(
       icon: Icons.change_circle_outlined,
@@ -730,29 +732,25 @@ class _RootShellState extends State<RootShell> {
     try { SimpleBus.navIndex.value = _idx; } catch (_) {}
   }
 
-
-  List<_DrawerEntrySpec> _filterDrawerEntries(List<_DrawerEntrySpec> source, String query) {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return source;
-    final keywords = q.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList(growable: false);
-    return source.where((entry) {
-      final haystack = [entry.title, entry.subtitle, entry.badgeText].join(' ').toLowerCase();
-      return keywords.every((keyword) =>
-          haystack.contains(keyword) || keyword.runes.every((r) => haystack.contains(String.fromCharCode(r))));
-    }).toList(growable: false);
+  bool _isPinnedDrawerEntry(_DrawerEntrySpec entry) {
+    // New Tablets is a newly added first-class module.  The drawer intentionally
+    // randomizes most module cards on every open, but that can make a new module
+    // look as if it disappeared in a long drawer.  Keep high-priority modules at
+    // the top and only shuffle the remaining entries.
+    return entry.title.startsWith('新榜 New Tablets');
   }
 
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
-    final pinned = source.where((e) => e.title == '真实自尊 SelfWorth AI').toList(growable: false);
-    final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI').toList(growable: false);
-    if (entries.length > 1) {
-      final r = math.Random((seed ^ 0x6C8E9CF5).abs());
-      for (var i = entries.length - 1; i > 0; i--) {
-        final j = r.nextInt(i + 1);
-        final tmp = entries[i];
-        entries[i] = entries[j];
-        entries[j] = tmp;
-      }
+    if (source.length <= 1) return List<_DrawerEntrySpec>.from(source);
+    final pinned = source.where(_isPinnedDrawerEntry).toList(growable: false);
+    final entries = source.where((e) => !_isPinnedDrawerEntry(e)).toList(growable: false);
+    if (entries.length <= 1) return <_DrawerEntrySpec>[...pinned, ...entries];
+    final r = math.Random((seed ^ 0x6C8E9CF5).abs());
+    for (var i = entries.length - 1; i > 0; i--) {
+      final j = r.nextInt(i + 1);
+      final tmp = entries[i];
+      entries[i] = entries[j];
+      entries[j] = tmp;
     }
     return <_DrawerEntrySpec>[...pinned, ...entries];
   }
@@ -854,6 +852,45 @@ class _RootShellState extends State<RootShell> {
     final clean = text.replaceAll(RegExp(r'\s+'), '');
     if (clean.runes.length <= maxChars) return clean;
     return String.fromCharCodes(clean.runes.take(maxChars));
+  }
+
+
+  List<_DrawerEntrySpec> _filterDrawerEntries(List<_DrawerEntrySpec> entries) {
+    final q = _drawerSearchQuery.trim().toLowerCase();
+    if (q.isEmpty) return entries;
+    return entries.where((e) {
+      final haystack = '${e.title}\n${e.subtitle}\n${e.badgeText}'.toLowerCase();
+      return haystack.contains(q);
+    }).toList(growable: false);
+  }
+
+  Widget _buildDrawerSearchBox(int resultCount) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: _drawerSearchController,
+        onChanged: (value) => setState(() => _drawerSearchQuery = value),
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: _drawerSearchQuery.trim().isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () {
+                    _drawerSearchController.clear();
+                    setState(() => _drawerSearchQuery = '');
+                  },
+                ),
+          hintText: '搜索模块：新榜 / New Tablets / 尼采',
+          helperText: _drawerSearchQuery.trim().isEmpty ? '新榜已固定置顶；其余模块仍随机展示' : '找到 $resultCount 个模块',
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.72),
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.white.withOpacity(0.8))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.white.withOpacity(0.8))),
+        ),
+      ),
+    );
   }
 
   Widget _buildDrawerHeader() {
@@ -963,8 +1000,8 @@ class _RootShellState extends State<RootShell> {
       const SettingsPage(),
     ];
     final baseEntries = _drawerEntries();
-    final orderedEntries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
-    final entries = _filterDrawerEntries(orderedEntries, _drawerSearchQuery);
+    final randomizedEntries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
+    final entries = _filterDrawerEntries(randomizedEntries);
     return Scaffold(
       onDrawerChanged: (opened) {
         if (!mounted) return;
@@ -984,6 +1021,8 @@ class _RootShellState extends State<RootShell> {
           setState(() {
             _drawerStyleSeed = nextSeed;
             _drawerRevealSeed = nextSeed ^ 0x31AF09;
+            _drawerSearchQuery = '';
+            _drawerSearchController.clear();
           });
         }
       },
@@ -1081,12 +1120,12 @@ class _RootShellState extends State<RootShell> {
                                 ),
                               ),
                               SizedBox(height: 8 + bgRandom.nextInt(8).toDouble()),
+                              _buildDrawerSearchBox(entries.length),
                               if (entries.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 28),
-                                  child: Center(
-                                    child: Text('没有找到匹配模块', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w700)),
-                                  ),
+                                Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.72), borderRadius: BorderRadius.circular(22)),
+                                  child: const Text('没有匹配的模块，请换一个关键词。', style: TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w700)),
                                 ),
                               for (var i = 0; i < entries.length; i++)
                                 Padding(
