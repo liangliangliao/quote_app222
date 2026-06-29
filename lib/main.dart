@@ -64,6 +64,7 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
+import 'new_tablets/new_tablets_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -406,6 +407,13 @@ class _RootShellState extends State<RootShell> {
   List<_DrawerEntrySpec> _drawerEntries() => [
 
     _DrawerEntrySpec(
+      icon: Icons.workspace_premium_outlined,
+      title: '新榜 New Tablets',
+      subtitle: '旧榜扫描 → 价值重估 → 谁在命令我 → 今日超克 → 主权承诺 → 坏良心转化 → 为创造而学习',
+      badgeText: '尼采式自我超克、价值重估与主权个体训练系统：更能命令自己，更能创造价值',
+      pageBuilder: (_) => const NewTabletsHomePage(),
+    ),
+    _DrawerEntrySpec(
       icon: Icons.change_circle_outlined,
       title: '成熟适应力罗盘 · Adaptation Compass',
       subtitle: '事件输入 → 防御识别 → 现实检查 → 成熟替代 → 关系修复 → 四维平衡 → 成人发展 → 生成性贡献 → 长期复盘',
@@ -718,9 +726,19 @@ class _RootShellState extends State<RootShell> {
     try { SimpleBus.navIndex.value = _idx; } catch (_) {}
   }
 
+  bool _isPinnedDrawerEntry(_DrawerEntrySpec entry) {
+    // New Tablets is a newly added first-class module.  The drawer intentionally
+    // randomizes most module cards on every open, but that can make a new module
+    // look as if it disappeared in a long drawer.  Keep high-priority modules at
+    // the top and only shuffle the remaining entries.
+    return entry.title.startsWith('新榜 New Tablets');
+  }
+
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
-    final entries = List<_DrawerEntrySpec>.from(source);
-    if (entries.length <= 1) return entries;
+    if (source.length <= 1) return List<_DrawerEntrySpec>.from(source);
+    final pinned = source.where(_isPinnedDrawerEntry).toList(growable: false);
+    final entries = source.where((e) => !_isPinnedDrawerEntry(e)).toList(growable: false);
+    if (entries.length <= 1) return <_DrawerEntrySpec>[...pinned, ...entries];
     final r = math.Random((seed ^ 0x6C8E9CF5).abs());
     for (var i = entries.length - 1; i > 0; i--) {
       final j = r.nextInt(i + 1);
@@ -728,7 +746,7 @@ class _RootShellState extends State<RootShell> {
       entries[i] = entries[j];
       entries[j] = tmp;
     }
-    return entries;
+    return <_DrawerEntrySpec>[...pinned, ...entries];
   }
 
   Widget _buildDrawerEntryCard(_DrawerEntrySpec entry, int index, int totalCount) {
