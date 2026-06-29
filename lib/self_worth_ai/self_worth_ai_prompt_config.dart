@@ -277,6 +277,18 @@ class SelfWorthAiPromptConfig {
     return count;
   }
 
+
+  Future<void> clearAllPromptData() async {
+    for (final id in allPromptIds()) {
+      await _kv.setString(_key(id), '');
+    }
+    final backups = await _kv.keyValuesWithPrefix('backup_ai_prompt.$moduleId.');
+    for (final row in backups) {
+      final key = (row['key'] ?? '').toString();
+      if (key.isNotEmpty) await _kv.setString(key, '');
+    }
+  }
+
   List<String> missingRequiredPlaceholders(String id, String template) => const <String>[];
 
   String render(String template, Map<String, String> values) {

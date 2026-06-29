@@ -64,7 +64,7 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
-import 'new_tablets/new_tablets_home_page.dart';
+import 'self_worth_ai/self_worth_ai_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -411,11 +411,11 @@ class _RootShellState extends State<RootShell> {
   List<_DrawerEntrySpec> _drawerEntries() => [
 
     _DrawerEntrySpec(
-      icon: Icons.workspace_premium_outlined,
-      title: '新榜 New Tablets',
-      subtitle: '旧榜扫描 → 价值重估 → 谁在命令我 → 今日超克 → 主权承诺 → 坏良心转化 → 为创造而学习',
-      badgeText: '尼采式自我超克、价值重估与主权个体训练系统：更能命令自己，更能创造价值',
-      pageBuilder: (_) => const NewTabletsHomePage(),
+      icon: Icons.self_improvement_outlined,
+      title: '真实自尊 SelfWorth AI',
+      subtitle: '自尊地图 → 三层自尊 → 真实关系 → 六项实践 → 认可戒断 → 复原力 → 责任目标 → AI场景教练',
+      badgeText: '基于《哈佛幸福课》第21集后半与第22集：从被认可走向被了解，用真实、责任、行动与接纳建立稳定自尊',
+      pageBuilder: (_) => const SelfWorthAiHomePage(),
     ),
     _DrawerEntrySpec(
       icon: Icons.change_circle_outlined,
@@ -743,16 +743,18 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
-    final entries = List<_DrawerEntrySpec>.from(source);
-    if (entries.length <= 1) return entries;
-    final r = math.Random((seed ^ 0x6C8E9CF5).abs());
-    for (var i = entries.length - 1; i > 0; i--) {
-      final j = r.nextInt(i + 1);
-      final tmp = entries[i];
-      entries[i] = entries[j];
-      entries[j] = tmp;
+    final pinned = source.where((e) => e.title == '真实自尊 SelfWorth AI').toList(growable: false);
+    final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI').toList(growable: false);
+    if (entries.length > 1) {
+      final r = math.Random((seed ^ 0x6C8E9CF5).abs());
+      for (var i = entries.length - 1; i > 0; i--) {
+        final j = r.nextInt(i + 1);
+        final tmp = entries[i];
+        entries[i] = entries[j];
+        entries[j] = tmp;
+      }
     }
-    return entries;
+    return <_DrawerEntrySpec>[...pinned, ...entries];
   }
 
   Widget _buildDrawerEntryCard(_DrawerEntrySpec entry, int index, int totalCount) {

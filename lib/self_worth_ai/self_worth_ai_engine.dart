@@ -68,6 +68,36 @@ class SelfWorthAiEngine {
     return '''## $title\n$userInput\n\n## 你现在可能正在经历什么\n一个现实事件触发了外部认可、比较、关系、目标、身体或责任层面的自尊波动。\n\n## 事实与解释分离\n事实：发生了一个有限事件。\n解释：我可能把它扩大为“我不够好/不值得/失败了”。\n\n## 自尊模式识别\n当前可能是依赖型自尊被触发，正在练习转向独立型自尊或无条件自尊。\n\n## 价值重构\n我的价值不等于这次评价、结果、关系反应或比较。我可以为行为负责，但不否定人格。\n\n## 今天的一个具体行动\n$action\n\n## 一句话练习\n我愿意把价值从外界评价中收回，放回真实、责任和行动里。\n\n## 复盘问题\n我今天哪里更真实？哪里更负责？哪里更少依赖外界认可？''';
   }
 
+
+  SelfWorthPracticeResult runFeature({
+    required SelfWorthFeatureSpec feature,
+    required String userInput,
+  }) {
+    final scene = sceneForFeature(feature);
+    final outputMode = outputModeForScene(scene);
+    final action = feature.actions.isEmpty ? _actionForScene(scene) : feature.actions.first;
+    final questions = <String>[
+      '我刚才把自我价值交给了什么外部信号？',
+      '我可以为哪一个行为负责，而不否定人格？',
+      '我今天能完成的最小真实行动是什么？',
+    ];
+    final markdown = localActionCard(scene: scene, userInput: userInput, feature: feature);
+    return SelfWorthPracticeResult(
+      featureId: feature.id,
+      scene: scene,
+      outputMode: outputMode,
+      summary: feature.goal,
+      facts: '用户正在练习：${feature.title}；输入材料：$userInput',
+      interpretation: '可能把评价、结果、比较、关系反应或身体标准解释成自我价值。',
+      selfWorthPattern: scene == 'external_validation' ? '依赖型自尊被触发' : '依赖型自尊 → 独立型自尊训练中',
+      valueReframe: '价值不等于单次反馈、失败、比较或关系反应；行为可以负责，人格不被否定。',
+      action: action,
+      oneLinePractice: '我把注意力带回真实、责任和今天能做的一步。',
+      reviewQuestions: questions,
+      markdown: markdown,
+    );
+  }
+
   String _actionForScene(String scene) {
     switch (scene) {
       case 'external_validation':
@@ -98,6 +128,113 @@ class SelfWorthAiEngine {
         return '选择一个5-30分钟内能完成的小行动。';
     }
   }
+
+
+  SelfWorthProgressReport buildProgressReport({
+    required Set<String> completedFeatureIds,
+    required Map<String, double> metrics,
+    required Map<String, double> sourceScores,
+    int recommendationLimit = 5,
+  }) {
+    final total = SelfWorthProductRegistry.features.length;
+    final completed = completedFeatureIds.intersection(SelfWorthProductRegistry.features.map((e) => e.id).toSet()).length;
+    final percent = total == 0 ? 0.0 : completed / total;
+    final topSources = sourceScores.entries.toList(growable: false)
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final lowMetrics = metrics.entries.where((e) => e.value < 0.45).map((e) => e.key).toList(growable: false);
+    final recommendations = nextRecommendedFeatures(completedFeatureIds: completedFeatureIds, limit: recommendationLimit);
+    final summary = percent >= 0.8
+        ? '你已经完成了大部分自尊训练功能，下一步适合做周报整合和无条件自尊练习。'
+        : percent >= 0.4
+            ? '你已经建立了一部分行动证据，下一步适合补齐低指标对应的模块。'
+            : '当前仍处于起步阶段，建议先完成自尊地图、认可戒断、真实表达和失败去人格化。';
+    return SelfWorthProgressReport(
+      totalFeatures: total,
+      completedFeatures: completed,
+      completionRatio: percent,
+      topSelfWorthSources: topSources.take(3).map((e) => e.key).toList(growable: false),
+      lowMetrics: lowMetrics,
+      recommendations: recommendations,
+      summary: summary,
+    );
+  }
+
+  List<SelfWorthFeatureSpec> nextRecommendedFeatures({required Set<String> completedFeatureIds, int limit = 5}) {
+    const priority = <String>[
+      'source_scan',
+      'stability_log',
+      'applause_dependency',
+      'validation_detox_24h',
+      'authentic_expression_editor',
+      'failure_personhood_protection',
+      'complaint_to_action',
+      'body_shame_reframe',
+      'weekly_responsibility_review',
+      'portrait_report',
+    ];
+    final byId = {for (final f in SelfWorthProductRegistry.features) f.id: f};
+    final result = <SelfWorthFeatureSpec>[];
+    for (final id in priority) {
+      final feature = byId[id];
+      if (feature != null && !completedFeatureIds.contains(id)) result.add(feature);
+      if (result.length >= limit) return result;
+    }
+    for (final feature in SelfWorthProductRegistry.features) {
+      if (!completedFeatureIds.contains(feature.id)) result.add(feature);
+      if (result.length >= limit) break;
+    }
+    return result;
+  }
+}
+
+class SelfWorthProgressReport {
+  final int totalFeatures;
+  final int completedFeatures;
+  final double completionRatio;
+  final List<String> topSelfWorthSources;
+  final List<String> lowMetrics;
+  final List<SelfWorthFeatureSpec> recommendations;
+  final String summary;
+
+  const SelfWorthProgressReport({
+    required this.totalFeatures,
+    required this.completedFeatures,
+    required this.completionRatio,
+    required this.topSelfWorthSources,
+    required this.lowMetrics,
+    required this.recommendations,
+    required this.summary,
+  });
+}
+
+class SelfWorthPracticeResult {
+  final String featureId;
+  final String scene;
+  final String outputMode;
+  final String summary;
+  final String facts;
+  final String interpretation;
+  final String selfWorthPattern;
+  final String valueReframe;
+  final String action;
+  final String oneLinePractice;
+  final List<String> reviewQuestions;
+  final String markdown;
+
+  const SelfWorthPracticeResult({
+    required this.featureId,
+    required this.scene,
+    required this.outputMode,
+    required this.summary,
+    required this.facts,
+    required this.interpretation,
+    required this.selfWorthPattern,
+    required this.valueReframe,
+    required this.action,
+    required this.oneLinePractice,
+    required this.reviewQuestions,
+    required this.markdown,
+  });
 }
 
 class SelfWorthModuleSpec {

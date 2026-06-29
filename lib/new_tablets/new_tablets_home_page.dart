@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../pages/ai_prompt_settings_page.dart';
 import 'new_tablets_ai_service.dart';
@@ -230,7 +231,7 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [_today(), _architecture(), _trainingWorkbench(), _tablets(), _commitment(), _badConscience(), _flowsAndMetrics(), _coach()];
+    final pages = [_today(), _architecture(), _trainingWorkbench(), _flowGuides(), _tablets(), _commitment(), _badConscience(), _flowsAndMetrics(), _sourcebookAndReport(), _coach()];
     return Scaffold(
       backgroundColor: const Color(0xFF0B1020),
       appBar: AppBar(
@@ -274,7 +275,7 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
       );
 
   Widget _tabs() {
-    const items = ['今日命令', '九模块总览', '训练工作台', '打碎与书写', '我能许诺', '罪感到责任', '流程指标', 'AI导师'];
+    const items = ['今日命令', '九模块总览', '训练工作台', '流程向导', '打碎与书写', '我能许诺', '罪感到责任', '流程指标', '源书报告', 'AI导师'];
     return SizedBox(
       height: 48,
       child: ListView.separated(
@@ -302,7 +303,7 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
         _section('防坏良心提醒', '这不是惩罚。任务是恢复力量、兑现承诺、创造价值。', Icons.health_and_safety_outlined),
         _matrix('晚间复盘', const [['冲动', '哪个冲动被你命令了？'], ['力量', '行动让你更强还是更弱？'], ['扩展', '明天这个命令可扩展到哪里？']]),
         FilledButton.icon(onPressed: _saveTodayCommand, icon: const Icon(Icons.save_alt_outlined), label: const Text('保存今日命令')),
-        if (_dailyCommands.isNotEmpty) _matrix('最近自我超克记录', _dailyCommands.take(5).map((e) => [e.completed ? '已完成' : '进行中', '${e.command}｜${e.minAction}']).toList()),
+        if (_dailyCommands.isNotEmpty) ..._dailyCommands.take(5).toList().asMap().entries.map((entry) => _dailyCommandCard(entry.key, entry.value)),
       ]);
 
 
@@ -332,6 +333,113 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
       ]);
 
 
+
+  Future<void> _runFlowGuide(_FlowGuideSpec spec) async {
+    final result = await _askFields(spec.title, spec.fields);
+    if (result == null) return;
+    final joined = result.asMap().entries.map((e) => '${spec.fields[e.key]}：${e.value}').join('\n');
+    final analysis = NewTabletsEngine.analyze('${spec.sceneHint}\n$joined');
+    final record = NewTabletsPracticeRecord(
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      moduleId: spec.id,
+      moduleName: spec.title,
+      userInput: joined,
+      diagnosis: analysis.diagnosis,
+      command: spec.commandBuilder(result, analysis),
+      minAction: spec.actionBuilder(result, analysis),
+      reviewQuestion: spec.reviewQuestion,
+    );
+    final next = [record, ..._practiceRecords].take(120).toList(growable: false);
+    await _dao.savePracticeRecords(next);
+    if (!mounted) return;
+    setState(() => _practiceRecords = next);
+    _toast('已生成「${spec.title}」流程卡');
+  }
+
+  List<List<String>> _metricRows() {
+    final avgReliability = _commitments.isEmpty ? 0 : (_commitments.map((e) => e.rate).reduce((a, b) => a + b) / _commitments.length * 100).round();
+    final repairCount = _commitments.fold<int>(0, (sum, e) => sum + e.repairs);
+    final completedDaily = _dailyCommands.where((e) => e.completed).length;
+    return <List<String>>[
+      ['主权指数', '承诺 ${_commitments.length} 个｜平均兑现率 $avgReliability%｜修复 $repairCount 次'],
+      ['价值清晰度', '旧榜 ${_oldTablets.length} 条｜新榜 ${_newTablets.length} 条｜训练 ${_practiceRecords.length} 次'],
+      ['坏良心转化率', '责任化改写 ${_rewrites.length} 条｜失败后修复次数 $repairCount'],
+      ['创造输出量', '创造输出 ${_creativeOutputs.length} 条'],
+      ['自我超克记录', '今日命令 ${_dailyCommands.length} 条｜已完成 $completedDaily 条'],
+    ];
+  }
+
+  Future<void> _markDailyCommand(int index, bool completed) async {
+    final next = List<DailyCommandRecord>.from(_dailyCommands);
+    next[index] = next[index].copyWith(completed: completed);
+    await _dao.saveDailyCommands(next);
+    if (!mounted) return;
+    setState(() => _dailyCommands = next);
+  }
+
+
+  String _buildReportText() {
+    final metrics = _metricRows().map((e) => '- ${e[0]}：${e[1]}').join('\n');
+    final old = _oldTablets.map((e) => '- ${e.value}｜${e.source}｜${e.status}').join('\n');
+    final newer = _newTablets.map((e) => '- ${e.value}｜${e.proof}｜${e.status}').join('\n');
+    final commitments = _commitments.map((e) => '- ${e.title}｜${e.period}｜兑现率 ${(e.rate * 100).round()}%｜修复 ${e.repairs} 次').join('\n');
+    final outputs = _creativeOutputs.take(10).map((e) => '- ${e.type}：${e.title}｜${e.linkedNewTablet}').join('\n');
+    final practices = _practiceRecords.take(10).map((e) => '- ${e.moduleName}：${e.command}｜${e.minAction}').join('\n');
+    return '''# 新榜 New Tablets 周度主权报告
+
+## 指标
+$metrics
+
+## 正在打碎的旧榜
+${old.isEmpty ? '- 暂无' : old}
+
+## 正在书写的新榜
+${newer.isEmpty ? '- 暂无' : newer}
+
+## 主权承诺
+${commitments.isEmpty ? '- 暂无' : commitments}
+
+## 创造输出
+${outputs.isEmpty ? '- 暂无' : outputs}
+
+## 最近训练
+${practices.isEmpty ? '- 暂无' : practices}
+
+## 下周问题
+- 哪个旧榜仍在命令我？
+- 哪个新榜需要用行动证明？
+- 哪个承诺需要缩小而不是羞辱自己？
+''';
+  }
+
+
+  Future<void> _copyStateJson() async {
+    final raw = await _dao.exportStateJson();
+    await Clipboard.setData(ClipboardData(text: raw));
+    _toast('已复制新榜完整数据 JSON');
+  }
+
+  Future<void> _importStateJsonFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final raw = (data?.text ?? '').trim();
+    if (raw.isEmpty) {
+      _toast('剪贴板为空');
+      return;
+    }
+    try {
+      await _dao.importStateJson(raw);
+      await _loadState();
+      _toast('已从剪贴板导入新榜数据');
+    } catch (e) {
+      _toast('导入失败：$e');
+    }
+  }
+
+  Future<void> _copyReport() async {
+    await Clipboard.setData(ClipboardData(text: _buildReportText()));
+    _toast('已复制新榜周度主权报告');
+  }
+
   Widget _trainingWorkbench() => _scroll([
         _section('训练工作台', '这里把产品设计方案中的九大模块变成可执行训练入口。每次训练都会保存为记录，而不是只展示理念。', Icons.dashboard_customize_outlined),
         for (final spec in _practiceSpecs)
@@ -348,6 +456,24 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
             ]),
           ),
         if (_practiceRecords.isNotEmpty) _matrix('最近训练记录', _practiceRecords.take(8).map((e) => [e.moduleName, '${e.command}｜${e.minAction}']).toList()),
+      ]);
+
+
+  Widget _flowGuides() => _scroll([
+        _section('四条关键用户流程', '这里把首次使用、每日使用、失败修复、每周价值重估做成可执行向导。每次生成的流程卡都会进入训练记录。', Icons.route_outlined),
+        for (final spec in _flowGuideSpecs)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: const Color(0xFF111827), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [Icon(spec.icon, color: const Color(0xFFFBBF24)), const SizedBox(width: 10), Expanded(child: Text(spec.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)))]),
+              const SizedBox(height: 6),
+              Text(spec.description, style: const TextStyle(color: Color(0xFFE5E7EB), height: 1.45)),
+              const SizedBox(height: 10),
+              Align(alignment: Alignment.centerRight, child: FilledButton.tonal(onPressed: () => _runFlowGuide(spec), child: const Text('启动向导'))),
+            ]),
+          ),
       ]);
 
   Widget _tablets() => _scroll([
@@ -401,13 +527,35 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
         ]),
         FilledButton.icon(onPressed: _addCreativeOutput, icon: const Icon(Icons.create_outlined), label: const Text('记录创造输出')),
         if (_creativeOutputs.isNotEmpty) _matrix('最近创造输出', _creativeOutputs.take(5).map((e) => [e.type, '${e.title}｜${e.linkedNewTablet}']).toList()),
-        _matrix('核心指标仪表盘', const [
-          ['主权指数', '许诺兑现率 / 修复速度 / 过度许诺下降率 / 长期承诺稳定度。'],
-          ['价值清晰度', '新榜数量 / 旧榜识别数量 / 外部价值转化数量 / 自主目标比例。'],
-          ['坏良心转化率', '自我羞辱表达减少 / 责任化改写增加 / 失败后恢复更快。'],
-          ['创造输出量', '文章 / 笔记 / 项目 / 训练成果 / 决策记录 / 公开表达。'],
-          ['自我超克记录', '拖延减少 / 独立判断增加 / 群体比较减少 / 行动主动性增强。'],
+        _matrix('核心指标仪表盘', _metricRows()),
+      ]);
+
+
+  Widget _sourcebookAndReport() => _scroll([
+        _section('源书底盘', '本模块的 AI 与训练结构围绕五个文本线索：〈论自我超克〉、〈论旧榜与新榜〉、《善恶的彼岸》第19节、《善恶的彼岸》第199节、《道德的谱系》第二论文。', Icons.auto_stories_outlined),
+        _matrix('思想 → 产品能力映射', const [
+          ['自我超克', '今日超克对象、微型超克任务、行动后权力感复盘。'],
+          ['旧榜与新榜', '旧榜扫描、新榜写作、价值强度评分、每周价值重估。'],
+          ['第19节', '内在意志解析器：谁在命令我、命令语生成、内部服从设计。'],
+          ['第199节', '群体本能雷达：外部命令扫描、群体语言识别、断连练习。'],
+          ['道德谱系第二论文', '主权承诺、坏良心转化、违约修复、可靠性仪表盘。'],
         ]),
+        _matrix('安全与误用边界', const [
+          ['反自虐', '不把“变强”解释成惩罚自己、剥夺休息或极端压迫。'],
+          ['反支配他人', '权力意志只用于自我组织、自我增强与创造形式，不用于羞辱或控制别人。'],
+          ['反坏良心', '自责语言必须转化为责任修复，不把罪感当进步动力。'],
+          ['专业边界', '若出现自伤、伤害他人或急性危机，应优先寻求当地紧急服务或专业支持。'],
+        ]),
+        _section('周度主权报告', '把旧榜、新榜、承诺、创造输出、训练记录和指标汇总为可复制报告，用于每周价值重估或导出给自己复盘。', Icons.summarize_outlined),
+        Row(children: [
+          Expanded(child: FilledButton.icon(onPressed: _copyReport, icon: const Icon(Icons.copy_all_outlined), label: const Text('复制周报'))),
+          const SizedBox(width: 10),
+          Expanded(child: OutlinedButton.icon(onPressed: _copyStateJson, icon: const Icon(Icons.ios_share_outlined), label: const Text('导出数据'))),
+        ]),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(onPressed: _importStateJsonFromClipboard, icon: const Icon(Icons.system_update_alt_outlined), label: const Text('从剪贴板导入完整新榜数据 JSON')),
+        const SizedBox(height: 12),
+        _section('报告预览', _buildReportText(), Icons.article_outlined),
       ]);
 
   Widget _coach() => _scroll([
@@ -435,6 +583,24 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
         _matrix('8. 复盘问题', _analysis.reviewQuestions.map((e) => ['问题', e]).toList()),
         _section('Prompt 配置中心', '本模块不再把提示词锁死在页面内。全局价值层、12 个场景/流程层与 3 个输出格式 Prompt 已接入设置页 AI 提示词统一配置中心，可自由保存、恢复、导入和导出。', Icons.integration_instructions_outlined),
       ]);
+
+
+  Widget _dailyCommandCard(int index, DailyCommandRecord record) => Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: const Color(0xFF111827), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(record.completed ? '已完成' : '进行中', style: TextStyle(color: record.completed ? const Color(0xFF34D399) : const Color(0xFFFBBF24), fontWeight: FontWeight.w900)),
+          const SizedBox(height: 6),
+          Text(record.command, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(record.minAction, style: const TextStyle(color: Color(0xFFE5E7EB))),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            TextButton(onPressed: () => _markDailyCommand(index, false), child: const Text('修复')),
+            FilledButton.tonal(onPressed: () => _markDailyCommand(index, true), child: const Text('完成')),
+          ]),
+        ]),
+      );
 
   Widget _commitmentActions(int index) {
     final item = _commitments[index];
@@ -491,6 +657,60 @@ class _NewTabletsHomePageState extends State<NewTabletsHomePage> {
       );
 }
 
+
+
+const List<_FlowGuideSpec> _flowGuideSpecs = <_FlowGuideSpec>[
+  _FlowGuideSpec(
+    id: 'flow_onboarding',
+    title: '首次使用：旧榜地图 → 新榜草案 → 7天实验 → 主权承诺卡',
+    description: '用于第一次进入模块时完成价值初始化，而不是直接打卡。',
+    fields: ['我从小被灌输的应该', '我想写入新榜的价值', '我愿意做的7天实验'],
+    sceneHint: '必须 认可 目标 承诺',
+    reviewQuestion: '这个新榜是否值得我付代价？',
+    icon: Icons.rocket_launch_outlined,
+  ),
+  _FlowGuideSpec(
+    id: 'flow_daily',
+    title: '每日使用：今天谁最可能支配我？',
+    description: '生成今日命令、今日超克对象、最小行动和晚间复盘。',
+    fields: ['今天最可能支配我的力量', '今天要超克的旧我', '可执行的最小行动'],
+    sceneHint: '拖延 不想 恐惧 群体 坏良心',
+    reviewQuestion: '今天哪个冲动被我命令了？',
+    icon: Icons.today_outlined,
+  ),
+  _FlowGuideSpec(
+    id: 'flow_repair',
+    title: '失败后的修复：不羞辱，只修复承诺结构',
+    description: '判断承诺过大、环境失败、身体不足或低级冲动夺权。',
+    fields: ['未兑现的承诺', '可能原因', '明天缩小后的版本'],
+    sceneHint: '废物 自责 承诺 失败',
+    reviewQuestion: '我是在修复，还是在惩罚自己？',
+    icon: Icons.build_circle_outlined,
+  ),
+  _FlowGuideSpec(
+    id: 'flow_weekly',
+    title: '每周价值重估：旧榜、新榜、承诺与失败材料',
+    description: '每周检查哪个旧榜仍在支配、哪个新榜被行动证明。',
+    fields: ['本周仍在支配我的旧榜', '本周被证明的新榜', '下周要超克的旧我'],
+    sceneHint: '旧榜 新榜 承诺 过去',
+    reviewQuestion: '下周我让什么成为更高尺度？',
+    icon: Icons.calendar_month_outlined,
+  ),
+];
+
+class _FlowGuideSpec {
+  final String id;
+  final String title;
+  final String description;
+  final List<String> fields;
+  final String sceneHint;
+  final String reviewQuestion;
+  final IconData icon;
+  const _FlowGuideSpec({required this.id, required this.title, required this.description, required this.fields, required this.sceneHint, required this.reviewQuestion, required this.icon});
+
+  String commandBuilder(List<String> values, NewTabletsAnalysis analysis) => analysis.command;
+  String actionBuilder(List<String> values, NewTabletsAnalysis analysis) => values.isEmpty ? analysis.action : values.last;
+}
 
 const List<_PracticeSpec> _practiceSpecs = <_PracticeSpec>[
   _PracticeSpec('start', '我的新榜起点', '旧榜扫描、新榜草案与价值强度评分。', '别人认可 必须 成功', '这个价值来自哪里？', Icons.flag_circle_outlined),
