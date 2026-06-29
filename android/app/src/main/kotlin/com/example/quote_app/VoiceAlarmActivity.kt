@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v32_music_playback_barge_guard_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：背景音乐/歌声播放期间只允许强近端连续插话触发，普通歌声不进入STT缓存"
+  private val batchChatPipelineVersion = "chat_input_v33_post_playback_strict_near_voice_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：播报/背景音乐后保留严格近端真人声窗口，过滤尾音/歌声/空转提交"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -217,8 +217,8 @@ class VoiceAlarmActivity : Activity() {
         VoiceAlarmRingingService.ACTION_SIGNAL_PLAYBACK_END -> {
           alarmSignalPlaying = false
           logVoice("alarm.signal.end", "alarm signal/music playback end broadcast received", mapOf("pipeline" to batchChatPipelineVersion))
-          markPostPlaybackHandoff(700L)
-          resetBatchCurrentCaptureForSpeakerPlayback("闹钟背景音乐/播报已结束：短暂冷却后恢复干净录音。", cooldownMs = 120L, preserveOpenRecorder = true)
+          markPostPlaybackHandoff(2200L)
+          resetBatchCurrentCaptureForSpeakerPlayback("闹钟背景音乐/播报已结束：短暂冷却后恢复干净录音，并继续用严格近端人声确认过滤残留歌声。", cooldownMs = 160L, preserveOpenRecorder = true)
         }
         VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_START -> handleAlarmVoicePlaybackStart(intent?.getStringExtra("text").orEmpty())
         VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_END -> {
@@ -228,8 +228,8 @@ class VoiceAlarmActivity : Activity() {
           alarmVoicePlaying = false
           alarmPlaybackWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
           alarmPlaybackWatchdogRunnable = null
-          markPostPlaybackHandoff(700L)
-          resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报刚结束：非实时录音已保持就绪，短暂冷却后立即接收你接下来的开头。", cooldownMs = 80L, preserveOpenRecorder = true)
+          markPostPlaybackHandoff(3000L)
+          resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报刚结束：非实时录音保持就绪，但会用更严格的近端人声确认，避免把播报尾音/背景歌声当成你说话。", cooldownMs = 160L, preserveOpenRecorder = true)
           scheduleBatchRecorderRefreshAfterPlayback()
           if (speechBuffer.isNotBlank()) {
             scheduleBufferedSpeechProcessing(350L)
@@ -1061,6 +1061,14 @@ class VoiceAlarmActivity : Activity() {
             runOnUiThread {
               setBatchStatus("刚才识别到的是闹钟/AI 播报内容，已丢弃且不会发送给 AI。请在播报结束后重新说；这一版会从源头失效跨播报窗口的录音缓存。")
             }
+          } else if (!job.submittedManually && lastError.isBlank()) {
+            batchLastRetryJob = null
+            logVoice("batch.result.emptyAutoDiscarded", "auto-captured segment returned empty STT; treat as false-positive VAD rather than user speech", mapOf("pcmBytes" to job.pcm.size, "audioSeconds" to String.format(Locale.US, "%.2f", job.pcm.size / (16000.0 * 2.0)), "peak" to job.peak, "rms" to job.rms, "pipeline" to batchChatPipelineVersion))
+            runOnUiThread { updateBatchRetryButton(false) }
+            runOnUiThread {
+              val seconds = String.format(Locale.CHINA, "%.1f", job.durationMs / 1000.0)
+              setBatchStatus("刚才 ${seconds} 秒自动录音没有识别出任何文字，已按误触发/环境声丢弃，不会发送给 AI。请靠近麦克风正常说话，系统会继续等待真人语音。")
+            }
           } else {
             batchLastRetryJob = job
             runOnUiThread { updateBatchRetryButton(true) }
@@ -1697,8 +1705,8 @@ class VoiceAlarmActivity : Activity() {
           // v13：采用“候选 -> 确认 -> 迟滞”的三段式。
           // 参考 WebRTC/服务端 VAD 的思想：连续窗口、人声形态和 padding/端点要分开处理；
           // 纯能量连续很久也只能是候选，不能变成 speech_started。
-          val requiredHits = if (postPlaybackHandoffActive) 18 else 8
-          val minStartWindowMs = if (postPlaybackHandoffActive) 1200L else 480L
+          val requiredHits = if (postPlaybackHandoffActive) 24 else 8
+          val minStartWindowMs = if (postPlaybackHandoffActive) 1800L else 480L
           val startWindowOk = autoArmStartFirstAt > 0L && (now - autoArmStartFirstAt) >= minStartWindowMs
           val voiceLikeRatioOk = autoArmStartHitCount > 0 && autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 58
           val strongVoiceShapeOk = autoArmStrongVoiceLikeHitCount >= maxOf(3, requiredHits / 3)
@@ -1715,8 +1723,9 @@ class VoiceAlarmActivity : Activity() {
             autoArmStartFirstAt > 0L &&
             now - autoArmStartFirstAt >= maxOf(minStartWindowMs, 900L)
           val rejectedTooMany = autoArmRejectedHitCount >= 4 && autoArmRejectedHitCount * 100 > autoArmStartHitCount * 24
+          val postPlaybackStartOk = !postPlaybackHandoffActive || isPostPlaybackStartStrongEnough(autoArmVoiceShape, level, noiseRms)
           val confirmedSpeech = speechStarted ||
-            (autoArmStartSpeech && speechHitCount >= requiredHits && startWindowOk && voiceLikeRatioOk && (strongVoiceShapeOk || warmVoiceShapeOk) && (endpointVoiceOk || sustainedWarmVoiceOk) && !rejectedTooMany)
+            (autoArmStartSpeech && speechHitCount >= requiredHits && startWindowOk && voiceLikeRatioOk && (strongVoiceShapeOk || warmVoiceShapeOk) && (endpointVoiceOk || sustainedWarmVoiceOk) && !rejectedTooMany && postPlaybackStartOk)
           if (softSpeech && softSpeechHitCount >= 2) {
             // 软声音只代表“有较明显声音输入”，不能直接确认为用户说话；
             // 否则底噪/口水音/残留播放声会持续刷新静音端点，导致永远不提交，
@@ -2089,6 +2098,13 @@ class VoiceAlarmActivity : Activity() {
     val peakThreshold = maxOf(2600, (noiseRms * 42.0).toInt())
     return (level.rms >= rmsThreshold && level.peak >= peakCompanion) ||
       (level.peak >= peakThreshold && level.rms >= maxOf(150.0, noiseRms * 3.0).toInt())
+  }
+
+  private fun isPostPlaybackStartStrongEnough(shape: AudioVoiceShape, level: AudioLevel, noiseRms: Double): Boolean {
+    val closeMicEnergy = level.rms >= maxOf(1800.0, noiseRms * 20.0).toInt() && level.peak >= maxOf(6500, (noiseRms * 90.0).toInt())
+    val veryStrongPeak = level.rms >= maxOf(1300.0, noiseRms * 16.0).toInt() && level.peak >= maxOf(9000, (noiseRms * 120.0).toInt())
+    val strongShape = shape.voicedScore >= 72 && shape.zcrPermille in 10..190 && shape.crestX100 in 130..1800
+    return strongShape && (closeMicEnergy || veryStrongPeak)
   }
 
   private fun hasBatchBargeInSpeech(level: AudioLevel, shape: AudioVoiceShape, noiseRms: Double): Boolean {
@@ -3618,6 +3634,11 @@ class VoiceAlarmActivity : Activity() {
 
   private fun syncExistingAlarmPlaybackState() {
     if (selectedSttMode() != "batch") return
+    if (VoiceAlarmRingingService.currentSignalPlaybackState()) {
+      alarmSignalPlaying = true
+      resetBatchCurrentCaptureForSpeakerPlayback("检测到闹钟背景音乐/播报信号仍在播放：非实时模式只允许强近端真人插话，不缓存背景歌声。", cooldownMs = 1800L)
+      logVoice("alarm.signal.stateSync", "synced already-active alarm signal/music playback from service state", mapOf("pipeline" to batchChatPipelineVersion))
+    }
     val (active, playbackText) = VoiceAlarmRingingService.currentVoicePlaybackState(this)
     if (!active) return
     alarmVoicePlaying = true
@@ -3717,7 +3738,7 @@ class VoiceAlarmActivity : Activity() {
     }, delayMs)
   }
 
-  private fun markPostPlaybackHandoff(durationMs: Long = 900L) {
+  private fun markPostPlaybackHandoff(durationMs: Long = 3000L) {
     val now = System.currentTimeMillis()
     postPlaybackHandoffUntil = maxOf(postPlaybackHandoffUntil, now + durationMs)
     // Playback has already ended, so keep only a very short echo gate.  Longer

@@ -56,6 +56,10 @@ class VoiceAlarmRingingService : Service() {
     const val ACTION_SIGNAL_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_SIGNAL_PLAYBACK_START"
     const val ACTION_SIGNAL_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_SIGNAL_PLAYBACK_END"
     @Volatile private var activePayload: String? = null
+    @Volatile private var activeSignalPlayback = false
+
+    @JvmStatic
+    fun currentSignalPlaybackState(): Boolean = activeSignalPlayback
 
     @JvmStatic
     fun start(context: Context, payload: String) {
@@ -429,6 +433,7 @@ class VoiceAlarmRingingService : Service() {
     stopSignals()
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
     alarmSignalPlaybackActive = true
+    activeSignalPlayback = true
     sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", data.optBoolean("systemMusic", true) || data.optString("musicPath", "").isNotBlank() || data.optJSONArray("musicPaths")?.length()?.let { it > 0 } == true))
     logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
     requestAlarmAudioFocus()
@@ -647,6 +652,7 @@ class VoiceAlarmRingingService : Service() {
   private fun stopSignals() {
     val shouldNotifySignalEnd = alarmSignalPlaybackActive
     alarmSignalPlaybackActive = false
+    activeSignalPlayback = false
     if (shouldNotifySignalEnd) sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName))
     logVoice("signals.stop", "stopping alarm signals")
     try { voicePlayer?.stop() } catch (_: Throwable) {}
