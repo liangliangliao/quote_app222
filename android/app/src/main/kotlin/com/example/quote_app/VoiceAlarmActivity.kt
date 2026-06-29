@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v36_duck_music_listening_window_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：闹钟播报后自动压低背景音乐进入干净聆听窗口，避免长句被持续屏蔽"
+  private val batchChatPipelineVersion = "chat_input_v37_fast_listen_fullscreen_ai_sync_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：播报后快速聆听并保留更长前滚，全屏自恢复，AI思考/全文实时显示"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -91,6 +91,7 @@ class VoiceAlarmActivity : Activity() {
   private var pendingSpeakRestart = true
   private var pendingSpeakAttempts = 0
   private var transcriptView: TextView? = null
+  private var transcriptScrollView: ScrollView? = null
   private var batchStatusView: TextView? = null
   private var batchRetryButton: Button? = null
   @Volatile private var destroyed = false
@@ -103,6 +104,8 @@ class VoiceAlarmActivity : Activity() {
   @Volatile private var aiRequestSeq = 0
   @Volatile private var aiBusyStartedAt = 0L
   private var aiBusyWatchdogRunnable: Runnable? = null
+  private var aiThinkingTickerRunnable: Runnable? = null
+  private var restoreFullScreenRunnable: Runnable? = null
   private var pendingAiWatchdogRunnable: Runnable? = null
   private val conversation = mutableListOf<Pair<String, String>>()
   private var pendingAiUserText = ""
@@ -304,6 +307,8 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onResume() {
     super.onResume()
+    restoreFullScreenRunnable?.let { speechHandler.removeCallbacks(it) }
+    restoreFullScreenRunnable = null
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     when {
       cloudSttActive && !isCloudSttHealthy() -> {
@@ -317,6 +322,18 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onStop() {
     super.onStop()
+    // If OEM/task switching hides the full-screen alarm while it is still ringing,
+    // ask the foreground service to bring the same alarm UI back.  This keeps the
+    // user from getting stranded after the app briefly goes to background.
+    restoreFullScreenRunnable?.let { speechHandler.removeCallbacks(it) }
+    restoreFullScreenRunnable = Runnable {
+      restoreFullScreenRunnable = null
+      if (!destroyed && !isFinishing) {
+        logVoice("alarm.fullscreen.restore", "activity stopped while alarm may still be ringing; request full-screen restore", mapOf("pipeline" to batchChatPipelineVersion))
+        VoiceAlarmRingingService.restoreFullScreenIfRinging(applicationContext)
+      }
+    }
+    speechHandler.postDelayed(restoreFullScreenRunnable!!, 700L)
     // Keep the voice assistant alive while the alarm is ringing in the background.
     // The foreground ringing service carries the microphone foreground-service type.
   }
@@ -377,6 +394,7 @@ class VoiceAlarmActivity : Activity() {
     ttsStartWatchdogRunnable = null
     aiBusyWatchdogRunnable = null
     pendingAiWatchdogRunnable = null
+    stopAiThinkingTicker()
     pendingAiUserText = ""
     pendingAiUserTextAt = 0L
     pendingSpeakText = ""
@@ -481,9 +499,15 @@ class VoiceAlarmActivity : Activity() {
       textSize = 16f
       setTextColor(Color.WHITE)
       gravity = Gravity.CENTER
+      setSingleLine(false)
+      includeFontPadding = true
       setPadding(0, 0, 0, 32)
     }
-    panel.addView(transcriptView, LinearLayout.LayoutParams(-1, -2))
+    transcriptScrollView = ScrollView(this).apply {
+      isFillViewport = false
+      addView(transcriptView, ScrollView.LayoutParams(-1, -2))
+    }
+    panel.addView(transcriptScrollView, LinearLayout.LayoutParams(-1, 0, 2f))
     batchSubmitButton = null
     batchRetryButton = null
     batchStatusView = null
@@ -534,7 +558,11 @@ class VoiceAlarmActivity : Activity() {
         finishAndRemoveTask()
       }
     }, LinearLayout.LayoutParams(-1, -2))
-    root.addView(panel, FrameLayout.LayoutParams(-1, -1))
+    val scroll = ScrollView(this).apply {
+      isFillViewport = true
+      addView(panel, ScrollView.LayoutParams(-1, -2))
+    }
+    root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
     return root
   }
 
@@ -1223,6 +1251,19 @@ class VoiceAlarmActivity : Activity() {
     val apply = {
       val view = batchStatusView ?: transcriptView
       view?.text = message
+      scrollTranscriptToBottom()
+    }
+    if (Looper.myLooper() == Looper.getMainLooper()) apply() else runOnUiThread { apply() }
+  }
+
+  private fun scrollTranscriptToBottom() {
+    transcriptScrollView?.post { transcriptScrollView?.fullScroll(View.FOCUS_DOWN) }
+  }
+
+  private fun appendTranscriptLine(message: String) {
+    val apply = {
+      transcriptView?.append("\n$message")
+      scrollTranscriptToBottom()
     }
     if (Looper.myLooper() == Looper.getMainLooper()) apply() else runOnUiThread { apply() }
   }
@@ -1349,7 +1390,7 @@ class VoiceAlarmActivity : Activity() {
     var lastEarlyValidationAt = 0L
     val preRoll = java.util.ArrayDeque<ByteArray>()
     var preRollBytes = 0
-    val preRollLimitBytes = sampleRate * 2 * 1600 / 1000
+    val preRollLimitBytes = sampleRate * 2 * 3000 / 1000
     var utteranceFallbackStartByte = -1
     val minBytes = ((sampleRate * 2L * 260L) / 1000L).toInt().coerceAtLeast(sampleRate * 2 / 8)
     batchManualSubmitRequested = false
@@ -1717,8 +1758,8 @@ class VoiceAlarmActivity : Activity() {
           // v13：采用“候选 -> 确认 -> 迟滞”的三段式。
           // 参考 WebRTC/服务端 VAD 的思想：连续窗口、人声形态和 padding/端点要分开处理；
           // 纯能量连续很久也只能是候选，不能变成 speech_started。
-          val requiredHits = if (postPlaybackHandoffActive) 24 else 8
-          val minStartWindowMs = if (postPlaybackHandoffActive) 1800L else 480L
+          val requiredHits = if (postPlaybackHandoffActive) 12 else 8
+          val minStartWindowMs = if (postPlaybackHandoffActive) 700L else 420L
           val startWindowOk = autoArmStartFirstAt > 0L && (now - autoArmStartFirstAt) >= minStartWindowMs
           val voiceLikeRatioOk = autoArmStartHitCount > 0 && autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 58
           val strongVoiceShapeOk = autoArmStrongVoiceLikeHitCount >= maxOf(3, requiredHits / 3)
@@ -2113,9 +2154,9 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun isPostPlaybackStartStrongEnough(shape: AudioVoiceShape, level: AudioLevel, noiseRms: Double): Boolean {
-    val closeMicEnergy = level.rms >= maxOf(1800.0, noiseRms * 20.0).toInt() && level.peak >= maxOf(6500, (noiseRms * 90.0).toInt())
-    val veryStrongPeak = level.rms >= maxOf(1300.0, noiseRms * 16.0).toInt() && level.peak >= maxOf(9000, (noiseRms * 120.0).toInt())
-    val strongShape = shape.voicedScore >= 72 && shape.zcrPermille in 10..190 && shape.crestX100 in 130..1800
+    val closeMicEnergy = level.rms >= maxOf(950.0, noiseRms * 10.0).toInt() && level.peak >= maxOf(3000, (noiseRms * 42.0).toInt())
+    val veryStrongPeak = level.rms >= maxOf(1200.0, noiseRms * 12.0).toInt() && level.peak >= maxOf(5200, (noiseRms * 64.0).toInt())
+    val strongShape = shape.voicedScore >= 55 && shape.zcrPermille in 8..220 && shape.crestX100 in 120..2300
     return strongShape && (closeMicEnergy || veryStrongPeak)
   }
 
@@ -4651,11 +4692,31 @@ class VoiceAlarmActivity : Activity() {
       if (age >= 70_000L) {
         aiBusy = false
         aiRequestSeq++
-        transcriptView?.append("\nAI 请求超时，已恢复语音识别；可继续说话。")
+        stopAiThinkingTicker()
+        appendTranscriptLine("AI 请求超时，已恢复语音识别；可继续说话。")
+        setBatchStatus("AI 请求超时，已恢复语音识别；可继续说话。")
         if (!processPendingAiUserSpeechIfReady()) listenAgain(120L)
       }
     }
     speechHandler.postDelayed(aiBusyWatchdogRunnable!!, 72_000L)
+  }
+
+  private fun stopAiThinkingTicker() {
+    aiThinkingTickerRunnable?.let { speechHandler.removeCallbacks(it) }
+    aiThinkingTickerRunnable = null
+  }
+
+  private fun startAiThinkingTicker(requestSeq: Int) {
+    stopAiThinkingTicker()
+    aiThinkingTickerRunnable = object : Runnable {
+      override fun run() {
+        if (destroyed || !aiBusy || aiRequestSeq != requestSeq) return
+        val seconds = ((System.currentTimeMillis() - aiBusyStartedAt) / 1000L).coerceAtLeast(0L)
+        setBatchStatus("AI 正在思考…${seconds} 秒，请稍候；回答文字返回后会完整显示。")
+        speechHandler.postDelayed(this, 1000L)
+      }
+    }
+    speechHandler.post(aiThinkingTickerRunnable!!)
   }
 
   private fun askAi(userText: String) {
@@ -4667,7 +4728,8 @@ class VoiceAlarmActivity : Activity() {
     val aiConfig = try { JSONObject(payload).optJSONObject("aiConfig") } catch (_: Throwable) { null }
     if (aiConfig == null || !aiConfig.optBoolean("available", false)) {
       val answer = "我已经被唤醒了，但当前闹钟没有可用的全局 AI 配置快照。请回到设置页配置 AI 后重新保存闹钟。你仍可说关闭闹钟或延迟五分钟。"
-      transcriptView?.append("\nAI：$answer")
+      appendTranscriptLine("AI：$answer")
+      setBatchStatus("AI 配置不可用：已显示完整文字回答，可继续语音操作。")
       speak(answer, "alarm_ai_unavailable")
       return
     }
@@ -4676,7 +4738,9 @@ class VoiceAlarmActivity : Activity() {
     val requestSeq = ++aiRequestSeq
     logVoice("ai.ask.start", "AI request started", mapOf("seq" to requestSeq, "text" to logPreview(userText), "provider" to aiConfig.optString("provider", ""), "model" to aiConfig.optString("model", "")))
     scheduleAiBusyWatchdog(requestSeq)
-    transcriptView?.append("\nAI：正在思考…")
+    appendTranscriptLine("AI：正在思考…")
+    setBatchStatus("AI 正在思考…0 秒，请稍候；回答文字返回后会完整显示。")
+    startAiThinkingTicker(requestSeq)
     Thread {
       val answer = try { callAi(aiConfig, userText) } catch (t: Throwable) {
         logVoice("ai.ask.error", t.message ?: t.javaClass.simpleName, mapOf("seq" to requestSeq))
@@ -4688,8 +4752,10 @@ class VoiceAlarmActivity : Activity() {
         aiBusyWatchdogRunnable = null
         aiBusy = false
         aiBusyStartedAt = 0L
+        stopAiThinkingTicker()
         val clean = answer.ifBlank { "AI 没有返回内容。你可以再说一遍，或说关闭闹钟 / 延迟五分钟。" }
-        transcriptView?.append("\nAI：$clean")
+        appendTranscriptLine("AI：$clean")
+        setBatchStatus("AI 已返回完整文字，正在准备播报；你也可以直接查看屏幕上的完整回答。")
         conversation.add("user" to userText)
         conversation.add("assistant" to clean)
         while (conversation.size > 12) conversation.removeAt(0)
@@ -4907,6 +4973,9 @@ class VoiceAlarmActivity : Activity() {
     ttsStartWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
     aiBusyWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
     pendingAiWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
+    stopAiThinkingTicker()
+    restoreFullScreenRunnable?.let { speechHandler.removeCallbacks(it) }
+    restoreFullScreenRunnable = null
     if (alarmPlaybackReceiverRegistered) { try { unregisterReceiver(alarmPlaybackReceiver) } catch (_: Throwable) {} ; alarmPlaybackReceiverRegistered = false }
     try { recognizer?.destroy() } catch (_: Throwable) {}
     pendingSpeakText = ""
