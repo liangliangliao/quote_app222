@@ -64,6 +64,7 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
+import 'new_tablets/new_tablets_home_page.dart';
 import 'self_worth_ai/self_worth_ai_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
