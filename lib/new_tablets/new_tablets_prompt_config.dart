@@ -140,6 +140,63 @@ class NewTabletsPromptConfig {
     return result;
   }
 
+  Future<String> buildPrompt({
+    required String scene,
+    required String userInput,
+    required String profileJson,
+    required String recentContextJson,
+    String outputMode = 'standard',
+  }) async {
+    final global = await getPrompt(globalId);
+    final scenePrompt = render(await getPrompt(sceneGeneralId), <String, String>{
+      'scene': scene,
+      'user_input': userInput,
+      'context_json': recentContextJson,
+      'profile_json': profileJson,
+      'recent_context_json': recentContextJson,
+      'output_mode': outputMode,
+    });
+    final output = render(await getPrompt(outputCommonId), <String, String>{
+      'scene': scene,
+      'user_input': userInput,
+      'context_json': recentContextJson,
+      'profile_json': profileJson,
+      'recent_context_json': recentContextJson,
+      'output_mode': outputMode,
+    });
+
+    return render(r'''
+【全局价值层 Prompt】
+{{global_prompt}}
+
+【当前场景层 Prompt】
+{{scene_prompt}}
+
+【用户 NewTablets 档案 JSON】
+{{profile_json}}
+
+【本模块近期上下文 JSON】
+{{recent_context_json}}
+
+【输出格式 Prompt】
+{{output_prompt}}
+
+【当前场景】{{scene}}
+【输出模式】{{output_mode}}
+【用户输入】
+{{user_input}}
+''', <String, String>{
+      'global_prompt': global,
+      'scene_prompt': scenePrompt,
+      'profile_json': profileJson,
+      'recent_context_json': recentContextJson,
+      'output_prompt': output,
+      'scene': scene,
+      'output_mode': outputMode,
+      'user_input': userInput,
+    });
+  }
+
   Future<void> _backupCurrent(String id) async {
     final current = ((await _kv.getString(_key(id))) ?? '').trim();
     if (current.isEmpty) return;
