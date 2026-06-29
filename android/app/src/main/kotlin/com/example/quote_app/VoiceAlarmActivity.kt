@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v38_prompt_safe_fast_short_start_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：闹钟播报不被噪声打断，播报后长聆听窗口并快速确认短真人语音"
+  private val batchChatPipelineVersion = "chat_input_v39_safer_commands_user_background_configured_silence_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：关闭指令更严格，允许切后台，严格按配置静音时长提交"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -322,18 +322,11 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onStop() {
     super.onStop()
-    // If OEM/task switching hides the full-screen alarm while it is still ringing,
-    // ask the foreground service to bring the same alarm UI back.  This keeps the
-    // user from getting stranded after the app briefly goes to background.
+    // Respect the user's choice to switch to another app.  The foreground ringing
+    // service/notification keeps the alarm accessible instead of forcing the
+    // full-screen Activity back to the front on every background transition.
     restoreFullScreenRunnable?.let { speechHandler.removeCallbacks(it) }
-    restoreFullScreenRunnable = Runnable {
-      restoreFullScreenRunnable = null
-      if (!destroyed && !isFinishing) {
-        logVoice("alarm.fullscreen.restore", "activity stopped while alarm may still be ringing; request full-screen restore", mapOf("pipeline" to batchChatPipelineVersion))
-        VoiceAlarmRingingService.restoreFullScreenIfRinging(applicationContext)
-      }
-    }
-    speechHandler.postDelayed(restoreFullScreenRunnable!!, 700L)
+    restoreFullScreenRunnable = null
     // Keep the voice assistant alive while the alarm is ringing in the background.
     // The foreground ringing service carries the microphone foreground-service type.
   }
@@ -1949,7 +1942,7 @@ class VoiceAlarmActivity : Activity() {
           if (now - lastStatusUiAt >= 1200L) {
             lastStatusUiAt = now
             val cachedSec = fallbackOut.size() / (sampleRate * 2.0)
-            val effectiveSilenceMs = if (speechStarted && cachedSec >= 12.0) minOf(autoSilenceMs, 2500L) else autoSilenceMs
+            val effectiveSilenceMs = autoSilenceMs
             runOnUiThread {
               if (!batchSubmitInProgress) {
                 val state = when {
@@ -1994,7 +1987,7 @@ class VoiceAlarmActivity : Activity() {
             speechStarted && lastSpeechAt > 0L -> lastSpeechAt
             else -> 0L
           }
-          val effectiveAutoSilenceMs = if (speechStarted && fallbackOut.size() / (sampleRate * 2.0) >= 12.0) minOf(autoSilenceMs, 2500L) else autoSilenceMs
+          val effectiveAutoSilenceMs = autoSilenceMs
           // Disabled by design. ChatGPT / Claude / Grok style voice input records one complete user utterance
           // and sends that complete audio once. Local rolling split was the root cause of missing tails.
           if (speechStarted && autoSubmit && silenceReferenceAt > 0L && now - silenceReferenceAt >= effectiveAutoSilenceMs) {
@@ -4667,9 +4660,15 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isStopCommand(text: String): Boolean {
     val normalized = normalizeSpeechText(text)
-    return listOf("关闭", "停止", "关掉", "结束闹钟", "停掉闹钟", "不响了", "不要响", "别响", "停", "关").any {
-      text.contains(it) || normalized.contains(normalizeSpeechText(it))
-    }
+    val explicitStopPhrases = listOf(
+      "关闭闹钟", "关掉闹钟", "停止闹钟", "结束闹钟", "停掉闹钟",
+      "关闭这个闹钟", "关掉这个闹钟", "停止这个闹钟", "闹钟关闭", "闹钟停止",
+      "不响了", "不要响", "别响了", "别再响", "取消闹钟"
+    )
+    if (explicitStopPhrases.any { text.contains(it) || normalized.contains(normalizeSpeechText(it)) }) return true
+    // Avoid treating an arbitrary single "关"/"停" inside normal speech as a destructive command.
+    val compact = normalized.trim()
+    return compact in setOf("关闭", "停止", "关掉", "停掉", "别响", "不响")
   }
 
   private fun isSnoozeCommand(text: String): Boolean {
