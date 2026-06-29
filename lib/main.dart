@@ -352,6 +352,8 @@ class _RootShellState extends State<RootShell> {
   final GlobalAiSettings _drawerAiSettings = GlobalAiSettings();
   final UnifiedAiService _drawerAiService = UnifiedAiService();
   final ScrollController _drawerScrollController = ScrollController();
+  final TextEditingController _drawerSearchController = TextEditingController();
+  String _drawerSearchQuery = '';
 
   void _resetDrawerScrollToTop() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -393,6 +395,7 @@ class _RootShellState extends State<RootShell> {
   @override
   void dispose() {
     _drawerScrollController.dispose();
+    _drawerSearchController.dispose();
     super.dispose();
   }
 
@@ -844,6 +847,45 @@ class _RootShellState extends State<RootShell> {
     return String.fromCharCodes(clean.runes.take(maxChars));
   }
 
+
+  List<_DrawerEntrySpec> _filterDrawerEntries(List<_DrawerEntrySpec> entries) {
+    final q = _drawerSearchQuery.trim().toLowerCase();
+    if (q.isEmpty) return entries;
+    return entries.where((e) {
+      final haystack = '${e.title}\n${e.subtitle}\n${e.badgeText}'.toLowerCase();
+      return haystack.contains(q);
+    }).toList(growable: false);
+  }
+
+  Widget _buildDrawerSearchBox(int resultCount) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: _drawerSearchController,
+        onChanged: (value) => setState(() => _drawerSearchQuery = value),
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: _drawerSearchQuery.trim().isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () {
+                    _drawerSearchController.clear();
+                    setState(() => _drawerSearchQuery = '');
+                  },
+                ),
+          hintText: '搜索模块：新榜 / New Tablets / 尼采',
+          helperText: _drawerSearchQuery.trim().isEmpty ? '新榜已固定置顶；其余模块仍随机展示' : '找到 $resultCount 个模块',
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.72),
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.white.withOpacity(0.8))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.white.withOpacity(0.8))),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDrawerHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
@@ -926,7 +968,8 @@ class _RootShellState extends State<RootShell> {
       const SettingsPage(),
     ];
     final baseEntries = _drawerEntries();
-    final entries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
+    final randomizedEntries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
+    final entries = _filterDrawerEntries(randomizedEntries);
     return Scaffold(
       onDrawerChanged: (opened) {
         if (!mounted) return;
@@ -946,6 +989,8 @@ class _RootShellState extends State<RootShell> {
           setState(() {
             _drawerStyleSeed = nextSeed;
             _drawerRevealSeed = nextSeed ^ 0x31AF09;
+            _drawerSearchQuery = '';
+            _drawerSearchController.clear();
           });
         }
       },
@@ -1019,6 +1064,13 @@ class _RootShellState extends State<RootShell> {
                             children: [
                               _buildDrawerHeader(),
                               SizedBox(height: 8 + bgRandom.nextInt(8).toDouble()),
+                              _buildDrawerSearchBox(entries.length),
+                              if (entries.isEmpty)
+                                Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.72), borderRadius: BorderRadius.circular(22)),
+                                  child: const Text('没有匹配的模块，请换一个关键词。', style: TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w700)),
+                                ),
                               for (var i = 0; i < entries.length; i++)
                                 Padding(
                                   padding: EdgeInsets.only(
