@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/kv_dao.dart';
 import '../pages/ai_prompt_settings_page.dart';
+import 'self_worth_ai_ai_service.dart';
 import 'self_worth_ai_engine.dart';
 import 'self_worth_ai_prompt_config.dart';
 
@@ -20,15 +21,19 @@ class _SelfWorthAiHomePageState extends State<SelfWorthAiHomePage> with TickerPr
   late final TabController _tab;
   final KeyValueDao _kv = KeyValueDao();
   final SelfWorthAiEngine _engine = const SelfWorthAiEngine();
+  final SelfWorthAiService _aiService = SelfWorthAiService();
   final TextEditingController _eventCtrl = TextEditingController(text: '今天老板没有表扬我，我就开始怀疑自己是不是不够好。');
   final TextEditingController _reflectionCtrl = TextEditingController();
   String _scene = 'external_validation';
   String _coachOutput = '';
   final Set<String> _completed = <String>{};
+  final Set<String> _completedFeatures = <String>{};
   final List<_EvidenceRecord> _evidence = <_EvidenceRecord>[];
   final Map<String, double> _sourceScores = <String, double>{};
   String _featureModuleFilter = '全部';
   bool _loading = true;
+  bool _generating = false;
+  String _lastCoachSource = '本地行动引擎';
   final Map<String, double> _metrics = <String, double>{
     '自尊稳定度': 0.46,
     '自我一致度': 0.52,
@@ -120,6 +125,7 @@ class _SelfWorthAiHomePageState extends State<SelfWorthAiHomePage> with TickerPr
       final metrics = decoded['metrics'];
       final sources = decoded['source_scores'];
       final evidence = decoded['evidence'];
+      final completedFeatures = decoded['completed_features'];
       if (!mounted) return;
       setState(() {
         if (metrics is Map) {
@@ -141,6 +147,11 @@ class _SelfWorthAiHomePageState extends State<SelfWorthAiHomePage> with TickerPr
             ..clear()
             ..addAll(evidence.whereType<Map>().map(_EvidenceRecord.fromJson));
         }
+        if (completedFeatures is List) {
+          _completedFeatures
+            ..clear()
+            ..addAll(completedFeatures.map((e) => e.toString()));
+        }
         _loading = false;
       });
     } catch (_) {
@@ -153,8 +164,38 @@ class _SelfWorthAiHomePageState extends State<SelfWorthAiHomePage> with TickerPr
       'metrics': _metrics,
       'source_scores': _sourceScores,
       'evidence': _evidence.map((e) => e.toJson()).toList(growable: false),
+      'completed_features': _completedFeatures.toList(growable: false),
     };
     await _kv.setString(_stateKey, jsonEncode(payload));
+  }
+
+
+  Future<void> _generateCoachWithAi() async {
+    final input = _eventCtrl.text.trim();
+    if (input.isEmpty) return;
+    setState(() => _generating = true);
+    try {
+      final result = await _aiService.generate(
+        userInput: input,
+        scene: _scene,
+        profileJson: jsonEncode(<String, Object?>{
+          'metrics': _metrics,
+          'source_scores': _sourceScores,
+          'completed_features': _completedFeatures.toList(growable: false),
+        }),
+        recentContextJson: jsonEncode(<String, Object?>{
+          'evidence': _evidence.take(12).map((e) => e.toJson()).toList(growable: false),
+        }),
+      );
+      if (!mounted) return;
+      setState(() {
+        _scene = result.scene;
+        _coachOutput = result.markdown;
+        _lastCoachSource = result.usedAi ? 'AI 生成' : '本地行动引擎';
+      });
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
   }
 
   String _buildCoachOutput(String event, String scene) {
@@ -384,7 +425,9 @@ $action
         const SizedBox(height: 12),
         TextField(controller: _eventCtrl, minLines: 4, maxLines: 8, decoration: const InputDecoration(labelText: '写下一个现实事件', border: OutlineInputBorder())),
         const SizedBox(height: 12),
-        FilledButton.icon(onPressed: () => setState(() => _coachOutput = _buildCoachOutput(_eventCtrl.text.trim(), _scene)), icon: const Icon(Icons.auto_awesome), label: const Text('生成自尊行动卡')),
+        FilledButton.icon(onPressed: _generating ? null : _generateCoachWithAi, icon: Icon(_generating ? Icons.hourglass_top : Icons.auto_awesome), label: Text(_generating ? '正在生成...' : '生成自尊行动卡')),
+        const SizedBox(height: 6),
+        Text('生成来源：$_lastCoachSource', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
         const SizedBox(height: 12),
         _markdownLike(_coachOutput),
         const SizedBox(height: 12),
@@ -401,6 +444,7 @@ $action
     return ListView(padding: const EdgeInsets.all(16), children: [
       _section('功能总控台', '这里直接读取 self_worth_ai_engine.dart 的产品功能注册表，把产品设计方案中的全部子功能拆成可进入、可提问、可生成行动卡、可沉淀证据的练习单元。'),
       _coverageAuditCard(),
+      _nextRecommendedCard(),
       DropdownButtonFormField<String>(
         value: _featureModuleFilter,
         decoration: const InputDecoration(labelText: '按模块筛选', border: OutlineInputBorder()),
@@ -446,6 +490,38 @@ $action
     return moduleId;
   }
 
+  SelfWorthProgressReport _buildProgressReport() => _engine.buildProgressReport(
+        completedFeatureIds: _completedFeatures,
+        metrics: _metrics,
+        sourceScores: _sourceScores,
+      );
+
+  Widget _nextRecommendedCard() {
+    final report = _buildProgressReport();
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFF0FDF4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22), side: const BorderSide(color: Color(0xFFBBF7D0))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('下一步推荐 · 已完成 ${report.completedFeatures}/${report.totalFeatures}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFF14532D))),
+          const SizedBox(height: 8),
+          Text(report.summary, style: const TextStyle(color: Color(0xFF166534), height: 1.45)),
+          const SizedBox(height: 8),
+          ...report.recommendations.map((f) => ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(f.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('${_registryModuleTitle(f.moduleId)} · ${f.goal}'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                onTap: () => _startRegistryFeature(f),
+              )),
+        ]),
+      ),
+    );
+  }
+
   Widget _registryFeatureCard(SelfWorthFeatureSpec f) => Card(
         elevation: 0,
         color: Colors.white,
@@ -456,6 +532,7 @@ $action
             Row(children: [
               Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: const Color(0xFFEDE9FE), borderRadius: BorderRadius.circular(999)), child: Text(_registryModuleTitle(f.moduleId), style: const TextStyle(color: Color(0xFF5B21B6), fontSize: 12, fontWeight: FontWeight.w800))),
               const Spacer(),
+              Checkbox(value: _completedFeatures.contains(f.id), onChanged: (v) => _toggleRegistryFeatureDone(f, v ?? false)),
               TextButton(onPressed: () => _startRegistryFeature(f), child: const Text('进入练习')),
             ]),
             Text(f.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
@@ -474,14 +551,27 @@ $action
       );
 
   void _startRegistryFeature(SelfWorthFeatureSpec f) {
-    final scene = _engine.sceneForFeature(f);
     final input = '${f.title}：输入 ${f.inputs.join('、')}；目标 ${f.goal}。';
+    final result = _engine.runFeature(feature: f, userInput: input);
     setState(() {
-      _scene = scene;
+      _scene = result.scene;
       _eventCtrl.text = input;
-      _coachOutput = _engine.localActionCard(scene: scene, userInput: input, feature: f);
+      _coachOutput = result.markdown;
+      _lastCoachSource = '功能引擎：${result.outputMode}';
     });
     _tab.animateTo(3);
+  }
+
+  void _toggleRegistryFeatureDone(SelfWorthFeatureSpec f, bool done) {
+    setState(() {
+      if (done) {
+        _completedFeatures.add(f.id);
+        _evidence.insert(0, _EvidenceRecord(DateTime.now(), _registryModuleTitle(f.moduleId), '完成子功能：${f.title}；行动：${f.actions.join(' / ')}'));
+      } else {
+        _completedFeatures.remove(f.id);
+      }
+    });
+    _saveState();
   }
 
   Widget _journeyPage() => ListView(padding: const EdgeInsets.all(16), children: [
@@ -505,6 +595,7 @@ $action
 
   Widget _evidencePage() => ListView(padding: const EdgeInsets.all(16), children: [
         _section('稳定自尊证据库', '这里不记录“我超过了多少人”，只记录我如何更真实、更负责、更能接纳、更少被外界评价操控。'),
+        _progressReportCard(),
         if (_evidence.isEmpty) _section('暂无证据', '去 AI 教练页完成一个小行动，并写一句复盘。'),
         ..._evidence.map((e) => ListTile(
               tileColor: Colors.white,
@@ -514,6 +605,30 @@ $action
               trailing: Text('${e.time.month}/${e.time.day}'),
             )),
       ]);
+
+  Widget _progressReportCard() {
+    final report = _buildProgressReport();
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22), side: const BorderSide(color: Color(0xFFE5E7EB))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('自尊成长进度报告', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: report.completionRatio, minHeight: 8, borderRadius: BorderRadius.circular(999)),
+          const SizedBox(height: 8),
+          Text('完成 ${report.completedFeatures}/${report.totalFeatures} 个子功能 · ${(report.completionRatio * 100).round()}%'),
+          const SizedBox(height: 8),
+          Text('主要自尊来源：${report.topSelfWorthSources.join('、')}', style: const TextStyle(color: Color(0xFF475569))),
+          Text('需要照顾的指标：${report.lowMetrics.isEmpty ? '暂无明显低项' : report.lowMetrics.join('、')}', style: const TextStyle(color: Color(0xFF475569))),
+          const SizedBox(height: 8),
+          Text(report.summary, style: const TextStyle(height: 1.45, color: Color(0xFF334155))),
+        ]),
+      ),
+    );
+  }
 
   Widget _prompts() => ListView(padding: const EdgeInsets.all(16), children: [
         _section('已接入 AI 提示词统一配置中心', '点击右上角调节按钮，或下方按钮，可编辑本模块所有全局层、模块层、场景层、输出格式层 Prompt。覆盖值保存在 ai_prompt.self_worth_ai.*，与其他模块隔离。'),
