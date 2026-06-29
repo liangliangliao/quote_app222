@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v34_ai_handoff_and_barge_confirm_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：AI/闹钟播报后统一严格窗口，背景音乐只允许超强近端插话，空识别自动丢弃"
+  private val batchChatPipelineVersion = "chat_input_v35_signal_barge_recovery_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：AI/闹钟播报后统一严格窗口，背景音乐允许连续近端真人插话唤醒并空识别自动丢弃"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1395,7 +1395,7 @@ class VoiceAlarmActivity : Activity() {
             batchCurrentCachedSeconds = 0.0
             batchCurrentSpeechDetected = false
             batchCurrentConfirmedSpeech = false
-            logVoice("batch.capture.invalidatedByPlayback", "discard current batch capture because app speaker state changed", mapOf("cachedBytes" to cachedBytes, "captureEpoch" to captureEpoch, "currentEpoch" to batchSpeakerPlaybackEpoch, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+            logVoice("batch.capture.invalidatedByPlayback", "discard current batch capture because app speaker state changed", mapOf("cachedBytes" to cachedBytes, "captureEpoch" to captureEpoch, "currentEpoch" to batchSpeakerPlaybackEpoch, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
             runOnUiThread {
               updateBatchSubmitButton(false, 0.0)
               setBatchStatus("检测到闹钟/AI 播报开始或结束：已丢弃当前录音缓存，避免把播报声转成用户文字；播报结束后请重新说。")
@@ -1411,7 +1411,7 @@ class VoiceAlarmActivity : Activity() {
             val cachedBeforeSwitch = fallbackOut.size()
             if (speechStarted && cachedBeforeSwitch >= minBytes) {
               submittedByPlaybackInterrupt = true
-              logVoice("batch.capture.speakerMaskSubmit", "playback guard became active after confirmed speech; submit cached user utterance before masking speaker frames", mapOf("cachedBytes" to cachedBeforeSwitch, "cachedSeconds" to batchCurrentCachedSeconds, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+              logVoice("batch.capture.speakerMaskSubmit", "playback guard became active after confirmed speech; submit cached user utterance before masking speaker frames", mapOf("cachedBytes" to cachedBeforeSwitch, "cachedSeconds" to batchCurrentCachedSeconds, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
               runOnUiThread {
                 updateBatchSubmitButton(true, batchCurrentCachedSeconds)
                 setBatchStatus("播报/回声保护已启动，但你的语音已确认：先提交当前录音，再屏蔽后续扬声器帧。")
@@ -1449,7 +1449,7 @@ class VoiceAlarmActivity : Activity() {
             batchCurrentCachedSeconds = 0.0
             batchCurrentSpeechDetected = false
             batchCurrentConfirmedSpeech = false
-            logVoice("batch.capture.speakerMaskReset", "playback echo guard became active; discard all current audio instead of submitting speaker-prone cache", mapOf("cachedBytes" to cachedBeforeSwitch, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+            logVoice("batch.capture.speakerMaskReset", "playback echo guard became active; discard all current audio instead of submitting speaker-prone cache", mapOf("cachedBytes" to cachedBeforeSwitch, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
             runOnUiThread {
               updateBatchSubmitButton(false, 0.0)
               setBatchStatus("检测到闹钟/AI 播报：本次麦克风缓存已作废，播报声音不会写入转文字音频；请等播报结束后再说。")
@@ -1525,7 +1525,7 @@ class VoiceAlarmActivity : Activity() {
             val playbackActiveForBargeIn = speaking || alarmVoicePlaying || alarmSignalPlaying
             val signalOnlyPlayback = alarmSignalPlaying && !speaking && !alarmVoicePlaying
             val strongBargeIn = (if (signalOnlyPlayback) hasBatchAlarmSignalBargeInSpeech(level, bargeInShape, noiseRms) else hasBatchBargeInSpeech(level, bargeInShape, noiseRms)) && playbackActiveForBargeIn
-            val requiredBargeInHits = if (signalOnlyPlayback) 8 else 4
+            val requiredBargeInHits = if (signalOnlyPlayback) 6 else 4
             playbackBargeInHitCount = if (strongBargeIn) (playbackBargeInHitCount + 1).coerceAtMost(16) else 0
             if (playbackBargeInHitCount >= requiredBargeInHits) {
               logVoice("batch.bargeIn.detected", "dominant near-end user speech detected while app speaker/music is active; stop playback and discard speaker frames before clean capture", mapOf("rms" to level.rms, "peak" to level.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "hits" to playbackBargeInHitCount, "requiredHits" to requiredBargeInHits, "signalOnly" to signalOnlyPlayback, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
@@ -1561,7 +1561,7 @@ class VoiceAlarmActivity : Activity() {
             }
             if (speechStarted && fallbackOut.size() >= minBytes) {
               submittedByPlaybackInterrupt = true
-              logVoice("batch.speakerFrame.masked.submit", "speaker/echo-guard frame arrived after confirmed speech; submit cached user utterance instead of resetting it", mapOf("rms" to level.rms, "peak" to level.peak, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to batchCurrentCachedSeconds, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+              logVoice("batch.speakerFrame.masked.submit", "speaker/echo-guard frame arrived after confirmed speech; submit cached user utterance instead of resetting it", mapOf("rms" to level.rms, "peak" to level.peak, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to batchCurrentCachedSeconds, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
               runOnUiThread {
                 updateBatchSubmitButton(true, batchCurrentCachedSeconds)
                 setBatchStatus("检测到播报/回声帧，但已缓存到你的完整语音：正在提交当前录音，后续扬声器帧不会进入 STT。")
@@ -1569,7 +1569,7 @@ class VoiceAlarmActivity : Activity() {
               break
             }
             if (fallbackOut.size() > 0 || out.size() > 0 || preRollBytes > 0 || speechStarted || softSpeechStarted || activityStarted || candidateStarted) {
-              logVoice("batch.speakerFrame.masked.reset", "speaker/echo-guard frame detected; discard current cache so prompt audio is not submitted as user speech", mapOf("rms" to level.rms, "peak" to level.peak, "cachedBytes" to fallbackOut.size(), "strictBytes" to out.size(), "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+              logVoice("batch.speakerFrame.masked.reset", "speaker/echo-guard frame detected; discard current cache so prompt audio is not submitted as user speech", mapOf("rms" to level.rms, "peak" to level.peak, "cachedBytes" to fallbackOut.size(), "strictBytes" to out.size(), "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
             }
             fallbackOut.reset()
             out.reset()
@@ -1603,7 +1603,7 @@ class VoiceAlarmActivity : Activity() {
             batchCurrentConfirmedSpeech = false
             if (now - batchPlaybackBlockedStatusAt >= 1200L) {
               batchPlaybackBlockedStatusAt = now
-              logVoice("batch.speakerFrame.masked", "speaker/echo-guard frame ignored; waiting for clean user speech", mapOf("rms" to level.rms, "peak" to level.peak, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+              logVoice("batch.speakerFrame.masked", "speaker/echo-guard frame ignored; waiting for clean user speech", mapOf("rms" to level.rms, "peak" to level.peak, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
               runOnUiThread {
                 updateBatchSubmitButton(false, 0.0)
                 setBatchStatus("闹钟/AI 播报或回声冷却中：录音已暂停，等播报/回声冷却结束后再开始。")
@@ -2129,13 +2129,16 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun hasBatchAlarmSignalBargeInSpeech(level: AudioLevel, shape: AudioVoiceShape, noiseRms: Double): Boolean {
-    // Background music can contain singer vocals that look speech-like.  While only
-    // the alarm signal/music is playing, require an ultra-close near-end voice for
-    // several consecutive frames before stopping playback; otherwise keep masking
-    // the speaker frames instead of feeding them to STT.
-    val voiceShapeOk = shape.voicedScore >= 80 && shape.zcrPermille in 12..170 && shape.crestX100 in 130..1700
-    val ultraCloseEnergy = level.rms >= maxOf(4200.0, noiseRms * 36.0).toInt() && level.peak >= maxOf(15000, (noiseRms * 140.0).toInt())
-    return voiceShapeOk && ultraCloseEnergy
+    // Background music can contain singer vocals that look speech-like, so these
+    // frames are still masked from STT until a barge-in is confirmed.  The previous
+    // ultra-close gate was too strict: logs showed real user speech around
+    // rms≈900-1100/peak≈4300 was repeatedly masked while music stayed active.  Use
+    // a continuous near-end speech gate here, then stop the music and restart a
+    // clean microphone capture instead of submitting any mixed music/user frames.
+    val voiceShapeOk = shape.voicedScore >= 45 && shape.zcrPermille in 8..230 && shape.crestX100 in 120..2600
+    val nearMicEnergy = level.rms >= maxOf(700.0, noiseRms * 7.0).toInt() && level.peak >= maxOf(2200, (noiseRms * 28.0).toInt())
+    val clearPeakEnergy = level.rms >= maxOf(850.0, noiseRms * 8.0).toInt() && level.peak >= maxOf(4200, (noiseRms * 42.0).toInt())
+    return voiceShapeOk && (nearMicEnergy || clearPeakEnergy)
   }
 
   private fun hasBatchSoftSpeechEnergy(level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
@@ -4342,7 +4345,7 @@ class VoiceAlarmActivity : Activity() {
       val urgent = isStopCommand(merged) || isSnoozeCommand(merged)
       recoverStuckPlaybackStateIfNeeded()
       if (isPlaybackActiveForSpeechGate() && !urgent) {
-        logVoice("batch.aiDuringPlayback.allowed", "send confirmed user transcript to AI while playback is active; playback echo filtering remains enabled", mapOf("chars" to merged.length, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "pipeline" to batchChatPipelineVersion))
+        logVoice("batch.aiDuringPlayback.allowed", "send confirmed user transcript to AI while playback is active; playback echo filtering remains enabled", mapOf("chars" to merged.length, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
       }
       if (shouldHoldBatchAiCommit(urgent)) {
         transcriptView?.text = "非实时识别结果：$merged\n（严格单轮模式：当前文字准备发送给 AI，录音暂停）"
