@@ -734,9 +734,11 @@ class _RootShellState extends State<RootShell> {
   List<_DrawerEntrySpec> _filterDrawerEntries(List<_DrawerEntrySpec> source, String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return source;
+    final keywords = q.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList(growable: false);
     return source.where((entry) {
-      final haystack = '${entry.title} ${entry.subtitle} ${entry.badgeText}'.toLowerCase();
-      return haystack.contains(q) || q.runes.every((r) => haystack.contains(String.fromCharCode(r)));
+      final haystack = [entry.title, entry.subtitle, entry.badgeText].join(' ').toLowerCase();
+      return keywords.every((keyword) =>
+          haystack.contains(keyword) || keyword.runes.every((r) => haystack.contains(String.fromCharCode(r))));
     }).toList(growable: false);
   }
 
@@ -926,6 +928,31 @@ class _RootShellState extends State<RootShell> {
     );
   }
 
+
+  Widget _buildDrawerModuleStats({required int totalCount, required int visibleCount}) {
+    final searching = _drawerSearchQuery.trim().isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.64),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.9)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.widgets_outlined, size: 17, color: Color(0xFF4F46E5)),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              searching ? '当前共 $totalCount 个模块 · 匹配 $visibleCount 个' : '当前共 $totalCount 个模块',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF374151)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -1029,12 +1056,14 @@ class _RootShellState extends State<RootShell> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _buildDrawerHeader(),
+                              _buildDrawerModuleStats(totalCount: baseEntries.length, visibleCount: entries.length),
+                              const SizedBox(height: 10),
                               TextField(
                                 controller: _drawerSearchController,
                                 onChanged: (value) => setState(() => _drawerSearchQuery = value),
                                 textInputAction: TextInputAction.search,
                                 decoration: InputDecoration(
-                                  hintText: '搜索模块 / 关键词',
+                                  hintText: '搜索模块标题 / 简介 / 关键词',
                                   prefixIcon: const Icon(Icons.search, color: Color(0xFF4F46E5)),
                                   suffixIcon: _drawerSearchQuery.trim().isEmpty
                                       ? null
