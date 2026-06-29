@@ -9,6 +9,7 @@ import '../data/kv_dao.dart';
 /// 与其他模块完全隔离。
 class NewTabletsPromptConfig {
   static const String moduleId = 'new_tablets';
+  static const String moduleName = '新榜 New Tablets';
 
   static const String globalId = 'nt_global_value';
   static const String sceneProcrastinationId = 'nt_scene_procrastination';
