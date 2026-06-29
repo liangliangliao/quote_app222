@@ -67,8 +67,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v29_immediate_post_playback_resume_20260628"
-  private val batchChatPipelineSummary = "自动待命多轮录音：播报结束保留已打开麦克风并快速恢复，短冷却后立即接收用户开头"
+  private val batchChatPipelineVersion = "chat_input_v30_post_playback_recorder_refresh_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：播报结束短暂保留麦克风后主动刷新到干净录音源，避免短句无声漏检"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -217,6 +217,7 @@ class VoiceAlarmActivity : Activity() {
           alarmPlaybackWatchdogRunnable = null
           markPostPlaybackHandoff(700L)
           resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报刚结束：非实时录音已保持就绪，短暂冷却后立即接收你接下来的开头。", cooldownMs = 80L, preserveOpenRecorder = true)
+          scheduleBatchRecorderRefreshAfterPlayback()
           if (speechBuffer.isNotBlank()) {
             scheduleBufferedSpeechProcessing(350L)
           }
@@ -3593,6 +3594,7 @@ class VoiceAlarmActivity : Activity() {
       alarmVoicePlaying = false
       markPostPlaybackHandoff(700L)
       resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报同步保护超时结束：非实时录音已保持就绪，短暂冷却后恢复。", cooldownMs = 80L, preserveOpenRecorder = true)
+      scheduleBatchRecorderRefreshAfterPlayback()
       listenAgain(0L)
     }
     speechHandler.postDelayed(alarmPlaybackWatchdogRunnable!!, estimatedAlarmVoiceWatchdogMs())
@@ -3633,6 +3635,7 @@ class VoiceAlarmActivity : Activity() {
       alarmPlaybackWatchdogRunnable = null
       markPostPlaybackHandoff(700L)
       resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报状态超时结束：非实时录音已保持就绪，立即恢复。", cooldownMs = 80L, preserveOpenRecorder = true)
+      scheduleBatchRecorderRefreshAfterPlayback()
       listenAgain(0L)
     }
     speechHandler.postDelayed(alarmPlaybackWatchdogRunnable!!, estimatedAlarmVoiceWatchdogMs())
@@ -3665,6 +3668,18 @@ class VoiceAlarmActivity : Activity() {
   private fun isAlarmPlaybackSuppressed(): Boolean = System.currentTimeMillis() < suppressRecognitionUntil
 
   private fun isPostPlaybackHandoffActive(): Boolean = System.currentTimeMillis() < postPlaybackHandoffUntil
+
+  private fun scheduleBatchRecorderRefreshAfterPlayback(delayMs: Long = 140L) {
+    if (selectedSttMode() != "batch") return
+    speechHandler.postDelayed({
+      if (destroyed || selectedSttMode() != "batch" || speaking || alarmVoicePlaying) return@postDelayed
+      if (batchRecognitionInFlight || batchSubmitInProgress || batchPcmQueue.isNotEmpty() || batchCurrentConfirmedSpeech) return@postDelayed
+      batchSpeakerPlaybackEpoch += 1L
+      releaseContinuousAudioRecord()
+      logVoice("batch.postPlaybackRecorderRefresh", "refresh recorder shortly after playback so clean user speech is captured from normal mic source", mapOf("delayMs" to delayMs, "pipeline" to batchChatPipelineVersion))
+      listenAgain(0L)
+    }, delayMs)
+  }
 
   private fun markPostPlaybackHandoff(durationMs: Long = 900L) {
     val now = System.currentTimeMillis()
@@ -3828,6 +3843,7 @@ class VoiceAlarmActivity : Activity() {
     speaking = false
     markPostPlaybackHandoff(700L)
     resetBatchCurrentCaptureForSpeakerPlayback("AI 语音播报刚结束：非实时录音已保持就绪，短暂冷却后立即接收你接下来的开头。", cooldownMs = 80L, preserveOpenRecorder = true)
+    scheduleBatchRecorderRefreshAfterPlayback()
     if (speechBuffer.isNotBlank()) {
       scheduleBufferedSpeechProcessing(350L)
       if (restart) runOnUiThread { listenAgain(0L) }
