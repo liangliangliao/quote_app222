@@ -45,6 +45,41 @@ class NewTabletsDao {
     practiceRecords: await loadPracticeRecords(),
   );
 
+
+
+  Future<String> exportStateJson() async {
+    final state = await loadState();
+    return jsonEncode(<String, dynamic>{
+      'module': 'new_tablets',
+      'schema_version': 1,
+      'exported_at_ms': DateTime.now().millisecondsSinceEpoch,
+      'old_tablets': state.oldTablets.map((e) => e.toJson()).toList(growable: false),
+      'new_tablets': state.newTablets.map((e) => e.toJson()).toList(growable: false),
+      'commitments': state.commitments.map((e) => e.toJson()).toList(growable: false),
+      'rewrites': state.rewrites.map((e) => e.toJson()).toList(growable: false),
+      'daily_commands': state.dailyCommands.map((e) => e.toJson()).toList(growable: false),
+      'creative_outputs': state.creativeOutputs.map((e) => e.toJson()).toList(growable: false),
+      'practice_records': state.practiceRecords.map((e) => e.toJson()).toList(growable: false),
+    });
+  }
+
+  Future<void> importStateJson(String raw) async {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) throw const FormatException('New Tablets state JSON must be an object');
+    List<T> readList<T>(String key, T Function(Map<String, dynamic>) fromJson) {
+      final value = decoded[key];
+      if (value is! List) return <T>[];
+      return value.whereType<Map>().map((e) => fromJson(Map<String, dynamic>.from(e))).toList(growable: false);
+    }
+    await saveOldTablets(readList('old_tablets', OldTablet.fromJson));
+    await saveNewTablets(readList('new_tablets', NewTablet.fromJson));
+    await saveCommitments(readList('commitments', SovereignCommitment.fromJson));
+    await saveRewrites(readList('rewrites', BadConscienceRewrite.fromJson));
+    await saveDailyCommands(readList('daily_commands', DailyCommandRecord.fromJson));
+    await saveCreativeOutputs(readList('creative_outputs', CreativeOutputRecord.fromJson));
+    await savePracticeRecords(readList('practice_records', NewTabletsPracticeRecord.fromJson));
+  }
+
   Future<void> _saveList(String key, List<Map<String, dynamic>> list) => _kv.setString(key, jsonEncode(list));
 
   List<T> _decodeList<T>(String? raw, T Function(Map<String, dynamic>) fromJson) {
