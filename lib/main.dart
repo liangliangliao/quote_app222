@@ -64,6 +64,7 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
+import 'self_worth_ai/self_worth_ai_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -404,7 +405,6 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
-
     _DrawerEntrySpec(
       icon: Icons.change_circle_outlined,
       title: '成熟适应力罗盘 · Adaptation Compass',
@@ -665,6 +665,14 @@ class _RootShellState extends State<RootShell> {
       badgeText: '电影角色实验室',
       pageBuilder: (_) => const MovieRoleLabHomePage(),
     ),
+    _DrawerEntrySpec(
+      icon: Icons.self_improvement_outlined,
+      title: '真实自尊 SelfWorth AI',
+      subtitle: '第37模块 · 自尊地图 → 三层自尊 → 真实关系 → 六项实践 → 认可戒断 → 复原力 → 责任目标 → AI场景教练',
+      badgeText: '第37模块 · 基于《哈佛幸福课》第21集后半与第22集：从被认可走向被了解，用真实、责任、行动与接纳建立稳定自尊',
+      sequenceNumber: 37,
+      pageBuilder: (_) => const SelfWorthAiHomePage(),
+    ),
   ];
 
   @override
@@ -719,16 +727,18 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
-    final entries = List<_DrawerEntrySpec>.from(source);
-    if (entries.length <= 1) return entries;
-    final r = math.Random((seed ^ 0x6C8E9CF5).abs());
-    for (var i = entries.length - 1; i > 0; i--) {
-      final j = r.nextInt(i + 1);
-      final tmp = entries[i];
-      entries[i] = entries[j];
-      entries[j] = tmp;
+    final selfWorthEntry = source.where((e) => e.title == '真实自尊 SelfWorth AI').toList(growable: false);
+    final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI').toList(growable: false);
+    if (entries.length > 1) {
+      final r = math.Random((seed ^ 0x6C8E9CF5).abs());
+      for (var i = entries.length - 1; i > 0; i--) {
+        final j = r.nextInt(i + 1);
+        final tmp = entries[i];
+        entries[i] = entries[j];
+        entries[j] = tmp;
+      }
     }
-    return entries;
+    return <_DrawerEntrySpec>[...entries, ...selfWorthEntry];
   }
 
   Widget _buildDrawerEntryCard(_DrawerEntrySpec entry, int index, int totalCount) {
@@ -744,6 +754,7 @@ class _RootShellState extends State<RootShell> {
         subtitle: entry.subtitle,
         badgeText: entry.badgeText,
         index: index,
+        displayNumber: entry.sequenceNumber ?? index + 1,
         seed: _drawerStyleSeed,
         onTap: () {
           final navigator = Navigator.of(context);
@@ -1062,6 +1073,7 @@ class _DrawerEntrySpec {
   final String title;
   final String subtitle;
   final String badgeText;
+  final int? sequenceNumber;
   final WidgetBuilder pageBuilder;
 
   const _DrawerEntrySpec({
@@ -1069,6 +1081,7 @@ class _DrawerEntrySpec {
     required this.title,
     required this.subtitle,
     required this.badgeText,
+    this.sequenceNumber,
     required this.pageBuilder,
   });
 }
@@ -1291,6 +1304,7 @@ class _AnimatedDrawerEntryCard extends StatefulWidget {
   final String subtitle;
   final String badgeText;
   final int index;
+  final int displayNumber;
   final int seed;
   final VoidCallback onTap;
 
@@ -1301,6 +1315,7 @@ class _AnimatedDrawerEntryCard extends StatefulWidget {
     required this.subtitle,
     required this.badgeText,
     required this.index,
+    required this.displayNumber,
     required this.seed,
     required this.onTap,
   });
@@ -1659,7 +1674,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               Icon(widget.icon, color: Colors.white, size: 24),
               const SizedBox(height: 7),
-              Text('${widget.index + 1}'.padLeft(2, '0'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+              Text('${widget.displayNumber}'.padLeft(2, '0'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
             ]),
           ),
           const SizedBox(width: 14),
@@ -1688,7 +1703,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
         boxShadow: [BoxShadow(color: accent.withOpacity(.24 + pulse * .10), blurRadius: 25, offset: Offset(0, 12 + pulse * 5))],
       ),
       child: Stack(children: [
-        Positioned(right: -14, top: -18, child: Text('${widget.index + 1}', style: TextStyle(fontSize: 72, fontWeight: FontWeight.w900, color: Colors.white.withOpacity(.09), height: 1))),
+        Positioned(right: -14, top: -18, child: Text('${widget.displayNumber}', style: TextStyle(fontSize: 72, fontWeight: FontWeight.w900, color: Colors.white.withOpacity(.09), height: 1))),
         Positioned(right: 4, bottom: 4, child: Icon(widget.icon, size: 74, color: Colors.white.withOpacity(.08))),
         Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Row(children: [Container(width: 42, height: 42, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(.18), border: Border.all(color: Colors.white.withOpacity(.28))), child: Icon(widget.icon, color: Colors.white, size: 22)), const Spacer(), _badge(Colors.white, _badgeText, dark: false)]),
@@ -1775,7 +1790,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(widget.icon, color: Colors.white, size: 27),
             const SizedBox(height: 10),
-            Text('${widget.index + 1}', style: TextStyle(color: Colors.white.withOpacity(.58), fontWeight: FontWeight.w900)),
+            Text('${widget.displayNumber}', style: TextStyle(color: Colors.white.withOpacity(.58), fontWeight: FontWeight.w900)),
           ]),
         ),
         Expanded(
@@ -1970,7 +1985,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Stack(children: [
-        Positioned(top: 0, right: 0, child: Text('0${widget.index + 1}', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: accent.withOpacity(.18), height: 1))),
+        Positioned(top: 0, right: 0, child: Text('${widget.displayNumber}'.padLeft(2, '0'), style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: accent.withOpacity(.18), height: 1))),
         Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Row(children: [Icon(widget.icon, color: accent, size: 22), const SizedBox(width: 7), _badge(accent, _badgeText)]),
           const SizedBox(height: 14),
