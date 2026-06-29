@@ -24,6 +24,7 @@ class GlobalAiSettings {
   static const String movieRoleLabEpisodePromptKey = 'movie_role_lab_episode_prompt';
   static const String movieAnalysisPromptKey = 'movie_analysis_prompt';
   static const String drawerHeaderPromptKey = 'drawer_header_prompt';
+  static const String drawerHeaderAiEnabledKey = 'drawer_header_ai_enabled';
   static const String lifeNoteAnalysisPromptKey = 'life_note_analysis_prompt';
   static const String meditationDailyScriptPromptKey = 'meditation_daily_script_prompt';
   static const String meditationFeedbackPromptKey = 'meditation_feedback_prompt';
@@ -110,6 +111,16 @@ class GlobalAiSettings {
         key: voiceAlarmNightAssistantPromptKey,
         fallback: defaultVoiceAlarmNightAssistantPrompt,
       );
+
+
+  Future<bool> isDrawerHeaderAiEnabled() async {
+    final value = ((await _kvDao.getString(drawerHeaderAiEnabledKey)) ?? '').trim().toLowerCase();
+    return value == '1' || value == 'true' || value == 'yes' || value == 'on';
+  }
+
+  Future<void> setDrawerHeaderAiEnabled(bool enabled) async {
+    await _kvDao.setString(drawerHeaderAiEnabledKey, enabled ? '1' : '0');
+  }
 
   Future<Map<String, String>> getState() async {
     final global = await _configDao.getOne();
