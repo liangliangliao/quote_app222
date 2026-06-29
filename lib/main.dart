@@ -64,6 +64,8 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
+import 'new_tablets/new_tablets_home_page.dart';
+import 'self_worth_ai/self_worth_ai_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -348,6 +350,9 @@ class _RootShellState extends State<RootShell> {
   String _drawerAiTitle = '成长宇宙';
   String _drawerAiSubtitle = '每个模块都可呈现不同形态、节奏与光影';
   bool _drawerAiLoading = false;
+  bool _drawerHeaderAiEnabled = false;
+  String _drawerSearchQuery = '';
+  final TextEditingController _drawerSearchController = TextEditingController();
   final GlobalAiSettings _drawerAiSettings = GlobalAiSettings();
   final UnifiedAiService _drawerAiService = UnifiedAiService();
   final ScrollController _drawerScrollController = ScrollController();
@@ -392,6 +397,7 @@ class _RootShellState extends State<RootShell> {
   @override
   void dispose() {
     _drawerScrollController.dispose();
+    _drawerSearchController.dispose();
     super.dispose();
   }
 
@@ -404,7 +410,13 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
-
+    _DrawerEntrySpec(
+      icon: Icons.workspace_premium_outlined,
+      title: '新榜 New Tablets',
+      subtitle: '旧榜扫描 → 价值重估 → 谁在命令我 → 今日超克 → 主权承诺 → 坏良心转化 → 为创造而学习',
+      badgeText: '尼采式自我超克、价值重估与主权个体训练系统：更能命令自己，更能创造价值',
+      pageBuilder: (_) => const NewTabletsHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.change_circle_outlined,
       title: '成熟适应力罗盘 · Adaptation Compass',
@@ -665,6 +677,14 @@ class _RootShellState extends State<RootShell> {
       badgeText: '电影角色实验室',
       pageBuilder: (_) => const MovieRoleLabHomePage(),
     ),
+    _DrawerEntrySpec(
+      icon: Icons.self_improvement_outlined,
+      title: '真实自尊 SelfWorth AI',
+      subtitle: '第37模块 · 自尊地图 → 三层自尊 → 真实关系 → 六项实践 → 认可戒断 → 复原力 → 责任目标 → AI场景教练',
+      badgeText: '第37模块 · 基于《哈佛幸福课》第21集后半与第22集：从被认可走向被了解，用真实、责任、行动与接纳建立稳定自尊',
+      sequenceNumber: 37,
+      pageBuilder: (_) => const SelfWorthAiHomePage(),
+    ),
   ];
 
   @override
@@ -718,17 +738,27 @@ class _RootShellState extends State<RootShell> {
     try { SimpleBus.navIndex.value = _idx; } catch (_) {}
   }
 
+  bool _isPinnedDrawerEntry(_DrawerEntrySpec entry) {
+    // New Tablets is a newly added first-class module.  The drawer intentionally
+    // randomizes most module cards on every open, but that can make a new module
+    // look as if it disappeared in a long drawer.  Keep high-priority modules at
+    // the top and only shuffle the remaining entries.
+    return entry.title.startsWith('新榜 New Tablets');
+  }
+
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
-    final entries = List<_DrawerEntrySpec>.from(source);
-    if (entries.length <= 1) return entries;
-    final r = math.Random((seed ^ 0x6C8E9CF5).abs());
-    for (var i = entries.length - 1; i > 0; i--) {
-      final j = r.nextInt(i + 1);
-      final tmp = entries[i];
-      entries[i] = entries[j];
-      entries[j] = tmp;
+    final selfWorthEntry = source.where((e) => e.title == '真实自尊 SelfWorth AI').toList(growable: false);
+    final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI').toList(growable: false);
+    if (entries.length > 1) {
+      final r = math.Random((seed ^ 0x6C8E9CF5).abs());
+      for (var i = entries.length - 1; i > 0; i--) {
+        final j = r.nextInt(i + 1);
+        final tmp = entries[i];
+        entries[i] = entries[j];
+        entries[j] = tmp;
+      }
     }
-    return entries;
+    return <_DrawerEntrySpec>[...entries, ...selfWorthEntry];
   }
 
   Widget _buildDrawerEntryCard(_DrawerEntrySpec entry, int index, int totalCount) {
@@ -744,6 +774,7 @@ class _RootShellState extends State<RootShell> {
         subtitle: entry.subtitle,
         badgeText: entry.badgeText,
         index: index,
+        displayNumber: entry.sequenceNumber ?? index + 1,
         seed: _drawerStyleSeed,
         onTap: () {
           final navigator = Navigator.of(context);
@@ -758,11 +789,15 @@ class _RootShellState extends State<RootShell> {
     final requestId = ++_drawerHeaderRequestId;
     final seed = _drawerStyleSeed.toString();
     final localFallback = _localDrawerHeaderFallback(seed);
+    final aiEnabled = await _drawerAiSettings.isDrawerHeaderAiEnabled();
+    if (!mounted || requestId != _drawerHeaderRequestId) return;
     setState(() {
-      _drawerAiLoading = true;
+      _drawerHeaderAiEnabled = aiEnabled;
+      _drawerAiLoading = aiEnabled;
       _drawerAiTitle = localFallback.$1;
       _drawerAiSubtitle = localFallback.$2;
     });
+    if (!aiEnabled) return;
 
     try {
       final modulesThemeText = entries
@@ -826,6 +861,45 @@ class _RootShellState extends State<RootShell> {
     return String.fromCharCodes(clean.runes.take(maxChars));
   }
 
+
+  List<_DrawerEntrySpec> _filterDrawerEntries(List<_DrawerEntrySpec> entries) {
+    final q = _drawerSearchQuery.trim().toLowerCase();
+    if (q.isEmpty) return entries;
+    return entries.where((e) {
+      final haystack = '${e.title}\n${e.subtitle}\n${e.badgeText}'.toLowerCase();
+      return haystack.contains(q);
+    }).toList(growable: false);
+  }
+
+  Widget _buildDrawerSearchBox(int resultCount) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: _drawerSearchController,
+        onChanged: (value) => setState(() => _drawerSearchQuery = value),
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: _drawerSearchQuery.trim().isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () {
+                    _drawerSearchController.clear();
+                    setState(() => _drawerSearchQuery = '');
+                  },
+                ),
+          hintText: '搜索模块：新榜 / New Tablets / 尼采',
+          helperText: _drawerSearchQuery.trim().isEmpty ? '新榜已固定置顶；其余模块仍随机展示' : '找到 $resultCount 个模块',
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.72),
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.white.withOpacity(0.8))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.white.withOpacity(0.8))),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDrawerHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
@@ -887,10 +961,35 @@ class _RootShellState extends State<RootShell> {
                 Icon(_drawerAiLoading ? Icons.bolt_outlined : Icons.motion_photos_on_outlined, size: 16, color: const Color(0xFF4F46E5)),
                 const SizedBox(width: 6),
                 Text(
-                  _drawerAiLoading ? 'AI正在生成本次侧栏主题' : 'AI随机标题 · 多形态布局 · 模块差异化',
+                  _drawerAiLoading ? 'AI正在生成本次侧栏主题' : (_drawerHeaderAiEnabled ? 'AI随机标题 · 多形态布局 · 模块差异化' : 'AI侧栏主题已关闭 · 使用本地随机主题'),
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5)),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildDrawerModuleStats({required int totalCount, required int visibleCount}) {
+    final searching = _drawerSearchQuery.trim().isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.64),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.9)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.widgets_outlined, size: 17, color: Color(0xFF4F46E5)),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              searching ? '当前共 $totalCount 个模块 · 匹配 $visibleCount 个' : '当前共 $totalCount 个模块',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF374151)),
             ),
           ),
         ],
@@ -908,7 +1007,8 @@ class _RootShellState extends State<RootShell> {
       const SettingsPage(),
     ];
     final baseEntries = _drawerEntries();
-    final entries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
+    final randomizedEntries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
+    final entries = _filterDrawerEntries(randomizedEntries);
     return Scaffold(
       onDrawerChanged: (opened) {
         if (!mounted) return;
@@ -928,6 +1028,8 @@ class _RootShellState extends State<RootShell> {
           setState(() {
             _drawerStyleSeed = nextSeed;
             _drawerRevealSeed = nextSeed ^ 0x31AF09;
+            _drawerSearchQuery = '';
+            _drawerSearchController.clear();
           });
         }
       },
@@ -1000,7 +1102,38 @@ class _RootShellState extends State<RootShell> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _buildDrawerHeader(),
+                              _buildDrawerModuleStats(totalCount: baseEntries.length, visibleCount: entries.length),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _drawerSearchController,
+                                onChanged: (value) => setState(() => _drawerSearchQuery = value),
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: '搜索模块标题 / 简介 / 关键词',
+                                  prefixIcon: const Icon(Icons.search, color: Color(0xFF4F46E5)),
+                                  suffixIcon: _drawerSearchQuery.trim().isEmpty
+                                      ? null
+                                      : IconButton(
+                                          icon: const Icon(Icons.close),
+                                          onPressed: () {
+                                            _drawerSearchController.clear();
+                                            setState(() => _drawerSearchQuery = '');
+                                          },
+                                        ),
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.72),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                                ),
+                              ),
                               SizedBox(height: 8 + bgRandom.nextInt(8).toDouble()),
+                              _buildDrawerSearchBox(entries.length),
+                              if (entries.isEmpty)
+                                Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.72), borderRadius: BorderRadius.circular(22)),
+                                  child: const Text('没有匹配的模块，请换一个关键词。', style: TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w700)),
+                                ),
                               for (var i = 0; i < entries.length; i++)
                                 Padding(
                                   padding: EdgeInsets.only(
@@ -1062,6 +1195,7 @@ class _DrawerEntrySpec {
   final String title;
   final String subtitle;
   final String badgeText;
+  final int? sequenceNumber;
   final WidgetBuilder pageBuilder;
 
   const _DrawerEntrySpec({
@@ -1069,6 +1203,7 @@ class _DrawerEntrySpec {
     required this.title,
     required this.subtitle,
     required this.badgeText,
+    this.sequenceNumber,
     required this.pageBuilder,
   });
 }
@@ -1291,6 +1426,7 @@ class _AnimatedDrawerEntryCard extends StatefulWidget {
   final String subtitle;
   final String badgeText;
   final int index;
+  final int displayNumber;
   final int seed;
   final VoidCallback onTap;
 
@@ -1301,6 +1437,7 @@ class _AnimatedDrawerEntryCard extends StatefulWidget {
     required this.subtitle,
     required this.badgeText,
     required this.index,
+    required this.displayNumber,
     required this.seed,
     required this.onTap,
   });
@@ -1659,7 +1796,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               Icon(widget.icon, color: Colors.white, size: 24),
               const SizedBox(height: 7),
-              Text('${widget.index + 1}'.padLeft(2, '0'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+              Text('${widget.displayNumber}'.padLeft(2, '0'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
             ]),
           ),
           const SizedBox(width: 14),
@@ -1688,7 +1825,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
         boxShadow: [BoxShadow(color: accent.withOpacity(.24 + pulse * .10), blurRadius: 25, offset: Offset(0, 12 + pulse * 5))],
       ),
       child: Stack(children: [
-        Positioned(right: -14, top: -18, child: Text('${widget.index + 1}', style: TextStyle(fontSize: 72, fontWeight: FontWeight.w900, color: Colors.white.withOpacity(.09), height: 1))),
+        Positioned(right: -14, top: -18, child: Text('${widget.displayNumber}', style: TextStyle(fontSize: 72, fontWeight: FontWeight.w900, color: Colors.white.withOpacity(.09), height: 1))),
         Positioned(right: 4, bottom: 4, child: Icon(widget.icon, size: 74, color: Colors.white.withOpacity(.08))),
         Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Row(children: [Container(width: 42, height: 42, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(.18), border: Border.all(color: Colors.white.withOpacity(.28))), child: Icon(widget.icon, color: Colors.white, size: 22)), const Spacer(), _badge(Colors.white, _badgeText, dark: false)]),
@@ -1775,7 +1912,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(widget.icon, color: Colors.white, size: 27),
             const SizedBox(height: 10),
-            Text('${widget.index + 1}', style: TextStyle(color: Colors.white.withOpacity(.58), fontWeight: FontWeight.w900)),
+            Text('${widget.displayNumber}', style: TextStyle(color: Colors.white.withOpacity(.58), fontWeight: FontWeight.w900)),
           ]),
         ),
         Expanded(
@@ -1970,7 +2107,7 @@ class _AnimatedDrawerEntryCardState extends State<_AnimatedDrawerEntryCard> with
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Stack(children: [
-        Positioned(top: 0, right: 0, child: Text('0${widget.index + 1}', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: accent.withOpacity(.18), height: 1))),
+        Positioned(top: 0, right: 0, child: Text('${widget.displayNumber}'.padLeft(2, '0'), style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: accent.withOpacity(.18), height: 1))),
         Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Row(children: [Icon(widget.icon, color: accent, size: 22), const SizedBox(width: 7), _badge(accent, _badgeText)]),
           const SizedBox(height: 14),
