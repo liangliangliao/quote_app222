@@ -64,6 +64,7 @@ import 'woop_action_engine/woop_action_engine_home_page.dart';
 import 'realistic_positivity_os/realistic_positivity_os_home_page.dart';
 import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
+import 'self_worth_ai/self_worth_ai_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -406,6 +407,13 @@ class _RootShellState extends State<RootShell> {
   List<_DrawerEntrySpec> _drawerEntries() => [
 
     _DrawerEntrySpec(
+      icon: Icons.self_improvement_outlined,
+      title: '真实自尊 SelfWorth AI',
+      subtitle: '自尊地图 → 三层自尊 → 真实关系 → 六项实践 → 认可戒断 → 复原力 → 责任目标 → AI场景教练',
+      badgeText: '基于《哈佛幸福课》第21集后半与第22集：从被认可走向被了解，用真实、责任、行动与接纳建立稳定自尊',
+      pageBuilder: (_) => const SelfWorthAiHomePage(),
+    ),
+    _DrawerEntrySpec(
       icon: Icons.change_circle_outlined,
       title: '成熟适应力罗盘 · Adaptation Compass',
       subtitle: '事件输入 → 防御识别 → 现实检查 → 成熟替代 → 关系修复 → 四维平衡 → 成人发展 → 生成性贡献 → 长期复盘',
@@ -719,16 +727,18 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
-    final entries = List<_DrawerEntrySpec>.from(source);
-    if (entries.length <= 1) return entries;
-    final r = math.Random((seed ^ 0x6C8E9CF5).abs());
-    for (var i = entries.length - 1; i > 0; i--) {
-      final j = r.nextInt(i + 1);
-      final tmp = entries[i];
-      entries[i] = entries[j];
-      entries[j] = tmp;
+    final pinned = source.where((e) => e.title == '真实自尊 SelfWorth AI').toList(growable: false);
+    final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI').toList(growable: false);
+    if (entries.length > 1) {
+      final r = math.Random((seed ^ 0x6C8E9CF5).abs());
+      for (var i = entries.length - 1; i > 0; i--) {
+        final j = r.nextInt(i + 1);
+        final tmp = entries[i];
+        entries[i] = entries[j];
+        entries[j] = tmp;
+      }
     }
-    return entries;
+    return <_DrawerEntrySpec>[...pinned, ...entries];
   }
 
   Widget _buildDrawerEntryCard(_DrawerEntrySpec entry, int index, int totalCount) {
