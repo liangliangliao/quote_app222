@@ -264,6 +264,51 @@ $action
     _saveState();
   }
 
+
+  void _resetLocalState() {
+    _completed.clear();
+    _completedFeatures.clear();
+    _evidence.clear();
+    _sourceScores
+      ..clear()
+      ..addEntries(_sources.map((s) => MapEntry(s.name, s.value)));
+    _metrics
+      ..clear()
+      ..addAll(<String, double>{
+        '自尊稳定度': 0.46,
+        '自我一致度': 0.52,
+        '真实表达度': 0.38,
+        '外部认可依赖下降度': 0.31,
+        '关系互依度': 0.44,
+        '责任行动数': 0.40,
+      });
+    _scene = 'external_validation';
+    _eventCtrl.text = '今天老板没有表扬我，我就开始怀疑自己是不是不够好。';
+    _reflectionCtrl.clear();
+    _coachOutput = _buildCoachOutput(_eventCtrl.text, _scene);
+    _lastCoachSource = '本地行动引擎';
+  }
+
+  Future<void> _clearAllModuleData() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清空真实自尊模块数据？'),
+        content: const Text('这会清空本模块的自尊来源、指标、已完成子功能、证据库、输入状态，以及本模块在 AI 提示词配置中心保存的 Prompt 覆盖和备份。此操作不可撤销。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认清空')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _kv.setString(_stateKey, '');
+    await SelfWorthAiPromptConfig().clearAllPromptData();
+    if (!mounted) return;
+    setState(_resetLocalState);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已清空真实自尊 SelfWorth AI 模块数据'), behavior: SnackBarBehavior.floating));
+  }
+
   void _openPromptSettings([String? promptId]) {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => AiPromptSettingsPage(
@@ -633,6 +678,8 @@ $action
   Widget _prompts() => ListView(padding: const EdgeInsets.all(16), children: [
         _section('已接入 AI 提示词统一配置中心', '点击右上角调节按钮，或下方按钮，可编辑本模块所有全局层、模块层、场景层、输出格式层 Prompt。覆盖值保存在 ai_prompt.self_worth_ai.*，与其他模块隔离。'),
         FilledButton.icon(onPressed: () => _openPromptSettings(), icon: const Icon(Icons.tune_outlined), label: const Text('打开统一配置中心：真实自尊 SelfWorth AI')),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: _clearAllModuleData, icon: const Icon(Icons.delete_forever_outlined), label: const Text('一键清空本模块所有数据')),
         const SizedBox(height: 12),
         _section('全局价值层 Prompt', SelfWorthAiPromptConfig.globalValuePrompt),
         _section('模块层 Prompt', SelfWorthAiPromptConfig.modulePrompts.entries.map((e) => '【${SelfWorthAiPromptConfig.labels[e.key] ?? e.key}】${e.value}').join('\n\n')),
