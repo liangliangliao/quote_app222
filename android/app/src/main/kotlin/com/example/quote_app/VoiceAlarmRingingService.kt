@@ -27,6 +27,7 @@ import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
+import kotlin.random.Random
 import java.io.File
 
 class VoiceAlarmRingingService : Service() {
@@ -52,6 +53,8 @@ class VoiceAlarmRingingService : Service() {
     private const val ACTIVE_PAYLOAD_TTL_MS = 12L * 60L * 60L * 1000L
     const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
     const val ACTION_VOICE_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_END"
+    const val ACTION_SIGNAL_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_SIGNAL_PLAYBACK_START"
+    const val ACTION_SIGNAL_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_SIGNAL_PLAYBACK_END"
     @Volatile private var activePayload: String? = null
 
     @JvmStatic
@@ -213,6 +216,7 @@ class VoiceAlarmRingingService : Service() {
 
   private var voicePlayer: MediaPlayer? = null
   private var musicPlayer: MediaPlayer? = null
+  private var alarmSignalPlaybackActive = false
   private var alarmTts: TextToSpeech? = null
   private var alarmTtsReady = false
   private var pendingAlarmTts: Pair<String, Float>? = null
@@ -407,9 +411,25 @@ class VoiceAlarmRingingService : Service() {
     sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName).putExtra("text", currentVoiceText))
   }
 
+  private fun randomExistingPath(data: JSONObject, listKey: String, legacyKey: String): String {
+    val values = mutableListOf<String>()
+    val arr = data.optJSONArray(listKey)
+    if (arr != null) {
+      for (i in 0 until arr.length()) {
+        val path = arr.optString(i, "")
+        if (path.isNotBlank() && File(path).isFile) values.add(path)
+      }
+    }
+    val legacy = data.optString(legacyKey, "")
+    if (legacy.isNotBlank() && File(legacy).isFile) values.add(legacy)
+    return values.distinct().let { if (it.isEmpty()) "" else it[Random.nextInt(it.size)] }
+  }
+
   private fun startSignals(payload: String) {
     stopSignals()
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
+    alarmSignalPlaybackActive = true
+    sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", data.optBoolean("systemMusic", true) || data.optString("musicPath", "").isNotBlank() || data.optJSONArray("musicPaths")?.length()?.let { it > 0 } == true))
     logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
     requestAlarmAudioFocus()
     ensureAudibleAlarmVolume()
@@ -434,9 +454,9 @@ class VoiceAlarmRingingService : Service() {
         vibrator?.vibrate(pattern, 0)
       }
     }
-    val musicPath = data.optString("musicPath", "")
+    val musicPath = randomExistingPath(data, "musicPaths", "musicPath")
     currentMusicVolume = data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f)
-    if (musicPath.isNotBlank() && File(musicPath).isFile) {
+    if (musicPath.isNotBlank()) {
       musicPlayer = createPlayer(Uri.fromFile(File(musicPath)), true, currentMusicVolume)
     } else if (data.optBoolean("systemMusic", true)) {
       val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
@@ -625,6 +645,9 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun stopSignals() {
+    val shouldNotifySignalEnd = alarmSignalPlaybackActive
+    alarmSignalPlaybackActive = false
+    if (shouldNotifySignalEnd) sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName))
     logVoice("signals.stop", "stopping alarm signals")
     try { voicePlayer?.stop() } catch (_: Throwable) {}
     try { voicePlayer?.release() } catch (_: Throwable) {}
