@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v33_post_playback_strict_near_voice_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：播报/背景音乐后保留严格近端真人声窗口，过滤尾音/歌声/空转提交"
+  private val batchChatPipelineVersion = "chat_input_v34_ai_handoff_and_barge_confirm_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：AI/闹钟播报后统一严格窗口，背景音乐只允许超强近端插话，空识别自动丢弃"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1021,6 +1021,7 @@ class VoiceAlarmActivity : Activity() {
           mapOf("path" to debugAudioPath, "originalPath" to debugOriginalPath, "pcmBytes" to job.pcm.size, "originalBytes" to job.originalPcm.size, "peak" to job.peak, "rms" to job.rms),
         )
         var lastError = ""
+        var autoEmptyRecognitionError = false
         logVoice(
           "batch.singleUpload.start",
           "upload one complete utterance audio to STT; no rolling chunks or local split retries",
@@ -1028,7 +1029,10 @@ class VoiceAlarmActivity : Activity() {
         )
         var raw = try { recognizeBatchWithProvider(provider, cfg, job.pcm) } catch (t: Throwable) {
           lastError = t.message ?: t.javaClass.simpleName
-          setBatchStatus("${sttProviderLabel(provider)}非实时识别失败：$lastError；本次按完整录音提交，没有再做本地拆分重试。")
+          autoEmptyRecognitionError = !job.submittedManually && isEmptyAutoCaptureRecognitionError(lastError)
+          if (!autoEmptyRecognitionError) {
+            setBatchStatus("${sttProviderLabel(provider)}非实时识别失败：$lastError；本次按完整录音提交，没有再做本地拆分重试。")
+          }
           ""
         }
         var echoDiscarded = false
@@ -1061,7 +1065,7 @@ class VoiceAlarmActivity : Activity() {
             runOnUiThread {
               setBatchStatus("刚才识别到的是闹钟/AI 播报内容，已丢弃且不会发送给 AI。请在播报结束后重新说；这一版会从源头失效跨播报窗口的录音缓存。")
             }
-          } else if (!job.submittedManually && lastError.isBlank()) {
+          } else if (!job.submittedManually && (lastError.isBlank() || autoEmptyRecognitionError)) {
             batchLastRetryJob = null
             logVoice("batch.result.emptyAutoDiscarded", "auto-captured segment returned empty STT; treat as false-positive VAD rather than user speech", mapOf("pcmBytes" to job.pcm.size, "audioSeconds" to String.format(Locale.US, "%.2f", job.pcm.size / (16000.0 * 2.0)), "peak" to job.peak, "rms" to job.rms, "pipeline" to batchChatPipelineVersion))
             runOnUiThread { updateBatchRetryButton(false) }
@@ -1519,10 +1523,12 @@ class VoiceAlarmActivity : Activity() {
             // 这里仍然读取麦克风、计算能量，只用于判断用户是否强插话；不把扬声器声音缓存到 fallback/out/preRoll。
             val bargeInShape = batchAudioVoiceShape(frame, read)
             val playbackActiveForBargeIn = speaking || alarmVoicePlaying || alarmSignalPlaying
-            val strongBargeIn = hasBatchBargeInSpeech(level, bargeInShape, noiseRms) && playbackActiveForBargeIn
-            playbackBargeInHitCount = if (strongBargeIn) (playbackBargeInHitCount + 1).coerceAtMost(12) else 0
-            if (playbackBargeInHitCount >= 4) {
-              logVoice("batch.bargeIn.detected", "dominant near-end user speech detected while app speaker/music is active; stop playback and discard speaker frames before clean capture", mapOf("rms" to level.rms, "peak" to level.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "hits" to playbackBargeInHitCount, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
+            val signalOnlyPlayback = alarmSignalPlaying && !speaking && !alarmVoicePlaying
+            val strongBargeIn = (if (signalOnlyPlayback) hasBatchAlarmSignalBargeInSpeech(level, bargeInShape, noiseRms) else hasBatchBargeInSpeech(level, bargeInShape, noiseRms)) && playbackActiveForBargeIn
+            val requiredBargeInHits = if (signalOnlyPlayback) 8 else 4
+            playbackBargeInHitCount = if (strongBargeIn) (playbackBargeInHitCount + 1).coerceAtMost(16) else 0
+            if (playbackBargeInHitCount >= requiredBargeInHits) {
+              logVoice("batch.bargeIn.detected", "dominant near-end user speech detected while app speaker/music is active; stop playback and discard speaker frames before clean capture", mapOf("rms" to level.rms, "peak" to level.peak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "hits" to playbackBargeInHitCount, "requiredHits" to requiredBargeInHits, "signalOnly" to signalOnlyPlayback, "speaking" to speaking, "alarmVoicePlaying" to alarmVoicePlaying, "alarmSignalPlaying" to alarmSignalPlaying, "pipeline" to batchChatPipelineVersion))
               interruptPlaybackForUserSpeech("用户插话")
               fallbackOut.reset()
               out.reset()
@@ -2122,6 +2128,16 @@ class VoiceAlarmActivity : Activity() {
     return voiceShapeOk && (mediumBargeIn || sharpBargeIn)
   }
 
+  private fun hasBatchAlarmSignalBargeInSpeech(level: AudioLevel, shape: AudioVoiceShape, noiseRms: Double): Boolean {
+    // Background music can contain singer vocals that look speech-like.  While only
+    // the alarm signal/music is playing, require an ultra-close near-end voice for
+    // several consecutive frames before stopping playback; otherwise keep masking
+    // the speaker frames instead of feeding them to STT.
+    val voiceShapeOk = shape.voicedScore >= 80 && shape.zcrPermille in 12..170 && shape.crestX100 in 130..1700
+    val ultraCloseEnergy = level.rms >= maxOf(4200.0, noiseRms * 36.0).toInt() && level.peak >= maxOf(15000, (noiseRms * 140.0).toInt())
+    return voiceShapeOk && ultraCloseEnergy
+  }
+
   private fun hasBatchSoftSpeechEnergy(level: AudioLevel, noiseRms: Double, playbackGuard: Boolean): Boolean {
     if (playbackGuard) return (level.rms >= 520 && level.peak >= 1800) || level.peak >= 4200
     // 软语音只代表“声音输入较像人声”，不能确认用户说话，也不能刷新静音端点。
@@ -2242,6 +2258,12 @@ class VoiceAlarmActivity : Activity() {
     "iflytek" -> "讯飞"
     "xai" -> "xAI"
     else -> "语音服务商"
+  }
+
+  private fun isEmptyAutoCaptureRecognitionError(error: String): Boolean {
+    if (error.isBlank()) return false
+    val normalized = error.lowercase(Locale.US)
+    return error.contains("未返回文字") || normalized.contains("pieces=0") || normalized.contains("messages=") || normalized.contains("empty")
   }
 
   private fun recognizeBatchWithProvider(provider: String, cfg: JSONObject, pcm: ByteArray): String {
@@ -3898,8 +3920,8 @@ class VoiceAlarmActivity : Activity() {
       currentAppTtsStartedByEngine = false
     }
     speaking = false
-    markPostPlaybackHandoff(700L)
-    resetBatchCurrentCaptureForSpeakerPlayback("AI 语音播报刚结束：非实时录音已保持就绪，短暂冷却后立即接收你接下来的开头。", cooldownMs = 80L, preserveOpenRecorder = true)
+    markPostPlaybackHandoff(3000L)
+    resetBatchCurrentCaptureForSpeakerPlayback("AI 语音播报刚结束：非实时录音保持就绪，但会先用严格近端真人声确认，避免把 TTS 尾音当成你说话。", cooldownMs = 160L, preserveOpenRecorder = true)
     scheduleBatchRecorderRefreshAfterPlayback()
     if (speechBuffer.isNotBlank()) {
       scheduleBufferedSpeechProcessing(350L)
