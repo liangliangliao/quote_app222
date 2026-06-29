@@ -39,8 +39,10 @@ class VoiceAlarmRingingService : Service() {
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
     private const val ACTION_POSTPONE_VOICE_REPLAY = "com.example.quote_app.VOICE_ALARM_POSTPONE_VOICE_REPLAY"
+    private const val ACTION_DUCK_SIGNAL_FOR_LISTENING = "com.example.quote_app.VOICE_ALARM_DUCK_SIGNAL_FOR_LISTENING"
     private const val EXTRA_PAYLOAD = "payload"
     private const val EXTRA_POSTPONE_MS = "postponeMs"
+    private const val EXTRA_DUCK_MS = "duckMs"
     const val CHANNEL_ID = "voice_alarm_ringing_v5"
     private const val NOTIFICATION_ID = 974002
     private const val STATE_PREFS = "voice_alarm_ringing_state"
@@ -188,6 +190,16 @@ class VoiceAlarmRingingService : Service() {
     }
 
     @JvmStatic
+    fun duckSignalForVoiceListening(context: Context, durationMs: Long) {
+      try {
+        context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply {
+          action = ACTION_DUCK_SIGNAL_FOR_LISTENING
+          putExtra(EXTRA_DUCK_MS, durationMs)
+        })
+      } catch (_: Throwable) {}
+    }
+
+    @JvmStatic
     fun ensureAlarmChannel(context: Context) {
       if (Build.VERSION.SDK_INT < 26) return
       val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -253,6 +265,10 @@ class VoiceAlarmRingingService : Service() {
     }
     if (intent?.action == ACTION_POSTPONE_VOICE_REPLAY) {
       postponeVoiceReplay(intent.getLongExtra(EXTRA_POSTPONE_MS, 15_000L))
+      return START_STICKY
+    }
+    if (intent?.action == ACTION_DUCK_SIGNAL_FOR_LISTENING) {
+      duckSignalForVoiceListening(intent.getLongExtra(EXTRA_DUCK_MS, 12_000L))
       return START_STICKY
     }
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: activePayload ?: readActivePayload(this) ?: "{}"
@@ -606,6 +622,28 @@ class VoiceAlarmRingingService : Service() {
       try { musicPlayer?.setVolume(currentMusicVolume, currentMusicVolume) } catch (_: Throwable) {}
     }
     replayHandler.postDelayed(musicRestoreRunnable!!, durationMs.coerceAtLeast(1000L))
+  }
+
+  private fun duckSignalForVoiceListening(durationMs: Long) {
+    val safeMs = durationMs.coerceIn(3000L, 30_000L)
+    val hadSignal = alarmSignalPlaybackActive || activeSignalPlayback || musicPlayer != null || vibrator != null
+    if (!hadSignal) return
+    activeSignalPlayback = false
+    logVoice("signals.duckForListening", "duck alarm signal/music so microphone can hear user speech after prompt", mapOf("durationMs" to safeMs, "hasMusic" to (musicPlayer != null), "vibrate" to (vibrator != null)))
+    sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName).putExtra("reason", "duckForListening"))
+    try { musicPlayer?.setVolume(currentMusicVolume * 0.08f, currentMusicVolume * 0.08f) } catch (_: Throwable) {}
+    try { vibrator?.cancel() } catch (_: Throwable) {}
+    musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
+    musicRestoreRunnable = Runnable {
+      musicRestoreRunnable = null
+      try { musicPlayer?.setVolume(currentMusicVolume, currentMusicVolume) } catch (_: Throwable) {}
+      if (alarmSignalPlaybackActive && (musicPlayer != null || vibrator != null)) {
+        activeSignalPlayback = true
+        logVoice("signals.resumeAfterListening", "restore alarm signal/music after voice listening window", mapOf("hasMusic" to (musicPlayer != null), "vibrate" to (vibrator != null)))
+        sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", musicPlayer != null))
+      }
+    }
+    replayHandler.postDelayed(musicRestoreRunnable!!, safeMs)
   }
 
   private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f, notifyVoice: Boolean = false): MediaPlayer? {

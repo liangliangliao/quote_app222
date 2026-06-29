@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v35_signal_barge_recovery_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：AI/闹钟播报后统一严格窗口，背景音乐允许连续近端真人插话唤醒并空识别自动丢弃"
+  private val batchChatPipelineVersion = "chat_input_v36_duck_music_listening_window_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：闹钟播报后自动压低背景音乐进入干净聆听窗口，避免长句被持续屏蔽"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -228,9 +228,15 @@ class VoiceAlarmActivity : Activity() {
           alarmVoicePlaying = false
           alarmPlaybackWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
           alarmPlaybackWatchdogRunnable = null
-          markPostPlaybackHandoff(3000L)
-          resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报刚结束：非实时录音保持就绪，但会用更严格的近端人声确认，避免把播报尾音/背景歌声当成你说话。", cooldownMs = 160L, preserveOpenRecorder = true)
-          scheduleBatchRecorderRefreshAfterPlayback()
+          val hadSignalMusic = alarmSignalPlaying
+          if (hadSignalMusic) {
+            alarmSignalPlaying = false
+            logVoice("alarm.signal.duckForListening", "duck background alarm music after voice prompt so user speech is not masked", mapOf("durationMs" to 15_000L, "pipeline" to batchChatPipelineVersion))
+            VoiceAlarmRingingService.duckSignalForVoiceListening(this@VoiceAlarmActivity, 15_000L)
+          }
+          markPostPlaybackHandoff(if (hadSignalMusic) 900L else 1800L)
+          resetBatchCurrentCaptureForSpeakerPlayback(if (hadSignalMusic) "闹钟播报刚结束：已临时压低背景音乐，进入干净聆听窗口；现在说话会直接录入。" else "闹钟播报刚结束：非实时录音保持就绪，但会用近端人声确认，避免把播报尾音当成你说话。", cooldownMs = if (hadSignalMusic) 120L else 160L, preserveOpenRecorder = true)
+          scheduleBatchRecorderRefreshAfterPlayback(if (hadSignalMusic) 80L else 140L)
           if (speechBuffer.isNotBlank()) {
             scheduleBufferedSpeechProcessing(350L)
           }
