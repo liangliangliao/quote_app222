@@ -349,6 +349,9 @@ class _RootShellState extends State<RootShell> {
   String _drawerAiTitle = '成长宇宙';
   String _drawerAiSubtitle = '每个模块都可呈现不同形态、节奏与光影';
   bool _drawerAiLoading = false;
+  bool _drawerHeaderAiEnabled = false;
+  String _drawerSearchQuery = '';
+  final TextEditingController _drawerSearchController = TextEditingController();
   final GlobalAiSettings _drawerAiSettings = GlobalAiSettings();
   final UnifiedAiService _drawerAiService = UnifiedAiService();
   final ScrollController _drawerScrollController = ScrollController();
@@ -393,6 +396,7 @@ class _RootShellState extends State<RootShell> {
   @override
   void dispose() {
     _drawerScrollController.dispose();
+    _drawerSearchController.dispose();
     super.dispose();
   }
 
@@ -726,6 +730,16 @@ class _RootShellState extends State<RootShell> {
     try { SimpleBus.navIndex.value = _idx; } catch (_) {}
   }
 
+
+  List<_DrawerEntrySpec> _filterDrawerEntries(List<_DrawerEntrySpec> source, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return source;
+    return source.where((entry) {
+      final haystack = '${entry.title} ${entry.subtitle} ${entry.badgeText}'.toLowerCase();
+      return haystack.contains(q) || q.runes.every((r) => haystack.contains(String.fromCharCode(r)));
+    }).toList(growable: false);
+  }
+
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
     final pinned = source.where((e) => e.title == '真实自尊 SelfWorth AI').toList(growable: false);
     final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI').toList(growable: false);
@@ -768,11 +782,15 @@ class _RootShellState extends State<RootShell> {
     final requestId = ++_drawerHeaderRequestId;
     final seed = _drawerStyleSeed.toString();
     final localFallback = _localDrawerHeaderFallback(seed);
+    final aiEnabled = await _drawerAiSettings.isDrawerHeaderAiEnabled();
+    if (!mounted || requestId != _drawerHeaderRequestId) return;
     setState(() {
-      _drawerAiLoading = true;
+      _drawerHeaderAiEnabled = aiEnabled;
+      _drawerAiLoading = aiEnabled;
       _drawerAiTitle = localFallback.$1;
       _drawerAiSubtitle = localFallback.$2;
     });
+    if (!aiEnabled) return;
 
     try {
       final modulesThemeText = entries
@@ -897,7 +915,7 @@ class _RootShellState extends State<RootShell> {
                 Icon(_drawerAiLoading ? Icons.bolt_outlined : Icons.motion_photos_on_outlined, size: 16, color: const Color(0xFF4F46E5)),
                 const SizedBox(width: 6),
                 Text(
-                  _drawerAiLoading ? 'AI正在生成本次侧栏主题' : 'AI随机标题 · 多形态布局 · 模块差异化',
+                  _drawerAiLoading ? 'AI正在生成本次侧栏主题' : (_drawerHeaderAiEnabled ? 'AI随机标题 · 多形态布局 · 模块差异化' : 'AI侧栏主题已关闭 · 使用本地随机主题'),
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5)),
                 ),
               ],
@@ -918,7 +936,8 @@ class _RootShellState extends State<RootShell> {
       const SettingsPage(),
     ];
     final baseEntries = _drawerEntries();
-    final entries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
+    final orderedEntries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
+    final entries = _filterDrawerEntries(orderedEntries, _drawerSearchQuery);
     return Scaffold(
       onDrawerChanged: (opened) {
         if (!mounted) return;
@@ -1010,7 +1029,36 @@ class _RootShellState extends State<RootShell> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _buildDrawerHeader(),
+                              TextField(
+                                controller: _drawerSearchController,
+                                onChanged: (value) => setState(() => _drawerSearchQuery = value),
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: '搜索模块 / 关键词',
+                                  prefixIcon: const Icon(Icons.search, color: Color(0xFF4F46E5)),
+                                  suffixIcon: _drawerSearchQuery.trim().isEmpty
+                                      ? null
+                                      : IconButton(
+                                          icon: const Icon(Icons.close),
+                                          onPressed: () {
+                                            _drawerSearchController.clear();
+                                            setState(() => _drawerSearchQuery = '');
+                                          },
+                                        ),
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.72),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                                ),
+                              ),
                               SizedBox(height: 8 + bgRandom.nextInt(8).toDouble()),
+                              if (entries.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 28),
+                                  child: Center(
+                                    child: Text('没有找到匹配模块', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w700)),
+                                  ),
+                                ),
                               for (var i = 0; i < entries.length; i++)
                                 Padding(
                                   padding: EdgeInsets.only(
