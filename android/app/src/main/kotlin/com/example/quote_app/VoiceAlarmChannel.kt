@@ -30,6 +30,10 @@ object VoiceAlarmChannel {
             VoiceAlarmRingingService.stop(context)
             result.success(true)
           }
+          "cancelAlarm" -> {
+            VoiceAlarmScheduler.cancel(context, call.argument<String>("alarmId"))
+            result.success(true)
+          }
           "snooze" -> {
             VoiceAlarmScheduler.snooze(context, call.argument<String>("payload") ?: "{}", 5)
             result.success(true)

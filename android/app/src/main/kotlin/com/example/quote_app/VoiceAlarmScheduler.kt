@@ -6,12 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
+import org.json.JSONArray
 import org.json.JSONObject
 
 object VoiceAlarmScheduler {
   private const val PREFS = "voice_alarm_native"
   private const val KEY_PAYLOAD = "payload"
   private const val KEY_AT = "at"
+  private const val KEY_IDS = "ids"
   private const val MORNING_ALARM_ID = 974001
   private const val NIGHT_ALARM_ID = 974002
   private const val EXACT_FALLBACK_OFFSET = 200
@@ -31,11 +33,29 @@ object VoiceAlarmScheduler {
     credentialProtectedPrefs(context),
   )
 
+  private fun persistedRequestKey(payload: String): String {
+    val id = alarmId(payload)
+    return id.toString()
+  }
+
   private fun persistAlarm(context: Context, mode: String, payload: String, atMs: Long) {
+    val requestKey = persistedRequestKey(payload)
     for (prefs: SharedPreferences in persistedPrefs(context)) {
+      val ids = LinkedHashSet<String>()
+      val raw = prefs.getString(KEY_IDS, "[]") ?: "[]"
+      try {
+        val arr = JSONArray(raw)
+        for (i in 0 until arr.length()) ids.add(arr.optString(i))
+      } catch (_: Throwable) {}
+      ids.add(requestKey)
+      val nextIds = JSONArray()
+      ids.forEach { nextIds.put(it) }
       prefs.edit()
         .putString("${KEY_PAYLOAD}_$mode", payload)
         .putLong("${KEY_AT}_$mode", atMs)
+        .putString("${KEY_PAYLOAD}_$requestKey", payload)
+        .putLong("${KEY_AT}_$requestKey", atMs)
+        .putString(KEY_IDS, nextIds.toString())
         .apply()
     }
   }
@@ -46,7 +66,12 @@ object VoiceAlarmScheduler {
   }
 
   private fun alarmId(payload: String): Int {
-    val mode = try { JSONObject(payload).optString("mode", "morning") } catch (_: Throwable) { "morning" }
+    val obj = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
+    val customId = obj.optString("alarmId", "")
+    if (customId.isNotBlank()) {
+      return 974100 + (customId.hashCode() and 0x3fffffff) % 400000
+    }
+    val mode = obj.optString("mode", "morning")
     return if (mode == "night") NIGHT_ALARM_ID else MORNING_ALARM_ID
   }
 
@@ -192,63 +217,84 @@ object VoiceAlarmScheduler {
     }
   }
 
-  @JvmStatic
-  fun cancel(context: Context) {
-    val app = context.applicationContext
-    for (id in intArrayOf(MORNING_ALARM_ID, NIGHT_ALARM_ID)) {
-      val primary = PendingIntent.getBroadcast(
-        app,
-        id,
-        Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE" },
-        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-      )
-      if (primary != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(primary)
-        primary.cancel()
-      }
-      val fallback = PendingIntent.getBroadcast(
-        app,
-        id + EXACT_FALLBACK_OFFSET,
-        Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK" },
-        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-      )
-      if (fallback != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(fallback)
-        fallback.cancel()
-      }
-      val serviceFallbackIntent = Intent(app, VoiceAlarmRingingService::class.java).apply {
-        action = "com.example.quote_app.VOICE_ALARM_START"
-      }
-      val serviceFallback = if (Build.VERSION.SDK_INT >= 26) {
-        PendingIntent.getForegroundService(
-          app,
-          id + SERVICE_FALLBACK_OFFSET,
-          serviceFallbackIntent,
-          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-        )
-      } else {
-        PendingIntent.getService(
-          app,
-          id + SERVICE_FALLBACK_OFFSET,
-          serviceFallbackIntent,
-          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-        )
-      }
-      if (serviceFallback != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(serviceFallback)
-        serviceFallback.cancel()
-      }
-      val activityFallback = PendingIntent.getActivity(
-        app,
-        id + ACTIVITY_FALLBACK_OFFSET,
-        Intent(app, VoiceAlarmActivity::class.java).apply { putExtra("fromAlarmFire", true) },
-        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-      )
-      if (activityFallback != null) {
-        (app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(activityFallback)
-        activityFallback.cancel()
-      }
+  private fun cancelRequestCode(app: Context, id: Int) {
+    val alarmManager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val primary = PendingIntent.getBroadcast(
+      app,
+      id,
+      Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE" },
+      PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+    )
+    if (primary != null) {
+      alarmManager.cancel(primary)
+      primary.cancel()
     }
+    val fallback = PendingIntent.getBroadcast(
+      app,
+      id + EXACT_FALLBACK_OFFSET,
+      Intent(app, VoiceAlarmReceiver::class.java).apply { action = "com.example.quote_app.VOICE_ALARM_FIRE_FALLBACK" },
+      PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+    )
+    if (fallback != null) {
+      alarmManager.cancel(fallback)
+      fallback.cancel()
+    }
+    val serviceFallbackIntent = Intent(app, VoiceAlarmRingingService::class.java).apply {
+      action = "com.example.quote_app.VOICE_ALARM_START"
+    }
+    val serviceFallback = if (Build.VERSION.SDK_INT >= 26) {
+      PendingIntent.getForegroundService(
+        app,
+        id + SERVICE_FALLBACK_OFFSET,
+        serviceFallbackIntent,
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+      )
+    } else {
+      PendingIntent.getService(
+        app,
+        id + SERVICE_FALLBACK_OFFSET,
+        serviceFallbackIntent,
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+      )
+    }
+    if (serviceFallback != null) {
+      alarmManager.cancel(serviceFallback)
+      serviceFallback.cancel()
+    }
+    val activityFallback = PendingIntent.getActivity(
+      app,
+      id + ACTIVITY_FALLBACK_OFFSET,
+      Intent(app, VoiceAlarmActivity::class.java).apply { putExtra("fromAlarmFire", true) },
+      PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+    )
+    if (activityFallback != null) {
+      alarmManager.cancel(activityFallback)
+      activityFallback.cancel()
+    }
+  }
+
+  @JvmStatic
+  fun cancel(context: Context, alarmKey: String? = null) {
+    val app = context.applicationContext
+    if (!alarmKey.isNullOrBlank()) {
+      val id = alarmId(JSONObject().put("alarmId", alarmKey).toString())
+      cancelRequestCode(app, id)
+      for (prefs: SharedPreferences in persistedPrefs(app)) {
+        prefs.edit().remove("${KEY_PAYLOAD}_$id").remove("${KEY_AT}_$id").apply()
+      }
+      return
+    }
+    val ids = LinkedHashSet<Int>()
+    ids.add(MORNING_ALARM_ID)
+    ids.add(NIGHT_ALARM_ID)
+    for (prefs: SharedPreferences in persistedPrefs(app)) {
+      val raw = prefs.getString(KEY_IDS, "[]") ?: "[]"
+      try {
+        val arr = JSONArray(raw)
+        for (i in 0 until arr.length()) arr.optString(i).toIntOrNull()?.let { ids.add(it) }
+      } catch (_: Throwable) {}
+    }
+    ids.forEach { cancelRequestCode(app, it) }
     clearPersistedAlarms(app)
   }
 
@@ -281,14 +327,28 @@ object VoiceAlarmScheduler {
 
   @JvmStatic
   fun restore(context: Context) {
+    val entries = LinkedHashMap<String, String>()
+    val devicePrefs = deviceProtectedPrefs(context)
+    val credentialPrefs = credentialProtectedPrefs(context)
+    for (prefs in listOf(devicePrefs, credentialPrefs)) {
+      val raw = prefs.getString(KEY_IDS, "[]") ?: "[]"
+      try {
+        val arr = JSONArray(raw)
+        for (i in 0 until arr.length()) {
+          val key = arr.optString(i)
+          val payload = prefs.getString("${KEY_PAYLOAD}_$key", null)
+          if (!payload.isNullOrBlank()) entries[key] = payload
+        }
+      } catch (_: Throwable) {}
+    }
     for (mode in arrayOf("morning", "night")) {
-      val devicePrefs = deviceProtectedPrefs(context)
-      val credentialPrefs = credentialProtectedPrefs(context)
       val payload = devicePrefs.getString("${KEY_PAYLOAD}_$mode", null)
         ?: credentialPrefs.getString("${KEY_PAYLOAD}_$mode", null)
-        ?: continue
-      var at = devicePrefs.getLong("${KEY_AT}_$mode", 0L).takeIf { it > 0L }
-        ?: credentialPrefs.getLong("${KEY_AT}_$mode", 0L)
+      if (!payload.isNullOrBlank()) entries[mode] = payload
+    }
+    for ((key, payload) in entries) {
+      var at = devicePrefs.getLong("${KEY_AT}_$key", 0L).takeIf { it > 0L }
+        ?: credentialPrefs.getLong("${KEY_AT}_$key", 0L)
       if (at <= System.currentTimeMillis()) {
         val obj = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
         val hour = obj.optInt("hour", 8)
@@ -315,4 +375,5 @@ object VoiceAlarmScheduler {
       schedule(context, at, payload, true)
     }
   }
+
 }
