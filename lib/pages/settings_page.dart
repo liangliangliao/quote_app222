@@ -154,6 +154,7 @@ class _SettingsPageState extends State<SettingsPage> {
   int _esteemScale = 100;
 
   bool _moodCardPopupEnabled = true;
+  bool _drawerHeaderAiEnabled = false;
 
   // ====== 运动设置 ======
   String? _sportBgPath;
@@ -1610,6 +1611,13 @@ Future<void> _clearSportMusicPlaylist() async {
     } catch (_) {
       _emaEnabled = false;
       _esteemScale = 100;
+    }
+
+    // 读取首页侧栏 AI 主题开关（默认关闭）
+    try {
+      _drawerHeaderAiEnabled = await _globalAiSettings.isDrawerHeaderAiEnabled();
+    } catch (_) {
+      _drawerHeaderAiEnabled = false;
     }
 
     // 读取发现之旅“此时此刻心情卡片”设置
@@ -3081,22 +3089,35 @@ const Text('头像（用于通知图标）'),
               await _load();
             },
           ),
+          SwitchListTile(
+            title: const Text('首页侧栏 AI 主题开关'),
+            subtitle: const Text('默认关闭；关闭时展开左侧菜单只使用本地随机主题，不会调用 AI。开启后才会调用 AI 生成侧栏标题与简介。'),
+            value: _drawerHeaderAiEnabled,
+            onChanged: (bool value) async {
+              setState(() => _drawerHeaderAiEnabled = value);
+              await _globalAiSettings.setDrawerHeaderAiEnabled(value);
+              showToast(value ? '已开启首页侧栏 AI 主题' : '已关闭首页侧栏 AI 主题');
+            },
+          ),
           ListTile(
             title: const Text('首页侧栏 AI 标题提示词配置'),
-            subtitle: const Text('配置每次展开左侧菜单时，AI 随机生成标题与简介的轻量提示词'),
+            subtitle: const Text('配置开启“首页侧栏 AI 主题”后，每次展开左侧菜单时生成标题与简介的轻量提示词'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AiPromptSettingsPage(
-                    initialModuleId: 'app_shell',
-                    initialPromptId: 'drawer_header',
-                  ),
-                ),
-              );
-              await _load();
-            },
+            enabled: _drawerHeaderAiEnabled,
+            onTap: _drawerHeaderAiEnabled
+                ? () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AiPromptSettingsPage(
+                          initialModuleId: 'app_shell',
+                          initialPromptId: 'drawer_header',
+                        ),
+                      ),
+                    );
+                    await _load();
+                  }
+                : null,
           ),
           Divider(),
             
