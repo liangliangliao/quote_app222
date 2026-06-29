@@ -505,7 +505,7 @@ class VoiceAlarmActivity : Activity() {
     }
     transcriptScrollView = ScrollView(this).apply {
       isFillViewport = false
-      addView(transcriptView, ScrollView.LayoutParams(-1, -2))
+      addView(transcriptView, FrameLayout.LayoutParams(-1, -2))
     }
     panel.addView(transcriptScrollView, LinearLayout.LayoutParams(-1, 0, 2f))
     batchSubmitButton = null
@@ -560,7 +560,7 @@ class VoiceAlarmActivity : Activity() {
     }, LinearLayout.LayoutParams(-1, -2))
     val scroll = ScrollView(this).apply {
       isFillViewport = true
-      addView(panel, ScrollView.LayoutParams(-1, -2))
+      addView(panel, FrameLayout.LayoutParams(-1, -2))
     }
     root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
     return root
