@@ -625,7 +625,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun duckSignalForVoiceListening(durationMs: Long) {
-    val safeMs = durationMs.coerceIn(3000L, 30_000L)
+    val safeMs = durationMs.coerceIn(3000L, 120_000L)
     val hadSignal = alarmSignalPlaybackActive || activeSignalPlayback || musicPlayer != null || vibrator != null
     if (!hadSignal) return
     activeSignalPlayback = false

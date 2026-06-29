@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v37_fast_listen_fullscreen_ai_sync_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：播报后快速聆听并保留更长前滚，全屏自恢复，AI思考/全文实时显示"
+  private val batchChatPipelineVersion = "chat_input_v38_prompt_safe_fast_short_start_20260629"
+  private val batchChatPipelineSummary = "自动待命多轮录音：闹钟播报不被噪声打断，播报后长聆听窗口并快速确认短真人语音"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -234,8 +234,8 @@ class VoiceAlarmActivity : Activity() {
           val hadSignalMusic = alarmSignalPlaying
           if (hadSignalMusic) {
             alarmSignalPlaying = false
-            logVoice("alarm.signal.duckForListening", "duck background alarm music after voice prompt so user speech is not masked", mapOf("durationMs" to 15_000L, "pipeline" to batchChatPipelineVersion))
-            VoiceAlarmRingingService.duckSignalForVoiceListening(this@VoiceAlarmActivity, 15_000L)
+            logVoice("alarm.signal.duckForListening", "duck background alarm music after voice prompt so user speech is not masked", mapOf("durationMs" to 60_000L, "pipeline" to batchChatPipelineVersion))
+            VoiceAlarmRingingService.duckSignalForVoiceListening(this@VoiceAlarmActivity, 60_000L)
           }
           markPostPlaybackHandoff(if (hadSignalMusic) 900L else 1800L)
           resetBatchCurrentCaptureForSpeakerPlayback(if (hadSignalMusic) "闹钟播报刚结束：已临时压低背景音乐，进入干净聆听窗口；现在说话会直接录入。" else "闹钟播报刚结束：非实时录音保持就绪，但会用近端人声确认，避免把播报尾音当成你说话。", cooldownMs = if (hadSignalMusic) 120L else 160L, preserveOpenRecorder = true)
@@ -1569,8 +1569,11 @@ class VoiceAlarmActivity : Activity() {
             // 聊天 App 式非实时输入的核心：App 自己的播报帧不能写入待转写音频。
             // 这里仍然读取麦克风、计算能量，只用于判断用户是否强插话；不把扬声器声音缓存到 fallback/out/preRoll。
             val bargeInShape = batchAudioVoiceShape(frame, read)
-            val playbackActiveForBargeIn = speaking || alarmVoicePlaying || alarmSignalPlaying
+            // Do not stop the fixed alarm voice prompt from random noise: real user
+            // speech is captured immediately after the prompt via the ducked listening
+            // window.  Barge-in remains enabled for AI TTS and for signal-only music.
             val signalOnlyPlayback = alarmSignalPlaying && !speaking && !alarmVoicePlaying
+            val playbackActiveForBargeIn = speaking || signalOnlyPlayback
             val strongBargeIn = (if (signalOnlyPlayback) hasBatchAlarmSignalBargeInSpeech(level, bargeInShape, noiseRms) else hasBatchBargeInSpeech(level, bargeInShape, noiseRms)) && playbackActiveForBargeIn
             val requiredBargeInHits = if (signalOnlyPlayback) 6 else 4
             playbackBargeInHitCount = if (strongBargeIn) (playbackBargeInHitCount + 1).coerceAtMost(16) else 0
@@ -1777,7 +1780,15 @@ class VoiceAlarmActivity : Activity() {
             now - autoArmStartFirstAt >= maxOf(minStartWindowMs, 900L)
           val rejectedTooMany = autoArmRejectedHitCount >= 4 && autoArmRejectedHitCount * 100 > autoArmStartHitCount * 24
           val postPlaybackStartOk = !postPlaybackHandoffActive || isPostPlaybackStartStrongEnough(autoArmVoiceShape, level, noiseRms)
+          val shortStrongStart = autoArmStartSpeech &&
+            autoArmStartHitCount >= 4 &&
+            autoArmStrongVoiceLikeHitCount >= 4 &&
+            autoArmEndpointVoiceLikeHitCount >= 4 &&
+            autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 70 &&
+            !rejectedTooMany &&
+            postPlaybackStartOk
           val confirmedSpeech = speechStarted ||
+            shortStrongStart ||
             (autoArmStartSpeech && speechHitCount >= requiredHits && startWindowOk && voiceLikeRatioOk && (strongVoiceShapeOk || warmVoiceShapeOk) && (endpointVoiceOk || sustainedWarmVoiceOk) && !rejectedTooMany && postPlaybackStartOk)
           if (softSpeech && softSpeechHitCount >= 2) {
             // 软声音只代表“有较明显声音输入”，不能直接确认为用户说话；
