@@ -349,6 +349,9 @@ class _RootShellState extends State<RootShell> {
   String _drawerAiTitle = '成长宇宙';
   String _drawerAiSubtitle = '每个模块都可呈现不同形态、节奏与光影';
   bool _drawerAiLoading = false;
+  bool _drawerHeaderAiEnabled = false;
+  String _drawerSearchQuery = '';
+  final TextEditingController _drawerSearchController = TextEditingController();
   final GlobalAiSettings _drawerAiSettings = GlobalAiSettings();
   final UnifiedAiService _drawerAiService = UnifiedAiService();
   final ScrollController _drawerScrollController = ScrollController();
@@ -779,11 +782,15 @@ class _RootShellState extends State<RootShell> {
     final requestId = ++_drawerHeaderRequestId;
     final seed = _drawerStyleSeed.toString();
     final localFallback = _localDrawerHeaderFallback(seed);
+    final aiEnabled = await _drawerAiSettings.isDrawerHeaderAiEnabled();
+    if (!mounted || requestId != _drawerHeaderRequestId) return;
     setState(() {
-      _drawerAiLoading = true;
+      _drawerHeaderAiEnabled = aiEnabled;
+      _drawerAiLoading = aiEnabled;
       _drawerAiTitle = localFallback.$1;
       _drawerAiSubtitle = localFallback.$2;
     });
+    if (!aiEnabled) return;
 
     try {
       final modulesThemeText = entries
@@ -947,10 +954,35 @@ class _RootShellState extends State<RootShell> {
                 Icon(_drawerAiLoading ? Icons.bolt_outlined : Icons.motion_photos_on_outlined, size: 16, color: const Color(0xFF4F46E5)),
                 const SizedBox(width: 6),
                 Text(
-                  _drawerAiLoading ? 'AI正在生成本次侧栏主题' : 'AI随机标题 · 多形态布局 · 模块差异化',
+                  _drawerAiLoading ? 'AI正在生成本次侧栏主题' : (_drawerHeaderAiEnabled ? 'AI随机标题 · 多形态布局 · 模块差异化' : 'AI侧栏主题已关闭 · 使用本地随机主题'),
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5)),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildDrawerModuleStats({required int totalCount, required int visibleCount}) {
+    final searching = _drawerSearchQuery.trim().isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.64),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.9)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.widgets_outlined, size: 17, color: Color(0xFF4F46E5)),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              searching ? '当前共 $totalCount 个模块 · 匹配 $visibleCount 个' : '当前共 $totalCount 个模块',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF374151)),
             ),
           ),
         ],
@@ -1063,6 +1095,30 @@ class _RootShellState extends State<RootShell> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _buildDrawerHeader(),
+                              _buildDrawerModuleStats(totalCount: baseEntries.length, visibleCount: entries.length),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _drawerSearchController,
+                                onChanged: (value) => setState(() => _drawerSearchQuery = value),
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: '搜索模块标题 / 简介 / 关键词',
+                                  prefixIcon: const Icon(Icons.search, color: Color(0xFF4F46E5)),
+                                  suffixIcon: _drawerSearchQuery.trim().isEmpty
+                                      ? null
+                                      : IconButton(
+                                          icon: const Icon(Icons.close),
+                                          onPressed: () {
+                                            _drawerSearchController.clear();
+                                            setState(() => _drawerSearchQuery = '');
+                                          },
+                                        ),
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.72),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                                ),
+                              ),
                               SizedBox(height: 8 + bgRandom.nextInt(8).toDouble()),
                               _buildDrawerSearchBox(entries.length),
                               if (entries.isEmpty)
