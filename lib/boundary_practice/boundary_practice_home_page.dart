@@ -19,6 +19,8 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     text: '我妈每天都问我和老公有没有吵架，我不说她就说我结婚以后不把她当妈了。',
   );
   final TextEditingController _actionTargetController = TextEditingController(text: '今晚 20:30 给妈妈打电话时');
+  final TextEditingController _guiltFactController = TextEditingController(text: '我拒绝了朋友临时提出的帮忙请求');
+  final TextEditingController _guiltStoryController = TextEditingController(text: '我这样很自私，他会不喜欢我');
   final BoundaryPracticePromptConfig _promptConfig = BoundaryPracticePromptConfig();
   _BoundaryScene _scene = _BoundaryScene.family;
   String _profile = '混合型：松散边界 + 讨好/拯救倾向';
@@ -55,6 +57,21 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     '今天我尊重了别人的边界': false,
     '今天我对一个自我承诺守信': false,
   };
+  final Map<String, bool> _assessmentAnswers = <String, bool>{
+    '我很难拒绝别人': true,
+    '我经常答应后又怨恨': true,
+    '我会过度解释自己的决定': true,
+    '我害怕别人失望或生气': true,
+    '我经常替别人承担后果': false,
+    '我遇到冲突会突然切断关系': false,
+    '我很难求助或表达脆弱': false,
+    '我能接受别人对我说“不”': false,
+  };
+  String _selectedReaction = '说你自私';
+  String _selectedRefreshEvent = '换工作后';
+  double _repairEvidence = 40;
+  double _respectConsistency = 35;
+  double _safetyRisk = 20;
   final Map<String, double> _domainScores = <String, double>{
     '家庭': 36,
     '亲密关系': 48,
@@ -83,14 +100,17 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
   void dispose() {
     _situationController.dispose();
     _actionTargetController.dispose();
+    _guiltFactController.dispose();
+    _guiltStoryController.dispose();
     super.dispose();
   }
 
   void _runAssessment() {
     final s = _situationController.text;
-    final loose = _hits(s, const ['不敢', '内疚', '答应', '借钱', '害怕', '失望', '帮忙', '随叫随到']);
+    final checkedLoose = _assessmentAnswers.entries.where((e) => e.value && (e.key.contains('拒绝') || e.key.contains('怨恨') || e.key.contains('解释') || e.key.contains('失望'))).length;
+    final loose = _hits(s, const ['不敢', '内疚', '答应', '借钱', '害怕', '失望', '帮忙', '随叫随到']) + checkedLoose;
     final rigid = _hits(s, const ['断联', '拉黑', '不信任', '不求助', '消失', '切断']);
-    final rescue = _hits(s, const ['收拾', '解决', '替他', '替她', '救', '承担', '后果']);
+    final rescue = _hits(s, const ['收拾', '解决', '替他', '替她', '救', '承担', '后果']) + (_assessmentAnswers['我经常替别人承担后果'] == true ? 2 : 0);
     final self = _hits(s, const ['熬夜', '拖延', '消费', '刷手机', '控制不住']);
     final Map<String, double> next = Map<String, double>.from(_scores);
     next['情绪'] = (72 - loose * 9 - rescue * 5).clamp(18, 92).toDouble();
@@ -213,6 +233,8 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
             const SizedBox(height: 10),
             _BoundaryMap(scores: _scores),
             const SizedBox(height: 10),
+            _assessmentChecklist(),
+            const SizedBox(height: 10),
             Wrap(spacing: 8, runSpacing: 8, children: const [
               _Tag('三类边界画像'), _Tag('六类边界评分'), _Tag('关系领域画像'), _Tag('推荐训练路径'),
             ]),
@@ -280,6 +302,12 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
               _numbered(output.guiltCards),
               const SizedBox(height: 8),
               _kv('对方反应预演', output.reactionPlan),
+              const Divider(height: 24),
+              _guiltWorkbench(),
+            ]),
+            const SizedBox(height: 12),
+            _sectionCard(title: '五-补充：对方反应预演训练器', icon: Icons.theater_comedy_outlined, children: [
+              _reactionTrainer(),
             ]),
             const SizedBox(height: 12),
             _sectionCard(title: '六、标准 AI 输出结构', icon: Icons.article_outlined, children: [
@@ -309,6 +337,10 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
           const SizedBox(height: 12),
           _sectionCard(title: '八、关系健康档案与边界刷新', icon: Icons.people_alt_outlined, children: [
             _relationshipArchive(),
+          ]),
+          const SizedBox(height: 12),
+          _sectionCard(title: '九、关系评估与距离调整器', icon: Icons.social_distance_outlined, children: [
+            _relationshipEvaluator(),
           ]),
           const SizedBox(height: 12),
           _sectionCard(title: 'AI 三层 Prompt 体系（模块内置）', icon: Icons.layers_outlined, children: const [
@@ -400,6 +432,65 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         _kv('12. 安全提醒', '如果涉及暴力、胁迫、严重控制、自伤、他伤、性侵犯、严重职场骚扰或违法风险，请优先保护安全，并寻求可信赖的人、专业机构或当地紧急服务支持。'),
       ]);
 
+  Widget _assessmentChecklist() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('初始边界自测题', style: TextStyle(fontWeight: FontWeight.w900)),
+        for (final entry in _assessmentAnswers.entries) CheckboxListTile(
+          value: entry.value,
+          onChanged: (v) => setState(() => _assessmentAnswers[entry.key] = v ?? false),
+          title: Text(entry.key),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ]);
+
+  Widget _guiltWorkbench() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('内疚识别：事实 vs 解释', style: TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        TextField(controller: _guiltFactController, decoration: const InputDecoration(labelText: '事实：发生了什么', border: OutlineInputBorder())),
+        const SizedBox(height: 8),
+        TextField(controller: _guiltStoryController, decoration: const InputDecoration(labelText: '解释：我脑中如何评价这件事', border: OutlineInputBorder())),
+        const SizedBox(height: 8),
+        _kv('责任重估', '事实不等于解释。你需要负责清楚表达与尊重行动，不需要负责让所有人立刻满意。'),
+      ]);
+
+  Widget _reactionTrainer() {
+    final responses = <String, String>{
+      '质疑你': '我理解你有不同看法，但我的决定没有改变。',
+      '生气': '我愿意在彼此尊重时继续谈，现在我们先暂停。',
+      '说你自私': '这不是不在乎你，而是我需要保护自己的边界。',
+      '讨价还价': '我不会继续协商这个底线。',
+      '冷处理': '我会给你时间消化，但我不会因为沉默撤回边界。',
+      '继续越界': '我已经说明边界了，现在我会执行刚才说过的行动。',
+    };
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, children: responses.keys.map((k) => ChoiceChip(label: Text(k), selected: _selectedReaction == k, onSelected: (_) => setState(() => _selectedReaction = k))).toList()),
+      const SizedBox(height: 8),
+      _kv('可直接回应', responses[_selectedReaction] ?? ''),
+    ]);
+  }
+
+  Widget _relationshipEvaluator() {
+    final score = (_repairEvidence + _respectConsistency - _safetyRisk).clamp(0, 100).round();
+    final advice = _safetyRisk > 70
+        ? '优先安全：暂停单独沟通，记录证据，寻求可信赖的人、专业机构或当地紧急服务。'
+        : score >= 65
+            ? '可以修复：给出清楚观察周期，看对方是否持续尊重边界。'
+            : score >= 35
+                ? '降低距离：减少隐私、金钱或情绪承接，只保留低风险互动。'
+                : '暂停或退出：如果表达和行动多次无效，请把精力转回安全与自我恢复。';
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _slider('对方是否有真实行为改变证据', _repairEvidence, (v) => setState(() => _repairEvidence = v)),
+      _slider('对方是否持续尊重边界', _respectConsistency, (v) => setState(() => _respectConsistency = v)),
+      _slider('安全/控制/羞辱/胁迫风险', _safetyRisk, (v) => setState(() => _safetyRisk = v)),
+      _kv('关系距离建议（$score/100）', advice),
+    ]);
+  }
+
+  Widget _slider(String label, double value, ValueChanged<double> onChanged) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$label：${value.round()}'),
+        Slider(value: value, min: 0, max: 100, divisions: 20, label: value.round().toString(), onChanged: onChanged),
+      ]);
+
   Widget _relationshipArchive() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _kv('关系健康档案字段', '关系对象、主要越界类型、已表达边界、对方反应、我采取过的行动、当前关系距离、是否值得修复、是否需要降级/暂停/结束。'),
         for (final r in _relationships) Card(
@@ -411,6 +502,8 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
           ),
         ),
         _kv('边界刷新触发器', '换工作、结婚、生孩子、搬家、收入变化、关系修复、对方持续不尊重、自己容量显著变化。'),
+        Wrap(spacing: 8, children: ['换工作后', '结婚后', '生孩子后', '收入变化后', '对方持续不尊重后'].map((e) => ChoiceChip(label: Text(e), selected: _selectedRefreshEvent == e, onSelected: (_) => setState(() => _selectedRefreshEvent = e))).toList()),
+        _kv('刷新后的边界草案', '$_selectedRefreshEvent，我需要重新说明我的时间、情绪和责任边界。接下来我会先表达一次，如果仍被无视，我会降低互动强度或执行预设后果。'),
         _kv('七天执行计划', '第1天识别情绪信号；第2天写一句话边界；第3天预演对方反应；第4天执行最小行动；第5天管理内疚；第6天重述或执行后果；第7天复盘并更新身份表述。'),
         _kv('关系距离建议', '不是只能忍耐或断联，可选择：保持但限频、只谈低风险话题、减少金钱/情绪承接、暂停联系、在高风险时优先安全和正式支持。'),
       ]);
