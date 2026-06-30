@@ -6,7 +6,7 @@ import 'boundary_action_coach_models.dart';
 import 'boundary_action_coach_orchestrator.dart';
 import 'boundary_action_coach_prompt_config.dart';
 
-enum BacScene { family, friend, intimacy, parenting, work, selfBoundary, values, resistance }
+enum BacScene { family, friend, intimacy, parenting, work, selfBoundary, valueBeliefs, resistance }
 
 class BoundaryActionCoachHomePage extends StatefulWidget {
   const BoundaryActionCoachHomePage({super.key});
@@ -306,6 +306,8 @@ class _CaseCoachTab extends StatelessWidget {
     required this.onGuiltChanged,
     required this.onResentmentChanged,
     required this.onEnergyChanged,
+    required this.tone,
+    required this.onToneChanged,
     required this.onGenerate,
     required this.onSave,
   });
@@ -604,7 +606,7 @@ class _BoundaryActionCoachEngine {
         BacScene.parenting: '育儿边界',
         BacScene.work: '职场边界',
         BacScene.selfBoundary: '自我边界',
-        BacScene.values: '信仰/价值观边界',
+        BacScene.valueBeliefs: '信仰/价值观边界',
         BacScene.resistance: '阻力应对',
       }[scene]!;
 
@@ -723,7 +725,7 @@ class _BoundaryActionCoachEngine {
     if (scene == BacScene.friend) return '情绪倾倒型朋友';
     if (scene == BacScene.intimacy) return '逃避或冷处理伴侣';
     if (scene == BacScene.parenting) return '叛逆孩子';
-    if (scene == BacScene.values) return '罪疚操控型组织成员';
+    if (scene == BacScene.valueBeliefs) return '罪疚操控型组织成员';
     return '哭诉或愤怒型父母';
   }
 
