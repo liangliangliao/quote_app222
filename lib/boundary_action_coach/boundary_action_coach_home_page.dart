@@ -4,7 +4,7 @@ import '../pages/ai_prompt_settings_page.dart';
 import 'boundary_action_coach_catalog.dart';
 import 'boundary_action_coach_prompt_config.dart';
 
-enum BacScene { family, friend, intimacy, parenting, work, self, values, resistance }
+enum BacScene { family, friend, intimacy, parenting, work, self, valueBelief, resistance }
 
 class BoundaryActionCoachHomePage extends StatefulWidget {
   const BoundaryActionCoachHomePage({super.key});
@@ -94,7 +94,7 @@ class _CoachResult { _CoachResult({required this.summary, required this.sceneNam
 
 class _BoundaryActionCoach {
   static const caseCards = ['Sherrie型', 'Bill父母型', 'Rachel型', 'Steve型', 'Jim型', 'Robby型', 'Susie型', 'Jerry型'];
-  static String sceneName(BacScene s) => const {BacScene.family:'原生家庭边界', BacScene.friend:'朋友边界', BacScene.intimacy:'婚姻/亲密关系边界', BacScene.parenting:'育儿边界', BacScene.work:'职场边界', BacScene.self:'自我边界', BacScene.values:'信仰/价值观边界', BacScene.resistance:'阻力应对'}[s]!;
+  static String sceneName(BacScene s) => const {BacScene.family:'原生家庭边界', BacScene.friend:'朋友边界', BacScene.intimacy:'婚姻/亲密关系边界', BacScene.parenting:'育儿边界', BacScene.work:'职场边界', BacScene.self:'自我边界', BacScene.valueBelief:'信仰/价值观边界', BacScene.resistance:'阻力应对'}[s]!;
   static _CoachResult analyze(String text, BacScene scene) {
     final guilt = _hit(text, ['内疚','不孝','自私','失望','白养']); final rescue = _hit(text, ['替','收拾','还钱','帮他','帮她']); final self = _hit(text, ['刷手机','熬夜','控制不住','拖延','暴食']); final risk = _hit(text, ['威胁','打','跟踪','自杀','伤害','家暴']);
     final types = <String>[if (guilt > 0) '顺从者/罪疚压力', if (rescue > 0) '过度拯救/后果错位', if (self > 0 || scene == BacScene.self) '自我边界', if (scene == BacScene.resistance) '外在阻力', '责任混乱'];
