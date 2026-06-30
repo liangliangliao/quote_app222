@@ -66,6 +66,7 @@ import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
 import 'new_tablets/new_tablets_home_page.dart';
 import 'self_worth_ai/self_worth_ai_home_page.dart';
+import 'boundary_practice/boundary_practice_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -410,6 +411,14 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
+    _DrawerEntrySpec(
+      icon: Icons.health_and_safety_outlined,
+      title: '边界练习场 · Boundary Practice',
+      subtitle: '边界自测 → 边界雷达 → AI场景教练 → 话术生成 → 行动后果 → 内疚管理 → 复盘成长',
+      badgeText: '基于《Set Boundaries, Find Peace》核心思想：把边界从理念转化为清楚表达、行动跟进与稳定身份',
+      sequenceNumber: 38,
+      pageBuilder: (_) => const BoundaryPracticeHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.workspace_premium_outlined,
       title: '新榜 New Tablets',

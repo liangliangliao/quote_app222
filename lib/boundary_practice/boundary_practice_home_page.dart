@@ -1,0 +1,714 @@
+import 'package:flutter/material.dart';
+
+import '../pages/ai_prompt_settings_page.dart';
+import 'boundary_practice_prompt_config.dart';
+
+/// Boundary Practice is intentionally implemented as an isolated product module.
+/// It does not reuse state, DAOs, or flows from existing growth modules.
+class BoundaryPracticeHomePage extends StatefulWidget {
+  const BoundaryPracticeHomePage({super.key});
+
+  @override
+  State<BoundaryPracticeHomePage> createState() => _BoundaryPracticeHomePageState();
+}
+
+enum _BoundaryScene { family, intimacy, friendship, work, technology, self, guilt, relationship }
+
+class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
+  final TextEditingController _situationController = TextEditingController(
+    text: '我妈每天都问我和老公有没有吵架，我不说她就说我结婚以后不把她当妈了。',
+  );
+  final TextEditingController _actionTargetController = TextEditingController(text: '今晚 20:30 给妈妈打电话时');
+  final BoundaryPracticePromptConfig _promptConfig = BoundaryPracticePromptConfig();
+  _BoundaryScene _scene = _BoundaryScene.family;
+  String _profile = '混合型：松散边界 + 讨好/拯救倾向';
+  Map<String, double> _scores = const {
+    '身体': 72,
+    '性': 68,
+    '智识': 61,
+    '情绪': 38,
+    '物质': 46,
+    '时间': 34,
+    '技术': 52,
+    '自我': 41,
+  };
+  _BoundaryOutput? _output;
+  String _promptPreview = '';
+  final List<_BoundaryReview> _reviews = <_BoundaryReview>[];
+  final List<String> _favoriteScripts = <String>[];
+  final List<_BoundaryActionPlan> _actionPlans = <_BoundaryActionPlan>[];
+  final List<_RelationshipRecord> _relationships = <_RelationshipRecord>[
+    const _RelationshipRecord(
+      name: '妈妈',
+      domain: '家庭',
+      violation: '过度追问婚姻隐私',
+      expressedBoundary: '婚姻细节由小家庭内部处理',
+      response: '质疑与情绪施压',
+      distance: '保持联系但降低隐私开放度',
+      nextStep: '固定每周一次分享近况，追问时结束话题',
+    ),
+  ];
+  final Map<String, bool> _dailyReview = <String, bool>{
+    '今天我清楚表达了一个“不”或限制': false,
+    '今天我没有用过度解释换取理解': false,
+    '今天我用行动维护了边界': false,
+    '今天我尊重了别人的边界': false,
+    '今天我对一个自我承诺守信': false,
+  };
+  final Map<String, double> _domainScores = <String, double>{
+    '家庭': 36,
+    '亲密关系': 48,
+    '朋友': 54,
+    '工作': 42,
+    '社交媒体与技术': 57,
+    '金钱': 44,
+    '自我管理': 39,
+  };
+
+  static const List<String> _principles = <String>[
+    '边界不是控制别人，而是定义自己如何参与关系。',
+    '健康边界 = 清楚沟通 + 行动跟进。',
+    '内疚不一定是错误信号，也可能是旧模式正在被打破。',
+    '我有边界，别人也有边界。',
+    '不设边界会带来怨恨、倦怠、逃避和自我背叛。',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _generate();
+  }
+
+  @override
+  void dispose() {
+    _situationController.dispose();
+    _actionTargetController.dispose();
+    super.dispose();
+  }
+
+  void _runAssessment() {
+    final s = _situationController.text;
+    final loose = _hits(s, const ['不敢', '内疚', '答应', '借钱', '害怕', '失望', '帮忙', '随叫随到']);
+    final rigid = _hits(s, const ['断联', '拉黑', '不信任', '不求助', '消失', '切断']);
+    final rescue = _hits(s, const ['收拾', '解决', '替他', '替她', '救', '承担', '后果']);
+    final self = _hits(s, const ['熬夜', '拖延', '消费', '刷手机', '控制不住']);
+    final Map<String, double> next = Map<String, double>.from(_scores);
+    next['情绪'] = (72 - loose * 9 - rescue * 5).clamp(18, 92).toDouble();
+    next['时间'] = (70 - loose * 8 - self * 4).clamp(16, 90).toDouble();
+    next['物质'] = (68 - _hits(s, const ['钱', '借', '财务', '消费']) * 12).clamp(18, 88).toDouble();
+    next['技术'] = (76 - _hits(s, const ['手机', '短视频', '消息', '社交媒体', '通知']) * 13).clamp(18, 90).toDouble();
+    next['自我'] = (74 - self * 14 - loose * 4).clamp(16, 90).toDouble();
+    String type;
+    if (rigid > loose && rigid > 0) {
+      type = '僵硬边界型：用高墙、突然切断或不求助保护自己';
+    } else if (rescue >= 2) {
+      type = '拯救者型：容易替别人承担情绪、金钱或后果';
+    } else if (loose >= 2) {
+      type = '松散边界型：容易讨好、过度解释、答应后怨恨';
+    } else {
+      type = '健康边界发展型：已有觉察，重点是行动跟进与复盘';
+    }
+    setState(() {
+      _profile = type;
+      _scores = next;
+    });
+    _generate();
+  }
+
+  int _hits(String input, List<String> words) => words.where(input.contains).length;
+
+  Future<void> _generate() async {
+    final output = _BoundaryCoach.generate(
+      scene: _scene,
+      situation: _situationController.text.trim(),
+      actionTarget: _actionTargetController.text.trim(),
+    );
+    final prompt = await _promptConfig.buildPrompt(
+      scene: _BoundaryCoach.sceneKey(_scene),
+      userInput: _situationController.text.trim(),
+      profileJson: '{\"profile\":\"$_profile\",\"scores\":${_scores.length}}',
+      contextJson: '{\"action_target\":\"${_actionTargetController.text.trim()}\"}',
+      recentContextJson: '{\"review_count\":${_reviews.length}}',
+    );
+    if (!mounted) return;
+    setState(() {
+      _output = output;
+      _promptPreview = prompt;
+    });
+  }
+
+  void _openPromptSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const AiPromptSettingsPage(
+          initialModuleId: BoundaryPracticePromptConfig.moduleId,
+          initialPromptId: BoundaryPracticePromptConfig.globalId,
+        ),
+      ),
+    );
+  }
+
+  void _saveReview() {
+    if (_output == null) return;
+    setState(() {
+      _reviews.insert(
+        0,
+        _BoundaryReview(
+          time: DateTime.now(),
+          sceneName: _output!.sceneName,
+          action: _output!.todayAction,
+          script: _output!.recommendedLine,
+        ),
+      );
+    });
+    if (_output != null) {
+      _actionPlans.insert(
+        0,
+        _BoundaryActionPlan(
+          target: _BoundaryCoach.sceneName(_scene),
+          script: _output!.recommendedLine,
+          consequence: _output!.consequence,
+          dueText: _actionTargetController.text.trim().isEmpty ? '今天' : _actionTargetController.text.trim(),
+        ),
+      );
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已保存到边界复盘与行动看板')));
+  }
+
+  void _favoriteCurrentScript() {
+    final line = _output?.recommendedLine.trim();
+    if (line == null || line.isEmpty) return;
+    setState(() {
+      if (!_favoriteScripts.contains(line)) _favoriteScripts.insert(0, line);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已收藏话术')));
+  }
+
+  void _togglePlanStep(int index, int stepIndex, bool value) {
+    final plan = _actionPlans[index];
+    setState(() {
+      _actionPlans[index] = plan.copyWithStep(stepIndex, value);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final output = _output;
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F4EE),
+      appBar: AppBar(
+        title: const Text('边界练习场 · Boundary Practice'),
+        backgroundColor: const Color(0xFFF7F4EE),
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        children: [
+          _heroCard(),
+          const SizedBox(height: 12),
+          _moduleDepthCard(),
+          const SizedBox(height: 12),
+          _sectionCard(title: '一、边界自测与画像', icon: Icons.radar_outlined, children: [
+            Text(_profile, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 10),
+            _BoundaryMap(scores: _scores),
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: const [
+              _Tag('三类边界画像'), _Tag('六类边界评分'), _Tag('关系领域画像'), _Tag('推荐训练路径'),
+            ]),
+            const SizedBox(height: 10),
+            FilledButton.icon(onPressed: _runAssessment, icon: const Icon(Icons.psychology_alt_outlined), label: const Text('根据当前输入重新自测')),
+          ]),
+          const SizedBox(height: 12),
+          _sectionCard(title: '二、边界雷达 + AI 场景教练', icon: Icons.online_prediction_outlined, children: [
+            _sceneSelector(),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _situationController,
+              minLines: 4,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                labelText: '输入现实处境 / 情绪信号',
+                hintText: '例如：我答应同事帮他做报告，但我很烦……',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _actionTargetController,
+              decoration: const InputDecoration(
+                labelText: '今日最小行动发生的时间 / 对象 / 场景',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+              ),
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(onPressed: _generate, icon: const Icon(Icons.auto_awesome), label: const Text('生成边界诊断、话术与行动计划')),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(onPressed: _openPromptSettings, icon: const Icon(Icons.tune_outlined), label: const Text('到设置页自由配置本模块全部 AI 提示词')),
+          ]),
+          if (output != null) ...[
+            const SizedBox(height: 12),
+            _sectionCard(title: '三、话术生成器', icon: Icons.record_voice_over_outlined, children: [
+              _kv('一句话边界', output.recommendedLine),
+              _kv('温和版话术', output.gentleLine),
+              _kv('坚定版话术', output.firmLine),
+              _kv('不解释版', output.noExplainLine),
+              _kv('重述版', output.repeatLine),
+              OutlinedButton.icon(onPressed: _favoriteCurrentScript, icon: const Icon(Icons.bookmark_add_outlined), label: const Text('收藏当前推荐话术')),
+              if (_favoriteScripts.isNotEmpty) ...[
+                const Divider(height: 24),
+                _kv('已收藏话术', _favoriteScripts.take(3).join('\n')),
+              ],
+            ]),
+            const SizedBox(height: 12),
+            _sectionCard(title: '四、行动与后果跟踪', icon: Icons.checklist_rtl_outlined, children: [
+              _numbered(output.actionPlan),
+              const Divider(height: 24),
+              _kv('合理后果', output.consequence),
+              _kv('边界刷新提醒', '换工作、结婚、生孩子、搬家、收入变化、关系修复或对方持续不尊重后，请重新生成新版边界。'),
+            ]),
+            const SizedBox(height: 12),
+            _sectionCard(title: '四-补充：执行提醒与行动看板', icon: Icons.notifications_active_outlined, children: [
+              _actionBoard(),
+            ]),
+            const SizedBox(height: 12),
+            _sectionCard(title: '五、不适感与内疚管理', icon: Icons.favorite_border_outlined, children: [
+              _numbered(output.guiltCards),
+              const SizedBox(height: 8),
+              _kv('对方反应预演', output.reactionPlan),
+            ]),
+            const SizedBox(height: 12),
+            _sectionCard(title: '六、标准 AI 输出结构', icon: Icons.article_outlined, children: [
+              _aiOutput(output),
+              const SizedBox(height: 10),
+              FilledButton.icon(onPressed: _saveReview, icon: const Icon(Icons.save_outlined), label: const Text('保存本次边界复盘')),
+              const SizedBox(height: 8),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('查看本次三层 Prompt 拼接预览'),
+                children: [SelectableText(_promptPreview)],
+              ),
+            ]),
+          ],
+          const SizedBox(height: 12),
+          _sectionCard(title: '七、边界复盘与成长系统', icon: Icons.show_chart_outlined, children: [
+            _growthSystem(),
+          ]),
+          const SizedBox(height: 12),
+          _sectionCard(title: '七-补充：每日边界复盘打卡', icon: Icons.fact_check_outlined, children: [
+            _dailyReviewChecklist(),
+          ]),
+          const SizedBox(height: 12),
+          _sectionCard(title: '边界地图：关系领域评分', icon: Icons.map_outlined, children: [
+            _domainScoreBoard(),
+          ]),
+          const SizedBox(height: 12),
+          _sectionCard(title: '八、关系健康档案与边界刷新', icon: Icons.people_alt_outlined, children: [
+            _relationshipArchive(),
+          ]),
+          const SizedBox(height: 12),
+          _sectionCard(title: 'AI 三层 Prompt 体系（模块内置）', icon: Icons.layers_outlined, children: const [
+            _PromptBlock(title: '全局价值层', text: '识别边界问题、清楚表达需要、制定现实行动、承受不适；坚持“边界不是控制别人，而是定义自己如何参与”。'),
+            _PromptBlock(title: '场景层', text: '家庭、亲密关系、友谊、工作、技术、自我、内疚管理、关系评估八类场景分别约束分析重点。'),
+            _PromptBlock(title: '输出格式层', text: '固定输出：问题概括、边界议题、责任归位、话术、反应预案、行动跟进、内疚管理、今日最小行动、复盘与安全提醒。'),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroCard() => Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFF40513B), Color(0xFF7A5C37)]),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 18, offset: Offset(0, 8))],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('把“我应该学会拒绝”变成真实、稳定、可执行的生活方式', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900, height: 1.2)),
+          const SizedBox(height: 10),
+          const Text('产品闭环：识别问题 → 生成话术 → 执行动作 → 管理内疚 → 复盘成长。', style: TextStyle(color: Color(0xFFEDE7D7), height: 1.45)),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: _principles.map((e) => _Pill(e)).toList()),
+        ]),
+      );
+
+  Widget _moduleDepthCard() => _sectionCard(title: 'MVP 已扩展为完整产品功能矩阵', icon: Icons.dashboard_customize_outlined, children: const [
+        _PromptBlock(title: '首页', text: '今日边界提醒、今日最小行动、最近复盘、当前最需要练习的关系与 AI 快速入口。'),
+        _PromptBlock(title: '边界地图页', text: '六类边界雷达、关系领域评分、当前模式与推荐训练路径。'),
+        _PromptBlock(title: '场景教练页', text: '家庭、伴侣、朋友、工作、技术、自我边界六大训练入口。'),
+        _PromptBlock(title: '话术页', text: '一句话、温和版、坚定版、不解释版、重述版与对方反应预案。'),
+        _PromptBlock(title: '行动计划页', text: '对象、话术、时间、接受/无视/攻击时行动、内疚稳定和复盘时间。'),
+        _PromptBlock(title: '复盘页', text: '是否说清楚、是否过度解释、是否行动跟进、现在感觉和下次调整。'),
+      ]);
+
+  Widget _sceneSelector() => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: _BoundaryScene.values.map((scene) {
+          final selected = _scene == scene;
+          return ChoiceChip(
+            selected: selected,
+            label: Text(_BoundaryCoach.sceneName(scene)),
+            onSelected: (_) => setState(() => _scene = scene),
+          );
+        }).toList(),
+      );
+
+  Widget _sectionCard({required String title, required IconData icon, required List<Widget> children}) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Color(0xFFE7DDCC))),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [Icon(icon, color: const Color(0xFF6F4E27)), const SizedBox(width: 8), Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)))]),
+            const SizedBox(height: 12),
+            ...children,
+          ]),
+        ),
+      );
+
+  Widget _kv(String k, String v) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(k, style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF40513B))),
+          const SizedBox(height: 4),
+          Text(v, style: const TextStyle(height: 1.45)),
+        ]),
+      );
+
+  Widget _numbered(List<String> items) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [for (var i = 0; i < items.length; i++) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('${i + 1}. ${items[i]}', style: const TextStyle(height: 1.45)))],
+      );
+
+  Widget _aiOutput(_BoundaryOutput o) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _kv('1. 你现在遇到的边界问题', o.problem),
+        _kv('2. 核心边界议题', o.issues.join('、')),
+        _kv('3. 责任归位', '你的责任：${o.userResponsibility}\n对方的责任：${o.otherResponsibility}\n你正在多承担：${o.overResponsibility}\n可提供但不牺牲自己的支持：${o.support}'),
+        _kv('4-6. 推荐 / 温和 / 坚定话术', '${o.recommendedLine}\n${o.gentleLine}\n${o.firmLine}'),
+        _kv('7. 如果对方这样回应', o.reactionPlan),
+        _kv('8. 行动跟进', o.consequence),
+        _kv('9. 内疚管理', o.guiltCards.join('\n')),
+        _kv('10. 今日最小行动', o.todayAction),
+        _kv('11. 复盘问题', '我是否清楚表达了？\n我是否过度解释或道歉了？\n我是否用行动维护了边界？'),
+        _kv('12. 安全提醒', '如果涉及暴力、胁迫、严重控制、自伤、他伤、性侵犯、严重职场骚扰或违法风险，请优先保护安全，并寻求可信赖的人、专业机构或当地紧急服务支持。'),
+      ]);
+
+  Widget _relationshipArchive() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _kv('关系健康档案字段', '关系对象、主要越界类型、已表达边界、对方反应、我采取过的行动、当前关系距离、是否值得修复、是否需要降级/暂停/结束。'),
+        for (final r in _relationships) Card(
+          elevation: 0,
+          color: const Color(0xFFF7F4EE),
+          child: ListTile(
+            title: Text('${r.name} · ${r.domain}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            subtitle: Text('越界：${r.violation}\n已表达：${r.expressedBoundary}\n反应：${r.response}\n距离：${r.distance}\n下一步：${r.nextStep}'),
+          ),
+        ),
+        _kv('边界刷新触发器', '换工作、结婚、生孩子、搬家、收入变化、关系修复、对方持续不尊重、自己容量显著变化。'),
+        _kv('七天执行计划', '第1天识别情绪信号；第2天写一句话边界；第3天预演对方反应；第4天执行最小行动；第5天管理内疚；第6天重述或执行后果；第7天复盘并更新身份表述。'),
+        _kv('关系距离建议', '不是只能忍耐或断联，可选择：保持但限频、只谈低风险话题、减少金钱/情绪承接、暂停联系、在高风险时优先安全和正式支持。'),
+      ]);
+
+  Widget _actionBoard() {
+    if (_actionPlans.isEmpty) {
+      return const Text('保存一次边界复盘后，行动看板会生成“已表达 / 已执行后果 / 已复盘”三步追踪，避免边界只停留在话术层面。');
+    }
+    return Column(
+      children: [
+        for (var i = 0; i < _actionPlans.length; i++) Card(
+          elevation: 0,
+          color: const Color(0xFFF7F4EE),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${_actionPlans[i].target} · ${_actionPlans[i].dueText}', style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text(_actionPlans[i].script),
+              const SizedBox(height: 6),
+              Text('后果：${_actionPlans[i].consequence}', style: const TextStyle(color: Color(0xFF6F4E27))),
+              CheckboxListTile(value: _actionPlans[i].communicated, onChanged: (v) => _togglePlanStep(i, 0, v ?? false), title: const Text('已清楚表达'), dense: true, contentPadding: EdgeInsets.zero),
+              CheckboxListTile(value: _actionPlans[i].consequenceDone, onChanged: (v) => _togglePlanStep(i, 1, v ?? false), title: const Text('必要时已执行后果'), dense: true, contentPadding: EdgeInsets.zero),
+              CheckboxListTile(value: _actionPlans[i].reviewed, onChanged: (v) => _togglePlanStep(i, 2, v ?? false), title: const Text('已完成复盘'), dense: true, contentPadding: EdgeInsets.zero),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _dailyReviewChecklist() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (final entry in _dailyReview.entries) CheckboxListTile(
+          value: entry.value,
+          onChanged: (v) => setState(() => _dailyReview[entry.key] = v ?? false),
+          title: Text(entry.key),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+        _kv('今日身份沉淀', _dailyReview.values.where((v) => v).length >= 3 ? '我是一个正在用行动维护清晰关系的人。' : '今天先完成一个最小行动，不用一次变成完美有边界的人。'),
+      ]);
+
+  Widget _domainScoreBoard() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (final entry in _domainScores.entries) Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${entry.key}：${entry.value.round()}'),
+          Slider(
+            value: entry.value,
+            min: 0,
+            max: 100,
+            divisions: 20,
+            label: entry.value.round().toString(),
+            onChanged: (v) => setState(() => _domainScores[entry.key] = v),
+          ),
+        ]),
+        _kv('优先练习领域', (_domainScores.entries.toList()..sort((a, b) => a.value.compareTo(b.value))).first.key),
+      ]);
+
+  Widget _growthSystem() {
+    if (_reviews.isEmpty) {
+      return const Text('保存一次 AI 输出后，这里会形成关系健康档案、行动证据和身份化成长记录。每日复盘问题：今天我哪里说了“不”？哪里过度解释了？哪里尊重了别人和自己的边界？');
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('成长曲线：已记录 ${_reviews.length} 次边界练习；过度解释减少、边界重述、自我守信天数可持续追踪。', style: const TextStyle(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 10),
+      for (final r in _reviews.take(5)) ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const CircleAvatar(backgroundColor: Color(0xFFE7DDCC), child: Icon(Icons.flag_outlined, color: Color(0xFF40513B))),
+        title: Text('${r.sceneName} · ${r.action}', maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Text(r.script, maxLines: 2, overflow: TextOverflow.ellipsis),
+      ),
+      const SizedBox(height: 8),
+      const Text('身份建设：我不是在讨好中证明爱；我是一个尊重自己容量、资源和关系清晰度的人。'),
+    ]);
+  }
+}
+
+class _BoundaryCoach {
+  static String sceneKey(_BoundaryScene scene) => switch (scene) {
+        _BoundaryScene.family => 'family',
+        _BoundaryScene.intimacy => 'intimacy',
+        _BoundaryScene.friendship => 'friendship',
+        _BoundaryScene.work => 'work',
+        _BoundaryScene.technology => 'technology',
+        _BoundaryScene.self => 'self',
+        _BoundaryScene.guilt => 'guilt',
+        _BoundaryScene.relationship => 'relationship',
+      };
+
+  static String sceneName(_BoundaryScene scene) => switch (scene) {
+        _BoundaryScene.family => '家庭',
+        _BoundaryScene.intimacy => '亲密关系',
+        _BoundaryScene.friendship => '友谊',
+        _BoundaryScene.work => '工作',
+        _BoundaryScene.technology => '技术/社媒',
+        _BoundaryScene.self => '自我边界',
+        _BoundaryScene.guilt => '内疚管理',
+        _BoundaryScene.relationship => '关系评估',
+      };
+
+  static _BoundaryOutput generate({required _BoundaryScene scene, required String situation, required String actionTarget}) {
+    final cfg = _SceneConfig.of(scene);
+    final subject = _extractSubject(scene, situation);
+    final issue = cfg.issues;
+    final request = _extractRequest(situation, cfg.defaultRequest);
+    final recommended = '${cfg.address(subject)}，${cfg.care}，但我${cfg.boundaryVerb}$request。${cfg.followUp}';
+    final gentle = '${cfg.address(subject)}，我知道这件事对你重要。现在我需要先确认自己的容量，所以我不会马上答应$request。我们可以${cfg.supportOption}。';
+    final firm = '${cfg.address(subject)}，我已经说过我不会继续$request。如果这个边界继续被无视，我会${cfg.consequenceAction}。';
+    return _BoundaryOutput(
+      sceneName: sceneName(scene),
+      problem: '这是一个${sceneName(scene)}边界问题：你已经出现烦、累、内疚、想逃或答应后后悔的信号，需要把模糊不满转成清楚表达和行动。',
+      issues: issue,
+      userResponsibility: '清楚表达你的需要、限制和下一步行动，并检查自己是否在过度解释、讨好、冷处理或控制。',
+      otherResponsibility: cfg.otherResponsibility,
+      overResponsibility: cfg.overResponsibility,
+      support: cfg.support,
+      recommendedLine: recommended,
+      gentleLine: gentle,
+      firmLine: firm,
+      noExplainLine: '不行，我现在不方便$request。',
+      repeatLine: '我理解你不习惯这个变化，但我的决定没有改变。',
+      actionPlan: [
+        '我要对谁设边界：$subject。',
+        '我要说什么：先使用“一句话边界”，不要解释超过三分钟。',
+        '我什么时候说：${actionTarget.isEmpty ? '今天选择一个低干扰时间' : actionTarget}。',
+        '如果对方接受：感谢对方理解，并把新的互动方式具体化。',
+        '如果对方无视：重述一次边界，然后执行后果。',
+        '如果我内疚：先稳定自己，不用撤回边界换取对方舒服。',
+      ],
+      consequence: '如果对方继续无视，你可以先转换话题一次；若仍继续，就${cfg.consequenceAction}。关键是让行动和边界一致。',
+      guiltCards: const [
+        '我可以不舒服，但不撤回边界。',
+        '别人的失望不等于我的错误。',
+        '我不需要用过度解释换取理解。',
+      ],
+      reactionPlan: '对方质疑：我理解你有不同感受，但我的决定没有改变。\n对方生气：我愿意在彼此尊重时继续谈，现在先暂停。\n对方说我自私：这不是不在乎你，而是我需要保护自己的边界。\n对方讨价还价：我不会继续协商这个底线。\n对方继续越界：我会执行刚才说过的行动。',
+      todayAction: '${actionTarget.isEmpty ? '今天' : actionTarget}只说一句边界句，不补充长篇解释，并在结束后记录一次复盘。',
+    );
+  }
+
+  static String _extractSubject(_BoundaryScene scene, String s) {
+    final pairs = <String, String>{'妈': '妈', '妈妈': '妈妈', '爸': '爸', '老板': '老板', '同事': '同事', '朋友': '朋友', '伴侣': '伴侣', '老公': '老公', '老婆': '老婆', '哥哥': '哥哥', '姐姐': '姐姐'};
+    for (final e in pairs.entries) {
+      if (s.contains(e.key)) return e.value;
+    }
+    return switch (scene) { _BoundaryScene.work => '对方', _BoundaryScene.self => '自己', _ => '对方' };
+  }
+
+  static String _extractRequest(String s, String fallback) {
+    if (s.contains('借钱')) return '借钱';
+    if (s.contains('加班')) return '无条件加班';
+    if (s.contains('手机') || s.contains('短视频')) return '让手机占用我们的相处和休息时间';
+    if (s.contains('问') || s.contains('追问')) return '详细讨论这些私人细节';
+    if (s.contains('帮')) return '承担这件超出我容量的帮忙';
+    if (s.contains('熬夜')) return '继续熬夜透支自己';
+    return fallback;
+  }
+}
+
+class _SceneConfig {
+  const _SceneConfig({required this.issues, required this.care, required this.boundaryVerb, required this.defaultRequest, required this.followUp, required this.otherResponsibility, required this.overResponsibility, required this.support, required this.supportOption, required this.consequenceAction});
+  final List<String> issues;
+  final String care;
+  final String boundaryVerb;
+  final String defaultRequest;
+  final String followUp;
+  final String otherResponsibility;
+  final String overResponsibility;
+  final String support;
+  final String supportOption;
+  final String consequenceAction;
+  String address(String subject) => subject == '自己' ? '我' : subject;
+
+  static _SceneConfig of(_BoundaryScene scene) => switch (scene) {
+        _BoundaryScene.family => const _SceneConfig(issues: ['家庭边界', '情绪边界', '时间边界', '隐私边界'], care: '我知道你关心我', boundaryVerb: '不会继续', defaultRequest: '把我的私人生活全部开放给你', followUp: '我会分享近况，但具体问题我会自己处理。', otherResponsibility: '管理自己的不安、失望或需求，不用亲情施压。', overResponsibility: '用顺从、分享隐私或牺牲资源来证明爱。', support: '可以固定联系和表达关心，但不开放所有隐私或承担所有后果。', supportOption: '约一个固定时间聊近况', consequenceAction: '结束这次通话或改天再聊'),
+        _BoundaryScene.intimacy => const _SceneConfig(issues: ['亲密关系边界', '情绪边界', '物质边界', '技术边界'], care: '我在乎我们的关系', boundaryVerb: '需要重新协商', defaultRequest: '靠猜测维持关系', followUp: '我们需要把期待说清楚并形成具体协议。', otherResponsibility: '表达需要、尊重协议，并承担自己的行为影响。', overResponsibility: '用忍耐、追问或控制来维持亲密。', support: '可以一起协商家务、金钱、手机、性生活和冲突规则。', supportOption: '一起定一个明确协议', consequenceAction: '暂停这次讨论并约定再谈时间'),
+        _BoundaryScene.friendship => const _SceneConfig(issues: ['友谊边界', '情绪边界', '时间边界', '物质边界'], care: '我珍惜我们的友谊', boundaryVerb: '不能继续', defaultRequest: '无限承接情绪或随叫随到', followUp: '我能支持你，但不能充当治疗师或救援者。', otherResponsibility: '寻找多元支持、尊重朋友的时间和资源。', overResponsibility: '替朋友消化情绪、收拾烂摊子或承担财务风险。', support: '可以倾听一段时间、推荐资源或约定互惠联系。', supportOption: '把聊天控制在一个可承受的时间', consequenceAction: '降低互动频率'),
+        _BoundaryScene.work => const _SceneConfig(issues: ['工作边界', '时间边界', '职责边界', '尊严边界'], care: '我会对工作负责', boundaryVerb: '需要先确认优先级，不能默认接受', defaultRequest: '超出职责和时间容量的任务', followUp: '请帮我确认优先级、截止时间和资源。', otherResponsibility: '清楚分配任务、尊重下班时间和正式流程。', overResponsibility: '用无条件可用证明自己是好员工。', support: '可以提供专业协作，但不牺牲所有休息和职责边界。', supportOption: '重新排优先级', consequenceAction: '把任务退回并抄送负责人'),
+        _BoundaryScene.technology => const _SceneConfig(issues: ['技术边界', '注意力边界', '时间边界', '亲密关系边界'], care: '我需要保护注意力和休息', boundaryVerb: '不会继续', defaultRequest: '被消息、短视频或通知牵着走', followUp: '我会设置静音、限时和无手机时段。', otherResponsibility: '尊重离线时间和当面相处规则。', overResponsibility: '把即时回复当成关系证明。', support: '可以约定回复窗口和无手机陪伴时间。', supportOption: '约定一个固定回复窗口', consequenceAction: '关闭通知并把手机放到另一个房间'),
+        _BoundaryScene.self => const _SceneConfig(issues: ['自我边界', '时间边界', '物质边界', '身体边界'], care: '我想对自己守信', boundaryVerb: '不再默认允许自己', defaultRequest: '继续重复这个伤害自己的旧模式', followUp: '我今天只做一个最小可执行行动。', otherResponsibility: '他人不需要替我执行我的自我承诺。', overResponsibility: '用自责代替行动修复。', support: '可以请求陪伴或环境支持，但行动由我执行。', supportOption: '请一个人见证我的七天计划', consequenceAction: '启动预设替代行为并记录失败修复'),
+        _BoundaryScene.guilt => const _SceneConfig(issues: ['内疚管理', '情绪边界', '责任边界'], care: '我可以善良', boundaryVerb: '不需要因为内疚撤回', defaultRequest: '用自我牺牲证明关系', followUp: '我会先稳定自己，再决定是否需要重述边界。', otherResponsibility: '处理自己的失望，而不是把失望变成施压。', overResponsibility: '把对方不舒服等同于自己做错。', support: '可以表达理解，但不牺牲底线。', supportOption: '给对方一点时间消化', consequenceAction: '暂停回应，24小时后再复盘'),
+        _BoundaryScene.relationship => const _SceneConfig(issues: ['关系评估', '边界执行历史', '关系距离'], care: '我愿意看事实而不是只看承诺', boundaryVerb: '需要观察行为证据后再决定是否继续', defaultRequest: '忽视边界后只用口头道歉恢复原状', followUp: '关系能否继续，要看边界是否被真实尊重。', otherResponsibility: '用持续行为改变证明尊重，而不是只解释。', overResponsibility: '无限给机会、替对方合理化或忽视安全风险。', support: '可以给出清楚条件和观察期限。', supportOption: '设一个具体观察周期', consequenceAction: '降低关系距离或暂停联系'),
+      };
+}
+
+class _BoundaryOutput {
+  const _BoundaryOutput({required this.sceneName, required this.problem, required this.issues, required this.userResponsibility, required this.otherResponsibility, required this.overResponsibility, required this.support, required this.recommendedLine, required this.gentleLine, required this.firmLine, required this.noExplainLine, required this.repeatLine, required this.actionPlan, required this.consequence, required this.guiltCards, required this.reactionPlan, required this.todayAction});
+  final String sceneName;
+  final String problem;
+  final List<String> issues;
+  final String userResponsibility;
+  final String otherResponsibility;
+  final String overResponsibility;
+  final String support;
+  final String recommendedLine;
+  final String gentleLine;
+  final String firmLine;
+  final String noExplainLine;
+  final String repeatLine;
+  final List<String> actionPlan;
+  final String consequence;
+  final List<String> guiltCards;
+  final String reactionPlan;
+  final String todayAction;
+}
+
+class _BoundaryActionPlan {
+  const _BoundaryActionPlan({
+    required this.target,
+    required this.script,
+    required this.consequence,
+    required this.dueText,
+    this.communicated = false,
+    this.consequenceDone = false,
+    this.reviewed = false,
+  });
+  final String target;
+  final String script;
+  final String consequence;
+  final String dueText;
+  final bool communicated;
+  final bool consequenceDone;
+  final bool reviewed;
+
+  _BoundaryActionPlan copyWithStep(int index, bool value) {
+    return _BoundaryActionPlan(
+      target: target,
+      script: script,
+      consequence: consequence,
+      dueText: dueText,
+      communicated: index == 0 ? value : communicated,
+      consequenceDone: index == 1 ? value : consequenceDone,
+      reviewed: index == 2 ? value : reviewed,
+    );
+  }
+}
+
+class _RelationshipRecord {
+  const _RelationshipRecord({
+    required this.name,
+    required this.domain,
+    required this.violation,
+    required this.expressedBoundary,
+    required this.response,
+    required this.distance,
+    required this.nextStep,
+  });
+  final String name;
+  final String domain;
+  final String violation;
+  final String expressedBoundary;
+  final String response;
+  final String distance;
+  final String nextStep;
+}
+
+class _BoundaryReview {
+  const _BoundaryReview({required this.time, required this.sceneName, required this.action, required this.script});
+  final DateTime time;
+  final String sceneName;
+  final String action;
+  final String script;
+}
+
+class _BoundaryMap extends StatelessWidget {
+  const _BoundaryMap({required this.scores});
+  final Map<String, double> scores;
+  @override
+  Widget build(BuildContext context) => Column(
+        children: scores.entries.map((e) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [
+            SizedBox(width: 44, child: Text(e.key, style: const TextStyle(fontWeight: FontWeight.w700))),
+            Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(99), child: LinearProgressIndicator(value: e.value / 100, minHeight: 10, backgroundColor: const Color(0xFFEDE7D7), color: Color.lerp(const Color(0xFFC7522A), const Color(0xFF40513B), e.value / 100)))),
+            const SizedBox(width: 8),
+            Text(e.value.round().toString()),
+          ]),
+        )).toList(),
+      );
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7), decoration: BoxDecoration(color: Colors.white.withOpacity(.14), borderRadius: BorderRadius.circular(99), border: Border.all(color: Colors.white24)), child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)));
+}
+
+class _Tag extends StatelessWidget {
+  const _Tag(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Chip(label: Text(text), backgroundColor: const Color(0xFFF7F4EE), side: const BorderSide(color: Color(0xFFE7DDCC)));
+}
+
+class _PromptBlock extends StatelessWidget {
+  const _PromptBlock({required this.title, required this.text});
+  final String title;
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 10), child: Text('$title：$text', style: const TextStyle(height: 1.45)));
+}
