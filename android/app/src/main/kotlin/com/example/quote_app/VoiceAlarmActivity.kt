@@ -68,8 +68,8 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "chat_input_v39_safer_commands_user_background_configured_silence_20260629"
-  private val batchChatPipelineSummary = "自动待命多轮录音：关闭指令更严格，允许切后台，严格按配置静音时长提交"
+  private val batchChatPipelineVersion = "chat_input_v40_recent_voice_window_empty_guard_20260630"
+  private val batchChatPipelineSummary = "自动待命多轮录音：用近期人声窗口确认真人语音，降低空识别误触发并恢复被旧噪声债阻塞的开口"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
     VoiceAlarmDebugLog.write(this, event, detail, data)
@@ -1704,6 +1704,14 @@ class VoiceAlarmActivity : Activity() {
                 if (autoArmVoiceShape.voicedScore >= 22 || autoArmVoiceShape.zcrPermille in 10..220 || autoArmVoiceShape.crestX100 in 140..2400) {
                   autoArmStrongVoiceLikeHitCount += 1
                 }
+                // Rejection debt must describe the recent window, not the whole candidate lifetime.
+                // Logs showed real speech staying forever in "suspected voice" after a noisy start:
+                // startHits kept growing, but old rejectedHits still dominated and blocked confirmation.
+                if (autoArmEndpointVoiceLike) {
+                  autoArmRejectedHitCount = (autoArmRejectedHitCount - 2).coerceAtLeast(0)
+                } else {
+                  autoArmRejectedHitCount = (autoArmRejectedHitCount - 1).coerceAtLeast(0)
+                }
               } else {
                 autoArmRejectedHitCount += 1
               }
@@ -1771,18 +1779,33 @@ class VoiceAlarmActivity : Activity() {
             (speech || softSpeech) &&
             autoArmStartFirstAt > 0L &&
             now - autoArmStartFirstAt >= maxOf(minStartWindowMs, 900L)
-          val rejectedTooMany = autoArmRejectedHitCount >= 4 && autoArmRejectedHitCount * 100 > autoArmStartHitCount * 24
+          val recentVoiceRecoveryOk =
+            autoArmStartHitCount >= maxOf(requiredHits * 3, 24) &&
+            autoArmVoiceLikeHitCount >= maxOf(requiredHits * 2, 16) &&
+            autoArmEndpointVoiceLikeHitCount >= maxOf(requiredHits, 8) &&
+            autoArmLastVoiceLikeAt > 0L &&
+            now - autoArmLastVoiceLikeAt <= 700L &&
+            autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 22
+          val rejectedTooMany =
+            autoArmRejectedHitCount >= 4 &&
+              autoArmRejectedHitCount * 100 > autoArmStartHitCount * 24 &&
+              !recentVoiceRecoveryOk
           val postPlaybackStartOk = !postPlaybackHandoffActive || isPostPlaybackStartStrongEnough(autoArmVoiceShape, level, noiseRms)
+          val shortStrongShapeOk =
+            autoArmVoiceShape.voicedScore >= 58 &&
+              autoArmVoiceShape.zcrPermille in 35..180 &&
+              autoArmVoiceShape.crestX100 in 150..900
           val shortStrongStart = autoArmStartSpeech &&
-            autoArmStartHitCount >= 4 &&
-            autoArmStrongVoiceLikeHitCount >= 4 &&
-            autoArmEndpointVoiceLikeHitCount >= 4 &&
-            autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 70 &&
+            autoArmStartHitCount >= 6 &&
+            autoArmStrongVoiceLikeHitCount >= 6 &&
+            autoArmEndpointVoiceLikeHitCount >= 5 &&
+            autoArmVoiceLikeHitCount * 100 >= autoArmStartHitCount * 75 &&
+            shortStrongShapeOk &&
             !rejectedTooMany &&
             postPlaybackStartOk
           val confirmedSpeech = speechStarted ||
             shortStrongStart ||
-            (autoArmStartSpeech && speechHitCount >= requiredHits && startWindowOk && voiceLikeRatioOk && (strongVoiceShapeOk || warmVoiceShapeOk) && (endpointVoiceOk || sustainedWarmVoiceOk) && !rejectedTooMany && postPlaybackStartOk)
+            (autoArmStartSpeech && speechHitCount >= requiredHits && startWindowOk && voiceLikeRatioOk && (strongVoiceShapeOk || warmVoiceShapeOk || recentVoiceRecoveryOk) && (endpointVoiceOk || sustainedWarmVoiceOk || recentVoiceRecoveryOk) && !rejectedTooMany && postPlaybackStartOk)
           if (softSpeech && softSpeechHitCount >= 2) {
             // 软声音只代表“有较明显声音输入”，不能直接确认为用户说话；
             // 否则底噪/口水音/残留播放声会持续刷新静音端点，导致永远不提交，
