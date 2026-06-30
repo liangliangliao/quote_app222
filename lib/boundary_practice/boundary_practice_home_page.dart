@@ -606,6 +606,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
 
   Widget _aiOutput(_BoundaryOutput o) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _kv('1. 你现在遇到的边界问题', o.problem),
+        _kv('边界侵犯级别', o.violationLevel),
         _kv('2. 核心边界议题', o.issues.join('、')),
         _kv('3. 责任归位', '你的责任：${o.userResponsibility}\n对方的责任：${o.otherResponsibility}\n你正在多承担：${o.overResponsibility}\n可提供但不牺牲自己的支持：${o.support}'),
         _kv('4-6. 推荐 / 温和 / 坚定话术', '${o.recommendedLine}\n${o.gentleLine}\n${o.firmLine}'),
@@ -793,12 +794,14 @@ class _BoundaryCoach {
     final subject = _extractSubject(scene, situation);
     final issue = cfg.issues;
     final request = _extractRequest(situation, cfg.defaultRequest);
+    final violationLevel = _classifyViolation(situation);
     final recommended = '${cfg.address(subject)}，${cfg.care}，但我${cfg.boundaryVerb}$request。${cfg.followUp}';
     final gentle = '${cfg.address(subject)}，我知道这件事对你重要。现在我需要先确认自己的容量，所以我不会马上答应$request。我们可以${cfg.supportOption}。';
     final firm = '${cfg.address(subject)}，我已经说过我不会继续$request。如果这个边界继续被无视，我会${cfg.consequenceAction}。';
     return _BoundaryOutput(
       sceneName: sceneName(scene),
       problem: '这是一个${sceneName(scene)}边界问题：你已经出现烦、累、内疚、想逃或答应后后悔的信号，需要把模糊不满转成清楚表达和行动。',
+      violationLevel: violationLevel,
       issues: issue,
       userResponsibility: '清楚表达你的需要、限制和下一步行动，并检查自己是否在过度解释、讨好、冷处理或控制。',
       otherResponsibility: cfg.otherResponsibility,
@@ -826,6 +829,18 @@ class _BoundaryCoach {
       reactionPlan: '对方质疑：我理解你有不同感受，但我的决定没有改变。\n对方生气：我愿意在彼此尊重时继续谈，现在先暂停。\n对方说我自私：这不是不在乎你，而是我需要保护自己的边界。\n对方讨价还价：我不会继续协商这个底线。\n对方继续越界：我会执行刚才说过的行动。',
       todayAction: '${actionTarget.isEmpty ? '今天' : actionTarget}只说一句边界句，不补充长篇解释，并在结束后记录一次复盘。',
     );
+  }
+
+  static String _classifyViolation(String s) {
+    final severe = ['暴力', '威胁', '胁迫', '性骚扰', '性侵犯', '控制', '跟踪', '羞辱', '霸凌', '违法', '自伤', '他伤'];
+    final chronic = ['每次', '总是', '长期', '反复', '持续', '多年'];
+    if (severe.any(s.contains)) {
+      return '大 B 边界侵犯：可能涉及安全、权力压迫、严重控制、暴力/胁迫/骚扰或违法风险，优先安全、记录证据并寻求可信赖的人、专业机构或当地紧急服务支持。';
+    }
+    if (chronic.any(s.contains)) {
+      return '大 B 倾向：这是反复或长期模式，不宜只靠一次温和沟通，需要清楚后果、关系距离调整和持续观察行为证据。';
+    }
+    return '小 b 边界侵犯：偏日常轻微或中度越界，优先使用清楚沟通、重述边界和一致行动。';
   }
 
   static String _extractSubject(_BoundaryScene scene, String s) {
@@ -874,9 +889,10 @@ class _SceneConfig {
 }
 
 class _BoundaryOutput {
-  const _BoundaryOutput({required this.sceneName, required this.problem, required this.issues, required this.userResponsibility, required this.otherResponsibility, required this.overResponsibility, required this.support, required this.recommendedLine, required this.gentleLine, required this.firmLine, required this.noExplainLine, required this.repeatLine, required this.actionPlan, required this.consequence, required this.guiltCards, required this.reactionPlan, required this.todayAction});
+  const _BoundaryOutput({required this.sceneName, required this.problem, required this.violationLevel, required this.issues, required this.userResponsibility, required this.otherResponsibility, required this.overResponsibility, required this.support, required this.recommendedLine, required this.gentleLine, required this.firmLine, required this.noExplainLine, required this.repeatLine, required this.actionPlan, required this.consequence, required this.guiltCards, required this.reactionPlan, required this.todayAction});
   final String sceneName;
   final String problem;
+  final String violationLevel;
   final List<String> issues;
   final String userResponsibility;
   final String otherResponsibility;
