@@ -18,6 +18,7 @@ import '../adaptation_compass/adaptation_compass_prompt_config.dart';
 import '../new_tablets/new_tablets_prompt_config.dart';
 import '../self_worth_ai/self_worth_ai_prompt_config.dart';
 import '../boundary_practice/boundary_practice_prompt_config.dart';
+import '../boundary_action_coach/boundary_action_coach_prompt_config.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -52,6 +53,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final SelfWorthAiPromptConfig _swPrompts = SelfWorthAiPromptConfig();
   final NewTabletsPromptConfig _ntPrompts = NewTabletsPromptConfig();
   final BoundaryPracticePromptConfig _bpPrompts = BoundaryPracticePromptConfig();
+  final BoundaryActionCoachPromptConfig _bacPrompts = BoundaryActionCoachPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -89,6 +91,12 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<_PromptModule> get _modules => <_PromptModule>[
+        _PromptModule(
+          id: BoundaryActionCoachPromptConfig.moduleId,
+          name: BoundaryActionCoachPromptConfig.moduleName,
+          description: '统一配置边界行动教练的全局价值层、输出格式层、八大场景层、十个产品功能层、安全伦理与异常修复 Prompt。覆盖值保存在 ai_prompt.boundary_action_coach.*，与 Boundary Practice 等模块隔离。',
+          items: BoundaryActionCoachPromptConfig.allIds.map((id) => _PromptItem(id: id, name: BoundaryActionCoachPromptConfig.labels[id] ?? id)).toList(growable: false),
+        ),
         _PromptModule(
           id: BoundaryPracticePromptConfig.moduleId,
           name: BoundaryPracticePromptConfig.moduleName,
@@ -524,6 +532,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         _ccBackups = await _swPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('nt_')) {
         _ccBackups = await _ntPrompts.listBackups(_promptId);
+      } else if (_promptId.startsWith('bac_')) {
+        _ccBackups = await _bacPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('bp_')) {
         _ccBackups = await _bpPrompts.listBackups(_promptId);
       } else {
@@ -682,6 +692,23 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         if (ok != true) return;
       }
     }
+    if (_promptId.startsWith('bac_')) {
+      final missing = _bacPrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
+      if (missing.isNotEmpty) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('关键占位符缺失'),
+            content: Text("当前模板缺少：${missing.join('、')}。保存后 AI 仍可调用，但上下文可能不完整。是否仍然保存？"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('返回修改')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('仍然保存')),
+            ],
+          ),
+        );
+        if (ok != true) return;
+      }
+    }
     if (_promptId.startsWith('bp_')) {
       final missing = _bpPrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
       if (missing.isNotEmpty) {
@@ -806,17 +833,19 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       await _swPrompts.clearPromptOverride(_promptId);
     } else if (_promptId.startsWith('nt_')) {
       await _ntPrompts.clearPromptOverride(_promptId);
+    } else if (_promptId.startsWith('bac_')) {
+      await _bacPrompts.clearPromptOverride(_promptId);
     } else if (_promptId.startsWith('bp_')) {
       await _bpPrompts.clearPromptOverride(_promptId);
     } else {
       await _savePromptById(_promptId, def);
     }
     await _loadPrompt();
-    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('sw_') || _promptId.startsWith('nt_') || _promptId.startsWith('bp_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
+    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('sw_') || _promptId.startsWith('nt_') || _promptId.startsWith('bac_') || _promptId.startsWith('bp_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
   }
 
   Future<void> _restoreCcBackup(CcPromptBackupRecord backup) async {
-    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('sw_') && !_promptId.startsWith('nt_') && !_promptId.startsWith('bp_')) return;
+    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('sw_') && !_promptId.startsWith('nt_') && !_promptId.startsWith('bac_') && !_promptId.startsWith('bp_')) return;
     setState(() => _backupLoading = true);
     try {
       if (_promptId.startsWith('cc_')) {
@@ -845,6 +874,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         await _swPrompts.restoreBackup(_promptId, backup.key);
       } else if (_promptId.startsWith('nt_')) {
         await _ntPrompts.restoreBackup(_promptId, backup.key);
+      } else if (_promptId.startsWith('bac_')) {
+        await _bacPrompts.restoreBackup(_promptId, backup.key);
       } else {
         await _bpPrompts.restoreBackup(_promptId, backup.key);
       }
@@ -1199,6 +1230,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<Map<String, String>> _inspectPrompt(String id) {
+    if (id.startsWith('bac_')) {
+      return _bacPrompts.inspectPrompt(id);
+    }
     if (id.startsWith('bp_')) {
       return _bpPrompts.inspectPrompt(id);
     }
@@ -1292,6 +1326,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<void> _savePromptById(String id, String value) {
+    if (id.startsWith('bac_')) {
+      return _bacPrompts.savePrompt(id, value);
+    }
     if (id.startsWith('bp_')) {
       return _bpPrompts.savePrompt(id, value);
     }
