@@ -67,7 +67,6 @@ import 'adaptation_compass/adaptation_compass_home_page.dart';
 import 'new_tablets/new_tablets_home_page.dart';
 import 'self_worth_ai/self_worth_ai_home_page.dart';
 import 'boundary_practice/boundary_practice_home_page.dart';
-import 'boundary_action_coach/boundary_action_coach_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -412,14 +411,6 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
-    _DrawerEntrySpec(
-      icon: Icons.fence_outlined,
-      title: '边界行动教练 · Boundary Action Coach',
-      subtitle: '识别问题 → 区分责任 → 澄清价值 → 设计边界 → 练习表达 → 承担后果 → 支持复盘',
-      badgeText: '独立模块：基于《Boundaries: When to Say Yes, How to Say No》的 AI 边界行动闭环',
-      sequenceNumber: 39,
-      pageBuilder: (_) => const BoundaryActionCoachHomePage(),
-    ),
     _DrawerEntrySpec(
       icon: Icons.health_and_safety_outlined,
       title: '边界练习场 · Boundary Practice',

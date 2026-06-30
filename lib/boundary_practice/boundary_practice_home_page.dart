@@ -14,6 +14,90 @@ class BoundaryPracticeHomePage extends StatefulWidget {
 
 enum _BoundaryScene { family, intimacy, friendship, work, technology, self, guilt, relationship }
 
+
+class _StrictModuleSpec {
+  const _StrictModuleSpec({
+    required this.shortTitle,
+    required this.goal,
+    required this.principle,
+    required this.features,
+    required this.liveEntry,
+  });
+  final String shortTitle;
+  final String goal;
+  final String principle;
+  final List<String> features;
+  final String liveEntry;
+}
+
+const List<_StrictModuleSpec> _strictSpecs = <_StrictModuleSpec>[
+  _StrictModuleSpec(
+    shortTitle: '1 自测',
+    goal: '识别用户当前边界类型：松散、僵硬、健康或混合型。',
+    principle: '来自《Set Boundaries, Find Peace》中松散边界、僵硬边界、健康边界的区分。',
+    features: <String>['初始边界自测', '身体/性/智识/情绪/物质/时间六类边界评分', '家庭/亲密/朋友/工作/技术/金钱/自我管理关系领域画像', '输出风险、三个练习方向和推荐路径'],
+    liveEntry: '“边界自测与画像”区：自测题 + 六类边界地图 + 关系领域滑杆。',
+  ),
+  _StrictModuleSpec(
+    shortTitle: '2 雷达',
+    goal: '把烦、累、怨、想逃、答应后后悔等情绪翻译成边界问题。',
+    principle: '怨恨、焦虑、倦怠常常是边界信号；边界雷达负责识别越界和责任归位。',
+    features: <String>['情绪输入', '小 b / 大 B 边界侵犯识别', '我的责任/对方责任/多承担责任/可提供支持分析'],
+    liveEntry: '“边界雷达 + AI 场景教练”输入区与标准 AI 输出中的责任归位。',
+  ),
+  _StrictModuleSpec(
+    shortTitle: '3 教练',
+    goal: '把核心思想应用到家庭、亲密关系、友谊、工作、技术、自我边界等真实场景。',
+    principle: '边界不是冷漠，而是帮助用户清楚、坚定、尊重地活在关系中。',
+    features: <String>['家庭边界教练', '亲密关系边界教练', '友谊边界教练', '工作边界教练', '技术边界教练', '自我边界教练'],
+    liveEntry: '场景 ChoiceChip：家庭/亲密关系/友谊/工作/技术/自我/内疚/关系评估。',
+  ),
+  _StrictModuleSpec(
+    shortTitle: '4 话术',
+    goal: '把模糊不满转成清楚表达，避免攻击、羞辱、冷处理和过度解释。',
+    principle: '坚定表达应简短、直接、尊重、清楚；不要期待别人猜。',
+    features: <String>['一句话边界', '温和版话术', '坚定版话术', '重述边界话术', '不解释版话术', '话术收藏'],
+    liveEntry: '“话术生成器”区生成五类话术并可收藏。',
+  ),
+  _StrictModuleSpec(
+    shortTitle: '5 行动',
+    goal: '防止用户只说边界却不执行边界。',
+    principle: '边界 = 沟通 + 行动；没有行动的边界只是愿望。',
+    features: <String>['边界行动计划', '后果设定器', '执行提醒', '边界刷新'],
+    liveEntry: '“行动与后果跟踪”“执行提醒与行动看板”“边界刷新触发器”。',
+  ),
+  _StrictModuleSpec(
+    shortTitle: '6 内疚',
+    goal: '帮助用户度过设边界后的心理反弹期。',
+    principle: '内疚不一定说明做错，可能只是讨好、拯救或回避旧模式被打破。',
+    features: <String>['内疚识别', '不适感陪伴卡', '对方反应预演', '事实 vs 解释', '情绪稳定练习'],
+    liveEntry: '“不适感与内疚管理”“事实 vs 解释工作台”“对方反应预演训练器”。',
+  ),
+  _StrictModuleSpec(
+    shortTitle: '7 成长',
+    goal: '把一次次边界练习转成长期身份变化。',
+    principle: '边界需要重述、刷新和长期练习；关系能否继续取决于边界是否被真实尊重。',
+    features: <String>['每日边界复盘', '边界成长曲线', '关系健康档案', '边界身份建设', '关系评估与距离调整'],
+    liveEntry: '“每日边界复盘打卡”“关系健康档案”“关系评估与距离调整器”。',
+  ),
+];
+
+
+class _BoundaryPersonaSpec {
+  const _BoundaryPersonaSpec({required this.name, required this.signs, required this.needs});
+  final String name;
+  final List<String> signs;
+  final List<String> needs;
+}
+
+const List<_BoundaryPersonaSpec> _personaSpecs = <_BoundaryPersonaSpec>[
+  _BoundaryPersonaSpec(name: '讨好型用户', signs: <String>['总是答应别人', '害怕让别人失望', '说“不”后内疚', '累、怨恨、想逃'], needs: <String>['学会拒绝', '减少过度解释', '承受内疚', '把责任还给别人']),
+  _BoundaryPersonaSpec(name: '拯救者型用户', signs: <String>['总想解决别人的问题', '替别人收拾烂摊子', '像治疗师/父母/财务救援者', '帮助后怨恨'], needs: <String>['区分支持和拯救', '不替别人承担后果', '设置金钱/情绪/时间边界']),
+  _BoundaryPersonaSpec(name: '僵硬边界型用户', signs: <String>['不求助', '不表达脆弱', '冲突时切断关系', '很难信任别人'], needs: <String>['安全表达', '区分健康边界和高墙', '低风险亲密连接']),
+  _BoundaryPersonaSpec(name: '关系混乱型用户', signs: <String>['家庭/伴侣/朋友/职场边界不清', '被拉进别人情绪和责任', '不知道继续/减少/结束'], needs: <String>['边界诊断', '关系距离评估', '对话脚本', '后续行动计划']),
+  _BoundaryPersonaSpec(name: '自我边界薄弱型用户', signs: <String>['冲动消费', '刷手机失控', '熬夜拖延', '反复进入伤害性关系'], needs: <String>['建立自我承诺', '小行动重建身份', '追踪自我边界执行']),
+];
+
 class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
   final TextEditingController _situationController = TextEditingController(
     text: '我妈每天都问我和老公有没有吵架，我不说她就说我结婚以后不把她当妈了。',
@@ -23,6 +107,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
   final TextEditingController _guiltStoryController = TextEditingController(text: '我这样很自私，他会不喜欢我');
   final BoundaryPracticePromptConfig _promptConfig = BoundaryPracticePromptConfig();
   _BoundaryScene _scene = _BoundaryScene.family;
+  String _selectedPersona = '讨好型用户';
   String _profile = '混合型：松散边界 + 讨好/拯救倾向';
   Map<String, double> _scores = const {
     '身体': 72,
@@ -146,7 +231,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     final prompt = await _promptConfig.buildPrompt(
       scene: _BoundaryCoach.sceneKey(_scene),
       userInput: _situationController.text.trim(),
-      profileJson: '{\"profile\":\"$_profile\",\"scores\":${_scores.length}}',
+      profileJson: '{\"profile\":\"$_profile\",\"persona\":\"$_selectedPersona\",\"scores\":${_scores.length}}',
       contextJson: '{\"action_target\":\"${_actionTargetController.text.trim()}\"}',
       recentContextJson: '{\"review_count\":${_reviews.length}}',
     );
@@ -169,29 +254,29 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
   }
 
   void _saveReview() {
-    if (_output == null) return;
+    final output = _output;
+    if (output == null) return;
     setState(() {
       _reviews.insert(
         0,
         _BoundaryReview(
           time: DateTime.now(),
-          sceneName: _output!.sceneName,
-          action: _output!.todayAction,
-          script: _output!.recommendedLine,
+          sceneName: output.sceneName,
+          action: output.todayAction,
+          script: output.recommendedLine,
         ),
       );
-    });
-    if (_output != null) {
       _actionPlans.insert(
         0,
         _BoundaryActionPlan(
           target: _BoundaryCoach.sceneName(_scene),
-          script: _output!.recommendedLine,
-          consequence: _output!.consequence,
+          script: output.recommendedLine,
+          consequence: output.consequence,
           dueText: _actionTargetController.text.trim().isEmpty ? '今天' : _actionTargetController.text.trim(),
         ),
       );
-    }
+      _dailyReview['今天我清楚表达了一个“不”或限制'] = true;
+    });
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已保存到边界复盘与行动看板')));
   }
 
@@ -226,7 +311,17 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         children: [
           _heroCard(),
           const SizedBox(height: 12),
+          _strictSevenModuleNavigator(),
+          const SizedBox(height: 12),
+          _oneToOneFeatureMatrix(),
+          const SizedBox(height: 12),
+          _linkedWorkflowPanel(),
+          const SizedBox(height: 12),
           _moduleDepthCard(),
+          const SizedBox(height: 12),
+          _sectionCard(title: '三、目标用户画像选择', icon: Icons.person_search_outlined, children: [
+            _personaSelector(),
+          ]),
           const SizedBox(height: 12),
           _sectionCard(title: '一、边界自测与画像', icon: Icons.radar_outlined, children: [
             Text(_profile, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -369,13 +464,124 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         ]),
       );
 
-  Widget _moduleDepthCard() => _sectionCard(title: 'MVP 已扩展为完整产品功能矩阵', icon: Icons.dashboard_customize_outlined, children: const [
-        _PromptBlock(title: '首页', text: '今日边界提醒、今日最小行动、最近复盘、当前最需要练习的关系与 AI 快速入口。'),
-        _PromptBlock(title: '边界地图页', text: '六类边界雷达、关系领域评分、当前模式与推荐训练路径。'),
-        _PromptBlock(title: '场景教练页', text: '家庭、伴侣、朋友、工作、技术、自我边界六大训练入口。'),
-        _PromptBlock(title: '话术页', text: '一句话、温和版、坚定版、不解释版、重述版与对方反应预案。'),
-        _PromptBlock(title: '行动计划页', text: '对象、话术、时间、接受/无视/攻击时行动、内疚稳定和复盘时间。'),
-        _PromptBlock(title: '复盘页', text: '是否说清楚、是否过度解释、是否行动跟进、现在感觉和下次调整。'),
+
+  Widget _strictSevenModuleNavigator() => _sectionCard(
+        title: '严格按产品设计方案落地的七大模块导航',
+        icon: Icons.account_tree_outlined,
+        children: [
+          const Text(
+            '本区按原产品方案的七大模块逐项呈现：每个模块都有目标、书中思想、子功能和本页可操作入口，避免把方案简化成单一聊天页。',
+            style: TextStyle(height: 1.45),
+          ),
+          const SizedBox(height: 12),
+          DefaultTabController(
+            length: _strictSpecs.length,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TabBar(
+                  isScrollable: true,
+                  labelColor: const Color(0xFF40513B),
+                  unselectedLabelColor: const Color(0xFF6B7280),
+                  tabs: [for (final spec in _strictSpecs) Tab(text: spec.shortTitle)],
+                ),
+                SizedBox(
+                  height: 330,
+                  child: TabBarView(
+                    children: [
+                      for (final spec in _strictSpecs)
+                        ListView(
+                          padding: const EdgeInsets.only(top: 12),
+                          children: [
+                            _kv('模块目标', spec.goal),
+                            _kv('对应核心思想', spec.principle),
+                            const Text('子功能', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF40513B))),
+                            const SizedBox(height: 4),
+                            for (final feature in spec.features)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text('• $feature', style: const TextStyle(height: 1.35)),
+                              ),
+                            const SizedBox(height: 8),
+                            _kv('本页已落地入口', spec.liveEntry),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+
+
+  int get _workflowCompletedCount {
+    final steps = <bool>[
+      _situationController.text.trim().isNotEmpty,
+      _output != null,
+      _favoriteScripts.isNotEmpty,
+      _actionPlans.isNotEmpty,
+      _actionPlans.any((p) => p.communicated || p.consequenceDone),
+      _reviews.isNotEmpty,
+      _dailyReview.values.where((v) => v).length >= 3,
+    ];
+    return steps.where((v) => v).length;
+  }
+
+  Widget _linkedWorkflowPanel() {
+    final output = _output;
+    final steps = <_FlowStepView>[
+      _FlowStepView('1 识别问题', _situationController.text.trim().isNotEmpty, _situationController.text.trim().isEmpty ? '先输入现实处境或情绪信号。' : _situationController.text.trim()),
+      _FlowStepView('2 生成诊断', output != null, output?.problem ?? '点击“生成边界诊断、话术与行动计划”。'),
+      _FlowStepView('3 选定话术', _favoriteScripts.isNotEmpty, _favoriteScripts.isEmpty ? '收藏一条你准备真实使用的话术。' : _favoriteScripts.first),
+      _FlowStepView('4 建立行动', _actionPlans.isNotEmpty, _actionPlans.isEmpty ? '保存本次边界复盘后自动生成行动卡。' : '${_actionPlans.first.target} · ${_actionPlans.first.dueText}'),
+      _FlowStepView('5 执行后果', _actionPlans.any((p) => p.communicated || p.consequenceDone), '在行动看板勾选“已清楚表达 / 已执行后果”。'),
+      _FlowStepView('6 管理内疚', _guiltFactController.text.trim().isNotEmpty && _guiltStoryController.text.trim().isNotEmpty, '用“事实 vs 解释”把内疚从责任中分离。'),
+      _FlowStepView('7 复盘成长', _reviews.isNotEmpty && _dailyReview.values.where((v) => v).length >= 3, '完成保存复盘与每日打卡，形成身份化证据。'),
+    ];
+    return _sectionCard(
+      title: 'MVP 核心闭环：识别 → 话术 → 行动 → 内疚 → 复盘',
+      icon: Icons.sync_alt_outlined,
+      children: [
+        LinearProgressIndicator(value: _workflowCompletedCount / steps.length, minHeight: 10, backgroundColor: const Color(0xFFEDE7D7), color: const Color(0xFF40513B)),
+        const SizedBox(height: 10),
+        Text('当前闭环进度：$_workflowCompletedCount/${steps.length}', style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 10),
+        for (final step in steps)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(step.done ? Icons.check_circle : Icons.radio_button_unchecked, color: step.done ? const Color(0xFF40513B) : const Color(0xFF9CA3AF)),
+            title: Text(step.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text(step.detail, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+    );
+  }
+
+  Widget _oneToOneFeatureMatrix() => _sectionCard(
+        title: '十二、产品功能总表逐项对应',
+        icon: Icons.rule_folder_outlined,
+        children: const [
+          _PromptBlock(title: '边界自测', text: '三类边界画像、六类边界评分、关系领域评分 → 对应“边界自测与画像”“边界地图：关系领域评分”。'),
+          _PromptBlock(title: '边界雷达', text: '情绪识别、越界诊断、责任归位 → 对应“边界雷达 + AI 场景教练”和标准输出的责任归位。'),
+          _PromptBlock(title: 'AI 场景教练', text: '家庭、伴侣、朋友、职场、技术、自我边界 → 对应场景选择器八类场景。'),
+          _PromptBlock(title: '话术生成器', text: '一句话边界、温和版、坚定版、重述版 → 对应“话术生成器”。'),
+          _PromptBlock(title: '行动跟踪', text: '行动计划、后果设定、执行提醒、边界刷新 → 对应行动计划、行动看板、刷新触发器。'),
+          _PromptBlock(title: '内疚管理', text: '内疚识别、不适陪伴、反应预演 → 对应内疚管理、事实 vs 解释、反应预演训练器。'),
+          _PromptBlock(title: '成长系统', text: '每日复盘、关系档案、成长曲线、身份建设 → 对应复盘打卡、关系健康档案、成长系统。'),
+        ],
+      );
+
+  Widget _moduleDepthCard() => _sectionCard(title: '十五、关键页面设计逐项落地', icon: Icons.dashboard_customize_outlined, children: const [
+        _PromptBlock(title: '首页：今日边界练习', text: '今日边界提醒、今日最小行动、最近一次边界复盘、当前最需要练习的关系、AI 快速入口。'),
+        _PromptBlock(title: '边界地图页', text: '六类边界雷达图、家庭/伴侣/朋友/工作/技术/自我评分、当前主要模式、推荐训练路径。'),
+        _PromptBlock(title: '场景教练页', text: '我想处理家庭/伴侣/朋友/工作/手机社交媒体/自我边界问题。'),
+        _PromptBlock(title: '话术页', text: '一句话边界、温和版、坚定版、不解释版、重述版、对方反应预案。'),
+        _PromptBlock(title: '行动计划页', text: '我要对谁设边界、我要说什么、什么时候说、接受/无视/内疚时怎么办、复盘时间。'),
+        _PromptBlock(title: '复盘页', text: '我说了吗、是否说清楚、是否过度解释、对方怎么回应、是否行动跟进、现在感觉、下次调整。'),
       ]);
 
   Widget _sceneSelector() => Wrap(
@@ -421,6 +627,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
 
   Widget _aiOutput(_BoundaryOutput o) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _kv('1. 你现在遇到的边界问题', o.problem),
+        _kv('边界侵犯级别', o.violationLevel),
         _kv('2. 核心边界议题', o.issues.join('、')),
         _kv('3. 责任归位', '你的责任：${o.userResponsibility}\n对方的责任：${o.otherResponsibility}\n你正在多承担：${o.overResponsibility}\n可提供但不牺牲自己的支持：${o.support}'),
         _kv('4-6. 推荐 / 温和 / 坚定话术', '${o.recommendedLine}\n${o.gentleLine}\n${o.firmLine}'),
@@ -431,6 +638,19 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         _kv('11. 复盘问题', '我是否清楚表达了？\n我是否过度解释或道歉了？\n我是否用行动维护了边界？'),
         _kv('12. 安全提醒', '如果涉及暴力、胁迫、严重控制、自伤、他伤、性侵犯、严重职场骚扰或违法风险，请优先保护安全，并寻求可信赖的人、专业机构或当地紧急服务支持。'),
       ]);
+
+  Widget _personaSelector() {
+    final current = _personaSpecs.firstWhere((p) => p.name == _selectedPersona, orElse: () => _personaSpecs.first);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final p in _personaSpecs) ChoiceChip(label: Text(p.name), selected: _selectedPersona == p.name, onSelected: (_) => setState(() => _selectedPersona = p.name)),
+      ]),
+      const SizedBox(height: 10),
+      _kv('典型表现', current.signs.join('；')),
+      _kv('核心需求', current.needs.join('；')),
+      _kv('与训练流的连接', '画像会进入本模块 Prompt 上下文，并影响你优先关注的边界类型、话术强度、行动后果和内疚管理策略。'),
+    ]);
+  }
 
   Widget _assessmentChecklist() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('初始边界自测题', style: TextStyle(fontWeight: FontWeight.w900)),
@@ -608,12 +828,14 @@ class _BoundaryCoach {
     final subject = _extractSubject(scene, situation);
     final issue = cfg.issues;
     final request = _extractRequest(situation, cfg.defaultRequest);
+    final violationLevel = _classifyViolation(situation);
     final recommended = '${cfg.address(subject)}，${cfg.care}，但我${cfg.boundaryVerb}$request。${cfg.followUp}';
     final gentle = '${cfg.address(subject)}，我知道这件事对你重要。现在我需要先确认自己的容量，所以我不会马上答应$request。我们可以${cfg.supportOption}。';
     final firm = '${cfg.address(subject)}，我已经说过我不会继续$request。如果这个边界继续被无视，我会${cfg.consequenceAction}。';
     return _BoundaryOutput(
       sceneName: sceneName(scene),
       problem: '这是一个${sceneName(scene)}边界问题：你已经出现烦、累、内疚、想逃或答应后后悔的信号，需要把模糊不满转成清楚表达和行动。',
+      violationLevel: violationLevel,
       issues: issue,
       userResponsibility: '清楚表达你的需要、限制和下一步行动，并检查自己是否在过度解释、讨好、冷处理或控制。',
       otherResponsibility: cfg.otherResponsibility,
@@ -641,6 +863,18 @@ class _BoundaryCoach {
       reactionPlan: '对方质疑：我理解你有不同感受，但我的决定没有改变。\n对方生气：我愿意在彼此尊重时继续谈，现在先暂停。\n对方说我自私：这不是不在乎你，而是我需要保护自己的边界。\n对方讨价还价：我不会继续协商这个底线。\n对方继续越界：我会执行刚才说过的行动。',
       todayAction: '${actionTarget.isEmpty ? '今天' : actionTarget}只说一句边界句，不补充长篇解释，并在结束后记录一次复盘。',
     );
+  }
+
+  static String _classifyViolation(String s) {
+    final severe = ['暴力', '威胁', '胁迫', '性骚扰', '性侵犯', '控制', '跟踪', '羞辱', '霸凌', '违法', '自伤', '他伤'];
+    final chronic = ['每次', '总是', '长期', '反复', '持续', '多年'];
+    if (severe.any(s.contains)) {
+      return '大 B 边界侵犯：可能涉及安全、权力压迫、严重控制、暴力/胁迫/骚扰或违法风险，优先安全、记录证据并寻求可信赖的人、专业机构或当地紧急服务支持。';
+    }
+    if (chronic.any(s.contains)) {
+      return '大 B 倾向：这是反复或长期模式，不宜只靠一次温和沟通，需要清楚后果、关系距离调整和持续观察行为证据。';
+    }
+    return '小 b 边界侵犯：偏日常轻微或中度越界，优先使用清楚沟通、重述边界和一致行动。';
   }
 
   static String _extractSubject(_BoundaryScene scene, String s) {
@@ -689,9 +923,10 @@ class _SceneConfig {
 }
 
 class _BoundaryOutput {
-  const _BoundaryOutput({required this.sceneName, required this.problem, required this.issues, required this.userResponsibility, required this.otherResponsibility, required this.overResponsibility, required this.support, required this.recommendedLine, required this.gentleLine, required this.firmLine, required this.noExplainLine, required this.repeatLine, required this.actionPlan, required this.consequence, required this.guiltCards, required this.reactionPlan, required this.todayAction});
+  const _BoundaryOutput({required this.sceneName, required this.problem, required this.violationLevel, required this.issues, required this.userResponsibility, required this.otherResponsibility, required this.overResponsibility, required this.support, required this.recommendedLine, required this.gentleLine, required this.firmLine, required this.noExplainLine, required this.repeatLine, required this.actionPlan, required this.consequence, required this.guiltCards, required this.reactionPlan, required this.todayAction});
   final String sceneName;
   final String problem;
+  final String violationLevel;
   final List<String> issues;
   final String userResponsibility;
   final String otherResponsibility;
@@ -707,6 +942,13 @@ class _BoundaryOutput {
   final List<String> guiltCards;
   final String reactionPlan;
   final String todayAction;
+}
+
+class _FlowStepView {
+  const _FlowStepView(this.title, this.done, this.detail);
+  final String title;
+  final bool done;
+  final String detail;
 }
 
 class _BoundaryActionPlan {
