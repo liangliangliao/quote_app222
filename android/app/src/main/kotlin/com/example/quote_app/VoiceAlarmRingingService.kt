@@ -27,6 +27,7 @@ import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
+import kotlin.random.Random
 import java.io.File
 
 class VoiceAlarmRingingService : Service() {
@@ -38,17 +39,29 @@ class VoiceAlarmRingingService : Service() {
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
     private const val ACTION_POSTPONE_VOICE_REPLAY = "com.example.quote_app.VOICE_ALARM_POSTPONE_VOICE_REPLAY"
+    private const val ACTION_DUCK_SIGNAL_FOR_LISTENING = "com.example.quote_app.VOICE_ALARM_DUCK_SIGNAL_FOR_LISTENING"
     private const val EXTRA_PAYLOAD = "payload"
     private const val EXTRA_POSTPONE_MS = "postponeMs"
+    private const val EXTRA_DUCK_MS = "duckMs"
     const val CHANNEL_ID = "voice_alarm_ringing_v5"
     private const val NOTIFICATION_ID = 974002
     private const val STATE_PREFS = "voice_alarm_ringing_state"
     private const val KEY_ACTIVE_PAYLOAD = "activePayload"
     private const val KEY_ACTIVE_AT = "activeAt"
+    private const val KEY_VOICE_PLAYBACK_ACTIVE = "voicePlaybackActive"
+    private const val KEY_VOICE_PLAYBACK_TEXT = "voicePlaybackText"
+    private const val KEY_VOICE_PLAYBACK_AT = "voicePlaybackAt"
+    private const val VOICE_PLAYBACK_STATE_TTL_MS = 90_000L
     private const val ACTIVE_PAYLOAD_TTL_MS = 12L * 60L * 60L * 1000L
     const val ACTION_VOICE_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_START"
     const val ACTION_VOICE_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_VOICE_PLAYBACK_END"
+    const val ACTION_SIGNAL_PLAYBACK_START = "com.example.quote_app.VOICE_ALARM_SIGNAL_PLAYBACK_START"
+    const val ACTION_SIGNAL_PLAYBACK_END = "com.example.quote_app.VOICE_ALARM_SIGNAL_PLAYBACK_END"
     @Volatile private var activePayload: String? = null
+    @Volatile private var activeSignalPlayback = false
+
+    @JvmStatic
+    fun currentSignalPlaybackState(): Boolean = activeSignalPlayback
 
     @JvmStatic
     fun start(context: Context, payload: String) {
@@ -121,6 +134,35 @@ class VoiceAlarmRingingService : Service() {
       return null
     }
 
+    @JvmStatic
+    fun currentVoicePlaybackState(context: Context): Pair<Boolean, String> {
+      for (storageContext in stateContexts(context)) {
+        try {
+          val prefs = storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+          val active = prefs.getBoolean(KEY_VOICE_PLAYBACK_ACTIVE, false)
+          val activeAt = prefs.getLong(KEY_VOICE_PLAYBACK_AT, 0L)
+          val text = prefs.getString(KEY_VOICE_PLAYBACK_TEXT, "") ?: ""
+          if (active && activeAt > 0L && System.currentTimeMillis() - activeAt <= VOICE_PLAYBACK_STATE_TTL_MS) {
+            return true to text
+          }
+        } catch (_: Throwable) {}
+      }
+      return false to ""
+    }
+
+    private fun persistVoicePlaybackState(context: Context, active: Boolean, text: String) {
+      for (storageContext in stateContexts(context)) {
+        try {
+          storageContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_VOICE_PLAYBACK_ACTIVE, active)
+            .putString(KEY_VOICE_PLAYBACK_TEXT, if (active) text else "")
+            .putLong(KEY_VOICE_PLAYBACK_AT, if (active) System.currentTimeMillis() else 0L)
+            .apply()
+        } catch (_: Throwable) {}
+      }
+    }
+
     private fun clearActivePayload(context: Context) {
       activePayload = null
       for (storageContext in stateContexts(context)) {
@@ -129,6 +171,9 @@ class VoiceAlarmRingingService : Service() {
             .edit()
             .remove(KEY_ACTIVE_PAYLOAD)
             .remove(KEY_ACTIVE_AT)
+            .remove(KEY_VOICE_PLAYBACK_ACTIVE)
+            .remove(KEY_VOICE_PLAYBACK_TEXT)
+            .remove(KEY_VOICE_PLAYBACK_AT)
             .apply()
         } catch (_: Throwable) {}
       }
@@ -140,6 +185,16 @@ class VoiceAlarmRingingService : Service() {
         context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply {
           action = ACTION_POSTPONE_VOICE_REPLAY
           putExtra(EXTRA_POSTPONE_MS, postponeMs)
+        })
+      } catch (_: Throwable) {}
+    }
+
+    @JvmStatic
+    fun duckSignalForVoiceListening(context: Context, durationMs: Long) {
+      try {
+        context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply {
+          action = ACTION_DUCK_SIGNAL_FOR_LISTENING
+          putExtra(EXTRA_DUCK_MS, durationMs)
         })
       } catch (_: Throwable) {}
     }
@@ -177,6 +232,7 @@ class VoiceAlarmRingingService : Service() {
 
   private var voicePlayer: MediaPlayer? = null
   private var musicPlayer: MediaPlayer? = null
+  private var alarmSignalPlaybackActive = false
   private var alarmTts: TextToSpeech? = null
   private var alarmTtsReady = false
   private var pendingAlarmTts: Pair<String, Float>? = null
@@ -209,6 +265,10 @@ class VoiceAlarmRingingService : Service() {
     }
     if (intent?.action == ACTION_POSTPONE_VOICE_REPLAY) {
       postponeVoiceReplay(intent.getLongExtra(EXTRA_POSTPONE_MS, 15_000L))
+      return START_STICKY
+    }
+    if (intent?.action == ACTION_DUCK_SIGNAL_FOR_LISTENING) {
+      duckSignalForVoiceListening(intent.getLongExtra(EXTRA_DUCK_MS, 12_000L))
       return START_STICKY
     }
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: activePayload ?: readActivePayload(this) ?: "{}"
@@ -358,6 +418,7 @@ class VoiceAlarmRingingService : Service() {
   private fun notifyVoicePlaybackStart() {
     if (alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = true
+    persistVoicePlaybackState(this, true, currentVoiceText)
     logVoice("voicePlayback.start", "voice prompt playback started", mapOf("textLen" to currentVoiceText.length))
     sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName).putExtra("text", currentVoiceText))
   }
@@ -365,13 +426,31 @@ class VoiceAlarmRingingService : Service() {
   private fun notifyVoicePlaybackEnd() {
     if (!alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = false
+    persistVoicePlaybackState(this, false, currentVoiceText)
     logVoice("voicePlayback.end", "voice prompt playback ended", mapOf("textLen" to currentVoiceText.length))
     sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName).putExtra("text", currentVoiceText))
+  }
+
+  private fun randomExistingPath(data: JSONObject, listKey: String, legacyKey: String): String {
+    val values = mutableListOf<String>()
+    val arr = data.optJSONArray(listKey)
+    if (arr != null) {
+      for (i in 0 until arr.length()) {
+        val path = arr.optString(i, "")
+        if (path.isNotBlank() && File(path).isFile) values.add(path)
+      }
+    }
+    val legacy = data.optString(legacyKey, "")
+    if (legacy.isNotBlank() && File(legacy).isFile) values.add(legacy)
+    return values.distinct().let { if (it.isEmpty()) "" else it[Random.nextInt(it.size)] }
   }
 
   private fun startSignals(payload: String) {
     stopSignals()
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
+    alarmSignalPlaybackActive = true
+    activeSignalPlayback = true
+    sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", data.optBoolean("systemMusic", true) || data.optString("musicPath", "").isNotBlank() || data.optJSONArray("musicPaths")?.length()?.let { it > 0 } == true))
     logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
     requestAlarmAudioFocus()
     ensureAudibleAlarmVolume()
@@ -396,9 +475,9 @@ class VoiceAlarmRingingService : Service() {
         vibrator?.vibrate(pattern, 0)
       }
     }
-    val musicPath = data.optString("musicPath", "")
+    val musicPath = randomExistingPath(data, "musicPaths", "musicPath")
     currentMusicVolume = data.optDouble("musicVolume", 0.4).toFloat().coerceIn(0f, 1f)
-    if (musicPath.isNotBlank() && File(musicPath).isFile) {
+    if (musicPath.isNotBlank()) {
       musicPlayer = createPlayer(Uri.fromFile(File(musicPath)), true, currentMusicVolume)
     } else if (data.optBoolean("systemMusic", true)) {
       val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
@@ -545,6 +624,28 @@ class VoiceAlarmRingingService : Service() {
     replayHandler.postDelayed(musicRestoreRunnable!!, durationMs.coerceAtLeast(1000L))
   }
 
+  private fun duckSignalForVoiceListening(durationMs: Long) {
+    val safeMs = durationMs.coerceIn(3000L, 120_000L)
+    val hadSignal = alarmSignalPlaybackActive || activeSignalPlayback || musicPlayer != null || vibrator != null
+    if (!hadSignal) return
+    activeSignalPlayback = false
+    logVoice("signals.duckForListening", "duck alarm signal/music so microphone can hear user speech after prompt", mapOf("durationMs" to safeMs, "hasMusic" to (musicPlayer != null), "vibrate" to (vibrator != null)))
+    sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName).putExtra("reason", "duckForListening"))
+    try { musicPlayer?.setVolume(currentMusicVolume * 0.08f, currentMusicVolume * 0.08f) } catch (_: Throwable) {}
+    try { vibrator?.cancel() } catch (_: Throwable) {}
+    musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
+    musicRestoreRunnable = Runnable {
+      musicRestoreRunnable = null
+      try { musicPlayer?.setVolume(currentMusicVolume, currentMusicVolume) } catch (_: Throwable) {}
+      if (alarmSignalPlaybackActive && (musicPlayer != null || vibrator != null)) {
+        activeSignalPlayback = true
+        logVoice("signals.resumeAfterListening", "restore alarm signal/music after voice listening window", mapOf("hasMusic" to (musicPlayer != null), "vibrate" to (vibrator != null)))
+        sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", musicPlayer != null))
+      }
+    }
+    replayHandler.postDelayed(musicRestoreRunnable!!, safeMs)
+  }
+
   private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f, notifyVoice: Boolean = false): MediaPlayer? {
     return try {
       MediaPlayer().apply {
@@ -587,6 +688,10 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun stopSignals() {
+    val shouldNotifySignalEnd = alarmSignalPlaybackActive
+    alarmSignalPlaybackActive = false
+    activeSignalPlayback = false
+    if (shouldNotifySignalEnd) sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName))
     logVoice("signals.stop", "stopping alarm signals")
     try { voicePlayer?.stop() } catch (_: Throwable) {}
     try { voicePlayer?.release() } catch (_: Throwable) {}

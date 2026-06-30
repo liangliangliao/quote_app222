@@ -21,6 +21,35 @@ class VoiceAlarmPage extends StatefulWidget {
   State<VoiceAlarmPage> createState() => _VoiceAlarmPageState();
 }
 
+
+class _VoiceAlarmEntry {
+  const _VoiceAlarmEntry({required this.id, required this.time, required this.text});
+
+  final String id;
+  final TimeOfDay time;
+  final String text;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'hour': time.hour,
+        'minute': time.minute,
+        'text': text,
+      };
+
+  static _VoiceAlarmEntry? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final id = (value['id'] ?? '').toString();
+    final hour = (value['hour'] as num?)?.toInt();
+    final minute = (value['minute'] as num?)?.toInt();
+    if (id.isEmpty || hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return _VoiceAlarmEntry(
+      id: id,
+      time: TimeOfDay(hour: hour, minute: minute),
+      text: (value['text'] ?? '').toString(),
+    );
+  }
+}
+
 class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   final _text = TextEditingController(text: '早上好，新的一天开始了。愿你平静、专注、充满力量。');
   final _tts = MultiProviderTtsService();
@@ -40,6 +69,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   bool _batchAutoCorrect = false;
   String? _customMusic;
   String? _backgroundImage;
+  List<String> _customMusics = [];
+  List<String> _backgroundImages = [];
+  List<_VoiceAlarmEntry> _alarmEntries = [];
   String? _generatedVoice;
   double _speed = 1.0;
   double _pauseSeconds = 0.6;
@@ -96,9 +128,26 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     super.dispose();
   }
 
-  DateTime _nextTime() {
+  DateTime _nextTime() => _nextTimeFor(_time);
+
+  String get _configKey => 'voice_alarm.config.$_mode';
+  String get _historyKey => 'voice_alarm.text_history.$_mode';
+
+  List<String> _stringListFromConfig(Map<String, dynamic> data, String listKey, String legacyKey) {
+    final values = <String>[];
+    final rawList = data[listKey];
+    if (rawList is List) {
+      values.addAll(rawList.map((e) => e.toString()).where((path) => path.trim().isNotEmpty));
+    }
+    final legacy = data[legacyKey]?.toString() ?? '';
+    if (legacy.isNotEmpty) values.add(legacy);
+    final seen = <String>{};
+    return values.where((path) => seen.add(path)).toList();
+  }
+
+  DateTime _nextTimeFor(TimeOfDay time) {
     final now = DateTime.now();
-    var value = DateTime(now.year, now.month, now.day, _time.hour, _time.minute);
+    var value = DateTime(now.year, now.month, now.day, time.hour, time.minute);
     if (!value.isAfter(now)) value = value.add(const Duration(days: 1));
     final allowed = _effectiveWeekdays();
     var guard = 0;
@@ -108,9 +157,6 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     }
     return value;
   }
-
-  String get _configKey => 'voice_alarm.config.$_mode';
-  String get _historyKey => 'voice_alarm.text_history.$_mode';
 
   Future<void> _loadMode(String mode) async {
     setState(() {
@@ -169,8 +215,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _systemMusic = data['systemMusic'] as bool? ?? true;
       final savedTime = DateTime.tryParse((data['time'] ?? '').toString());
       if (savedTime != null) _time = TimeOfDay.fromDateTime(savedTime);
-      _customMusic = data['musicPath']?.toString().isEmpty == false ? data['musicPath'].toString() : null;
-      _backgroundImage = data['backgroundPath']?.toString().isEmpty == false ? data['backgroundPath'].toString() : null;
+      _customMusics = _stringListFromConfig(data, 'musicPaths', 'musicPath');
+      _backgroundImages = _stringListFromConfig(data, 'backgroundPaths', 'backgroundPath');
+      _customMusic = _customMusics.isNotEmpty ? _customMusics.first : null;
+      _backgroundImage = _backgroundImages.isNotEmpty ? _backgroundImages.first : null;
+      _alarmEntries = (data['alarms'] is List ? data['alarms'] as List : const [])
+          .map(_VoiceAlarmEntry.fromJson)
+          .whereType<_VoiceAlarmEntry>()
+          .toList();
       _selectedSavedVoicePath = data['savedVoicePath']?.toString().isEmpty == false ? data['savedVoicePath'].toString() : null;
       final generated = generatedRaw == null || generatedRaw.isEmpty
           ? <Map<String, String>>[]
@@ -245,15 +297,44 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<void> _pickMusic() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.audio);
-    final path = result?.files.single.path;
-    if (path != null && mounted) setState(() => _customMusic = path);
+    final result = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
+    final paths = result?.files.map((file) => file.path).whereType<String>().where((path) => path.isNotEmpty).toList() ?? const <String>[];
+    if (paths.isEmpty || !mounted) return;
+    setState(() {
+      _customMusics = <String>{..._customMusics, ...paths}.toList();
+      _customMusic = (_customMusics.isEmpty ? null : _customMusics.first);
+      _systemMusic = true;
+    });
+    await _persistDraftConfig();
   }
 
   Future<void> _pickBackground() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image);
-    final path = result?.files.single.path;
-    if (path != null && mounted) setState(() => _backgroundImage = path);
+    final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true);
+    final paths = result?.files.map((file) => file.path).whereType<String>().where((path) => path.isNotEmpty).toList() ?? const <String>[];
+    if (paths.isEmpty || !mounted) return;
+    setState(() {
+      _backgroundImages = <String>{..._backgroundImages, ...paths}.toList();
+      _backgroundImage = (_backgroundImages.isEmpty ? null : _backgroundImages.first);
+    });
+    await _persistDraftConfig();
+  }
+
+  Future<void> _persistDraftConfig() async {
+    final config = _payloadMap()
+      ..['savedVoicePath'] = _selectedSavedVoicePath ?? ''
+      ..['time'] = _nextTime().toIso8601String();
+    await _kv.setString(_configKey, jsonEncode(config));
+  }
+
+  Future<void> _removeAlarmEntry(_VoiceAlarmEntry alarm) async {
+    setState(() => _alarmEntries = _alarmEntries.where((item) => item.id != alarm.id).toList());
+    await _persistDraftConfig();
+    try {
+      await _native.invokeMethod<void>('cancelAlarm', {'alarmId': alarm.id});
+      _toast('已删除并取消 ${alarm.time.format(context)} 的闹钟');
+    } catch (e) {
+      _toast('已从列表删除；取消系统闹钟失败：$e');
+    }
   }
 
   Future<bool> _ensureVoiceInteractionReady() async {
@@ -467,7 +548,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         _generatedVoice = null;
         _toast('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟：$e');
       }
+      final text = _text.text.trim();
       final when = _nextTime();
+      final alarmId = '$_mode-${_time.hour.toString().padLeft(2, '0')}${_time.minute.toString().padLeft(2, '0')}-${DateTime.now().millisecondsSinceEpoch}';
       await _kv.setString('voice_alarm.time', when.toIso8601String());
       await _kv.setString('voice_alarm.text', _text.text.trim());
       await _kv.setString('voice_alarm.provider', _provider);
@@ -475,19 +558,20 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       await _kv.setString('voice_alarm.music_file', _customMusic ?? '');
       await _kv.setString('voice_alarm.vibrate', _vibrate ? '1' : '0');
       await _kv.setString('voice_alarm.system_music', _systemMusic ? '1' : '0');
-      final config = _payloadMap()
+      final entry = _VoiceAlarmEntry(id: alarmId, time: _time, text: text);
+      _alarmEntries = <_VoiceAlarmEntry>[entry, ..._alarmEntries.where((item) => item.id != alarmId)];
+      final config = _payloadMap(alarmId: alarmId)
         ..['savedVoicePath'] = _selectedSavedVoicePath ?? ''
         ..['time'] = when.toIso8601String();
       await _kv.setString(_configKey, jsonEncode(config));
-      final text = _text.text.trim();
       _textHistory = <String>[text, ..._textHistory.where((item) => item != text)].take(20).toList();
       await _kv.setString(_historyKey, jsonEncode(_textHistory));
-      final payload = _payload();
+      final payload = _payload(alarmId: alarmId);
       await _native.invokeMethod<void>('schedule', {
         'atMs': when.millisecondsSinceEpoch,
         'payload': payload,
       });
-      _toast('已注册 Android 系统闹钟；进程被清理、后台、锁屏和重启后会尽力恢复提醒');
+      _toast('已添加 ${_mode == 'morning' ? '起床' : '睡觉'}闹钟 ${_time.format(context)}；当前模块共 ${_alarmEntries.length} 组');
       setState(() {});
     } catch (e) {
       _toast('设置失败：$e');
@@ -615,11 +699,11 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     }
   }
 
-  String _payload() {
-    return jsonEncode(_payloadMap());
+  String _payload({String? alarmId}) {
+    return jsonEncode(_payloadMap(alarmId: alarmId));
   }
 
-  Map<String, dynamic> _payloadMap() {
+  Map<String, dynamic> _payloadMap({String? alarmId}) {
     return {
       'text': _text.text.trim(),
       'provider': _provider,
@@ -627,8 +711,12 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'sttMode': _sttMode,
       'batchStt': _batchSttMap(),
       'voicePath': _generatedVoice ?? '',
-      'musicPath': _customMusic ?? '',
-      'backgroundPath': _backgroundImage ?? '',
+      'alarmId': alarmId ?? '',
+      'musicPath': (_customMusics.isEmpty ? null : _customMusics.first) ?? _customMusic ?? '',
+      'musicPaths': _customMusics,
+      'backgroundPath': (_backgroundImages.isEmpty ? null : _backgroundImages.first) ?? _backgroundImage ?? '',
+      'backgroundPaths': _backgroundImages,
+      'alarms': _alarmEntries.map((alarm) => alarm.toJson()).toList(),
       'vibrate': _vibrate,
       'systemMusic': _systemMusic,
       'hour': _time.hour,
@@ -716,6 +804,34 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
               ]),
             ),
           ),
+          if (_alarmEntries.isNotEmpty)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${_mode == 'morning' ? '起床' : '睡觉'}闹钟列表（${_alarmEntries.length} 组）', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  ..._alarmEntries.map((alarm) {
+                    final nextAt = _nextTimeFor(alarm.time);
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.alarm_on_outlined),
+                      title: Text(alarm.time.format(context)),
+                      subtitle: Text('${nextAt.month.toString().padLeft(2, '0')}-${nextAt.day.toString().padLeft(2, '0')} 下一次响铃 · ${alarm.text.isEmpty ? '使用当前朗读内容' : alarm.text}'),
+                      trailing: IconButton(
+                        tooltip: '删除这组闹钟',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: _saving ? null : () => _removeAlarmEntry(alarm),
+                      ),
+                      onTap: () => setState(() {
+                        _time = alarm.time;
+                        if (alarm.text.isNotEmpty) _text.text = alarm.text;
+                      }),
+                    );
+                  }),
+                ]),
+              ),
+            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -997,18 +1113,52 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
               SwitchListTile(title: const Text('系统闹钟音乐'), subtitle: const Text('未选择自定义音乐时使用系统提醒通道'), value: _systemMusic, onChanged: (value) => setState(() => _systemMusic = value)),
               ListTile(
                 leading: const Icon(Icons.library_music_outlined),
-                title: const Text('自定义音乐'),
-                subtitle: Text(_customMusic == null ? '未选择' : _customMusic!.split('/').last),
-                trailing: const Icon(Icons.chevron_right),
+                title: const Text('背景音乐（多选，响铃时随机播放）'),
+                subtitle: Text(_customMusics.isEmpty ? '未选择' : '已选择 ${_customMusics.length} 首：${_customMusics.first.split('/').last}'),
+                trailing: const Icon(Icons.add),
                 onTap: _pickMusic,
               ),
+              if (_customMusics.isNotEmpty)
+                ..._customMusics.map((path) => ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.only(left: 56, right: 16),
+                      title: Text(path.split('/').last, overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        tooltip: '删除背景音乐',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () async {
+                          setState(() {
+                            _customMusics = _customMusics.where((item) => item != path).toList();
+                            _customMusic = (_customMusics.isEmpty ? null : _customMusics.first);
+                          });
+                          await _persistDraftConfig();
+                        },
+                      ),
+                    )),
               ListTile(
                 leading: const Icon(Icons.image_outlined),
-                title: const Text('全屏闹钟背景图片'),
-                subtitle: Text(_backgroundImage == null ? '未选择，使用默认渐变背景' : _backgroundImage!.split('/').last),
-                trailing: const Icon(Icons.chevron_right),
+                title: const Text('全屏闹钟背景图片（多选，响铃时随机轮播）'),
+                subtitle: Text(_backgroundImages.isEmpty ? '未选择，使用默认渐变背景' : '已选择 ${_backgroundImages.length} 张：${_backgroundImages.first.split('/').last}'),
+                trailing: const Icon(Icons.add),
                 onTap: _pickBackground,
               ),
+              if (_backgroundImages.isNotEmpty)
+                ..._backgroundImages.map((path) => ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.only(left: 56, right: 16),
+                      title: Text(path.split('/').last, overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        tooltip: '删除背景图片',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () async {
+                          setState(() {
+                            _backgroundImages = _backgroundImages.where((item) => item != path).toList();
+                            _backgroundImage = (_backgroundImages.isEmpty ? null : _backgroundImages.first);
+                          });
+                          await _persistDraftConfig();
+                        },
+                      ),
+                    )),
               ListTile(
                 title: Text('闹钟语音重播间隔 $_replayIntervalSeconds 秒'),
                 subtitle: Slider(value: _replayIntervalSeconds.toDouble(), min: 15, max: 300, divisions: 19, onChanged: (value) => setState(() => _replayIntervalSeconds = value.round())),
@@ -1027,7 +1177,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           FilledButton.icon(
             onPressed: _saving ? null : _schedule,
             icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.alarm_add),
-            label: Text(_saving ? '正在生成语音并设置…' : '保存并启用语音闹钟'),
+            label: Text(_saving ? '正在生成语音并设置…' : '添加当前配置为一组闹钟'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(onPressed: _ring, icon: const Icon(Icons.play_arrow), label: const Text('立即测试闹钟与稍后提醒')),
