@@ -82,6 +82,22 @@ const List<_StrictModuleSpec> _strictSpecs = <_StrictModuleSpec>[
   ),
 ];
 
+
+class _BoundaryPersonaSpec {
+  const _BoundaryPersonaSpec({required this.name, required this.signs, required this.needs});
+  final String name;
+  final List<String> signs;
+  final List<String> needs;
+}
+
+const List<_BoundaryPersonaSpec> _personaSpecs = <_BoundaryPersonaSpec>[
+  _BoundaryPersonaSpec(name: '讨好型用户', signs: <String>['总是答应别人', '害怕让别人失望', '说“不”后内疚', '累、怨恨、想逃'], needs: <String>['学会拒绝', '减少过度解释', '承受内疚', '把责任还给别人']),
+  _BoundaryPersonaSpec(name: '拯救者型用户', signs: <String>['总想解决别人的问题', '替别人收拾烂摊子', '像治疗师/父母/财务救援者', '帮助后怨恨'], needs: <String>['区分支持和拯救', '不替别人承担后果', '设置金钱/情绪/时间边界']),
+  _BoundaryPersonaSpec(name: '僵硬边界型用户', signs: <String>['不求助', '不表达脆弱', '冲突时切断关系', '很难信任别人'], needs: <String>['安全表达', '区分健康边界和高墙', '低风险亲密连接']),
+  _BoundaryPersonaSpec(name: '关系混乱型用户', signs: <String>['家庭/伴侣/朋友/职场边界不清', '被拉进别人情绪和责任', '不知道继续/减少/结束'], needs: <String>['边界诊断', '关系距离评估', '对话脚本', '后续行动计划']),
+  _BoundaryPersonaSpec(name: '自我边界薄弱型用户', signs: <String>['冲动消费', '刷手机失控', '熬夜拖延', '反复进入伤害性关系'], needs: <String>['建立自我承诺', '小行动重建身份', '追踪自我边界执行']),
+];
+
 class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
   final TextEditingController _situationController = TextEditingController(
     text: '我妈每天都问我和老公有没有吵架，我不说她就说我结婚以后不把她当妈了。',
@@ -91,6 +107,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
   final TextEditingController _guiltStoryController = TextEditingController(text: '我这样很自私，他会不喜欢我');
   final BoundaryPracticePromptConfig _promptConfig = BoundaryPracticePromptConfig();
   _BoundaryScene _scene = _BoundaryScene.family;
+  String _selectedPersona = '讨好型用户';
   String _profile = '混合型：松散边界 + 讨好/拯救倾向';
   Map<String, double> _scores = const {
     '身体': 72,
@@ -214,7 +231,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     final prompt = await _promptConfig.buildPrompt(
       scene: _BoundaryCoach.sceneKey(_scene),
       userInput: _situationController.text.trim(),
-      profileJson: '{\"profile\":\"$_profile\",\"scores\":${_scores.length}}',
+      profileJson: '{\"profile\":\"$_profile\",\"persona\":\"$_selectedPersona\",\"scores\":${_scores.length}}',
       contextJson: '{\"action_target\":\"${_actionTargetController.text.trim()}\"}',
       recentContextJson: '{\"review_count\":${_reviews.length}}',
     );
@@ -301,6 +318,10 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
           _linkedWorkflowPanel(),
           const SizedBox(height: 12),
           _moduleDepthCard(),
+          const SizedBox(height: 12),
+          _sectionCard(title: '三、目标用户画像选择', icon: Icons.person_search_outlined, children: [
+            _personaSelector(),
+          ]),
           const SizedBox(height: 12),
           _sectionCard(title: '一、边界自测与画像', icon: Icons.radar_outlined, children: [
             Text(_profile, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -617,6 +638,19 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         _kv('11. 复盘问题', '我是否清楚表达了？\n我是否过度解释或道歉了？\n我是否用行动维护了边界？'),
         _kv('12. 安全提醒', '如果涉及暴力、胁迫、严重控制、自伤、他伤、性侵犯、严重职场骚扰或违法风险，请优先保护安全，并寻求可信赖的人、专业机构或当地紧急服务支持。'),
       ]);
+
+  Widget _personaSelector() {
+    final current = _personaSpecs.firstWhere((p) => p.name == _selectedPersona, orElse: () => _personaSpecs.first);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final p in _personaSpecs) ChoiceChip(label: Text(p.name), selected: _selectedPersona == p.name, onSelected: (_) => setState(() => _selectedPersona = p.name)),
+      ]),
+      const SizedBox(height: 10),
+      _kv('典型表现', current.signs.join('；')),
+      _kv('核心需求', current.needs.join('；')),
+      _kv('与训练流的连接', '画像会进入本模块 Prompt 上下文，并影响你优先关注的边界类型、话术强度、行动后果和内疚管理策略。'),
+    ]);
+  }
 
   Widget _assessmentChecklist() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('初始边界自测题', style: TextStyle(fontWeight: FontWeight.w900)),
