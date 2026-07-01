@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../pages/ai_prompt_settings_page.dart';
@@ -116,8 +118,6 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     '情绪': 38,
     '物质': 46,
     '时间': 34,
-    '技术': 52,
-    '自我': 41,
   };
   _BoundaryOutput? _output;
   String _promptPreview = '';
@@ -131,13 +131,17 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
       violation: '过度追问婚姻隐私',
       expressedBoundary: '婚姻细节由小家庭内部处理',
       response: '质疑与情绪施压',
+      actionTaken: '已说明婚姻细节不继续展开，并准备追问时结束话题',
       distance: '保持联系但降低隐私开放度',
+      worthRepair: true,
+      needDowngrade: true,
       nextStep: '固定每周一次分享近况，追问时结束话题',
     ),
   ];
   final Map<String, bool> _dailyReview = <String, bool>{
     '今天我清楚表达了一个“不”或限制': false,
     '今天我没有用过度解释换取理解': false,
+    '今天我注意到一次答应后产生的怨恨': false,
     '今天我用行动维护了边界': false,
     '今天我尊重了别人的边界': false,
     '今天我对一个自我承诺守信': false,
@@ -146,6 +150,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     '我很难拒绝别人': true,
     '我经常答应后又怨恨': true,
     '我会过度解释自己的决定': true,
+    '我会过度分享来换取亲近或安全感': false,
     '我害怕别人失望或生气': true,
     '我经常替别人承担后果': false,
     '我遇到冲突会突然切断关系': false,
@@ -168,11 +173,16 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
   };
 
   static const List<String> _principles = <String>[
-    '边界不是控制别人，而是定义自己如何参与关系。',
-    '健康边界 = 清楚沟通 + 行动跟进。',
-    '内疚不一定是错误信号，也可能是旧模式正在被打破。',
-    '我有边界，别人也有边界。',
+    '边界不是控制别人，而是定义自己如何参与。',
+    '边界不是冷漠，而是让关系更清楚、更可持续。',
+    '边界必须包含沟通和行动。',
+    '内疚可能只是旧模式被打破。',
     '不设边界会带来怨恨、倦怠、逃避和自我背叛。',
+    '健康边界既不是融合，也不是筑墙。',
+    '我有边界，别人也有边界。',
+    '自我边界和人际边界同样重要。',
+    '边界需要重述、刷新和长期练习。',
+    '关系能否继续，要看边界是否被真实尊重。',
   ];
 
   @override
@@ -201,8 +211,6 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     next['情绪'] = (72 - loose * 9 - rescue * 5).clamp(18, 92).toDouble();
     next['时间'] = (70 - loose * 8 - self * 4).clamp(16, 90).toDouble();
     next['物质'] = (68 - _hits(s, const ['钱', '借', '财务', '消费']) * 12).clamp(18, 88).toDouble();
-    next['技术'] = (76 - _hits(s, const ['手机', '短视频', '消息', '社交媒体', '通知']) * 13).clamp(18, 90).toDouble();
-    next['自我'] = (74 - self * 14 - loose * 4).clamp(16, 90).toDouble();
     String type;
     if (rigid > loose && rigid > 0) {
       type = '僵硬边界型：用高墙、突然切断或不求助保护自己';
@@ -222,6 +230,33 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
 
   int _hits(String input, List<String> words) => words.where(input.contains).length;
 
+  List<String> get _practiceDirections {
+    final weak = _scores.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+    return weak.take(3).map((e) {
+      final module = switch (e.key) {
+        '情绪' => '边界雷达 + 内疚管理',
+        '时间' => '行动与后果跟踪',
+        '物质' => '话术生成器 + 后果设定器',
+        '智识' => '场景教练 + 重述边界话术',
+        '身体' => '安全提醒 + 场景教练',
+        '性' => '亲密关系边界教练 + 安全提醒',
+        _ => '边界复盘与成长系统',
+      };
+      return '${e.key}边界：先进入$module';
+    }).toList(growable: false);
+  }
+
+  String get _recommendedModule {
+    final min = (_scores.entries.toList()..sort((a, b) => a.value.compareTo(b.value))).first.key;
+    return switch (min) {
+      '情绪' => '模块二边界雷达 + 模块六不适感与内疚管理',
+      '时间' => '模块五行动与后果跟踪',
+      '物质' => '模块四边界话术生成器 + 模块五后果设定器',
+      '身体' || '性' => '模块三场景教练 + 安全提醒',
+      _ => '模块三 AI 场景教练',
+    };
+  }
+
   Future<void> _generate() async {
     final output = _BoundaryCoach.generate(
       scene: _scene,
@@ -231,9 +266,16 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     final prompt = await _promptConfig.buildPrompt(
       scene: _BoundaryCoach.sceneKey(_scene),
       userInput: _situationController.text.trim(),
-      profileJson: '{\"profile\":\"$_profile\",\"persona\":\"$_selectedPersona\",\"scores\":${_scores.length}}',
-      contextJson: '{\"action_target\":\"${_actionTargetController.text.trim()}\"}',
-      recentContextJson: '{\"review_count\":${_reviews.length}}',
+      profileJson: jsonEncode(<String, dynamic>{
+        'profile': _profile,
+        'persona': _selectedPersona,
+        'six_boundary_scores': _scores,
+        'relationship_domain_scores': _domainScores,
+        'priority_practice_directions': _practiceDirections,
+        'recommended_module': _recommendedModule,
+      }),
+      contextJson: jsonEncode(<String, dynamic>{'action_target': _actionTargetController.text.trim()}),
+      recentContextJson: jsonEncode(<String, dynamic>{'review_count': _reviews.length}),
     );
     if (!mounted) return;
     setState(() {
@@ -311,19 +353,25 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         children: [
           _heroCard(),
           const SizedBox(height: 12),
+          _todayPracticeCard(),
+          const SizedBox(height: 12),
           _strictSevenModuleNavigator(),
           const SizedBox(height: 12),
+          _productValueCard(),
+          const SizedBox(height: 12),
           _oneToOneFeatureMatrix(),
+          const SizedBox(height: 12),
+          _dataAndFlowContractCard(),
           const SizedBox(height: 12),
           _linkedWorkflowPanel(),
           const SizedBox(height: 12),
           _moduleDepthCard(),
           const SizedBox(height: 12),
-          _sectionCard(title: '三、目标用户画像选择', icon: Icons.person_search_outlined, children: [
+          _sectionCard(title: '目标用户画像选择', icon: Icons.person_search_outlined, children: [
             _personaSelector(),
           ]),
           const SizedBox(height: 12),
-          _sectionCard(title: '一、边界自测与画像', icon: Icons.radar_outlined, children: [
+          _sectionCard(title: '模块一：边界自测与画像', icon: Icons.radar_outlined, children: [
             Text(_profile, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 10),
             _BoundaryMap(scores: _scores),
@@ -334,10 +382,13 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
               _Tag('三类边界画像'), _Tag('六类边界评分'), _Tag('关系领域画像'), _Tag('推荐训练路径'),
             ]),
             const SizedBox(height: 10),
+            _kv('最需要练习的三个方向', _practiceDirections.join('\n')),
+            _kv('推荐进入模块', _recommendedModule),
+            const SizedBox(height: 10),
             FilledButton.icon(onPressed: _runAssessment, icon: const Icon(Icons.psychology_alt_outlined), label: const Text('根据当前输入重新自测')),
           ]),
           const SizedBox(height: 12),
-          _sectionCard(title: '二、边界雷达 + AI 场景教练', icon: Icons.online_prediction_outlined, children: [
+          _sectionCard(title: '模块二/三：边界雷达 + AI 场景教练', icon: Icons.online_prediction_outlined, children: [
             _sceneSelector(),
             const SizedBox(height: 10),
             TextField(
@@ -369,7 +420,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
           ]),
           if (output != null) ...[
             const SizedBox(height: 12),
-            _sectionCard(title: '三、话术生成器', icon: Icons.record_voice_over_outlined, children: [
+            _sectionCard(title: '模块四：边界话术生成器', icon: Icons.record_voice_over_outlined, children: [
               _kv('一句话边界', output.recommendedLine),
               _kv('温和版话术', output.gentleLine),
               _kv('坚定版话术', output.firmLine),
@@ -382,30 +433,32 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
               ],
             ]),
             const SizedBox(height: 12),
-            _sectionCard(title: '四、行动与后果跟踪', icon: Icons.checklist_rtl_outlined, children: [
+            _sectionCard(title: '模块五：行动与后果跟踪', icon: Icons.checklist_rtl_outlined, children: [
               _numbered(output.actionPlan),
               const Divider(height: 24),
               _kv('合理后果', output.consequence),
               _kv('边界刷新提醒', '换工作、结婚、生孩子、搬家、收入变化、关系修复或对方持续不尊重后，请重新生成新版边界。'),
             ]),
             const SizedBox(height: 12),
-            _sectionCard(title: '四-补充：执行提醒与行动看板', icon: Icons.notifications_active_outlined, children: [
+            _sectionCard(title: '模块五补充：执行提醒与行动看板', icon: Icons.notifications_active_outlined, children: [
               _actionBoard(),
             ]),
             const SizedBox(height: 12),
-            _sectionCard(title: '五、不适感与内疚管理', icon: Icons.favorite_border_outlined, children: [
+            _sectionCard(title: '模块六：不适感与内疚管理', icon: Icons.favorite_border_outlined, children: [
               _numbered(output.guiltCards),
               const SizedBox(height: 8),
               _kv('对方反应预演', output.reactionPlan),
               const Divider(height: 24),
               _guiltWorkbench(),
+              const Divider(height: 24),
+              _emotionStabilityExercises(),
             ]),
             const SizedBox(height: 12),
-            _sectionCard(title: '五-补充：对方反应预演训练器', icon: Icons.theater_comedy_outlined, children: [
+            _sectionCard(title: '模块六补充：对方反应预演训练器', icon: Icons.theater_comedy_outlined, children: [
               _reactionTrainer(),
             ]),
             const SizedBox(height: 12),
-            _sectionCard(title: '六、标准 AI 输出结构', icon: Icons.article_outlined, children: [
+            _sectionCard(title: '标准 AI 输出结构', icon: Icons.article_outlined, children: [
               _aiOutput(output),
               const SizedBox(height: 10),
               FilledButton.icon(onPressed: _saveReview, icon: const Icon(Icons.save_outlined), label: const Text('保存本次边界复盘')),
@@ -418,23 +471,23 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
             ]),
           ],
           const SizedBox(height: 12),
-          _sectionCard(title: '七、边界复盘与成长系统', icon: Icons.show_chart_outlined, children: [
+          _sectionCard(title: '模块七：边界复盘与成长系统', icon: Icons.show_chart_outlined, children: [
             _growthSystem(),
           ]),
           const SizedBox(height: 12),
-          _sectionCard(title: '七-补充：每日边界复盘打卡', icon: Icons.fact_check_outlined, children: [
+          _sectionCard(title: '模块七补充：每日边界复盘打卡', icon: Icons.fact_check_outlined, children: [
             _dailyReviewChecklist(),
           ]),
           const SizedBox(height: 12),
-          _sectionCard(title: '边界地图：关系领域评分', icon: Icons.map_outlined, children: [
+          _sectionCard(title: '模块一补充：边界地图 · 关系领域评分', icon: Icons.map_outlined, children: [
             _domainScoreBoard(),
           ]),
           const SizedBox(height: 12),
-          _sectionCard(title: '八、关系健康档案与边界刷新', icon: Icons.people_alt_outlined, children: [
+          _sectionCard(title: '模块七补充：关系健康档案与边界刷新', icon: Icons.people_alt_outlined, children: [
             _relationshipArchive(),
           ]),
           const SizedBox(height: 12),
-          _sectionCard(title: '九、关系评估与距离调整器', icon: Icons.social_distance_outlined, children: [
+          _sectionCard(title: '模块七补充：关系评估与距离调整器', icon: Icons.social_distance_outlined, children: [
             _relationshipEvaluator(),
           ]),
           const SizedBox(height: 12),
@@ -464,6 +517,44 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         ]),
       );
 
+
+
+
+  Widget _todayPracticeCard() {
+    final recent = _reviews.isEmpty ? '尚未复盘：完成一次练习后这里会显示最近记录。' : '${_reviews.first.sceneName} · ${_reviews.first.action}';
+    final weakestDomain = (_domainScores.entries.toList()..sort((a, b) => a.value.compareTo(b.value))).first.key;
+    return _sectionCard(
+      title: '首页：今日边界练习',
+      icon: Icons.today_outlined,
+      children: [
+        _kv('今日边界提醒', '不要用过度解释换取理解。'),
+        _kv('今日最小行动', _output?.todayAction ?? '今天选择一个低风险场景，只说一句清楚边界。'),
+        _kv('最近一次边界复盘', recent),
+        _kv('当前最需要练习的关系/领域', weakestDomain),
+        Wrap(spacing: 8, runSpacing: 8, children: const [
+          _Tag('AI 快速入口'), _Tag('生成话术'), _Tag('建立行动计划'), _Tag('复盘'),
+        ]),
+      ],
+    );
+  }
+
+  Widget _productValueCard() => _sectionCard(
+        title: '二、核心价值主张逐条落地',
+        icon: Icons.favorite_border_outlined,
+        children: [
+          const Text('本模块不把边界训练做成读书笔记或普通聊天，而是把产品方案中的十条核心思想持续暴露给用户，并进入 AI Prompt、话术、行动和复盘。', style: TextStyle(height: 1.45)),
+          const SizedBox(height: 10),
+          for (final principle in _principles)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.check_circle_outline, size: 18, color: Color(0xFF40513B)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(principle, style: const TextStyle(height: 1.35))),
+              ]),
+            ),
+        ],
+      );
 
   Widget _strictSevenModuleNavigator() => _sectionCard(
         title: '严格按产品设计方案落地的七大模块导航',
@@ -529,6 +620,23 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     ];
     return steps.where((v) => v).length;
   }
+
+
+  Widget _dataAndFlowContractCard() => _sectionCard(
+        title: '数据、业务逻辑与用户路径契约',
+        icon: Icons.schema_outlined,
+        children: const [
+          _PromptBlock(title: 'Boundary Case', text: '场景类型 / 相关人物 / 事件描述 / 我的感受 / 对方要求 / 我已经答应了什么 / 我真正想要什么 / 当前内疚感 / 当前怨恨 / 安全风险 / AI 建议边界 / 实际行动 / 复盘结果。'),
+          _PromptBlock(title: 'Boundary Profile', text: '边界类型、目标用户画像、六类边界评分、关系领域评分、最需要练习的三个方向、推荐进入模块。'),
+          _PromptBlock(title: 'Boundary Script', text: '一句话边界 / 温和版 / 坚定版 / 不解释版 / 重述版 / 对方反应预案 / 收藏状态。'),
+          _PromptBlock(title: 'Boundary Action Plan', text: '我要对谁设边界 / 我要说什么 / 什么时候说 / 接受时怎么继续 / 无视时怎么做 / 攻击时怎么回应 / 内疚时如何稳定 / 合理后果 / 执行提醒 / 边界刷新条件。'),
+          _PromptBlock(title: 'Relationship Health Record', text: '关系对象 / 主要越界类型 / 已表达边界 / 对方反应 / 我采取过的行动 / 当前关系距离 / 是否值得修复 / 是否需要降级、暂停或结束。'),
+          _PromptBlock(title: '核心路径一', text: '从情绪到边界：情绪输入 → AI 识别边界类型 → 责任归位 → 话术 → 行动计划 → 复盘。'),
+          _PromptBlock(title: '核心路径二', text: '从不会拒绝到清楚表达：具体请求 → 三版话术 → 反应预演 → 保存执行时间 → 执行后复盘。'),
+          _PromptBlock(title: '核心路径三', text: '从内疚到稳定：内疚输入 → 事实与解释 → 稳定语句 → 不撤回边界 → 简短复盘。'),
+          _PromptBlock(title: '核心路径四', text: '从重复关系模式到身份改变：模式识别 → 长期边界计划 → 身份目标 → 执行追踪。'),
+        ],
+      );
 
   Widget _linkedWorkflowPanel() {
     final output = _output;
@@ -689,6 +797,16 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     ]);
   }
 
+
+  Widget _emotionStabilityExercises() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+        Text('情绪稳定练习', style: TextStyle(fontWeight: FontWeight.w900)),
+        SizedBox(height: 8),
+        _PromptBlock(title: '呼吸练习', text: '先做 3 轮慢呼吸，再决定是否回复。'),
+        _PromptBlock(title: '事实与解释', text: '写下“事实发生了什么”和“我脑中如何解释”，不要把解释当成事实。'),
+        _PromptBlock(title: '内疚 vs 责任', text: '我需要负责清楚表达和一致行动，不需要负责让对方完全不失望。'),
+        _PromptBlock(title: '我能控制什么', text: '把注意力从对方反应转回我的话术、行动、后果和复盘。'),
+      ]);
+
   Widget _relationshipEvaluator() {
     final score = (_repairEvidence + _respectConsistency - _safetyRisk).clamp(0, 100).round();
     final advice = _safetyRisk > 70
@@ -718,7 +836,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
           color: const Color(0xFFF7F4EE),
           child: ListTile(
             title: Text('${r.name} · ${r.domain}', style: const TextStyle(fontWeight: FontWeight.w900)),
-            subtitle: Text('越界：${r.violation}\n已表达：${r.expressedBoundary}\n反应：${r.response}\n距离：${r.distance}\n下一步：${r.nextStep}'),
+            subtitle: Text('越界：${r.violation}\n已表达：${r.expressedBoundary}\n反应：${r.response}\n已采取行动：${r.actionTaken}\n距离：${r.distance}\n值得修复：${r.worthRepair ? '是' : '否'}；需要降级：${r.needDowngrade ? '是' : '否'}\n下一步：${r.nextStep}'),
           ),
         ),
         _kv('边界刷新触发器', '换工作、结婚、生孩子、搬家、收入变化、关系修复、对方持续不尊重、自己容量显著变化。'),
@@ -733,7 +851,9 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
       return const Text('保存一次边界复盘后，行动看板会生成“已表达 / 已执行后果 / 已复盘”三步追踪，避免边界只停留在话术层面。');
     }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _kv('执行提醒', '今天是否执行了边界？有没有因为内疚撤回？有没有过度解释？有没有答应后又怨恨？是否需要重述边界？'),
         for (var i = 0; i < _actionPlans.length; i++) Card(
           elevation: 0,
           color: const Color(0xFFF7F4EE),
@@ -786,7 +906,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
       return const Text('保存一次 AI 输出后，这里会形成关系健康档案、行动证据和身份化成长记录。每日复盘问题：今天我哪里说了“不”？哪里过度解释了？哪里尊重了别人和自己的边界？');
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('成长曲线：已记录 ${_reviews.length} 次边界练习；过度解释减少、边界重述、自我守信天数可持续追踪。', style: const TextStyle(fontWeight: FontWeight.w800)),
+      Text('成长曲线：已记录 ${_reviews.length} 次边界练习；持续追踪拒绝次数、过度解释减少次数、边界重述次数、自我边界执行天数、怨恨感变化、内疚感变化和关系压力变化。', style: const TextStyle(fontWeight: FontWeight.w800)),
       const SizedBox(height: 10),
       for (final r in _reviews.take(5)) ListTile(
         contentPadding: EdgeInsets.zero,
@@ -852,6 +972,7 @@ class _BoundaryCoach {
         '我什么时候说：${actionTarget.isEmpty ? '今天选择一个低干扰时间' : actionTarget}。',
         '如果对方接受：感谢对方理解，并把新的互动方式具体化。',
         '如果对方无视：重述一次边界，然后执行后果。',
+        '如果对方攻击我：不进入争辩，只说明“我愿意在彼此尊重时继续谈”，然后暂停互动。',
         '如果我内疚：先稳定自己，不用撤回边界换取对方舒服。',
       ],
       consequence: '如果对方继续无视，你可以先转换话题一次；若仍继续，就${cfg.consequenceAction}。关键是让行动和边界一致。',
@@ -989,7 +1110,10 @@ class _RelationshipRecord {
     required this.violation,
     required this.expressedBoundary,
     required this.response,
+    required this.actionTaken,
     required this.distance,
+    required this.worthRepair,
+    required this.needDowngrade,
     required this.nextStep,
   });
   final String name;
@@ -997,7 +1121,10 @@ class _RelationshipRecord {
   final String violation;
   final String expressedBoundary;
   final String response;
+  final String actionTaken;
   final String distance;
+  final bool worthRepair;
+  final bool needDowngrade;
   final String nextStep;
 }
 
