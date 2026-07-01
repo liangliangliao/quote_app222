@@ -131,13 +131,17 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
       violation: '过度追问婚姻隐私',
       expressedBoundary: '婚姻细节由小家庭内部处理',
       response: '质疑与情绪施压',
+      actionTaken: '已说明婚姻细节不继续展开，并准备追问时结束话题',
       distance: '保持联系但降低隐私开放度',
+      worthRepair: true,
+      needDowngrade: true,
       nextStep: '固定每周一次分享近况，追问时结束话题',
     ),
   ];
   final Map<String, bool> _dailyReview = <String, bool>{
     '今天我清楚表达了一个“不”或限制': false,
     '今天我没有用过度解释换取理解': false,
+    '今天我注意到一次答应后产生的怨恨': false,
     '今天我用行动维护了边界': false,
     '今天我尊重了别人的边界': false,
     '今天我对一个自我承诺守信': false,
@@ -146,6 +150,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     '我很难拒绝别人': true,
     '我经常答应后又怨恨': true,
     '我会过度解释自己的决定': true,
+    '我会过度分享来换取亲近或安全感': false,
     '我害怕别人失望或生气': true,
     '我经常替别人承担后果': false,
     '我遇到冲突会突然切断关系': false,
@@ -348,11 +353,15 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
         children: [
           _heroCard(),
           const SizedBox(height: 12),
+          _todayPracticeCard(),
+          const SizedBox(height: 12),
           _strictSevenModuleNavigator(),
           const SizedBox(height: 12),
           _productValueCard(),
           const SizedBox(height: 12),
           _oneToOneFeatureMatrix(),
+          const SizedBox(height: 12),
+          _dataAndFlowContractCard(),
           const SizedBox(height: 12),
           _linkedWorkflowPanel(),
           const SizedBox(height: 12),
@@ -441,6 +450,8 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
               _kv('对方反应预演', output.reactionPlan),
               const Divider(height: 24),
               _guiltWorkbench(),
+              const Divider(height: 24),
+              _emotionStabilityExercises(),
             ]),
             const SizedBox(height: 12),
             _sectionCard(title: '模块六补充：对方反应预演训练器', icon: Icons.theater_comedy_outlined, children: [
@@ -507,6 +518,25 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
       );
 
 
+
+
+  Widget _todayPracticeCard() {
+    final recent = _reviews.isEmpty ? '尚未复盘：完成一次练习后这里会显示最近记录。' : '${_reviews.first.sceneName} · ${_reviews.first.action}';
+    final weakestDomain = (_domainScores.entries.toList()..sort((a, b) => a.value.compareTo(b.value))).first.key;
+    return _sectionCard(
+      title: '首页：今日边界练习',
+      icon: Icons.today_outlined,
+      children: [
+        _kv('今日边界提醒', '不要用过度解释换取理解。'),
+        _kv('今日最小行动', _output?.todayAction ?? '今天选择一个低风险场景，只说一句清楚边界。'),
+        _kv('最近一次边界复盘', recent),
+        _kv('当前最需要练习的关系/领域', weakestDomain),
+        Wrap(spacing: 8, runSpacing: 8, children: const [
+          _Tag('AI 快速入口'), _Tag('生成话术'), _Tag('建立行动计划'), _Tag('复盘'),
+        ]),
+      ],
+    );
+  }
 
   Widget _productValueCard() => _sectionCard(
         title: '二、核心价值主张逐条落地',
@@ -590,6 +620,23 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     ];
     return steps.where((v) => v).length;
   }
+
+
+  Widget _dataAndFlowContractCard() => _sectionCard(
+        title: '数据、业务逻辑与用户路径契约',
+        icon: Icons.schema_outlined,
+        children: const [
+          _PromptBlock(title: 'Boundary Case', text: '场景类型 / 相关人物 / 事件描述 / 我的感受 / 对方要求 / 我已经答应了什么 / 我真正想要什么 / 当前内疚感 / 当前怨恨 / 安全风险 / AI 建议边界 / 实际行动 / 复盘结果。'),
+          _PromptBlock(title: 'Boundary Profile', text: '边界类型、目标用户画像、六类边界评分、关系领域评分、最需要练习的三个方向、推荐进入模块。'),
+          _PromptBlock(title: 'Boundary Script', text: '一句话边界 / 温和版 / 坚定版 / 不解释版 / 重述版 / 对方反应预案 / 收藏状态。'),
+          _PromptBlock(title: 'Boundary Action Plan', text: '我要对谁设边界 / 我要说什么 / 什么时候说 / 接受时怎么继续 / 无视时怎么做 / 攻击时怎么回应 / 内疚时如何稳定 / 合理后果 / 执行提醒 / 边界刷新条件。'),
+          _PromptBlock(title: 'Relationship Health Record', text: '关系对象 / 主要越界类型 / 已表达边界 / 对方反应 / 我采取过的行动 / 当前关系距离 / 是否值得修复 / 是否需要降级、暂停或结束。'),
+          _PromptBlock(title: '核心路径一', text: '从情绪到边界：情绪输入 → AI 识别边界类型 → 责任归位 → 话术 → 行动计划 → 复盘。'),
+          _PromptBlock(title: '核心路径二', text: '从不会拒绝到清楚表达：具体请求 → 三版话术 → 反应预演 → 保存执行时间 → 执行后复盘。'),
+          _PromptBlock(title: '核心路径三', text: '从内疚到稳定：内疚输入 → 事实与解释 → 稳定语句 → 不撤回边界 → 简短复盘。'),
+          _PromptBlock(title: '核心路径四', text: '从重复关系模式到身份改变：模式识别 → 长期边界计划 → 身份目标 → 执行追踪。'),
+        ],
+      );
 
   Widget _linkedWorkflowPanel() {
     final output = _output;
@@ -750,6 +797,16 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
     ]);
   }
 
+
+  Widget _emotionStabilityExercises() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+        Text('情绪稳定练习', style: TextStyle(fontWeight: FontWeight.w900)),
+        SizedBox(height: 8),
+        _PromptBlock(title: '呼吸练习', text: '先做 3 轮慢呼吸，再决定是否回复。'),
+        _PromptBlock(title: '事实与解释', text: '写下“事实发生了什么”和“我脑中如何解释”，不要把解释当成事实。'),
+        _PromptBlock(title: '内疚 vs 责任', text: '我需要负责清楚表达和一致行动，不需要负责让对方完全不失望。'),
+        _PromptBlock(title: '我能控制什么', text: '把注意力从对方反应转回我的话术、行动、后果和复盘。'),
+      ]);
+
   Widget _relationshipEvaluator() {
     final score = (_repairEvidence + _respectConsistency - _safetyRisk).clamp(0, 100).round();
     final advice = _safetyRisk > 70
@@ -779,7 +836,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
           color: const Color(0xFFF7F4EE),
           child: ListTile(
             title: Text('${r.name} · ${r.domain}', style: const TextStyle(fontWeight: FontWeight.w900)),
-            subtitle: Text('越界：${r.violation}\n已表达：${r.expressedBoundary}\n反应：${r.response}\n距离：${r.distance}\n下一步：${r.nextStep}'),
+            subtitle: Text('越界：${r.violation}\n已表达：${r.expressedBoundary}\n反应：${r.response}\n已采取行动：${r.actionTaken}\n距离：${r.distance}\n值得修复：${r.worthRepair ? '是' : '否'}；需要降级：${r.needDowngrade ? '是' : '否'}\n下一步：${r.nextStep}'),
           ),
         ),
         _kv('边界刷新触发器', '换工作、结婚、生孩子、搬家、收入变化、关系修复、对方持续不尊重、自己容量显著变化。'),
@@ -794,7 +851,9 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
       return const Text('保存一次边界复盘后，行动看板会生成“已表达 / 已执行后果 / 已复盘”三步追踪，避免边界只停留在话术层面。');
     }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _kv('执行提醒', '今天是否执行了边界？有没有因为内疚撤回？有没有过度解释？有没有答应后又怨恨？是否需要重述边界？'),
         for (var i = 0; i < _actionPlans.length; i++) Card(
           elevation: 0,
           color: const Color(0xFFF7F4EE),
@@ -847,7 +906,7 @@ class _BoundaryPracticeHomePageState extends State<BoundaryPracticeHomePage> {
       return const Text('保存一次 AI 输出后，这里会形成关系健康档案、行动证据和身份化成长记录。每日复盘问题：今天我哪里说了“不”？哪里过度解释了？哪里尊重了别人和自己的边界？');
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('成长曲线：已记录 ${_reviews.length} 次边界练习；过度解释减少、边界重述、自我守信天数可持续追踪。', style: const TextStyle(fontWeight: FontWeight.w800)),
+      Text('成长曲线：已记录 ${_reviews.length} 次边界练习；持续追踪拒绝次数、过度解释减少次数、边界重述次数、自我边界执行天数、怨恨感变化、内疚感变化和关系压力变化。', style: const TextStyle(fontWeight: FontWeight.w800)),
       const SizedBox(height: 10),
       for (final r in _reviews.take(5)) ListTile(
         contentPadding: EdgeInsets.zero,
@@ -913,6 +972,7 @@ class _BoundaryCoach {
         '我什么时候说：${actionTarget.isEmpty ? '今天选择一个低干扰时间' : actionTarget}。',
         '如果对方接受：感谢对方理解，并把新的互动方式具体化。',
         '如果对方无视：重述一次边界，然后执行后果。',
+        '如果对方攻击我：不进入争辩，只说明“我愿意在彼此尊重时继续谈”，然后暂停互动。',
         '如果我内疚：先稳定自己，不用撤回边界换取对方舒服。',
       ],
       consequence: '如果对方继续无视，你可以先转换话题一次；若仍继续，就${cfg.consequenceAction}。关键是让行动和边界一致。',
@@ -1050,7 +1110,10 @@ class _RelationshipRecord {
     required this.violation,
     required this.expressedBoundary,
     required this.response,
+    required this.actionTaken,
     required this.distance,
+    required this.worthRepair,
+    required this.needDowngrade,
     required this.nextStep,
   });
   final String name;
@@ -1058,7 +1121,10 @@ class _RelationshipRecord {
   final String violation;
   final String expressedBoundary;
   final String response;
+  final String actionTaken;
   final String distance;
+  final bool worthRepair;
+  final bool needDowngrade;
   final String nextStep;
 }
 
