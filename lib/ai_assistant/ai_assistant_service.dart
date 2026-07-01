@@ -1113,7 +1113,11 @@ class AiAssistantService {
     if (lower.endsWith('.csv')) return 'text/csv';
     if (lower.endsWith('.json')) return 'application/json';
     if (lower.endsWith('.xml')) return 'application/xml';
-    if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html';
+    if (lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.xhtml')) return 'text/html';
+    if (lower.endsWith('.epub') || lower.endsWith('.kepub')) return 'application/epub+zip';
+    if (lower.endsWith('.fb2')) return 'application/x-fictionbook+xml';
+    if (lower.endsWith('.mobi')) return 'application/x-mobipocket-ebook';
+    if (lower.endsWith('.azw') || lower.endsWith('.azw3')) return 'application/vnd.amazon.ebook';
     if (lower.endsWith('.pdf')) return 'application/pdf';
     if (lower.endsWith('.doc')) return 'application/msword';
     if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
