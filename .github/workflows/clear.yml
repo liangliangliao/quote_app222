@@ -1,0 +1,68 @@
+name: Cleanup GitHub Actions Storage
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_runs:
+        description: "保留最近多少条 workflow runs"
+        required: true
+        default: "10"
+      delete_runs:
+        description: "是否删除旧 workflow runs"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Delete all artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Deleting all artifacts in $REPO ..."
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$REPO/actions/artifacts?per_page=100" \
+            --paginate \
+            --jq '.artifacts[].id' \
+          | while read id; do
+              echo "Deleting artifact: $id"
+              gh api \
+                --method DELETE \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/$REPO/actions/artifacts/$id" || true
+            done
+
+      - name: Delete old completed workflow runs
+        if: ${{ inputs.delete_runs == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ inputs.keep_runs }}
+        run: |
+          echo "Deleting old completed workflow runs, keeping latest $KEEP ..."
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$REPO/actions/runs?per_page=100&status=completed" \
+            --paginate \
+            --jq '.workflow_runs[].id' \
+          | awk -v keep="$KEEP" 'NR > keep {print}' \
+          | while read id; do
+              echo "Deleting workflow run: $id"
+              gh api \
+                --method DELETE \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/$REPO/actions/runs/$id" || true
+            done
+
+      - name: Done
+        run: echo "Cleanup finished."
