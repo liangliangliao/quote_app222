@@ -241,6 +241,8 @@ class VoiceAlarmRingingService : Service() {
   private var vibrator: Vibrator? = null
   private var wakeLock: PowerManager.WakeLock? = null
   private var originalAlarmVolume: Int? = null
+  private var originalVolumeStream: Int = AudioManager.STREAM_ALARM
+  private var headsetPlaybackModeActive = false
   private var currentMusicVolume = 0.4f
   private var musicRestoreRunnable: Runnable? = null
   private val replayHandler = Handler(Looper.getMainLooper())
@@ -328,8 +330,8 @@ class VoiceAlarmRingingService : Service() {
     if (audioDeviceCallback != null) return
     val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
     val callback = object : AudioDeviceCallback() {
-      override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = applyPreferredOutputDeviceToActivePlayers()
-      override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = applyPreferredOutputDeviceToActivePlayers()
+      override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = onConnectedAudioDevicesChanged()
+      override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = onConnectedAudioDevicesChanged()
     }
     try {
       audio.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
@@ -345,6 +347,20 @@ class VoiceAlarmRingingService : Service() {
     } catch (_: Throwable) {}
   }
 
+  /**
+   * USAGE_ALARM is "enforced audible": the platform always adds the speaker to the routed
+   * devices for that strategy no matter what, so a connected headset never gets exclusive
+   * playback (see VoiceAlarmAudioRoute's kdoc). Falling back to USAGE_MEDIA while a headset is
+   * connected uses Android's normal, non-enforced device selection, which routes to the
+   * connected wired/USB/Bluetooth device only - exactly the behavior every media app gets when
+   * headphones are plugged in.
+   */
+  private fun headsetOutputConnected(): Boolean = VoiceAlarmAudioRoute.hasHeadsetOutput(this)
+
+  private fun playbackUsage(): Int = if (headsetOutputConnected()) AudioAttributes.USAGE_MEDIA else AudioAttributes.USAGE_ALARM
+
+  private fun playbackStream(): Int = if (headsetOutputConnected()) AudioManager.STREAM_MUSIC else AudioManager.STREAM_ALARM
+
   private fun applyPreferredOutputDevice(player: MediaPlayer?) {
     if (player == null) return
     try {
@@ -354,10 +370,21 @@ class VoiceAlarmRingingService : Service() {
     } catch (_: Throwable) {}
   }
 
-  private fun applyPreferredOutputDeviceToActivePlayers() {
-    logVoice("audioRoute.deviceListChanged", "connected audio device set changed; re-evaluating headset routing")
-    applyPreferredOutputDevice(voicePlayer)
-    applyPreferredOutputDevice(musicPlayer)
+  private fun onConnectedAudioDevicesChanged() {
+    val headsetNow = headsetOutputConnected()
+    if (headsetNow == headsetPlaybackModeActive) {
+      // Same routing mode (e.g. switching between two Bluetooth devices); just re-pin the
+      // preferred device on the already-correctly-configured players.
+      logVoice("audioRoute.deviceListChanged", "connected audio device set changed; headset mode unchanged, reapplying preferred device")
+      applyPreferredOutputDevice(voicePlayer)
+      applyPreferredOutputDevice(musicPlayer)
+      return
+    }
+    // Headset presence flipped mid-ring: USAGE_ALARM vs USAGE_MEDIA can only be chosen when a
+    // player/TTS engine/audio-focus request is (re)created, so rebuild playback from scratch
+    // with the attributes that match the new state instead of trying to hot-swap them.
+    logVoice("audioRoute.modeChanged", "headset presence changed mid-ring; rebuilding playback with matching audio attributes", mapOf("headsetNow" to headsetNow))
+    startSignals(currentPayload)
   }
 
   private fun startForegroundAlarm(payload: String) {
@@ -496,6 +523,7 @@ class VoiceAlarmRingingService : Service() {
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
     alarmSignalPlaybackActive = true
     activeSignalPlayback = true
+    headsetPlaybackModeActive = headsetOutputConnected()
     registerHeadsetRouteCallback()
     sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", data.optBoolean("systemMusic", true) || data.optString("musicPath", "").isNotBlank() || data.optJSONArray("musicPaths")?.length()?.let { it > 0 } == true))
     logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
@@ -567,6 +595,16 @@ class VoiceAlarmRingingService : Service() {
     currentVoiceText = cleanText
     logVoice("voice.tts.speak", "platform alarm TTS requested", mapOf("textLen" to cleanText.length, "volume" to volume))
     if (alarmTtsReady && alarmTts != null) {
+      // Re-apply attributes on every utterance (not just at engine construction time) so a
+      // headset plugged/unplugged since the engine was created is reflected on this replay.
+      try {
+        alarmTts?.setAudioAttributes(
+          AudioAttributes.Builder()
+            .setUsage(playbackUsage())
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build(),
+        )
+      } catch (_: Throwable) {}
       val utteranceId = "alarm_tts_${System.currentTimeMillis()}"
       val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
       try {
@@ -587,7 +625,7 @@ class VoiceAlarmRingingService : Service() {
           try {
             alarmTts?.setAudioAttributes(
               AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setUsage(playbackUsage())
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build(),
             )
@@ -698,7 +736,7 @@ class VoiceAlarmRingingService : Service() {
       MediaPlayer().apply {
         setAudioAttributes(
           AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setUsage(playbackUsage())
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build(),
         )
@@ -765,7 +803,7 @@ class VoiceAlarmRingingService : Service() {
       val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
       if (Build.VERSION.SDK_INT >= 26) {
         val attrs = AudioAttributes.Builder()
-          .setUsage(AudioAttributes.USAGE_ALARM)
+          .setUsage(playbackUsage())
           .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
           .build()
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
@@ -776,7 +814,7 @@ class VoiceAlarmRingingService : Service() {
         audioFocusRequest = request
       } else {
         @Suppress("DEPRECATION")
-        audio.requestAudioFocus(null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        audio.requestAudioFocus(null, playbackStream(), AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
       }
     } catch (_: Throwable) {}
   }
@@ -797,10 +835,15 @@ class VoiceAlarmRingingService : Service() {
   private fun ensureAudibleAlarmVolume() {
     try {
       val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-      val current = audio.getStreamVolume(AudioManager.STREAM_ALARM)
+      // When routed through a headset via USAGE_MEDIA, STREAM_ALARM's volume is irrelevant -
+      // raise STREAM_MUSIC instead so a forgotten-low media volume doesn't make the alarm
+      // effectively silent in the user's ears.
+      val stream = playbackStream()
+      val current = audio.getStreamVolume(stream)
+      originalVolumeStream = stream
       originalAlarmVolume = current
-      val target = maxOf(1, (audio.getStreamMaxVolume(AudioManager.STREAM_ALARM) * 0.7f).toInt())
-      if (current < target) audio.setStreamVolume(AudioManager.STREAM_ALARM, target, 0)
+      val target = maxOf(1, (audio.getStreamMaxVolume(stream) * 0.7f).toInt())
+      if (current < target) audio.setStreamVolume(stream, target, 0)
     } catch (_: Throwable) {}
   }
 
@@ -808,7 +851,7 @@ class VoiceAlarmRingingService : Service() {
     try {
       val value = originalAlarmVolume ?: return
       val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-      audio.setStreamVolume(AudioManager.STREAM_ALARM, value, 0)
+      audio.setStreamVolume(originalVolumeStream, value, 0)
     } catch (_: Throwable) {}
     originalAlarmVolume = null
   }
