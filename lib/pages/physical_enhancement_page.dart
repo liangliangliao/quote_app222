@@ -88,7 +88,7 @@ class PhysicalEnhancementPage extends StatelessWidget {
             // hands_clapping 图标在部分 Flutter 版本中不存在，改用 pan_tool 代替
             leading: const Icon(Icons.pan_tool, color: Colors.orange),
             title: const Text('触摸'),
-            subtitle: const Text('触摸 · V167 可见七十二变光弦版：修复黑底下变身层过暗不可见'),
+            subtitle: const Text('触摸 · 潮汐光迹 / 书法书写 / 拼图复原，三种动态壁纸可选'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(

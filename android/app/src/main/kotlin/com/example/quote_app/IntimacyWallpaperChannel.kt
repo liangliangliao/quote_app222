@@ -58,6 +58,14 @@ object IntimacyWallpaperChannel {
                         editor.putFloat("releaseMaxSec", numberArg(call, "releaseMaxSec", 24.0).toFloat().coerceIn(2f, 1200f))
                         editor.putFloat("afterglowMinSec", numberArg(call, "afterglowMinSec", 20.0).toFloat().coerceIn(3f, 1800f))
                         editor.putFloat("afterglowMaxSec", numberArg(call, "afterglowMaxSec", 90.0).toFloat().coerceIn(3f, 3600f))
+                        editor.putString("puzzleImagePaths", call.argument<String>("puzzleImagePaths") ?: "[]")
+                        editor.putString("puzzleRotationMode", call.argument<String>("puzzleRotationMode") ?: "sequential")
+                        editor.putInt("puzzleCols", numberArg(call, "puzzleCols", 5.0).toInt().coerceIn(2, 14))
+                        editor.putInt("puzzleRows", numberArg(call, "puzzleRows", 7.0).toInt().coerceIn(2, 16))
+                        editor.putFloat("puzzleAssembleSeconds", numberArg(call, "puzzleAssembleSeconds", 4.0).toFloat().coerceIn(1f, 1200f))
+                        editor.putFloat("puzzleHoldSeconds", numberArg(call, "puzzleHoldSeconds", 2.0).toFloat().coerceIn(0.3f, 1200f))
+                        editor.putFloat("puzzleScatterRadius", numberArg(call, "puzzleScatterRadius", 0.85).toFloat().coerceIn(0.2f, 2f))
+                        editor.putInt("puzzleBatchSize", numberArg(call, "puzzleBatchSize", 0.0).toInt().coerceIn(0, 400))
                         val nowMs = System.currentTimeMillis()
                         val resetSeed = call.argument<Boolean>("resetSeed") ?: true
                         if (resetSeed) {
@@ -78,7 +86,15 @@ object IntimacyWallpaperChannel {
                             "calligraphySpeed" to prefs.getFloat("calligraphySpeed", 0.55f).toDouble(),
                             "calligraphyStrokeData" to (prefs.getString("calligraphyStrokeData", "{}") ?: "{}"),
                             "calligraphyPlaylist" to (prefs.getString("calligraphyPlaylist", "[]") ?: "[]"),
-                            "calligraphyAiHistory" to (prefs.getString("calligraphyAiHistory", "[]") ?: "[]")
+                            "calligraphyAiHistory" to (prefs.getString("calligraphyAiHistory", "[]") ?: "[]"),
+                            "puzzleImagePaths" to (prefs.getString("puzzleImagePaths", "[]") ?: "[]"),
+                            "puzzleRotationMode" to (prefs.getString("puzzleRotationMode", "sequential") ?: "sequential"),
+                            "puzzleCols" to prefs.getInt("puzzleCols", 5),
+                            "puzzleRows" to prefs.getInt("puzzleRows", 7),
+                            "puzzleAssembleSeconds" to prefs.getFloat("puzzleAssembleSeconds", 4f).toDouble(),
+                            "puzzleHoldSeconds" to prefs.getFloat("puzzleHoldSeconds", 2f).toDouble(),
+                            "puzzleScatterRadius" to prefs.getFloat("puzzleScatterRadius", 0.85f).toDouble(),
+                            "puzzleBatchSize" to prefs.getInt("puzzleBatchSize", 0)
                         ))
                     }
                     "setLiveWallpaperDirect" -> {
@@ -170,6 +186,58 @@ object IntimacyWallpaperChannel {
                         ))
                     }
                     "isSupported" -> result.success(true)
+                    "savePuzzleImage" -> {
+                        val srcPath = call.argument<String>("path")
+                        if (srcPath.isNullOrEmpty()) {
+                            result.error("NO_PATH", "path missing", null)
+                        } else {
+                            try {
+                                val srcFile = java.io.File(srcPath)
+                                if (!srcFile.exists()) {
+                                    result.error("FILE_NOT_FOUND", "source file does not exist", null)
+                                } else {
+                                    // 把图片拷贝进 App 私有存储（filesDir，非缓存目录），这样动态壁纸
+                                    // 引擎（可能在系统重启/不同进程上下文中运行）始终能用一个稳定路径
+                                    // 读到图片，不依赖 image_picker 临时文件或 content:// Uri 的持久化
+                                    // 授权。
+                                    //
+                                    // 关键修复：文件名必须带上时间戳+随机数等唯一后缀。早期版本固定用
+                                    // 同一个文件名（puzzle_wallpaper_source.jpg），导致"更换图片"时新图片
+                                    // 覆盖旧文件但路径字符串完全不变——原生引擎判断"是否要重新解码"是按
+                                    // 路径是否变化来判断的，路径没变就永远不会重新加载新图内容，
+                                    // 于是看起来像是"换图失败"。现在每张图片都有独立、稳定的路径，
+                                    // 同时也是支持多图轮换的基础。
+                                    val uniqueName = "puzzle_src_${System.currentTimeMillis()}_${(1000..9999).random()}.jpg"
+                                    val destFile = java.io.File(activity.applicationContext.filesDir, uniqueName)
+                                    srcFile.copyTo(destFile, overwrite = false)
+                                    result.success(destFile.absolutePath)
+                                }
+                            } catch (t: Throwable) {
+                                result.error("COPY_FAILED", t.message ?: t.javaClass.simpleName, null)
+                            }
+                        }
+                    }
+                    "deletePuzzleImageFile" -> {
+                        val path = call.argument<String>("path")
+                        if (path.isNullOrEmpty()) {
+                            result.success(false)
+                        } else {
+                            try {
+                                val f = java.io.File(path)
+                                // 安全检查：只允许删除 App 自己私有存储目录下、以拼图前缀命名的文件，
+                                // 避免被滥用为任意路径删除。
+                                val isOwnFile = f.parentFile?.absolutePath == activity.applicationContext.filesDir.absolutePath &&
+                                        f.name.startsWith("puzzle_src_")
+                                if (isOwnFile && f.exists()) {
+                                    result.success(f.delete())
+                                } else {
+                                    result.success(false)
+                                }
+                            } catch (t: Throwable) {
+                                result.success(false)
+                            }
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             } catch (t: Throwable) {
