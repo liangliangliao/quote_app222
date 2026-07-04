@@ -68,6 +68,7 @@ import 'new_tablets/new_tablets_home_page.dart';
 import 'self_worth_ai/self_worth_ai_home_page.dart';
 import 'boundary_practice/boundary_practice_home_page.dart';
 import 'boundary_action_coach/boundary_action_coach_home_page.dart';
+import 'self_determination_growth/self_determination_growth_home_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -412,6 +413,14 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntries() => [
+    _DrawerEntrySpec(
+      icon: Icons.psychology_alt_outlined,
+      title: '自我决定成长系统 · SDT Growth',
+      subtitle: '今日面板 → 三大需要雷达 → 目标审查 → 动机光谱 → 最小行动 → 失败恢复 → 身份整合',
+      badgeText: '独立模块：基于 Ryan & Deci 自我决定理论，把自主、胜任、关系转化为 AI 成长闭环',
+      sequenceNumber: 40,
+      pageBuilder: (_) => const SelfDeterminationGrowthHomePage(),
+    ),
     _DrawerEntrySpec(
       icon: Icons.fence_outlined,
       title: '边界行动教练 · Boundary Action Coach',
