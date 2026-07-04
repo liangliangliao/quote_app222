@@ -45,6 +45,14 @@ class IntimacyWallpaperBridge {
     required double afterglowMinSec,
     required double afterglowMaxSec,
     bool resetSeed = true,
+    String puzzleImagePaths = '[]',
+    String puzzleRotationMode = 'sequential',
+    int puzzleCols = 5,
+    int puzzleRows = 7,
+    double puzzleAssembleSeconds = 4.0,
+    double puzzleHoldSeconds = 2.0,
+    double puzzleScatterRadius = 0.85,
+    int puzzleBatchSize = 0,
   }) async {
     if (!isAndroid) return false;
     final ok = await _channel.invokeMethod<bool>('saveConfig', <String, dynamic>{
@@ -85,6 +93,14 @@ class IntimacyWallpaperBridge {
       'afterglowMinSec': afterglowMinSec,
       'afterglowMaxSec': afterglowMaxSec,
       'resetSeed': resetSeed,
+      'puzzleImagePaths': puzzleImagePaths,
+      'puzzleRotationMode': puzzleRotationMode,
+      'puzzleCols': puzzleCols,
+      'puzzleRows': puzzleRows,
+      'puzzleAssembleSeconds': puzzleAssembleSeconds,
+      'puzzleHoldSeconds': puzzleHoldSeconds,
+      'puzzleScatterRadius': puzzleScatterRadius,
+      'puzzleBatchSize': puzzleBatchSize,
     });
     return ok == true;
   }
@@ -139,5 +155,31 @@ class IntimacyWallpaperBridge {
     if (!isAndroid) return false;
     final ok = await _channel.invokeMethod<bool>('isSupported');
     return ok == true;
+  }
+
+  /// Copies a locally-picked image (e.g. from image_picker) into the app's
+  /// permanent internal storage so the live wallpaper engine can read it via
+  /// a stable file path, independent of process lifecycle or URI grants.
+  /// Returns the saved absolute path on success, or null on failure.
+  static Future<String?> savePuzzleImage(String path) async {
+    if (!isAndroid) return null;
+    try {
+      final saved = await _channel.invokeMethod<String>('savePuzzleImage', <String, dynamic>{'path': path});
+      return saved;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Best-effort cleanup of a previously-saved puzzle image file when it's
+  /// removed from the rotation list. Safe to ignore failures (orphaned files
+  /// just sit in app-private storage and don't affect correctness).
+  static Future<void> deletePuzzleImageFile(String path) async {
+    if (!isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('deletePuzzleImageFile', <String, dynamic>{'path': path});
+    } catch (_) {
+      // ignore
+    }
   }
 }

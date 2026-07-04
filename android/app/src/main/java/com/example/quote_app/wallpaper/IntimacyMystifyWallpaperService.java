@@ -4,10 +4,12 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.opengl.GLES20;
@@ -18,12 +20,14 @@ import android.view.SurfaceHolder;
 
 import androidx.core.graphics.PathParser;
 
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
@@ -190,7 +194,7 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
         private final OnSharedPreferenceChangeListener prefListener;
         private volatile boolean configDirty = true;
         private String visualConfigSignature = "";
-        private static final int MOTIF_COUNT = 18;
+        private static final int MOTIF_COUNT = 26; // 0-17 原有 + 18-25 新艺术母型
         private final Random random = new Random();
         private final ArrayList<StrokeEvent> strokes = new ArrayList<>();
         private final int[] spawnHeat = new int[GRID_COLS * GRID_ROWS];
@@ -198,6 +202,34 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
         // 反复看到同一种“线条整体轮廓”。
         private final int[] motifCooldown = new int[MOTIF_COUNT];
         private int artSpawnIndex = 0;
+        private int sceneEra = 0;
+        // 场景画布系统字段（潮汐光迹艺术模式）
+        private static final int MA_MAXP     = 520;
+        private static final int MA_MAXLINES = 80;
+        private static final int MA_SCENE_COUNT = 10;
+        private static final long MA_SCENE_MS   = 60_000L; // 60 秒一个场景
+        private final float[] maPX  = new float[MA_MAXP];
+        private final float[] maPY  = new float[MA_MAXP];
+        private final float[] maVX  = new float[MA_MAXP];
+        private final float[] maVY  = new float[MA_MAXP];
+        private final float[] maTX  = new float[MA_MAXP];
+        private final float[] maTY  = new float[MA_MAXP];
+        private final float[] maStagger = new float[MA_MAXP];
+        private final int[]   maCOL = new int  [MA_MAXP];
+        private final float[] maSZ  = new float[MA_MAXP];
+        private final int[]   maLn0 = new int  [MA_MAXLINES];
+        private final int[]   maLn1 = new int  [MA_MAXLINES];
+        private int   maPCount  = 0;
+        private int   maLnCount = 0;
+        private int   maInitedScene = -1;
+        private long  maPrevFrameMs = 0L;
+        private int   maTexture     = 0;
+        private Bitmap maBitmap;
+        private int   maBmpW = 0, maBmpH = 0;
+        private long  maUploadMs    = 0L;
+        private long  maSceneStartMs = -1L;
+        private int   maSceneIdx    = 0;           // 0=celestial 1=garden 2=marine 3=architecture 4=fire
+        private int sceneEraSpawnCount = 0; // era changes every N spawns
 
         private volatile boolean running = true;
         private volatile boolean visible = false;
@@ -219,6 +251,32 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
         private int colorProgram = 0;
         private int calligraphyTexture = 0;
         private Bitmap calligraphyBitmap;
+        // 拼图壁纸（第三种动态壁纸模式）渲染状态。
+        private static final int PUZZLE_PHASE_ASSEMBLING = 0;
+        private static final int PUZZLE_PHASE_HOLDING = 1;
+        private int puzzleTexture = 0;
+        private Bitmap puzzleCanvasBitmap;
+        private Bitmap puzzleSourceBitmap;
+        private String puzzleLoadedPath = "";
+        private int puzzleCanvasW = 0;
+        private int puzzleCanvasH = 0;
+        private long lastPuzzleUploadMs = 0L;
+        private int puzzleBuiltCols = -1;
+        private int puzzleBuiltRows = -1;
+        private float puzzleBuiltScatter = -1f;
+        private int puzzleBuiltBatchSize = -1;
+        private float puzzlePerWaveFlightSec = 1f;
+        private long puzzleSeenSeed = Long.MIN_VALUE;
+        private int puzzlePhase = PUZZLE_PHASE_ASSEMBLING;
+        private long puzzlePhaseStartMs = 0L;
+        // 多图轮换状态：puzzleAvailablePaths 是当前已解析的图片路径列表；
+        // puzzleActiveIndex/puzzleActivePath 是“正在展示”的那一张。
+        private List<String> puzzleAvailablePaths = new ArrayList<>();
+        private String puzzleAvailablePathsRaw = "";
+        private int puzzleActiveIndex = 0;
+        private String puzzleActivePath = "";
+        private final ArrayList<PuzzlePiece> puzzlePieces = new ArrayList<>();
+        private final Random puzzleRandom = new Random();
         private long lastCalligraphyUploadMs = 0L;
         private final Map<Integer, CalligraphyStrokeGlyph> calligraphyStrokeGlyphs = new HashMap<>();
         private int[] fbo = new int[]{0, 0};
@@ -413,149 +471,514 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 renderCalligraphyFrame(nowMs);
                 return;
             }
-            ensureCycleState(false);
-
-            // V25：新增“调试循环模式”。
-            // debugLoopEnabled 会同时作用于 App 原生预览和真实桌面/锁屏动态壁纸，
-            // 按分钟把一次完整过程无限循环，专门用于验证阶段比例和短阶段持续时间是否生效。
-            // previewAccelerated 仍只作用于系统/应用预览，不影响正式壁纸。
-            boolean useDebugLoop = cfg.debugLoopEnabled;
-            boolean useAcceleratedPreview = !useDebugLoop && enginePreview && cfg.previewAccelerated;
-            float durationSec = useDebugLoop
-                    ? Math.max(60f, cfg.debugCycleMinutes * 60f)
-                    : (useAcceleratedPreview ? Math.max(30f, cfg.previewCycleMinutes * 60f) : Math.max(1f, cycleDurationSec));
-
-            float sec;
-            if (useDebugLoop) {
-                float raw = (SystemClock.elapsedRealtime() - startMs) / 1000f;
-                sec = raw % durationSec;
-            } else if (useAcceleratedPreview) {
-                // 单次预览：只跑一次完整过程，不循环释放/余韵。
-                float raw = (SystemClock.elapsedRealtime() - startMs) / 1000f;
-                sec = Math.min(raw, Math.max(0.001f, durationSec - 0.001f));
-            } else {
-                sec = currentCycleElapsedSec();
-                if (sec >= cycleDurationSec) {
-                    beginNewCycle(System.currentTimeMillis());
-                    sec = 0f;
-                }
+            if ("puzzle".equals(cfg.wallpaperMode)) {
+                renderPuzzleFrame(nowMs);
+                return;
             }
+            // 潮汐光迹模式：粒子熵减场景画布（Canvas→Bitmap→GL Texture）。
+            // 替换掉原有随机 FBO 笔触管线——后者产生混沌乱线，无法表达艺术内容。
+            renderMystifyArtFrame(nowMs);
+        }
 
-            if (lastVisualSec >= 0f && sec + 0.20f < lastVisualSec) {
-                // 只处理真实周期重置或配置变更造成的时间回退；演示模式不再循环。
-                nextSpawnSec = 0f;
-                nextHardClearSec = 6f + random.nextFloat() * 12f;
-                strokes.clear();
-                resetSpawnHeat();
-                clearFbos();
-                releasePulseArmed = true;
-                afterglowSeed = random.nextInt();
-                releaseSeed = random.nextInt();
-                lastPhaseName = "";
+        // ══════════════════════════════════════════════════════════════════
+        //  潮汐光迹  ——  粒子熵减系统
+        //
+        //  每个场景：数百粒子从完全随机位置（最大熵）出发，受目标吸引力
+        //  越来越强，经历四个阶段抵达各自有序目标位置：
+        //
+        //    0-20s  混沌（Chaos）     — 完全随机游走，看不出任何结构
+        //   20-60s  涌现（Emergence） — 粒子开始流向目标，拖尾轨迹揭示秩序
+        //   60-80s  结晶（Crystal）   — 大部分粒子到位，形体清晰浮现
+        //   80-100s 有序（Order）     — 完整艺术构图，静默呈现
+        //
+        //  6 个场景：极光北境 / 深海潮汐 / 樱花物语 /
+        //           星座图谱 / 曼陀罗旋 / 凤凰涅槃
+        // ══════════════════════════════════════════════════════════════════
+
+        private void renderMystifyArtFrame(long nowMs) {
+            if (maTexture == 0) {
+                int[] ids = new int[1];
+                GLES20.glGenTextures(1, ids, 0);
+                maTexture = ids[0];
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maTexture);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
             }
-            lastVisualSec = sec;
-            CyclePlan plan = (useDebugLoop || useAcceleratedPreview) ? previewPlan(durationSec) : storedCyclePlan(durationSec);
-            Phase phase = Phase.of(sec, durationSec, cfg, plan);
-            if (!phase.name.equals(lastPhaseName)) {
-                String previousPhase = lastPhaseName;
-                // V34：进入释放时重置释放特效种子，并洗掉前段过多线条，让释放画面像一次干净、强烈的能量爆发。
-                if (phase.name.equals("释放")) {
-                    releaseSeed = random.nextInt();
-                    resetSpawnHeat();
-                    clearFbos();
-                }
-                // 进入余韵时立即清空释放阶段的大形体残影，让气泡层从干净黑/蓝水域中出现。
-                if (phase.name.equals("余韵") && cfg.bubbles) {
-                    strokes.clear();
-                    resetSpawnHeat();
-                    clearFbos();
-                    afterglowSeed = random.nextInt();
-                    nextSpawnSec = sec + 9999f;
-                }
-                // 余韵结束后也清一次，避免透明泡泡/旧光迹在桌面上留下截图里那种灰黑网状痕迹。
-                if (phase.name.equals("分离") && "余韵".equals(previousPhase)) {
-                    strokes.clear();
-                    resetSpawnHeat();
-                    clearFbos();
-                    nextSpawnSec = sec + 0.10f;
-                }
-                lastPhaseName = phase.name;
+            int bw, bh;
+            if (width <= 0 || height <= 0) { bw = 720; bh = 1280; }
+            else if (width >= height) { bw = Math.min(width, 800); bh = Math.round(bw * (float)height / width); }
+            else { bh = Math.min(height, 800); bw = Math.round(bh * (float)width / height); }
+            bw = Math.max(2, bw); bh = Math.max(2, bh);
+            if (maBitmap == null || maBmpW != bw || maBmpH != bh) {
+                if (maBitmap != null && !maBitmap.isRecycled()) maBitmap.recycle();
+                maBitmap = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+                maBmpW = bw; maBmpH = bh;
+                maBitmap.eraseColor(Color.rgb(0, 0, 8));
+                maSceneStartMs = -1L; maInitedScene = -1;
             }
-            float rawLocal = clamp((sec - phase.start) / Math.max(0.001f, phase.end - phase.start), 0f, 1f);
-            float local = smooth(rawLocal);
-            float release = phase.name.equals("释放") ? (float)Math.sin(local * Math.PI) : 0f;
-            float after = phase.name.equals("余韵") ? local : 0f;
-            float intensity = clamp(phase.intensity * (0.74f + 0.52f * cfg.intimacy), 0f, 1.30f);
-            float tension = clamp(phase.tension * (0.72f + 0.56f * cfg.intimacy), 0f, 1.35f);
-
-            if (!phase.name.equals("释放")) releasePulseArmed = true;
-            if (phase.name.equals("释放") && releasePulseArmed) {
-                float[] p = pickLeastUsedPoint(false);
-                pulseX = p[0] / Math.max(1f, width);
-                pulseY = p[1] / Math.max(1f, height);
-                releaseSeed = random.nextInt();
-                releasePulseArmed = false;
+            if (maSceneStartMs < 0) maSceneStartMs = nowMs;
+            if (nowMs - maSceneStartMs >= MA_SCENE_MS) {
+                maSceneIdx = (maSceneIdx + 1) % MA_SCENE_COUNT;
+                maSceneStartMs = nowMs;
+                maBitmap.eraseColor(Color.rgb(0, 0, 8));
+                maInitedScene = -1;
             }
-
-            boolean observedVideoSubjectPhase = !phase.name.equals("释放") && !phase.name.equals("余韵");
-            if (observedVideoSubjectPhase) {
-                // V47：主体阶段完全改为逐帧程序化视频薄膜，不再继续生成/更新旧 Mystify 光迹。
-                // 这样可以根除用户截图中仍然出现的粗白斜带、黄带交叉、巨大灰白扇面和多主体叠加。
-                strokes.clear();
-            } else {
-                if (sec >= nextSpawnSec && !(phase.name.equals("余韵") && cfg.bubbles)) spawnAccordingToPhase(phase, sec);
-                updateStrokes(sec, dt, phase, intensity, tension, release);
+            float sceneT = (nowMs - maSceneStartMs) / 1000f;
+            long uploadMs = cfg.powerSave ? 80L : 33L;
+            if (nowMs - maUploadMs >= uploadMs) {
+                drawMAScene(maBitmap, sceneT, nowMs, maSceneIdx);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maTexture);
+                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, maBitmap, 0);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+                maUploadMs = nowMs;
             }
-
-            // Windows Mystify 的“离开”不是突然清除，也不是对象死亡，而是上一帧缓慢被黑场吞没。
-            // 因此这里不再定时 hard clear，只做 FBO 反馈衰减；trail 越高，背影越慢消失。
-            // V17：Windows Mystify 的背影是“慢慢被黑场吞没”，不是快速衰亡。
-            // 这里提高最低残留，让尾部能在头部继续游走时同步、缓慢、淡淡退场。
-            float fade = lerp(0.940f, 0.985f, cfg.trail);
-            if (phase.name.equals("余韵") && cfg.bubbles) {
-                // V36：气泡不是依靠 FBO 拖尾移动。每帧先清空旧帧，再绘制当前透明泡，
-                // 彻底避免截图中那种随运动拉成长筒的重影/残影。
-                fade = 0.0f;
-            } else if (phase.name.equals("余韵")) {
-                fade = Math.min(fade, 0.955f);
-            } else if (!phase.name.equals("释放")) {
-                // V103：主体阶段继续保留 FBO 残影美感，但要避免旧主体在下一次换位时仍然被重复凸显。
-                // 因此改为按“当前笔势周期”动态调低残留：停顿期与换笔前后衰减更快。
-                fade = Math.min(fade, subjectPhaseFeedbackFade(sec));
-            }
-            if (phase.name.equals("释放")) fade = Math.min(fade, lerp(0.780f, 0.900f, cfg.trail));
-            if (cfg.powerSave) fade = Math.min(fade, 0.955f);
-
-            // 1) FBO 残影：把上一帧纹理衰减写入新 FBO。
-            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo[writeIndex]);
-            GLES20.glViewport(0, 0, width, height);
-            GLES20.glDisable(GLES20.GL_BLEND);
-            GLES20.glClearColor(0f, 0f, 0f, 1f);
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-            drawTexture(tex[readIndex], fade);
-
-            // 2) 即时绘制当前随机线条。旧线条历史不由对象保存，只由 FBO 残影留下。
-            GLES20.glEnable(GLES20.GL_BLEND);
-            GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE);
-            if (observedVideoSubjectPhase) {
-                drawObservedVideoMembrane(sec, rawLocal, phase, intensity, tension);
-            } else if (!(phase.name.equals("余韵") && cfg.bubbles) && !(phase.name.equals("释放") && local > 0.16f)) {
-                drawAllStrokes(phase, intensity, tension, release, after);
-            }
-            if (phase.name.equals("释放")) drawReleaseEruption(rawLocal, release, phase);
-            drawAfterglowBubbleAquarium(sec, after, phase);
-            GLES20.glDisable(GLES20.GL_BLEND);
-
-            // 3) 输出到真实壁纸 Surface。
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
             GLES20.glViewport(0, 0, width, height);
-            GLES20.glClearColor(0f, 0f, 0f, 1f);
+            GLES20.glDisable(GLES20.GL_BLEND);
+            GLES20.glClearColor(0f, 0f, 0.03f, 1f);
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-            drawTexture(tex[writeIndex], 1f);
+            drawBitmapTexture(maTexture);
+        }
 
-            int tmp = readIndex;
-            readIndex = writeIndex;
-            writeIndex = tmp;
+        private void drawMAScene(Bitmap bmp, float sceneT, long nowMs, int scene) {
+            int w = bmp.getWidth(), h = bmp.getHeight();
+            if (maInitedScene != scene) {
+                maInitedScene = scene;
+                maPCount = 0; maLnCount = 0; maPrevFrameMs = 0L;
+                initEntropyScene(scene, w, h);
+                Random rng0 = new Random(scene * 31337L + maSceneIdx);
+                for (int i = 0; i < maPCount; i++) {
+                    maPX[i] = rng0.nextFloat() * w;
+                    maPY[i] = rng0.nextFloat() * h;
+                    maVX[i] = (rng0.nextFloat() - 0.5f) * 4f;
+                    maVY[i] = (rng0.nextFloat() - 0.5f) * 4f;
+                    maStagger[i] = rng0.nextFloat() * 0.40f;
+                }
+            }
+            // 有序强度：0-20s 纯混沌，20-70s S 曲线增长，70s 后全有序
+            float raw = Math.max(0f, Math.min(1f, (sceneT - 20f) / 50f));
+            float ord = raw * raw * (3f - 2f * raw);
+            // 拖尾 alpha：涌现阶段非常长（让运动轨迹成为可欣赏的内容）
+            int fadeA = ord < 0.08f ? 55 : (ord < 0.80f ? 12 : 40 + (int)((ord - 0.80f) / 0.20f * 60f));
+            Canvas c = new Canvas(bmp);
+            c.drawColor(Color.argb(fadeA, 0, 0, 8));
+            float dt = (maPrevFrameMs > 0) ? Math.min((nowMs - maPrevFrameMs) / 1000f, 0.05f) : 0.016f;
+            maPrevFrameMs = nowMs;
+            long noiseSeed = nowMs / 80;
+            Random noise = new Random(noiseSeed);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setStyle(Paint.Style.FILL);
+            for (int i = 0; i < maPCount; i++) {
+                float iRaw = Math.max(0f, Math.min(1f, (ord - maStagger[i] * 0.35f) / Math.max(0.01f, 1f - maStagger[i] * 0.30f)));
+                float iOrd = iRaw * iRaw * (3f - 2f * iRaw);
+                float tx = maTX[i], ty = maTY[i];
+                float dx = tx - maPX[i], dy = ty - maPY[i];
+                float dist2 = dx * dx + dy * dy;
+                if (dist2 > 4f) {
+                    float diff = (1f - iOrd) * 65f;
+                    float nx = (noise.nextFloat() - 0.5f) * diff;
+                    float ny = (noise.nextFloat() - 0.5f) * diff;
+                    float dist = (float)Math.sqrt(dist2);
+                    float pull = iOrd * iOrd * 6f;
+                    float ax = nx + (dx / dist) * pull * Math.min(dist, w * 0.25f) * 0.065f;
+                    float ay = ny + (dy / dist) * pull * Math.min(dist, h * 0.25f) * 0.065f;
+                    float damp = 0.85f - iOrd * 0.08f;
+                    maVX[i] = maVX[i] * damp + ax * dt;
+                    maVY[i] = maVY[i] * damp + ay * dt;
+                    maPX[i] += maVX[i]; maPY[i] += maVY[i];
+                    if (maPX[i]<0){maPX[i]=0;maVX[i]=Math.abs(maVX[i])*0.5f;}
+                    if (maPX[i]>w){maPX[i]=w;maVX[i]=-Math.abs(maVX[i])*0.5f;}
+                    if (maPY[i]<0){maPY[i]=0;maVY[i]=Math.abs(maVY[i])*0.5f;}
+                    if (maPY[i]>h){maPY[i]=h;maVY[i]=-Math.abs(maVY[i])*0.5f;}
+                } else {
+                    maPX[i]=tx; maPY[i]=ty; maVX[i]=0; maVY[i]=0;
+                }
+                float size = maSZ[i] * (0.45f + 0.55f * iOrd);
+                float alpha = 0.55f + 0.45f * iOrd;
+                if (iOrd < 0.05f) alpha *= 0.45f + 0.55f*(float)Math.abs(Math.sin(sceneT*3.5f+i*0.3f));
+                int col=maCOL[i]; int r=Color.red(col),g=Color.green(col),b2=Color.blue(col);
+                p.setColor(Color.argb((int)(38*alpha),r,g,b2)); c.drawCircle(maPX[i],maPY[i],size*2.8f,p);
+                p.setColor(Color.argb((int)(120*alpha),r,g,b2)); c.drawCircle(maPX[i],maPY[i],size*1.4f,p);
+                p.setColor(Color.argb((int)(210*alpha),r,g,b2)); c.drawCircle(maPX[i],maPY[i],size,p);
+            }
+            if (maLnCount > 0 && ord > 0.30f) {
+                Paint lp = new Paint(Paint.ANTI_ALIAS_FLAG);
+                lp.setStyle(Paint.Style.STROKE); lp.setStrokeWidth(1.3f);
+                for (int li=0;li<maLnCount;li++) {
+                    int a=maLn0[li],b=maLn1[li];
+                    if (a>=maPCount||b>=maPCount) continue;
+                    float dA=maDistToTarget(a),dB=maDistToTarget(b);
+                    float prox=1f-Math.min(1f,(dA+dB)/(Math.min(w,h)*0.12f));
+                    if (prox<0.08f) continue;
+                    float lineA=prox*prox*0.62f*ord;
+                    int col=maCOL[a];
+                    lp.setColor(Color.argb((int)(145*lineA),Color.red(col),Color.green(col),Color.blue(col)));
+                    c.drawLine(maPX[a],maPY[a],maPX[b],maPY[b],lp);
+                }
+            }
+        }
+
+        private float maDistToTarget(int i){float dx=maTX[i]-maPX[i],dy=maTY[i]-maPY[i];return(float)Math.sqrt(dx*dx+dy*dy);}
+        private void maAddP(float tx,float ty,int col,float sz){if(maPCount>=MA_MAXP)return;maTX[maPCount]=tx;maTY[maPCount]=ty;maCOL[maPCount]=col;maSZ[maPCount]=sz;maPCount++;}
+        private void maAddLine(int a,int b){if(maLnCount>=MA_MAXLINES)return;maLn0[maLnCount]=a;maLn1[maLnCount]=b;maLnCount++;}
+        private float maLerp(float a,float b,float t){return a+(b-a)*t;}
+
+        private void initEntropyScene(int scene,int w,int h){
+            switch(scene){
+                case 0:initSceneAurora(w,h);break;
+                case 1:initSceneOcean(w,h);break;
+                case 2:initSceneBlossoms(w,h);break;
+                case 3:initSceneConstellation(w,h);break;
+                case 4:initSceneMandala(w,h);break;
+                case 5:initScenePhoenix(w,h);break;
+                case 6:initSceneEmotionHealing(w,h);break;
+                case 7:initSceneDisciplineDay(w,h);break;
+                case 8:initSceneDesireToGoal(w,h);break;
+                case 9:initSceneInnerCosmos(w,h);break;
+            }
+        }
+
+        // 场景0：极光北境 — 5条竖向极光帷幕，每条38粒子
+        private void initSceneAurora(int w,int h){
+            float min=Math.min(w,h);
+            float[]cx={0.12f,0.30f,0.50f,0.68f,0.85f};
+            int[][]col={{0,255,140},{0,200,255},{160,0,255},{0,255,110},{0,160,255}};
+            for(int ci=0;ci<5;ci++){
+                float bx=cx[ci]*w; int[]cc=col[ci];
+                for(int pi=0;pi<38;pi++){
+                    float fy=pi/37f,yp=h*(0.04f+fy*0.74f);
+                    float xw=(float)(w*0.055f*Math.sin(fy*3.5f));
+                    for(int col2=-1;col2<=1;col2++){
+                        float sz=min*(0.007f+(1-fy)*0.004f)*(col2==0?1.3f:0.7f);
+                        int alpha=col2==0?190:100;
+                        maAddP(bx+xw+col2*w*0.013f,yp,Color.argb(alpha,cc[0],cc[1],cc[2]),sz);
+                    }
+                }
+            }
+        }
+
+        // 场景1：深海潮汐 — 5层波浪+月亮+浮游生物
+        private void initSceneOcean(int w,int h){
+            float min=Math.min(w,h);
+            float[]wy={0.42f,0.53f,0.63f,0.73f,0.83f},wa={0.018f,0.028f,0.036f,0.044f,0.052f};
+            int[][]wc={{6,18,55},{8,38,90},{0,60,130},{0,110,170},{0,190,195}};
+            for(int wi=0;wi<5;wi++){
+                float by=wy[wi]*h,amp=wa[wi]*h; int[]cc=wc[wi];
+                int sz2=Math.max(3,(int)(min*(0.005f+wi*0.0018f)));
+                for(int xi=0;xi<44;xi++){
+                    float fx=xi/43f;
+                    float wh=(float)(amp*Math.sin(fx*4.5f*Math.PI)+amp*0.35f*Math.sin(fx*8.2f*Math.PI+1f));
+                    maAddP(fx*w,by+wh,Color.argb(120+wi*24,cc[0],cc[1],cc[2]),sz2);
+                    if(wi>=3&&xi%3==0) maAddP(fx*w+(random.nextFloat()-0.5f)*w*0.02f,by+wh-min*0.01f,Color.argb(155,80,255,200),min*0.003f);
+                }
+            }
+            float mx=w*0.72f,my=h*0.13f,mr=min*0.055f;
+            for(int mi=0;mi<8;mi++){float a=mi*(float)(Math.PI/4);maAddP(mx+(float)Math.cos(a)*mr*0.85f,my+(float)Math.sin(a)*mr*0.85f,Color.argb(200,230,245,255),min*0.008f);}
+            maAddP(mx,my,Color.argb(235,245,252,255),min*0.022f);
+        }
+
+        // 场景2：樱花物语 — 枝干+花簇+飘落花瓣
+        private void initSceneBlossoms(int w,int h){
+            float min=Math.min(w,h);
+            float[][]branches={{0.05f,0.92f,0.52f,0.36f},{0.52f,0.36f,0.82f,0.12f},
+                {0.26f,0.64f,0.46f,0.50f},{0.46f,0.50f,0.22f,0.32f},{0.52f,0.36f,0.40f,0.20f}};
+            for(int bi=0;bi<branches.length;bi++){
+                float[]br=branches[bi]; float thick=min*(bi==0?0.011f:bi==1?0.007f:0.006f);
+                for(int pi=0;pi<=22;pi++){float u=pi/22f;maAddP(maLerp(br[0],br[2],u)*w,maLerp(br[1],br[3],u)*h,Color.argb(140,40,20,12),thick);}
+            }
+            float[][]tips={{0.82f,0.12f},{0.46f,0.50f},{0.22f,0.32f},{0.40f,0.20f},{0.66f,0.24f},{0.60f,0.30f}};
+            for(float[]t:tips){
+                float tcx=t[0]*w,tcy=t[1]*h,r=min*0.038f;
+                for(int pe=0;pe<5;pe++){float a=pe*(float)(Math.PI*2/5);maAddP(tcx+(float)Math.cos(a)*r*0.62f,tcy+(float)Math.sin(a)*r*0.62f,Color.argb(190,255,128,165),min*0.016f);}
+                maAddP(tcx,tcy,Color.argb(215,255,215,88),min*0.010f);
+            }
+            Random pr=new Random(777L);
+            for(int i=0;i<40;i++){int pv=(int)(pr.nextFloat()*45);maAddP(pr.nextFloat()*w,h*(0.15f+pr.nextFloat()*0.75f),Color.argb(165,255,118+pv,152+pv),min*0.008f);}
+        }
+
+        // 场景3：星座图谱 — 主星+背景星+连线
+        private void initSceneConstellation(int w,int h){
+            float min=Math.min(w,h);
+            float[][]stars={{0.35f,0.20f},{0.28f,0.32f},{0.47f,0.30f},{0.35f,0.47f},{0.42f,0.45f},{0.49f,0.43f},
+                {0.28f,0.63f},{0.55f,0.59f},{0.43f,0.55f},{0.44f,0.61f},
+                {0.68f,0.18f},{0.75f,0.13f},{0.82f,0.18f},{0.88f,0.12f},{0.94f,0.17f}};
+            float[]mags={1.4f,1.2f,1.5f,1.0f,1.1f,1.0f,1.3f,1.2f,0.7f,0.7f,0.9f,0.8f,1.0f,0.9f,0.8f};
+            int brightBase=maPCount;
+            for(int si=0;si<stars.length;si++) maAddP(stars[si][0]*w,stars[si][1]*h,Color.argb(225,218,228,255),min*0.007f*(si<mags.length?mags[si]:0.8f));
+            Random bg=new Random(456L);
+            for(int i=0;i<65;i++) maAddP(bg.nextFloat()*w,bg.nextFloat()*h,Color.argb(110,175,190,255),min*0.003f);
+            int[][]lines={{1,2},{0,1},{0,2},{1,3},{2,5},{3,4},{4,5},{1,6},{5,7},{3,8},{8,9},{10,11},{11,12},{12,13},{13,14}};
+            for(int[]ln:lines) maAddLine(brightBase+ln[0],brightBase+ln[1]);
+        }
+
+        // 场景4：曼陀罗旋 — 4层同心环
+        private void initSceneMandala(int w,int h){
+            float cx=w*0.5f,cy=h*0.5f,maxR=Math.min(w,h)*0.44f,min=Math.min(w,h);
+            maAddP(cx,cy,Color.argb(240,255,255,200),min*0.018f);
+            for(int i=0;i<8;i++){float a=i*(float)(Math.PI/4);float[]hsv={i*45f,0.7f,0.9f};maAddP(cx+(float)Math.cos(a)*maxR*0.20f,cy+(float)Math.sin(a)*maxR*0.20f,Color.HSVToColor(160,hsv),min*0.013f);}
+            for(int si=0;si<48;si++){float th=si/48f*(float)(Math.PI*2);float rr=maxR*0.40f*(float)Math.abs(Math.cos(5*th));float[]hsv={(th*57f+120f)%360,0.82f,1f};maAddP(cx+rr*(float)Math.cos(th),cy+rr*(float)Math.sin(th),Color.HSVToColor(185,hsv),min*0.006f);}
+            for(int i=0;i<12;i++){float a=i*(float)(Math.PI/6),rr=maxR*0.62f,tr=rr*0.12f;float[]hsv={(i*30f+240f)%360,0.75f,0.85f};float bx=cx+(float)Math.cos(a)*rr,by=cy+(float)Math.sin(a)*rr;maAddP(bx-(float)Math.cos(a)*tr,by-(float)Math.sin(a)*tr,Color.HSVToColor(128,hsv),min*0.007f);maAddP(bx+(float)Math.cos(a+1.2f)*tr,by+(float)Math.sin(a+1.2f)*tr,Color.HSVToColor(128,hsv),min*0.007f);maAddP(bx+(float)Math.cos(a-1.2f)*tr,by+(float)Math.sin(a-1.2f)*tr,Color.HSVToColor(128,hsv),min*0.007f);}
+            for(int i=0;i<24;i++){float a=i*(float)(Math.PI/12),rr=maxR*0.87f;float[]hsv={(i*15f+60f)%360,0.62f,1f};maAddP(cx+(float)Math.cos(a)*rr,cy+(float)Math.sin(a)*rr,Color.HSVToColor(155,hsv),min*0.007f);}
+        }
+
+        // 场景5：凤凰涅槃 — 核心+双翼+7条尾羽+火星
+        private void initScenePhoenix(int w,int h){
+            float cx=w*0.5f,cy=h*0.42f,min=Math.min(w,h),ws=w*0.42f;
+            maAddP(cx,cy,Color.argb(240,255,255,215),min*0.026f);
+            for(int side=-1;side<=1;side+=2){
+                for(int pi=0;pi<=22;pi++){
+                    float u=pi/22f;
+                    float bx=cx+side*(maLerp(maLerp(cx*0.9f,ws*0.5f,u),maLerp(ws,ws*1.08f,u),u));
+                    float by=cy+maLerp(maLerp(0f,-h*0.20f,u),maLerp(-h*0.04f,h*0.10f,u),u);
+                    maAddP(bx,by,Color.argb(115,255,138,0),min*0.012f);
+                }
+            }
+            for(int fi=0;fi<7;fi++){
+                float ta=-(float)Math.PI*0.38f+fi*((float)Math.PI*0.76f/6f);
+                float tl=min*(0.30f+fi*0.030f),cp=fi/6f;
+                int tr=255,tg=(int)(168-cp*118),ta2=(int)(148-cp*63);
+                for(int pi=0;pi<=14;pi++){
+                    float u=pi/14f;
+                    float wv=min*0.052f*u*u*(float)Math.sin(u*2.5f*(float)Math.PI+fi*0.82f);
+                    float px=cx+(float)Math.cos(ta+(float)Math.PI*0.5f)*wv+(float)Math.cos(ta)*tl*u*0.28f;
+                    float py=cy+h*0.08f+(float)Math.sin(ta)*tl*u+wv;
+                    maAddP(px,py,Color.argb(ta2,tr,tg,0),min*(0.009f-cp*0.003f+0.001f));
+                }
+            }
+            Random er=new Random(303L);
+            for(int i=0;i<35;i++) maAddP(cx+(er.nextFloat()-0.5f)*w*0.42f,cy-h*(0.06f+er.nextFloat()*0.28f),Color.argb(138,255,(int)(78+er.nextFloat()*118),0),min*0.004f);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  人文主题场景 6-9：将"人的内在成长"过程做成熵减艺术。
+        //  这些场景的独特之处：混沌起点本身就是叙事的一部分——
+        //  病态情绪的碎裂 / 失序生活的散乱 / 妄念欲望的漂浮，
+        //  而有序终点是精神状态的视觉隐喻。
+        // ══════════════════════════════════════════════════════════════════
+
+        // 场景6：情绪疗愈 —— 从病态无序到健康有序
+        // 叙事：混沌期粒子是暗红/灰紫的"情绪碎片"（焦虑、抑郁的色彩），
+        // 散乱尖锐；随着熵减，它们汇聚成一颗对称的"心"和环绕心的
+        // 平静呼吸光环——同一批粒子，从阴暗的碎裂到温暖的完整。
+        private void initSceneEmotionHealing(int w,int h){
+            float cx=w*0.5f, cy=h*0.44f, min=Math.min(w,h);
+            float heartR=min*0.20f;
+            // 心形轮廓（参数方程 x=16sin³t, y=13cost-5cos2t-2cos3t-cos4t）
+            // 粒子颜色刻意选"疗愈渐层"：从心尖的深玫瑰到心顶的暖金——
+            // 但注意：这些是"目标态"颜色。混沌期同样的粒子看上去只是
+            // 散乱的暗色碎片，颜色的"含义"要等形状浮现才被赋予。
+            for(int i=0;i<72;i++){
+                float t=i/72f*(float)(Math.PI*2);
+                float hx=16f*(float)Math.pow(Math.sin(t),3);
+                float hy=13f*(float)Math.cos(t)-5f*(float)Math.cos(2*t)
+                        -2f*(float)Math.cos(3*t)-(float)Math.cos(4*t);
+                float px=cx+hx/16f*heartR;
+                float py=cy-hy/17f*heartR;
+                // 颜色从深玫瑰（底部）过渡到暖金（顶部）
+                float g=Math.max(0f,Math.min(1f,(hy+17f)/34f));
+                int cr=(int)(200+g*55), cg=(int)(40+g*150), cb=(int)(80+g*20);
+                maAddP(px,py,Color.argb(200,cr,cg,cb),min*0.007f);
+            }
+            // 心内填充光点（较暗，制造体积感）
+            Random hr=new Random(606L);
+            for(int i=0;i<46;i++){
+                float t=hr.nextFloat()*(float)(Math.PI*2);
+                float rr=hr.nextFloat()*0.72f;
+                float hx=16f*(float)Math.pow(Math.sin(t),3)*rr;
+                float hy=(13f*(float)Math.cos(t)-5f*(float)Math.cos(2*t)
+                        -2f*(float)Math.cos(3*t)-(float)Math.cos(4*t))*rr;
+                maAddP(cx+hx/16f*heartR, cy-hy/17f*heartR,
+                       Color.argb(120,255,110,130), min*0.005f);
+            }
+            // 环绕心的三圈"呼吸光环"（平静的象征：等距、均匀、和谐）
+            for(int ring=0;ring<3;ring++){
+                float rr=heartR*(1.45f+ring*0.35f);
+                int n=16+ring*6;
+                for(int i=0;i<n;i++){
+                    float a=i/(float)n*(float)(Math.PI*2);
+                    int alpha=110-ring*26;
+                    maAddP(cx+(float)Math.cos(a)*rr, cy+(float)Math.sin(a)*rr*0.92f,
+                           Color.argb(alpha,150,220,255), min*0.004f);
+                }
+            }
+            // 底部一行"扎根"光点（象征疗愈后的稳定与接地）
+            for(int i=0;i<14;i++){
+                float fx=0.20f+i/13f*0.60f;
+                maAddP(fx*w, h*0.86f, Color.argb(130,120,200,160), min*0.0045f);
+            }
+        }
+
+        // 场景7：自律的一天 —— 从散乱失序到符合自然节律
+        // 叙事：混沌期粒子四处乱飘（熬夜、拖延、无规律的生活碎片）；
+        // 有序后它们排成一个巨大的"昼夜时钟环"：日出金、白昼蓝、
+        // 黄昏橙、深夜蓝紫，四段色带首尾相接成完整圆环——
+        // 中心是一根笔直的"当下"指针，底部是整齐的"作息刻度"。
+        private void initSceneDisciplineDay(int w,int h){
+            float cx=w*0.5f, cy=h*0.42f, min=Math.min(w,h);
+            float ringR=min*0.30f;
+            // 昼夜环：96 粒子 = 一天的 96 个刻钟，四段色带
+            for(int i=0;i<96;i++){
+                float frac=i/96f;
+                float a=frac*(float)(Math.PI*2)-(float)Math.PI*0.5f; // 顶部=0点
+                int cr,cg,cb;
+                if(frac<0.25f){        // 深夜→黎明：深蓝紫→金
+                    float u=frac/0.25f;
+                    cr=(int)(40+u*215); cg=(int)(40+u*160); cb=(int)(120-u*40);
+                }else if(frac<0.5f){   // 白昼：金→天蓝
+                    float u=(frac-0.25f)/0.25f;
+                    cr=(int)(255-u*175); cg=(int)(200-u*20); cb=(int)(80+u*175);
+                }else if(frac<0.75f){  // 午后→黄昏：天蓝→落日橙
+                    float u=(frac-0.5f)/0.25f;
+                    cr=(int)(80+u*175); cg=(int)(180-u*60); cb=(int)(255-u*195);
+                }else{                 // 黄昏→深夜：橙→深蓝紫
+                    float u=(frac-0.75f)/0.25f;
+                    cr=(int)(255-u*215); cg=(int)(120-u*80); cb=(int)(60+u*60);
+                }
+                maAddP(cx+(float)Math.cos(a)*ringR, cy+(float)Math.sin(a)*ringR,
+                       Color.argb(190,cr,cg,cb), min*0.006f);
+            }
+            // 中心"当下"指针（竖直向上的一列粒子——象征专注于此刻）
+            for(int i=0;i<10;i++){
+                float u=i/9f;
+                maAddP(cx, cy-u*ringR*0.78f, Color.argb(220,255,255,240), min*(0.008f-u*0.004f));
+            }
+            maAddP(cx, cy, Color.argb(240,255,255,255), min*0.012f);
+            // 环外四个"节律锚点"：晨起/工作/运动/入睡（等距分布=规律）
+            float[][] anchors={{0f,-1f},{1f,0f},{0f,1f},{-1f,0f}};
+            int[][] anchorCol={{255,215,80},{80,190,255},{255,140,60},{130,110,230}};
+            for(int ai=0;ai<4;ai++){
+                float ax=cx+anchors[ai][0]*ringR*1.30f;
+                float ay=cy+anchors[ai][1]*ringR*1.30f;
+                int[] ac=anchorCol[ai];
+                for(int j=0;j<6;j++){
+                    float ja=j/6f*(float)(Math.PI*2);
+                    maAddP(ax+(float)Math.cos(ja)*min*0.020f, ay+(float)Math.sin(ja)*min*0.020f,
+                           Color.argb(160,ac[0],ac[1],ac[2]), min*0.004f);
+                }
+            }
+            // 底部整齐的"作息刻度"横排（象征生活的秩序感）
+            for(int i=0;i<20;i++){
+                float fx=0.12f+i/19f*0.76f;
+                maAddP(fx*w, h*0.85f, Color.argb(140,180,210,230), min*0.0040f);
+                if(i%5==0) maAddP(fx*w, h*0.82f, Color.argb(170,220,240,255), min*0.0050f);
+            }
+        }
+
+        // 场景8：欲望到目标 —— 从不切实际的幻想到现实的阶梯
+        // 叙事：混沌期粒子是满屏漂浮的"欲望泡泡"（五颜六色、大小不一、
+        // 到处乱飞）；熵减后大部分泡泡"沉淀"为一座清晰的登山阶梯，
+        // 阶梯尽头是一颗明亮的目标之星——少数几颗仍然漂在天上，
+        // 但已变得暗淡（象征放下的执念仍在，只是不再主导）。
+        private void initSceneDesireToGoal(int w,int h){
+            float min=Math.min(w,h);
+            // 登山阶梯：8 级台阶从左下到右上
+            int steps=8;
+            for(int s=0;s<steps;s++){
+                float u=s/(float)(steps-1);
+                float sx=w*(0.14f+u*0.60f);
+                float sy=h*(0.82f-u*0.52f);
+                float stepW=w*0.11f;
+                // 每级台阶 7 个粒子排成水平短线
+                for(int j=0;j<7;j++){
+                    float fx=sx+(j/6f-0.5f)*stepW;
+                    // 台阶颜色随高度从大地褐变为山巅青
+                    int cr=(int)(150-u*90), cg=(int)(110+u*80), cb=(int)(70+u*130);
+                    maAddP(fx, sy, Color.argb(185,cr,cg,cb), min*0.0055f);
+                }
+                // 台阶之间的"攀登足迹"连接点
+                if(s<steps-1){
+                    float nu=(s+1)/(float)(steps-1);
+                    float nx=w*(0.14f+nu*0.60f), ny=h*(0.82f-nu*0.52f);
+                    maAddP((sx+nx)/2f, (sy+ny)/2f, Color.argb(120,200,220,200), min*0.0035f);
+                }
+            }
+            // 阶梯尽头的目标之星（明亮的多层光点）
+            float gx=w*0.78f, gy=h*0.24f;
+            maAddP(gx, gy, Color.argb(245,255,250,200), min*0.016f);
+            for(int i=0;i<8;i++){
+                float a=i/8f*(float)(Math.PI*2);
+                maAddP(gx+(float)Math.cos(a)*min*0.035f, gy+(float)Math.sin(a)*min*0.035f,
+                       Color.argb(170,255,235,140), min*0.005f);
+            }
+            // 星光射线（四方向短线）
+            for(int d=0;d<4;d++){
+                float a=d*(float)(Math.PI/2)+(float)(Math.PI/4);
+                for(int j=1;j<=3;j++){
+                    maAddP(gx+(float)Math.cos(a)*min*0.05f*j, gy+(float)Math.sin(a)*min*0.05f*j,
+                           Color.argb(130-j*30,255,240,170), min*0.0035f);
+                }
+            }
+            // 已放下的执念：4 颗暗淡泡泡仍漂在高空（有序态里它们也待在天上，
+            // 但暗淡、远离主体——被接纳而非被消灭）
+            Random dr=new Random(808L);
+            for(int i=0;i<4;i++){
+                maAddP(w*(0.10f+dr.nextFloat()*0.30f), h*(0.06f+dr.nextFloat()*0.12f),
+                       Color.argb(70,180,160,200), min*(0.006f+dr.nextFloat()*0.004f));
+            }
+            // 山脚下的起点标记（一小圈粒子——不忘出发之地）
+            for(int i=0;i<8;i++){
+                float a=i/8f*(float)(Math.PI*2);
+                maAddP(w*0.14f+(float)Math.cos(a)*min*0.022f, h*0.86f+(float)Math.sin(a)*min*0.022f,
+                       Color.argb(140,160,200,170), min*0.004f);
+            }
+        }
+
+        // 场景9：内在宇宙 —— 从思绪的噪声到专注的轨道
+        // 叙事：混沌期粒子是脑海中四处乱窜的"思绪噪点"；
+        // 熵减后它们各归其位，形成一个"内在太阳系"——
+        // 中心是自我之核，外围是 4 条清晰的同心轨道（价值观、
+        // 目标、关系、日常），每条轨道上的粒子等距排列，
+        // 象征所有念头都找到了自己该在的位置。
+        private void initSceneInnerCosmos(int w,int h){
+            float cx=w*0.5f, cy=h*0.46f, min=Math.min(w,h);
+            // 自我之核（三层）
+            maAddP(cx, cy, Color.argb(245,255,255,255), min*0.016f);
+            for(int i=0;i<6;i++){
+                float a=i/6f*(float)(Math.PI*2);
+                maAddP(cx+(float)Math.cos(a)*min*0.030f, cy+(float)Math.sin(a)*min*0.030f,
+                       Color.argb(190,255,235,180), min*0.006f);
+            }
+            // 4 条同心轨道：价值观(金) / 目标(青) / 关系(玫红) / 日常(紫)
+            float[] orbitR={0.11f,0.17f,0.235f,0.30f};
+            int[][] orbitCol={{255,205,90},{60,220,210},{255,110,160},{160,130,255}};
+            int[] orbitN={10,14,18,24};
+            for(int oi=0;oi<4;oi++){
+                float rr=orbitR[oi]*min;
+                int n=orbitN[oi]; int[] oc=orbitCol[oi];
+                // 轨道线（细密小点勾出圆）
+                for(int i=0;i<n*3;i++){
+                    float a=i/(float)(n*3)*(float)(Math.PI*2);
+                    maAddP(cx+(float)Math.cos(a)*rr, cy+(float)Math.sin(a)*rr*0.94f,
+                           Color.argb(55,oc[0],oc[1],oc[2]), min*0.0022f);
+                }
+                // 轨道上的"念头行星"（等距排列=每个念头都有位置）
+                for(int i=0;i<n;i++){
+                    float a=i/(float)n*(float)(Math.PI*2)+oi*0.4f;
+                    maAddP(cx+(float)Math.cos(a)*rr, cy+(float)Math.sin(a)*rr*0.94f,
+                           Color.argb(185,oc[0],oc[1],oc[2]), min*0.0055f);
+                }
+            }
+            // 底部一句"星轨签名"：一条微弯的弧线（宁静的地平线）
+            for(int i=0;i<22;i++){
+                float fx=0.12f+i/21f*0.76f;
+                float bend=(float)Math.sin(i/21f*(float)Math.PI)*h*0.015f;
+                maAddP(fx*w, h*0.88f-bend, Color.argb(110,140,170,220), min*0.0035f);
+            }
+        }
+
+
+        private int calligraphyBitmapW() {
+            if (width <= 0 || height <= 0) return 720;
+            if (width >= height) return Math.min(width, 800);
+            return Math.round(800f * width / height);
+        }
+        private int calligraphyBitmapH() {
+            if (width <= 0 || height <= 0) return 1280;
+            if (height >= width) return Math.min(height, 800);
+            return Math.round(800f * height / width);
         }
 
         private void renderCalligraphyFrame(long nowMs) {
@@ -569,8 +992,10 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
             }
-            if (calligraphyBitmap == null || calligraphyBitmap.isRecycled()) {
-                calligraphyBitmap = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
+            if (calligraphyBitmap == null || calligraphyBitmap.isRecycled()
+                    || calligraphyBitmap.getWidth() != calligraphyBitmapW()
+                    || calligraphyBitmap.getHeight() != calligraphyBitmapH()) {
+                calligraphyBitmap = Bitmap.createBitmap(calligraphyBitmapW(), calligraphyBitmapH(), Bitmap.Config.ARGB_8888);
                 lastCalligraphyUploadMs = 0L;
             }
             if (nowMs - lastCalligraphyUploadMs >= (cfg.powerSave ? 150L : 70L)) {
@@ -586,6 +1011,388 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             GLES20.glClearColor(0f, 0f, 0f, 1f);
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
             drawBitmapTexture(calligraphyTexture);
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // 拼图壁纸（第三种动态壁纸模式）
+        //
+        // 思路与 calligraphy 模式一致：在一个 CPU 端 Bitmap 上用普通 Canvas
+        // 逐帧绘制内容（这里是每块拼图碎片当前的位置/旋转/透明度），节流上传为
+        // GL 纹理，再用已有的 drawBitmapTexture() 全屏贴图。
+        //
+        // 动画分两个阶段循环："assembling"（碎片沿随机三次贝塞尔路径从四周
+        // 飞回原位，到达时间按碎片错落 0~0.5×拼接时长 的延迟）与
+        // "holding"（完整图片停留展示）。停留结束后自动重新打乱并重新拼接，
+        // 形成无限循环的“拆解—复原”过程。
+        // ──────────────────────────────────────────────────────────────────
+        private void renderPuzzleFrame(long nowMs) {
+            ensurePuzzleTexture();
+            ensurePuzzleCanvasBitmap();
+            ensurePuzzleImageList();
+            ensurePuzzleSourceLoaded();
+            if (puzzleCanvasBitmap == null) return;
+            updatePuzzleAnimationState(nowMs);
+
+            long uploadIntervalMs = cfg.powerSave ? 90L : 45L;
+            if (nowMs - lastPuzzleUploadMs >= uploadIntervalMs) {
+                drawPuzzleBitmap(puzzleCanvasBitmap, nowMs);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, puzzleTexture);
+                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, puzzleCanvasBitmap, 0);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+                lastPuzzleUploadMs = nowMs;
+            }
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+            GLES20.glViewport(0, 0, width, height);
+            GLES20.glDisable(GLES20.GL_BLEND);
+            GLES20.glClearColor(0f, 0f, 0f, 1f);
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            drawBitmapTexture(puzzleTexture);
+        }
+
+        private void ensurePuzzleTexture() {
+            if (puzzleTexture == 0) {
+                int[] ids = new int[1];
+                GLES20.glGenTextures(1, ids, 0);
+                puzzleTexture = ids[0];
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, puzzleTexture);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+            }
+        }
+
+        // 拼图 CPU 画布按屏幕宽高比分配，限制最大边长以控制内存/上传带宽。
+        private void ensurePuzzleCanvasBitmap() {
+            int maxDim = 1280;
+            int targetW = Math.max(2, width);
+            int targetH = Math.max(2, height);
+            float scale = Math.min(1f, maxDim / (float) Math.max(targetW, targetH));
+            int w = Math.max(2, Math.round(targetW * scale));
+            int h = Math.max(2, Math.round(targetH * scale));
+            if (puzzleCanvasBitmap == null || puzzleCanvasW != w || puzzleCanvasH != h) {
+                if (puzzleCanvasBitmap != null && !puzzleCanvasBitmap.isRecycled()) puzzleCanvasBitmap.recycle();
+                puzzleCanvasBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                puzzleCanvasW = w;
+                puzzleCanvasH = h;
+                puzzlePieces.clear();
+                puzzleBuiltCols = -1;
+            }
+        }
+
+        // 解析 cfg.puzzleImagePaths（JSON 字符串数组）。仅当原始字符串变化时才
+        // 重新解析，避免每帧都做 JSON 解析。图片集合变化时尽量保留当前展示的
+        // 那一张（如果它依然在新集合里），否则回退到持久化的索引或 0。
+        private void ensurePuzzleImageList() {
+            String raw = cfg.puzzleImagePaths == null ? "[]" : cfg.puzzleImagePaths;
+            if (raw.equals(puzzleAvailablePathsRaw)) return;
+            puzzleAvailablePathsRaw = raw;
+            ArrayList<String> list = new ArrayList<>();
+            try {
+                JSONArray arr = new JSONArray(raw);
+                for (int i = 0; i < arr.length(); i++) {
+                    String p = arr.optString(i, "");
+                    if (!p.isEmpty()) list.add(p);
+                }
+            } catch (Throwable ignored) {
+                // 忽略损坏的 JSON，视为空列表。
+            }
+            puzzleAvailablePaths = list;
+            if (puzzleAvailablePaths.isEmpty()) {
+                puzzleActiveIndex = 0;
+                puzzleActivePath = "";
+            } else {
+                int savedIndex = prefs.getInt("puzzleImageIndex", 0);
+                puzzleActiveIndex = Math.max(0, Math.min(puzzleAvailablePaths.size() - 1, savedIndex));
+                puzzleActivePath = puzzleAvailablePaths.get(puzzleActiveIndex);
+            }
+            // 图片集合变了：强制下一次 updatePuzzleAnimationState() 重新切片打乱。
+            puzzlePieces.clear();
+            puzzleBuiltCols = -1;
+        }
+
+        // 按轮换模式切换到下一张图片（"holding" 阶段结束时调用）。
+        // sequential：按顺序循环；random：随机选一张，列表多于 1 张时避免立即重复。
+        private void advancePuzzleImage() {
+            if (puzzleAvailablePaths.isEmpty()) {
+                puzzleActivePath = "";
+                return;
+            }
+            int size = puzzleAvailablePaths.size();
+            if ("random".equals(cfg.puzzleRotationMode) && size > 1) {
+                int next;
+                do {
+                    next = puzzleRandom.nextInt(size);
+                } while (next == puzzleActiveIndex);
+                puzzleActiveIndex = next;
+            } else {
+                puzzleActiveIndex = (puzzleActiveIndex + 1) % size;
+            }
+            puzzleActivePath = puzzleAvailablePaths.get(puzzleActiveIndex);
+            try {
+                prefs.edit().putInt("puzzleImageIndex", puzzleActiveIndex).apply();
+            } catch (Throwable ignored) {}
+        }
+
+        // 仅当“当前展示图片”的路径变化时才重新解码；解码时按目标画布尺寸做合理
+        // 降采样，避免相机原图（往往几千像素见方）在壁纸引擎里造成内存压力。
+        private void ensurePuzzleSourceLoaded() {
+            String path = puzzleActivePath == null ? "" : puzzleActivePath;
+            if (path.equals(puzzleLoadedPath) && (puzzleSourceBitmap != null || path.isEmpty())) return;
+            if (puzzleSourceBitmap != null && !puzzleSourceBitmap.isRecycled()) puzzleSourceBitmap.recycle();
+            puzzleSourceBitmap = null;
+            puzzleLoadedPath = path;
+            if (!path.isEmpty()) {
+                try {
+                    File f = new File(path);
+                    if (f.exists()) {
+                        BitmapFactory.Options bounds = new BitmapFactory.Options();
+                        bounds.inJustDecodeBounds = true;
+                        BitmapFactory.decodeFile(path, bounds);
+                        int srcW = bounds.outWidth;
+                        int srcH = bounds.outHeight;
+                        if (srcW > 0 && srcH > 0) {
+                            int targetMax = Math.max(
+                                    puzzleCanvasW > 0 ? puzzleCanvasW : width,
+                                    puzzleCanvasH > 0 ? puzzleCanvasH : height);
+                            int sample = 1;
+                            while ((srcW / sample) > targetMax * 2 && (srcH / sample) > targetMax * 2) sample *= 2;
+                            BitmapFactory.Options opts = new BitmapFactory.Options();
+                            opts.inSampleSize = Math.max(1, sample);
+                            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                            puzzleSourceBitmap = BitmapFactory.decodeFile(path, opts);
+                        }
+                    }
+                } catch (Throwable ignored) {
+                    puzzleSourceBitmap = null;
+                }
+            }
+            puzzlePieces.clear();
+            puzzleBuiltCols = -1;
+        }
+
+        // 检测列数/行数/飞散半径/分批数量/图片集合/全局随机种子是否变化；任一
+        // 变化都会重新打乱并从“assembling”阶段重新开始（沿用当前展示的图片）。
+        // 否则按阶段推进时间轴，并在“holding”阶段计时结束后切到下一张图片
+        // （按轮换模式）、重新切片打乱，形成无限循环的多图轮播。
+        private void updatePuzzleAnimationState(long nowMs) {
+            int cols = Math.max(2, Math.min(14, cfg.puzzleCols));
+            int rows = Math.max(2, Math.min(16, cfg.puzzleRows));
+            int batchSize = Math.max(0, cfg.puzzleBatchSize);
+            long seed = prefs.getLong("seed", 0L);
+            boolean needRebuild = puzzlePieces.isEmpty()
+                    || puzzleBuiltCols != cols
+                    || puzzleBuiltRows != rows
+                    || Math.abs(puzzleBuiltScatter - cfg.puzzleScatterRadius) > 0.001f
+                    || puzzleBuiltBatchSize != batchSize
+                    || seed != puzzleSeenSeed;
+            puzzleSeenSeed = seed;
+            if (needRebuild) {
+                rebuildPuzzlePieces();
+                return;
+            }
+            float assembleSec = clamp(cfg.puzzleAssembleSeconds, 1f, 1200f);
+            float holdSec = clamp(cfg.puzzleHoldSeconds, 0.3f, 1200f);
+            float phaseElapsedSec = (nowMs - puzzlePhaseStartMs) / 1000f;
+
+            if (puzzlePhase == PUZZLE_PHASE_ASSEMBLING) {
+                if (phaseElapsedSec >= assembleSec) {
+                    puzzlePhase = PUZZLE_PHASE_HOLDING;
+                    puzzlePhaseStartMs = nowMs;
+                }
+            } else {
+                if (phaseElapsedSec >= holdSec) {
+                    advancePuzzleImage();
+                    ensurePuzzleSourceLoaded();
+                    rebuildPuzzlePieces();
+                }
+            }
+        }
+
+        // 按当前列数/行数把源图切成网格碎片，计算每块碎片的目标（拼好后）位置，
+        // 再以随机角度+随机距离生成飞散起点和两个三次贝塞尔控制点，使每块碎片
+        // 沿略带弧度的随机路径飞回原位；碎片到达顺序被打乱并赋予 0~0.5×拼接
+        // 时长的错落延迟，避免所有碎片同时到位显得呆板。
+        private void rebuildPuzzlePieces() {
+            puzzlePieces.clear();
+            puzzlePhase = PUZZLE_PHASE_ASSEMBLING;
+            puzzlePhaseStartMs = SystemClock.elapsedRealtime();
+            int batchSizeCfg = Math.max(0, cfg.puzzleBatchSize);
+            if (puzzleSourceBitmap == null || puzzleCanvasW <= 0 || puzzleCanvasH <= 0) {
+                puzzleBuiltCols = Math.max(2, Math.min(14, cfg.puzzleCols));
+                puzzleBuiltRows = Math.max(2, Math.min(16, cfg.puzzleRows));
+                puzzleBuiltScatter = cfg.puzzleScatterRadius;
+                puzzleBuiltBatchSize = batchSizeCfg;
+                return;
+            }
+            int cols = Math.max(2, Math.min(14, cfg.puzzleCols));
+            int rows = Math.max(2, Math.min(16, cfg.puzzleRows));
+            int srcW = puzzleSourceBitmap.getWidth();
+            int srcH = puzzleSourceBitmap.getHeight();
+            float srcAspect = srcW / (float) srcH;
+            float canvasAspect = puzzleCanvasW / (float) puzzleCanvasH;
+            float dispW, dispH;
+            // COVER（全屏填充）：让图片铺满整个画布，多余部分居中裁剪。
+            // 与原来的 FIT（留边适应）相反：
+            // FIT  → 取较小缩放比，图片完整显示，边缘留黑边；
+            // COVER → 取较大缩放比，图片填满画布，超出边缘被裁剪。
+            if (canvasAspect > srcAspect) {
+                // 画布比图片"更宽" → 以宽度对齐，高度会超出画布被裁剪
+                dispW = puzzleCanvasW;
+                dispH = dispW / srcAspect;
+            } else {
+                // 画布比图片"更高" → 以高度对齐，宽度会超出画布被裁剪
+                dispH = puzzleCanvasH;
+                dispW = dispH * srcAspect;
+            }
+            float imgLeft = (puzzleCanvasW - dispW) / 2f; // 负值代表图片左边缘在画布外
+            float imgTop  = (puzzleCanvasH - dispH) / 2f; // 负值代表图片上边缘在画布外
+            // 只对 **可见区域** 进行切片，超出画布的部分不生成碎片。
+            float visLeft   = Math.max(0f, imgLeft);
+            float visTop    = Math.max(0f, imgTop);
+            float visRight  = Math.min(puzzleCanvasW, imgLeft + dispW);
+            float visBottom = Math.min(puzzleCanvasH, imgTop + dispH);
+            float visW = visRight  - visLeft;
+            float visH = visBottom - visTop;
+            // 将可见区域在 canvas 中的位置映射回源图片像素坐标。
+            float srcVisLeft = (visLeft - imgLeft) / dispW * srcW;
+            float srcVisTop  = (visTop  - imgTop)  / dispH * srcH;
+            float srcVisW    = visW / dispW * srcW;
+            float srcVisH    = visH / dispH * srcH;
+            // 按列/行把可见区域均匀划分。
+            float pw = visW / cols;
+            float ph = visH / rows;
+            float sw = srcVisW / cols;
+            float sh = srcVisH / rows;
+
+            ArrayList<int[]> order = new ArrayList<>();
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) order.add(new int[]{c, r});
+            }
+            java.util.Collections.shuffle(order, puzzleRandom);
+
+            float maxR = Math.max(puzzleCanvasW, puzzleCanvasH) * clamp(cfg.puzzleScatterRadius, 0.2f, 2f);
+            int n = order.size();
+
+            // 碎片到达节奏：把打乱后的碎片按 batchSize 分成若干“批次”（wave）。
+            // batchSize<=0 或 >=n 时只有 1 批，全部碎片同时飞回（蜂拥而至）；
+            // batchSize=1 时每批只有 1 块，等价于“单个”逐一出现；
+            // 其余值则是“分批”，每批同时起飞 batchSize 块。
+            // 拼接总时长固定为 assembleSeconds，按批次数平均分配，
+            // 因此调大“分批”力度只会改变节奏感，不会改变整体拼接耗时。
+            float assembleSec = clamp(cfg.puzzleAssembleSeconds, 1f, 1200f);
+            int effectiveBatch = batchSizeCfg <= 0 ? n : Math.min(batchSizeCfg, n);
+            int totalWaves = Math.max(1, (int) Math.ceil(n / (double) effectiveBatch));
+            float perWaveFlight = Math.max(0.04f, assembleSec / (float) totalWaves);
+            puzzlePerWaveFlightSec = perWaveFlight;
+
+            for (int i = 0; i < n; i++) {
+                int c = order.get(i)[0];
+                int r = order.get(i)[1];
+                PuzzlePiece p = new PuzzlePiece();
+                p.col = c; p.row = r;
+                // 源图坐标：基于 COVER 可见区域映射回原图像素坐标。
+                p.srcLeft   = srcVisLeft + c       * sw;
+                p.srcTop    = srcVisTop  + r       * sh;
+                p.srcRight  = srcVisLeft + (c + 1) * sw;
+                p.srcBottom = srcVisTop  + (r + 1) * sh;
+                p.pieceW = pw; p.pieceH = ph;
+                // 目标位置：全屏可见区域内均匀排列。
+                p.targetX = visLeft + (c + 0.5f) * pw;
+                p.targetY = visTop  + (r + 0.5f) * ph;
+
+                float angle = puzzleRandom.nextFloat() * (float) (Math.PI * 2);
+                float dist = maxR * (0.6f + puzzleRandom.nextFloat() * 0.4f);
+                p.startX = p.targetX + (float) Math.cos(angle) * dist;
+                p.startY = p.targetY + (float) Math.sin(angle) * dist;
+
+                float cp1Angle = angle + (puzzleRandom.nextFloat() - 0.5f) * (float) Math.PI * 0.8f;
+                float cp1Dist = dist * (0.4f + puzzleRandom.nextFloat() * 0.4f);
+                float cp2Angle = angle + (puzzleRandom.nextFloat() - 0.5f) * (float) Math.PI * 1.2f;
+                float cp2Dist = dist * (0.1f + puzzleRandom.nextFloat() * 0.3f);
+                p.cp1X = p.startX + (float) Math.cos(cp1Angle) * cp1Dist;
+                p.cp1Y = p.startY + (float) Math.sin(cp1Angle) * cp1Dist;
+                p.cp2X = p.targetX + (float) Math.cos(cp2Angle) * cp2Dist;
+                p.cp2Y = p.targetY + (float) Math.sin(cp2Angle) * cp2Dist;
+
+                p.startRot = (puzzleRandom.nextFloat() - 0.5f) * (float) Math.PI * 1.2f;
+                int waveIndex = i / effectiveBatch;
+                p.delay = waveIndex * perWaveFlight; // 绝对秒数（不再是相对拼接时长的比例）
+                puzzlePieces.add(p);
+            }
+            puzzleBuiltCols = cols;
+            puzzleBuiltRows = rows;
+            puzzleBuiltScatter = cfg.puzzleScatterRadius;
+            puzzleBuiltBatchSize = batchSizeCfg;
+        }
+
+        private void drawPuzzleBitmap(Bitmap bitmap, long nowMs) {
+            Canvas canvas = new Canvas(bitmap);
+            canvas.drawColor(Color.rgb(6, 7, 12));
+
+            if (puzzleSourceBitmap == null) {
+                Paint hint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                hint.setColor(Color.argb(170, 255, 255, 255));
+                hint.setTextAlign(Paint.Align.CENTER);
+                hint.setTextSize(Math.min(bitmap.getWidth(), bitmap.getHeight()) * 0.045f);
+                canvas.drawText("请在 App 中选择一张图片", bitmap.getWidth() / 2f, bitmap.getHeight() / 2f, hint);
+                return;
+            }
+            if (puzzlePieces.isEmpty()) return;
+
+            float perWave = puzzlePerWaveFlightSec > 0f ? puzzlePerWaveFlightSec : clamp(cfg.puzzleAssembleSeconds, 1f, 1200f);
+            float phaseElapsedSec = (nowMs - puzzlePhaseStartMs) / 1000f;
+            boolean holding = puzzlePhase == PUZZLE_PHASE_HOLDING;
+
+            Paint piecePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            borderPaint.setStyle(Paint.Style.STROKE);
+            borderPaint.setStrokeWidth(1f);
+
+            Rect srcRect = new Rect();
+            RectF dstRect = new RectF();
+
+            for (int i = 0; i < puzzlePieces.size(); i++) {
+                PuzzlePiece p = puzzlePieces.get(i);
+                float t = holding ? 1f : clamp((phaseElapsedSec - p.delay) / perWave, 0f, 1f);
+                float eased = easeInOutCubic(t);
+                float px, py, rot, alpha;
+                if (holding || t >= 1f) {
+                    px = p.targetX; py = p.targetY; rot = 0f; alpha = 1f;
+                } else {
+                    px = bezier(p.startX, p.cp1X, p.cp2X, p.targetX, eased);
+                    py = bezier(p.startY, p.cp1Y, p.cp2Y, p.targetY, eased);
+                    rot = p.startRot * (1f - eased);
+                    alpha = clamp(t * 3f, 0f, 1f);
+                }
+                if (alpha <= 0f) continue;
+
+                srcRect.set(Math.round(p.srcLeft), Math.round(p.srcTop), Math.round(p.srcRight), Math.round(p.srcBottom));
+                dstRect.set(-p.pieceW / 2f, -p.pieceH / 2f, p.pieceW / 2f, p.pieceH / 2f);
+
+                canvas.save();
+                canvas.translate(px, py);
+                canvas.rotate((float) Math.toDegrees(rot));
+                piecePaint.setAlpha(Math.round(clamp(alpha, 0f, 1f) * 255));
+                canvas.drawBitmap(puzzleSourceBitmap, srcRect, dstRect, piecePaint);
+                if (!holding && alpha < 0.96f) {
+                    borderPaint.setColor(Color.argb(Math.round(alpha * 110f), 255, 255, 255));
+                    canvas.drawRect(dstRect, borderPaint);
+                }
+                canvas.restore();
+            }
+        }
+
+        private static float easeInOutCubic(float t) {
+            if (t < 0.5f) return 4f * t * t * t;
+            float f = 2f * t - 2f;
+            return 0.5f * f * f * f + 1f;
+        }
+
+        private static float bezier(float p0, float p1, float p2, float p3, float t) {
+            float mt = 1f - t;
+            return p0 * (mt * mt * mt) + p1 * (3f * mt * mt * t) + p2 * (3f * mt * t * t) + p3 * (t * t * t);
         }
 
         private void drawCalligraphyBitmap(Bitmap bitmap, long nowMs) {
@@ -609,14 +1416,21 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             String content = activeWork.text;
             if (content.length() == 0) content = "行到水穷处，坐看云起时。";
             int[] codePoints = content.codePoints().filter(cp -> !Character.isWhitespace(cp)).limit(80).toArray();
-            float secondsPerCharacter = 1.35f - activeWork.speed * 0.72f;
-            float writingDuration = Math.max(3.5f, codePoints.length * secondsPerCharacter);
-            float cycle = writingDuration + 4.2f;
+            // ── 速度公式（修复版）────────────────────────────────────────────────
+            // 旧公式范围只有 0.63~1.24 秒/字（约 2 倍差距），肉眼无法感知。
+            // 新公式使用平方曲线，慢速 / 快速差距达到 44 倍：
+            //   speed=1.0（最快）→ 0.20 秒/字
+            //   speed=0.55（默认）→ 2.25 秒/字
+            //   speed=0.15（最慢）→ 8.87 秒/字
+            float t = 1.0f - activeWork.speed;            // 0=最快, 0.85=最慢
+            float secondsPerCharacter = 0.20f + t * t * 12.0f;
+            float writingDuration = Math.max(2.0f, codePoints.length * secondsPerCharacter);
+            float cycle = writingDuration + 3.5f;
             float local = activeWork.localSeconds % cycle;
             float shownFloat = Math.min(codePoints.length, local / secondsPerCharacter);
-            int shown = Math.min(codePoints.length, (int)Math.ceil(shownFloat));
-            float fadeOut = local > writingDuration + 2.8f
-                    ? clamp(1f - (local - writingDuration - 2.8f) / 1.4f, 0f, 1f) : 1f;
+            int shown = Math.min(codePoints.length, (int) Math.ceil(shownFloat));
+            float fadeOut = local > writingDuration + 2.2f
+                    ? clamp(1f - (local - writingDuration - 2.2f) / 1.3f, 0f, 1f) : 1f;
 
             Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
             String family = "kaishu".equals(activeWork.style) ? "serif" : "sans-serif";
@@ -629,14 +1443,72 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                     : ("xingshu".equals(activeWork.style) ? -0.12f : 0f));
             ink.setShadowLayer(18f, 0f, 2f, Color.argb(95, 60, 230, 190));
 
-            final int maxColumns = 5;
-            final int rows = Math.max(1, Math.min(16, (int)Math.ceil(codePoints.length / (float)maxColumns)));
-            final int cols = Math.max(1, (int)Math.ceil(codePoints.length / (float)rows));
-            final float rowGap = Math.min(108f, (h - 250f) / Math.max(1f, rows - 0.35f));
-            final float colGap = Math.min(126f, (w - 130f) / Math.max(1f, cols));
-            ink.setTextSize(Math.min(ink.getTextSize(), Math.min(rowGap * 0.82f, colGap * 0.78f)));
-            final float firstX = w * 0.5f + (cols - 1) * colGap * 0.5f;
-            final float firstY = 132f;
+            // ── 布局（全面修正版）────────────────────────────────────────────────────
+            // 修正点：
+            // ① 长文本：maxCols 随字数自适应（最多 7 列），避免字数过多时行数过多、
+            //    字号被压得过小，甚至超出画布底部。
+            // ② 居中：gridH 需要包含首行上方的半个单元格（ascent）和末行下方的
+            //    半个单元格（descent），才能让文字块在视觉上真正居中。
+            // ③ 字号：先按布局需要缩放，再保证最小可读尺寸。
+            final int n = codePoints.length;
+
+            // 列数策略
+            final int cols;
+            final int rows;
+            if (n <= 2) {
+                cols = 1; rows = n;
+            } else if (n <= 6) {
+                cols = 2; rows = (int) Math.ceil(n / 2.0f);
+            } else if (n <= 12) {
+                cols = 3; rows = (int) Math.ceil(n / 3.0f);
+            } else if (n <= 24) {
+                cols = 4; rows = (int) Math.ceil(n / 4.0f);
+            } else if (n <= 42) {
+                cols = 5; rows = (int) Math.ceil(n / 5.0f);
+            } else if (n <= 56) {
+                cols = 6; rows = (int) Math.ceil(n / 6.0f);
+            } else {
+                cols = 7; rows = (int) Math.ceil(n / 7.0f);
+            }
+
+            // 可用区域（四边各留 marginV px）
+            float marginV = 52f;
+            float availH = Math.max(1f, h - marginV * 2f);
+            float availW = Math.max(1f, w - marginV * 2f);
+
+            // 单元格尺寸（不再用间距 + 固定 cap，改用"把可用区域均分给每个单元格"）
+            float cellH = availH / rows;
+            float cellW = availW / cols;
+
+            // 字号 = 单元格的 78%，同时不超过初始设计字号（82/92px 是为 720px 宽基准
+            // 设定的，现在 bitmap 按屏幕比例缩放，字号上限也要同步调整）。
+            float baseSize = "caoshu".equals(activeWork.style) ? 92f : 82f;
+            // 按新 bitmap 宽度（w）相对 720px 做缩放
+            float sizeScale = w / 720f;
+            float maxSize = baseSize * sizeScale;
+            float sz = Math.min(maxSize, Math.min(cellH * 0.80f, cellW * 0.80f));
+            sz = Math.max(14f, sz);          // 最小可读 14px
+            ink.setTextSize(sz);
+
+            // 间距：基于字号而非单元格，让大字间距稍宽、小字间距稍紧
+            float rowGap = Math.max(sz * 1.05f, cellH);
+            float colGap = Math.max(sz * 1.05f, cellW);
+
+            // ── 视觉居中 ──
+            // 文字块的视觉上边界 ≈ 第 0 行基线 - sz*0.88（ascent）
+            // 文字块的视觉下边界 ≈ 第(rows-1)行基线 + sz*0.20（descent）
+            // 让整块在 [marginV, h-marginV] 内垂直居中。
+            float totalVisH = (rows - 1) * rowGap + sz * 1.08f; // ascent+descent ≈ 1.08*sz
+            float topOfGrid  = (h - totalVisH) / 2f;            // 视觉顶部 y
+            float firstY     = topOfGrid + sz * 0.88f;           // 第 0 行基线
+            // 保证不超出顶部
+            firstY = Math.max(sz * 0.88f + marginV * 0.4f, firstY);
+
+            // 水平居中（竖排：从右列到左列）
+            float totalVisW = (cols - 1) * colGap + sz;
+            float leftOfGrid = (w - totalVisW) / 2f;
+            float firstX     = leftOfGrid + (cols - 1) * colGap + sz * 0.5f; // 最右列中心
+
             for (int i = 0; i < shown; i++) {
                 int col = i / rows;
                 int row = i % rows;
@@ -645,10 +1517,8 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 float characterProgress = clamp(shownFloat - i, 0f, 1f);
                 CalligraphyStrokeGlyph strokeGlyph = calligraphyStrokeGlyphs.get(codePoints[i]);
                 if (strokeGlyph != null && !strokeGlyph.medians.isEmpty()) {
-                    drawRealStrokeOrderGlyph(canvas, strokeGlyph, x, y, ink.getTextSize(), characterProgress, fadeOut, activeWork.style);
+                    drawRealStrokeOrderGlyph(canvas, strokeGlyph, x, y, sz, characterProgress, fadeOut, activeWork.style);
                 } else {
-                    // Never invent a fake stroke order. If no verified data was
-                    // downloaded, show the complete glyph as an explicit fallback.
                     ink.setColor(Color.argb((int)(242f * fadeOut * characterProgress), 240, 231, 209));
                     drawStyledCalligraphyText(
                             canvas,
@@ -656,23 +1526,12 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                             codePoints[i],
                             x,
                             y,
-                            ink.getTextSize(),
+                            sz,
                             ink,
                             activeWork.style
                     );
                 }
             }
-
-            Paint seal = new Paint(Paint.ANTI_ALIAS_FLAG);
-            seal.setStyle(Paint.Style.STROKE);
-            seal.setStrokeWidth(5f);
-            seal.setColor(Color.argb((int)(205 * fadeOut), 181, 50, 50));
-            canvas.drawRect(52f, h - 142f, 126f, h - 68f, seal);
-            seal.setStyle(Paint.Style.FILL);
-            seal.setTextAlign(Paint.Align.CENTER);
-            seal.setTypeface(Typeface.create("serif", Typeface.BOLD));
-            seal.setTextSize(27f);
-            canvas.drawText("静", 89f, h - 95f, seal);
         }
 
         private CalligraphyWork resolveCalligraphyWork(float seconds) {
@@ -684,10 +1543,14 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                     if (item == null) continue;
                     String text = item.optString("text", "").trim();
                     if (text.isEmpty()) continue;
+                    // 关键修复：落笔速度始终采用用户当前滑杆值（cfg.calligraphySpeed），
+                    // 而不是条目加入播放队列时保存的旧值（item.optDouble("speed"，...)）。
+                    // 原因：playlist 条目的速度字段只在"添加"那一刻快照，此后无论用户
+                    // 怎么拖动滑杆，该字段也不会更新——导致速度设置完全不生效。
                     works.add(new CalligraphyWork(
                             text,
                             item.optString("style", "kaishu"),
-                            clamp((float)item.optDouble("speed", 0.55), 0.15f, 1f),
+                            cfg.calligraphySpeed,   // ← 始终使用当前全局速度
                             0f
                     ));
                 }
@@ -796,6 +1659,11 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
         private void spawnAccordingToPhase(Phase phase, float sec) {
             decayArtMemory();
             artSpawnIndex++;
+            sceneEraSpawnCount++;
+            if (sceneEraSpawnCount >= 18 + random.nextInt(12)) {
+                sceneEra = (sceneEra + 1) % 5;
+                sceneEraSpawnCount = 0;
+            }
 
             // V43：参考视频的主体不是两片大色带相互穿插，而是黑场中“一片主膜 + 极少量暗回声”。
             // 因此只在主体阶段（分离/吸引/同步/临界）改成单主体生成；释放与余韵继续走下面的旧逻辑。
@@ -916,109 +1784,149 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
         }
 
         private int chooseArtMotif(Phase phase, int actor) {
+            // 获取阶段基础权重（含全部 26 个母型，18-25 为新增艺术母型）
             float[] w = motifWeightsForPhase(phase.name);
-            // V30：优先选择有完整轮廓的大形体，降低“电子纱扇/星座碎链”这类细网比例。
-            // 12 liquid pod, 13 wing, 14 blossom, 15 silk sheet, 16 orbit halo, 17 crystal shard.
+
+            // ── Actor 角色偏好 ─────────────────────────────────────────
             if (actor == 1) {
-                w[3] *= 1.15f;   // silver blade
-                w[10] *= 0.92f;  // origami sheet
-                w[13] *= 1.35f;  // wing
-                w[15] *= 1.22f;  // silk sheet
-                w[17] *= 1.32f;  // crystal shard
-                w[2] *= 0.42f;   // less fan lattice
-                w[11] *= 0.34f;  // less dot chain
+                // 主动者：锋利、扩张、长程
+                w[3]  *= 1.30f; w[7]  *= 1.18f; w[13] *= 1.22f;
+                w[17] *= 1.25f; w[19] *= 1.20f; w[20] *= 1.35f; w[24] *= 1.28f;
+                w[2]  *= 0.42f; w[11] *= 0.34f;
             } else if (actor == 2) {
-                w[4] *= 1.05f;   // petal hook
-                w[6] *= 0.95f;   // vine
-                w[12] *= 1.45f;  // liquid pod
-                w[14] *= 1.58f;  // blossom
-                w[16] *= 1.26f;  // orbit halo
-                w[2] *= 0.35f;
-                w[11] *= 0.28f;
+                // 回应者：柔和、向内、有机生命
+                w[4]  *= 1.18f; w[8]  *= 1.22f; w[12] *= 1.38f;
+                w[14] *= 1.55f; w[16] *= 1.30f; w[21] *= 1.42f;
+                w[22] *= 1.28f; w[25] *= 1.35f;
+                w[2]  *= 0.35f; w[11] *= 0.28f;
             }
 
-            // V29/V30：非周期“天气”。不同天气推动不同雕塑形态，而不是反复刷同一种曲线。
+            // ── 非周期天气：让每次出生的形体组合都不一样 ─────────────
             float t = (SystemClock.elapsedRealtime() - startMs) / 1000f;
-            float weatherA = 0.5f + 0.5f * (float)Math.sin(t * 0.0173f + artSpawnIndex * 0.618f);
-            float weatherB = 0.5f + 0.5f * (float)Math.sin(t * 0.0117f + artSpawnIndex * 1.4142f + 2.1f);
-            float weatherC = 0.5f + 0.5f * (float)Math.sin(t * 0.0079f + artSpawnIndex * 1.7320f + 4.7f);
-            w[8] *= 0.66f + weatherB * 0.78f;
-            w[9] *= 0.62f + weatherC * 0.92f;
-            w[12] *= 0.70f + weatherA * 1.35f;
-            w[13] *= 0.72f + weatherB * 1.22f;
-            w[14] *= 0.68f + weatherC * 1.38f;
-            w[15] *= 0.74f + (1f - weatherA) * 1.20f;
-            w[16] *= 0.72f + (1f - weatherB) * 1.26f;
-            w[17] *= 0.76f + (1f - weatherC) * 1.18f;
-            w[2] *= 0.25f + weatherA * 0.18f;
-            w[11] *= 0.20f + weatherB * 0.16f;
-            // V33：整体更偏“有形状的生命体/光膜/花瓣/晶体”，减少奇怪细线和网状语言。
-            for (int i = 0; i < 12; i++) w[i] *= 0.82f;
-            for (int i = 12; i <= 17; i++) w[i] *= 1.28f;
+            float wA = 0.5f + 0.5f*(float)Math.sin(t*0.0173f + artSpawnIndex*0.618f);
+            float wB = 0.5f + 0.5f*(float)Math.sin(t*0.0117f + artSpawnIndex*1.4142f + 2.1f);
+            float wC = 0.5f + 0.5f*(float)Math.sin(t*0.0079f + artSpawnIndex*1.7320f + 4.7f);
+            w[8]  *= 0.70f + wB  * 0.90f;
+            w[9]  *= 0.65f + wC  * 0.88f;
+            w[12] *= 0.72f + wA  * 1.30f;
+            w[13] *= 0.74f + wB  * 1.18f;
+            w[14] *= 0.70f + wC  * 1.32f;
+            w[15] *= 0.76f + (1-wA) * 1.24f;
+            w[16] *= 0.74f + (1-wB) * 1.20f;
+            w[17] *= 0.78f + (1-wC) * 1.16f;
+            w[18] *= 0.72f + wA  * 1.28f;
+            w[19] *= 0.68f + wB  * 1.22f;
+            w[21] *= 0.70f + wC  * 1.34f;
+            w[22] *= 0.74f + wA  * 1.18f;
+            w[23] *= 0.66f + (1-wC)* 1.26f;
+            w[24] *= 0.72f + wB  * 1.20f;
+            w[25] *= 0.68f + wA  * 1.30f;
 
-            // V41：只修正“主体阶段”的形体。
-            // 之前 V38 只是提高视频母型权重，仍会混入旧银白刃/大灰面，并且 13/15/17 本身会生成贯穿屏幕的白色斜带。
-            // 这里在分离/吸引/同步/临界阶段锁定为参考视频主体：单侧折叠膜面 + 宽端裁切 + 弯曲尖端 + 贴面肋纹。
-            // 释放阶段和余韵阶段不在这里强改，保持现有释放爆发与余韵气泡逻辑不变。
-            if (!phase.name.equals("释放") && !phase.name.equals("余韵")) {
-                float bladeBias = phase.name.equals("分离") ? 1.00f
-                        : (phase.name.equals("吸引") ? 1.10f
-                        : (phase.name.equals("同步") ? 1.18f
-                        : (phase.name.equals("临界") ? 1.26f : 1.00f)));
-                for (int i = 0; i < w.length; i++) w[i] = 0f;
-                // V44：主体阶段锁定为“视频单片卷曲薄膜”。13/17 只作为同一膜面的窄态/尖钩态，避免多形体拼贴和大色带交叉。
-                w[13] = phase.name.equals("分离") ? 0.30f * bladeBias : 0.12f * bladeBias;
-                w[15] = 1.00f * bladeBias;
-                w[17] = phase.name.equals("临界") ? 0.16f * bladeBias : 0.05f * bladeBias;
-            } else {
-                float bladeBias = phase.name.equals("释放") ? 1.38f : 1.08f;
-                w[13] *= 1.95f * bladeBias;
-                w[15] *= 2.28f * bladeBias;
-                w[17] *= 1.82f * bladeBias;
-                w[12] *= 0.54f;
-                w[14] *= 0.46f;
-                w[16] *= 0.62f;
-                w[2] *= 0.22f;
-                w[11] *= 0.24f;
+            // ── 场景纪元：五大创作主题循环 ────────────────────────────
+            // 0=星空  1=花园  2=海洋  3=建筑  4=火焰
+            switch (sceneEra) {
+                case 0: // 星空纪元：极光、彗星、星云、太阳辐射、流星
+                    w[0]  *= 1.55f; w[9]  *= 1.60f; w[16] *= 1.45f;
+                    w[18] *= 2.20f; w[20] *= 1.80f; w[24] *= 1.65f;
+                    w[4]  *= 0.40f; w[6]  *= 0.35f; w[8]  *= 0.50f; w[14] *= 0.40f;
+                    break;
+                case 1: // 花园纪元：花瓣、藤蔓、丝绸、羽毛、玫瑰曲线、墨晕
+                    w[4]  *= 1.80f; w[6]  *= 1.65f; w[14] *= 2.10f;
+                    w[21] *= 2.00f; w[22] *= 1.75f; w[15] *= 1.45f; w[25] *= 1.60f;
+                    w[3]  *= 0.30f; w[17] *= 0.35f; w[20] *= 0.30f; w[24] *= 0.35f;
+                    break;
+                case 2: // 海洋纪元：潮汐、水母、液态荚、轨道晕、墨水晕染
+                    w[1]  *= 1.40f; w[8]  *= 1.90f; w[12] *= 2.05f;
+                    w[16] *= 1.70f; w[19] *= 2.15f; w[25] *= 1.85f;
+                    w[3]  *= 0.30f; w[17] *= 0.30f; w[20] *= 0.25f; w[23] *= 0.30f;
+                    break;
+                case 3: // 建筑纪元：桥梁、棱镜、折纸、晶体、龙骨脊、银刃
+                    w[3]  *= 1.50f; w[5]  *= 1.80f; w[7]  *= 2.00f;
+                    w[10] *= 1.75f; w[17] *= 1.90f; w[23] *= 2.10f;
+                    w[8]  *= 0.30f; w[12] *= 0.30f; w[14] *= 0.30f; w[25] *= 0.30f;
+                    break;
+                case 4: // 火焰纪元：太阳辐射、流星、银刃、水晶碎裂、龙骨
+                    w[3]  *= 1.75f; w[13] *= 1.65f; w[17] *= 1.80f;
+                    w[20] *= 2.20f; w[23] *= 1.70f; w[24] *= 2.00f;
+                    w[8]  *= 0.30f; w[12] *= 0.30f; w[14] *= 0.30f; w[25] *= 0.35f;
+                    break;
             }
 
-            // 反重复冷却：最近出现过的母型降权。雕塑类也参与冷却，防止连续看到同一类大形体。
+            // ── 反重复冷却 ────────────────────────────────────────────
             for (int i = 0; i < w.length; i++) {
                 w[i] *= 1f / (1f + motifCooldown[i] * (isSculpturalMotif(i) ? 0.72f : 0.58f));
-                if (cfg.powerSave && (i == 8 || i == 9 || i == 11 || i == 14 || i == 16)) w[i] *= 0.68f;
+                if (cfg.powerSave && (i==8||i==9||i==11||i==14||i==16||i==21||i==25))
+                    w[i] *= 0.62f;
             }
 
             int motif = weightedMotif(w);
             rememberMotif(motif);
             return motif;
         }
-
         private float[] motifWeightsForPhase(String phaseName) {
-            // 0 comet arc, 1 veil ribbon, 2 electronic fan, 3 silver blade,
-            // 4 petal hook, 5 prism polygon, 6 falling leaf, 7 long bridge,
-            // 8 jellyfish tendril, 9 nebula coil, 10 origami sheet, 11 constellation chain,
-            // 12 liquid pod, 13 luminous wing, 14 blossom crown, 15 silk banner,
-            // 16 orbit halo, 17 crystal shard.
+            // 母型索引
+            // 0  comet arc      1  veil ribbon      2  fan lattice      3  silver blade
+            // 4  petal hook     5  prism polygon    6  falling leaf     7  long bridge
+            // 8  jellyfish      9  nebula coil      10 origami sheet    11 constellation
+            // 12 liquid pod     13 luminous wing    14 blossom crown    15 silk banner
+            // 16 orbit halo     17 crystal shard
+            // ── 8 个新艺术母型 ──
+            // 18 aurora curtain 19 tidal wave       20 solar spoke      21 rose mandala
+            // 22 feather quill  23 dragon spine     24 meteor shower    25 ink bloom
+            //
+            // 每个阶段都覆盖全部 26 个母型，体现各阶段的艺术气质：
+            // 分离：长程、扩张、极光、彗星流 —— 疏离感
+            // 吸引：弧线、向内、生命感、花/水母 —— 温柔引力
+            // 同步：共鸣/波动/玫瑰曲线/轨道 —— 和谐共振
+            // 临界：棱角/张力/晶体/龙骨 —— 极限边缘
+            // 释放：爆发/辐射/流星/龙骨 —— 全面绽放
+            // 余韵：漂浮/叶/水母/墨晕 —— 静谧收尾
             if (phaseName.equals("分离")) {
-                return new float[]{1.08f, 0.74f, 0.06f, 0.98f, 0.20f, 0.34f, 0.82f, 1.02f, 0.38f, 0.30f, 0.52f, 0.18f, 0.62f, 1.05f, 0.28f, 0.96f, 0.52f, 0.92f};
+                return new float[]{
+                    1.10f, 0.72f, 0.05f, 0.85f, 0.18f, 0.28f, 0.75f, 1.05f,
+                    0.35f, 0.55f, 0.45f, 0.15f, 0.55f, 0.85f, 0.22f, 0.90f,
+                    0.60f, 0.80f,
+                    1.60f, 1.20f, 0.90f, 0.40f, 0.50f, 0.60f, 1.40f, 0.35f};
             }
             if (phaseName.equals("吸引")) {
-                return new float[]{0.60f, 0.95f, 0.12f, 0.38f, 0.86f, 0.46f, 0.92f, 0.42f, 0.74f, 0.54f, 0.46f, 0.12f, 1.24f, 1.12f, 1.42f, 1.05f, 0.78f, 0.52f};
+                return new float[]{
+                    0.55f, 1.00f, 0.10f, 0.30f, 1.20f, 0.40f, 1.05f, 0.38f,
+                    1.30f, 0.50f, 0.42f, 0.10f, 1.40f, 0.85f, 1.65f, 0.85f,
+                    0.95f, 0.45f,
+                    0.50f, 0.80f, 0.40f, 1.55f, 1.30f, 0.45f, 0.35f, 1.45f};
             }
             if (phaseName.equals("同步")) {
-                return new float[]{0.34f, 0.86f, 0.30f, 0.48f, 0.72f, 0.58f, 0.44f, 0.32f, 0.50f, 0.64f, 0.72f, 0.16f, 1.06f, 1.30f, 1.20f, 1.34f, 1.18f, 0.76f};
+                return new float[]{
+                    0.30f, 0.90f, 0.25f, 0.40f, 0.75f, 0.55f, 0.40f, 0.28f,
+                    0.65f, 0.95f, 0.70f, 0.14f, 0.95f, 1.05f, 1.25f, 1.20f,
+                    1.45f, 0.70f,
+                    0.70f, 1.10f, 0.80f, 1.80f, 0.80f, 0.55f, 0.45f, 0.90f};
             }
             if (phaseName.equals("临界")) {
-                return new float[]{0.22f, 0.56f, 0.28f, 1.02f, 0.56f, 0.62f, 0.24f, 0.48f, 0.42f, 0.76f, 0.92f, 0.20f, 1.22f, 1.18f, 1.06f, 1.28f, 1.46f, 1.32f};
+                return new float[]{
+                    0.20f, 0.50f, 0.22f, 1.30f, 0.48f, 1.10f, 0.20f, 0.70f,
+                    0.35f, 0.80f, 1.05f, 0.18f, 0.95f, 1.10f, 0.80f, 1.10f,
+                    1.20f, 1.55f,
+                    0.35f, 0.65f, 1.60f, 0.40f, 0.65f, 1.70f, 0.90f, 0.30f};
             }
             if (phaseName.equals("释放")) {
-                return new float[]{0.24f, 0.40f, 0.22f, 1.14f, 0.32f, 0.46f, 0.22f, 0.94f, 0.34f, 0.72f, 0.88f, 0.22f, 1.48f, 1.06f, 0.86f, 0.92f, 1.70f, 1.46f};
+                return new float[]{
+                    0.22f, 0.35f, 0.18f, 1.40f, 0.28f, 0.55f, 0.20f, 1.10f,
+                    0.30f, 0.80f, 0.90f, 0.18f, 1.35f, 0.95f, 0.75f, 0.80f,
+                    1.65f, 1.50f,
+                    0.45f, 0.80f, 2.10f, 0.30f, 0.60f, 1.45f, 1.85f, 0.25f};
             }
-            return new float[]{0.86f, 0.62f, 0.08f, 0.74f, 0.28f, 0.26f, 0.92f, 0.68f, 0.42f, 0.28f, 0.38f, 0.14f, 0.94f, 0.72f, 0.74f, 0.86f, 0.78f, 0.66f};
+            // 余韵（afterglow）：漂浮、叶落、水母、墨晕、极光尾影
+            return new float[]{
+                0.90f, 0.70f, 0.06f, 0.50f, 0.35f, 0.22f, 1.10f, 0.60f,
+                0.95f, 0.40f, 0.35f, 0.12f, 1.05f, 0.55f, 0.90f, 0.80f,
+                0.85f, 0.50f,
+                0.80f, 0.65f, 0.30f, 0.70f, 0.95f, 0.45f, 0.60f, 1.20f};
         }
 
         private boolean isSculpturalMotif(int motif) {
-            return motif >= 12 && motif <= 17;
+            // 12-17: 原有大形体; 18-25: 新艺术母型（全部视为雕塑级，纳入反重复冷却）
+            return (motif >= 12 && motif <= 17) || (motif >= 18 && motif <= 25);
         }
 
         private int weightedMotif(float[] w) {
@@ -1051,6 +1959,14 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 case 15: return 5 + random.nextInt(3);  // silk banner
                 case 16: return 5 + random.nextInt(3);  // orbit halo
                 case 17: return 4 + random.nextInt(3);  // crystal shard
+                case 18: return 6 + random.nextInt(4);  // aurora curtain
+                case 19: return 6 + random.nextInt(3);  // tidal wave
+                case 20: return 5 + random.nextInt(3);  // solar spoke (radial rays)
+                case 21: return 7 + random.nextInt(3);  // rose mandala
+                case 22: return 6 + random.nextInt(3);  // feather quill
+                case 23: return 6 + random.nextInt(2);  // dragon spine
+                case 24: return 5 + random.nextInt(3);  // meteor shower arc
+                case 25: return 5 + random.nextInt(3);  // ink bloom diffusion
                 default: return 4 + random.nextInt(3);
             }
         }
@@ -1085,7 +2001,7 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             if (phase.name.equals("释放")) s.visibleWindow *= 1.24f;
             s.headLead = 0.06f + random.nextFloat() * 0.13f;
             s.seed = random.nextFloat() * (float)Math.PI * 2f;
-            s.widthScale = 0.54f + random.nextFloat() * 0.72f;
+            s.widthScale = 0.28f + random.nextFloat() * 0.36f;
             s.speed = Math.min(width, height) * (0.82f + random.nextFloat() * (0.90f + cfg.randomness * 0.55f));
             s.turn = 0.06f + random.nextFloat() * (0.20f + cfg.randomness * 0.18f);
             s.relation = phase.relation;
@@ -1094,18 +2010,18 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
             s.fanGapPx = Math.min(width, height) * (0.003f + random.nextFloat() * 0.009f);
             int[] colors = palette(cfg.style);
             if (actor == 1) {
-                // 主动追寻者：冷色、锋利、较直、点线更克制。
+                // 主动追寻者：冷色、锋利
                 s.colorA = colors[0];
-                s.colorB = random.nextFloat() < 0.62f ? colors[1] : Color.WHITE;
+                s.colorB = random.nextFloat() < 0.70f ? colors[1] : colors[3];
                 s.widthScale *= 0.82f;
                 s.turn *= 0.68f;
                 s.visibleWindow *= 0.94f;
                 s.fan = false;
                 s.fanLines = 0;
             } else if (actor == 2) {
-                // 回应者：暖色、柔和、点线喷洒更丰富。
+                // 回应者：暖色、柔和
                 s.colorA = colors[2];
-                s.colorB = random.nextFloat() < 0.58f ? colors[3] : Color.WHITE;
+                s.colorB = random.nextFloat() < 0.70f ? colors[3] : colors[0];
                 s.widthScale *= 1.10f;
                 s.turn *= 1.18f;
                 s.visibleWindow *= 1.05f;
@@ -1115,9 +2031,9 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 }
             } else {
                 s.colorA = pickColor(colors);
-                s.colorB = random.nextFloat() < 0.20f ? Color.WHITE : pickColor(colors);
+                s.colorB = random.nextFloat() < 0.45f ? pickColor(colors) : colors[Math.floorMod(random.nextInt(4), 4)];
             }
-            boolean v41SubjectPhase = !phase.name.equals("释放") && !phase.name.equals("余韵");
+            // ── motif별 初始参数 ───────────────────────────────────────────────────
             // V28：不同母型有不同的运动气质，避免“所有线条长得一样”。
             if (s.motif == 2) { // electronic fan / shell
                 s.fan = true;
@@ -1129,7 +2045,9 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 s.widthScale *= 0.72f;
                 s.turn *= 0.48f;
                 s.visibleWindow *= 0.92f;
-                s.colorA = Color.WHITE;
+                // 刀刃感：银蓝 / 冰蓝渐变，不用纯白避免 FBO 过饱和
+                s.colorA = Math.floorMod(s.variant, 2) == 0 ? 0xFFB8D8FF : 0xFF88CCFF;
+                s.colorB = 0xFFE8F4FF;
             } else if (s.motif == 4) { // petal hook
                 s.widthScale *= 1.12f;
                 s.turn *= 1.35f;
@@ -1162,47 +2080,29 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 s.turn *= 0.86f;
                 s.visibleWindow *= 0.86f;
             } else if (s.motif == 12) { // liquid light pod: rounded glowing body
-                s.widthScale *= 1.85f;
+                s.widthScale *= 1.10f;
                 s.turn *= 0.62f;
                 s.visibleWindow *= 1.22f;
                 s.fan = false;
                 s.fanLines = 0;
-            } else if (s.motif == 13) { // video wing
-                if (v41SubjectPhase) {
-                    // V44：主体阶段只让宽度服务于边缘/肋线，不再把整条轨迹放大成白色彩带。
-                    s.widthScale *= 0.82f;
-                    s.turn *= 0.18f;
-                    s.visibleWindow = Math.max(s.visibleWindow * 1.18f, 0.56f);
-                    s.life *= 1.18f;
-                } else {
-                    // 释放/余韵保持 V38 既有参数。
-                    s.widthScale *= 2.36f;
-                    s.turn *= 0.36f;
-                    s.visibleWindow *= 1.52f;
-                    s.life *= 1.14f;
-                }
+            } else if (s.motif == 13) { // luminous wing
+                s.widthScale *= 0.90f;
+                s.turn *= 0.30f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.48f, 0.60f);
+                s.life *= 1.16f;
                 s.fan = false;
                 s.fanLines = 0;
             } else if (s.motif == 14) { // blossom crown: petal cluster
-                s.widthScale *= 1.72f;
+                s.widthScale *= 1.10f;
                 s.turn *= 0.84f;
                 s.visibleWindow *= 1.20f;
                 s.fan = false;
                 s.fanLines = 0;
-            } else if (s.motif == 15) { // silk banner / main video subject
-                if (v41SubjectPhase) {
-                    // V44：主膜面靠自定义 profile 展开，baseWidth 只留给极细折脊。
-                    s.widthScale *= 0.90f;
-                    s.turn *= 0.18f;
-                    s.visibleWindow = Math.max(s.visibleWindow * 1.22f, 0.62f);
-                    s.life *= 1.22f;
-                } else {
-                    // 释放/余韵保持 V38 既有参数。
-                    s.widthScale *= 2.78f;
-                    s.turn *= 0.38f;
-                    s.visibleWindow *= 1.64f;
-                    s.life *= 1.18f;
-                }
+            } else if (s.motif == 15) { // silk banner
+                s.widthScale *= 1.05f;
+                s.turn *= 0.32f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.58f, 0.65f);
+                s.life *= 1.20f;
                 s.fan = false;
                 s.fanLines = 0;
             } else if (s.motif == 16) { // orbit halo: luminous ring / crescent
@@ -1212,43 +2112,117 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
                 s.fan = false;
                 s.fanLines = 0;
             } else if (s.motif == 17) { // crystal edge / shard
-                if (v41SubjectPhase) {
-                    s.widthScale *= 0.62f;
-                    s.turn *= 0.15f;
-                    s.visibleWindow = Math.max(s.visibleWindow * 1.10f, 0.50f);
-                    s.life *= 1.12f;
-                } else {
-                    // 释放/余韵保持 V38 既有参数。
-                    s.widthScale *= 1.84f;
-                    s.turn *= 0.30f;
-                    s.visibleWindow *= 1.24f;
-                    s.life *= 1.08f;
-                }
+                s.widthScale *= 1.10f;
+                s.turn *= 0.30f;
+                s.visibleWindow *= 1.24f;
+                s.life *= 1.08f;
                 s.fan = false;
                 s.fanLines = 0;
+            } else if (s.motif == 18) { // 极光帷幕 aurora curtain
+                s.widthScale *= 1.60f;
+                s.turn *= 0.08f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.55f, 0.70f);
+                s.life *= 1.30f;
+                s.fan = false; s.fanLines = 0;
+                int va = Math.floorMod(s.variant, 5);
+                if      (va==0){ s.colorA=0xFF00FFC8; s.colorB=0xFF7C3AED; }
+                else if (va==1){ s.colorA=0xFF00E5FF; s.colorB=0xFF00FF99; }
+                else if (va==2){ s.colorA=0xFF9D00FF; s.colorB=0xFF00FFCC; }
+                else if (va==3){ s.colorA=0xFF00FF88; s.colorB=0xFF00B4FF; }
+                else           { s.colorA=0xFF44FFB0; s.colorB=0xFFCC00FF; }
+            } else if (s.motif == 19) { // 潮汐波浪 tidal wave
+                s.widthScale *= 1.10f;
+                s.turn *= 0.55f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.38f, 0.62f);
+                s.life *= 1.10f;
+                s.fan = false; s.fanLines = 0;
+                int vb = Math.floorMod(s.variant, 4);
+                if      (vb==0){ s.colorA=0xFF0077FF; s.colorB=0xFF00E5FF; }
+                else if (vb==1){ s.colorA=0xFF00B4FF; s.colorB=0xFF55FFCC; }
+                else if (vb==2){ s.colorA=0xFF0055CC; s.colorB=0xFF55FFCC; }
+                else           { s.colorA=0xFF00CCFF; s.colorB=0xFF8844FF; }
+            } else if (s.motif == 20) { // 太阳辐射 solar spoke
+                s.widthScale *= 0.55f;
+                s.turn *= 0.18f;
+                s.visibleWindow *= 0.68f;
+                s.life *= 0.85f;
+                s.fan = true; s.fanLines = 8 + random.nextInt(8);
+                int vc = Math.floorMod(s.variant, 4);
+                if      (vc==0){ s.colorA=0xFFFFCC00; s.colorB=0xFFFF6600; }
+                else if (vc==1){ s.colorA=0xFFFFEE44; s.colorB=0xFFFF4400; }
+                else if (vc==2){ s.colorA=0xFFFFDD55; s.colorB=0xFFFF8800; }
+                else           { s.colorA=0xFFFFFFAA; s.colorB=0xFFFFAA00; }
+            } else if (s.motif == 21) { // 玫瑰曲线 rose mandala
+                s.widthScale *= 0.85f;
+                s.turn *= 0.32f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.30f, 0.60f);
+                s.life *= 1.18f;
+                s.fan = false; s.fanLines = 0;
+                int vd = Math.floorMod(s.variant, 5);
+                if      (vd==0){ s.colorA=0xFFFF55AA; s.colorB=0xFFFF88DD; }
+                else if (vd==1){ s.colorA=0xFFCC22FF; s.colorB=0xFFFF66BB; }
+                else if (vd==2){ s.colorA=0xFFFF3399; s.colorB=0xFFFF99CC; }
+                else if (vd==3){ s.colorA=0xFFFF77BB; s.colorB=0xFFCC00FF; }
+                else           { s.colorA=0xFFFF44CC; s.colorB=0xFF9900FF; }
+            } else if (s.motif == 22) { // 羽毛笔管 feather quill
+                s.widthScale *= 0.92f;
+                s.turn *= 0.42f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.18f, 0.55f);
+                s.life *= 1.05f;
+                s.fan = true; s.fanLines = 4 + random.nextInt(5);
+                int ve = Math.floorMod(s.variant, 4);
+                if      (ve==0){ s.colorA=0xFFFFF0C8; s.colorB=0xFFFFD070; }
+                else if (ve==1){ s.colorA=0xFFFFE499; s.colorB=0xFFFF9900; }
+                else if (ve==2){ s.colorA=0xFFFFFFDD; s.colorB=0xFFFFCC44; }
+                else           { s.colorA=0xFFFFDDAA; s.colorB=0xFFFFAA22; }
+            } else if (s.motif == 23) { // 龙骨脊 dragon spine
+                s.widthScale *= 0.78f;
+                s.turn *= 0.88f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.45f, 0.65f);
+                s.life *= 1.22f;
+                s.fan = true; s.fanLines = 3 + random.nextInt(4);
+                int vf = Math.floorMod(s.variant, 4);
+                if      (vf==0){ s.colorA=0xFFFF4422; s.colorB=0xFFFF8844; }
+                else if (vf==1){ s.colorA=0xFFFF6600; s.colorB=0xFFFFCC00; }
+                else if (vf==2){ s.colorA=0xFFCC2200; s.colorB=0xFFFF6622; }
+                else           { s.colorA=0xFFFF3300; s.colorB=0xFFFFAA44; }
+            } else if (s.motif == 24) { // 流星雨 meteor shower
+                s.widthScale *= 0.52f;
+                s.turn *= 0.22f;
+                s.visibleWindow *= 0.52f;
+                s.life *= 0.72f;
+                s.fan = true; s.fanLines = 5 + random.nextInt(6);
+                int vg = Math.floorMod(s.variant, 4);
+                if      (vg==0){ s.colorA=0xFFFFFFFF; s.colorB=0xFFAADDFF; }
+                else if (vg==1){ s.colorA=0xFFCCEEFF; s.colorB=0xFFFFFFCC; }
+                else if (vg==2){ s.colorA=0xFFFFEECC; s.colorB=0xFFFFFFFF; }
+                else           { s.colorA=0xFFEEFFFF; s.colorB=0xFFCCCCFF; }
+            } else if (s.motif == 25) { // 墨水晕染 ink bloom
+                s.widthScale *= 1.30f;
+                s.turn *= 0.72f;
+                s.visibleWindow = Math.max(s.visibleWindow * 1.40f, 0.65f);
+                s.life *= 1.15f;
+                s.fan = false; s.fanLines = 0;
+                int vh = Math.floorMod(s.variant, 5);
+                if      (vh==0){ s.colorA=0xFF221144; s.colorB=0xFF8844FF; }
+                else if (vh==1){ s.colorA=0xFF002244; s.colorB=0xFF0066FF; }
+                else if (vh==2){ s.colorA=0xFF330022; s.colorB=0xFFCC0066; }
+                else if (vh==3){ s.colorA=0xFF003322; s.colorB=0xFF00AA55; }
+                else           { s.colorA=0xFF440011; s.colorB=0xFFCC2255; }
             }
 
+            // ── 13/15/17 颜色：取消 V44 的 v41SubjectPhase 分支，统一使用丰富色彩 ──
             if (s.motif == 13 || s.motif == 15 || s.motif == 17) {
-                if (v41SubjectPhase) {
-                    // V43：主体阶段限制在参考视频常见的绿/紫/青色族，移除黄色/橙色宽带。
-                    int v = Math.floorMod(s.variant, 6);
-                    if (v == 0) { s.colorA = 0xFF20F05A; s.colorB = 0xFF7C3AED; }
-                    else if (v == 1) { s.colorA = 0xFF2EE67A; s.colorB = 0xFFB000FF; }
-                    else if (v == 2) { s.colorA = 0xFF16D977; s.colorB = 0xFF3EEBFF; }
-                    else if (v == 3) { s.colorA = 0xFF7C3AED; s.colorB = 0xFF23F06D; }
-                    else if (v == 4) { s.colorA = 0xFF39FF74; s.colorB = 0xFF3EEBFF; }
-                    else { s.colorA = 0xFF22C55E; s.colorB = 0xFFA855F7; }
-                    s.asymmetry = (strokeHash(s, 17, 1181) < 0.5f ? -1f : 1f) * (0.86f + strokeHash(s, 19, 1187) * 0.42f);
-                } else {
-                    // 释放/余韵保持 V38 的色相族。
-                    int v = Math.floorMod(s.variant, 5);
-                    if (v == 0) { s.colorA = 0xFF22C55E; s.colorB = 0xFFA78BFA; }
-                    else if (v == 1) { s.colorA = 0xFF7C3AED; s.colorB = 0xFFE5E7EB; }
-                    else if (v == 2) { s.colorA = 0xFF34D399; s.colorB = 0xFFECFEFF; }
-                    else if (v == 3) { s.colorA = 0xFFC4B5FD; s.colorB = 0xFFFFFFFF; }
-                    else { s.colorA = 0xFF4ADE80; s.colorB = 0xFF60A5FA; }
-                    s.asymmetry = (strokeHash(s, 17, 1181) < 0.5f ? -1f : 1f) * (0.72f + strokeHash(s, 19, 1187) * 0.52f);
-                }
+                int v = Math.floorMod(s.variant, 8);
+                if      (v==0){ s.colorA=0xFF20F05A; s.colorB=0xFF7C3AED; }
+                else if (v==1){ s.colorA=0xFF2EE67A; s.colorB=0xFFB000FF; }
+                else if (v==2){ s.colorA=0xFF16D977; s.colorB=0xFF3EEBFF; }
+                else if (v==3){ s.colorA=0xFF7C3AED; s.colorB=0xFF23F06D; }
+                else if (v==4){ s.colorA=0xFF39FF74; s.colorB=0xFF3EEBFF; }
+                else if (v==5){ s.colorA=0xFF22C55E; s.colorB=0xFFA855F7; }
+                else if (v==6){ s.colorA=0xFFFF6B35; s.colorB=0xFFFF2D55; }
+                else          { s.colorA=0xFFFFD60A; s.colorB=0xFFFF375F; }
+                s.asymmetry = (strokeHash(s,17,1181)<0.5f?-1f:1f)*(0.72f+strokeHash(s,19,1187)*0.52f);
             }
 
             s.bounds = fullScreenBounds();
@@ -1319,8 +2293,21 @@ public class IntimacyMystifyWallpaperService extends WallpaperService {
 
 
         private boolean initVideoSilkBladeSubject(StrokeEvent s, int side, int motif, Phase phase) {
-            // V44：根据视频逐帧重新抽象主体骨架：不是横竖交叉的宽彩带，也不是居中白脊，
-            // 而是一条弯曲折脊牵引的单侧卷曲薄膜。它从黑场局部浮出，宽肩逐渐展开，末端收成细钩/细茎。
+            // 首先：按场景纪元给 13/15/17 赋予丰富色彩，覆盖 createStroke 的 palette 颜色。
+            // 这是 13/15/17 颜色定制的唯一有效入口（line 2018 早于所有其它赋色块返回）。
+            int cv = Math.floorMod(s.variant + sceneEra * 17, 10);
+            if      (cv == 0) { s.colorA = 0xFF00FFC8; s.colorB = 0xFF7C3AED; } // 青/紫
+            else if (cv == 1) { s.colorA = 0xFFFF55AA; s.colorB = 0xFF9900FF; } // 玫红/深紫
+            else if (cv == 2) { s.colorA = 0xFF00B4FF; s.colorB = 0xFF00FFE0; } // 海蓝/青
+            else if (cv == 3) { s.colorA = 0xFFFFD60A; s.colorB = 0xFFFF6B35; } // 金/橙
+            else if (cv == 4) { s.colorA = 0xFF34D399; s.colorB = 0xFFFDE68A; } // 翠绿/琥珀
+            else if (cv == 5) { s.colorA = 0xFFFF44CC; s.colorB = 0xFF44EEFF; } // 洋红/冰蓝
+            else if (cv == 6) { s.colorA = 0xFFFF3300; s.colorB = 0xFFFF8800; } // 深红/橙
+            else if (cv == 7) { s.colorA = 0xFF00FFFF; s.colorB = 0xFF00FF88; } // 电青/荧光绿
+            else if (cv == 8) { s.colorA = 0xFFFF88BB; s.colorB = 0xFF99FFAA; } // 樱粉/嫩绿
+            else              { s.colorA = 0xFFE8F4FF; s.colorB = 0xFFB8D8FF; } // 银白/冰蓝
+            s.asymmetry = (strokeHash(s, 17, 1181) < 0.5f ? -1f : 1f)
+                        * (0.68f + strokeHash(s, 19, 1187) * 0.60f);
             float minDim = Math.max(1f, Math.min(width, height));
             float spanBase = phase.name.equals("分离") ? 0.30f
                     : (phase.name.equals("吸引") ? 0.34f
@@ -1799,6 +2786,186 @@ private boolean initStrokeByArtMotif(StrokeEvent s, int side, Phase phase) {
                 s.attractY = lerp(p0[1], p1[1], 0.50f);
                 return true;
             }
+
+            // ═══════════════════════════════════════════════════════════════
+            // 新艺术母型 18-25
+            // ═══════════════════════════════════════════════════════════════
+
+            if (motif == 18) { // 极光帷幕 aurora curtain
+                // 竖向高大飘带；多控制点沿同一竖轴排列，横向振幅很小使形体保持直立
+                float cx = randomOppositeLongPoint(width*0.5f, height*0.5f)[0];
+                float speed = s.speed * (0.10f + random.nextFloat() * 0.10f);
+                float amp = minDim * (0.04f + random.nextFloat() * 0.08f) * s.motifStrength;
+                float topY = height * (0.02f + random.nextFloat() * 0.08f);
+                float botY = height * (0.88f + random.nextFloat() * 0.10f);
+                for (int i = 0; i < s.count; i++) {
+                    float u = i / Math.max(1f, s.count - 1f);
+                    float wave = (float)Math.sin(Math.PI * u * 2.5f + random.nextFloat()) * amp;
+                    s.x[i] = cx + wave;
+                    s.y[i] = lerp(topY, botY, u);
+                    s.vx[i] = (float)Math.cos(random.nextFloat()*(float)Math.PI*2f) * speed * 0.15f;
+                    s.vy[i] = -speed * (0.30f + u * 0.25f); // 向上漂移
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = cx;
+                s.attractY = height * 0.38f;
+                return true;
+            }
+
+            if (motif == 19) { // 潮汐波浪 tidal wave
+                // 横向宽弧跨越大部分屏幕宽度，带有 2~3 个波峰
+                float[] p0 = new float[]{width * (0.02f + random.nextFloat() * 0.06f),
+                                          height * (0.25f + random.nextFloat() * 0.50f)};
+                float[] p1 = new float[]{width * (0.92f + random.nextFloat() * 0.06f), p0[1]};
+                float waveAmp = minDim * (0.06f + random.nextFloat() * 0.10f) * s.motifStrength;
+                int waves = 2 + random.nextInt(2);
+                float speed = s.speed * (0.18f + random.nextFloat() * 0.14f);
+                float driftY = speed * (random.nextBoolean() ? 1f : -1f);
+                for (int i = 0; i < s.count; i++) {
+                    float u = i / Math.max(1f, s.count - 1f);
+                    float wy = (float)Math.sin(u * (float)Math.PI * waves * 2f) * waveAmp;
+                    s.x[i] = lerp(p0[0], p1[0], u);
+                    s.y[i] = p0[1] + wy;
+                    s.vx[i] = speed * 0.08f;
+                    s.vy[i] = driftY;
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = lerp(p0[0], p1[0], 0.50f);
+                s.attractY = p0[1];
+                return true;
+            }
+
+            if (motif == 20) { // 太阳辐射 solar spoke
+                // 从屏幕中偏位置向外辐射若干短线（颜色和 fan 将它们展开成扇形/射线）
+                float[] c = pickLeastUsedPoint(false);
+                float speed = s.speed * (0.42f + random.nextFloat() * 0.30f);
+                float spoke = random.nextFloat() * (float)Math.PI * 2f;
+                float len0 = minDim * (0.05f + random.nextFloat() * 0.08f);
+                float len1 = minDim * (0.18f + random.nextFloat() * 0.22f) * s.motifStrength;
+                for (int i = 0; i < s.count; i++) {
+                    float u = i / Math.max(1f, s.count - 1f);
+                    float r = lerp(len0, len1, u);
+                    s.x[i] = c[0] + (float)Math.cos(spoke) * r;
+                    s.y[i] = c[1] + (float)Math.sin(spoke) * r;
+                    s.vx[i] = (float)Math.cos(spoke) * speed;
+                    s.vy[i] = (float)Math.sin(spoke) * speed;
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = c[0];
+                s.attractY = c[1];
+                return true;
+            }
+
+            if (motif == 21) { // 玫瑰曲线 rose mandala r = cos(k*θ)
+                float[] c = pickLeastUsedPoint(false);
+                int k = 2 + random.nextInt(4); // k=2,3,4,5 → 4,3,8,5 瓣
+                float scale = minDim * (0.14f + random.nextFloat() * 0.16f) * s.motifStrength;
+                float rot = random.nextFloat() * (float)Math.PI;
+                float speed = s.speed * (0.08f + random.nextFloat() * 0.08f);
+                for (int i = 0; i < s.count; i++) {
+                    float u = i / Math.max(1f, s.count - 1f);
+                    float theta = u * (float)Math.PI * 2f;
+                    float r = scale * (float)Math.abs(Math.cos(k * theta));
+                    float px = c[0] + r * (float)Math.cos(theta + rot);
+                    float py = c[1] + r * (float)Math.sin(theta + rot);
+                    s.x[i] = px;
+                    s.y[i] = py;
+                    float vang = theta + rot + (float)Math.PI * 0.5f;
+                    s.vx[i] = (float)Math.cos(vang) * speed;
+                    s.vy[i] = (float)Math.sin(vang) * speed;
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = c[0];
+                s.attractY = c[1];
+                return true;
+            }
+
+            if (motif == 22) { // 羽毛笔管 feather quill
+                // 中轴线是带弯曲的长线，fan 在两侧产生细小羽根
+                float[] p0 = pickLeastUsedPoint(false);
+                float[] p1 = randomOppositeLongPoint(p0[0], p0[1]);
+                float dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+                float len = (float)Math.sqrt(dx*dx+dy*dy); if(len<1f)len=1f;
+                float nx = -dy/len, ny = dx/len;
+                float amp = minDim * (0.04f + random.nextFloat() * 0.07f) * s.motifStrength;
+                float speed = s.speed * (0.22f + random.nextFloat() * 0.18f);
+                for (int i = 0; i < s.count; i++) {
+                    float u = i / Math.max(1f, s.count - 1f);
+                    float curve = (float)Math.sin(Math.PI * u) * amp;
+                    s.x[i] = lerp(p0[0], p1[0], u) + nx * curve;
+                    s.y[i] = lerp(p0[1], p1[1], u) + ny * curve;
+                    s.vx[i] = dx/len*speed + nx*speed*(0.08f - u*0.05f);
+                    s.vy[i] = dy/len*speed + ny*speed*(0.04f + u*0.04f);
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = lerp(p0[0], p1[0], 0.55f);
+                s.attractY = lerp(p0[1], p1[1], 0.55f);
+                return true;
+            }
+
+            if (motif == 23) { // 龙骨脊 dragon spine
+                // 强 S 曲线 + fan 模拟短刺；曲率比 vine 大 2-3 倍
+                float[] p0 = pickLeastUsedPoint(false);
+                float[] p1 = randomOppositeLongPoint(p0[0], p0[1]);
+                float dx = p1[0]-p0[0], dy = p1[1]-p0[1];
+                float len = (float)Math.sqrt(dx*dx+dy*dy); if(len<1f)len=1f;
+                float nx=-dy/len, ny=dx/len;
+                float amp = minDim*(0.10f+random.nextFloat()*0.16f)*s.motifStrength;
+                float speed = s.speed*(0.30f+random.nextFloat()*0.20f);
+                for (int i=0; i<s.count; i++) {
+                    float u = i/Math.max(1f,s.count-1f);
+                    float spine = (float)Math.sin(Math.PI*u*1.5f)*amp + (float)Math.sin(Math.PI*u*3f)*amp*0.35f;
+                    s.x[i] = lerp(p0[0],p1[0],u) + nx*spine;
+                    s.y[i] = lerp(p0[1],p1[1],u) + ny*spine;
+                    s.vx[i] = dx/len*speed;
+                    s.vy[i] = dy/len*speed;
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = lerp(p0[0],p1[0],0.50f);
+                s.attractY = lerp(p0[1],p1[1],0.50f);
+                return true;
+            }
+
+            if (motif == 24) { // 流星雨 meteor shower
+                // 若干条平行弧线从屏幕高处斜向冲出，speed 高，life 短
+                float angle = -(float)Math.PI*0.25f + (random.nextFloat()-0.5f)*(float)Math.PI*0.15f;
+                float[] c = new float[]{width*(0.15f+random.nextFloat()*0.70f), height*0.05f};
+                float streakLen = minDim*(0.18f+random.nextFloat()*0.22f)*s.motifStrength;
+                float speed = s.speed*(0.80f+random.nextFloat()*0.40f);
+                float cos = (float)Math.cos(angle), sin = (float)Math.sin(angle);
+                for (int i=0; i<s.count; i++) {
+                    float u = i/Math.max(1f,s.count-1f);
+                    s.x[i] = c[0] + cos*u*streakLen;
+                    s.y[i] = c[1] + sin*u*streakLen;
+                    s.vx[i] = cos*speed;
+                    s.vy[i] = sin*speed;
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = c[0]+cos*streakLen*0.5f;
+                s.attractY = c[1]+sin*streakLen*0.5f;
+                return true;
+            }
+
+            if (motif == 25) { // 墨水晕染 ink bloom
+                // 从中心向四周慢速扩散；控制点排成类似涟漪的多弧形
+                float[] c = pickLeastUsedPoint(false);
+                float maxR = minDim*(0.12f+random.nextFloat()*0.18f)*s.motifStrength;
+                float speed = s.speed*(0.06f+random.nextFloat()*0.06f);
+                for (int i=0; i<s.count; i++) {
+                    float u = i/Math.max(1f,s.count-1f);
+                    float theta = u*(float)Math.PI*2f + random.nextFloat()*0.4f;
+                    float r = maxR*(0.3f+0.7f*u);
+                    s.x[i] = c[0] + (float)Math.cos(theta)*r;
+                    s.y[i] = c[1] + (float)Math.sin(theta)*r;
+                    s.vx[i] = (float)Math.cos(theta)*speed;
+                    s.vy[i] = (float)Math.sin(theta)*speed;
+                    markSpawnHeat(s.x[i], s.y[i]);
+                }
+                s.attractX = c[0];
+                s.attractY = c[1];
+                return true;
+            }
+
             return false;
         }
 
@@ -9859,6 +11026,17 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
                 }
                 if (calligraphyBitmap != null && !calligraphyBitmap.isRecycled()) calligraphyBitmap.recycle();
                 calligraphyBitmap = null;
+                if (puzzleTexture != 0) {
+                    GLES20.glDeleteTextures(1, new int[]{puzzleTexture}, 0);
+                    puzzleTexture = 0;
+                }
+                if (puzzleCanvasBitmap != null && !puzzleCanvasBitmap.isRecycled()) puzzleCanvasBitmap.recycle();
+                puzzleCanvasBitmap = null;
+                if (puzzleSourceBitmap != null && !puzzleSourceBitmap.isRecycled()) puzzleSourceBitmap.recycle();
+                puzzleSourceBitmap = null;
+                if (maTexture != 0) { GLES20.glDeleteTextures(1, new int[]{maTexture}, 0); maTexture = 0; }
+                if (maBitmap != null && !maBitmap.isRecycled()) maBitmap.recycle();
+                maBitmap = null;
                 if (textureProgram != 0) GLES20.glDeleteProgram(textureProgram);
                 if (colorProgram != 0) GLES20.glDeleteProgram(colorProgram);
                 if (egl != null && eglDisplay != null) {
@@ -10106,6 +11284,16 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
             cfg.releaseMaxSec = clamp(prefs.getFloat("releaseMaxSec", 24f), cfg.releaseMinSec, 1200f);
             cfg.afterglowMinSec = clamp(prefs.getFloat("afterglowMinSec", 20f), 3f, 1800f);
             cfg.afterglowMaxSec = clamp(prefs.getFloat("afterglowMaxSec", 90f), cfg.afterglowMinSec, 3600f);
+            cfg.puzzleImagePaths = prefs.getString("puzzleImagePaths", "[]");
+            if (cfg.puzzleImagePaths == null) cfg.puzzleImagePaths = "[]";
+            cfg.puzzleRotationMode = prefs.getString("puzzleRotationMode", "sequential");
+            if (cfg.puzzleRotationMode == null) cfg.puzzleRotationMode = "sequential";
+            cfg.puzzleCols = Math.round(clamp(prefs.getInt("puzzleCols", 5), 2, 14));
+            cfg.puzzleRows = Math.round(clamp(prefs.getInt("puzzleRows", 7), 2, 16));
+            cfg.puzzleAssembleSeconds = clamp(prefs.getFloat("puzzleAssembleSeconds", 4f), 1f, 1200f);
+            cfg.puzzleHoldSeconds = clamp(prefs.getFloat("puzzleHoldSeconds", 2f), 0.3f, 1200f);
+            cfg.puzzleScatterRadius = clamp(prefs.getFloat("puzzleScatterRadius", 0.85f), 0.2f, 2f);
+            cfg.puzzleBatchSize = Math.round(clamp(prefs.getInt("puzzleBatchSize", 0), 0, 400));
             normalizeRatios(cfg);
             visualConfigSignature = buildVisualConfigSignature();
             if (force || !visualConfigSignature.equals(oldVisualSignature)) {
@@ -10156,12 +11344,24 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
         }
 
         private int[] palette(int style) {
-            switch (Math.floorMod(style, 5)) {
-                case 1: return new int[]{0xFF34D399, 0xFF67E8F9, 0xFF93C5FD, 0xFFFDE68A, 0xFF020617};
-                case 2: return new int[]{0xFFA78BFA, 0xFFD8B4FE, 0xFFF472B6, 0xFFFFFFFF, 0xFF050316};
-                case 3: return new int[]{0xFFE5E7EB, 0xFFFFFFFF, 0xFF93C5FD, 0xFFD1D5DB, 0xFF000000};
-                case 4: return new int[]{0xFFFDE68A, 0xFFFFF7ED, 0xFFFB7185, 0xFFF97316, 0xFF06030A};
-                default: return new int[]{0xFF7DD3FC, 0xFFC4B5FD, 0xFFF472B6, 0xFFFDE68A, 0xFF030712};
+            // 8 个艺术主题调色板（4 前景色 + 1 背景参考色）
+            switch (Math.floorMod(style, 8)) {
+                case 0: // 深海：深蓝/电青/水晶白
+                    return new int[]{0xFF00B4FF, 0xFF00FFE0, 0xFF4DDFFF, 0xFF00FFCC, 0xFF030A1A};
+                case 1: // 翡翠琥珀：翠绿/琥珀金/冰蓝
+                    return new int[]{0xFF34D399, 0xFFFDE68A, 0xFF67E8F9, 0xFF6EE7B7, 0xFF020C0A};
+                case 2: // 极光紫：紫罗兰/洋红/青色
+                    return new int[]{0xFFAA44FF, 0xFFFF44CC, 0xFF44EEFF, 0xFFDD88FF, 0xFF08021A};
+                case 3: // 银河月光：银白/冰蓝/淡紫
+                    return new int[]{0xFFE8F4FF, 0xFFFFFFFF, 0xFFB8D8FF, 0xFFCCBBFF, 0xFF000814};
+                case 4: // 落日熔岩：金橙/深红/珊瑚
+                    return new int[]{0xFFFFD60A, 0xFFFF6B35, 0xFFFF375F, 0xFFFF9500, 0xFF100300};
+                case 5: // 樱花春雨：樱粉/玫红/嫩绿
+                    return new int[]{0xFFFF88BB, 0xFFFFBBDD, 0xFFFF44AA, 0xFF99FFAA, 0xFF100A10};
+                case 6: // 生物发光：电青/霓虹绿/深海蓝
+                    return new int[]{0xFF00FFFF, 0xFF00FF88, 0xFF44FFEE, 0xFF00DDCC, 0xFF001015};
+                default: // 火山火焰：深红/橙/白热
+                    return new int[]{0xFFFF3300, 0xFFFF8800, 0xFFFFCC44, 0xFFFF5500, 0xFF0D0200};
             }
         }
 
@@ -10284,10 +11484,30 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
         float releaseMaxSec = 24f;
         float afterglowMinSec = 20f;
         float afterglowMaxSec = 90f;
+        // 拼图壁纸（第三种动态壁纸模式）配置。
+        String puzzleImagePaths = "[]";        // JSON 字符串数组，支持多张图片
+        String puzzleRotationMode = "sequential"; // "sequential" | "random"
+        int puzzleCols = 5;
+        int puzzleRows = 7;
+        float puzzleAssembleSeconds = 4f;
+        float puzzleHoldSeconds = 2f;
+        float puzzleScatterRadius = 0.85f;
+        int puzzleBatchSize = 0;               // 0 = 不限制（蜂拥而至）；1 = 单个；其它 = 分批
     }
 
     static final class CalligraphyStrokeGlyph {
         final ArrayList<ArrayList<float[]>> medians = new ArrayList<>();
+    }
+
+    static final class PuzzlePiece {
+        int col, row;
+        float srcLeft, srcTop, srcRight, srcBottom; // pixel coords in source bitmap
+        float pieceW, pieceH;                       // display size in canvas px
+        float targetX, targetY;                      // final assembled centre
+        float startX, startY;                         // scatter start centre
+        float cp1X, cp1Y, cp2X, cp2Y;                  // bezier control points
+        float startRot;                                // initial rotation (radians)
+        float delay;                                   // staggered start, 0..0.5 of assemble duration
     }
 
     static final class CalligraphyWork {
@@ -10305,7 +11525,10 @@ private void drawArtMotifAccent(StrokeEvent s, ArrayList<float[]> pts, Phase pha
 
         float duration() {
             int count = (int)text.codePoints().filter(cp -> !Character.isWhitespace(cp)).limit(80).count();
-            return Math.max(3.5f, count * (1.35f - speed * 0.72f)) + 4.2f;
+            // 与 drawCalligraphyBitmap 保持完全一致的公式，确保轮播队列时间切换准确。
+            float tSpeed = 1.0f - speed;
+            float secsPerChar = 0.20f + tSpeed * tSpeed * 12.0f;
+            return Math.max(2.0f, count * secsPerChar) + 3.5f;
         }
     }
 
