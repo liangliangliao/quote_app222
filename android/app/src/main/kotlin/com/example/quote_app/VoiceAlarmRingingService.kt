@@ -837,12 +837,16 @@ class VoiceAlarmRingingService : Service() {
       val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
       // When routed through a headset via USAGE_MEDIA, STREAM_ALARM's volume is irrelevant -
       // raise STREAM_MUSIC instead so a forgotten-low media volume doesn't make the alarm
-      // effectively silent in the user's ears.
+      // effectively silent in the user's ears. Most users already keep STREAM_ALARM near max,
+      // but STREAM_MUSIC is usually left at an everyday-listening level, so push it much closer
+      // to max here (rather than the 70% floor used for the speaker/ALARM case) to restore the
+      // loudness users expect from the alarm once it is only audible through the headset.
       val stream = playbackStream()
       val current = audio.getStreamVolume(stream)
       originalVolumeStream = stream
       originalAlarmVolume = current
-      val target = maxOf(1, (audio.getStreamMaxVolume(stream) * 0.7f).toInt())
+      val targetRatio = if (headsetOutputConnected()) 0.95f else 0.7f
+      val target = maxOf(1, (audio.getStreamMaxVolume(stream) * targetRatio).toInt())
       if (current < target) audio.setStreamVolume(stream, target, 0)
     } catch (_: Throwable) {}
   }
