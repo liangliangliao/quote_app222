@@ -19,6 +19,7 @@ import '../new_tablets/new_tablets_prompt_config.dart';
 import '../self_worth_ai/self_worth_ai_prompt_config.dart';
 import '../boundary_practice/boundary_practice_prompt_config.dart';
 import '../boundary_action_coach/boundary_action_coach_prompt_config.dart';
+import '../self_determination_growth/self_determination_growth_prompt_config.dart';
 
 class AiPromptSettingsPage extends StatefulWidget {
   final String? initialModuleId;
@@ -54,6 +55,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final NewTabletsPromptConfig _ntPrompts = NewTabletsPromptConfig();
   final BoundaryPracticePromptConfig _bpPrompts = BoundaryPracticePromptConfig();
   final BoundaryActionCoachPromptConfig _bacPrompts = BoundaryActionCoachPromptConfig();
+  final SelfDeterminationGrowthPromptConfig _sdgPrompts = SelfDeterminationGrowthPromptConfig();
   final TextEditingController _templateCtrl = TextEditingController();
 
   late String _moduleId;
@@ -91,6 +93,12 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   List<_PromptModule> get _modules => <_PromptModule>[
+        _PromptModule(
+          id: SelfDeterminationGrowthPromptConfig.moduleId,
+          name: SelfDeterminationGrowthPromptConfig.moduleName,
+          description: '统一配置自我决定成长系统的全局价值层、六大场景层、十二大功能层、报告、输出格式、安全伦理与异常修复 Prompt。覆盖值保存在 ai_prompt.self_determination_growth.*，与其他模块完全隔离。',
+          items: SelfDeterminationGrowthPromptConfig.allIds.map((id) => _PromptItem(id: id, name: SelfDeterminationGrowthPromptConfig.labels[id] ?? id)).toList(growable: false),
+        ),
         _PromptModule(
           id: BoundaryActionCoachPromptConfig.moduleId,
           name: BoundaryActionCoachPromptConfig.moduleName,
@@ -506,7 +514,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       _effectiveTemplate = value;
       _sourceLabel = inspected['sourceLabel'] ?? '当前模板';
       _sourceNote = inspected['note'] ?? '';
-      if (_promptId.startsWith('cc_')) {
+      if (_promptId.startsWith('sdg_')) {
+        _ccBackups = await _sdgPrompts.listBackups(_promptId);
+      } else if (_promptId.startsWith('cc_')) {
         _ccBackups = await _ccPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('se_')) {
         _ccBackups = await _sePrompts.listBackups(_promptId);
@@ -552,6 +562,23 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<void> _savePrompt() async {
+    if (_promptId.startsWith('sdg_')) {
+      final missing = _sdgPrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
+      if (missing.isNotEmpty) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('关键占位符缺失'),
+            content: Text("当前模板缺少：${missing.join('、')}。保存后 AI 仍可调用，但上下文可能不完整。是否仍然保存？"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('返回修改')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('仍然保存')),
+            ],
+          ),
+        );
+        if (ok != true) return;
+      }
+    }
     if (_promptId.startsWith('se_')) {
       final missing = _sePrompts.missingRequiredPlaceholders(_promptId, _templateCtrl.text);
       if (missing.isNotEmpty) {
@@ -809,7 +836,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   Future<void> _restoreDefault() async {
     final def = _defaultPrompt(_promptId);
     setState(() => _templateCtrl.text = def);
-    if (_promptId.startsWith('se_')) {
+    if (_promptId.startsWith('sdg_')) {
+      await _sdgPrompts.clearPromptOverride(_promptId);
+    } else if (_promptId.startsWith('se_')) {
       await _sePrompts.clearPromptOverride(_promptId);
     } else if (_promptId.startsWith('rot_')) {
       await _rotPrompts.clearPromptOverride(_promptId);
@@ -841,14 +870,16 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       await _savePromptById(_promptId, def);
     }
     await _loadPrompt();
-    _toast((_promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('sw_') || _promptId.startsWith('nt_') || _promptId.startsWith('bac_') || _promptId.startsWith('bp_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
+    _toast((_promptId.startsWith('sdg_') || _promptId.startsWith('se_') || _promptId.startsWith('rot_') || _promptId.startsWith('mi_') || _promptId.startsWith('st_') || _promptId.startsWith('act_') || _promptId.startsWith('am_') || _promptId.startsWith('woop_') || _promptId.startsWith('rpo_') || _promptId.startsWith('df_') || _promptId.startsWith('ac_') || _promptId.startsWith('sw_') || _promptId.startsWith('nt_') || _promptId.startsWith('bac_') || _promptId.startsWith('bp_')) ? '已删除本地覆盖，恢复源码默认模板' : '已恢复源码默认模板');
   }
 
   Future<void> _restoreCcBackup(CcPromptBackupRecord backup) async {
-    if (!_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('sw_') && !_promptId.startsWith('nt_') && !_promptId.startsWith('bac_') && !_promptId.startsWith('bp_')) return;
+    if (!_promptId.startsWith('sdg_') && !_promptId.startsWith('cc_') && !_promptId.startsWith('se_') && !_promptId.startsWith('rot_') && !_promptId.startsWith('mi_') && !_promptId.startsWith('st_') && !_promptId.startsWith('act_') && !_promptId.startsWith('am_') && !_promptId.startsWith('woop_') && !_promptId.startsWith('rpo_') && !_promptId.startsWith('df_') && !_promptId.startsWith('ac_') && !_promptId.startsWith('sw_') && !_promptId.startsWith('nt_') && !_promptId.startsWith('bac_') && !_promptId.startsWith('bp_')) return;
     setState(() => _backupLoading = true);
     try {
-      if (_promptId.startsWith('cc_')) {
+      if (_promptId.startsWith('sdg_')) {
+        await _sdgPrompts.restoreBackup(_promptId, backup.key);
+      } else if (_promptId.startsWith('cc_')) {
         await _ccPrompts.restoreBackup(_promptId, backup.key);
       } else if (_promptId.startsWith('se_')) {
         await _sePrompts.restoreBackup(_promptId, backup.key);
@@ -1137,6 +1168,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   String _defaultPrompt(String id) {
+    if (id.startsWith('sdg_')) return _sdgPrompts.defaultFor(id);
     if (id.startsWith('bp_')) {
       return _bpPrompts.defaultFor(id);
     }
@@ -1230,6 +1262,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<Map<String, String>> _inspectPrompt(String id) {
+    if (id.startsWith('sdg_')) {
+      return _sdgPrompts.inspectPrompt(id);
+    }
     if (id.startsWith('bac_')) {
       return _bacPrompts.inspectPrompt(id);
     }
@@ -1326,6 +1361,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   }
 
   Future<void> _savePromptById(String id, String value) {
+    if (id.startsWith('sdg_')) {
+      return _sdgPrompts.savePrompt(id, value);
+    }
     if (id.startsWith('bac_')) {
       return _bacPrompts.savePrompt(id, value);
     }
