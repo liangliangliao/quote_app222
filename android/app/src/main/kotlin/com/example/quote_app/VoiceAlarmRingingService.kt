@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -248,6 +250,7 @@ class VoiceAlarmRingingService : Service() {
   private var voiceReplayBlockedUntil = 0L
   private var alarmVoicePlaybackActive = false
   private var audioFocusRequest: Any? = null
+  private var audioDeviceCallback: AudioDeviceCallback? = null
 
   private fun hasActiveSignalsFor(payload: String): Boolean {
     if (currentPayload != payload) return false
@@ -311,7 +314,50 @@ class VoiceAlarmRingingService : Service() {
     try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Throwable) {}
     wakeLock = null
     restoreAlarmVolume()
+    unregisterHeadsetRouteCallback()
     super.onDestroy()
+  }
+
+  /**
+   * When a wired/Bluetooth headset is present, route alarm voice + background music only to it
+   * instead of Android's default "also play on the speaker" alarm behavior, and keep re-applying
+   * that choice whenever the set of connected audio devices changes mid-alarm (headset plugged in
+   * or removed while ringing).
+   */
+  private fun registerHeadsetRouteCallback() {
+    if (audioDeviceCallback != null) return
+    val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+    val callback = object : AudioDeviceCallback() {
+      override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = applyPreferredOutputDeviceToActivePlayers()
+      override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = applyPreferredOutputDeviceToActivePlayers()
+    }
+    try {
+      audio.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+      audioDeviceCallback = callback
+    } catch (_: Throwable) {}
+  }
+
+  private fun unregisterHeadsetRouteCallback() {
+    val callback = audioDeviceCallback ?: return
+    audioDeviceCallback = null
+    try {
+      (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.unregisterAudioDeviceCallback(callback)
+    } catch (_: Throwable) {}
+  }
+
+  private fun applyPreferredOutputDevice(player: MediaPlayer?) {
+    if (player == null) return
+    try {
+      val device = VoiceAlarmAudioRoute.preferredOutputDevice(this)
+      val applied = player.setPreferredDevice(device)
+      logVoice("audioRoute.apply", "applied preferred output device to player", mapOf("deviceType" to (device?.type ?: -1), "applied" to applied))
+    } catch (_: Throwable) {}
+  }
+
+  private fun applyPreferredOutputDeviceToActivePlayers() {
+    logVoice("audioRoute.deviceListChanged", "connected audio device set changed; re-evaluating headset routing")
+    applyPreferredOutputDevice(voicePlayer)
+    applyPreferredOutputDevice(musicPlayer)
   }
 
   private fun startForegroundAlarm(payload: String) {
@@ -450,6 +496,7 @@ class VoiceAlarmRingingService : Service() {
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
     alarmSignalPlaybackActive = true
     activeSignalPlayback = true
+    registerHeadsetRouteCallback()
     sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", data.optBoolean("systemMusic", true) || data.optString("musicPath", "").isNotBlank() || data.optJSONArray("musicPaths")?.length()?.let { it > 0 } == true))
     logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
     requestAlarmAudioFocus()
@@ -658,6 +705,7 @@ class VoiceAlarmRingingService : Service() {
         setDataSource(this@VoiceAlarmRingingService, uri)
         isLooping = looping
         setVolume(volume, volume)
+        applyPreferredOutputDevice(this)
         setOnPreparedListener { player ->
           try {
             logVoice("media.prepared", "MediaPlayer prepared", mapOf("notifyVoice" to notifyVoice, "looping" to looping, "volume" to volume))

@@ -11,7 +11,10 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
@@ -100,6 +103,8 @@ class VoiceAlarmActivity : Activity() {
   @Volatile private var speaking = false
   @Volatile private var alarmVoicePlaying = false
   @Volatile private var alarmSignalPlaying = false
+  private var headsetAudioDeviceCallback: AudioDeviceCallback? = null
+  @Volatile private var bluetoothScoRequested = false
   @Volatile private var aiBusy = false
   @Volatile private var aiRequestSeq = 0
   @Volatile private var aiBusyStartedAt = 0L
@@ -302,6 +307,8 @@ class VoiceAlarmActivity : Activity() {
     registerAlarmPlaybackReceiver()
     syncExistingAlarmPlaybackState()
     handleAlarmFireIntent(intent)
+    registerHeadsetRouteCallback()
+    ensureHeadsetMicRouting()
     startVoiceAssistant()
   }
 
@@ -635,6 +642,59 @@ class VoiceAlarmActivity : Activity() {
   // enable platform AEC/NS/AGC when we are explicitly in playback echo-guard
   // mode; otherwise those effects can over-suppress quiet user speech and make
   // batch STT look completely broken.
+  /**
+   * When a mic-capable headset (wired headset or Bluetooth) is connected, route capture to it
+   * instead of the phone's built-in mic so the user can hold a normal voice conversation through
+   * the headset. Bluetooth mic audio only flows once the SCO link is up, so it must be requested
+   * ahead of time; wired headset mics are picked up automatically by AudioRecord.setPreferredDevice.
+   */
+  private fun ensureHeadsetMicRouting() {
+    val device = VoiceAlarmAudioRoute.preferredInputDevice(this) ?: return
+    if (!VoiceAlarmAudioRoute.isBluetoothScoType(device.type) || bluetoothScoRequested) return
+    try {
+      val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+      audio.startBluetoothSco()
+      @Suppress("DEPRECATION")
+      audio.isBluetoothScoOn = true
+      bluetoothScoRequested = true
+      logVoice("audioRoute.sco.start", "requested Bluetooth SCO for headset mic conversation")
+    } catch (_: Throwable) {}
+  }
+
+  private fun stopHeadsetMicRouting() {
+    if (!bluetoothScoRequested) return
+    bluetoothScoRequested = false
+    try {
+      val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+      @Suppress("DEPRECATION")
+      audio.isBluetoothScoOn = false
+      audio.stopBluetoothSco()
+    } catch (_: Throwable) {}
+  }
+
+  private fun registerHeadsetRouteCallback() {
+    if (headsetAudioDeviceCallback != null) return
+    val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+    val callback = object : AudioDeviceCallback() {
+      override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = ensureHeadsetMicRouting()
+      override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+        if (VoiceAlarmAudioRoute.preferredInputDevice(this@VoiceAlarmActivity) == null) stopHeadsetMicRouting()
+      }
+    }
+    try {
+      audio.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+      headsetAudioDeviceCallback = callback
+    } catch (_: Throwable) {}
+  }
+
+  private fun unregisterHeadsetRouteCallback() {
+    val callback = headsetAudioDeviceCallback ?: return
+    headsetAudioDeviceCallback = null
+    try {
+      (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.unregisterAudioDeviceCallback(callback)
+    } catch (_: Throwable) {}
+  }
+
   private fun obtainContinuousAudioRecord(playbackGuard: Boolean): AudioRecord? {
     val existing = sharedCaptureRecord
     if (existing != null && existing.state == AudioRecord.STATE_INITIALIZED && sharedCaptureIsPlaybackGuard == playbackGuard) {
@@ -660,6 +720,9 @@ class VoiceAlarmActivity : Activity() {
         try { record.release() } catch (_: Throwable) {}
         continue
       }
+      try {
+        VoiceAlarmAudioRoute.preferredInputDevice(this)?.let { record.setPreferredDevice(it) }
+      } catch (_: Throwable) {}
       val effects = if (playbackGuard) enableVoiceSeparationEffects(record.audioSessionId) else VoiceAudioEffects(null, null, null)
       try {
         record.startRecording()
@@ -3896,12 +3959,17 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isStrictPlaybackActiveForCapture(): Boolean {
     val now = System.currentTimeMillis()
-    return speaking || alarmVoicePlaying || (!isPostPlaybackHandoffActive() && (now < suppressRecognitionUntil || now < strongPlaybackGateUntil))
+    // alarmSignalPlaying covers the looping background music/ringtone/vibration bed,
+    // which keeps sounding between voice-prompt replays (up to replayIntervalSeconds
+    // apart). Without it, the mic falls back to quiet-room thresholds with AEC/NS
+    // disabled during those gaps and background music gets captured as if it were
+    // near-silence, making it far more likely to be misheard as real user speech.
+    return speaking || alarmVoicePlaying || alarmSignalPlaying || (!isPostPlaybackHandoffActive() && (now < suppressRecognitionUntil || now < strongPlaybackGateUntil))
   }
 
   private fun isPlaybackActiveForSpeechGate(): Boolean {
     val now = System.currentTimeMillis()
-    return speaking || alarmVoicePlaying || (!isPostPlaybackHandoffActive() && (now < suppressRecognitionUntil || now < strongPlaybackGateUntil))
+    return speaking || alarmVoicePlaying || alarmSignalPlaying || (!isPostPlaybackHandoffActive() && (now < suppressRecognitionUntil || now < strongPlaybackGateUntil))
   }
 
   private fun markExternalPlaybackStart() {
@@ -5010,6 +5078,8 @@ class VoiceAlarmActivity : Activity() {
     restoreFullScreenRunnable?.let { speechHandler.removeCallbacks(it) }
     restoreFullScreenRunnable = null
     if (alarmPlaybackReceiverRegistered) { try { unregisterReceiver(alarmPlaybackReceiver) } catch (_: Throwable) {} ; alarmPlaybackReceiverRegistered = false }
+    unregisterHeadsetRouteCallback()
+    stopHeadsetMicRouting()
     try { recognizer?.destroy() } catch (_: Throwable) {}
     pendingSpeakText = ""
     pendingSpeakUtteranceId = ""
