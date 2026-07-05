@@ -66,6 +66,7 @@ import 'defense_compass/defense_compass_home_page.dart';
 import 'adaptation_compass/adaptation_compass_home_page.dart';
 import 'new_tablets/new_tablets_home_page.dart';
 import 'self_worth_ai/self_worth_ai_home_page.dart';
+import 'self_evidence/self_evidence_home_page.dart';
 import 'boundary_practice/boundary_practice_home_page.dart';
 import 'boundary_action_coach/boundary_action_coach_home_page.dart';
 import 'self_determination_growth/self_determination_growth_home_page.dart';
@@ -705,6 +706,14 @@ class _RootShellState extends State<RootShell> {
       pageBuilder: (_) => const MovieRoleLabHomePage(),
     ),
     _DrawerEntrySpec(
+      icon: Icons.fact_check_outlined,
+      title: '自我证据 Self Evidence',
+      subtitle: '第38模块 · 自我标签诊断 → 行为证据账本 → 观察者镜像 → 情境归因 → 行动实验 → 周期报告',
+      badgeText: '第38模块 · 基于 Daryl J. Bem 自我知觉理论：用真实行动、选择、情境分析和行为证据重建自我认知',
+      sequenceNumber: 38,
+      pageBuilder: (_) => const SelfEvidenceHomePage(),
+    ),
+    _DrawerEntrySpec(
       icon: Icons.self_improvement_outlined,
       title: '真实自尊 SelfWorth AI',
       subtitle: '第37模块 · 自尊地图 → 三层自尊 → 真实关系 → 六项实践 → 认可戒断 → 复原力 → 责任目标 → AI场景教练',
@@ -774,8 +783,8 @@ class _RootShellState extends State<RootShell> {
   }
 
   List<_DrawerEntrySpec> _drawerEntriesInRandomOrder(List<_DrawerEntrySpec> source, int seed) {
-    final selfWorthEntry = source.where((e) => e.title == '真实自尊 SelfWorth AI').toList(growable: false);
-    final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI').toList(growable: false);
+    final pinnedEntries = source.where((e) => e.title == '真实自尊 SelfWorth AI' || e.title == '自我证据 Self Evidence').toList(growable: false);
+    final entries = source.where((e) => e.title != '真实自尊 SelfWorth AI' && e.title != '自我证据 Self Evidence').toList(growable: false);
     if (entries.length > 1) {
       final r = math.Random((seed ^ 0x6C8E9CF5).abs());
       for (var i = entries.length - 1; i > 0; i--) {
@@ -785,7 +794,7 @@ class _RootShellState extends State<RootShell> {
         entries[j] = tmp;
       }
     }
-    return <_DrawerEntrySpec>[...entries, ...selfWorthEntry];
+    return <_DrawerEntrySpec>[...entries, ...pinnedEntries];
   }
 
   Widget _buildDrawerEntryCard(_DrawerEntrySpec entry, int index, int totalCount) {
