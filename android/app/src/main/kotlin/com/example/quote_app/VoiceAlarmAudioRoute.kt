@@ -8,13 +8,18 @@ import android.os.Build
 /**
  * Shared headset-detection helpers for the voice alarm feature.
  *
- * Android's alarm/notification ("sonification") audio strategy intentionally plays through
- * the speaker in addition to any connected headset, so an alarm cannot be silently missed.
- * That is undesirable here: when the user is wearing a headset we want alarm voice + background
- * music to stay private to the headset, and when the headset also has a mic we want the AI
- * conversation to capture from it instead of the phone's built-in mic/speaker loop. Both call
- * sites use these helpers to find the actual connected device and hand it to
- * MediaPlayer/AudioRecord.setPreferredDevice(...), which overrides the default dual-routing.
+ * IMPORTANT: AudioAttributes.USAGE_ALARM (mapped to STREAM_ALARM) is deliberately
+ * "enforced audible" by the Android audio policy: the platform always adds the speaker
+ * to the output device set for that strategy, in addition to any connected headset, so an
+ * alarm can never be silently missed. This is done at the native audio policy layer and is
+ * NOT overridden by AudioTrack/MediaPlayer/AudioRecord.setPreferredDevice() - that call is
+ * a no-op for the alarm strategy. The only way to get headset-exclusive routing is to stop
+ * using USAGE_ALARM while a headset is connected and use a normal, non-enforced usage
+ * (USAGE_MEDIA) instead, which is naturally routed only to the connected wired/USB/Bluetooth
+ * device by the platform's default output selection - the same behavior every media app gets
+ * automatically when headphones are plugged in. See VoiceAlarmRingingService, which switches
+ * the voice/music players' AudioAttributes usage based on hasHeadsetOutput() and only relies
+ * on setPreferredDevice() as an extra hint for picking among multiple connected devices.
  */
 object VoiceAlarmAudioRoute {
   private fun audioManager(context: Context): AudioManager? =
@@ -59,6 +64,8 @@ object VoiceAlarmAudioRoute {
       null
     }
   }
+
+  fun hasHeadsetOutput(context: Context): Boolean = preferredOutputDevice(context) != null
 
   /** The best mic-capable headset input device for recording, or null if none connected. */
   fun preferredInputDevice(context: Context): AudioDeviceInfo? {

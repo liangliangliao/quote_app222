@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../platform/intimacy_wallpaper_bridge.dart';
 import '../services/unified_ai_service.dart';
@@ -71,6 +72,17 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   bool _waitingForSystemApply = false;
   Timer? _configSyncDebounce;
 
+  // 拼图壁纸（第三种动态壁纸模式）状态。
+  List<String> _puzzleImagePaths = [];
+  String _puzzleRotationMode = 'sequential'; // 'sequential' | 'random'
+  int _puzzleCols = 5;
+  int _puzzleRows = 7;
+  double _puzzleAssembleSeconds = 4.0;
+  double _puzzleHoldSeconds = 2.0;
+  double _puzzleScatterRadius = 0.85;
+  int _puzzleBatchSize = 0; // 0 = 蜂拥而至（不限制）；1 = 单个；其它 = 分批
+  bool _pickingPuzzleImage = false;
+
   final List<String> _styles = const ['可见硬震屏释放', '深海蓝绿光体', '紫粉花冠羽翼', '银白晶体折片', '金橙生命洪流'];
 
   @override
@@ -93,8 +105,16 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     final savedStrokeData = config['calligraphyStrokeData'] as String?;
     final savedPlaylist = config['calligraphyPlaylist'] as String?;
     final savedAiHistory = config['calligraphyAiHistory'] as String?;
+    final savedPuzzleImagePaths = config['puzzleImagePaths'] as String?;
+    final savedPuzzleRotationMode = config['puzzleRotationMode'] as String?;
+    final savedPuzzleCols = (config['puzzleCols'] as num?)?.toInt();
+    final savedPuzzleRows = (config['puzzleRows'] as num?)?.toInt();
+    final savedPuzzleAssembleSeconds = (config['puzzleAssembleSeconds'] as num?)?.toDouble();
+    final savedPuzzleHoldSeconds = (config['puzzleHoldSeconds'] as num?)?.toDouble();
+    final savedPuzzleScatterRadius = (config['puzzleScatterRadius'] as num?)?.toDouble();
+    final savedPuzzleBatchSize = (config['puzzleBatchSize'] as num?)?.toInt();
     setState(() {
-      if (savedMode == 'mystify' || savedMode == 'calligraphy') {
+      if (savedMode == 'mystify' || savedMode == 'calligraphy' || savedMode == 'puzzle') {
         _wallpaperMode = savedMode!;
       }
       if (savedText != null && savedText.trim().isNotEmpty) {
@@ -112,6 +132,16 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
       }
       _calligraphyPlaylist = _decodeObjectList(savedPlaylist);
       _calligraphyAiHistory = _decodeStringList(savedAiHistory);
+      _puzzleImagePaths = _decodeStringList(savedPuzzleImagePaths);
+      if (savedPuzzleRotationMode == 'sequential' || savedPuzzleRotationMode == 'random') {
+        _puzzleRotationMode = savedPuzzleRotationMode!;
+      }
+      if (savedPuzzleCols != null) _puzzleCols = savedPuzzleCols.clamp(2, 14);
+      if (savedPuzzleRows != null) _puzzleRows = savedPuzzleRows.clamp(2, 16);
+      if (savedPuzzleAssembleSeconds != null) _puzzleAssembleSeconds = savedPuzzleAssembleSeconds.clamp(1.0, 1200.0);
+      if (savedPuzzleHoldSeconds != null) _puzzleHoldSeconds = savedPuzzleHoldSeconds.clamp(0.3, 1200.0);
+      if (savedPuzzleScatterRadius != null) _puzzleScatterRadius = savedPuzzleScatterRadius.clamp(0.2, 2.0);
+      if (savedPuzzleBatchSize != null) _puzzleBatchSize = savedPuzzleBatchSize.clamp(0, 400);
     });
   }
 
@@ -230,6 +260,14 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
       afterglowMinSec: _afterglowMinSec,
       afterglowMaxSec: _afterglowMaxSec,
       resetSeed: resetSeed,
+      puzzleImagePaths: jsonEncode(_puzzleImagePaths),
+      puzzleRotationMode: _puzzleRotationMode,
+      puzzleCols: _puzzleCols,
+      puzzleRows: _puzzleRows,
+      puzzleAssembleSeconds: _puzzleAssembleSeconds,
+      puzzleHoldSeconds: _puzzleHoldSeconds,
+      puzzleScatterRadius: _puzzleScatterRadius,
+      puzzleBatchSize: _puzzleBatchSize,
     );
     if (showSnack && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -460,6 +498,48 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
     _saveCurrentConfig(resetSeed: true);
   }
 
+  Future<void> _addPuzzleImage() async {
+    if (_pickingPuzzleImage) return;
+    setState(() => _pickingPuzzleImage = true);
+    try {
+      final picker = ImagePicker();
+      final xFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 92);
+      if (xFile == null) return;
+      final savedPath = await IntimacyWallpaperBridge.savePuzzleImage(xFile.path);
+      if (!mounted) return;
+      if (savedPath == null || savedPath.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('图片保存失败，请重试或更换图片')),
+        );
+        return;
+      }
+      setState(() => _puzzleImagePaths = [..._puzzleImagePaths, savedPath]);
+      await _saveCurrentConfig(resetSeed: _puzzleImagePaths.length == 1);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已添加图片，当前共 ${_puzzleImagePaths.length} 张，将按设置的轮换方式自动切换')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('选择图片失败：$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _pickingPuzzleImage = false);
+    }
+  }
+
+  Future<void> _removePuzzleImage(int index) async {
+    if (index < 0 || index >= _puzzleImagePaths.length) return;
+    final removedPath = _puzzleImagePaths[index];
+    setState(() {
+      _puzzleImagePaths = [..._puzzleImagePaths]..removeAt(index);
+    });
+    await _saveCurrentConfig(resetSeed: false);
+    // 物理删除是“尽力而为”的清理动作，失败也不影响功能正确性。
+    unawaited(IntimacyWallpaperBridge.deletePuzzleImageFile(removedPath));
+  }
+
   @override
   Widget build(BuildContext context) {
     final seconds = _elapsed.inMilliseconds / 1000.0;
@@ -484,85 +564,37 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                     speed: _calligraphySpeed,
                     strokeData: _calligraphyStrokeData,
                   )
-                : _HeroPreview(
-                    key: const ValueKey('mystify'),
-                    seconds: seconds,
-                    style: _style,
-                    intimacy: _intimacy,
-                    randomness: _randomness,
-                    ribbonWidth: _ribbonWidth,
-                    trail: _trail,
-                    fullScreenCoverage: _fullScreenCoverage,
-                    bubbles: _bubbles,
-                    ratioSeparation: _ratioSeparation,
-                    ratioAttraction: _ratioAttraction,
-                    ratioSync: _ratioSync,
-                    ratioCritical: _ratioCritical,
-                    ratioRelease: _ratioRelease,
-                    ratioAfterglow: _ratioAfterglow,
-                    criticalMinSec: _criticalMinSec,
-                    criticalMaxSec: _criticalMaxSec,
-                    releaseMinSec: _releaseMinSec,
-                    releaseMaxSec: _releaseMaxSec,
-                    afterglowMinSec: _afterglowMinSec,
-                    afterglowMaxSec: _afterglowMaxSec,
-                    seed: _previewSeed,
-                  ),
+                : _wallpaperMode == 'puzzle'
+                    ? _PuzzlePreview(
+                        key: const ValueKey('puzzle'),
+                        imagePaths: _puzzleImagePaths,
+                        seconds: seconds,
+                      )
+                    : _HeroPreview(
+                        key: const ValueKey('mystify'),
+                        seconds: seconds,
+                        style: _style,
+                        intimacy: _intimacy,
+                        randomness: _randomness,
+                        ribbonWidth: _ribbonWidth,
+                        trail: _trail,
+                        fullScreenCoverage: _fullScreenCoverage,
+                        bubbles: _bubbles,
+                        ratioSeparation: _ratioSeparation,
+                        ratioAttraction: _ratioAttraction,
+                        ratioSync: _ratioSync,
+                        ratioCritical: _ratioCritical,
+                        ratioRelease: _ratioRelease,
+                        ratioAfterglow: _ratioAfterglow,
+                        criticalMinSec: _criticalMinSec,
+                        criticalMaxSec: _criticalMaxSec,
+                        releaseMinSec: _releaseMinSec,
+                        releaseMaxSec: _releaseMaxSec,
+                        afterglowMinSec: _afterglowMinSec,
+                        afterglowMaxSec: _afterglowMaxSec,
+                        seed: _previewSeed,
+                      ),
           ),
-          if (_wallpaperMode == 'calligraphy') ...[
-            const SizedBox(height: 12),
-            _SectionCard(
-              title: '书写内容与笔体',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: _calligraphyController,
-                    minLines: 2,
-                    maxLines: 4,
-                    maxLength: 80,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: '自定义书写内容',
-                      hintText: '输入名言、诗句或你想每天看见的话',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) {
-                      setState(() {});
-                      _scheduleConfigSync();
-                    },
-                  ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _generatingCalligraphy ? null : _generateClassicText,
-                      icon: _generatingCalligraphy
-                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.auto_awesome),
-                      label: Text(_generatingCalligraphy ? 'AI 正在选句…' : 'AI 获取经典名言 / 诗词'),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: const [
-                      ('kaishu', '楷书'), ('xingshu', '行书'), ('caoshu', '草书'),
-                    ].map((item) => ChoiceChip(
-                      label: Text(item.$2),
-                      selected: _calligraphyStyle == item.$1,
-                      onSelected: (_) => _updateConfigPreview(() => _calligraphyStyle = item.$1),
-                    )).toList(),
-                  ),
-                  _SliderRow(
-                    label: '落笔速度',
-                    value: _calligraphySpeed,
-                    description: '控制文字逐笔显现与停顿节奏。',
-                    onChanged: (value) => _updateConfigPreview(() => _calligraphySpeed = value),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 16),
           _SectionCard(
             title: '选择真正应用的动态壁纸',
@@ -573,15 +605,18 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                   segments: const [
                     ButtonSegment(value: 'mystify', icon: Icon(Icons.auto_awesome), label: Text('潮汐光迹')),
                     ButtonSegment(value: 'calligraphy', icon: Icon(Icons.gesture), label: Text('书法书写')),
+                    ButtonSegment(value: 'puzzle', icon: Icon(Icons.extension_outlined), label: Text('拼图复原')),
                   ],
                   selected: {_wallpaperMode},
                   onSelectionChanged: (value) => _updateConfigPreview(() => _wallpaperMode = value.first),
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  _wallpaperMode == 'mystify'
-                      ? '保留当前已经实现的动画壁纸，所有效果和参数均保持不变。'
-                      : '书法模式会在黑色宣纸氛围中逐字落墨；保存后，系统中的同一个动态壁纸服务会即时切换。',
+                  switch (_wallpaperMode) {
+                    'calligraphy' => '书法模式会在黑色宣纸氛围中逐字落墨；保存后，系统中的同一个动态壁纸服务会即时切换。',
+                    'puzzle' => '拼图模式会把当前图片自动切成碎片、随机飞散后沿随机路径自动复原；可上传多张图片，按顺序或随机轮换播放，循环往复。',
+                    _ => '保留当前已经实现的动画壁纸，所有效果和参数均保持不变。',
+                  },
                   style: const TextStyle(color: Colors.white60, height: 1.4),
                 ),
               ],
@@ -670,12 +705,223 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
                   _SliderRow(
                     label: '落笔速度',
                     value: _calligraphySpeed,
-                    description: '控制文字逐笔显现与停顿节奏。',
-                    onChanged: (value) => _updateConfigPreview(() => _calligraphySpeed = value),
+                    description: '控制文字逐笔显现与停顿节奏；拖动后预览立即重播以体现新速度。',
+                    onChanged: (value) => _updateConfigPreview(() {
+                      _calligraphySpeed = value;
+                      // 速度变化后立即重置预览计时器，让新速度的效果立刻可见。
+                      _calligraphyPreviewStartedAt = (_elapsed.inMilliseconds / 1000.0);
+                    }),
                   ),
                   const Text(
                     '说明：标准笔顺数据提供楷书字形的真实笔画顺序。行书、草书需要专门的书家字形与运笔数据库；当前“行书笔意/草书笔意”仅改变笔锋和节奏，不再宣称为标准行草字帖。',
                     style: TextStyle(color: Colors.amberAccent, fontSize: 12, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_wallpaperMode == 'puzzle') ...[
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '图片库（${_puzzleImagePaths.length} 张）',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (int i = 0; i < _puzzleImagePaths.length; i++)
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                File(_puzzleImagePaths[i]),
+                                width: 72,
+                                height: 72,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 72,
+                                  height: 72,
+                                  color: Colors.white.withOpacity(0.08),
+                                  child: const Icon(Icons.broken_image_outlined, color: Colors.white38),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: -8,
+                              right: -8,
+                              child: GestureDetector(
+                                onTap: () => _removePuzzleImage(i),
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: const BoxDecoration(color: Colors.black87, shape: BoxShape.circle),
+                                  child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      GestureDetector(
+                        onTap: _pickingPuzzleImage ? null : _addPuzzleImage,
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white24, style: BorderStyle.solid),
+                          ),
+                          child: _pickingPuzzleImage
+                              ? const Center(
+                                  child: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                              : const Icon(Icons.add_photo_alternate_outlined, color: Colors.white60),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _puzzleImagePaths.isEmpty
+                        ? '尚未添加图片：真实壁纸会显示提示语，直到你添加好图片为止。'
+                        : '可添加多张图片，按下方轮换方式自动切换；点击缩略图右上角 × 可移除。',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+                  ),
+                  if (_puzzleImagePaths.length > 1) ...[
+                    const SizedBox(height: 14),
+                    const Text('轮换方式', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('顺序循环'),
+                          selected: _puzzleRotationMode == 'sequential',
+                          onSelected: (_) => _updateConfigPreview(() => _puzzleRotationMode = 'sequential'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('随机轮换'),
+                          selected: _puzzleRotationMode == 'random',
+                          onSelected: (_) => _updateConfigPreview(() => _puzzleRotationMode = 'random'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '碎片到场方式',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('蜂拥而至'),
+                        selected: _puzzleBatchSize == 0,
+                        onSelected: (_) => _updateConfigPreview(() => _puzzleBatchSize = 0),
+                      ),
+                      ChoiceChip(
+                        label: const Text('分批'),
+                        selected: _puzzleBatchSize > 1,
+                        onSelected: (_) => _updateConfigPreview(
+                          () => _puzzleBatchSize = _puzzleBatchSize > 1 ? _puzzleBatchSize : 6,
+                        ),
+                      ),
+                      ChoiceChip(
+                        label: const Text('单个'),
+                        selected: _puzzleBatchSize == 1,
+                        onSelected: (_) => _updateConfigPreview(() => _puzzleBatchSize = 1),
+                      ),
+                    ],
+                  ),
+                  if (_puzzleBatchSize > 1) ...[
+                    const SizedBox(height: 8),
+                    _PuzzleSliderRow(
+                      label: '每批碎片数',
+                      value: _puzzleBatchSize.toDouble(),
+                      min: 2,
+                      max: 40,
+                      divisions: 38,
+                      suffix: ' 块',
+                      onChanged: (v) => _updateConfigPreview(() => _puzzleBatchSize = v.round()),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    switch (_puzzleBatchSize) {
+                      0 => '说明：所有碎片同时起飞、同时落位，画面感受最热闹。',
+                      1 => '说明：碎片逐个单独出现，节奏最缓慢、最有仪式感，适合配合较长的拼接时长慢慢欣赏。',
+                      _ => '说明：碎片按批次成组出现，每批同时起飞；批次数量越小、每批镜头感越强。',
+                    },
+                    style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '拼图节奏',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PuzzleSliderRow(
+                    label: '碎片列数',
+                    value: _puzzleCols.toDouble(),
+                    min: 2,
+                    max: 14,
+                    divisions: 12,
+                    suffix: ' 列',
+                    onChanged: (v) => _updateConfigPreview(() => _puzzleCols = v.round()),
+                  ),
+                  _PuzzleSliderRow(
+                    label: '碎片行数',
+                    value: _puzzleRows.toDouble(),
+                    min: 2,
+                    max: 16,
+                    divisions: 14,
+                    suffix: ' 行',
+                    onChanged: (v) => _updateConfigPreview(() => _puzzleRows = v.round()),
+                  ),
+                  _PuzzleSliderRow(
+                    label: '拼接时长',
+                    value: _puzzleAssembleSeconds,
+                    min: 1.5,
+                    max: 1200,
+                    divisions: 400,
+                    suffix: '',
+                    labelBuilder: _formatPuzzleSeconds,
+                    onChanged: (v) => _updateConfigPreview(() => _puzzleAssembleSeconds = v),
+                  ),
+                  _PuzzleSliderRow(
+                    label: '完整图展示时长',
+                    value: _puzzleHoldSeconds,
+                    min: 0.5,
+                    max: 1200,
+                    divisions: 400,
+                    suffix: '',
+                    labelBuilder: _formatPuzzleSeconds,
+                    onChanged: (v) => _updateConfigPreview(() => _puzzleHoldSeconds = v),
+                  ),
+                  _PuzzleSliderRow(
+                    label: '飞散半径',
+                    value: _puzzleScatterRadius,
+                    min: 0.3,
+                    max: 1.6,
+                    divisions: 26,
+                    suffix: '',
+                    fractionDigits: 2,
+                    onChanged: (v) => _updateConfigPreview(() => _puzzleScatterRadius = v),
+                  ),
+                  const Text(
+                    '说明：碎片会从屏幕四周随机位置、随机弧线路径飞回原位；拼接时长和展示时长都可以拉到 20 分钟，适合做成缓慢悠长的氛围壁纸。展示结束后会自动切到下一张图片并重新打乱，循环往复。',
+                    style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
                   ),
                 ],
               ),
@@ -967,6 +1213,137 @@ class _TouchMystifyWallpaperPageState extends State<TouchMystifyWallpaperPage> w
   }
 }
 
+// ─── 拼图复原模式预览 ────────────────────────────────────────────────────────
+class _PuzzlePreview extends StatelessWidget {
+  const _PuzzlePreview({
+    super.key,
+    required this.imagePaths,
+    required this.seconds,
+  });
+  final List<String> imagePaths;
+  final double seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    // 用全屏宽度 × 设备宽高比呈现，让用户感受到壁纸的真实尺寸感。
+    final screenSize = MediaQuery.of(context).size;
+    final previewH = screenSize.width * (screenSize.height / screenSize.width);
+
+    return SizedBox(
+      width: double.infinity,
+      height: previewH.clamp(300.0, 520.0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 背景：第一张图片（或渐变占位）
+            if (imagePaths.isNotEmpty)
+              Image.file(
+                File(imagePaths[0]),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                errorBuilder: (_, __, ___) => _gradientBg(),
+              )
+            else
+              _gradientBg(),
+            // 暗色遮罩，突出叠加信息
+            Container(color: Colors.black.withOpacity(0.42)),
+            // 拼图格线动画（简单 CustomPaint 示意）
+            Positioned.fill(
+              child: CustomPaint(painter: _PuzzleGridPainter(seconds: seconds, cols: 5, rows: 8)),
+            ),
+            // 中央提示信息
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.extension_outlined, color: Colors.white, size: 48),
+                  const SizedBox(height: 12),
+                  Text(
+                    imagePaths.isEmpty ? '尚未选择图片' : '拼图复原 · ${imagePaths.length} 张图片',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    imagePaths.isEmpty
+                        ? '请在下方图片库中添加至少一张图片'
+                        : '碎片将从四周随机飞回，全屏铺满',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      shadows: [Shadow(blurRadius: 6, color: Colors.black87)],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // 图片数量角标
+            if (imagePaths.length > 1)
+              Positioned(
+                top: 14,
+                right: 14,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('${imagePaths.length} 张轮换',
+                      style: const TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _gradientBg() => Container(
+    decoration: const BoxDecoration(
+      gradient: RadialGradient(
+        center: Alignment(0, -0.2),
+        radius: 1.3,
+        colors: [Color(0xFF1A1035), Color(0xFF050714)],
+      ),
+    ),
+  );
+}
+
+// 拼图格线动画 Painter（简单示意，用渐隐/渐显的格线传递"正在拼接"的感觉）
+class _PuzzleGridPainter extends CustomPainter {
+  const _PuzzleGridPainter({required this.seconds, required this.cols, required this.rows});
+  final double seconds;
+  final int cols;
+  final int rows;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final phase = (seconds % 4.0) / 4.0; // 0..1 cycle
+    final opacity = (math.sin(phase * math.pi * 2) * 0.5 + 0.5) * 0.22;
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(opacity)
+      ..strokeWidth = 0.8;
+    for (int c = 1; c < cols; c++) {
+      final x = size.width * c / cols;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (int r = 1; r < rows; r++) {
+      final y = size.height * r / rows;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PuzzleGridPainter old) =>
+      old.seconds != seconds || old.cols != cols || old.rows != rows;
+}
+
 class _CalligraphyPreview extends StatelessWidget {
   const _CalligraphyPreview({
     super.key,
@@ -987,7 +1364,13 @@ class _CalligraphyPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = text.trim().isEmpty ? '行到水穷处，坐看云起时。' : text.trim();
     final runeCount = content.runes.length;
-    final cycleSeconds = math.max(7.0, runeCount * (0.48 - speed * 0.27) + 4.0).toDouble();
+    // 与 Java 端保持完全一致的平方曲线速度公式：
+    //   speed=1.0（最快）→ 0.20 秒/字
+    //   speed=0.55（默认）→ 2.25 秒/字
+    //   speed=0.15（最慢）→ 8.87 秒/字（44 倍差距，拖动立即可感知）
+    final tSpeed = (1.0 - speed).clamp(0.0, 1.0);
+    final secsPerChar = 0.20 + tSpeed * tSpeed * 12.0;
+    final cycleSeconds = math.max(1.5, runeCount * secsPerChar + 3.5).toDouble();
     final progress = (seconds % cycleSeconds) / cycleSeconds;
     final label = switch (style) {
       'caoshu' => '草书',
@@ -995,9 +1378,18 @@ class _CalligraphyPreview extends StatelessWidget {
       _ => '楷书',
     };
 
-    return AspectRatio(
-      aspectRatio: 9 / 14,
-      child: ClipRRect(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenH = MediaQuery.of(context).size.height;
+        // 预览高度：字数少时保持 9:14 比例；字数多时允许高度最多增加到屏幕高度的 65%，
+        // 确保长文本不会因为容器太矮而显示不全。
+        final minH = constraints.maxWidth * (14 / 9.0);
+        final maxH = screenH * 0.65;
+        final previewH = minH.clamp(minH, maxH);
+        return SizedBox(
+          width: double.infinity,
+          height: previewH,
+          child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
         child: DecoratedBox(
           decoration: const BoxDecoration(
@@ -1041,7 +1433,9 @@ class _CalligraphyPreview extends StatelessWidget {
             ],
           ),
         ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1070,23 +1464,55 @@ class _CalligraphyWritingPainter extends CustomPainter {
     } catch (_) {
       verifiedData = const {};
     }
-    final runes = text.runes.where((rune) => !String.fromCharCode(rune).trim().isEmpty).take(40).toList();
+    final runes = text.runes.where((rune) => !String.fromCharCode(rune).trim().isEmpty).take(80).toList();
     if (runes.isEmpty) return;
-    final maxRows = math.min(10, math.max(1, (runes.length / 3).ceil()));
-    final columns = math.max(1, (runes.length / maxRows).ceil());
-    final cellWidth = math.min(58.0, size.width / math.max(1, columns)).toDouble();
-    final cellHeight = math.min(58.0, size.height / math.max(1, maxRows)).toDouble();
-    final fontSize = math.min(cellWidth * 0.76, cellHeight * 0.78).toDouble();
-    final firstX = size.width * 0.5 + (columns - 1) * cellWidth * 0.5;
-    final firstY = math.max(12.0, (size.height - maxRows * cellHeight) * 0.5).toDouble();
-    final characterProgress = progress * runes.length;
+    final n = runes.length;
 
-    for (var index = 0; index < runes.length; index++) {
+    // ── 列数策略：与 Java 端完全一致 ─────────────────────────────────────────
+    final int columns, maxRows;
+    if (n <= 2) {
+      columns = 1; maxRows = n;
+    } else if (n <= 6) {
+      columns = 2; maxRows = (n / 2).ceil();
+    } else if (n <= 12) {
+      columns = 3; maxRows = (n / 3).ceil();
+    } else if (n <= 24) {
+      columns = 4; maxRows = (n / 4).ceil();
+    } else if (n <= 42) {
+      columns = 5; maxRows = (n / 5).ceil();
+    } else if (n <= 56) {
+      columns = 6; maxRows = (n / 6).ceil();
+    } else {
+      columns = 7; maxRows = (n / 7).ceil();
+    }
+
+    // ── 单元格尺寸：用可用空间均分，去掉 80dp 上限避免大字符被压缩 ──────────
+    final cellWidth  = (size.width  / math.max(1, columns)).clamp(14.0, 200.0).toDouble();
+    final cellHeight = (size.height / math.max(1, maxRows )).clamp(14.0, 200.0).toDouble();
+    final fontSize   = math.min(cellWidth * 0.78, cellHeight * 0.80).clamp(10.0, 120.0).toDouble();
+
+    // ── 居中布局（与 Java 完全同步）──────────────────────────────────────────
+    // 水平居中：竖排从右列向左列，firstX 是最右列中心
+    final totalVisW = (columns - 1) * cellWidth + fontSize;
+    final firstX    = (size.width - totalVisW) / 2 + (columns - 1) * cellWidth + fontSize / 2;
+    // 垂直居中：用视觉高度 (ascent + descent ≈ 1.08*fontSize) 来定位，
+    //           使文字块在视觉上真正居中（不再贴顶）
+    final totalVisH = (maxRows - 1) * cellHeight + fontSize * 1.08;
+    final topOfGrid = (size.height - totalVisH) / 2;
+    final firstY    = math.max(fontSize * 0.12, topOfGrid);
+
+    final characterProgress = progress * n;
+
+    for (var index = 0; index < n; index++) {
       final local = (characterProgress - index).clamp(0.0, 1.0).toDouble();
       if (local <= 0) continue;
-      final row = index % maxRows;
+      final row    = index % maxRows;
       final column = index ~/ maxRows;
-      final center = Offset(firstX - column * cellWidth, firstY + row * cellHeight + cellHeight * 0.5);
+      // firstY は視覚ブロック上端。各行のセンターは firstY + row*cellHeight + fontSize*0.5
+      final center = Offset(
+        firstX - column * cellWidth,
+        firstY + row * cellHeight + fontSize * 0.5,
+      );
       final character = String.fromCharCode(runes[index]);
       final source = verifiedData[character];
       if (source is Map<String, dynamic> && source['medians'] is List) {
@@ -1254,6 +1680,64 @@ class _SectionCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PuzzleSliderRow extends StatelessWidget {
+  const _PuzzleSliderRow({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.suffix,
+    required this.onChanged,
+    this.fractionDigits = 0,
+    this.labelBuilder,
+  });
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String suffix;
+  final int fractionDigits;
+  final ValueChanged<double> onChanged;
+  final String Function(double)? labelBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = value.clamp(min, max).toDouble();
+    final text = labelBuilder != null ? labelBuilder!(shown) : '${shown.toStringAsFixed(fractionDigits)}$suffix';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+              Text(text, style: const TextStyle(color: Colors.white60)),
+            ],
+          ),
+          Slider(
+            value: shown,
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatPuzzleSeconds(double seconds) {
+  if (seconds < 60) return '${seconds.toStringAsFixed(1)} 秒';
+  final totalSec = seconds.round();
+  final m = totalSec ~/ 60;
+  final s = totalSec % 60;
+  return s == 0 ? '$m 分钟' : '$m 分 $s 秒';
 }
 
 class _SliderRow extends StatelessWidget {

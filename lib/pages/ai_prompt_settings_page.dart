@@ -17,6 +17,7 @@ import '../defense_compass/defense_compass_prompt_config.dart';
 import '../adaptation_compass/adaptation_compass_prompt_config.dart';
 import '../new_tablets/new_tablets_prompt_config.dart';
 import '../self_worth_ai/self_worth_ai_prompt_config.dart';
+import '../self_evidence/self_evidence_prompt_config.dart';
 import '../boundary_practice/boundary_practice_prompt_config.dart';
 import '../boundary_action_coach/boundary_action_coach_prompt_config.dart';
 import '../self_determination_growth/self_determination_growth_prompt_config.dart';
@@ -52,6 +53,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   final DefenseCompassPromptConfig _dfPrompts = DefenseCompassPromptConfig();
   final AdaptationCompassPromptConfig _acPrompts = AdaptationCompassPromptConfig();
   final SelfWorthAiPromptConfig _swPrompts = SelfWorthAiPromptConfig();
+  final SelfEvidencePromptConfig _sevPrompts = SelfEvidencePromptConfig();
   final NewTabletsPromptConfig _ntPrompts = NewTabletsPromptConfig();
   final BoundaryPracticePromptConfig _bpPrompts = BoundaryPracticePromptConfig();
   final BoundaryActionCoachPromptConfig _bacPrompts = BoundaryActionCoachPromptConfig();
@@ -231,6 +233,12 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           items: RealisticPositivityOsPromptConfig.allIds
               .map((id) => _PromptItem(id: id, name: RealisticPositivityOsPromptConfig.labels[id] ?? id))
               .toList(growable: false),
+        ),
+        _PromptModule(
+          id: SelfEvidencePromptConfig.moduleId,
+          name: SelfEvidencePromptConfig.moduleName,
+          description: '统一配置基于 Daryl J. Bem 自我知觉理论的全局价值层、九大模块层、七个场景层与 10 段式输出格式 Prompt。修改后下一次本模块 AI 调用立即生效。',
+          items: SelfEvidencePromptConfig.allIds.map((id) => _PromptItem(id: id, name: SelfEvidencePromptConfig.labels[id] ?? id)).toList(growable: false),
         ),
         _PromptModule(
           id: SelfWorthAiPromptConfig.moduleId,
@@ -540,6 +548,8 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         _ccBackups = await _acPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('sw_')) {
         _ccBackups = await _swPrompts.listBackups(_promptId);
+      } else if (_promptId.startsWith('sev_')) {
+        _ccBackups = await _sevPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('nt_')) {
         _ccBackups = await _ntPrompts.listBackups(_promptId);
       } else if (_promptId.startsWith('bac_')) {
@@ -1063,12 +1073,14 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
       id.startsWith('df_') ||
       id.startsWith('ac_') ||
       id.startsWith('sw_') ||
+      id.startsWith('sev_') ||
       id.startsWith('nt_') ||
       id.startsWith('bp_');
 
   String _moduleExportLabel(String id) {
     if (id.startsWith('bp_')) return BoundaryPracticePromptConfig.moduleName;
     if (id.startsWith('sw_')) return '真实自尊 SelfWorth AI';
+    if (id.startsWith('sev_')) return SelfEvidencePromptConfig.moduleName;
     if (id.startsWith('nt_')) return NewTabletsPromptConfig.moduleName;
     if (id.startsWith('rpo_')) return '真实积极行动系统';
     if (id.startsWith('df_')) return '自我防御罗盘';
@@ -1087,6 +1099,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   Future<String> _exportCurrentPromptModuleJson() {
     if (_promptId.startsWith('bp_')) return _bpPrompts.exportPromptsJson();
     if (_promptId.startsWith('sw_')) return _swPrompts.exportPromptsJson();
+    if (_promptId.startsWith('sev_')) return _sevPrompts.exportPromptsJson();
     if (_promptId.startsWith('nt_')) return _ntPrompts.exportPromptsJson();
     if (_promptId.startsWith('rpo_')) return _rpoPrompts.exportPromptsJson();
     if (_promptId.startsWith('df_')) return _dfPrompts.exportPromptsJson();
@@ -1105,6 +1118,7 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
   Future<int> _importCurrentPromptModuleJson(String raw) {
     if (_promptId.startsWith('bp_')) return _bpPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('sw_')) return _swPrompts.importPromptsJson(raw);
+    if (_promptId.startsWith('sev_')) return _sevPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('nt_')) return _ntPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('rpo_')) return _rpoPrompts.importPromptsJson(raw);
     if (_promptId.startsWith('df_')) return _dfPrompts.importPromptsJson(raw);
@@ -1202,6 +1216,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('sw_')) {
       return _swPrompts.defaultFor(id);
     }
+    if (id.startsWith('sev_')) {
+      return _sevPrompts.defaultFor(id);
+    }
     if (id.startsWith('nt_')) {
       return _ntPrompts.defaultFor(id);
     }
@@ -1219,6 +1236,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     }
     if (id.startsWith('sw_')) {
       return _swPrompts.defaultFor(id);
+    }
+    if (id.startsWith('sev_')) {
+      return _sevPrompts.defaultFor(id);
     }
     switch (id) {
       case 'goal_action':
@@ -1301,6 +1321,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('sw_')) {
       return _swPrompts.inspectPrompt(id);
     }
+    if (id.startsWith('sev_')) {
+      return _sevPrompts.inspectPrompt(id);
+    }
     if (id.startsWith('nt_')) {
       return _ntPrompts.inspectPrompt(id);
     }
@@ -1318,6 +1341,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     }
     if (id.startsWith('sw_')) {
       return _swPrompts.inspectPrompt(id);
+    }
+    if (id.startsWith('sev_')) {
+      return _sevPrompts.inspectPrompt(id);
     }
     switch (id) {
       case 'goal_action':
@@ -1400,6 +1426,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     if (id.startsWith('sw_')) {
       return _swPrompts.savePrompt(id, value);
     }
+    if (id.startsWith('sev_')) {
+      return _sevPrompts.savePrompt(id, value);
+    }
     if (id.startsWith('nt_')) {
       return _ntPrompts.savePrompt(id, value);
     }
@@ -1417,6 +1446,9 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
     }
     if (id.startsWith('sw_')) {
       return _swPrompts.savePrompt(id, value);
+    }
+    if (id.startsWith('sev_')) {
+      return _sevPrompts.savePrompt(id, value);
     }
     switch (id) {
       case 'goal_action':
@@ -1476,6 +1508,14 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
         MapEntry('{{scene}}', 'NewTablets 当前场景标识。'),
         MapEntry('{{user_input}}', '用户本轮输入内容。'),
         MapEntry('{{context_json}}', '模块上下文 JSON。'),
+      ];
+    }
+    if (id.startsWith('sev_')) {
+      return const <MapEntry<String, String>>[
+        MapEntry('{{scene}}', '自我证据场景：procrastination / self_denial / choice / interference / review / reward / willpower。'),
+        MapEntry('{{user_input}}', '用户本轮输入的自我标签、现实行为、选择困境、干扰事件或行动复盘。'),
+        MapEntry('{{profile_json}}', '本模块行为证据档案：旧标签、目标行动、难度、自由选择、奖励/压力、干扰恢复。'),
+        MapEntry('{{recent_context_json}}', '近期行为证据卡、每日证据、周报和身份更新摘要。'),
       ];
     }
     if (id.startsWith('sw_')) {
