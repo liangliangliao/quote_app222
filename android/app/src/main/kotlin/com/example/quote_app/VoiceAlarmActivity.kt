@@ -1125,6 +1125,28 @@ class VoiceAlarmActivity : Activity() {
           }
           ""
         }
+        // 提交给 STT 的是压缩后的音频（compactPcmForStt 删掉长静音、拼接有声片段）。
+        // 拼接点的突变或对偏安静真人语音的过度裁剪，有时会让讯飞对一段真语音返回空文字，
+        // 随后被当成误触发丢弃——这正是“真人说话却识别不出内容”的一个来源。
+        // 因此在丢弃前，对“有明显能量、且压缩确实改动过音频”的段，用完整未压缩音频再试一次。
+        if (raw.isBlank() && lastError.isBlank() &&
+          job.originalPcm.isNotEmpty() && job.originalPcm.size != job.pcm.size &&
+          (job.peak >= 2000 || job.rms >= 700)
+        ) {
+          logVoice(
+            "batch.singleUpload.retryOriginal",
+            "compacted audio returned empty; retry once with full uncompacted audio before discarding",
+            mapOf("provider" to provider, "compactBytes" to job.pcm.size, "originalBytes" to job.originalPcm.size, "peak" to job.peak, "rms" to job.rms),
+          )
+          raw = try { recognizeBatchWithProvider(provider, cfg, job.originalPcm) } catch (t: Throwable) {
+            lastError = t.message ?: t.javaClass.simpleName
+            autoEmptyRecognitionError = !job.submittedManually && isEmptyAutoCaptureRecognitionError(lastError)
+            if (!autoEmptyRecognitionError) {
+              setBatchStatus("${sttProviderLabel(provider)}非实时识别失败：$lastError；本次按完整录音提交，没有再做本地拆分重试。")
+            }
+            ""
+          }
+        }
         var echoDiscarded = false
         if (raw.isNotBlank()) {
           val sanitized = sanitizeBatchTranscriptEcho(raw)
@@ -5000,37 +5022,75 @@ class VoiceAlarmActivity : Activity() {
       for ((role, content) in conversation.takeLast(10)) put(JSONObject().put("role", role).put("content", content))
       put(JSONObject().put("role", "user").put("content", userText))
     }
-    val body = if (provider == "openai" && endpoint.contains("/responses")) {
-      JSONObject()
-        .put("model", model)
-        .put("input", messages)
-        .put("max_output_tokens", 220)
-        .put("temperature", 0.7)
-    } else {
-      JSONObject()
-        .put("model", model)
-        .put("messages", messages)
-        .put("max_tokens", 220)
-        .put("temperature", 0.7)
-        .put("stream", false)
+    // 推理型模型（如 deepseek-v4-flash）会先产出 reasoning_content 再产出正式回答。
+    // 之前 max_tokens=220 经常在“思考”阶段就被截断（finish_reason=length），
+    // 于是 content 为空、界面反复提示“AI 没有返回内容”。这里给足初始预算；
+    // 若仍因长度截断且没有正文，再翻倍预算重试一次，直到拿到回答或用尽重试。
+    var maxTokens = 1024
+    var attempt = 0
+    while (true) {
+      attempt += 1
+      val body = if (provider == "openai" && endpoint.contains("/responses")) {
+        JSONObject()
+          .put("model", model)
+          .put("input", messages)
+          .put("max_output_tokens", maxTokens)
+          .put("temperature", 0.7)
+      } else {
+        JSONObject()
+          .put("model", model)
+          .put("messages", messages)
+          .put("max_tokens", maxTokens)
+          .put("temperature", 0.7)
+          .put("stream", false)
+      }
+      val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        connectTimeout = 15000
+        readTimeout = 45000
+        doOutput = true
+        setRequestProperty("Content-Type", "application/json")
+        setRequestProperty("Authorization", "Bearer $apiKey")
+        if (provider == "openrouter") setRequestProperty("X-OpenRouter-Title", "Quote App Voice Alarm")
+        if (provider == "edenai") setRequestProperty("Accept", "application/json")
+      }
+      logVoice("ai.call.http.start", "calling AI endpoint", mapOf("provider" to provider, "model" to model, "endpoint" to endpoint.take(120), "bodyChars" to body.toString().length, "attempt" to attempt, "maxTokens" to maxTokens))
+      OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+      val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+      val resp = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+      logVoice("ai.call.http.result", "AI HTTP response", mapOf("provider" to provider, "status" to conn.responseCode, "attempt" to attempt, "resp" to resp.take(220)))
+      if (conn.responseCode !in 200..299) return "AI 请求失败：HTTP ${conn.responseCode} ${resp.take(120)}"
+      val parsed = JSONObject(resp)
+      val text = extractAiText(parsed)
+      if (text.isNotBlank()) return text
+      val finish = aiFinishReason(parsed)
+      val truncatedByLength = finish == "length" || finish == "max_output_tokens" || finish == "max_tokens"
+      if (truncatedByLength && attempt < 3 && maxTokens < 4096) {
+        val next = (maxTokens * 2).coerceAtMost(4096)
+        logVoice("ai.call.retryLength", "empty content truncated by token budget; retry with larger budget", mapOf("provider" to provider, "finish" to finish, "prevMaxTokens" to maxTokens, "nextMaxTokens" to next, "attempt" to attempt))
+        maxTokens = next
+        continue
+      }
+      logVoice("ai.call.emptyContent", "AI returned empty content", mapOf("provider" to provider, "finish" to finish, "attempt" to attempt, "maxTokens" to maxTokens))
+      return ""
     }
-    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-      requestMethod = "POST"
-      connectTimeout = 15000
-      readTimeout = 45000
-      doOutput = true
-      setRequestProperty("Content-Type", "application/json")
-      setRequestProperty("Authorization", "Bearer $apiKey")
-      if (provider == "openrouter") setRequestProperty("X-OpenRouter-Title", "Quote App Voice Alarm")
-      if (provider == "edenai") setRequestProperty("Accept", "application/json")
+  }
+
+  private fun aiFinishReason(obj: JSONObject): String {
+    val choices = obj.optJSONArray("choices")
+    if (choices != null && choices.length() > 0) {
+      val c = choices.optJSONObject(0)
+      val fr = c?.optString("finish_reason", "") ?: ""
+      if (fr.isNotBlank()) return fr
+      val nr = c?.optString("native_finish_reason", "") ?: ""
+      if (nr.isNotBlank()) return nr
     }
-    logVoice("ai.call.http.start", "calling AI endpoint", mapOf("provider" to provider, "model" to model, "endpoint" to endpoint.take(120), "bodyChars" to body.toString().length))
-    OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
-    val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
-    val resp = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-    logVoice("ai.call.http.result", "AI HTTP response", mapOf("provider" to provider, "status" to conn.responseCode, "resp" to resp.take(220)))
-    if (conn.responseCode !in 200..299) return "AI 请求失败：HTTP ${conn.responseCode} ${resp.take(120)}"
-    return extractAiText(JSONObject(resp))
+    // openai /responses 风格：截断时 status=incomplete，原因在 incomplete_details.reason。
+    if (obj.optString("status", "") == "incomplete") {
+      val reason = obj.optJSONObject("incomplete_details")?.optString("reason", "") ?: ""
+      if (reason.isNotBlank()) return reason
+    }
+    return ""
   }
 
   private fun extractAiText(obj: JSONObject): String {
