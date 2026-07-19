@@ -4877,15 +4877,56 @@ class VoiceAlarmActivity : Activity() {
     val safeText = text.take(600).trim()
     if (safeText.isBlank()) { if (restart) listenAgain(120L); return }
     lastAssistantSpokenText = safeText
-    // 优先用云端 TTS（讯飞，复用已配置的 STT 凭据）播报 AI 回复，音色与闹钟提示语一致、
-    // 不再落到机械的系统本地 TTS；只有在没有凭据或云端合成/播放失败时才回退本地。
+    // 按用户选择的 TTS 服务商用云端合成 AI 回复语音；无可用服务商/凭据或合成失败时回退本地。
     // 关闭/延迟等即时指令确认走本地 TTS（无网络合成延迟，界面很快就会关闭）。
-    val iflytekCfg = if (allowCloudTts) cloudSttConfigForProvider("iflytek") else null
-    if (iflytekCfg != null) {
-      speakWithCloudAiTts(safeText, utteranceId, restart, iflytekCfg)
+    val ttsCfg = if (allowCloudTts) alarmTtsConfig() else null
+    val provider = ttsCfg?.let { resolveAiTtsProvider(it) }
+    if (ttsCfg != null && provider != null) {
+      speakWithCloudAiTts(safeText, utteranceId, restart, ttsCfg, provider)
       return
     }
     speakWithLocalTts(safeText, utteranceId, restart)
+  }
+
+  private fun alarmTtsConfig(): JSONObject? {
+    val direct = try { JSONObject(payload).optJSONObject("ttsConfig") } catch (_: Throwable) { null }
+    if (direct != null) return direct
+    // 向后兼容：更新前保存的闹钟负载没有 ttsConfig，用 iFlytek STT 凭据兜底合成 AI 回复语音。
+    val iflytek = cloudSttConfigForProvider("iflytek") ?: return null
+    return JSONObject()
+      .put("provider", "iflytek")
+      .put(
+        "iflytek",
+        JSONObject()
+          .put("appId", iflytek.optString("appId", ""))
+          .put("apiKey", iflytek.optString("apiKey", ""))
+          .put("apiSecret", iflytek.optString("apiSecret", ""))
+          .put("endpoint", "wss://tts-api.xfyun.cn/v2/tts"),
+      )
+  }
+
+  private fun ttsHasIflytek(cfg: JSONObject): Boolean = cfg.optJSONObject("iflytek")?.let {
+    it.optString("appId", "").isNotBlank() && it.optString("apiKey", "").isNotBlank() && it.optString("apiSecret", "").isNotBlank()
+  } == true
+
+  private fun ttsHasMicrosoft(cfg: JSONObject): Boolean = cfg.optJSONObject("microsoft")?.optString("apiKey", "")?.isNotBlank() == true
+
+  private fun ttsHasElevenLabs(cfg: JSONObject): Boolean = cfg.optJSONObject("elevenlabs")?.let {
+    it.optString("apiKey", "").isNotBlank() && (it.optString("voiceId", "").isNotBlank())
+  } == true
+
+  // 选定实际用于合成 AI 回复的服务商：先尊重用户所选；若该服务商原生未实现或缺凭据，
+  // 再回退到任一有凭据、原生已实现的服务商（讯飞/微软/ElevenLabs）；都没有则返回 null 走本地。
+  private fun resolveAiTtsProvider(cfg: JSONObject): String? {
+    when (cfg.optString("provider", "")) {
+      "microsoft" -> if (ttsHasMicrosoft(cfg)) return "microsoft"
+      "elevenlabs" -> if (ttsHasElevenLabs(cfg)) return "elevenlabs"
+      "iflytek" -> if (ttsHasIflytek(cfg)) return "iflytek"
+    }
+    if (ttsHasIflytek(cfg)) return "iflytek"
+    if (ttsHasMicrosoft(cfg)) return "microsoft"
+    if (ttsHasElevenLabs(cfg)) return "elevenlabs"
+    return null
   }
 
   private fun speakWithLocalTts(text: String, utteranceId: String, restart: Boolean) {
@@ -4896,17 +4937,23 @@ class VoiceAlarmActivity : Activity() {
     performTtsSpeak(text, utteranceId, restart, retry = 0)
   }
 
-  private fun speakWithCloudAiTts(text: String, utteranceId: String, restart: Boolean, cfg: JSONObject) {
-    logVoice("ai.tts.cloud.start", "synthesizing AI reply with cloud TTS", mapOf("utteranceId" to utteranceId, "chars" to text.length, "provider" to "iflytek"))
+  private fun speakWithCloudAiTts(text: String, utteranceId: String, restart: Boolean, cfg: JSONObject, provider: String) {
+    logVoice("ai.tts.cloud.start", "synthesizing AI reply with cloud TTS", mapOf("utteranceId" to utteranceId, "chars" to text.length, "provider" to provider, "selected" to cfg.optString("provider", "")))
     Thread {
-      val path = try { synthesizeIflytekTtsToFile(cfg, text) } catch (t: Throwable) {
-        logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId))
+      val path = try {
+        when (provider) {
+          "microsoft" -> synthesizeMicrosoftTtsToFile(cfg, text)
+          "elevenlabs" -> synthesizeElevenLabsTtsToFile(cfg, text)
+          else -> synthesizeIflytekTtsToFile(cfg.optJSONObject("iflytek") ?: JSONObject(), text, cfg.optString("voiceId", ""))
+        }
+      } catch (t: Throwable) {
+        logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId, "provider" to provider))
         null
       }
       runOnUiThread {
         if (destroyed) return@runOnUiThread
         if (path == null) {
-          logVoice("ai.tts.cloud.fallback", "cloud TTS unavailable; fall back to local TTS", mapOf("utteranceId" to utteranceId))
+          logVoice("ai.tts.cloud.fallback", "cloud TTS unavailable; fall back to local TTS", mapOf("utteranceId" to utteranceId, "provider" to provider))
           speakWithLocalTts(text, utteranceId, restart)
         } else {
           playCloudAiTtsFile(path, text, utteranceId, restart)
@@ -4972,19 +5019,21 @@ class VoiceAlarmActivity : Activity() {
     try { player.release() } catch (_: Throwable) {}
   }
 
-  private fun synthesizeIflytekTtsToFile(cfg: JSONObject, text: String): String? {
+  private fun synthesizeIflytekTtsToFile(cfg: JSONObject, text: String, voiceOverride: String = ""): String? {
     val clean = text.trim()
     if (clean.isEmpty()) return null
     val appId = cfg.optString("appId", "")
     val apiKey = cfg.optString("apiKey", "")
     val apiSecret = cfg.optString("apiSecret", "")
     if (appId.isBlank() || apiKey.isBlank() || apiSecret.isBlank()) return null
+    // ttsConfig.iflytek.endpoint 是 TTS 端点（wss://tts-api.xfyun.cn/v2/tts）；容错回退默认值。
+    val endpoint = cfg.optString("endpoint", "").let { if (it.contains("/tts")) it else "wss://tts-api.xfyun.cn/v2/tts" }
     val ttsCfg = JSONObject()
-      .put("endpoint", "wss://tts-api.xfyun.cn/v2/tts")
+      .put("endpoint", endpoint)
       .put("apiKey", apiKey)
       .put("apiSecret", apiSecret)
     val url = iflytekSignedUrl(ttsCfg)
-    val vcn = cfg.optString("ttsVoiceName", "").ifBlank { "xiaoyan" }
+    val vcn = voiceOverride.trim().ifBlank { cfg.optString("voiceName", "").ifBlank { "xiaoyan" } }
     val requestBody = JSONObject()
       .put("common", JSONObject().put("app_id", appId))
       .put(
@@ -5038,18 +5087,113 @@ class VoiceAlarmActivity : Activity() {
     try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
     val bytes = synchronized(audio) { audio.toByteArray() }
     if (bytes.isEmpty() || error.isNotBlank()) {
-      logVoice("ai.tts.cloud.error", error.ifBlank { "empty audio" }, mapOf("bytes" to bytes.size))
+      logVoice("ai.tts.cloud.error", error.ifBlank { "empty audio" }, mapOf("provider" to "iflytek", "bytes" to bytes.size))
       return null
     }
+    return writeAiTtsFile(bytes, "mp3")
+  }
+
+  private fun writeAiTtsFile(bytes: ByteArray, ext: String): String? {
+    if (bytes.isEmpty()) return null
     return try {
       val dir = File(filesDir, "voice_alarm_ai_tts").apply { mkdirs() }
       // 清掉上一轮遗留的音频（打断/退出路径可能没删），避免临时文件堆积。
       try { dir.listFiles()?.forEach { it.delete() } } catch (_: Throwable) {}
-      val out = File(dir, "ai_tts_${System.currentTimeMillis()}.mp3")
+      val out = File(dir, "ai_tts_${System.currentTimeMillis()}.$ext")
       out.writeBytes(bytes)
       out.absolutePath
     } catch (_: Throwable) { null }
   }
+
+  private fun synthesizeMicrosoftTtsToFile(ttsConfig: JSONObject, text: String): String? {
+    val clean = text.trim()
+    if (clean.isEmpty()) return null
+    val cfg = ttsConfig.optJSONObject("microsoft") ?: return null
+    val apiKey = cfg.optString("apiKey", "")
+    if (apiKey.isBlank()) return null
+    val region = cfg.optString("region", "").ifBlank { "eastasia" }
+    val custom = cfg.optString("endpoint", "")
+    val endpoint = if (custom.contains("/cognitiveservices/v1")) custom
+      else "https://${region}.tts.speech.microsoft.com/cognitiveservices/v1"
+    val voice = ttsConfig.optString("voiceId", "").ifBlank { cfg.optString("voice", "").ifBlank { "zh-CN-XiaoxiaoNeural" } }
+    val outputFormat = cfg.optString("outputFormat", "").ifBlank { "audio-24khz-48kbitrate-mono-mp3" }
+    val ssml = "<speak version='1.0' xml:lang='zh-CN'><voice xml:lang='zh-CN' name='${escapeXml(voice)}'>${escapeXml(clean)}</voice></speak>"
+    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+      requestMethod = "POST"
+      connectTimeout = 15000
+      readTimeout = 60000
+      doOutput = true
+      setRequestProperty("Ocp-Apim-Subscription-Key", apiKey)
+      setRequestProperty("Content-Type", "application/ssml+xml")
+      setRequestProperty("X-Microsoft-OutputFormat", outputFormat)
+      setRequestProperty("User-Agent", "quote_app")
+    }
+    return try {
+      OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(ssml) }
+      if (conn.responseCode !in 200..299) {
+        val err = try { conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "" } catch (_: Throwable) { "" }
+        logVoice("ai.tts.cloud.error", "microsoft http ${conn.responseCode} ${err.take(120)}", mapOf("provider" to "microsoft"))
+        null
+      } else {
+        val bytes = conn.inputStream.use { it.readBytes() }
+        val ext = if (outputFormat.contains("mp3")) "mp3" else if (outputFormat.contains("wav") || outputFormat.contains("pcm") || outputFormat.contains("riff")) "wav" else "mp3"
+        writeAiTtsFile(bytes, ext)
+      }
+    } catch (t: Throwable) {
+      logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("provider" to "microsoft"))
+      null
+    } finally {
+      try { conn.disconnect() } catch (_: Throwable) {}
+    }
+  }
+
+  private fun synthesizeElevenLabsTtsToFile(ttsConfig: JSONObject, text: String): String? {
+    val clean = text.trim()
+    if (clean.isEmpty()) return null
+    val cfg = ttsConfig.optJSONObject("elevenlabs") ?: return null
+    val apiKey = cfg.optString("apiKey", "")
+    val voiceId = ttsConfig.optString("voiceId", "").ifBlank { cfg.optString("voiceId", "") }
+    if (apiKey.isBlank() || voiceId.isBlank()) return null
+    val model = cfg.optString("model", "").ifBlank { "eleven_multilingual_v2" }
+    val outputFormat = cfg.optString("outputFormat", "").ifBlank { "mp3_44100_128" }
+    val endpoint = "https://api.elevenlabs.io/v1/text-to-speech/${URLEncoder.encode(voiceId, "UTF-8")}?output_format=${URLEncoder.encode(outputFormat, "UTF-8")}"
+    val body = JSONObject()
+      .put("text", clean)
+      .put("model_id", model)
+    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+      requestMethod = "POST"
+      connectTimeout = 15000
+      readTimeout = 60000
+      doOutput = true
+      setRequestProperty("xi-api-key", apiKey)
+      setRequestProperty("Content-Type", "application/json")
+      setRequestProperty("Accept", "audio/mpeg")
+    }
+    return try {
+      OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+      if (conn.responseCode !in 200..299) {
+        val err = try { conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "" } catch (_: Throwable) { "" }
+        logVoice("ai.tts.cloud.error", "elevenlabs http ${conn.responseCode} ${err.take(120)}", mapOf("provider" to "elevenlabs"))
+        null
+      } else {
+        val bytes = conn.inputStream.use { it.readBytes() }
+        val ext = if (outputFormat.startsWith("pcm") || outputFormat.contains("wav")) "wav" else "mp3"
+        writeAiTtsFile(bytes, ext)
+      }
+    } catch (t: Throwable) {
+      logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("provider" to "elevenlabs"))
+      null
+    } finally {
+      try { conn.disconnect() } catch (_: Throwable) {}
+    }
+  }
+
+  private fun escapeXml(s: String): String = s
+    .replace("&", "&amp;")
+    .replace("<", "&lt;")
+    .replace(">", "&gt;")
+    .replace("\"", "&quot;")
+    .replace("'", "&apos;")
 
   private fun queuePendingSpeak(text: String, utteranceId: String, restart: Boolean) {
     pendingSpeakText = text

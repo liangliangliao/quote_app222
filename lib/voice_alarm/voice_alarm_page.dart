@@ -100,6 +100,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Map<String, dynamic> _alarmAiConfig = <String, dynamic>{};
   String _alarmAiSystemPrompt = '';
   Map<String, dynamic> _alarmSttConfig = <String, dynamic>{};
+  Map<String, dynamic> _alarmTtsConfig = <String, dynamic>{};
   String _speechPreset = 'balanced';
   double _speechCompleteSilenceMs = 2400;
   double _speechPossiblyCompleteSilenceMs = 1600;
@@ -373,6 +374,40 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _alarmAiConfig = <String, dynamic>{'available': false};
     }
     await _refreshAlarmSttConfig();
+    await _refreshAlarmTtsConfig();
+  }
+
+  // AI 回复的文字转语音要用用户选择的 TTS 服务商来播报，因此把所选服务商与各家凭据、
+  // 音色一起下发给原生闹钟侧（原生按 provider 合成 AI 回复语音，失败再回退系统本地 TTS）。
+  Future<void> _refreshAlarmTtsConfig() async {
+    _alarmTtsConfig = <String, dynamic>{
+      'provider': _provider,
+      'voiceId': _voiceId.text.trim(),
+      'speed': _speed,
+      'pitch': _pitch,
+      'volume': _voiceVolume,
+      'emotion': _emotion,
+      'microsoft': {
+        'apiKey': await _kv.getString(VoiceProviderSettings.microsoftApiKey) ?? '',
+        'region': await _kv.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion,
+        'endpoint': await _kv.getString(VoiceProviderSettings.microsoftEndpoint) ?? '',
+        'voice': await _kv.getString(VoiceProviderSettings.microsoftVoice) ?? VoiceProviderSettings.defaultMicrosoftVoice,
+        'outputFormat': await _kv.getString(VoiceProviderSettings.microsoftOutputFormat) ?? VoiceProviderSettings.defaultMicrosoftOutputFormat,
+      },
+      'iflytek': {
+        'appId': await _kv.getString(VoiceProviderSettings.iflytekAppId) ?? '',
+        'apiKey': await _kv.getString(VoiceProviderSettings.iflytekApiKey) ?? '',
+        'apiSecret': await _kv.getString(VoiceProviderSettings.iflytekApiSecret) ?? '',
+        'endpoint': await _kv.getString(VoiceProviderSettings.iflytekEndpoint) ?? VoiceProviderSettings.defaultIflytekEndpoint,
+        'voiceName': await _kv.getString(VoiceProviderSettings.iflytekVoiceName) ?? VoiceProviderSettings.defaultIflytekVoiceName,
+      },
+      'elevenlabs': {
+        'apiKey': await _kv.getString(ElevenLabsSettings.apiKey) ?? '',
+        'voiceId': await _kv.getString(ElevenLabsSettings.presetVoiceId) ?? ElevenLabsSettings.defaultPresetVoiceId,
+        'model': await _kv.getString(ElevenLabsSettings.defaultModel) ?? '',
+        'outputFormat': await _kv.getString(ElevenLabsSettings.outputFormat) ?? '',
+      },
+    };
   }
 
   Future<void> _refreshAlarmSttConfig() async {
@@ -739,6 +774,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'aiConfig': _alarmAiConfig,
       'aiSystemPrompt': _alarmAiSystemPrompt,
       'sttConfig': _alarmSttConfig,
+      'ttsConfig': _alarmTtsConfig,
       'voiceEndpointing': _voiceEndpointingMap(),
     };
   }
