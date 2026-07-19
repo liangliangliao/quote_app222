@@ -11,11 +11,13 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
@@ -86,6 +88,8 @@ class VoiceAlarmActivity : Activity() {
   private var payload = "{}"
   private var recognizer: SpeechRecognizer? = null
   private var tts: TextToSpeech? = null
+  // 云端 TTS（讯飞，复用 STT 凭据）播放 AI 回复音频；失败回退系统本地 TTS。
+  private var aiTtsPlayer: MediaPlayer? = null
   @Volatile private var ttsReady = false
   @Volatile private var currentAppTtsStartedByEngine = false
   private var ttsStartWatchdogRunnable: Runnable? = null
@@ -436,6 +440,7 @@ class VoiceAlarmActivity : Activity() {
     semanticHoldExtended = false
     lastTranscriptRevisionAt = 0L
     try { tts?.stop() } catch (_: Throwable) {}
+    stopCloudAiTtsPlayback()
     stopNativeRecognizer()
     releaseContinuousAudioRecord()
     logVoice("voiceSession.reset", "reset runtime voice state for fresh alarm UI", mapOf("reason" to reason, "pipeline" to batchChatPipelineVersion))
@@ -2104,8 +2109,14 @@ class VoiceAlarmActivity : Activity() {
               validation.strongFrames >= 1 ||
                 (validation.voiceFrames >= 4 && validation.voiceFrames * 100 >= validation.frames.coerceAtLeast(1) * 10)
             )
-            if (!validation.ok && !likelyShortUserUtterance) {
-              logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to validation.reason, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
+            // 长录音里只有零星几帧“类人声”能量（常见于环境噪声/干扰声突发），密度极低，
+            // 几乎不可能是完整用户语音。旧逻辑因 strongFrames>=3 就判定通过并上传，
+            // 结果讯飞只回一个“嗯”之类的填充词。这类段直接按噪声丢弃，不上传给转写服务商。
+            val sparseNoiseOverLongCapture = validation.durationMs >= 3000L &&
+              validation.strongFrames < 6 &&
+              validation.voiceFrames * 100 < validation.frames.coerceAtLeast(1) * 8
+            if ((!validation.ok || sparseNoiseOverLongCapture) && !likelyShortUserUtterance) {
+              logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to (if (validation.ok) "sparse_noise_over_long_capture" else validation.reason), "sparseNoise" to sparseNoiseOverLongCapture, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
               fallbackOut.reset()
               out.reset()
               preRoll.clear()
@@ -4055,6 +4066,8 @@ class VoiceAlarmActivity : Activity() {
 
   private fun markAppTtsPlaybackStart() {
     logVoice("ai.tts.playback.start", "AI TTS playback state entered")
+    // 标记 AI 回复正在（或即将）播报，服务据此暂停提醒语音复读，避免两路语音叠加。
+    VoiceAlarmRingingService.appReplySpeaking = true
     resetBatchCurrentCaptureForSpeakerPlayback("AI 语音播报中：非实时模式暂停录音，避免把 AI 回复当成用户输入。", cooldownMs = 1200L)
     speaking = true
     val now = System.currentTimeMillis()
@@ -4082,6 +4095,7 @@ class VoiceAlarmActivity : Activity() {
         currentAppTtsUtteranceId = ""
         currentAppTtsStartedByEngine = false
         speaking = false
+        VoiceAlarmRingingService.appReplySpeaking = false
         markPostPlaybackHandoff()
       }
     }
@@ -4110,6 +4124,7 @@ class VoiceAlarmActivity : Activity() {
         currentAppTtsUtteranceId = ""
         currentAppTtsStartedByEngine = false
         speaking = false
+        VoiceAlarmRingingService.appReplySpeaking = false
         markPostPlaybackHandoff()
         transcriptView?.append("\n（播报状态已自动恢复，继续聆听…）")
         if (speechBuffer.isNotBlank()) {
@@ -4125,6 +4140,7 @@ class VoiceAlarmActivity : Activity() {
 
   private fun finishAppTtsPlaybackState(utteranceId: String?, restart: Boolean) {
     logVoice("ai.tts.playback.finish", "AI TTS playback finished", mapOf("utteranceId" to (utteranceId ?: ""), "restart" to restart))
+    VoiceAlarmRingingService.appReplySpeaking = false
     if (utteranceId == null || utteranceId == currentAppTtsUtteranceId) {
       appTtsWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
       appTtsWatchdogRunnable = null
@@ -4159,6 +4175,7 @@ class VoiceAlarmActivity : Activity() {
       // Stop the current TTS and release the speaking gate immediately; do not
       // wait for onDone/onError because many engines do not fire it after stop().
       try { tts?.stop() } catch (_: Throwable) {}
+      stopCloudAiTtsPlayback()
       val currentId = currentAppTtsUtteranceId
       synchronized(ttsRestartByUtterance) {
         if (currentId.isNotBlank()) ttsRestartByUtterance.remove(currentId)
@@ -4731,12 +4748,12 @@ class VoiceAlarmActivity : Activity() {
     }
     when {
       isStop -> {
-        speak("好的，已关闭闹钟。", "alarm_stop", restart = false)
+        speak("好的，已关闭闹钟。", "alarm_stop", restart = false, allowCloudTts = false)
         VoiceAlarmRingingService.stop(this)
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
       isSnooze -> {
-        speak("好的，五分钟后再次提醒。", "alarm_snooze", restart = false)
+        speak("好的，五分钟后再次提醒。", "alarm_snooze", restart = false, allowCloudTts = false)
         VoiceAlarmScheduler.snooze(this, payload, 5)
         VoiceAlarmRingingService.stop(this)
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
@@ -4935,15 +4952,182 @@ class VoiceAlarmActivity : Activity() {
     }.start()
   }
 
-  private fun speak(text: String, utteranceId: String, restart: Boolean = true) {
+  private fun speak(text: String, utteranceId: String, restart: Boolean = true, allowCloudTts: Boolean = true) {
     val safeText = text.take(600).trim()
     if (safeText.isBlank()) { if (restart) listenAgain(120L); return }
     lastAssistantSpokenText = safeText
-    if (tts == null || !ttsReady) {
-      queuePendingSpeak(safeText, utteranceId, restart)
+    // 优先用云端 TTS（讯飞，复用已配置的 STT 凭据）播报 AI 回复，音色与闹钟提示语一致、
+    // 不再落到机械的系统本地 TTS；只有在没有凭据或云端合成/播放失败时才回退本地。
+    // 关闭/延迟等即时指令确认走本地 TTS（无网络合成延迟，界面很快就会关闭）。
+    val iflytekCfg = if (allowCloudTts) cloudSttConfigForProvider("iflytek") else null
+    if (iflytekCfg != null) {
+      speakWithCloudAiTts(safeText, utteranceId, restart, iflytekCfg)
       return
     }
-    performTtsSpeak(safeText, utteranceId, restart, retry = 0)
+    speakWithLocalTts(safeText, utteranceId, restart)
+  }
+
+  private fun speakWithLocalTts(text: String, utteranceId: String, restart: Boolean) {
+    if (tts == null || !ttsReady) {
+      queuePendingSpeak(text, utteranceId, restart)
+      return
+    }
+    performTtsSpeak(text, utteranceId, restart, retry = 0)
+  }
+
+  private fun speakWithCloudAiTts(text: String, utteranceId: String, restart: Boolean, cfg: JSONObject) {
+    logVoice("ai.tts.cloud.start", "synthesizing AI reply with cloud TTS", mapOf("utteranceId" to utteranceId, "chars" to text.length, "provider" to "iflytek"))
+    Thread {
+      val path = try { synthesizeIflytekTtsToFile(cfg, text) } catch (t: Throwable) {
+        logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId))
+        null
+      }
+      runOnUiThread {
+        if (destroyed) return@runOnUiThread
+        if (path == null) {
+          logVoice("ai.tts.cloud.fallback", "cloud TTS unavailable; fall back to local TTS", mapOf("utteranceId" to utteranceId))
+          speakWithLocalTts(text, utteranceId, restart)
+        } else {
+          playCloudAiTtsFile(path, text, utteranceId, restart)
+        }
+      }
+    }.apply { name = "voice-alarm-ai-tts"; isDaemon = true }.start()
+  }
+
+  private fun playCloudAiTtsFile(path: String, text: String, utteranceId: String, restart: Boolean) {
+    try { aiTtsPlayer?.release() } catch (_: Throwable) {}
+    aiTtsPlayer = null
+    val player = MediaPlayer()
+    try {
+      player.setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+          .build(),
+      )
+      player.setDataSource(path)
+      player.setOnPreparedListener { mp ->
+        if (destroyed) { try { mp.release() } catch (_: Throwable) {}; return@setOnPreparedListener }
+        markAppTtsPlaybackStart()
+        currentAppTtsUtteranceId = utteranceId
+        currentAppTtsStartedByEngine = true
+        synchronized(ttsRestartByUtterance) { ttsRestartByUtterance[utteranceId] = restart }
+        // 复用既有的“播报卡死自动恢复”看门狗，避免云端播放异常导致 speaking 卡住。
+        scheduleAppTtsWatchdog(utteranceId, text, restart)
+        try { mp.start() } catch (_: Throwable) { cleanupCloudAiTtsPlayer(path); speakWithLocalTts(text, utteranceId, restart) }
+      }
+      player.setOnCompletionListener { mp ->
+        cleanupCloudAiTtsPlayer(path, mp)
+        handleTtsFinished(utteranceId, true)
+      }
+      player.setOnErrorListener { mp, what, extra ->
+        logVoice("ai.tts.cloud.playError", "cloud TTS playback error; fall back to local TTS", mapOf("what" to what, "extra" to extra, "utteranceId" to utteranceId))
+        cleanupCloudAiTtsPlayer(path, mp)
+        // 播放失败：回退本地 TTS，保证用户仍能听到回复。
+        speakWithLocalTts(text, utteranceId, restart)
+        true
+      }
+      aiTtsPlayer = player
+      player.prepareAsync()
+    } catch (t: Throwable) {
+      logVoice("ai.tts.cloud.playError", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId))
+      try { player.release() } catch (_: Throwable) {}
+      if (aiTtsPlayer === player) aiTtsPlayer = null
+      try { File(path).delete() } catch (_: Throwable) {}
+      speakWithLocalTts(text, utteranceId, restart)
+    }
+  }
+
+  private fun cleanupCloudAiTtsPlayer(path: String, mp: MediaPlayer? = null) {
+    try { (mp ?: aiTtsPlayer)?.release() } catch (_: Throwable) {}
+    if (mp == null || aiTtsPlayer === mp) aiTtsPlayer = null
+    try { File(path).delete() } catch (_: Throwable) {}
+  }
+
+  private fun stopCloudAiTtsPlayback() {
+    val player = aiTtsPlayer ?: return
+    aiTtsPlayer = null
+    try { player.stop() } catch (_: Throwable) {}
+    try { player.release() } catch (_: Throwable) {}
+  }
+
+  private fun synthesizeIflytekTtsToFile(cfg: JSONObject, text: String): String? {
+    val clean = text.trim()
+    if (clean.isEmpty()) return null
+    val appId = cfg.optString("appId", "")
+    val apiKey = cfg.optString("apiKey", "")
+    val apiSecret = cfg.optString("apiSecret", "")
+    if (appId.isBlank() || apiKey.isBlank() || apiSecret.isBlank()) return null
+    val ttsCfg = JSONObject()
+      .put("endpoint", "wss://tts-api.xfyun.cn/v2/tts")
+      .put("apiKey", apiKey)
+      .put("apiSecret", apiSecret)
+    val url = iflytekSignedUrl(ttsCfg)
+    val vcn = cfg.optString("ttsVoiceName", "").ifBlank { "xiaoyan" }
+    val requestBody = JSONObject()
+      .put("common", JSONObject().put("app_id", appId))
+      .put(
+        "business",
+        JSONObject()
+          .put("aue", "lame")
+          .put("auf", "audio/L16;rate=16000")
+          .put("vcn", vcn)
+          .put("tte", "UTF8")
+          .put("speed", 50)
+          .put("volume", 90)
+          .put("pitch", 50),
+      )
+      .put("data", JSONObject().put("status", 2).put("text", Base64.getEncoder().encodeToString(clean.toByteArray(Charsets.UTF_8))))
+    val opened = CountDownLatch(1)
+    val closed = CountDownLatch(1)
+    val audio = ByteArrayOutputStream()
+    var error = ""
+    var webSocket: WebSocket? = null
+    val listener = object : WebSocketListener() {
+      override fun onOpen(webSocket: WebSocket, response: Response) {
+        opened.countDown()
+        try { webSocket.send(requestBody.toString()) } catch (_: Throwable) {}
+      }
+      override fun onMessage(webSocket: WebSocket, message: String) {
+        val obj = try { JSONObject(message) } catch (_: Throwable) { JSONObject() }
+        val code = obj.optInt("code", -1)
+        if (code != 0) {
+          error = "讯飞 TTS code=$code ${obj.optString("message", "")}"
+          closed.countDown()
+          return
+        }
+        val data = obj.optJSONObject("data")
+        val b64 = data?.optString("audio", "") ?: ""
+        if (b64.isNotBlank()) { try { synchronized(audio) { audio.write(Base64.getDecoder().decode(b64)) } } catch (_: Throwable) {} }
+        if ((data?.optInt("status", 0) ?: 0) == 2) closed.countDown()
+      }
+      override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+        error = t.message ?: t.javaClass.simpleName
+        opened.countDown()
+        closed.countDown()
+      }
+      override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { closed.countDown() }
+    }
+    webSocket = getIflytekSttClient().newWebSocket(Request.Builder().url(url).build(), listener)
+    if (!opened.await(12, TimeUnit.SECONDS)) {
+      try { webSocket?.cancel() } catch (_: Throwable) {}
+      return null
+    }
+    closed.await(20, TimeUnit.SECONDS)
+    try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
+    val bytes = synchronized(audio) { audio.toByteArray() }
+    if (bytes.isEmpty() || error.isNotBlank()) {
+      logVoice("ai.tts.cloud.error", error.ifBlank { "empty audio" }, mapOf("bytes" to bytes.size))
+      return null
+    }
+    return try {
+      val dir = File(filesDir, "voice_alarm_ai_tts").apply { mkdirs() }
+      // 清掉上一轮遗留的音频（打断/退出路径可能没删），避免临时文件堆积。
+      try { dir.listFiles()?.forEach { it.delete() } } catch (_: Throwable) {}
+      val out = File(dir, "ai_tts_${System.currentTimeMillis()}.mp3")
+      out.writeBytes(bytes)
+      out.absolutePath
+    } catch (_: Throwable) { null }
   }
 
   private fun queuePendingSpeak(text: String, utteranceId: String, restart: Boolean) {
@@ -5168,6 +5352,7 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onDestroy() {
     destroyed = true
+    VoiceAlarmRingingService.appReplySpeaking = false
     stopCloudStt()
     try { iflytekSttClient?.dispatcher?.executorService?.shutdown() } catch (_: Throwable) {}
     try { iflytekSttClient?.connectionPool?.evictAll() } catch (_: Throwable) {}
@@ -5193,6 +5378,7 @@ class VoiceAlarmActivity : Activity() {
     pendingSpeakUtteranceId = ""
     ttsReady = false
     try { tts?.shutdown() } catch (_: Throwable) {}
+    stopCloudAiTtsPlayback()
     recognizer = null
     tts = null
     super.onDestroy()
