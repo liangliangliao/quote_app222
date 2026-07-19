@@ -2441,7 +2441,26 @@ class VoiceAlarmActivity : Activity() {
       "xai" -> recognizeWithXaiRest(c, pcm)
       else -> ""
     }.trim()
-    val primary = call(provider, cfg)
+    // 主服务瞬时网络错误（尤其讯飞 WebSocket 连接超时）自动重试几次。
+    // 之前主调用抛错会直接冒泡到最外层：既不重试、也不尝试备用服务商，
+    // 用户明明说了话却被判“识别失败”。这里对可重试错误做指数退避重试；
+    // 干净空结果（HTTP 200 无文字）不重试本服务商，直接走备用服务商。
+    var primaryError: Throwable? = null
+    var primary = ""
+    val maxPrimaryAttempts = 3
+    for (attempt in 1..maxPrimaryAttempts) {
+      try {
+        primary = call(provider, cfg)
+        primaryError = null
+        break
+      } catch (t: Throwable) {
+        primaryError = t
+        val retryable = isRetryableSttError(t)
+        logVoice("batch.stt.primary.error", t.message ?: t.javaClass.simpleName, mapOf("provider" to provider, "attempt" to attempt, "maxAttempts" to maxPrimaryAttempts, "retryable" to retryable, "bytes" to pcm.size, "pipeline" to batchChatPipelineVersion))
+        if (attempt >= maxPrimaryAttempts || !retryable) break
+        try { Thread.sleep(400L * attempt) } catch (_: InterruptedException) {}
+      }
+    }
     if (primary.isNotBlank()) return primary
 
     // Some STT services can return HTTP 200 + empty transcript for a real user utterance.
@@ -2458,7 +2477,25 @@ class VoiceAlarmActivity : Activity() {
         return text
       }
     }
+    // 主服务是网络类错误、且备用服务商也没救回来：把原始错误抛出去，
+    // 让上层显示“可重试的识别失败”，而不是把真人语音当成误触发静默丢弃。
+    primaryError?.let { throw it }
     return ""
+  }
+
+  private fun isRetryableSttError(t: Throwable): Boolean {
+    if (t is java.net.SocketTimeoutException ||
+      t is java.net.UnknownHostException ||
+      t is java.io.InterruptedIOException ||
+      t is java.net.ConnectException ||
+      t is java.net.SocketException
+    ) return true
+    val msg = (t.message ?: t.javaClass.simpleName).lowercase(Locale.US)
+    return msg.contains("超时") || msg.contains("timeout") ||
+      msg.contains("connection") || msg.contains("connect") ||
+      msg.contains("socket") || msg.contains("reset") ||
+      msg.contains("unreachable") || msg.contains("closed") ||
+      msg.contains("eof") || msg.contains("network")
   }
 
   private fun recognizeBatchByChunks(provider: String, cfg: JSONObject, pcm: ByteArray, reason: String): String {
@@ -3193,7 +3230,11 @@ class VoiceAlarmActivity : Activity() {
       }
     }
     webSocket = client.newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
-    if (!opened.await(5, TimeUnit.SECONDS)) throw IllegalStateException("讯飞 WebSocket 连接超时")
+    if (!opened.await(12, TimeUnit.SECONDS)) {
+      // 主动取消这条迟迟未握手成功的连接，避免它在超时后才 onOpen 变成僵尸连接。
+      try { webSocket?.cancel() } catch (_: Throwable) {}
+      throw IllegalStateException("讯飞 WebSocket 连接超时")
+    }
     val chunkSize = 1280
     var offset = 0
     var frameIndex = 0
@@ -3394,7 +3435,14 @@ class VoiceAlarmActivity : Activity() {
 
   private fun getIflytekSttClient(): OkHttpClient {
     return iflytekSttClient ?: OkHttpClient.Builder()
+      // 讯飞 STT 走 WebSocket。之前没有显式连接超时/保活，弱网下握手可能要十几秒，
+      // 而上层只等 5s 就判连接超时且不重试，导致“明明说了话却识别失败”。
+      // 给足连接/写入超时并开启 ping 保活；readTimeout 仍为 0，因为要长时间接收流式结果。
+      .connectTimeout(15, TimeUnit.SECONDS)
+      .writeTimeout(15, TimeUnit.SECONDS)
       .readTimeout(0, TimeUnit.MILLISECONDS)
+      .pingInterval(20, TimeUnit.SECONDS)
+      .retryOnConnectionFailure(true)
       .build()
       .also { iflytekSttClient = it }
   }
