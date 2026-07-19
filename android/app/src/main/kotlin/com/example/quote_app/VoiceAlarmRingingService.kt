@@ -863,11 +863,9 @@ class VoiceAlarmRingingService : Service() {
       // 蓝牙耳机若通过 SCO（电话通道）出声，其音量由 STREAM_VOICE_CALL 控制，
       // STREAM_MUSIC 的提升对它无效——这正是“蓝牙耳机时播报/音乐很小”的原因。
       // 因此 SCO 生效时把通话流也拉到接近最大，并在结束后恢复。
-      // SCO 可能刚请求还没连上（isBluetoothScoOn 短时仍为 false），因此只要存在
-      // 支持 SCO 的蓝牙麦克风耳机就一并提升通话流，覆盖“请求了 SCO 但尚未建立”的时间窗。
-      val scoLikely = audio.isBluetoothScoOn ||
-        (VoiceAlarmAudioRoute.preferredInputDevice(this)?.let { VoiceAlarmAudioRoute.isBluetoothScoType(it.type) } == true)
-      if (scoLikely) {
+      // 正常情况下已不再启用 SCO（会挂起 A2DP）。这里仅在系统确实处于 SCO 出声时兜底：
+      // 此时音量由 STREAM_VOICE_CALL 控制，一并拉高并在结束后恢复。
+      if (audio.isBluetoothScoOn) {
         val callStream = AudioManager.STREAM_VOICE_CALL
         val callCurrent = audio.getStreamVolume(callStream)
         if (originalVoiceCallVolume == null) originalVoiceCallVolume = callCurrent

@@ -654,16 +654,10 @@ class VoiceAlarmActivity : Activity() {
    * ahead of time; wired headset mics are picked up automatically by AudioRecord.setPreferredDevice.
    */
   private fun ensureHeadsetMicRouting() {
-    val device = VoiceAlarmAudioRoute.preferredInputDevice(this) ?: return
-    if (!VoiceAlarmAudioRoute.isBluetoothScoType(device.type) || bluetoothScoRequested) return
-    try {
-      val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-      audio.startBluetoothSco()
-      @Suppress("DEPRECATION")
-      audio.isBluetoothScoOn = true
-      bluetoothScoRequested = true
-      logVoice("audioRoute.sco.start", "requested Bluetooth SCO for headset mic conversation")
-    } catch (_: Throwable) {}
+    // 故意不再启动蓝牙 SCO。SCO 与 A2DP 在多数设备上互斥：一旦为“耳机麦克风”开启 SCO，
+    // 系统会挂起 A2DP，导致闹钟提示语只播几个字就断、背景音乐完全不出声、且 SCO 电话通道
+    // 声音很小。闹钟场景手机通常就在身边，改用手机内置麦克风采集，把 A2DP 留给高音量立体声播放。
+    logVoice("audioRoute.sco.skip", "keep A2DP playback; capture via built-in mic instead of starting SCO (SCO would suspend A2DP)")
   }
 
   private fun stopHeadsetMicRouting() {
@@ -726,7 +720,11 @@ class VoiceAlarmActivity : Activity() {
         continue
       }
       try {
-        VoiceAlarmAudioRoute.preferredInputDevice(this)?.let { record.setPreferredDevice(it) }
+        // 只把有线/USB 耳机麦克风设为首选输入；蓝牙 SCO 麦克风需要开 SCO 才有音频，
+        // 而我们不再开 SCO（会挂起 A2DP 播放），所以此时让系统用内置麦克风采集。
+        VoiceAlarmAudioRoute.preferredInputDevice(this)?.let { dev ->
+          if (!VoiceAlarmAudioRoute.isBluetoothScoType(dev.type)) record.setPreferredDevice(dev)
+        }
       } catch (_: Throwable) {}
       val effects = if (playbackGuard) enableVoiceSeparationEffects(record.audioSessionId) else VoiceAudioEffects(null, null, null)
       try {
@@ -2342,88 +2340,11 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun compactPcmForStt(pcm: ByteArray, sampleRate: Int = 16000, reason: String = "submit"): ByteArray {
-    // 聊天 App 的服务端 STT 一般拿到的是“当前语音输入”的有效语音段，而不是等待/播报/长空白。
-    // 这里不再做破坏性切句；只删除长静音/空白帧，并在每个有声音片段前后保留 padding，
-    // 同时保留短停顿，避免把一句话剪得不自然。
-    if (pcm.size < sampleRate * 2 / 2) return pcm
-    val bytesPerSample = 2
-    val frameMs = 20
-    val frameBytesRaw = sampleRate * bytesPerSample * frameMs / 1000
-    val frameBytes = (frameBytesRaw / 2 * 2).coerceAtLeast(320)
-    if (pcm.size <= frameBytes * 8) return pcm
-    data class FrameInfo(val start: Int, val end: Int, val rms: Int, val peak: Int)
-    val frames = ArrayList<FrameInfo>()
-    var pos = 0
-    while (pos < pcm.size) {
-      val end = minOf(pcm.size, pos + frameBytes)
-      val evenEnd = if (((end - pos) and 1) == 0) end else end - 1
-      if (evenEnd <= pos) break
-      val level = audioFrameLevel(pcm.copyOfRange(pos, evenEnd), evenEnd - pos)
-      frames.add(FrameInfo(pos, evenEnd, level.rms, level.peak))
-      pos = evenEnd
-    }
-    if (frames.isEmpty()) return pcm
-    val sortedRms = frames.map { it.rms }.sorted()
-    val p20 = sortedRms[(sortedRms.size * 0.20).toInt().coerceIn(0, sortedRms.lastIndex)]
-    val p50 = sortedRms[(sortedRms.size * 0.50).toInt().coerceIn(0, sortedRms.lastIndex)]
-    val noiseRms = minOf(p20, p50).coerceIn(8, 900)
-    val rmsThreshold = maxOf(90, (noiseRms * 2.2).toInt()).coerceAtMost(900)
-    val peakThreshold = maxOf(520, noiseRms * 8).coerceAtMost(4200)
-    fun isVoiceLike(f: FrameInfo): Boolean {
-      // 绝对阈值保护弱语音；动态阈值保护底噪。
-      return f.rms >= rmsThreshold || f.peak >= peakThreshold || f.rms >= 260 || f.peak >= 1500
-    }
-    val voiced = frames.map { isVoiceLike(it) }
-    val rawSegments = ArrayList<Pair<Int, Int>>()
-    var i = 0
-    while (i < frames.size) {
-      while (i < frames.size && !voiced[i]) i += 1
-      if (i >= frames.size) break
-      val start = i
-      while (i < frames.size && voiced[i]) i += 1
-      val endExclusive = i
-      rawSegments.add(start to endExclusive)
-    }
-    if (rawSegments.isEmpty()) {
-      logVoice("batch.voiceCompact.noVoice", "voice compaction found no voiced frames; keep original audio", mapOf("reason" to reason, "bytes" to pcm.size, "seconds" to String.format(Locale.US, "%.2f", pcm.size / (sampleRate * 2.0)), "noiseRms" to noiseRms, "rmsTh" to rmsThreshold, "peakTh" to peakThreshold, "pipeline" to batchChatPipelineVersion))
-      return pcm
-    }
-    val padFrames = (260 / frameMs).coerceAtLeast(3)
-    val maxGapFrames = (520 / frameMs).coerceAtLeast(6)
-    val minSegmentFrames = (80 / frameMs).coerceAtLeast(2)
-    val merged = ArrayList<Pair<Int, Int>>()
-    for ((segStart, segEnd) in rawSegments) {
-      if (segEnd - segStart < minSegmentFrames) continue
-      val paddedStart = (segStart - padFrames).coerceAtLeast(0)
-      val paddedEnd = (segEnd + padFrames).coerceAtMost(frames.size)
-      if (merged.isEmpty()) {
-        merged.add(paddedStart to paddedEnd)
-      } else {
-        val last = merged.removeAt(merged.lastIndex)
-        if (paddedStart - last.second <= maxGapFrames) {
-          merged.add(last.first to maxOf(last.second, paddedEnd))
-        } else {
-          merged.add(last)
-          merged.add(paddedStart to paddedEnd)
-        }
-      }
-    }
-    if (merged.isEmpty()) return pcm
-    val out = ByteArrayOutputStream(pcm.size)
-    for ((startFrame, endFrame) in merged) {
-      val byteStart = frames[startFrame].start
-      val byteEnd = frames[endFrame - 1].end
-      if (byteEnd > byteStart) out.write(pcm, byteStart, byteEnd - byteStart)
-    }
-    val compacted = out.toByteArray()
-    val originalMs = pcmDurationMs(pcm, sampleRate)
-    val compactMs = pcmDurationMs(compacted, sampleRate)
-    if (compacted.size < sampleRate * 2 * 350 / 1000 || compacted.size >= (pcm.size * 0.96).toInt()) {
-      logVoice("batch.voiceCompact.keepOriginal", "voice compaction not beneficial; keep original audio", mapOf("reason" to reason, "originalMs" to originalMs, "compactMs" to compactMs, "segments" to merged.size, "noiseRms" to noiseRms, "rmsTh" to rmsThreshold, "peakTh" to peakThreshold, "pipeline" to batchChatPipelineVersion))
-      return pcm
-    }
-    logVoice("batch.voiceCompact.applied", "removed long silent/empty spans before STT upload", mapOf("reason" to reason, "originalMs" to originalMs, "compactMs" to compactMs, "removedMs" to (originalMs - compactMs).coerceAtLeast(0L), "segments" to merged.size, "noiseRms" to noiseRms, "rmsTh" to rmsThreshold, "peakTh" to peakThreshold, "pipeline" to batchChatPipelineVersion))
-    return compacted
+    // 已停用按能量阈值删“静音”的压缩：说话时忽大忽小、偏安静的真语音常被误删，
+    // 导致“说了一大段，只识别出一部分/缺字漏句”。讯飞批式 STT 自带端点/静音处理，
+    // 直接上传完整录音更稳、不会漏句。整体返回原始音频（不再裁剪）。
+    logVoice("batch.voiceCompact.disabled", "voice compaction disabled; upload full captured audio to avoid truncating quiet speech", mapOf("reason" to reason, "bytes" to pcm.size, "seconds" to String.format(Locale.US, "%.2f", pcm.size / (sampleRate * 2.0)), "pipeline" to batchChatPipelineVersion))
+    return pcm
   }
 
   private fun sttProviderLabel(provider: String): String = when (provider) {
