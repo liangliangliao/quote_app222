@@ -278,10 +278,7 @@ object VoiceAlarmScheduler {
     val app = context.applicationContext
     if (!alarmKey.isNullOrBlank()) {
       val id = alarmId(JSONObject().put("alarmId", alarmKey).toString())
-      cancelRequestCode(app, id)
-      for (prefs: SharedPreferences in persistedPrefs(app)) {
-        prefs.edit().remove("${KEY_PAYLOAD}_$id").remove("${KEY_AT}_$id").apply()
-      }
+      cancelById(app, id)
       return
     }
     val ids = LinkedHashSet<Int>()
@@ -296,6 +293,77 @@ object VoiceAlarmScheduler {
     }
     ids.forEach { cancelRequestCode(app, it) }
     clearPersistedAlarms(app)
+  }
+
+  // 彻底删除某个闹钟：取消所有触发通道 + 清掉 id 键副本 + 从 ids 列表移除 +
+  // 清掉指向同一闹钟的 morning/night 模式副本（否则 rescheduleAll 会把它复活）。
+  @JvmStatic
+  fun cancelById(context: Context, id: Int) {
+    val app = context.applicationContext
+    cancelRequestCode(app, id)
+    for (prefs: SharedPreferences in persistedPrefs(app)) {
+      val editor = prefs.edit()
+      editor.remove("${KEY_PAYLOAD}_$id").remove("${KEY_AT}_$id")
+      val raw = prefs.getString(KEY_IDS, "[]") ?: "[]"
+      val nextIds = JSONArray()
+      try {
+        val arr = JSONArray(raw)
+        for (i in 0 until arr.length()) {
+          val k = arr.optString(i)
+          if (k != id.toString()) nextIds.put(k)
+        }
+      } catch (_: Throwable) {}
+      editor.putString(KEY_IDS, nextIds.toString())
+      for (mode in arrayOf("morning", "night")) {
+        val mp = prefs.getString("${KEY_PAYLOAD}_$mode", null)
+        if (mp != null && alarmId(mp) == id) {
+          editor.remove("${KEY_PAYLOAD}_$mode").remove("${KEY_AT}_$mode")
+        }
+      }
+      editor.apply()
+    }
+  }
+
+  // 列出所有已持久化的闹钟（按 id 去重），供前端界面展示、删除、开关。
+  @JvmStatic
+  fun listPersistedAlarms(context: Context): String {
+    val app = context.applicationContext
+    val entries = LinkedHashMap<Int, JSONObject>()
+    fun consider(fallbackKey: String, payload: String?, atMs: Long) {
+      if (payload.isNullOrBlank()) return
+      val obj = try { JSONObject(payload) } catch (_: Throwable) { return }
+      val id = alarmId(payload)
+      val info = JSONObject()
+        .put("id", id)
+        .put("alarmId", obj.optString("alarmId", ""))
+        .put("mode", obj.optString("mode", ""))
+        .put("hour", obj.optInt("hour", 8))
+        .put("minute", obj.optInt("minute", 0))
+        .put("text", obj.optString("text", ""))
+        .put("frequency", obj.optString("frequency", ""))
+        .put("weekdays", obj.optJSONArray("weekdays") ?: JSONArray())
+        .put("atMs", atMs)
+        .put("fallbackKey", fallbackKey)
+      // id 已存在时，保留 atMs 更大的（更完整/更新的）。
+      val prev = entries[id]
+      if (prev == null || atMs >= prev.optLong("atMs", 0L)) entries[id] = info
+    }
+    for (prefs: SharedPreferences in persistedPrefs(app)) {
+      val raw = prefs.getString(KEY_IDS, "[]") ?: "[]"
+      try {
+        val arr = JSONArray(raw)
+        for (i in 0 until arr.length()) {
+          val k = arr.optString(i)
+          consider(k, prefs.getString("${KEY_PAYLOAD}_$k", null), prefs.getLong("${KEY_AT}_$k", 0L))
+        }
+      } catch (_: Throwable) {}
+      for (mode in arrayOf("morning", "night")) {
+        consider(mode, prefs.getString("${KEY_PAYLOAD}_$mode", null), prefs.getLong("${KEY_AT}_$mode", 0L))
+      }
+    }
+    val out = JSONArray()
+    entries.values.forEach { out.put(it) }
+    return out.toString()
   }
 
   @JvmStatic

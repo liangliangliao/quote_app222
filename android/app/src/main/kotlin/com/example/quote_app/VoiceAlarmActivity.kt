@@ -3903,11 +3903,17 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isPostPlaybackHandoffActive(): Boolean = System.currentTimeMillis() < postPlaybackHandoffUntil
 
-  private fun scheduleBatchRecorderRefreshAfterPlayback(delayMs: Long = 140L) {
+  private fun scheduleBatchRecorderRefreshAfterPlayback(delayMs: Long = 320L) {
     if (selectedSttMode() != "batch") return
     speechHandler.postDelayed({
       if (destroyed || selectedSttMode() != "batch" || speaking || alarmVoicePlaying) return@postDelayed
       if (batchRecognitionInFlight || batchSubmitInProgress || batchPcmQueue.isNotEmpty() || batchCurrentConfirmedSpeech) return@postDelayed
+      // 用户紧接着播报就开口时，不要释放当前已在录音的采集器——那会把开头几个字丢掉。
+      // 只有在还没检测到用户说话时才刷新到干净麦克风源。
+      if (batchCurrentSpeechDetected) {
+        logVoice("batch.postPlaybackRecorderRefresh.skip", "user already speaking right after playback; keep current recorder to preserve leading words", mapOf("speechDetected" to batchCurrentSpeechDetected, "pipeline" to batchChatPipelineVersion))
+        return@postDelayed
+      }
       batchSpeakerPlaybackEpoch += 1L
       releaseContinuousAudioRecord()
       logVoice("batch.postPlaybackRecorderRefresh", "refresh recorder shortly after playback so clean user speech is captured from normal mic source", mapOf("delayMs" to delayMs, "pipeline" to batchChatPipelineVersion))

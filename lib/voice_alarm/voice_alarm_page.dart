@@ -101,6 +101,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   String _alarmAiSystemPrompt = '';
   Map<String, dynamic> _alarmSttConfig = <String, dynamic>{};
   Map<String, dynamic> _alarmTtsConfig = <String, dynamic>{};
+  List<Map<String, dynamic>> _scheduledAlarms = <Map<String, dynamic>>[];
   String _speechPreset = 'balanced';
   double _speechCompleteSilenceMs = 2400;
   double _speechPossiblyCompleteSilenceMs = 1600;
@@ -120,6 +121,86 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   void initState() {
     super.initState();
     _loadMode('morning');
+    _loadScheduledAlarms();
+  }
+
+  // 读取原生实际已排期的所有闹钟（含前端没记录、但仍会到点响的“幽灵闹钟”），供展示与删除。
+  Future<void> _loadScheduledAlarms() async {
+    try {
+      final raw = await _native.invokeMethod<String>('listAlarms');
+      final list = <Map<String, dynamic>>[];
+      if (raw != null && raw.trim().isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final e in decoded) {
+            if (e is Map) list.add(e.map((k, v) => MapEntry(k.toString(), v)));
+          }
+        }
+      }
+      list.sort((a, b) {
+        final ha = (a['hour'] as num?)?.toInt() ?? 0;
+        final hb = (b['hour'] as num?)?.toInt() ?? 0;
+        if (ha != hb) return ha.compareTo(hb);
+        return ((a['minute'] as num?)?.toInt() ?? 0).compareTo((b['minute'] as num?)?.toInt() ?? 0);
+      });
+      if (mounted) setState(() => _scheduledAlarms = list);
+    } catch (_) {
+      // 旧版原生不支持 listAlarms 时静默忽略。
+    }
+  }
+
+  String _weekdaysLabel(Map<String, dynamic> alarm) {
+    final freq = (alarm['frequency'] ?? '').toString();
+    if (freq == 'daily') return '每天';
+    if (freq == 'weekdays') return '工作日';
+    final raw = alarm['weekdays'];
+    final days = <int>[];
+    if (raw is List) {
+      for (final d in raw) {
+        final n = (d is num) ? d.toInt() : int.tryParse(d.toString());
+        if (n != null) days.add(n);
+      }
+    }
+    if (days.isEmpty) return '每天';
+    if (days.length == 7) return '每天';
+    if (days.length == 5 && days.toSet().containsAll({1, 2, 3, 4, 5}) && !days.contains(6) && !days.contains(7)) return '工作日';
+    const names = {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '日'};
+    days.sort();
+    return '周${days.map((d) => names[d] ?? '').join('、周')}';
+  }
+
+  Future<void> _deleteScheduledAlarm(Map<String, dynamic> alarm) async {
+    final id = (alarm['id'] as num?)?.toInt();
+    if (id == null) return;
+    try {
+      await _native.invokeMethod<void>('cancelAlarm', {'id': id});
+      _toast('已删除该闹钟');
+    } catch (e) {
+      _toast('删除失败：$e');
+    }
+    await _loadScheduledAlarms();
+  }
+
+  Future<void> _clearAllScheduledAlarms() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清除全部闹钟'),
+        content: const Text('将取消所有已排期的语音闹钟（包括未在列表设置过、但仍会到点响的闹钟）。确定吗？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('全部清除')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _native.invokeMethod<void>('cancelAllAlarms');
+      _toast('已清除全部闹钟');
+    } catch (e) {
+      _toast('清除失败：$e');
+    }
+    await _loadScheduledAlarms();
   }
 
   @override
@@ -607,6 +688,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         'payload': payload,
       });
       _toast('已添加 ${_mode == 'morning' ? '起床' : '睡觉'}闹钟 ${_time.format(context)}；当前模块共 ${_alarmEntries.length} 组');
+      await _loadScheduledAlarms();
       setState(() {});
     } catch (e) {
       _toast('设置失败：$e');
@@ -819,6 +901,56 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
             ],
             selected: {_mode},
             onSelectionChanged: (value) => _loadMode(value.first),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(
+                  children: [
+                    const Expanded(child: Text('已设置的闹钟（全部）', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    IconButton(
+                      tooltip: '刷新',
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _loadScheduledAlarms,
+                    ),
+                  ],
+                ),
+                if (_scheduledAlarms.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('当前没有已排期的闹钟。', style: TextStyle(color: Colors.grey)),
+                  )
+                else
+                  ..._scheduledAlarms.map((alarm) {
+                    final h = (alarm['hour'] as num?)?.toInt() ?? 0;
+                    final m = (alarm['minute'] as num?)?.toInt() ?? 0;
+                    final modeLabel = (alarm['mode'] ?? '').toString() == 'night' ? '睡觉' : '起床';
+                    final text = (alarm['text'] ?? '').toString();
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.alarm_on),
+                      title: Text('${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}  ·  ${_weekdaysLabel(alarm)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                      subtitle: Text('$modeLabel${text.isEmpty ? '' : ' · $text'}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        tooltip: '删除',
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        onPressed: () => _deleteScheduledAlarm(alarm),
+                      ),
+                    );
+                  }),
+                if (_scheduledAlarms.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _clearAllScheduledAlarms,
+                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+                      label: const Text('清除全部闹钟', style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ),
+              ]),
+            ),
           ),
           const SizedBox(height: 12),
           Card(
