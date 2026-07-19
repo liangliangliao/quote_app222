@@ -4687,8 +4687,10 @@ class VoiceAlarmActivity : Activity() {
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
       isSnooze -> {
-        speak("好的，五分钟后再次提醒。", "alarm_snooze", restart = false, allowCloudTts = false)
-        VoiceAlarmScheduler.snooze(this, payload, 5)
+        val minutes = parseSnoozeMinutes(text)
+        logVoice("command.snooze", "voice snooze command recognized", mapOf("text" to logPreview(text), "minutes" to minutes))
+        speak("好的，${minutes}分钟后再次提醒。", "alarm_snooze", restart = false, allowCloudTts = false)
+        VoiceAlarmScheduler.snooze(this, payload, minutes)
         VoiceAlarmRingingService.stop(this)
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
@@ -4786,16 +4788,48 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isSnoozeCommand(text: String): Boolean {
     val normalized = normalizeSpeechText(text)
-    val hasSnoozeIntent = listOf("延迟", "延时", "推迟", "稍后", "等会", "再响", "贪睡", "小睡", "过会").any {
-      text.contains(it) || normalized.contains(normalizeSpeechText(it))
+    fun has(vararg keys: String) = keys.any { text.contains(it) || normalized.contains(normalizeSpeechText(it)) }
+    // 明确表达“稍后/延迟提醒、贪睡、再睡”的独立短语，无需再带具体时间。
+    if (has(
+        "贪睡", "小睡", "再睡一会", "再睡会", "再睡一下", "再睡片刻", "接着睡", "继续睡",
+        "稍后提醒", "待会提醒", "晚点提醒", "延迟提醒", "推迟提醒", "过会提醒", "过会儿提醒",
+        "再眯一会", "眯一会", "再躺一会", "等下提醒", "等会提醒",
+      )
+    ) return true
+    // “X分钟之后/以后/后 + 提醒/叫我/叫醒/再响/喊我/再说”这类“过一会再叫我”的表达。
+    if (has(
+        "后提醒", "之后提醒", "以后提醒", "后叫我", "之后叫我", "以后叫我", "后叫醒",
+        "后喊我", "后再响", "后再叫", "后再说", "后再提醒", "后再喊", "后再叫我",
+      )
+    ) return true
+    val hasMinutes = normalized.contains("分钟") || normalized.contains("分种") ||
+      Regex("[0-9零一两二三四五六七八九十]+\\s*分").containsMatchIn(normalized)
+    // 贪睡/延迟意图词 + 时间。
+    val snoozeVerb = has(
+      "延迟", "延时", "推迟", "稍后", "等会", "等一会", "待会", "再响",
+      "再睡", "过会", "过一会", "再过", "晚点", "晚些", "缓一缓", "缓会",
+    )
+    if (snoozeVerb && hasMinutes) return true
+    // “过5分钟/过五分钟/再过X分钟”等。
+    if (hasMinutes && has("过5", "过五", "过10", "过十", "过15", "过三", "过两", "过二", "过一", "再过")) return true
+    return normalized.contains("延迟五") || normalized.contains("延迟5") ||
+      normalized.contains("延时五") || normalized.contains("延时5")
+  }
+
+  // 解析用户想延迟的分钟数；无法识别时默认 5 分钟。
+  private fun parseSnoozeMinutes(text: String): Int {
+    val normalized = normalizeSpeechText(text)
+    Regex("([0-9]{1,3})\\s*分").find(normalized)?.groupValues?.get(1)?.toIntOrNull()?.let {
+      if (it in 1..180) return it
     }
-    val hasFiveMinutes = listOf("五分钟", "5分钟", "五 分钟", "5 分钟", "五分", "5分", "五分钟后", "5分钟后").any {
-      text.contains(it) || normalized.contains(normalizeSpeechText(it))
+    val cn = mapOf(
+      "十五" to 15, "二十" to 20, "三十" to 30, "四十" to 40, "四十五" to 45, "五十" to 50, "六十" to 60,
+      "十" to 10, "两" to 2, "二" to 2, "三" to 3, "四" to 4, "五" to 5, "六" to 6, "七" to 7, "八" to 8, "九" to 9, "一" to 1,
+    )
+    for ((word, minutes) in cn) {
+      if (normalized.contains("${word}分")) return minutes
     }
-    return (hasSnoozeIntent && hasFiveMinutes) ||
-      normalized.contains("延迟五") || normalized.contains("延迟5") ||
-      normalized.contains("延时五") || normalized.contains("延时5") ||
-      normalized.contains("五分钟后提醒") || normalized.contains("5分钟后提醒")
+    return 5
   }
 
   private fun isWakeCommand(text: String): Boolean = listOf("小名小名", "你好AI", "你好ai", "闹钟助手", "AI助手", "ai助手", "小名", "助手").any { text.contains(it) }
