@@ -99,6 +99,7 @@ class VoiceAlarmActivity : Activity() {
   private var pendingSpeakAttempts = 0
   private var transcriptView: TextView? = null
   private var transcriptScrollView: ScrollView? = null
+  private var ttsProviderView: TextView? = null
   private var batchStatusView: TextView? = null
   private var batchRetryButton: Button? = null
   @Volatile private var destroyed = false
@@ -498,7 +499,7 @@ class VoiceAlarmActivity : Activity() {
       setTextColor(Color.WHITE)
       gravity = Gravity.CENTER
       setPadding(0, 48, 0, 64)
-    }, LinearLayout.LayoutParams(-1, 0, 1f))
+    }, LinearLayout.LayoutParams(-1, -2))
     transcriptView = TextView(this).apply {
       text = "可直接说“小名小名/你好AI/闹钟助手”唤醒 AI；说“关闭闹钟”停止；说“延迟五分钟”稍后提醒。"
       textSize = 16f
@@ -510,9 +511,21 @@ class VoiceAlarmActivity : Activity() {
     }
     transcriptScrollView = ScrollView(this).apply {
       isFillViewport = false
+      isVerticalScrollBarEnabled = true
       addView(transcriptView, FrameLayout.LayoutParams(-1, -2))
     }
-    panel.addView(transcriptScrollView, LinearLayout.LayoutParams(-1, 0, 2f))
+    // 面板本身在外层 ScrollView 里，若给这里用权重高度会被测成 0（外层不限高，权重失效），
+    // 导致 AI 长回答被截断。给转写/回答区一个真实的固定高度，长文本在此区域内出滚动条查看。
+    val transcriptBoxHeightPx = (300 * resources.displayMetrics.density).toInt()
+    panel.addView(transcriptScrollView, LinearLayout.LayoutParams(-1, transcriptBoxHeightPx))
+    ttsProviderView = TextView(this).apply {
+      text = "AI 语音播报：${aiTtsProviderDisplay()}"
+      textSize = 13f
+      setTextColor(0xFF93C5FD.toInt())
+      gravity = Gravity.CENTER
+      setPadding(0, 4, 0, 12)
+    }
+    panel.addView(ttsProviderView, LinearLayout.LayoutParams(-1, -2))
     batchSubmitButton = null
     batchRetryButton = null
     batchStatusView = null
@@ -4707,32 +4720,33 @@ class VoiceAlarmActivity : Activity() {
     val b = normalizeSpeechText(text)
     if (b.length < 3) return false
     if (isGenericAlarmPromptTranscript(b)) return true
+    // 只有“播报进行中/刚结束”时麦克风才可能录进扬声器声，才需要宽松的部分匹配回声过滤。
+    // 播报早已结束、录音已刷新为干净近端麦克风时，用户完全可能在就 AI 刚说的话题作回应、
+    // 复用几个词——这不是回声。此时只拦“整段几乎逐字雷同”的真回声，避免误杀真人输入
+    // （日志中 “那好的请把这个联网搜索功能开启” 就被 6 字窗口重叠误判为回声、没发给 AI）。
+    val playbackActive = isPlaybackActiveForSpeechGate()
     for (source in sources) {
       val a = normalizeSpeechText(source)
       if (a.length < 4) continue
-      // Exact/substring match: most common when STT hears our own TTS verbatim.
-      if (a.contains(b) || b.contains(a.take(minOf(24, a.length)))) return true
-      if (b.length >= 6 && a.windowed(minOf(6, b.length), 1).any { b.contains(it) }) return true
-
       val lcs = longestCommonSubsequenceLength(a, b)
-      val shortBase = minOf(a.length, b.length).coerceAtLeast(1)
-      val longBase = maxOf(a.length, b.length).coerceAtLeast(1)
-      val shortRatio = lcs.toDouble() / shortBase
-      val longRatio = lcs.toDouble() / longBase
-
-      if (isPlaybackActiveForSpeechGate()) {
+      val shortRatio = lcs.toDouble() / minOf(a.length, b.length).coerceAtLeast(1)
+      val longRatio = lcs.toDouble() / maxOf(a.length, b.length).coerceAtLeast(1)
+      if (playbackActive) {
+        // Exact/substring match: most common when STT hears our own TTS verbatim.
+        if (a.contains(b) || b.contains(a.take(minOf(24, a.length)))) return true
+        if (b.length >= 6 && a.windowed(minOf(6, b.length), 1).any { b.contains(it) }) return true
         // During playback, partial ASR fragments may be short and not perfectly
         // literal. LCS catches “same content with missing/extra words”.
         if (b.length <= 12 && shortRatio >= 0.58) return true
         if (b.length > 12 && (shortRatio >= 0.52 || longRatio >= 0.36)) return true
+        val bigramCommon = if (b.length >= 2) b.windowed(2, 1).count { a.contains(it) } else 0
+        val bigramRatio = bigramCommon.toDouble() / maxOf(1, b.length - 1)
+        if (bigramRatio >= 0.62) return true
       } else {
-        if (b.length >= 8 && shortRatio >= 0.72) return true
+        // 干净麦克风：仅当整段用户文本几乎就是播报原文本身才算回声。
+        if (a.contains(b) && b.length >= 8) return true
+        if (b.length >= 8 && longRatio >= 0.82) return true
       }
-
-      val bigramCommon = if (b.length >= 2) b.windowed(2, 1).count { a.contains(it) } else 0
-      val bigramRatio = bigramCommon.toDouble() / maxOf(1, b.length - 1)
-      if (isPlaybackActiveForSpeechGate() && bigramRatio >= 0.62) return true
-      if (!isPlaybackActiveForSpeechGate() && b.length >= 8 && bigramRatio >= 0.78) return true
     }
     return false
   }
@@ -4929,7 +4943,34 @@ class VoiceAlarmActivity : Activity() {
     return null
   }
 
+  private fun ttsProviderLabel(provider: String): String = when (provider) {
+    "microsoft" -> "微软"
+    "iflytek" -> "讯飞"
+    "elevenlabs" -> "ElevenLabs"
+    "resemble" -> "Resemble"
+    "minimax" -> "MiniMax"
+    "local" -> "系统本地兜底"
+    else -> provider.ifBlank { "系统本地兜底" }
+  }
+
+  // 供界面初始显示：用户所选服务商；若不可用则显示实际会用到的兜底服务商。
+  private fun aiTtsProviderDisplay(): String {
+    val cfg = alarmTtsConfig() ?: return ttsProviderLabel("local")
+    val selected = cfg.optString("provider", "")
+    val resolved = resolveAiTtsProvider(cfg) ?: return ttsProviderLabel("local")
+    return if (selected.isNotBlank() && resolved != selected) {
+      "${ttsProviderLabel(resolved)}（已选 ${ttsProviderLabel(selected)} 未配置）"
+    } else {
+      ttsProviderLabel(resolved)
+    }
+  }
+
+  private fun updateTtsProviderDisplay(actualProvider: String) {
+    runOnUiThread { ttsProviderView?.text = "AI 语音播报：${ttsProviderLabel(actualProvider)}" }
+  }
+
   private fun speakWithLocalTts(text: String, utteranceId: String, restart: Boolean) {
+    updateTtsProviderDisplay("local")
     if (tts == null || !ttsReady) {
       queuePendingSpeak(text, utteranceId, restart)
       return
@@ -4937,26 +4978,42 @@ class VoiceAlarmActivity : Activity() {
     performTtsSpeak(text, utteranceId, restart, retry = 0)
   }
 
+  private fun synthesizeAiTtsWithProvider(cfg: JSONObject, provider: String, text: String): String? = when (provider) {
+    "microsoft" -> synthesizeMicrosoftTtsToFile(cfg, text)
+    "elevenlabs" -> synthesizeElevenLabsTtsToFile(cfg, text)
+    "iflytek" -> synthesizeIflytekTtsToFile(cfg.optJSONObject("iflytek") ?: JSONObject(), text, cfg.optString("voiceId", ""))
+    else -> null
+  }
+
   private fun speakWithCloudAiTts(text: String, utteranceId: String, restart: Boolean, cfg: JSONObject, provider: String) {
-    logVoice("ai.tts.cloud.start", "synthesizing AI reply with cloud TTS", mapOf("utteranceId" to utteranceId, "chars" to text.length, "provider" to provider, "selected" to cfg.optString("provider", "")))
+    // 候选顺序：先用已选/解析出的服务商，运行时若失败再依次尝试其它有凭据的云端服务商，最后才本地兜底。
+    val candidates = LinkedHashSet<String>()
+    candidates.add(provider)
+    if (ttsHasIflytek(cfg)) candidates.add("iflytek")
+    if (ttsHasMicrosoft(cfg)) candidates.add("microsoft")
+    if (ttsHasElevenLabs(cfg)) candidates.add("elevenlabs")
+    logVoice("ai.tts.cloud.start", "synthesizing AI reply with cloud TTS", mapOf("utteranceId" to utteranceId, "chars" to text.length, "provider" to provider, "selected" to cfg.optString("provider", ""), "candidates" to candidates.joinToString(",")))
     Thread {
-      val path = try {
-        when (provider) {
-          "microsoft" -> synthesizeMicrosoftTtsToFile(cfg, text)
-          "elevenlabs" -> synthesizeElevenLabsTtsToFile(cfg, text)
-          else -> synthesizeIflytekTtsToFile(cfg.optJSONObject("iflytek") ?: JSONObject(), text, cfg.optString("voiceId", ""))
+      var path: String? = null
+      var used = ""
+      for (candidate in candidates) {
+        path = try {
+          synthesizeAiTtsWithProvider(cfg, candidate, text)
+        } catch (t: Throwable) {
+          logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId, "provider" to candidate))
+          null
         }
-      } catch (t: Throwable) {
-        logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId, "provider" to provider))
-        null
+        if (path != null) { used = candidate; break }
       }
+      val finalPath = path
       runOnUiThread {
         if (destroyed) return@runOnUiThread
-        if (path == null) {
-          logVoice("ai.tts.cloud.fallback", "cloud TTS unavailable; fall back to local TTS", mapOf("utteranceId" to utteranceId, "provider" to provider))
+        if (finalPath == null) {
+          logVoice("ai.tts.cloud.fallback", "all cloud TTS providers failed; fall back to local TTS", mapOf("utteranceId" to utteranceId, "tried" to candidates.joinToString(",")))
           speakWithLocalTts(text, utteranceId, restart)
         } else {
-          playCloudAiTtsFile(path, text, utteranceId, restart)
+          updateTtsProviderDisplay(used)
+          playCloudAiTtsFile(finalPath, text, utteranceId, restart)
         }
       }
     }.apply { name = "voice-alarm-ai-tts"; isDaemon = true }.start()
