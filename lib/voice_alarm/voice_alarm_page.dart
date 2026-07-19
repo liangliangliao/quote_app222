@@ -102,6 +102,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Map<String, dynamic> _alarmSttConfig = <String, dynamic>{};
   Map<String, dynamic> _alarmTtsConfig = <String, dynamic>{};
   List<Map<String, dynamic>> _scheduledAlarms = <Map<String, dynamic>>[];
+  bool _showAdvanced = false;
   String _speechPreset = 'balanced';
   double _speechCompleteSilenceMs = 2400;
   double _speechPossiblyCompleteSilenceMs = 1600;
@@ -408,17 +409,6 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     await _kv.setString(_configKey, jsonEncode(config));
   }
 
-  Future<void> _removeAlarmEntry(_VoiceAlarmEntry alarm) async {
-    setState(() => _alarmEntries = _alarmEntries.where((item) => item.id != alarm.id).toList());
-    await _persistDraftConfig();
-    try {
-      await _native.invokeMethod<void>('cancelAlarm', {'alarmId': alarm.id});
-      _toast('已删除并取消 ${alarm.time.format(context)} 的闹钟');
-    } catch (e) {
-      _toast('已从列表删除；取消系统闹钟失败：$e');
-    }
-  }
-
   Future<bool> _ensureVoiceInteractionReady() async {
     final mic = await Permission.microphone.status;
     if (!mic.isGranted) {
@@ -666,7 +656,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       }
       final text = _text.text.trim();
       final when = _nextTime();
-      final alarmId = '$_mode-${_time.hour.toString().padLeft(2, '0')}${_time.minute.toString().padLeft(2, '0')}-${DateTime.now().millisecondsSinceEpoch}';
+      // 用“模式+时间”作为闹钟 id（不再追加时间戳），这样对同一时间点重复保存会“更新”而不是
+      // 不断新增重复闹钟；不同时间自然是不同闹钟。
+      final alarmId = '$_mode-${_time.hour.toString().padLeft(2, '0')}${_time.minute.toString().padLeft(2, '0')}';
       await _kv.setString('voice_alarm.time', when.toIso8601String());
       await _kv.setString('voice_alarm.text', _text.text.trim());
       await _kv.setString('voice_alarm.provider', _provider);
@@ -957,7 +949,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('提醒时间', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('新建闹钟 · 提醒时间', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('设置下面的时间、重复与语音，点最下方“添加”即可新增一个闹钟。', style: TextStyle(color: Colors.black54, fontSize: 12.5)),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.alarm),
@@ -972,34 +965,6 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
               ]),
             ),
           ),
-          if (_alarmEntries.isNotEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${_mode == 'morning' ? '起床' : '睡觉'}闹钟列表（${_alarmEntries.length} 组）', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  ..._alarmEntries.map((alarm) {
-                    final nextAt = _nextTimeFor(alarm.time);
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.alarm_on_outlined),
-                      title: Text(alarm.time.format(context)),
-                      subtitle: Text('${nextAt.month.toString().padLeft(2, '0')}-${nextAt.day.toString().padLeft(2, '0')} 下一次响铃 · ${alarm.text.isEmpty ? '使用当前朗读内容' : alarm.text}'),
-                      trailing: IconButton(
-                        tooltip: '删除这组闹钟',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: _saving ? null : () => _removeAlarmEntry(alarm),
-                      ),
-                      onTap: () => setState(() {
-                        _time = alarm.time;
-                        if (alarm.text.isNotEmpty) _text.text = alarm.text;
-                      }),
-                    );
-                  }),
-                ]),
-              ),
-            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -1078,7 +1043,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                           : 'Microsoft 实时模式按短句连续识别；非实时模式会把完整录音一次提交给 Azure Speech detailed 识别，优先使用 NBest 最佳结果。',
                   style: const TextStyle(color: Colors.deepOrange, fontSize: 12.5),
                 ),
-                if (_sttMode == 'batch') ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _showAdvanced = !_showAdvanced),
+                    icon: Icon(_showAdvanced ? Icons.expand_less : Icons.tune),
+                    label: Text(_showAdvanced ? '收起自动提交/句段微调' : '自动提交与句段微调（高级，可选）'),
+                  ),
+                ),
+                if (_showAdvanced && _sttMode == 'batch') ...[
                   const SizedBox(height: 12),
                   Card(
                     color: Colors.amber.withOpacity(0.08),
@@ -1112,6 +1085,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     ),
                   ),
                 ],
+                if (_showAdvanced && _sttMode == 'realtime') ...[
                 const SizedBox(height: 12),
                 Card(
                   color: Colors.blueGrey.withOpacity(0.06),
@@ -1160,6 +1134,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     ]),
                   ),
                 ),
+                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: _voiceId,
