@@ -2126,8 +2126,14 @@ class VoiceAlarmActivity : Activity() {
             val sparseNoiseOverLongCapture = validation.durationMs >= 3000L &&
               validation.strongFrames < 6 &&
               validation.voiceFrames * 100 < validation.frames.coerceAtLeast(1) * 8
-            if ((!validation.ok || sparseNoiseOverLongCapture) && !likelyShortUserUtterance) {
-              logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to (if (validation.ok) "sparse_noise_over_long_capture" else validation.reason), "sparseNoise" to sparseNoiseOverLongCapture, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
+            // 背景音乐/歌声的过零率(zcr)整段持续偏高（日志里“从来在”这类歌声 zcr 中位数≈110~130），
+            // 而贴近手机麦克风的真人语音 zcr 通常明显更低（~20~90）。据此把明显是音乐/歌声的段
+            // 在上传前拦掉，避免把歌词转成文字并发给 AI。阈值保守，正常真人短句不会命中。
+            val looksLikeMusicOrSinging = validation.durationMs >= 2500L &&
+              validation.voiceFrames >= 12 &&
+              validation.voicedZcrMedian >= 100
+            if ((!validation.ok || sparseNoiseOverLongCapture || looksLikeMusicOrSinging) && !likelyShortUserUtterance) {
+              logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to (if (looksLikeMusicOrSinging) "music_or_singing_high_zcr" else if (validation.ok) "sparse_noise_over_long_capture" else validation.reason), "sparseNoise" to sparseNoiseOverLongCapture, "musicLike" to looksLikeMusicOrSinging, "voicedZcrMedian" to validation.voicedZcrMedian, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
               fallbackOut.reset()
               out.reset()
               preRoll.clear()
@@ -2751,6 +2757,7 @@ class VoiceAlarmActivity : Activity() {
     val durationMs: Long,
     val bestRms: Int,
     val bestPeak: Int,
+    val voicedZcrMedian: Int = 0,
   )
 
   private fun validateBatchAutoArmSpeechSegment(pcm: ByteArray, sampleRate: Int = 16000, noiseRms: Double): AutoArmSegmentValidation {
@@ -2765,6 +2772,7 @@ class VoiceAlarmActivity : Activity() {
     var strongFrames = 0
     var bestRms = 0
     var bestPeak = 0
+    val voicedZcrs = ArrayList<Int>()
     while (pos + 2 <= pcm.size) {
       val end = minOf(pcm.size, pos + frameBytes)
       val evenEnd = if (((end - pos) and 1) == 0) end else end - 1
@@ -2776,7 +2784,7 @@ class VoiceAlarmActivity : Activity() {
       if (level.peak > bestPeak) bestPeak = level.peak
       val voice = isBatchAutoArmEndpointVoiceLike(shape, level, noiseRms, playbackGuard = false)
       val strong = isBatchAutoArmVoiceLike(shape, level, noiseRms)
-      if (voice) voiceFrames += 1
+      if (voice) { voiceFrames += 1; voicedZcrs.add(shape.zcrPermille) }
       if (strong) strongFrames += 1
       frames += 1
       pos = evenEnd
@@ -2789,7 +2797,8 @@ class VoiceAlarmActivity : Activity() {
       voiceFrames < minVoiceFrames -> "not_enough_voice_like_frames"
       else -> "weak_voice_shape"
     }
-    return AutoArmSegmentValidation(ok, reason, frames, voiceFrames, strongFrames, durationMs, bestRms, bestPeak)
+    val voicedZcrMedian = if (voicedZcrs.isEmpty()) 0 else voicedZcrs.sorted()[voicedZcrs.size / 2]
+    return AutoArmSegmentValidation(ok, reason, frames, voiceFrames, strongFrames, durationMs, bestRms, bestPeak, voicedZcrMedian)
   }
 
   private data class AudioLevel(val peak: Int, val rms: Int)
