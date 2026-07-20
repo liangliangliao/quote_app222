@@ -711,7 +711,9 @@ class VoiceAlarmRingingService : Service() {
 
   private fun duckMusicFor(durationMs: Long) {
     val player = musicPlayer ?: return
-    try { player.setVolume(currentMusicVolume * 0.18f, currentMusicVolume * 0.18f) } catch (_: Throwable) { return }
+    // 全静音（而不是压到 18%）：AI 处理/播报期间录音器可能仍在监听，带人声的背景音乐即使很轻
+    // 也会漏进麦克风被转成歌词。窗口结束后自动恢复原音量。
+    try { player.setVolume(0f, 0f) } catch (_: Throwable) { return }
     musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
     musicRestoreRunnable = Runnable {
       musicRestoreRunnable = null
@@ -727,7 +729,9 @@ class VoiceAlarmRingingService : Service() {
     activeSignalPlayback = false
     logVoice("signals.duckForListening", "duck alarm signal/music so microphone can hear user speech after prompt", mapOf("durationMs" to safeMs, "hasMusic" to (musicPlayer != null), "vibrate" to (vibrator != null)))
     sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName).putExtra("reason", "duckForListening"))
-    try { musicPlayer?.setVolume(currentMusicVolume * 0.08f, currentMusicVolume * 0.08f) } catch (_: Throwable) {}
+    // 监听用户说话的窗口里把背景音乐完全静音（而不是压到 8%），彻底避免带人声的音乐/歌声
+    // 漏进麦克风被识别成用户文字。窗口结束后恢复原音量。
+    try { musicPlayer?.setVolume(0f, 0f) } catch (_: Throwable) {}
     try { vibrator?.cancel() } catch (_: Throwable) {}
     musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
     musicRestoreRunnable = Runnable {
