@@ -31,9 +31,17 @@ object VoiceAlarmChannel {
             result.success(true)
           }
           "cancelAlarm" -> {
-            VoiceAlarmScheduler.cancel(context, call.argument<String>("alarmId"))
+            val id = call.argument<Number>("id")?.toInt()
+            if (id != null) VoiceAlarmScheduler.cancelById(context, id)
+            else VoiceAlarmScheduler.cancel(context, call.argument<String>("alarmId"))
             result.success(true)
           }
+          "cancelAllAlarms" -> {
+            VoiceAlarmScheduler.cancel(context)
+            VoiceAlarmRingingService.stop(context)
+            result.success(true)
+          }
+          "listAlarms" -> result.success(VoiceAlarmScheduler.listPersistedAlarms(context))
           "snooze" -> {
             VoiceAlarmScheduler.snooze(context, call.argument<String>("payload") ?: "{}", 5)
             result.success(true)

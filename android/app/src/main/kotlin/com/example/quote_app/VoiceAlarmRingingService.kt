@@ -38,6 +38,10 @@ class VoiceAlarmRingingService : Service() {
   }
 
   companion object {
+    // Activity 播报 AI 回复文字时置为 true（同进程共享，@Volatile 立即可见）。
+    // 服务在播放任何提醒语音（初次或周期复读）前会检查它，避免与 AI 回复同时出声。
+    @Volatile @JvmStatic var appReplySpeaking: Boolean = false
+
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
     private const val ACTION_POSTPONE_VOICE_REPLAY = "com.example.quote_app.VOICE_ALARM_POSTPONE_VOICE_REPLAY"
@@ -242,6 +246,7 @@ class VoiceAlarmRingingService : Service() {
   private var wakeLock: PowerManager.WakeLock? = null
   private var originalAlarmVolume: Int? = null
   private var originalVolumeStream: Int = AudioManager.STREAM_ALARM
+  private var originalVoiceCallVolume: Int? = null
   private var headsetPlaybackModeActive = false
   private var currentMusicVolume = 0.4f
   private var musicRestoreRunnable: Runnable? = null
@@ -676,6 +681,12 @@ class VoiceAlarmRingingService : Service() {
         replayHandler.postDelayed(replayRunnable!!, blockedMs.coerceAtLeast(1000L))
         return@Runnable
       }
+      // AI 回复正在播报时，不要让提醒语音（早上好…/晚上好…）同时响起；
+      // 稍后再查，等这条 AI 回复播完再复读。
+      if (appReplySpeaking) {
+        replayHandler.postDelayed(replayRunnable!!, 1500L)
+        return@Runnable
+      }
       playVoiceOnce(latest)
       scheduleVoiceReplay(latest)
     }
@@ -700,7 +711,9 @@ class VoiceAlarmRingingService : Service() {
 
   private fun duckMusicFor(durationMs: Long) {
     val player = musicPlayer ?: return
-    try { player.setVolume(currentMusicVolume * 0.18f, currentMusicVolume * 0.18f) } catch (_: Throwable) { return }
+    // 全静音（而不是压到 18%）：AI 处理/播报期间录音器可能仍在监听，带人声的背景音乐即使很轻
+    // 也会漏进麦克风被转成歌词。窗口结束后自动恢复原音量。
+    try { player.setVolume(0f, 0f) } catch (_: Throwable) { return }
     musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
     musicRestoreRunnable = Runnable {
       musicRestoreRunnable = null
@@ -716,7 +729,9 @@ class VoiceAlarmRingingService : Service() {
     activeSignalPlayback = false
     logVoice("signals.duckForListening", "duck alarm signal/music so microphone can hear user speech after prompt", mapOf("durationMs" to safeMs, "hasMusic" to (musicPlayer != null), "vibrate" to (vibrator != null)))
     sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName).putExtra("reason", "duckForListening"))
-    try { musicPlayer?.setVolume(currentMusicVolume * 0.08f, currentMusicVolume * 0.08f) } catch (_: Throwable) {}
+    // 监听用户说话的窗口里把背景音乐完全静音（而不是压到 8%），彻底避免带人声的音乐/歌声
+    // 漏进麦克风被识别成用户文字。窗口结束后恢复原音量。
+    try { musicPlayer?.setVolume(0f, 0f) } catch (_: Throwable) {}
     try { vibrator?.cancel() } catch (_: Throwable) {}
     musicRestoreRunnable?.let { replayHandler.removeCallbacks(it) }
     musicRestoreRunnable = Runnable {
@@ -832,6 +847,7 @@ class VoiceAlarmRingingService : Service() {
     audioFocusRequest = null
   }
 
+  @Suppress("DEPRECATION")
   private fun ensureAudibleAlarmVolume() {
     try {
       val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -848,15 +864,28 @@ class VoiceAlarmRingingService : Service() {
       val targetRatio = if (headsetOutputConnected()) 0.95f else 0.7f
       val target = maxOf(1, (audio.getStreamMaxVolume(stream) * targetRatio).toInt())
       if (current < target) audio.setStreamVolume(stream, target, 0)
+      // 蓝牙耳机若通过 SCO（电话通道）出声，其音量由 STREAM_VOICE_CALL 控制，
+      // STREAM_MUSIC 的提升对它无效——这正是“蓝牙耳机时播报/音乐很小”的原因。
+      // 因此 SCO 生效时把通话流也拉到接近最大，并在结束后恢复。
+      // 正常情况下已不再启用 SCO（会挂起 A2DP）。这里仅在系统确实处于 SCO 出声时兜底：
+      // 此时音量由 STREAM_VOICE_CALL 控制，一并拉高并在结束后恢复。
+      if (audio.isBluetoothScoOn) {
+        val callStream = AudioManager.STREAM_VOICE_CALL
+        val callCurrent = audio.getStreamVolume(callStream)
+        if (originalVoiceCallVolume == null) originalVoiceCallVolume = callCurrent
+        val callTarget = maxOf(1, (audio.getStreamMaxVolume(callStream) * 0.95f).toInt())
+        if (callCurrent < callTarget) audio.setStreamVolume(callStream, callTarget, 0)
+      }
     } catch (_: Throwable) {}
   }
 
   private fun restoreAlarmVolume() {
     try {
-      val value = originalAlarmVolume ?: return
       val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-      audio.setStreamVolume(originalVolumeStream, value, 0)
+      originalAlarmVolume?.let { audio.setStreamVolume(originalVolumeStream, it, 0) }
+      originalVoiceCallVolume?.let { audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, it, 0) }
     } catch (_: Throwable) {}
     originalAlarmVolume = null
+    originalVoiceCallVolume = null
   }
 }

@@ -48,8 +48,11 @@ object VoiceAlarmAudioRoute {
     AudioDeviceInfo.TYPE_WIRED_HEADSET -> 0
     AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> 1
     AudioDeviceInfo.TYPE_USB_HEADSET -> 2
-    AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> 3
-    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> 4
+    // 播放优先走 A2DP（高品质、正常音量），而不是 SCO（电话通道，单声道、音量小）。
+    // 之前把 SCO 排在 A2DP 前面，蓝牙耳机时播报/音乐被路由到 SCO，声音很小。
+    // SCO 只应给麦克风采集用（见 preferredInputDevice，仅在 mic-capable 里选择，不受此影响）。
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> 3
+    AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> 4
     else -> 5
   }
 

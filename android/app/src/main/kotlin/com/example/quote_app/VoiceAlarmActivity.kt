@@ -11,11 +11,13 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
@@ -86,6 +88,8 @@ class VoiceAlarmActivity : Activity() {
   private var payload = "{}"
   private var recognizer: SpeechRecognizer? = null
   private var tts: TextToSpeech? = null
+  // 云端 TTS（讯飞，复用 STT 凭据）播放 AI 回复音频；失败回退系统本地 TTS。
+  private var aiTtsPlayer: MediaPlayer? = null
   @Volatile private var ttsReady = false
   @Volatile private var currentAppTtsStartedByEngine = false
   private var ttsStartWatchdogRunnable: Runnable? = null
@@ -95,6 +99,7 @@ class VoiceAlarmActivity : Activity() {
   private var pendingSpeakAttempts = 0
   private var transcriptView: TextView? = null
   private var transcriptScrollView: ScrollView? = null
+  private var ttsProviderView: TextView? = null
   private var batchStatusView: TextView? = null
   private var batchRetryButton: Button? = null
   @Volatile private var destroyed = false
@@ -436,6 +441,7 @@ class VoiceAlarmActivity : Activity() {
     semanticHoldExtended = false
     lastTranscriptRevisionAt = 0L
     try { tts?.stop() } catch (_: Throwable) {}
+    stopCloudAiTtsPlayback()
     stopNativeRecognizer()
     releaseContinuousAudioRecord()
     logVoice("voiceSession.reset", "reset runtime voice state for fresh alarm UI", mapOf("reason" to reason, "pipeline" to batchChatPipelineVersion))
@@ -493,7 +499,7 @@ class VoiceAlarmActivity : Activity() {
       setTextColor(Color.WHITE)
       gravity = Gravity.CENTER
       setPadding(0, 48, 0, 64)
-    }, LinearLayout.LayoutParams(-1, 0, 1f))
+    }, LinearLayout.LayoutParams(-1, -2))
     transcriptView = TextView(this).apply {
       text = "可直接说“小名小名/你好AI/闹钟助手”唤醒 AI；说“关闭闹钟”停止；说“延迟五分钟”稍后提醒。"
       textSize = 16f
@@ -505,9 +511,21 @@ class VoiceAlarmActivity : Activity() {
     }
     transcriptScrollView = ScrollView(this).apply {
       isFillViewport = false
+      isVerticalScrollBarEnabled = true
       addView(transcriptView, FrameLayout.LayoutParams(-1, -2))
     }
-    panel.addView(transcriptScrollView, LinearLayout.LayoutParams(-1, 0, 2f))
+    // 面板本身在外层 ScrollView 里，若给这里用权重高度会被测成 0（外层不限高，权重失效），
+    // 导致 AI 长回答被截断。给转写/回答区一个真实的固定高度，长文本在此区域内出滚动条查看。
+    val transcriptBoxHeightPx = (300 * resources.displayMetrics.density).toInt()
+    panel.addView(transcriptScrollView, LinearLayout.LayoutParams(-1, transcriptBoxHeightPx))
+    ttsProviderView = TextView(this).apply {
+      text = "AI 语音播报：${aiTtsProviderDisplay()}"
+      textSize = 13f
+      setTextColor(0xFF93C5FD.toInt())
+      gravity = Gravity.CENTER
+      setPadding(0, 4, 0, 12)
+    }
+    panel.addView(ttsProviderView, LinearLayout.LayoutParams(-1, -2))
     batchSubmitButton = null
     batchRetryButton = null
     batchStatusView = null
@@ -649,16 +667,10 @@ class VoiceAlarmActivity : Activity() {
    * ahead of time; wired headset mics are picked up automatically by AudioRecord.setPreferredDevice.
    */
   private fun ensureHeadsetMicRouting() {
-    val device = VoiceAlarmAudioRoute.preferredInputDevice(this) ?: return
-    if (!VoiceAlarmAudioRoute.isBluetoothScoType(device.type) || bluetoothScoRequested) return
-    try {
-      val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-      audio.startBluetoothSco()
-      @Suppress("DEPRECATION")
-      audio.isBluetoothScoOn = true
-      bluetoothScoRequested = true
-      logVoice("audioRoute.sco.start", "requested Bluetooth SCO for headset mic conversation")
-    } catch (_: Throwable) {}
+    // 故意不再启动蓝牙 SCO。SCO 与 A2DP 在多数设备上互斥：一旦为“耳机麦克风”开启 SCO，
+    // 系统会挂起 A2DP，导致闹钟提示语只播几个字就断、背景音乐完全不出声、且 SCO 电话通道
+    // 声音很小。闹钟场景手机通常就在身边，改用手机内置麦克风采集，把 A2DP 留给高音量立体声播放。
+    logVoice("audioRoute.sco.skip", "keep A2DP playback; capture via built-in mic instead of starting SCO (SCO would suspend A2DP)")
   }
 
   private fun stopHeadsetMicRouting() {
@@ -721,7 +733,11 @@ class VoiceAlarmActivity : Activity() {
         continue
       }
       try {
-        VoiceAlarmAudioRoute.preferredInputDevice(this)?.let { record.setPreferredDevice(it) }
+        // 只把有线/USB 耳机麦克风设为首选输入；蓝牙 SCO 麦克风需要开 SCO 才有音频，
+        // 而我们不再开 SCO（会挂起 A2DP 播放），所以此时让系统用内置麦克风采集。
+        VoiceAlarmAudioRoute.preferredInputDevice(this)?.let { dev ->
+          if (!VoiceAlarmAudioRoute.isBluetoothScoType(dev.type)) record.setPreferredDevice(dev)
+        }
       } catch (_: Throwable) {}
       val effects = if (playbackGuard) enableVoiceSeparationEffects(record.audioSessionId) else VoiceAudioEffects(null, null, null)
       try {
@@ -1124,6 +1140,28 @@ class VoiceAlarmActivity : Activity() {
             setBatchStatus("${sttProviderLabel(provider)}非实时识别失败：$lastError；本次按完整录音提交，没有再做本地拆分重试。")
           }
           ""
+        }
+        // 提交给 STT 的是压缩后的音频（compactPcmForStt 删掉长静音、拼接有声片段）。
+        // 拼接点的突变或对偏安静真人语音的过度裁剪，有时会让讯飞对一段真语音返回空文字，
+        // 随后被当成误触发丢弃——这正是“真人说话却识别不出内容”的一个来源。
+        // 因此在丢弃前，对“有明显能量、且压缩确实改动过音频”的段，用完整未压缩音频再试一次。
+        if (raw.isBlank() && lastError.isBlank() &&
+          job.originalPcm.isNotEmpty() && job.originalPcm.size != job.pcm.size &&
+          (job.peak >= 2000 || job.rms >= 700)
+        ) {
+          logVoice(
+            "batch.singleUpload.retryOriginal",
+            "compacted audio returned empty; retry once with full uncompacted audio before discarding",
+            mapOf("provider" to provider, "compactBytes" to job.pcm.size, "originalBytes" to job.originalPcm.size, "peak" to job.peak, "rms" to job.rms),
+          )
+          raw = try { recognizeBatchWithProvider(provider, cfg, job.originalPcm) } catch (t: Throwable) {
+            lastError = t.message ?: t.javaClass.simpleName
+            autoEmptyRecognitionError = !job.submittedManually && isEmptyAutoCaptureRecognitionError(lastError)
+            if (!autoEmptyRecognitionError) {
+              setBatchStatus("${sttProviderLabel(provider)}非实时识别失败：$lastError；本次按完整录音提交，没有再做本地拆分重试。")
+            }
+            ""
+          }
         }
         var echoDiscarded = false
         if (raw.isNotBlank()) {
@@ -2082,8 +2120,20 @@ class VoiceAlarmActivity : Activity() {
               validation.strongFrames >= 1 ||
                 (validation.voiceFrames >= 4 && validation.voiceFrames * 100 >= validation.frames.coerceAtLeast(1) * 10)
             )
-            if (!validation.ok && !likelyShortUserUtterance) {
-              logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to validation.reason, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
+            // 长录音里只有零星几帧“类人声”能量（常见于环境噪声/干扰声突发），密度极低，
+            // 几乎不可能是完整用户语音。旧逻辑因 strongFrames>=3 就判定通过并上传，
+            // 结果讯飞只回一个“嗯”之类的填充词。这类段直接按噪声丢弃，不上传给转写服务商。
+            val sparseNoiseOverLongCapture = validation.durationMs >= 3000L &&
+              validation.strongFrames < 6 &&
+              validation.voiceFrames * 100 < validation.frames.coerceAtLeast(1) * 8
+            // 背景音乐/歌声的过零率(zcr)整段持续偏高（日志里“从来在”这类歌声 zcr 中位数≈110~130），
+            // 而贴近手机麦克风的真人语音 zcr 通常明显更低（~20~90）。据此把明显是音乐/歌声的段
+            // 在上传前拦掉，避免把歌词转成文字并发给 AI。阈值保守，正常真人短句不会命中。
+            val looksLikeMusicOrSinging = validation.durationMs >= 2500L &&
+              validation.voiceFrames >= 12 &&
+              validation.voicedZcrMedian >= 100
+            if ((!validation.ok || sparseNoiseOverLongCapture || looksLikeMusicOrSinging) && !likelyShortUserUtterance) {
+              logVoice("batch.vad.falseStartDiscarded", "discard auto-start capture because buffered audio does not contain enough speech-like frames", mapOf("reason" to (if (looksLikeMusicOrSinging) "music_or_singing_high_zcr" else if (validation.ok) "sparse_noise_over_long_capture" else validation.reason), "sparseNoise" to sparseNoiseOverLongCapture, "musicLike" to looksLikeMusicOrSinging, "voicedZcrMedian" to validation.voicedZcrMedian, "frames" to validation.frames, "voiceFrames" to validation.voiceFrames, "strongFrames" to validation.strongFrames, "durationMs" to validation.durationMs, "cachedBytes" to fallbackOut.size(), "cachedSeconds" to String.format(Locale.US, "%.1f", batchCurrentCachedSeconds), "bestRms" to validation.bestRms, "bestPeak" to validation.bestPeak, "noiseRms" to String.format(Locale.US, "%.1f", noiseRms), "pipeline" to batchChatPipelineVersion))
               fallbackOut.reset()
               out.reset()
               preRoll.clear()
@@ -2309,88 +2359,11 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun compactPcmForStt(pcm: ByteArray, sampleRate: Int = 16000, reason: String = "submit"): ByteArray {
-    // 聊天 App 的服务端 STT 一般拿到的是“当前语音输入”的有效语音段，而不是等待/播报/长空白。
-    // 这里不再做破坏性切句；只删除长静音/空白帧，并在每个有声音片段前后保留 padding，
-    // 同时保留短停顿，避免把一句话剪得不自然。
-    if (pcm.size < sampleRate * 2 / 2) return pcm
-    val bytesPerSample = 2
-    val frameMs = 20
-    val frameBytesRaw = sampleRate * bytesPerSample * frameMs / 1000
-    val frameBytes = (frameBytesRaw / 2 * 2).coerceAtLeast(320)
-    if (pcm.size <= frameBytes * 8) return pcm
-    data class FrameInfo(val start: Int, val end: Int, val rms: Int, val peak: Int)
-    val frames = ArrayList<FrameInfo>()
-    var pos = 0
-    while (pos < pcm.size) {
-      val end = minOf(pcm.size, pos + frameBytes)
-      val evenEnd = if (((end - pos) and 1) == 0) end else end - 1
-      if (evenEnd <= pos) break
-      val level = audioFrameLevel(pcm.copyOfRange(pos, evenEnd), evenEnd - pos)
-      frames.add(FrameInfo(pos, evenEnd, level.rms, level.peak))
-      pos = evenEnd
-    }
-    if (frames.isEmpty()) return pcm
-    val sortedRms = frames.map { it.rms }.sorted()
-    val p20 = sortedRms[(sortedRms.size * 0.20).toInt().coerceIn(0, sortedRms.lastIndex)]
-    val p50 = sortedRms[(sortedRms.size * 0.50).toInt().coerceIn(0, sortedRms.lastIndex)]
-    val noiseRms = minOf(p20, p50).coerceIn(8, 900)
-    val rmsThreshold = maxOf(90, (noiseRms * 2.2).toInt()).coerceAtMost(900)
-    val peakThreshold = maxOf(520, noiseRms * 8).coerceAtMost(4200)
-    fun isVoiceLike(f: FrameInfo): Boolean {
-      // 绝对阈值保护弱语音；动态阈值保护底噪。
-      return f.rms >= rmsThreshold || f.peak >= peakThreshold || f.rms >= 260 || f.peak >= 1500
-    }
-    val voiced = frames.map { isVoiceLike(it) }
-    val rawSegments = ArrayList<Pair<Int, Int>>()
-    var i = 0
-    while (i < frames.size) {
-      while (i < frames.size && !voiced[i]) i += 1
-      if (i >= frames.size) break
-      val start = i
-      while (i < frames.size && voiced[i]) i += 1
-      val endExclusive = i
-      rawSegments.add(start to endExclusive)
-    }
-    if (rawSegments.isEmpty()) {
-      logVoice("batch.voiceCompact.noVoice", "voice compaction found no voiced frames; keep original audio", mapOf("reason" to reason, "bytes" to pcm.size, "seconds" to String.format(Locale.US, "%.2f", pcm.size / (sampleRate * 2.0)), "noiseRms" to noiseRms, "rmsTh" to rmsThreshold, "peakTh" to peakThreshold, "pipeline" to batchChatPipelineVersion))
-      return pcm
-    }
-    val padFrames = (260 / frameMs).coerceAtLeast(3)
-    val maxGapFrames = (520 / frameMs).coerceAtLeast(6)
-    val minSegmentFrames = (80 / frameMs).coerceAtLeast(2)
-    val merged = ArrayList<Pair<Int, Int>>()
-    for ((segStart, segEnd) in rawSegments) {
-      if (segEnd - segStart < minSegmentFrames) continue
-      val paddedStart = (segStart - padFrames).coerceAtLeast(0)
-      val paddedEnd = (segEnd + padFrames).coerceAtMost(frames.size)
-      if (merged.isEmpty()) {
-        merged.add(paddedStart to paddedEnd)
-      } else {
-        val last = merged.removeAt(merged.lastIndex)
-        if (paddedStart - last.second <= maxGapFrames) {
-          merged.add(last.first to maxOf(last.second, paddedEnd))
-        } else {
-          merged.add(last)
-          merged.add(paddedStart to paddedEnd)
-        }
-      }
-    }
-    if (merged.isEmpty()) return pcm
-    val out = ByteArrayOutputStream(pcm.size)
-    for ((startFrame, endFrame) in merged) {
-      val byteStart = frames[startFrame].start
-      val byteEnd = frames[endFrame - 1].end
-      if (byteEnd > byteStart) out.write(pcm, byteStart, byteEnd - byteStart)
-    }
-    val compacted = out.toByteArray()
-    val originalMs = pcmDurationMs(pcm, sampleRate)
-    val compactMs = pcmDurationMs(compacted, sampleRate)
-    if (compacted.size < sampleRate * 2 * 350 / 1000 || compacted.size >= (pcm.size * 0.96).toInt()) {
-      logVoice("batch.voiceCompact.keepOriginal", "voice compaction not beneficial; keep original audio", mapOf("reason" to reason, "originalMs" to originalMs, "compactMs" to compactMs, "segments" to merged.size, "noiseRms" to noiseRms, "rmsTh" to rmsThreshold, "peakTh" to peakThreshold, "pipeline" to batchChatPipelineVersion))
-      return pcm
-    }
-    logVoice("batch.voiceCompact.applied", "removed long silent/empty spans before STT upload", mapOf("reason" to reason, "originalMs" to originalMs, "compactMs" to compactMs, "removedMs" to (originalMs - compactMs).coerceAtLeast(0L), "segments" to merged.size, "noiseRms" to noiseRms, "rmsTh" to rmsThreshold, "peakTh" to peakThreshold, "pipeline" to batchChatPipelineVersion))
-    return compacted
+    // 已停用按能量阈值删“静音”的压缩：说话时忽大忽小、偏安静的真语音常被误删，
+    // 导致“说了一大段，只识别出一部分/缺字漏句”。讯飞批式 STT 自带端点/静音处理，
+    // 直接上传完整录音更稳、不会漏句。整体返回原始音频（不再裁剪）。
+    logVoice("batch.voiceCompact.disabled", "voice compaction disabled; upload full captured audio to avoid truncating quiet speech", mapOf("reason" to reason, "bytes" to pcm.size, "seconds" to String.format(Locale.US, "%.2f", pcm.size / (sampleRate * 2.0)), "pipeline" to batchChatPipelineVersion))
+    return pcm
   }
 
   private fun sttProviderLabel(provider: String): String = when (provider) {
@@ -2419,7 +2392,26 @@ class VoiceAlarmActivity : Activity() {
       "xai" -> recognizeWithXaiRest(c, pcm)
       else -> ""
     }.trim()
-    val primary = call(provider, cfg)
+    // 主服务瞬时网络错误（尤其讯飞 WebSocket 连接超时）自动重试几次。
+    // 之前主调用抛错会直接冒泡到最外层：既不重试、也不尝试备用服务商，
+    // 用户明明说了话却被判“识别失败”。这里对可重试错误做指数退避重试；
+    // 干净空结果（HTTP 200 无文字）不重试本服务商，直接走备用服务商。
+    var primaryError: Throwable? = null
+    var primary = ""
+    val maxPrimaryAttempts = 3
+    for (attempt in 1..maxPrimaryAttempts) {
+      try {
+        primary = call(provider, cfg)
+        primaryError = null
+        break
+      } catch (t: Throwable) {
+        primaryError = t
+        val retryable = isRetryableSttError(t)
+        logVoice("batch.stt.primary.error", t.message ?: t.javaClass.simpleName, mapOf("provider" to provider, "attempt" to attempt, "maxAttempts" to maxPrimaryAttempts, "retryable" to retryable, "bytes" to pcm.size, "pipeline" to batchChatPipelineVersion))
+        if (attempt >= maxPrimaryAttempts || !retryable) break
+        try { Thread.sleep(400L * attempt) } catch (_: InterruptedException) {}
+      }
+    }
     if (primary.isNotBlank()) return primary
 
     // Some STT services can return HTTP 200 + empty transcript for a real user utterance.
@@ -2436,7 +2428,25 @@ class VoiceAlarmActivity : Activity() {
         return text
       }
     }
+    // 主服务是网络类错误、且备用服务商也没救回来：把原始错误抛出去，
+    // 让上层显示“可重试的识别失败”，而不是把真人语音当成误触发静默丢弃。
+    primaryError?.let { throw it }
     return ""
+  }
+
+  private fun isRetryableSttError(t: Throwable): Boolean {
+    if (t is java.net.SocketTimeoutException ||
+      t is java.net.UnknownHostException ||
+      t is java.io.InterruptedIOException ||
+      t is java.net.ConnectException ||
+      t is java.net.SocketException
+    ) return true
+    val msg = (t.message ?: t.javaClass.simpleName).lowercase(Locale.US)
+    return msg.contains("超时") || msg.contains("timeout") ||
+      msg.contains("connection") || msg.contains("connect") ||
+      msg.contains("socket") || msg.contains("reset") ||
+      msg.contains("unreachable") || msg.contains("closed") ||
+      msg.contains("eof") || msg.contains("network")
   }
 
   private fun recognizeBatchByChunks(provider: String, cfg: JSONObject, pcm: ByteArray, reason: String): String {
@@ -2747,6 +2757,7 @@ class VoiceAlarmActivity : Activity() {
     val durationMs: Long,
     val bestRms: Int,
     val bestPeak: Int,
+    val voicedZcrMedian: Int = 0,
   )
 
   private fun validateBatchAutoArmSpeechSegment(pcm: ByteArray, sampleRate: Int = 16000, noiseRms: Double): AutoArmSegmentValidation {
@@ -2761,6 +2772,7 @@ class VoiceAlarmActivity : Activity() {
     var strongFrames = 0
     var bestRms = 0
     var bestPeak = 0
+    val voicedZcrs = ArrayList<Int>()
     while (pos + 2 <= pcm.size) {
       val end = minOf(pcm.size, pos + frameBytes)
       val evenEnd = if (((end - pos) and 1) == 0) end else end - 1
@@ -2772,7 +2784,7 @@ class VoiceAlarmActivity : Activity() {
       if (level.peak > bestPeak) bestPeak = level.peak
       val voice = isBatchAutoArmEndpointVoiceLike(shape, level, noiseRms, playbackGuard = false)
       val strong = isBatchAutoArmVoiceLike(shape, level, noiseRms)
-      if (voice) voiceFrames += 1
+      if (voice) { voiceFrames += 1; voicedZcrs.add(shape.zcrPermille) }
       if (strong) strongFrames += 1
       frames += 1
       pos = evenEnd
@@ -2785,7 +2797,8 @@ class VoiceAlarmActivity : Activity() {
       voiceFrames < minVoiceFrames -> "not_enough_voice_like_frames"
       else -> "weak_voice_shape"
     }
-    return AutoArmSegmentValidation(ok, reason, frames, voiceFrames, strongFrames, durationMs, bestRms, bestPeak)
+    val voicedZcrMedian = if (voicedZcrs.isEmpty()) 0 else voicedZcrs.sorted()[voicedZcrs.size / 2]
+    return AutoArmSegmentValidation(ok, reason, frames, voiceFrames, strongFrames, durationMs, bestRms, bestPeak, voicedZcrMedian)
   }
 
   private data class AudioLevel(val peak: Int, val rms: Int)
@@ -3171,7 +3184,11 @@ class VoiceAlarmActivity : Activity() {
       }
     }
     webSocket = client.newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
-    if (!opened.await(5, TimeUnit.SECONDS)) throw IllegalStateException("讯飞 WebSocket 连接超时")
+    if (!opened.await(12, TimeUnit.SECONDS)) {
+      // 主动取消这条迟迟未握手成功的连接，避免它在超时后才 onOpen 变成僵尸连接。
+      try { webSocket?.cancel() } catch (_: Throwable) {}
+      throw IllegalStateException("讯飞 WebSocket 连接超时")
+    }
     val chunkSize = 1280
     var offset = 0
     var frameIndex = 0
@@ -3372,7 +3389,14 @@ class VoiceAlarmActivity : Activity() {
 
   private fun getIflytekSttClient(): OkHttpClient {
     return iflytekSttClient ?: OkHttpClient.Builder()
+      // 讯飞 STT 走 WebSocket。之前没有显式连接超时/保活，弱网下握手可能要十几秒，
+      // 而上层只等 5s 就判连接超时且不重试，导致“明明说了话却识别失败”。
+      // 给足连接/写入超时并开启 ping 保活；readTimeout 仍为 0，因为要长时间接收流式结果。
+      .connectTimeout(15, TimeUnit.SECONDS)
+      .writeTimeout(15, TimeUnit.SECONDS)
       .readTimeout(0, TimeUnit.MILLISECONDS)
+      .pingInterval(20, TimeUnit.SECONDS)
+      .retryOnConnectionFailure(true)
       .build()
       .also { iflytekSttClient = it }
   }
@@ -3888,11 +3912,17 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isPostPlaybackHandoffActive(): Boolean = System.currentTimeMillis() < postPlaybackHandoffUntil
 
-  private fun scheduleBatchRecorderRefreshAfterPlayback(delayMs: Long = 140L) {
+  private fun scheduleBatchRecorderRefreshAfterPlayback(delayMs: Long = 320L) {
     if (selectedSttMode() != "batch") return
     speechHandler.postDelayed({
       if (destroyed || selectedSttMode() != "batch" || speaking || alarmVoicePlaying) return@postDelayed
       if (batchRecognitionInFlight || batchSubmitInProgress || batchPcmQueue.isNotEmpty() || batchCurrentConfirmedSpeech) return@postDelayed
+      // 用户紧接着播报就开口时，不要释放当前已在录音的采集器——那会把开头几个字丢掉。
+      // 只有在还没检测到用户说话时才刷新到干净麦克风源。
+      if (batchCurrentSpeechDetected) {
+        logVoice("batch.postPlaybackRecorderRefresh.skip", "user already speaking right after playback; keep current recorder to preserve leading words", mapOf("speechDetected" to batchCurrentSpeechDetected, "pipeline" to batchChatPipelineVersion))
+        return@postDelayed
+      }
       batchSpeakerPlaybackEpoch += 1L
       releaseContinuousAudioRecord()
       logVoice("batch.postPlaybackRecorderRefresh", "refresh recorder shortly after playback so clean user speech is captured from normal mic source", mapOf("delayMs" to delayMs, "pipeline" to batchChatPipelineVersion))
@@ -3985,6 +4015,8 @@ class VoiceAlarmActivity : Activity() {
 
   private fun markAppTtsPlaybackStart() {
     logVoice("ai.tts.playback.start", "AI TTS playback state entered")
+    // 标记 AI 回复正在（或即将）播报，服务据此暂停提醒语音复读，避免两路语音叠加。
+    VoiceAlarmRingingService.appReplySpeaking = true
     resetBatchCurrentCaptureForSpeakerPlayback("AI 语音播报中：非实时模式暂停录音，避免把 AI 回复当成用户输入。", cooldownMs = 1200L)
     speaking = true
     val now = System.currentTimeMillis()
@@ -4012,6 +4044,7 @@ class VoiceAlarmActivity : Activity() {
         currentAppTtsUtteranceId = ""
         currentAppTtsStartedByEngine = false
         speaking = false
+        VoiceAlarmRingingService.appReplySpeaking = false
         markPostPlaybackHandoff()
       }
     }
@@ -4040,6 +4073,7 @@ class VoiceAlarmActivity : Activity() {
         currentAppTtsUtteranceId = ""
         currentAppTtsStartedByEngine = false
         speaking = false
+        VoiceAlarmRingingService.appReplySpeaking = false
         markPostPlaybackHandoff()
         transcriptView?.append("\n（播报状态已自动恢复，继续聆听…）")
         if (speechBuffer.isNotBlank()) {
@@ -4055,6 +4089,7 @@ class VoiceAlarmActivity : Activity() {
 
   private fun finishAppTtsPlaybackState(utteranceId: String?, restart: Boolean) {
     logVoice("ai.tts.playback.finish", "AI TTS playback finished", mapOf("utteranceId" to (utteranceId ?: ""), "restart" to restart))
+    VoiceAlarmRingingService.appReplySpeaking = false
     if (utteranceId == null || utteranceId == currentAppTtsUtteranceId) {
       appTtsWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
       appTtsWatchdogRunnable = null
@@ -4089,6 +4124,7 @@ class VoiceAlarmActivity : Activity() {
       // Stop the current TTS and release the speaking gate immediately; do not
       // wait for onDone/onError because many engines do not fire it after stop().
       try { tts?.stop() } catch (_: Throwable) {}
+      stopCloudAiTtsPlayback()
       val currentId = currentAppTtsUtteranceId
       synchronized(ttsRestartByUtterance) {
         if (currentId.isNotBlank()) ttsRestartByUtterance.remove(currentId)
@@ -4661,13 +4697,15 @@ class VoiceAlarmActivity : Activity() {
     }
     when {
       isStop -> {
-        speak("好的，已关闭闹钟。", "alarm_stop", restart = false)
+        speak("好的，已关闭闹钟。", "alarm_stop", restart = false, allowCloudTts = false)
         VoiceAlarmRingingService.stop(this)
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
       isSnooze -> {
-        speak("好的，五分钟后再次提醒。", "alarm_snooze", restart = false)
-        VoiceAlarmScheduler.snooze(this, payload, 5)
+        val minutes = parseSnoozeMinutes(text)
+        logVoice("command.snooze", "voice snooze command recognized", mapOf("text" to logPreview(text), "minutes" to minutes))
+        speak("好的，${minutes}分钟后再次提醒。", "alarm_snooze", restart = false, allowCloudTts = false)
+        VoiceAlarmScheduler.snooze(this, payload, minutes)
         VoiceAlarmRingingService.stop(this)
         transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
       }
@@ -4699,32 +4737,33 @@ class VoiceAlarmActivity : Activity() {
     val b = normalizeSpeechText(text)
     if (b.length < 3) return false
     if (isGenericAlarmPromptTranscript(b)) return true
+    // 只有“播报进行中/刚结束”时麦克风才可能录进扬声器声，才需要宽松的部分匹配回声过滤。
+    // 播报早已结束、录音已刷新为干净近端麦克风时，用户完全可能在就 AI 刚说的话题作回应、
+    // 复用几个词——这不是回声。此时只拦“整段几乎逐字雷同”的真回声，避免误杀真人输入
+    // （日志中 “那好的请把这个联网搜索功能开启” 就被 6 字窗口重叠误判为回声、没发给 AI）。
+    val playbackActive = isPlaybackActiveForSpeechGate()
     for (source in sources) {
       val a = normalizeSpeechText(source)
       if (a.length < 4) continue
-      // Exact/substring match: most common when STT hears our own TTS verbatim.
-      if (a.contains(b) || b.contains(a.take(minOf(24, a.length)))) return true
-      if (b.length >= 6 && a.windowed(minOf(6, b.length), 1).any { b.contains(it) }) return true
-
       val lcs = longestCommonSubsequenceLength(a, b)
-      val shortBase = minOf(a.length, b.length).coerceAtLeast(1)
-      val longBase = maxOf(a.length, b.length).coerceAtLeast(1)
-      val shortRatio = lcs.toDouble() / shortBase
-      val longRatio = lcs.toDouble() / longBase
-
-      if (isPlaybackActiveForSpeechGate()) {
+      val shortRatio = lcs.toDouble() / minOf(a.length, b.length).coerceAtLeast(1)
+      val longRatio = lcs.toDouble() / maxOf(a.length, b.length).coerceAtLeast(1)
+      if (playbackActive) {
+        // Exact/substring match: most common when STT hears our own TTS verbatim.
+        if (a.contains(b) || b.contains(a.take(minOf(24, a.length)))) return true
+        if (b.length >= 6 && a.windowed(minOf(6, b.length), 1).any { b.contains(it) }) return true
         // During playback, partial ASR fragments may be short and not perfectly
         // literal. LCS catches “same content with missing/extra words”.
         if (b.length <= 12 && shortRatio >= 0.58) return true
         if (b.length > 12 && (shortRatio >= 0.52 || longRatio >= 0.36)) return true
+        val bigramCommon = if (b.length >= 2) b.windowed(2, 1).count { a.contains(it) } else 0
+        val bigramRatio = bigramCommon.toDouble() / maxOf(1, b.length - 1)
+        if (bigramRatio >= 0.62) return true
       } else {
-        if (b.length >= 8 && shortRatio >= 0.72) return true
+        // 干净麦克风：仅当整段用户文本几乎就是播报原文本身才算回声。
+        if (a.contains(b) && b.length >= 8) return true
+        if (b.length >= 8 && longRatio >= 0.82) return true
       }
-
-      val bigramCommon = if (b.length >= 2) b.windowed(2, 1).count { a.contains(it) } else 0
-      val bigramRatio = bigramCommon.toDouble() / maxOf(1, b.length - 1)
-      if (isPlaybackActiveForSpeechGate() && bigramRatio >= 0.62) return true
-      if (!isPlaybackActiveForSpeechGate() && b.length >= 8 && bigramRatio >= 0.78) return true
     }
     return false
   }
@@ -4764,16 +4803,48 @@ class VoiceAlarmActivity : Activity() {
 
   private fun isSnoozeCommand(text: String): Boolean {
     val normalized = normalizeSpeechText(text)
-    val hasSnoozeIntent = listOf("延迟", "延时", "推迟", "稍后", "等会", "再响", "贪睡", "小睡", "过会").any {
-      text.contains(it) || normalized.contains(normalizeSpeechText(it))
+    fun has(vararg keys: String) = keys.any { text.contains(it) || normalized.contains(normalizeSpeechText(it)) }
+    // 明确表达“稍后/延迟提醒、贪睡、再睡”的独立短语，无需再带具体时间。
+    if (has(
+        "贪睡", "小睡", "再睡一会", "再睡会", "再睡一下", "再睡片刻", "接着睡", "继续睡",
+        "稍后提醒", "待会提醒", "晚点提醒", "延迟提醒", "推迟提醒", "过会提醒", "过会儿提醒",
+        "再眯一会", "眯一会", "再躺一会", "等下提醒", "等会提醒",
+      )
+    ) return true
+    // “X分钟之后/以后/后 + 提醒/叫我/叫醒/再响/喊我/再说”这类“过一会再叫我”的表达。
+    if (has(
+        "后提醒", "之后提醒", "以后提醒", "后叫我", "之后叫我", "以后叫我", "后叫醒",
+        "后喊我", "后再响", "后再叫", "后再说", "后再提醒", "后再喊", "后再叫我",
+      )
+    ) return true
+    val hasMinutes = normalized.contains("分钟") || normalized.contains("分种") ||
+      Regex("[0-9零一两二三四五六七八九十]+\\s*分").containsMatchIn(normalized)
+    // 贪睡/延迟意图词 + 时间。
+    val snoozeVerb = has(
+      "延迟", "延时", "推迟", "稍后", "等会", "等一会", "待会", "再响",
+      "再睡", "过会", "过一会", "再过", "晚点", "晚些", "缓一缓", "缓会",
+    )
+    if (snoozeVerb && hasMinutes) return true
+    // “过5分钟/过五分钟/再过X分钟”等。
+    if (hasMinutes && has("过5", "过五", "过10", "过十", "过15", "过三", "过两", "过二", "过一", "再过")) return true
+    return normalized.contains("延迟五") || normalized.contains("延迟5") ||
+      normalized.contains("延时五") || normalized.contains("延时5")
+  }
+
+  // 解析用户想延迟的分钟数；无法识别时默认 5 分钟。
+  private fun parseSnoozeMinutes(text: String): Int {
+    val normalized = normalizeSpeechText(text)
+    Regex("([0-9]{1,3})\\s*分").find(normalized)?.groupValues?.get(1)?.toIntOrNull()?.let {
+      if (it in 1..180) return it
     }
-    val hasFiveMinutes = listOf("五分钟", "5分钟", "五 分钟", "5 分钟", "五分", "5分", "五分钟后", "5分钟后").any {
-      text.contains(it) || normalized.contains(normalizeSpeechText(it))
+    val cn = mapOf(
+      "十五" to 15, "二十" to 20, "三十" to 30, "四十" to 40, "四十五" to 45, "五十" to 50, "六十" to 60,
+      "十" to 10, "两" to 2, "二" to 2, "三" to 3, "四" to 4, "五" to 5, "六" to 6, "七" to 7, "八" to 8, "九" to 9, "一" to 1,
+    )
+    for ((word, minutes) in cn) {
+      if (normalized.contains("${word}分")) return minutes
     }
-    return (hasSnoozeIntent && hasFiveMinutes) ||
-      normalized.contains("延迟五") || normalized.contains("延迟5") ||
-      normalized.contains("延时五") || normalized.contains("延时5") ||
-      normalized.contains("五分钟后提醒") || normalized.contains("5分钟后提醒")
+    return 5
   }
 
   private fun isWakeCommand(text: String): Boolean = listOf("小名小名", "你好AI", "你好ai", "闹钟助手", "AI助手", "ai助手", "小名", "助手").any { text.contains(it) }
@@ -4865,16 +4936,370 @@ class VoiceAlarmActivity : Activity() {
     }.start()
   }
 
-  private fun speak(text: String, utteranceId: String, restart: Boolean = true) {
+  private fun speak(text: String, utteranceId: String, restart: Boolean = true, allowCloudTts: Boolean = true) {
     val safeText = text.take(600).trim()
     if (safeText.isBlank()) { if (restart) listenAgain(120L); return }
     lastAssistantSpokenText = safeText
-    if (tts == null || !ttsReady) {
-      queuePendingSpeak(safeText, utteranceId, restart)
+    // 按用户选择的 TTS 服务商用云端合成 AI 回复语音；无可用服务商/凭据或合成失败时回退本地。
+    // 关闭/延迟等即时指令确认走本地 TTS（无网络合成延迟，界面很快就会关闭）。
+    val ttsCfg = if (allowCloudTts) alarmTtsConfig() else null
+    val provider = ttsCfg?.let { resolveAiTtsProvider(it) }
+    if (ttsCfg != null && provider != null) {
+      speakWithCloudAiTts(safeText, utteranceId, restart, ttsCfg, provider)
       return
     }
-    performTtsSpeak(safeText, utteranceId, restart, retry = 0)
+    speakWithLocalTts(safeText, utteranceId, restart)
   }
+
+  private fun alarmTtsConfig(): JSONObject? {
+    val direct = try { JSONObject(payload).optJSONObject("ttsConfig") } catch (_: Throwable) { null }
+    if (direct != null) return direct
+    // 向后兼容：更新前保存的闹钟负载没有 ttsConfig，用 iFlytek STT 凭据兜底合成 AI 回复语音。
+    val iflytek = cloudSttConfigForProvider("iflytek") ?: return null
+    return JSONObject()
+      .put("provider", "iflytek")
+      .put(
+        "iflytek",
+        JSONObject()
+          .put("appId", iflytek.optString("appId", ""))
+          .put("apiKey", iflytek.optString("apiKey", ""))
+          .put("apiSecret", iflytek.optString("apiSecret", ""))
+          .put("endpoint", "wss://tts-api.xfyun.cn/v2/tts"),
+      )
+  }
+
+  private fun ttsHasIflytek(cfg: JSONObject): Boolean = cfg.optJSONObject("iflytek")?.let {
+    it.optString("appId", "").isNotBlank() && it.optString("apiKey", "").isNotBlank() && it.optString("apiSecret", "").isNotBlank()
+  } == true
+
+  private fun ttsHasMicrosoft(cfg: JSONObject): Boolean = cfg.optJSONObject("microsoft")?.optString("apiKey", "")?.isNotBlank() == true
+
+  private fun ttsHasElevenLabs(cfg: JSONObject): Boolean = cfg.optJSONObject("elevenlabs")?.let {
+    it.optString("apiKey", "").isNotBlank() && (it.optString("voiceId", "").isNotBlank())
+  } == true
+
+  // 选定实际用于合成 AI 回复的服务商：先尊重用户所选；若该服务商原生未实现或缺凭据，
+  // 再回退到任一有凭据、原生已实现的服务商（讯飞/微软/ElevenLabs）；都没有则返回 null 走本地。
+  private fun resolveAiTtsProvider(cfg: JSONObject): String? {
+    when (cfg.optString("provider", "")) {
+      "microsoft" -> if (ttsHasMicrosoft(cfg)) return "microsoft"
+      "elevenlabs" -> if (ttsHasElevenLabs(cfg)) return "elevenlabs"
+      "iflytek" -> if (ttsHasIflytek(cfg)) return "iflytek"
+    }
+    if (ttsHasIflytek(cfg)) return "iflytek"
+    if (ttsHasMicrosoft(cfg)) return "microsoft"
+    if (ttsHasElevenLabs(cfg)) return "elevenlabs"
+    return null
+  }
+
+  private fun ttsProviderLabel(provider: String): String = when (provider) {
+    "microsoft" -> "微软"
+    "iflytek" -> "讯飞"
+    "elevenlabs" -> "ElevenLabs"
+    "resemble" -> "Resemble"
+    "minimax" -> "MiniMax"
+    "local" -> "系统本地兜底"
+    else -> provider.ifBlank { "系统本地兜底" }
+  }
+
+  // 供界面初始显示：用户所选服务商；若不可用则显示实际会用到的兜底服务商。
+  private fun aiTtsProviderDisplay(): String {
+    val cfg = alarmTtsConfig() ?: return ttsProviderLabel("local")
+    val selected = cfg.optString("provider", "")
+    val resolved = resolveAiTtsProvider(cfg) ?: return ttsProviderLabel("local")
+    return if (selected.isNotBlank() && resolved != selected) {
+      "${ttsProviderLabel(resolved)}（已选 ${ttsProviderLabel(selected)} 未配置）"
+    } else {
+      ttsProviderLabel(resolved)
+    }
+  }
+
+  private fun updateTtsProviderDisplay(actualProvider: String) {
+    runOnUiThread { ttsProviderView?.text = "AI 语音播报：${ttsProviderLabel(actualProvider)}" }
+  }
+
+  private fun speakWithLocalTts(text: String, utteranceId: String, restart: Boolean) {
+    updateTtsProviderDisplay("local")
+    if (tts == null || !ttsReady) {
+      queuePendingSpeak(text, utteranceId, restart)
+      return
+    }
+    performTtsSpeak(text, utteranceId, restart, retry = 0)
+  }
+
+  private fun synthesizeAiTtsWithProvider(cfg: JSONObject, provider: String, text: String): String? = when (provider) {
+    "microsoft" -> synthesizeMicrosoftTtsToFile(cfg, text)
+    "elevenlabs" -> synthesizeElevenLabsTtsToFile(cfg, text)
+    "iflytek" -> synthesizeIflytekTtsToFile(cfg.optJSONObject("iflytek") ?: JSONObject(), text, cfg.optString("voiceId", ""))
+    else -> null
+  }
+
+  private fun speakWithCloudAiTts(text: String, utteranceId: String, restart: Boolean, cfg: JSONObject, provider: String) {
+    // 候选顺序：先用已选/解析出的服务商，运行时若失败再依次尝试其它有凭据的云端服务商，最后才本地兜底。
+    val candidates = LinkedHashSet<String>()
+    candidates.add(provider)
+    if (ttsHasIflytek(cfg)) candidates.add("iflytek")
+    if (ttsHasMicrosoft(cfg)) candidates.add("microsoft")
+    if (ttsHasElevenLabs(cfg)) candidates.add("elevenlabs")
+    logVoice("ai.tts.cloud.start", "synthesizing AI reply with cloud TTS", mapOf("utteranceId" to utteranceId, "chars" to text.length, "provider" to provider, "selected" to cfg.optString("provider", ""), "candidates" to candidates.joinToString(",")))
+    Thread {
+      var path: String? = null
+      var used = ""
+      for (candidate in candidates) {
+        path = try {
+          synthesizeAiTtsWithProvider(cfg, candidate, text)
+        } catch (t: Throwable) {
+          logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId, "provider" to candidate))
+          null
+        }
+        if (path != null) { used = candidate; break }
+      }
+      val finalPath = path
+      runOnUiThread {
+        if (destroyed) return@runOnUiThread
+        if (finalPath == null) {
+          logVoice("ai.tts.cloud.fallback", "all cloud TTS providers failed; fall back to local TTS", mapOf("utteranceId" to utteranceId, "tried" to candidates.joinToString(",")))
+          speakWithLocalTts(text, utteranceId, restart)
+        } else {
+          updateTtsProviderDisplay(used)
+          playCloudAiTtsFile(finalPath, text, utteranceId, restart)
+        }
+      }
+    }.apply { name = "voice-alarm-ai-tts"; isDaemon = true }.start()
+  }
+
+  private fun playCloudAiTtsFile(path: String, text: String, utteranceId: String, restart: Boolean) {
+    try { aiTtsPlayer?.release() } catch (_: Throwable) {}
+    aiTtsPlayer = null
+    val player = MediaPlayer()
+    try {
+      player.setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+          .build(),
+      )
+      player.setDataSource(path)
+      player.setOnPreparedListener { mp ->
+        if (destroyed) { try { mp.release() } catch (_: Throwable) {}; return@setOnPreparedListener }
+        markAppTtsPlaybackStart()
+        currentAppTtsUtteranceId = utteranceId
+        currentAppTtsStartedByEngine = true
+        synchronized(ttsRestartByUtterance) { ttsRestartByUtterance[utteranceId] = restart }
+        // 复用既有的“播报卡死自动恢复”看门狗，避免云端播放异常导致 speaking 卡住。
+        scheduleAppTtsWatchdog(utteranceId, text, restart)
+        try { mp.start() } catch (_: Throwable) { cleanupCloudAiTtsPlayer(path); speakWithLocalTts(text, utteranceId, restart) }
+      }
+      player.setOnCompletionListener { mp ->
+        cleanupCloudAiTtsPlayer(path, mp)
+        handleTtsFinished(utteranceId, true)
+      }
+      player.setOnErrorListener { mp, what, extra ->
+        logVoice("ai.tts.cloud.playError", "cloud TTS playback error; fall back to local TTS", mapOf("what" to what, "extra" to extra, "utteranceId" to utteranceId))
+        cleanupCloudAiTtsPlayer(path, mp)
+        // 播放失败：回退本地 TTS，保证用户仍能听到回复。
+        speakWithLocalTts(text, utteranceId, restart)
+        true
+      }
+      aiTtsPlayer = player
+      player.prepareAsync()
+    } catch (t: Throwable) {
+      logVoice("ai.tts.cloud.playError", t.message ?: t.javaClass.simpleName, mapOf("utteranceId" to utteranceId))
+      try { player.release() } catch (_: Throwable) {}
+      if (aiTtsPlayer === player) aiTtsPlayer = null
+      try { File(path).delete() } catch (_: Throwable) {}
+      speakWithLocalTts(text, utteranceId, restart)
+    }
+  }
+
+  private fun cleanupCloudAiTtsPlayer(path: String, mp: MediaPlayer? = null) {
+    try { (mp ?: aiTtsPlayer)?.release() } catch (_: Throwable) {}
+    if (mp == null || aiTtsPlayer === mp) aiTtsPlayer = null
+    try { File(path).delete() } catch (_: Throwable) {}
+  }
+
+  private fun stopCloudAiTtsPlayback() {
+    val player = aiTtsPlayer ?: return
+    aiTtsPlayer = null
+    try { player.stop() } catch (_: Throwable) {}
+    try { player.release() } catch (_: Throwable) {}
+  }
+
+  private fun synthesizeIflytekTtsToFile(cfg: JSONObject, text: String, voiceOverride: String = ""): String? {
+    val clean = text.trim()
+    if (clean.isEmpty()) return null
+    val appId = cfg.optString("appId", "")
+    val apiKey = cfg.optString("apiKey", "")
+    val apiSecret = cfg.optString("apiSecret", "")
+    if (appId.isBlank() || apiKey.isBlank() || apiSecret.isBlank()) return null
+    // ttsConfig.iflytek.endpoint 是 TTS 端点（wss://tts-api.xfyun.cn/v2/tts）；容错回退默认值。
+    val endpoint = cfg.optString("endpoint", "").let { if (it.contains("/tts")) it else "wss://tts-api.xfyun.cn/v2/tts" }
+    val ttsCfg = JSONObject()
+      .put("endpoint", endpoint)
+      .put("apiKey", apiKey)
+      .put("apiSecret", apiSecret)
+    val url = iflytekSignedUrl(ttsCfg)
+    val vcn = voiceOverride.trim().ifBlank { cfg.optString("voiceName", "").ifBlank { "xiaoyan" } }
+    val requestBody = JSONObject()
+      .put("common", JSONObject().put("app_id", appId))
+      .put(
+        "business",
+        JSONObject()
+          .put("aue", "lame")
+          .put("auf", "audio/L16;rate=16000")
+          .put("vcn", vcn)
+          .put("tte", "UTF8")
+          .put("speed", 50)
+          .put("volume", 90)
+          .put("pitch", 50),
+      )
+      .put("data", JSONObject().put("status", 2).put("text", Base64.getEncoder().encodeToString(clean.toByteArray(Charsets.UTF_8))))
+    val opened = CountDownLatch(1)
+    val closed = CountDownLatch(1)
+    val audio = ByteArrayOutputStream()
+    var error = ""
+    var webSocket: WebSocket? = null
+    val listener = object : WebSocketListener() {
+      override fun onOpen(webSocket: WebSocket, response: Response) {
+        opened.countDown()
+        try { webSocket.send(requestBody.toString()) } catch (_: Throwable) {}
+      }
+      override fun onMessage(webSocket: WebSocket, message: String) {
+        val obj = try { JSONObject(message) } catch (_: Throwable) { JSONObject() }
+        val code = obj.optInt("code", -1)
+        if (code != 0) {
+          error = "讯飞 TTS code=$code ${obj.optString("message", "")}"
+          closed.countDown()
+          return
+        }
+        val data = obj.optJSONObject("data")
+        val b64 = data?.optString("audio", "") ?: ""
+        if (b64.isNotBlank()) { try { synchronized(audio) { audio.write(Base64.getDecoder().decode(b64)) } } catch (_: Throwable) {} }
+        if ((data?.optInt("status", 0) ?: 0) == 2) closed.countDown()
+      }
+      override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+        error = t.message ?: t.javaClass.simpleName
+        opened.countDown()
+        closed.countDown()
+      }
+      override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { closed.countDown() }
+    }
+    webSocket = getIflytekSttClient().newWebSocket(Request.Builder().url(url).build(), listener)
+    if (!opened.await(12, TimeUnit.SECONDS)) {
+      try { webSocket?.cancel() } catch (_: Throwable) {}
+      return null
+    }
+    closed.await(20, TimeUnit.SECONDS)
+    try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
+    val bytes = synchronized(audio) { audio.toByteArray() }
+    if (bytes.isEmpty() || error.isNotBlank()) {
+      logVoice("ai.tts.cloud.error", error.ifBlank { "empty audio" }, mapOf("provider" to "iflytek", "bytes" to bytes.size))
+      return null
+    }
+    return writeAiTtsFile(bytes, "mp3")
+  }
+
+  private fun writeAiTtsFile(bytes: ByteArray, ext: String): String? {
+    if (bytes.isEmpty()) return null
+    return try {
+      val dir = File(filesDir, "voice_alarm_ai_tts").apply { mkdirs() }
+      // 清掉上一轮遗留的音频（打断/退出路径可能没删），避免临时文件堆积。
+      try { dir.listFiles()?.forEach { it.delete() } } catch (_: Throwable) {}
+      val out = File(dir, "ai_tts_${System.currentTimeMillis()}.$ext")
+      out.writeBytes(bytes)
+      out.absolutePath
+    } catch (_: Throwable) { null }
+  }
+
+  private fun synthesizeMicrosoftTtsToFile(ttsConfig: JSONObject, text: String): String? {
+    val clean = text.trim()
+    if (clean.isEmpty()) return null
+    val cfg = ttsConfig.optJSONObject("microsoft") ?: return null
+    val apiKey = cfg.optString("apiKey", "")
+    if (apiKey.isBlank()) return null
+    val region = cfg.optString("region", "").ifBlank { "eastasia" }
+    val custom = cfg.optString("endpoint", "")
+    val endpoint = if (custom.contains("/cognitiveservices/v1")) custom
+      else "https://${region}.tts.speech.microsoft.com/cognitiveservices/v1"
+    val voice = ttsConfig.optString("voiceId", "").ifBlank { cfg.optString("voice", "").ifBlank { "zh-CN-XiaoxiaoNeural" } }
+    val outputFormat = cfg.optString("outputFormat", "").ifBlank { "audio-24khz-48kbitrate-mono-mp3" }
+    val ssml = "<speak version='1.0' xml:lang='zh-CN'><voice xml:lang='zh-CN' name='${escapeXml(voice)}'>${escapeXml(clean)}</voice></speak>"
+    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+      requestMethod = "POST"
+      connectTimeout = 15000
+      readTimeout = 60000
+      doOutput = true
+      setRequestProperty("Ocp-Apim-Subscription-Key", apiKey)
+      setRequestProperty("Content-Type", "application/ssml+xml")
+      setRequestProperty("X-Microsoft-OutputFormat", outputFormat)
+      setRequestProperty("User-Agent", "quote_app")
+    }
+    return try {
+      OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(ssml) }
+      if (conn.responseCode !in 200..299) {
+        val err = try { conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "" } catch (_: Throwable) { "" }
+        logVoice("ai.tts.cloud.error", "microsoft http ${conn.responseCode} ${err.take(120)}", mapOf("provider" to "microsoft"))
+        null
+      } else {
+        val bytes = conn.inputStream.use { it.readBytes() }
+        val ext = if (outputFormat.contains("mp3")) "mp3" else if (outputFormat.contains("wav") || outputFormat.contains("pcm") || outputFormat.contains("riff")) "wav" else "mp3"
+        writeAiTtsFile(bytes, ext)
+      }
+    } catch (t: Throwable) {
+      logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("provider" to "microsoft"))
+      null
+    } finally {
+      try { conn.disconnect() } catch (_: Throwable) {}
+    }
+  }
+
+  private fun synthesizeElevenLabsTtsToFile(ttsConfig: JSONObject, text: String): String? {
+    val clean = text.trim()
+    if (clean.isEmpty()) return null
+    val cfg = ttsConfig.optJSONObject("elevenlabs") ?: return null
+    val apiKey = cfg.optString("apiKey", "")
+    val voiceId = ttsConfig.optString("voiceId", "").ifBlank { cfg.optString("voiceId", "") }
+    if (apiKey.isBlank() || voiceId.isBlank()) return null
+    val model = cfg.optString("model", "").ifBlank { "eleven_multilingual_v2" }
+    val outputFormat = cfg.optString("outputFormat", "").ifBlank { "mp3_44100_128" }
+    val endpoint = "https://api.elevenlabs.io/v1/text-to-speech/${URLEncoder.encode(voiceId, "UTF-8")}?output_format=${URLEncoder.encode(outputFormat, "UTF-8")}"
+    val body = JSONObject()
+      .put("text", clean)
+      .put("model_id", model)
+    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+      requestMethod = "POST"
+      connectTimeout = 15000
+      readTimeout = 60000
+      doOutput = true
+      setRequestProperty("xi-api-key", apiKey)
+      setRequestProperty("Content-Type", "application/json")
+      setRequestProperty("Accept", "audio/mpeg")
+    }
+    return try {
+      OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+      if (conn.responseCode !in 200..299) {
+        val err = try { conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "" } catch (_: Throwable) { "" }
+        logVoice("ai.tts.cloud.error", "elevenlabs http ${conn.responseCode} ${err.take(120)}", mapOf("provider" to "elevenlabs"))
+        null
+      } else {
+        val bytes = conn.inputStream.use { it.readBytes() }
+        val ext = if (outputFormat.startsWith("pcm") || outputFormat.contains("wav")) "wav" else "mp3"
+        writeAiTtsFile(bytes, ext)
+      }
+    } catch (t: Throwable) {
+      logVoice("ai.tts.cloud.error", t.message ?: t.javaClass.simpleName, mapOf("provider" to "elevenlabs"))
+      null
+    } finally {
+      try { conn.disconnect() } catch (_: Throwable) {}
+    }
+  }
+
+  private fun escapeXml(s: String): String = s
+    .replace("&", "&amp;")
+    .replace("<", "&lt;")
+    .replace(">", "&gt;")
+    .replace("\"", "&quot;")
+    .replace("'", "&apos;")
 
   private fun queuePendingSpeak(text: String, utteranceId: String, restart: Boolean) {
     pendingSpeakText = text
@@ -5000,37 +5425,75 @@ class VoiceAlarmActivity : Activity() {
       for ((role, content) in conversation.takeLast(10)) put(JSONObject().put("role", role).put("content", content))
       put(JSONObject().put("role", "user").put("content", userText))
     }
-    val body = if (provider == "openai" && endpoint.contains("/responses")) {
-      JSONObject()
-        .put("model", model)
-        .put("input", messages)
-        .put("max_output_tokens", 220)
-        .put("temperature", 0.7)
-    } else {
-      JSONObject()
-        .put("model", model)
-        .put("messages", messages)
-        .put("max_tokens", 220)
-        .put("temperature", 0.7)
-        .put("stream", false)
+    // 推理型模型（如 deepseek-v4-flash）会先产出 reasoning_content 再产出正式回答。
+    // 之前 max_tokens=220 经常在“思考”阶段就被截断（finish_reason=length），
+    // 于是 content 为空、界面反复提示“AI 没有返回内容”。这里给足初始预算；
+    // 若仍因长度截断且没有正文，再翻倍预算重试一次，直到拿到回答或用尽重试。
+    var maxTokens = 1024
+    var attempt = 0
+    while (true) {
+      attempt += 1
+      val body = if (provider == "openai" && endpoint.contains("/responses")) {
+        JSONObject()
+          .put("model", model)
+          .put("input", messages)
+          .put("max_output_tokens", maxTokens)
+          .put("temperature", 0.7)
+      } else {
+        JSONObject()
+          .put("model", model)
+          .put("messages", messages)
+          .put("max_tokens", maxTokens)
+          .put("temperature", 0.7)
+          .put("stream", false)
+      }
+      val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        connectTimeout = 15000
+        readTimeout = 45000
+        doOutput = true
+        setRequestProperty("Content-Type", "application/json")
+        setRequestProperty("Authorization", "Bearer $apiKey")
+        if (provider == "openrouter") setRequestProperty("X-OpenRouter-Title", "Quote App Voice Alarm")
+        if (provider == "edenai") setRequestProperty("Accept", "application/json")
+      }
+      logVoice("ai.call.http.start", "calling AI endpoint", mapOf("provider" to provider, "model" to model, "endpoint" to endpoint.take(120), "bodyChars" to body.toString().length, "attempt" to attempt, "maxTokens" to maxTokens))
+      OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+      val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+      val resp = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+      logVoice("ai.call.http.result", "AI HTTP response", mapOf("provider" to provider, "status" to conn.responseCode, "attempt" to attempt, "resp" to resp.take(220)))
+      if (conn.responseCode !in 200..299) return "AI 请求失败：HTTP ${conn.responseCode} ${resp.take(120)}"
+      val parsed = JSONObject(resp)
+      val text = extractAiText(parsed)
+      if (text.isNotBlank()) return text
+      val finish = aiFinishReason(parsed)
+      val truncatedByLength = finish == "length" || finish == "max_output_tokens" || finish == "max_tokens"
+      if (truncatedByLength && attempt < 3 && maxTokens < 4096) {
+        val next = (maxTokens * 2).coerceAtMost(4096)
+        logVoice("ai.call.retryLength", "empty content truncated by token budget; retry with larger budget", mapOf("provider" to provider, "finish" to finish, "prevMaxTokens" to maxTokens, "nextMaxTokens" to next, "attempt" to attempt))
+        maxTokens = next
+        continue
+      }
+      logVoice("ai.call.emptyContent", "AI returned empty content", mapOf("provider" to provider, "finish" to finish, "attempt" to attempt, "maxTokens" to maxTokens))
+      return ""
     }
-    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-      requestMethod = "POST"
-      connectTimeout = 15000
-      readTimeout = 45000
-      doOutput = true
-      setRequestProperty("Content-Type", "application/json")
-      setRequestProperty("Authorization", "Bearer $apiKey")
-      if (provider == "openrouter") setRequestProperty("X-OpenRouter-Title", "Quote App Voice Alarm")
-      if (provider == "edenai") setRequestProperty("Accept", "application/json")
+  }
+
+  private fun aiFinishReason(obj: JSONObject): String {
+    val choices = obj.optJSONArray("choices")
+    if (choices != null && choices.length() > 0) {
+      val c = choices.optJSONObject(0)
+      val fr = c?.optString("finish_reason", "") ?: ""
+      if (fr.isNotBlank()) return fr
+      val nr = c?.optString("native_finish_reason", "") ?: ""
+      if (nr.isNotBlank()) return nr
     }
-    logVoice("ai.call.http.start", "calling AI endpoint", mapOf("provider" to provider, "model" to model, "endpoint" to endpoint.take(120), "bodyChars" to body.toString().length))
-    OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
-    val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
-    val resp = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-    logVoice("ai.call.http.result", "AI HTTP response", mapOf("provider" to provider, "status" to conn.responseCode, "resp" to resp.take(220)))
-    if (conn.responseCode !in 200..299) return "AI 请求失败：HTTP ${conn.responseCode} ${resp.take(120)}"
-    return extractAiText(JSONObject(resp))
+    // openai /responses 风格：截断时 status=incomplete，原因在 incomplete_details.reason。
+    if (obj.optString("status", "") == "incomplete") {
+      val reason = obj.optJSONObject("incomplete_details")?.optString("reason", "") ?: ""
+      if (reason.isNotBlank()) return reason
+    }
+    return ""
   }
 
   private fun extractAiText(obj: JSONObject): String {
@@ -5060,6 +5523,7 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onDestroy() {
     destroyed = true
+    VoiceAlarmRingingService.appReplySpeaking = false
     stopCloudStt()
     try { iflytekSttClient?.dispatcher?.executorService?.shutdown() } catch (_: Throwable) {}
     try { iflytekSttClient?.connectionPool?.evictAll() } catch (_: Throwable) {}
@@ -5085,6 +5549,7 @@ class VoiceAlarmActivity : Activity() {
     pendingSpeakUtteranceId = ""
     ttsReady = false
     try { tts?.shutdown() } catch (_: Throwable) {}
+    stopCloudAiTtsPlayback()
     recognizer = null
     tts = null
     super.onDestroy()

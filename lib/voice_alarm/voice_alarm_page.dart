@@ -100,6 +100,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Map<String, dynamic> _alarmAiConfig = <String, dynamic>{};
   String _alarmAiSystemPrompt = '';
   Map<String, dynamic> _alarmSttConfig = <String, dynamic>{};
+  Map<String, dynamic> _alarmTtsConfig = <String, dynamic>{};
+  List<Map<String, dynamic>> _scheduledAlarms = <Map<String, dynamic>>[];
+  bool _showAdvanced = false;
   String _speechPreset = 'balanced';
   double _speechCompleteSilenceMs = 2400;
   double _speechPossiblyCompleteSilenceMs = 1600;
@@ -119,6 +122,86 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   void initState() {
     super.initState();
     _loadMode('morning');
+    _loadScheduledAlarms();
+  }
+
+  // 读取原生实际已排期的所有闹钟（含前端没记录、但仍会到点响的“幽灵闹钟”），供展示与删除。
+  Future<void> _loadScheduledAlarms() async {
+    try {
+      final raw = await _native.invokeMethod<String>('listAlarms');
+      final list = <Map<String, dynamic>>[];
+      if (raw != null && raw.trim().isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final e in decoded) {
+            if (e is Map) list.add(e.map((k, v) => MapEntry(k.toString(), v)));
+          }
+        }
+      }
+      list.sort((a, b) {
+        final ha = (a['hour'] as num?)?.toInt() ?? 0;
+        final hb = (b['hour'] as num?)?.toInt() ?? 0;
+        if (ha != hb) return ha.compareTo(hb);
+        return ((a['minute'] as num?)?.toInt() ?? 0).compareTo((b['minute'] as num?)?.toInt() ?? 0);
+      });
+      if (mounted) setState(() => _scheduledAlarms = list);
+    } catch (_) {
+      // 旧版原生不支持 listAlarms 时静默忽略。
+    }
+  }
+
+  String _weekdaysLabel(Map<String, dynamic> alarm) {
+    final freq = (alarm['frequency'] ?? '').toString();
+    if (freq == 'daily') return '每天';
+    if (freq == 'weekdays') return '工作日';
+    final raw = alarm['weekdays'];
+    final days = <int>[];
+    if (raw is List) {
+      for (final d in raw) {
+        final n = (d is num) ? d.toInt() : int.tryParse(d.toString());
+        if (n != null) days.add(n);
+      }
+    }
+    if (days.isEmpty) return '每天';
+    if (days.length == 7) return '每天';
+    if (days.length == 5 && days.toSet().containsAll({1, 2, 3, 4, 5}) && !days.contains(6) && !days.contains(7)) return '工作日';
+    const names = {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '日'};
+    days.sort();
+    return '周${days.map((d) => names[d] ?? '').join('、周')}';
+  }
+
+  Future<void> _deleteScheduledAlarm(Map<String, dynamic> alarm) async {
+    final id = (alarm['id'] as num?)?.toInt();
+    if (id == null) return;
+    try {
+      await _native.invokeMethod<void>('cancelAlarm', {'id': id});
+      _toast('已删除该闹钟');
+    } catch (e) {
+      _toast('删除失败：$e');
+    }
+    await _loadScheduledAlarms();
+  }
+
+  Future<void> _clearAllScheduledAlarms() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清除全部闹钟'),
+        content: const Text('将取消所有已排期的语音闹钟（包括未在列表设置过、但仍会到点响的闹钟）。确定吗？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('全部清除')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _native.invokeMethod<void>('cancelAllAlarms');
+      _toast('已清除全部闹钟');
+    } catch (e) {
+      _toast('清除失败：$e');
+    }
+    await _loadScheduledAlarms();
   }
 
   @override
@@ -326,17 +409,6 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     await _kv.setString(_configKey, jsonEncode(config));
   }
 
-  Future<void> _removeAlarmEntry(_VoiceAlarmEntry alarm) async {
-    setState(() => _alarmEntries = _alarmEntries.where((item) => item.id != alarm.id).toList());
-    await _persistDraftConfig();
-    try {
-      await _native.invokeMethod<void>('cancelAlarm', {'alarmId': alarm.id});
-      _toast('已删除并取消 ${alarm.time.format(context)} 的闹钟');
-    } catch (e) {
-      _toast('已从列表删除；取消系统闹钟失败：$e');
-    }
-  }
-
   Future<bool> _ensureVoiceInteractionReady() async {
     final mic = await Permission.microphone.status;
     if (!mic.isGranted) {
@@ -373,6 +445,40 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _alarmAiConfig = <String, dynamic>{'available': false};
     }
     await _refreshAlarmSttConfig();
+    await _refreshAlarmTtsConfig();
+  }
+
+  // AI 回复的文字转语音要用用户选择的 TTS 服务商来播报，因此把所选服务商与各家凭据、
+  // 音色一起下发给原生闹钟侧（原生按 provider 合成 AI 回复语音，失败再回退系统本地 TTS）。
+  Future<void> _refreshAlarmTtsConfig() async {
+    _alarmTtsConfig = <String, dynamic>{
+      'provider': _provider,
+      'voiceId': _voiceId.text.trim(),
+      'speed': _speed,
+      'pitch': _pitch,
+      'volume': _voiceVolume,
+      'emotion': _emotion,
+      'microsoft': {
+        'apiKey': await _kv.getString(VoiceProviderSettings.microsoftApiKey) ?? '',
+        'region': await _kv.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion,
+        'endpoint': await _kv.getString(VoiceProviderSettings.microsoftEndpoint) ?? '',
+        'voice': await _kv.getString(VoiceProviderSettings.microsoftVoice) ?? VoiceProviderSettings.defaultMicrosoftVoice,
+        'outputFormat': await _kv.getString(VoiceProviderSettings.microsoftOutputFormat) ?? VoiceProviderSettings.defaultMicrosoftOutputFormat,
+      },
+      'iflytek': {
+        'appId': await _kv.getString(VoiceProviderSettings.iflytekAppId) ?? '',
+        'apiKey': await _kv.getString(VoiceProviderSettings.iflytekApiKey) ?? '',
+        'apiSecret': await _kv.getString(VoiceProviderSettings.iflytekApiSecret) ?? '',
+        'endpoint': await _kv.getString(VoiceProviderSettings.iflytekEndpoint) ?? VoiceProviderSettings.defaultIflytekEndpoint,
+        'voiceName': await _kv.getString(VoiceProviderSettings.iflytekVoiceName) ?? VoiceProviderSettings.defaultIflytekVoiceName,
+      },
+      'elevenlabs': {
+        'apiKey': await _kv.getString(ElevenLabsSettings.apiKey) ?? '',
+        'voiceId': await _kv.getString(ElevenLabsSettings.presetVoiceId) ?? ElevenLabsSettings.defaultPresetVoiceId,
+        'model': await _kv.getString(ElevenLabsSettings.defaultModel) ?? '',
+        'outputFormat': await _kv.getString(ElevenLabsSettings.outputFormat) ?? '',
+      },
+    };
   }
 
   Future<void> _refreshAlarmSttConfig() async {
@@ -550,7 +656,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       }
       final text = _text.text.trim();
       final when = _nextTime();
-      final alarmId = '$_mode-${_time.hour.toString().padLeft(2, '0')}${_time.minute.toString().padLeft(2, '0')}-${DateTime.now().millisecondsSinceEpoch}';
+      // 用“模式+时间”作为闹钟 id（不再追加时间戳），这样对同一时间点重复保存会“更新”而不是
+      // 不断新增重复闹钟；不同时间自然是不同闹钟。
+      final alarmId = '$_mode-${_time.hour.toString().padLeft(2, '0')}${_time.minute.toString().padLeft(2, '0')}';
       await _kv.setString('voice_alarm.time', when.toIso8601String());
       await _kv.setString('voice_alarm.text', _text.text.trim());
       await _kv.setString('voice_alarm.provider', _provider);
@@ -572,9 +680,151 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         'payload': payload,
       });
       _toast('已添加 ${_mode == 'morning' ? '起床' : '睡觉'}闹钟 ${_time.format(context)}；当前模块共 ${_alarmEntries.length} 组');
+      await _loadScheduledAlarms();
       setState(() {});
     } catch (e) {
       _toast('设置失败：$e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  // 新增闹钟：在一个弹窗里集中选“时间 + 重复频率”，点保存即用当前语音/铃声设置创建闹钟。
+  Future<void> _showAddAlarmSheet() async {
+    var time = _time;
+    var freq = _frequency;
+    final days = <int>{..._weekdays};
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(left: 20, right: 20, top: 4, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('新增${_mode == 'morning' ? '起床' : '睡觉'}闹钟', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.access_time),
+                  title: Text(time.format(ctx), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.edit_outlined),
+                  onTap: () async {
+                    final v = await showTimePicker(context: ctx, initialTime: time);
+                    if (v != null) setSheet(() => time = v);
+                  },
+                ),
+                const SizedBox(height: 4),
+                const Text('重复', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Wrap(spacing: 8, children: [
+                  ChoiceChip(label: const Text('每天'), selected: freq == 'daily', onSelected: (_) => setSheet(() => freq = 'daily')),
+                  ChoiceChip(label: const Text('工作日'), selected: freq == 'weekdays', onSelected: (_) => setSheet(() => freq = 'weekdays')),
+                  ChoiceChip(label: const Text('自定义'), selected: freq == 'custom', onSelected: (_) => setSheet(() => freq = 'custom')),
+                ]),
+                if (freq == 'custom') ...[
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 4, children: List.generate(7, (i) {
+                    final d = i + 1;
+                    return FilterChip(
+                      label: Text('周${const ['一', '二', '三', '四', '五', '六', '日'][i]}'),
+                      selected: days.contains(d),
+                      onSelected: (s) => setSheet(() => s ? days.add(d) : days.remove(d)),
+                    );
+                  })),
+                ],
+                const SizedBox(height: 20),
+                Row(children: [
+                  Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消'))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        if (freq == 'custom' && days.isEmpty) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('请至少选择一天')));
+                          return;
+                        }
+                        Navigator.pop(ctx, true);
+                      },
+                      icon: const Icon(Icons.check),
+                      label: const Text('保存'),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (saved == true) {
+      setState(() {
+        _time = time;
+        _frequency = freq;
+        _weekdays = days;
+      });
+      await _schedule();
+    }
+  }
+
+  // 保存语音/铃声等共享参数：持久化为模板，并把最新设置同步到“当前模式下已排期的闹钟”
+  // （沿用每个闹钟各自的时间与重复规则，只更新语音、音乐、音量等设置）。
+  Future<void> _saveSettings() async {
+    if (_text.text.trim().isEmpty) {
+      _toast('请输入闹钟朗读内容');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await _refreshAlarmAiConfig();
+      try {
+        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
+        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
+      } catch (e) {
+        _generatedVoice = null;
+        _toast('语音文件生成失败，将用系统兜底播报：$e');
+      }
+      await _persistDraftConfig();
+      final targets = _scheduledAlarms.where((a) => (a['mode'] ?? 'morning').toString() == _mode).toList();
+      final savedTime = _time;
+      final savedFreq = _frequency;
+      final savedDays = <int>{..._weekdays};
+      var synced = 0;
+      for (final a in targets) {
+        try {
+          final h = (a['hour'] as num?)?.toInt() ?? savedTime.hour;
+          final m = (a['minute'] as num?)?.toInt() ?? savedTime.minute;
+          _time = TimeOfDay(hour: h, minute: m);
+          final freq = (a['frequency'] ?? '').toString();
+          if (freq.isNotEmpty) _frequency = freq;
+          final wd = a['weekdays'];
+          if (wd is List && wd.isNotEmpty) {
+            _weekdays = {...wd.map((e) => (e is num) ? e.toInt() : (int.tryParse(e.toString()) ?? 1))};
+          }
+          // 优先沿用该闹钟原有的 alarmId，确保是“更新”这条闹钟而不是新建一条重复的。
+          final existingId = (a['alarmId'] ?? '').toString();
+          final alarmId = existingId.isNotEmpty ? existingId : '$_mode-${h.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}';
+          final when = _nextTime();
+          await _native.invokeMethod<void>('schedule', {
+            'atMs': when.millisecondsSinceEpoch,
+            'payload': _payload(alarmId: alarmId),
+          });
+          synced++;
+        } catch (_) {}
+      }
+      _time = savedTime;
+      _frequency = savedFreq;
+      _weekdays = savedDays;
+      _toast(synced > 0
+          ? '已保存设置，并同步更新 $synced 个${_mode == 'morning' ? '起床' : '睡觉'}闹钟'
+          : '已保存设置（当前模式暂无已排期闹钟，将用于新建的闹钟）');
+      await _loadScheduledAlarms();
+      setState(() {});
+    } catch (e) {
+      _toast('保存设置失败：$e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -739,6 +989,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'aiConfig': _alarmAiConfig,
       'aiSystemPrompt': _alarmAiSystemPrompt,
       'sttConfig': _alarmSttConfig,
+      'ttsConfig': _alarmTtsConfig,
       'voiceEndpointing': _voiceEndpointingMap(),
     };
   }
@@ -768,7 +1019,6 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
 
   @override
   Widget build(BuildContext context) {
-    final next = _nextTime();
     return Scaffold(
       appBar: AppBar(title: const Text('语音闹钟')),
       body: _loading
@@ -789,54 +1039,68 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('提醒时间', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.alarm),
-                  title: Text(_time.format(context), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w600)),
-                  subtitle: Text('下一次：${next.year}-${next.month.toString().padLeft(2, '0')}-${next.day.toString().padLeft(2, '0')}'),
-                  trailing: const Icon(Icons.edit_outlined),
-                  onTap: () async {
-                    final value = await showTimePicker(context: context, initialTime: _time);
-                    if (value != null) setState(() => _time = value);
-                  },
+                Row(
+                  children: [
+                    const Expanded(child: Text('已设置的闹钟（全部）', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    IconButton(
+                      tooltip: '刷新',
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _loadScheduledAlarms,
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _showAddAlarmSheet,
+                    icon: const Icon(Icons.add_alarm),
+                    label: const Text('新增闹钟（选时间与重复即可）'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_scheduledAlarms.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('当前没有已排期的闹钟。', style: TextStyle(color: Colors.grey)),
+                  )
+                else
+                  ..._scheduledAlarms.map((alarm) {
+                    final h = (alarm['hour'] as num?)?.toInt() ?? 0;
+                    final m = (alarm['minute'] as num?)?.toInt() ?? 0;
+                    final modeLabel = (alarm['mode'] ?? '').toString() == 'night' ? '睡觉' : '起床';
+                    final text = (alarm['text'] ?? '').toString();
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.alarm_on),
+                      title: Text('${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}  ·  ${_weekdaysLabel(alarm)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                      subtitle: Text('$modeLabel${text.isEmpty ? '' : ' · $text'}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        tooltip: '删除',
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        onPressed: () => _deleteScheduledAlarm(alarm),
+                      ),
+                    );
+                  }),
+                if (_scheduledAlarms.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _clearAllScheduledAlarms,
+                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+                      label: const Text('清除全部闹钟', style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ),
               ]),
             ),
           ),
-          if (_alarmEntries.isNotEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${_mode == 'morning' ? '起床' : '睡觉'}闹钟列表（${_alarmEntries.length} 组）', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  ..._alarmEntries.map((alarm) {
-                    final nextAt = _nextTimeFor(alarm.time);
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.alarm_on_outlined),
-                      title: Text(alarm.time.format(context)),
-                      subtitle: Text('${nextAt.month.toString().padLeft(2, '0')}-${nextAt.day.toString().padLeft(2, '0')} 下一次响铃 · ${alarm.text.isEmpty ? '使用当前朗读内容' : alarm.text}'),
-                      trailing: IconButton(
-                        tooltip: '删除这组闹钟',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: _saving ? null : () => _removeAlarmEntry(alarm),
-                      ),
-                      onTap: () => setState(() {
-                        _time = alarm.time;
-                        if (alarm.text.isNotEmpty) _text.text = alarm.text;
-                      }),
-                    );
-                  }),
-                ]),
-              ),
-            ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('语音内容与服务商', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('语音与铃声设置（共享模板）', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('这里的朗读内容、发音服务商与音效是所有闹钟共用的模板。改动后点最下方“保存设置”即可生效，并同步到当前模式下已有的闹钟。', style: TextStyle(color: Colors.black54, fontSize: 12.5)),
                 const SizedBox(height: 12),
                 TextField(controller: _text, maxLines: 4, decoration: const InputDecoration(labelText: '到点朗读内容', border: OutlineInputBorder())),
                 Wrap(
@@ -910,7 +1174,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                           : 'Microsoft 实时模式按短句连续识别；非实时模式会把完整录音一次提交给 Azure Speech detailed 识别，优先使用 NBest 最佳结果。',
                   style: const TextStyle(color: Colors.deepOrange, fontSize: 12.5),
                 ),
-                if (_sttMode == 'batch') ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _showAdvanced = !_showAdvanced),
+                    icon: Icon(_showAdvanced ? Icons.expand_less : Icons.tune),
+                    label: Text(_showAdvanced ? '收起自动提交/句段微调' : '自动提交与句段微调（高级，可选）'),
+                  ),
+                ),
+                if (_showAdvanced && _sttMode == 'batch') ...[
                   const SizedBox(height: 12),
                   Card(
                     color: Colors.amber.withOpacity(0.08),
@@ -944,6 +1216,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     ),
                   ),
                 ],
+                if (_showAdvanced && _sttMode == 'realtime') ...[
                 const SizedBox(height: 12),
                 Card(
                   color: Colors.blueGrey.withOpacity(0.06),
@@ -992,6 +1265,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     ]),
                   ),
                 ),
+                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: _voiceId,
@@ -1084,31 +1358,6 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           ),
           Card(
             child: Column(children: [
-              ListTile(
-                title: const Text('重复频率'),
-                subtitle: DropdownButton<String>(
-                  value: _frequency,
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: 'daily', child: Text('每天')),
-                    DropdownMenuItem(value: 'weekdays', child: Text('工作日（周一至周五）')),
-                    DropdownMenuItem(value: 'custom', child: Text('自定义星期')),
-                  ],
-                  onChanged: (value) => setState(() => _frequency = value ?? 'daily'),
-                ),
-              ),
-              if (_frequency == 'custom')
-                Wrap(
-                  spacing: 4,
-                  children: List.generate(7, (index) {
-                    final day = index + 1;
-                    return FilterChip(
-                      label: Text('周${const ['一', '二', '三', '四', '五', '六', '日'][index]}'),
-                      selected: _weekdays.contains(day),
-                      onSelected: (selected) => setState(() => selected ? _weekdays.add(day) : _weekdays.remove(day)),
-                    );
-                  }),
-                ),
               SwitchListTile(title: const Text('震动'), subtitle: const Text('同时启用系统通知震动'), value: _vibrate, onChanged: (value) => setState(() => _vibrate = value)),
               SwitchListTile(title: const Text('系统闹钟音乐'), subtitle: const Text('未选择自定义音乐时使用系统提醒通道'), value: _systemMusic, onChanged: (value) => setState(() => _systemMusic = value)),
               ListTile(
@@ -1175,10 +1424,12 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _saving ? null : _schedule,
-            icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.alarm_add),
-            label: Text(_saving ? '正在生成语音并设置…' : '添加当前配置为一组闹钟'),
+            onPressed: _saving ? null : _saveSettings,
+            icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined),
+            label: Text(_saving ? '正在生成语音并保存…' : '保存设置（更新并同步到已有闹钟）'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(onPressed: _saving ? null : _showAddAlarmSheet, icon: const Icon(Icons.add_alarm), label: const Text('新增一个闹钟')),
           const SizedBox(height: 8),
           OutlinedButton.icon(onPressed: _ring, icon: const Icon(Icons.play_arrow), label: const Text('立即测试闹钟与稍后提醒')),
           const SizedBox(height: 8),
