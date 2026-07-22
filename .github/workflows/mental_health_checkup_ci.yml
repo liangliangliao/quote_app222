@@ -39,3 +39,6 @@ jobs:
           lib/mental_health_checkup
           lib/pages/discover_page.dart
           test/mental_health_checkup
+
+      - name: Build Android release APK
+        run: flutter build apk --release -t lib/main.dart
