@@ -1,0 +1,41 @@
+name: Mental Health Checkup CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mental_health_checkup_ci.yml"
+      - "lib/mental_health_checkup/**"
+      - "lib/pages/discover_page.dart"
+      - "assets/mental_health_checkup/**"
+      - "test/mental_health_checkup/**"
+      - "pubspec.yaml"
+
+jobs:
+  checkup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Run mental health checkup tests
+        run: flutter test test/mental_health_checkup/mental_health_checkup_engine_test.dart
+
+      - name: Analyze integration
+        run: >-
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          lib/mental_health_checkup
+          lib/pages/discover_page.dart
+          test/mental_health_checkup
