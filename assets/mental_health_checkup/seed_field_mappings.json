@@ -1,0 +1,70 @@
+{
+  "indicators.json": {
+    "指标ID": "id",
+    "讲次": "lecture_no",
+    "领域": "domain",
+    "指标名称": "name",
+    "类型": "indicator_type",
+    "DEF定义位置": "def_location_id",
+    "LOW低端位置": "low_location_id",
+    "HIGH高端位置": "high_location_id",
+    "ACT行动位置": "act_location_id",
+    "直接证据数": "direct_evidence_count",
+    "定位覆盖": "location_coverage",
+    "直接性": "directness",
+    "审核状态": "review_status"
+  },
+  "diagnosis_patterns.json": {
+    "模式ID": "id",
+    "课程型诊断名称": "name",
+    "触发指标": "trigger_indicator_ids",
+    "机制假设": "mechanism_hypothesis",
+    "推荐处方ID": "recommended_rx_codes",
+    "优先行动": "priority_action",
+    "诊断所需证据": "required_evidence",
+    "主要反证/排除": "alternative_checks",
+    "置信度要求": "confidence_policy",
+    "审核状态": "review_status"
+  },
+  "course_prescriptions.json": {
+    "处方ID": "rx_code",
+    "讲次": "lecture_no",
+    "课程主题": "course_topic",
+    "主要指标ID": "primary_indicator_id",
+    "主要指标": "primary_indicator_name",
+    "ACT课程位置": "act_location_id",
+    "适用机制": "applicable_mechanism",
+    "起始课程处方": "starting_action",
+    "深入课程处方": "deep_action",
+    "微量": "minimum_dose",
+    "起始量": "starting_dose",
+    "巩固量": "consolidation_dose",
+    "建议试验期": "trial_period",
+    "疗效证据": "success_evidence",
+    "过度化/停止规则": "guardrail_and_pause",
+    "来源等级": "source_boundary",
+    "审核状态": "review_status"
+  },
+  "b20_items.json": {
+    "题号": "id",
+    "组别": "group_name",
+    "题型": "question_type",
+    "题目": "prompt",
+    "量尺/选项": "scale_or_options",
+    "计分方向": "scoring_direction",
+    "指标ID": "indicator_id",
+    "来源等级": "source_level",
+    "是否固定": "is_fixed",
+    "触发动作": "trigger_action"
+  },
+  "assessment_modes.json": {
+    "模式": "mode",
+    "时间": "estimated_time",
+    "基础题量": "base_item_count",
+    "固定内容": "fixed_content",
+    "最多题量": "max_item_count",
+    "行动数": "max_actions",
+    "适用场景": "use_case",
+    "结论覆盖等级": "coverage_level"
+  }
+}
