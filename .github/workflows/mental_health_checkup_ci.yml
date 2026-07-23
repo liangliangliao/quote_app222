@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -33,12 +33,32 @@ jobs:
       - name: Run mental health checkup tests
         run: flutter test test/mental_health_checkup/mental_health_checkup_engine_test.dart
 
-      - name: Analyze integration
+      - name: Analyze mental health checkup strictly
+        run: >-
+          flutter analyze --fatal-infos --fatal-warnings
+          lib/mental_health_checkup
+          test/mental_health_checkup
+
+      - name: Analyze discovery integration
         run: >-
           flutter analyze --no-fatal-infos --no-fatal-warnings
-          lib/mental_health_checkup
           lib/pages/discover_page.dart
-          test/mental_health_checkup
 
       - name: Build Android release APK
         run: flutter build apk --release -t lib/main.dart
+
+      - name: Create APK checksum
+        run: >-
+          sha256sum build/app/outputs/flutter-apk/app-release.apk
+          > build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload Android release APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: quote-app-mental-health-checkup-release
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

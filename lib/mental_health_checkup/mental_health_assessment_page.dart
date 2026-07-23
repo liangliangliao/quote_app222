@@ -37,6 +37,7 @@ class _MentalHealthAssessmentPageState
   int _index = 0;
   bool _finishing = false;
   bool _savingDraft = false;
+  bool _allowPop = false;
 
   @override
   void initState() {
@@ -84,9 +85,18 @@ class _MentalHealthAssessmentPageState
     }
   }
 
-  Future<bool> _onWillPop() async {
+  Future<void> _popAfterSaving(CheckupSession? result) async {
+    if (!mounted) return;
+    setState(() => _allowPop = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    Navigator.of(context).pop(result);
+  }
+
+  Future<void> _onPopInvoked(bool didPop, CheckupSession? result) async {
+    if (didPop || _allowPop || _finishing) return;
     await _persistDraft();
-    return true;
+    await _popAfterSaving(result);
   }
 
   Future<void> _select(CheckupAnswerChoice choice) async {
@@ -198,7 +208,7 @@ class _MentalHealthAssessmentPageState
     );
     await widget.repository.clearDraft();
     if (!mounted) return;
-    Navigator.of(context).pop(session);
+    await _popAfterSaving(session);
   }
 
   @override
@@ -209,8 +219,9 @@ class _MentalHealthAssessmentPageState
       );
     }
     final progress = (_index + 1) / _questions.length;
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope<CheckupSession>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: _onPopInvoked,
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FB),
         appBar: AppBar(
@@ -377,7 +388,7 @@ class _Tag extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.09),
+          color: color.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(99),
         ),
         child: Row(

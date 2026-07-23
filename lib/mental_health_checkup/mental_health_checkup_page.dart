@@ -149,7 +149,8 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
-                    backgroundColor: _domainColor(entry.key).withOpacity(0.12),
+                    backgroundColor:
+                        _domainColor(entry.key).withValues(alpha: 0.12),
                     child: Text(
                       entry.key,
                       style: TextStyle(
@@ -1148,7 +1149,7 @@ class _MentalHealthCheckupPromptPageState
             child: Column(
               children: <Widget>[
                 DropdownButtonFormField<String>(
-                  value: _promptId,
+                  initialValue: _promptId,
                   decoration: const InputDecoration(
                     labelText: 'Prompt 层',
                     border: OutlineInputBorder(),
@@ -1302,9 +1303,9 @@ class _HeroChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.14),
+          color: Colors.white.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: Colors.white.withOpacity(0.22)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1440,7 +1441,7 @@ class _ModeIcon extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(size * 0.3),
       ),
       child: Icon(_modeIcon(modeId), color: color, size: size * 0.5),
@@ -1597,7 +1598,7 @@ class _ReportHero extends StatelessWidget {
                   CircularProgressIndicator(
                     value: (report.overallScore / 100).clamp(0, 1).toDouble(),
                     strokeWidth: 10,
-                    backgroundColor: color.withOpacity(0.12),
+                    backgroundColor: color.withValues(alpha: 0.12),
                     color: color,
                   ),
                   Column(
@@ -1798,7 +1799,10 @@ class _DomainScoreTile extends StatelessWidget {
                   width: 35,
                   height: 35,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Text(domain.id, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
                 ),
                 const SizedBox(width: 10),
@@ -2348,7 +2352,8 @@ class _SessionHistoryTile extends StatelessWidget {
         color: Colors.white,
         child: ListTile(
           leading: CircleAvatar(
-            backgroundColor: _scoreColor(session.report.overallScore).withOpacity(0.12),
+            backgroundColor: _scoreColor(session.report.overallScore)
+                .withValues(alpha: 0.12),
             child: Text(session.report.overallScore.toStringAsFixed(0), style: TextStyle(color: _scoreColor(session.report.overallScore), fontWeight: FontWeight.w900)),
           ),
           title: Text(session.modeName, style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -2511,7 +2516,10 @@ class _InfoStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
