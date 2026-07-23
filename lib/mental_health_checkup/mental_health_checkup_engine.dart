@@ -212,6 +212,10 @@ class MentalHealthCheckupEngine {
     } else if (currentStable && previousStable) {
       decision = '进入恢复维持';
       reason = '连续两次复验中，目标指标、现实功能、自主执行和过度化制衡达到维持条件。';
+    } else if (currentStable) {
+      decision = '维持当前剂量';
+      reason = '本次复验已达到稳定门槛，但进入恢复维持需要第二次连续稳定证据；'
+          '当前不加量，也不因现实功能已处于低影响水平而误判为证据冲突。';
     } else if (scoreChange >= 10 && functionChange > 0) {
       decision = '维持当前剂量';
       reason = '目标改善 ${scoreChange.toStringAsFixed(1)} 分，现实功能也有改善，不宜过早加量。';
