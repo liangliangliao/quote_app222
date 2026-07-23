@@ -39,7 +39,9 @@ jobs:
         run: flutter pub get
 
       - name: Install Android SDK 36
-        run: sdkmanager "platforms;android-36"
+        run: >-
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "platforms;android-36"
 
       - name: Run mental health checkup tests
         run: flutter test test/mental_health_checkup/mental_health_checkup_engine_test.dart
