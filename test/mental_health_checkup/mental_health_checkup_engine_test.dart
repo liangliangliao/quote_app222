@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quote_app/mental_health_checkup/mental_health_checkup_backup.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_catalog.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_engine.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_models.dart';
+import 'package:quote_app/mental_health_checkup/mental_health_checkup_trends.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +45,60 @@ void main() {
                 item.lecture != null && item.lecture! >= 5 && item.lecture! <= 9),
         isTrue,
       );
+    });
+
+    test('focused mode keeps gates unique and includes the focus anchor',
+        () async {
+      final catalog = await MentalHealthCheckupCatalog.load();
+      final questions = catalog.questionsForMode(
+        'focused',
+        focusDomainId: 'D4',
+        now: DateTime(2026, 7, 23),
+      );
+      final ids = questions.map((item) => item.id).toList(growable: false);
+
+      expect(ids.toSet().length, ids.length);
+      expect(ids, contains('B20-D4'));
+      expect(ids.where((id) => id == 'B20-S1'), hasLength(1));
+    });
+
+    test('low anchors add bounded adaptive evidence questions', () async {
+      final catalog = await MentalHealthCheckupCatalog.load();
+      final questions =
+          catalog.questionsForMode('b20', now: DateTime(2026, 7, 23));
+      final anchor = questions.firstWhere((item) => item.id == 'B20-D1');
+      final additions = catalog.adaptiveQuestions(
+        modeId: 'b20',
+        question: anchor,
+        answer: _answer(anchor.id, 1),
+        existingQuestionIds: questions.map((item) => item.id).toSet(),
+        now: DateTime(2026, 7, 23),
+      );
+
+      expect(additions, isNotEmpty);
+      expect(additions.length, lessThanOrEqualTo(4));
+      expect(additions.every((item) => item.domainId == 'D1'), isTrue);
+    });
+
+    test('question randomization is repeatable and keeps safety gates first',
+        () async {
+      final catalog = await MentalHealthCheckupCatalog.load();
+      final questions =
+          catalog.questionsForMode('standard', now: DateTime(2026, 7, 23));
+      final first = catalog.restoreQuestionOrder(
+        questions,
+        sessionId: 'stable-session',
+      );
+      final second = catalog.restoreQuestionOrder(
+        questions,
+        sessionId: 'stable-session',
+      );
+
+      expect(
+        first.map((item) => item.id),
+        orderedEquals(second.map((item) => item.id)),
+      );
+      expect(first.take(4).every((item) => item.isSafety), isTrue);
     });
   });
 
@@ -107,6 +165,74 @@ void main() {
       expect(report.prescriptions.single.prescriptionId, 'RX-L04');
       expect(report.sourceBoundaries.join(), contains('不是医学疾病诊断'));
     });
+
+    test('K/A/B report uses the documented 25/30/45 weighting', () {
+      final kabQuestions = <CheckupQuestion>[
+        ...questions.take(2),
+        const CheckupQuestion(
+          id: 'B20-K1',
+          group: '理论',
+          kind: '情境判断',
+          prompt: '理论题',
+          scaleLabel: 'A/B',
+          direction: '客观计分',
+          sourceLevel: 'C1',
+          required: true,
+          choices: <CheckupAnswerChoice>[
+            CheckupAnswerChoice('A', 0),
+            CheckupAnswerChoice('B', 1),
+          ],
+        ),
+        const CheckupQuestion(
+          id: 'A1',
+          group: '态度',
+          kind: '保护型',
+          prompt: '态度题',
+          scaleLabel: '0-4',
+          direction: '越高越健康',
+          sourceLevel: 'C2',
+          required: true,
+          domainId: 'D1',
+          choices: <CheckupAnswerChoice>[
+            CheckupAnswerChoice('0', 0),
+            CheckupAnswerChoice('4', 4),
+          ],
+        ),
+        const CheckupQuestion(
+          id: 'B20-C1',
+          group: '行为',
+          kind: '态度-行为',
+          prompt: '差距题',
+          scaleLabel: '0-4',
+          direction: '越高表示知行差距越大',
+          sourceLevel: 'C2',
+          required: true,
+          choices: <CheckupAnswerChoice>[
+            CheckupAnswerChoice('0', 0),
+            CheckupAnswerChoice('4', 4),
+          ],
+        ),
+      ];
+      final report = engine.buildReport(
+        sessionId: 'kab',
+        modeId: 'standard',
+        questions: kabQuestions,
+        answers: <CheckupAnswer>[
+          _answer('B20-S1', 0),
+          _answer('B20-F1', 0),
+          _answer('B20-K1', 1),
+          _answer('A1', 4),
+          _answer('B20-C1', 4),
+        ],
+      );
+
+      expect(report.knowledgeScore, 100);
+      expect(report.attitudeScore, 100);
+      expect(report.behaviorScore, 0);
+      expect(report.kabIntegratedScore, 55);
+      expect(report.overallScore, 55);
+      expect(report.attitudeBehaviorConsistency, 0);
+    });
   });
 
   group('retest adjustment rules', () {
@@ -120,7 +246,7 @@ void main() {
       unchanged = _report(engine, 'unchanged', risk: 4);
     });
 
-    test('high execution without improvement triggers rediagnosis', () {
+    test('one high-execution cycle without improvement waits for evidence', () {
       final plan = _plan(
         baseline,
         <CheckupExecutionLog>[
@@ -137,7 +263,35 @@ void main() {
       );
 
       expect(retest.executionRate, 100);
+      expect(retest.decision, isNot(contains('重新诊断')));
+      expect(retest.decision, contains('再观察一周期'));
+    });
+
+    test('two high-execution cycles without improvement trigger rediagnosis',
+        () {
+      final plan = _plan(
+        baseline,
+        <CheckupExecutionLog>[
+          _log(completed: true),
+          _log(completed: true),
+          _log(completed: true),
+        ],
+      );
+      final prior = _priorRetest(
+        plan: plan,
+        baseline: baseline,
+        retest: unchanged,
+      );
+
+      final retest = engine.evaluateRetest(
+        plan: plan,
+        baseline: baseline,
+        retest: unchanged,
+        priorRetests: <CheckupRetestRecord>[prior],
+      );
+
       expect(retest.decision, contains('重新诊断'));
+      expect(retest.reason, contains('连续两个周期'));
     });
 
     test('low execution shrinks the task before blaming the user', () {
@@ -177,6 +331,42 @@ void main() {
       expect(retest.decision, contains('减量'));
       expect(engine.applyRetestDecision(plan, retest).doseStage, '微量');
     });
+
+    test('maintenance requires two stable retests', () {
+      final plan = _plan(
+        baseline,
+        <CheckupExecutionLog>[
+          _log(completed: true),
+          _log(completed: true),
+          _log(completed: true),
+        ],
+      );
+      final stable = _report(engine, 'stable', risk: 0);
+      final first = engine.evaluateRetest(
+        plan: plan,
+        baseline: baseline,
+        retest: stable,
+      );
+      expect(first.decision, '维持当前剂量');
+      expect(
+        engine.applyRetestDecision(plan, first).status,
+        CheckupPlanStatus.active,
+      );
+
+      final second = engine.evaluateRetest(
+        plan: plan,
+        baseline: baseline,
+        retest: stable,
+        priorRetests: <CheckupRetestRecord>[
+          _priorRetest(plan: plan, baseline: baseline, retest: stable),
+        ],
+      );
+      expect(second.decision, '进入恢复维持');
+      expect(
+        engine.applyRetestDecision(plan, second).status,
+        CheckupPlanStatus.maintenance,
+      );
+    });
   });
 
   test('persistent state survives a JSON round trip', () {
@@ -202,6 +392,86 @@ void main() {
     expect(decoded.sessions.single.report.id, report.id);
     expect(decoded.sessions.single.report.safetyStatus,
         CheckupSafetyStatus.clear);
+  });
+
+  test('backup envelope validates hash and preserves the current install id',
+      () {
+    final engine = MentalHealthCheckupEngine(_catalog());
+    final report = _report(engine, 'backup', risk: 3);
+    final session = CheckupSession(
+      id: 'backup-session',
+      modeId: 'b20',
+      modeName: 'B20快速基准',
+      startedAtMs: 1,
+      completedAtMs: 2,
+      answers: <CheckupAnswer>[_answer('B20-S1', 0)],
+      report: report,
+    );
+    final state = MentalHealthCheckupState(
+      installId: 'old-install',
+      onboardingAccepted: true,
+      sessions: <CheckupSession>[session],
+    );
+    final raw = MentalHealthBackupEnvelope.create(
+      state: state,
+      seedVersion: 'test',
+      now: DateTime.fromMillisecondsSinceEpoch(10),
+    );
+
+    final restored = MentalHealthBackupEnvelope.validateAndDecode(
+      raw: raw,
+      expectedSeedVersion: 'test',
+      currentInstallId: 'current-install',
+    );
+
+    expect(restored.installId, 'current-install');
+    expect(restored.sessions.single.id, session.id);
+  });
+
+  test('backup preflight rejects tampered state before persistence', () {
+    final raw = MentalHealthBackupEnvelope.create(
+      state: const MentalHealthCheckupState(installId: 'source'),
+      seedVersion: 'test',
+      now: DateTime.fromMillisecondsSinceEpoch(10),
+    );
+    final root = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    final state = Map<String, dynamic>.from(root['state'] as Map);
+    state['onboarding_accepted'] = true;
+    root['state'] = state;
+
+    expect(
+      () => MentalHealthBackupEnvelope.validateAndDecode(
+        raw: jsonEncode(root),
+        expectedSeedVersion: 'test',
+        currentInstallId: 'current',
+      ),
+      throwsA(isA<MentalHealthBackupException>()),
+    );
+  });
+
+  test('trend analyzer raises the 15-point personal-baseline rule', () {
+    final engine = MentalHealthCheckupEngine(_catalog());
+    CheckupSession session(String id, double risk, int completedAt) {
+      final report = _report(engine, id, risk: risk);
+      return CheckupSession(
+        id: id,
+        modeId: 'b20',
+        modeName: 'B20',
+        startedAtMs: completedAt - 1,
+        completedAtMs: completedAt,
+        answers: const <CheckupAnswer>[],
+        report: report,
+      );
+    }
+
+    final insights = const MentalHealthCheckupTrendAnalyzer().analyze(
+      <CheckupSession>[
+        session('latest', 4, 3),
+        session('prior', 0, 2),
+      ],
+    );
+
+    expect(insights.any((item) => item.title.contains('个人基线')), isTrue);
   });
 }
 
@@ -384,4 +654,27 @@ CheckupExecutionLog _log({
       benefit: 4,
       functionChange: 0,
       overuseRisk: overuse,
+    );
+
+CheckupRetestRecord _priorRetest({
+  required CheckupPrescriptionPlan plan,
+  required CheckupReport baseline,
+  required CheckupReport retest,
+}) =>
+    CheckupRetestRecord(
+      id: 'prior',
+      planId: plan.id,
+      baselineReportId: baseline.id,
+      retestReportId: retest.id,
+      createdAtMs: 1,
+      scoreChange: retest.overallScore - baseline.overallScore,
+      functionChange:
+          (baseline.functionImpact - retest.functionImpact).toDouble(),
+      executionRate: plan.completionRate,
+      overuseRisk: plan.averageOveruseRisk,
+      retestScore: retest.overallScore,
+      retestFunctionImpact: retest.functionImpact,
+      safetyClear: retest.safetyClear,
+      decision: '保持低剂量并再观察一周期',
+      reason: '第一周期证据。',
     );

@@ -3,6 +3,26 @@ import 'dart:math' as math;
 import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_models.dart';
 
+class _KabScores {
+  final double? knowledge;
+  final double? attitude;
+  final double? behavior;
+  final double? attitudeBehaviorConsistency;
+  final double? knowledgeBehaviorConsistency;
+  final double? integrated;
+  final double? weakestLink;
+
+  const _KabScores({
+    required this.knowledge,
+    required this.attitude,
+    required this.behavior,
+    required this.attitudeBehaviorConsistency,
+    required this.knowledgeBehaviorConsistency,
+    required this.integrated,
+    required this.weakestLink,
+  });
+}
+
 class MentalHealthCheckupEngine {
   final MentalHealthCheckupCatalog catalog;
 
@@ -32,10 +52,12 @@ class MentalHealthCheckupEngine {
     final dataQuality = _dataQuality(answerById, coverage);
     final domainResults = _domainResults(questions, answerById);
     final coveredDomains = domainResults.where((domain) => domain.answered > 0);
-    final overall = coveredDomains.isEmpty
+    final domainOverall = coveredDomains.isEmpty
         ? 0.0
         : coveredDomains.map((domain) => domain.score).reduce((a, b) => a + b) /
             coveredDomains.length;
+    final kab = _kabScores(questions, answerById);
+    final overall = kab.integrated ?? domainOverall;
     final uncoveredConcern = (answerById['B20-Q1']?.value ?? 0) > 0;
 
     final diagnoses = safety == CheckupSafetyStatus.clear
@@ -64,13 +86,23 @@ class MentalHealthCheckupEngine {
       dataQuality: dataQuality,
       uncoveredConcern: uncoveredConcern,
       answerById: answerById,
+      kab: kab,
     );
-    final courseEvidence = <String>{
+    final courseEvidenceSet = <String>{
+      for (final question in questions)
+        if (answerById.containsKey(question.id) &&
+            question.evidenceLocation?.isNotEmpty == true)
+          '${question.evidenceLocation} · '
+              '${question.lecture == null ? '' : 'Lecture ${question.lecture} · '}'
+              '${question.indicatorId ?? question.group} · '
+              '${question.sourceLevel}',
       for (final domain in domainResults.where((e) => e.answered > 0))
         '${MentalHealthCheckupCatalog.domainLectureAnchors[domain.id]} · ${domain.name}',
       for (final item in recommendations)
         'Lecture ${item.lecture} · ${item.evidenceLocation} · ${item.sourceLevel}',
-    }.toList(growable: false);
+    };
+    final courseEvidence =
+        courseEvidenceSet.take(24).toList(growable: false);
 
     return CheckupReport(
       id: _id('report'),
@@ -78,8 +110,20 @@ class MentalHealthCheckupEngine {
       modeId: modeId,
       createdAtMs: now.millisecondsSinceEpoch,
       ruleVersion: MentalHealthCheckupCatalog.ruleVersion,
+      seedVersion: catalog.validation.version,
       safetyStatus: safety,
       overallScore: _round1(overall),
+      knowledgeScore: kab.knowledge == null ? null : _round1(kab.knowledge!),
+      attitudeScore: kab.attitude == null ? null : _round1(kab.attitude!),
+      behaviorScore: kab.behavior == null ? null : _round1(kab.behavior!),
+      attitudeBehaviorConsistency: kab.attitudeBehaviorConsistency == null
+          ? null
+          : _round1(kab.attitudeBehaviorConsistency!),
+      knowledgeBehaviorConsistency: kab.knowledgeBehaviorConsistency == null
+          ? null
+          : _round1(kab.knowledgeBehaviorConsistency!),
+      kabIntegratedScore:
+          kab.integrated == null ? null : _round1(kab.integrated!),
       coverage: _round1(coverage.clamp(0, 100)),
       dataQuality: _round1(dataQuality.clamp(0, 100)),
       functionImpact: functionImpact,
@@ -124,12 +168,38 @@ class MentalHealthCheckupEngine {
     required CheckupPrescriptionPlan plan,
     required CheckupReport baseline,
     required CheckupReport retest,
+    List<CheckupRetestRecord> priorRetests =
+        const <CheckupRetestRecord>[],
   }) {
     final scoreChange = retest.overallScore - baseline.overallScore;
     final functionChange =
         (baseline.functionImpact - retest.functionImpact).toDouble();
     final executionRate = plan.completionRate;
     final overuse = plan.averageOveruseRisk;
+    CheckupRetestRecord? previous;
+    for (final item in priorRetests) {
+      if (item.planId == plan.id) {
+        previous = item;
+        break;
+      }
+    }
+    final currentStable = retest.safetyClear &&
+        retest.overallScore >= 75 &&
+        retest.functionImpact <= 1 &&
+        executionRate >= 70 &&
+        overuse <= 30;
+    final previousStable = previous != null &&
+        previous.safetyClear &&
+        previous.retestScore >= 75 &&
+        previous.retestFunctionImpact <= 1 &&
+        previous.executionRate >= 70 &&
+        previous.overuseRisk <= 30;
+    final currentNoImprovement =
+        executionRate >= 70 && scoreChange < 3 && overuse < 50;
+    final previousNoImprovement = previous != null &&
+        previous.executionRate >= 70 &&
+        previous.scoreChange < 3 &&
+        previous.overuseRisk < 50;
 
     String decision;
     String reason;
@@ -139,12 +209,9 @@ class MentalHealthCheckupEngine {
     } else if (overuse >= 50) {
       decision = '减量或暂停';
       reason = '过度化风险达到 ${overuse.toStringAsFixed(0)}，需先保护现实功能。';
-    } else if (retest.overallScore >= 75 &&
-        retest.functionImpact <= 1 &&
-        executionRate >= 70 &&
-        overuse <= 30) {
+    } else if (currentStable && previousStable) {
       decision = '进入恢复维持';
-      reason = '目标指标、现实功能、自主执行和过度化制衡达到维持条件。';
+      reason = '连续两次复验中，目标指标、现实功能、自主执行和过度化制衡达到维持条件。';
     } else if (scoreChange >= 10 && functionChange > 0) {
       decision = '维持当前剂量';
       reason = '目标改善 ${scoreChange.toStringAsFixed(1)} 分，现实功能也有改善，不宜过早加量。';
@@ -154,9 +221,12 @@ class MentalHealthCheckupEngine {
     } else if (executionRate < 50 && overuse < 30) {
       decision = '缩小到微量并调整环境';
       reason = '执行率低首先提示任务难度、时机、环境或恢复不足，而不是意志品质失败。';
-    } else if (executionRate >= 70 && scoreChange < 3) {
+    } else if (currentNoImprovement && previousNoImprovement) {
       decision = '重新诊断并考虑换方';
-      reason = '较高执行率下仍没有实质改善，当前机制假设或课程处方可能不匹配。';
+      reason = '连续两个周期在较高执行率下仍没有实质改善，当前机制假设或课程处方可能不匹配。';
+    } else if (currentNoImprovement) {
+      decision = '保持低剂量并再观察一周期';
+      reason = '本周期执行率较高但尚无实质改善；需要第二个周期证据，暂不无限重复或过早换方。';
     } else {
       decision = '继续一周期并保持观察';
       reason = '现有证据不足以支持加量、换方或进入维持，继续收集功能与执行证据。';
@@ -172,6 +242,9 @@ class MentalHealthCheckupEngine {
       functionChange: _round1(functionChange),
       executionRate: _round1(executionRate),
       overuseRisk: _round1(overuse),
+      retestScore: _round1(retest.overallScore),
+      retestFunctionImpact: retest.functionImpact,
+      safetyClear: retest.safetyClear,
       decision: decision,
       reason: reason,
     );
@@ -188,13 +261,16 @@ class MentalHealthCheckupEngine {
         nextRetestAtMs: next,
       );
     }
-    if (retest.decision.contains('维持')) {
+    if (retest.decision == '进入恢复维持') {
       return plan.copyWith(
         status: CheckupPlanStatus.maintenance,
         doseStage: '维持量',
         nextRetestAtMs:
             DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
       );
+    }
+    if (retest.decision == '维持当前剂量') {
+      return plan.copyWith(nextRetestAtMs: next);
     }
     if (retest.decision.contains('微量') || retest.decision.contains('减量')) {
       return plan.copyWith(doseStage: '微量', nextRetestAtMs: next);
@@ -239,9 +315,97 @@ class MentalHealthCheckupEngine {
     final q2 = answers['B20-Q2'];
     if (c2 != null) samples.add(c2.value / 4 * 100);
     if (q2 != null) samples.add(q2.value / 4 * 100);
-    if (samples.isEmpty) return coverage * 0.75;
-    final answerQuality = samples.reduce((a, b) => a + b) / samples.length;
-    return answerQuality * 0.7 + coverage * 0.3;
+    var quality = samples.isEmpty
+        ? coverage * 0.75
+        : (samples.reduce((a, b) => a + b) / samples.length) * 0.7 +
+            coverage * 0.3;
+    final timed =
+        answers.values.where((answer) => answer.responseDurationMs > 0).toList();
+    if (timed.isNotEmpty) {
+      final fastRatio =
+          timed.where((answer) => answer.responseDurationMs < 550).length /
+              timed.length;
+      quality -= fastRatio * 30;
+    }
+    final ordered = answers.values.toList(growable: false)
+      ..sort((a, b) => a.answeredAtMs.compareTo(b.answeredAtMs));
+    var longestRun = 0;
+    var currentRun = 0;
+    double? previous;
+    for (final answer in ordered) {
+      if (previous == answer.value) {
+        currentRun++;
+      } else {
+        currentRun = 1;
+        previous = answer.value;
+      }
+      longestRun = math.max(longestRun, currentRun);
+    }
+    if (longestRun >= 8) {
+      quality -= 20;
+    } else if (longestRun >= 6) {
+      quality -= 10;
+    }
+    final evidence = answers['B20-C2']?.value;
+    final authenticity = answers['B20-Q2']?.value;
+    if (evidence != null &&
+        authenticity != null &&
+        (evidence - authenticity).abs() >= 3) {
+      quality -= 12;
+    }
+    return quality.clamp(0, 100).toDouble();
+  }
+
+  _KabScores _kabScores(
+    List<CheckupQuestion> questions,
+    Map<String, CheckupAnswer> answers,
+  ) {
+    final knowledge = <double>[];
+    final attitude = <double>[];
+    final behavior = <double>[];
+    for (final question in questions) {
+      final answer = answers[question.id];
+      if (answer == null ||
+          question.isSafety ||
+          question.isFunction ||
+          question.id == 'B20-C2' ||
+          question.id.startsWith('B20-Q') ||
+          question.id.startsWith('BR-F-')) {
+        continue;
+      }
+      final score = _healthScore(question, answer);
+      if (question.isKnowledge) {
+        knowledge.add(score);
+      } else if (question.id == 'B20-C1' ||
+          question.kind.contains('行为') ||
+          question.kind == '功能结果') {
+        behavior.add(score);
+      } else {
+        attitude.add(score);
+      }
+    }
+    double? mean(List<double> values) => values.isEmpty
+        ? null
+        : values.reduce((a, b) => a + b) / values.length;
+    final k = mean(knowledge);
+    final a = mean(attitude);
+    final b = mean(behavior);
+    final integrated =
+        k == null || a == null || b == null ? null : k * 0.25 + a * 0.30 + b * 0.45;
+    final z = k == null || a == null || b == null
+        ? null
+        : math.min(k, math.min(a, b)) * 0.6 + ((k + a + b) / 3) * 0.4;
+    return _KabScores(
+      knowledge: k,
+      attitude: a,
+      behavior: b,
+      attitudeBehaviorConsistency:
+          a == null || b == null ? null : 100 - (a - b).abs(),
+      knowledgeBehaviorConsistency:
+          k == null || b == null ? null : 100 - (k - b).abs(),
+      integrated: integrated,
+      weakestLink: z,
+    );
   }
 
   List<CheckupDomainResult> _domainResults(
@@ -446,6 +610,7 @@ class MentalHealthCheckupEngine {
     required double dataQuality,
     required bool uncoveredConcern,
     required Map<String, CheckupAnswer> answerById,
+    required _KabScores kab,
   }) {
     if (safety == CheckupSafetyStatus.alert) {
       return const <String>[
@@ -470,6 +635,21 @@ class MentalHealthCheckupEngine {
     }
     final gap = answerById['B20-C1']?.value ?? 0;
     if (gap >= 2) findings.add('知识认同与现实行动存在明显差距，应优先处理启动、环境、恢复和目标自洽。');
+    if (kab.attitude != null &&
+        kab.behavior != null &&
+        kab.attitude! >= 75 &&
+        kab.behavior! < 50) {
+      findings.add('态度认同较高但行为证据偏低，优先验证启动门槛、环境和恢复，而不是继续增加知识。');
+    }
+    if (kab.attitude != null &&
+        kab.behavior != null &&
+        kab.behavior! >= 75 &&
+        kab.attitude! < 50) {
+      findings.add('行为完成较高但内在认同偏低，需检查外部驱动、僵化和可持续性。');
+    }
+    if (kab.weakestLink != null) {
+      findings.add('K/A/B薄弱环节整合指数 ${kab.weakestLink!.toStringAsFixed(1)}，用于防止平均分掩盖短板。');
+    }
     if (dataQuality < 60) findings.add('回答证据质量或覆盖度有限：以下机制只能视为待验证候选。');
     if (uncoveredConcern) findings.add('你报告了未被题目覆盖的重要变化，应在后续聚焦评估或专业评估中补充。');
     if (findings.isEmpty) findings.add('当前未发现已覆盖领域的明显偏离，仍建议通过纵向复验观察稳定性。');

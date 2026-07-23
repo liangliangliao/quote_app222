@@ -13,6 +13,7 @@ import '../pages/discover_page.dart';
 import '../pages/sport_detail_page.dart';
 import '../pages/sport_running_page.dart';
 import '../behavior_tracking/behavior_tracking_home_page.dart';
+import '../mental_health_checkup/mental_health_checkup_page.dart';
 import 'sport_music_service.dart';
 import 'package:flutter/material.dart';
 
@@ -123,6 +124,23 @@ static Future<bool> isNativeAM() async {
           }
         } catch (_) {}
 
+        if (type == 'mental_health_checkup') {
+          final nav = SimpleBus.navigatorKey.currentState;
+          if (nav != null) {
+            final initialTab = payload == 'retest'
+                ? 3
+                : payload == 'action' || payload == 'shrink'
+                    ? 2
+                    : 0;
+            nav.push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    MentalHealthCheckupPage(initialTab: initialTab),
+              ),
+            );
+            return null;
+          }
+        }
         // Handle vision focus notifications by navigating to VisionFocusPreparePage
         if (type == 'vision_focus') {
           try {

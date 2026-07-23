@@ -173,12 +173,14 @@ class CheckupAnswer {
   final String label;
   final double value;
   final int answeredAtMs;
+  final int responseDurationMs;
 
   const CheckupAnswer({
     required this.questionId,
     required this.label,
     required this.value,
     required this.answeredAtMs,
+    this.responseDurationMs = 0,
   });
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -186,6 +188,7 @@ class CheckupAnswer {
         'label': label,
         'value': value,
         'answered_at_ms': answeredAtMs,
+        'response_duration_ms': responseDurationMs,
       };
 
   factory CheckupAnswer.fromJson(Map<String, dynamic> json) => CheckupAnswer(
@@ -193,6 +196,8 @@ class CheckupAnswer {
         label: (json['label'] ?? '').toString(),
         value: (json['value'] as num?)?.toDouble() ?? 0,
         answeredAtMs: (json['answered_at_ms'] as num?)?.toInt() ?? 0,
+        responseDurationMs:
+            (json['response_duration_ms'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -372,8 +377,15 @@ class CheckupReport {
   final String modeId;
   final int createdAtMs;
   final String ruleVersion;
+  final String seedVersion;
   final CheckupSafetyStatus safetyStatus;
   final double overallScore;
+  final double? knowledgeScore;
+  final double? attitudeScore;
+  final double? behaviorScore;
+  final double? attitudeBehaviorConsistency;
+  final double? knowledgeBehaviorConsistency;
+  final double? kabIntegratedScore;
   final double coverage;
   final double dataQuality;
   final int functionImpact;
@@ -392,8 +404,15 @@ class CheckupReport {
     required this.modeId,
     required this.createdAtMs,
     required this.ruleVersion,
+    this.seedVersion = 'unknown',
     required this.safetyStatus,
     required this.overallScore,
+    this.knowledgeScore,
+    this.attitudeScore,
+    this.behaviorScore,
+    this.attitudeBehaviorConsistency,
+    this.knowledgeBehaviorConsistency,
+    this.kabIntegratedScore,
     required this.coverage,
     required this.dataQuality,
     required this.functionImpact,
@@ -415,8 +434,15 @@ class CheckupReport {
         'mode_id': modeId,
         'created_at_ms': createdAtMs,
         'rule_version': ruleVersion,
+        'seed_version': seedVersion,
         'safety_status': safetyStatus.name,
         'overall_score': overallScore,
+        'knowledge_score': knowledgeScore,
+        'attitude_score': attitudeScore,
+        'behavior_score': behaviorScore,
+        'attitude_behavior_consistency': attitudeBehaviorConsistency,
+        'knowledge_behavior_consistency': knowledgeBehaviorConsistency,
+        'kab_integrated_score': kabIntegratedScore,
         'coverage': coverage,
         'data_quality': dataQuality,
         'function_impact': functionImpact,
@@ -438,11 +464,21 @@ class CheckupReport {
         modeId: (json['mode_id'] ?? '').toString(),
         createdAtMs: (json['created_at_ms'] as num?)?.toInt() ?? 0,
         ruleVersion: (json['rule_version'] ?? '2.5').toString(),
+        seedVersion: (json['seed_version'] ?? 'legacy').toString(),
         safetyStatus: CheckupSafetyStatus.values.firstWhere(
           (e) => e.name == json['safety_status'],
           orElse: () => CheckupSafetyStatus.uncertain,
         ),
         overallScore: (json['overall_score'] as num?)?.toDouble() ?? 0,
+        knowledgeScore: (json['knowledge_score'] as num?)?.toDouble(),
+        attitudeScore: (json['attitude_score'] as num?)?.toDouble(),
+        behaviorScore: (json['behavior_score'] as num?)?.toDouble(),
+        attitudeBehaviorConsistency:
+            (json['attitude_behavior_consistency'] as num?)?.toDouble(),
+        knowledgeBehaviorConsistency:
+            (json['knowledge_behavior_consistency'] as num?)?.toDouble(),
+        kabIntegratedScore:
+            (json['kab_integrated_score'] as num?)?.toDouble(),
         coverage: (json['coverage'] as num?)?.toDouble() ?? 0,
         dataQuality: (json['data_quality'] as num?)?.toDouble() ?? 0,
         functionImpact: (json['function_impact'] as num?)?.toInt() ?? 0,
@@ -660,6 +696,9 @@ class CheckupRetestRecord {
   final double functionChange;
   final double executionRate;
   final double overuseRisk;
+  final double retestScore;
+  final int retestFunctionImpact;
+  final bool safetyClear;
   final String decision;
   final String reason;
 
@@ -673,6 +712,9 @@ class CheckupRetestRecord {
     required this.functionChange,
     required this.executionRate,
     required this.overuseRisk,
+    this.retestScore = 0,
+    this.retestFunctionImpact = 4,
+    this.safetyClear = false,
     required this.decision,
     required this.reason,
   });
@@ -687,6 +729,9 @@ class CheckupRetestRecord {
         'function_change': functionChange,
         'execution_rate': executionRate,
         'overuse_risk': overuseRisk,
+        'retest_score': retestScore,
+        'retest_function_impact': retestFunctionImpact,
+        'safety_clear': safetyClear,
         'decision': decision,
         'reason': reason,
       };
@@ -703,21 +748,110 @@ class CheckupRetestRecord {
             (json['function_change'] as num?)?.toDouble() ?? 0,
         executionRate: (json['execution_rate'] as num?)?.toDouble() ?? 0,
         overuseRisk: (json['overuse_risk'] as num?)?.toDouble() ?? 0,
+        retestScore: (json['retest_score'] as num?)?.toDouble() ?? 0,
+        retestFunctionImpact:
+            (json['retest_function_impact'] as num?)?.toInt() ?? 4,
+        safetyClear: json['safety_clear'] == true,
         decision: (json['decision'] ?? '').toString(),
         reason: (json['reason'] ?? '').toString(),
       );
 }
 
+class MentalHealthCheckupSettings {
+  final bool remindersEnabled;
+  final int reminderHour;
+  final int reminderMinute;
+  final int quietStartHour;
+  final int quietEndHour;
+  final bool lockScreenPrivacy;
+  final bool secureScreen;
+  final String emergencyNumber;
+  final String crisisNumber;
+
+  const MentalHealthCheckupSettings({
+    this.remindersEnabled = false,
+    this.reminderHour = 19,
+    this.reminderMinute = 0,
+    this.quietStartHour = 22,
+    this.quietEndHour = 8,
+    this.lockScreenPrivacy = true,
+    this.secureScreen = false,
+    this.emergencyNumber = '',
+    this.crisisNumber = '',
+  });
+
+  MentalHealthCheckupSettings copyWith({
+    bool? remindersEnabled,
+    int? reminderHour,
+    int? reminderMinute,
+    int? quietStartHour,
+    int? quietEndHour,
+    bool? lockScreenPrivacy,
+    bool? secureScreen,
+    String? emergencyNumber,
+    String? crisisNumber,
+  }) =>
+      MentalHealthCheckupSettings(
+        remindersEnabled: remindersEnabled ?? this.remindersEnabled,
+        reminderHour: reminderHour ?? this.reminderHour,
+        reminderMinute: reminderMinute ?? this.reminderMinute,
+        quietStartHour: quietStartHour ?? this.quietStartHour,
+        quietEndHour: quietEndHour ?? this.quietEndHour,
+        lockScreenPrivacy: lockScreenPrivacy ?? this.lockScreenPrivacy,
+        secureScreen: secureScreen ?? this.secureScreen,
+        emergencyNumber: emergencyNumber ?? this.emergencyNumber,
+        crisisNumber: crisisNumber ?? this.crisisNumber,
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'reminders_enabled': remindersEnabled,
+        'reminder_hour': reminderHour,
+        'reminder_minute': reminderMinute,
+        'quiet_start_hour': quietStartHour,
+        'quiet_end_hour': quietEndHour,
+        'lock_screen_privacy': lockScreenPrivacy,
+        'secure_screen': secureScreen,
+        'emergency_number': emergencyNumber,
+        'crisis_number': crisisNumber,
+      };
+
+  factory MentalHealthCheckupSettings.fromJson(Map<String, dynamic> json) =>
+      MentalHealthCheckupSettings(
+        remindersEnabled: json['reminders_enabled'] == true,
+        reminderHour: ((json['reminder_hour'] as num?)?.toInt() ?? 19)
+            .clamp(0, 23)
+            .toInt(),
+        reminderMinute: ((json['reminder_minute'] as num?)?.toInt() ?? 0)
+            .clamp(0, 59)
+            .toInt(),
+        quietStartHour:
+            ((json['quiet_start_hour'] as num?)?.toInt() ?? 22)
+                .clamp(0, 23)
+                .toInt(),
+        quietEndHour: ((json['quiet_end_hour'] as num?)?.toInt() ?? 8)
+            .clamp(0, 23)
+            .toInt(),
+        lockScreenPrivacy: json['lock_screen_privacy'] != false,
+        secureScreen: json['secure_screen'] == true,
+        emergencyNumber: (json['emergency_number'] ?? '').toString(),
+        crisisNumber: (json['crisis_number'] ?? '').toString(),
+      );
+}
+
 class MentalHealthCheckupState {
   final int schemaVersion;
+  final String installId;
   final bool onboardingAccepted;
+  final MentalHealthCheckupSettings settings;
   final List<CheckupSession> sessions;
   final List<CheckupPrescriptionPlan> plans;
   final List<CheckupRetestRecord> retests;
 
   const MentalHealthCheckupState({
-    this.schemaVersion = 1,
+    this.schemaVersion = 4,
+    this.installId = '',
     this.onboardingAccepted = false,
+    this.settings = const MentalHealthCheckupSettings(),
     this.sessions = const <CheckupSession>[],
     this.plans = const <CheckupPrescriptionPlan>[],
     this.retests = const <CheckupRetestRecord>[],
@@ -741,14 +875,18 @@ class MentalHealthCheckupState {
   }
 
   MentalHealthCheckupState copyWith({
+    String? installId,
     bool? onboardingAccepted,
+    MentalHealthCheckupSettings? settings,
     List<CheckupSession>? sessions,
     List<CheckupPrescriptionPlan>? plans,
     List<CheckupRetestRecord>? retests,
   }) =>
       MentalHealthCheckupState(
         schemaVersion: schemaVersion,
+        installId: installId ?? this.installId,
         onboardingAccepted: onboardingAccepted ?? this.onboardingAccepted,
+        settings: settings ?? this.settings,
         sessions: sessions ?? this.sessions,
         plans: plans ?? this.plans,
         retests: retests ?? this.retests,
@@ -756,7 +894,9 @@ class MentalHealthCheckupState {
 
   Map<String, Object?> toJson() => <String, Object?>{
         'schema_version': schemaVersion,
+        'install_id': installId,
         'onboarding_accepted': onboardingAccepted,
+        'settings': settings.toJson(),
         'sessions': sessions.map((e) => e.toJson()).toList(growable: false),
         'plans': plans.map((e) => e.toJson()).toList(growable: false),
         'retests': retests.map((e) => e.toJson()).toList(growable: false),
@@ -770,7 +910,11 @@ class MentalHealthCheckupState {
     final json = Map<String, dynamic>.from(value);
     return MentalHealthCheckupState(
       schemaVersion: (json['schema_version'] as num?)?.toInt() ?? 1,
+      installId: (json['install_id'] ?? '').toString(),
       onboardingAccepted: json['onboarding_accepted'] == true,
+      settings: MentalHealthCheckupSettings.fromJson(
+        Map<String, dynamic>.from(json['settings'] as Map? ?? const {}),
+      ),
       sessions: (json['sessions'] as List? ?? const <Object?>[])
           .whereType<Map>()
           .map((e) =>

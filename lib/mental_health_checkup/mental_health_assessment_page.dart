@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_engine.dart';
@@ -30,9 +29,10 @@ class MentalHealthAssessmentPage extends StatefulWidget {
 class _MentalHealthAssessmentPageState
     extends State<MentalHealthAssessmentPage> {
   late final MentalHealthCheckupEngine _engine;
-  late final List<CheckupQuestion> _questions;
+  late List<CheckupQuestion> _questions;
   late final String _sessionId;
   late final int _startedAtMs;
+  int _questionShownAtMs = 0;
   final Map<String, CheckupAnswer> _answers = <String, CheckupAnswer>{};
   int _index = 0;
   bool _finishing = false;
@@ -43,25 +43,42 @@ class _MentalHealthAssessmentPageState
   void initState() {
     super.initState();
     _engine = MentalHealthCheckupEngine(widget.catalog);
-    _questions = widget.catalog.questionsForMode(
-      widget.mode.id,
-      focusDomainId: widget.focusDomainId,
-    );
     final draft = widget.draft;
     _sessionId = (draft?['session_id'] ?? '').toString().trim().isNotEmpty
         ? draft!['session_id'].toString()
         : 'session_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
     _startedAtMs = (draft?['started_at_ms'] as num?)?.toInt() ??
         DateTime.now().millisecondsSinceEpoch;
+    _questions = widget.catalog.questionsForMode(
+      widget.mode.id,
+      focusDomainId: widget.focusDomainId,
+      now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+    );
     if (draft != null && draft['answers'] is List) {
       for (final value in (draft['answers'] as List).whereType<Map>()) {
         final answer = CheckupAnswer.fromJson(Map<String, dynamic>.from(value));
         _answers[answer.questionId] = answer;
       }
+      _restoreAdaptiveQuestions();
+      final storedQuestionIds =
+          (draft['question_ids'] as List? ?? const <Object?>[])
+              .map((value) => value.toString())
+              .toList(growable: false);
+      _questions = widget.catalog.restoreQuestionOrder(
+        _questions,
+        sessionId: _sessionId,
+        storedQuestionIds: storedQuestionIds,
+      );
       _index = ((draft['current_index'] as num?)?.toInt() ?? 0)
           .clamp(0, _questions.isEmpty ? 0 : _questions.length - 1)
           .toInt();
+    } else {
+      _questions = widget.catalog.restoreQuestionOrder(
+        _questions,
+        sessionId: _sessionId,
+      );
     }
+    _questionShownAtMs = DateTime.now().millisecondsSinceEpoch;
   }
 
   CheckupQuestion get _question => _questions[_index];
@@ -79,6 +96,8 @@ class _MentalHealthAssessmentPageState
         startedAtMs: _startedAtMs,
         currentIndex: _index,
         answers: _answers.values.toList(growable: false),
+        questionIds:
+            _questions.map((question) => question.id).toList(growable: false),
       );
     } finally {
       _savingDraft = false;
@@ -100,13 +119,29 @@ class _MentalHealthAssessmentPageState
   }
 
   Future<void> _select(CheckupAnswerChoice choice) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     final answer = CheckupAnswer(
       questionId: _question.id,
       label: choice.label,
       value: choice.value,
-      answeredAtMs: DateTime.now().millisecondsSinceEpoch,
+      answeredAtMs: now,
+      responseDurationMs:
+          (now - _questionShownAtMs).clamp(0, 600000).toInt(),
     );
-    setState(() => _answers[_question.id] = answer);
+    final additions = widget.catalog.adaptiveQuestions(
+      modeId: widget.mode.id,
+      question: _question,
+      answer: answer,
+      existingQuestionIds: _questions.map((item) => item.id).toSet(),
+      now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+    );
+    final remaining = (widget.mode.maxQuestionCount - _questions.length)
+        .clamp(0, 120)
+        .toInt();
+    setState(() {
+      _answers[_question.id] = answer;
+      _questions.addAll(additions.take(remaining));
+    });
     await _persistDraft();
     if (!mounted || !_question.isSafety) return;
     final alert = _question.id == 'B20-S3'
@@ -134,11 +169,6 @@ class _MentalHealthAssessmentPageState
               : '你的回答存在不确定或轻度异常。本轮不会继续生成普通课程处方。请先查看安全路线，并在需要时寻求人工支持。',
         ),
         actions: <Widget>[
-          TextButton.icon(
-            onPressed: () => _launchPhone('988'),
-            icon: const Icon(Icons.call_outlined),
-            label: const Text('加拿大/美国 988'),
-          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('保存并查看安全路线'),
@@ -147,12 +177,6 @@ class _MentalHealthAssessmentPageState
       ),
     );
     if (stop == true && mounted) await _finish(allowIncomplete: true);
-  }
-
-  Future<void> _launchPhone(String number) async {
-    try {
-      await launchUrl(Uri.parse('tel:$number'));
-    } catch (_) {}
   }
 
   Future<void> _next() async {
@@ -166,13 +190,19 @@ class _MentalHealthAssessmentPageState
       await _finish();
       return;
     }
-    setState(() => _index++);
+    setState(() {
+      _index++;
+      _questionShownAtMs = DateTime.now().millisecondsSinceEpoch;
+    });
     await _persistDraft();
   }
 
   Future<void> _previous() async {
     if (_index == 0) return;
-    setState(() => _index--);
+    setState(() {
+      _index--;
+      _questionShownAtMs = DateTime.now().millisecondsSinceEpoch;
+    });
     await _persistDraft();
   }
 
@@ -206,9 +236,47 @@ class _MentalHealthAssessmentPageState
       answers: answers,
       report: report,
     );
-    await widget.repository.clearDraft();
+    try {
+      await widget.repository.saveCompletedSession(session);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _finishing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('本地保存失败，草稿仍保留。请检查存储空间后重试。'),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     await _popAfterSaving(session);
+  }
+
+  void _restoreAdaptiveQuestions() {
+    final knownIds = _questions.map((item) => item.id).toSet();
+    for (final answer in _answers.values) {
+      CheckupQuestion? question;
+      for (final candidate in _questions) {
+        if (candidate.id == answer.questionId) {
+          question = candidate;
+          break;
+        }
+      }
+      if (question == null) continue;
+      final additions = widget.catalog.adaptiveQuestions(
+        modeId: widget.mode.id,
+        question: question,
+        answer: answer,
+        existingQuestionIds: knownIds,
+        now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+      );
+      final remaining = (widget.mode.maxQuestionCount - _questions.length)
+          .clamp(0, 120)
+          .toInt();
+      final accepted = additions.take(remaining).toList(growable: false);
+      _questions.addAll(accepted);
+      knownIds.addAll(accepted.map((item) => item.id));
+    }
   }
 
   @override

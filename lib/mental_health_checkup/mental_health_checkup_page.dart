@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'mental_health_assessment_page.dart';
@@ -9,9 +11,15 @@ import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_engine.dart';
 import 'mental_health_checkup_models.dart';
 import 'mental_health_checkup_repository.dart';
+import 'mental_health_checkup_trends.dart';
 
 class MentalHealthCheckupPage extends StatefulWidget {
-  const MentalHealthCheckupPage({super.key});
+  final int initialTab;
+
+  const MentalHealthCheckupPage({
+    super.key,
+    this.initialTab = 0,
+  });
 
   @override
   State<MentalHealthCheckupPage> createState() =>
@@ -37,7 +45,14 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
   @override
   void initState() {
     super.initState();
+    _tabIndex = widget.initialTab.clamp(0, 4).toInt();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _repository.setSecureScreenEnabled(false).ignore();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -49,8 +64,14 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
     }
     try {
       final catalog = await MentalHealthCheckupCatalog.load();
-      final state = await _repository.load();
+      final state = await _repository.load(catalog: catalog);
       final draft = await _repository.loadDraft();
+      try {
+        await _repository.syncPlatformSettings(state);
+      } catch (_) {
+        // A platform reminder/privacy bridge failure must not block access to
+        // the local assessment records. The next settings save retries it.
+      }
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
@@ -70,6 +91,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
   Future<void> _acceptOnboarding() async {
     if (!_understandsNonMedical || !_understandsSafety) return;
     final next = await _repository.acceptOnboarding(_state);
+    await _repository.syncPlatformSettings(next);
     if (mounted) setState(() => _state = next);
   }
 
@@ -300,6 +322,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       ...pausedExisting,
     ]);
     await _repository.save(next);
+    await _repository.syncPlatformSettings(next);
     if (!mounted) return;
     setState(() {
       _state = next;
@@ -318,8 +341,45 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       builder: (_) => const _ExecutionCheckInSheet(),
     );
     if (log == null) return;
-    final next = await _repository.appendExecutionLog(_state, plan.id, log);
-    if (mounted) setState(() => _state = next);
+    var next = await _repository.appendExecutionLog(_state, plan.id, log);
+    if (log.overuseRisk >= 50) {
+      CheckupPrescriptionPlan? updated;
+      for (final item in next.plans) {
+        if (item.id == plan.id) {
+          updated = item.copyWith(status: CheckupPlanStatus.paused);
+          break;
+        }
+      }
+      if (updated != null) {
+        next = await _repository.upsertPlan(next, updated);
+        await _repository.syncPlatformSettings(next);
+      }
+    }
+    if (!mounted) return;
+    setState(() => _state = next);
+    if (log.overuseRisk >= 50) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(
+            Icons.pause_circle_outline,
+            color: Color(0xFFC05621),
+            size: 38,
+          ),
+          title: const Text('已暂停课程行动和提醒'),
+          content: const Text(
+            '本次过度化/僵化风险达到暂停阈值。请先保护睡眠、关系和现实责任；'
+            '之后可在复验中减量、换方或补充评估。',
+          ),
+          actions: <Widget>[
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _togglePlan(CheckupPrescriptionPlan plan) async {
@@ -329,6 +389,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
           : CheckupPlanStatus.paused,
     );
     final next = await _repository.upsertPlan(_state, nextPlan);
+    await _repository.syncPlatformSettings(next);
     if (mounted) setState(() => _state = next);
   }
 
@@ -362,6 +423,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       plan: plan,
       baseline: baseline,
       retest: session.report,
+      priorRetests: _state.retests
+          .where((item) => item.planId == plan.id)
+          .toList(growable: false),
     );
     final updatedPlan = engine.applyRetestDecision(plan, retest);
     final next = await _repository.completeRetest(
@@ -370,6 +434,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       retest: retest,
       updatedPlan: updatedPlan,
     );
+    await _repository.syncPlatformSettings(next);
     if (!mounted) return;
     setState(() {
       _state = next;
@@ -444,6 +509,130 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
     return buffer.toString().trim();
   }
 
+  Future<void> _exportCurrentReport(CheckupReport report) async {
+    try {
+      final saved = await _repository.exportReportPdf(report);
+      if (!mounted || !saved) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF 报告已保存到你选择的位置。')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF 导出失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _exportBackup() async {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    final password = await showDialog<String>(
+      context: context,
+      builder: (_) => const _BackupPasswordDialog(confirmPassword: true),
+    );
+    if (password == null || !mounted) return;
+    try {
+      final saved = await _repository.exportEncryptedBackup(
+        catalog: catalog,
+        password: password,
+      );
+      if (!mounted || !saved) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('加密备份已保存。请将文件和密码分开保管。')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('备份导出失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _importBackup() async {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.restore_page_outlined),
+        title: const Text('导入加密备份？'),
+        content: const Text(
+          '系统会先在临时内存中完成密码认证、格式版本、种子版本、哈希、记录数、重复ID和关联关系预检。'
+          '全部通过后才会在一个事务中替换本模块数据；失败不会修改现有数据。',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('继续预检'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    final password = await showDialog<String>(
+      context: context,
+      builder: (_) => const _BackupPasswordDialog(confirmPassword: false),
+    );
+    if (password == null || !mounted) return;
+    try {
+      final imported = await _repository.importEncryptedBackup(
+        catalog: catalog,
+        password: password,
+      );
+      if (!mounted || imported == null) return;
+      await _repository.syncPlatformSettings(imported);
+      setState(() {
+        _state = imported;
+        _draft = null;
+        _tabIndex = 4;
+        _aiNarrative = '';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('备份已通过预检并完成原子导入。')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导入失败，现有数据未修改：$error')),
+      );
+    }
+  }
+
+  Future<void> _openLocalSettings() async {
+    final settings = await Navigator.of(context)
+        .push<MentalHealthCheckupSettings>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthCheckupLocalSettingsPage(
+          initial: _state.settings,
+        ),
+      ),
+    );
+    if (settings == null || !mounted) return;
+    final next = await _repository.updateSettings(_state, settings);
+    await _repository.syncPlatformSettings(next);
+    if (mounted) setState(() => _state = next);
+  }
+
+  Future<void> _openEvidenceSearch({
+    String initialQuery = '',
+    int? lecture,
+  }) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthCourseEvidencePage(
+          repository: _repository,
+          initialQuery: initialQuery,
+          initialLecture: lecture,
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteAll() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -467,11 +656,35 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       ),
     );
     if (confirm != true) return;
+    final finalConfirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Color(0xFFC62828)),
+        title: const Text('最后确认'),
+        content: const Text(
+          '删除后无法从本机恢复。只有你此前主动导出的加密备份仍会保留在外部位置。',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('返回'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC62828),
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除且重新初始化'),
+          ),
+        ],
+      ),
+    );
+    if (finalConfirm != true) return;
     await _repository.clearAllModuleData();
     if (!mounted) return;
+    await _load();
+    if (!mounted) return;
     setState(() {
-      _state = const MentalHealthCheckupState();
-      _draft = null;
       _aiNarrative = '';
       _understandsNonMedical = false;
       _understandsSafety = false;
@@ -754,12 +967,29 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: <Widget>[
         if (!report.safetyClear) ...<Widget>[
-          _SafetyRouteCard(status: report.safetyStatus),
+          _SafetyRouteCard(
+            status: report.safetyStatus,
+            emergencyNumber: _state.settings.emergencyNumber,
+            crisisNumber: _state.settings.crisisNumber,
+            onConfigure: _openLocalSettings,
+          ),
           const SizedBox(height: 14),
         ],
         _ReportHero(report: report),
         const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: () => _exportCurrentReport(report),
+          icon: const Icon(Icons.picture_as_pdf_outlined),
+          label: const Text('预览完成 · 导出本地 PDF'),
+        ),
+        const SizedBox(height: 14),
         _MetricGrid(report: report),
+        if (report.knowledgeScore != null ||
+            report.attitudeScore != null ||
+            report.behaviorScore != null) ...<Widget>[
+          const SizedBox(height: 12),
+          _KabCard(report: report),
+        ],
         const SizedBox(height: 20),
         const _SectionHeader(
           title: '八域画像',
@@ -822,7 +1052,17 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
           ),
         ],
         const SizedBox(height: 20),
-        _EvidenceAndBoundaryCard(report: report),
+        _EvidenceAndBoundaryCard(
+          report: report,
+          onOpenEvidence: () => _openEvidenceSearch(
+            initialQuery: report.prescriptions.isNotEmpty
+                ? report.prescriptions.first.evidenceLocation
+                : _firstLocationId(report.courseEvidence),
+            lecture: report.prescriptions.isEmpty
+                ? null
+                : report.prescriptions.first.lecture,
+          ),
+        ),
       ],
     );
   }
@@ -919,6 +1159,13 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         ),
         const SizedBox(height: 10),
         _TrendCard(sessions: _state.sessions),
+        if (_state.sessions.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 10),
+          _TrendInsightsCard(
+            insights:
+                const MentalHealthCheckupTrendAnalyzer().analyze(_state.sessions),
+          ),
+        ],
         const SizedBox(height: 18),
         const _SectionHeader(
           title: '处方调整规则',
@@ -973,6 +1220,33 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         ),
         const SizedBox(height: 10),
         _SettingsTile(
+          icon: Icons.notifications_active_outlined,
+          title: '本地提醒、静默时段与锁屏隐私',
+          subtitle: _state.settings.remindersEnabled
+              ? '已开启 · ${_twoDigits(_state.settings.reminderHour)}:${_twoDigits(_state.settings.reminderMinute)} · '
+                  '静默 ${_twoDigits(_state.settings.quietStartHour)}:00-${_twoDigits(_state.settings.quietEndHour)}:00'
+              : '默认关闭；只使用 WorkManager 本地提醒',
+          onTap: _openLocalSettings,
+        ),
+        _SettingsTile(
+          icon: Icons.manage_search_outlined,
+          title: '课程原文定位与离线检索',
+          subtitle: '2253 个稳定定位单元 · FTS/中文回退 · 可核对页码方法',
+          onTap: _openEvidenceSearch,
+        ),
+        _SettingsTile(
+          icon: Icons.lock_clock_outlined,
+          title: '导出独立密码加密备份',
+          subtitle: '系统文件选择器 · PBKDF2-SHA256 · AES-256-GCM',
+          onTap: _exportBackup,
+        ),
+        _SettingsTile(
+          icon: Icons.restore_page_outlined,
+          title: '预检并导入加密备份',
+          subtitle: '先验证版本、哈希、数量、重复ID与关联，再原子替换',
+          onTap: _importBackup,
+        ),
+        _SettingsTile(
           icon: Icons.tune,
           title: '本模块 AI 提示词',
           subtitle: '编辑全局安全、报告解释和复验解释 Prompt',
@@ -990,7 +1264,8 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         _SettingsTile(
           icon: Icons.privacy_tip_outlined,
           title: '隐私与能力边界',
-          subtitle: '无登录、本地事实源、AI需单次同意、非医学诊断',
+          subtitle: '安装标识 ${_shortInstallId(_state.installId)} · 无登录 · '
+              'AI需单次同意',
           onTap: _showPrivacyInfo,
         ),
         _SettingsTile(
@@ -1046,6 +1321,8 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
           '版本：${catalog.validation.version}\n'
           '已校验文件：${catalog.validation.checkedFiles}\n'
           '指标：${catalog.indicators.length}\n'
+          '指标—课程证据关系：1380\n'
+          '课程原文定位单元：2253\n'
           'B20固定题：${catalog.b20Questions.length}\n'
           '课程机制模式：${catalog.diagnosisPatterns.length}\n'
           '课程行动处方：${catalog.prescriptions.length}\n\n'
@@ -1076,9 +1353,11 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
               SizedBox(height: 14),
               _InfoStrip(icon: Icons.person_off_outlined, color: Color(0xFF4554C5), title: '无账号', text: '不要求手机号、邮箱、姓名或云端用户档案。'),
               SizedBox(height: 10),
-              _InfoStrip(icon: Icons.storage_outlined, color: Color(0xFF39715D), title: '本地事实源', text: '结构化会话、报告、行动和复验写入App现有SQLite私有数据库。'),
+              _InfoStrip(icon: Icons.storage_outlined, color: Color(0xFF39715D), title: '本地事实源', text: '会话、答案、报告、行动、执行和复验写入独立SQLite表；升级走显式迁移，提交与导入使用事务。'),
               SizedBox(height: 10),
-              _InfoStrip(icon: Icons.notes_outlined, color: Color(0xFF7A4E9D), title: '最小化敏感文本', text: '本版本不持久化开放题原文，只保存结构化选项和变化指标。'),
+              _InfoStrip(icon: Icons.notes_outlined, color: Color(0xFF7A4E9D), title: '敏感数据最小化与加密', text: '不持久化开放题原文；用户配置的当地支持号码使用Android Keystore AES-GCM字段加密。'),
+              SizedBox(height: 10),
+              _InfoStrip(icon: Icons.backup_outlined, color: Color(0xFF5664D2), title: '不自动上云', text: 'Android自动备份和设备迁移已关闭；只有你主动选择位置并设置独立密码时才导出AES-GCM加密备份。'),
               SizedBox(height: 10),
               _InfoStrip(icon: Icons.auto_awesome_outlined, color: Color(0xFFB54708), title: 'AI是可选解释层', text: '离线报告先生成；只有单次明确同意后，才向用户配置的提供方发送结构化报告。'),
               SizedBox(height: 10),
@@ -1089,6 +1368,514 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       ),
     );
   }
+}
+
+class MentalHealthCheckupLocalSettingsPage extends StatefulWidget {
+  final MentalHealthCheckupSettings initial;
+
+  const MentalHealthCheckupLocalSettingsPage({
+    super.key,
+    required this.initial,
+  });
+
+  @override
+  State<MentalHealthCheckupLocalSettingsPage> createState() =>
+      _MentalHealthCheckupLocalSettingsPageState();
+}
+
+class _MentalHealthCheckupLocalSettingsPageState
+    extends State<MentalHealthCheckupLocalSettingsPage> {
+  late bool _remindersEnabled;
+  late TimeOfDay _reminderTime;
+  late int _quietStartHour;
+  late int _quietEndHour;
+  late bool _lockScreenPrivacy;
+  late bool _secureScreen;
+  late final TextEditingController _emergencyController;
+  late final TextEditingController _crisisController;
+
+  @override
+  void initState() {
+    super.initState();
+    final value = widget.initial;
+    _remindersEnabled = value.remindersEnabled;
+    _reminderTime = TimeOfDay(
+      hour: value.reminderHour,
+      minute: value.reminderMinute,
+    );
+    _quietStartHour = value.quietStartHour;
+    _quietEndHour = value.quietEndHour;
+    _lockScreenPrivacy = value.lockScreenPrivacy;
+    _secureScreen = value.secureScreen;
+    _emergencyController =
+        TextEditingController(text: value.emergencyNumber);
+    _crisisController = TextEditingController(text: value.crisisNumber);
+  }
+
+  @override
+  void dispose() {
+    _emergencyController.dispose();
+    _crisisController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleReminders(bool enabled) async {
+    if (!enabled) {
+      setState(() => _remindersEnabled = false);
+      return;
+    }
+    final status = await Permission.notification.request();
+    if (!mounted) return;
+    if (!status.isGranted) {
+      setState(() => _remindersEnabled = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('未获得通知权限；体检、报告和复验仍可完全离线使用。'),
+        ),
+      );
+      return;
+    }
+    setState(() => _remindersEnabled = true);
+  }
+
+  Future<void> _pickReminderTime() async {
+    final value = await showTimePicker(
+      context: context,
+      initialTime: _reminderTime,
+      helpText: '选择课程行动提醒时间',
+    );
+    if (value != null && mounted) setState(() => _reminderTime = value);
+  }
+
+  Future<void> _pickQuietHour({required bool start}) async {
+    final initial = TimeOfDay(
+      hour: start ? _quietStartHour : _quietEndHour,
+      minute: 0,
+    );
+    final value = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: start ? '静默时段开始' : '静默时段结束',
+    );
+    if (value == null || !mounted) return;
+    setState(() {
+      if (start) {
+        _quietStartHour = value.hour;
+      } else {
+        _quietEndHour = value.hour;
+      }
+    });
+  }
+
+  String _cleanNumber(String raw) =>
+      raw.replaceAll(RegExp(r'[^0-9+*#]'), '');
+
+  void _save() {
+    Navigator.of(context).pop(
+      widget.initial.copyWith(
+        remindersEnabled: _remindersEnabled,
+        reminderHour: _reminderTime.hour,
+        reminderMinute: _reminderTime.minute,
+        quietStartHour: _quietStartHour,
+        quietEndHour: _quietEndHour,
+        lockScreenPrivacy: _lockScreenPrivacy,
+        secureScreen: _secureScreen,
+        emergencyNumber: _cleanNumber(_emergencyController.text),
+        crisisNumber: _cleanNumber(_crisisController.text),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text('本地提醒与隐私'),
+          actions: <Widget>[
+            TextButton(onPressed: _save, child: const Text('保存')),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          children: <Widget>[
+            SwitchListTile(
+              value: _remindersEnabled,
+              onChanged: _toggleReminders,
+              secondary: const Icon(Icons.notifications_active_outlined),
+              title: const Text('开启本地课程行动提醒'),
+              subtitle: const Text(
+                '默认关闭；使用 WorkManager，不依赖推送服务，拒绝权限不影响核心功能。',
+              ),
+            ),
+            ListTile(
+              enabled: _remindersEnabled,
+              leading: const Icon(Icons.schedule),
+              title: const Text('每日提醒时间'),
+              subtitle: Text(_reminderTime.format(context)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _remindersEnabled ? _pickReminderTime : null,
+            ),
+            ListTile(
+              leading: const Icon(Icons.bedtime_outlined),
+              title: const Text('静默时段'),
+              subtitle: Text(
+                '${_twoDigits(_quietStartHour)}:00 - '
+                '${_twoDigits(_quietEndHour)}:00',
+              ),
+              trailing: Wrap(
+                spacing: 4,
+                children: <Widget>[
+                  TextButton(
+                    onPressed: () => _pickQuietHour(start: true),
+                    child: const Text('开始'),
+                  ),
+                  TextButton(
+                    onPressed: () => _pickQuietHour(start: false),
+                    child: const Text('结束'),
+                  ),
+                ],
+              ),
+            ),
+            SwitchListTile(
+              value: _lockScreenPrivacy,
+              onChanged: (value) =>
+                  setState(() => _lockScreenPrivacy = value),
+              secondary: const Icon(Icons.phonelink_lock_outlined),
+              title: const Text('锁屏隐藏提醒内容'),
+              subtitle: const Text('通知只显示中性提示，不显示分数、模式或课程机制名称。'),
+            ),
+            SwitchListTile(
+              value: _secureScreen,
+              onChanged: (value) => setState(() => _secureScreen = value),
+              secondary: const Icon(Icons.screenshot_monitor_outlined),
+              title: const Text('进入体检模块时阻止截图'),
+              subtitle: const Text('离开本模块后自动恢复；投屏和最近任务缩略图也会被保护。'),
+            ),
+            const Divider(height: 32),
+            const Text(
+              '当地安全支持（可选）',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '应用不会根据语言或时区猜测号码。请仅填写你已从当地官方来源核实的号码；字段使用 Android Keystore AES-GCM 加密。',
+              style: TextStyle(color: Color(0xFF667085), height: 1.45),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _crisisController,
+              keyboardType: TextInputType.phone,
+              autofillHints: const <String>[AutofillHints.telephoneNumber],
+              decoration: const InputDecoration(
+                labelText: '当地危机支持号码',
+                prefixIcon: Icon(Icons.support_agent),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emergencyController,
+              keyboardType: TextInputType.phone,
+              autofillHints: const <String>[AutofillHints.telephoneNumber],
+              decoration: const InputDecoration(
+                labelText: '当地紧急服务号码',
+                prefixIcon: Icon(Icons.emergency_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _save,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('保存本地设置'),
+            ),
+          ],
+        ),
+      );
+}
+
+class MentalHealthCourseEvidencePage extends StatefulWidget {
+  final MentalHealthCheckupRepository repository;
+  final String initialQuery;
+  final int? initialLecture;
+
+  const MentalHealthCourseEvidencePage({
+    super.key,
+    required this.repository,
+    this.initialQuery = '',
+    this.initialLecture,
+  });
+
+  @override
+  State<MentalHealthCourseEvidencePage> createState() =>
+      _MentalHealthCourseEvidencePageState();
+}
+
+class _MentalHealthCourseEvidencePageState
+    extends State<MentalHealthCourseEvidencePage> {
+  late final TextEditingController _queryController;
+  int? _lecture;
+  bool _loading = false;
+  bool _searched = false;
+  List<CheckupCourseEvidence> _results = const <CheckupCourseEvidence>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _queryController = TextEditingController(text: widget.initialQuery);
+    _lecture = widget.initialLecture;
+    if (widget.initialQuery.isNotEmpty || widget.initialLecture != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _search());
+    }
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _loading = true;
+      _searched = true;
+    });
+    final results = await widget.repository.searchCourseEvidence(
+      _queryController.text,
+      lecture: _lecture,
+    );
+    if (!mounted) return;
+    setState(() {
+      _results = results;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('课程原文定位')),
+        body: Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+              child: Column(
+                children: <Widget>[
+                  TextField(
+                    controller: _queryController,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _search(),
+                    decoration: InputDecoration(
+                      labelText: '指标ID、位置ID、关键词或中文原文',
+                      hintText:
+                          '例如 L04-C1 / L04-P034 / transformation / 情绪',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: IconButton(
+                        tooltip: '检索',
+                        onPressed: _loading ? null : _search,
+                        icon: const Icon(Icons.arrow_forward),
+                      ),
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<int?>(
+                    initialValue: _lecture,
+                    decoration: const InputDecoration(
+                      labelText: '讲次筛选',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: <DropdownMenuItem<int?>>[
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('全部 23 讲'),
+                      ),
+                      for (var value = 1; value <= 23; value++)
+                        DropdownMenuItem<int?>(
+                          value: value,
+                          child: Text('Lecture $value'),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() => _lecture = value),
+                  ),
+                ],
+              ),
+            ),
+            if (_loading) const LinearProgressIndicator(minHeight: 3),
+            Expanded(
+              child: !_searched
+                  ? const _EmptyTab(
+                      icon: Icons.manage_search_outlined,
+                      title: '离线核对课程证据',
+                      text: '2253个定位单元已随App导入本地数据库；'
+                          '英文走FTS，中文与位置ID走本地回退检索。',
+                      action: '',
+                      onPressed: null,
+                    )
+                  : _results.isEmpty
+                      ? const Center(child: Text('没有找到匹配的课程定位。'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 28),
+                          itemCount: _results.length,
+                          itemBuilder: (context, index) {
+                            final item = _results[index];
+                            return Card(
+                              elevation: 0,
+                              child: ExpansionTile(
+                                leading: CircleAvatar(
+                                  child: Text('${item.lecture}'),
+                                ),
+                                title: Text(
+                                  item.locationId,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${item.section} · 固定页 ${item.page} · '
+                                  '${item.language}',
+                                ),
+                                childrenPadding:
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                children: <Widget>[
+                                  SelectableText(
+                                    item.text,
+                                    style: const TextStyle(height: 1.55),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _LabeledText(
+                                    label: '位置方法',
+                                    text: item.pageMethod,
+                                  ),
+                                  _LabeledText(
+                                    label: '源文件',
+                                    text: item.sourceFile,
+                                  ),
+                                  _LabeledText(
+                                    label: '源SHA-256',
+                                    text: item.sourceSha256,
+                                  ),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton.icon(
+                                      onPressed: () async {
+                                        await Clipboard.setData(
+                                          ClipboardData(
+                                            text:
+                                                '${item.locationId}\n${item.text}',
+                                          ),
+                                        );
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text('位置与原文已复制。'),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.copy_outlined),
+                                      label: const Text('复制定位'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _BackupPasswordDialog extends StatefulWidget {
+  final bool confirmPassword;
+
+  const _BackupPasswordDialog({required this.confirmPassword});
+
+  @override
+  State<_BackupPasswordDialog> createState() => _BackupPasswordDialogState();
+}
+
+class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
+  final TextEditingController _password = TextEditingController();
+  final TextEditingController _confirm = TextEditingController();
+  bool _obscure = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _password.text;
+    if (value.length < 10) {
+      setState(() => _error = '独立备份密码至少10个字符。');
+      return;
+    }
+    if (widget.confirmPassword && value != _confirm.text) {
+      setState(() => _error = '两次输入不一致。');
+      return;
+    }
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        icon: const Icon(Icons.password_outlined),
+        title: Text(widget.confirmPassword ? '设置独立备份密码' : '输入备份密码'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                widget.confirmPassword
+                    ? '任何同时持有文件和密码的人都能读取内容。应用不会保存或找回这个密码。'
+                    : '密码错误或文件被篡改时，认证会失败且不会导入任何记录。',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _password,
+                obscureText: _obscure,
+                autofocus: true,
+                onSubmitted: (_) => _submit(),
+                decoration: InputDecoration(
+                  labelText: '密码（至少10个字符）',
+                  errorText: _error,
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                    icon: Icon(
+                      _obscure ? Icons.visibility_off : Icons.visibility,
+                    ),
+                  ),
+                ),
+              ),
+              if (widget.confirmPassword) ...<Widget>[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _confirm,
+                  obscureText: _obscure,
+                  onSubmitted: (_) => _submit(),
+                  decoration: const InputDecoration(
+                    labelText: '再次输入',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(onPressed: _submit, child: const Text('继续')),
+        ],
+      );
 }
 
 class MentalHealthCheckupPromptPage extends StatefulWidget {
@@ -1628,7 +2415,10 @@ class _ReportHero extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 5),
-                  Text('规则版本 ${report.ruleVersion} · ${_date(report.createdAtMs)}'),
+                  Text(
+                    '规则 ${report.ruleVersion} · 种子 ${report.seedVersion} · '
+                    '${_date(report.createdAtMs)}',
+                  ),
                   const SizedBox(height: 6),
                   const Text(
                     '分数只汇总已覆盖课程领域；安全与功能不被“幸福总分”抵消。',
@@ -1658,6 +2448,82 @@ class _MetricGrid extends StatelessWidget {
           Expanded(child: _MetricCard(label: '功能影响', value: '${report.functionImpact}/4', icon: Icons.work_outline)),
         ],
       );
+}
+
+class _KabCard extends StatelessWidget {
+  final CheckupReport report;
+
+  const _KabCard({required this.report});
+
+  @override
+  Widget build(BuildContext context) {
+    String value(double? score) =>
+        score == null ? '—' : score.toStringAsFixed(0);
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFF2F4FF),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Row(
+              children: <Widget>[
+                Icon(Icons.hub_outlined, color: Color(0xFF4554C5)),
+                SizedBox(width: 8),
+                Text(
+                  '知识—态度—行为（K/A/B）',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _MetricCard(
+                    label: 'K 理论',
+                    value: value(report.knowledgeScore),
+                    icon: Icons.school_outlined,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MetricCard(
+                    label: 'A 态度',
+                    value: value(report.attitudeScore),
+                    icon: Icons.psychology_alt_outlined,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MetricCard(
+                    label: 'B 行为',
+                    value: value(report.behaviorScore),
+                    icon: Icons.directions_run_outlined,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              report.kabIntegratedScore == null
+                  ? '本轮未同时覆盖 K/A/B，暂不生成加权分。'
+                  : '加权分 M = K×25% + A×30% + B×45%：'
+                      '${report.kabIntegratedScore!.toStringAsFixed(1)}；'
+                      'A-B一致性 ${value(report.attitudeBehaviorConsistency)}，'
+                      'K-B一致性 ${value(report.knowledgeBehaviorConsistency)}。',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF475467),
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _MetricCard extends StatelessWidget {
@@ -1954,7 +2820,11 @@ class _AiExplanationCard extends StatelessWidget {
 
 class _EvidenceAndBoundaryCard extends StatelessWidget {
   final CheckupReport report;
-  const _EvidenceAndBoundaryCard({required this.report});
+  final VoidCallback onOpenEvidence;
+  const _EvidenceAndBoundaryCard({
+    required this.report,
+    required this.onOpenEvidence,
+  });
 
   @override
   Widget build(BuildContext context) => Card(
@@ -1968,6 +2838,15 @@ class _EvidenceAndBoundaryCard extends StatelessWidget {
           children: <Widget>[
             _LabeledList(label: '本轮课程位置', items: report.courseEvidence),
             _LabeledList(label: '来源边界', items: report.sourceBoundaries),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onOpenEvidence,
+                icon: const Icon(Icons.manage_search_outlined),
+                label: const Text('跳转到课程原文定位检索'),
+              ),
+            ),
           ],
         ),
       );
@@ -1975,10 +2854,22 @@ class _EvidenceAndBoundaryCard extends StatelessWidget {
 
 class _SafetyRouteCard extends StatelessWidget {
   final CheckupSafetyStatus status;
-  const _SafetyRouteCard({required this.status});
+  final String emergencyNumber;
+  final String crisisNumber;
+  final VoidCallback onConfigure;
+  const _SafetyRouteCard({
+    required this.status,
+    required this.emergencyNumber,
+    required this.crisisNumber,
+    required this.onConfigure,
+  });
 
-  Future<void> _launch(String value) async {
-    try { await launchUrl(Uri.parse(value)); } catch (_) {}
+  Future<void> _dial(String number) async {
+    final compact = number.replaceAll(RegExp(r'[^0-9+*#]'), '');
+    if (compact.isEmpty) return;
+    try {
+      await launchUrl(Uri(scheme: 'tel', path: compact));
+    } catch (_) {}
   }
 
   @override
@@ -2004,7 +2895,7 @@ class _SafetyRouteCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             alert
-                ? '请优先联系可信任的人和当地专业/紧急支持，不要独自承担，也不要用积极练习覆盖危险。若你在加拿大或美国，可拨打或短信 988；如有立即危险，请拨打当地紧急号码（加拿大/美国 911）。'
+                ? '请优先联系可信任的人和当地专业/紧急支持，不要独自承担，也不要用积极练习覆盖危险。'
                 : '请先完成更详细的安全确认，必要时联系当地专业支持。本轮不会生成普通课程行动处方。',
             style: const TextStyle(height: 1.55),
           ),
@@ -2013,13 +2904,32 @@ class _SafetyRouteCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              FilledButton.icon(onPressed: () => _launch('tel:988'), icon: const Icon(Icons.call), label: const Text('拨打 988')),
-              OutlinedButton.icon(onPressed: () => _launch('sms:988'), icon: const Icon(Icons.sms_outlined), label: const Text('短信 988')),
-              OutlinedButton.icon(onPressed: () => _launch('tel:911'), icon: const Icon(Icons.emergency_outlined), label: const Text('紧急 911')),
+              if (crisisNumber.isNotEmpty)
+                FilledButton.icon(
+                  onPressed: () => _dial(crisisNumber),
+                  icon: const Icon(Icons.support_agent),
+                  label: const Text('联系已设置的危机支持'),
+                ),
+              if (emergencyNumber.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: () => _dial(emergencyNumber),
+                  icon: const Icon(Icons.emergency_outlined),
+                  label: const Text('联系已设置的紧急服务'),
+                ),
+              if (crisisNumber.isEmpty && emergencyNumber.isEmpty)
+                OutlinedButton.icon(
+                  onPressed: onConfigure,
+                  icon: const Icon(Icons.add_call),
+                  label: const Text('设置当地支持号码'),
+                ),
             ],
           ),
           const SizedBox(height: 8),
-          const Text('988/911按钮适用于加拿大或美国；其他地区请联系当地危机热线或紧急服务。', style: TextStyle(fontSize: 11, color: Color(0xFF7A271A))),
+          const Text(
+            '应用不猜测你的国家或号码；请只保存你已核实的当地资源。'
+            '号码使用 Android Keystore 字段加密。',
+            style: TextStyle(fontSize: 11, color: Color(0xFF7A271A)),
+          ),
         ],
       ),
     );
@@ -2189,6 +3099,77 @@ class _TrendCard extends StatelessWidget {
             SizedBox(height: 150, child: CustomPaint(painter: _TrendPainter(values), child: const SizedBox.expand())),
             const SizedBox(height: 8),
             Text(values.length < 2 ? '至少完成两次评估后显示变化轨迹。' : '共 ${values.length} 次记录 · 最近 ${values.last.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, color: Color(0xFF667085))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrendInsightsCard extends StatelessWidget {
+  final List<CheckupTrendInsight> insights;
+
+  const _TrendInsightsCard({required this.insights});
+
+  @override
+  Widget build(BuildContext context) {
+    if (insights.isEmpty) return const SizedBox.shrink();
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text(
+              '纵向规则提示',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            for (final insight in insights)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      insight.severity == CheckupTrendSeverity.elevated
+                          ? Icons.warning_amber_rounded
+                          : insight.severity == CheckupTrendSeverity.attention
+                              ? Icons.trending_down
+                              : Icons.info_outline,
+                      color:
+                          insight.severity == CheckupTrendSeverity.elevated
+                              ? const Color(0xFFC62828)
+                              : insight.severity ==
+                                      CheckupTrendSeverity.attention
+                                  ? const Color(0xFFB54708)
+                                  : const Color(0xFF5664D2),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            insight.title,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            insight.message,
+                            style: const TextStyle(
+                              color: Color(0xFF667085),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -2656,7 +3637,7 @@ class _EmptyTab extends StatelessWidget {
   final String title;
   final String text;
   final String action;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   const _EmptyTab({required this.icon, required this.title, required this.text, required this.action, required this.onPressed});
 
   @override
@@ -2676,8 +3657,10 @@ class _EmptyTab extends StatelessWidget {
               Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
               Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF667085), height: 1.5)),
-              const SizedBox(height: 18),
-              FilledButton(onPressed: onPressed, child: Text(action)),
+              if (action.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 18),
+                FilledButton(onPressed: onPressed, child: Text(action)),
+              ],
             ],
           ),
         ),
@@ -2758,4 +3741,16 @@ String _date(int milliseconds) {
   final date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
   String two(int value) => value.toString().padLeft(2, '0');
   return '${date.year}-${two(date.month)}-${two(date.day)}';
+}
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+String _shortInstallId(String value) {
+  if (value.length <= 14) return value.isEmpty ? '待生成' : value;
+  return '${value.substring(0, 10)}…${value.substring(value.length - 4)}';
+}
+
+String _firstLocationId(List<String> values) {
+  final match = RegExp(r'L\d{2}-P\d{3}').firstMatch(values.join(' '));
+  return match?.group(0) ?? '';
 }

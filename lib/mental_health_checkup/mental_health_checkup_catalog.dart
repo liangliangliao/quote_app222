@@ -255,6 +255,7 @@ class MentalHealthCheckupCatalog {
         final domainId = domainNames.containsKey(focusDomainId)
             ? focusDomainId!
             : 'D1';
+        final anchorId = 'B20-D${domainId.substring(1)}';
         return <CheckupQuestion>[
           ...pick(const <String>[
             'B20-S1',
@@ -263,6 +264,13 @@ class MentalHealthCheckupCatalog {
             'B20-S4',
             'B20-F1',
             'B20-F2',
+          ]),
+          ...pick(<String>[
+            anchorId,
+            'B20-C1',
+            'B20-C2',
+            'B20-Q1',
+            'B20-Q2',
           ]),
           ..._indicatorQuestions(domainId, 30, clock),
         ];
@@ -276,6 +284,76 @@ class MentalHealthCheckupCatalog {
       default:
         return List<CheckupQuestion>.unmodifiable(b20Questions);
     }
+  }
+
+  List<CheckupQuestion> adaptiveQuestions({
+    required String modeId,
+    required CheckupQuestion question,
+    required CheckupAnswer answer,
+    required Set<String> existingQuestionIds,
+    DateTime? now,
+  }) {
+    if (modeId == 'safety' ||
+        modeId == 'daily' ||
+        modeId == 'five_minute' ||
+        modeId == 'focused' ||
+        modeId == 'comprehensive') {
+      return const <CheckupQuestion>[];
+    }
+    final clock = now ?? DateTime.now();
+    final candidates = <CheckupQuestion>[];
+    final domainMatch = RegExp(r'B20-D([1-8])').firstMatch(question.id);
+    if (domainMatch != null && answer.value <= 2) {
+      candidates.addAll(
+        _indicatorQuestions('D${domainMatch.group(1)}', 4, clock),
+      );
+    }
+    if (question.id == 'B20-C1' && answer.value >= 2) {
+      candidates.addAll(_indicatorQuestions('D3', 4, clock));
+    }
+    if (question.isFunction && answer.value >= 2) {
+      candidates.addAll(_functionBranchQuestions());
+    }
+    return candidates
+        .where((item) => !existingQuestionIds.contains(item.id))
+        .toList(growable: false);
+  }
+
+  List<CheckupQuestion> restoreQuestionOrder(
+    List<CheckupQuestion> questions, {
+    required String sessionId,
+    List<String> storedQuestionIds = const <String>[],
+  }) {
+    final byId = <String, CheckupQuestion>{
+      for (final question in questions) question.id: question,
+    };
+    if (storedQuestionIds.isNotEmpty) {
+      final restored = storedQuestionIds
+          .map((id) => byId.remove(id))
+          .whereType<CheckupQuestion>()
+          .toList(growable: true);
+      restored.addAll(byId.values);
+      return restored;
+    }
+
+    final gates = questions
+        .where((item) => item.isSafety || item.isFunction)
+        .toList(growable: false);
+    final remainder = questions
+        .where((item) => !item.isSafety && !item.isFunction)
+        .toList(growable: true);
+    var seed = 0x811C9DC5;
+    for (final unit in sessionId.codeUnits) {
+      seed = ((seed ^ unit) * 0x01000193) & 0x7FFFFFFF;
+    }
+    for (var index = remainder.length - 1; index > 0; index--) {
+      seed = (1103515245 * seed + 12345) & 0x7FFFFFFF;
+      final target = seed % (index + 1);
+      final value = remainder[index];
+      remainder[index] = remainder[target];
+      remainder[target] = value;
+    }
+    return <CheckupQuestion>[...gates, ...remainder];
   }
 
   List<CheckupQuestion> _indicatorQuestions(
@@ -331,6 +409,74 @@ class MentalHealthCheckupCatalog {
       );
     }).toList(growable: false);
   }
+
+  static List<CheckupQuestion> _functionBranchQuestions() =>
+      const <CheckupQuestion>[
+        CheckupQuestion(
+          id: 'BR-F-TIME',
+          group: '功能分支',
+          kind: '功能时间线',
+          prompt: '现实功能受到影响的时间更接近哪一种？',
+          scaleLabel: '结构化时间线，不保存开放文本',
+          direction: 'D2安全与功能分流',
+          sourceLevel: 'D2',
+          required: false,
+          choices: <CheckupAnswerChoice>[
+            CheckupAnswerChoice('今天或昨天开始', 3),
+            CheckupAnswerChoice('过去1周内开始', 2),
+            CheckupAnswerChoice('持续2周以上', 1),
+            CheckupAnswerChoice('不确定', 0),
+          ],
+        ),
+        CheckupQuestion(
+          id: 'BR-F-BREADTH',
+          group: '功能分支',
+          kind: '功能范围',
+          prompt: '影响目前覆盖多少类现实生活？',
+          scaleLabel: '学习/工作、关系、自我照护、睡眠等',
+          direction: '越高风险越高',
+          sourceLevel: 'D2',
+          required: false,
+          choices: <CheckupAnswerChoice>[
+            CheckupAnswerChoice('尚未明显影响', 0),
+            CheckupAnswerChoice('主要影响1类', 1),
+            CheckupAnswerChoice('影响2类', 2),
+            CheckupAnswerChoice('影响3类及以上', 3),
+          ],
+        ),
+        CheckupQuestion(
+          id: 'BR-F-BODY',
+          group: '功能分支',
+          kind: '共同原因',
+          prompt: '睡眠、身体不适、药物变化或恢复不足，是否可能解释本次变化？',
+          scaleLabel: '用于避免把课程外因素误判为课程机制',
+          direction: '用于分流',
+          sourceLevel: 'D2',
+          required: false,
+          choices: <CheckupAnswerChoice>[
+            CheckupAnswerChoice('不太可能', 0),
+            CheckupAnswerChoice('不确定', 1),
+            CheckupAnswerChoice('有一定可能', 2),
+            CheckupAnswerChoice('很可能', 3),
+          ],
+        ),
+        CheckupQuestion(
+          id: 'BR-F-SUPPORT',
+          group: '功能分支',
+          kind: '支持可及性',
+          prompt: '如果状态继续恶化，你目前是否有可信任的人或专业支持可以联系？',
+          scaleLabel: '用于支持路径，不进入幸福总分',
+          direction: '越高保护越强',
+          sourceLevel: 'D2',
+          required: false,
+          choices: <CheckupAnswerChoice>[
+            CheckupAnswerChoice('没有或不确定', 0),
+            CheckupAnswerChoice('可能有，但尚未联系', 1),
+            CheckupAnswerChoice('有明确联系人', 2),
+            CheckupAnswerChoice('已经在获得支持', 3),
+          ],
+        ),
+      ];
 
   static List<Map<String, dynamic>> _mapList(dynamic value) =>
       (value as List? ?? const <Object?>[])
