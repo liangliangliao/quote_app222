@@ -1,6 +1,8 @@
 {
   "source_workbook": "哈佛幸福课23讲_心理健康体检V2.3_AI课程诊断处方与恢复闭环.xlsx",
   "source_sha256": "0b857f8a7e7969f656f39585c8a6b25e0765194abe76908b5f2810928c913098",
+  "legacy_source_document": "哈佛幸福课23讲_心理健康体检程序设计说明书_V2.3.docx",
+  "legacy_source_sha256": "b99d06d459da350134cf15f3298fb61a95891892db552a8cd539d7926334d4fd",
   "version": "2.4",
   "exports": [
     {
@@ -122,6 +124,14 @@
       "format": "json",
       "rows": 17,
       "sha256": "8f8778cbaec96a94766aabf3076966ded25e9f21c1e7053e09af4a2c417e1079"
+    },
+    {
+      "sheet": "V1历史题目与行为任务（说明书表8-99）",
+      "range": "23讲×4题+23讲×2任务",
+      "file": "legacy_content_candidates.json",
+      "format": "json",
+      "rows": 138,
+      "sha256": "83ded1a458f7972514422910f2ab5e1f39b3d87085f71f91a965bff8094aea53"
     }
   ]
 }

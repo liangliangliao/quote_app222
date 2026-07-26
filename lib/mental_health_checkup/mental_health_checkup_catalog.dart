@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 
+import 'mental_health_content_governance.dart';
 import 'mental_health_checkup_models.dart';
 
 class CheckupReferenceRule {
@@ -81,6 +82,7 @@ class MentalHealthCheckupCatalog {
   final List<CheckupReferenceRule> recoveryMaintenanceRules;
   final List<CheckupReferenceRule> sourceBoundaryRules;
   final Map<String, Map<String, String>> seedFieldMappings;
+  final List<CheckupContentCandidate> legacyContentCandidates;
   final CheckupSeedValidationResult validation;
 
   const MentalHealthCheckupCatalog({
@@ -98,6 +100,7 @@ class MentalHealthCheckupCatalog {
     this.recoveryMaintenanceRules = const <CheckupReferenceRule>[],
     this.sourceBoundaryRules = const <CheckupReferenceRule>[],
     this.seedFieldMappings = const <String, Map<String, String>>{},
+    this.legacyContentCandidates = const <CheckupContentCandidate>[],
     required this.validation,
   });
 
@@ -122,6 +125,7 @@ class MentalHealthCheckupCatalog {
       rootBundle.loadString('$assetRoot/recovery_maintenance_rules.json'),
       rootBundle.loadString('$assetRoot/source_boundaries.json'),
       rootBundle.loadString('$assetRoot/seed_field_mappings.json'),
+      rootBundle.loadString('$assetRoot/legacy_content_candidates.json'),
     ]);
 
     final modeRows = _mapList(jsonDecode(values[0]));
@@ -155,6 +159,9 @@ class MentalHealthCheckupCatalog {
       recoveryMaintenanceRules: _ruleList(jsonDecode(values[11])),
       sourceBoundaryRules: _ruleList(jsonDecode(values[12])),
       seedFieldMappings: _fieldMappings(jsonDecode(values[13])),
+      legacyContentCandidates: _mapList(jsonDecode(values[14]))
+          .map(CheckupContentCandidate.fromJson)
+          .toList(growable: false),
       validation: validation,
     );
   }
@@ -209,6 +216,10 @@ class MentalHealthCheckupCatalog {
             .map((rule) => rule.toJson())
             .toList(growable: false),
         'seed_field_mappings': seedFieldMappings,
+        'legacy_content_candidates': <String, Object?>{
+          'count': legacyContentCandidates.length,
+          'status': '历史候选，待独立审核、认知访谈与试测',
+        },
       };
 
   static Future<CheckupSeedValidationResult> validateSeeds() async {

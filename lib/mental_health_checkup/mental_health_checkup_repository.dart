@@ -156,6 +156,7 @@ class MentalHealthCheckupRepository {
     final db = await AppDatabase.instance();
     await _ensureSchema(db);
     await _importReferenceSeedsIfNeeded(db, catalog);
+    await _importLegacyContentCandidatesIfNeeded(db, catalog);
     await _migrateLegacyStateIfNeeded(db);
   }
 
@@ -575,6 +576,75 @@ class MentalHealthCheckupRepository {
       where: 'key = ? OR key = ?',
       whereArgs: <Object?>[_legacyStateKey, _legacyDraftKey],
     );
+  }
+
+  Future<void> _importLegacyContentCandidatesIfNeeded(
+    Database db,
+    MentalHealthCheckupCatalog catalog,
+  ) async {
+    final storedVersion = await _meta(db, 'legacy_content_seed_version');
+    final storedCount = Sqflite.firstIntValue(
+          await db.rawQuery(
+            "SELECT COUNT(*) FROM mh_content_candidates WHERE id LIKE 'LEGACY-%'",
+          ),
+        ) ??
+        0;
+    if (storedVersion == catalog.validation.version && storedCount == 138) {
+      return;
+    }
+    final candidates = catalog.legacyContentCandidates;
+    final attitudeCount = candidates
+        .where(
+          (candidate) =>
+              candidate.kind == CheckupContentKind.assessmentItem,
+        )
+        .length;
+    final behaviorCount = candidates
+        .where(
+          (candidate) => candidate.kind == CheckupContentKind.behaviorTask,
+        )
+        .length;
+    if (candidates.length != 138 ||
+        attitudeCount != 92 ||
+        behaviorCount != 46) {
+      throw StateError(
+        '历史内容数量不符：'
+        '${candidates.length}/138，题目$attitudeCount/92，'
+        '任务$behaviorCount/46。',
+      );
+    }
+    final indicatorIds =
+        catalog.indicators.map((indicator) => indicator.id).toSet();
+    final candidateIds = <String>{};
+    await db.transaction((txn) async {
+      for (final candidate in candidates) {
+        if (!candidateIds.add(candidate.candidateId) ||
+            !indicatorIds.contains(candidate.primaryIndicatorId) ||
+            candidate.stage != CheckupCandidateStage.candidate) {
+          throw StateError('历史候选映射无效：${candidate.candidateId}');
+        }
+        await txn.insert(
+          'mh_content_candidates',
+          <String, Object?>{
+            'id': candidate.candidateId,
+            'indicator_id': candidate.primaryIndicatorId,
+            'content_kind': candidate.kind.name,
+            'content_code': candidate.contentCode,
+            'stage': candidate.stage.name,
+            'version': candidate.version,
+            'updated_at_ms': candidate.updatedAtMs,
+            'payload_json': jsonEncode(candidate.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+      await _putMeta(
+        txn,
+        'legacy_content_seed_version',
+        catalog.validation.version,
+      );
+      await _putMeta(txn, 'legacy_content_seed_count', '${candidates.length}');
+    });
   }
 
   Future<MentalHealthCheckupState> load({

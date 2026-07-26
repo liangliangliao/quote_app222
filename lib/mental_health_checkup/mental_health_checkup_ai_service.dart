@@ -464,6 +464,7 @@ class MentalHealthCheckupAiService {
             const <String, dynamic>{},
       );
       final suggested = CheckupCandidateQuality.fromJson(qualityRow);
+      final generatedOptions = _aiStringList(decoded['answer_options']);
       final candidate = fallback.copyWith(
         content: (decoded['content'] ?? fallback.content).toString(),
         scaleOrDuration:
@@ -474,7 +475,9 @@ class MentalHealthCheckupAiService {
                 .toString(),
         recallWindow:
             (decoded['recall_window'] ?? fallback.recallWindow).toString(),
-        answerOptions: _aiStringList(decoded['answer_options']),
+        answerOptions: generatedOptions.isEmpty
+            ? fallback.answerOptions
+            : generatedOptions,
         correctAnswerIndex:
             (decoded['correct_answer_index'] as num?)?.toInt(),
         sourceLevel:

@@ -17,7 +17,7 @@ void main() {
       final catalog = await MentalHealthCheckupCatalog.load();
 
       expect(catalog.validation.valid, isTrue);
-      expect(catalog.validation.checkedFiles, 15);
+      expect(catalog.validation.checkedFiles, 16);
       expect(catalog.modes, hasLength(7));
       expect(catalog.b20Questions, hasLength(20));
       expect(catalog.indicators, hasLength(345));
@@ -32,6 +32,32 @@ void main() {
       expect(catalog.recoveryMaintenanceRules, hasLength(8));
       expect(catalog.sourceBoundaryRules, hasLength(6));
       expect(catalog.seedFieldMappings, hasLength(5));
+      expect(catalog.legacyContentCandidates, hasLength(138));
+      expect(
+        catalog.legacyContentCandidates
+            .where(
+              (candidate) =>
+                  candidate.kind == CheckupContentKind.assessmentItem,
+            ),
+        hasLength(92),
+      );
+      expect(
+        catalog.legacyContentCandidates
+            .where(
+              (candidate) =>
+                  candidate.kind == CheckupContentKind.behaviorTask,
+            ),
+        hasLength(46),
+      );
+      expect(
+        catalog.legacyContentCandidates.every(
+          (candidate) =>
+              candidate.stage == CheckupCandidateStage.candidate &&
+              candidate.reviewer.isEmpty &&
+              candidate.signer.isEmpty,
+        ),
+        isTrue,
+      );
     });
 
     test('keeps D1 and D2 supplemental coverage separate', () async {
