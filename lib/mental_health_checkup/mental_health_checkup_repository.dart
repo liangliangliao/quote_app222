@@ -60,6 +60,67 @@ class CheckupCourseEvidence {
       );
 }
 
+class CheckupEvidenceTrace {
+  final String relationId;
+  final String indicatorId;
+  final String evidenceRole;
+  final String locationId;
+  final String sourceLevel;
+  final String excerpt;
+  final double? confidence;
+  final String reviewStatus;
+  final int lecture;
+  final int page;
+  final String section;
+  final String courseText;
+
+  const CheckupEvidenceTrace({
+    required this.relationId,
+    required this.indicatorId,
+    required this.evidenceRole,
+    required this.locationId,
+    required this.sourceLevel,
+    required this.excerpt,
+    required this.confidence,
+    required this.reviewStatus,
+    required this.lecture,
+    required this.page,
+    required this.section,
+    required this.courseText,
+  });
+
+  factory CheckupEvidenceTrace.fromDatabase(Map<String, Object?> row) =>
+      CheckupEvidenceTrace(
+        relationId: (row['relation_id'] ?? '').toString(),
+        indicatorId: (row['indicator_id'] ?? '').toString(),
+        evidenceRole: (row['evidence_role'] ?? '').toString(),
+        locationId: (row['location_id'] ?? '').toString(),
+        sourceLevel: (row['source_level'] ?? '').toString(),
+        excerpt: (row['excerpt'] ?? '').toString(),
+        confidence: (row['confidence'] as num?)?.toDouble(),
+        reviewStatus: (row['review_status'] ?? '').toString(),
+        lecture: (row['lecture_no'] as num?)?.toInt() ?? 0,
+        page: (row['page_no'] as num?)?.toInt() ?? 0,
+        section: (row['section'] ?? '').toString(),
+        courseText: (row['course_text'] ?? '').toString(),
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'relation_id': relationId,
+        'indicator_id': indicatorId,
+        'evidence_role': evidenceRole,
+        'location_id': locationId,
+        'source_level': sourceLevel,
+        'excerpt': excerpt,
+        'confidence': confidence,
+        'review_status': reviewStatus,
+        'lecture': lecture,
+        'page': page,
+        'section': section,
+        'course_text': courseText,
+      };
+}
+
 class MentalHealthCheckupRepository {
   static const int _schemaVersion = 4;
   static const String _legacyStateKey = 'mental_health_checkup.state.v25';
@@ -766,6 +827,7 @@ class MentalHealthCheckupRepository {
     required int currentIndex,
     required List<CheckupAnswer> answers,
     List<String> questionIds = const <String>[],
+    CheckupAssessmentPlan assessmentPlan = const CheckupAssessmentPlan(),
   }) async {
     final payload = <String, Object?>{
       'session_id': sessionId,
@@ -776,6 +838,7 @@ class MentalHealthCheckupRepository {
       'current_index': currentIndex,
       'question_ids': questionIds,
       'answers': answers.map((answer) => answer.toJson()).toList(growable: false),
+      'assessment_plan': assessmentPlan.toJson(),
     };
     final db = await AppDatabase.instance();
     await _ensureSchema(db);
@@ -915,6 +978,38 @@ class MentalHealthCheckupRepository {
       if (row.locationId == locationId) return row;
     }
     return null;
+  }
+
+  Future<List<CheckupEvidenceTrace>> evidenceTracesForIndicators(
+    Iterable<String> indicatorIds, {
+    int limit = 48,
+  }) async {
+    final ids = indicatorIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .take(40)
+        .toList(growable: false);
+    if (ids.isEmpty) return const <CheckupEvidenceTrace>[];
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final placeholders = List<String>.filled(ids.length, '?').join(',');
+    final rows = await db.rawQuery(
+      '''
+      SELECT e.*, c.lecture_no, c.page_no, c.section,
+             c.content AS course_text
+      FROM mh_indicator_evidence e
+      JOIN mh_course_locations c ON c.location_id = e.location_id
+      WHERE e.indicator_id IN ($placeholders)
+      ORDER BY e.indicator_id, e.evidence_role,
+               COALESCE(e.confidence, 0) DESC, c.lecture_position
+      LIMIT ?
+      ''',
+      <Object?>[...ids, limit.clamp(1, 120).toInt()],
+    );
+    return rows
+        .map(CheckupEvidenceTrace.fromDatabase)
+        .toList(growable: false);
   }
 
   Future<bool> exportEncryptedBackup({

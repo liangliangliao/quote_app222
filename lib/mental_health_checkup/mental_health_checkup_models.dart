@@ -72,6 +72,80 @@ class CheckupModeSpec {
   });
 }
 
+class CheckupAssessmentPlan {
+  final int timeBudgetMinutes;
+  final int questionLimit;
+  final bool includeUncoveredCheck;
+  final bool wantsCourseAction;
+  final bool useLongitudinalPrioritization;
+
+  const CheckupAssessmentPlan({
+    this.timeBudgetMinutes = 20,
+    this.questionLimit = 55,
+    this.includeUncoveredCheck = true,
+    this.wantsCourseAction = true,
+    this.useLongitudinalPrioritization = true,
+  });
+
+  factory CheckupAssessmentPlan.forMode(
+    CheckupModeSpec mode,
+    MentalHealthCheckupSettings settings,
+  ) =>
+      CheckupAssessmentPlan(
+        timeBudgetMinutes: settings.assessmentTimeBudgetMinutes,
+        questionLimit: settings.preferredQuestionLimit
+            .clamp(mode.baseQuestionCount, mode.maxQuestionCount)
+            .toInt(),
+        includeUncoveredCheck: settings.includeUncoveredCheck,
+        wantsCourseAction: settings.wantsCourseAction,
+        useLongitudinalPrioritization:
+            settings.useLongitudinalPrioritization,
+      );
+
+  CheckupAssessmentPlan copyWith({
+    int? timeBudgetMinutes,
+    int? questionLimit,
+    bool? includeUncoveredCheck,
+    bool? wantsCourseAction,
+    bool? useLongitudinalPrioritization,
+  }) =>
+      CheckupAssessmentPlan(
+        timeBudgetMinutes: (timeBudgetMinutes ?? this.timeBudgetMinutes)
+            .clamp(1, 120)
+            .toInt(),
+        questionLimit:
+            (questionLimit ?? this.questionLimit).clamp(1, 120).toInt(),
+        includeUncoveredCheck:
+            includeUncoveredCheck ?? this.includeUncoveredCheck,
+        wantsCourseAction: wantsCourseAction ?? this.wantsCourseAction,
+        useLongitudinalPrioritization: useLongitudinalPrioritization ??
+            this.useLongitudinalPrioritization,
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'time_budget_minutes': timeBudgetMinutes,
+        'question_limit': questionLimit,
+        'include_uncovered_check': includeUncoveredCheck,
+        'wants_course_action': wantsCourseAction,
+        'use_longitudinal_prioritization': useLongitudinalPrioritization,
+      };
+
+  factory CheckupAssessmentPlan.fromJson(Map<String, dynamic> json) =>
+      CheckupAssessmentPlan(
+        timeBudgetMinutes:
+            ((json['time_budget_minutes'] as num?)?.toInt() ?? 20)
+                .clamp(1, 120)
+                .toInt(),
+        questionLimit: ((json['question_limit'] as num?)?.toInt() ?? 55)
+            .clamp(1, 120)
+            .toInt(),
+        includeUncoveredCheck: json['include_uncovered_check'] != false,
+        wantsCourseAction: json['wants_course_action'] != false,
+        useLongitudinalPrioritization:
+            json['use_longitudinal_prioritization'] != false,
+      );
+}
+
 class CheckupIndicator {
   final String id;
   final int lecture;
@@ -522,6 +596,7 @@ class CheckupSession {
   final int completedAtMs;
   final List<CheckupAnswer> answers;
   final CheckupReport report;
+  final CheckupAssessmentPlan assessmentPlan;
 
   const CheckupSession({
     required this.id,
@@ -531,6 +606,7 @@ class CheckupSession {
     required this.completedAtMs,
     required this.answers,
     required this.report,
+    this.assessmentPlan = const CheckupAssessmentPlan(),
   });
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -541,6 +617,7 @@ class CheckupSession {
         'completed_at_ms': completedAtMs,
         'answers': answers.map((e) => e.toJson()).toList(growable: false),
         'report': report.toJson(),
+        'assessment_plan': assessmentPlan.toJson(),
       };
 
   factory CheckupSession.fromJson(Map<String, dynamic> json) => CheckupSession(
@@ -556,6 +633,11 @@ class CheckupSession {
             .toList(growable: false),
         report: CheckupReport.fromJson(
             Map<String, dynamic>.from(json['report'] as Map? ?? const {})),
+        assessmentPlan: CheckupAssessmentPlan.fromJson(
+          Map<String, dynamic>.from(
+            json['assessment_plan'] as Map? ?? const <String, dynamic>{},
+          ),
+        ),
       );
 }
 
@@ -767,6 +849,11 @@ class MentalHealthCheckupSettings {
   final bool secureScreen;
   final String emergencyNumber;
   final String crisisNumber;
+  final int assessmentTimeBudgetMinutes;
+  final int preferredQuestionLimit;
+  final bool includeUncoveredCheck;
+  final bool wantsCourseAction;
+  final bool useLongitudinalPrioritization;
 
   const MentalHealthCheckupSettings({
     this.remindersEnabled = false,
@@ -778,6 +865,11 @@ class MentalHealthCheckupSettings {
     this.secureScreen = false,
     this.emergencyNumber = '',
     this.crisisNumber = '',
+    this.assessmentTimeBudgetMinutes = 20,
+    this.preferredQuestionLimit = 55,
+    this.includeUncoveredCheck = true,
+    this.wantsCourseAction = true,
+    this.useLongitudinalPrioritization = true,
   });
 
   MentalHealthCheckupSettings copyWith({
@@ -790,6 +882,11 @@ class MentalHealthCheckupSettings {
     bool? secureScreen,
     String? emergencyNumber,
     String? crisisNumber,
+    int? assessmentTimeBudgetMinutes,
+    int? preferredQuestionLimit,
+    bool? includeUncoveredCheck,
+    bool? wantsCourseAction,
+    bool? useLongitudinalPrioritization,
   }) =>
       MentalHealthCheckupSettings(
         remindersEnabled: remindersEnabled ?? this.remindersEnabled,
@@ -801,6 +898,19 @@ class MentalHealthCheckupSettings {
         secureScreen: secureScreen ?? this.secureScreen,
         emergencyNumber: emergencyNumber ?? this.emergencyNumber,
         crisisNumber: crisisNumber ?? this.crisisNumber,
+        assessmentTimeBudgetMinutes:
+            (assessmentTimeBudgetMinutes ?? this.assessmentTimeBudgetMinutes)
+                .clamp(1, 120)
+                .toInt(),
+        preferredQuestionLimit:
+            (preferredQuestionLimit ?? this.preferredQuestionLimit)
+                .clamp(5, 120)
+                .toInt(),
+        includeUncoveredCheck:
+            includeUncoveredCheck ?? this.includeUncoveredCheck,
+        wantsCourseAction: wantsCourseAction ?? this.wantsCourseAction,
+        useLongitudinalPrioritization: useLongitudinalPrioritization ??
+            this.useLongitudinalPrioritization,
       );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -813,6 +923,11 @@ class MentalHealthCheckupSettings {
         'secure_screen': secureScreen,
         'emergency_number': emergencyNumber,
         'crisis_number': crisisNumber,
+        'assessment_time_budget_minutes': assessmentTimeBudgetMinutes,
+        'preferred_question_limit': preferredQuestionLimit,
+        'include_uncovered_check': includeUncoveredCheck,
+        'wants_course_action': wantsCourseAction,
+        'use_longitudinal_prioritization': useLongitudinalPrioritization,
       };
 
   factory MentalHealthCheckupSettings.fromJson(Map<String, dynamic> json) =>
@@ -835,6 +950,18 @@ class MentalHealthCheckupSettings {
         secureScreen: json['secure_screen'] == true,
         emergencyNumber: (json['emergency_number'] ?? '').toString(),
         crisisNumber: (json['crisis_number'] ?? '').toString(),
+        assessmentTimeBudgetMinutes:
+            ((json['assessment_time_budget_minutes'] as num?)?.toInt() ?? 20)
+                .clamp(1, 120)
+                .toInt(),
+        preferredQuestionLimit:
+            ((json['preferred_question_limit'] as num?)?.toInt() ?? 55)
+                .clamp(5, 120)
+                .toInt(),
+        includeUncoveredCheck: json['include_uncovered_check'] != false,
+        wantsCourseAction: json['wants_course_action'] != false,
+        useLongitudinalPrioritization:
+            json['use_longitudinal_prioritization'] != false,
       );
 }
 

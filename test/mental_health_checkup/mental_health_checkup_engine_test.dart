@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_backup.dart';
+import 'package:quote_app/mental_health_checkup/mental_health_checkup_ai_service.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_catalog.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_engine.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_models.dart';
@@ -21,6 +22,15 @@ void main() {
       expect(catalog.indicators, hasLength(345));
       expect(catalog.diagnosisPatterns, hasLength(14));
       expect(catalog.prescriptions, hasLength(23));
+      expect(catalog.clinicalTerms, hasLength(10));
+      expect(catalog.longitudinalCoverageRules, hasLength(7));
+      expect(catalog.branchAlertRules, hasLength(7));
+      expect(catalog.aiReportFields, hasLength(17));
+      expect(catalog.doseAndCourseRules, hasLength(6));
+      expect(catalog.prescriptionAdjustmentRules, hasLength(8));
+      expect(catalog.recoveryMaintenanceRules, hasLength(8));
+      expect(catalog.sourceBoundaryRules, hasLength(6));
+      expect(catalog.seedFieldMappings, hasLength(5));
     });
 
     test('keeps D1 and D2 supplemental coverage separate', () async {
@@ -100,6 +110,70 @@ void main() {
       );
       expect(first.take(4).every((item) => item.isSafety), isTrue);
     });
+
+    test('assessment plan enforces question limit and uncovered-check choice',
+        () async {
+      final catalog = await MentalHealthCheckupCatalog.load();
+      const plan = CheckupAssessmentPlan(
+        timeBudgetMinutes: 15,
+        questionLimit: 30,
+        includeUncoveredCheck: false,
+      );
+      final questions = catalog.questionsForMode(
+        'focused',
+        focusDomainId: 'D1',
+        assessmentPlan: plan,
+        now: DateTime(2026, 7, 23),
+      );
+
+      expect(questions, hasLength(30));
+      expect(questions.any((question) => question.id == 'B20-Q1'), isFalse);
+      expect(questions.take(4).every((question) => question.isSafety), isTrue);
+    });
+
+    test('longitudinal selection prioritizes a previously high-risk indicator',
+        () async {
+      final catalog = await MentalHealthCheckupCatalog.load();
+      final anchors =
+          catalog.b20Questions.map((question) => question.indicatorId).toSet();
+      final target = catalog.indicators.firstWhere(
+        (indicator) =>
+            indicator.lecture == 4 &&
+            indicator.type == '风险型' &&
+            !anchors.contains(indicator.id),
+      );
+      final history = CheckupSession(
+        id: 'history',
+        modeId: 'focused',
+        modeName: '聚焦深入版',
+        startedAtMs: DateTime(2026, 5).millisecondsSinceEpoch,
+        completedAtMs: DateTime(2026, 5, 1).millisecondsSinceEpoch,
+        answers: <CheckupAnswer>[
+          _answer('IND-${target.id}', 4),
+        ],
+        report: _report(
+          MentalHealthCheckupEngine(_catalog()),
+          'history-report',
+          risk: 4,
+        ),
+      );
+      const plan = CheckupAssessmentPlan(
+        questionLimit: 70,
+        useLongitudinalPrioritization: true,
+      );
+      final questions = catalog.questionsForMode(
+        'focused',
+        focusDomainId: 'D1',
+        assessmentPlan: plan,
+        history: <CheckupSession>[history],
+        now: DateTime(2026, 7, 23),
+      );
+      final prioritized = questions.firstWhere(
+        (question) => question.id.startsWith('IND-'),
+      );
+
+      expect(prioritized.indicatorId, target.id);
+    });
   });
 
   group('safety-first report engine', () {
@@ -164,6 +238,26 @@ void main() {
       expect(report.prescriptions.length, lessThanOrEqualTo(1));
       expect(report.prescriptions.single.prescriptionId, 'RX-L04');
       expect(report.sourceBoundaries.join(), contains('不是医学疾病诊断'));
+    });
+
+    test('user can request assessment-only output without a course action', () {
+      final report = engine.buildReport(
+        sessionId: 'assessment-only',
+        modeId: 'b20',
+        questions: questions,
+        answers: <CheckupAnswer>[
+          _answer('B20-S1', 0),
+          _answer('B20-F1', 1),
+          _answer('D1-RISK', 4),
+        ],
+        assessmentPlan: const CheckupAssessmentPlan(
+          wantsCourseAction: false,
+        ),
+      );
+
+      expect(report.diagnoses, isNotEmpty);
+      expect(report.prescriptions, isEmpty);
+      expect(report.surfaceFindings.join(), contains('只评估'));
     });
 
     test('K/A/B report uses the documented 25/30/45 weighting', () {
@@ -380,6 +474,11 @@ void main() {
       completedAtMs: 2,
       answers: <CheckupAnswer>[_answer('B20-S1', 0)],
       report: report,
+      assessmentPlan: const CheckupAssessmentPlan(
+        timeBudgetMinutes: 10,
+        questionLimit: 26,
+        wantsCourseAction: false,
+      ),
     );
     final state = MentalHealthCheckupState(
       onboardingAccepted: true,
@@ -392,6 +491,48 @@ void main() {
     expect(decoded.sessions.single.report.id, report.id);
     expect(decoded.sessions.single.report.safetyStatus,
         CheckupSafetyStatus.clear);
+    expect(decoded.sessions.single.assessmentPlan.questionLimit, 26);
+    expect(decoded.sessions.single.assessmentPlan.wantsCourseAction, isFalse);
+  });
+
+  test('full AI context includes the closed loop and excludes local secrets',
+      () {
+    final catalog = _catalog();
+    final engine = MentalHealthCheckupEngine(catalog);
+    final report = _report(engine, 'ai-context', risk: 3);
+    final session = CheckupSession(
+      id: 'ai-session',
+      modeId: 'b20',
+      modeName: 'B20',
+      startedAtMs: 1,
+      completedAtMs: 2,
+      answers: <CheckupAnswer>[_answer('D1-RISK', 3)],
+      report: report,
+    );
+    final state = MentalHealthCheckupState(
+      installId: 'private-install-id',
+      settings: const MentalHealthCheckupSettings(
+        emergencyNumber: '911-secret',
+        crisisNumber: '988-secret',
+      ),
+      sessions: <CheckupSession>[session],
+    );
+    final context = MentalHealthCheckupAiService().buildReportContext(
+      report: report,
+      state: state,
+      catalog: catalog,
+      includeHistory: true,
+    );
+    final encoded = jsonEncode(context);
+
+    expect(context, contains('current_report'));
+    expect(context, contains('trend_insights'));
+    expect(context, contains('plans_and_execution'));
+    expect(context, contains('retests'));
+    expect(context, contains('governance'));
+    expect(encoded, isNot(contains('private-install-id')));
+    expect(encoded, isNot(contains('911-secret')));
+    expect(encoded, isNot(contains('988-secret')));
   });
 
   test('backup envelope validates hash and preserves the current install id',

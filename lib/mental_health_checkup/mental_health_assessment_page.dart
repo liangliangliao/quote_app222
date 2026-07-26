@@ -11,12 +11,16 @@ class MentalHealthAssessmentPage extends StatefulWidget {
   final MentalHealthCheckupRepository repository;
   final String? focusDomainId;
   final Map<String, dynamic>? draft;
+  final CheckupAssessmentPlan assessmentPlan;
+  final List<CheckupSession> history;
 
   const MentalHealthAssessmentPage({
     super.key,
     required this.catalog,
     required this.mode,
     required this.repository,
+    required this.assessmentPlan,
+    this.history = const <CheckupSession>[],
     this.focusDomainId,
     this.draft,
   });
@@ -53,6 +57,8 @@ class _MentalHealthAssessmentPageState
       widget.mode.id,
       focusDomainId: widget.focusDomainId,
       now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+      assessmentPlan: widget.assessmentPlan,
+      history: widget.history,
     );
     if (draft != null && draft['answers'] is List) {
       for (final value in (draft['answers'] as List).whereType<Map>()) {
@@ -68,6 +74,9 @@ class _MentalHealthAssessmentPageState
         _questions,
         sessionId: _sessionId,
         storedQuestionIds: storedQuestionIds,
+        preservePriorityOrder:
+            widget.assessmentPlan.useLongitudinalPrioritization &&
+                widget.history.isNotEmpty,
       );
       _index = ((draft['current_index'] as num?)?.toInt() ?? 0)
           .clamp(0, _questions.isEmpty ? 0 : _questions.length - 1)
@@ -76,6 +85,9 @@ class _MentalHealthAssessmentPageState
       _questions = widget.catalog.restoreQuestionOrder(
         _questions,
         sessionId: _sessionId,
+        preservePriorityOrder:
+            widget.assessmentPlan.useLongitudinalPrioritization &&
+                widget.history.isNotEmpty,
       );
     }
     _questionShownAtMs = DateTime.now().millisecondsSinceEpoch;
@@ -98,6 +110,7 @@ class _MentalHealthAssessmentPageState
         answers: _answers.values.toList(growable: false),
         questionIds:
             _questions.map((question) => question.id).toList(growable: false),
+        assessmentPlan: widget.assessmentPlan,
       );
     } finally {
       _savingDraft = false;
@@ -134,8 +147,10 @@ class _MentalHealthAssessmentPageState
       answer: answer,
       existingQuestionIds: _questions.map((item) => item.id).toSet(),
       now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+      assessmentPlan: widget.assessmentPlan,
+      history: widget.history,
     );
-    final remaining = (widget.mode.maxQuestionCount - _questions.length)
+    final remaining = (widget.assessmentPlan.questionLimit - _questions.length)
         .clamp(0, 120)
         .toInt();
     setState(() {
@@ -226,6 +241,7 @@ class _MentalHealthAssessmentPageState
       modeId: widget.mode.id,
       questions: _questions,
       answers: answers,
+      assessmentPlan: widget.assessmentPlan,
     );
     final session = CheckupSession(
       id: _sessionId,
@@ -235,6 +251,7 @@ class _MentalHealthAssessmentPageState
       completedAtMs: DateTime.now().millisecondsSinceEpoch,
       answers: answers,
       report: report,
+      assessmentPlan: widget.assessmentPlan,
     );
     try {
       await widget.repository.saveCompletedSession(session);
@@ -269,8 +286,10 @@ class _MentalHealthAssessmentPageState
         answer: answer,
         existingQuestionIds: knownIds,
         now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+        assessmentPlan: widget.assessmentPlan,
+        history: widget.history,
       );
-      final remaining = (widget.mode.maxQuestionCount - _questions.length)
+      final remaining = (widget.assessmentPlan.questionLimit - _questions.length)
           .clamp(0, 120)
           .toInt();
       final accepted = additions.take(remaining).toList(growable: false);

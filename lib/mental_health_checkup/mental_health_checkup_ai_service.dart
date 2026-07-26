@@ -2,7 +2,10 @@ import 'dart:convert';
 
 import '../data/kv_dao.dart';
 import '../services/unified_ai_service.dart';
+import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_models.dart';
+import 'mental_health_checkup_repository.dart';
+import 'mental_health_checkup_trends.dart';
 
 class MentalHealthCheckupPromptConfig {
   static const String moduleId = 'mental_health_checkup';
@@ -31,7 +34,7 @@ class MentalHealthCheckupPromptConfig {
 ''';
 
   static const String defaultReportPrompt = r'''
-请根据 {{report_json}} 生成一份便于用户理解的课程型体检解释。严格使用以下结构：
+请根据 {{context_json}} 生成一份便于用户理解的课程型体检解释。上下文可能包含当前报告、历史趋势、行动执行、复验、课程证据图谱和治理规则；缺失字段必须明确说证据不足，不能自行补造。严格使用以下结构：
 
 【本轮能说明什么】说明模式、覆盖度、数据质量和结论强度。
 【先看安全与功能】准确复述安全状态和现实功能影响。
@@ -47,7 +50,7 @@ class MentalHealthCheckupPromptConfig {
 ''';
 
   static const String defaultRetestPrompt = r'''
-请根据 {{retest_json}} 解释本次复验。先复述规则引擎给出的 decision 和 reason，再解释分数变化、现实功能、执行率和过度化风险之间的关系。不得推翻规则引擎决策；不得因为完成率高就宣告恢复；结尾只给一个最小下一步。
+请根据 {{context_json}} 解释本次复验。上下文可能包含基线、当前复验、历史复验、执行记录、课程证据与治理边界。先复述规则引擎给出的 decision 和 reason，再解释分数变化、现实功能、执行率和过度化风险之间的关系。不得推翻规则引擎决策；不得因为完成率高就宣告恢复；结尾只给一个最小下一步。
 ''';
 
   final KeyValueDao _kv;
@@ -82,14 +85,28 @@ class MentalHealthCheckupPromptConfig {
   Future<void> resetPrompt(String id) =>
       _kv.setString(_key(id), defaultFor(id));
 
-  Future<String> buildReportPrompt(CheckupReport report) async {
+  Future<String> buildReportPrompt(
+    CheckupReport report, {
+    Map<String, Object?>? context,
+  }) async {
     final template = await getPrompt(reportId);
-    return template.replaceAll('{{report_json}}', jsonEncode(report.toJson()));
+    final reportJson = jsonEncode(report.toJson());
+    final contextJson = jsonEncode(context ?? report.toJson());
+    return template
+        .replaceAll('{{context_json}}', contextJson)
+        .replaceAll('{{report_json}}', reportJson);
   }
 
-  Future<String> buildRetestPrompt(CheckupRetestRecord retest) async {
+  Future<String> buildRetestPrompt(
+    CheckupRetestRecord retest, {
+    Map<String, Object?>? context,
+  }) async {
     final template = await getPrompt(retestId);
-    return template.replaceAll('{{retest_json}}', jsonEncode(retest.toJson()));
+    final retestJson = jsonEncode(retest.toJson());
+    final contextJson = jsonEncode(context ?? retest.toJson());
+    return template
+        .replaceAll('{{context_json}}', contextJson)
+        .replaceAll('{{retest_json}}', retestJson);
   }
 }
 
@@ -113,15 +130,164 @@ class MentalHealthCheckupAiService {
   })  : _ai = ai ?? UnifiedAiService(),
         prompts = promptConfig ?? MentalHealthCheckupPromptConfig();
 
+  Map<String, Object?> buildReportContext({
+    required CheckupReport report,
+    required MentalHealthCheckupState state,
+    required MentalHealthCheckupCatalog catalog,
+    List<CheckupEvidenceTrace> evidenceTraces =
+        const <CheckupEvidenceTrace>[],
+    bool includeHistory = true,
+  }) {
+    CheckupSession? sourceSession;
+    for (final session in state.sessions) {
+      if (session.report.id == report.id || session.id == report.sessionId) {
+        sourceSession = session;
+        break;
+      }
+    }
+    final trends = includeHistory
+        ? const MentalHealthCheckupTrendAnalyzer().analyze(state.sessions)
+        : const <CheckupTrendInsight>[];
+    return <String, Object?>{
+      'context_version': '2.5-full-evidence-v1',
+      'history_included': includeHistory,
+      'current_report': report.toJson(),
+      'current_assessment_plan': sourceSession?.assessmentPlan.toJson(),
+      'current_answer_summary': sourceSession == null
+          ? const <Object?>[]
+          : sourceSession.answers
+              .map(
+                (answer) => <String, Object?>{
+                  'question_id': answer.questionId,
+                  'selected_label': answer.label,
+                  'value': answer.value,
+                  'response_duration_ms': answer.responseDurationMs,
+                },
+              )
+              .toList(growable: false),
+      'historical_reports': includeHistory
+          ? state.sessions
+              .where((session) => session.report.id != report.id)
+              .take(8)
+              .map(
+                (session) => <String, Object?>{
+                  'mode_id': session.modeId,
+                  'completed_at_ms': session.completedAtMs,
+                  'assessment_plan': session.assessmentPlan.toJson(),
+                  'report': session.report.toJson(),
+                },
+              )
+              .toList(growable: false)
+          : const <Object?>[],
+      'trend_insights': trends
+          .map(
+            (item) => <String, Object?>{
+              'severity': item.severity.name,
+              'title': item.title,
+              'message': item.message,
+            },
+          )
+          .toList(growable: false),
+      'course_evidence_graph': evidenceTraces
+          .map((trace) => trace.toJson())
+          .toList(growable: false),
+      'course_evidence_locations': report.courseEvidence,
+      'plans_and_execution': includeHistory
+          ? state.plans
+              .take(5)
+              .map((plan) => plan.toJson())
+              .toList(growable: false)
+          : const <Object?>[],
+      'retests': includeHistory
+          ? state.retests
+              .take(10)
+              .map((retest) => retest.toJson())
+              .toList(growable: false)
+          : const <Object?>[],
+      'governance': catalog.governanceContext(),
+      'privacy_exclusions': const <String>[
+        'install_id',
+        '当地危机支持号码',
+        '当地紧急服务号码',
+        '开放题原文',
+      ],
+    };
+  }
+
+  Map<String, Object?> buildRetestContext({
+    required CheckupRetestRecord retest,
+    required MentalHealthCheckupState state,
+    required MentalHealthCheckupCatalog catalog,
+    List<CheckupEvidenceTrace> evidenceTraces =
+        const <CheckupEvidenceTrace>[],
+    bool includeHistory = true,
+  }) {
+    CheckupReport? reportById(String id) {
+      for (final session in state.sessions) {
+        if (session.report.id == id) return session.report;
+      }
+      return null;
+    }
+
+    CheckupPrescriptionPlan? plan;
+    for (final candidate in state.plans) {
+      if (candidate.id == retest.planId) {
+        plan = candidate;
+        break;
+      }
+    }
+    return <String, Object?>{
+      'context_version': '2.5-full-evidence-v1',
+      'history_included': includeHistory,
+      'current_retest': retest.toJson(),
+      'baseline_report': reportById(retest.baselineReportId)?.toJson(),
+      'retest_report': reportById(retest.retestReportId)?.toJson(),
+      'current_plan_and_execution': plan?.toJson(),
+      'prior_retests': includeHistory
+          ? state.retests
+              .where((item) =>
+                  item.planId == retest.planId && item.id != retest.id)
+              .take(8)
+              .map((item) => item.toJson())
+              .toList(growable: false)
+          : const <Object?>[],
+      'course_evidence_graph': evidenceTraces
+          .map((trace) => trace.toJson())
+          .toList(growable: false),
+      'governance': catalog.governanceContext(),
+      'privacy_exclusions': const <String>[
+        'install_id',
+        '当地危机支持号码',
+        '当地紧急服务号码',
+        '开放题原文',
+      ],
+    };
+  }
+
   Future<MentalHealthCheckupAiResult> explainReport(
     CheckupReport report, {
     required String fallback,
+    MentalHealthCheckupState state = const MentalHealthCheckupState(),
+    MentalHealthCheckupCatalog? catalog,
+    List<CheckupEvidenceTrace> evidenceTraces =
+        const <CheckupEvidenceTrace>[],
+    bool includeHistory = false,
   }) async {
     if (!report.safetyClear) {
       return MentalHealthCheckupAiResult(text: fallback, usedAi: false);
     }
     try {
-      final prompt = await prompts.buildReportPrompt(report);
+      final context = catalog == null
+          ? <String, Object?>{'current_report': report.toJson()}
+          : buildReportContext(
+              report: report,
+              state: state,
+              catalog: catalog,
+              evidenceTraces: evidenceTraces,
+              includeHistory: includeHistory,
+            );
+      final prompt =
+          await prompts.buildReportPrompt(report, context: context);
       final systemPrompt = await prompts.getPrompt(
         MentalHealthCheckupPromptConfig.globalId,
       );
@@ -146,9 +312,24 @@ class MentalHealthCheckupAiService {
   Future<MentalHealthCheckupAiResult> explainRetest(
     CheckupRetestRecord retest, {
     required String fallback,
+    MentalHealthCheckupState state = const MentalHealthCheckupState(),
+    MentalHealthCheckupCatalog? catalog,
+    List<CheckupEvidenceTrace> evidenceTraces =
+        const <CheckupEvidenceTrace>[],
+    bool includeHistory = false,
   }) async {
     try {
-      final prompt = await prompts.buildRetestPrompt(retest);
+      final context = catalog == null
+          ? <String, Object?>{'current_retest': retest.toJson()}
+          : buildRetestContext(
+              retest: retest,
+              state: state,
+              catalog: catalog,
+              evidenceTraces: evidenceTraces,
+              includeHistory: includeHistory,
+            );
+      final prompt =
+          await prompts.buildRetestPrompt(retest, context: context);
       final systemPrompt = await prompts.getPrompt(
         MentalHealthCheckupPromptConfig.globalId,
       );

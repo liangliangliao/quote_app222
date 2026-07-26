@@ -33,6 +33,7 @@ class MentalHealthCheckupEngine {
     required String modeId,
     required List<CheckupQuestion> questions,
     required List<CheckupAnswer> answers,
+    CheckupAssessmentPlan assessmentPlan = const CheckupAssessmentPlan(),
   }) {
     final now = DateTime.now();
     final answerById = <String, CheckupAnswer>{
@@ -70,7 +71,8 @@ class MentalHealthCheckupEngine {
             dataQuality: dataQuality,
           )
         : const <CheckupDiagnosisResult>[];
-    final recommendations = safety == CheckupSafetyStatus.clear
+    final recommendations =
+        safety == CheckupSafetyStatus.clear && assessmentPlan.wantsCourseAction
         ? _recommendPrescriptions(
             diagnoses: diagnoses,
             domains: domainResults,
@@ -87,6 +89,7 @@ class MentalHealthCheckupEngine {
       uncoveredConcern: uncoveredConcern,
       answerById: answerById,
       kab: kab,
+      wantsCourseAction: assessmentPlan.wantsCourseAction,
     );
     final courseEvidenceSet = <String>{
       for (final question in questions)
@@ -133,13 +136,7 @@ class MentalHealthCheckupEngine {
       prescriptions: recommendations,
       surfaceFindings: findings,
       courseEvidence: courseEvidence,
-      sourceBoundaries: const <String>[
-        'C1：课程直接内容；可直接支持定义、机制或行动。',
-        'C2：课程机制推导；用于候选解释，仍需现实证据验证。',
-        'D1：题量、量尺、阈值、剂量和复验期限等产品参数。',
-        'D2：安全与功能分流；不进入“课程幸福总分”。',
-        '本报告是课程型评估，不是医学疾病诊断、药物处方或治愈承诺。',
-      ],
+      sourceBoundaries: catalog.sourceBoundaryStatements(),
       nextRetestAtMs: recommendations.isEmpty
           ? null
           : now.add(const Duration(days: 7)).millisecondsSinceEpoch,
@@ -615,6 +612,7 @@ class MentalHealthCheckupEngine {
     required bool uncoveredConcern,
     required Map<String, CheckupAnswer> answerById,
     required _KabScores kab,
+    required bool wantsCourseAction,
   }) {
     if (safety == CheckupSafetyStatus.alert) {
       return const <String>[
@@ -656,6 +654,9 @@ class MentalHealthCheckupEngine {
     }
     if (dataQuality < 60) findings.add('回答证据质量或覆盖度有限：以下机制只能视为待验证候选。');
     if (uncoveredConcern) findings.add('你报告了未被题目覆盖的重要变化，应在后续聚焦评估或专业评估中补充。');
+    if (!wantsCourseAction) {
+      findings.add('你选择本轮只评估、不启动课程行动；报告保留结论，但不生成课程处方。');
+    }
     if (findings.isEmpty) findings.add('当前未发现已覆盖领域的明显偏离，仍建议通过纵向复验观察稳定性。');
     return findings;
   }

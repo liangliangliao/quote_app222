@@ -6,6 +6,16 @@ import 'package:flutter/services.dart';
 
 import 'mental_health_checkup_models.dart';
 
+class CheckupReferenceRule {
+  final Map<String, String> fields;
+
+  const CheckupReferenceRule(this.fields);
+
+  String value(String key) => fields[key] ?? '';
+
+  Map<String, String> toJson() => Map<String, String>.from(fields);
+}
+
 class CheckupSeedValidationResult {
   final bool valid;
   final String version;
@@ -62,6 +72,15 @@ class MentalHealthCheckupCatalog {
   final List<CheckupIndicator> indicators;
   final List<CheckupDiagnosisPattern> diagnosisPatterns;
   final List<CheckupPrescription> prescriptions;
+  final List<CheckupReferenceRule> clinicalTerms;
+  final List<CheckupReferenceRule> longitudinalCoverageRules;
+  final List<CheckupReferenceRule> branchAlertRules;
+  final List<CheckupReferenceRule> aiReportFields;
+  final List<CheckupReferenceRule> doseAndCourseRules;
+  final List<CheckupReferenceRule> prescriptionAdjustmentRules;
+  final List<CheckupReferenceRule> recoveryMaintenanceRules;
+  final List<CheckupReferenceRule> sourceBoundaryRules;
+  final Map<String, Map<String, String>> seedFieldMappings;
   final CheckupSeedValidationResult validation;
 
   const MentalHealthCheckupCatalog({
@@ -70,6 +89,15 @@ class MentalHealthCheckupCatalog {
     required this.indicators,
     required this.diagnosisPatterns,
     required this.prescriptions,
+    this.clinicalTerms = const <CheckupReferenceRule>[],
+    this.longitudinalCoverageRules = const <CheckupReferenceRule>[],
+    this.branchAlertRules = const <CheckupReferenceRule>[],
+    this.aiReportFields = const <CheckupReferenceRule>[],
+    this.doseAndCourseRules = const <CheckupReferenceRule>[],
+    this.prescriptionAdjustmentRules = const <CheckupReferenceRule>[],
+    this.recoveryMaintenanceRules = const <CheckupReferenceRule>[],
+    this.sourceBoundaryRules = const <CheckupReferenceRule>[],
+    this.seedFieldMappings = const <String, Map<String, String>>{},
     required this.validation,
   });
 
@@ -85,6 +113,15 @@ class MentalHealthCheckupCatalog {
       rootBundle.loadString('$assetRoot/indicators.json'),
       rootBundle.loadString('$assetRoot/diagnosis_patterns.json'),
       rootBundle.loadString('$assetRoot/course_prescriptions.json'),
+      rootBundle.loadString('$assetRoot/course_clinical_terms.json'),
+      rootBundle.loadString('$assetRoot/longitudinal_coverage_rules.json'),
+      rootBundle.loadString('$assetRoot/branch_alert_rules.json'),
+      rootBundle.loadString('$assetRoot/ai_report_fields.json'),
+      rootBundle.loadString('$assetRoot/dose_and_course_rules.json'),
+      rootBundle.loadString('$assetRoot/prescription_adjustment_rules.json'),
+      rootBundle.loadString('$assetRoot/recovery_maintenance_rules.json'),
+      rootBundle.loadString('$assetRoot/source_boundaries.json'),
+      rootBundle.loadString('$assetRoot/seed_field_mappings.json'),
     ]);
 
     final modeRows = _mapList(jsonDecode(values[0]));
@@ -109,9 +146,70 @@ class MentalHealthCheckupCatalog {
       prescriptions: prescriptionRows
           .map(_prescriptionFromJson)
           .toList(growable: false),
+      clinicalTerms: _ruleList(jsonDecode(values[5])),
+      longitudinalCoverageRules: _ruleList(jsonDecode(values[6])),
+      branchAlertRules: _ruleList(jsonDecode(values[7])),
+      aiReportFields: _ruleList(jsonDecode(values[8])),
+      doseAndCourseRules: _ruleList(jsonDecode(values[9])),
+      prescriptionAdjustmentRules: _ruleList(jsonDecode(values[10])),
+      recoveryMaintenanceRules: _ruleList(jsonDecode(values[11])),
+      sourceBoundaryRules: _ruleList(jsonDecode(values[12])),
+      seedFieldMappings: _fieldMappings(jsonDecode(values[13])),
       validation: validation,
     );
   }
+
+  List<String> sourceBoundaryStatements() {
+    if (sourceBoundaryRules.isEmpty) {
+      return const <String>[
+        'C1：课程直接内容；可直接支持定义、机制或行动。',
+        'C2：课程机制推导；用于候选解释，仍需现实证据验证。',
+        'D1：题量、量尺、阈值、剂量和复验期限等产品参数。',
+        'D2：安全与功能分流；不进入“课程幸福总分”。',
+        '本报告是课程型评估，不是医学疾病诊断、药物处方或治愈承诺。',
+      ];
+    }
+    final values = sourceBoundaryRules.map((rule) {
+      final level = rule.value('等级');
+      final meaning = rule.value('含义');
+      final use = rule.value('在V2.2中的用途');
+      return '$level：$meaning；$use。';
+    }).toList(growable: true);
+    for (final rule in clinicalTerms) {
+      if (rule.value('术语') != '课程型诊断') continue;
+      final clinical =
+          '${rule.value('术语')}不代表${rule.value('不代表什么')}。';
+      if (clinical.isNotEmpty) values.add(clinical);
+      break;
+    }
+    return values;
+  }
+
+  Map<String, Object?> governanceContext() => <String, Object?>{
+        'clinical_terms':
+            clinicalTerms.map((rule) => rule.toJson()).toList(growable: false),
+        'longitudinal_coverage_rules': longitudinalCoverageRules
+            .map((rule) => rule.toJson())
+            .toList(growable: false),
+        'branch_alert_rules': branchAlertRules
+            .map((rule) => rule.toJson())
+            .toList(growable: false),
+        'ai_report_fields':
+            aiReportFields.map((rule) => rule.toJson()).toList(growable: false),
+        'dose_and_course_rules': doseAndCourseRules
+            .map((rule) => rule.toJson())
+            .toList(growable: false),
+        'prescription_adjustment_rules': prescriptionAdjustmentRules
+            .map((rule) => rule.toJson())
+            .toList(growable: false),
+        'recovery_maintenance_rules': recoveryMaintenanceRules
+            .map((rule) => rule.toJson())
+            .toList(growable: false),
+        'source_boundaries': sourceBoundaryRules
+            .map((rule) => rule.toJson())
+            .toList(growable: false),
+        'seed_field_mappings': seedFieldMappings,
+      };
 
   static Future<CheckupSeedValidationResult> validateSeeds() async {
     final errors = <String>[];
@@ -209,6 +307,8 @@ class MentalHealthCheckupCatalog {
     String modeId, {
     String? focusDomainId,
     DateTime? now,
+    CheckupAssessmentPlan? assessmentPlan,
+    List<CheckupSession> history = const <CheckupSession>[],
   }) {
     final clock = now ?? DateTime.now();
     final byId = <String, CheckupQuestion>{
@@ -218,25 +318,37 @@ class MentalHealthCheckupCatalog {
         .map((id) => byId[id])
         .whereType<CheckupQuestion>()
         .toList(growable: false);
+    List<CheckupQuestion> finish(List<CheckupQuestion> questions) {
+      final filtered = assessmentPlan?.includeUncoveredCheck == false
+          ? questions
+              .where((question) => !question.isOpenCheck)
+              .toList(growable: false)
+          : questions;
+      final mode = modeById(modeId);
+      final limit = (assessmentPlan?.questionLimit ?? mode.maxQuestionCount)
+          .clamp(1, mode.maxQuestionCount)
+          .toInt();
+      return filtered.take(limit).toList(growable: false);
+    }
 
     switch (modeId) {
       case 'safety':
-        return pick(const <String>[
+        return finish(pick(const <String>[
           'B20-S1',
           'B20-S2',
           'B20-S3',
           'B20-S4',
           'B20-F1',
-        ]);
+        ]));
       case 'daily':
         final start = clock.difference(DateTime(2025)).inDays.abs() % 8;
         final domainIds = List<String>.generate(
           4,
           (index) => 'B20-D${(start + index) % 8 + 1}',
         );
-        return pick(<String>['B20-S1', 'B20-F1', ...domainIds]);
+        return finish(pick(<String>['B20-S1', 'B20-F1', ...domainIds]));
       case 'five_minute':
-        return pick(<String>[
+        return finish(pick(<String>[
           'B20-S1',
           'B20-S2',
           'B20-S3',
@@ -244,19 +356,25 @@ class MentalHealthCheckupCatalog {
           'B20-F1',
           'B20-F2',
           ...List<String>.generate(8, (index) => 'B20-D${index + 1}'),
-        ]);
+        ]));
       case 'standard':
-        return <CheckupQuestion>[
+        return finish(<CheckupQuestion>[
           ...b20Questions,
           for (final domainId in domainNames.keys)
-            ..._indicatorQuestions(domainId, 2, clock),
-        ];
+            ..._indicatorQuestions(
+              domainId,
+              2,
+              clock,
+              assessmentPlan: assessmentPlan,
+              history: history,
+            ),
+        ]);
       case 'focused':
         final domainId = domainNames.containsKey(focusDomainId)
             ? focusDomainId!
             : 'D1';
         final anchorId = 'B20-D${domainId.substring(1)}';
-        return <CheckupQuestion>[
+        return finish(<CheckupQuestion>[
           ...pick(const <String>[
             'B20-S1',
             'B20-S2',
@@ -272,17 +390,29 @@ class MentalHealthCheckupCatalog {
             'B20-Q1',
             'B20-Q2',
           ]),
-          ..._indicatorQuestions(domainId, 30, clock),
-        ];
+          ..._indicatorQuestions(
+            domainId,
+            30,
+            clock,
+            assessmentPlan: assessmentPlan,
+            history: history,
+          ),
+        ]);
       case 'comprehensive':
-        return <CheckupQuestion>[
+        return finish(<CheckupQuestion>[
           ...b20Questions,
           for (final domainId in domainNames.keys)
-            ..._indicatorQuestions(domainId, 5, clock),
-        ];
+            ..._indicatorQuestions(
+              domainId,
+              5,
+              clock,
+              assessmentPlan: assessmentPlan,
+              history: history,
+            ),
+        ]);
       case 'b20':
       default:
-        return List<CheckupQuestion>.unmodifiable(b20Questions);
+        return finish(List<CheckupQuestion>.unmodifiable(b20Questions));
     }
   }
 
@@ -292,6 +422,8 @@ class MentalHealthCheckupCatalog {
     required CheckupAnswer answer,
     required Set<String> existingQuestionIds,
     DateTime? now,
+    CheckupAssessmentPlan? assessmentPlan,
+    List<CheckupSession> history = const <CheckupSession>[],
   }) {
     if (modeId == 'safety' ||
         modeId == 'daily' ||
@@ -305,11 +437,25 @@ class MentalHealthCheckupCatalog {
     final domainMatch = RegExp(r'B20-D([1-8])').firstMatch(question.id);
     if (domainMatch != null && answer.value <= 2) {
       candidates.addAll(
-        _indicatorQuestions('D${domainMatch.group(1)}', 4, clock),
+        _indicatorQuestions(
+          'D${domainMatch.group(1)}',
+          4,
+          clock,
+          assessmentPlan: assessmentPlan,
+          history: history,
+        ),
       );
     }
     if (question.id == 'B20-C1' && answer.value >= 2) {
-      candidates.addAll(_indicatorQuestions('D3', 4, clock));
+      candidates.addAll(
+        _indicatorQuestions(
+          'D3',
+          4,
+          clock,
+          assessmentPlan: assessmentPlan,
+          history: history,
+        ),
+      );
     }
     if (question.isFunction && answer.value >= 2) {
       candidates.addAll(_functionBranchQuestions());
@@ -323,6 +469,7 @@ class MentalHealthCheckupCatalog {
     List<CheckupQuestion> questions, {
     required String sessionId,
     List<String> storedQuestionIds = const <String>[],
+    bool preservePriorityOrder = false,
   }) {
     final byId = <String, CheckupQuestion>{
       for (final question in questions) question.id: question,
@@ -342,6 +489,9 @@ class MentalHealthCheckupCatalog {
     final remainder = questions
         .where((item) => !item.isSafety && !item.isFunction)
         .toList(growable: true);
+    if (preservePriorityOrder) {
+      return <CheckupQuestion>[...gates, ...remainder];
+    }
     var seed = 0x811C9DC5;
     for (final unit in sessionId.codeUnits) {
       seed = ((seed ^ unit) * 0x01000193) & 0x7FFFFFFF;
@@ -359,8 +509,10 @@ class MentalHealthCheckupCatalog {
   List<CheckupQuestion> _indicatorQuestions(
     String domainId,
     int count,
-    DateTime now,
-  ) {
+    DateTime now, {
+    CheckupAssessmentPlan? assessmentPlan,
+    List<CheckupSession> history = const <CheckupSession>[],
+  }) {
     final matching = indicators
         .where((indicator) => _domainForIndicator(indicator) == domainId)
         .toList(growable: false);
@@ -369,18 +521,43 @@ class MentalHealthCheckupCatalog {
         .map((e) => e.indicatorId)
         .whereType<String>()
         .toSet();
-    final candidates = matching
+    var candidates = matching
         .where((indicator) => !anchorIndicatorIds.contains(indicator.id))
         .toList(growable: false);
     if (candidates.isEmpty) return const <CheckupQuestion>[];
-    final offset = (now.year * 372 + now.month * 31 + now.day +
-            domainId.hashCode.abs()) %
-        candidates.length;
     final selected = <CheckupIndicator>[];
-    for (var index = 0;
-        index < count && index < candidates.length;
-        index++) {
-      selected.add(candidates[(offset + index) % candidates.length]);
+    if (assessmentPlan?.useLongitudinalPrioritization == true &&
+        history.isNotEmpty) {
+      final plan = assessmentPlan!;
+      candidates = List<CheckupIndicator>.of(candidates)
+        ..sort((left, right) {
+          final comparison = _indicatorPriority(
+            right,
+            history: history,
+            now: now,
+            assessmentPlan: plan,
+          ).compareTo(
+            _indicatorPriority(
+              left,
+              history: history,
+              now: now,
+              assessmentPlan: plan,
+            ),
+          );
+          return comparison != 0 ? comparison : left.id.compareTo(right.id);
+        });
+      selected.addAll(candidates.take(count));
+    } else {
+      final offset = (now.year * 372 +
+              now.month * 31 +
+              now.day +
+              domainId.hashCode.abs()) %
+          candidates.length;
+      for (var index = 0;
+          index < count && index < candidates.length;
+          index++) {
+        selected.add(candidates[(offset + index) % candidates.length]);
+      }
     }
     return selected.map((indicator) {
       final risk = indicator.type == '风险型';
@@ -408,6 +585,137 @@ class MentalHealthCheckupCatalog {
         choices: _zeroToFourChoices(),
       );
     }).toList(growable: false);
+  }
+
+  double _indicatorPriority(
+    CheckupIndicator indicator, {
+    required List<CheckupSession> history,
+    required DateTime now,
+    required CheckupAssessmentPlan assessmentPlan,
+  }) {
+    final observations = <({CheckupAnswer answer, CheckupSession session})>[];
+    for (final session in history) {
+      for (final answer in session.answers) {
+        final indicatorId = _indicatorIdForQuestion(answer.questionId);
+        if (indicatorId == indicator.id) {
+          observations.add((answer: answer, session: session));
+        }
+      }
+    }
+    observations.sort(
+      (left, right) =>
+          right.session.completedAtMs.compareTo(left.session.completedAtMs),
+    );
+
+    double riskFor(CheckupAnswer answer) {
+      final normalized = (answer.value / 4).clamp(0, 1).toDouble();
+      return indicator.type.contains('风险') ? normalized : 1 - normalized;
+    }
+
+    final latestRisk =
+        observations.isEmpty ? 0.35 : riskFor(observations.first.answer);
+    final priorRisk =
+        observations.length < 2 ? latestRisk : riskFor(observations[1].answer);
+    final deterioration = (latestRisk - priorRisk).clamp(0, 1).toDouble();
+    final latestQuality = observations.isEmpty
+        ? 50.0
+        : observations.first.session.report.dataQuality;
+    final evidenceUncertainty = indicator.directEvidenceCount <= 1 ||
+            indicator.reviewStatus.contains('待')
+        ? 1.0
+        : indicator.directness.contains('直接证据较强')
+            ? 0.15
+            : 0.55;
+    final uncertainty =
+        (((100 - latestQuality) / 100) * 0.55 + evidenceUncertainty * 0.45)
+            .clamp(0, 1)
+            .toDouble();
+    final daysSince = observations.isEmpty
+        ? 365
+        : now
+            .difference(
+              DateTime.fromMillisecondsSinceEpoch(
+                observations.first.session.completedAtMs,
+              ),
+            )
+            .inDays
+            .clamp(0, 3650);
+    final coverage = (daysSince / 90).clamp(0, 1).toDouble();
+    final randomExploration =
+        (_stableHash('${indicator.id}:${now.year}-${now.month}') % 1000) / 999;
+    final stableStrength =
+        latestRisk < 0.25 && deterioration == 0 && observations.isNotEmpty;
+    final burden = stableStrength
+        ? assessmentPlan.timeBudgetMinutes <= 10
+            ? 1.0
+            : 0.65
+        : assessmentPlan.timeBudgetMinutes <= 5
+            ? 0.35
+            : 0.1;
+    final dueDays = _maximumUncheckedDays(
+      latestRisk: latestRisk,
+      hasObservation: observations.isNotEmpty,
+      indicator: indicator,
+    );
+    final dueBoost = daysSince >= dueDays ? 0.25 : 0.0;
+    return latestRisk * 0.30 +
+        deterioration * 0.25 +
+        uncertainty * 0.15 +
+        coverage * 0.20 +
+        randomExploration * 0.10 -
+        burden * 0.15 +
+        dueBoost;
+  }
+
+  String? _indicatorIdForQuestion(String questionId) {
+    if (questionId.startsWith('IND-')) return questionId.substring(4);
+    for (final question in b20Questions) {
+      if (question.id == questionId) return question.indicatorId;
+    }
+    return null;
+  }
+
+  int _maximumUncheckedDays({
+    required double latestRisk,
+    required bool hasObservation,
+    required CheckupIndicator indicator,
+  }) {
+    String target;
+    if (latestRisk >= 0.5) {
+      target = '红/橙指标';
+    } else if (latestRisk >= 0.25) {
+      target = '黄色指标';
+    } else if (!hasObservation) {
+      target = '23讲核心指标';
+    } else if (indicator.directEvidenceCount >= 3) {
+      target = '关键指标';
+    } else {
+      target = '微观指标';
+    }
+    for (final rule in longitudinalCoverageRules) {
+      if (rule.value('指标层级') != target) continue;
+      final values = RegExp(r'\d+')
+          .allMatches(rule.value('最长未检查时间'))
+          .map((match) => int.tryParse(match.group(0) ?? ''))
+          .whereType<int>()
+          .toList(growable: false);
+      if (values.isNotEmpty) return values.last;
+    }
+    return switch (target) {
+      '红/橙指标' => 7,
+      '黄色指标' => 30,
+      '23讲核心指标' => 60,
+      '关键指标' => 90,
+      _ => 180,
+    };
+  }
+
+  static int _stableHash(String value) {
+    var hash = 0x811C9DC5;
+    for (final unit in value.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0x7FFFFFFF;
+    }
+    return hash;
   }
 
   static List<CheckupQuestion> _functionBranchQuestions() =>
@@ -483,6 +791,29 @@ class MentalHealthCheckupCatalog {
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList(growable: false);
+
+  static List<CheckupReferenceRule> _ruleList(dynamic value) => _mapList(value)
+      .map(
+        (row) => CheckupReferenceRule(
+          <String, String>{
+            for (final entry in row.entries)
+              entry.key: entry.value?.toString() ?? '',
+          },
+        ),
+      )
+      .toList(growable: false);
+
+  static Map<String, Map<String, String>> _fieldMappings(dynamic value) {
+    if (value is! Map) return const <String, Map<String, String>>{};
+    return <String, Map<String, String>>{
+      for (final entry in value.entries)
+        entry.key.toString(): <String, String>{
+          if (entry.value is Map)
+            for (final field in (entry.value as Map).entries)
+              field.key.toString(): field.value?.toString() ?? '',
+        },
+    };
+  }
 
   static CheckupModeSpec _modeFromJson(Map<String, dynamic> json) {
     final name = (json['模式'] ?? '').toString();

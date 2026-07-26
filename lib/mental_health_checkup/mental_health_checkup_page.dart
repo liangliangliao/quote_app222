@@ -99,6 +99,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
     CheckupModeSpec mode, {
     String? focusDomainId,
     Map<String, dynamic>? draft,
+    CheckupAssessmentPlan? assessmentPlan,
     bool isRetest = false,
     CheckupPrescriptionPlan? retestPlan,
   }) async {
@@ -109,10 +110,18 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       domainId = await _chooseFocusDomain();
       if (domainId == null || !mounted) return;
     }
-    if (draft == null) {
-      final accepted = await _showAssessmentPreflight(mode, domainId);
-      if (accepted != true || !mounted) return;
+    var plan = assessmentPlan;
+    if (draft != null) {
+      plan ??= CheckupAssessmentPlan.fromJson(
+        Map<String, dynamic>.from(
+          draft['assessment_plan'] as Map? ?? const <String, dynamic>{},
+        ),
+      );
+    } else {
+      plan = await _showAssessmentPreflight(mode, domainId);
+      if (plan == null || !mounted) return;
     }
+    plan ??= CheckupAssessmentPlan.forMode(mode, _state.settings);
     final session = await Navigator.of(context).push<CheckupSession>(
       MaterialPageRoute(
         builder: (_) => MentalHealthAssessmentPage(
@@ -121,6 +130,8 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
           repository: _repository,
           focusDomainId: domainId,
           draft: draft,
+          assessmentPlan: plan!,
+          history: _state.sessions,
         ),
       ),
     );
@@ -197,90 +208,182 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
     );
   }
 
-  Future<bool?> _showAssessmentPreflight(
+  Future<CheckupAssessmentPlan?> _showAssessmentPreflight(
       CheckupModeSpec mode, String? domainId) {
-    return showModalBottomSheet<bool>(
+    var plan = CheckupAssessmentPlan.forMode(mode, _state.settings);
+    final timeOptions = <int>{5, 10, 20, 35, 60, plan.timeBudgetMinutes}
+        .toList(growable: false)
+      ..sort();
+    return showModalBottomSheet<CheckupAssessmentPlan>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  _ModeIcon(modeId: mode.id, size: 52),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          mode.name,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    _ModeIcon(modeId: mode.id, size: 52),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            mode.name,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                        Text('${mode.duration} · 最多 ${mode.maxQuestionCount} 题'),
-                      ],
+                          Text(
+                            '${mode.duration} · 本轮最多 ${plan.questionLimit} 题',
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _InfoStrip(
+                  icon: Icons.shield_outlined,
+                  color: const Color(0xFFB54708),
+                  title: '安全门优先',
+                  text: '安全题命中或不确定时，立即停止普通课程评分和课程行动处方。',
+                ),
+                const SizedBox(height: 10),
+                const _InfoStrip(
+                  icon: Icons.offline_bolt_outlined,
+                  color: Color(0xFF39715D),
+                  title: '默认完全离线',
+                  text: '题目、评分、课程机制候选、课程行动处方与复验均在本机完成。',
+                ),
+                if (domainId != null) ...<Widget>[
+                  const SizedBox(height: 10),
+                  _InfoStrip(
+                    icon: Icons.center_focus_strong,
+                    color: _domainColor(domainId),
+                    title:
+                        '本轮聚焦：${MentalHealthCheckupCatalog.domainNames[domainId]}',
+                    text: MentalHealthCheckupCatalog
+                            .domainDescriptions[domainId] ??
+                        '',
                   ),
                 ],
-              ),
-              const SizedBox(height: 18),
-              _InfoStrip(
-                icon: Icons.shield_outlined,
-                color: const Color(0xFFB54708),
-                title: '安全门优先',
-                text: '安全题命中或不确定时，立即停止普通课程评分和课程行动处方。',
-              ),
-              const SizedBox(height: 10),
-              const _InfoStrip(
-                icon: Icons.offline_bolt_outlined,
-                color: Color(0xFF39715D),
-                title: '默认完全离线',
-                text: '题目、评分、课程机制候选、课程行动处方与复验均在本机完成。',
-              ),
-              const SizedBox(height: 10),
-              const _InfoStrip(
-                icon: Icons.lock_outline,
-                color: Color(0xFF4554C5),
-                title: '不保存开放题原文',
-                text: '当前版本只保存结构化选项；AI深入解读必须另行确认，且只发送结构化报告。',
-              ),
-              if (domainId != null) ...<Widget>[
+                const SizedBox(height: 20),
+                const Text(
+                  '本轮评估偏好',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '可用时间约 ${plan.timeBudgetMinutes} 分钟；'
+                  '题量范围 ${mode.baseQuestionCount}-${mode.maxQuestionCount} 题。',
+                  style: const TextStyle(
+                    color: Color(0xFF667085),
+                    height: 1.45,
+                  ),
+                ),
                 const SizedBox(height: 10),
-                _InfoStrip(
-                  icon: Icons.center_focus_strong,
-                  color: _domainColor(domainId),
-                  title: '本轮聚焦：${MentalHealthCheckupCatalog.domainNames[domainId]}',
-                  text: MentalHealthCheckupCatalog.domainDescriptions[domainId] ?? '',
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: timeOptions
+                      .map(
+                        (minutes) => ChoiceChip(
+                          label: Text('$minutes分钟'),
+                          selected: plan.timeBudgetMinutes == minutes,
+                          onSelected: (_) => setSheetState(
+                            () => plan =
+                                plan.copyWith(timeBudgetMinutes: minutes),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '本轮题量上限：${plan.questionLimit}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                Slider(
+                  value: plan.questionLimit.toDouble().clamp(
+                        mode.baseQuestionCount.toDouble(),
+                        mode.maxQuestionCount.toDouble(),
+                      ).toDouble(),
+                  min: mode.baseQuestionCount.toDouble(),
+                  max: mode.maxQuestionCount.toDouble(),
+                  divisions: mode.maxQuestionCount == mode.baseQuestionCount
+                      ? null
+                      : mode.maxQuestionCount - mode.baseQuestionCount,
+                  label: '${plan.questionLimit}题',
+                  onChanged: mode.maxQuestionCount == mode.baseQuestionCount
+                      ? null
+                      : (value) => setSheetState(
+                            () => plan =
+                                plan.copyWith(questionLimit: value.round()),
+                          ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: plan.includeUncoveredCheck,
+                  onChanged: (value) => setSheetState(
+                    () => plan =
+                        plan.copyWith(includeUncoveredCheck: value),
+                  ),
+                  secondary: const Icon(Icons.manage_search_outlined),
+                  title: const Text('检查题目未覆盖的重要变化'),
+                  subtitle: const Text('只保存“有/无”结构化信号，不保存开放题原文。'),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: plan.wantsCourseAction,
+                  onChanged: (value) => setSheetState(
+                    () => plan = plan.copyWith(wantsCourseAction: value),
+                  ),
+                  secondary: const Icon(Icons.directions_run_outlined),
+                  title: const Text('本轮愿意接收一项课程行动'),
+                  subtitle: const Text('关闭后只生成评估报告，不生成课程行动处方。'),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: plan.useLongitudinalPrioritization,
+                  onChanged: _state.sessions.isEmpty
+                      ? null
+                      : (value) => setSheetState(
+                            () => plan = plan.copyWith(
+                              useLongitudinalPrioritization: value,
+                            ),
+                          ),
+                  secondary: const Icon(Icons.timeline_outlined),
+                  title: const Text('按历史风险与欠覆盖优先抽题'),
+                  subtitle: Text(
+                    _state.sessions.isEmpty
+                        ? '首次评估暂无历史，本轮建立基线。'
+                        : '综合当前风险、恶化、不确定性、欠覆盖、随机探索和用户负担。',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '按最近14天的真实情况作答，不按“理想中的自己”作答；不确定就选择不确定。进度会自动保存在本机，可稍后继续。',
+                  style: TextStyle(height: 1.55, color: Color(0xFF475467)),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.of(context).pop(plan),
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text('按本轮设置开始体检'),
+                  ),
                 ),
               ],
-              const SizedBox(height: 18),
-              const Text(
-                '作答原则',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '按最近14天的真实情况作答，不按“理想中的自己”作答；不确定就选择不确定。进度会自动保存在本机，可稍后继续。',
-                style: TextStyle(height: 1.55, color: Color(0xFF475467)),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('开始本地体检'),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -296,6 +399,11 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       catalog.modeById(modeId),
       focusDomainId: draft['focus_domain_id']?.toString(),
       draft: draft,
+      assessmentPlan: CheckupAssessmentPlan.fromJson(
+        Map<String, dynamic>.from(
+          draft['assessment_plan'] as Map? ?? const <String, dynamic>{},
+        ),
+      ),
     );
   }
 
@@ -459,36 +567,124 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
   }
 
   Future<void> _generateAiNarrative(CheckupReport report) async {
-    final accepted = await showDialog<bool>(
+    final scope = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.cloud_upload_outlined),
-        title: const Text('是否使用你配置的AI？'),
+        title: const Text('选择本次 AI 解释范围'),
         content: const Text(
-          '离线规则报告已经完成。继续后，应用只会把结构化分数、课程机制候选、证据等级和处方字段发送给你在全局设置中选择的AI提供方；不发送开放题原文。AI只能解释，不能改写安全状态或评分。',
+          '离线规则报告已经完成。你可以只发送当前结构化报告，或同时发送本机历史趋势、行动执行、复验和课程证据关系。不会发送开放题原文、install_id 或当地支持号码。AI只能解释，不能改写安全状态、评分或处方上限。',
         ),
         actions: <Widget>[
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('保持离线'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('同意本次发送'),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('current'),
+            child: const Text('仅当前报告'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop('history'),
+            icon: const Icon(Icons.timeline_outlined),
+            label: const Text('包含历史与证据'),
           ),
         ],
       ),
     );
-    if (accepted != true || !mounted) return;
+    if (scope == null || !mounted) return;
     setState(() => _aiLoading = true);
     final fallback = _localNarrative(report);
-    final result = await _ai.explainReport(report, fallback: fallback);
+    final indicatorIds = report.domains
+        .expand((domain) => domain.indicatorIds)
+        .toSet();
+    final evidenceTraces =
+        await _repository.evidenceTracesForIndicators(indicatorIds);
+    final result = await _ai.explainReport(
+      report,
+      fallback: fallback,
+      state: _state,
+      catalog: _catalog,
+      evidenceTraces: evidenceTraces,
+      includeHistory: scope == 'history',
+    );
     if (!mounted) return;
     setState(() {
       _aiLoading = false;
       _aiNarrative = result.text;
       _aiNarrativeUsedRemote = result.usedAi;
     });
+  }
+
+  Future<void> _generateAiRetestNarrative(
+    CheckupRetestRecord retest,
+  ) async {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    final scope = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.fact_check_outlined),
+        title: const Text('解释这次复验'),
+        content: const Text(
+          '可以只发送本次复验，或同时包含基线、历史复验、执行日志、课程证据和调整规则。不会发送开放题原文、install_id 或当地支持号码。',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('保持离线'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('current'),
+            child: const Text('仅本次复验'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('history'),
+            child: const Text('包含完整闭环'),
+          ),
+        ],
+      ),
+    );
+    if (scope == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在生成复验解释…')),
+    );
+    final indicatorIds = <String>{};
+    for (final session in _state.sessions) {
+      if (session.report.id != retest.baselineReportId &&
+          session.report.id != retest.retestReportId) {
+        continue;
+      }
+      for (final domain in session.report.domains) {
+        indicatorIds.addAll(domain.indicatorIds);
+      }
+    }
+    final evidenceTraces =
+        await _repository.evidenceTracesForIndicators(indicatorIds);
+    final result = await _ai.explainRetest(
+      retest,
+      fallback: '${retest.decision}\n\n${retest.reason}',
+      state: _state,
+      catalog: catalog,
+      evidenceTraces: evidenceTraces,
+      includeHistory: scope == 'history',
+    );
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('AI课程复验解释'),
+        content: SingleChildScrollView(
+          child: SelectableText(result.text),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(result.usedAi ? '完成' : '本地回退 · 完成'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _localNarrative(CheckupReport report) {
@@ -1172,7 +1368,10 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
           subtitle: '规则在本机运行，AI不能覆盖。',
         ),
         const SizedBox(height: 10),
-        const _AdjustmentRulesCard(),
+        _AdjustmentRulesCard(
+          rules: _catalog?.prescriptionAdjustmentRules ??
+              const <CheckupReferenceRule>[],
+        ),
         const SizedBox(height: 18),
         const _SectionHeader(
           title: '复验记录',
@@ -1185,7 +1384,11 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
             text: '完成至少一个课程行动周期后，这里会显示基线—复验对比与调整决定。',
           )
         else
-          for (final record in _state.retests) _RetestRecordCard(record: record),
+          for (final record in _state.retests)
+            _RetestRecordCard(
+              record: record,
+              onExplain: () => _generateAiRetestNarrative(record),
+            ),
       ],
     );
   }
@@ -1391,6 +1594,11 @@ class _MentalHealthCheckupLocalSettingsPageState
   late int _quietEndHour;
   late bool _lockScreenPrivacy;
   late bool _secureScreen;
+  late int _assessmentTimeBudgetMinutes;
+  late int _preferredQuestionLimit;
+  late bool _includeUncoveredCheck;
+  late bool _wantsCourseAction;
+  late bool _useLongitudinalPrioritization;
   late final TextEditingController _emergencyController;
   late final TextEditingController _crisisController;
 
@@ -1407,6 +1615,12 @@ class _MentalHealthCheckupLocalSettingsPageState
     _quietEndHour = value.quietEndHour;
     _lockScreenPrivacy = value.lockScreenPrivacy;
     _secureScreen = value.secureScreen;
+    _assessmentTimeBudgetMinutes = value.assessmentTimeBudgetMinutes;
+    _preferredQuestionLimit = value.preferredQuestionLimit;
+    _includeUncoveredCheck = value.includeUncoveredCheck;
+    _wantsCourseAction = value.wantsCourseAction;
+    _useLongitudinalPrioritization =
+        value.useLongitudinalPrioritization;
     _emergencyController =
         TextEditingController(text: value.emergencyNumber);
     _crisisController = TextEditingController(text: value.crisisNumber);
@@ -1482,6 +1696,12 @@ class _MentalHealthCheckupLocalSettingsPageState
         secureScreen: _secureScreen,
         emergencyNumber: _cleanNumber(_emergencyController.text),
         crisisNumber: _cleanNumber(_crisisController.text),
+        assessmentTimeBudgetMinutes: _assessmentTimeBudgetMinutes,
+        preferredQuestionLimit: _preferredQuestionLimit,
+        includeUncoveredCheck: _includeUncoveredCheck,
+        wantsCourseAction: _wantsCourseAction,
+        useLongitudinalPrioritization:
+            _useLongitudinalPrioritization,
       ),
     );
   }
@@ -1489,7 +1709,7 @@ class _MentalHealthCheckupLocalSettingsPageState
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('本地提醒与隐私'),
+          title: const Text('评估、提醒与隐私'),
           actions: <Widget>[
             TextButton(onPressed: _save, child: const Text('保存')),
           ],
@@ -1497,6 +1717,82 @@ class _MentalHealthCheckupLocalSettingsPageState
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: <Widget>[
+            const Text(
+              '默认评估偏好',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '每次开始前仍可单独调整；模式的固定安全门和最低题量不会被跳过。',
+              style: TextStyle(color: Color(0xFF667085), height: 1.45),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <int>[5, 10, 20, 35, 60]
+                  .map(
+                    (minutes) => ChoiceChip(
+                      label: Text('$minutes分钟'),
+                      selected: _assessmentTimeBudgetMinutes == minutes,
+                      onSelected: (_) => setState(
+                        () => _assessmentTimeBudgetMinutes = minutes,
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              '默认题量上限：$_preferredQuestionLimit',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            Slider(
+              value: _preferredQuestionLimit.toDouble(),
+              min: 5,
+              max: 120,
+              divisions: 23,
+              label: '$_preferredQuestionLimit题',
+              onChanged: (value) => setState(
+                () => _preferredQuestionLimit =
+                    (value / 5).round() * 5,
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _includeUncoveredCheck,
+              onChanged: (value) =>
+                  setState(() => _includeUncoveredCheck = value),
+              secondary: const Icon(Icons.manage_search_outlined),
+              title: const Text('检查题目未覆盖的重要变化'),
+              subtitle: const Text('仅保存结构化信号，不保存开放题原文。'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _wantsCourseAction,
+              onChanged: (value) =>
+                  setState(() => _wantsCourseAction = value),
+              secondary: const Icon(Icons.directions_run_outlined),
+              title: const Text('愿意接收一项课程行动'),
+              subtitle: const Text('关闭后只评估，不生成课程行动处方。'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _useLongitudinalPrioritization,
+              onChanged: (value) => setState(
+                () => _useLongitudinalPrioritization = value,
+              ),
+              secondary: const Icon(Icons.timeline_outlined),
+              title: const Text('启用纵向加权抽题'),
+              subtitle: const Text(
+                '按风险30%、恶化25%、不确定性15%、欠覆盖20%、随机探索10%和用户负担-15%排序。',
+              ),
+            ),
+            const Divider(height: 32),
+            const Text(
+              '本地提醒',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
             SwitchListTile(
               value: _remindersEnabled,
               onChanged: _toggleReminders,
@@ -3204,18 +3500,29 @@ class _TrendPainter extends CustomPainter {
 }
 
 class _AdjustmentRulesCard extends StatelessWidget {
-  const _AdjustmentRulesCard();
+  final List<CheckupReferenceRule> rules;
+
+  const _AdjustmentRulesCard({required this.rules});
 
   @override
   Widget build(BuildContext context) {
-    const rows = <_RuleRow>[
-      _RuleRow('安全不清楚', '暂停普通课程任务，转安全/人工复核'),
-      _RuleRow('过度化 ≥50%', '减量、暂停或换制衡处方'),
-      _RuleRow('改善 ≥10且功能改善', '维持剂量，不新增处方'),
-      _RuleRow('执行 <50%', '先缩小任务、改时机和环境'),
-      _RuleRow('执行 ≥70%但无改善', '重新诊断或换方'),
-      _RuleRow('综合 ≥75且稳定', '进入低频维持与防复发'),
-    ];
+    final rows = rules.isEmpty
+        ? const <_RuleRow>[
+            _RuleRow('安全不清楚', '暂停普通课程任务，转安全/人工复核'),
+            _RuleRow('过度化 ≥50%', '减量、暂停或换制衡处方'),
+            _RuleRow('改善 ≥10且功能改善', '维持剂量，不新增处方'),
+            _RuleRow('执行 <50%', '先缩小任务、改时机和环境'),
+            _RuleRow('执行 ≥70%但无改善', '重新诊断或换方'),
+            _RuleRow('综合 ≥75且稳定', '进入低频维持与防复发'),
+          ]
+        : rules
+            .map(
+              (rule) => _RuleRow(
+                rule.value('条件'),
+                '${rule.value('处方动作')}；${rule.value('复验安排')}',
+              ),
+            )
+            .toList(growable: false);
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -3251,7 +3558,11 @@ class _RuleRow {
 
 class _RetestRecordCard extends StatelessWidget {
   final CheckupRetestRecord record;
-  const _RetestRecordCard({required this.record});
+  final VoidCallback onExplain;
+  const _RetestRecordCard({
+    required this.record,
+    required this.onExplain,
+  });
 
   @override
   Widget build(BuildContext context) => Card(
@@ -3282,6 +3593,15 @@ class _RetestRecordCard extends StatelessWidget {
                   _MiniPill('执行 ${record.executionRate.toStringAsFixed(0)}%'),
                   _MiniPill('过度化 ${record.overuseRisk.toStringAsFixed(0)}%'),
                 ],
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: onExplain,
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('AI解释本次复验'),
+                ),
               ),
             ],
           ),
