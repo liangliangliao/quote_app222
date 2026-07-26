@@ -110,16 +110,19 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       domainId = await _chooseFocusDomain();
       if (domainId == null || !mounted) return;
     }
-    var plan = assessmentPlan;
+    final CheckupAssessmentPlan resolvedPlan;
     if (draft != null) {
-      plan ??= CheckupAssessmentPlan.fromJson(
-        Map<String, dynamic>.from(
-          draft['assessment_plan'] as Map? ?? const <String, dynamic>{},
-        ),
-      );
+      resolvedPlan = assessmentPlan ??
+          CheckupAssessmentPlan.fromJson(
+            Map<String, dynamic>.from(
+              draft['assessment_plan'] as Map? ??
+                  const <String, dynamic>{},
+            ),
+          );
     } else {
-      plan = await _showAssessmentPreflight(mode, domainId);
-      if (plan == null || !mounted) return;
+      final selectedPlan = await _showAssessmentPreflight(mode, domainId);
+      if (selectedPlan == null || !mounted) return;
+      resolvedPlan = selectedPlan;
     }
     final session = await Navigator.of(context).push<CheckupSession>(
       MaterialPageRoute(
@@ -129,7 +132,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
           repository: _repository,
           focusDomainId: domainId,
           draft: draft,
-          assessmentPlan: plan,
+          assessmentPlan: resolvedPlan,
           history: _state.sessions,
         ),
       ),
