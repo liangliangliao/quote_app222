@@ -360,6 +360,18 @@ class _MentalHealthAssessmentPageState
                             label: _shortSourceLevel(_question.sourceLevel),
                             color: const Color(0xFF39715D),
                           ),
+                          if (_question.contentCandidateId != null)
+                            _Tag(
+                              icon: _question.retiredSnapshot
+                                  ? Icons.history
+                                  : Icons.approval_outlined,
+                              label: _question.retiredSnapshot
+                                  ? '原草稿签发快照 v${_question.contentVersion}'
+                                  : '人工签发 v${_question.contentVersion}',
+                              color: _question.retiredSnapshot
+                                  ? const Color(0xFFB54708)
+                                  : const Color(0xFF19705A),
+                            ),
                           if (!_question.required)
                             const _Tag(
                               icon: Icons.tune,
@@ -389,6 +401,11 @@ class _MentalHealthAssessmentPageState
                           height: 1.45,
                         ),
                       ),
+                      if (_question.scoringRole ==
+                          CheckupQuestionScoringRole.contextOnly) ...[
+                        const SizedBox(height: 12),
+                        const _ScoringBoundaryNote(),
+                      ],
                       const SizedBox(height: 22),
                       ..._question.choices.map(
                         (choice) => _AnswerTile(
@@ -489,6 +506,42 @@ class _Tag extends StatelessWidget {
                 color: color,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ScoringBoundaryNote extends StatelessWidget {
+  const _ScoringBoundaryNote();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7E8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF2D49B)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(
+              Icons.balance_outlined,
+              size: 18,
+              color: Color(0xFF9A6700),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '这是理解信心/校准证据，不进入K分或健康分，也不会单独触发异常结论。',
+                style: TextStyle(
+                  color: Color(0xFF6D4C00),
+                  height: 1.4,
+                  fontSize: 12,
+                ),
               ),
             ),
           ],

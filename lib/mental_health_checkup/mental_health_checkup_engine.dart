@@ -369,6 +369,7 @@ class MentalHealthCheckupEngine {
       if (answer == null ||
           question.isSafety ||
           question.isFunction ||
+          !question.contributesToHealth ||
           question.id == 'B20-C2' ||
           question.id.startsWith('B20-Q') ||
           question.id.startsWith('BR-F-')) {
@@ -377,7 +378,8 @@ class MentalHealthCheckupEngine {
       final score = _healthScore(question, answer);
       if (question.isKnowledge) {
         knowledge.add(score);
-      } else if (question.id == 'B20-C1' ||
+      } else if (question.isBehaviorMetric ||
+          question.id == 'B20-C1' ||
           question.kind.contains('行为') ||
           question.kind == '功能结果') {
         behavior.add(score);
@@ -415,7 +417,13 @@ class MentalHealthCheckupEngine {
   ) {
     return MentalHealthCheckupCatalog.domainNames.entries.map((entry) {
       final domainQuestions =
-          questions.where((question) => question.domainId == entry.key).toList();
+          questions
+              .where(
+                (question) =>
+                    question.domainId == entry.key &&
+                    question.contributesToHealth,
+              )
+              .toList();
       final scores = <double>[];
       final indicatorIds = <String>[];
       for (final question in domainQuestions) {
@@ -440,6 +448,10 @@ class MentalHealthCheckupEngine {
   }
 
   double _healthScore(CheckupQuestion question, CheckupAnswer answer) {
+    final correctChoiceValue = question.correctChoiceValue;
+    if (correctChoiceValue != null) {
+      return answer.value == correctChoiceValue ? 100 : 0;
+    }
     if (question.id == 'B20-K1') return answer.value == 1 ? 100 : 0;
     if (question.id == 'B20-K2') return answer.value == 2 ? 100 : 0;
     final values = question.choices.map((choice) => choice.value).toList();
@@ -466,7 +478,11 @@ class MentalHealthCheckupEngine {
     for (final question in questions) {
       final indicatorId = question.indicatorId;
       final answer = answers[question.id];
-      if (indicatorId == null || answer == null) continue;
+      if (indicatorId == null ||
+          answer == null ||
+          !question.contributesToHealth) {
+        continue;
+      }
       indicatorHealth[indicatorId] = _healthScore(question, answer);
     }
     final domainById = <String, CheckupDomainResult>{
@@ -585,19 +601,32 @@ class MentalHealthCheckupEngine {
     for (final id in candidateIds) {
       final item = catalog.prescriptionById(id);
       if (item == null) continue;
+      final startingTask = catalog.publishedBehaviorTaskForIndicator(
+        item.primaryIndicatorId,
+      );
+      final deepeningTask = catalog.publishedBehaviorTaskForIndicator(
+        item.primaryIndicatorId,
+        preferredCodes: const <String>['B3', 'B4'],
+      );
       return <CheckupPrescriptionRecommendation>[
         CheckupPrescriptionRecommendation(
           prescriptionId: item.id,
           lecture: item.lecture,
           theme: item.theme,
           target: item.primaryIndicator,
-          startingAction: item.startingAction,
-          deepeningAction: item.deepeningAction,
-          dose: '${item.microDose}；${item.startingDose}',
+          startingAction: startingTask?.content ?? item.startingAction,
+          deepeningAction: deepeningTask?.content ?? item.deepeningAction,
+          dose: startingTask == null
+              ? '${item.microDose}；${item.startingDose}'
+              : startingTask.scaleOrDuration,
           trialPeriod: item.trialPeriod,
-          evidenceLocation: item.actionLocation,
-          sourceLevel: item.sourceLevel,
-          stopRule: item.stopRule,
+          evidenceLocation:
+              startingTask?.courseEvidenceIds.join('、') ??
+                  item.actionLocation,
+          sourceLevel: startingTask?.sourceLevel ?? item.sourceLevel,
+          stopRule: startingTask?.safetyRule ?? item.stopRule,
+          contentCandidateId: startingTask?.candidateId,
+          contentVersion: startingTask?.version,
         ),
       ];
     }

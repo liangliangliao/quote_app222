@@ -84,6 +84,140 @@ void main() {
       );
     });
 
+    test('only fully signed official items enter the rotating assessment bank',
+        () async {
+      final seed = await MentalHealthCheckupCatalog.load();
+      final anchors =
+          seed.b20Questions.map((question) => question.indicatorId).toSet();
+      final indicator = seed.indicators.firstWhere(
+        (value) =>
+            value.lecture == 4 &&
+            !value.id.contains('-K') &&
+            !anchors.contains(value.id),
+      );
+      final official = _officialContent(
+        candidateId: 'OFFICIAL-${indicator.id}-A3',
+        indicator: indicator,
+        contentCode: 'A3',
+      );
+      final catalog = seed.withPublishedContent(<CheckupContentCandidate>[
+        official.copyWith(
+          candidateId: 'UNSIGNED-${indicator.id}-A3',
+          stage: CheckupCandidateStage.candidate,
+          signer: '',
+        ),
+        official,
+      ]);
+      final questions = catalog.questionsForMode(
+        'focused',
+        focusDomainId: 'D1',
+        assessmentPlan: const CheckupAssessmentPlan(questionLimit: 70),
+        now: DateTime(2026, 7, 25),
+      );
+
+      expect(catalog.publishedContentCandidates, hasLength(1));
+      expect(catalog.publishedQuestions, hasLength(1));
+      expect(
+        questions.any(
+          (question) =>
+              question.contentCandidateId == official.candidateId &&
+              question.id == 'PUB-${official.candidateId}',
+        ),
+        isTrue,
+      );
+    });
+
+    test('official A7 uses its signed answer key and preserves item version',
+        () {
+      const indicator = CheckupIndicator(
+        id: 'L04-K9',
+        lecture: 4,
+        area: '情绪与认知',
+        name: '情绪接纳理论迁移',
+        type: '核心理论',
+        definitionLocation: 'L04-P001',
+        lowLocation: 'L04-P002',
+        highLocation: 'L04-P003',
+        actionLocation: 'L04-P004',
+        directEvidenceCount: 3,
+        directness: '直接证据较强',
+        reviewStatus: '已确认',
+      );
+      final official = _officialContent(
+        candidateId: 'OFFICIAL-L04-K9-A7',
+        indicator: indicator,
+        contentCode: 'A7',
+        answerOptions: const <String>['回避所有感受', '接纳感受并选择安全行动', '只重复口号'],
+        correctAnswerIndex: 1,
+      );
+      final base = _catalogWithIndicator(indicator);
+      final catalog = base.withPublishedContent(<CheckupContentCandidate>[
+        official,
+      ]);
+      final question = catalog.publishedQuestions.single;
+      final report = MentalHealthCheckupEngine(catalog).buildReport(
+        sessionId: 'published-a7',
+        modeId: 'standard',
+        questions: <CheckupQuestion>[
+          ..._questions().take(2),
+          question,
+        ],
+        answers: <CheckupAnswer>[
+          _answer('B20-S1', 0),
+          _answer('B20-F1', 0),
+          _answer(question.id, 1),
+        ],
+      );
+
+      expect(question.isKnowledge, isTrue);
+      expect(question.correctChoiceValue, 1);
+      expect(question.contentVersion, 1);
+      expect(report.knowledgeScore, 100);
+      expect(report.domains.first.score, 100);
+    });
+
+    test('retired signed items only restore an existing draft snapshot',
+        () async {
+      final seed = await MentalHealthCheckupCatalog.load();
+      final anchors =
+          seed.b20Questions.map((question) => question.indicatorId).toSet();
+      final indicator = seed.indicators.firstWhere(
+        (value) =>
+            value.lecture == 4 &&
+            !value.id.contains('-K') &&
+            !anchors.contains(value.id),
+      );
+      final retired = _officialContent(
+        candidateId: 'RETIRED-${indicator.id}-A3',
+        indicator: indicator,
+        contentCode: 'A3',
+      ).copyWith(
+        stage: CheckupCandidateStage.retired,
+        retirementReason: '已有更高版本。',
+      );
+      final catalog = seed.withPublishedContent(<CheckupContentCandidate>[
+        retired,
+      ]);
+      final fresh = catalog.questionsForMode(
+        'focused',
+        focusDomainId: 'D1',
+        assessmentPlan: const CheckupAssessmentPlan(questionLimit: 70),
+        now: DateTime(2026, 7, 25),
+      );
+      final retiredId = 'PUB-${retired.candidateId}';
+      final restored = catalog.restoreQuestionOrder(
+        fresh,
+        sessionId: 'draft-with-retired-question',
+        storedQuestionIds: <String>[retiredId],
+      );
+
+      expect(fresh.any((question) => question.id == retiredId), isFalse);
+      expect(restored.first.id, retiredId);
+      expect(restored.first.retiredSnapshot, isTrue);
+      expect(catalog.publishedQuestions, isEmpty);
+      expect(catalog.retiredPublishedQuestions, hasLength(1));
+    });
+
     test('focused mode keeps gates unique and includes the focus anchor',
         () async {
       final catalog = await MentalHealthCheckupCatalog.load();
@@ -266,6 +400,40 @@ void main() {
       expect(report.prescriptions.length, lessThanOrEqualTo(1));
       expect(report.prescriptions.single.prescriptionId, 'RX-L04');
       expect(report.sourceBoundaries.join(), contains('不是医学疾病诊断'));
+    });
+
+    test('official B1 replaces the matching starter task and is versioned',
+        () {
+      final indicator = _catalog().indicators.single;
+      final task = _officialContent(
+        candidateId: 'OFFICIAL-I1-B1',
+        indicator: indicator,
+        contentCode: 'B1',
+        kind: CheckupContentKind.behaviorTask,
+        content: '用30秒记录情绪，并完成一个不会扩大风险的安全小行动。',
+      );
+      final catalog = _catalog().withPublishedContent(
+        <CheckupContentCandidate>[task],
+      );
+      final report = MentalHealthCheckupEngine(catalog).buildReport(
+        sessionId: 'published-task',
+        modeId: 'b20',
+        questions: _questions(),
+        answers: <CheckupAnswer>[
+          _answer('B20-S1', 0),
+          _answer('B20-F1', 1),
+          _answer('D1-RISK', 4),
+        ],
+      );
+      final recommendation = report.prescriptions.single;
+      final restored = CheckupReport.fromJson(
+        Map<String, dynamic>.from(report.toJson()),
+      ).prescriptions.single;
+
+      expect(recommendation.startingAction, task.content);
+      expect(recommendation.contentCandidateId, task.candidateId);
+      expect(recommendation.contentVersion, task.version);
+      expect(restored.contentCandidateId, task.candidateId);
     });
 
     test('user can request assessment-only output without a course action', () {
@@ -876,6 +1044,102 @@ void main() {
       expect(restored.safetyRule, contains('不得练习风险行为'));
     });
   });
+}
+
+CheckupContentCandidate _officialContent({
+  required String candidateId,
+  required CheckupIndicator indicator,
+  required String contentCode,
+  CheckupContentKind kind = CheckupContentKind.assessmentItem,
+  String? content,
+  List<String> answerOptions = const <String>[],
+  int? correctAnswerIndex,
+}) =>
+    CheckupContentCandidate(
+      candidateId: candidateId,
+      kind: kind,
+      primaryIndicatorId: indicator.id,
+      indicatorName: indicator.name,
+      indicatorType: indicator.type,
+      contentCode: contentCode,
+      content: content ??
+          (contentCode == 'A7'
+              ? '下面哪项最符合“${indicator.name}”？'
+              : '过去14天，“${indicator.name}”在现实生活中出现的程度是。'),
+      scaleOrDuration: kind == CheckupContentKind.behaviorTask
+          ? '每日1次，每次1分钟'
+          : contentCode == 'A7'
+              ? '情境判断单选'
+              : '频率0—4',
+      scoringDirection: contentCode == 'A7'
+          ? '客观计分'
+          : indicator.type.contains('风险')
+              ? '越高风险越高'
+              : '越高越健康',
+      recallWindow: contentCode == 'A7' ? '此刻' : '过去14天',
+      answerOptions: answerOptions,
+      correctAnswerIndex: correctAnswerIndex,
+      courseEvidenceIds: <String>[indicator.definitionLocation],
+      sourceLevel: 'C1候选直接证据',
+      constructRationale: '仅测量 ${indicator.id}：${indicator.name}。',
+      guardrailIndicatorIds: const <String>[],
+      safetyRule: kind == CheckupContentKind.behaviorTask
+          ? '不得练习风险行为；若不适或现实功能变差立即停止。'
+          : '若出现安全风险或明显不适，停止普通解释并进入安全复核。',
+      smallerVersion:
+          contentCode == 'B1' ? '缩小为10秒观察和一个安全动作。' : '',
+      counterEvidencePrompt:
+          contentCode == 'B2' || contentCode == 'B4' ? '记录反证和功能结果。' : '',
+      quality: const CheckupCandidateQuality(
+        indicatorConsistency: 95,
+        courseFidelity: 95,
+        nonDuplication: 90,
+        measurability: 92,
+        scaleWindowFit: 94,
+        bidirectionalLogic: 90,
+        safety: 98,
+      ),
+      stage: CheckupCandidateStage.official,
+      evidenceReviewPassed: true,
+      constructReviewPassed: true,
+      cognitiveInterviewPassed: true,
+      pilotPassed: true,
+      pilotSampleSize: 24,
+      pilotNotes: '认知访谈和小样本试测通过。',
+      author: '作者甲',
+      reviewer: '独立审核乙',
+      signer: '课程签发丙',
+      modelVersion: 'local-template',
+      promptVersion: 'content-governance-v1',
+      indicatorVersion: 'V2.3-345',
+      courseVersion: '2.5',
+      version: 1,
+      createdAtMs: 100,
+      updatedAtMs: 200,
+    );
+
+MentalHealthCheckupCatalog _catalogWithIndicator(
+  CheckupIndicator indicator,
+) {
+  final base = _catalog();
+  return MentalHealthCheckupCatalog(
+    modes: base.modes,
+    b20Questions: base.b20Questions,
+    indicators: <CheckupIndicator>[...base.indicators, indicator],
+    diagnosisPatterns: base.diagnosisPatterns,
+    prescriptions: base.prescriptions,
+    clinicalTerms: base.clinicalTerms,
+    longitudinalCoverageRules: base.longitudinalCoverageRules,
+    branchAlertRules: base.branchAlertRules,
+    aiReportFields: base.aiReportFields,
+    doseAndCourseRules: base.doseAndCourseRules,
+    prescriptionAdjustmentRules: base.prescriptionAdjustmentRules,
+    recoveryMaintenanceRules: base.recoveryMaintenanceRules,
+    sourceBoundaryRules: base.sourceBoundaryRules,
+    seedFieldMappings: base.seedFieldMappings,
+    legacyContentCandidates: base.legacyContentCandidates,
+    validation: base.validation,
+  );
 }
 
 MentalHealthCheckupCatalog _catalog() => MentalHealthCheckupCatalog(

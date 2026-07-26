@@ -64,8 +64,10 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       });
     }
     try {
-      final catalog = await MentalHealthCheckupCatalog.load();
-      final state = await _repository.load(catalog: catalog);
+      final seedCatalog = await MentalHealthCheckupCatalog.load();
+      final state = await _repository.load(catalog: seedCatalog);
+      final governedContent = await _repository.loadContentCandidates();
+      final catalog = seedCatalog.withPublishedContent(governedContent);
       final draft = await _repository.loadDraft();
       try {
         await _repository.syncPlatformSettings(state);
@@ -832,6 +834,32 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
     );
   }
 
+  Future<void> _openContentGovernance() async {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthContentGovernancePage(
+          catalog: catalog,
+          repository: _repository,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    try {
+      final governedContent = await _repository.loadContentCandidates();
+      if (!mounted) return;
+      setState(() {
+        _catalog = catalog.withPublishedContent(governedContent);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('正式题库刷新失败：$error')),
+      );
+    }
+  }
+
   Future<void> _deleteAll() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1463,15 +1491,10 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         _SettingsTile(
           icon: Icons.account_tree_outlined,
           title: '课程内容候选治理台',
-          subtitle: '345项生成计划 · A1-A9/B0-B4 · 独立审核、试测、签发与版本审计',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => MentalHealthContentGovernancePage(
-                catalog: catalog,
-                repository: _repository,
-              ),
-            ),
-          ),
+          subtitle:
+              '345项计划 · 正式启用 ${catalog.publishedQuestions.length} 道题 / '
+              '${catalog.publishedBehaviorTasks.length} 项任务 · 独立审核与版本审计',
+          onTap: _openContentGovernance,
         ),
         _SettingsTile(
           icon: Icons.verified_user_outlined,
@@ -3064,6 +3087,12 @@ class _RecommendationCard extends StatelessWidget {
               _LabeledText(label: '从微量开始', text: recommendation.startingAction),
               _LabeledText(label: '剂量', text: recommendation.dose),
               _LabeledText(label: '首次复验', text: recommendation.trialPeriod),
+              if (recommendation.contentCandidateId != null)
+                _LabeledText(
+                  label: '正式任务版本',
+                  text: '${recommendation.contentCandidateId} · '
+                      'v${recommendation.contentVersion ?? 1}',
+                ),
               _LabeledText(label: '课程证据', text: 'Lecture ${recommendation.lecture} · ${recommendation.evidenceLocation} · ${recommendation.sourceLevel}'),
               const SizedBox(height: 10),
               SizedBox(

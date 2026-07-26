@@ -83,6 +83,9 @@ class MentalHealthCheckupCatalog {
   final List<CheckupReferenceRule> sourceBoundaryRules;
   final Map<String, Map<String, String>> seedFieldMappings;
   final List<CheckupContentCandidate> legacyContentCandidates;
+  final List<CheckupContentCandidate> publishedContentCandidates;
+  final List<CheckupQuestion> publishedQuestions;
+  final List<CheckupQuestion> retiredPublishedQuestions;
   final CheckupSeedValidationResult validation;
 
   const MentalHealthCheckupCatalog({
@@ -101,6 +104,9 @@ class MentalHealthCheckupCatalog {
     this.sourceBoundaryRules = const <CheckupReferenceRule>[],
     this.seedFieldMappings = const <String, Map<String, String>>{},
     this.legacyContentCandidates = const <CheckupContentCandidate>[],
+    this.publishedContentCandidates = const <CheckupContentCandidate>[],
+    this.publishedQuestions = const <CheckupQuestion>[],
+    this.retiredPublishedQuestions = const <CheckupQuestion>[],
     required this.validation,
   });
 
@@ -165,6 +171,215 @@ class MentalHealthCheckupCatalog {
       validation: validation,
     );
   }
+
+  List<CheckupContentCandidate> get publishedBehaviorTasks =>
+      publishedContentCandidates
+          .where(
+            (candidate) =>
+                candidate.kind == CheckupContentKind.behaviorTask,
+          )
+          .toList(growable: false);
+
+  MentalHealthCheckupCatalog withPublishedContent(
+    Iterable<CheckupContentCandidate> candidates,
+  ) {
+    const governance = MentalHealthContentGovernanceEngine();
+    final bySlot = <String, CheckupContentCandidate>{};
+    final retired = <CheckupContentCandidate>[];
+    for (final candidate in candidates) {
+      if (!_isSignedGovernedContent(candidate, governance)) continue;
+      if (candidate.stage == CheckupCandidateStage.retired) {
+        retired.add(candidate);
+        continue;
+      }
+      final slot = '${candidate.kind.name}|${candidate.primaryIndicatorId}|'
+          '${candidate.contentCode}';
+      final previous = bySlot[slot];
+      if (previous == null ||
+          candidate.version > previous.version ||
+          candidate.version == previous.version &&
+              candidate.updatedAtMs > previous.updatedAtMs) {
+        bySlot[slot] = candidate;
+      }
+    }
+    final published = bySlot.values.toList(growable: false)
+      ..sort((left, right) {
+        final indicatorComparison =
+            left.primaryIndicatorId.compareTo(right.primaryIndicatorId);
+        if (indicatorComparison != 0) return indicatorComparison;
+        return left.contentCode.compareTo(right.contentCode);
+      });
+    final questions = published
+        .map(_publishedQuestionFromCandidate)
+        .whereType<CheckupQuestion>()
+        .toList(growable: false);
+    final retiredQuestions = retired
+        .map(_publishedQuestionFromCandidate)
+        .whereType<CheckupQuestion>()
+        .toList(growable: false);
+    return MentalHealthCheckupCatalog(
+      modes: modes,
+      b20Questions: b20Questions,
+      indicators: indicators,
+      diagnosisPatterns: diagnosisPatterns,
+      prescriptions: prescriptions,
+      clinicalTerms: clinicalTerms,
+      longitudinalCoverageRules: longitudinalCoverageRules,
+      branchAlertRules: branchAlertRules,
+      aiReportFields: aiReportFields,
+      doseAndCourseRules: doseAndCourseRules,
+      prescriptionAdjustmentRules: prescriptionAdjustmentRules,
+      recoveryMaintenanceRules: recoveryMaintenanceRules,
+      sourceBoundaryRules: sourceBoundaryRules,
+      seedFieldMappings: seedFieldMappings,
+      legacyContentCandidates: legacyContentCandidates,
+      publishedContentCandidates: published,
+      publishedQuestions: questions,
+      retiredPublishedQuestions: retiredQuestions,
+      validation: validation,
+    );
+  }
+
+  CheckupContentCandidate? publishedBehaviorTaskForIndicator(
+    String indicatorId, {
+    List<String> preferredCodes = const <String>['B1', 'B2', 'B0'],
+  }) {
+    for (final code in preferredCodes) {
+      for (final candidate in publishedContentCandidates) {
+        if (candidate.kind == CheckupContentKind.behaviorTask &&
+            candidate.primaryIndicatorId == indicatorId &&
+            candidate.contentCode == code) {
+          return candidate;
+        }
+      }
+    }
+    return null;
+  }
+
+  static bool _isSignedGovernedContent(
+    CheckupContentCandidate candidate,
+    MentalHealthContentGovernanceEngine governance,
+  ) {
+    final author = candidate.author.trim().toLowerCase();
+    final reviewer = candidate.reviewer.trim().toLowerCase();
+    final signer = candidate.signer.trim().toLowerCase();
+    return (candidate.stage == CheckupCandidateStage.official ||
+            candidate.stage == CheckupCandidateStage.retired) &&
+        candidate.evidenceReviewPassed &&
+        candidate.constructReviewPassed &&
+        candidate.cognitiveInterviewPassed &&
+        candidate.pilotPassed &&
+        candidate.pilotSampleSize > 0 &&
+        reviewer.isNotEmpty &&
+        signer.isNotEmpty &&
+        reviewer != author &&
+        !reviewer.contains('ai') &&
+        !signer.contains('ai') &&
+        governance.validate(candidate).valid;
+  }
+
+  CheckupQuestion? _publishedQuestionFromCandidate(
+    CheckupContentCandidate candidate,
+  ) {
+    if (candidate.kind != CheckupContentKind.assessmentItem ||
+        candidate.contentCode == 'A8') {
+      return null;
+    }
+    final indicator = indicatorById(candidate.primaryIndicatorId);
+    if (indicator == null) return null;
+    final code = candidate.contentCode;
+    final role = switch (code) {
+      'A7' => CheckupQuestionScoringRole.knowledge,
+      'A1' || 'A9' => CheckupQuestionScoringRole.contextOnly,
+      'A3' || 'A6F' || 'A6I' => CheckupQuestionScoringRole.behavior,
+      'A2' || 'A4' || 'A5' => CheckupQuestionScoringRole.attitude,
+      _ => null,
+    };
+    if (role == null) return null;
+    final choices = _choicesForPublishedCandidate(candidate);
+    if (choices.length < 2) return null;
+    final correctIndex = candidate.correctAnswerIndex;
+    if (role == CheckupQuestionScoringRole.knowledge &&
+        (correctIndex == null ||
+            correctIndex < 0 ||
+            correctIndex >= choices.length)) {
+      return null;
+    }
+    final domainId = _domainForIndicator(indicator);
+    return CheckupQuestion(
+      id: role == CheckupQuestionScoringRole.knowledge
+          ? 'B20-KP-${candidate.candidateId}'
+          : 'PUB-${candidate.candidateId}',
+      group: '${domainNames[domainId]} · 正式题库 v${candidate.version}',
+      kind: _publishedKindLabel(code, indicator.type),
+      prompt: candidate.content,
+      scaleLabel: candidate.scaleOrDuration,
+      direction: candidate.scoringDirection,
+      indicatorId: indicator.id,
+      sourceLevel: candidate.sourceLevel,
+      required: false,
+      domainId: domainId,
+      lecture: indicator.lecture,
+      evidenceLocation: candidate.courseEvidenceIds.join('、'),
+      choices: choices,
+      scoringRole: role,
+      correctChoiceValue:
+          correctIndex == null ? null : choices[correctIndex].value,
+      contentCandidateId: candidate.candidateId,
+      contentVersion: candidate.version,
+      contentCode: code,
+      retiredSnapshot:
+          candidate.stage == CheckupCandidateStage.retired,
+    );
+  }
+
+  static List<CheckupAnswerChoice> _choicesForPublishedCandidate(
+    CheckupContentCandidate candidate,
+  ) {
+    if (candidate.answerOptions.length >= 2) {
+      final startsAtOne =
+          RegExp(r'(^|\D)1\s*[—–~-]\s*5(\D|$)')
+              .hasMatch(candidate.scaleOrDuration);
+      return List<CheckupAnswerChoice>.generate(
+        candidate.answerOptions.length,
+        (index) => CheckupAnswerChoice(
+          candidate.answerOptions[index],
+          (startsAtOne ? index + 1 : index).toDouble(),
+        ),
+      );
+    }
+    if (candidate.scaleOrDuration.contains('1—5') ||
+        candidate.scaleOrDuration.contains('1-5')) {
+      return const <CheckupAnswerChoice>[
+        CheckupAnswerChoice('1 · 完全不符合', 1),
+        CheckupAnswerChoice('2 · 较不符合', 2),
+        CheckupAnswerChoice('3 · 一般/不确定', 3),
+        CheckupAnswerChoice('4 · 较符合', 4),
+        CheckupAnswerChoice('5 · 非常符合', 5),
+      ];
+    }
+    return const <CheckupAnswerChoice>[
+      CheckupAnswerChoice('0 · 从未/完全不符合', 0),
+      CheckupAnswerChoice('1 · 很少/较不符合', 1),
+      CheckupAnswerChoice('2 · 有时/一般', 2),
+      CheckupAnswerChoice('3 · 经常/较符合', 3),
+      CheckupAnswerChoice('4 · 几乎总是/非常符合', 4),
+    ];
+  }
+
+  static String _publishedKindLabel(String code, String indicatorType) =>
+      switch (code) {
+        'A1' => '理论理解信心（不计K分）',
+        'A2' => '态度倾向',
+        'A3' => '近期行为观察',
+        'A4' => '风险合理化',
+        'A5' => '高端制衡',
+        'A6F' => '现实结果频率',
+        'A6I' => '现实功能影响',
+        'A7' => '课程情境判断',
+        'A9' => '元认知校准（不计健康分）',
+        _ => indicatorType,
+      };
 
   List<String> sourceBoundaryStatements() {
     if (sourceBoundaryRules.isEmpty) {
@@ -486,6 +701,11 @@ class MentalHealthCheckupCatalog {
       for (final question in questions) question.id: question,
     };
     if (storedQuestionIds.isNotEmpty) {
+      for (final retired in retiredPublishedQuestions) {
+        if (storedQuestionIds.contains(retired.id)) {
+          byId.putIfAbsent(retired.id, () => retired);
+        }
+      }
       final restored = storedQuestionIds
           .map((id) => byId.remove(id))
           .whereType<CheckupQuestion>()
@@ -533,7 +753,13 @@ class MentalHealthCheckupCatalog {
         .whereType<String>()
         .toSet();
     var candidates = matching
-        .where((indicator) => !anchorIndicatorIds.contains(indicator.id))
+        .where(
+          (indicator) =>
+              !anchorIndicatorIds.contains(indicator.id) ||
+              publishedQuestions.any(
+                (question) => question.indicatorId == indicator.id,
+              ),
+        )
         .toList(growable: false);
     if (candidates.isEmpty) return const <CheckupQuestion>[];
     final selected = <CheckupIndicator>[];
@@ -570,14 +796,20 @@ class MentalHealthCheckupCatalog {
         selected.add(candidates[(offset + index) % candidates.length]);
       }
     }
-    return selected.map((indicator) {
+    final questions = <CheckupQuestion>[];
+    for (final indicator in selected) {
+      final published = _publishedQuestionsForIndicator(indicator, now);
+      if (published.isNotEmpty) {
+        questions.addAll(published);
+        continue;
+      }
       final risk = indicator.type == '风险型';
       final promptPrefix = risk
           ? '过去14天，以下情况出现的程度是：'
           : indicator.type == '功能结果'
               ? '过去14天，以下现实功能在多大程度上符合你：'
               : '过去14天，以下能力在多大程度上符合你：';
-      return CheckupQuestion(
+      questions.add(CheckupQuestion(
         id: 'IND-${indicator.id}',
         group: '${domainNames[domainId]} · 深入追问',
         kind: indicator.type,
@@ -594,8 +826,58 @@ class MentalHealthCheckupCatalog {
         lecture: indicator.lecture,
         evidenceLocation: indicator.definitionLocation,
         choices: _zeroToFourChoices(),
-      );
-    }).toList(growable: false);
+      ));
+    }
+    return questions.take(count).toList(growable: false);
+  }
+
+  List<CheckupQuestion> _publishedQuestionsForIndicator(
+    CheckupIndicator indicator,
+    DateTime now,
+  ) {
+    final available = publishedQuestions
+        .where((question) => question.indicatorId == indicator.id)
+        .toList(growable: false);
+    if (available.isEmpty) return const <CheckupQuestion>[];
+    final knowledge = available
+        .where((question) => question.isKnowledge)
+        .toList(growable: false);
+    if (indicator.id.contains('-K')) {
+      if (knowledge.isEmpty) {
+        // A1/A9 are confidence evidence only. They must never replace the
+        // paired objective A7 item or enter the K score by themselves.
+        return const <CheckupQuestion>[];
+      }
+      final result = <CheckupQuestion>[
+        knowledge[
+            _stableHash('${indicator.id}:${now.year}-${now.month}') %
+                knowledge.length],
+      ];
+      final calibration = available
+          .where(
+            (question) =>
+                question.scoringRole ==
+                CheckupQuestionScoringRole.contextOnly,
+          )
+          .toList(growable: false);
+      if (calibration.isNotEmpty) {
+        result.add(
+          calibration[
+              _stableHash('${indicator.id}:${now.year}-${now.month}-${now.day}') %
+                  calibration.length],
+        );
+      }
+      return result;
+    }
+    final scoreBearing = available
+        .where((question) => question.contributesToHealth)
+        .toList(growable: false);
+    if (scoreBearing.isEmpty) return const <CheckupQuestion>[];
+    return <CheckupQuestion>[
+      scoreBearing[
+          _stableHash('${indicator.id}:${now.year}-${now.month}-${now.day}') %
+              scoreBearing.length],
+    ];
   }
 
   double _indicatorPriority(
@@ -680,7 +962,10 @@ class MentalHealthCheckupCatalog {
 
   String? _indicatorIdForQuestion(String questionId) {
     if (questionId.startsWith('IND-')) return questionId.substring(4);
-    for (final question in b20Questions) {
+    for (final question in <CheckupQuestion>[
+      ...b20Questions,
+      ...publishedQuestions,
+    ]) {
       if (question.id == questionId) return question.indicatorId;
     }
     return null;

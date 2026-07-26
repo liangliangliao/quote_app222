@@ -4,6 +4,14 @@ enum CheckupSafetyStatus { clear, uncertain, alert }
 
 enum CheckupPlanStatus { active, paused, completed, maintenance }
 
+enum CheckupQuestionScoringRole {
+  inferred,
+  knowledge,
+  attitude,
+  behavior,
+  contextOnly,
+}
+
 class CheckupAnswerChoice {
   final String label;
   final double value;
@@ -25,6 +33,12 @@ class CheckupQuestion {
   final int? lecture;
   final String? evidenceLocation;
   final List<CheckupAnswerChoice> choices;
+  final CheckupQuestionScoringRole scoringRole;
+  final double? correctChoiceValue;
+  final String? contentCandidateId;
+  final int? contentVersion;
+  final String? contentCode;
+  final bool retiredSnapshot;
 
   const CheckupQuestion({
     required this.id,
@@ -40,11 +54,24 @@ class CheckupQuestion {
     this.domainId,
     this.lecture,
     this.evidenceLocation,
+    this.scoringRole = CheckupQuestionScoringRole.inferred,
+    this.correctChoiceValue,
+    this.contentCandidateId,
+    this.contentVersion,
+    this.contentCode,
+    this.retiredSnapshot = false,
   });
 
   bool get isSafety => id.startsWith('B20-S');
   bool get isFunction => id == 'B20-F1' || id == 'B20-F2';
-  bool get isKnowledge => id.startsWith('B20-K');
+  bool get isKnowledge =>
+      scoringRole == CheckupQuestionScoringRole.knowledge ||
+      scoringRole == CheckupQuestionScoringRole.inferred &&
+          id.startsWith('B20-K');
+  bool get isBehaviorMetric =>
+      scoringRole == CheckupQuestionScoringRole.behavior;
+  bool get contributesToHealth =>
+      scoringRole != CheckupQuestionScoringRole.contextOnly;
   bool get isOpenCheck => id == 'B20-Q1';
 }
 
@@ -399,6 +426,8 @@ class CheckupPrescriptionRecommendation {
   final String evidenceLocation;
   final String sourceLevel;
   final String stopRule;
+  final String? contentCandidateId;
+  final int? contentVersion;
 
   const CheckupPrescriptionRecommendation({
     required this.prescriptionId,
@@ -412,6 +441,8 @@ class CheckupPrescriptionRecommendation {
     required this.evidenceLocation,
     required this.sourceLevel,
     required this.stopRule,
+    this.contentCandidateId,
+    this.contentVersion,
   });
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -426,6 +457,8 @@ class CheckupPrescriptionRecommendation {
         'evidence_location': evidenceLocation,
         'source_level': sourceLevel,
         'stop_rule': stopRule,
+        'content_candidate_id': contentCandidateId,
+        'content_version': contentVersion,
       };
 
   factory CheckupPrescriptionRecommendation.fromJson(
@@ -442,6 +475,8 @@ class CheckupPrescriptionRecommendation {
         evidenceLocation: (json['evidence_location'] ?? '').toString(),
         sourceLevel: (json['source_level'] ?? '').toString(),
         stopRule: (json['stop_rule'] ?? '').toString(),
+        contentCandidateId: json['content_candidate_id']?.toString(),
+        contentVersion: (json['content_version'] as num?)?.toInt(),
       );
 }
 
