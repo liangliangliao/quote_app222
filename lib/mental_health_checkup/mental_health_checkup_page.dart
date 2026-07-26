@@ -889,11 +889,12 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     );
     if (password == null || !mounted) return;
     try {
-      var imported = await _repository.importEncryptedBackup(
+      final restored = await _repository.importEncryptedBackup(
         catalog: catalog,
         password: password,
       );
-      if (!mounted || imported == null) return;
+      if (!mounted || restored == null) return;
+      var imported = restored;
       var appLockDisabledOnImport = false;
       if (imported.settings.appLockEnabled) {
         setState(() => _appLockUnlocking = true);
