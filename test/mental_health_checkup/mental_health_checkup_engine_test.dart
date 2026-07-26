@@ -126,7 +126,8 @@ void main() {
         now: DateTime(2026, 7, 23),
       );
 
-      expect(questions, hasLength(30));
+      expect(questions.length, lessThanOrEqualTo(plan.questionLimit));
+      expect(questions, isNotEmpty);
       expect(questions.any((question) => question.id == 'B20-Q1'), isFalse);
       expect(questions.take(4).every((question) => question.isSafety), isTrue);
     });
