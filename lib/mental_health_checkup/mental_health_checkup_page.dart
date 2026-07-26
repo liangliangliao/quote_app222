@@ -121,7 +121,6 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       plan = await _showAssessmentPreflight(mode, domainId);
       if (plan == null || !mounted) return;
     }
-    plan ??= CheckupAssessmentPlan.forMode(mode, _state.settings);
     final session = await Navigator.of(context).push<CheckupSession>(
       MaterialPageRoute(
         builder: (_) => MentalHealthAssessmentPage(
@@ -130,7 +129,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
           repository: _repository,
           focusDomainId: domainId,
           draft: draft,
-          assessmentPlan: plan!,
+          assessmentPlan: plan,
           history: _state.sessions,
         ),
       ),
