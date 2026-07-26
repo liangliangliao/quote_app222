@@ -1327,7 +1327,9 @@ class MentalHealthCheckupRepository {
         break;
       }
     }
-    await _platform.setSecureScreen(settings.secureScreen);
+    await _platform.setSecureScreen(
+      settings.secureScreen || settings.appLockEnabled,
+    );
     await _platform.scheduleReminders(
       enabled: settings.remindersEnabled && reminderPlan != null,
       hour: settings.reminderHour,
@@ -1341,6 +1343,12 @@ class MentalHealthCheckupRepository {
 
   Future<void> setSecureScreenEnabled(bool enabled) =>
       _platform.setSecureScreen(enabled);
+
+  Future<bool> canAuthenticateAppLock() =>
+      _platform.canAuthenticateAppLock();
+
+  Future<bool> authenticateAppLock() =>
+      _platform.authenticateAppLock();
 
   Future<void> clearAllModuleData() async {
     final db = await AppDatabase.instance();

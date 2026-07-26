@@ -1,6 +1,7 @@
 package com.example.quote_app
 
 import android.app.Activity
+import android.app.KeyguardManager
 import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -29,6 +30,7 @@ object MentalHealthCheckupPlatform {
     private const val REQUEST_CREATE_BACKUP = 7811
     private const val REQUEST_OPEN_BACKUP = 7812
     private const val REQUEST_CREATE_PDF = 7813
+    private const val REQUEST_APP_UNLOCK = 7814
     private const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
 
     private var activity: Activity? = null
@@ -49,6 +51,10 @@ object MentalHealthCheckupPlatform {
 
         data class ExportPdf(
             val bytes: ByteArray,
+            override val result: MethodChannel.Result,
+        ) : PendingOperation(result)
+
+        data class Unlock(
             override val result: MethodChannel.Result,
         ) : PendingOperation(result)
     }
@@ -179,6 +185,37 @@ object MentalHealthCheckupPlatform {
                 result.success(null)
             }
 
+            "isDeviceLockAvailable" -> {
+                val manager =
+                    requireActivity().getSystemService(KeyguardManager::class.java)
+                result.success(manager.isDeviceSecure)
+            }
+
+            "authenticateAppLock" -> {
+                ensureIdle(result) ?: return
+                val host = requireActivity()
+                val manager = host.getSystemService(KeyguardManager::class.java)
+                if (!manager.isDeviceSecure) {
+                    result.success(false)
+                    return
+                }
+                val intent = manager.createConfirmDeviceCredentialIntent(
+                    "解锁心理健康体检",
+                    "使用设备PIN、图案或密码查看本地体检记录。",
+                )
+                if (intent == null) {
+                    result.success(false)
+                    return
+                }
+                pending = PendingOperation.Unlock(result)
+                try {
+                    host.startActivityForResult(intent, REQUEST_APP_UNLOCK)
+                } catch (error: Throwable) {
+                    pending = null
+                    throw error
+                }
+            }
+
             "scheduleReminders" -> {
                 val context = requireActivity().applicationContext
                 MentalHealthCheckupReminderScheduler.configure(
@@ -221,12 +258,17 @@ object MentalHealthCheckupPlatform {
                 REQUEST_CREATE_BACKUP,
                 REQUEST_OPEN_BACKUP,
                 REQUEST_CREATE_PDF,
+                REQUEST_APP_UNLOCK,
             )
         ) {
             return false
         }
         val operation = pending ?: return true
         pending = null
+        if (operation is PendingOperation.Unlock) {
+            operation.result.success(resultCode == Activity.RESULT_OK)
+            return true
+        }
         if (resultCode != Activity.RESULT_OK || data?.data == null) {
             when (operation) {
                 is PendingOperation.ImportBackup -> {
@@ -241,6 +283,10 @@ object MentalHealthCheckupPlatform {
 
                 is PendingOperation.ExportPdf -> {
                     operation.bytes.fill(0)
+                    operation.result.success(false)
+                }
+
+                is PendingOperation.Unlock -> {
                     operation.result.success(false)
                 }
             }
@@ -279,6 +325,10 @@ object MentalHealthCheckupPlatform {
                     val text = plain.decodeToString()
                     plain.fill(0)
                     operation.result.success(text)
+                }
+
+                is PendingOperation.Unlock -> {
+                    operation.result.success(false)
                 }
             }
         } catch (error: Throwable) {

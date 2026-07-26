@@ -27,7 +27,8 @@ class MentalHealthCheckupPage extends StatefulWidget {
       _MentalHealthCheckupPageState();
 }
 
-class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
+class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
+    with WidgetsBindingObserver {
   final MentalHealthCheckupRepository _repository =
       MentalHealthCheckupRepository();
   final MentalHealthCheckupAiService _ai = MentalHealthCheckupAiService();
@@ -42,18 +43,42 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
   bool _aiLoading = false;
   String _aiNarrative = '';
   bool _aiNarrativeUsedRemote = false;
+  bool _appLockRequired = false;
+  bool _appLockUnlocking = false;
+  String _appLockMessage = '';
+  int? _backgroundedAtMs;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabIndex = widget.initialTab.clamp(0, 4).toInt();
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _repository.setSecureScreenEnabled(false).ignore();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted || !_state.settings.appLockEnabled) return;
+    if (state == AppLifecycleState.paused && !_appLockUnlocking) {
+      _backgroundedAtMs = DateTime.now().millisecondsSinceEpoch;
+      return;
+    }
+    if (state == AppLifecycleState.resumed && !_appLockUnlocking) {
+      final backgroundedAtMs = _backgroundedAtMs;
+      _backgroundedAtMs = null;
+      if (backgroundedAtMs != null &&
+          DateTime.now().millisecondsSinceEpoch - backgroundedAtMs >= 5000) {
+        setState(() => _appLockRequired = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) => _unlockAppLock());
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -80,14 +105,56 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         _catalog = catalog;
         _state = state;
         _draft = draft;
+        _appLockRequired = state.settings.appLockEnabled;
+        _appLockMessage = '';
         _loading = false;
       });
+      if (state.settings.appLockEnabled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _unlockAppLock());
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _loadError = error.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<bool> _unlockAppLock() async {
+    if (_appLockUnlocking || !_state.settings.appLockEnabled) {
+      return !_appLockRequired;
+    }
+    setState(() {
+      _appLockUnlocking = true;
+      _appLockMessage = '';
+    });
+    try {
+      final available = await _repository.canAuthenticateAppLock();
+      if (!available) {
+        if (!mounted) return false;
+        setState(() {
+          _appLockRequired = true;
+          _appLockMessage = '设备尚未设置PIN、图案或密码，请先在系统设置中配置设备锁。';
+        });
+        return false;
+      }
+      final authenticated = await _repository.authenticateAppLock();
+      if (!mounted) return authenticated;
+      setState(() {
+        _appLockRequired = !authenticated;
+        _appLockMessage = authenticated ? '' : '未完成设备凭据验证，记录仍保持锁定。';
+      });
+      return authenticated;
+    } catch (error) {
+      if (!mounted) return false;
+      setState(() {
+        _appLockRequired = true;
+        _appLockMessage = '无法调用系统设备锁：$error';
+      });
+      return false;
+    } finally {
+      if (mounted) setState(() => _appLockUnlocking = false);
     }
   }
 
@@ -506,6 +573,47 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
     if (mounted) setState(() => _state = next);
   }
 
+  Future<void> _rescheduleRetest(CheckupPrescriptionPlan plan) async {
+    final current = DateTime.fromMillisecondsSinceEpoch(plan.nextRetestAtMs);
+    final today = DateTime.now();
+    final firstDate = DateTime(today.year, today.month, today.day);
+    final lastDate = DateTime(today.year + 1, today.month, today.day);
+    final initialDate = current.isBefore(firstDate)
+        ? firstDate
+        : current.isAfter(lastDate)
+            ? lastDate
+            : current;
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: '调整下一次复验日期',
+      confirmText: '保存日期',
+    );
+    if (selected == null || !mounted) return;
+    var target = DateTime(
+      selected.year,
+      selected.month,
+      selected.day,
+      _state.settings.reminderHour,
+      _state.settings.reminderMinute,
+    );
+    if (!target.isAfter(DateTime.now())) {
+      target = DateTime.now().add(const Duration(hours: 1));
+    }
+    final nextPlan = plan.copyWith(
+      nextRetestAtMs: target.millisecondsSinceEpoch,
+    );
+    final next = await _repository.upsertPlan(_state, nextPlan);
+    await _repository.syncPlatformSettings(next);
+    if (!mounted) return;
+    setState(() => _state = next);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('下一次复验已调整为 ${_date(target.millisecondsSinceEpoch)}。')),
+    );
+  }
+
   Future<void> _runRetest(CheckupPrescriptionPlan plan) async {
     final catalog = _catalog;
     if (catalog == null) return;
@@ -781,11 +889,32 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
     );
     if (password == null || !mounted) return;
     try {
-      final imported = await _repository.importEncryptedBackup(
+      var imported = await _repository.importEncryptedBackup(
         catalog: catalog,
         password: password,
       );
       if (!mounted || imported == null) return;
+      var appLockDisabledOnImport = false;
+      if (imported.settings.appLockEnabled) {
+        setState(() => _appLockUnlocking = true);
+        var authenticated = false;
+        try {
+          authenticated =
+              await _repository.canAuthenticateAppLock() &&
+                  await _repository.authenticateAppLock();
+        } catch (_) {
+          authenticated = false;
+        } finally {
+          if (mounted) setState(() => _appLockUnlocking = false);
+        }
+        if (!authenticated) {
+          appLockDisabledOnImport = true;
+          imported = await _repository.updateSettings(
+            imported,
+            imported.settings.copyWith(appLockEnabled: false),
+          );
+        }
+      }
       await _repository.syncPlatformSettings(imported);
       setState(() {
         _state = imported;
@@ -794,7 +923,13 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         _aiNarrative = '';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('备份已通过预检并完成原子导入。')),
+        SnackBar(
+          content: Text(
+            appLockDisabledOnImport
+                ? '备份已导入；设备凭据未验证，因此应用锁保持关闭。'
+                : '备份已通过预检并完成原子导入。',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
@@ -814,9 +949,42 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
       ),
     );
     if (settings == null || !mounted) return;
-    final next = await _repository.updateSettings(_state, settings);
+    var effectiveSettings = settings;
+    String? appLockWarning;
+    if (settings.appLockEnabled && !_state.settings.appLockEnabled) {
+      setState(() => _appLockUnlocking = true);
+      try {
+        final available = await _repository.canAuthenticateAppLock();
+        final authenticated =
+            available && await _repository.authenticateAppLock();
+        if (!authenticated) {
+          effectiveSettings = settings.copyWith(appLockEnabled: false);
+          appLockWarning = available
+              ? '未完成设备凭据验证，应用锁没有开启；其他设置已保存。'
+              : '设备尚未设置PIN、图案或密码，应用锁没有开启；其他设置已保存。';
+        }
+      } catch (error) {
+        effectiveSettings = settings.copyWith(appLockEnabled: false);
+        appLockWarning = '系统设备锁验证失败，应用锁没有开启：$error';
+      } finally {
+        if (mounted) setState(() => _appLockUnlocking = false);
+      }
+    }
+    final next = await _repository.updateSettings(
+      _state,
+      effectiveSettings,
+    );
     await _repository.syncPlatformSettings(next);
-    if (mounted) setState(() => _state = next);
+    if (!mounted) return;
+    setState(() {
+      _state = next;
+      if (!next.settings.appLockEnabled) _appLockRequired = false;
+    });
+    if (appLockWarning != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(appLockWarning)),
+      );
+    }
   }
 
   Future<void> _openEvidenceSearch({
@@ -970,6 +1138,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         ),
       );
     }
+    if (_appLockRequired) return _buildAppLock();
     if (!_state.onboardingAccepted) return _buildOnboarding();
 
     return Scaffold(
@@ -1034,6 +1203,76 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
             label: '档案',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAppLock() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F5FA),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFF4F5FA),
+        title: const Text('本地记录已锁定'),
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: 84,
+                height: 84,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8ECFF),
+                  borderRadius: BorderRadius.circular(26),
+                ),
+                child: const Icon(
+                  Icons.lock_person_outlined,
+                  size: 44,
+                  color: Color(0xFF4554C5),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '使用设备凭据解锁',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '验证由Android系统完成；本模块不会接收或保存你的PIN、图案、密码或生物信息。',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF667085),
+                  height: 1.5,
+                ),
+              ),
+              if (_appLockMessage.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _appLockMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFFB42318)),
+                ),
+              ],
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed:
+                    _appLockUnlocking ? null : () => _unlockAppLock(),
+                icon: _appLockUnlocking
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.lock_open_outlined),
+                label: Text(_appLockUnlocking ? '正在调用系统验证…' : '解锁本模块'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1344,6 +1583,14 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
             ),
           ],
         ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => _rescheduleRetest(plan),
+            icon: const Icon(Icons.edit_calendar_outlined),
+            label: Text('调整复验日 · ${_date(plan.nextRetestAtMs)}'),
+          ),
+        ),
         const SizedBox(height: 18),
         const _SectionHeader(
           title: '疗效不是“打卡次数”',
@@ -1378,6 +1625,8 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         _RetestHero(
           plan: plan,
           onRetest: plan == null ? null : () => _runRetest(plan),
+          onReschedule:
+              plan == null ? null : () => _rescheduleRetest(plan),
         ),
         const SizedBox(height: 18),
         const _SectionHeader(
@@ -1633,6 +1882,7 @@ class _MentalHealthCheckupLocalSettingsPageState
   late int _quietEndHour;
   late bool _lockScreenPrivacy;
   late bool _secureScreen;
+  late bool _appLockEnabled;
   late int _assessmentTimeBudgetMinutes;
   late int _preferredQuestionLimit;
   late bool _includeUncoveredCheck;
@@ -1654,6 +1904,7 @@ class _MentalHealthCheckupLocalSettingsPageState
     _quietEndHour = value.quietEndHour;
     _lockScreenPrivacy = value.lockScreenPrivacy;
     _secureScreen = value.secureScreen;
+    _appLockEnabled = value.appLockEnabled;
     _assessmentTimeBudgetMinutes = value.assessmentTimeBudgetMinutes;
     _preferredQuestionLimit = value.preferredQuestionLimit;
     _includeUncoveredCheck = value.includeUncoveredCheck;
@@ -1733,6 +1984,7 @@ class _MentalHealthCheckupLocalSettingsPageState
         quietEndHour: _quietEndHour,
         lockScreenPrivacy: _lockScreenPrivacy,
         secureScreen: _secureScreen,
+        appLockEnabled: _appLockEnabled,
         emergencyNumber: _cleanNumber(_emergencyController.text),
         crisisNumber: _cleanNumber(_crisisController.text),
         assessmentTimeBudgetMinutes: _assessmentTimeBudgetMinutes,
@@ -1884,6 +2136,16 @@ class _MentalHealthCheckupLocalSettingsPageState
               secondary: const Icon(Icons.screenshot_monitor_outlined),
               title: const Text('进入体检模块时阻止截图'),
               subtitle: const Text('离开本模块后自动恢复；投屏和最近任务缩略图也会被保护。'),
+            ),
+            SwitchListTile(
+              value: _appLockEnabled,
+              onChanged: (value) =>
+                  setState(() => _appLockEnabled = value),
+              secondary: const Icon(Icons.lock_person_outlined),
+              title: const Text('使用系统设备锁保护本模块'),
+              subtitle: const Text(
+                '默认关闭；开启时先验证设备PIN、图案或密码。离开应用5秒后返回会重新验证。',
+              ),
             ),
             const Divider(height: 32),
             const Text(
@@ -3330,6 +3592,10 @@ class _ActionDoseCard extends StatelessWidget {
               Text(plan.prescription.startingAction, style: const TextStyle(fontSize: 16, height: 1.55)),
               const Divider(height: 28),
               _LabeledText(label: '当前剂量', text: plan.prescription.dose),
+              _LabeledText(
+                label: '稳定后的进阶与防复发',
+                text: plan.prescription.deepeningAction,
+              ),
               _LabeledText(label: '课程位置', text: 'Lecture ${plan.prescription.lecture} · ${plan.prescription.evidenceLocation}'),
             ],
           ),
@@ -3342,13 +3608,48 @@ class _PlanMetrics extends StatelessWidget {
   const _PlanMetrics({required this.plan});
 
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Column(
         children: <Widget>[
-          Expanded(child: _MetricCard(label: '执行率', value: '${plan.completionRate.toStringAsFixed(0)}%', icon: Icons.check_circle_outline)),
-          const SizedBox(width: 8),
-          Expanded(child: _MetricCard(label: '平均收益', value: '${plan.averageBenefit.toStringAsFixed(1)}/10', icon: Icons.trending_up)),
-          const SizedBox(width: 8),
-          Expanded(child: _MetricCard(label: '过度化', value: '${plan.averageOveruseRisk.toStringAsFixed(0)}%', icon: Icons.speed_outlined)),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _MetricCard(
+                  label: '执行率',
+                  value: '${plan.completionRate.toStringAsFixed(0)}%',
+                  icon: Icons.check_circle_outline,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MetricCard(
+                  label: '平均收益',
+                  value: '${plan.averageBenefit.toStringAsFixed(1)}/10',
+                  icon: Icons.trending_up,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _MetricCard(
+                  label: '自主执行',
+                  value: '${plan.averageAutonomy.toStringAsFixed(0)}%',
+                  icon: Icons.self_improvement_outlined,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MetricCard(
+                  label: plan.hasRelapsePlan ? '已有复发预案' : '复发预案待补',
+                  value:
+                      '${plan.averageOveruseRisk.toStringAsFixed(0)}% 过度化',
+                  icon: Icons.shield_outlined,
+                ),
+              ),
+            ],
+          ),
         ],
       );
 }
@@ -3367,7 +3668,13 @@ class _ExecutionLogTile extends StatelessWidget {
             child: Icon(log.completed ? Icons.check : Icons.close, color: log.completed ? const Color(0xFF39715D) : const Color(0xFFB42318)),
           ),
           title: Text(log.completed ? '完成了可接受版本' : '本次未完成'),
-          subtitle: Text('${_date(log.createdAtMs)} · 收益 ${log.benefit.toStringAsFixed(1)}/10 · 功能 ${log.functionChange >= 0 ? '+' : ''}${log.functionChange.toStringAsFixed(0)} · 过度化 ${log.overuseRisk.toStringAsFixed(0)}%'),
+          subtitle: Text(
+            '${_date(log.createdAtMs)} · 收益 ${log.benefit.toStringAsFixed(1)}/10 '
+            '· 功能 ${log.functionChange >= 0 ? '+' : ''}${log.functionChange.toStringAsFixed(0)} '
+            '· 自主 ${log.autonomy.toStringAsFixed(0)}/10 '
+            '· ${log.relapsePlanReady ? '已有复发预案' : '预案待补'} '
+            '· 过度化 ${log.overuseRisk.toStringAsFixed(0)}%',
+          ),
         ),
       );
 }
@@ -3394,7 +3701,12 @@ class _StopRuleCard extends StatelessWidget {
 class _RetestHero extends StatelessWidget {
   final CheckupPrescriptionPlan? plan;
   final VoidCallback? onRetest;
-  const _RetestHero({required this.plan, required this.onRetest});
+  final VoidCallback? onReschedule;
+  const _RetestHero({
+    required this.plan,
+    required this.onRetest,
+    required this.onReschedule,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3415,7 +3727,23 @@ class _RetestHero extends StatelessWidget {
           const SizedBox(height: 7),
           Text(plan == null ? '先建立基线并启动一项课程行动；系统不会把重复做题误当成恢复。' : '复验重新检查目标领域、现实功能、执行率、过度化和自主性。', style: const TextStyle(color: Color(0xFF667085), height: 1.45)),
           const SizedBox(height: 14),
-          FilledButton.icon(onPressed: onRetest, icon: const Icon(Icons.fact_check_outlined), label: const Text('完成 B20 课程复验')),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              FilledButton.icon(
+                onPressed: onRetest,
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('完成 B20 课程复验'),
+              ),
+              if (plan != null)
+                OutlinedButton.icon(
+                  onPressed: onReschedule,
+                  icon: const Icon(Icons.edit_calendar_outlined),
+                  label: const Text('调整日期'),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -3636,6 +3964,8 @@ class _RetestRecordCard extends StatelessWidget {
                   _MiniPill('分数 ${record.scoreChange >= 0 ? '+' : ''}${record.scoreChange.toStringAsFixed(1)}'),
                   _MiniPill('功能 ${record.functionChange >= 0 ? '+' : ''}${record.functionChange.toStringAsFixed(1)}'),
                   _MiniPill('执行 ${record.executionRate.toStringAsFixed(0)}%'),
+                  _MiniPill('自主 ${record.autonomyScore.toStringAsFixed(0)}%'),
+                  _MiniPill(record.relapsePlanReady ? '复发预案已备' : '复发预案待补'),
                   _MiniPill('过度化 ${record.overuseRisk.toStringAsFixed(0)}%'),
                 ],
               ),
@@ -3745,6 +4075,8 @@ class _ExecutionCheckInSheetState extends State<_ExecutionCheckInSheet> {
   double _benefit = 5;
   double _function = 0;
   double _overuse = 0;
+  double _autonomy = 5;
+  bool _relapsePlanReady = false;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -3770,6 +4102,25 @@ class _ExecutionCheckInSheetState extends State<_ExecutionCheckInSheet> {
               _SliderField(label: '即时收益', value: _benefit, min: 0, max: 10, divisions: 10, onChanged: (v) => setState(() => _benefit = v)),
               _SliderField(label: '现实功能变化', value: _function, min: -2, max: 2, divisions: 4, onChanged: (v) => setState(() => _function = v)),
               _SliderField(label: '过度化/僵化风险', value: _overuse, min: 0, max: 10, divisions: 10, onChanged: (v) => setState(() => _overuse = v)),
+              _SliderField(
+                label: '自主执行（较少提醒也能完成）',
+                value: _autonomy,
+                min: 0,
+                max: 10,
+                divisions: 10,
+                onChanged: (value) => setState(() => _autonomy = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _relapsePlanReady,
+                onChanged: (value) =>
+                    setState(() => _relapsePlanReady = value),
+                secondary: const Icon(Icons.shield_outlined),
+                title: const Text('已形成可执行的复发预案'),
+                subtitle: const Text(
+                  '只保存“已准备/未准备”；不保存私密预案原文。',
+                ),
+              ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -3782,6 +4133,8 @@ class _ExecutionCheckInSheetState extends State<_ExecutionCheckInSheet> {
                       benefit: _benefit,
                       functionChange: _function,
                       overuseRisk: _overuse * 10,
+                      autonomy: _autonomy,
+                      relapsePlanReady: _relapsePlanReady,
                     ),
                   ),
                   icon: const Icon(Icons.save_outlined),

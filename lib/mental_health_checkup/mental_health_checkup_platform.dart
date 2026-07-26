@@ -90,6 +90,16 @@ class MentalHealthCheckupPlatform {
     );
   }
 
+  Future<bool> canAuthenticateAppLock() async {
+    if (!Platform.isAndroid) return false;
+    return await _channel.invokeMethod<bool>('isDeviceLockAvailable') ?? false;
+  }
+
+  Future<bool> authenticateAppLock() async {
+    if (!Platform.isAndroid) return false;
+    return await _channel.invokeMethod<bool>('authenticateAppLock') ?? false;
+  }
+
   Future<void> scheduleReminders({
     required bool enabled,
     required int hour,

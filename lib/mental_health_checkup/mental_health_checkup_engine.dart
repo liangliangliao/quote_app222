@@ -173,6 +173,8 @@ class MentalHealthCheckupEngine {
         (baseline.functionImpact - retest.functionImpact).toDouble();
     final executionRate = plan.completionRate;
     final overuse = plan.averageOveruseRisk;
+    final autonomy = plan.averageAutonomy;
+    final relapsePlanReady = plan.hasRelapsePlan;
     CheckupRetestRecord? previous;
     for (final item in priorRetests) {
       if (item.planId == plan.id) {
@@ -180,17 +182,22 @@ class MentalHealthCheckupEngine {
         break;
       }
     }
-    final currentStable = retest.safetyClear &&
+    final recoveryBaseReady = retest.safetyClear &&
         retest.overallScore >= 75 &&
         retest.functionImpact <= 1 &&
         executionRate >= 70 &&
         overuse <= 30;
+    final currentStable = recoveryBaseReady &&
+        autonomy >= 60 &&
+        relapsePlanReady;
     final previousStable = previous != null &&
         previous.safetyClear &&
         previous.retestScore >= 75 &&
         previous.retestFunctionImpact <= 1 &&
         previous.executionRate >= 70 &&
-        previous.overuseRisk <= 30;
+        previous.overuseRisk <= 30 &&
+        previous.autonomyScore >= 60 &&
+        previous.relapsePlanReady;
     final currentNoImprovement =
         executionRate >= 70 && scoreChange < 3 && overuse < 50;
     final previousNoImprovement = previous != null &&
@@ -213,6 +220,16 @@ class MentalHealthCheckupEngine {
       decision = '维持当前剂量';
       reason = '本次复验已达到稳定门槛，但进入恢复维持需要第二次连续稳定证据；'
           '当前不加量，也不因现实功能已处于低影响水平而误判为证据冲突。';
+    } else if (recoveryBaseReady) {
+      decision = '补充自主执行与复发预案证据';
+      reason = autonomy < 60 && !relapsePlanReady
+          ? '指标、功能、执行和过度化已达到参考带，但自主执行仍不足60，'
+              '且尚未确认复发预案；暂不宣布进入恢复维持。'
+          : autonomy < 60
+              ? '其余恢复条件已达到参考带，但自主执行仍不足60；'
+                  '请逐步减少提醒依赖后再复验。'
+              : '其余恢复条件已达到参考带，但尚未确认复发预案；'
+                  '请先形成可执行的早期信号与应对计划。';
     } else if (scoreChange >= 10 && functionChange > 0) {
       decision = '维持当前剂量';
       reason = '目标改善 ${scoreChange.toStringAsFixed(1)} 分，现实功能也有改善，不宜过早加量。';
@@ -243,6 +260,8 @@ class MentalHealthCheckupEngine {
       functionChange: _round1(functionChange),
       executionRate: _round1(executionRate),
       overuseRisk: _round1(overuse),
+      autonomyScore: _round1(autonomy),
+      relapsePlanReady: relapsePlanReady,
       retestScore: _round1(retest.overallScore),
       retestFunctionImpact: retest.functionImpact,
       safetyClear: retest.safetyClear,

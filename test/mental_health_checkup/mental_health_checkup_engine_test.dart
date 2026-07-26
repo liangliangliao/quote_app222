@@ -657,6 +657,47 @@ void main() {
         CheckupPlanStatus.maintenance,
       );
     });
+
+    test('recovery is blocked without autonomy and a relapse plan', () {
+      final plan = _plan(
+        baseline,
+        <CheckupExecutionLog>[
+          _log(
+            completed: true,
+            autonomy: 4,
+            relapsePlanReady: false,
+          ),
+          _log(
+            completed: true,
+            autonomy: 5,
+            relapsePlanReady: false,
+          ),
+        ],
+      );
+      final stable = _report(engine, 'stable-without-autonomy', risk: 0);
+      final retest = engine.evaluateRetest(
+        plan: plan,
+        baseline: baseline,
+        retest: stable,
+        priorRetests: <CheckupRetestRecord>[
+          _priorRetest(plan: plan, baseline: baseline, retest: stable),
+        ],
+      );
+
+      expect(retest.decision, contains('自主执行'));
+      expect(retest.reason, contains('暂不宣布'));
+      expect(retest.autonomyScore, 45);
+      expect(retest.relapsePlanReady, isFalse);
+      final restored = CheckupRetestRecord.fromJson(
+        Map<String, dynamic>.from(retest.toJson()),
+      );
+      expect(restored.autonomyScore, 45);
+      expect(restored.relapsePlanReady, isFalse);
+      expect(
+        engine.applyRetestDecision(plan, retest).status,
+        CheckupPlanStatus.active,
+      );
+    });
   });
 
   test('persistent state survives a JSON round trip', () {
@@ -678,6 +719,7 @@ void main() {
     );
     final state = MentalHealthCheckupState(
       onboardingAccepted: true,
+      settings: const MentalHealthCheckupSettings(appLockEnabled: true),
       sessions: <CheckupSession>[session],
     );
 
@@ -689,6 +731,7 @@ void main() {
         CheckupSafetyStatus.clear);
     expect(decoded.sessions.single.assessmentPlan.questionLimit, 26);
     expect(decoded.sessions.single.assessmentPlan.wantsCourseAction, isFalse);
+    expect(decoded.settings.appLockEnabled, isTrue);
   });
 
   test('full AI context includes the closed loop and excludes local secrets',
@@ -1313,6 +1356,8 @@ CheckupPrescriptionPlan _plan(
 CheckupExecutionLog _log({
   required bool completed,
   double overuse = 0,
+  double autonomy = 8,
+  bool relapsePlanReady = true,
 }) =>
     CheckupExecutionLog(
       createdAtMs: 1,
@@ -1321,6 +1366,8 @@ CheckupExecutionLog _log({
       benefit: 4,
       functionChange: 0,
       overuseRisk: overuse,
+      autonomy: autonomy,
+      relapsePlanReady: relapsePlanReady,
     );
 
 CheckupRetestRecord _priorRetest({
@@ -1339,6 +1386,8 @@ CheckupRetestRecord _priorRetest({
           (baseline.functionImpact - retest.functionImpact).toDouble(),
       executionRate: plan.completionRate,
       overuseRisk: plan.averageOveruseRisk,
+      autonomyScore: plan.averageAutonomy,
+      relapsePlanReady: plan.hasRelapsePlan,
       retestScore: retest.overallScore,
       retestFunctionImpact: retest.functionImpact,
       safetyClear: retest.safetyClear,

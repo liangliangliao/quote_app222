@@ -683,6 +683,8 @@ class CheckupExecutionLog {
   final double benefit;
   final double functionChange;
   final double overuseRisk;
+  final double autonomy;
+  final bool relapsePlanReady;
 
   const CheckupExecutionLog({
     required this.createdAtMs,
@@ -691,6 +693,8 @@ class CheckupExecutionLog {
     required this.benefit,
     required this.functionChange,
     required this.overuseRisk,
+    this.autonomy = 0,
+    this.relapsePlanReady = false,
   });
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -700,6 +704,8 @@ class CheckupExecutionLog {
         'benefit': benefit,
         'function_change': functionChange,
         'overuse_risk': overuseRisk,
+        'autonomy': autonomy,
+        'relapse_plan_ready': relapsePlanReady,
       };
 
   factory CheckupExecutionLog.fromJson(Map<String, dynamic> json) =>
@@ -711,6 +717,8 @@ class CheckupExecutionLog {
         functionChange:
             (json['function_change'] as num?)?.toDouble() ?? 0,
         overuseRisk: (json['overuse_risk'] as num?)?.toDouble() ?? 0,
+        autonomy: (json['autonomy'] as num?)?.toDouble() ?? 0,
+        relapsePlanReady: json['relapse_plan_ready'] == true,
       );
 }
 
@@ -750,6 +758,16 @@ class CheckupPrescriptionPlan {
     return logs.map((e) => e.overuseRisk).reduce((a, b) => a + b) /
         logs.length;
   }
+
+  double get averageAutonomy {
+    if (logs.isEmpty) return 0;
+    return logs.map((e) => e.autonomy).reduce((a, b) => a + b) /
+        logs.length *
+        10;
+  }
+
+  bool get hasRelapsePlan =>
+      logs.any((log) => log.relapsePlanReady);
 
   CheckupPrescriptionPlan copyWith({
     CheckupPlanStatus? status,
@@ -813,6 +831,8 @@ class CheckupRetestRecord {
   final double functionChange;
   final double executionRate;
   final double overuseRisk;
+  final double autonomyScore;
+  final bool relapsePlanReady;
   final double retestScore;
   final int retestFunctionImpact;
   final bool safetyClear;
@@ -829,6 +849,8 @@ class CheckupRetestRecord {
     required this.functionChange,
     required this.executionRate,
     required this.overuseRisk,
+    this.autonomyScore = 0,
+    this.relapsePlanReady = false,
     this.retestScore = 0,
     this.retestFunctionImpact = 4,
     this.safetyClear = false,
@@ -846,6 +868,8 @@ class CheckupRetestRecord {
         'function_change': functionChange,
         'execution_rate': executionRate,
         'overuse_risk': overuseRisk,
+        'autonomy_score': autonomyScore,
+        'relapse_plan_ready': relapsePlanReady,
         'retest_score': retestScore,
         'retest_function_impact': retestFunctionImpact,
         'safety_clear': safetyClear,
@@ -865,6 +889,9 @@ class CheckupRetestRecord {
             (json['function_change'] as num?)?.toDouble() ?? 0,
         executionRate: (json['execution_rate'] as num?)?.toDouble() ?? 0,
         overuseRisk: (json['overuse_risk'] as num?)?.toDouble() ?? 0,
+        autonomyScore:
+            (json['autonomy_score'] as num?)?.toDouble() ?? 0,
+        relapsePlanReady: json['relapse_plan_ready'] == true,
         retestScore: (json['retest_score'] as num?)?.toDouble() ?? 0,
         retestFunctionImpact:
             (json['retest_function_impact'] as num?)?.toInt() ?? 4,
@@ -882,6 +909,7 @@ class MentalHealthCheckupSettings {
   final int quietEndHour;
   final bool lockScreenPrivacy;
   final bool secureScreen;
+  final bool appLockEnabled;
   final String emergencyNumber;
   final String crisisNumber;
   final int assessmentTimeBudgetMinutes;
@@ -898,6 +926,7 @@ class MentalHealthCheckupSettings {
     this.quietEndHour = 8,
     this.lockScreenPrivacy = true,
     this.secureScreen = false,
+    this.appLockEnabled = false,
     this.emergencyNumber = '',
     this.crisisNumber = '',
     this.assessmentTimeBudgetMinutes = 20,
@@ -915,6 +944,7 @@ class MentalHealthCheckupSettings {
     int? quietEndHour,
     bool? lockScreenPrivacy,
     bool? secureScreen,
+    bool? appLockEnabled,
     String? emergencyNumber,
     String? crisisNumber,
     int? assessmentTimeBudgetMinutes,
@@ -931,6 +961,7 @@ class MentalHealthCheckupSettings {
         quietEndHour: quietEndHour ?? this.quietEndHour,
         lockScreenPrivacy: lockScreenPrivacy ?? this.lockScreenPrivacy,
         secureScreen: secureScreen ?? this.secureScreen,
+        appLockEnabled: appLockEnabled ?? this.appLockEnabled,
         emergencyNumber: emergencyNumber ?? this.emergencyNumber,
         crisisNumber: crisisNumber ?? this.crisisNumber,
         assessmentTimeBudgetMinutes:
@@ -956,6 +987,7 @@ class MentalHealthCheckupSettings {
         'quiet_end_hour': quietEndHour,
         'lock_screen_privacy': lockScreenPrivacy,
         'secure_screen': secureScreen,
+        'app_lock_enabled': appLockEnabled,
         'emergency_number': emergencyNumber,
         'crisis_number': crisisNumber,
         'assessment_time_budget_minutes': assessmentTimeBudgetMinutes,
@@ -983,6 +1015,7 @@ class MentalHealthCheckupSettings {
             .toInt(),
         lockScreenPrivacy: json['lock_screen_privacy'] != false,
         secureScreen: json['secure_screen'] == true,
+        appLockEnabled: json['app_lock_enabled'] == true,
         emergencyNumber: (json['emergency_number'] ?? '').toString(),
         crisisNumber: (json['crisis_number'] ?? '').toString(),
         assessmentTimeBudgetMinutes:
