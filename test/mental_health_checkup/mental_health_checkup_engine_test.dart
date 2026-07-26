@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quote_app/mental_health_checkup/mental_health_content_governance.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_backup.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_ai_service.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_checkup_catalog.dart';
@@ -614,6 +615,240 @@ void main() {
     );
 
     expect(insights.any((item) => item.title.contains('个人基线')), isTrue);
+  });
+
+  group('content candidate governance', () {
+    const governance = MentalHealthContentGovernanceEngine();
+    const indicators = <CheckupIndicator>[
+      CheckupIndicator(
+        id: 'L04-C1',
+        lecture: 4,
+        area: '情绪与认知',
+        name: '情绪接纳',
+        type: '保护型',
+        definitionLocation: 'L04-P001',
+        lowLocation: 'L04-P002',
+        highLocation: 'L04-P003',
+        actionLocation: 'L04-P004',
+        directEvidenceCount: 4,
+        directness: '直接证据较强',
+        reviewStatus: '待课程专家确认',
+      ),
+      CheckupIndicator(
+        id: 'L04-R1',
+        lecture: 4,
+        area: '情绪与认知',
+        name: '强迫积极',
+        type: '风险型',
+        definitionLocation: 'L04-P010',
+        lowLocation: 'L04-P011',
+        highLocation: 'L04-P012',
+        actionLocation: 'L04-P013',
+        directEvidenceCount: 2,
+        directness: '混合直接/推导',
+        reviewStatus: '待课程专家确认',
+      ),
+    ];
+
+    test('every indicator gets item types, B0-B4 and evidence ids', () {
+      final queue = governance.buildGenerationQueue(indicators);
+
+      expect(queue, hasLength(indicators.length));
+      expect(
+        queue.every(
+          (plan) => plan.behaviorLevels
+              .toSet()
+              .containsAll(const <String>{'B0', 'B1', 'B2', 'B3', 'B4'}),
+        ),
+        isTrue,
+      );
+      expect(queue.every((plan) => plan.itemTypeCodes.length >= 4), isTrue);
+      expect(queue.every((plan) => plan.evidenceIds.isNotEmpty), isTrue);
+      expect(
+        queue
+            .firstWhere((plan) => plan.indicatorId == 'L04-R1')
+            .itemTypeCodes,
+        containsAll(const <String>['A5', 'A3', 'A4', 'A8']),
+      );
+    });
+
+    test('quality gate rejects an unreviewed local template', () {
+      final plan = governance.buildGenerationQueue(indicators).first;
+      final draft = governance.createLocalDraft(
+        plan: plan,
+        contentCode: 'A3',
+        courseVersion: '2.5',
+        now: DateTime.fromMillisecondsSinceEpoch(100),
+      );
+
+      final validation = governance.validate(draft);
+      expect(validation.valid, isFalse);
+      expect(
+        validation.blockingIssues.any((issue) => issue.contains('课程忠实度')),
+        isTrue,
+      );
+      expect(
+        () => governance.transition(
+          candidate: draft,
+          target: CheckupCandidateStage.candidate,
+          actor: '作者甲',
+          note: '提交候选',
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('independent review, interview and pilot are required for publish',
+        () {
+      final plan = governance.buildGenerationQueue(indicators).first;
+      var value = governance.createLocalDraft(
+        plan: plan,
+        contentCode: 'A3',
+        courseVersion: '2.5',
+        author: '作者甲',
+        now: DateTime.fromMillisecondsSinceEpoch(100),
+      );
+      value = value.copyWith(
+        quality: const CheckupCandidateQuality(
+          indicatorConsistency: 90,
+          courseFidelity: 90,
+          nonDuplication: 90,
+          measurability: 90,
+          scaleWindowFit: 90,
+          bidirectionalLogic: 90,
+          safety: 95,
+        ),
+      );
+      value = governance
+          .transition(
+            candidate: value,
+            target: CheckupCandidateStage.candidate,
+            actor: '作者甲',
+            note: '字段与质量门通过',
+            now: DateTime.fromMillisecondsSinceEpoch(101),
+          )
+          .candidate
+          .copyWith(
+            evidenceReviewPassed: true,
+            constructReviewPassed: true,
+          );
+
+      expect(
+        () => governance.transition(
+          candidate: value,
+          target: CheckupCandidateStage.cognitiveInterview,
+          actor: '作者甲',
+          note: '自行审核',
+        ),
+        throwsStateError,
+      );
+
+      value = governance
+          .transition(
+            candidate: value,
+            target: CheckupCandidateStage.cognitiveInterview,
+            actor: '独立审核乙',
+            note: '课程证据与单一构念通过',
+            now: DateTime.fromMillisecondsSinceEpoch(102),
+          )
+          .candidate;
+      expect(
+        () => governance.transition(
+          candidate: value,
+          target: CheckupCandidateStage.pilot,
+          actor: '访谈员丙',
+          note: '尚未访谈',
+        ),
+        throwsStateError,
+      );
+
+      value = value.copyWith(cognitiveInterviewPassed: true);
+      value = governance
+          .transition(
+            candidate: value,
+            target: CheckupCandidateStage.pilot,
+            actor: '访谈员丙',
+            note: '目标用户理解符合预期',
+            now: DateTime.fromMillisecondsSinceEpoch(103),
+          )
+          .candidate
+          .copyWith(
+            pilotPassed: true,
+            pilotSampleSize: 24,
+            pilotNotes: '缺失率、区分度和初步稳定性达到预设门槛。',
+          );
+
+      expect(
+        () => governance.transition(
+          candidate: value,
+          target: CheckupCandidateStage.official,
+          actor: 'AI审核',
+          note: '自动发布',
+        ),
+        throwsStateError,
+      );
+      final published = governance.transition(
+        candidate: value,
+        target: CheckupCandidateStage.official,
+        actor: '签发人丁',
+        note: '人工签发V1',
+        now: DateTime.fromMillisecondsSinceEpoch(104),
+      );
+      expect(published.candidate.stage, CheckupCandidateStage.official);
+      expect(published.candidate.signer, '签发人丁');
+      expect(
+        published.auditEvent.fromStage,
+        CheckupCandidateStage.pilot,
+      );
+    });
+
+    test('official content creates a new immutable revision lineage', () {
+      final plan = governance.buildGenerationQueue(indicators).first;
+      final official = governance
+          .createLocalDraft(
+            plan: plan,
+            contentCode: 'B1',
+            courseVersion: '2.5',
+            now: DateTime.fromMillisecondsSinceEpoch(100),
+          )
+          .copyWith(
+            stage: CheckupCandidateStage.official,
+            version: 3,
+            signer: '签发人',
+          );
+
+      final revision = governance.reviseOfficial(
+        official: official,
+        author: '修订者',
+        now: DateTime.fromMillisecondsSinceEpoch(200),
+      );
+
+      expect(revision.stage, CheckupCandidateStage.draft);
+      expect(revision.version, 4);
+      expect(revision.parentCandidateId, official.candidateId);
+      expect(official.stage, CheckupCandidateStage.official);
+      expect(official.version, 3);
+    });
+
+    test('candidate JSON keeps version and audit-critical fields', () {
+      final plan = governance.buildGenerationQueue(indicators).last;
+      final value = governance.createLocalDraft(
+        plan: plan,
+        contentCode: 'B2',
+        courseVersion: '2.5',
+        now: DateTime.fromMillisecondsSinceEpoch(100),
+      );
+      final restored = CheckupContentCandidate.fromJson(
+        Map<String, dynamic>.from(value.toJson()),
+      );
+
+      expect(restored.candidateId, value.candidateId);
+      expect(restored.primaryIndicatorId, 'L04-R1');
+      expect(restored.courseEvidenceIds, value.courseEvidenceIds);
+      expect(restored.smallerVersion, isNotEmpty);
+      expect(restored.counterEvidencePrompt, isNotEmpty);
+      expect(restored.safetyRule, contains('不得练习风险行为'));
+    });
   });
 }
 

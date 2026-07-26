@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'mental_health_assessment_page.dart';
+import 'mental_health_content_governance_page.dart';
 import 'mental_health_checkup_ai_service.dart';
 import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_engine.dart';
@@ -1454,9 +1455,22 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage> {
         _SettingsTile(
           icon: Icons.tune,
           title: '本模块 AI 提示词',
-          subtitle: '编辑全局安全、报告解释和复验解释 Prompt',
+          subtitle: '编辑全局安全、报告、复验和内容候选生成 Prompt',
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const MentalHealthCheckupPromptPage()),
+          ),
+        ),
+        _SettingsTile(
+          icon: Icons.account_tree_outlined,
+          title: '课程内容候选治理台',
+          subtitle: '345项生成计划 · A1-A9/B0-B4 · 独立审核、试测、签发与版本审计',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => MentalHealthContentGovernancePage(
+                catalog: catalog,
+                repository: _repository,
+              ),
+            ),
           ),
         ),
         _SettingsTile(

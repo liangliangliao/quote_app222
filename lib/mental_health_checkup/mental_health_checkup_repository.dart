@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
 import '../data/kv_dao.dart';
+import 'mental_health_content_governance.dart';
 import 'mental_health_checkup_backup.dart';
 import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_models.dart';
@@ -122,7 +123,7 @@ class CheckupEvidenceTrace {
 }
 
 class MentalHealthCheckupRepository {
-  static const int _schemaVersion = 4;
+  static const int _schemaVersion = 5;
   static const String _legacyStateKey = 'mental_health_checkup.state.v25';
   static const String _legacyDraftKey = 'mental_health_checkup.draft.v25';
   static const String _promptPrefix = 'ai_prompt.mental_health_checkup.';
@@ -229,6 +230,43 @@ class MentalHealthCheckupRepository {
         )
       ''');
       await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_content_candidates (
+          id TEXT PRIMARY KEY,
+          indicator_id TEXT NOT NULL,
+          content_kind TEXT NOT NULL,
+          content_code TEXT NOT NULL,
+          stage TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_content_audit_events (
+          id TEXT PRIMARY KEY,
+          candidate_id TEXT NOT NULL,
+          from_stage TEXT NOT NULL,
+          to_stage TEXT NOT NULL,
+          actor TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          FOREIGN KEY (candidate_id) REFERENCES mh_content_candidates(id)
+            ON DELETE CASCADE
+        )
+      ''');
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_content_candidate_indicator '
+        'ON mh_content_candidates(indicator_id, content_kind, content_code)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_content_candidate_stage '
+        'ON mh_content_candidates(stage, updated_at_ms DESC)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_content_audit_candidate '
+        'ON mh_content_audit_events(candidate_id, created_at_ms)',
+      );
+      await txn.execute('''
         CREATE TABLE IF NOT EXISTS mh_indicators (
           indicator_id TEXT PRIMARY KEY,
           lecture_no INTEGER NOT NULL,
@@ -334,6 +372,13 @@ class MentalHealthCheckupRepository {
         db,
         'migration_4',
         'indicator_and_evidence_reference_tables',
+      );
+    }
+    if (oldVersion < 5) {
+      await _putMeta(
+        db,
+        'migration_5',
+        'content_candidate_governance_and_audit',
       );
     }
   }
@@ -882,6 +927,151 @@ class MentalHealthCheckupRepository {
     );
   }
 
+  Future<List<CheckupContentCandidate>> loadContentCandidates({
+    String? indicatorId,
+    CheckupCandidateStage? stage,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (indicatorId != null && indicatorId.trim().isNotEmpty) {
+      clauses.add('indicator_id = ?');
+      args.add(indicatorId.trim());
+    }
+    if (stage != null) {
+      clauses.add('stage = ?');
+      args.add(stage.name);
+    }
+    final rows = await db.query(
+      'mh_content_candidates',
+      where: clauses.isEmpty ? null : clauses.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'updated_at_ms DESC, version DESC',
+    );
+    return rows
+        .map(
+          (row) => CheckupContentCandidate.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> saveContentCandidate(
+    CheckupContentCandidate candidate,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.transaction((txn) async {
+      final existing = await txn.query(
+        'mh_content_candidates',
+        columns: <String>['stage', 'payload_json'],
+        where: 'id = ?',
+        whereArgs: <Object?>[candidate.candidateId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        final existingStage = (existing.first['stage'] ?? '').toString();
+        if (existingStage == CheckupCandidateStage.official.name ||
+            existingStage == CheckupCandidateStage.retired.name) {
+          final existingPayload =
+              (existing.first['payload_json'] ?? '').toString();
+          if (existingPayload != jsonEncode(candidate.toJson())) {
+            throw StateError('正式或已停用内容不可覆盖；请派生新版本。');
+          }
+          return;
+        }
+      }
+      await _putContentCandidate(txn, candidate);
+    });
+  }
+
+  Future<void> saveContentTransition(
+    CheckupCandidateTransition transition,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.transaction((txn) async {
+      final currentRows = await txn.query(
+        'mh_content_candidates',
+        columns: <String>['stage'],
+        where: 'id = ?',
+        whereArgs: <Object?>[transition.candidate.candidateId],
+        limit: 1,
+      );
+      if (currentRows.isEmpty) throw StateError('候选内容不存在，无法变更状态。');
+      final currentStage = (currentRows.first['stage'] ?? '').toString();
+      if (currentStage != transition.auditEvent.fromStage.name ||
+          transition.candidate.stage != transition.auditEvent.toStage) {
+        throw StateError('候选状态已变化，请刷新后重试。');
+      }
+      if (transition.candidate.stage == CheckupCandidateStage.official) {
+        final conflicts = Sqflite.firstIntValue(
+              await txn.rawQuery(
+                '''
+                SELECT COUNT(*)
+                FROM mh_content_candidates
+                WHERE indicator_id = ? AND content_kind = ?
+                  AND content_code = ? AND version = ?
+                  AND stage = ? AND id != ?
+                ''',
+                <Object?>[
+                  transition.candidate.primaryIndicatorId,
+                  transition.candidate.kind.name,
+                  transition.candidate.contentCode,
+                  transition.candidate.version,
+                  CheckupCandidateStage.official.name,
+                  transition.candidate.candidateId,
+                ],
+              ),
+            ) ??
+            0;
+        if (conflicts > 0) {
+          throw StateError('同一指标、内容类型和版本已经存在正式内容。');
+        }
+      }
+      await _putContentCandidate(txn, transition.candidate);
+      await txn.insert(
+        'mh_content_audit_events',
+        <String, Object?>{
+          'id': transition.auditEvent.id,
+          'candidate_id': transition.auditEvent.candidateId,
+          'from_stage': transition.auditEvent.fromStage.name,
+          'to_stage': transition.auditEvent.toStage.name,
+          'actor': transition.auditEvent.actor,
+          'created_at_ms': transition.auditEvent.createdAtMs,
+          'payload_json': jsonEncode(transition.auditEvent.toJson()),
+        },
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+    });
+  }
+
+  Future<List<CheckupContentAuditEvent>> loadContentAudit(
+    String candidateId,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_content_audit_events',
+      where: 'candidate_id = ?',
+      whereArgs: <Object?>[candidateId],
+      orderBy: 'created_at_ms ASC',
+    );
+    return rows
+        .map(
+          (row) => CheckupContentAuditEvent.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   Future<List<CheckupCourseEvidence>> searchCourseEvidence(
     String query, {
     int? lecture,
@@ -1087,6 +1277,8 @@ class MentalHealthCheckupRepository {
     await _ensureSchema(db);
     await db.transaction((txn) async {
       for (final table in const <String>[
+        'mh_content_audit_events',
+        'mh_content_candidates',
         'mh_answers',
         'mh_sessions',
         'mh_execution_logs',
@@ -1250,6 +1442,26 @@ class MentalHealthCheckupRepository {
     await db.insert(
       'mh_meta',
       <String, Object?>{'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> _putContentCandidate(
+    DatabaseExecutor db,
+    CheckupContentCandidate candidate,
+  ) async {
+    await db.insert(
+      'mh_content_candidates',
+      <String, Object?>{
+        'id': candidate.candidateId,
+        'indicator_id': candidate.primaryIndicatorId,
+        'content_kind': candidate.kind.name,
+        'content_code': candidate.contentCode,
+        'stage': candidate.stage.name,
+        'version': candidate.version,
+        'updated_at_ms': candidate.updatedAtMs,
+        'payload_json': jsonEncode(candidate.toJson()),
+      },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
