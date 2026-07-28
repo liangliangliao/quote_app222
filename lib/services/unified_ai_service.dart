@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -25,6 +26,22 @@ class UnifiedAiResolvedConfig {
     required this.label,
     required this.displayModel,
     required this.available,
+  });
+}
+
+class UnifiedAiUploadedFile {
+  final String provider;
+  final String fileId;
+  final String resourceId;
+  final String fileName;
+  final int byteCount;
+
+  const UnifiedAiUploadedFile({
+    required this.provider,
+    required this.fileId,
+    required this.resourceId,
+    required this.fileName,
+    required this.byteCount,
   });
 }
 
@@ -497,12 +514,61 @@ class UnifiedAiService {
     }
   }
 
+  Future<String> generateTextWithFile({
+    required String prompt,
+    required String purpose,
+    required String provider,
+    required String fileId,
+    String? fileName,
+    String? systemPrompt,
+    int maxTokens = 1800,
+    bool expectJson = false,
+    double? temperature,
+  }) async {
+    final normalizedProvider = _normalizeProvider(provider);
+    if (!_supportsPersistentFileKnowledge(normalizedProvider)) {
+      throw UnsupportedError(
+        '$normalizedProvider不支持持久文件ID知识库输入',
+      );
+    }
+    final current = await resolveGlobalConfig();
+    if (!current.available || current.provider != normalizedProvider) {
+      throw StateError('当前AI供应商与课程知识库资源不匹配');
+    }
+    return generateChatMessages(
+      messages: <UnifiedAiChatMessage>[
+        if ((systemPrompt ?? '').trim().isNotEmpty)
+          UnifiedAiChatMessage(
+            role: 'system',
+            content: systemPrompt!.trim(),
+          ),
+        UnifiedAiChatMessage(
+          role: 'user',
+          content: prompt,
+          parts: <UnifiedAiContentPart>[
+            UnifiedAiContentPart.fileId(
+              fileId: fileId,
+              filename: fileName,
+              mimeType: 'text/plain',
+            ),
+          ],
+        ),
+      ],
+      purpose: purpose,
+      maxTokens: maxTokens,
+      forcedProvider: normalizedProvider,
+      expectJson: expectJson,
+      temperature: temperature,
+    );
+  }
+
   Future<String> generateChatMessages({
     required List<UnifiedAiChatMessage> messages,
     String purpose = 'ai_assistant.chat',
     int maxTokens = 2200,
     String? forcedProvider,
     String? forcedModel,
+    bool expectJson = false,
     double? temperature,
   }) async {
     final cleaned = <UnifiedAiChatMessage>[];
@@ -536,6 +602,7 @@ class UnifiedAiService {
           messages: cleaned,
           purpose: purpose,
           maxTokens: effectiveMaxTokens,
+          expectJson: expectJson,
           temperature: effectiveTemperature,
           topP: effectiveTopP,
           timeout: effectiveTimeout,
@@ -556,6 +623,7 @@ class UnifiedAiService {
           messages: cleaned,
           purpose: purpose,
           maxTokens: effectiveMaxTokens,
+          expectJson: expectJson,
           temperature: effectiveTemperature,
           topP: effectiveTopP,
           timeout: effectiveTimeout,
@@ -572,6 +640,7 @@ class UnifiedAiService {
     required List<UnifiedAiChatMessage> messages,
     required String purpose,
     required int maxTokens,
+    required bool expectJson,
     double? temperature,
     double? topP,
     required Duration timeout,
@@ -591,6 +660,8 @@ class UnifiedAiService {
             'model': model,
             'messages': messages.map((e) => e.toJson(supportsVision: true, supportsFiles: true, openAiResponses: false)).toList(),
             'max_tokens': maxTokens,
+            if (expectJson)
+              'response_format': <String, dynamic>{'type': 'json_object'},
             if (temperature != null) 'temperature': temperature,
             if (topP != null) 'top_p': topP,
             'stream': false,
@@ -599,6 +670,10 @@ class UnifiedAiService {
             'model': model,
             'input': messages.map((e) => e.toJson(supportsVision: true, supportsFiles: true, openAiResponses: true)).toList(),
             'max_output_tokens': maxTokens,
+            if (expectJson)
+              'text': <String, dynamic>{
+                'format': <String, dynamic>{'type': 'json_object'},
+              },
             if (temperature != null) 'temperature': temperature,
             if (topP != null) 'top_p': topP,
             'stream': false,
@@ -624,6 +699,7 @@ class UnifiedAiService {
     required List<UnifiedAiChatMessage> messages,
     required String purpose,
     required int maxTokens,
+    required bool expectJson,
     double? temperature,
     double? topP,
     required Duration timeout,
@@ -645,6 +721,9 @@ class UnifiedAiService {
         supportsFiles: _supportsFileInput(provider, model),
       )).toList(),
       'max_tokens': maxTokens,
+      if (expectJson &&
+          _shouldUseJsonResponseFormat(provider, model, expectJson))
+        'response_format': <String, dynamic>{'type': 'json_object'},
       if (_isDeepseekV4(provider, model)) 'thinking': <String, dynamic>{'type': 'enabled'},
       if (_isDeepseekV4(provider, model)) 'reasoning_effort': 'high',
       if (temperature != null && !_isDeepseekV4(provider, model)) 'temperature': temperature,
@@ -829,6 +908,12 @@ class UnifiedAiService {
     return false;
   }
 
+  bool supportsPersistentKnowledgeFile(String provider) =>
+      _supportsPersistentFileKnowledge(_normalizeProvider(provider));
+
+  bool _supportsPersistentFileKnowledge(String provider) =>
+      provider == 'openai' || provider == 'edenai';
+
   bool _looksLikeVisionModel(String model) {
     final m = model.trim().toLowerCase();
     if (m.isEmpty) return false;
@@ -864,6 +949,144 @@ class UnifiedAiService {
       'multimodal',
     ];
     return positiveSignals.any(m.contains);
+  }
+
+  Future<UnifiedAiUploadedFile?> uploadKnowledgeFileBytes({
+    required Uint8List bytes,
+    required String filename,
+    String purpose = 'mental_health_checkup.course_knowledge',
+  }) async {
+    if (bytes.isEmpty) throw ArgumentError('知识库文件不能为空');
+    final cfg = await resolveGlobalConfig();
+    if (!cfg.available ||
+        !_supportsPersistentFileKnowledge(cfg.provider)) {
+      return null;
+    }
+    final uri = cfg.provider == 'openai'
+        ? _openAiFilesUri(cfg.endpoint)
+        : Uri.parse('https://api.edenai.run/v3/upload');
+    final providerPurpose =
+        cfg.provider == 'openai' ? 'user_data' : 'assistants';
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer ${cfg.apiKey}'
+      ..fields['purpose'] = providerPurpose
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+        ),
+      );
+    await DeepSeekLogger.logRequest(
+      provider: cfg.label,
+      module: 'mental_health_checkup.knowledge.upload',
+      endpoint: uri.toString(),
+      headers: <String, String>{'Authorization': 'Bearer ***REDACTED***'},
+      body: <String, Object?>{
+        'filename': filename,
+        'purpose': purpose,
+        'provider_purpose': providerPurpose,
+        'size_bytes': bytes.length,
+        'contains_user_health_data': false,
+      },
+      method: 'POST',
+      model: 'course-knowledge-file',
+    );
+    try {
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 180));
+      final body = await streamed.stream.transform(utf8.decoder).join();
+      await DeepSeekLogger.logResponse(
+        provider: cfg.label,
+        module: 'mental_health_checkup.knowledge.upload',
+        endpoint: uri.toString(),
+        statusCode: streamed.statusCode,
+        body: body,
+        model: 'course-knowledge-file',
+      );
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        return null;
+      }
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return null;
+      final row = Map<String, dynamic>.from(decoded);
+      final id = (row['file_id'] ?? row['id'] ?? '').toString().trim();
+      if (id.isEmpty) return null;
+      return UnifiedAiUploadedFile(
+        provider: cfg.provider,
+        fileId: id,
+        resourceId:
+            (row['resource_id'] ?? row['vector_store_id'] ?? id)
+                .toString(),
+        fileName: filename,
+        byteCount: bytes.length,
+      );
+    } catch (error, stackTrace) {
+      await DeepSeekLogger.logError(
+        provider: cfg.label,
+        module: 'mental_health_checkup.knowledge.upload',
+        endpoint: uri.toString(),
+        error: error,
+        stackTrace: stackTrace,
+        model: 'course-knowledge-file',
+      );
+      return null;
+    }
+  }
+
+  Future<bool> deleteKnowledgeFile({
+    required String provider,
+    required String fileId,
+  }) async {
+    final normalized = _normalizeProvider(provider);
+    if (normalized != 'openai' || fileId.trim().isEmpty) return false;
+    final cfg = await resolveGlobalConfig();
+    if (!cfg.available || cfg.provider != normalized) return false;
+    final uri = _openAiFilesUri(cfg.endpoint).replace(
+      path: '${_openAiFilesUri(cfg.endpoint).path}/${fileId.trim()}',
+    );
+    try {
+      final response = await http.delete(
+        uri,
+        headers: <String, String>{
+          'Authorization': 'Bearer ${cfg.apiKey}',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 90));
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Uri _openAiFilesUri(String endpoint) {
+    final base = Uri.parse(
+      endpoint.trim().isEmpty ? openAiResponsesEndpoint : endpoint,
+    );
+    final segments = base.pathSegments.toList(growable: true);
+    if (segments.isNotEmpty &&
+        (segments.last == 'responses' ||
+            segments.last == 'completions')) {
+      segments.removeLast();
+      if (segments.isNotEmpty && segments.last == 'chat') {
+        segments.removeLast();
+      }
+    }
+    if (segments.isEmpty || segments.last != 'v1') {
+      final v1Index = segments.lastIndexOf('v1');
+      if (v1Index >= 0) {
+        segments.removeRange(v1Index + 1, segments.length);
+      } else {
+        segments
+          ..clear()
+          ..add('v1');
+      }
+    }
+    return base.replace(
+      path: '/${<String>[...segments, 'files'].join('/')}',
+      queryParameters: const <String, String>{},
+      fragment: '',
+    );
   }
 
   Future<String?> uploadEdenAiAssistantFile({
