@@ -16,6 +16,7 @@ import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_models.dart';
 import 'mental_health_checkup_platform.dart';
 import 'mental_health_knowledge_models.dart';
+import 'mental_health_validation.dart';
 
 class CheckupCourseEvidence {
   final String locationId;
@@ -126,7 +127,7 @@ class CheckupEvidenceTrace {
 }
 
 class MentalHealthCheckupRepository {
-  static const int _schemaVersion = 8;
+  static const int _schemaVersion = 9;
   static const String _legacyStateKey = 'mental_health_checkup.state.v25';
   static const String _legacyDraftKey = 'mental_health_checkup.draft.v25';
   static const String _promptPrefix = 'ai_prompt.mental_health_checkup.';
@@ -160,6 +161,7 @@ class MentalHealthCheckupRepository {
     await _ensureSchema(db);
     await _importReferenceSeedsIfNeeded(db, catalog);
     await _importLegacyContentCandidatesIfNeeded(db, catalog);
+    await _materializeContentBlueprintsIfNeeded(db, catalog);
     await _migrateLegacyStateIfNeeded(db);
   }
 
@@ -318,6 +320,50 @@ class MentalHealthCheckupRepository {
             ON DELETE CASCADE
         )
       ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_expert_reviews (
+          id TEXT PRIMARY KEY,
+          candidate_id TEXT NOT NULL,
+          reviewer_id TEXT NOT NULL,
+          review_role TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          FOREIGN KEY (candidate_id) REFERENCES mh_content_candidates(id)
+            ON DELETE CASCADE
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_cognitive_interviews (
+          id TEXT PRIMARY KEY,
+          candidate_id TEXT NOT NULL,
+          participant_key TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          FOREIGN KEY (candidate_id) REFERENCES mh_content_candidates(id)
+            ON DELETE CASCADE
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_pilot_observations (
+          id TEXT PRIMARY KEY,
+          candidate_id TEXT NOT NULL,
+          participant_key TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          FOREIGN KEY (candidate_id) REFERENCES mh_content_candidates(id)
+            ON DELETE CASCADE
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_seed_reviews (
+          id TEXT PRIMARY KEY,
+          target_kind TEXT NOT NULL,
+          target_id TEXT NOT NULL,
+          reviewer_id TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL
+        )
+      ''');
       await txn.execute(
         'CREATE INDEX IF NOT EXISTS idx_mh_content_candidate_indicator '
         'ON mh_content_candidates(indicator_id, content_kind, content_code)',
@@ -359,6 +405,24 @@ class MentalHealthCheckupRepository {
       await txn.execute(
         'CREATE INDEX IF NOT EXISTS idx_mh_generation_job_status '
         'ON mh_generation_jobs(batch_id, status, updated_at_ms)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_expert_review_candidate '
+        'ON mh_expert_reviews(candidate_id, review_role, created_at_ms)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_cognitive_candidate '
+        'ON mh_cognitive_interviews('
+        'candidate_id, participant_key, created_at_ms)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_pilot_candidate '
+        'ON mh_pilot_observations('
+        'candidate_id, participant_key, created_at_ms)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_seed_review_target '
+        'ON mh_seed_reviews(target_kind, target_id, created_at_ms)',
       );
       await txn.execute('''
         CREATE TABLE IF NOT EXISTS mh_indicators (
@@ -488,6 +552,13 @@ class MentalHealthCheckupRepository {
     }
     if (oldVersion < 8) {
       await _putMeta(db, 'migration_8', 'resumable_content_generation_batches');
+    }
+    if (oldVersion < 9) {
+      await _putMeta(
+        db,
+        'migration_9',
+        'full_content_blueprints_and_validation_dossiers',
+      );
     }
   }
 
@@ -743,6 +814,75 @@ class MentalHealthCheckupRepository {
       );
       await _putMeta(txn, 'legacy_content_seed_count', '${candidates.length}');
     });
+  }
+
+  Future<void> _materializeContentBlueprintsIfNeeded(
+    Database db,
+    MentalHealthCheckupCatalog catalog,
+  ) async {
+    final storedVersion = await _meta(db, 'content_blueprint_version');
+    final storedCount = Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM mh_content_candidates WHERE id LIKE ?',
+            <Object?>[
+              '${MentalHealthContentBlueprintFactory.candidatePrefix}%',
+            ],
+          ),
+        ) ??
+        0;
+    if (storedVersion == MentalHealthContentBlueprintFactory.version &&
+        storedCount ==
+            MentalHealthContentBlueprintFactory.expectedCandidateCount) {
+      return;
+    }
+    final candidates = const MentalHealthContentBlueprintFactory().build(
+      catalog.indicators,
+      courseVersion: catalog.validation.version,
+    );
+    await db.transaction((txn) async {
+      for (final candidate in candidates) {
+        await txn.insert(
+          'mh_content_candidates',
+          <String, Object?>{
+            'id': candidate.candidateId,
+            'indicator_id': candidate.primaryIndicatorId,
+            'content_kind': candidate.kind.name,
+            'content_code': candidate.contentCode,
+            'stage': candidate.stage.name,
+            'version': candidate.version,
+            'updated_at_ms': candidate.updatedAtMs,
+            'payload_json': jsonEncode(candidate.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+      await _putMeta(
+        txn,
+        'content_blueprint_version',
+        MentalHealthContentBlueprintFactory.version,
+      );
+      await _putMeta(
+        txn,
+        'content_blueprint_count',
+        '${candidates.length}',
+      );
+    });
+    final actualCount = Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM mh_content_candidates WHERE id LIKE ?',
+            <Object?>[
+              '${MentalHealthContentBlueprintFactory.candidatePrefix}%',
+            ],
+          ),
+        ) ??
+        0;
+    if (actualCount != MentalHealthContentBlueprintFactory.expectedCandidateCount) {
+      throw StateError(
+        '全量内容蓝图写入不完整：'
+        '$actualCount/'
+        '${MentalHealthContentBlueprintFactory.expectedCandidateCount}',
+      );
+    }
   }
 
   Future<MentalHealthCheckupState> load({
@@ -1107,6 +1247,7 @@ class MentalHealthCheckupRepository {
   Future<List<CheckupContentCandidate>> loadContentCandidates({
     String? indicatorId,
     CheckupCandidateStage? stage,
+    Set<CheckupCandidateStage>? stages,
   }) async {
     final db = await AppDatabase.instance();
     await _ensureSchema(db);
@@ -1119,6 +1260,11 @@ class MentalHealthCheckupRepository {
     if (stage != null) {
       clauses.add('stage = ?');
       args.add(stage.name);
+    } else if (stages != null && stages.isNotEmpty) {
+      clauses.add(
+        'stage IN (${List<String>.filled(stages.length, '?').join(',')})',
+      );
+      args.addAll(stages.map((value) => value.name));
     }
     final rows = await db.query(
       'mh_content_candidates',
@@ -1135,6 +1281,25 @@ class MentalHealthCheckupRepository {
           ),
         )
         .toList(growable: false);
+  }
+
+  Future<CheckupContentCandidate?> loadContentCandidate(
+    String candidateId,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_content_candidates',
+      where: 'id = ?',
+      whereArgs: <Object?>[candidateId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return CheckupContentCandidate.fromJson(
+      Map<String, dynamic>.from(
+        jsonDecode((rows.first['payload_json'] ?? '{}').toString()) as Map,
+      ),
+    );
   }
 
   Future<void> saveContentCandidate(CheckupContentCandidate candidate) async {
@@ -1183,6 +1348,37 @@ class MentalHealthCheckupRepository {
           transition.candidate.stage != transition.auditEvent.toStage) {
         throw StateError('候选状态已变化，请刷新后重试。');
       }
+      final targetStage = transition.candidate.stage;
+      if (targetStage == CheckupCandidateStage.cognitiveInterview ||
+          targetStage == CheckupCandidateStage.pilot ||
+          targetStage == CheckupCandidateStage.official) {
+        final decision = await _validationDecisionFromDatabase(
+          txn,
+          transition.candidate,
+        );
+        final expertGatesPassed = decision.evidenceReviewPassed &&
+            decision.constructReviewPassed &&
+            decision.safetyReviewPassed &&
+            decision.reviewedQuality.passesPublishedThresholds;
+        if (!expertGatesPassed) {
+          throw StateError(
+            '当前内容指纹对应的独立专家审核尚未通过：'
+            '${decision.blockingIssues.take(3).join('；')}',
+          );
+        }
+        if ((targetStage == CheckupCandidateStage.pilot ||
+                targetStage == CheckupCandidateStage.official) &&
+            !decision.cognitiveInterviewPassed) {
+          throw StateError('当前内容指纹对应的认知访谈尚未达到门槛。');
+        }
+        if (targetStage == CheckupCandidateStage.official &&
+            !decision.readyForHumanSignature) {
+          throw StateError(
+            '当前内容指纹对应的验证证据尚未满足签发条件：'
+            '${decision.blockingIssues.take(4).join('；')}',
+          );
+        }
+      }
       if (transition.candidate.stage == CheckupCandidateStage.official) {
         final locationIds = transition.candidate.courseEvidenceIds
             .where((value) => value.trim().isNotEmpty)
@@ -1200,6 +1396,11 @@ class MentalHealthCheckupRepository {
         if (locationRows.length != locationIds.length) {
           throw StateError('存在无法在本地课程知识库验证的证据位置ID。');
         }
+        await _assertSeedReviewGates(
+          txn,
+          transition.candidate,
+          locationIds,
+        );
         final conflicts = Sqflite.firstIntValue(
               await txn.rawQuery(
                 '''
@@ -1260,6 +1461,386 @@ class MentalHealthCheckupRepository {
           ),
         )
         .toList(growable: false);
+  }
+
+  Future<void> saveExpertReview(CheckupExpertReviewRecord record) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.insert(
+      'mh_expert_reviews',
+      <String, Object?>{
+        'id': record.id,
+        'candidate_id': record.candidateId,
+        'reviewer_id': record.reviewerId,
+        'review_role': record.role.name,
+        'created_at_ms': record.createdAtMs,
+        'payload_json': jsonEncode(record.toJson()),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<CheckupExpertReviewRecord>> loadExpertReviews({
+    String? candidateId,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_expert_reviews',
+      where: candidateId == null ? null : 'candidate_id = ?',
+      whereArgs: candidateId == null ? null : <Object?>[candidateId],
+      orderBy: 'created_at_ms ASC',
+    );
+    return rows
+        .map(
+          (row) => CheckupExpertReviewRecord.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> saveCognitiveInterview(
+    CheckupCognitiveInterviewRecord record,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.insert(
+      'mh_cognitive_interviews',
+      <String, Object?>{
+        'id': record.id,
+        'candidate_id': record.candidateId,
+        'participant_key': record.participantKey,
+        'created_at_ms': record.createdAtMs,
+        'payload_json': jsonEncode(record.toJson()),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<CheckupCognitiveInterviewRecord>> loadCognitiveInterviews({
+    String? candidateId,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_cognitive_interviews',
+      where: candidateId == null ? null : 'candidate_id = ?',
+      whereArgs: candidateId == null ? null : <Object?>[candidateId],
+      orderBy: 'created_at_ms ASC',
+    );
+    return rows
+        .map(
+          (row) => CheckupCognitiveInterviewRecord.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> savePilotObservation(CheckupPilotObservation record) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.insert(
+      'mh_pilot_observations',
+      <String, Object?>{
+        'id': record.id,
+        'candidate_id': record.candidateId,
+        'participant_key': record.participantKey,
+        'created_at_ms': record.createdAtMs,
+        'payload_json': jsonEncode(record.toJson()),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<CheckupPilotObservation>> loadPilotObservations({
+    String? candidateId,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_pilot_observations',
+      where: candidateId == null ? null : 'candidate_id = ?',
+      whereArgs: candidateId == null ? null : <Object?>[candidateId],
+      orderBy: 'created_at_ms ASC',
+    );
+    return rows
+        .map(
+          (row) => CheckupPilotObservation.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> saveSeedReview(CheckupSeedReviewRecord record) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.insert(
+      'mh_seed_reviews',
+      <String, Object?>{
+        'id': record.id,
+        'target_kind': record.targetKind.name,
+        'target_id': record.targetId,
+        'reviewer_id': record.reviewerId,
+        'created_at_ms': record.createdAtMs,
+        'payload_json': jsonEncode(record.toJson()),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<CheckupSeedReviewRecord>> loadSeedReviews({
+    CheckupSeedTargetKind? targetKind,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_seed_reviews',
+      where: targetKind == null ? null : 'target_kind = ?',
+      whereArgs: targetKind == null ? null : <Object?>[targetKind.name],
+      orderBy: 'created_at_ms ASC',
+    );
+    return rows
+        .map(
+          (row) => CheckupSeedReviewRecord.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<CheckupValidationDossier> loadValidationDossier(
+    String candidateId,
+  ) async =>
+      CheckupValidationDossier(
+        expertReviews:
+            await loadExpertReviews(candidateId: candidateId),
+        cognitiveInterviews:
+            await loadCognitiveInterviews(candidateId: candidateId),
+        pilotObservations:
+            await loadPilotObservations(candidateId: candidateId),
+      );
+
+  Future<CheckupValidationDecision> synchronizeContentValidation(
+    String candidateId,
+  ) async {
+    final candidate = await loadContentCandidate(candidateId);
+    if (candidate == null) {
+      throw StateError('候选内容不存在，无法计算验证门槛。');
+    }
+    final dossier = await loadValidationDossier(candidateId);
+    const engine = MentalHealthValidationEngine();
+    final decision = engine.evaluate(
+      candidate: candidate,
+      dossier: dossier,
+    );
+    if (!candidate.isReadOnly) {
+      await saveContentCandidate(
+        engine.applyDecision(
+          candidate: candidate,
+          decision: decision,
+        ),
+      );
+    }
+    return decision;
+  }
+
+  Future<List<String>> loadSeedPublicationBlockers(
+    String candidateId,
+  ) async {
+    final candidate = await loadContentCandidate(candidateId);
+    if (candidate == null) return const <String>['候选内容不存在'];
+    final locationIds = candidate.courseEvidenceIds
+        .where((value) => value.trim().isNotEmpty)
+        .toSet();
+    if (locationIds.isEmpty) return const <String>['缺少课程证据位置'];
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    try {
+      await _assertSeedReviewGates(db, candidate, locationIds);
+      return const <String>[];
+    } on StateError catch (error) {
+      return <String>[
+        error.toString().replaceFirst('Bad state: ', ''),
+      ];
+    }
+  }
+
+  Future<bool> exportEncryptedValidationPackage({
+    required MentalHealthCheckupCatalog catalog,
+    required String password,
+  }) async {
+    await initialize(catalog);
+    final candidates = await loadContentCandidates();
+    final payload = CheckupValidationEnvelope.create(
+      courseVersion: catalog.validation.version,
+      blueprintVersion: MentalHealthContentBlueprintFactory.version,
+      candidates: candidates,
+      expertReviews: await loadExpertReviews(),
+      cognitiveInterviews: await loadCognitiveInterviews(),
+      pilotObservations: await loadPilotObservations(),
+      seedReviews: await loadSeedReviews(),
+      seedTargets: await _validationSeedTargets(
+        await AppDatabase.instance(),
+        catalog,
+      ),
+    );
+    final date = DateTime.now().toIso8601String().substring(0, 10);
+    return _platform.exportEncryptedBackup(
+      payload: payload,
+      password: password,
+      suggestedName: '心理健康内容验证包_$date.ppvalidation',
+    );
+  }
+
+  Future<int> importEncryptedValidationPackage({
+    required MentalHealthCheckupCatalog catalog,
+    required String password,
+  }) async {
+    await initialize(catalog);
+    final raw = await _platform.importEncryptedBackup(password: password);
+    if (raw == null) return 0;
+    final payload = CheckupValidationEnvelope.validateAndDecode(
+      raw: raw,
+      expectedCourseVersion: catalog.validation.version,
+      expectedBlueprintVersion: MentalHealthContentBlueprintFactory.version,
+    );
+    final expertReviews = _validationRows(
+      payload['expert_reviews'],
+      CheckupExpertReviewRecord.fromJson,
+    );
+    final cognitiveInterviews = _validationRows(
+      payload['cognitive_interviews'],
+      CheckupCognitiveInterviewRecord.fromJson,
+    );
+    final pilotObservations = _validationRows(
+      payload['pilot_observations'],
+      CheckupPilotObservation.fromJson,
+    );
+    final seedReviews = _validationRows(
+      payload['seed_reviews'],
+      CheckupSeedReviewRecord.fromJson,
+    );
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final candidateRows = await db.query(
+      'mh_content_candidates',
+      columns: <String>['id', 'payload_json'],
+    );
+    final knownCandidates = <String, CheckupContentCandidate>{
+      for (final row in candidateRows)
+        (row['id'] ?? '').toString(): CheckupContentCandidate.fromJson(
+          Map<String, dynamic>.from(
+            jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+          ),
+        ),
+    };
+    final importedCandidateIds = <String>{};
+    for (final record in expertReviews) {
+      _verifyValidationCandidate(
+        candidate: knownCandidates[record.candidateId],
+        candidateId: record.candidateId,
+        fingerprint: record.candidateFingerprint,
+      );
+      importedCandidateIds.add(record.candidateId);
+    }
+    for (final record in cognitiveInterviews) {
+      _verifyValidationCandidate(
+        candidate: knownCandidates[record.candidateId],
+        candidateId: record.candidateId,
+        fingerprint: record.candidateFingerprint,
+      );
+      importedCandidateIds.add(record.candidateId);
+    }
+    for (final record in pilotObservations) {
+      _verifyValidationCandidate(
+        candidate: knownCandidates[record.candidateId],
+        candidateId: record.candidateId,
+        fingerprint: record.candidateFingerprint,
+      );
+      importedCandidateIds.add(record.candidateId);
+    }
+    final knownSeedTargets = await _knownSeedTargets(db, catalog);
+    for (final record in seedReviews) {
+      if (!knownSeedTargets[record.targetKind]!.contains(record.targetId)) {
+        throw FormatException(
+          '验证包包含未知${record.targetKind.label}：${record.targetId}',
+        );
+      }
+    }
+    await db.transaction((txn) async {
+      for (final record in expertReviews) {
+        await txn.insert(
+          'mh_expert_reviews',
+          <String, Object?>{
+            'id': record.id,
+            'candidate_id': record.candidateId,
+            'reviewer_id': record.reviewerId,
+            'review_role': record.role.name,
+            'created_at_ms': record.createdAtMs,
+            'payload_json': jsonEncode(record.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      for (final record in cognitiveInterviews) {
+        await txn.insert(
+          'mh_cognitive_interviews',
+          <String, Object?>{
+            'id': record.id,
+            'candidate_id': record.candidateId,
+            'participant_key': record.participantKey,
+            'created_at_ms': record.createdAtMs,
+            'payload_json': jsonEncode(record.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      for (final record in pilotObservations) {
+        await txn.insert(
+          'mh_pilot_observations',
+          <String, Object?>{
+            'id': record.id,
+            'candidate_id': record.candidateId,
+            'participant_key': record.participantKey,
+            'created_at_ms': record.createdAtMs,
+            'payload_json': jsonEncode(record.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      for (final record in seedReviews) {
+        await txn.insert(
+          'mh_seed_reviews',
+          <String, Object?>{
+            'id': record.id,
+            'target_kind': record.targetKind.name,
+            'target_id': record.targetId,
+            'reviewer_id': record.reviewerId,
+            'created_at_ms': record.createdAtMs,
+            'payload_json': jsonEncode(record.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+    for (final candidateId in importedCandidateIds) {
+      await synchronizeContentValidation(candidateId);
+    }
+    return expertReviews.length +
+        cognitiveInterviews.length +
+        pilotObservations.length +
+        seedReviews.length;
   }
 
   Future<List<CheckupIndicatorCandidate>> loadIndicatorCandidates({
@@ -2145,6 +2726,10 @@ class MentalHealthCheckupRepository {
     await _ensureSchema(db);
     await db.transaction((txn) async {
       for (final table in const <String>[
+        'mh_pilot_observations',
+        'mh_cognitive_interviews',
+        'mh_expert_reviews',
+        'mh_seed_reviews',
         'mh_indicator_audit_events',
         'mh_indicator_candidates',
         'mh_content_audit_events',
@@ -2185,6 +2770,338 @@ class MentalHealthCheckupRepository {
     });
     await _platform.clearSecurityAndReminders();
     _initializing = null;
+  }
+
+  static List<T> _validationRows<T>(
+    Object? value,
+    T Function(Map<String, dynamic>) decode,
+  ) =>
+      (value as List? ?? const <Object?>[])
+          .whereType<Map>()
+          .map((row) => decode(Map<String, dynamic>.from(row)))
+          .toList(growable: false);
+
+  static void _verifyValidationCandidate({
+    required CheckupContentCandidate? candidate,
+    required String candidateId,
+    required String fingerprint,
+  }) {
+    if (candidate == null) {
+      throw FormatException('验证包包含未知候选：$candidateId');
+    }
+    final expected =
+        MentalHealthValidationEngine.candidateFingerprint(candidate);
+    if (fingerprint.isEmpty || fingerprint != expected) {
+      throw FormatException('候选内容指纹不匹配：$candidateId');
+    }
+  }
+
+  static Future<void> _assertSeedReviewGates(
+    DatabaseExecutor database,
+    CheckupContentCandidate candidate,
+    Set<String> locationIds,
+  ) async {
+    final evidenceRows = await database.query(
+      'mh_indicator_evidence',
+      columns: <String>['relation_id', 'location_id'],
+      where: 'indicator_id = ? AND location_id IN '
+          '(${List<String>.filled(locationIds.length, '?').join(',')})',
+      whereArgs: <Object?>[
+        candidate.primaryIndicatorId,
+        ...locationIds,
+      ],
+    );
+    final evidenceIds = evidenceRows
+        .map((row) => (row['relation_id'] ?? '').toString())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final mappedLocationIds = evidenceRows
+        .map((row) => (row['location_id'] ?? '').toString())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    if (evidenceIds.isEmpty) {
+      throw StateError('正式内容对应的指标—证据关系尚未建立。');
+    }
+    final targets = <(CheckupSeedTargetKind, String)>[
+      (CheckupSeedTargetKind.indicator, candidate.primaryIndicatorId),
+      for (final evidenceId in evidenceIds)
+        (CheckupSeedTargetKind.evidenceRelation, evidenceId),
+    ];
+    final missing = <String>[];
+    for (final locationId in locationIds.difference(mappedLocationIds)) {
+      missing.add('证据位置$locationId');
+    }
+    for (final target in targets) {
+      final rows = await database.query(
+        'mh_seed_reviews',
+        columns: <String>['payload_json'],
+        where: 'target_kind = ? AND target_id = ?',
+        whereArgs: <Object?>[target.$1.name, target.$2],
+        orderBy: 'created_at_ms DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        missing.add('${target.$1.label}${target.$2}');
+        continue;
+      }
+      final review = CheckupSeedReviewRecord.fromJson(
+        Map<String, dynamic>.from(
+          jsonDecode((rows.first['payload_json'] ?? '{}').toString()) as Map,
+        ),
+      );
+      if (!review.passed ||
+          review.sourceVersion != candidate.courseVersion) {
+        missing.add('${target.$1.label}${target.$2}');
+      }
+    }
+    if (missing.isNotEmpty) {
+      throw StateError(
+        '正式发布前需完成当前课程版本的基础专家确认：'
+        '${missing.take(4).join('、')}'
+        '${missing.length > 4 ? '等${missing.length}项' : ''}',
+      );
+    }
+  }
+
+  static Future<CheckupValidationDecision> _validationDecisionFromDatabase(
+    DatabaseExecutor database,
+    CheckupContentCandidate candidate,
+  ) async {
+    Future<List<T>> load<T>(
+      String table,
+      T Function(Map<String, dynamic>) decode,
+    ) async {
+      final rows = await database.query(
+        table,
+        columns: <String>['payload_json'],
+        where: 'candidate_id = ?',
+        whereArgs: <Object?>[candidate.candidateId],
+        orderBy: 'created_at_ms ASC',
+      );
+      return rows
+          .map(
+            (row) => decode(
+              Map<String, dynamic>.from(
+                jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+              ),
+            ),
+          )
+          .toList(growable: false);
+    }
+
+    final dossier = CheckupValidationDossier(
+      expertReviews: await load<CheckupExpertReviewRecord>(
+        'mh_expert_reviews',
+        CheckupExpertReviewRecord.fromJson,
+      ),
+      cognitiveInterviews: await load<CheckupCognitiveInterviewRecord>(
+        'mh_cognitive_interviews',
+        CheckupCognitiveInterviewRecord.fromJson,
+      ),
+      pilotObservations: await load<CheckupPilotObservation>(
+        'mh_pilot_observations',
+        CheckupPilotObservation.fromJson,
+      ),
+    );
+    return const MentalHealthValidationEngine().evaluate(
+      candidate: candidate,
+      dossier: dossier,
+    );
+  }
+
+  Future<Map<CheckupSeedTargetKind, Set<String>>> _knownSeedTargets(
+    Database db,
+    MentalHealthCheckupCatalog catalog,
+  ) async {
+    final evidenceIds = (await db.query(
+      'mh_indicator_evidence',
+      columns: <String>['relation_id'],
+    ))
+        .map((row) => (row['relation_id'] ?? '').toString())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    return <CheckupSeedTargetKind, Set<String>>{
+      CheckupSeedTargetKind.indicator:
+          catalog.indicators.map((value) => value.id).toSet(),
+      CheckupSeedTargetKind.evidenceRelation: evidenceIds,
+      CheckupSeedTargetKind.diagnosisPattern:
+          catalog.diagnosisPatterns.map((value) => value.id).toSet(),
+      CheckupSeedTargetKind.prescription:
+          catalog.prescriptions.map((value) => value.id).toSet(),
+    };
+  }
+
+  Future<Set<String>> loadSeedTargetIds({
+    required CheckupSeedTargetKind targetKind,
+    required MentalHealthCheckupCatalog catalog,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    return (await _knownSeedTargets(db, catalog))[targetKind]!;
+  }
+
+  Future<Map<String, String>> loadSeedTargetSummary({
+    required CheckupSeedTargetKind targetKind,
+    required String targetId,
+    required MentalHealthCheckupCatalog catalog,
+  }) async {
+    switch (targetKind) {
+      case CheckupSeedTargetKind.indicator:
+        final value = _firstWhereOrNull(
+          catalog.indicators,
+          (item) => item.id == targetId,
+        );
+        if (value == null) return const <String, String>{};
+        return <String, String>{
+          '讲次与领域': '第${value.lecture}讲 · ${value.area}',
+          '指标名称': value.name,
+          '指标类型': value.type,
+          '定义证据': value.definitionLocation,
+          '低端证据': value.lowLocation,
+          '高端证据': value.highLocation,
+          '行动证据': value.actionLocation,
+          '来源直接性': value.directness,
+          '原始状态': value.reviewStatus,
+        };
+      case CheckupSeedTargetKind.evidenceRelation:
+        final db = await AppDatabase.instance();
+        await _ensureSchema(db);
+        final rows = await db.rawQuery(
+          '''
+          SELECT e.*, c.lecture_no, c.page_no, c.section,
+                 c.content AS course_text
+          FROM mh_indicator_evidence e
+          JOIN mh_course_locations c ON c.location_id = e.location_id
+          WHERE e.relation_id = ?
+          LIMIT 1
+          ''',
+          <Object?>[targetId],
+        );
+        if (rows.isEmpty) return const <String, String>{};
+        final row = rows.first;
+        return <String, String>{
+          '指标': (row['indicator_id'] ?? '').toString(),
+          '证据角色': (row['evidence_role'] ?? '').toString(),
+          '课程位置':
+              '${row['location_id']} · 第${row['lecture_no']}讲 · '
+                  '第${row['page_no']}页 · ${row['section']}',
+          '来源等级': (row['source_level'] ?? '').toString(),
+          '关系摘录': (row['excerpt'] ?? '').toString(),
+          '课程原文': (row['course_text'] ?? '').toString(),
+          '原始状态': (row['review_status'] ?? '').toString(),
+        };
+      case CheckupSeedTargetKind.diagnosisPattern:
+        final value = _firstWhereOrNull(
+          catalog.diagnosisPatterns,
+          (item) => item.id == targetId,
+        );
+        if (value == null) return const <String, String>{};
+        return <String, String>{
+          '模式名称': value.name,
+          '触发指标': value.triggerIndicatorIds.join('、'),
+          '机制假设': value.mechanism,
+          '行动处方': value.prescriptionIds.join('、'),
+          '优先行动': value.priorityAction,
+          '所需证据': value.evidenceNeeded,
+          '反证与排除': value.exclusions,
+          '置信度规则': value.confidenceRule,
+          '原始状态': value.reviewStatus,
+        };
+      case CheckupSeedTargetKind.prescription:
+        final value = _firstWhereOrNull(
+          catalog.prescriptions,
+          (item) => item.id == targetId,
+        );
+        if (value == null) return const <String, String>{};
+        return <String, String>{
+          '讲次与主题': '第${value.lecture}讲 · ${value.theme}',
+          '主要指标': '${value.primaryIndicatorId} · ${value.primaryIndicator}',
+          '适用机制': value.mechanism,
+          '起始行动': value.startingAction,
+          '深入行动': value.deepeningAction,
+          '剂量':
+              '${value.microDose} / ${value.startingDose} / '
+                  '${value.consolidationDose}',
+          '试验期': value.trialPeriod,
+          '结果证据': value.outcomeEvidence,
+          '停止规则': value.stopRule,
+          '来源等级': value.sourceLevel,
+          '原始状态': value.reviewStatus,
+        };
+    }
+  }
+
+  Future<Map<String, Object?>> _validationSeedTargets(
+    Database db,
+    MentalHealthCheckupCatalog catalog,
+  ) async {
+    final evidence = await db.query(
+      'mh_indicator_evidence',
+      orderBy: 'indicator_id, evidence_role, relation_id',
+    );
+    return <String, Object?>{
+      CheckupSeedTargetKind.indicator.name: catalog.indicators
+          .map(
+            (value) => <String, Object?>{
+              'id': value.id,
+              'lecture': value.lecture,
+              'area': value.area,
+              'name': value.name,
+              'type': value.type,
+              'definition_location': value.definitionLocation,
+              'low_location': value.lowLocation,
+              'high_location': value.highLocation,
+              'action_location': value.actionLocation,
+              'review_status': value.reviewStatus,
+            },
+          )
+          .toList(growable: false),
+      CheckupSeedTargetKind.evidenceRelation.name: evidence,
+      CheckupSeedTargetKind.diagnosisPattern.name: catalog.diagnosisPatterns
+          .map(
+            (value) => <String, Object?>{
+              'id': value.id,
+              'name': value.name,
+              'trigger_indicator_ids': value.triggerIndicatorIds,
+              'mechanism': value.mechanism,
+              'prescription_ids': value.prescriptionIds,
+              'priority_action': value.priorityAction,
+              'evidence_needed': value.evidenceNeeded,
+              'exclusions': value.exclusions,
+              'confidence_rule': value.confidenceRule,
+              'review_status': value.reviewStatus,
+            },
+          )
+          .toList(growable: false),
+      CheckupSeedTargetKind.prescription.name: catalog.prescriptions
+          .map(
+            (value) => <String, Object?>{
+              'id': value.id,
+              'lecture': value.lecture,
+              'theme': value.theme,
+              'primary_indicator_id': value.primaryIndicatorId,
+              'mechanism': value.mechanism,
+              'starting_action': value.startingAction,
+              'deepening_action': value.deepeningAction,
+              'trial_period': value.trialPeriod,
+              'outcome_evidence': value.outcomeEvidence,
+              'stop_rule': value.stopRule,
+              'source_level': value.sourceLevel,
+              'review_status': value.reviewStatus,
+            },
+          )
+          .toList(growable: false),
+    };
+  }
+
+  static T? _firstWhereOrNull<T>(
+    Iterable<T> values,
+    bool Function(T) test,
+  ) {
+    for (final value in values) {
+      if (test(value)) return value;
+    }
+    return null;
   }
 
   MentalHealthCheckupState _ensureInstallId(MentalHealthCheckupState state) {
