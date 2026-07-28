@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'mental_health_content_governance.dart';
 import 'mental_health_checkup_models.dart';
+import 'mental_health_indicator_governance.dart';
 
 class CheckupReferenceRule {
   final Map<String, String> fields;
@@ -153,9 +154,8 @@ class MentalHealthCheckupCatalog {
       indicators: indicators,
       diagnosisPatterns:
           diagnosisRows.map(_diagnosisFromJson).toList(growable: false),
-      prescriptions: prescriptionRows
-          .map(_prescriptionFromJson)
-          .toList(growable: false),
+      prescriptions:
+          prescriptionRows.map(_prescriptionFromJson).toList(growable: false),
       clinicalTerms: _ruleList(jsonDecode(values[5])),
       longitudinalCoverageRules: _ruleList(jsonDecode(values[6])),
       branchAlertRules: _ruleList(jsonDecode(values[7])),
@@ -165,9 +165,9 @@ class MentalHealthCheckupCatalog {
       recoveryMaintenanceRules: _ruleList(jsonDecode(values[11])),
       sourceBoundaryRules: _ruleList(jsonDecode(values[12])),
       seedFieldMappings: _fieldMappings(jsonDecode(values[13])),
-      legacyContentCandidates: _mapList(jsonDecode(values[14]))
-          .map(CheckupContentCandidate.fromJson)
-          .toList(growable: false),
+      legacyContentCandidates: _mapList(
+        jsonDecode(values[14]),
+      ).map(CheckupContentCandidate.fromJson).toList(growable: false),
       validation: validation,
     );
   }
@@ -175,10 +175,77 @@ class MentalHealthCheckupCatalog {
   List<CheckupContentCandidate> get publishedBehaviorTasks =>
       publishedContentCandidates
           .where(
-            (candidate) =>
-                candidate.kind == CheckupContentKind.behaviorTask,
+            (candidate) => candidate.kind == CheckupContentKind.behaviorTask,
           )
           .toList(growable: false);
+
+  MentalHealthCheckupCatalog withGovernedIndicators(
+    Iterable<CheckupIndicatorCandidate> candidates,
+  ) {
+    const governance = MentalHealthIndicatorGovernanceEngine();
+    final candidateList = candidates.toList(growable: false);
+    final governedIds = candidateList
+        .map((candidate) => candidate.proposedIndicatorId)
+        .where((id) => id.trim().isNotEmpty)
+        .toSet();
+    final existingById = <String, CheckupIndicator>{
+      for (final indicator in indicators)
+        if (!governedIds.contains(indicator.id)) indicator.id: indicator,
+    };
+    final selected = <String, CheckupIndicatorCandidate>{};
+    for (final candidate in candidateList) {
+      if (candidate.stage != CheckupCandidateStage.official ||
+          !candidate.evidenceReviewPassed ||
+          !candidate.constructReviewPassed ||
+          !candidate.expertReviewPassed ||
+          !candidate.cognitiveInterviewPassed ||
+          !candidate.pilotPassed ||
+          candidate.pilotSampleSize <= 0 ||
+          candidate.reviewer.trim().isEmpty ||
+          candidate.signer.trim().isEmpty ||
+          candidate.reviewer.trim().toLowerCase() ==
+              candidate.author.trim().toLowerCase() ||
+          candidate.reviewer.toLowerCase().contains('ai') ||
+          candidate.signer.toLowerCase().contains('ai') ||
+          !governance
+              .validate(candidate, existingIndicators: indicators)
+              .valid) {
+        continue;
+      }
+      final previous = selected[candidate.proposedIndicatorId];
+      if (previous == null ||
+          candidate.version > previous.version ||
+          candidate.version == previous.version &&
+              candidate.updatedAtMs > previous.updatedAtMs) {
+        selected[candidate.proposedIndicatorId] = candidate;
+      }
+    }
+    for (final candidate in selected.values) {
+      existingById[candidate.proposedIndicatorId] =
+          candidate.toPublishedIndicator();
+    }
+    return MentalHealthCheckupCatalog(
+      modes: modes,
+      b20Questions: b20Questions,
+      indicators: existingById.values.toList(growable: false),
+      diagnosisPatterns: diagnosisPatterns,
+      prescriptions: prescriptions,
+      clinicalTerms: clinicalTerms,
+      longitudinalCoverageRules: longitudinalCoverageRules,
+      branchAlertRules: branchAlertRules,
+      aiReportFields: aiReportFields,
+      doseAndCourseRules: doseAndCourseRules,
+      prescriptionAdjustmentRules: prescriptionAdjustmentRules,
+      recoveryMaintenanceRules: recoveryMaintenanceRules,
+      sourceBoundaryRules: sourceBoundaryRules,
+      seedFieldMappings: seedFieldMappings,
+      legacyContentCandidates: legacyContentCandidates,
+      publishedContentCandidates: publishedContentCandidates,
+      publishedQuestions: publishedQuestions,
+      retiredPublishedQuestions: retiredPublishedQuestions,
+      validation: validation,
+    );
+  }
 
   MentalHealthCheckupCatalog withPublishedContent(
     Iterable<CheckupContentCandidate> candidates,
@@ -204,8 +271,9 @@ class MentalHealthCheckupCatalog {
     }
     final published = bySlot.values.toList(growable: false)
       ..sort((left, right) {
-        final indicatorComparison =
-            left.primaryIndicatorId.compareTo(right.primaryIndicatorId);
+        final indicatorComparison = left.primaryIndicatorId.compareTo(
+          right.primaryIndicatorId,
+        );
         if (indicatorComparison != 0) return indicatorComparison;
         return left.contentCode.compareTo(right.contentCode);
       });
@@ -328,8 +396,7 @@ class MentalHealthCheckupCatalog {
       contentCandidateId: candidate.candidateId,
       contentVersion: candidate.version,
       contentCode: code,
-      retiredSnapshot:
-          candidate.stage == CheckupCandidateStage.retired,
+      retiredSnapshot: candidate.stage == CheckupCandidateStage.retired,
     );
   }
 
@@ -337,9 +404,9 @@ class MentalHealthCheckupCatalog {
     CheckupContentCandidate candidate,
   ) {
     if (candidate.answerOptions.length >= 2) {
-      final startsAtOne =
-          RegExp(r'(^|\D)1\s*[—–~-]\s*5(\D|$)')
-              .hasMatch(candidate.scaleOrDuration);
+      final startsAtOne = RegExp(
+        r'(^|\D)1\s*[—–~-]\s*5(\D|$)',
+      ).hasMatch(candidate.scaleOrDuration);
       return List<CheckupAnswerChoice>.generate(
         candidate.answerOptions.length,
         (index) => CheckupAnswerChoice(
@@ -399,8 +466,7 @@ class MentalHealthCheckupCatalog {
     }).toList(growable: true);
     for (final rule in clinicalTerms) {
       if (rule.value('术语') != '课程型诊断') continue;
-      final clinical =
-          '${rule.value('术语')}不代表${rule.value('不代表什么')}。';
+      final clinical = '${rule.value('术语')}不代表${rule.value('不代表什么')}。';
       if (clinical.isNotEmpty) values.add(clinical);
       break;
     }
@@ -559,13 +625,15 @@ class MentalHealthCheckupCatalog {
 
     switch (modeId) {
       case 'safety':
-        return finish(pick(const <String>[
-          'B20-S1',
-          'B20-S2',
-          'B20-S3',
-          'B20-S4',
-          'B20-F1',
-        ]));
+        return finish(
+          pick(const <String>[
+            'B20-S1',
+            'B20-S2',
+            'B20-S3',
+            'B20-S4',
+            'B20-F1',
+          ]),
+        );
       case 'daily':
         final start = clock.difference(DateTime(2025)).inDays.abs() % 8;
         final domainIds = List<String>.generate(
@@ -574,15 +642,17 @@ class MentalHealthCheckupCatalog {
         );
         return finish(pick(<String>['B20-S1', 'B20-F1', ...domainIds]));
       case 'five_minute':
-        return finish(pick(<String>[
-          'B20-S1',
-          'B20-S2',
-          'B20-S3',
-          'B20-S4',
-          'B20-F1',
-          'B20-F2',
-          ...List<String>.generate(8, (index) => 'B20-D${index + 1}'),
-        ]));
+        return finish(
+          pick(<String>[
+            'B20-S1',
+            'B20-S2',
+            'B20-S3',
+            'B20-S4',
+            'B20-F1',
+            'B20-F2',
+            ...List<String>.generate(8, (index) => 'B20-D${index + 1}'),
+          ]),
+        );
       case 'standard':
         return finish(<CheckupQuestion>[
           ...b20Questions,
@@ -596,9 +666,8 @@ class MentalHealthCheckupCatalog {
             ),
         ]);
       case 'focused':
-        final domainId = domainNames.containsKey(focusDomainId)
-            ? focusDomainId!
-            : 'D1';
+        final domainId =
+            domainNames.containsKey(focusDomainId) ? focusDomainId! : 'D1';
         final anchorId = 'B20-D${domainId.substring(1)}';
         return finish(<CheckupQuestion>[
           ...pick(const <String>[
@@ -609,13 +678,7 @@ class MentalHealthCheckupCatalog {
             'B20-F1',
             'B20-F2',
           ]),
-          ...pick(<String>[
-            anchorId,
-            'B20-C1',
-            'B20-C2',
-            'B20-Q1',
-            'B20-Q2',
-          ]),
+          ...pick(<String>[anchorId, 'B20-C1', 'B20-C2', 'B20-Q1', 'B20-Q2']),
           ..._indicatorQuestions(
             domainId,
             30,
@@ -748,10 +811,8 @@ class MentalHealthCheckupCatalog {
         .where((indicator) => _domainForIndicator(indicator) == domainId)
         .toList(growable: false);
     if (matching.isEmpty) return const <CheckupQuestion>[];
-    final anchorIndicatorIds = b20Questions
-        .map((e) => e.indicatorId)
-        .whereType<String>()
-        .toSet();
+    final anchorIndicatorIds =
+        b20Questions.map((e) => e.indicatorId).whereType<String>().toSet();
     var candidates = matching
         .where(
           (indicator) =>
@@ -790,9 +851,7 @@ class MentalHealthCheckupCatalog {
               now.day +
               domainId.hashCode.abs()) %
           candidates.length;
-      for (var index = 0;
-          index < count && index < candidates.length;
-          index++) {
+      for (var index = 0; index < count && index < candidates.length; index++) {
         selected.add(candidates[(offset + index) % candidates.length]);
       }
     }
@@ -809,24 +868,24 @@ class MentalHealthCheckupCatalog {
           : indicator.type == '功能结果'
               ? '过去14天，以下现实功能在多大程度上符合你：'
               : '过去14天，以下能力在多大程度上符合你：';
-      questions.add(CheckupQuestion(
-        id: 'IND-${indicator.id}',
-        group: '${domainNames[domainId]} · 深入追问',
-        kind: indicator.type,
-        prompt: '$promptPrefix${indicator.name}',
-        scaleLabel: risk
-            ? '0 从未 - 4 几乎总是（越高风险越高）'
-            : '0 完全不符合 - 4 非常符合（越高越健康）',
-        direction: risk ? '越高风险越高' : '越高越健康',
-        indicatorId: indicator.id,
-        sourceLevel:
-            indicator.directness.contains('直接证据较强') ? 'C1' : 'C2',
-        required: false,
-        domainId: domainId,
-        lecture: indicator.lecture,
-        evidenceLocation: indicator.definitionLocation,
-        choices: _zeroToFourChoices(),
-      ));
+      questions.add(
+        CheckupQuestion(
+          id: 'IND-${indicator.id}',
+          group: '${domainNames[domainId]} · 深入追问',
+          kind: indicator.type,
+          prompt: '$promptPrefix${indicator.name}',
+          scaleLabel:
+              risk ? '0 从未 - 4 几乎总是（越高风险越高）' : '0 完全不符合 - 4 非常符合（越高越健康）',
+          direction: risk ? '越高风险越高' : '越高越健康',
+          indicatorId: indicator.id,
+          sourceLevel: indicator.directness.contains('直接证据较强') ? 'C1' : 'C2',
+          required: false,
+          domainId: domainId,
+          lecture: indicator.lecture,
+          evidenceLocation: indicator.definitionLocation,
+          choices: _zeroToFourChoices(),
+        ),
+      );
     }
     return questions.take(count).toList(growable: false);
   }
@@ -849,22 +908,21 @@ class MentalHealthCheckupCatalog {
         return const <CheckupQuestion>[];
       }
       final result = <CheckupQuestion>[
-        knowledge[
-            _stableHash('${indicator.id}:${now.year}-${now.month}') %
-                knowledge.length],
+        knowledge[_stableHash('${indicator.id}:${now.year}-${now.month}') %
+            knowledge.length],
       ];
       final calibration = available
           .where(
             (question) =>
-                question.scoringRole ==
-                CheckupQuestionScoringRole.contextOnly,
+                question.scoringRole == CheckupQuestionScoringRole.contextOnly,
           )
           .toList(growable: false);
       if (calibration.isNotEmpty) {
         result.add(
-          calibration[
-              _stableHash('${indicator.id}:${now.year}-${now.month}-${now.day}') %
-                  calibration.length],
+          calibration[_stableHash(
+                '${indicator.id}:${now.year}-${now.month}-${now.day}',
+              ) %
+              calibration.length],
         );
       }
       return result;
@@ -874,9 +932,10 @@ class MentalHealthCheckupCatalog {
         .toList(growable: false);
     if (scoreBearing.isEmpty) return const <CheckupQuestion>[];
     return <CheckupQuestion>[
-      scoreBearing[
-          _stableHash('${indicator.id}:${now.year}-${now.month}-${now.day}') %
-              scoreBearing.length],
+      scoreBearing[_stableHash(
+            '${indicator.id}:${now.year}-${now.month}-${now.day}',
+          ) %
+          scoreBearing.length],
     ];
   }
 
@@ -1090,12 +1149,10 @@ class MentalHealthCheckupCatalog {
 
   static List<CheckupReferenceRule> _ruleList(dynamic value) => _mapList(value)
       .map(
-        (row) => CheckupReferenceRule(
-          <String, String>{
-            for (final entry in row.entries)
-              entry.key: entry.value?.toString() ?? '',
-          },
-        ),
+        (row) => CheckupReferenceRule(<String, String>{
+          for (final entry in row.entries)
+            entry.key: entry.value?.toString() ?? '',
+        }),
       )
       .toList(growable: false);
 
@@ -1184,8 +1241,7 @@ class MentalHealthCheckupCatalog {
     );
   }
 
-  static List<CheckupAnswerChoice> _choicesForB20(
-      String id, String rawScale) {
+  static List<CheckupAnswerChoice> _choicesForB20(String id, String rawScale) {
     if (id == 'B20-S1' || id == 'B20-S2' || id == 'B20-S4') {
       return const <CheckupAnswerChoice>[
         CheckupAnswerChoice('否', 0),
@@ -1273,7 +1329,8 @@ class MentalHealthCheckupCatalog {
   }
 
   static CheckupDiagnosisPattern _diagnosisFromJson(
-          Map<String, dynamic> json) =>
+    Map<String, dynamic> json,
+  ) =>
       CheckupDiagnosisPattern(
         id: (json['模式ID'] ?? '').toString(),
         name: (json['课程型诊断名称'] ?? '').toString(),
@@ -1294,8 +1351,7 @@ class MentalHealthCheckupCatalog {
       .where((e) => e.isNotEmpty)
       .toList(growable: false);
 
-  static CheckupPrescription _prescriptionFromJson(
-          Map<String, dynamic> json) =>
+  static CheckupPrescription _prescriptionFromJson(Map<String, dynamic> json) =>
       CheckupPrescription(
         id: (json['处方ID'] ?? '').toString(),
         lecture: (json['讲次'] as num?)?.toInt() ?? 0,
