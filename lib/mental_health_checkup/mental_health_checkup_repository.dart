@@ -2,16 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
 import '../data/kv_dao.dart';
 import 'mental_health_content_governance.dart';
+import 'mental_health_generation_batch.dart';
+import 'mental_health_indicator_governance.dart';
 import 'mental_health_checkup_backup.dart';
 import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_models.dart';
 import 'mental_health_checkup_platform.dart';
+import 'mental_health_knowledge_models.dart';
 
 class CheckupCourseEvidence {
   final String locationId;
@@ -51,8 +55,7 @@ class CheckupCourseEvidence {
         language: (row['language'] ?? '').toString(),
         globalParagraphIndex:
             (row['global_paragraph_index'] as num?)?.toInt() ?? 0,
-        lecturePosition:
-            (row['lecture_position'] as num?)?.toInt() ?? 0,
+        lecturePosition: (row['lecture_position'] as num?)?.toInt() ?? 0,
         page: (row['page_no'] as num?)?.toInt() ?? 0,
         pageMethod: (row['page_method'] ?? '').toString(),
         text: (row['content'] ?? '').toString(),
@@ -123,7 +126,7 @@ class CheckupEvidenceTrace {
 }
 
 class MentalHealthCheckupRepository {
-  static const int _schemaVersion = 5;
+  static const int _schemaVersion = 8;
   static const String _legacyStateKey = 'mental_health_checkup.state.v25';
   static const String _legacyDraftKey = 'mental_health_checkup.draft.v25';
   static const String _promptPrefix = 'ai_prompt.mental_health_checkup.';
@@ -255,6 +258,66 @@ class MentalHealthCheckupRepository {
             ON DELETE CASCADE
         )
       ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_indicator_candidates (
+          id TEXT PRIMARY KEY,
+          proposed_indicator_id TEXT NOT NULL,
+          lecture_no INTEGER NOT NULL,
+          stage TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_indicator_audit_events (
+          id TEXT PRIMARY KEY,
+          candidate_id TEXT NOT NULL,
+          from_stage TEXT NOT NULL,
+          to_stage TEXT NOT NULL,
+          actor TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          FOREIGN KEY (candidate_id) REFERENCES mh_indicator_candidates(id)
+            ON DELETE CASCADE
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_provider_knowledge_resources (
+          id TEXT PRIMARY KEY,
+          provider TEXT NOT NULL,
+          account_fingerprint TEXT NOT NULL,
+          course_version TEXT NOT NULL,
+          source_sha256 TEXT NOT NULL,
+          status TEXT NOT NULL,
+          enabled INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_generation_batches (
+          id TEXT PRIMARY KEY,
+          status TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL
+        )
+      ''');
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS mh_generation_jobs (
+          id TEXT PRIMARY KEY,
+          batch_id TEXT NOT NULL,
+          indicator_id TEXT NOT NULL,
+          content_code TEXT NOT NULL,
+          status TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          FOREIGN KEY (batch_id) REFERENCES mh_generation_batches(id)
+            ON DELETE CASCADE
+        )
+      ''');
       await txn.execute(
         'CREATE INDEX IF NOT EXISTS idx_mh_content_candidate_indicator '
         'ON mh_content_candidates(indicator_id, content_kind, content_code)',
@@ -266,6 +329,36 @@ class MentalHealthCheckupRepository {
       await txn.execute(
         'CREATE INDEX IF NOT EXISTS idx_mh_content_audit_candidate '
         'ON mh_content_audit_events(candidate_id, created_at_ms)',
+      );
+      await txn.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS '
+        'idx_mh_indicator_candidate_proposed_version '
+        'ON mh_indicator_candidates(proposed_indicator_id, version)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_indicator_candidate_stage '
+        'ON mh_indicator_candidates(stage, updated_at_ms DESC)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_indicator_audit_candidate '
+        'ON mh_indicator_audit_events(candidate_id, created_at_ms)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_provider_resource_lookup '
+        'ON mh_provider_knowledge_resources('
+        'provider, account_fingerprint, enabled, updated_at_ms DESC)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_generation_batch_status '
+        'ON mh_generation_batches(status, updated_at_ms DESC)',
+      );
+      await txn.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_mh_generation_job_slot '
+        'ON mh_generation_jobs(batch_id, indicator_id, content_code)',
+      );
+      await txn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_mh_generation_job_status '
+        'ON mh_generation_jobs(batch_id, status, updated_at_ms)',
       );
       await txn.execute('''
         CREATE TABLE IF NOT EXISTS mh_indicators (
@@ -355,10 +448,7 @@ class MentalHealthCheckupRepository {
     });
   }
 
-  Future<void> _runMigrations(
-    DatabaseExecutor db,
-    int oldVersion,
-  ) async {
+  Future<void> _runMigrations(DatabaseExecutor db, int oldVersion) async {
     if (oldVersion < 1) {
       await _putMeta(db, 'migration_1', 'normalized_state_tables');
     }
@@ -381,6 +471,23 @@ class MentalHealthCheckupRepository {
         'migration_5',
         'content_candidate_governance_and_audit',
       );
+    }
+    if (oldVersion < 6) {
+      await _putMeta(
+        db,
+        'migration_6',
+        'indicator_candidate_governance_and_audit',
+      );
+    }
+    if (oldVersion < 7) {
+      await _putMeta(
+        db,
+        'migration_7',
+        'provider_knowledge_resource_lifecycle',
+      );
+    }
+    if (oldVersion < 8) {
+      await _putMeta(db, 'migration_8', 'resumable_content_generation_batches');
     }
   }
 
@@ -421,9 +528,7 @@ class MentalHealthCheckupRepository {
         .where((line) => line.trim().isNotEmpty)
         .toList(growable: false);
     if (courseLines.length != 2253) {
-      throw StateError(
-        '课程定位索引应为2253条，实际为${courseLines.length}条。',
-      );
+      throw StateError('课程定位索引应为2253条，实际为${courseLines.length}条。');
     }
     if (catalog.indicators.length != 345 || evidenceLines.length != 1380) {
       throw StateError(
@@ -445,23 +550,22 @@ class MentalHealthCheckupRepository {
           throw StateError('指标ID缺失或重复：${indicator.id}');
         }
         batch.insert(
-          'mh_indicators',
-          <String, Object?>{
-            'indicator_id': indicator.id,
-            'lecture_no': indicator.lecture,
-            'area': indicator.area,
-            'name': indicator.name,
-            'indicator_type': indicator.type,
-            'definition_location': indicator.definitionLocation,
-            'low_location': indicator.lowLocation,
-            'high_location': indicator.highLocation,
-            'action_location': indicator.actionLocation,
-            'direct_evidence_count': indicator.directEvidenceCount,
-            'directness': indicator.directness,
-            'review_status': indicator.reviewStatus,
-          },
-          conflictAlgorithm: ConflictAlgorithm.abort,
-        );
+            'mh_indicators',
+            <String, Object?>{
+              'indicator_id': indicator.id,
+              'lecture_no': indicator.lecture,
+              'area': indicator.area,
+              'name': indicator.name,
+              'indicator_type': indicator.type,
+              'definition_location': indicator.definitionLocation,
+              'low_location': indicator.lowLocation,
+              'high_location': indicator.highLocation,
+              'action_location': indicator.actionLocation,
+              'direct_evidence_count': indicator.directEvidenceCount,
+              'directness': indicator.directness,
+              'review_status': indicator.reviewStatus,
+            },
+            conflictAlgorithm: ConflictAlgorithm.abort);
       }
 
       final courseLocationIds = <String>{};
@@ -473,8 +577,7 @@ class MentalHealthCheckupRepository {
           'section': (row['章节'] ?? '').toString(),
           'source_structure': (row['来源结构'] ?? '').toString(),
           'language': (row['语言'] ?? '').toString(),
-          'global_paragraph_index':
-              (row['全局段落索引'] as num?)?.toInt() ?? 0,
+          'global_paragraph_index': (row['全局段落索引'] as num?)?.toInt() ?? 0,
           'lecture_position': (row['讲内位置'] as num?)?.toInt() ?? 0,
           'page_no': (row['固定页'] as num?)?.toInt() ?? 0,
           'page_method': (row['页码方法'] ?? '').toString(),
@@ -514,19 +617,18 @@ class MentalHealthCheckupRepository {
           throw StateError('证据关系ID重复：$relationId');
         }
         batch.insert(
-          'mh_indicator_evidence',
-          <String, Object?>{
-            'relation_id': relationId,
-            'indicator_id': indicatorId,
-            'evidence_role': role,
-            'location_id': locationId,
-            'source_level': (row['证据等级'] ?? '').toString(),
-            'excerpt': (row['原文摘录'] ?? '').toString(),
-            'confidence': (row['置信度'] as num?)?.toDouble(),
-            'review_status': (row['审核状态'] ?? '').toString(),
-          },
-          conflictAlgorithm: ConflictAlgorithm.abort,
-        );
+            'mh_indicator_evidence',
+            <String, Object?>{
+              'relation_id': relationId,
+              'indicator_id': indicatorId,
+              'evidence_role': role,
+              'location_id': locationId,
+              'source_level': (row['证据等级'] ?? '').toString(),
+              'excerpt': (row['原文摘录'] ?? '').toString(),
+              'confidence': (row['置信度'] as num?)?.toDouble(),
+              'review_status': (row['审核状态'] ?? '').toString(),
+            },
+            conflictAlgorithm: ConflictAlgorithm.abort);
       }
       await batch.commit(noResult: true);
       await _putMeta(txn, 'course_seed_version', catalog.validation.version);
@@ -537,9 +639,10 @@ class MentalHealthCheckupRepository {
   }
 
   Future<void> _migrateLegacyStateIfNeeded(Database db) async {
-    final profileCount =
-        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM mh_profile')) ??
-            0;
+    final profileCount = Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM mh_profile'),
+        ) ??
+        0;
     if (profileCount > 0) return;
 
     final legacyRaw = await _kv.getString(_legacyStateKey);
@@ -561,14 +664,13 @@ class MentalHealthCheckupRepository {
       try {
         jsonDecode(legacyDraft);
         await db.insert(
-          'mh_drafts',
-          <String, Object?>{
-            'id': _draftId,
-            'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-            'payload_json': legacyDraft,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+            'mh_drafts',
+            <String, Object?>{
+              'id': _draftId,
+              'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+              'payload_json': legacyDraft,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
       } catch (_) {}
     }
     await db.delete(
@@ -595,14 +697,11 @@ class MentalHealthCheckupRepository {
     final candidates = catalog.legacyContentCandidates;
     final attitudeCount = candidates
         .where(
-          (candidate) =>
-              candidate.kind == CheckupContentKind.assessmentItem,
+          (candidate) => candidate.kind == CheckupContentKind.assessmentItem,
         )
         .length;
     final behaviorCount = candidates
-        .where(
-          (candidate) => candidate.kind == CheckupContentKind.behaviorTask,
-        )
+        .where((candidate) => candidate.kind == CheckupContentKind.behaviorTask)
         .length;
     if (candidates.length != 138 ||
         attitudeCount != 92 ||
@@ -624,19 +723,18 @@ class MentalHealthCheckupRepository {
           throw StateError('历史候选映射无效：${candidate.candidateId}');
         }
         await txn.insert(
-          'mh_content_candidates',
-          <String, Object?>{
-            'id': candidate.candidateId,
-            'indicator_id': candidate.primaryIndicatorId,
-            'content_kind': candidate.kind.name,
-            'content_code': candidate.contentCode,
-            'stage': candidate.stage.name,
-            'version': candidate.version,
-            'updated_at_ms': candidate.updatedAtMs,
-            'payload_json': jsonEncode(candidate.toJson()),
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+            'mh_content_candidates',
+            <String, Object?>{
+              'id': candidate.candidateId,
+              'indicator_id': candidate.primaryIndicatorId,
+              'content_kind': candidate.kind.name,
+              'content_code': candidate.contentCode,
+              'stage': candidate.stage.name,
+              'version': candidate.version,
+              'updated_at_ms': candidate.updatedAtMs,
+              'payload_json': jsonEncode(candidate.toJson()),
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore);
       }
       await _putMeta(
         txn,
@@ -675,17 +773,23 @@ class MentalHealthCheckupRepository {
       ),
     );
 
-    final sessionRows =
-        await db.query('mh_sessions', orderBy: 'completed_at_ms DESC');
-    final answerRows =
-        await db.query('mh_answers', orderBy: 'answered_at_ms ASC');
+    final sessionRows = await db.query(
+      'mh_sessions',
+      orderBy: 'completed_at_ms DESC',
+    );
+    final answerRows = await db.query(
+      'mh_answers',
+      orderBy: 'answered_at_ms ASC',
+    );
     final answersBySession = <String, List<Map<String, dynamic>>>{};
     for (final row in answerRows) {
       final id = (row['session_id'] ?? '').toString();
       final answer = Map<String, dynamic>.from(
         jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
       );
-      answersBySession.putIfAbsent(id, () => <Map<String, dynamic>>[]).add(answer);
+      answersBySession
+          .putIfAbsent(id, () => <Map<String, dynamic>>[])
+          .add(answer);
     }
     final sessions = sessionRows.map((row) {
       final payload = Map<String, dynamic>.from(
@@ -696,8 +800,10 @@ class MentalHealthCheckupRepository {
       return CheckupSession.fromJson(payload);
     }).toList(growable: false);
 
-    final logRows =
-        await db.query('mh_execution_logs', orderBy: 'created_at_ms DESC');
+    final logRows = await db.query(
+      'mh_execution_logs',
+      orderBy: 'created_at_ms DESC',
+    );
     final logsByPlan = <String, List<Map<String, dynamic>>>{};
     for (final row in logRows) {
       final id = (row['plan_id'] ?? '').toString();
@@ -716,19 +822,24 @@ class MentalHealthCheckupRepository {
       return CheckupPrescriptionPlan.fromJson(payload);
     }).toList(growable: false);
 
-    final retestRows =
-        await db.query('mh_retests', orderBy: 'created_at_ms DESC');
+    final retestRows = await db.query(
+      'mh_retests',
+      orderBy: 'created_at_ms DESC',
+    );
     final retests = retestRows
-        .map((row) => CheckupRetestRecord.fromJson(
-              Map<String, dynamic>.from(
-                jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
-              ),
-            ))
+        .map(
+          (row) => CheckupRetestRecord.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
         .toList(growable: false);
     return MentalHealthCheckupState(
       schemaVersion: _schemaVersion,
       installId: (profile['install_id'] ?? '').toString(),
-      onboardingAccepted: (profile['onboarding_accepted'] as num?)?.toInt() == 1,
+      onboardingAccepted:
+          (profile['onboarding_accepted'] as num?)?.toInt() == 1,
       settings: settings,
       sessions: sessions,
       plans: plans,
@@ -750,16 +861,15 @@ class MentalHealthCheckupRepository {
     final settingsJson = jsonEncode(await _encodeSettings(normalized.settings));
     await db.transaction((txn) async {
       await txn.insert(
-        'mh_profile',
-        <String, Object?>{
-          'id': _profileId,
-          'install_id': normalized.installId,
-          'onboarding_accepted': normalized.onboardingAccepted ? 1 : 0,
-          'settings_json': settingsJson,
-          'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+          'mh_profile',
+          <String, Object?>{
+            'id': _profileId,
+            'install_id': normalized.installId,
+            'onboarding_accepted': normalized.onboardingAccepted ? 1 : 0,
+            'settings_json': settingsJson,
+            'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.delete('mh_answers');
       await txn.delete('mh_sessions');
       await txn.delete('mh_execution_logs');
@@ -835,14 +945,13 @@ class MentalHealthCheckupRepository {
       final payload = session.toJson();
       payload['answers'] = const <Object?>[];
       await txn.insert(
-        'mh_sessions',
-        <String, Object?>{
-          'id': session.id,
-          'completed_at_ms': session.completedAtMs,
-          'payload_json': jsonEncode(payload),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+          'mh_sessions',
+          <String, Object?>{
+            'id': session.id,
+            'completed_at_ms': session.completedAtMs,
+            'payload_json': jsonEncode(payload),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.delete(
         'mh_answers',
         where: 'session_id = ?',
@@ -923,11 +1032,9 @@ class MentalHealthCheckupRepository {
       retest,
       ...state.retests.where((item) => item.id != retest.id),
     ];
-    final next = _ensureInstallId(state).copyWith(
-      sessions: sessions,
-      plans: plans,
-      retests: retests,
-    );
+    final next = _ensureInstallId(
+      state,
+    ).copyWith(sessions: sessions, plans: plans, retests: retests);
     await save(next);
     await clearDraft();
     return next;
@@ -952,20 +1059,20 @@ class MentalHealthCheckupRepository {
       'started_at_ms': startedAtMs,
       'current_index': currentIndex,
       'question_ids': questionIds,
-      'answers': answers.map((answer) => answer.toJson()).toList(growable: false),
+      'answers':
+          answers.map((answer) => answer.toJson()).toList(growable: false),
       'assessment_plan': assessmentPlan.toJson(),
     };
     final db = await AppDatabase.instance();
     await _ensureSchema(db);
     await db.insert(
-      'mh_drafts',
-      <String, Object?>{
-        'id': _draftId,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-        'payload_json': jsonEncode(payload),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+        'mh_drafts',
+        <String, Object?>{
+          'id': _draftId,
+          'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+          'payload_json': jsonEncode(payload),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<Map<String, dynamic>?> loadDraft() async {
@@ -1030,9 +1137,7 @@ class MentalHealthCheckupRepository {
         .toList(growable: false);
   }
 
-  Future<void> saveContentCandidate(
-    CheckupContentCandidate candidate,
-  ) async {
+  Future<void> saveContentCandidate(CheckupContentCandidate candidate) async {
     final db = await AppDatabase.instance();
     await _ensureSchema(db);
     await db.transaction((txn) async {
@@ -1079,6 +1184,47 @@ class MentalHealthCheckupRepository {
         throw StateError('候选状态已变化，请刷新后重试。');
       }
       if (transition.candidate.stage == CheckupCandidateStage.official) {
+        final locationIds = <String>{
+          ...transition.candidate.evidenceLocationIds,
+          transition.candidate.definitionLocation,
+          transition.candidate.lowLocation,
+          transition.candidate.highLocation,
+          transition.candidate.actionLocation,
+        }..removeWhere((value) => value.trim().isEmpty);
+        if (locationIds.isEmpty) {
+          throw StateError('正式指标没有课程证据位置。');
+        }
+        final locationRows = await txn.query(
+          'mh_course_locations',
+          columns: <String>['location_id', 'lecture_no'],
+          where: 'location_id IN '
+              '(${List<String>.filled(locationIds.length, '?').join(',')})',
+          whereArgs: locationIds.toList(growable: false),
+        );
+        if (locationRows.length != locationIds.length) {
+          throw StateError('存在无法在本地课程知识库验证的证据位置ID。');
+        }
+        if (locationRows.any(
+          (row) =>
+              (row['lecture_no'] as num?)?.toInt() !=
+              transition.candidate.lecture,
+        )) {
+          throw StateError('课程证据位置与候选指标讲次不一致。');
+        }
+        final seededIndicatorConflicts = Sqflite.firstIntValue(
+              await txn.rawQuery(
+                '''
+                SELECT COUNT(*)
+                FROM mh_indicators
+                WHERE indicator_id = ?
+                ''',
+                <Object?>[transition.candidate.proposedIndicatorId],
+              ),
+            ) ??
+            0;
+        if (seededIndicatorConflicts > 0) {
+          throw StateError('候选指标ID与内置正式指标冲突。');
+        }
         final conflicts = Sqflite.firstIntValue(
               await txn.rawQuery(
                 '''
@@ -1105,18 +1251,17 @@ class MentalHealthCheckupRepository {
       }
       await _putContentCandidate(txn, transition.candidate);
       await txn.insert(
-        'mh_content_audit_events',
-        <String, Object?>{
-          'id': transition.auditEvent.id,
-          'candidate_id': transition.auditEvent.candidateId,
-          'from_stage': transition.auditEvent.fromStage.name,
-          'to_stage': transition.auditEvent.toStage.name,
-          'actor': transition.auditEvent.actor,
-          'created_at_ms': transition.auditEvent.createdAtMs,
-          'payload_json': jsonEncode(transition.auditEvent.toJson()),
-        },
-        conflictAlgorithm: ConflictAlgorithm.abort,
-      );
+          'mh_content_audit_events',
+          <String, Object?>{
+            'id': transition.auditEvent.id,
+            'candidate_id': transition.auditEvent.candidateId,
+            'from_stage': transition.auditEvent.fromStage.name,
+            'to_stage': transition.auditEvent.toStage.name,
+            'actor': transition.auditEvent.actor,
+            'created_at_ms': transition.auditEvent.createdAtMs,
+            'payload_json': jsonEncode(transition.auditEvent.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.abort);
     });
   }
 
@@ -1142,6 +1287,135 @@ class MentalHealthCheckupRepository {
         .toList(growable: false);
   }
 
+  Future<List<CheckupIndicatorCandidate>> loadIndicatorCandidates({
+    CheckupCandidateStage? stage,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_indicator_candidates',
+      where: stage == null ? null : 'stage = ?',
+      whereArgs: stage == null ? null : <Object?>[stage.name],
+      orderBy: 'updated_at_ms DESC, version DESC',
+    );
+    return rows
+        .map(
+          (row) => CheckupIndicatorCandidate.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> saveIndicatorCandidate(
+    CheckupIndicatorCandidate candidate,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.transaction((txn) async {
+      final existing = await txn.query(
+        'mh_indicator_candidates',
+        columns: <String>['stage', 'payload_json'],
+        where: 'id = ?',
+        whereArgs: <Object?>[candidate.candidateId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        final existingStage = (existing.first['stage'] ?? '').toString();
+        if (existingStage == CheckupCandidateStage.official.name ||
+            existingStage == CheckupCandidateStage.retired.name) {
+          if ((existing.first['payload_json'] ?? '').toString() !=
+              jsonEncode(candidate.toJson())) {
+            throw StateError('正式或已停用指标不可覆盖；请派生新版本。');
+          }
+          return;
+        }
+      }
+      await _putIndicatorCandidate(txn, candidate);
+    });
+  }
+
+  Future<void> saveIndicatorTransition(
+    CheckupIndicatorTransition transition,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'mh_indicator_candidates',
+        columns: <String>['stage'],
+        where: 'id = ?',
+        whereArgs: <Object?>[transition.candidate.candidateId],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('候选指标不存在，无法变更状态。');
+      final currentStage = (rows.first['stage'] ?? '').toString();
+      if (currentStage != transition.auditEvent.fromStage.name ||
+          transition.candidate.stage != transition.auditEvent.toStage) {
+        throw StateError('候选指标状态已变化，请刷新后重试。');
+      }
+      if (transition.candidate.stage == CheckupCandidateStage.official) {
+        final conflicts = Sqflite.firstIntValue(
+              await txn.rawQuery(
+                '''
+                SELECT COUNT(*)
+                FROM mh_indicator_candidates
+                WHERE proposed_indicator_id = ? AND version = ?
+                  AND stage = ? AND id != ?
+                ''',
+                <Object?>[
+                  transition.candidate.proposedIndicatorId,
+                  transition.candidate.version,
+                  CheckupCandidateStage.official.name,
+                  transition.candidate.candidateId,
+                ],
+              ),
+            ) ??
+            0;
+        if (conflicts > 0) {
+          throw StateError('同一候选指标和版本已经存在正式记录。');
+        }
+      }
+      await _putIndicatorCandidate(txn, transition.candidate);
+      await txn.insert(
+          'mh_indicator_audit_events',
+          <String, Object?>{
+            'id': transition.auditEvent.id,
+            'candidate_id': transition.auditEvent.candidateId,
+            'from_stage': transition.auditEvent.fromStage.name,
+            'to_stage': transition.auditEvent.toStage.name,
+            'actor': transition.auditEvent.actor,
+            'created_at_ms': transition.auditEvent.createdAtMs,
+            'payload_json': jsonEncode(transition.auditEvent.toJson()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.abort);
+    });
+  }
+
+  Future<List<CheckupIndicatorAuditEvent>> loadIndicatorAudit(
+    String candidateId,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_indicator_audit_events',
+      where: 'candidate_id = ?',
+      whereArgs: <Object?>[candidateId],
+      orderBy: 'created_at_ms ASC',
+    );
+    return rows
+        .map(
+          (row) => CheckupIndicatorAuditEvent.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   Future<List<CheckupCourseEvidence>> searchCourseEvidence(
     String query, {
     int? lecture,
@@ -1150,7 +1424,8 @@ class MentalHealthCheckupRepository {
     final db = await AppDatabase.instance();
     await _ensureSchema(db);
     final trimmed = query.trim();
-    if (trimmed.isEmpty && lecture == null) return const <CheckupCourseEvidence>[];
+    if (trimmed.isEmpty && lecture == null)
+      return const <CheckupCourseEvidence>[];
     final boundedLimit = limit.clamp(1, 50).toInt();
     List<Map<String, Object?>> rows = const <Map<String, Object?>>[];
 
@@ -1160,8 +1435,7 @@ class MentalHealthCheckupRepository {
       final args = <Object?>[pattern, pattern, pattern, pattern];
       if (lecture != null) args.add(lecture);
       args.add(boundedLimit);
-      rows = await db.rawQuery(
-        '''
+      rows = await db.rawQuery('''
         SELECT DISTINCT c.*
         FROM mh_indicator_evidence e
         JOIN mh_indicators i ON i.indicator_id = e.indicator_id
@@ -1172,9 +1446,7 @@ class MentalHealthCheckupRepository {
         ) $lectureClause
         ORDER BY c.lecture_no, c.lecture_position
         LIMIT ?
-        ''',
-        args,
-      );
+        ''', args);
     }
 
     final asciiTokens = trimmed
@@ -1193,17 +1465,14 @@ class MentalHealthCheckupRepository {
       if (lecture != null) args.add(lecture);
       args.add(boundedLimit);
       try {
-        rows = await db.rawQuery(
-          '''
+        rows = await db.rawQuery('''
           SELECT c.*
           FROM mh_course_locations_fts f
           JOIN mh_course_locations c ON c.location_id = f.location_id
           WHERE f.content MATCH ? $whereLecture
           ORDER BY c.lecture_no, c.lecture_position
           LIMIT ?
-          ''',
-          args,
-        );
+          ''', args);
       } catch (_) {
         rows = const <Map<String, Object?>>[];
       }
@@ -1227,9 +1496,7 @@ class MentalHealthCheckupRepository {
         limit: boundedLimit,
       );
     }
-    return rows
-        .map(CheckupCourseEvidence.fromDatabase)
-        .toList(growable: false);
+    return rows.map(CheckupCourseEvidence.fromDatabase).toList(growable: false);
   }
 
   Future<CheckupCourseEvidence?> evidenceByLocation(String locationId) async {
@@ -1267,9 +1534,519 @@ class MentalHealthCheckupRepository {
       ''',
       <Object?>[...ids, limit.clamp(1, 120).toInt()],
     );
+    final traces =
+        rows.map(CheckupEvidenceTrace.fromDatabase).toList(growable: true);
+    final foundIds = traces.map((trace) => trace.indicatorId).toSet();
+    final missingIds = ids.where((id) => !foundIds.contains(id)).toSet();
+    if (missingIds.isNotEmpty) {
+      final candidateRows = await db.query(
+        'mh_indicator_candidates',
+        where: 'proposed_indicator_id IN '
+            '(${List<String>.filled(missingIds.length, '?').join(',')})',
+        whereArgs: missingIds.toList(growable: false),
+        orderBy: 'version DESC, updated_at_ms DESC',
+      );
+      final seenCandidateIds = <String>{};
+      for (final row in candidateRows) {
+        final candidate = CheckupIndicatorCandidate.fromJson(
+          Map<String, dynamic>.from(
+            jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+          ),
+        );
+        if (!seenCandidateIds.add(candidate.proposedIndicatorId)) continue;
+        final roles = <String, String>{
+          'DEF': candidate.definitionLocation,
+          'LOW': candidate.lowLocation,
+          'HIGH': candidate.highLocation,
+          'ACT': candidate.actionLocation,
+        };
+        for (final entry in roles.entries) {
+          final locationId = entry.value.trim();
+          if (locationId.isEmpty) continue;
+          final locations = await db.query(
+            'mh_course_locations',
+            where: 'location_id = ?',
+            whereArgs: <Object?>[locationId],
+            limit: 1,
+          );
+          if (locations.isEmpty) continue;
+          final location = locations.first;
+          traces.add(
+            CheckupEvidenceTrace(
+              relationId: 'IND-CAND-${candidate.candidateId}-${entry.key}',
+              indicatorId: candidate.proposedIndicatorId,
+              evidenceRole: entry.key,
+              locationId: locationId,
+              sourceLevel: candidate.sourceLevel,
+              excerpt: (location['content'] ?? '').toString(),
+              confidence: null,
+              reviewStatus: candidate.stage.name,
+              lecture: (location['lecture_no'] as num?)?.toInt() ?? 0,
+              page: (location['page_no'] as num?)?.toInt() ?? 0,
+              section: (location['section'] ?? '').toString(),
+              courseText: (location['content'] ?? '').toString(),
+            ),
+          );
+        }
+      }
+    }
+    return traces.take(limit.clamp(1, 120).toInt()).toList(growable: false);
+  }
+
+  Future<List<CheckupEvidenceTrace>> evidenceTracesForLecture(
+    int lecture, {
+    int limit = 80,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.rawQuery(
+      '''
+      SELECT c.location_id, c.lecture_no, c.page_no, c.section,
+             c.content AS course_text
+      FROM mh_course_locations c
+      WHERE c.lecture_no = ?
+      ORDER BY c.lecture_position, c.location_id
+      LIMIT ?
+      ''',
+      <Object?>[lecture.clamp(1, 23).toInt(), limit.clamp(1, 160).toInt()],
+    );
     return rows
-        .map(CheckupEvidenceTrace.fromDatabase)
+        .map(
+          (row) => CheckupEvidenceTrace(
+            relationId: 'COURSE-${(row['location_id'] ?? '').toString()}',
+            indicatorId: '',
+            evidenceRole: 'COURSE',
+            locationId: (row['location_id'] ?? '').toString(),
+            sourceLevel: '课程原文',
+            excerpt: (row['course_text'] ?? '').toString(),
+            confidence: null,
+            reviewStatus: '待候选指标审核',
+            lecture: (row['lecture_no'] as num?)?.toInt() ?? 0,
+            page: (row['page_no'] as num?)?.toInt() ?? 0,
+            section: (row['section'] ?? '').toString(),
+            courseText: (row['course_text'] ?? '').toString(),
+          ),
+        )
         .toList(growable: false);
+  }
+
+  Future<CheckupKnowledgeCorpus> buildCourseKnowledgeCorpus({
+    required MentalHealthCheckupCatalog catalog,
+  }) async {
+    final db = await AppDatabase.instance();
+    await initialize(catalog);
+    final locations = await db.query(
+      'mh_course_locations',
+      orderBy: 'lecture_no, lecture_position, location_id',
+    );
+    final relations = await db.query(
+      'mh_indicator_evidence',
+      orderBy: 'indicator_id, evidence_role, relation_id',
+    );
+    final governedRows = await db.query(
+      'mh_indicator_candidates',
+      where: 'stage = ?',
+      whereArgs: <Object?>[CheckupCandidateStage.official.name],
+      orderBy: 'proposed_indicator_id, version DESC, updated_at_ms DESC',
+    );
+    final governedRelations = <Map<String, Object?>>[];
+    final governedIds = <String>{};
+    final catalogIds =
+        catalog.indicators.map((indicator) => indicator.id).toSet();
+    for (final row in governedRows) {
+      final candidate = CheckupIndicatorCandidate.fromJson(
+        Map<String, dynamic>.from(
+          jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+        ),
+      );
+      if (!catalogIds.contains(candidate.proposedIndicatorId) ||
+          !governedIds.add(candidate.proposedIndicatorId)) {
+        continue;
+      }
+      final locations = <String, String>{
+        'DEF': candidate.definitionLocation,
+        'LOW': candidate.lowLocation,
+        'HIGH': candidate.highLocation,
+        'ACT': candidate.actionLocation,
+      };
+      for (final entry in locations.entries) {
+        if (entry.value.trim().isEmpty) continue;
+        governedRelations.add(<String, Object?>{
+          'relation_id': 'IND-CAND-${candidate.candidateId}-${entry.key}',
+          'indicator_id': candidate.proposedIndicatorId,
+          'evidence_role': entry.key,
+          'location_id': entry.value.trim(),
+          'source_level': candidate.sourceLevel,
+          'excerpt': '',
+          'confidence': null,
+          'review_status': '课程专家签发',
+        });
+      }
+    }
+    final relationCount = relations.length + governedRelations.length;
+    final buffer = StringBuffer();
+    buffer.writeln(
+      jsonEncode(<String, Object?>{
+        'record_type': 'manifest',
+        'module': 'mental_health_checkup',
+        'course_version': catalog.validation.version,
+        'rule_version': MentalHealthCheckupCatalog.ruleVersion,
+        'privacy_scope': 'course_knowledge_only',
+        'contains_user_health_data': false,
+        'indicator_count': catalog.indicators.length,
+        'course_location_count': locations.length,
+        'evidence_relation_count': relationCount,
+      }),
+    );
+    for (final indicator in catalog.indicators) {
+      buffer.writeln(
+        jsonEncode(<String, Object?>{
+          'record_type': 'indicator',
+          'indicator_id': indicator.id,
+          'lecture': indicator.lecture,
+          'area': indicator.area,
+          'name': indicator.name,
+          'indicator_type': indicator.type,
+          'definition_location': indicator.definitionLocation,
+          'low_location': indicator.lowLocation,
+          'high_location': indicator.highLocation,
+          'action_location': indicator.actionLocation,
+          'source_directness': indicator.directness,
+          'review_status': indicator.reviewStatus,
+        }),
+      );
+    }
+    for (final row in locations) {
+      buffer.writeln(
+        jsonEncode(<String, Object?>{'record_type': 'course_location', ...row}),
+      );
+    }
+    for (final row in relations) {
+      buffer.writeln(
+        jsonEncode(<String, Object?>{
+          'record_type': 'indicator_evidence',
+          ...row,
+        }),
+      );
+    }
+    for (final row in governedRelations) {
+      buffer.writeln(
+        jsonEncode(<String, Object?>{
+          'record_type': 'indicator_evidence',
+          ...row,
+        }),
+      );
+    }
+    final bytes = utf8.encode(buffer.toString());
+    final digest = sha256.convert(bytes).toString();
+    final safeVersion = catalog.validation.version.replaceAll(
+      RegExp(r'[^A-Za-z0-9._-]+'),
+      '_',
+    );
+    return CheckupKnowledgeCorpus(
+      courseVersion: catalog.validation.version,
+      sourceSha256: digest,
+      fileName: 'mental_health_course_$safeVersion.jsonl',
+      bytes: bytes,
+      courseLocationCount: locations.length,
+      evidenceRelationCount: relationCount,
+      indicatorCount: catalog.indicators.length,
+    );
+  }
+
+  Future<List<CheckupProviderKnowledgeResource>>
+      loadProviderKnowledgeResources({
+    String? provider,
+    String? accountFingerprint,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if ((provider ?? '').trim().isNotEmpty) {
+      clauses.add('provider = ?');
+      args.add(provider!.trim().toLowerCase());
+    }
+    if ((accountFingerprint ?? '').trim().isNotEmpty) {
+      clauses.add('account_fingerprint = ?');
+      args.add(accountFingerprint!.trim());
+    }
+    final rows = await db.query(
+      'mh_provider_knowledge_resources',
+      where: clauses.isEmpty ? null : clauses.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'updated_at_ms DESC',
+    );
+    return rows
+        .map(
+          (row) => CheckupProviderKnowledgeResource.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> saveProviderKnowledgeResource(
+    CheckupProviderKnowledgeResource resource,
+  ) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.transaction((txn) async {
+      if (resource.enabled) {
+        final rows = await txn.query(
+          'mh_provider_knowledge_resources',
+          columns: <String>['id', 'payload_json'],
+          where: 'provider = ? AND account_fingerprint = ? AND enabled = 1 '
+              'AND id != ?',
+          whereArgs: <Object?>[
+            resource.provider,
+            resource.accountFingerprint,
+            resource.id,
+          ],
+        );
+        for (final row in rows) {
+          final previous = CheckupProviderKnowledgeResource.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          );
+          await _putProviderKnowledgeResource(
+            txn,
+            previous.copyWith(
+              enabled: false,
+              status: previous.status == CheckupKnowledgeResourceStatus.ready
+                  ? CheckupKnowledgeResourceStatus.stale
+                  : previous.status,
+              lastVerifiedAtMs: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+        }
+      }
+      await _putProviderKnowledgeResource(txn, resource);
+    });
+  }
+
+  Future<void> detachProviderKnowledgeResource(String id) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_provider_knowledge_resources',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final resource = CheckupProviderKnowledgeResource.fromJson(
+      Map<String, dynamic>.from(
+        jsonDecode((rows.first['payload_json'] ?? '{}').toString()) as Map,
+      ),
+    );
+    await _putProviderKnowledgeResource(
+      db,
+      resource.copyWith(
+        enabled: false,
+        status: CheckupKnowledgeResourceStatus.detached,
+        lastVerifiedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<CheckupGenerationBatch> createGenerationBatch({
+    required String name,
+    required bool useAi,
+    required Iterable<CheckupContentGenerationPlan> plans,
+    DateTime? now,
+  }) async {
+    final clock = now ?? DateTime.now();
+    final batchId = 'content-batch-${clock.microsecondsSinceEpoch}';
+    final jobs = CheckupGenerationJob.expandPlans(
+      batchId: batchId,
+      plans: plans,
+      useAi: useAi,
+      now: clock,
+    );
+    final batch = CheckupGenerationBatch(
+      id: batchId,
+      name: name.trim().isEmpty ? '${useAi ? 'AI' : '本地'}课程内容批次' : name.trim(),
+      useAi: useAi,
+      status: CheckupGenerationBatchStatus.queued,
+      totalJobs: jobs.length,
+      completedJobs: 0,
+      failedJobs: 0,
+      createdAtMs: clock.millisecondsSinceEpoch,
+      updatedAtMs: clock.millisecondsSinceEpoch,
+    );
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await db.transaction((txn) async {
+      await _putGenerationBatch(txn, batch);
+      for (final job in jobs) {
+        await _putGenerationJob(txn, job);
+      }
+    });
+    return batch;
+  }
+
+  Future<List<CheckupGenerationBatch>> loadGenerationBatches() async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final rows = await db.query(
+      'mh_generation_batches',
+      orderBy: 'updated_at_ms DESC',
+    );
+    return rows
+        .map(
+          (row) => CheckupGenerationBatch.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<CheckupGenerationJob>> loadGenerationJobs(
+    String batchId, {
+    Set<CheckupGenerationJobStatus>? statuses,
+    int? limit,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final clauses = <String>['batch_id = ?'];
+    final args = <Object?>[batchId];
+    if (statuses != null && statuses.isNotEmpty) {
+      clauses.add(
+        'status IN (${List<String>.filled(statuses.length, '?').join(',')})',
+      );
+      args.addAll(statuses.map((status) => status.name));
+    }
+    final rows = await db.query(
+      'mh_generation_jobs',
+      where: clauses.join(' AND '),
+      whereArgs: args,
+      orderBy: 'created_at_ms, indicator_id, content_code',
+      limit: limit?.clamp(1, 500).toInt(),
+    );
+    return rows
+        .map(
+          (row) => CheckupGenerationJob.fromJson(
+            Map<String, dynamic>.from(
+              jsonDecode((row['payload_json'] ?? '{}').toString()) as Map,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> saveGenerationJob(CheckupGenerationJob job) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    await _putGenerationJob(db, job);
+    await refreshGenerationBatch(job.batchId);
+  }
+
+  Future<CheckupGenerationBatch?> refreshGenerationBatch(
+    String batchId, {
+    CheckupGenerationBatchStatus? forceStatus,
+  }) async {
+    final db = await AppDatabase.instance();
+    await _ensureSchema(db);
+    final batchRows = await db.query(
+      'mh_generation_batches',
+      where: 'id = ?',
+      whereArgs: <Object?>[batchId],
+      limit: 1,
+    );
+    if (batchRows.isEmpty) return null;
+    final batch = CheckupGenerationBatch.fromJson(
+      Map<String, dynamic>.from(
+        jsonDecode((batchRows.first['payload_json'] ?? '{}').toString()) as Map,
+      ),
+    );
+    final jobs = await loadGenerationJobs(batchId);
+    final completed = jobs.where((job) => job.terminal).length;
+    final failed = jobs
+        .where((job) => job.status == CheckupGenerationJobStatus.failed)
+        .length;
+    final pending = jobs.any(
+      (job) =>
+          job.status == CheckupGenerationJobStatus.queued ||
+          job.status == CheckupGenerationJobStatus.running,
+    );
+    final status = forceStatus ??
+        (!pending && failed == 0
+            ? CheckupGenerationBatchStatus.completed
+            : batch.status);
+    final updated = batch.copyWith(
+      status: status,
+      totalJobs: jobs.length,
+      completedJobs: completed,
+      failedJobs: failed,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _putGenerationBatch(db, updated);
+    return updated;
+  }
+
+  Future<void> setGenerationBatchStatus(
+    String batchId,
+    CheckupGenerationBatchStatus status,
+  ) async {
+    final batch = await refreshGenerationBatch(batchId, forceStatus: status);
+    if (batch == null) return;
+    if (status != CheckupGenerationBatchStatus.cancelled) return;
+    final db = await AppDatabase.instance();
+    final queued = await loadGenerationJobs(
+      batchId,
+      statuses: const <CheckupGenerationJobStatus>{
+        CheckupGenerationJobStatus.queued,
+        CheckupGenerationJobStatus.running,
+      },
+    );
+    await db.transaction((txn) async {
+      for (final job in queued) {
+        await _putGenerationJob(
+          txn,
+          job.copyWith(
+            status: CheckupGenerationJobStatus.cancelled,
+            error: '用户取消',
+            updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+      }
+    });
+    await refreshGenerationBatch(
+      batchId,
+      forceStatus: CheckupGenerationBatchStatus.cancelled,
+    );
+  }
+
+  Future<void> retryFailedGenerationJobs(String batchId) async {
+    final failed = await loadGenerationJobs(
+      batchId,
+      statuses: const <CheckupGenerationJobStatus>{
+        CheckupGenerationJobStatus.failed,
+      },
+    );
+    final db = await AppDatabase.instance();
+    await db.transaction((txn) async {
+      for (final job in failed) {
+        await _putGenerationJob(
+          txn,
+          job.copyWith(
+            status: CheckupGenerationJobStatus.queued,
+            error: '',
+            updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+      }
+    });
+    await refreshGenerationBatch(
+      batchId,
+      forceStatus: CheckupGenerationBatchStatus.paused,
+    );
   }
 
   Future<bool> exportEncryptedBackup({
@@ -1306,10 +2083,9 @@ class MentalHealthCheckupRepository {
   }
 
   Future<bool> exportReportPdf(CheckupReport report) {
-    final date =
-        DateTime.fromMillisecondsSinceEpoch(report.createdAtMs)
-            .toIso8601String()
-            .substring(0, 10);
+    final date = DateTime.fromMillisecondsSinceEpoch(
+      report.createdAtMs,
+    ).toIso8601String().substring(0, 10);
     return _platform.exportReportPdf(
       suggestedName: '心理健康体检报告_$date.pdf',
       title: '心理健康体检 · 课程型报告',
@@ -1344,19 +2120,22 @@ class MentalHealthCheckupRepository {
   Future<void> setSecureScreenEnabled(bool enabled) =>
       _platform.setSecureScreen(enabled);
 
-  Future<bool> canAuthenticateAppLock() =>
-      _platform.canAuthenticateAppLock();
+  Future<bool> canAuthenticateAppLock() => _platform.canAuthenticateAppLock();
 
-  Future<bool> authenticateAppLock() =>
-      _platform.authenticateAppLock();
+  Future<bool> authenticateAppLock() => _platform.authenticateAppLock();
 
   Future<void> clearAllModuleData() async {
     final db = await AppDatabase.instance();
     await _ensureSchema(db);
     await db.transaction((txn) async {
       for (final table in const <String>[
+        'mh_indicator_audit_events',
+        'mh_indicator_candidates',
         'mh_content_audit_events',
         'mh_content_candidates',
+        'mh_generation_jobs',
+        'mh_generation_batches',
+        'mh_provider_knowledge_resources',
         'mh_answers',
         'mh_sessions',
         'mh_execution_logs',
@@ -1392,9 +2171,7 @@ class MentalHealthCheckupRepository {
     _initializing = null;
   }
 
-  MentalHealthCheckupState _ensureInstallId(
-    MentalHealthCheckupState state,
-  ) {
+  MentalHealthCheckupState _ensureInstallId(MentalHealthCheckupState state) {
     if (state.installId.trim().isNotEmpty) return state;
     final random = Random.secure();
     final bytes = List<int>.generate(18, (_) => random.nextInt(256));
@@ -1406,10 +2183,12 @@ class MentalHealthCheckupRepository {
     MentalHealthCheckupSettings settings,
   ) async {
     final json = settings.toJson();
-    json['emergency_number'] =
-        await _platform.encryptSensitiveText(settings.emergencyNumber);
-    json['crisis_number'] =
-        await _platform.encryptSensitiveText(settings.crisisNumber);
+    json['emergency_number'] = await _platform.encryptSensitiveText(
+      settings.emergencyNumber,
+    );
+    json['crisis_number'] = await _platform.encryptSensitiveText(
+      settings.crisisNumber,
+    );
     return json;
   }
 
@@ -1492,16 +2271,15 @@ class MentalHealthCheckupRepository {
       final data = await rootBundle.load(
         '${MentalHealthCheckupCatalog.assetRoot}/$file.gz',
       );
-      final compressed =
-          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      final compressed = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
       return Uint8List.fromList(gzip.decode(compressed));
     }
   }
 
-  static Future<String?> _meta(
-    DatabaseExecutor db,
-    String key,
-  ) async {
+  static Future<String?> _meta(DatabaseExecutor db, String key) async {
     final rows = await db.query(
       'mh_meta',
       columns: <String>['value'],
@@ -1518,10 +2296,12 @@ class MentalHealthCheckupRepository {
     String value,
   ) async {
     await db.insert(
-      'mh_meta',
-      <String, Object?>{'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+        'mh_meta',
+        <String, Object?>{
+          'key': key,
+          'value': value,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   static Future<void> _putContentCandidate(
@@ -1529,18 +2309,91 @@ class MentalHealthCheckupRepository {
     CheckupContentCandidate candidate,
   ) async {
     await db.insert(
-      'mh_content_candidates',
+        'mh_content_candidates',
+        <String, Object?>{
+          'id': candidate.candidateId,
+          'indicator_id': candidate.primaryIndicatorId,
+          'content_kind': candidate.kind.name,
+          'content_code': candidate.contentCode,
+          'stage': candidate.stage.name,
+          'version': candidate.version,
+          'updated_at_ms': candidate.updatedAtMs,
+          'payload_json': jsonEncode(candidate.toJson()),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> _putIndicatorCandidate(
+    DatabaseExecutor db,
+    CheckupIndicatorCandidate candidate,
+  ) async {
+    await db.insert(
+        'mh_indicator_candidates',
+        <String, Object?>{
+          'id': candidate.candidateId,
+          'proposed_indicator_id': candidate.proposedIndicatorId,
+          'lecture_no': candidate.lecture,
+          'stage': candidate.stage.name,
+          'version': candidate.version,
+          'updated_at_ms': candidate.updatedAtMs,
+          'payload_json': jsonEncode(candidate.toJson()),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> _putProviderKnowledgeResource(
+    DatabaseExecutor db,
+    CheckupProviderKnowledgeResource resource,
+  ) async {
+    await db.insert(
+      'mh_provider_knowledge_resources',
       <String, Object?>{
-        'id': candidate.candidateId,
-        'indicator_id': candidate.primaryIndicatorId,
-        'content_kind': candidate.kind.name,
-        'content_code': candidate.contentCode,
-        'stage': candidate.stage.name,
-        'version': candidate.version,
-        'updated_at_ms': candidate.updatedAtMs,
-        'payload_json': jsonEncode(candidate.toJson()),
+        'id': resource.id,
+        'provider': resource.provider,
+        'account_fingerprint': resource.accountFingerprint,
+        'course_version': resource.courseVersion,
+        'source_sha256': resource.sourceSha256,
+        'status': resource.status.name,
+        'enabled': resource.enabled ? 1 : 0,
+        'updated_at_ms': resource.lastVerifiedAtMs,
+        'payload_json': jsonEncode(resource.toJson()),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  static Future<void> _putGenerationBatch(
+    DatabaseExecutor db,
+    CheckupGenerationBatch batch,
+  ) async {
+    await db.insert(
+        'mh_generation_batches',
+        <String, Object?>{
+          'id': batch.id,
+          'status': batch.status.name,
+          'created_at_ms': batch.createdAtMs,
+          'updated_at_ms': batch.updatedAtMs,
+          'payload_json': jsonEncode(batch.toJson()),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> _putGenerationJob(
+    DatabaseExecutor db,
+    CheckupGenerationJob job,
+  ) async {
+    await db.insert(
+        'mh_generation_jobs',
+        <String, Object?>{
+          'id': job.id,
+          'batch_id': job.batchId,
+          'indicator_id': job.indicatorId,
+          'content_code': job.contentCode,
+          'status': job.status.name,
+          'created_at_ms': job.createdAtMs,
+          'updated_at_ms': job.updatedAtMs,
+          'payload_json': jsonEncode(job.toJson()),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }
