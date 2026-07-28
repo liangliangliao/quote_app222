@@ -584,6 +584,9 @@ class MentalHealthContentGovernanceEngine {
     required String courseVersion,
     DateTime? now,
     String author = '本地模板',
+    String? candidateId,
+    String modelVersion = 'local-template',
+    String promptVersion = 'content-governance-v1',
   }) {
     if (!plan.itemTypeCodes.contains(contentCode) &&
         !plan.behaviorLevels.contains(contentCode)) {
@@ -594,10 +597,10 @@ class MentalHealthContentGovernanceEngine {
     final template = isBehavior
         ? _behaviorTemplate(plan, contentCode)
         : _itemTemplate(plan, contentCode);
-    final candidateId =
+    final resolvedCandidateId = candidateId ??
         'AI-C-${plan.indicatorId}-$contentCode-${clock.microsecondsSinceEpoch}';
     return CheckupContentCandidate(
-      candidateId: candidateId,
+      candidateId: resolvedCandidateId,
       kind: isBehavior
           ? CheckupContentKind.behaviorTask
           : CheckupContentKind.assessmentItem,
@@ -629,8 +632,8 @@ class MentalHealthContentGovernanceEngine {
         safety: 92,
       ),
       author: author,
-      modelVersion: 'local-template',
-      promptVersion: 'content-governance-v1',
+      modelVersion: modelVersion,
+      promptVersion: promptVersion,
       indicatorVersion: 'V2.3-345',
       courseVersion: courseVersion,
       createdAtMs: clock.millisecondsSinceEpoch,
@@ -1017,6 +1020,71 @@ class MentalHealthContentGovernanceEngine {
           safetyRule: riskRule,
         );
     }
+  }
+}
+
+class MentalHealthContentBlueprintFactory {
+  static const String version = 'V2.5-BLUEPRINT-1';
+  static const String candidatePrefix = 'BLUEPRINT-V25-1-';
+  static const int expectedIndicatorCount = 345;
+  static const int expectedSlotsPerIndicator = 9;
+  static const int expectedCandidateCount =
+      expectedIndicatorCount * expectedSlotsPerIndicator;
+  static final DateTime _createdAt = DateTime.utc(2026, 7, 22);
+
+  const MentalHealthContentBlueprintFactory();
+
+  List<CheckupContentCandidate> build(
+    List<CheckupIndicator> indicators, {
+    required String courseVersion,
+  }) {
+    if (indicators.length != expectedIndicatorCount) {
+      throw StateError(
+        '全量内容蓝图要求$expectedIndicatorCount项指标，'
+        '实际为${indicators.length}项。',
+      );
+    }
+    const governance = MentalHealthContentGovernanceEngine();
+    final plans = governance.buildGenerationQueue(indicators);
+    final candidates = <CheckupContentCandidate>[];
+    final ids = <String>{};
+    for (final plan in plans) {
+      final codes = <String>{
+        ...plan.itemTypeCodes,
+        ...plan.behaviorLevels,
+      };
+      if (codes.length != expectedSlotsPerIndicator) {
+        throw StateError(
+          '${plan.indicatorId}应有$expectedSlotsPerIndicator个生成槽位，'
+          '实际为${codes.length}个。',
+        );
+      }
+      for (final code in codes) {
+        final id = '$candidatePrefix${plan.indicatorId}-$code';
+        if (!ids.add(id)) {
+          throw StateError('全量内容蓝图存在重复candidate_id：$id');
+        }
+        candidates.add(
+          governance.createLocalDraft(
+            plan: plan,
+            contentCode: code,
+            courseVersion: courseVersion,
+            now: _createdAt,
+            author: 'V2.5本地课程内容蓝图',
+            candidateId: id,
+            modelVersion: 'deterministic-local-blueprint',
+            promptVersion: version,
+          ),
+        );
+      }
+    }
+    if (candidates.length != expectedCandidateCount) {
+      throw StateError(
+        '全量内容蓝图应生成$expectedCandidateCount条，'
+        '实际为${candidates.length}条。',
+      );
+    }
+    return List<CheckupContentCandidate>.unmodifiable(candidates);
   }
 }
 
