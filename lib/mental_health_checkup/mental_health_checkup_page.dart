@@ -17,10 +17,7 @@ import 'mental_health_checkup_trends.dart';
 class MentalHealthCheckupPage extends StatefulWidget {
   final int initialTab;
 
-  const MentalHealthCheckupPage({
-    super.key,
-    this.initialTab = 0,
-  });
+  const MentalHealthCheckupPage({super.key, this.initialTab = 0});
 
   @override
   State<MentalHealthCheckupPage> createState() =>
@@ -31,7 +28,6 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     with WidgetsBindingObserver {
   final MentalHealthCheckupRepository _repository =
       MentalHealthCheckupRepository();
-  final MentalHealthCheckupAiService _ai = MentalHealthCheckupAiService();
   MentalHealthCheckupCatalog? _catalog;
   MentalHealthCheckupState _state = const MentalHealthCheckupState();
   Map<String, dynamic>? _draft;
@@ -40,9 +36,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
   int _tabIndex = 0;
   bool _understandsNonMedical = false;
   bool _understandsSafety = false;
-  bool _aiLoading = false;
-  String _aiNarrative = '';
-  bool _aiNarrativeUsedRemote = false;
+  String _localNarrativeText = '';
   bool _appLockRequired = false;
   bool _appLockUnlocking = false;
   String _appLockMessage = '';
@@ -91,8 +85,11 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     try {
       final seedCatalog = await MentalHealthCheckupCatalog.load();
       final state = await _repository.load(catalog: seedCatalog);
+      final governedIndicators = await _repository.loadIndicatorCandidates();
       final governedContent = await _repository.loadContentCandidates();
-      final catalog = seedCatalog.withPublishedContent(governedContent);
+      final catalog = seedCatalog
+          .withGovernedIndicators(governedIndicators)
+          .withPublishedContent(governedContent);
       final draft = await _repository.loadDraft();
       try {
         await _repository.syncPlatformSettings(state);
@@ -185,8 +182,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       resolvedPlan = assessmentPlan ??
           CheckupAssessmentPlan.fromJson(
             Map<String, dynamic>.from(
-              draft['assessment_plan'] as Map? ??
-                  const <String, dynamic>{},
+              draft['assessment_plan'] as Map? ?? const <String, dynamic>{},
             ),
           );
     } else {
@@ -222,8 +218,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       _state = next;
       _draft = null;
       _tabIndex = 1;
-      _aiNarrative = '';
-      _aiNarrativeUsedRemote = false;
+      _localNarrativeText = '';
     });
   }
 
@@ -254,8 +249,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
-                    backgroundColor:
-                        _domainColor(entry.key).withValues(alpha: 0.12),
+                    backgroundColor: _domainColor(
+                      entry.key,
+                    ).withValues(alpha: 0.12),
                     child: Text(
                       entry.key,
                       style: TextStyle(
@@ -266,7 +262,8 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
                   ),
                   title: Text(entry.value),
                   subtitle: Text(
-                    MentalHealthCheckupCatalog.domainDescriptions[entry.key] ?? '',
+                    MentalHealthCheckupCatalog.domainDescriptions[entry.key] ??
+                        '',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -281,10 +278,18 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
   }
 
   Future<CheckupAssessmentPlan?> _showAssessmentPreflight(
-      CheckupModeSpec mode, String? domainId) {
+    CheckupModeSpec mode,
+    String? domainId,
+  ) {
     var plan = CheckupAssessmentPlan.forMode(mode, _state.settings);
-    final timeOptions = <int>{5, 10, 20, 35, 60, plan.timeBudgetMinutes}
-        .toList(growable: false)
+    final timeOptions = <int>{
+      5,
+      10,
+      20,
+      35,
+      60,
+      plan.timeBudgetMinutes,
+    }.toList(growable: false)
       ..sort();
     return showModalBottomSheet<CheckupAssessmentPlan>(
       context: context,
@@ -371,8 +376,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
                           label: Text('$minutes分钟'),
                           selected: plan.timeBudgetMinutes == minutes,
                           onSelected: (_) => setSheetState(
-                            () => plan =
-                                plan.copyWith(timeBudgetMinutes: minutes),
+                            () => plan = plan.copyWith(
+                              timeBudgetMinutes: minutes,
+                            ),
                           ),
                         ),
                       )
@@ -384,10 +390,13 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 Slider(
-                  value: plan.questionLimit.toDouble().clamp(
+                  value: plan.questionLimit
+                      .toDouble()
+                      .clamp(
                         mode.baseQuestionCount.toDouble(),
                         mode.maxQuestionCount.toDouble(),
-                      ).toDouble(),
+                      )
+                      .toDouble(),
                   min: mode.baseQuestionCount.toDouble(),
                   max: mode.maxQuestionCount.toDouble(),
                   divisions: mode.maxQuestionCount == mode.baseQuestionCount
@@ -397,16 +406,16 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
                   onChanged: mode.maxQuestionCount == mode.baseQuestionCount
                       ? null
                       : (value) => setSheetState(
-                            () => plan =
-                                plan.copyWith(questionLimit: value.round()),
+                            () => plan = plan.copyWith(
+                              questionLimit: value.round(),
+                            ),
                           ),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: plan.includeUncoveredCheck,
                   onChanged: (value) => setSheetState(
-                    () => plan =
-                        plan.copyWith(includeUncoveredCheck: value),
+                    () => plan = plan.copyWith(includeUncoveredCheck: value),
                   ),
                   secondary: const Icon(Icons.manage_search_outlined),
                   title: const Text('检查题目未覆盖的重要变化'),
@@ -484,7 +493,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     if (mounted) setState(() => _draft = null);
   }
 
-  Future<void> _startPlan(CheckupPrescriptionRecommendation recommendation) async {
+  Future<void> _startPlan(
+    CheckupPrescriptionRecommendation recommendation,
+  ) async {
     final latest = _state.latestSession?.report;
     final catalog = _catalog;
     if (latest == null || catalog == null || !latest.safetyClear) return;
@@ -497,10 +508,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       }
       return item;
     }).toList(growable: false);
-    final next = _state.copyWith(plans: <CheckupPrescriptionPlan>[
-      plan,
-      ...pausedExisting,
-    ]);
+    final next = _state.copyWith(
+      plans: <CheckupPrescriptionPlan>[plan, ...pausedExisting],
+    );
     await _repository.save(next);
     await _repository.syncPlatformSettings(next);
     if (!mounted) return;
@@ -508,9 +518,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       _state = next;
       _tabIndex = 2;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已从“微量”开始，一次只启用1项课程行动。')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已从“微量”开始，一次只启用1项课程行动。')));
   }
 
   Future<void> _recordExecution(CheckupPrescriptionPlan plan) async {
@@ -610,7 +620,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     if (!mounted) return;
     setState(() => _state = next);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('下一次复验已调整为 ${_date(target.millisecondsSinceEpoch)}。')),
+      SnackBar(
+        content: Text('下一次复验已调整为 ${_date(target.millisecondsSinceEpoch)}。'),
+      ),
     );
   }
 
@@ -661,7 +673,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       _state = next;
       _draft = null;
       _tabIndex = 3;
-      _aiNarrative = '';
+      _localNarrativeText = '';
     });
     await showDialog<void>(
       context: context,
@@ -679,121 +691,28 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     );
   }
 
-  Future<void> _generateAiNarrative(CheckupReport report) async {
-    final scope = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.cloud_upload_outlined),
-        title: const Text('选择本次 AI 解释范围'),
-        content: const Text(
-          '离线规则报告已经完成。你可以只发送当前结构化报告，或同时发送本机历史趋势、行动执行、复验和课程证据关系。不会发送开放题原文、install_id 或当地支持号码。AI只能解释，不能改写安全状态、评分或处方上限。',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('保持离线'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop('current'),
-            child: const Text('仅当前报告'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.of(context).pop('history'),
-            icon: const Icon(Icons.timeline_outlined),
-            label: const Text('包含历史与证据'),
-          ),
-        ],
-      ),
-    );
-    if (scope == null || !mounted) return;
-    setState(() => _aiLoading = true);
-    final fallback = _localNarrative(report);
-    final indicatorIds = report.domains
-        .expand((domain) => domain.indicatorIds)
-        .toSet();
-    final evidenceTraces =
-        await _repository.evidenceTracesForIndicators(indicatorIds);
-    final result = await _ai.explainReport(
-      report,
-      fallback: fallback,
-      state: _state,
-      catalog: _catalog,
-      evidenceTraces: evidenceTraces,
-      includeHistory: scope == 'history',
-    );
-    if (!mounted) return;
-    setState(() {
-      _aiLoading = false;
-      _aiNarrative = result.text;
-      _aiNarrativeUsedRemote = result.usedAi;
-    });
+  void _generateLocalNarrative(CheckupReport report) {
+    setState(() => _localNarrativeText = _localNarrative(report));
   }
 
-  Future<void> _generateAiRetestNarrative(
+  Future<void> _showLocalRetestNarrative(
     CheckupRetestRecord retest,
   ) async {
-    final catalog = _catalog;
-    if (catalog == null) return;
-    final scope = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.fact_check_outlined),
-        title: const Text('解释这次复验'),
-        content: const Text(
-          '可以只发送本次复验，或同时包含基线、历史复验、执行日志、课程证据和调整规则。不会发送开放题原文、install_id 或当地支持号码。',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('保持离线'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop('current'),
-            child: const Text('仅本次复验'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop('history'),
-            child: const Text('包含完整闭环'),
-          ),
-        ],
-      ),
-    );
-    if (scope == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('正在生成复验解释…')),
-    );
-    final indicatorIds = <String>{};
-    for (final session in _state.sessions) {
-      if (session.report.id != retest.baselineReportId &&
-          session.report.id != retest.retestReportId) {
-        continue;
-      }
-      for (final domain in session.report.domains) {
-        indicatorIds.addAll(domain.indicatorIds);
-      }
-    }
-    final evidenceTraces =
-        await _repository.evidenceTracesForIndicators(indicatorIds);
-    final result = await _ai.explainRetest(
-      retest,
-      fallback: '${retest.decision}\n\n${retest.reason}',
-      state: _state,
-      catalog: catalog,
-      evidenceTraces: evidenceTraces,
-      includeHistory: scope == 'history',
-    );
-    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('AI课程复验解释'),
+        icon: const Icon(Icons.phone_android_outlined),
+        title: const Text('本地规则复验解释'),
         content: SingleChildScrollView(
-          child: SelectableText(result.text),
+          child: SelectableText(
+            '${retest.decision}\n\n${retest.reason}\n\n'
+            '本解释由设备内规则生成，没有上传本次复验、历史记录或执行日志。',
+          ),
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(result.usedAi ? '完成' : '本地回退 · 完成'),
+            child: const Text('完成'),
           ),
         ],
       ),
@@ -804,16 +723,26 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     final lowest = report.domains.where((e) => e.answered > 0).toList()
       ..sort((a, b) => a.score.compareTo(b.score));
     final buffer = StringBuffer()
-      ..writeln('本轮覆盖度 ${report.coverage.toStringAsFixed(0)}%，数据质量 ${report.dataQuality.toStringAsFixed(0)}%。')
-      ..writeln('安全状态：${_safetyText(report.safetyStatus)}；现实功能影响 ${report.functionImpact}/4。');
+      ..writeln(
+        '本轮覆盖度 ${report.coverage.toStringAsFixed(0)}%，数据质量 ${report.dataQuality.toStringAsFixed(0)}%。',
+      )
+      ..writeln(
+        '安全状态：${_safetyText(report.safetyStatus)}；现实功能影响 ${report.functionImpact}/4。',
+      );
     if (lowest.isNotEmpty) {
-      buffer.writeln('当前最值得关注的已覆盖领域是${lowest.take(2).map((e) => e.name).join('、')}。');
+      buffer.writeln(
+        '当前最值得关注的已覆盖领域是${lowest.take(2).map((e) => e.name).join('、')}。',
+      );
     }
     if (report.diagnoses.isNotEmpty) {
-      buffer.writeln('优先验证的课程机制候选：${report.diagnoses.first.name}。这不是人格判决，也不是医学诊断。');
+      buffer.writeln(
+        '优先验证的课程机制候选：${report.diagnoses.first.name}。这不是人格判决，也不是医学诊断。',
+      );
     }
     if (report.prescriptions.isNotEmpty) {
-      buffer.writeln('当前只启动一项课程行动：${report.prescriptions.first.startingAction}');
+      buffer.writeln(
+        '当前只启动一项课程行动：${report.prescriptions.first.startingAction}',
+      );
     }
     return buffer.toString().trim();
   }
@@ -822,14 +751,14 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     try {
       final saved = await _repository.exportReportPdf(report);
       if (!mounted || !saved) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PDF 报告已保存到你选择的位置。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PDF 报告已保存到你选择的位置。')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF 导出失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF 导出失败：$error')));
     }
   }
 
@@ -847,14 +776,14 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         password: password,
       );
       if (!mounted || !saved) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('加密备份已保存。请将文件和密码分开保管。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('加密备份已保存。请将文件和密码分开保管。')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('备份导出失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('备份导出失败：$error')));
     }
   }
 
@@ -900,9 +829,8 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         setState(() => _appLockUnlocking = true);
         var authenticated = false;
         try {
-          authenticated =
-              await _repository.canAuthenticateAppLock() &&
-                  await _repository.authenticateAppLock();
+          authenticated = await _repository.canAuthenticateAppLock() &&
+              await _repository.authenticateAppLock();
         } catch (_) {
           authenticated = false;
         } finally {
@@ -921,7 +849,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         _state = imported;
         _draft = null;
         _tabIndex = 4;
-        _aiNarrative = '';
+        _localNarrativeText = '';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -934,19 +862,18 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导入失败，现有数据未修改：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导入失败，现有数据未修改：$error')));
     }
   }
 
   Future<void> _openLocalSettings() async {
-    final settings = await Navigator.of(context)
-        .push<MentalHealthCheckupSettings>(
+    final settings =
+        await Navigator.of(context).push<MentalHealthCheckupSettings>(
       MaterialPageRoute(
-        builder: (_) => MentalHealthCheckupLocalSettingsPage(
-          initial: _state.settings,
-        ),
+        builder: (_) =>
+            MentalHealthCheckupLocalSettingsPage(initial: _state.settings),
       ),
     );
     if (settings == null || !mounted) return;
@@ -971,10 +898,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         if (mounted) setState(() => _appLockUnlocking = false);
       }
     }
-    final next = await _repository.updateSettings(
-      _state,
-      effectiveSettings,
-    );
+    final next = await _repository.updateSettings(_state, effectiveSettings);
     await _repository.syncPlatformSettings(next);
     if (!mounted) return;
     setState(() {
@@ -982,9 +906,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       if (!next.settings.appLockEnabled) _appLockRequired = false;
     });
     if (appLockWarning != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(appLockWarning)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(appLockWarning)));
     }
   }
 
@@ -1017,15 +941,18 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     if (!mounted) return;
     try {
       final governedContent = await _repository.loadContentCandidates();
+      final governedIndicators = await _repository.loadIndicatorCandidates();
       if (!mounted) return;
       setState(() {
-        _catalog = catalog.withPublishedContent(governedContent);
+        _catalog = catalog
+            .withGovernedIndicators(governedIndicators)
+            .withPublishedContent(governedContent);
       });
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('正式题库刷新失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('正式题库刷新失败：$error')));
     }
   }
 
@@ -1033,10 +960,16 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.delete_forever_outlined, color: Color(0xFFC62828)),
+        icon: const Icon(
+          Icons.delete_forever_outlined,
+          color: Color(0xFFC62828),
+        ),
         title: const Text('删除本模块全部本地数据？'),
         content: const Text(
-          '将删除体检会话、结构化回答、报告、课程行动记录、复验记录、草稿和本模块AI提示词覆盖。此操作无法撤销，不影响App其他模块，也不会删除你自行导出的外部文件。',
+          '将删除体检会话、结构化回答、报告、课程行动、复验、草稿、'
+          '候选指标/题目/任务、批量队列、供应商文件ID本机关联和本模块'
+          'AI提示词覆盖。此操作无法撤销，不影响App其他模块；也不会'
+          '自动删除你导出的文件或供应商服务端文件。',
         ),
         actions: <Widget>[
           TextButton(
@@ -1044,7 +977,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC62828)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC62828),
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('确认删除'),
           ),
@@ -1057,9 +992,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.warning_amber_rounded, color: Color(0xFFC62828)),
         title: const Text('最后确认'),
-        content: const Text(
-          '删除后无法从本机恢复。只有你此前主动导出的加密备份仍会保留在外部位置。',
-        ),
+        content: const Text('删除后无法从本机恢复。只有你此前主动导出的加密备份仍会保留在外部位置。'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1081,7 +1014,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     await _load();
     if (!mounted) return;
     setState(() {
-      _aiNarrative = '';
+      _localNarrativeText = '';
       _understandsNonMedical = false;
       _understandsSafety = false;
       _tabIndex = 0;
@@ -1114,7 +1047,11 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                const Icon(Icons.gpp_bad_outlined, size: 54, color: Color(0xFFC62828)),
+                const Icon(
+                  Icons.gpp_bad_outlined,
+                  size: 54,
+                  color: Color(0xFFC62828),
+                ),
                 const SizedBox(height: 14),
                 const Text(
                   '课程种子校验未通过，已阻止生成新报告',
@@ -1243,10 +1180,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
               const Text(
                 '验证由Android系统完成；本模块不会接收或保存你的PIN、图案、密码或生物信息。',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Color(0xFF667085),
-                  height: 1.5,
-                ),
+                style: TextStyle(color: Color(0xFF667085), height: 1.5),
               ),
               if (_appLockMessage.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -1258,8 +1192,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
               ],
               const SizedBox(height: 22),
               FilledButton.icon(
-                onPressed:
-                    _appLockUnlocking ? null : () => _unlockAppLock(),
+                onPressed: _appLockUnlocking ? null : () => _unlockAppLock(),
                 icon: _appLockUnlocking
                     ? const SizedBox.square(
                         dimension: 18,
@@ -1294,7 +1227,11 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
                   colors: <Color>[Color(0xFF4453C6), Color(0xFF7A5BA7)],
                 ),
               ),
-              child: const Icon(Icons.health_and_safety, size: 38, color: Colors.white),
+              child: const Icon(
+                Icons.health_and_safety,
+                size: 38,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 20),
             const Text(
@@ -1309,7 +1246,11 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
             const SizedBox(height: 12),
             const Text(
               '用安全门、八域评估、课程证据、行动实验和复验，把“我怎么了”转化为“现在最值得验证什么、今天做什么”。',
-              style: TextStyle(fontSize: 16, height: 1.55, color: Color(0xFF596273)),
+              style: TextStyle(
+                fontSize: 16,
+                height: 1.55,
+                color: Color(0xFF596273),
+              ),
             ),
             const SizedBox(height: 24),
             const _OnboardingFeature(
@@ -1395,10 +1336,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
           ),
           const SizedBox(height: 12),
           for (final mode in catalog.modes) ...<Widget>[
-            _ModeCard(
-              mode: mode,
-              onTap: () => _startAssessment(mode),
-            ),
+            _ModeCard(mode: mode, onTap: () => _startAssessment(mode)),
             const SizedBox(height: 10),
           ],
           const SizedBox(height: 12),
@@ -1458,28 +1396,18 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
           _KabCard(report: report),
         ],
         const SizedBox(height: 20),
-        const _SectionHeader(
-          title: '八域画像',
-          subtitle: '只解释本轮已覆盖领域；未覆盖不等于异常。',
-        ),
+        const _SectionHeader(title: '八域画像', subtitle: '只解释本轮已覆盖领域；未覆盖不等于异常。'),
         const SizedBox(height: 12),
         _DomainRadarCard(domains: report.domains),
         const SizedBox(height: 12),
-        for (final domain in report.domains)
-          _DomainScoreTile(domain: domain),
+        for (final domain in report.domains) _DomainScoreTile(domain: domain),
         const SizedBox(height: 18),
-        const _SectionHeader(
-          title: '表层发现',
-          subtitle: '事实、功能和回答质量先于原因解释。',
-        ),
+        const _SectionHeader(title: '表层发现', subtitle: '事实、功能和回答质量先于原因解释。'),
         const SizedBox(height: 10),
         _BulletCard(items: report.surfaceFindings),
         if (report.safetyClear) ...<Widget>[
           const SizedBox(height: 20),
-          const _SectionHeader(
-            title: '课程机制候选',
-            subtitle: '不是医学诊断，也不是永久人格结论。',
-          ),
+          const _SectionHeader(title: '课程机制候选', subtitle: '不是医学诊断，也不是永久人格结论。'),
           const SizedBox(height: 10),
           if (report.diagnoses.isEmpty)
             const _SoftMessage(
@@ -1511,11 +1439,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
                 onStart: () => _startPlan(item),
               ),
           const SizedBox(height: 20),
-          _AiExplanationCard(
-            loading: _aiLoading,
-            narrative: _aiNarrative,
-            usedRemote: _aiNarrativeUsedRemote,
-            onGenerate: () => _generateAiNarrative(report),
+          _LocalExplanationCard(
+            narrative: _localNarrativeText,
+            onGenerate: () => _generateLocalNarrative(report),
           ),
         ],
         const SizedBox(height: 20),
@@ -1553,9 +1479,9 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
             : () => _startPlan(recommendation),
       );
     }
-    final days = DateTime.fromMillisecondsSinceEpoch(plan.nextRetestAtMs)
-        .difference(DateTime.now())
-        .inDays;
+    final days = DateTime.fromMillisecondsSinceEpoch(
+      plan.nextRetestAtMs,
+    ).difference(DateTime.now()).inDays;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: <Widget>[
@@ -1577,10 +1503,14 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
             const SizedBox(width: 10),
             OutlinedButton.icon(
               onPressed: () => _togglePlan(plan),
-              icon: Icon(plan.status == CheckupPlanStatus.paused
-                  ? Icons.play_arrow
-                  : Icons.pause),
-              label: Text(plan.status == CheckupPlanStatus.paused ? '恢复' : '暂停'),
+              icon: Icon(
+                plan.status == CheckupPlanStatus.paused
+                    ? Icons.play_arrow
+                    : Icons.pause,
+              ),
+              label: Text(
+                plan.status == CheckupPlanStatus.paused ? '恢复' : '暂停',
+              ),
             ),
           ],
         ),
@@ -1600,10 +1530,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         const SizedBox(height: 10),
         _PlanMetrics(plan: plan),
         const SizedBox(height: 18),
-        const _SectionHeader(
-          title: '执行记录',
-          subtitle: '不写私密原文，只保存结构化变化。',
-        ),
+        const _SectionHeader(title: '执行记录', subtitle: '不写私密原文，只保存结构化变化。'),
         const SizedBox(height: 10),
         if (plan.logs.isEmpty)
           const _SoftMessage(
@@ -1626,8 +1553,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         _RetestHero(
           plan: plan,
           onRetest: plan == null ? null : () => _runRetest(plan),
-          onReschedule:
-              plan == null ? null : () => _rescheduleRetest(plan),
+          onReschedule: plan == null ? null : () => _rescheduleRetest(plan),
         ),
         const SizedBox(height: 18),
         const _SectionHeader(
@@ -1639,25 +1565,20 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         if (_state.sessions.isNotEmpty) ...<Widget>[
           const SizedBox(height: 10),
           _TrendInsightsCard(
-            insights:
-                const MentalHealthCheckupTrendAnalyzer().analyze(_state.sessions),
+            insights: const MentalHealthCheckupTrendAnalyzer().analyze(
+              _state.sessions,
+            ),
           ),
         ],
         const SizedBox(height: 18),
-        const _SectionHeader(
-          title: '处方调整规则',
-          subtitle: '规则在本机运行，AI不能覆盖。',
-        ),
+        const _SectionHeader(title: '处方调整规则', subtitle: '规则在本机运行，AI不能覆盖。'),
         const SizedBox(height: 10),
         _AdjustmentRulesCard(
           rules: _catalog?.prescriptionAdjustmentRules ??
               const <CheckupReferenceRule>[],
         ),
         const SizedBox(height: 18),
-        const _SectionHeader(
-          title: '复验记录',
-          subtitle: '继续、减量、暂停、换方、重新诊断或进入维持。',
-        ),
+        const _SectionHeader(title: '复验记录', subtitle: '继续、减量、暂停、换方、重新诊断或进入维持。'),
         const SizedBox(height: 10),
         if (_state.retests.isEmpty)
           const _SoftMessage(
@@ -1668,7 +1589,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
           for (final record in _state.retests)
             _RetestRecordCard(
               record: record,
-              onExplain: () => _generateAiRetestNarrative(record),
+              onExplain: () => _showLocalRetestNarrative(record),
             ),
       ],
     );
@@ -1681,16 +1602,10 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       children: <Widget>[
         _ArchiveSummary(state: _state),
         const SizedBox(height: 18),
-        const _SectionHeader(
-          title: '历史体检',
-          subtitle: '报告保留当时的规则版本和课程来源。',
-        ),
+        const _SectionHeader(title: '历史体检', subtitle: '报告保留当时的规则版本和课程来源。'),
         const SizedBox(height: 10),
         if (_state.sessions.isEmpty)
-          const _SoftMessage(
-            icon: Icons.folder_open_outlined,
-            text: '暂无历史记录。',
-          )
+          const _SoftMessage(icon: Icons.folder_open_outlined, text: '暂无历史记录。')
         else
           for (final session in _state.sessions.take(20))
             _SessionHistoryTile(
@@ -1698,10 +1613,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
               onTap: () => _showHistoricalReport(session.report),
             ),
         const SizedBox(height: 18),
-        const _SectionHeader(
-          title: '设置与治理',
-          subtitle: '隐私、种子、AI和本地数据由你控制。',
-        ),
+        const _SectionHeader(title: '设置与治理', subtitle: '隐私、种子、AI和本地数据由你控制。'),
         const SizedBox(height: 10),
         _SettingsTile(
           icon: Icons.notifications_active_outlined,
@@ -1733,16 +1645,17 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
         _SettingsTile(
           icon: Icons.tune,
           title: '本模块 AI 提示词',
-          subtitle: '编辑全局安全、报告、复验和内容候选生成 Prompt',
+          subtitle: '仅编辑课程候选指标、题目和任务生成 Prompt',
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const MentalHealthCheckupPromptPage()),
+            MaterialPageRoute(
+              builder: (_) => const MentalHealthCheckupPromptPage(),
+            ),
           ),
         ),
         _SettingsTile(
           icon: Icons.account_tree_outlined,
           title: '课程内容候选治理台',
-          subtitle:
-              '345项计划 · 正式启用 ${catalog.publishedQuestions.length} 道题 / '
+          subtitle: '345项计划 · 正式启用 ${catalog.publishedQuestions.length} 道题 / '
               '${catalog.publishedBehaviorTasks.length} 项任务 · 独立审核与版本审计',
           onTap: _openContentGovernance,
         ),
@@ -1757,7 +1670,7 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
           icon: Icons.privacy_tip_outlined,
           title: '隐私与能力边界',
           subtitle: '安装标识 ${_shortInstallId(_state.installId)} · 无登录 · '
-              'AI需单次同意',
+              '个人体检数据不出机',
           onTap: _showPrivacyInfo,
         ),
         _SettingsTile(
@@ -1807,7 +1720,10 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.verified_user_outlined, color: Color(0xFF39715D)),
+        icon: const Icon(
+          Icons.verified_user_outlined,
+          color: Color(0xFF39715D),
+        ),
         title: const Text('课程知识完整性已验证'),
         content: Text(
           '版本：${catalog.validation.version}\n'
@@ -1841,19 +1757,52 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: const <Widget>[
-              Text('隐私与能力边界', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+              Text(
+                '隐私与能力边界',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              ),
               SizedBox(height: 14),
-              _InfoStrip(icon: Icons.person_off_outlined, color: Color(0xFF4554C5), title: '无账号', text: '不要求手机号、邮箱、姓名或云端用户档案。'),
+              _InfoStrip(
+                icon: Icons.person_off_outlined,
+                color: Color(0xFF4554C5),
+                title: '无账号',
+                text: '不要求手机号、邮箱、姓名或云端用户档案。',
+              ),
               SizedBox(height: 10),
-              _InfoStrip(icon: Icons.storage_outlined, color: Color(0xFF39715D), title: '本地事实源', text: '会话、答案、报告、行动、执行和复验写入独立SQLite表；升级走显式迁移，提交与导入使用事务。'),
+              _InfoStrip(
+                icon: Icons.storage_outlined,
+                color: Color(0xFF39715D),
+                title: '本地事实源',
+                text: '会话、答案、报告、行动、执行和复验写入独立SQLite表；升级走显式迁移，提交与导入使用事务。',
+              ),
               SizedBox(height: 10),
-              _InfoStrip(icon: Icons.notes_outlined, color: Color(0xFF7A4E9D), title: '敏感数据最小化与加密', text: '不持久化开放题原文；用户配置的当地支持号码使用Android Keystore AES-GCM字段加密。'),
+              _InfoStrip(
+                icon: Icons.notes_outlined,
+                color: Color(0xFF7A4E9D),
+                title: '敏感数据最小化与加密',
+                text: '不持久化开放题原文；用户配置的当地支持号码使用Android Keystore AES-GCM字段加密。',
+              ),
               SizedBox(height: 10),
-              _InfoStrip(icon: Icons.backup_outlined, color: Color(0xFF5664D2), title: '不自动上云', text: 'Android自动备份和设备迁移已关闭；只有你主动选择位置并设置独立密码时才导出AES-GCM加密备份。'),
+              _InfoStrip(
+                icon: Icons.backup_outlined,
+                color: Color(0xFF5664D2),
+                title: '不自动上云',
+                text: 'Android自动备份和设备迁移已关闭；只有你主动选择位置并设置独立密码时才导出AES-GCM加密备份。',
+              ),
               SizedBox(height: 10),
-              _InfoStrip(icon: Icons.auto_awesome_outlined, color: Color(0xFFB54708), title: 'AI是可选解释层', text: '离线报告先生成；只有单次明确同意后，才向用户配置的提供方发送结构化报告。'),
+              _InfoStrip(
+                icon: Icons.auto_awesome_outlined,
+                color: Color(0xFFB54708),
+                title: 'AI是可选解释层',
+                text: '离线报告先生成；只有单次明确同意后，才向用户配置的提供方发送结构化报告。',
+              ),
               SizedBox(height: 10),
-              _InfoStrip(icon: Icons.medical_information_outlined, color: Color(0xFFC62828), title: '不是医疗替代', text: '不提供疾病诊断、药物建议、医疗处方或治愈承诺。安全状态异常时停止普通课程闭环。'),
+              _InfoStrip(
+                icon: Icons.medical_information_outlined,
+                color: Color(0xFFC62828),
+                title: '不是医疗替代',
+                text: '不提供疾病诊断、药物建议、医疗处方或治愈承诺。安全状态异常时停止普通课程闭环。',
+              ),
             ],
           ),
         ),
@@ -1910,10 +1859,8 @@ class _MentalHealthCheckupLocalSettingsPageState
     _preferredQuestionLimit = value.preferredQuestionLimit;
     _includeUncoveredCheck = value.includeUncoveredCheck;
     _wantsCourseAction = value.wantsCourseAction;
-    _useLongitudinalPrioritization =
-        value.useLongitudinalPrioritization;
-    _emergencyController =
-        TextEditingController(text: value.emergencyNumber);
+    _useLongitudinalPrioritization = value.useLongitudinalPrioritization;
+    _emergencyController = TextEditingController(text: value.emergencyNumber);
     _crisisController = TextEditingController(text: value.crisisNumber);
   }
 
@@ -1934,9 +1881,7 @@ class _MentalHealthCheckupLocalSettingsPageState
     if (!status.isGranted) {
       setState(() => _remindersEnabled = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('未获得通知权限；体检、报告和复验仍可完全离线使用。'),
-        ),
+        const SnackBar(content: Text('未获得通知权限；体检、报告和复验仍可完全离线使用。')),
       );
       return;
     }
@@ -1972,8 +1917,7 @@ class _MentalHealthCheckupLocalSettingsPageState
     });
   }
 
-  String _cleanNumber(String raw) =>
-      raw.replaceAll(RegExp(r'[^0-9+*#]'), '');
+  String _cleanNumber(String raw) => raw.replaceAll(RegExp(r'[^0-9+*#]'), '');
 
   void _save() {
     Navigator.of(context).pop(
@@ -1992,8 +1936,7 @@ class _MentalHealthCheckupLocalSettingsPageState
         preferredQuestionLimit: _preferredQuestionLimit,
         includeUncoveredCheck: _includeUncoveredCheck,
         wantsCourseAction: _wantsCourseAction,
-        useLongitudinalPrioritization:
-            _useLongitudinalPrioritization,
+        useLongitudinalPrioritization: _useLongitudinalPrioritization,
       ),
     );
   }
@@ -2003,7 +1946,7 @@ class _MentalHealthCheckupLocalSettingsPageState
         appBar: AppBar(
           title: const Text('评估、提醒与隐私'),
           actions: <Widget>[
-            TextButton(onPressed: _save, child: const Text('保存')),
+            TextButton(onPressed: _save, child: const Text('保存'))
           ],
         ),
         body: ListView(
@@ -2028,8 +1971,7 @@ class _MentalHealthCheckupLocalSettingsPageState
                       label: Text('$minutes分钟'),
                       selected: _assessmentTimeBudgetMinutes == minutes,
                       onSelected: (_) => setState(
-                        () => _assessmentTimeBudgetMinutes = minutes,
-                      ),
+                          () => _assessmentTimeBudgetMinutes = minutes),
                     ),
                   )
                   .toList(growable: false),
@@ -2046,9 +1988,7 @@ class _MentalHealthCheckupLocalSettingsPageState
               divisions: 23,
               label: '$_preferredQuestionLimit题',
               onChanged: (value) => setState(
-                () => _preferredQuestionLimit =
-                    (value / 5).round() * 5,
-              ),
+                  () => _preferredQuestionLimit = (value / 5).round() * 5),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -2062,8 +2002,7 @@ class _MentalHealthCheckupLocalSettingsPageState
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _wantsCourseAction,
-              onChanged: (value) =>
-                  setState(() => _wantsCourseAction = value),
+              onChanged: (value) => setState(() => _wantsCourseAction = value),
               secondary: const Icon(Icons.directions_run_outlined),
               title: const Text('愿意接收一项课程行动'),
               subtitle: const Text('关闭后只评估，不生成课程行动处方。'),
@@ -2071,9 +2010,8 @@ class _MentalHealthCheckupLocalSettingsPageState
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _useLongitudinalPrioritization,
-              onChanged: (value) => setState(
-                () => _useLongitudinalPrioritization = value,
-              ),
+              onChanged: (value) =>
+                  setState(() => _useLongitudinalPrioritization = value),
               secondary: const Icon(Icons.timeline_outlined),
               title: const Text('启用纵向加权抽题'),
               subtitle: const Text(
@@ -2090,9 +2028,7 @@ class _MentalHealthCheckupLocalSettingsPageState
               onChanged: _toggleReminders,
               secondary: const Icon(Icons.notifications_active_outlined),
               title: const Text('开启本地课程行动提醒'),
-              subtitle: const Text(
-                '默认关闭；使用 WorkManager，不依赖推送服务，拒绝权限不影响核心功能。',
-              ),
+              subtitle: const Text('默认关闭；使用 WorkManager，不依赖推送服务，拒绝权限不影响核心功能。'),
             ),
             ListTile(
               enabled: _remindersEnabled,
@@ -2125,8 +2061,7 @@ class _MentalHealthCheckupLocalSettingsPageState
             ),
             SwitchListTile(
               value: _lockScreenPrivacy,
-              onChanged: (value) =>
-                  setState(() => _lockScreenPrivacy = value),
+              onChanged: (value) => setState(() => _lockScreenPrivacy = value),
               secondary: const Icon(Icons.phonelink_lock_outlined),
               title: const Text('锁屏隐藏提醒内容'),
               subtitle: const Text('通知只显示中性提示，不显示分数、模式或课程机制名称。'),
@@ -2140,13 +2075,10 @@ class _MentalHealthCheckupLocalSettingsPageState
             ),
             SwitchListTile(
               value: _appLockEnabled,
-              onChanged: (value) =>
-                  setState(() => _appLockEnabled = value),
+              onChanged: (value) => setState(() => _appLockEnabled = value),
               secondary: const Icon(Icons.lock_person_outlined),
               title: const Text('使用系统设备锁保护本模块'),
-              subtitle: const Text(
-                '默认关闭；开启时先验证设备PIN、图案或密码。离开应用5秒后返回会重新验证。',
-              ),
+              subtitle: const Text('默认关闭；开启时先验证设备PIN、图案或密码。离开应用5秒后返回会重新验证。'),
             ),
             const Divider(height: 32),
             const Text(
@@ -2264,8 +2196,7 @@ class _MentalHealthCourseEvidencePageState
                     onSubmitted: (_) => _search(),
                     decoration: InputDecoration(
                       labelText: '指标ID、位置ID、关键词或中文原文',
-                      hintText:
-                          '例如 L04-C1 / L04-P034 / transformation / 情绪',
+                      hintText: '例如 L04-C1 / L04-P034 / transformation / 情绪',
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: IconButton(
                         tooltip: '检索',
@@ -2320,20 +2251,22 @@ class _MentalHealthCourseEvidencePageState
                               elevation: 0,
                               child: ExpansionTile(
                                 leading: CircleAvatar(
-                                  child: Text('${item.lecture}'),
-                                ),
+                                    child: Text('${item.lecture}')),
                                 title: Text(
                                   item.locationId,
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                                      fontWeight: FontWeight.w900),
                                 ),
                                 subtitle: Text(
                                   '${item.section} · 固定页 ${item.page} · '
                                   '${item.language}',
                                 ),
-                                childrenPadding:
-                                    const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                childrenPadding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  16,
+                                  16,
+                                ),
                                 children: <Widget>[
                                   SelectableText(
                                     item.text,
@@ -2341,13 +2274,9 @@ class _MentalHealthCourseEvidencePageState
                                   ),
                                   const SizedBox(height: 12),
                                   _LabeledText(
-                                    label: '位置方法',
-                                    text: item.pageMethod,
-                                  ),
+                                      label: '位置方法', text: item.pageMethod),
                                   _LabeledText(
-                                    label: '源文件',
-                                    text: item.sourceFile,
-                                  ),
+                                      label: '源文件', text: item.sourceFile),
                                   _LabeledText(
                                     label: '源SHA-256',
                                     text: item.sourceSha256,
@@ -2366,8 +2295,7 @@ class _MentalHealthCourseEvidencePageState
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
                                           const SnackBar(
-                                            content: Text('位置与原文已复制。'),
-                                          ),
+                                              content: Text('位置与原文已复制。')),
                                         );
                                       },
                                       icon: const Icon(Icons.copy_outlined),
@@ -2446,8 +2374,7 @@ class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => _obscure = !_obscure),
                     icon: Icon(
-                      _obscure ? Icons.visibility_off : Icons.visibility,
-                    ),
+                        _obscure ? Icons.visibility_off : Icons.visibility),
                   ),
                 ),
               ),
@@ -2516,8 +2443,9 @@ class _MentalHealthCheckupPromptPageState
     await _config.savePrompt(_promptId, _controller.text);
     if (!mounted) return;
     setState(() => _saving = false);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Prompt 已保存在本机。')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Prompt 已保存在本机。')));
   }
 
   Future<void> _reset() async {
@@ -2527,7 +2455,7 @@ class _MentalHealthCheckupPromptPageState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('心理健康体检 · AI Prompt')),
+        appBar: AppBar(title: const Text('心理健康体检 · 课程生成 Prompt')),
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -2540,10 +2468,12 @@ class _MentalHealthCheckupPromptPageState
                     border: OutlineInputBorder(),
                   ),
                   items: MentalHealthCheckupPromptConfig.labels.entries
-                      .map((entry) => DropdownMenuItem<String>(
-                            value: entry.key,
-                            child: Text(entry.value),
-                          ))
+                      .map(
+                        (entry) => DropdownMenuItem<String>(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                      )
                       .toList(growable: false),
                   onChanged: (value) async {
                     if (value == null) return;
@@ -2625,7 +2555,11 @@ class _DashboardHero extends StatelessWidget {
           colors: <Color>[Color(0xFF34449A), Color(0xFF725A9C)],
         ),
         boxShadow: const <BoxShadow>[
-          BoxShadow(color: Color(0x283B458E), blurRadius: 24, offset: Offset(0, 12)),
+          BoxShadow(
+            color: Color(0x283B458E),
+            blurRadius: 24,
+            offset: Offset(0, 12),
+          ),
         ],
       ),
       child: Column(
@@ -2660,7 +2594,10 @@ class _DashboardHero extends StatelessWidget {
             const SizedBox(height: 14),
             Text(
               '进行中：${activePlan!.prescription.theme} · ${activePlan!.doseStage}',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
           const SizedBox(height: 20),
@@ -2697,7 +2634,8 @@ class _HeroChip extends StatelessWidget {
           children: <Widget>[
             Icon(icon, size: 15, color: Colors.white),
             const SizedBox(width: 5),
-            Text(text, style: const TextStyle(color: Colors.white, fontSize: 12)),
+            Text(text,
+                style: const TextStyle(color: Colors.white, fontSize: 12)),
           ],
         ),
       );
@@ -2778,26 +2716,37 @@ class _ModeCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               mode.name,
-                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                           Text(
                             mode.duration,
-                            style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
+                            style: const TextStyle(
+                              color: Color(0xFF667085),
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 5),
                       Text(
                         mode.useCase,
-                        style: const TextStyle(height: 1.4, color: Color(0xFF475467)),
+                        style: const TextStyle(
+                          height: 1.4,
+                          color: Color(0xFF475467),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
                         children: <Widget>[
-                          _MiniPill('${mode.baseQuestionCount}-${mode.maxQuestionCount}题'),
+                          _MiniPill(
+                            '${mode.baseQuestionCount}-${mode.maxQuestionCount}题',
+                          ),
                           _MiniPill(mode.coverageLevel),
                           _MiniPill('行动 ${mode.actionCount}'),
                         ],
@@ -2845,7 +2794,10 @@ class _MiniPill extends StatelessWidget {
           color: const Color(0xFFF1F3F8),
           borderRadius: BorderRadius.circular(99),
         ),
-        child: Text(text, style: const TextStyle(fontSize: 11, color: Color(0xFF596273))),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 11, color: Color(0xFF596273)),
+        ),
       );
 }
 
@@ -2858,12 +2810,16 @@ class _SafetyQuickEntry extends StatelessWidget {
         elevation: 0,
         color: const Color(0xFFFFF3F1),
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           leading: const CircleAvatar(
             backgroundColor: Color(0xFFFFDAD5),
             child: Icon(Icons.shield_outlined, color: Color(0xFFB42318)),
           ),
-          title: const Text('我现在只想确认是否需要优先求助', style: TextStyle(fontWeight: FontWeight.w800)),
+          title: const Text(
+            '我现在只想确认是否需要优先求助',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           subtitle: const Text('20-60秒安全快检 · 不生成普通课程行动'),
           trailing: const Icon(Icons.chevron_right),
           onTap: onTap,
@@ -2897,16 +2853,26 @@ class _ClosedLoopTimeline extends StatelessWidget {
                   CircleAvatar(
                     radius: 19,
                     backgroundColor: const Color(0xFFE9ECFF),
-                    child: Icon(steps[index].icon, size: 19, color: const Color(0xFF4554C5)),
+                    child: Icon(
+                      steps[index].icon,
+                      size: 19,
+                      color: const Color(0xFF4554C5),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(steps[index].title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        Text(
+                          steps[index].title,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
                         const SizedBox(height: 2),
-                        Text(steps[index].description, style: const TextStyle(color: Color(0xFF667085))),
+                        Text(
+                          steps[index].description,
+                          style: const TextStyle(color: Color(0xFF667085)),
+                        ),
                       ],
                     ),
                   ),
@@ -2952,7 +2918,7 @@ class _LocalPrivacyCard extends StatelessWidget {
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                '默认不上传：结构化回答、报告、行动和复验保存在本机。只有你在报告页单次同意后，AI解释层才发送最小化结构化结果。',
+                '结构化回答、报告、行动和复验始终保存在本机；报告与复验解释也只使用设备内规则。外部AI仅可处理不含个人数据的课程知识和内容候选。',
                 style: TextStyle(color: Color(0xFF315C4E), height: 1.5),
               ),
             ),
@@ -2991,7 +2957,11 @@ class _ReportHero extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         report.overallScore.toStringAsFixed(0),
-                        style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: color),
+                        style: TextStyle(
+                          fontSize: 27,
+                          fontWeight: FontWeight.w900,
+                          color: color,
+                        ),
                       ),
                       const Text('已覆盖综合', style: TextStyle(fontSize: 10)),
                     ],
@@ -3020,7 +2990,11 @@ class _ReportHero extends StatelessWidget {
                   const SizedBox(height: 6),
                   const Text(
                     '分数只汇总已覆盖课程领域；安全与功能不被“幸福总分”抵消。',
-                    style: TextStyle(color: Color(0xFF667085), height: 1.35, fontSize: 12),
+                    style: TextStyle(
+                      color: Color(0xFF667085),
+                      height: 1.35,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -3039,11 +3013,29 @@ class _MetricGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
         children: <Widget>[
-          Expanded(child: _MetricCard(label: '覆盖度', value: '${report.coverage.toStringAsFixed(0)}%', icon: Icons.grid_view_outlined)),
+          Expanded(
+            child: _MetricCard(
+              label: '覆盖度',
+              value: '${report.coverage.toStringAsFixed(0)}%',
+              icon: Icons.grid_view_outlined,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: _MetricCard(label: '数据质量', value: '${report.dataQuality.toStringAsFixed(0)}%', icon: Icons.verified_outlined)),
+          Expanded(
+            child: _MetricCard(
+              label: '数据质量',
+              value: '${report.dataQuality.toStringAsFixed(0)}%',
+              icon: Icons.verified_outlined,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: _MetricCard(label: '功能影响', value: '${report.functionImpact}/4', icon: Icons.work_outline)),
+          Expanded(
+            child: _MetricCard(
+              label: '功能影响',
+              value: '${report.functionImpact}/4',
+              icon: Icons.work_outline,
+            ),
+          ),
         ],
       );
 }
@@ -3128,18 +3120,31 @@ class _MetricCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  const _MetricCard({required this.label, required this.value, required this.icon});
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+        ),
         child: Column(
           children: <Widget>[
             Icon(icon, size: 19, color: const Color(0xFF5664D2)),
             const SizedBox(height: 6),
-            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-            Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF667085))),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF667085)),
+            ),
           ],
         ),
       );
@@ -3186,7 +3191,10 @@ class _RadarPainter extends CustomPainter {
       final path = Path();
       for (var index = 0; index < count; index++) {
         final point = _point(center, radius * ring / 4, index, count);
-        if (index == 0) path.moveTo(point.dx, point.dy); else path.lineTo(point.dx, point.dy);
+        if (index == 0)
+          path.moveTo(point.dx, point.dy);
+        else
+          path.lineTo(point.dx, point.dy);
       }
       path.close();
       canvas.drawPath(path, grid);
@@ -3197,18 +3205,27 @@ class _RadarPainter extends CustomPainter {
     final scorePath = Path();
     for (var index = 0; index < count; index++) {
       final domain = index < domains.length ? domains[index] : null;
-      final ratio = domain == null || domain.answered == 0 ? 0 : domain.score / 100;
+      final ratio =
+          domain == null || domain.answered == 0 ? 0 : domain.score / 100;
       final point = _point(center, radius * ratio.clamp(0, 1), index, count);
-      if (index == 0) scorePath.moveTo(point.dx, point.dy); else scorePath.lineTo(point.dx, point.dy);
+      if (index == 0)
+        scorePath.moveTo(point.dx, point.dy);
+      else
+        scorePath.lineTo(point.dx, point.dy);
     }
     scorePath.close();
     canvas.drawPath(
       scorePath,
-      Paint()..color = const Color(0x555664D2)..style = PaintingStyle.fill,
+      Paint()
+        ..color = const Color(0x555664D2)
+        ..style = PaintingStyle.fill,
     );
     canvas.drawPath(
       scorePath,
-      Paint()..color = const Color(0xFF5664D2)..style = PaintingStyle.stroke..strokeWidth = 2.2,
+      Paint()
+        ..color = const Color(0xFF5664D2)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2,
     );
     for (var index = 0; index < count; index++) {
       final point = _point(center, radius + 27, index, count);
@@ -3220,7 +3237,9 @@ class _RadarPainter extends CustomPainter {
         text: TextSpan(
           text: label,
           style: TextStyle(
-            color: domain?.answered == 0 ? const Color(0xFF98A2B3) : const Color(0xFF344054),
+            color: domain?.answered == 0
+                ? const Color(0xFF98A2B3)
+                : const Color(0xFF344054),
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -3228,7 +3247,10 @@ class _RadarPainter extends CustomPainter {
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: 52);
-      painter.paint(canvas, point - Offset(painter.width / 2, painter.height / 2));
+      painter.paint(
+        canvas,
+        point - Offset(painter.width / 2, painter.height / 2),
+      );
     }
   }
 
@@ -3238,7 +3260,8 @@ class _RadarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RadarPainter oldDelegate) => oldDelegate.domains != domains;
+  bool shouldRepaint(covariant _RadarPainter oldDelegate) =>
+      oldDelegate.domains != domains;
 }
 
 class _DomainScoreTile extends StatelessWidget {
@@ -3253,7 +3276,10 @@ class _DomainScoreTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Container(
         padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -3267,11 +3293,26 @@ class _DomainScoreTile extends StatelessWidget {
                     color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(domain.id, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                  child: Text(
+                    domain.id,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Expanded(child: Text(domain.name, style: const TextStyle(fontWeight: FontWeight.w800))),
-                Text(covered ? domain.score.toStringAsFixed(0) : '—', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+                Expanded(
+                  child: Text(
+                    domain.name,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Text(
+                  covered ? domain.score.toStringAsFixed(0) : '—',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: color,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 9),
@@ -3284,7 +3325,9 @@ class _DomainScoreTile extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              covered ? '${domain.level} · 已回答 ${domain.answered}/${domain.expected}' : '本轮未覆盖，不解释为异常',
+              covered
+                  ? '${domain.level} · 已回答 ${domain.answered}/${domain.expected}'
+                  : '本轮未覆盖，不解释为异常',
               style: const TextStyle(fontSize: 11, color: Color(0xFF667085)),
             ),
           ],
@@ -3305,11 +3348,23 @@ class _DiagnosisCard extends StatelessWidget {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          title: Text(diagnosis.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text('${diagnosis.candidateOnly ? '候选假设' : '当前较支持'} · 置信度 ${diagnosis.confidence.toStringAsFixed(0)} (${diagnosis.confidenceLevel})'),
+          title: Text(
+            diagnosis.name,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: Text(
+            '${diagnosis.candidateOnly ? '候选假设' : '当前较支持'} · 置信度 ${diagnosis.confidence.toStringAsFixed(0)} (${diagnosis.confidenceLevel})',
+          ),
           leading: CircleAvatar(
             backgroundColor: const Color(0xFFE9ECFF),
-            child: Text(diagnosis.patternId, style: const TextStyle(color: Color(0xFF4554C5), fontSize: 11, fontWeight: FontWeight.w900)),
+            child: Text(
+              diagnosis.patternId,
+              style: const TextStyle(
+                color: Color(0xFF4554C5),
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
           children: <Widget>[
             _LabeledText(label: '机制假设', text: diagnosis.mechanism),
@@ -3317,7 +3372,10 @@ class _DiagnosisCard extends StatelessWidget {
             _LabeledList(label: '冲突/限制', items: diagnosis.conflictingEvidence),
             _LabeledList(label: '替代解释', items: diagnosis.alternativeHypotheses),
             const SizedBox(height: 6),
-            Text(diagnosis.reviewStatus, style: const TextStyle(fontSize: 11, color: Color(0xFFB54708))),
+            Text(
+              diagnosis.reviewStatus,
+              style: const TextStyle(fontSize: 11, color: Color(0xFFB54708)),
+            ),
           ],
         ),
       );
@@ -3327,7 +3385,11 @@ class _RecommendationCard extends StatelessWidget {
   final CheckupPrescriptionRecommendation recommendation;
   final bool active;
   final VoidCallback onStart;
-  const _RecommendationCard({required this.recommendation, required this.active, required this.onStart});
+  const _RecommendationCard({
+    required this.recommendation,
+    required this.active,
+    required this.onStart,
+  });
 
   @override
   Widget build(BuildContext context) => Card(
@@ -3342,7 +3404,15 @@ class _RecommendationCard extends StatelessWidget {
                 children: <Widget>[
                   const Icon(Icons.route, color: Color(0xFF4554C5)),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(recommendation.theme, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+                  Expanded(
+                    child: Text(
+                      recommendation.theme,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
                   _MiniPill(recommendation.prescriptionId),
                 ],
               ),
@@ -3356,7 +3426,11 @@ class _RecommendationCard extends StatelessWidget {
                   text: '${recommendation.contentCandidateId} · '
                       'v${recommendation.contentVersion ?? 1}',
                 ),
-              _LabeledText(label: '课程证据', text: 'Lecture ${recommendation.lecture} · ${recommendation.evidenceLocation} · ${recommendation.sourceLevel}'),
+              _LabeledText(
+                label: '课程证据',
+                text:
+                    'Lecture ${recommendation.lecture} · ${recommendation.evidenceLocation} · ${recommendation.sourceLevel}',
+              ),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
@@ -3372,12 +3446,13 @@ class _RecommendationCard extends StatelessWidget {
       );
 }
 
-class _AiExplanationCard extends StatelessWidget {
-  final bool loading;
+class _LocalExplanationCard extends StatelessWidget {
   final String narrative;
-  final bool usedRemote;
   final VoidCallback onGenerate;
-  const _AiExplanationCard({required this.loading, required this.narrative, required this.usedRemote, required this.onGenerate});
+  const _LocalExplanationCard({
+    required this.narrative,
+    required this.onGenerate,
+  });
 
   @override
   Widget build(BuildContext context) => Card(
@@ -3390,31 +3465,49 @@ class _AiExplanationCard extends StatelessWidget {
             children: <Widget>[
               const Row(
                 children: <Widget>[
-                  Icon(Icons.auto_awesome, color: Color(0xFF7A4E9D)),
+                  Icon(Icons.phone_android_outlined, color: Color(0xFF39715D)),
                   SizedBox(width: 8),
-                  Expanded(child: Text('AI课程解释（可选）', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+                  Expanded(
+                    child: Text(
+                      '本地课程解释',
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text('离线规则先完成。AI只解释结构化结果，不能更改安全状态、分数、证据等级或课程行动上限。', style: TextStyle(color: Color(0xFF667085), height: 1.45)),
+              const Text(
+                '由设备内确定性规则解释当前结果，不调用外部AI，不上传回答、报告、行动或复验数据。',
+                style: TextStyle(color: Color(0xFF667085), height: 1.45),
+              ),
               if (narrative.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 14),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(color: const Color(0xFFF7F3FA), borderRadius: BorderRadius.circular(14)),
-                  child: SelectableText(narrative, style: const TextStyle(height: 1.55)),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F3FA),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: SelectableText(
+                    narrative,
+                    style: const TextStyle(height: 1.55),
+                  ),
                 ),
                 const SizedBox(height: 6),
-                Text(usedRemote ? '生成来源：你配置的AI提供方（本次已同意）' : '生成来源：本地模板回退', style: const TextStyle(fontSize: 11, color: Color(0xFF667085))),
+                const Text(
+                  '生成来源：设备内规则',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF667085)),
+                ),
               ],
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: loading ? null : onGenerate,
-                icon: loading
-                    ? const SizedBox.square(dimension: 17, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.auto_awesome_outlined),
-                label: Text(loading ? '正在生成…' : narrative.isEmpty ? '单次同意并深入解释' : '重新生成'),
+                onPressed: onGenerate,
+                icon: const Icon(Icons.subject_outlined),
+                label: Text(
+                  narrative.isEmpty ? '生成本地解释' : '重新生成本地解释',
+                ),
               ),
             ],
           ),
@@ -3436,8 +3529,12 @@ class _EvidenceAndBoundaryCard extends StatelessWidget {
         color: Colors.white,
         child: ExpansionTile(
           leading: const Icon(Icons.menu_book_outlined),
-          title: const Text('课程证据与来源边界', style: TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text('${report.courseEvidence.length} 个课程定位 · C1/C2/D1/D2分开显示'),
+          title: const Text(
+            '课程证据与来源边界',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle:
+              Text('${report.courseEvidence.length} 个课程定位 · C1/C2/D1/D2分开显示'),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           children: <Widget>[
             _LabeledList(label: '本轮课程位置', items: report.courseEvidence),
@@ -3484,16 +3581,30 @@ class _SafetyRouteCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: alert ? const Color(0xFFFFEDEA) : const Color(0xFFFFF4E5),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: alert ? const Color(0xFFF2AAA2) : const Color(0xFFF6C77A)),
+        border: Border.all(
+          color: alert ? const Color(0xFFF2AAA2) : const Color(0xFFF6C77A),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
             children: <Widget>[
-              Icon(alert ? Icons.health_and_safety : Icons.shield_outlined, color: alert ? const Color(0xFFC62828) : const Color(0xFFB54708)),
+              Icon(
+                alert ? Icons.health_and_safety : Icons.shield_outlined,
+                color:
+                    alert ? const Color(0xFFC62828) : const Color(0xFFB54708),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: Text(alert ? '普通课程流程已暂停' : '安全状态需先确认', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+              Expanded(
+                child: Text(
+                  alert ? '普通课程流程已暂停' : '安全状态需先确认',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -3550,7 +3661,9 @@ class _PlanHero extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
-          gradient: const LinearGradient(colors: <Color>[Color(0xFF315C4E), Color(0xFF4E8170)]),
+          gradient: const LinearGradient(
+            colors: <Color>[Color(0xFF315C4E), Color(0xFF4E8170)],
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3559,17 +3672,36 @@ class _PlanHero extends StatelessWidget {
               children: <Widget>[
                 const Icon(Icons.route, color: Colors.white),
                 const SizedBox(width: 8),
-                Text(plan.status == CheckupPlanStatus.paused ? '已暂停' : '当前课程行动', style: const TextStyle(color: Colors.white70)),
+                Text(
+                  plan.status == CheckupPlanStatus.paused ? '已暂停' : '当前课程行动',
+                  style: const TextStyle(color: Colors.white70),
+                ),
                 const Spacer(),
                 _HeroChip(icon: Icons.science_outlined, text: plan.doseStage),
               ],
             ),
             const SizedBox(height: 14),
-            Text(plan.prescription.theme, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+            Text(
+              plan.prescription.theme,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
             const SizedBox(height: 8),
-            Text(plan.prescription.target, style: const TextStyle(color: Color(0xFFDDF2EA), height: 1.45)),
+            Text(
+              plan.prescription.target,
+              style: const TextStyle(color: Color(0xFFDDF2EA), height: 1.45),
+            ),
             const SizedBox(height: 16),
-            Text(daysUntilRetest <= 0 ? '已到复验时间' : '$daysUntilRetest 天后复验', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+            Text(
+              daysUntilRetest <= 0 ? '已到复验时间' : '$daysUntilRetest 天后复验',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ],
         ),
       );
@@ -3588,16 +3720,26 @@ class _ActionDoseCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text('今天只做这一件', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+              const Text(
+                '今天只做这一件',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 10),
-              Text(plan.prescription.startingAction, style: const TextStyle(fontSize: 16, height: 1.55)),
+              Text(
+                plan.prescription.startingAction,
+                style: const TextStyle(fontSize: 16, height: 1.55),
+              ),
               const Divider(height: 28),
               _LabeledText(label: '当前剂量', text: plan.prescription.dose),
               _LabeledText(
                 label: '稳定后的进阶与防复发',
                 text: plan.prescription.deepeningAction,
               ),
-              _LabeledText(label: '课程位置', text: 'Lecture ${plan.prescription.lecture} · ${plan.prescription.evidenceLocation}'),
+              _LabeledText(
+                label: '课程位置',
+                text:
+                    'Lecture ${plan.prescription.lecture} · ${plan.prescription.evidenceLocation}',
+              ),
             ],
           ),
         ),
@@ -3644,8 +3786,7 @@ class _PlanMetrics extends StatelessWidget {
               Expanded(
                 child: _MetricCard(
                   label: plan.hasRelapsePlan ? '已有复发预案' : '复发预案待补',
-                  value:
-                      '${plan.averageOveruseRisk.toStringAsFixed(0)}% 过度化',
+                  value: '${plan.averageOveruseRisk.toStringAsFixed(0)}% 过度化',
                   icon: Icons.shield_outlined,
                 ),
               ),
@@ -3665,8 +3806,15 @@ class _ExecutionLogTile extends StatelessWidget {
         color: Colors.white,
         child: ListTile(
           leading: CircleAvatar(
-            backgroundColor: log.completed ? const Color(0xFFE1F2EA) : const Color(0xFFFEECE9),
-            child: Icon(log.completed ? Icons.check : Icons.close, color: log.completed ? const Color(0xFF39715D) : const Color(0xFFB42318)),
+            backgroundColor: log.completed
+                ? const Color(0xFFE1F2EA)
+                : const Color(0xFFFEECE9),
+            child: Icon(
+              log.completed ? Icons.check : Icons.close,
+              color: log.completed
+                  ? const Color(0xFF39715D)
+                  : const Color(0xFFB42318),
+            ),
           ),
           title: Text(log.completed ? '完成了可接受版本' : '本次未完成'),
           subtitle: Text(
@@ -3687,13 +3835,21 @@ class _StopRuleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFFFFF3F1), borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF3F1),
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             const Icon(Icons.pause_circle_outline, color: Color(0xFFB42318)),
             const SizedBox(width: 10),
-            Expanded(child: Text('减量/暂停规则\n$text', style: const TextStyle(height: 1.5, color: Color(0xFF7A271A)))),
+            Expanded(
+              child: Text(
+                '减量/暂停规则\n$text',
+                style: const TextStyle(height: 1.5, color: Color(0xFF7A271A)),
+              ),
+            ),
           ],
         ),
       );
@@ -3711,7 +3867,9 @@ class _RetestHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final due = plan == null ? null : DateTime.fromMillisecondsSinceEpoch(plan!.nextRetestAtMs);
+    final due = plan == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(plan!.nextRetestAtMs);
     final isDue = due != null && !due.isAfter(DateTime.now());
     return Container(
       padding: const EdgeInsets.all(20),
@@ -3722,11 +3880,27 @@ class _RetestHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(isDue ? Icons.notification_important_outlined : Icons.restart_alt, size: 34, color: isDue ? const Color(0xFFB54708) : const Color(0xFF5664D2)),
+          Icon(
+            isDue ? Icons.notification_important_outlined : Icons.restart_alt,
+            size: 34,
+            color: isDue ? const Color(0xFFB54708) : const Color(0xFF5664D2),
+          ),
           const SizedBox(height: 12),
-          Text(plan == null ? '复验从课程行动之后开始' : isDue ? '已经到复验时间' : '下一次复验：${_date(plan!.nextRetestAtMs)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          Text(
+            plan == null
+                ? '复验从课程行动之后开始'
+                : isDue
+                    ? '已经到复验时间'
+                    : '下一次复验：${_date(plan!.nextRetestAtMs)}',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 7),
-          Text(plan == null ? '先建立基线并启动一项课程行动；系统不会把重复做题误当成恢复。' : '复验重新检查目标领域、现实功能、执行率、过度化和自主性。', style: const TextStyle(color: Color(0xFF667085), height: 1.45)),
+          Text(
+            plan == null
+                ? '先建立基线并启动一项课程行动；系统不会把重复做题误当成恢复。'
+                : '复验重新检查目标领域、现实功能、执行率、过度化和自主性。',
+            style: const TextStyle(color: Color(0xFF667085), height: 1.45),
+          ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
@@ -3757,7 +3931,9 @@ class _TrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final values = sessions.reversed.map((e) => e.report.overallScore).toList(growable: false);
+    final values = sessions.reversed
+        .map((e) => e.report.overallScore)
+        .toList(growable: false);
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -3766,9 +3942,20 @@ class _TrendCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            SizedBox(height: 150, child: CustomPaint(painter: _TrendPainter(values), child: const SizedBox.expand())),
+            SizedBox(
+              height: 150,
+              child: CustomPaint(
+                painter: _TrendPainter(values),
+                child: const SizedBox.expand(),
+              ),
+            ),
             const SizedBox(height: 8),
-            Text(values.length < 2 ? '至少完成两次评估后显示变化轨迹。' : '共 ${values.length} 次记录 · 最近 ${values.last.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, color: Color(0xFF667085))),
+            Text(
+              values.length < 2
+                  ? '至少完成两次评估后显示变化轨迹。'
+                  : '共 ${values.length} 次记录 · 最近 ${values.last.toStringAsFixed(0)}',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF667085)),
+            ),
           ],
         ),
       ),
@@ -3809,13 +3996,11 @@ class _TrendInsightsCard extends StatelessWidget {
                           : insight.severity == CheckupTrendSeverity.attention
                               ? Icons.trending_down
                               : Icons.info_outline,
-                      color:
-                          insight.severity == CheckupTrendSeverity.elevated
-                              ? const Color(0xFFC62828)
-                              : insight.severity ==
-                                      CheckupTrendSeverity.attention
-                                  ? const Color(0xFFB54708)
-                                  : const Color(0xFF5664D2),
+                      color: insight.severity == CheckupTrendSeverity.elevated
+                          ? const Color(0xFFC62828)
+                          : insight.severity == CheckupTrendSeverity.attention
+                              ? const Color(0xFFB54708)
+                              : const Color(0xFF5664D2),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -3853,7 +4038,9 @@ class _TrendPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final grid = Paint()..color = const Color(0xFFE7EAF0)..strokeWidth = 1;
+    final grid = Paint()
+      ..color = const Color(0xFFE7EAF0)
+      ..strokeWidth = 1;
     for (var i = 0; i <= 4; i++) {
       final y = size.height * i / 4;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
@@ -3861,16 +4048,32 @@ class _TrendPainter extends CustomPainter {
     if (values.isEmpty) return;
     final path = Path();
     for (var index = 0; index < values.length; index++) {
-      final x = values.length == 1 ? size.width / 2 : size.width * index / (values.length - 1);
+      final x = values.length == 1
+          ? size.width / 2
+          : size.width * index / (values.length - 1);
       final y = size.height * (1 - values[index].clamp(0, 100) / 100);
-      if (index == 0) path.moveTo(x, y); else path.lineTo(x, y);
-      canvas.drawCircle(Offset(x, y), 4, Paint()..color = const Color(0xFF5664D2));
+      if (index == 0)
+        path.moveTo(x, y);
+      else
+        path.lineTo(x, y);
+      canvas.drawCircle(
+        Offset(x, y),
+        4,
+        Paint()..color = const Color(0xFF5664D2),
+      );
     }
-    canvas.drawPath(path, Paint()..color = const Color(0xFF5664D2)..strokeWidth = 2.5..style = PaintingStyle.stroke);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFF5664D2)
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _TrendPainter oldDelegate) => oldDelegate.values != values;
+  bool shouldRepaint(covariant _TrendPainter oldDelegate) =>
+      oldDelegate.values != values;
 }
 
 class _AdjustmentRulesCard extends StatelessWidget {
@@ -3904,18 +4107,34 @@ class _AdjustmentRulesCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: <Widget>[
-            for (final row in rows) Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  SizedBox(width: 118, child: Text(row.condition, style: const TextStyle(fontWeight: FontWeight.w800))),
-                  const Icon(Icons.arrow_forward, size: 17, color: Color(0xFF98A2B3)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(row.action, style: const TextStyle(color: Color(0xFF475467)))),
-                ],
+            for (final row in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    SizedBox(
+                      width: 118,
+                      child: Text(
+                        row.condition,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward,
+                      size: 17,
+                      color: Color(0xFF98A2B3),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        row.action,
+                        style: const TextStyle(color: Color(0xFF475467)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -3933,10 +4152,7 @@ class _RuleRow {
 class _RetestRecordCard extends StatelessWidget {
   final CheckupRetestRecord record;
   final VoidCallback onExplain;
-  const _RetestRecordCard({
-    required this.record,
-    required this.onExplain,
-  });
+  const _RetestRecordCard({required this.record, required this.onExplain});
 
   @override
   Widget build(BuildContext context) => Card(
@@ -3949,10 +4165,23 @@ class _RetestRecordCard extends StatelessWidget {
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  const Icon(Icons.fact_check_outlined, color: Color(0xFF5664D2)),
+                  const Icon(Icons.fact_check_outlined,
+                      color: Color(0xFF5664D2)),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(record.decision, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
-                  Text(_date(record.createdAtMs), style: const TextStyle(fontSize: 11, color: Color(0xFF667085))),
+                  Expanded(
+                    child: Text(
+                      record.decision,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _date(record.createdAtMs),
+                    style:
+                        const TextStyle(fontSize: 11, color: Color(0xFF667085)),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -3962,8 +4191,12 @@ class _RetestRecordCard extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: <Widget>[
-                  _MiniPill('分数 ${record.scoreChange >= 0 ? '+' : ''}${record.scoreChange.toStringAsFixed(1)}'),
-                  _MiniPill('功能 ${record.functionChange >= 0 ? '+' : ''}${record.functionChange.toStringAsFixed(1)}'),
+                  _MiniPill(
+                    '分数 ${record.scoreChange >= 0 ? '+' : ''}${record.scoreChange.toStringAsFixed(1)}',
+                  ),
+                  _MiniPill(
+                    '功能 ${record.functionChange >= 0 ? '+' : ''}${record.functionChange.toStringAsFixed(1)}',
+                  ),
                   _MiniPill('执行 ${record.executionRate.toStringAsFixed(0)}%'),
                   _MiniPill('自主 ${record.autonomyScore.toStringAsFixed(0)}%'),
                   _MiniPill(record.relapsePlanReady ? '复发预案已备' : '复发预案待补'),
@@ -3975,8 +4208,8 @@ class _RetestRecordCard extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: onExplain,
-                  icon: const Icon(Icons.auto_awesome_outlined),
-                  label: const Text('AI解释本次复验'),
+                  icon: const Icon(Icons.phone_android_outlined),
+                  label: const Text('本地解释本次复验'),
                 ),
               ),
             ],
@@ -3992,7 +4225,10 @@ class _ArchiveSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(color: const Color(0xFF283252), borderRadius: BorderRadius.circular(22)),
+        decoration: BoxDecoration(
+          color: const Color(0xFF283252),
+          borderRadius: BorderRadius.circular(22),
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
@@ -4012,7 +4248,14 @@ class _ArchiveNumber extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
         children: <Widget>[
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 27, fontWeight: FontWeight.w900)),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 27,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           Text(label, style: const TextStyle(color: Color(0xFFC8CDE0))),
         ],
       );
@@ -4029,12 +4272,24 @@ class _SessionHistoryTile extends StatelessWidget {
         color: Colors.white,
         child: ListTile(
           leading: CircleAvatar(
-            backgroundColor: _scoreColor(session.report.overallScore)
-                .withValues(alpha: 0.12),
-            child: Text(session.report.overallScore.toStringAsFixed(0), style: TextStyle(color: _scoreColor(session.report.overallScore), fontWeight: FontWeight.w900)),
+            backgroundColor: _scoreColor(
+              session.report.overallScore,
+            ).withValues(alpha: 0.12),
+            child: Text(
+              session.report.overallScore.toStringAsFixed(0),
+              style: TextStyle(
+                color: _scoreColor(session.report.overallScore),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
-          title: Text(session.modeName, style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text('${_date(session.completedAtMs)} · 覆盖 ${session.report.coverage.toStringAsFixed(0)}% · ${_safetyText(session.report.safetyStatus)}'),
+          title: Text(
+            session.modeName,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: Text(
+            '${_date(session.completedAtMs)} · 覆盖 ${session.report.coverage.toStringAsFixed(0)}% · ${_safetyText(session.report.safetyStatus)}',
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: onTap,
         ),
@@ -4047,7 +4302,13 @@ class _SettingsTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  const _SettingsTile({required this.icon, required this.title, required this.subtitle, required this.onTap, this.iconColor});
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) => Card(
@@ -4055,7 +4316,8 @@ class _SettingsTile extends StatelessWidget {
         color: Colors.white,
         child: ListTile(
           leading: Icon(icon, color: iconColor ?? const Color(0xFF5664D2)),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          title:
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
           subtitle: Text(subtitle),
           trailing: const Icon(Icons.chevron_right),
           onTap: onTap,
@@ -4082,27 +4344,75 @@ class _ExecutionCheckInSheetState extends State<_ExecutionCheckInSheet> {
   @override
   Widget build(BuildContext context) => SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            4,
+            20,
+            20 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text('记录本次课程行动', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              const Text(
+                '记录本次课程行动',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 6),
-              const Text('只记录结构化变化，不需要证明自己，也不保存私密反思原文。', style: TextStyle(color: Color(0xFF667085))),
+              const Text(
+                '只记录结构化变化，不需要证明自己，也不保存私密反思原文。',
+                style: TextStyle(color: Color(0xFF667085)),
+              ),
               const SizedBox(height: 16),
               SegmentedButton<bool>(
                 segments: const <ButtonSegment<bool>>[
-                  ButtonSegment(value: true, icon: Icon(Icons.check), label: Text('完成可接受版本')),
-                  ButtonSegment(value: false, icon: Icon(Icons.close), label: Text('本次未完成')),
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.check),
+                    label: Text('完成可接受版本'),
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.close),
+                    label: Text('本次未完成'),
+                  ),
                 ],
                 selected: <bool>{_completed},
-                onSelectionChanged: (value) => setState(() => _completed = value.first),
+                onSelectionChanged: (value) =>
+                    setState(() => _completed = value.first),
               ),
               const SizedBox(height: 16),
-              _SliderField(label: '主观用力', value: _effort, min: 0, max: 10, divisions: 10, onChanged: (v) => setState(() => _effort = v)),
-              _SliderField(label: '即时收益', value: _benefit, min: 0, max: 10, divisions: 10, onChanged: (v) => setState(() => _benefit = v)),
-              _SliderField(label: '现实功能变化', value: _function, min: -2, max: 2, divisions: 4, onChanged: (v) => setState(() => _function = v)),
-              _SliderField(label: '过度化/僵化风险', value: _overuse, min: 0, max: 10, divisions: 10, onChanged: (v) => setState(() => _overuse = v)),
+              _SliderField(
+                label: '主观用力',
+                value: _effort,
+                min: 0,
+                max: 10,
+                divisions: 10,
+                onChanged: (v) => setState(() => _effort = v),
+              ),
+              _SliderField(
+                label: '即时收益',
+                value: _benefit,
+                min: 0,
+                max: 10,
+                divisions: 10,
+                onChanged: (v) => setState(() => _benefit = v),
+              ),
+              _SliderField(
+                label: '现实功能变化',
+                value: _function,
+                min: -2,
+                max: 2,
+                divisions: 4,
+                onChanged: (v) => setState(() => _function = v),
+              ),
+              _SliderField(
+                label: '过度化/僵化风险',
+                value: _overuse,
+                min: 0,
+                max: 10,
+                divisions: 10,
+                onChanged: (v) => setState(() => _overuse = v),
+              ),
               _SliderField(
                 label: '自主执行（较少提醒也能完成）',
                 value: _autonomy,
@@ -4114,13 +4424,10 @@ class _ExecutionCheckInSheetState extends State<_ExecutionCheckInSheet> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _relapsePlanReady,
-                onChanged: (value) =>
-                    setState(() => _relapsePlanReady = value),
+                onChanged: (value) => setState(() => _relapsePlanReady = value),
                 secondary: const Icon(Icons.shield_outlined),
                 title: const Text('已形成可执行的复发预案'),
-                subtitle: const Text(
-                  '只保存“已准备/未准备”；不保存私密预案原文。',
-                ),
+                subtitle: const Text('只保存“已准备/未准备”；不保存私密预案原文。'),
               ),
               const SizedBox(height: 12),
               SizedBox(
@@ -4155,7 +4462,14 @@ class _SliderField extends StatelessWidget {
   final double max;
   final int divisions;
   final ValueChanged<double> onChanged;
-  const _SliderField({required this.label, required this.value, required this.min, required this.max, required this.divisions, required this.onChanged});
+  const _SliderField({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) => Column(
@@ -4163,11 +4477,26 @@ class _SliderField extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))),
-              Text(value.toStringAsFixed(0), style: const TextStyle(fontWeight: FontWeight.w900)),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                value.toStringAsFixed(0),
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
             ],
           ),
-          Slider(value: value, min: min, max: max, divisions: divisions, label: value.toStringAsFixed(0), onChanged: onChanged),
+          Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            label: value.toStringAsFixed(0),
+            onChanged: onChanged,
+          ),
         ],
       );
 }
@@ -4177,26 +4506,53 @@ class _OnboardingFeature extends StatelessWidget {
   final String title;
   final String text;
   final Color color;
-  const _OnboardingFeature({required this.number, required this.title, required this.text, required this.color});
+  const _OnboardingFeature({
+    required this.number,
+    required this.title,
+    required this.text,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Container(
           padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(17)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(17),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(number, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900)),
+              Text(
+                number,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 3),
-                    Text(text, style: const TextStyle(color: Color(0xFF667085), height: 1.45)),
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        color: Color(0xFF667085),
+                        height: 1.45,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -4211,7 +4567,12 @@ class _InfoStrip extends StatelessWidget {
   final Color color;
   final String title;
   final String text;
-  const _InfoStrip({required this.icon, required this.color, required this.title, required this.text});
+  const _InfoStrip({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.text,
+  });
 
   @override
   Widget build(BuildContext context) => Container(
@@ -4229,9 +4590,16 @@ class _InfoStrip extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                  Text(
+                    title,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                  ),
                   const SizedBox(height: 2),
-                  Text(text, style: const TextStyle(height: 1.4, color: Color(0xFF475467))),
+                  Text(
+                    text,
+                    style:
+                        const TextStyle(height: 1.4, color: Color(0xFF475467)),
+                  ),
                 ],
               ),
             ),
@@ -4249,9 +4617,19 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: Color(0xFF1D2433))),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1D2433),
+            ),
+          ),
           const SizedBox(height: 3),
-          Text(subtitle, style: const TextStyle(color: Color(0xFF667085), height: 1.4)),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Color(0xFF667085), height: 1.4),
+          ),
         ],
       );
 }
@@ -4276,10 +4654,15 @@ class _BulletCard extends StatelessWidget {
                     children: <Widget>[
                       const Padding(
                         padding: EdgeInsets.only(top: 7),
-                        child: CircleAvatar(radius: 3, backgroundColor: Color(0xFF5664D2)),
+                        child: CircleAvatar(
+                          radius: 3,
+                          backgroundColor: Color(0xFF5664D2),
+                        ),
                       ),
                       const SizedBox(width: 9),
-                      Expanded(child: Text(item, style: const TextStyle(height: 1.5))),
+                      Expanded(
+                        child: Text(item, style: const TextStyle(height: 1.5)),
+                      ),
                     ],
                   ),
                 ),
@@ -4297,13 +4680,21 @@ class _SoftMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Icon(icon, color: const Color(0xFF667085)),
             const SizedBox(width: 10),
-            Expanded(child: Text(text, style: const TextStyle(color: Color(0xFF596273), height: 1.5))),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(color: Color(0xFF596273), height: 1.5),
+              ),
+            ),
           ],
         ),
       );
@@ -4320,7 +4711,14 @@ class _LabeledText extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF5664D2))),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF5664D2),
+              ),
+            ),
             const SizedBox(height: 3),
             Text(text, style: const TextStyle(height: 1.5)),
           ],
@@ -4339,7 +4737,14 @@ class _LabeledList extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF5664D2))),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF5664D2),
+              ),
+            ),
             const SizedBox(height: 4),
             for (final item in items)
               Padding(
@@ -4357,7 +4762,13 @@ class _EmptyTab extends StatelessWidget {
   final String text;
   final String action;
   final VoidCallback? onPressed;
-  const _EmptyTab({required this.icon, required this.title, required this.text, required this.action, required this.onPressed});
+  const _EmptyTab({
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.action,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) => Center(
@@ -4369,13 +4780,25 @@ class _EmptyTab extends StatelessWidget {
               Container(
                 width: 82,
                 height: 82,
-                decoration: BoxDecoration(color: const Color(0xFFE9ECFF), borderRadius: BorderRadius.circular(28)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE9ECFF),
+                  borderRadius: BorderRadius.circular(28),
+                ),
                 child: Icon(icon, size: 42, color: const Color(0xFF5664D2)),
               ),
               const SizedBox(height: 18),
-              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 8),
-              Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF667085), height: 1.5)),
+              Text(
+                text,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFF667085), height: 1.5),
+              ),
               if (action.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 18),
                 FilledButton(onPressed: onPressed, child: Text(action)),
