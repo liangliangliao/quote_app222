@@ -11,6 +11,7 @@ import 'package:quote_app/mental_health_checkup/mental_health_checkup_trends.dar
 import 'package:quote_app/mental_health_checkup/mental_health_generation_batch.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_indicator_governance.dart';
 import 'package:quote_app/mental_health_checkup/mental_health_knowledge_models.dart';
+import 'package:quote_app/mental_health_checkup/mental_health_validation.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -1061,6 +1062,254 @@ void main() {
       expect(restored.smallerVersion, isNotEmpty);
       expect(restored.counterEvidencePrompt, isNotEmpty);
       expect(restored.safetyRule, contains('不得练习风险行为'));
+    });
+  });
+
+  group('full content blueprints and human validation evidence', () {
+    test('materializes exactly nine stable slots for all 345 indicators',
+        () async {
+      final catalog = await MentalHealthCheckupCatalog.load();
+      const factory = MentalHealthContentBlueprintFactory();
+
+      final first = factory.build(
+        catalog.indicators,
+        courseVersion: catalog.validation.version,
+      );
+      final second = factory.build(
+        catalog.indicators,
+        courseVersion: catalog.validation.version,
+      );
+      final ids = first.map((candidate) => candidate.candidateId).toSet();
+      final counts = <String, int>{};
+      for (final candidate in first) {
+        counts.update(
+          candidate.primaryIndicatorId,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
+
+      expect(
+        first,
+        hasLength(MentalHealthContentBlueprintFactory.expectedCandidateCount),
+      );
+      expect(ids, hasLength(first.length));
+      expect(counts, hasLength(345));
+      expect(counts.values.every((count) => count == 9), isTrue);
+      expect(first.map((value) => value.toJson()).toList(), second.map((value) => value.toJson()).toList());
+      expect(
+        first.every(
+          (candidate) =>
+              candidate.stage == CheckupCandidateStage.draft &&
+              candidate.courseEvidenceIds.isNotEmpty &&
+              candidate.content.trim().isNotEmpty &&
+              candidate.safetyRule.trim().isNotEmpty,
+        ),
+        isTrue,
+      );
+      expect(
+        first
+            .where((candidate) => candidate.kind == CheckupContentKind.behaviorTask)
+            .map((candidate) => candidate.contentCode)
+            .toSet(),
+        containsAll(const <String>['B0', 'B1', 'B2', 'B3', 'B4']),
+      );
+    });
+
+    test('real records drive all validation gates and content edits invalidate them',
+        () async {
+      final catalog = await MentalHealthCheckupCatalog.load();
+      final candidate = const MentalHealthContentBlueprintFactory()
+          .build(
+            catalog.indicators,
+            courseVersion: catalog.validation.version,
+          )
+          .firstWhere(
+            (value) =>
+                value.contentCode == 'A3' &&
+                !value.indicatorType.contains('风险'),
+          );
+      final fingerprint =
+          MentalHealthValidationEngine.candidateFingerprint(candidate);
+      const quality = CheckupCandidateQuality(
+        indicatorConsistency: 90,
+        courseFidelity: 90,
+        nonDuplication: 90,
+        measurability: 90,
+        scaleWindowFit: 90,
+        bidirectionalLogic: 90,
+        safety: 95,
+      );
+      final reviews = <CheckupExpertReviewRecord>[
+        CheckupExpertReviewRecord(
+          id: 'course-review',
+          candidateId: candidate.candidateId,
+          candidateFingerprint: fingerprint,
+          reviewerId: 'course-expert-01',
+          role: CheckupExpertReviewRole.courseExpert,
+          quality: quality,
+          passed: true,
+          note: '课程证据逐条核对通过',
+          createdAtMs: 1,
+        ),
+        CheckupExpertReviewRecord(
+          id: 'measurement-review',
+          candidateId: candidate.candidateId,
+          candidateFingerprint: fingerprint,
+          reviewerId: 'measurement-reviewer-02',
+          role: CheckupExpertReviewRole.measurementReviewer,
+          quality: quality,
+          passed: true,
+          note: '单一构念与量尺通过',
+          createdAtMs: 2,
+        ),
+      ];
+      final interviews = List<CheckupCognitiveInterviewRecord>.generate(
+        5,
+        (index) => CheckupCognitiveInterviewRecord(
+          id: 'cognitive-$index',
+          candidateId: candidate.candidateId,
+          candidateFingerprint: fingerprint,
+          participantKey: MentalHealthValidationEngine.participantKey(
+            studySalt: 'cognitive-study-salt',
+            localAlias: 'participant-$index',
+          ),
+          understoodConstruct: true,
+          understoodRecallWindow: true,
+          optionsClear: true,
+          doubleBarrelDetected: false,
+          leadingLanguageDetected: false,
+          burdenAcceptable: true,
+          note: '',
+          createdAtMs: 10 + index,
+        ),
+      );
+      final observations = List<CheckupPilotObservation>.generate(
+        30,
+        (index) {
+          final score = (index % 5).toDouble();
+          return CheckupPilotObservation(
+            id: 'pilot-$index',
+            candidateId: candidate.candidateId,
+            candidateFingerprint: fingerprint,
+            participantKey: MentalHealthValidationEngine.participantKey(
+              studySalt: 'pilot-study-salt',
+              localAlias: 'participant-$index',
+            ),
+            missing: false,
+            completionTimeMs: 30000,
+            itemScore: score,
+            restScore: score * 2 + 1,
+            retestScore: score,
+            behaviorCriterion: score,
+            fairnessGroup: index < 15 ? 'group-a' : 'group-b',
+            createdAtMs: 100 + index,
+          );
+        },
+      );
+      const engine = MentalHealthValidationEngine();
+      final dossier = CheckupValidationDossier(
+        expertReviews: reviews,
+        cognitiveInterviews: interviews,
+        pilotObservations: observations,
+      );
+
+      final decision = engine.evaluate(
+        candidate: candidate,
+        dossier: dossier,
+      );
+      final synchronized = engine.applyDecision(
+        candidate: candidate,
+        decision: decision,
+        now: DateTime.fromMillisecondsSinceEpoch(999),
+      );
+
+      expect(decision.blockingIssues, isEmpty);
+      expect(decision.readyForHumanSignature, isTrue);
+      expect(decision.cognitiveSampleSize, 5);
+      expect(decision.pilotSampleSize, 30);
+      expect(decision.metrics['item_rest_correlation'], closeTo(1, 0.0001));
+      expect(synchronized.evidenceReviewPassed, isTrue);
+      expect(synchronized.constructReviewPassed, isTrue);
+      expect(synchronized.cognitiveInterviewPassed, isTrue);
+      expect(synchronized.pilotPassed, isTrue);
+
+      final edited = candidate.copyWith(content: '${candidate.content}（修订）');
+      final editedDecision = engine.evaluate(
+        candidate: edited,
+        dossier: dossier,
+      );
+      expect(editedDecision.readyForHumanSignature, isFalse);
+      expect(
+        editedDecision.warnings.any((warning) => warning.contains('内容指纹')),
+        isTrue,
+      );
+      expect(
+        editedDecision.blockingIssues,
+        contains('缺少通过的课程专家证据审核'),
+      );
+    });
+
+    test('validation package detects tampering and participant keys are private',
+        () {
+      const indicator = CheckupIndicator(
+        id: 'L04-C1',
+        lecture: 4,
+        area: '情绪与认知',
+        name: '情绪接纳',
+        type: '保护型',
+        definitionLocation: 'L04-P001',
+        lowLocation: 'L04-P002',
+        highLocation: 'L04-P003',
+        actionLocation: 'L04-P004',
+        directEvidenceCount: 4,
+        directness: '直接证据较强',
+        reviewStatus: '待确认',
+      );
+      const governance = MentalHealthContentGovernanceEngine();
+      final candidate = governance.createLocalDraft(
+        plan: governance.buildGenerationQueue(const <CheckupIndicator>[
+          indicator,
+        ]).single,
+        contentCode: 'A3',
+        courseVersion: '2.5',
+        now: DateTime.fromMillisecondsSinceEpoch(10),
+      );
+      final key = MentalHealthValidationEngine.participantKey(
+        studySalt: 'private-study-salt',
+        localAlias: 'local-person-01',
+      );
+      final raw = CheckupValidationEnvelope.create(
+        courseVersion: '2.5',
+        blueprintVersion: MentalHealthContentBlueprintFactory.version,
+        candidates: <CheckupContentCandidate>[candidate],
+        expertReviews: const <CheckupExpertReviewRecord>[],
+        cognitiveInterviews: const <CheckupCognitiveInterviewRecord>[],
+        pilotObservations: const <CheckupPilotObservation>[],
+        seedReviews: const <CheckupSeedReviewRecord>[],
+        now: DateTime.fromMillisecondsSinceEpoch(20),
+      );
+
+      expect(key, hasLength(64));
+      expect(key, isNot(contains('local-person-01')));
+      expect(
+        CheckupValidationEnvelope.validateAndDecode(
+          raw: raw,
+          expectedCourseVersion: '2.5',
+          expectedBlueprintVersion:
+              MentalHealthContentBlueprintFactory.version,
+        )['candidates'],
+        hasLength(1),
+      );
+      expect(
+        () => CheckupValidationEnvelope.validateAndDecode(
+          raw: raw.replaceFirst(candidate.content, '被篡改'),
+          expectedCourseVersion: '2.5',
+          expectedBlueprintVersion:
+              MentalHealthContentBlueprintFactory.version,
+        ),
+        throwsFormatException,
+      );
     });
   });
 
