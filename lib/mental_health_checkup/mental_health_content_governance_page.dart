@@ -4,6 +4,10 @@ import 'mental_health_checkup_ai_service.dart';
 import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_repository.dart';
 import 'mental_health_content_governance.dart';
+import 'mental_health_generation_batch_page.dart';
+import 'mental_health_indicator_governance_page.dart';
+import 'mental_health_knowledge_base_page.dart';
+import 'mental_health_knowledge_base_service.dart';
 
 class MentalHealthContentGovernancePage extends StatefulWidget {
   final MentalHealthCheckupCatalog catalog;
@@ -25,16 +29,18 @@ class _MentalHealthContentGovernancePageState
   static const MentalHealthContentGovernanceEngine _engine =
       MentalHealthContentGovernanceEngine();
   final TextEditingController _searchController = TextEditingController();
-  late final List<CheckupContentGenerationPlan> _plans;
-  List<CheckupContentCandidate> _candidates =
-      const <CheckupContentCandidate>[];
+  late MentalHealthCheckupCatalog _catalog;
+  List<CheckupContentGenerationPlan> _plans =
+      const <CheckupContentGenerationPlan>[];
+  List<CheckupContentCandidate> _candidates = const <CheckupContentCandidate>[];
   CheckupCandidateStage? _stageFilter;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _plans = _engine.buildGenerationQueue(widget.catalog.indicators);
+    _catalog = widget.catalog;
+    _plans = _engine.buildGenerationQueue(_catalog.indicators);
     _load();
   }
 
@@ -47,9 +53,16 @@ class _MentalHealthContentGovernancePageState
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
     final candidates = await widget.repository.loadContentCandidates();
+    final indicatorCandidates =
+        await widget.repository.loadIndicatorCandidates();
     if (!mounted) return;
+    final catalog = widget.catalog
+        .withGovernedIndicators(indicatorCandidates)
+        .withPublishedContent(candidates);
     setState(() {
       _candidates = candidates;
+      _catalog = catalog;
+      _plans = _engine.buildGenerationQueue(catalog.indicators);
       _loading = false;
     });
   }
@@ -81,9 +94,45 @@ class _MentalHealthContentGovernancePageState
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => MentalHealthContentPlanPage(
-          catalog: widget.catalog,
+          catalog: _catalog,
           repository: widget.repository,
           plan: plan,
+        ),
+      ),
+    );
+    await _load();
+  }
+
+  Future<void> _openIndicatorGovernance() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthIndicatorGovernancePage(
+          catalog: _catalog,
+          repository: widget.repository,
+        ),
+      ),
+    );
+    await _load();
+  }
+
+  Future<void> _openKnowledgeBase() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthKnowledgeBasePage(
+          catalog: _catalog,
+          repository: widget.repository,
+        ),
+      ),
+    );
+    await _load();
+  }
+
+  Future<void> _openGenerationBatches() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthGenerationBatchPage(
+          catalog: _catalog,
+          repository: widget.repository,
         ),
       ),
     );
@@ -116,14 +165,19 @@ class _MentalHealthContentGovernancePageState
                   _QueueDashboard(
                     queueCount: _plans.length,
                     candidateCount: _candidates.length,
-                    officialCount:
-                        _stageCount(CheckupCandidateStage.official),
+                    officialCount: _stageCount(CheckupCandidateStage.official),
                     pilotCount: _stageCount(CheckupCandidateStage.pilot),
                   ),
+                  const SizedBox(height: 12),
+                  _GovernanceToolbox(
+                    onIndicators: _openIndicatorGovernance,
+                    onKnowledge: _openKnowledgeBase,
+                    onBatches: _openGenerationBatches,
+                  ),
                   const SizedBox(height: 18),
-                  const Text(
-                    '345项指标生成队列',
-                    style: TextStyle(
+                  Text(
+                    '${_plans.length}项指标生成队列',
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
                     ),
@@ -131,10 +185,7 @@ class _MentalHealthContentGovernancePageState
                   const SizedBox(height: 5),
                   const Text(
                     '每项均固定生成题型计划、B0—B4计划和课程证据ID；候选内容按需生成，避免把大批重复文本写入APK。',
-                    style: TextStyle(
-                      color: Color(0xFF667085),
-                      height: 1.45,
-                    ),
+                    style: TextStyle(color: Color(0xFF667085), height: 1.45),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -169,9 +220,7 @@ class _MentalHealthContentGovernancePageState
                         const SizedBox(width: 8),
                         for (final stage in CheckupCandidateStage.values) ...[
                           ChoiceChip(
-                            label: Text(
-                              '${stage.label} ${_stageCount(stage)}',
-                            ),
+                            label: Text('${stage.label} ${_stageCount(stage)}'),
                             selected: _stageFilter == stage,
                             onSelected: (_) =>
                                 setState(() => _stageFilter = stage),
@@ -183,11 +232,9 @@ class _MentalHealthContentGovernancePageState
                   ),
                   const SizedBox(height: 12),
                   if (plans.isEmpty)
-                    const _GovernanceEmpty(
-                      text: '没有匹配的生成计划或候选状态。',
-                    )
+                    const _GovernanceEmpty(text: '没有匹配的生成计划或候选状态。')
                   else
-                    for (final plan in plans.take(345))
+                    for (final plan in plans)
                       _GenerationPlanTile(
                         plan: plan,
                         candidates: _candidates
@@ -228,8 +275,7 @@ class _MentalHealthContentPlanPageState
   static const MentalHealthContentGovernanceEngine _engine =
       MentalHealthContentGovernanceEngine();
   final MentalHealthCheckupAiService _ai = MentalHealthCheckupAiService();
-  List<CheckupContentCandidate> _candidates =
-      const <CheckupContentCandidate>[];
+  List<CheckupContentCandidate> _candidates = const <CheckupContentCandidate>[];
   bool _loading = true;
   String? _generatingCode;
 
@@ -283,11 +329,15 @@ class _MentalHealthContentPlanPageState
         <String>[widget.plan.indicatorId],
         limit: 12,
       );
+      final knowledgeResource = await MentalHealthKnowledgeBaseService(
+        repository: widget.repository,
+      ).activeResource(catalog: widget.catalog);
       final result = await _ai.generateContentCandidate(
         plan: widget.plan,
         contentCode: code,
         courseVersion: widget.catalog.validation.version,
         evidenceTraces: traces,
+        knowledgeResource: knowledgeResource,
       );
       candidate = result.candidate;
       message = result.message;
@@ -302,9 +352,9 @@ class _MentalHealthContentPlanPageState
     await widget.repository.saveContentCandidate(candidate);
     if (!mounted) return;
     setState(() => _generatingCode = null);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
     await _openCandidate(candidate);
     await _load();
   }
@@ -334,18 +384,13 @@ class _MentalHealthContentPlanPageState
             children: <Widget>[
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                ),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  color: Color(0xFF667085),
-                  height: 1.4,
-                ),
+                style: const TextStyle(color: Color(0xFF667085), height: 1.4),
               ),
               const SizedBox(height: 12),
               for (final code in codes)
@@ -357,9 +402,7 @@ class _MentalHealthContentPlanPageState
                         width: 48,
                         child: Text(
                           code,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),
                       Expanded(
@@ -380,9 +423,8 @@ class _MentalHealthContentPlanPageState
                           icon: _generatingCode == code
                               ? const SizedBox.square(
                                   dimension: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.auto_awesome_outlined),
                           label: const Text('AI候选'),
@@ -426,15 +468,9 @@ class _MentalHealthContentPlanPageState
                               _GovernancePill(
                                 text: 'Lecture ${widget.plan.lecture}',
                               ),
-                              _GovernancePill(
-                                text: widget.plan.indicatorType,
-                              ),
-                              _GovernancePill(
-                                text: widget.plan.sourceLevel,
-                              ),
-                              _GovernancePill(
-                                text: widget.plan.reviewStatus,
-                              ),
+                              _GovernancePill(text: widget.plan.indicatorType),
+                              _GovernancePill(text: widget.plan.sourceLevel),
+                              _GovernancePill(text: widget.plan.reviewStatus),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -525,24 +561,24 @@ class _MentalHealthContentCandidateEditorPageState
     super.initState();
     _candidate = widget.candidate;
     _contentController = TextEditingController(text: _candidate.content);
-    _scaleController =
-        TextEditingController(text: _candidate.scaleOrDuration);
-    _directionController =
-        TextEditingController(text: _candidate.scoringDirection);
-    _windowController =
-        TextEditingController(text: _candidate.recallWindow);
-    _rationaleController =
-        TextEditingController(text: _candidate.constructRationale);
+    _scaleController = TextEditingController(text: _candidate.scaleOrDuration);
+    _directionController = TextEditingController(
+      text: _candidate.scoringDirection,
+    );
+    _windowController = TextEditingController(text: _candidate.recallWindow);
+    _rationaleController = TextEditingController(
+      text: _candidate.constructRationale,
+    );
     _safetyController = TextEditingController(text: _candidate.safetyRule);
-    _smallerController =
-        TextEditingController(text: _candidate.smallerVersion);
-    _counterController =
-        TextEditingController(text: _candidate.counterEvidencePrompt);
+    _smallerController = TextEditingController(text: _candidate.smallerVersion);
+    _counterController = TextEditingController(
+      text: _candidate.counterEvidencePrompt,
+    );
     _authorController = TextEditingController(text: _candidate.author);
-    _pilotSampleController =
-        TextEditingController(text: '${_candidate.pilotSampleSize}');
-    _pilotNotesController =
-        TextEditingController(text: _candidate.pilotNotes);
+    _pilotSampleController = TextEditingController(
+      text: '${_candidate.pilotSampleSize}',
+    );
+    _pilotNotesController = TextEditingController(text: _candidate.pilotNotes);
   }
 
   @override
@@ -575,8 +611,7 @@ class _MentalHealthContentCandidateEditorPageState
         smallerVersion: _smallerController.text.trim(),
         counterEvidencePrompt: _counterController.text.trim(),
         author: _authorController.text.trim(),
-        pilotSampleSize:
-            int.tryParse(_pilotSampleController.text.trim()) ?? 0,
+        pilotSampleSize: int.tryParse(_pilotSampleController.text.trim()) ?? 0,
         pilotNotes: _pilotNotesController.text.trim(),
         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       );
@@ -592,9 +627,9 @@ class _MentalHealthContentCandidateEditorPageState
       _saving = false;
     });
     if (showMessage) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('候选草稿与质量记录已保存在本机。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('候选草稿与质量记录已保存在本机。')));
     }
   }
 
@@ -654,13 +689,11 @@ class _MentalHealthContentCandidateEditorPageState
     return result;
   }
 
-  CheckupCandidateStage? get _nextStage =>
-      switch (_candidate.stage) {
+  CheckupCandidateStage? get _nextStage => switch (_candidate.stage) {
         CheckupCandidateStage.draft => CheckupCandidateStage.candidate,
         CheckupCandidateStage.candidate =>
           CheckupCandidateStage.cognitiveInterview,
-        CheckupCandidateStage.cognitiveInterview =>
-          CheckupCandidateStage.pilot,
+        CheckupCandidateStage.cognitiveInterview => CheckupCandidateStage.pilot,
         CheckupCandidateStage.pilot => CheckupCandidateStage.official,
         CheckupCandidateStage.official => CheckupCandidateStage.retired,
         CheckupCandidateStage.retired => null,
@@ -672,9 +705,7 @@ class _MentalHealthContentCandidateEditorPageState
     if (!_candidate.isReadOnly) await _save(showMessage: false);
     if (!mounted) return;
     final input = await _askAuditInput(
-      target == CheckupCandidateStage.retired
-          ? '停用正式版本'
-          : '进入${target.label}',
+      target == CheckupCandidateStage.retired ? '停用正式版本' : '进入${target.label}',
     );
     if (input == null || !mounted) return;
     try {
@@ -687,9 +718,9 @@ class _MentalHealthContentCandidateEditorPageState
       await widget.repository.saveContentTransition(transition);
       if (!mounted) return;
       setState(() => _candidate = transition.candidate);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已进入${target.label}并写入审计记录。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已进入${target.label}并写入审计记录。')));
     } catch (error) {
       if (!mounted) return;
       await showDialog<void>(
@@ -809,10 +840,7 @@ class _MentalHealthContentCandidateEditorPageState
             label: '课程证据ID',
             value: _candidate.courseEvidenceIds.join('、'),
           ),
-          _ReadOnlyValue(
-            label: '来源等级',
-            value: _candidate.sourceLevel,
-          ),
+          _ReadOnlyValue(label: '来源等级', value: _candidate.sourceLevel),
           _ReadOnlyValue(
             label: '制衡指标',
             value: _candidate.guardrailIndicatorIds.isEmpty
@@ -912,9 +940,8 @@ class _MentalHealthContentCandidateEditorPageState
             onChanged: readOnly
                 ? null
                 : (value) => setState(
-                      () => _candidate = _candidate.copyWith(
-                        pilotPassed: value,
-                      ),
+                      () =>
+                          _candidate = _candidate.copyWith(pilotPassed: value),
                     ),
             title: const Text('小样本试测通过'),
             subtitle: const Text('缺失率、区分度和初步稳定性达到预设标准。'),
@@ -944,8 +971,7 @@ class _MentalHealthContentCandidateEditorPageState
           ),
           _ReadOnlyValue(
             label: '模型/Prompt',
-            value:
-                '${_candidate.modelVersion} / ${_candidate.promptVersion}',
+            value: '${_candidate.modelVersion} / ${_candidate.promptVersion}',
           ),
           _ReadOnlyValue(
             label: '指标/课程版本',
@@ -957,9 +983,7 @@ class _MentalHealthContentCandidateEditorPageState
           if (_candidate.signer.isNotEmpty)
             _ReadOnlyValue(label: '签发人', value: _candidate.signer),
           FutureBuilder<List<CheckupContentAuditEvent>>(
-            future: widget.repository.loadContentAudit(
-              _candidate.candidateId,
-            ),
+            future: widget.repository.loadContentAudit(_candidate.candidateId),
             builder: (context, snapshot) => _AuditTimeline(
               events: snapshot.data ?? const <CheckupContentAuditEvent>[],
             ),
@@ -971,9 +995,7 @@ class _MentalHealthContentCandidateEditorPageState
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
           decoration: const BoxDecoration(
             color: Colors.white,
-            border: Border(
-              top: BorderSide(color: Color(0xFFE4E7EC)),
-            ),
+            border: Border(top: BorderSide(color: Color(0xFFE4E7EC))),
           ),
           child: Row(
             children: <Widget>[
@@ -1045,6 +1067,63 @@ class _GovernanceNotice extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      );
+}
+
+class _GovernanceToolbox extends StatelessWidget {
+  final VoidCallback onIndicators;
+  final VoidCallback onKnowledge;
+  final VoidCallback onBatches;
+
+  const _GovernanceToolbox({
+    required this.onIndicators,
+    required this.onKnowledge,
+    required this.onBatches,
+  });
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Column(
+          children: <Widget>[
+            ListTile(
+              onTap: onIndicators,
+              leading: const CircleAvatar(
+                child: Icon(Icons.travel_explore_outlined),
+              ),
+              title: const Text(
+                '候选指标发现与治理',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: const Text('AI/本地发现 · 证据复核 · 专家审核 · 访谈 · 试测 · 签发'),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+            const Divider(height: 1, indent: 72),
+            ListTile(
+              onTap: onBatches,
+              leading: const CircleAvatar(
+                child: Icon(Icons.playlist_play_outlined),
+              ),
+              title: const Text(
+                '批量生成题目与B0—B4任务',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: const Text('持久队列 · 分块继续 · 失败重试 · 不自动发布'),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+            const Divider(height: 1, indent: 72),
+            ListTile(
+              onTap: onKnowledge,
+              leading:
+                  const CircleAvatar(child: Icon(Icons.cloud_sync_outlined)),
+              title: const Text(
+                'AI课程知识库与文件ID',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: const Text('默认本地RAG · 可选首次上传 · 哈希校验 · 可解除关联'),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+          ],
         ),
       );
 }
@@ -1130,10 +1209,7 @@ class _QueueMetric extends StatelessWidget {
             ),
             Text(
               label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF667085),
-              ),
+              style: const TextStyle(fontSize: 12, color: Color(0xFF667085)),
             ),
           ],
         ),
@@ -1196,19 +1272,14 @@ class _CandidateTile extends StatelessWidget {
   final CheckupContentCandidate candidate;
   final VoidCallback onTap;
 
-  const _CandidateTile({
-    required this.candidate,
-    required this.onTap,
-  });
+  const _CandidateTile({required this.candidate, required this.onTap});
 
   @override
   Widget build(BuildContext context) => Card(
         margin: const EdgeInsets.only(bottom: 8),
         child: ListTile(
           onTap: onTap,
-          leading: CircleAvatar(
-            child: Text(candidate.contentCode),
-          ),
+          leading: CircleAvatar(child: Text(candidate.contentCode)),
           title: Text(
             candidate.content,
             maxLines: 2,
@@ -1239,10 +1310,8 @@ class _CandidateStageHeader extends StatelessWidget {
             children: <Widget>[
               Text(
                 '${candidate.primaryIndicatorId} · ${candidate.indicatorName}',
-                style: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w900,
-                ),
+                style:
+                    const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -1305,10 +1374,8 @@ class _GovernanceGateCard extends StatelessWidget {
                 for (final warning in validation.warnings)
                   Text(
                     '提示：$warning',
-                    style: const TextStyle(
-                      color: Color(0xFF667085),
-                      height: 1.4,
-                    ),
+                    style:
+                        const TextStyle(color: Color(0xFF667085), height: 1.4),
                   ),
               ],
             ],
@@ -1356,9 +1423,8 @@ class _QualityEditor extends StatelessWidget {
                 value: value.indicatorConsistency,
                 threshold: 75,
                 enabled: enabled,
-                onChanged: (score) => onChanged(
-                  value.copyWith(indicatorConsistency: score),
-                ),
+                onChanged: (score) =>
+                    onChanged(value.copyWith(indicatorConsistency: score)),
               ),
               _QualitySlider(
                 label: '课程忠实度',
@@ -1402,8 +1468,7 @@ class _QualityEditor extends StatelessWidget {
                 value: value.safety,
                 threshold: 90,
                 enabled: enabled,
-                onChanged: (score) =>
-                    onChanged(value.copyWith(safety: score)),
+                onChanged: (score) => onChanged(value.copyWith(safety: score)),
               ),
             ],
           ),
@@ -1459,10 +1524,7 @@ class _EditorSectionTitle extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _EditorSectionTitle({
-    required this.title,
-    required this.subtitle,
-  });
+  const _EditorSectionTitle({required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) => Column(
@@ -1470,18 +1532,12 @@ class _EditorSectionTitle extends StatelessWidget {
         children: <Widget>[
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 3),
           Text(
             subtitle,
-            style: const TextStyle(
-              color: Color(0xFF667085),
-              height: 1.4,
-            ),
+            style: const TextStyle(color: Color(0xFF667085), height: 1.4),
           ),
         ],
       );
@@ -1524,10 +1580,7 @@ class _ReadOnlyValue extends StatelessWidget {
   final String label;
   final String value;
 
-  const _ReadOnlyValue({
-    required this.label,
-    required this.value,
-  });
+  const _ReadOnlyValue({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1545,10 +1598,7 @@ class _ReadOnlyValue extends StatelessWidget {
             children: <Widget>[
               Text(
                 label,
-                style: const TextStyle(
-                  color: Color(0xFF667085),
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
               ),
               const SizedBox(height: 3),
               SelectableText(value.isEmpty ? '—' : value),
@@ -1607,10 +1657,7 @@ class _GovernancePill extends StatelessWidget {
         ),
         child: Text(
           text,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
       );
 }
@@ -1642,8 +1689,5 @@ class _GovernanceAuditInput {
   final String actor;
   final String note;
 
-  const _GovernanceAuditInput({
-    required this.actor,
-    required this.note,
-  });
+  const _GovernanceAuditInput({required this.actor, required this.note});
 }
