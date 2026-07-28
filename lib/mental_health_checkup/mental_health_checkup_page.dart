@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'mental_health_assessment_page.dart';
 import 'mental_health_content_governance_page.dart';
+import 'mental_health_content_governance.dart';
 import 'mental_health_checkup_ai_service.dart';
 import 'mental_health_checkup_catalog.dart';
 import 'mental_health_checkup_engine.dart';
@@ -86,7 +87,12 @@ class _MentalHealthCheckupPageState extends State<MentalHealthCheckupPage>
       final seedCatalog = await MentalHealthCheckupCatalog.load();
       final state = await _repository.load(catalog: seedCatalog);
       final governedIndicators = await _repository.loadIndicatorCandidates();
-      final governedContent = await _repository.loadContentCandidates();
+      final governedContent = await _repository.loadContentCandidates(
+        stages: const <CheckupCandidateStage>{
+          CheckupCandidateStage.official,
+          CheckupCandidateStage.retired,
+        },
+      );
       final catalog = seedCatalog
           .withGovernedIndicators(governedIndicators)
           .withPublishedContent(governedContent);
