@@ -8,6 +8,7 @@ import 'mental_health_generation_batch_page.dart';
 import 'mental_health_indicator_governance_page.dart';
 import 'mental_health_knowledge_base_page.dart';
 import 'mental_health_knowledge_base_service.dart';
+import 'mental_health_validation_page.dart';
 
 class MentalHealthContentGovernancePage extends StatefulWidget {
   final MentalHealthCheckupCatalog catalog;
@@ -139,6 +140,18 @@ class _MentalHealthContentGovernancePageState
     await _load();
   }
 
+  Future<void> _openValidationCenter() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthValidationCenterPage(
+          catalog: _catalog,
+          repository: widget.repository,
+        ),
+      ),
+    );
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final plans = _filteredPlans;
@@ -173,6 +186,7 @@ class _MentalHealthContentGovernancePageState
                     onIndicators: _openIndicatorGovernance,
                     onKnowledge: _openKnowledgeBase,
                     onBatches: _openGenerationBatches,
+                    onValidation: _openValidationCenter,
                   ),
                   const SizedBox(height: 18),
                   Text(
@@ -184,7 +198,8 @@ class _MentalHealthContentGovernancePageState
                   ),
                   const SizedBox(height: 5),
                   const Text(
-                    '每项均固定生成题型计划、B0—B4计划和课程证据ID；候选内容按需生成，避免把大批重复文本写入APK。',
+                    '每项均固定生成4类适配题目和B0—B4任务，共3105条版本化蓝图。'
+                    '蓝图在模块首启时写入本地数据库，不把大批重复文本塞进APK。',
                     style: TextStyle(color: Color(0xFF667085), height: 1.45),
                   ),
                   const SizedBox(height: 12),
@@ -759,6 +774,28 @@ class _MentalHealthContentCandidateEditorPageState
     setState(() => _candidate = _candidate.copyWith(quality: value));
   }
 
+  Future<void> _openValidation() async {
+    if (!_candidate.isReadOnly) await _save(showMessage: false);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MentalHealthCandidateValidationPage(
+          candidateId: _candidate.candidateId,
+          repository: widget.repository,
+        ),
+      ),
+    );
+    final updated = await widget.repository.loadContentCandidate(
+      _candidate.candidateId,
+    );
+    if (!mounted || updated == null) return;
+    setState(() {
+      _candidate = updated;
+      _pilotSampleController.text = '${updated.pilotSampleSize}';
+      _pilotNotesController.text = updated.pilotNotes;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final readOnly = _candidate.isReadOnly;
@@ -887,7 +924,7 @@ class _MentalHealthContentCandidateEditorPageState
           const SizedBox(height: 16),
           const _EditorSectionTitle(
             title: '人工门槛',
-            subtitle: '作者、独立审核、认知访谈、小样本试测和签发完整留痕。',
+            subtitle: '状态只由当前内容指纹对应的真实记录计算，不能手工勾选。',
           ),
           const SizedBox(height: 8),
           _EditorField(
@@ -895,67 +932,59 @@ class _MentalHealthContentCandidateEditorPageState
             label: '作者/生成来源',
             enabled: !readOnly,
           ),
+          Card(
+            color: const Color(0xFFEEF4FF),
+            child: ListTile(
+              onTap: _saving ? null : _openValidation,
+              leading: const CircleAvatar(
+                child: Icon(Icons.verified_user_outlined),
+              ),
+              title: const Text(
+                '录入和计算验证证据',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: const Text('专家审核 · 认知访谈 · 试测统计 · 内容指纹校验'),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _candidate.evidenceReviewPassed,
-            onChanged: readOnly
-                ? null
-                : (value) => setState(
-                      () => _candidate = _candidate.copyWith(
-                        evidenceReviewPassed: value,
-                      ),
-                    ),
+            onChanged: null,
             title: const Text('课程证据相关性已独立审核'),
-            subtitle: const Text('不能只因同属一讲就判定高度相关。'),
+            subtitle: const Text('由通过的课程专家记录自动计算。'),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _candidate.constructReviewPassed,
-            onChanged: readOnly
-                ? null
-                : (value) => setState(
-                      () => _candidate = _candidate.copyWith(
-                        constructReviewPassed: value,
-                      ),
-                    ),
+            onChanged: null,
             title: const Text('单一构念与量尺适配已审核'),
-            subtitle: const Text('拒绝双重构念、量尺错配和伪时间窗。'),
+            subtitle: const Text('由独立测量审核记录自动计算。'),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _candidate.cognitiveInterviewPassed,
-            onChanged: readOnly
-                ? null
-                : (value) => setState(
-                      () => _candidate = _candidate.copyWith(
-                        cognitiveInterviewPassed: value,
-                      ),
-                    ),
+            onChanged: null,
             title: const Text('目标用户认知访谈通过'),
-            subtitle: const Text('理解方式符合预期，记录歧义与修改结果。'),
+            subtitle: const Text('由去重后的匿名访谈样本和预设阈值计算。'),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _candidate.pilotPassed,
-            onChanged: readOnly
-                ? null
-                : (value) => setState(
-                      () =>
-                          _candidate = _candidate.copyWith(pilotPassed: value),
-                    ),
+            onChanged: null,
             title: const Text('小样本试测通过'),
-            subtitle: const Text('缺失率、区分度和初步稳定性达到预设标准。'),
+            subtitle: const Text('由缺失、耗时、相关、公平性和报警校准自动计算。'),
           ),
           _EditorField(
             controller: _pilotSampleController,
             label: '试测样本数',
-            enabled: !readOnly,
+            enabled: false,
             keyboardType: TextInputType.number,
           ),
           _EditorField(
             controller: _pilotNotesController,
             label: '试测结果与校准记录',
-            enabled: !readOnly,
+            enabled: false,
             minLines: 2,
           ),
           const SizedBox(height: 16),
@@ -1075,11 +1104,13 @@ class _GovernanceToolbox extends StatelessWidget {
   final VoidCallback onIndicators;
   final VoidCallback onKnowledge;
   final VoidCallback onBatches;
+  final VoidCallback onValidation;
 
   const _GovernanceToolbox({
     required this.onIndicators,
     required this.onKnowledge,
     required this.onBatches,
+    required this.onValidation,
   });
 
   @override
@@ -1109,6 +1140,19 @@ class _GovernanceToolbox extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.w900),
               ),
               subtitle: const Text('持久队列 · 分块继续 · 失败重试 · 不自动发布'),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+            const Divider(height: 1, indent: 72),
+            ListTile(
+              onTap: onValidation,
+              leading: const CircleAvatar(
+                child: Icon(Icons.verified_user_outlined),
+              ),
+              title: const Text(
+                '专家与真实用户验证中心',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: const Text('内容指纹 · 独立评审 · 访谈 · 试测 · 统计门槛'),
               trailing: const Icon(Icons.chevron_right),
             ),
             const Divider(height: 1, indent: 72),
