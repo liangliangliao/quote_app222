@@ -1184,46 +1184,21 @@ class MentalHealthCheckupRepository {
         throw StateError('候选状态已变化，请刷新后重试。');
       }
       if (transition.candidate.stage == CheckupCandidateStage.official) {
-        final locationIds = <String>{
-          ...transition.candidate.evidenceLocationIds,
-          transition.candidate.definitionLocation,
-          transition.candidate.lowLocation,
-          transition.candidate.highLocation,
-          transition.candidate.actionLocation,
-        }..removeWhere((value) => value.trim().isEmpty);
+        final locationIds = transition.candidate.courseEvidenceIds
+            .where((value) => value.trim().isNotEmpty)
+            .toSet();
         if (locationIds.isEmpty) {
-          throw StateError('正式指标没有课程证据位置。');
+          throw StateError('正式内容没有课程证据位置。');
         }
         final locationRows = await txn.query(
           'mh_course_locations',
-          columns: <String>['location_id', 'lecture_no'],
+          columns: <String>['location_id'],
           where: 'location_id IN '
               '(${List<String>.filled(locationIds.length, '?').join(',')})',
           whereArgs: locationIds.toList(growable: false),
         );
         if (locationRows.length != locationIds.length) {
           throw StateError('存在无法在本地课程知识库验证的证据位置ID。');
-        }
-        if (locationRows.any(
-          (row) =>
-              (row['lecture_no'] as num?)?.toInt() !=
-              transition.candidate.lecture,
-        )) {
-          throw StateError('课程证据位置与候选指标讲次不一致。');
-        }
-        final seededIndicatorConflicts = Sqflite.firstIntValue(
-              await txn.rawQuery(
-                '''
-                SELECT COUNT(*)
-                FROM mh_indicators
-                WHERE indicator_id = ?
-                ''',
-                <Object?>[transition.candidate.proposedIndicatorId],
-              ),
-            ) ??
-            0;
-        if (seededIndicatorConflicts > 0) {
-          throw StateError('候选指标ID与内置正式指标冲突。');
         }
         final conflicts = Sqflite.firstIntValue(
               await txn.rawQuery(
@@ -1357,6 +1332,47 @@ class MentalHealthCheckupRepository {
         throw StateError('候选指标状态已变化，请刷新后重试。');
       }
       if (transition.candidate.stage == CheckupCandidateStage.official) {
+        final locationIds = <String>{
+          ...transition.candidate.evidenceLocationIds,
+          transition.candidate.definitionLocation,
+          transition.candidate.lowLocation,
+          transition.candidate.highLocation,
+          transition.candidate.actionLocation,
+        }..removeWhere((value) => value.trim().isEmpty);
+        if (locationIds.isEmpty) {
+          throw StateError('正式指标没有课程证据位置。');
+        }
+        final locationRows = await txn.query(
+          'mh_course_locations',
+          columns: <String>['location_id', 'lecture_no'],
+          where: 'location_id IN '
+              '(${List<String>.filled(locationIds.length, '?').join(',')})',
+          whereArgs: locationIds.toList(growable: false),
+        );
+        if (locationRows.length != locationIds.length) {
+          throw StateError('存在无法在本地课程知识库验证的证据位置ID。');
+        }
+        if (locationRows.any(
+          (row) =>
+              (row['lecture_no'] as num?)?.toInt() !=
+              transition.candidate.lecture,
+        )) {
+          throw StateError('课程证据位置与候选指标讲次不一致。');
+        }
+        final seededIndicatorConflicts = Sqflite.firstIntValue(
+              await txn.rawQuery(
+                '''
+                SELECT COUNT(*)
+                FROM mh_indicators
+                WHERE indicator_id = ?
+                ''',
+                <Object?>[transition.candidate.proposedIndicatorId],
+              ),
+            ) ??
+            0;
+        if (seededIndicatorConflicts > 0) {
+          throw StateError('候选指标ID与内置正式指标冲突。');
+        }
         final conflicts = Sqflite.firstIntValue(
               await txn.rawQuery(
                 '''
