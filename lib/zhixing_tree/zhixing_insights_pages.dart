@@ -441,7 +441,7 @@ class _ZhixingDataSettingsPageState extends State<ZhixingDataSettingsPage> {
                   children: <Widget>[
                     SwitchListTile(
                       value: game.dormant,
-                      activeColor: const Color(0xFF247A57),
+                      activeThumbColor: const Color(0xFF247A57),
                       secondary: const Icon(Icons.ac_unit_rounded),
                       title: const Text('主动休眠保护', style: TextStyle(fontWeight: FontWeight.w700)),
                       subtitle: const Text('疾病、危机、长期暂停或主动恢复时，树木停止衰退，不把休息当作失败。'),

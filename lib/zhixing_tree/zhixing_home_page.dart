@@ -392,7 +392,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(.78),
+                          color: Colors.white.withValues(alpha: .78),
                           borderRadius: BorderRadius.circular(99),
                         ),
                         child: Text(
@@ -463,7 +463,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage> {
                   child: LinearProgressIndicator(
                     value: progress,
                     minHeight: 8,
-                    backgroundColor: Colors.white.withOpacity(.75),
+                    backgroundColor: Colors.white.withValues(alpha: .75),
                     color: _green,
                   ),
                 ),
@@ -538,7 +538,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                     decoration: BoxDecoration(
-                      color: _green.withOpacity(.1),
+                      color: _green.withValues(alpha: .1),
                       borderRadius: BorderRadius.circular(99),
                     ),
                     child: Text(
@@ -848,7 +848,7 @@ class ZhixingTreePainter extends CustomPainter {
     final sun = Paint()..color = const Color(0x55F5C451);
     canvas.drawCircle(Offset(size.width * .82, size.height * .2), 30, sun);
 
-    final cloud = Paint()..color = Colors.white.withOpacity(.38);
+    final cloud = Paint()..color = Colors.white.withValues(alpha: .38);
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(size.width * .32, size.height * .22),
@@ -858,7 +858,7 @@ class ZhixingTreePainter extends CustomPainter {
       cloud,
     );
 
-    final soil = Paint()..color = const Color(0xFFB8996B).withOpacity(.42);
+    final soil = Paint()..color = const Color(0xFFB8996B).withValues(alpha: .42);
     canvas.drawOval(
       Rect.fromCenter(center: Offset(center.dx, center.dy + 9), width: size.width * .58, height: 30),
       soil,
@@ -934,7 +934,8 @@ class ZhixingTreePainter extends CustomPainter {
       }
     }
 
-    final leafPaint = Paint()..color = leafColor.withOpacity(condition == 'withered' ? .68 : .92);
+    final leafPaint = Paint()
+      ..color = leafColor.withValues(alpha: condition == 'withered' ? .68 : .92);
     final leafCount = math.max(2, ((index * 8 + 2) * math.max(.25, leafHealth)).round());
     final crownWidth = 27.0 + index * 13;
     final crownHeight = 24.0 + index * 8;
@@ -948,14 +949,18 @@ class ZhixingTreePainter extends CustomPainter {
       canvas.translate(point.dx, point.dy);
       canvas.rotate(angle);
       canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: 13 + index, height: 7 + index * .45),
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: (13 + index).toDouble(),
+          height: 7 + index * .45,
+        ),
         leafPaint,
       );
       canvas.restore();
     }
 
     if (condition == 'withered') {
-      final fallen = Paint()..color = const Color(0xFFB38346).withOpacity(.72);
+      final fallen = Paint()..color = const Color(0xFFB38346).withValues(alpha: .72);
       for (var i = 0; i < 6; i++) {
         final x = center.dx - 52 + i * 20.0;
         canvas.drawOval(
@@ -1008,7 +1013,7 @@ class _MiniPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(.8),
+        color: Colors.white.withValues(alpha: .8),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Row(
@@ -1041,7 +1046,7 @@ class _ResourceButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color.withOpacity(.09),
+      color: color.withValues(alpha: .09),
       borderRadius: BorderRadius.circular(15),
       child: InkWell(
         onTap: onTap,
@@ -1057,7 +1062,10 @@ class _ResourceButton extends StatelessWidget {
                 style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 2),
-              Text('点击养护', style: TextStyle(color: color.withOpacity(.8), fontSize: 10)),
+              Text(
+                '点击养护',
+                style: TextStyle(color: color.withValues(alpha: .8), fontSize: 10),
+              ),
             ],
           ),
         ),
@@ -1125,7 +1133,7 @@ class _ShopTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(.11),
+          backgroundColor: color.withValues(alpha: .11),
           child: Icon(icon, color: color),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),

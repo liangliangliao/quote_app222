@@ -849,7 +849,7 @@ class _StuckTile extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: color.withOpacity(.12),
+            color: color.withValues(alpha: .12),
             borderRadius: BorderRadius.circular(13),
           ),
           child: Icon(icon, color: color),
@@ -891,7 +891,7 @@ class _ActionField extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: color.withOpacity(.11),
+              color: color.withValues(alpha: .11),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 21),
@@ -979,7 +979,7 @@ class _Tag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(.1),
+        color: color.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text(
