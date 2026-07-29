@@ -39,6 +39,7 @@ import '../diary/notebook_list_page.dart';
 import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
+import '../zhixing_tree/zhixing_home_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2549,6 +2550,18 @@ Widget _buildEmotionPieChart() {
                       icon: Icons.edit_note_outlined,
                       title: '写日记',
                       onTap: _openDiaryFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildDiscoverEntry(
+                      icon: Icons.park_outlined,
+                      title: '知行树 · 智能行动成长',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute(
+                            builder: (_) => const ZhixingTreeHomePage(),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     // 改变 · 心理自助入口
