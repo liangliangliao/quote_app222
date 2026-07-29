@@ -85,7 +85,7 @@ void main() {
   test('explicit boundary request routes to stop-loss', () {
     final item = engine.generateLocal(
       diagnosis: diagnosis(
-        problem: '我需要对一项持续侵占休息时间的不合理要求明确拒绝，并设下边界。',
+        problem: '我需要对一项持续侵占我时间的不合理要求明确拒绝，并设下边界。',
         barrier: 'environment',
       ),
       profile: profile,
