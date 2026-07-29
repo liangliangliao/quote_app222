@@ -136,7 +136,11 @@ class _ZhixingActionPageState extends State<ZhixingActionPage> {
       if (completed) {
         final reward = await widget.repository.completeAction(_action, evidence);
         if (!mounted) return;
-        await _showReward(reward);
+        if (_action.isSafetyRoute) {
+          await _showSafetyRecorded();
+        } else {
+          await _showReward(reward);
+        }
       } else {
         await widget.repository.recalibrateAction(_action, evidence);
         if (!mounted) return;
@@ -208,6 +212,32 @@ class _ZhixingActionPageState extends State<ZhixingActionPage> {
             style: FilledButton.styleFrom(backgroundColor: _green),
             onPressed: () => Navigator.pop(context),
             child: const Text('看看知行树'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSafetyRecorded() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.health_and_safety_outlined,
+          color: Color(0xFFB54B4B),
+          size: 38,
+        ),
+        title: const Text('已经连接到现实支持'),
+        content: const Text(
+          '这条联系记录已保存，但不会进入经验、金币或树木成长结算。请继续遵循真实支持人员给出的安全安排。',
+          style: TextStyle(height: 1.55),
+        ),
+        actions: <Widget>[
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB54B4B)),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
           ),
         ],
       ),
@@ -713,7 +743,9 @@ class _FeedbackSheetState extends State<_FeedbackSheet> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: Text(
-                  widget.completed ? '保存证据并领取奖励' : '保存校准，不扣奖励',
+                  widget.completed
+                      ? (widget.action.isSafetyRoute ? '保存联系记录' : '保存证据并领取奖励')
+                      : '保存校准，不扣奖励',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),

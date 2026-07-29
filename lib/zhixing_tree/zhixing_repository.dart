@@ -296,6 +296,24 @@ class ZhixingRepository {
       await _upsertAction(txn, completed);
       await _upsertEvidence(txn, evidence);
 
+      if (completed.isSafetyRoute) {
+        await txn.update(
+          'zhixing_match_history',
+          <String, Object?>{
+            'user_fit': evidence.fit,
+            'completed': 1,
+          },
+          where: 'prescription_id = ?',
+          whereArgs: <Object?>[completed.id],
+        );
+        return ZhixingRewardResult(
+          game: game,
+          grantedXp: 0,
+          grantedCoins: 0,
+          returnBonus: false,
+        );
+      }
+
       final profile = await _loadProfile(txn);
       final nextProfile = engine.profileAfterEvidence(profile, completed, evidence);
       await _saveState(txn, 'profile', nextProfile.encode());
@@ -368,12 +386,14 @@ class ZhixingRepository {
       );
       await _upsertAction(txn, updated);
       await _upsertEvidence(txn, evidence);
-      final profile = await _loadProfile(txn);
-      await _saveState(
-        txn,
-        'profile',
-        engine.profileAfterEvidence(profile, updated, evidence).encode(),
-      );
+      if (!updated.isSafetyRoute) {
+        final profile = await _loadProfile(txn);
+        await _saveState(
+          txn,
+          'profile',
+          engine.profileAfterEvidence(profile, updated, evidence).encode(),
+        );
+      }
       await txn.update(
         'zhixing_match_history',
         <String, Object?>{

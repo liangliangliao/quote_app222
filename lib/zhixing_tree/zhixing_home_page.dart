@@ -913,7 +913,7 @@ class ZhixingTreePainter extends CustomPainter {
 
     if (index >= 2) {
       final branchCount = index + 1;
-      trunk.strokeWidth = math.max(3, index * 1.5);
+      trunk.strokeWidth = math.max(3, index * 1.5).toDouble();
       for (var i = 0; i < branchCount; i++) {
         final side = i.isEven ? -1.0 : 1.0;
         final y = center.dy - height * (.32 + i * .09);
