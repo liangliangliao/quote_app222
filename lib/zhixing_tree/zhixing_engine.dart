@@ -106,7 +106,20 @@ class ZhixingEngine {
 
   ZhixingChallengeType selectChallenge(ZhixingDiagnosis diagnosis) {
     final text = diagnosis.problem;
-    if (_containsAny(text, const <String>['停止', '止损', '沉没成本', '边界', '拒绝', '伤害性'])) {
+    if (_containsAny(
+      text,
+      const <String>[
+        '停止',
+        '止损',
+        '沉没成本',
+        '边界',
+        '说不',
+        '拒绝继续',
+        '拒绝不合理',
+        '明确拒绝',
+        '伤害性',
+      ],
+    )) {
       return ZhixingChallengeType.stopLoss;
     }
     if (_containsAny(text, const <String>['团队', '协作', '合作', '同事', '伴侣', '请求帮助', '一个人无法'])) {

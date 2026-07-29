@@ -82,6 +82,19 @@ void main() {
     expect(item.action, contains('继续、修改或暂停'));
   });
 
+  test('explicit boundary request routes to stop-loss', () {
+    final item = engine.generateLocal(
+      diagnosis: diagnosis(
+        problem: '我需要对一项持续伤害自己的不合理要求明确拒绝，并设下边界。',
+        barrier: 'environment',
+      ),
+      profile: profile,
+    );
+
+    expect(item.challengeType, ZhixingChallengeType.stopLoss);
+    expect(item.action, contains('停止条件或边界'));
+  });
+
   test('crisis language bypasses ordinary challenge and rewards', () {
     final item = engine.generateLocal(
       diagnosis: diagnosis(
