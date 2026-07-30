@@ -2623,7 +2623,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               _labelValue('规则版本', info.ruleVersion),
               _labelValue('审阅状态', info.reviewStatus),
               _labelValue('来源数量', '${info.sourceCount}部作品'),
-              _labelValue('行动思想', '${_knowledge.lenses.length}套完整思想方案'),
+              _labelValue(
+                '完整思想体系',
+                '${ZxThinkerCatalog.guides.length}套作者/理论整合体系',
+              ),
+              _labelValue(
+                '作品级机制',
+                '${_knowledge.lenses.length}个机制镜头（保留原始证据分工）',
+              ),
               _labelValue(
                 'SHA-256',
                 '${info.actualSha256.substring(0, 16)}… · '
