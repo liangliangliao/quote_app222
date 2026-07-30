@@ -1811,6 +1811,39 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     });
   }
 
+  Future<void> _selectSystemsTogether(
+    Iterable<ZxThinkerGuide> systems,
+  ) async {
+    final requiredSystems = systems.toSet();
+    final requiredTokens =
+        requiredSystems.map((system) => system.primaryLensId).toSet();
+    final next = <String>{..._selectedLensIds, ...requiredTokens};
+    while (next.length > 3) {
+      final removable = next.firstWhere(
+        (token) => !requiredTokens.contains(token),
+        orElse: () => next.first,
+      );
+      next.remove(removable);
+    }
+    final enabledLensIds =
+        requiredSystems.expand((system) => system.lensIds).toSet();
+    final disabled = <String>{..._disabledLenses}
+      ..removeAll(enabledLensIds);
+    await _dao.setSelectedLenses(next);
+    if (!setEquals(disabled, _disabledLenses)) {
+      await _dao.setDisabledLenses(disabled);
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedLensIds = next;
+      _disabledLenses = disabled;
+      _diagnosis = null;
+      _match = null;
+      _prescription = null;
+    });
+    _snack('已融合${requiredSystems.map((item) => item.thinker).join('与')}的思想体系。');
+  }
+
   Future<void> _showThoughtRelationship(
     ZxThinkerGuide first,
     ZxThinkerGuide second,
@@ -1871,13 +1904,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           FilledButton(
             onPressed: () async {
               Navigator.pop(context);
-              if (!_selectedLensIds.contains(first.primaryLensId)) {
-                await _toggleSelectedSystem(first);
-              }
-              if (mounted &&
-                  !_selectedLensIds.contains(second.primaryLensId)) {
-                await _toggleSelectedSystem(second);
-              }
+              await _selectSystemsTogether(<ZxThinkerGuide>[first, second]);
             },
             child: const Text('融合这两套思想'),
           ),
