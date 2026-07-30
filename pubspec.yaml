@@ -81,3 +81,5 @@ flutter:
     - assets/yangming_module/mission_state_machines.json
     - assets/yangming_module/zhixing15_content.txt
     - assets/yangming_module/lizhi12_content.txt
+    - assets/zhixing_tree/knowledge_manifest_v1_2.json
+    - assets/zhixing_tree/knowledge_v1_2.md
