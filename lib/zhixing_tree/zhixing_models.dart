@@ -750,7 +750,7 @@ class ZxActionPrescription {
             lowerLoadAlternative ?? this.lowerLoadAlternative,
         challengeAlternative: challengeAlternative ?? this.challengeAlternative,
         cue: cue,
-        response: response,
+        response: mainAction ?? this.response,
         supportChanges: supportChanges,
         stopConditions: stopConditions,
         proofOptions: proofOptions,
