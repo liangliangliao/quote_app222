@@ -36,27 +36,88 @@ void main() {
       expect(repository.search('BCW-P0064-B010'), isNotEmpty);
     });
 
-    test('shows every reviewed thought in a complete ordered decision guide',
+    test(
+        'groups 22 reviewed lenses into 17 complete systems on a Yangming-led evolution path',
         () async {
       final repository = ZxKnowledgeRepository();
       await repository.load();
 
-      expect(ZxThinkerCatalog.guides, hasLength(22));
+      expect(ZxThinkerCatalog.guides, hasLength(17));
       expect(
         ZxThinkerCatalog.guides.map((item) => item.sequence),
-        orderedEquals(List<int>.generate(22, (index) => index + 1)),
+        orderedEquals(List<int>.generate(17, (index) => index + 1)),
+      );
+      expect(
+        ZxThinkerCatalog.guides.first.systemId,
+        ZxThinkerCatalog.yangmingSystemId,
+      );
+      expect(
+        ZxThinkerCatalog.guides.take(5).map((item) => item.systemId),
+        orderedEquals(<String>[
+          'yangming',
+          'william_james',
+          'beck_cognitive_therapy',
+          'ellis_rebt',
+          'laozi',
+        ]),
       );
       expect(
         ZxThinkerCatalog.validateAgainst(repository.lenses),
         isEmpty,
       );
+      expect(
+        ZxThinkerCatalog.guides.expand((item) => item.lensIds),
+        unorderedEquals(repository.lenses.map((item) => item.id)),
+      );
       for (final guide in ZxThinkerCatalog.guides) {
-        expect(guide.coreValues, isNotEmpty);
-        expect(guide.coreIdeas, isNotEmpty);
+        expect(guide.coreValues.length, greaterThanOrEqualTo(4));
+        expect(guide.coreIdeas.length, greaterThanOrEqualTo(4));
+        expect(guide.knowledgeView, isNotEmpty);
+        expect(guide.actionView, isNotEmpty);
+        expect(guide.splitDiagnosis, isNotEmpty);
+        expect(guide.transformationPath, isNotEmpty);
+        expect(guide.actionFeedback, isNotEmpty);
+        expect(guide.yangmingConnection, isNotEmpty);
+        expect(guide.inheritedLimit, isNotEmpty);
+        expect(guide.qualitativeLeap, isNotEmpty);
+        expect(guide.synthesisOutcome, isNotEmpty);
+        expect(guide.workSynthesis, isNotEmpty);
         expect(guide.distinctiveFocus, isNotEmpty);
         expect(guide.decisionCue, isNotEmpty);
-        expect(guide.relatedLensIds, isNotEmpty);
+        expect(guide.relatedSystemIds, isNotEmpty);
+        if (guide.sequence > 1) {
+          expect(guide.buildsOnSystemIds, isNotEmpty);
+        }
       }
+      expect(
+        ZxThinkerCatalog.guideForSystem('nietzsche')!.lensIds,
+        unorderedEquals(<String>[
+          'NZ_SELF_OVERCOMING',
+          'NGS_STYLE',
+          'NBG_WILL_COMPLEXITY',
+          'NGM_GENEALOGY',
+        ]),
+      );
+      expect(
+        ZxThinkerCatalog.guideForSystem('dewey')!.lensIds,
+        hasLength(2),
+      );
+      expect(
+        ZxThinkerCatalog.guideForSystem('bandura')!.lensIds,
+        hasLength(2),
+      );
+      expect(
+        ZxThinkerCatalog.normalizeSelectionTokens(<String>[
+          'NGS_STYLE',
+          'NBG_WILL_COMPLEXITY',
+          'NZ_SELF_OVERCOMING',
+          'DHC_HABIT_ENVIRONMENT',
+        ]),
+        unorderedEquals(<String>[
+          'NZ_SELF_OVERCOMING',
+          'DHT_REFLECTIVE_INQUIRY',
+        ]),
+      );
     });
   });
 

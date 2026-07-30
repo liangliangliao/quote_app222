@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -62,6 +63,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Map<String, String> _providerState = const <String, String>{};
   Map<String, double> _lensHistory = const <String, double>{};
   Set<String> _disabledLenses = <String>{};
+  // Persisted values are representative lens ids, one token per integrated
+  // thought system. A selected system may expose several mechanism lenses to
+  // the matcher (for example Nietzsche, Dewey and Bandura).
   Set<String> _selectedLensIds = <String>{};
   bool _personalizationEnabled = true;
   bool _safetyExpanded = false;
@@ -95,7 +99,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   String _knowledgeSource = '';
   List<ZxKnowledgeSearchResult> _searchResults =
       const <ZxKnowledgeSearchResult>[];
-  final Set<String> _compareLensIds = <String>{};
+  final Set<String> _compareSystemIds = <String>{};
   String _challengeDimension = '';
   ZxDifficulty? _challengeDifficulty;
 
@@ -105,6 +109,28 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     _tabs = TabController(length: 6, vsync: this);
     _challenges = _challengeFactory.buildAll();
     _initialize();
+  }
+
+  List<ZxThinkerGuide> get _selectedSystems => _selectedLensIds
+      .map(ZxThinkerCatalog.guideFor)
+      .whereType<ZxThinkerGuide>()
+      .toList(growable: false);
+
+  List<ZxThinkerLens> _lensesForSystem(ZxThinkerGuide guide) =>
+      ZxThinkerCatalog.lensesFor(
+        guide,
+        _knowledge.lenses,
+        disabledLensIds: _disabledLenses,
+      );
+
+  ZxThinkerGuide? _systemForLens(String lensId) =>
+      ZxThinkerCatalog.guideFor(lensId);
+
+  String _systemLabelForLens(ZxThinkerLens lens) {
+    final system = _systemForLens(lens.id);
+    if (system == null) return '${lens.thinker} · ${lens.name}';
+    if (system.lensIds.length == 1) return system.displayName;
+    return '${system.displayName} · 当前镜头：${lens.name}';
   }
 
   @override
@@ -146,6 +172,18 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       final disabled = await _dao.disabledLenses();
       final selected = await _dao.selectedLenses();
       final personalization = await _dao.personalizationEnabled();
+      final normalizedSelected =
+          ZxThinkerCatalog.normalizeSelectionTokens(selected)
+              .where((token) {
+                final system = ZxThinkerCatalog.guideFor(token);
+                return system != null &&
+                    system.lensIds.any((id) => !disabled.contains(id));
+              })
+              .take(3)
+              .toSet();
+      if (!setEquals(selected, normalizedSelected)) {
+        await _dao.setSelectedLenses(normalizedSelected);
+      }
       if (!mounted) return;
       setState(() {
         _tree = tree;
@@ -154,14 +192,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _providerState = provider;
         _lensHistory = history;
         _disabledLenses = disabled;
-        _selectedLensIds = selected
-            .where(
-              (id) =>
-                  _knowledge.lensById(id) != null &&
-                  !disabled.contains(id),
-            )
-            .take(3)
-            .toSet();
+        _selectedLensIds = normalizedSelected;
         _personalizationEnabled = personalization;
         _searchResults = _knowledge.search('');
         _loading = false;
@@ -340,9 +371,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   Widget _buildPrescriptionPage() {
-    final selectedLenses = _selectedLensIds
-        .map(_knowledge.lensById)
-        .whereType<ZxThinkerLens>()
+    final selectedSystems = _selectedSystems;
+    final selectedLenses = selectedSystems
+        .expand(_lensesForSystem)
         .toList(growable: false);
     final quickActions = selectedLenses
         .expand((lens) => lens.actionTemplates)
@@ -358,17 +389,19 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (selectedLenses.isEmpty)
+              if (selectedSystems.isEmpty)
                 _statusBanner(
                   '尚未选择行动思想',
-                  '可以先从全部22套思想中自主选择；也可直接生成，由系统给出推荐供你决定。',
+                  '可以先从17套完整思想体系中自主选择；也可直接生成，由系统给出推荐供你决定。',
                   Colors.orange.shade800,
                 )
               else
                 _statusBanner(
-                  selectedLenses.length == 1 ? '单一思想指导' : '融合思想指导',
-                  selectedLenses
-                      .map((lens) => '${lens.thinker} · ${lens.name}')
+                  selectedSystems.length == 1
+                      ? '单一思想体系指导'
+                      : '融合思想体系指导',
+                  selectedSystems
+                      .map((system) => system.displayName)
                       .join('  +  '),
                   _green,
                 ),
@@ -379,7 +412,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   onPressed: () => _tabs.animateTo(1),
                   icon: const Icon(Icons.account_tree_outlined),
                   label: Text(
-                    selectedLenses.isEmpty ? '先看懂并选择思想' : '修改所选思想',
+                    selectedSystems.isEmpty ? '先看懂并选择思想' : '修改所选思想',
                   ),
                 ),
               ),
@@ -505,9 +538,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     ZxMatchResult? match;
     ZxActionPrescription? prescription;
     if (diagnosis.safety.actionAllowed) {
-      final manuallySelected = _selectedLensIds
-          .map(_knowledge.lensById)
-          .whereType<ZxThinkerLens>()
+      final selectedSystems = _selectedSystems;
+      final manuallySelected = selectedSystems
+          .expand(_lensesForSystem)
           .toList(growable: false);
       final matched = _matcher.match(
         input: input,
@@ -518,25 +551,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             _personalizationEnabled ? _lensHistory : const <String, double>{},
         disabledLensIds: _disabledLenses,
       );
-      match = matched;
-      if (manuallySelected.length > 1 && matched.complementary == null) {
-        final complementary = manuallySelected.firstWhere(
-          (lens) => lens.id != matched.primary.id,
-        );
-        match = ZxMatchResult(
-          primary: matched.primary,
-          complementary: complementary,
-          ranking: matched.ranking,
-          lowMatch: matched.lowMatch,
-          lowMatchReason: matched.lowMatchReason,
-          uncertainty: matched.uncertainty,
-          conflictNotes: <String>[
-            ...matched.conflictNotes,
-            ...complementary.tensionLinks.take(1),
-          ].toSet().take(3).toList(growable: false),
-          createdAtMs: matched.createdAtMs,
-        );
-      }
+      match = _alignMatchToThoughtSystems(matched, selectedSystems);
       prescription = _actionGenerator.generate(
         input: input,
         diagnosis: diagnosis,
@@ -550,6 +565,63 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       _prescription = prescription;
       _selectedDifficulty = diagnosis.suggestedDifficulty;
     });
+  }
+
+  ZxMatchResult _alignMatchToThoughtSystems(
+    ZxMatchResult matched,
+    List<ZxThinkerGuide> selectedSystems,
+  ) {
+    final primarySystem = _systemForLens(matched.primary.id);
+    final selectedSystemIds =
+        selectedSystems.map((item) => item.systemId).toSet();
+
+    bool isAllowedComplement(ZxThinkerLens lens) {
+      final system = _systemForLens(lens.id);
+      if (system == null || system.systemId == primarySystem?.systemId) {
+        return false;
+      }
+      return selectedSystemIds.isEmpty ||
+          selectedSystemIds.contains(system.systemId);
+    }
+
+    ZxThinkerLens? complementary;
+    if (selectedSystems.length != 1) {
+      final existing = matched.complementary;
+      if (existing != null && isAllowedComplement(existing)) {
+        complementary = existing;
+      } else {
+        for (final score in matched.ranking) {
+          if (score.disqualified || score.total < 0.4) continue;
+          final lens = _knowledge.lensById(score.lensId);
+          if (lens != null && isAllowedComplement(lens)) {
+            complementary = lens;
+            break;
+          }
+        }
+      }
+    }
+
+    final primarySystemTensions =
+        primarySystem?.tensions.take(1) ?? const <String>[];
+    final complementarySystemTensions =
+        _systemForLens(complementary?.id ?? '')?.tensions.take(1) ??
+            const <String>[];
+    return ZxMatchResult(
+      primary: matched.primary,
+      complementary: complementary,
+      ranking: matched.ranking,
+      lowMatch: matched.lowMatch,
+      lowMatchReason: matched.lowMatchReason,
+      uncertainty: matched.uncertainty,
+      conflictNotes: <String>[
+        ...matched.primary.tensionLinks.take(1),
+        ...primarySystemTensions,
+        if (complementary != null)
+          ...complementary.tensionLinks.take(1),
+        ...complementarySystemTensions,
+      ].toSet().take(3).toList(growable: false),
+      createdAtMs: matched.createdAtMs,
+    );
   }
 
   ZxSituationInput _buildSituationInput() {
@@ -642,9 +714,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           _statusBanner(
             match.complementary == null ? '本次指导思想' : '本次融合思想',
             <String>[
-              '${match.primary.thinker} · ${match.primary.name}',
+              _systemLabelForLens(match.primary),
               if (match.complementary != null)
-                '${match.complementary!.thinker} · ${match.complementary!.name}',
+                _systemLabelForLens(match.complementary!),
             ].join('  +  '),
             _green,
           ),
@@ -910,7 +982,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             Text(action.mainAction),
             const SizedBox(height: 8),
             Text(
-              '指导思想：${lens?.thinker ?? action.primaryLensId}',
+              '指导思想：${lens == null ? action.primaryLensId : _systemLabelForLens(lens)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 10),
@@ -940,17 +1012,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     var completion = ZxCompletionStatus.completed;
     var difficultyFit = '合适';
     var thoughtDecision = 'continue';
+    final currentSystem = _systemForLens(action.primaryLensId);
     final alternatives = ZxThinkerCatalog.guides
-        .map((guide) => _knowledge.lensById(guide.lensId))
-        .whereType<ZxThinkerLens>()
-        .where(
-          (lens) =>
-              lens.id != action.primaryLensId &&
-              !_disabledLenses.contains(lens.id),
-        )
+        .where((guide) => guide.systemId != currentSystem?.systemId)
+        .where((guide) => _lensesForSystem(guide).isNotEmpty)
         .toList(growable: false);
     var alternativeLensId =
-        alternatives.isEmpty ? '' : alternatives.first.id;
+        alternatives.isEmpty ? '' : alternatives.first.primaryLensId;
     final insight = TextEditingController();
     final nextAction = TextEditingController();
     final review = await showDialog<ZxReviewInput>(
@@ -1059,9 +1127,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                       ),
                       items: alternatives
                           .map(
-                            (lens) => DropdownMenuItem<String>(
-                              value: lens.id,
-                              child: Text('${lens.thinker} · ${lens.name}'),
+                            (system) => DropdownMenuItem<String>(
+                              value: system.primaryLensId,
+                              child: Text(system.displayName),
                             ),
                           )
                           .toList(growable: false),
@@ -1146,6 +1214,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         decisionParts.isEmpty ? 'continue' : decisionParts.first;
     final alternativeId =
         decisionParts.length < 2 ? '' : decisionParts[1];
+    final currentSelectionToken =
+        currentSystem?.primaryLensId ?? action.primaryLensId;
     final nextSelected = <String>{..._selectedLensIds};
     if (decision == 'switch' && alternativeId.isNotEmpty) {
       nextSelected
@@ -1153,20 +1223,25 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         ..add(alternativeId);
     } else if (decision == 'blend' && alternativeId.isNotEmpty) {
       nextSelected
-        ..add(action.primaryLensId)
+        ..add(currentSelectionToken)
         ..add(alternativeId);
       while (nextSelected.length > 3) {
         final removable = nextSelected.firstWhere(
-          (id) => id != action.primaryLensId && id != alternativeId,
+          (id) => id != currentSelectionToken && id != alternativeId,
           orElse: () => nextSelected.first,
         );
         nextSelected.remove(removable);
       }
     } else if (nextSelected.isEmpty) {
-      nextSelected.add(action.primaryLensId);
+      nextSelected.add(currentSelectionToken);
     }
+    final selectedSystemLensIds = nextSelected
+        .map(ZxThinkerCatalog.guideFor)
+        .whereType<ZxThinkerGuide>()
+        .expand((system) => system.lensIds)
+        .toSet();
     final nextDisabled = <String>{..._disabledLenses}
-      ..removeAll(nextSelected);
+      ..removeAll(selectedSystemLensIds);
     await _dao.recordLensFeedback(
       action.primaryLensId,
       decision == 'switch'
@@ -1185,9 +1260,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     await _refreshLocalState();
     if (!mounted) return;
     final selectedNames = nextSelected
-        .map(_knowledge.lensById)
-        .whereType<ZxThinkerLens>()
-        .map((lens) => '${lens.thinker} · ${lens.name}')
+        .map(ZxThinkerCatalog.guideFor)
+        .whereType<ZxThinkerGuide>()
+        .map((system) => system.displayName)
         .join(' + ');
     setState(() {
       _working = false;
@@ -1233,16 +1308,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   Widget _buildKnowledgePage() {
-    final selected = _selectedLensIds
-        .map(_knowledge.lensById)
-        .whereType<ZxThinkerLens>()
-        .toList(growable: false);
+    final selected = _selectedSystems;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
       children: <Widget>[
         _sectionCard(
-          title: '先看懂，再自主选择',
-          subtitle: '22套思想全部依次展示。系统不替你决定，最多可选择3套进行融合。',
+          title: '以王阳明为主干，逐层推进知行合一',
+          subtitle:
+              '22部作品保留为证据，整合成17套思想体系。每次引入都说明上一层的缺口、本次质变和融合后的新能力。',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -1259,11 +1332,11 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   runSpacing: 7,
                   children: selected
                       .map(
-                        (lens) => InputChip(
+                        (system) => InputChip(
                           avatar:
                               const Icon(Icons.check_circle_outline, size: 17),
-                          label: Text('${lens.thinker} · ${lens.name}'),
-                          onDeleted: () => _toggleSelectedLens(lens),
+                          label: Text(system.displayName),
+                          onDeleted: () => _toggleSelectedSystem(system),
                         ),
                       )
                       .toList(growable: false),
@@ -1283,19 +1356,29 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         ),
         const SizedBox(height: 12),
         _sectionCard(
-          title: '它们共同相信什么？',
-          subtitle: '共同底座不等于观点相同；真正差异在于从哪里切入行动。',
+          title: '它们怎样共同推进知行合一？',
+          subtitle:
+              '相得益彰不等于观点完全相同：共同主线被保留，真实差异和张力也必须公开。',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               ...ZxThinkerCatalog.commonGround.map(_bullet),
+              const Divider(height: 24),
+              _labelValue(
+                '三种“知”',
+                '规范性知：什么值得；解释性知：为何没做；程序性知：下一次怎样做。',
+              ),
+              _labelValue(
+                '三种“行”',
+                '启动行为；持续、修正与恢复行为；长期形成能力、关系、价值风格与贡献的生成性行动。',
+              ),
               const Divider(height: 24),
               const Text(
                 '按当前卡点快速决策',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 7),
-              ...ZxThinkerCatalog.categoryGuidance.entries.map(
+              ...ZxThinkerCatalog.decisionRoutes.entries.map(
                 (entry) => ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -1312,7 +1395,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           children: <Widget>[
             const Expanded(
               child: Text(
-                '全部22套思想',
+                '知行合一的17次认知与行动升级',
                 style: TextStyle(
                   color: _ink,
                   fontSize: 20,
@@ -1321,20 +1404,29 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               ),
             ),
             Badge(
-              label: Text('${_compareLensIds.length}/2'),
+              label: Text('${_compareSystemIds.length}/2'),
               child: IconButton.filledTonal(
                 tooltip: '对照两套思想',
                 onPressed:
-                    _compareLensIds.length == 2 ? _compareLenses : null,
+                    _compareSystemIds.length == 2 ? _compareSystems : null,
                 icon: const Icon(Icons.compare_arrows),
               ),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        const Text('按知识库顺序完整展示；核心价值、核心思想、独特之处、共同点与关联均可直接查看。'),
+        const Text(
+          '从王阳明总纲开始，后续体系依次补足心理机制、认知检验、柔韧行动、主体性、能力、环境、反馈和工程落地。',
+        ),
         const SizedBox(height: 10),
-        ...ZxThinkerCatalog.guides.map(_buildThinkerGuideCard),
+        ...ZxThinkerCatalog.evolutionStageGuidance.entries.expand(
+          (entry) => <Widget>[
+            _buildEvolutionStageHeader(entry.key, entry.value),
+            ...ZxThinkerCatalog.guides
+                .where((guide) => guide.evolutionStage == entry.key)
+                .map(_buildThinkerGuideCard),
+          ],
+        ),
         const SizedBox(height: 12),
         _sectionCard(
           title: '查找原始知识与证据',
@@ -1422,12 +1514,76 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     );
   }
 
+  Widget _buildEvolutionStageHeader(String title, String body) => Padding(
+        padding: const EdgeInsets.fromLTRB(2, 14, 2, 10),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _ink,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  body,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
   Widget _buildThinkerGuideCard(ZxThinkerGuide guide) {
-    final lens = _knowledge.lensById(guide.lensId)!;
-    final work = _knowledge.workBySourceId(lens.sourceId);
-    final selected = _selectedLensIds.contains(lens.id);
-    final comparing = _compareLensIds.contains(lens.id);
+    final lenses =
+        ZxThinkerCatalog.lensesFor(guide, _knowledge.lenses);
+    final availableLenses = _lensesForSystem(guide);
+    final works = lenses
+        .map((lens) => _knowledge.workBySourceId(lens.sourceId))
+        .whereType<ZxWork>()
+        .toList(growable: false);
+    final selected = _selectedLensIds.contains(guide.primaryLensId);
+    final comparing = _compareSystemIds.contains(guide.systemId);
     final related = ZxThinkerCatalog.relatedTo(guide);
+    final buildsOn = guide.buildsOnSystemIds
+        .map(ZxThinkerCatalog.guideForSystem)
+        .whereType<ZxThinkerGuide>()
+        .map((item) => item.displayName)
+        .join(' → ');
+    final actionTemplates = lenses
+        .expand((lens) => lens.actionTemplates)
+        .toSet()
+        .toList(growable: false);
+    final evidenceLocators = lenses
+        .expand((lens) => lens.evidenceLinks)
+        .toSet()
+        .toList(growable: false);
+    final tensionNotes = <String>[
+      ...guide.tensions,
+      ...lenses.expand((lens) => lens.tensionLinks),
+    ].toSet().toList(growable: false);
+    final bestFit =
+        lenses.map((lens) => lens.bestFit).toSet().join('；');
+    final boundaries = <String>[
+      ...lenses.map((lens) => lens.nonFit),
+      ...lenses.map((lens) => lens.contraindications),
+    ].where((item) => item.trim().isNotEmpty).toSet().join('；');
+    final workTitles = works
+        .map((work) => work.title)
+        .toSet()
+        .join('；');
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: selected
@@ -1461,7 +1617,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        '${lens.thinker} · ${lens.name}',
+                        guide.displayName,
                         style: const TextStyle(
                           color: _ink,
                           fontSize: 17,
@@ -1470,7 +1626,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '${guide.category}${work == null ? '' : ' · ${work.title}'}',
+                        '${guide.category} · ${works.length}部作品 · '
+                        '${guide.lensIds.length}个行动机制',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -1478,7 +1635,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 ),
                 IconButton(
                   tooltip: comparing ? '移出对照' : '加入两两对照',
-                  onPressed: () => _toggleCompareLens(lens.id),
+                  onPressed: () => _toggleCompareSystem(guide.systemId),
                   icon: Icon(
                     comparing
                         ? Icons.compare_arrows
@@ -1489,6 +1646,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               ],
             ),
             const SizedBox(height: 12),
+            _statusBanner('本次引入产生的质变', guide.qualitativeLeap, _green),
+            const SizedBox(height: 10),
+            _labelValue('上一层仍未解决', guide.inheritedLimit),
             const Text(
               '核心价值体系',
               style: TextStyle(fontWeight: FontWeight.w800),
@@ -1503,67 +1663,88 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             ),
             const SizedBox(height: 12),
             const Text(
-              '核心思想',
+              '围绕知行合一的核心思想',
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
             ...guide.coreIdeas.map(_bullet),
             const SizedBox(height: 8),
-            _labelValue('独特之处', guide.distinctiveFocus),
+            _labelValue('怎样理解“知”', guide.knowledgeView),
+            _labelValue('怎样理解“行”', guide.actionView),
+            _labelValue('为什么会知行分裂', guide.splitDiagnosis),
             _labelValue('适合现在的你', guide.decisionCue),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: EdgeInsets.zero,
-              title: const Text('共同点、差异和关联'),
-              subtitle: Text('与${related.map((item) => _knowledge.lensById(item.lensId)?.thinker ?? '').toSet().join('、')}等相关'),
+              title: const Text('展开完整体系、著作融合与思想关系'),
+              subtitle: Text(
+                works.length > 1
+                    ? '同一作者${works.length}部作品已统一整合，仍保留各书分工'
+                    : '查看转化路径、王阳明主线、关系、边界与证据',
+              ),
               children: <Widget>[
-                _labelValue(
-                  '共同底座',
-                  '同样要求把理解带入具体行动，并根据现实反馈修正；同时尊重容量、安全和用户自主。',
+                _labelValue('从知到行的转化路径', guide.transformationPath),
+                _labelValue('行动怎样回写认识', guide.actionFeedback),
+                _labelValue('与王阳明主线的关系', guide.yangmingConnection),
+                if (buildsOn.isNotEmpty)
+                  _labelValue('承接的前序思想', buildsOn),
+                _labelValue('融合后形成什么', guide.synthesisOutcome),
+                _labelValue('著作如何整合', guide.workSynthesis),
+                if (workTitles.isNotEmpty)
+                  _labelValue('对应的22源作品', workTitles),
+                const Text(
+                  '在七环知行回路中的位置',
+                  style: TextStyle(fontWeight: FontWeight.w800),
                 ),
-                _labelValue('主要差异', guide.distinctiveFocus),
-                if (lens.tensionLinks.isNotEmpty) ...<Widget>[
-                  const Text(
-                    '真实张力与互补',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  ...lens.tensionLinks.map(_bullet),
-                ],
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: guide.sevenLoopRoles
+                      .map(_miniTag)
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 12),
+                _labelValue('独特贡献', guide.distinctiveFocus),
+                const Text(
+                  '真实张力与误用边界',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                ...tensionNotes.map(_bullet),
+                const SizedBox(height: 8),
+                const Text(
+                  '相互补足的思想体系',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   children: related
                       .map(
-                        (item) {
-                          final relatedLens =
-                              _knowledge.lensById(item.lensId)!;
-                          return ActionChip(
-                            avatar:
-                                const Icon(Icons.hub_outlined, size: 16),
-                            label: Text(
-                              '${relatedLens.thinker} · ${relatedLens.name}',
-                            ),
-                            onPressed: () =>
-                                _showThoughtRelationship(guide, item),
-                          );
-                        },
+                        (item) => ActionChip(
+                          avatar:
+                              const Icon(Icons.hub_outlined, size: 16),
+                          label: Text(item.displayName),
+                          onPressed: () =>
+                              _showThoughtRelationship(guide, item),
+                        ),
                       )
                       .toList(growable: false),
                 ),
                 const SizedBox(height: 10),
-                _labelValue('最适合', lens.bestFit),
-                _labelValue('不适合/边界', lens.nonFit),
+                _labelValue('最适合', bestFit),
+                _labelValue('不适合/边界', boundaries),
                 const Text(
                   '可直接采用的行动方式',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
-                ...lens.actionTemplates.map(_bullet),
+                ...actionTemplates.map(_bullet),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: lens.evidenceLinks
+                  children: evidenceLocators
                       .map(
                         (locator) => ActionChip(
                           avatar: const Icon(
@@ -1583,14 +1764,20 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               width: double.infinity,
               child: selected
                   ? OutlinedButton.icon(
-                      onPressed: () => _toggleSelectedLens(lens),
+                      onPressed: () => _toggleSelectedSystem(guide),
                       icon: const Icon(Icons.remove_circle_outline),
                       label: const Text('移出行动指导'),
                     )
                   : FilledButton.tonalIcon(
-                      onPressed: () => _toggleSelectedLens(lens),
+                      onPressed: availableLenses.isEmpty
+                          ? null
+                          : () => _toggleSelectedSystem(guide),
                       icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('选为行动指导'),
+                      label: Text(
+                        availableLenses.isEmpty
+                            ? '本体系镜头已全部停用'
+                            : '选为行动指导',
+                      ),
                     ),
             ),
           ],
@@ -1599,16 +1786,16 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     );
   }
 
-  Future<void> _toggleSelectedLens(ZxThinkerLens lens) async {
+  Future<void> _toggleSelectedSystem(ZxThinkerGuide guide) async {
     final next = <String>{..._selectedLensIds};
     final disabled = <String>{..._disabledLenses};
-    if (!next.remove(lens.id)) {
+    if (!next.remove(guide.primaryLensId)) {
       if (next.length >= 3) {
         _snack('最多融合3套思想；请先移除一套再选择。');
         return;
       }
-      next.add(lens.id);
-      disabled.remove(lens.id);
+      next.add(guide.primaryLensId);
+      disabled.removeAll(guide.lensIds);
     }
     await _dao.setSelectedLenses(next);
     if (disabled.length != _disabledLenses.length) {
@@ -1628,21 +1815,51 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     ZxThinkerGuide first,
     ZxThinkerGuide second,
   ) async {
-    final a = _knowledge.lensById(first.lensId)!;
-    final b = _knowledge.lensById(second.lensId)!;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${a.thinker} × ${b.thinker}'),
+        title: Text('${first.thinker} × ${second.thinker}'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              _labelValue('共同点', '都要求进入具体情境、采取行动并让现实反馈修正理解。'),
-              _labelValue('${a.thinker}更关注', first.distinctiveFocus),
-              _labelValue('${b.thinker}更关注', second.distinctiveFocus),
-              _labelValue('如何融合', '先用一套思想确定本轮主动作，再用另一套补足方向、心理关系、执行技术、能力或环境条件；不要在一轮中堆叠多个主动作。'),
+              _labelValue(
+                '共同主线',
+                '都被纳入“方向—澄清—容纳—启动—稳定—求证—内化”的知行回路，让理解进入行动并由现实结果回写。',
+              ),
+              _labelValue(
+                '${first.thinker}带来的质变',
+                first.qualitativeLeap,
+              ),
+              _labelValue(
+                '${second.thinker}带来的质变',
+                second.qualitativeLeap,
+              ),
+              _labelValue(
+                '${first.thinker}与王阳明',
+                first.yangmingConnection,
+              ),
+              _labelValue(
+                '${second.thinker}与王阳明',
+                second.yangmingConnection,
+              ),
+              _labelValue(
+                '融合后形成什么',
+                '${first.synthesisOutcome}；${second.synthesisOutcome}',
+              ),
+              const Text(
+                '不能抹平的张力',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              ...<String>{
+                ...first.tensions.take(1),
+                ...second.tensions.take(1),
+              }.map(_bullet),
+              _labelValue(
+                '本轮如何融合',
+                '只由更贴合当前卡点的一套体系确定唯一主动作，另一套只补足方向、心理关系、能力、环境或停止条件；复盘后再决定是否交换主次。',
+              ),
             ],
           ),
         ),
@@ -1654,11 +1871,12 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           FilledButton(
             onPressed: () async {
               Navigator.pop(context);
-              if (!_selectedLensIds.contains(a.id)) {
-                await _toggleSelectedLens(a);
+              if (!_selectedLensIds.contains(first.primaryLensId)) {
+                await _toggleSelectedSystem(first);
               }
-              if (mounted && !_selectedLensIds.contains(b.id)) {
-                await _toggleSelectedLens(b);
+              if (mounted &&
+                  !_selectedLensIds.contains(second.primaryLensId)) {
+                await _toggleSelectedSystem(second);
               }
             },
             child: const Text('融合这两套思想'),
@@ -1677,13 +1895,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     });
   }
 
-  void _toggleCompareLens(String id) {
+  void _toggleCompareSystem(String id) {
     setState(() {
-      if (!_compareLensIds.remove(id)) {
-        if (_compareLensIds.length >= 2) {
-          _compareLensIds.remove(_compareLensIds.first);
+      if (!_compareSystemIds.remove(id)) {
+        if (_compareSystemIds.length >= 2) {
+          _compareSystemIds.remove(_compareSystemIds.first);
         }
-        _compareLensIds.add(id);
+        _compareSystemIds.add(id);
       }
     });
   }
@@ -1871,16 +2089,25 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     }
   }
 
-  Future<void> _compareLenses() async {
-    final items = _compareLensIds
-        .map(_knowledge.lensById)
-        .whereType<ZxThinkerLens>()
+  Future<void> _compareSystems() async {
+    final items = _compareSystemIds
+        .map(ZxThinkerCatalog.guideForSystem)
+        .whereType<ZxThinkerGuide>()
         .toList(growable: false);
     if (items.length != 2) return;
     final a = items[0];
     final b = items[1];
-    final guideA = ZxThinkerCatalog.guideFor(a.id)!;
-    final guideB = ZxThinkerCatalog.guideFor(b.id)!;
+    String worksFor(ZxThinkerGuide guide) =>
+        ZxThinkerCatalog.lensesFor(guide, _knowledge.lenses)
+            .map((lens) => _knowledge.workBySourceId(lens.sourceId)?.title ?? '')
+            .where((title) => title.isNotEmpty)
+            .toSet()
+            .join('\n');
+    String bestFitFor(ZxThinkerGuide guide) =>
+        ZxThinkerCatalog.lensesFor(guide, _knowledge.lenses)
+            .map((lens) => lens.bestFit)
+            .toSet()
+            .join('\n');
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1896,28 +2123,45 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 2: FlexColumnWidth(),
               },
               children: <TableRow>[
-                _comparisonRow('', '${a.thinker}\n${a.name}',
-                    '${b.thinker}\n${b.name}', header: true),
-                _comparisonRow('核心价值', guideA.coreValues.join('、'),
-                    guideB.coreValues.join('、')),
-                _comparisonRow('核心思想', guideA.coreIdeas.join('\n'),
-                    guideB.coreIdeas.join('\n')),
+                _comparisonRow('', a.displayName, b.displayName, header: true),
+                _comparisonRow(
+                    '演化层级', a.evolutionStage, b.evolutionStage),
+                _comparisonRow(
+                    '前层缺口', a.inheritedLimit, b.inheritedLimit),
+                _comparisonRow(
+                    '本次质变', a.qualitativeLeap, b.qualitativeLeap),
+                _comparisonRow('核心价值', a.coreValues.join('、'),
+                    b.coreValues.join('、')),
+                _comparisonRow('核心思想', a.coreIdeas.join('\n'),
+                    b.coreIdeas.join('\n')),
                 _comparisonRow(
                   '共同点',
-                  '进入具体行动，以现实反馈修正，尊重自主与边界。',
-                  '进入具体行动，以现实反馈修正，尊重自主与边界。',
+                  '进入具体行动，并由现实反馈回写认识。',
+                  '进入具体行动，并由现实反馈回写认识。',
                 ),
                 _comparisonRow(
-                    '独特之处', guideA.distinctiveFocus, guideB.distinctiveFocus),
-                _comparisonRow('核心问题', a.coreQuestion, b.coreQuestion),
-                _comparisonRow('机制', a.mechanism, b.mechanism),
-                _comparisonRow('最适合', a.bestFit, b.bestFit),
-                _comparisonRow('不适合', a.nonFit, b.nonFit),
-                _comparisonRow('方法', a.methods.join('、'), b.methods.join('、')),
+                    '怎样理解知', a.knowledgeView, b.knowledgeView),
+                _comparisonRow('怎样理解行', a.actionView, b.actionView),
                 _comparisonRow(
-                    '边界', a.contraindications, b.contraindications),
-                _comparisonRow('证据', a.evidenceLinks.join('\n'),
-                    b.evidenceLinks.join('\n')),
+                    '分裂原因', a.splitDiagnosis, b.splitDiagnosis),
+                _comparisonRow(
+                    '转化路径', a.transformationPath, b.transformationPath),
+                _comparisonRow(
+                    '行动回写', a.actionFeedback, b.actionFeedback),
+                _comparisonRow(
+                    '与王阳明', a.yangmingConnection, b.yangmingConnection),
+                _comparisonRow(
+                    '独特贡献', a.distinctiveFocus, b.distinctiveFocus),
+                _comparisonRow(
+                    '融合结果', a.synthesisOutcome, b.synthesisOutcome),
+                _comparisonRow(
+                    '七环位置',
+                    a.sevenLoopRoles.join('、'),
+                    b.sevenLoopRoles.join('、')),
+                _comparisonRow('最适合', bestFitFor(a), bestFitFor(b)),
+                _comparisonRow(
+                    '真实张力', a.tensions.join('\n'), b.tensions.join('\n')),
+                _comparisonRow('作品', worksFor(a), worksFor(b)),
               ],
             ),
           ),
@@ -2608,7 +2852,11 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     enabled ? next.remove(id) : next.add(id);
     await _dao.setDisabledLenses(next);
     final selected = <String>{..._selectedLensIds};
-    if (!enabled && selected.remove(id)) {
+    final system = ZxThinkerCatalog.guideFor(id);
+    final systemUnavailable = !enabled &&
+        system != null &&
+        system.lensIds.every(next.contains);
+    if (systemUnavailable && selected.remove(system.primaryLensId)) {
       await _dao.setSelectedLenses(selected);
     }
     if (mounted) {
