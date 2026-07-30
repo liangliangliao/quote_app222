@@ -2304,9 +2304,12 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   Future<void> _editPrompts() async {
-    final action = TextEditingController(await _promptConfig.actionPrompt());
-    final expansion =
-        TextEditingController(await _promptConfig.expansionPrompt());
+    final action = TextEditingController(
+      text: await _promptConfig.actionPrompt(),
+    );
+    final expansion = TextEditingController(
+      text: await _promptConfig.expansionPrompt(),
+    );
     if (!mounted) return;
     final save = await showDialog<bool>(
       context: context,
