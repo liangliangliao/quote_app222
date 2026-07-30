@@ -1,0 +1,1695 @@
+{
+  "manifest": {
+    "package_id": "zhixing-tree-core",
+    "version": "2.0.0",
+    "rule_version": "2.0.0",
+    "published_at": "2026-07-30",
+    "source_count": 22,
+    "system_count": 17,
+    "evidence_count": 256,
+    "review_status": "primary_source_reanalysis",
+    "content_sha256": "e25f03f8afd4b9d52a7a0f14720636341351c83f8b2dbf2514e65668944ab04f",
+    "catalog_sha256": "694bcbec247221297458fb3435287220b8118a17319393657bfb4ce54b4feb94",
+    "integrity_scheme": "sha256-bundled-content-and-catalog",
+    "content_asset": "assets/zhixing_tree/knowledge_v2_0.md",
+    "catalog_asset": "assets/zhixing_tree/knowledge_systems_v2_0.json"
+  },
+  "works": [
+    {
+      "batch": 1,
+      "source_id": "WY",
+      "title": "《传习录》",
+      "author": "王阳明",
+      "evidence_role": "良知、格物、知行合一、事上磨",
+      "evidence_tier": "P1",
+      "edition": "武汉出版社，2014，EPUB",
+      "source_sha256": "027aaa73c7b899f8f23c7c639d2b49bd96bfb1807f71d6833466fd5ac321fefc",
+      "source_file_size": 440752,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2818,
+      "primary_evidence_count": 16,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "LZ",
+      "title": "Te-Tao Ching",
+      "author": "老子；Henricks译",
+      "evidence_role": "无为、柔弱、微小介入",
+      "evidence_tier": "P1经现代译本转述",
+      "edition": "Ballantine/Random House，MOBI",
+      "source_sha256": "5b7c56406f1f20d5146a74df2e1f3586bdd29822532b4cc558057c32619e7699",
+      "source_file_size": 1795348,
+      "locator_kind": "mobi_block",
+      "extract_record_count": 2028,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "WJ",
+      "title": "The Principles of Psychology",
+      "author": "William James",
+      "evidence_role": "注意、意志、习惯",
+      "evidence_tier": "P1经典心理学",
+      "edition": "Harvard University Press，1983，扫描转 EPUB",
+      "source_sha256": "f55dce8d1be317a330fe16506771279e6ca2d694ff2db766c54c0cee258393e3",
+      "source_file_size": 2474990,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 9129,
+      "primary_evidence_count": 10,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "NZ",
+      "title": "Also sprach Zarathustra",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "自我超越、创造与肯定",
+      "evidence_tier": "P1",
+      "edition": "Gutenberg 文本，文件标 2004，EPUB",
+      "source_sha256": "fc21593d63abe1fbf9a3a56ad488a86e66eddb21bba7658292d031e4bda47b3f",
+      "source_file_size": 324360,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 3871,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "AB",
+      "title": "Cognitive Therapy and the Emotional Disorders",
+      "author": "Aaron T. Beck",
+      "evidence_role": "自动思维、认知检验与行为实验",
+      "evidence_tier": "P2",
+      "edition": "Plume/Penguin，1979，EPUB",
+      "source_sha256": "975ec40e7eeb4918d8b32be0eeb304cc9ac4b648d47dfe4cbc61ed5fa010ee75",
+      "source_file_size": 453641,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 1979,
+      "primary_evidence_count": 10,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "AE",
+      "title": "Reason and Emotion in Psychotherapy",
+      "author": "Albert Ellis",
+      "evidence_role": "绝对要求、辩驳与实践",
+      "evidence_tier": "P2历史原著",
+      "edition": "Institute for Rational Living，1963，PDF 转 EPUB",
+      "source_sha256": "4f5c33d46dce005006abcbd7191634264223356ae9d8cc4a069c1a527acc1e7a",
+      "source_file_size": 784496,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2102,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "ACT",
+      "title": "Acceptance and Commitment Therapy",
+      "author": "Hayes、Strosahl、Wilson",
+      "evidence_role": "接纳、解离、价值与承诺行动",
+      "evidence_tier": "P2",
+      "edition": "2008 EPUB 版本线索",
+      "source_sha256": "ae8586a59d02ad5c5a46bbe385c3d63b4930646ede7e4e9f6b0447b5757a11d9",
+      "source_file_size": 607351,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 4553,
+      "primary_evidence_count": 10,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "SDT",
+      "title": "Self-Determination Theory",
+      "author": "Ryan、Deci",
+      "evidence_role": "自主、胜任、关系与内化",
+      "evidence_tier": "P2/E",
+      "edition": "Guilford，2017，EPUB",
+      "source_sha256": "1c85f400b1552f840f76db1426cc14d9c684380b1e06351801af0242fd42bd99",
+      "source_file_size": 3125000,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 10734,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "HPL",
+      "title": "哈佛幸福课讲稿",
+      "author": "课程转录整理",
+      "evidence_role": "练习、仪式、恢复",
+      "evidence_tier": "S，需外部复核",
+      "edition": "DOCX，版本来源未详，教学性二手源",
+      "source_sha256": "e1ba42b234287180e95daccf82e5ffebc3391524b2ff41dd49d0f9fdef8c6778",
+      "source_file_size": 579825,
+      "locator_kind": "lecture_paragraph",
+      "extract_record_count": 1572,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "secondary_teaching_source"
+    },
+    {
+      "batch": 2,
+      "source_id": "DHT",
+      "title": "How We Think",
+      "author": "John Dewey",
+      "evidence_role": "反思探究和行动检验",
+      "evidence_tier": "P1",
+      "edition": "1933，扫描/OCR PDF",
+      "source_sha256": "581888711068b07b00ac3f0bfc7b02d6a0eb9a62e676e4f7c6d07f6a2839cb8b",
+      "source_file_size": 9861281,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 1548,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "DHC",
+      "title": "Human Nature and Conduct",
+      "author": "John Dewey",
+      "evidence_role": "习惯、环境、审议与生长",
+      "evidence_tier": "P1",
+      "edition": "Serapis Classics，EPUB",
+      "source_sha256": "95dbc2d25489608eaa66103d762c7d5e0bf29859a262b7c4bfe0cd36242994bd",
+      "source_file_size": 787505,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 435,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "II",
+      "title": "Implementation Intentions",
+      "author": "Peter M. Gollwitzer",
+      "evidence_role": "如果—那么计划",
+      "evidence_tier": "E/理论论文",
+      "edition": "American Psychologist 54(7)，1999，PDF",
+      "source_sha256": "a55f4799acaa9679ae8db6a3c91c4ec86080bc20466e0eb85f747f862481897f",
+      "source_file_size": 1893482,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 206,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "SLT",
+      "title": "Social Learning Theory",
+      "author": "Albert Bandura",
+      "evidence_role": "观察学习和自我调节",
+      "evidence_tier": "P2历史理论",
+      "edition": "Prentice-Hall，1976，EPUB",
+      "source_sha256": "92f2afbf6d1aa465b6db1897f90c9bce92963ee45daedd827120255db3d7a199",
+      "source_file_size": 449547,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 1487,
+      "primary_evidence_count": 13,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "BA",
+      "title": "Behavioral Activation for Depression",
+      "author": "Martell等",
+      "evidence_role": "功能分析与分级激活",
+      "evidence_tier": "P2/E临床指南",
+      "edition": "Guilford，第二版，2022，PDF",
+      "source_sha256": "014610f11c1be9293e90fc16e9dd4899f4fbc56782405c5cc84ebed0cd8a3ba1",
+      "source_file_size": 8852444,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 2804,
+      "primary_evidence_count": 14,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "MMP",
+      "title": "Motivation and Personality",
+      "author": "Abraham H. Maslow",
+      "evidence_role": "需要、成长和自我实现",
+      "evidence_tier": "P2历史理论",
+      "edition": "第二版转制 EPUB",
+      "source_sha256": "ff0c3cc39f4aa674b99cf620f2a7ec0270a88ba628434f319bca81cf5fc7f468",
+      "source_file_size": 3029362,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2279,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "NGS",
+      "title": "Die fröhliche Wissenschaft",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "生命肯定、风格与动机谱系",
+      "evidence_tier": "P1",
+      "edition": "2011 德文公版 EPUB",
+      "source_sha256": "363ded6d4cd912b7675017a3922d133ad96bec1839aa5eb0f568f90b736f3df9",
+      "source_file_size": 317282,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2493,
+      "primary_evidence_count": 6,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "NBG",
+      "title": "Jenseits von Gut und Böse",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "意志复杂性与价值创造",
+      "evidence_tier": "P1公版替代文本",
+      "edition": "2011 德文公版 EPUB；正式证据以 Project Gutenberg ebook 7204 节号为准",
+      "source_sha256": "3488a918dd89b281476764839a1a6a4b577cd610371d7405ed3f00e208e36a61",
+      "source_file_size": 241280,
+      "locator_kind": "numbered_section",
+      "extract_record_count": 658,
+      "primary_evidence_count": 3,
+      "substitute_for": "用户原 Apple FairPlay 加密 EPUB",
+      "source_status": "public_substitute_verified"
+    },
+    {
+      "batch": 2,
+      "source_id": "NGM",
+      "title": "Zur Genealogie der Moral",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "价值谱系、承诺、坏良心与意义",
+      "evidence_tier": "P1",
+      "edition": "1887 德文原典转制 PDF",
+      "source_sha256": "35a94c560c4ef74e2db66833752e2d035da797f6e986b2072c881fa705f8606d",
+      "source_file_size": 831241,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 3743,
+      "primary_evidence_count": 8,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "OET",
+      "title": "Rethinking Positive Thinking",
+      "author": "Gabriele Oettingen",
+      "evidence_role": "心理对照、可行性与WOOP",
+      "evidence_tier": "S/E研究综述",
+      "edition": "Penguin Random House，2014，EPUB",
+      "source_sha256": "24d203e00fe62d833b7504f789052aa5f56d33d291fed0cd3ab65d38d2ff955e",
+      "source_file_size": 1815232,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 1326,
+      "primary_evidence_count": 16,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "SEF",
+      "title": "Self-Efficacy: The Exercise of Control",
+      "author": "Albert Bandura",
+      "evidence_role": "效能来源、过程与集体层面",
+      "evidence_tier": "P2历史理论专著",
+      "edition": "W. H. Freeman，1997，OCR 转制 EPUB",
+      "source_sha256": "835f4ecb1062ffe10ad2794a26e81af5e64fe088960e99e00fff321bf526d119",
+      "source_file_size": 1743025,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 10386,
+      "primary_evidence_count": 17,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "FRK",
+      "title": "Man’s Search for Meaning",
+      "author": "Viktor E. Frankl",
+      "evidence_role": "意义、责任与受限自由",
+      "evidence_tier": "P1/P2",
+      "edition": "Beacon Press，2006，EPUB；含 1984 年后记",
+      "source_sha256": "50332be9defa66b3d6713878bf252bea81862e8b20f82645282e9b3ac8cd52b7",
+      "source_file_size": 129985,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 452,
+      "primary_evidence_count": 16,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "BCW",
+      "title": "The Behaviour Change Wheel",
+      "author": "Michie、Atkins、West",
+      "evidence_role": "COM-B、干预设计与APEASE",
+      "evidence_tier": "E/方法指南",
+      "edition": "Silverback，2014，PDF",
+      "source_sha256": "bcfe7ba7bf63c159db9a3b36dccd714b20887d056ae17386634c18072da2d902",
+      "source_file_size": 10863684,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 2938,
+      "primary_evidence_count": 21,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    }
+  ],
+  "lenses": [
+    {
+      "lens_id": "WY_KNOW_ACT",
+      "source_id": "WY",
+      "thinker": "王阳明",
+      "name": "良知与知行合一",
+      "core_question": "你声称知道和重视的，是否已经在意念发动与现实行为中显现？",
+      "mechanism": "真知已经包含好恶、意向和行动方向；在具体事情上行动，既成就也检验所知。",
+      "best_fit": "方向不清、言行不一致、只谈不做、需要在真实情境求证。",
+      "non_fit": "时间、工具、身体容量或结构性机会明显不足时，不应先把问题归为意志。",
+      "prerequisites": "目标合法、低风险，并经过事实与外部条件检查。",
+      "contraindications": "不得把压迫、疾病、贫困或真实受害归因为“不够致良知”。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "省察",
+        "价值校准",
+        "事上磨",
+        "现实求证"
+      ],
+      "action_templates": [
+        "写下这项价值今天唯一可见的行为",
+        "在一件具体小事上做一次最小验证"
+      ],
+      "tension_links": [
+        "与ACT的个人价值存在道德真理张力",
+        "需由COM-B补足外部条件诊断"
+      ],
+      "evidence_links": [
+        "WY-S003-P0108",
+        "WY-S003-P0110",
+        "WY-S003-P0138",
+        "WY-S003-P0146",
+        "WY-S003-P0288",
+        "WY-S003-P0289",
+        "WY-S003-P0326",
+        "WY-S003-P0364",
+        "WY-S003-P0411",
+        "WY-S003-P0470",
+        "WY-S003-P1151",
+        "WY-S003-P1527",
+        "WY-S003-P2025",
+        "WY-S003-P2381",
+        "WY-S003-P2634",
+        "WY-S003-P2713"
+      ],
+      "evidence_directness": 0.72,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "LZ_REDUCE_FORCE",
+      "source_id": "LZ",
+      "thinker": "老子",
+      "name": "减法、微小与柔韧行动",
+      "core_question": "哪些过度控制、无效步骤或僵持正在让行动更难？",
+      "mechanism": "先减少妄为和摩擦，在问题尚微时介入，并在保持方向时调整方法。",
+      "best_fit": "过度用力、完美主义式加码、恢复失败、计划僵硬、同时目标过多。",
+      "non_fit": "紧急风险、明确责任或需要专业治疗时，不能用“无为”逃避。",
+      "prerequisites": "能区分减少无效控制与放弃必要责任。",
+      "contraindications": "无为不得解释为放弃治疗、求助、边界或对他人的责任。",
+      "barriers": [
+        "capacity",
+        "automatic_motivation",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "减法",
+        "环境去摩擦",
+        "微小行动",
+        "柔性计划"
+      ],
+      "action_templates": [
+        "删掉一个非必要步骤后再开始",
+        "把动作缩到两分钟并保留退出条件"
+      ],
+      "tension_links": [
+        "与强纪律路径存在坚持—无为张力",
+        "需由Dewey或BCW明确技术条件"
+      ],
+      "evidence_links": [
+        "LZ-C023-P0002",
+        "LZ-C038-P0002",
+        "LZ-C039-P0002",
+        "LZ-C039-P0003",
+        "LZ-C047-P0002",
+        "LZ-C048-P0002",
+        "LZ-C053-P0002",
+        "LZ-C055-P0002",
+        "LZ-C090-P0002"
+      ],
+      "evidence_directness": 0.58,
+      "review_status": "approved_with_translation_note",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "WJ_ATTENTION_HABIT",
+      "source_id": "WJ",
+      "thinker": "William James",
+      "name": "注意、动作表象与习惯",
+      "core_question": "关键时刻，怎样让困难但重要的动作表象继续占据注意？",
+      "mechanism": "清楚动作表象和注意保持帮助启动；重复行动把选择沉淀为习惯并释放注意。",
+      "best_fit": "分心、临场摇摆、入口不清、需要把高频基础动作自动化。",
+      "non_fit": "方向尚未认领、身体或机会不足时，不应只加强注意。",
+      "prerequisites": "动作已经具体，并且目标由用户认可。",
+      "contraindications": "历史性刚性习惯建议需更新；中断不归零，不以人格责备注意困难。",
+      "barriers": [
+        "automatic_motivation",
+        "physical_opportunity",
+        "psychological_capability"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "单任务",
+        "注意锚点",
+        "动作脚本",
+        "习惯线索"
+      ],
+      "action_templates": [
+        "让当前页面只保留一个动作入口",
+        "抓住下一个自然线索立即做首个微动作"
+      ],
+      "tension_links": [
+        "需由SDT审查目标自主性",
+        "习惯连续性须由恢复友好规则限定"
+      ],
+      "evidence_links": [
+        "WJ-S124-P0002",
+        "WJ-S140-P0004",
+        "WJ-S141-P0003",
+        "WJ-S141-P0004",
+        "WJ-S142-P0005",
+        "WJ-S1143-P0005",
+        "WJ-S1144-P0002",
+        "WJ-S1177-P0002",
+        "WJ-S1181-P0003",
+        "WJ-S1195-P0005"
+      ],
+      "evidence_directness": 0.6,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NZ_SELF_OVERCOMING",
+      "source_id": "NZ",
+      "thinker": "Friedrich Nietzsche",
+      "name": "自我超越与价值创造",
+      "core_question": "你是在承担、挣脱“你应当”，还是已准备创造一个能肯定的方向？",
+      "mechanism": "骆驼—狮子—孩子区分承担、争取自主与积极创造；身体也是行动判断的一部分。",
+      "best_fit": "被动继承目标、身份僵化、长期创造和反应性反抗之后的正向建设。",
+      "non_fit": "急性风险、低容量或需要具体技能时不宜用宏大超越语言。",
+      "prerequisites": "先保护身体、安全、他人权益和现实可行性。",
+      "contraindications": "禁止用力量、超人或超越正当化支配、冒险、轻视弱者或持续自我压迫。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "价值谱系",
+        "身份实验",
+        "身体审查",
+        "创造"
+      ],
+      "action_templates": [
+        "识别一个“别人说我必须”的目标并写出自己的选择",
+        "做一个七天新风格实验"
+      ],
+      "tension_links": [
+        "需由王阳明或伦理规则防止支配化",
+        "与SDT共同审查外控但价值根据不同"
+      ],
+      "evidence_links": [
+        "NZ-S003-P0039",
+        "NZ-S003-P0069",
+        "NZ-S004-P0003",
+        "NZ-S004-P0016",
+        "NZ-S004-P0021",
+        "NZ-S004-P0026",
+        "NZ-S007-P0004",
+        "NZ-S018-P0014",
+        "NZ-S038-P0027"
+      ],
+      "evidence_directness": 0.56,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "AB_COGNITIVE_TEST",
+      "source_id": "AB",
+      "thinker": "Aaron T. Beck",
+      "name": "想法是假设，行动是实验",
+      "core_question": "阻断行动的预测和解释，有哪些证据、反证和可做的低风险检验？",
+      "mechanism": "把自动思维显性化并当作可修订假设，用分级行为实验产生新证据。",
+      "best_fit": "灾难化、失败定性、读心、负面预测、把一次失败泛化成无能力。",
+      "non_fit": "真实危险、结构性伤害或事实充分时，不能把问题说成“只是想法”。",
+      "prerequisites": "区分事实、解释、预测，并设计低风险可逆实验。",
+      "contraindications": "不得否认真实受害或以认知重评代替安全措施和专业评估。",
+      "barriers": [
+        "psychological_capability",
+        "automatic_motivation",
+        "self_efficacy"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "事实—解释分离",
+        "证据表",
+        "替代解释",
+        "行为实验"
+      ],
+      "action_templates": [
+        "写下一个可反驳预测并做最小实验",
+        "为“我不能”设计一个分级任务"
+      ],
+      "tension_links": [
+        "需由ACT防止无休止争辩内在体验",
+        "需由BCW检查现实机会"
+      ],
+      "evidence_links": [
+        "AB-S006-P0006",
+        "AB-S007-P0022",
+        "AB-S008-P0034",
+        "AB-S009-P0035",
+        "AB-S016-P0004",
+        "AB-S016-P0029",
+        "AB-S017-P0035",
+        "AB-S017-P0039",
+        "AB-S017-P0130",
+        "AB-S018-P0078"
+      ],
+      "evidence_directness": 0.76,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "AE_PREFERENCE_TOLERANCE",
+      "source_id": "AE",
+      "thinker": "Albert Ellis",
+      "name": "从绝对要求退回偏好",
+      "core_question": "哪一句“必须、应该、受不了”正在把困难升级为人格或灾难？",
+      "mechanism": "识别绝对化评价，检验其逻辑和现实后果，并在触发情境练习更可行的偏好与挫折耐受。",
+      "best_fit": "完美主义、绝对要求、低挫折耐受、敌意和表现—人格混同。",
+      "non_fit": "真实侵害、权利受损或安全威胁不应只做信念辩驳。",
+      "prerequisites": "先确认事实和关系边界，再审查自我生成的绝对要求。",
+      "contraindications": "不得把他人侵害合理化；原著强硬语气不得复制为羞耻式交互。",
+      "barriers": [
+        "automatic_motivation",
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "ABC",
+        "语义探测",
+        "去灾难化",
+        "现场练习"
+      ],
+      "action_templates": [
+        "把一个“必须”改写成强烈偏好并写出可承受后果",
+        "在低风险现场练习一次不完美行动"
+      ],
+      "tension_links": [
+        "需由关系与环境镜头检查真实约束",
+        "与ACT在纠正内容或改变关系上有张力"
+      ],
+      "evidence_links": [
+        "AE-S037-P0005",
+        "AE-S054-P0001",
+        "AE-S058-P0002",
+        "AE-S060-P0003",
+        "AE-S199-P0001",
+        "AE-S202-P0001",
+        "AE-S394-P0001",
+        "AE-S421-P0002",
+        "AE-S429-P0003"
+      ],
+      "evidence_directness": 0.66,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "ACT_FLEXIBILITY",
+      "source_id": "ACT",
+      "thinker": "Hayes、Strosahl、Wilson",
+      "name": "心理灵活性与价值行动",
+      "core_question": "如果不必先消除不适，你愿意带着它朝哪个价值迈一小步？",
+      "mechanism": "通过接纳、解离、当下觉察、价值和承诺行动，改变与内在体验的关系，以可行性而非舒适度选择行为。",
+      "best_fit": "体验回避、情绪等待、与念头融合、偏离后全盘放弃。",
+      "non_fit": "真实危险和可避免伤害必须先移除，不用接纳要求用户忍受。",
+      "prerequisites": "价值由用户选择，动作可逆且有停止条件。",
+      "contraindications": "接纳不等于忍受虐待、危险、疾病或可避免伤害。",
+      "barriers": [
+        "automatic_motivation",
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "接纳",
+        "认知解离",
+        "价值",
+        "承诺行动"
+      ],
+      "action_templates": [
+        "命名感受和头脑故事后做一分钟价值动作",
+        "偏离后把步幅减半并重新承诺"
+      ],
+      "tension_links": [
+        "与CBT在纠正想法内容或改变关系上有张力",
+        "需由安全规则区分可避免伤害"
+      ],
+      "evidence_links": [
+        "ACT-S003-P0177",
+        "ACT-S003-P0283",
+        "ACT-S003-P0316",
+        "ACT-S005-P0461",
+        "ACT-S005-P0511",
+        "ACT-S006-P0337",
+        "ACT-S006-P0447",
+        "ACT-S006-P0483",
+        "ACT-S007-P0120",
+        "ACT-S007-P0288"
+      ],
+      "evidence_directness": 0.8,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "SDT_INTERNALIZATION",
+      "source_id": "SDT",
+      "thinker": "Ryan、Deci",
+      "name": "自主、胜任、关系与内化",
+      "core_question": "这个行动由你认领吗？它是否同时得到胜任结构和关系支持？",
+      "mechanism": "行动理由从外控、内摄走向认同与整合；自主、胜任和关系支持提高维持与迁移质量。",
+      "best_fit": "被迫目标、奖励依赖、羞耻驱动、无意义坚持、提醒撤除后崩溃。",
+      "non_fit": "已经认领但现场线索或技能不足时，应补充实施意向或掌握训练。",
+      "prerequisites": "用户有真实选择权，反馈是信息性的而非控制性的。",
+      "contraindications": "不得把“内化”当操纵技巧；收入或外在目标不被简单道德化。",
+      "barriers": [
+        "reflective_motivation",
+        "social_opportunity",
+        "self_efficacy",
+        "value_ethics"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "自主选择",
+        "胜任支架",
+        "关系支持",
+        "理由内化"
+      ],
+      "action_templates": [
+        "写下继续、修改或退出目标的自主理由",
+        "把控制性提醒换成可撤除的结构支持"
+      ],
+      "tension_links": [
+        "需由II或WOOP转成现场动作",
+        "奖励系统必须允许关闭并逐步撤除"
+      ],
+      "evidence_links": [
+        "SDT-S009-P0039",
+        "SDT-S009-P0040",
+        "SDT-S009-P0041",
+        "SDT-S009-P0047",
+        "SDT-S009-P0057",
+        "SDT-S018-P0021",
+        "SDT-S018-P0037",
+        "SDT-S018-P0172",
+        "SDT-S018-P0195",
+        "SDT-S021-P0021",
+        "SDT-S029-P0117",
+        "SDT-S029-P0123"
+      ],
+      "evidence_directness": 0.83,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "HPL_TRANSFORMATION",
+      "source_id": "HPL",
+      "thinker": "哈佛幸福课材料",
+      "name": "从信息到转化的日常练习",
+      "core_question": "这条信息怎样通过情感、行为或认知中的一条通道进入今天？",
+      "mechanism": "知识只有与练习、过程想象、仪式、恢复和现实反馈结合，才可能发生转化。",
+      "best_fit": "需要简单日常练习、过程脚本、五分钟启动和恢复节律。",
+      "non_fit": "高风险或复杂临床问题不能由课程练习替代评估。",
+      "prerequisites": "课程材料作为教学源使用，关键疗效主张需外部复核。",
+      "contraindications": "不把固定天数、意志配额或单一课堂研究冒充普遍定律。",
+      "barriers": [
+        "psychological_capability",
+        "automatic_motivation",
+        "capacity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "ABC三通道",
+        "允许为人",
+        "过程想象",
+        "仪式与恢复"
+      ],
+      "action_templates": [
+        "为一个知识点绑定今天的五分钟练习",
+        "同时想象准备、受阻、调整和完成"
+      ],
+      "tension_links": [
+        "教学材料需由原研究和容量守门补足",
+        "积极资源不得否认痛苦事实"
+      ],
+      "evidence_links": [
+        "HPL-C002-P0034—P0037",
+        "HPL-C002-P0071",
+        "HPL-C005-P0038—P0041",
+        "HPL-C008-P0014",
+        "HPL-C011-P0016",
+        "HPL-C011-P0044",
+        "HPL-C012-P0023",
+        "HPL-C012-P0031",
+        "HPL-C013-P0060—P0062",
+        "HPL-C014-P0085",
+        "HPL-C015-P0028",
+        "HPL-C015-P0034"
+      ],
+      "evidence_directness": 0.52,
+      "review_status": "approved_secondary",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "DHT_REFLECTIVE_INQUIRY",
+      "source_id": "DHT",
+      "thinker": "John Dewey",
+      "name": "反思性探究",
+      "core_question": "当前疑惑是什么？有哪些竞争假设，怎样通过行动检验其依据与后果？",
+      "mechanism": "受阻触发问题形成、假设、推理和检验；错误不是人格判决，而是下一轮观察与修正的材料。",
+      "best_fit": "问题模糊、反复失败、多个解释竞争、需要设计行动实验。",
+      "non_fit": "紧急场景不应延迟必要行动做长篇反思。",
+      "prerequisites": "愿意保留替代解释，并考虑判断和行动的后果。",
+      "contraindications": "反思不能成为拖延；实际行动可能不可逆，需先做风险检查。",
+      "barriers": [
+        "psychological_capability",
+        "value_ethics",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "问题形成",
+        "竞争假设",
+        "行动检验",
+        "无羞耻复盘"
+      ],
+      "action_templates": [
+        "列出最多三个假设并选一个最低风险检验",
+        "行动后记录哪条证据支持或反驳假设"
+      ],
+      "tension_links": [
+        "技术探究不能独自决定伦理方向",
+        "与王阳明共同重视事上检验但真理根据不同"
+      ],
+      "evidence_links": [
+        "DHT-P0023-B003",
+        "DHT-P0026-B004",
+        "DHT-P0028-B003",
+        "DHT-P0029-B004",
+        "DHT-P0044-B004",
+        "DHT-P0046-B003",
+        "DHT-P0100-B003",
+        "DHT-P0101-B003",
+        "DHT-P0121-B003",
+        "DHT-P0128-B004",
+        "DHT-P0129-B003",
+        "DHT-P0130-B003"
+      ],
+      "evidence_directness": 0.67,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "DHC_HABIT_ENVIRONMENT",
+      "source_id": "DHC",
+      "thinker": "John Dewey",
+      "name": "人—环境习惯系统",
+      "core_question": "当前行为由哪些环境条件和习得倾向共同维持？下一行动是什么？",
+      "mechanism": "习惯是主体与环境的互动倾向；改变既需要人的审议，也需要重构条件和下一行动。",
+      "best_fit": "环境摩擦、旧习惯、目标过远、冲动与习惯冲突。",
+      "non_fit": "不能用环境解释取消用户选择，也不能只改内心忽略资源。",
+      "prerequisites": "明确可改变的环境变量和用户可控部分。",
+      "contraindications": "固定目的不可为不当手段辩护。",
+      "barriers": [
+        "physical_opportunity",
+        "automatic_motivation",
+        "psychological_capability"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "环境重构",
+        "习惯分析",
+        "下一行动",
+        "审议预演"
+      ],
+      "action_templates": [
+        "把遥远目标改写成环境中的下一可见动作",
+        "移除一个旧路径线索并放入新入口"
+      ],
+      "tension_links": [
+        "需由伦理镜头审查目的",
+        "补足只强调内在意志的路径"
+      ],
+      "evidence_links": [
+        "DHC-S004-P0012",
+        "DHC-S005-P0003",
+        "DHC-S005-P0016",
+        "DHC-S005-P0035",
+        "DHC-S005-P0028",
+        "DHC-S006-P0028",
+        "DHC-S007-P0027",
+        "DHC-S007-P0058",
+        "DHC-S007-P0068",
+        "DHC-S007-P0076",
+        "DHC-S008-P0004",
+        "DHC-S008-P0011"
+      ],
+      "evidence_directness": 0.66,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "II_CUE_ACTION",
+      "source_id": "II",
+      "thinker": "Peter M. Gollwitzer",
+      "name": "如果—那么情境启动",
+      "core_question": "哪个可识别线索出现时，你将自动进入哪个具体反应？",
+      "mechanism": "把关键情境X与反应Y预先绑定，提高线索可及性并减少现场决策负担。",
+      "best_fit": "目标已认领但忘记、犹豫、容易被现场干扰。",
+      "non_fit": "目标未认领、不可行、危险或关键障碍尚不清楚时不应先编译。",
+      "prerequisites": "存在较强目标意向，线索具体可识别，计划可撤销。",
+      "contraindications": "自动化可能刚性化，必须包含例外、替代和到期复审。",
+      "barriers": [
+        "automatic_motivation",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "实施意向",
+        "线索绑定",
+        "预决策",
+        "例外规则"
+      ],
+      "action_templates": [
+        "如果X发生，那么我做Y；若条件不安全则改做Z",
+        "为计划设置一周到期复审"
+      ],
+      "tension_links": [
+        "先由WOOP筛目标与障碍",
+        "需由SDT保证目标自主"
+      ],
+      "evidence_links": [
+        "II-P0001-B004",
+        "II-P0001-B006",
+        "II-P0002-B005",
+        "II-P0002-B007",
+        "II-P0002-B008",
+        "II-P0003-B002",
+        "II-P0003-B003",
+        "II-P0009-B003",
+        "II-P0009-B004"
+      ],
+      "evidence_directness": 0.86,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "SLT_MODELING",
+      "source_id": "SLT",
+      "thinker": "Albert Bandura",
+      "name": "观察学习与微榜样",
+      "core_question": "你缺的是注意、保持、动作再现、技能成分还是实施动机？",
+      "mechanism": "观察相似榜样、心理和实际演练、子技能训练与信息反馈可降低昂贵试错。",
+      "best_fit": "不会做、缺少示范、动作复杂、需要反馈精炼。",
+      "non_fit": "学会不等于会实施；价值和结果后果仍需另行检查。",
+      "prerequisites": "榜样与用户任务相似，动作可拆解，反馈不羞辱。",
+      "contraindications": "影响技术不授予强加权力，不以榜样比较贬低用户。",
+      "barriers": [
+        "psychological_capability",
+        "self_efficacy",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "观察学习",
+        "子技能",
+        "演练",
+        "信息反馈"
+      ],
+      "action_templates": [
+        "找一个相似微榜样，只观察一个子步骤",
+        "模仿近似动作并记录一条修正反馈"
+      ],
+      "tension_links": [
+        "需由价值守门决定是否值得学",
+        "与SEF掌握经验互补但不可混同"
+      ],
+      "evidence_links": [
+        "SLT-S008-P0003",
+        "SLT-S008-P0005",
+        "SLT-S021-P0003",
+        "SLT-S032-P0002",
+        "SLT-S034-P0005",
+        "SLT-S035-P0006",
+        "SLT-S036-P0002",
+        "SLT-S036-P0004",
+        "SLT-S036-P0007",
+        "SLT-S037-P0003",
+        "SLT-S136-P0005",
+        "SLT-S142-P0003",
+        "SLT-S215-P0003"
+      ],
+      "evidence_directness": 0.7,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "BA_ACTIVATION",
+      "source_id": "BA",
+      "thinker": "Martell等",
+      "name": "行为激活与反回避",
+      "core_question": "这个行为短期帮你避开什么，长期又维持了什么？",
+      "mechanism": "通过ABC功能分析、分级活动和TRAP—TRAC，把情绪等待与短期回避转为可测试的替代应对。",
+      "best_fit": "低活动、情绪等待、刷视频式短期缓解、回避循环和行动复苏。",
+      "non_fit": "严重功能崩溃、自伤风险或需临床评估时不进入普通挑战。",
+      "prerequisites": "先做临床风险和容量守门，行动按计划协商而非强迫。",
+      "contraindications": "不得把临床指南当自助诊断；不用任务完成替代专业照护。",
+      "barriers": [
+        "automatic_motivation",
+        "capacity",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "ABC功能分析",
+        "分级活动",
+        "TRAP—TRAC",
+        "自然强化"
+      ],
+      "action_templates": [
+        "识别触发—反应—回避模式并选一个两分钟替代",
+        "按协商计划接触一个有自然回报的活动"
+      ],
+      "tension_links": [
+        "需由Maslow和临床风险检查容量",
+        "与ACT共同取消情绪许可但机制不同"
+      ],
+      "evidence_links": [
+        "BA-P0037-B003",
+        "BA-P0037-B004",
+        "BA-P0038-B003",
+        "BA-P0040-B003",
+        "BA-P0041-B003",
+        "BA-P0042-B003",
+        "BA-P0044-B003",
+        "BA-P0045-B003",
+        "BA-P0098-B004",
+        "BA-P0102-B003",
+        "BA-P0106-B003",
+        "BA-P0213-B002",
+        "BA-P0214-B005",
+        "BA-P0097-B004"
+      ],
+      "evidence_directness": 0.88,
+      "review_status": "approved_with_clinical_boundary",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "MMP_CAPACITY",
+      "source_id": "MMP",
+      "thinker": "Abraham H. Maslow",
+      "name": "需要与行动容量守门",
+      "core_question": "安全、睡眠、身体、归属或负荷中，哪项需要现在具有相对优先？",
+      "mechanism": "需要有动态相对优先且可同时存在；容量不足时先恢复和获得支持，再谈成长挑战。",
+      "best_fit": "睡眠不足、身体不适、安全/归属缺口、过载和恢复期。",
+      "non_fit": "不能用刚性金字塔阻止用户在困难条件下追求高层价值。",
+      "prerequisites": "把需要层级视为动态预算而非人格等级。",
+      "contraindications": "禁止“低层人”标签；历史样本和自我实现材料有证据限制。",
+      "barriers": [
+        "capacity",
+        "physical_capability",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "容量预算",
+        "恢复",
+        "减负",
+        "支持"
+      ],
+      "action_templates": [
+        "从睡眠、饮食、身体、秩序、关系或求助中选一个L0动作",
+        "把本周挑战降到不挤压基本需要的水平"
+      ],
+      "tension_links": [
+        "需由Frankl说明基本满足不会自动产生意义",
+        "需要顺序允许例外和反转"
+      ],
+      "evidence_links": [
+        "MMP-S002-P0044",
+        "MMP-S002-P0045",
+        "MMP-S002-P0051",
+        "MMP-S002-P0222",
+        "MMP-S002-P0283",
+        "MMP-S002-P0348",
+        "MMP-S002-P0353",
+        "MMP-S002-P0360",
+        "MMP-S002-P0780",
+        "MMP-S002-P0858",
+        "MMP-S002-P0876",
+        "MMP-S002-P0791"
+      ],
+      "evidence_directness": 0.55,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NGS_STYLE",
+      "source_id": "NGS",
+      "thinker": "Friedrich Nietzsche",
+      "name": "生命肯定与长期风格",
+      "core_question": "这个选择来自充盈还是匮乏？你愿意把它重复为长期风格吗？",
+      "mechanism": "从身体和健康经验审查思想，用长期工作赋予性格风格，并以永恒回归作长期选择试验。",
+      "best_fit": "长期身份实践、生命肯定、创造动机和高阶选择。",
+      "non_fit": "急性低容量、真实受害或需要具体技术时不首选。",
+      "prerequisites": "先检查身体、现实和伦理边界。",
+      "contraindications": "命运之爱不等于赞美伤害；长期风格不等于强迫重复错误目标。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics",
+        "capacity"
+      ],
+      "stages": [
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "身体审查",
+        "长期风格",
+        "动机谱系",
+        "永恒回归试验"
+      ],
+      "action_templates": [
+        "问自己是否愿意把今天的选择重复一百次",
+        "为一个认可品质设计连续七天的小风格实践"
+      ],
+      "tension_links": [
+        "需由恢复镜头防止肯定变成压抑",
+        "与Frankl在意义来源上不同"
+      ],
+      "evidence_links": [
+        "NGS-S005-P0005",
+        "NGS-S342-P0002",
+        "NGS-S349-P0002",
+        "NGS-S363-P0002",
+        "NGS-S414-P0002",
+        "NGS-S444-P0002"
+      ],
+      "evidence_directness": 0.48,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NBG_WILL_COMPLEXITY",
+      "source_id": "NBG",
+      "thinker": "Friedrich Nietzsche",
+      "name": "意志复合与自主纪律",
+      "core_question": "这次“我想要”由哪些感受、命令、服从、条件和行动能力共同构成？",
+      "mechanism": "意志不是单一按钮；长期自选约束可塑造形式，也可能压抑力量，需审查代价。",
+      "best_fit": "把愿望误当执行、长期纪律设计、复杂动机和高阶创造。",
+      "non_fit": "不适合用作启动困难的唯一解释。",
+      "prerequisites": "区分愿意、能够、机会和实际行动。",
+      "contraindications": "不得合理化外部强制、等级服从或单一路径。",
+      "barriers": [
+        "reflective_motivation",
+        "psychological_capability",
+        "value_ethics"
+      ],
+      "stages": [
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "意志拆解",
+        "代价审查",
+        "自选约束",
+        "创造"
+      ],
+      "action_templates": [
+        "把“我想”拆成想要、能做、机会、命令感和实际下一步",
+        "为自选纪律写明收益、代价和退出条件"
+      ],
+      "tension_links": [
+        "需由COM-B提供行为工程拆分",
+        "长期约束与自主存在真实张力"
+      ],
+      "evidence_links": [
+        "NBG-PG-§019",
+        "NBG-PG-§188",
+        "NBG-PG-§211"
+      ],
+      "evidence_directness": 0.46,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NGM_GENEALOGY",
+      "source_id": "NGM",
+      "thinker": "Friedrich Nietzsche",
+      "name": "价值谱系、承诺与罪责风险",
+      "core_question": "这个目标和价值怎样形成？它来自创造、承诺，还是怨恨与罪责化？",
+      "mechanism": "追踪价值生成条件和功能，区分跨时间可依赖的承诺与坏良心、反应性价值及自责。",
+      "best_fit": "反应性目标、羞耻驱动承诺、过度罪责、长期主权承诺。",
+      "non_fit": "事实尚不清、急性风险或普通微启动不需要复杂谱系分析。",
+      "prerequisites": "事实、责任和受到影响者先被明确。",
+      "contraindications": "不得把受害者的痛苦解释成软弱；谱系怀疑不能取消真实责任。",
+      "barriers": [
+        "value_ethics",
+        "reflective_motivation",
+        "automatic_motivation"
+      ],
+      "stages": [
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "价值谱系",
+        "反应性审查",
+        "承诺能力",
+        "去罪责化"
+      ],
+      "action_templates": [
+        "写下目标最早来自谁的评价以及现在服务什么",
+        "区分事实责任、修复责任和人格自责"
+      ],
+      "tension_links": [
+        "与王阳明的良知根据存在真实张力",
+        "需由Beck区分事实有罪与感到有罪"
+      ],
+      "evidence_links": [
+        "NGM-P0004-B022",
+        "NGM-P0012-B001",
+        "NGM-P0022-B013",
+        "NGM-P0036-B004",
+        "NGM-P0060-B001",
+        "NGM-P0061-B003",
+        "NGM-P0077-B021",
+        "NGM-P0078-B009"
+      ],
+      "evidence_directness": 0.5,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "OET_WOOP",
+      "source_id": "OET",
+      "thinker": "Gabriele Oettingen",
+      "name": "心理对照与WOOP",
+      "core_question": "愿望的最佳结果是什么，现实关键障碍是什么，它是否可行，出现时做什么？",
+      "mechanism": "把最佳未来与当前障碍连接，让可行性调节投入，再用实施意向连接障碍和工具行为。",
+      "best_fit": "积极幻想、愿景强但未行动、障碍不清、需要投入或退出分流。",
+      "non_fit": "外部可行性不足时不能把所有障碍转成用户内部问题。",
+      "prerequisites": "愿望重要、挑战且可能实现；先检查外部条件。",
+      "contraindications": "WOOP不是四个普通文本框；退出不可行愿望不是失败。",
+      "barriers": [
+        "reflective_motivation",
+        "automatic_motivation",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "心理对照",
+        "可行性分流",
+        "WOOP",
+        "实施意向"
+      ],
+      "action_templates": [
+        "完成Wish—Outcome—Obstacle—Plan并判断投入、缩小、延后或退出",
+        "把if端写成障碍/情境而非另一个动作"
+      ],
+      "tension_links": [
+        "需由COM-B检查结构性外部障碍",
+        "与积极结果想象材料存在补充和限制关系"
+      ],
+      "evidence_links": [
+        "OET-S007-P0006",
+        "OET-S007-P0007",
+        "OET-S007-P0009",
+        "OET-S008-P0022",
+        "OET-S011-P0025",
+        "OET-S011-P0026",
+        "OET-S012-P0021",
+        "OET-S012-P0034",
+        "OET-S012-P0063",
+        "OET-S013-P0025",
+        "OET-S013-P0029",
+        "OET-S013-P0040",
+        "OET-S013-P0042",
+        "OET-S013-P0044",
+        "OET-S013-P0048",
+        "OET-S013-P0050"
+      ],
+      "evidence_directness": 0.84,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "SEF_MASTERY",
+      "source_id": "SEF",
+      "thinker": "Albert Bandura",
+      "name": "任务特定效能与掌握阶梯",
+      "core_question": "在这个具体任务和情境中，你有什么真实掌握证据，判断误差在哪里？",
+      "mechanism": "效能来自掌握、替代、劝导与身心状态信息；亲历掌握最有影响，更新必须限于相似任务和情境。",
+      "best_fit": "“我肯定做不到”、低任务特定信心、能力高估/低估、需要迁移。",
+      "non_fit": "结果受外部结构限制时，不应把效能当唯一原因。",
+      "prerequisites": "任务、难度和情境被具体规定，并把效能与结果预期分开。",
+      "contraindications": "禁止空泛“相信自己”；效能不等于能力，更不等于人格价值。",
+      "barriers": [
+        "self_efficacy",
+        "psychological_capability",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "掌握阶梯",
+        "相似榜样",
+        "效能校准",
+        "迁移边界"
+      ],
+      "action_templates": [
+        "完成比当前证据略高的一小步并限定更新范围",
+        "记录预测把握、实际结果和校准误差"
+      ],
+      "tension_links": [
+        "由COM-B防止过度个人归因",
+        "与SLT观察学习互补但掌握证据权重更高"
+      ],
+      "evidence_links": [
+        "SEF-S009-P0002",
+        "SEF-S015-P0001",
+        "SEF-S015-P0002",
+        "SEF-S026-P0003",
+        "SEF-S033-P0009",
+        "SEF-S060-P0007",
+        "SEF-S063-P0028",
+        "SEF-S084-P0003",
+        "SEF-S091-P0005",
+        "SEF-S092-P0004",
+        "SEF-S098-P0008",
+        "SEF-S113-P0005",
+        "SEF-S118-P0005",
+        "SEF-S125-P0028",
+        "SEF-S128-P0004",
+        "SEF-S141-P0009",
+        "SEF-S490-P0001"
+      ],
+      "evidence_directness": 0.79,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "FRK_MEANING",
+      "source_id": "FRK",
+      "thinker": "Viktor E. Frankl",
+      "name": "情境意义、责任与受限自由",
+      "core_question": "此时此地，生活向你提出了什么可认领的问题，你愿意对谁或何事负责？",
+      "mechanism": "意义随人和时刻变化；行动可通过创造、体验/相遇或对不可避免痛苦采取立场而指向自身以外。",
+      "best_fit": "无意义、控制性目标、受限处境、需要责任边界和自我超越。",
+      "non_fit": "可避免的痛苦应先移除原因，治疗者或AI不能替用户指定意义。",
+      "prerequisites": "区分可改变条件、不可改变条件和用户自选责任。",
+      "contraindications": "禁止浪漫化痛苦、要求自我牺牲或用意义压迫用户。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "具体意义问题",
+        "责任边界",
+        "受限自由",
+        "自我超越"
+      ],
+      "action_templates": [
+        "写下此刻谁或什么值得你回应，以及边界是什么",
+        "先移除一种可避免痛苦，再选择剩余条件中的小立场"
+      ],
+      "tension_links": [
+        "与Nietzsche在意义创造/发现上有张力",
+        "与SDT共同防止他人控制但语言不同"
+      ],
+      "evidence_links": [
+        "FRK-S008-P0005",
+        "FRK-S008-P0007",
+        "FRK-S008-P0020",
+        "FRK-S008-P0025",
+        "FRK-S008-P0028",
+        "FRK-S008-P0036",
+        "FRK-S008-P0037",
+        "FRK-S008-P0040",
+        "FRK-S008-P0043",
+        "FRK-S008-P0044",
+        "FRK-S008-P0051",
+        "FRK-S008-P0054",
+        "FRK-S008-P0097",
+        "FRK-S008-P0100",
+        "FRK-S008-P0103",
+        "FRK-S009-P0004"
+      ],
+      "evidence_directness": 0.61,
+      "review_status": "approved_with_genre_note",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "BCW_COMB",
+      "source_id": "BCW",
+      "thinker": "Michie、Atkins、West",
+      "name": "COM-B情境诊断与行为工程",
+      "core_question": "这个具体行为缺的是身体/心理能力、物理/社会机会，还是反思/自动动机？",
+      "mechanism": "先规定目标行为，再用能力、机会和动机六格形成竞争假设，并以APEASE审查干预。",
+      "best_fit": "多因问题、建议反复错配、目标还是结果词、外部条件可能被忽略。",
+      "non_fit": "COM-B不能决定人生价值、意义或道德方向。",
+      "prerequisites": "行为被写成谁、何时、何地、做什么、频率与谁，并使用多来源证据。",
+      "contraindications": "有效不是唯一标准；必须检查可行、接受度、副作用、安全与公平。",
+      "barriers": [
+        "physical_capability",
+        "psychological_capability",
+        "physical_opportunity",
+        "social_opportunity",
+        "reflective_motivation",
+        "automatic_motivation",
+        "capacity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3",
+        "l4"
+      ],
+      "methods": [
+        "行为规定",
+        "COM-B六格",
+        "竞争假设",
+        "APEASE"
+      ],
+      "action_templates": [
+        "把结果词改写成可观察目标行为",
+        "只选一个首要障碍并设计一个可逆干预"
+      ],
+      "tension_links": [
+        "不能替代王阳明、SDT或Frankl的方向判断",
+        "用外部机会检查纠正过度内在归因"
+      ],
+      "evidence_links": [
+        "BCW-P0018-B002",
+        "BCW-P0022-B005",
+        "BCW-P0023-B002",
+        "BCW-P0023-B006",
+        "BCW-P0025-B005",
+        "BCW-P0028-B002",
+        "BCW-P0032-B002",
+        "BCW-P0033-B002",
+        "BCW-P0060-B002",
+        "BCW-P0061-B002",
+        "BCW-P0062-B002",
+        "BCW-P0064-B004",
+        "BCW-P0064-B006",
+        "BCW-P0064-B008",
+        "BCW-P0064-B010",
+        "BCW-P0064-B012",
+        "BCW-P0064-B014",
+        "BCW-P0067-B002",
+        "BCW-P0111-B002",
+        "BCW-P0151-B002",
+        "BCW-P0245-B002"
+      ],
+      "evidence_directness": 0.9,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    }
+  ]
+}

@@ -1,5 +1,29 @@
 import 'zhixing_models.dart';
 
+part 'zhixing_thinker_catalog.g.dart';
+
+class ZxThinkerEvidence {
+  final String evidenceId;
+  final String sourceId;
+  final String locator;
+  final String claim;
+  final String summary;
+  final String use;
+  final String boundary;
+  final String evidenceLayer;
+
+  const ZxThinkerEvidence({
+    required this.evidenceId,
+    required this.sourceId,
+    required this.locator,
+    required this.claim,
+    required this.summary,
+    required this.use,
+    required this.boundary,
+    required this.evidenceLayer,
+  });
+}
+
 /// A product-facing, author-level thought system.
 ///
 /// Twenty-two reviewed works remain independent evidence sources and
@@ -14,6 +38,7 @@ class ZxThinkerGuide {
   final String category;
   final String evolutionStage;
   final String primaryLensId;
+  final List<String> sourceIds;
   final List<String> lensIds;
   final List<String> coreValues;
   final List<String> coreIdeas;
@@ -33,6 +58,10 @@ class ZxThinkerGuide {
   final List<String> buildsOnSystemIds;
   final List<String> relatedSystemIds;
   final List<String> tensions;
+  final String primarySourceFoundation;
+  final List<String> commonGroundWithYangming;
+  final List<String> differencesFromYangming;
+  final List<ZxThinkerEvidence> evidenceHighlights;
 
   const ZxThinkerGuide({
     required this.sequence,
@@ -42,6 +71,7 @@ class ZxThinkerGuide {
     required this.category,
     required this.evolutionStage,
     required this.primaryLensId,
+    this.sourceIds = const <String>[],
     required this.lensIds,
     required this.coreValues,
     required this.coreIdeas,
@@ -61,6 +91,10 @@ class ZxThinkerGuide {
     required this.buildsOnSystemIds,
     required this.relatedSystemIds,
     required this.tensions,
+    this.primarySourceFoundation = '',
+    this.commonGroundWithYangming = const <String>[],
+    this.differencesFromYangming = const <String>[],
+    this.evidenceHighlights = const <ZxThinkerEvidence>[],
   });
 
   /// Backwards-compatible representative lens used as the persisted selection
@@ -73,7 +107,16 @@ class ZxThinkerCatalog {
 
   static const String yangmingSystemId = 'yangming';
 
-  static const List<String> commonGround = <String>[
+  static const String knowledgeVersion = zxGeneratedKnowledgeVersion;
+  static const String catalogSha256 = zxGeneratedCatalogSha256;
+  static const List<String> commonGround = zxGeneratedCommonGround;
+  static const Map<String, String> evolutionStageGuidance =
+      zxGeneratedEvolutionStageGuidance;
+  static const Map<String, String> decisionRoutes =
+      zxGeneratedDecisionRoutes;
+  static const List<ZxThinkerGuide> guides = zxGeneratedGuides;
+
+  static const List<String> legacyCommonGroundV1_2 = <String>[
     '知不能只按“说得正确”判断，还要进入具体情境、动作与后果。',
     '行动不是知识的附属品；它会检验预测、暴露条件并生成新的认识。',
     '知行分裂不等于意志薄弱，可能来自价值、认知、情绪、能力、机会、习惯或容量。',
@@ -81,7 +124,7 @@ class ZxThinkerCatalog {
     '高水平知行合一包括选择、开始、坚持、修正、退出、恢复、协作并承担后果。',
   ];
 
-  static const Map<String, String> evolutionStageGuidance =
+  static const Map<String, String> legacyEvolutionStageGuidanceV1_2 =
       <String, String>{
     '第一层 · 立根：王阳明知行合一主线':
         '确立总纲：真知包含行动方向，行动成就并检验所知。',
@@ -95,7 +138,8 @@ class ZxThinkerCatalog {
         '保护人的有限容量，把练习沉淀为生活，并用统一工程框架选择干预。',
   };
 
-  static const Map<String, String> decisionRoutes = <String, String>{
+  static const Map<String, String> legacyDecisionRoutesV1_2 =
+      <String, String>{
     '方向与正当性': '先判断什么值得做、是不是自己认领、会让谁承担代价。',
     '事实与解释': '区分事实、预测、自动思维、绝对要求和仍未知的条件。',
     '情绪与心理关系': '不等待不适消失，区分需要接纳的体验与需要改变的伤害。',
@@ -105,7 +149,8 @@ class ZxThinkerCatalog {
     '求证与内化': '让结果回写原判断，逐步形成习惯、能力、身份与贡献。',
   };
 
-  static const List<ZxThinkerGuide> guides = <ZxThinkerGuide>[
+  static const List<ZxThinkerGuide> legacyGuidesV1_2 =
+      <ZxThinkerGuide>[
     ZxThinkerGuide(
       sequence: 1,
       systemId: yangmingSystemId,
@@ -1203,7 +1248,8 @@ class ZxThinkerCatalog {
         issues.add('${guide.systemId}缺少前序承接关系');
       }
       if (guide.coreValues.length < 4 ||
-          guide.coreIdeas.length < 4 ||
+          guide.coreIdeas.length < 8 ||
+          guide.sourceIds.isEmpty ||
           guide.knowledgeView.trim().isEmpty ||
           guide.actionView.trim().isEmpty ||
           guide.splitDiagnosis.trim().isEmpty ||
@@ -1217,8 +1263,24 @@ class ZxThinkerCatalog {
           guide.sevenLoopRoles.isEmpty ||
           guide.distinctiveFocus.trim().isEmpty ||
           guide.decisionCue.trim().isEmpty ||
-          guide.tensions.isEmpty) {
+          guide.tensions.isEmpty ||
+          guide.primarySourceFoundation.trim().isEmpty ||
+          guide.commonGroundWithYangming.isEmpty ||
+          guide.differencesFromYangming.isEmpty ||
+          guide.evidenceHighlights.length < 8) {
         issues.add('${guide.systemId}的完整知行体系说明不完整');
+      }
+      for (final evidence in guide.evidenceHighlights) {
+        if (!guide.sourceIds.contains(evidence.sourceId)) {
+          issues.add(
+            '${guide.systemId}包含不属于本体系来源的证据：${evidence.locator}',
+          );
+        }
+        if (evidence.locator.trim().isEmpty ||
+            evidence.claim.trim().isEmpty ||
+            evidence.summary.trim().isEmpty) {
+          issues.add('${guide.systemId}包含不完整的原著证据卡');
+        }
       }
     }
 

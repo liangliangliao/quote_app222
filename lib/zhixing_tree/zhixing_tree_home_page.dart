@@ -1315,7 +1315,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '以王阳明为主干，逐层推进知行合一',
           subtitle:
-              '22部作品保留为证据，整合成17套思想体系。每次引入都说明上一层的缺口、本次质变和融合后的新能力。',
+              'V${ZxThinkerCatalog.knowledgeVersion}已重新打开22部登记原著/材料，'
+              '以69,541条可回定位文本和256条重点证据整合成17套思想体系。'
+              '每次引入都说明上一层缺口、共同点、差异、本次质变和融合后的新能力。',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -1464,7 +1466,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 items: <DropdownMenuItem<String>>[
                   const DropdownMenuItem<String>(
                     value: '',
-                    child: Text('全部22部作品'),
+                    child: Text('全部22部登记原著/材料'),
                   ),
                   ..._knowledge.works.map(
                     (work) => DropdownMenuItem<String>(
@@ -1663,11 +1665,22 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             ),
             const SizedBox(height: 12),
             const Text(
-              '围绕知行合一的核心思想',
+              '围绕知行合一的核心思想 · B/C层',
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
-            ...guide.coreIdeas.map(_bullet),
+            ...guide.coreIdeas.take(4).map(_bullet),
+            if (guide.coreIdeas.length > 4)
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: Text('查看全部${guide.coreIdeas.length}条核心思想'),
+                subtitle: const Text('先看4条总纲，需要时再展开完整思想脉络'),
+                children: guide.coreIdeas
+                    .skip(4)
+                    .map(_bullet)
+                    .toList(growable: false),
+              ),
             const SizedBox(height: 8),
             _labelValue('怎样理解“知”', guide.knowledgeView),
             _labelValue('怎样理解“行”', guide.actionView),
@@ -1686,6 +1699,18 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 _labelValue('从知到行的转化路径', guide.transformationPath),
                 _labelValue('行动怎样回写认识', guide.actionFeedback),
                 _labelValue('与王阳明主线的关系', guide.yangmingConnection),
+                _labelValue('原著重新核验', guide.primarySourceFoundation),
+                const Text(
+                  '与王阳明的共同点 · C层跨源综合',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                ...guide.commonGroundWithYangming.map(_bullet),
+                const SizedBox(height: 8),
+                const Text(
+                  '与王阳明的差异 · C层跨源综合',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                ...guide.differencesFromYangming.map(_bullet),
                 if (buildsOn.isNotEmpty)
                   _labelValue('承接的前序思想', buildsOn),
                 _labelValue('融合后形成什么', guide.synthesisOutcome),
@@ -1712,6 +1737,35 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 ),
                 ...tensionNotes.map(_bullet),
                 const SizedBox(height: 8),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    '原著证据链 · A/B层（${guide.evidenceHighlights.length}条）',
+                  ),
+                  subtitle: const Text('逐条查看来源、定位、主张、用途和边界'),
+                  children: guide.evidenceHighlights
+                      .map(
+                        (evidence) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.fact_check_outlined),
+                          title: Text(
+                            '${evidence.locator} · ${evidence.claim}',
+                          ),
+                          subtitle: Text(
+                            '${evidence.summary}\n'
+                            '产品用途：${evidence.use}\n'
+                            '边界：${evidence.boundary}',
+                          ),
+                          isThreeLine: false,
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () =>
+                              _openEvidenceLocator(evidence.locator),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 8),
                 const Text(
                   '相互补足的思想体系',
                   style: TextStyle(fontWeight: FontWeight.w800),
@@ -1736,7 +1790,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 _labelValue('最适合', bestFit),
                 _labelValue('不适合/边界', boundaries),
                 const Text(
-                  '可直接采用的行动方式',
+                  '可直接采用的行动方式 · D层产品推论',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 ...actionTemplates.map(_bullet),
@@ -2649,19 +2703,28 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               _labelValue('知识版本', info.version),
               _labelValue('规则版本', info.ruleVersion),
               _labelValue('审阅状态', info.reviewStatus),
-              _labelValue('来源数量', '${info.sourceCount}部作品'),
+              _labelValue('来源数量', '${info.sourceCount}部登记原著/材料'),
               _labelValue(
                 '完整思想体系',
-                '${ZxThinkerCatalog.guides.length}套作者/理论整合体系',
+                '${info.systemCount}套作者/理论整合体系',
               ),
               _labelValue(
                 '作品级机制',
                 '${_knowledge.lenses.length}个机制镜头（保留原始证据分工）',
               ),
               _labelValue(
-                'SHA-256',
+                '重点原著证据',
+                '${info.evidenceCount}条可回定位证据卡',
+              ),
+              _labelValue(
+                '累计知识库 SHA-256',
                 '${info.actualSha256.substring(0, 16)}… · '
-                    '${info.integrityValid ? '完整性通过' : '不匹配'}',
+                    '${info.contentIntegrityValid ? '完整性通过' : '不匹配'}',
+              ),
+              _labelValue(
+                '思想目录 SHA-256',
+                '${info.actualCatalogSha256.substring(0, 16)}… · '
+                    '${info.catalogIntegrityValid ? '同步通过' : '不匹配'}',
               ),
               const SizedBox(height: 8),
               Wrap(

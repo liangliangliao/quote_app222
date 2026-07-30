@@ -12,8 +12,14 @@ class ZxKnowledgePackageInfo {
   final String publishedAt;
   final int sourceCount;
   final String reviewStatus;
+  final int systemCount;
+  final int evidenceCount;
   final String expectedSha256;
   final String actualSha256;
+  final String expectedCatalogSha256;
+  final String actualCatalogSha256;
+  final bool contentIntegrityValid;
+  final bool catalogIntegrityValid;
   final bool integrityValid;
 
   const ZxKnowledgePackageInfo({
@@ -23,17 +29,25 @@ class ZxKnowledgePackageInfo {
     required this.publishedAt,
     required this.sourceCount,
     required this.reviewStatus,
+    required this.systemCount,
+    required this.evidenceCount,
     required this.expectedSha256,
     required this.actualSha256,
+    required this.expectedCatalogSha256,
+    required this.actualCatalogSha256,
+    required this.contentIntegrityValid,
+    required this.catalogIntegrityValid,
     required this.integrityValid,
   });
 }
 
 class ZxKnowledgeRepository {
   static const String manifestAsset =
-      'assets/zhixing_tree/knowledge_manifest_v1_2.json';
+      'assets/zhixing_tree/knowledge_manifest_v2_0.json';
   static const String contentAsset =
-      'assets/zhixing_tree/knowledge_v1_2.md';
+      'assets/zhixing_tree/knowledge_v2_0.md';
+  static const String catalogAsset =
+      'assets/zhixing_tree/knowledge_systems_v2_0.json';
 
   ZxKnowledgePackageInfo? _packageInfo;
   List<ZxWork> _works = const <ZxWork>[];
@@ -61,6 +75,7 @@ class ZxKnowledgeRepository {
     if (isLoaded) return;
     final manifestRaw = await rootBundle.loadString(manifestAsset);
     final knowledgeRaw = await rootBundle.loadString(contentAsset);
+    final catalogRaw = await rootBundle.loadString(catalogAsset);
     final decoded = jsonDecode(manifestRaw);
     if (decoded is! Map) {
       throw const FormatException('Invalid knowledge manifest root.');
@@ -71,6 +86,14 @@ class ZxKnowledgeRepository {
     );
     final expectedHash = (manifest['content_sha256'] ?? '').toString();
     final actualHash = sha256.convert(utf8.encode(knowledgeRaw)).toString();
+    final expectedCatalogHash =
+        (manifest['catalog_sha256'] ?? '').toString();
+    final actualCatalogHash =
+        sha256.convert(utf8.encode(catalogRaw)).toString();
+    final contentIntegrityValid =
+        expectedHash.isNotEmpty && expectedHash == actualHash;
+    final catalogIntegrityValid = expectedCatalogHash.isNotEmpty &&
+        expectedCatalogHash == actualCatalogHash;
 
     _works = _mapList(root['works']).map(ZxWork.fromJson).toList(growable: false);
     _lenses =
@@ -84,9 +107,15 @@ class ZxKnowledgeRepository {
       publishedAt: (manifest['published_at'] ?? '').toString(),
       sourceCount: _asInt(manifest['source_count']),
       reviewStatus: (manifest['review_status'] ?? '').toString(),
+      systemCount: _asInt(manifest['system_count']),
+      evidenceCount: _asInt(manifest['evidence_count']),
       expectedSha256: expectedHash,
       actualSha256: actualHash,
-      integrityValid: expectedHash.isNotEmpty && expectedHash == actualHash,
+      expectedCatalogSha256: expectedCatalogHash,
+      actualCatalogSha256: actualCatalogHash,
+      contentIntegrityValid: contentIntegrityValid,
+      catalogIntegrityValid: catalogIntegrityValid,
+      integrityValid: contentIntegrityValid && catalogIntegrityValid,
     );
     _validatePackage();
   }
@@ -99,6 +128,17 @@ class ZxKnowledgeRepository {
     if (_works.length != info.sourceCount) {
       throw StateError(
         'Knowledge source count mismatch: ${_works.length}/${info.sourceCount}.',
+      );
+    }
+    if (info.systemCount != 17) {
+      throw StateError(
+        'Knowledge system count mismatch: ${info.systemCount}/17.',
+      );
+    }
+    if (_evidence.length != info.evidenceCount) {
+      throw StateError(
+        'Knowledge evidence count mismatch: '
+        '${_evidence.length}/${info.evidenceCount}.',
       );
     }
     final sourceIds = _works.map((item) => item.sourceId).toSet();
@@ -160,7 +200,7 @@ class ZxKnowledgeRepository {
             sourceId: lens.sourceId,
             locator: locator,
             title: lens.name,
-            summary: '定位键存在于V1.2累计知识库，打开全文可查看上下文。',
+            summary: '定位键存在于V2.0累计知识库，打开全文可查看上下文。',
             use: lens.mechanism,
             boundary: lens.contraindications,
             contentType: 'original_claim',
@@ -358,6 +398,7 @@ class ZxKnowledgeRepository {
       'goal_id',
       'Work',
       'Concept',
+      'COM-B',
     };
     if (forbidden.contains(value)) return false;
     return RegExp(r'^[A-Z]{2,4}-').hasMatch(value);

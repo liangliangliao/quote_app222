@@ -8,13 +8,23 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('knowledge package', () {
-    test('loads 22 reviewed sources and 22 mechanism lenses with valid hash',
+    test('loads V2 primary-source package with synchronized catalog hashes',
         () async {
       final repository = ZxKnowledgeRepository();
       await repository.load();
 
       expect(repository.packageInfo.integrityValid, isTrue);
+      expect(repository.packageInfo.contentIntegrityValid, isTrue);
+      expect(repository.packageInfo.catalogIntegrityValid, isTrue);
+      expect(repository.packageInfo.version, '2.0.0');
       expect(repository.packageInfo.sourceCount, 22);
+      expect(repository.packageInfo.systemCount, 17);
+      expect(repository.packageInfo.evidenceCount, 256);
+      expect(repository.evidence, hasLength(256));
+      expect(
+        repository.packageInfo.actualCatalogSha256,
+        ZxThinkerCatalog.catalogSha256,
+      );
       expect(repository.works, hasLength(22));
       expect(repository.lenses, hasLength(22));
       for (final lens in repository.lenses) {
@@ -71,7 +81,12 @@ void main() {
       );
       for (final guide in ZxThinkerCatalog.guides) {
         expect(guide.coreValues.length, greaterThanOrEqualTo(4));
-        expect(guide.coreIdeas.length, greaterThanOrEqualTo(4));
+        expect(guide.coreIdeas.length, greaterThanOrEqualTo(8));
+        expect(guide.sourceIds, isNotEmpty);
+        expect(guide.primarySourceFoundation, isNotEmpty);
+        expect(guide.commonGroundWithYangming, isNotEmpty);
+        expect(guide.differencesFromYangming, isNotEmpty);
+        expect(guide.evidenceHighlights.length, greaterThanOrEqualTo(8));
         expect(guide.knowledgeView, isNotEmpty);
         expect(guide.actionView, isNotEmpty);
         expect(guide.splitDiagnosis, isNotEmpty);
@@ -87,6 +102,10 @@ void main() {
         expect(guide.relatedSystemIds, isNotEmpty);
         if (guide.sequence > 1) {
           expect(guide.buildsOnSystemIds, isNotEmpty);
+        }
+        for (final evidence in guide.evidenceHighlights) {
+          expect(guide.sourceIds, contains(evidence.sourceId));
+          expect(repository.locatorExists(evidence.locator), isTrue);
         }
       }
       expect(
