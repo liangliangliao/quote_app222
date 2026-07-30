@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/zhixing_tree/zhixing_engines.dart';
 import 'package:quote_app/zhixing_tree/zhixing_knowledge_repository.dart';
 import 'package:quote_app/zhixing_tree/zhixing_models.dart';
+import 'package:quote_app/zhixing_tree/zhixing_thinker_catalog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,29 @@ void main() {
       expect(results, isNotEmpty);
       expect(results.any((item) => item.type == 'lens'), isTrue);
       expect(repository.search('BCW-P0064-B010'), isNotEmpty);
+    });
+
+    test('shows every reviewed thought in a complete ordered decision guide',
+        () async {
+      final repository = ZxKnowledgeRepository();
+      await repository.load();
+
+      expect(ZxThinkerCatalog.guides, hasLength(22));
+      expect(
+        ZxThinkerCatalog.guides.map((item) => item.sequence),
+        orderedEquals(List<int>.generate(22, (index) => index + 1)),
+      );
+      expect(
+        ZxThinkerCatalog.validateAgainst(repository.lenses),
+        isEmpty,
+      );
+      for (final guide in ZxThinkerCatalog.guides) {
+        expect(guide.coreValues, isNotEmpty);
+        expect(guide.coreIdeas, isNotEmpty);
+        expect(guide.distinctiveFocus, isNotEmpty);
+        expect(guide.decisionCue, isNotEmpty);
+        expect(guide.relatedLensIds, isNotEmpty);
+      }
     });
   });
 
@@ -147,7 +171,36 @@ void main() {
       expect(action.stopConditions, isNotEmpty);
       expect(action.proofOptions, isNotEmpty);
       expect(action.evidenceLocators, isNotEmpty);
+      expect(action.mainAction, contains('完成一个最小动作'));
       expect(action.mainAction, isNot(contains('一定成功')));
+    });
+
+    test('chosen primary thought shapes the action and fusion stays supportive',
+        () {
+      final input = _input();
+      final diagnosis = diagnoser.diagnose(input);
+      final primary = _lens(id: 'PRIMARY');
+      final complementary = _lens(id: 'COMPLEMENT', sourceId: 'B');
+      final match = ZxMatchResult(
+        primary: primary,
+        complementary: complementary,
+        ranking: const <ZxFitScore>[],
+        lowMatch: false,
+        lowMatchReason: '',
+        uncertainty: 0.2,
+        conflictNotes: const <String>[],
+      );
+
+      final action = generator.generate(
+        input: input,
+        diagnosis: diagnosis,
+        match: match,
+      )!;
+
+      expect(action.mainAction, contains('采用PRIMARY'));
+      expect(action.mainAction, contains('完成一个最小动作'));
+      expect(action.supportChanges.join(' '), contains('互补采用COMPLEMENT'));
+      expect(action.complementaryLensId, 'COMPLEMENT');
     });
   });
 

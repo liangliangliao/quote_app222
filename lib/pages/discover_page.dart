@@ -2595,7 +2595,7 @@ Widget _buildEmotionPieChart() {
                                     ),
                                     SizedBox(height: 2),
                                     Text(
-                                      '情境诊断、思想匹配、行动处方、复盘证据与成长树',
+                                      '全部思想导航、自主选择与融合、立即行动、极简复盘与成长树',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(

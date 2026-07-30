@@ -26,6 +26,7 @@ class ZxRewardContext {
 class ZxDao {
   static const String _knowledgeVersionKey = 'zhixing_knowledge_version_v1';
   static const String _disabledLensesKey = 'zhixing_disabled_lenses_v1';
+  static const String _selectedLensesKey = 'zhixing_selected_lenses_v1';
   static const String _personalizationKey = 'zhixing_personalization_v1';
 
   final KeyValueDao _kv = KeyValueDao();
@@ -594,6 +595,21 @@ class ZxDao {
   Future<void> setDisabledLenses(Set<String> lensIds) =>
       _kv.setString(_disabledLensesKey, jsonEncode(lensIds.toList()..sort()));
 
+  Future<Set<String>> selectedLenses() async {
+    final raw = await _kv.getString(_selectedLensesKey);
+    if (raw == null || raw.isEmpty) return <String>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((item) => item.toString()).toSet();
+      }
+    } catch (_) {}
+    return <String>{};
+  }
+
+  Future<void> setSelectedLenses(Set<String> lensIds) =>
+      _kv.setString(_selectedLensesKey, jsonEncode(lensIds.toList()..sort()));
+
   Future<bool> personalizationEnabled() async =>
       (await _kv.getString(_personalizationKey)) != '0';
 
@@ -643,6 +659,7 @@ class ZxDao {
     Future<List<Map<String, Object?>>> table(String name) =>
         database.query(name, orderBy: 'id ASC');
     final treeRows = await database.query('zhixing_tree_state');
+    final selectedLensIds = (await selectedLenses()).toList()..sort();
     return <String, dynamic>{
       'schema': 'zhixing-tree-export-v1',
       'exported_at': DateTime.now().toIso8601String(),
@@ -654,6 +671,7 @@ class ZxDao {
       'xp_ledger': await table('zhixing_xp_ledger'),
       'tree_events': await table('zhixing_tree_events'),
       'lens_feedback': await table('zhixing_lens_feedback'),
+      'selected_lenses': selectedLensIds,
       'candidates': await table('zhixing_candidates'),
       'tree_state': treeRows,
     };
@@ -725,6 +743,7 @@ class ZxDao {
       }
     });
     await setDisabledLenses(<String>{});
+    await setSelectedLenses(<String>{});
   }
 }
 

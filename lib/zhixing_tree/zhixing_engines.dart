@@ -700,13 +700,27 @@ class ZxActionGenerator {
       diagnosis.safety.maximumDifficulty,
     );
     final barrier = diagnosis.primary.barrier;
-    final action = _actionFor(input, barrier, difficulty);
+    final fallbackAction = _actionFor(input, barrier, difficulty);
+    final action = _lensGuidedAction(
+      input: input,
+      diagnosis: diagnosis,
+      lens: match.primary,
+      difficulty: difficulty,
+      fallbackAction: fallbackAction,
+    );
     final lower = _lowerActionFor(input, barrier);
     final challenge = _challengeActionFor(input, barrier, difficulty);
     final cue = input.cue.trim().isEmpty
         ? '当我下一次进入“${input.goalTitle.trim()}”的现实情境时'
         : input.cue.trim();
-    final support = _supportFor(input, barrier);
+    final support = <String>[
+      ..._supportFor(input, barrier),
+      if (match.complementary != null &&
+          match.complementary!.actionTemplates.isNotEmpty)
+        '互补采用${match.complementary!.thinker}：'
+            '${match.complementary!.actionTemplates.first}；'
+            '它只用于降低摩擦或补足条件，不增加第二个主动作。',
+    ];
     final stop = _stopConditions(input, diagnosis);
     final proof = <ZxProofType>[
       ZxProofType.selfReport,
@@ -800,6 +814,29 @@ class ZxActionGenerator {
       ZxBarrier.capacity =>
         '从睡眠、饮食、身体、秩序、关系或求助中选一项，完成一个$minutes分钟的恢复/支持动作。',
     };
+  }
+
+  static String _lensGuidedAction({
+    required ZxSituationInput input,
+    required ZxDiagnosisResult diagnosis,
+    required ZxThinkerLens lens,
+    required ZxDifficulty difficulty,
+    required String fallbackAction,
+  }) {
+    if (lens.actionTemplates.isEmpty) return fallbackAction;
+    final capacityFirst = diagnosis.primary.barrier == ZxBarrier.capacity ||
+        diagnosis.primary.barrier == ZxBarrier.physicalCapability;
+    if (capacityFirst &&
+        !lens.barriers.contains(ZxBarrier.capacity) &&
+        !lens.barriers.contains(ZxBarrier.physicalCapability)) {
+      return fallbackAction;
+    }
+    final template = lens.actionTemplates.first.trim();
+    if (template.isEmpty) return fallbackAction;
+    final target = input.targetBehavior.trim();
+    final minutes = _minutesFor(difficulty, input.availableMinutes);
+    return '采用${lens.thinker}的“${lens.name}”：$template。'
+        '把它用于“$target”，本轮只投入$minutes分钟并完成这一项。';
   }
 
   static String _lowerActionFor(
