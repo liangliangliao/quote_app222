@@ -106,37 +106,61 @@ class AzureAiResource {
 
   bool get isConfigured => baseUrl.isNotEmpty && apiKey.trim().isNotEmpty;
 
-  /// 从用户填写的终结点里解析出资源根地址。
-  ///
-  /// 支持三种常见写法，全部归一化成 `https://<host>`：
-  /// - `https://xxx.openai.azure.com`
-  /// - `https://xxx.services.ai.azure.com/api/projects/yyy`（Foundry 项目终结点）
-  /// - 已经带上 `/openai`、`/openai/v1`、`/models` 等数据面后缀的地址
-  String get baseUrl {
+  Uri? get _parsedEndpoint {
     var raw = endpoint.trim();
-    if (raw.isEmpty) return '';
+    if (raw.isEmpty) return null;
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
       raw = 'https://$raw';
     }
     final uri = Uri.tryParse(raw);
-    if (uri == null || uri.host.trim().isEmpty) return '';
-    var path = uri.path;
-    final lower = path.toLowerCase();
-    final projectIndex = lower.indexOf('/api/projects/');
-    if (projectIndex >= 0) {
-      path = path.substring(0, projectIndex);
+    if (uri == null || uri.host.trim().isEmpty) return null;
+    return uri;
+  }
+
+  /// 从用户填写的终结点里解析出资源根地址。
+  ///
+  /// Azure 门户在不同位置给出的地址形态差别很大，用户很可能直接粘贴其中任意一种：
+  /// - `https://xxx.openai.azure.com`（资源终结点）
+  /// - `https://xxx.services.ai.azure.com/api/projects/yyy`（Foundry 项目终结点）
+  /// - `https://xxx.openai.azure.com/openai/responses?api-version=…`（部署页的“目标 URI”）
+  /// - `https://xxx.openai.azure.com/openai/deployments/<部署名>/chat/completions?api-version=…`
+  /// - `https://xxx.services.ai.azure.com/models/chat/completions?api-version=…`
+  ///
+  /// 因此这里不按固定后缀裁剪（那样只能认出少数几种写法），而是从第一个数据面
+  /// 路径段起把后面整段丢掉，只保留资源根地址；查询串也一并丢弃。
+  String get baseUrl {
+    final uri = _parsedEndpoint;
+    if (uri == null) return '';
+    final segments = uri.pathSegments.where((e) => e.trim().isNotEmpty).toList();
+    final kept = <String>[];
+    for (var i = 0; i < segments.length; i++) {
+      final segment = segments[i].toLowerCase();
+      // Foundry 项目终结点：/api/projects/<项目名>
+      if (segment == 'api' && i + 1 < segments.length && segments[i + 1].toLowerCase() == 'projects') break;
+      if (_dataPlaneSegments.contains(segment)) break;
+      kept.add(segments[i]);
     }
-    for (final suffix in const <String>['/openai/v1', '/openai/deployments', '/openai', '/models']) {
-      if (path.toLowerCase().endsWith(suffix)) {
-        path = path.substring(0, path.length - suffix.length);
-        break;
-      }
-    }
-    while (path.endsWith('/')) {
-      path = path.substring(0, path.length - 1);
-    }
+    final path = kept.isEmpty ? '' : '/${kept.join('/')}';
     return '${uri.scheme}://${uri.authority}$path';
   }
+
+  /// 数据面路径的起始段。命中其中任意一个就说明后面是调用路径而不是资源地址。
+  static const Set<String> _dataPlaneSegments = <String>{
+    'openai',
+    'models',
+    'deployments',
+    'chat',
+    'responses',
+    'completions',
+    'embeddings',
+    'inference',
+  };
+
+  /// 用户粘贴的终结点里自带的 api-version。
+  ///
+  /// 门户复制出来的“目标 URI”通常带 `?api-version=…`，那是这个资源当前推荐的版本；
+  /// 用户没有在设置里显式填写时，用它比用内置默认值更贴近实际部署。
+  String get endpointApiVersion => (_parsedEndpoint?.queryParameters['api-version'] ?? '').trim();
 
   /// Foundry 项目终结点里的项目名，仅用于设置页回显，不参与请求拼接。
   String get projectName {
@@ -171,6 +195,8 @@ class AzureAiResource {
   String get resolvedApiVersion {
     final v = apiVersion.trim();
     if (v.isNotEmpty) return v;
+    final fromEndpoint = endpointApiVersion;
+    if (fromEndpoint.isNotEmpty) return fromEndpoint;
     return resolvedKind == AzureAiSettings.kindFoundryModels
         ? AzureAiSettings.defaultFoundryApiVersion
         : AzureAiSettings.defaultAzureOpenAiApiVersion;
@@ -214,21 +240,24 @@ class AzureAiResource {
     return unique;
   }
 
-  /// 模型/部署列举候选终结点，按顺序尝试并合并结果。
+  /// 模型/部署列举候选终结点，按顺序尝试，第一条拿到结果就停。
+  ///
+  /// 这里只用“返回已部署模型”的接口。刻意不使用 `/openai/models`：它返回的是该区域
+  /// 所有可用的基础模型（上百条），并不代表这个资源真的部署了它们，选中后调用时才会
+  /// 报部署不存在——那比列不出来更难排查。
   List<String> modelListEndpointCandidates() {
     final base = baseUrl;
     if (base.isEmpty) return const <String>[];
     final version = resolvedApiVersion;
     final ordered = <String>[
-      // 数据面部署列举，Azure OpenAI 与 Foundry 资源都支持，返回的是“已部署”的模型。
+      // 数据面部署列举，Azure OpenAI 与 Foundry 资源都支持。
       '$base/openai/deployments?api-version=${AzureAiSettings.deploymentListApiVersion}',
-      '$base/openai/models?api-version=$version',
+      '$base/openai/deployments?api-version=$version',
+      // v1 API 上 /models 返回的同样是该资源已部署的模型。
+      '$base/openai/v1/models?api-version=preview',
       '$base/openai/v1/models',
       '$base/models?api-version=$version',
     ];
-    if (resolvedKind == AzureAiSettings.kindFoundryModels) {
-      ordered.insert(1, '$base/models?api-version=$version');
-    }
     final unique = <String>[];
     for (final item in ordered) {
       if (!unique.contains(item)) unique.add(item);
@@ -257,7 +286,10 @@ class AzureAiSettings {
   static const String kindAzureOpenAi = 'azure_openai';
   static const String kindFoundryModels = 'foundry_models';
 
-  static const String defaultAzureOpenAiApiVersion = '2024-10-21';
+  // gpt-5 / o 系列要用 max_completion_tokens，而这个参数要求 api-version 不低于
+  // 2024-12-01-preview；用更老的 GA 版本会被判成“无法识别的请求参数”。这里的默认值
+  // 与门户在部署页给出的“目标 URI”保持一致，避免新资源开箱即报错。
+  static const String defaultAzureOpenAiApiVersion = '2025-04-01-preview';
   static const String defaultFoundryApiVersion = '2024-05-01-preview';
   static const String deploymentListApiVersion = '2023-03-15-preview';
 
@@ -332,12 +364,13 @@ class AzureAiSettings {
   /// 用户只需要填终结点和密钥即可。
   static List<AzureAiResource> defaultTemplates() {
     return <AzureAiResource>[
+      // api-version 故意留空：留空时会优先采用用户粘贴的终结点里自带的
+      // `?api-version=…`（门户给出的推荐版本），比写死内置默认值更贴近实际资源。
       const AzureAiResource(
         id: 'azureopenai',
         name: 'AzureOpenAI',
         endpoint: '',
         apiKey: '',
-        apiVersion: defaultAzureOpenAiApiVersion,
         kind: kindAzureOpenAi,
       ),
       const AzureAiResource(
@@ -345,7 +378,6 @@ class AzureAiSettings {
         name: 'modleapikey',
         endpoint: '',
         apiKey: '',
-        apiVersion: defaultFoundryApiVersion,
         kind: kindFoundryModels,
       ),
     ];

@@ -11,13 +11,22 @@
   - `name`：资源/项目名，例如 `AzureOpenAI`、`modleapikey`
   - `endpoint`：Microsoft Foundry 项目终结点或 Azure OpenAI 终结点
   - `api_key`、`api_version`、`kind`（接入方式）、`deployments`（手填部署名兜底）、`enabled`
-- 终结点归一化：`https://<res>.services.ai.azure.com/api/projects/<project>`、`https://<res>.openai.azure.com`、
-  以及已带 `/openai`、`/openai/v1`、`/models` 后缀的写法，都会被裁成同一个资源根地址；缺少协议头时自动补 `https://`。
+- 终结点归一化：从第一个数据面路径段（`openai` / `models` / `deployments` / `chat` / `responses` /
+  `completions` / `embeddings` / `inference`，以及 `/api/projects/`）起把后面整段丢掉，只保留资源根地址，
+  查询串一并丢弃；缺少协议头时自动补 `https://`。因此下面几种写法都能直接粘贴：
+  - `https://<res>.openai.azure.com`（资源终结点）
+  - `https://<res>.services.ai.azure.com/api/projects/<project>`（Foundry 项目终结点）
+  - `https://<res>.openai.azure.com/openai/responses?api-version=…`（部署页的“目标 URI”）
+  - `https://<res>.openai.azure.com/openai/deployments/<部署名>/chat/completions?api-version=…`
+  - `https://<res>.services.ai.azure.com/models/chat/completions?api-version=…`
 - 模型列举按资源依次尝试并在第一条成功的地址上停止：
   1. `/openai/deployments?api-version=2023-03-15-preview`（部署列举，最权威）
-  2. `/openai/models?api-version=<版本>`
-  3. `/openai/v1/models`
-  4. `/models?api-version=<版本>`（Foundry 资源会提前到第 2 位）
+  2. `/openai/deployments?api-version=<版本>`
+  3. `/openai/v1/models?api-version=preview`
+  4. `/openai/v1/models`
+  5. `/models?api-version=<版本>`
+  刻意不使用 `/openai/models`：它返回的是该区域所有可用基础模型（上百条），并不代表这个资源
+  真的部署了它们，选中后要到调用时才报部署不存在，比列不出来更难排查。
   全部失败时退回该资源手工登记的部署名，因此订阅关闭列举接口时仍可选模型。
 - 列举结果会过滤掉 embedding / whisper / dall-e / tts / rerank 等非聊天部署，以及未部署成功的条目。
 - 模型 id 使用 `资源名/部署名` 的限定写法（例如 `AzureOpenAI/gpt-5.6-chat`、`modleapikey/claude-sonnet-4-5`），
@@ -26,7 +35,10 @@
 ### 2. 调用参数
 
 - 鉴权：Azure 走 `api-key` 头；`/models/…` 与 `/openai/v1/…` 两条路径额外带 `Authorization: Bearer`。
-- api-version：留空时按接入方式取默认值（Azure OpenAI `2024-10-21`，Foundry `2024-05-01-preview`）。
+- api-version 取值优先级：设置里显式填写 > 粘贴的终结点里自带的 `?api-version=…`（门户给出的推荐版本）
+  > 按接入方式取默认值（Azure OpenAI `2025-04-01-preview`，Foundry `2024-05-01-preview`）。
+  Azure OpenAI 默认值不能低于 `2024-12-01-preview`，否则 gpt-5 系列所需的 `max_completion_tokens`
+  会被判成“无法识别的请求参数”。
 - 调用地址按接入方式排出候选优先级，命中 404 / 405 / `DeploymentNotFound` 一类“路径或部署不存在”的错误时自动换下一条重试：
   - Azure OpenAI 部署：`/openai/deployments/<部署名>/chat/completions` → `/openai/v1/chat/completions` → `/models/chat/completions`
   - Foundry 模型推理：`/models/chat/completions` → `/openai/v1/chat/completions` → `/openai/deployments/<部署名>/chat/completions`
@@ -58,11 +70,14 @@
 - “全局 AI 提供方”新增 `Azure / Microsoft Foundry` 选项；选中后展示当前调用地址，未配置资源时给出明确提示。
 - 点“刷新模型列表”会先落盘编辑中的资源表再拉取，因此刚填完密钥即可直接刷新。
 - 保存时资源名若因重名被去重改写，已选模型会按新资源名重新限定，避免指向不存在的资源名。
+- 模型列举失败时，在模型下拉框下方直接展示每个资源的失败原因（归一化后的资源根地址 + 各候选地址的
+  HTTP 状态），不用再翻日志页判断到底是终结点填错、密钥不对还是资源下没有部署。
 
 ## 测试
 
-`test/services/azure_ai_settings_test.dart`：19 条用例，覆盖终结点归一化、调用地址候选与优先级、
-鉴权头、限定模型 id 往返转换、部署名输入解析、接入方式规范化与内置模板。
+`test/services/azure_ai_settings_test.dart`：25 条用例，覆盖终结点归一化（含门户“目标 URI”与完整
+调用地址两种粘贴形态）、api-version 取值优先级、调用地址候选与优先级、鉴权头、限定模型 id 往返转换、
+部署名输入解析、接入方式规范化与内置模板。
 
 ## 未包含
 

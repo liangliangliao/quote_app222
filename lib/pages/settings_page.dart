@@ -87,6 +87,9 @@ class _SettingsPageState extends State<SettingsPage> {
   // 资源表而不是单个密钥；每个资源单独维护终结点、密钥、api-version 和部署名。
   final AzureAiSettings _azureAiSettings = AzureAiSettings();
   List<AzureAiResource> _azureResources = <AzureAiResource>[];
+  // 上一次 Azure 模型列举的失败原因。Azure 终结点写法很多，填错时表现就是一串
+  // 404，这里直接展示原因，免得用户只看到一个空的模型下拉框。
+  List<String> _azureModelDiagnostics = <String>[];
   // 概念实践引擎配置（复用上方 DeepSeek 密钥）
   final _ceModelCtrl = TextEditingController();
   final _ceEndpointCtrl = TextEditingController();
@@ -654,10 +657,10 @@ void showToast(String msg) {
         _loadingGlobalAiModels = true;
       });
     }
+    // 允许用户刚填完密钥后直接刷新模型列表；这里会先同步当前输入框中的密钥，保证
+    // OpenAI / DeepSeek / OpenRouter / Eden AI / xGrok / Gemini / Azure 的模型列表加载都读取设置页最新值。
+    final provider = _normalizeProviderKey(_globalAiProvider);
     try {
-      // 允许用户刚填完密钥后直接刷新模型列表；这里会先同步当前输入框中的密钥，
-      // 保证 OpenAI / DeepSeek / OpenRouter / Eden AI / xGrok / Gemini 的模型列表加载都读取设置页最新值。
-      final provider = _normalizeProviderKey(_globalAiProvider);
       if (provider == 'edenai') {
         await _globalAiSettings.setEdenAiKey(_edenAiKeyCtrl.text.trim());
       } else if (provider == 'xgrok') {
@@ -679,10 +682,20 @@ void showToast(String msg) {
           endpoint: _endpointCtrl.text.trim(),
         );
       }
-      final models = await _unifiedAiService.fetchAvailableModels(_globalAiProvider);
+      final List<String> models;
+      final List<String> diagnostics;
+      if (provider == 'azure') {
+        final discovery = await _unifiedAiService.discoverAzureModels();
+        models = discovery.models;
+        diagnostics = discovery.diagnostics;
+      } else {
+        models = await _unifiedAiService.fetchAvailableModels(_globalAiProvider);
+        diagnostics = <String>[];
+      }
       if (!mounted) return;
       setState(() {
         _globalAiModels = models;
+        _azureModelDiagnostics = diagnostics;
         if (_globalAiModels.isNotEmpty) {
           final preferred = _globalAiModelRaw.trim();
           if (!_globalAiModels.contains(preferred)) {
@@ -691,10 +704,11 @@ void showToast(String msg) {
           _globalAiModelCtrl.text = _formatGlobalAiModelDisplay(_globalAiProvider, _globalAiModelRaw);
         }
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _globalAiModels = <String>[];
+        _azureModelDiagnostics = provider == 'azure' ? <String>['模型列举失败：$e'] : <String>[];
       });
     } finally {
       if (mounted) {
@@ -2778,6 +2792,18 @@ const Text('头像（用于通知图标）'),
                     .map<DropdownMenuItem<String>>((String m) => DropdownMenuItem<String>(value: m, child: Text(m)))
                     .toList(),
               ),
+        if (_globalAiProvider == 'azure' && _azureModelDiagnostics.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 6),
+          Text(
+            'Azure 模型列举提示：\n${_azureModelDiagnostics.join('\n')}',
+            style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+          ),
+          const Text(
+            '常见原因：终结点填成了别的地址、密钥不属于该资源、该资源下还没有部署模型。'
+            '终结点可以直接粘贴门户里的资源终结点、Foundry 项目终结点或部署页的“目标 URI”，系统会自动裁成资源根地址。',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
         const SizedBox(height: 12),
         const Divider(),
         const SizedBox(height: 8),

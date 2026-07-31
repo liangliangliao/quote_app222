@@ -60,6 +60,14 @@ class UnifiedAiResolvedConfig {
       authHeaders.isNotEmpty ? authHeaders : <String, String>{'Authorization': 'Bearer $apiKey'};
 }
 
+/// Azure 模型列举结果。[diagnostics] 为空表示每个资源都成功列举到了部署。
+class AzureModelDiscoveryResult {
+  final List<String> models;
+  final List<String> diagnostics;
+
+  const AzureModelDiscoveryResult({required this.models, required this.diagnostics});
+}
+
 class UnifiedAiContentPart {
   final String type;
   final String? text;
@@ -369,13 +377,23 @@ class UnifiedAiService {
   /// 每个资源会依次尝试多个列举地址（部署列表 / 模型列表 / v1 模型列表），
   /// 只要有一个返回结果就采用；全部失败时退回该资源手工登记的部署名，
   /// 这样即使订阅关闭了列举接口，用户仍然可以正常选模型。
-  Future<List<String>> _fetchAzureModels() async {
+  ///
+  /// 同时收集每个资源的失败原因：Azure 的终结点写法很多，填错时最常见的表现就是
+  /// 一串 404，光看空列表没法判断是密钥错、终结点错还是没有部署，因此把原因
+  /// 一并带回设置页展示。
+  Future<AzureModelDiscoveryResult> discoverAzureModels() async {
     final resources = await _azureSettings.listUsableResources();
-    if (resources.isEmpty) return <String>[];
+    if (resources.isEmpty) {
+      return const AzureModelDiscoveryResult(
+        models: <String>[],
+        diagnostics: <String>['尚未配置可用的 Azure 资源（需要同时填写终结点与密钥，且未停用）。'],
+      );
+    }
     final requestCfg = await _requestSettings.getConfig();
     final timeout = requestCfg.resolveTimeout(const Duration(seconds: 20));
     final result = <String>[];
     final seen = <String>{};
+    final diagnostics = <String>[];
 
     void addAll(String resourceName, Iterable<String> deployments) {
       for (final deployment in deployments) {
@@ -387,6 +405,7 @@ class UnifiedAiService {
     for (final resource in resources) {
       final module = 'settings.global_models.azure.${resource.id}';
       final discovered = <String>[];
+      final failures = <String>[];
       for (final endpoint in resource.modelListEndpointCandidates()) {
         final uri = Uri.parse(endpoint);
         final headers = <String, String>{
@@ -412,14 +431,21 @@ class UnifiedAiService {
             body: resp.body,
             model: 'models/list',
           );
-          if (resp.statusCode < 200 || resp.statusCode >= 300) continue;
+          if (resp.statusCode < 200 || resp.statusCode >= 300) {
+            failures.add('HTTP ${resp.statusCode} ${uri.path}');
+            continue;
+          }
           final list = _extractModelList(jsonDecode(resp.body), provider: 'azure');
-          if (list.isEmpty) continue;
+          if (list.isEmpty) {
+            failures.add('${uri.path} 返回成功但没有可对话的部署');
+            continue;
+          }
           for (final item in list) {
             if (!discovered.contains(item)) discovered.add(item);
           }
           break;
         } catch (e, st) {
+          failures.add('${uri.path} $e');
           await DeepSeekLogger.logError(
             provider: 'Azure',
             module: module,
@@ -435,12 +461,18 @@ class UnifiedAiService {
       // 手工登记的部署名始终保留：它既是列举失败时的兜底，也允许用户
       // 指定列举接口没有返回、但确实可以调用的部署。
       addAll(resource.name, resource.deployments);
+      if (discovered.isEmpty) {
+        diagnostics.add(
+          '${resource.name}（根地址 ${resource.baseUrl}）未列举到已部署模型：${failures.join('；')}'
+          '${resource.deployments.isEmpty ? '。可在该资源里手工填写部署名作为兜底。' : '。已改用手工填写的部署名。'}',
+        );
+      }
     }
-    return result;
+    return AzureModelDiscoveryResult(models: result, diagnostics: diagnostics);
   }
 
   Future<List<String>> fetchAvailableModels(String provider) async {
-    if (_normalizeProvider(provider) == 'azure') return _fetchAzureModels();
+    if (_normalizeProvider(provider) == 'azure') return (await discoverAzureModels()).models;
     final cfg = await resolveGlobalConfig(forcedProvider: provider);
     final requestCfg = await _requestSettings.getConfig();
     if (!cfg.available) return <String>[];

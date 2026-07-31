@@ -46,6 +46,52 @@ void main() {
           'https://my-res.services.ai.azure.com');
     });
 
+    test('门户部署页的“目标 URI”会被裁成资源根地址，查询串一并丢弃', () {
+      // 用户直接粘贴 Foundry 部署页复制出来的目标 URI。之前只按固定后缀裁剪，
+      // /openai/responses 认不出来，导致拼出 .../openai/responses/openai/v1/models 并 404。
+      final resource = _resource(
+        endpoint: 'https://test2026111.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+      );
+      expect(resource.baseUrl, 'https://test2026111.openai.azure.com');
+      expect(resource.modelListEndpointCandidates().every((e) => !e.contains('/responses/')), isTrue);
+      expect(
+        resource.chatEndpointCandidates('gpt-5.6-luna').first,
+        'https://test2026111.openai.azure.com/openai/deployments/gpt-5.6-luna/chat/completions'
+        '?api-version=2025-04-01-preview',
+      );
+    });
+
+    test('完整的 chat/completions 调用地址也会被裁成资源根地址', () {
+      expect(
+        _resource(
+          endpoint: 'https://my-res.openai.azure.com/openai/deployments/gpt-5/chat/completions?api-version=2024-10-21',
+        ).baseUrl,
+        'https://my-res.openai.azure.com',
+      );
+      expect(
+        _resource(
+          endpoint: 'https://my-res.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview',
+        ).baseUrl,
+        'https://my-res.services.ai.azure.com',
+      );
+    });
+
+    test('终结点自带的 api-version 会在未显式填写时被采用', () {
+      final resource = _resource(
+        endpoint: 'https://test2026111.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+      );
+      expect(resource.endpointApiVersion, '2025-04-01-preview');
+      expect(resource.resolvedApiVersion, '2025-04-01-preview');
+    });
+
+    test('显式填写的 api-version 优先于终结点里自带的', () {
+      final resource = _resource(
+        endpoint: 'https://test2026111.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+        apiVersion: '2024-10-21',
+      );
+      expect(resource.resolvedApiVersion, '2024-10-21');
+    });
+
     test('缺少协议头时补上 https', () {
       expect(_resource(endpoint: 'my-res.openai.azure.com').baseUrl, 'https://my-res.openai.azure.com');
     });
@@ -94,13 +140,19 @@ void main() {
       expect(_resource(endpoint: 'https://my-res.openai.azure.com').chatEndpointCandidates('  '), isEmpty);
     });
 
-    test('未显式填写 api-version 时按接入方式取默认值', () {
+    test('既没显式填写、终结点也不带 api-version 时按接入方式取默认值', () {
       expect(_resource(endpoint: 'https://my-res.openai.azure.com').resolvedApiVersion,
           AzureAiSettings.defaultAzureOpenAiApiVersion);
       expect(
         _resource(endpoint: 'https://my-res.services.ai.azure.com/api/projects/p1').resolvedApiVersion,
         AzureAiSettings.defaultFoundryApiVersion,
       );
+    });
+
+    test('Azure OpenAI 默认 api-version 支持 gpt-5 系列所需的 max_completion_tokens', () {
+      // max_completion_tokens 要求 api-version 不低于 2024-12-01-preview，
+      // 默认值低于这个门槛会让 gpt-5 部署一上来就被判成“无法识别的请求参数”。
+      expect(AzureAiSettings.defaultAzureOpenAiApiVersion.compareTo('2024-12-01') >= 0, isTrue);
     });
   });
 
@@ -170,6 +222,10 @@ void main() {
       final templates = AzureAiSettings.defaultTemplates();
       expect(templates.map((e) => e.name), containsAll(<String>['AzureOpenAI', 'modleapikey']));
       expect(templates.every((e) => !e.isConfigured), isTrue);
+    });
+
+    test('模板不预填 api-version，好让终结点里自带的版本能生效', () {
+      expect(AzureAiSettings.defaultTemplates().every((e) => e.apiVersion.isEmpty), isTrue);
     });
   });
 }
