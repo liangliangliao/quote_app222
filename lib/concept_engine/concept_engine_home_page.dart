@@ -343,6 +343,12 @@ class _ConceptEngineHomePageState extends State<ConceptEngineHomePage> {
                           selected: _providerFilter == 'gemini',
                           onSelected: (_) => setState(() => _providerFilter = 'gemini'),
                         ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Azure'),
+                          selected: _providerFilter == 'azure',
+                          onSelected: (_) => setState(() => _providerFilter = 'azure'),
+                        ),
                         const SizedBox(width: 12),
                         Text('共 ${list.length} 条', style: const TextStyle(color: Color(0xFF6B7280))),
                       ],

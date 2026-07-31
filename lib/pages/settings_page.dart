@@ -31,6 +31,7 @@ import '../services/scheduler_service.dart';
 import '../utils/debug_logger.dart';
 import '../utils/deepseek_logger.dart';
 import '../concept_engine/concept_engine_service.dart';
+import '../services/azure_ai_settings.dart';
 import '../services/global_ai_settings.dart';
 import '../services/global_ai_request_settings.dart';
 import '../services/unified_ai_service.dart';
@@ -82,6 +83,10 @@ class _SettingsPageState extends State<SettingsPage> {
   final _edenAiKeyCtrl = TextEditingController();
   final _xGrokKeyCtrl = TextEditingController();
   final _geminiKeyCtrl = TextEditingController();
+  // Azure / Microsoft Foundry 支持同时接入多个资源（项目），因此这里保存的是一张
+  // 资源表而不是单个密钥；每个资源单独维护终结点、密钥、api-version 和部署名。
+  final AzureAiSettings _azureAiSettings = AzureAiSettings();
+  List<AzureAiResource> _azureResources = <AzureAiResource>[];
   // 概念实践引擎配置（复用上方 DeepSeek 密钥）
   final _ceModelCtrl = TextEditingController();
   final _ceEndpointCtrl = TextEditingController();
@@ -659,6 +664,10 @@ void showToast(String msg) {
         await _globalAiSettings.setXGrokKey(_xGrokKeyCtrl.text.trim());
       } else if (provider == 'gemini') {
         await _globalAiSettings.setGeminiKey(_geminiKeyCtrl.text.trim());
+      } else if (provider == 'azure') {
+        // Azure 的模型列举需要读取每个资源的终结点与密钥，所以先落盘当前编辑中的资源表。
+        await _azureAiSettings.saveResources(_azureResources);
+        _azureResources = await _azureAiSettings.listResources();
       } else if (provider == 'openrouter') {
         await _configDao.setOpenRouterKey(_openRouterKeyCtrl.text.trim());
       } else if (provider == 'deepseek') {
@@ -1174,6 +1183,10 @@ Future<void> _clearSportMusicPlaylist() async {
     if (provider == 'gemini') {
       return _globalAiModelRaw.trim().isEmpty ? GlobalAiSettings.geminiDefaultModel : _globalAiModelRaw.trim();
     }
+    if (provider == 'azure') {
+      // Azure 没有内置默认模型：可用模型完全取决于用户在各资源里部署了什么。
+      return _globalAiModelRaw.trim();
+    }
     return 'deepseek-v4-pro';
   }
 
@@ -1194,7 +1207,142 @@ Future<void> _clearSportMusicPlaylist() async {
     if (provider == 'gemini') {
       return UnifiedAiService.geminiChatCompletionsEndpoint;
     }
+    if (provider == 'azure') {
+      return _azureChatEndpointPreview();
+    }
     return 'https://api.deepseek.com/chat/completions';
+  }
+
+  /// Azure 的调用地址由“所选模型所属的资源 + 部署名”推导出来，这里只作展示。
+  String _azureChatEndpointPreview() {
+    final parts = AzureAiSettings.splitModel(_globalAiModelRaw.trim());
+    if (parts.deployment.isEmpty) return '';
+    final resource = _findAzureResourceByName(parts.resourceName);
+    if (resource == null) return '';
+    final candidates = resource.chatEndpointCandidates(parts.deployment);
+    return candidates.isEmpty ? '' : candidates.first;
+  }
+
+  Widget _buildAzureResourceSection() {
+    final usableCount = _azureResources.where((e) => e.enabled && e.isConfigured).length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 8),
+        Row(
+          children: <Widget>[
+            const Expanded(
+              child: Text('Azure / Microsoft Foundry 资源', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            TextButton.icon(
+              onPressed: _editingConfig ? () => _openAzureResourceEditor() : null,
+              icon: const Icon(Icons.add),
+              label: const Text('添加资源'),
+            ),
+          ],
+        ),
+        const Text(
+          '可以同时接入多个 Azure 资源/项目：例如一个项目部署 gpt-5.6 系列，另一个项目部署 Claude、Grok。'
+          '每个资源单独填写 Microsoft Foundry 项目终结点（或 Azure OpenAI 终结点）、密钥、api-version。'
+          '保存后在上方“全局 AI 提供方”里选择 Azure，再点刷新即可拉取所有资源中已部署的模型；'
+          '模型以“资源名/部署名”展示，选中后全 app 的 AI 调用都会走到该模型上。',
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        const SizedBox(height: 8),
+        if (_azureResources.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text('尚未添加 Azure 资源。', style: TextStyle(color: Colors.grey)),
+          )
+        else
+          ..._azureResources.asMap().entries.map((entry) => _buildAzureResourceTile(entry.key, entry.value)),
+        const SizedBox(height: 4),
+        Text(
+          '当前可用资源：$usableCount 个（需同时填写终结点与密钥，且未停用）。',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAzureResourceTile(int index, AzureAiResource resource) {
+    final subtitleLines = <String>[
+      resource.endpoint.trim().isEmpty ? '终结点：未填写' : '终结点：${resource.endpoint.trim()}',
+      '接入方式：${resource.kindLabel}｜api-version：${resource.resolvedApiVersion}',
+      '密钥：${resource.apiKey.trim().isEmpty ? '未填写' : '已填写'}'
+          '${resource.projectName.isEmpty ? '' : '｜项目：${resource.projectName}'}'
+          '${resource.deployments.isEmpty ? '' : '｜手填部署：${resource.deployments.join('、')}'}',
+    ];
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        title: Row(
+          children: <Widget>[
+            Expanded(child: Text(resource.name.isEmpty ? '(未命名资源)' : resource.name)),
+            if (!resource.enabled)
+              const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: Text('已停用', style: TextStyle(fontSize: 12, color: Colors.orange)),
+              )
+            else if (!resource.isConfigured)
+              const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: Text('待完善', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+              ),
+          ],
+        ),
+        subtitle: Text(subtitleLines.join('\n'), style: const TextStyle(fontSize: 12)),
+        isThreeLine: true,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              tooltip: '编辑',
+              icon: const Icon(Icons.edit),
+              onPressed: _editingConfig ? () => _openAzureResourceEditor(index: index) : null,
+            ),
+            IconButton(
+              tooltip: '删除',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _editingConfig
+                  ? () {
+                      setState(() => _azureResources = List<AzureAiResource>.from(_azureResources)..removeAt(index));
+                    }
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAzureResourceEditor({int? index}) async {
+    final existing = index == null ? null : _azureResources[index];
+    final edited = await showDialog<AzureAiResource>(
+      context: context,
+      builder: (ctx) => _AzureResourceEditorDialog(resource: existing),
+    );
+    if (edited == null || !mounted) return;
+    setState(() {
+      final next = List<AzureAiResource>.from(_azureResources);
+      if (index == null) {
+        next.add(edited);
+      } else {
+        next[index] = edited;
+      }
+      _azureResources = next;
+    });
+  }
+
+  AzureAiResource? _findAzureResourceByName(String name) {
+    final usable = _azureResources.where((e) => e.enabled && e.isConfigured).toList();
+    if (usable.isEmpty) return null;
+    final wanted = name.trim().toLowerCase();
+    if (wanted.isEmpty) return usable.first;
+    for (final resource in usable) {
+      if (resource.name.toLowerCase() == wanted || resource.id.toLowerCase() == wanted) return resource;
+    }
+    return usable.first;
   }
 
   Future<int?> _readNextMillisFromDbOrNull(String uid) async {
@@ -1222,6 +1370,9 @@ Future<void> _clearSportMusicPlaylist() async {
     if (p == 'edenai') return 'edenai';
     if (p == 'xgrok' || p == 'xai' || p == 'grok') return 'xgrok';
     if (p == 'gemini' || p == 'google' || p == 'googleai') return 'gemini';
+    if (p == 'azure' || p == 'azureopenai' || p == 'azure_openai' || p == 'foundry' || p == 'msfoundry') {
+      return 'azure';
+    }
     return 'deepseek';
   }
 
@@ -1237,6 +1388,8 @@ Future<void> _clearSportMusicPlaylist() async {
         return 'xGrok';
       case 'gemini':
         return 'Gemini';
+      case 'azure':
+        return 'Azure';
       case 'deepseek':
       default:
         return 'DeepSeek';
@@ -1245,7 +1398,9 @@ Future<void> _clearSportMusicPlaylist() async {
 
   String _formatGlobalAiModelDisplay(String provider, String model) {
     final normalized = _normalizeProviderKey(provider);
-    return normalized == 'openrouter' ? 'openrouter / $model' : model;
+    if (normalized == 'openrouter') return 'openrouter / $model';
+    if (normalized == 'azure') return model.trim().isEmpty ? '' : 'azure / $model';
+    return model;
   }
 
   String _cePromptKey(String base, [String? provider]) {
@@ -1448,6 +1603,14 @@ Future<void> _clearSportMusicPlaylist() async {
       _geminiKeyCtrl.text = await _globalAiSettings.getGeminiKey();
     } catch (_) {
       _geminiKeyCtrl.text = '';
+    }
+    try {
+      final saved = await _azureAiSettings.listResources();
+      // 首次进入时给出与实际项目同名的两条模板（AzureOpenAI / modleapikey），
+      // 用户只需要补上终结点和密钥即可，不必从零开始建表。
+      _azureResources = saved.isEmpty ? AzureAiSettings.defaultTemplates() : saved;
+    } catch (_) {
+      _azureResources = AzureAiSettings.defaultTemplates();
     }
     try {
       final dsModel = await _configDao.getDeepseekModel();
@@ -1708,6 +1871,19 @@ Future<void> _clearSportMusicPlaylist() async {
     await _globalAiSettings.setEdenAiKey(_edenAiKeyCtrl.text.trim());
     await _globalAiSettings.setXGrokKey(_xGrokKeyCtrl.text.trim());
     await _globalAiSettings.setGeminiKey(_geminiKeyCtrl.text.trim());
+    await _azureAiSettings.saveResources(_azureResources);
+    _azureResources = await _azureAiSettings.listResources();
+    // 保存资源表时资源名可能被去重改写（例如两个同名资源）。所选模型是
+    // “资源名/部署名”的限定写法，这里按改写后的资源名重新限定一次，
+    // 避免保存后模型指向一个已经不存在的资源名。
+    if (_globalAiProvider == 'azure' && _globalAiModelRaw.trim().isNotEmpty) {
+      final parts = AzureAiSettings.splitModel(_globalAiModelRaw.trim());
+      final resource = _findAzureResourceByName(parts.resourceName);
+      if (resource != null && parts.deployment.isNotEmpty) {
+        _globalAiModelRaw = AzureAiSettings.qualifyModel(resource.name, parts.deployment);
+        _globalAiModelCtrl.text = _formatGlobalAiModelDisplay('azure', _globalAiModelRaw);
+      }
+    }
     await _globalAiSettings.save(
       provider: _globalAiProvider,
       model: _globalAiModelRaw.trim().isEmpty ? _globalAiModelCtrl.text.trim() : _globalAiModelRaw.trim(),
@@ -2446,6 +2622,11 @@ const Text('头像（用于通知图标）'),
           ),
         ),
 
+        const SizedBox(height: 12),
+        const Divider(),
+        _buildAzureResourceSection(),
+        const Divider(),
+
         const SizedBox(height: 8),
         const Text('YouTube Data API Key（全球音乐搜索）', style: TextStyle(fontWeight: FontWeight.bold)),
         TextField(
@@ -2508,7 +2689,7 @@ const Text('头像（用于通知图标）'),
         const Text('统一 AI 模型（供模块复用）', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         const Text(
-          '首页左侧菜单中的独立模块会统一读取这里的 AI 提供方与模型版本；模块内只展示，不单独配置。OpenAI 使用本页顶部 OpenAI 密钥，DeepSeek 使用本页 DeepSeek 密钥，OpenRouter 使用本页 OpenRouter 密钥，Eden AI 使用本页 Eden AI 密钥，xGrok 使用本页 xGrok 密钥，Gemini 使用本页 Gemini 密钥。',
+          '首页左侧菜单中的独立模块会统一读取这里的 AI 提供方与模型版本；模块内只展示，不单独配置。OpenAI 使用本页顶部 OpenAI 密钥，DeepSeek 使用本页 DeepSeek 密钥，OpenRouter 使用本页 OpenRouter 密钥，Eden AI 使用本页 Eden AI 密钥，xGrok 使用本页 xGrok 密钥，Gemini 使用本页 Gemini 密钥，Azure / Microsoft Foundry 使用本页“Azure / Microsoft Foundry 资源”里对应资源的终结点与密钥。',
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 8),
@@ -2539,8 +2720,18 @@ const Text('头像（用于通知图标）'),
             DropdownMenuItem(value: 'edenai', child: Text('Eden AI')),
             DropdownMenuItem(value: 'xgrok', child: Text('xGrok')),
             DropdownMenuItem(value: 'gemini', child: Text('Gemini')),
+            DropdownMenuItem(value: 'azure', child: Text('Azure / Microsoft Foundry')),
           ],
         ),
+        if (_globalAiProvider == 'azure') ...<Widget>[
+          const SizedBox(height: 6),
+          Text(
+            _azureResources.where((e) => e.enabled && e.isConfigured).isEmpty
+                ? '尚未配置可用的 Azure 资源：请先在上方“Azure / Microsoft Foundry 资源”里填写项目终结点与密钥，再刷新模型列表。'
+                : '当前调用地址：${_azureChatEndpointPreview().isEmpty ? '待选择模型' : _azureChatEndpointPreview()}',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
         const SizedBox(height: 8),
         Row(
           children: [
@@ -2593,7 +2784,7 @@ const Text('头像（用于通知图标）'),
         const Text('全局 AI 请求关键参数', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         const Text(
-          '以下参数会作为全 app 的统一请求覆盖项。留空表示沿用各模块原本默认值；填写后会优先作用到 OpenAI、DeepSeek、OpenRouter、Eden AI、xGrok、Gemini 及其通过统一路径触发的模型调用。',
+          '以下参数会作为全 app 的统一请求覆盖项。留空表示沿用各模块原本默认值；填写后会优先作用到 OpenAI、DeepSeek、OpenRouter、Eden AI、xGrok、Gemini、Azure / Microsoft Foundry 及其通过统一路径触发的模型调用。',
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 8),
@@ -3726,6 +3917,178 @@ class _BaiduAndroidAkConfigWidgetState extends State<BaiduAndroidAkConfigWidget>
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Azure / Microsoft Foundry 单个资源的编辑弹窗。
+///
+/// 资源表在设置页里是动态列表，把每条记录的输入框放到独立弹窗里维护，
+/// 可以避免为不定数量的资源在页面上持有一堆 TextEditingController。
+class _AzureResourceEditorDialog extends StatefulWidget {
+  const _AzureResourceEditorDialog({this.resource});
+
+  final AzureAiResource? resource;
+
+  @override
+  State<_AzureResourceEditorDialog> createState() => _AzureResourceEditorDialogState();
+}
+
+class _AzureResourceEditorDialogState extends State<_AzureResourceEditorDialog> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _endpointCtrl;
+  late final TextEditingController _apiKeyCtrl;
+  late final TextEditingController _apiVersionCtrl;
+  late final TextEditingController _deploymentsCtrl;
+  late String _kind;
+  late bool _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    final resource = widget.resource;
+    _nameCtrl = TextEditingController(text: resource?.name ?? '');
+    _endpointCtrl = TextEditingController(text: resource?.endpoint ?? '');
+    _apiKeyCtrl = TextEditingController(text: resource?.apiKey ?? '');
+    _apiVersionCtrl = TextEditingController(text: resource?.apiVersion ?? '');
+    _deploymentsCtrl = TextEditingController(text: (resource?.deployments ?? const <String>[]).join(', '));
+    _kind = AzureAiSettings.normalizeKind(resource?.kind ?? AzureAiSettings.kindAuto);
+    _enabled = resource?.enabled ?? true;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _endpointCtrl.dispose();
+    _apiKeyCtrl.dispose();
+    _apiVersionCtrl.dispose();
+    _deploymentsCtrl.dispose();
+    super.dispose();
+  }
+
+  /// 实时预览归一化后的资源根地址与调用地址，方便用户确认终结点填对了。
+  AzureAiResource get _preview => AzureAiResource(
+        id: widget.resource?.id ?? '',
+        name: _nameCtrl.text,
+        endpoint: _endpointCtrl.text,
+        apiKey: _apiKeyCtrl.text,
+        apiVersion: _apiVersionCtrl.text,
+        kind: _kind,
+        deployments: AzureAiSettings.parseDeploymentInput(_deploymentsCtrl.text),
+        enabled: _enabled,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = _preview;
+    final sampleDeployment = preview.deployments.isEmpty ? '<部署名>' : preview.deployments.first;
+    final candidates = preview.chatEndpointCandidates(sampleDeployment);
+    return AlertDialog(
+      title: Text(widget.resource == null ? '添加 Azure 资源' : '编辑 Azure 资源'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('资源/项目名称', style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _nameCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(hintText: '例如 AzureOpenAI、modleapikey'),
+            ),
+            const Text(
+              '模型列表里会显示成“资源名/部署名”，用于区分不同项目里的同名部署。',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            const Text('Microsoft Foundry 项目终结点 / Azure OpenAI 终结点',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _endpointCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: 'https://xxx.services.ai.azure.com/api/projects/yyy',
+              ),
+            ),
+            const Text(
+              '两种写法都支持：Foundry 项目终结点（含 /api/projects/…）或 Azure OpenAI 终结点'
+              '（https://xxx.openai.azure.com）。系统会自动归一化出资源根地址。',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            const Text('API 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _apiKeyCtrl,
+              obscureText: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(hintText: '该资源的 Key（请求会以 api-key 头发送）'),
+            ),
+            const SizedBox(height: 12),
+            const Text('接入方式', style: TextStyle(fontWeight: FontWeight.bold)),
+            DropdownButton<String>(
+              isExpanded: true,
+              value: _kind,
+              onChanged: (v) => setState(() => _kind = AzureAiSettings.normalizeKind(v ?? AzureAiSettings.kindAuto)),
+              items: const <DropdownMenuItem<String>>[
+                DropdownMenuItem(value: AzureAiSettings.kindAuto, child: Text('自动识别（按终结点判断）')),
+                DropdownMenuItem(value: AzureAiSettings.kindAzureOpenAi, child: Text('Azure OpenAI 部署（gpt 系列）')),
+                DropdownMenuItem(
+                    value: AzureAiSettings.kindFoundryModels, child: Text('Foundry 模型推理（Claude / Grok 等）')),
+              ],
+            ),
+            const Text(
+              '只影响候选调用地址的先后顺序。实际调用时如果首选路径返回“路径/部署不存在”，会自动改用其它路径重试。',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            const Text('api-version（可留空）', style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _apiVersionCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: '留空则使用默认：Azure OpenAI ${AzureAiSettings.defaultAzureOpenAiApiVersion}，'
+                    'Foundry ${AzureAiSettings.defaultFoundryApiVersion}',
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('部署名（可留空，用逗号分隔）', style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _deploymentsCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(hintText: '例如 gpt-5.6-chat, claude-sonnet-4-5, grok-4'),
+            ),
+            const Text(
+              '一般不用填：保存后点“刷新模型列表”会直接从该资源拉取已部署的模型。'
+              '只有当订阅关闭了部署列举接口时，才需要在这里手工登记部署名作为兜底。',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('启用该资源'),
+              subtitle: const Text('停用后不参与模型列举与调用', style: TextStyle(fontSize: 12)),
+              value: _enabled,
+              onChanged: (v) => setState(() => _enabled = v),
+            ),
+            const Divider(),
+            const Text('解析结果预览', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              '资源根地址：${preview.baseUrl.isEmpty ? '(终结点无法解析)' : preview.baseUrl}\n'
+              '${preview.projectName.isEmpty ? '' : '项目名：${preview.projectName}\n'}'
+              '接入方式：${preview.kindLabel}｜api-version：${preview.resolvedApiVersion}\n'
+              '调用地址：${candidates.isEmpty ? '(待补全终结点)' : candidates.first}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+        ElevatedButton(
+          onPressed: _nameCtrl.text.trim().isEmpty ? null : () => Navigator.of(context).pop(_preview),
+          child: const Text('确定'),
+        ),
+      ],
     );
   }
 }

@@ -1038,6 +1038,12 @@ class AiAssistantService {
       return m.contains('vision') || m.contains('grok-4') || m.contains('grok-3');
     }
 
+    if (p == 'azure') {
+      // Azure 上的模型名就是用户自定义的部署名，只能按名字里的模型线索判断；
+      // 认不出来时按纯文本处理，附件退化成文字说明而不是直接 400。
+      return _looksLikeVisionModel(m) || m.contains('grok-4') || m.contains('grok-3');
+    }
+
     return false;
   }
 
@@ -1049,6 +1055,9 @@ class AiAssistantService {
     if (p == 'edenai') return true;
     if (p == 'gemini') return false;
     if (p == 'xgrok') return false;
+    // Azure 的 chat/completions 不接受 OpenAI 的 file part（那是 Responses API 的能力），
+    // 附件统一走本地文本提取后的兜底描述。
+    if (p == 'azure') return false;
     if (p == 'openrouter') {
       // In this app OpenRouter file parts are only used for PDF parser support.
       // Leave it enabled for models that can at least accept file-parser input;
