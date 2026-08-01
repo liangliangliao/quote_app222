@@ -87,6 +87,7 @@ class ZxAiKnowledgeDraft {
     required this.boundaries,
     required this.provider,
     required this.modelLabel,
+    this.sourceMode = 'local_upload',
     this.status = 'saved',
     this.createdAtMs = 0,
   });
@@ -107,10 +108,15 @@ class ZxAiKnowledgeDraft {
   final List<String> boundaries;
   final String provider;
   final String modelLabel;
+  /// `remote_knowledge` means generation was grounded through saved provider
+  /// resource IDs, not by re-sending the local file content.
+  final String sourceMode;
   final String status;
   final int createdAtMs;
 
   ZxKnowledgeOrigin get origin => ZxKnowledgeOrigin.aiDerived;
+
+  bool get usesRemoteKnowledge => sourceMode == 'remote_knowledge';
 
   Map<String, Object?> toMap() => <String, Object?>{
         'origin': origin.key,
@@ -129,6 +135,7 @@ class ZxAiKnowledgeDraft {
         'boundaries_json': jsonEncode(boundaries),
         'provider': provider,
         'model_label': modelLabel,
+        'source_mode': sourceMode,
         'status': status,
         'created_at_ms': createdAtMs,
       };
@@ -151,6 +158,7 @@ class ZxAiKnowledgeDraft {
         boundaries: _strings(row['boundaries_json']),
         provider: (row['provider'] ?? '').toString(),
         modelLabel: (row['model_label'] ?? '').toString(),
+        sourceMode: (row['source_mode'] ?? 'local_upload').toString(),
         status: (row['status'] ?? 'saved').toString(),
         createdAtMs: _int(row['created_at_ms']),
       );
@@ -161,6 +169,7 @@ class ZxAiKnowledgeDraft {
     required List<int> bookIds,
     required String provider,
     required String modelLabel,
+    String sourceMode = 'local_upload',
   }) {
     final values = _strings(map['core_values']);
     final ideas = _strings(map['core_ideas']);
@@ -200,6 +209,7 @@ class ZxAiKnowledgeDraft {
       boundaries: boundaries,
       provider: provider,
       modelLabel: modelLabel,
+      sourceMode: sourceMode,
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }

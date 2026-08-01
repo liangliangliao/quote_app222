@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/zhixing_tree/zhixing_agent_service.dart';
 import 'package:quote_app/zhixing_tree/zhixing_extended_models.dart';
 import 'package:quote_app/zhixing_tree/zhixing_models.dart';
+import 'package:quote_app/zhixing_tree/zhixing_remote_knowledge_models.dart';
 import 'package:quote_app/zhixing_tree/zhixing_review_engine.dart';
 
 void main() {
@@ -38,6 +39,39 @@ void main() {
       );
     });
 
+    test('remote-derived draft remains explicitly distinct from local upload',
+        () {
+      final draft = ZxAiKnowledgeDraft.fromAiJson(
+        <String, dynamic>{
+          'title': '远端融合体系',
+          'core_values': <String>['真实', '行动', '责任', '反馈'],
+          'core_ideas': List<String>.generate(
+            8,
+            (index) => '核心思想' + (index + 1).toString(),
+          ),
+          'knowledge_view': '知要进入可检验的判断。',
+          'action_view': '行是具体实行与承担反馈。',
+          'transformation_path': '认识→行动→反馈→修正',
+          'decision_cue': '理解很多但尚未开始时使用。',
+          'yangming_connection': '把知行合一转成可反馈的实践路径。',
+          'common_ground': <String>['反对空谈'],
+          'differences': <String>['更强调实验反馈'],
+          'boundaries': <String>['不是疾病诊断'],
+        },
+        thinker: '测试思想家',
+        bookIds: const <int>[1],
+        provider: 'openai',
+        modelLabel: 'OpenAI · test',
+        sourceMode: 'remote_knowledge',
+      );
+
+      expect(draft.usesRemoteKnowledge, isTrue);
+      expect(
+        ZxAiKnowledgeDraft.fromMap(draft.toMap()).usesRemoteKnowledge,
+        isTrue,
+      );
+    });
+
     test('action serialization preserves guidance source and draft reference',
         () {
       final action = _action().copyWith(
@@ -52,6 +86,46 @@ void main() {
       expect(restored.guidanceKnowledgeRefId, 42);
       expect(restored.aiProvider, 'openai');
       expect(restored.aiModelLabel, 'OpenAI · test');
+    });
+  });
+
+  group('persistent remote knowledge identifiers', () {
+    test('provider-specific ready state requires durable identifiers', () {
+      const openAi = ZxRemoteKnowledgeItem(
+        bookId: 1,
+        provider: ZxRemoteKnowledgeProvider.openai,
+        remoteFileId: 'file_123',
+        remoteStoreId: 'vs_123',
+      );
+      const geminiPending = ZxRemoteKnowledgeItem(
+        bookId: 2,
+        provider: ZxRemoteKnowledgeProvider.gemini,
+        remoteStoreId: 'fileSearchStores/store_123',
+        remoteDocumentId: 'operations/pending_123',
+        status: ZxRemoteKnowledgeStatus.processing,
+      );
+      const geminiReady = ZxRemoteKnowledgeItem(
+        bookId: 2,
+        provider: ZxRemoteKnowledgeProvider.gemini,
+        remoteStoreId: 'fileSearchStores/store_123',
+        remoteDocumentId: 'fileSearchStores/store_123/documents/doc_123',
+      );
+
+      expect(openAi.isReady, isTrue);
+      expect(geminiPending.isReady, isFalse);
+      expect(geminiReady.isReady, isTrue);
+    });
+
+    test('Gemini retention wording does not claim permanent raw file storage',
+        () {
+      expect(
+        ZxRemoteKnowledgeProvider.gemini.retentionLabel,
+        contains('检索索引'),
+      );
+      expect(
+        ZxRemoteKnowledgeProvider.gemini.retentionLabel,
+        contains('原始文件'),
+      );
     });
   });
 

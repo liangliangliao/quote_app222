@@ -19,6 +19,7 @@ import 'zhixing_knowledge_repository.dart';
 import 'zhixing_models.dart';
 import 'zhixing_prompt_config.dart';
 import 'zhixing_review_engine.dart';
+import 'zhixing_remote_knowledge_models.dart';
 import 'zhixing_thinker_catalog.dart';
 import 'zhixing_tree_visual.dart';
 
@@ -77,6 +78,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   List<ZxActionPrescription> _actions = const <ZxActionPrescription>[];
   List<ZxCandidateLens> _candidates = const <ZxCandidateLens>[];
   List<ZxAiBook> _aiBooks = const <ZxAiBook>[];
+  List<ZxRemoteKnowledgeItem> _remoteKnowledgeItems =
+      const <ZxRemoteKnowledgeItem>[];
   List<ZxAiKnowledgeDraft> _aiDrafts = const <ZxAiKnowledgeDraft>[];
   List<ZxReviewReport> _reviewReports = const <ZxReviewReport>[];
   ZxAiKnowledgeDraft? _selectedAiKnowledge;
@@ -84,6 +87,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   ZxGoalSource _lastGoalSource = ZxGoalSource.zhixingLocal;
   ZxAgentSettings _agentSettings = const ZxAgentSettings();
   ZxAgentScene _agentScene = ZxAgentScene.setGoal;
+  ZxRemoteKnowledgeProvider _remoteKnowledgeProvider =
+      ZxRemoteKnowledgeProvider.openai;
+  ZxRemoteKnowledgeConfig? _remoteKnowledgeConfig;
   Map<String, String> _providerState = const <String, String>{};
   Map<String, double> _lensHistory = const <String, double>{};
   Set<String> _disabledLenses = <String>{};
@@ -192,6 +198,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       final actions = await _dao.actions();
       final candidates = await _dao.candidates();
       final aiBooks = await _dao.aiBooks();
+      final remoteKnowledgeProvider =
+          await _aiKnowledge.remoteKnowledgeProvider();
+      final remoteKnowledgeItems = await _dao.remoteKnowledgeItems(
+        includeDeleted: true,
+      );
+      final remoteKnowledgeConfig = await _aiKnowledge.remoteKnowledgeConfig(
+        provider: remoteKnowledgeProvider,
+      );
       final aiDrafts = await _dao.aiKnowledgeDrafts();
       final reviewReports = await _dao.reviewReports();
       final agentSettings = await _dao.agentSettings();
@@ -225,6 +239,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _actions = actions;
         _candidates = candidates;
         _aiBooks = aiBooks;
+        _remoteKnowledgeProvider = remoteKnowledgeProvider;
+        _remoteKnowledgeItems = remoteKnowledgeItems;
+        _remoteKnowledgeConfig = remoteKnowledgeConfig;
         _aiDrafts = aiDrafts;
         _reviewReports = reviewReports;
         _selectedAiKnowledge =
@@ -261,6 +278,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     final actions = await _dao.actions();
     final candidates = await _dao.candidates();
     final aiBooks = await _dao.aiBooks();
+    final remoteKnowledgeProvider =
+        await _aiKnowledge.remoteKnowledgeProvider();
+    final remoteKnowledgeItems = await _dao.remoteKnowledgeItems(
+      includeDeleted: true,
+    );
+    final remoteKnowledgeConfig = await _aiKnowledge.remoteKnowledgeConfig(
+      provider: remoteKnowledgeProvider,
+    );
     final aiDrafts = await _dao.aiKnowledgeDrafts();
     final reports = await _dao.reviewReports();
     final goals = await _dao.goals();
@@ -275,6 +300,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       _actions = actions;
       _candidates = candidates;
       _aiBooks = aiBooks;
+      _remoteKnowledgeProvider = remoteKnowledgeProvider;
+      _remoteKnowledgeItems = remoteKnowledgeItems;
+      _remoteKnowledgeConfig = remoteKnowledgeConfig;
       _aiDrafts = aiDrafts;
       _reviewReports = reports;
       _selectedAiKnowledge = nextSelectedDraft.isNotEmpty
@@ -426,6 +454,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           _sectionCard(
             title: '当前行动与复盘',
             subtitle: '完成、未完成或改做更小一步都可以复盘；复盘后可继续、换思想或融合思想。',
+            initiallyExpanded: active.isNotEmpty,
             child: active.isEmpty
                 ? _emptyState(
                     icon: Icons.route_outlined,
@@ -509,6 +538,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '把一个“知”变成现在的一步',
           subtitle: '这不是疾病诊断，也不是调查。普通行动只需写下你现在想做什么。',
+          initiallyExpanded: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -1072,6 +1102,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     return _sectionCard(
       title: '现在就做这一步',
       subtitle: '先行动，再用事实复盘；不要求先解释清楚所有原因。',
+      initiallyExpanded: true,
       leading: const CircleAvatar(child: Icon(Icons.play_arrow_rounded)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3139,8 +3170,17 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   Widget _buildAiMentorPage() {
-    final thinkerNames =
-        _aiBooks.map((item) => item.thinker).toSet().toList(growable: false);
+    final booksByThinker = <String, List<ZxAiBook>>{};
+    for (final book in _aiBooks) {
+      booksByThinker.putIfAbsent(book.thinker, () => <ZxAiBook>[]).add(book);
+    }
+    final remoteReadyCount = _remoteKnowledgeItems
+        .where(
+          (item) =>
+              item.provider == _remoteKnowledgeProvider && item.isReady,
+        )
+        .length;
+    final remoteConfig = _remoteKnowledgeConfig;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
       children: <Widget>[
@@ -3171,8 +3211,49 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         ),
         const SizedBox(height: 12),
         _sectionCard(
-          title: '著作文件库与AI分析',
-          subtitle: '先把著作复制到本机文件库，再由已配置AI融合多本著作，生成详细思想体系。',
+          title: '远端书库',
+          subtitle: '服务商只保存文件／知识库 ID；AI 派生内容仍与本地审核知识库分离。',
+          leading: const CircleAvatar(
+            child: Icon(Icons.cloud_done_outlined),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _statusBanner(
+                remoteConfig?.isConfigured == true
+                    ? '${_remoteKnowledgeProvider.label} 已配置'
+                    : '${_remoteKnowledgeProvider.label} 尚未配置',
+                '${_remoteKnowledgeProvider.retentionLabel} · 已就绪 $remoteReadyCount 本',
+                remoteConfig?.isConfigured == true
+                    ? _green
+                    : Colors.orange.shade800,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  FilledButton.tonalIcon(
+                    onPressed: _working ? null : _configureRemoteKnowledge,
+                    icon: const Icon(Icons.tune_outlined),
+                    label: const Text('选择服务商'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _working || _aiBooks.isEmpty
+                        ? null
+                        : _syncAllRemoteBooks,
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: const Text('同步全部著作'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: '著作文件库',
+          subtitle: '同一思想家的著作先统一归类；展开后可同步远端、问书或融合成派生思想。',
           leading: const CircleAvatar(
             child: Icon(Icons.folder_copy_outlined),
           ),
@@ -3188,41 +3269,18 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                     icon: const Icon(Icons.upload_file_outlined),
                     label: const Text('导入思想家著作'),
                   ),
-                  for (final thinker in thinkerNames)
-                    OutlinedButton.icon(
-                      onPressed: _working
-                          ? null
-                          : () => _analyzeBooksFor(thinker),
-                      icon: const Icon(Icons.auto_awesome_outlined),
-                      label: Text('AI融合 · ' + thinker),
-                    ),
                 ],
               ),
               const SizedBox(height: 10),
               if (_aiBooks.isEmpty)
                 const Text('还没有保存著作。支持 PDF、DOC/DOCX、EPUB、MOBI、AZW、FB2、RTF、TXT、MD。')
               else
-                ..._aiBooks.map(
-                  (book) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.menu_book_outlined),
-                    title: Text(book.thinker + ' · ' + book.title),
-                    subtitle: Text(
-                      book.fileName +
-                          ' · ' +
-                          (book.byteSize / 1024 / 1024).toStringAsFixed(1) +
-                          ' MB · 已提取' +
-                          book.extractedCharacters.toString() +
-                          '字',
-                    ),
-                    trailing: const Chip(label: Text('本机文件')),
+                ...booksByThinker.entries.map(
+                  (entry) => _buildThinkerBookGroup(
+                    thinker: entry.key,
+                    books: entry.value,
                   ),
                 ),
-              const SizedBox(height: 6),
-              const Text(
-                '点击“AI融合”时，所选著作内容会发送给全局设置中的AI提供方；生成内容只保存为“AI派生”，不会写入本地审核知识表。',
-                style: TextStyle(color: Colors.black54),
-              ),
             ],
           ),
         ),
@@ -3248,7 +3306,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                             ),
                             title: Text(draft.thinker + ' · ' + draft.title),
                             subtitle: Text(
-                              'AI派生 · ' +
+                              (draft.usesRemoteKnowledge
+                                      ? 'AI派生 · 远端书库 ID · '
+                                      : 'AI派生 · 本机临时附件 · ') +
                                   draft.modelLabel +
                                   ' · ' +
                                   draft.bookIds.length.toString() +
@@ -3414,6 +3474,163 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     );
   }
 
+  Widget _buildThinkerBookGroup({
+    required String thinker,
+    required List<ZxAiBook> books,
+  }) {
+    final readyCount = books
+        .where((book) => _remoteItemForBook(book)?.isReady ?? false)
+        .length;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: const Icon(Icons.person_outline),
+        title: Text(thinker),
+        subtitle: Text(
+          '本机 ${books.length} 本 · 当前服务商已就绪 $readyCount 本',
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        children: <Widget>[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                FilledButton.tonalIcon(
+                  onPressed: _working
+                      ? null
+                      : () => _syncRemoteBooks(
+                            books,
+                            label: thinker,
+                          ),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('同步远端'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _working
+                      ? null
+                      : () => _askRemoteBooksFor(thinker),
+                  icon: const Icon(Icons.question_answer_outlined),
+                  label: const Text('基于著作提问'),
+                ),
+                FilledButton.icon(
+                  onPressed: _working ? null : () => _analyzeBooksFor(thinker),
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('融合思想'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...books.map(_buildAiBookTile),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiBookTile(ZxAiBook book) {
+    final remote = _remoteItemForBook(book);
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      leading: const Icon(Icons.menu_book_outlined),
+      title: Text(book.title),
+      subtitle: Text(book.fileName),
+      trailing: _remoteStatusChip(remote),
+      childrenPadding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+      children: <Widget>[
+        _labelValue(
+          '本机文件',
+          '${(book.byteSize / 1024 / 1024).toStringAsFixed(1)} MB · 已提取 ${book.extractedCharacters} 字',
+        ),
+        if (remote != null) ...<Widget>[
+          _labelValue('远端保留方式', remote.retentionLabel),
+          _labelValue('服务商资源 ID', _remoteResourceSummary(remote)),
+          if (remote.lastError.trim().isNotEmpty)
+            _labelValue('同步状态', remote.lastError),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              OutlinedButton.icon(
+                onPressed: _working
+                    ? null
+                    : () => _syncRemoteBooks(<ZxAiBook>[book], label: book.title),
+                icon: const Icon(Icons.sync_outlined),
+                label: Text(remote?.isReady == true ? '检查远端状态' : '同步到远端'),
+              ),
+              if (remote != null &&
+                  remote.status != ZxRemoteKnowledgeStatus.deleted &&
+                  remote.status != ZxRemoteKnowledgeStatus.processing)
+                OutlinedButton.icon(
+                  onPressed: _working
+                      ? null
+                      : () => _deleteRemoteBookCopy(book, remote),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('删除远端副本'),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  ZxRemoteKnowledgeItem? _remoteItemForBook(ZxAiBook book) {
+    for (final item in _remoteKnowledgeItems) {
+      if (item.bookId == book.id && item.provider == _remoteKnowledgeProvider) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Widget _remoteStatusChip(ZxRemoteKnowledgeItem? item) {
+    final status = item?.status;
+    final Color color;
+    final String label;
+    switch (status) {
+      case ZxRemoteKnowledgeStatus.ready:
+        color = _green;
+        label = '远端已就绪';
+        break;
+      case ZxRemoteKnowledgeStatus.processing:
+        color = Colors.orange.shade800;
+        label = '正在索引';
+        break;
+      case ZxRemoteKnowledgeStatus.failed:
+        color = Colors.red.shade700;
+        label = '同步失败';
+        break;
+      case ZxRemoteKnowledgeStatus.deleted:
+        color = Colors.grey.shade700;
+        label = '已删除';
+        break;
+      case null:
+        color = Colors.blueGrey;
+        label = '仅本机';
+        break;
+    }
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      label: Text(label, style: TextStyle(color: color)),
+      side: BorderSide(color: color.withValues(alpha: 0.35)),
+      backgroundColor: color.withValues(alpha: 0.08),
+    );
+  }
+
+  String _remoteResourceSummary(ZxRemoteKnowledgeItem item) {
+    final ids = <String>[
+      if (item.remoteFileId.isNotEmpty) 'file: ${item.remoteFileId}',
+      if (item.remoteStoreId.isNotEmpty) 'store: ${item.remoteStoreId}',
+      if (item.remoteDocumentId.isNotEmpty) 'document: ${item.remoteDocumentId}',
+    ];
+    return ids.isEmpty ? '服务商尚未返回可用资源 ID。' : ids.join('\n');
+  }
+
   Future<void> _importAiBooks() async {
     final thinker = TextEditingController();
     final name = await showDialog<String>(
@@ -3489,37 +3706,308 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     );
   }
 
-  Future<void> _analyzeBooksFor(String thinker) async {
-    final books =
-        _aiBooks.where((item) => item.thinker == thinker).toList(growable: false);
+  Future<void> _configureRemoteKnowledge() async {
+    final values = await _aiKnowledge.remoteKnowledgeEditableSettings();
+    if (!mounted) return;
+    var provider = _remoteKnowledgeProvider;
+    final claudeKey = TextEditingController(text: values['claude_key'] ?? '');
+    final claudeModel =
+        TextEditingController(text: values['claude_model'] ?? 'claude-sonnet-4-5');
+    final compatibleKey =
+        TextEditingController(text: values['compatible_key'] ?? '');
+    final compatibleBase =
+        TextEditingController(text: values['compatible_base_url'] ?? '');
+    final compatibleModel = TextEditingController(
+      text: values['compatible_model'] ?? 'gpt-4.1-mini',
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('选择远端书库服务商'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                DropdownButtonFormField<ZxRemoteKnowledgeProvider>(
+                  value: provider,
+                  decoration: const InputDecoration(
+                    labelText: '服务商',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ZxRemoteKnowledgeProvider.values
+                      .map(
+                        (item) => DropdownMenuItem<ZxRemoteKnowledgeProvider>(
+                          value: item,
+                          child: Text(item.label),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() => provider = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text(provider.setupHint),
+                const SizedBox(height: 8),
+                Text(
+                  provider.retentionLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (provider == ZxRemoteKnowledgeProvider.claude) ...<Widget>[
+                  _dialogField(claudeKey, 'Claude API Key', obscureText: true),
+                  _dialogField(claudeModel, 'Claude 模型'),
+                ],
+                if (provider == ZxRemoteKnowledgeProvider.openAiCompatible)
+                  ...<Widget>[
+                    _dialogField(compatibleBase, 'API 基地址（含或不含 /v1）'),
+                    _dialogField(compatibleKey, 'API Key', obscureText: true),
+                    _dialogField(compatibleModel, '模型名称'),
+                  ],
+                if (provider == ZxRemoteKnowledgeProvider.openai ||
+                    provider == ZxRemoteKnowledgeProvider.xgrok ||
+                    provider == ZxRemoteKnowledgeProvider.gemini)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      '密钥与模型使用应用的全局 AI 设置；此处只选择用于书库的服务商。',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('保存选择'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == true) {
+      await _aiKnowledge.saveRemoteKnowledgeSettings(
+        provider: provider,
+        claudeKey: claudeKey.text,
+        claudeModel: claudeModel.text,
+        compatibleKey: compatibleKey.text,
+        compatibleBaseUrl: compatibleBase.text,
+        compatibleModel: compatibleModel.text,
+      );
+      await _refreshLocalState();
+      if (mounted) _snack('已选择${provider.label}。');
+    }
+    claudeKey.dispose();
+    claudeModel.dispose();
+    compatibleKey.dispose();
+    compatibleBase.dispose();
+    compatibleModel.dispose();
+  }
+
+  Future<void> _syncAllRemoteBooks() =>
+      _syncRemoteBooks(_aiBooks, label: '全部已导入著作');
+
+  Future<void> _syncRemoteBooks(
+    List<ZxAiBook> books, {
+    required String label,
+  }) async {
     if (books.isEmpty) return;
+    final config = await _aiKnowledge.remoteKnowledgeConfig(
+      provider: _remoteKnowledgeProvider,
+    );
+    if (!config.isConfigured) {
+      _snack('请先配置${_remoteKnowledgeProvider.label}的密钥与模型。');
+      return;
+    }
     final confirmed = await _confirm(
-      title: '将著作发送给AI分析？',
-      body: '将把' +
-          books.length.toString() +
-          '本“' +
-          thinker +
-          '”著作的附件或提取文字发送给全局AI提供方。输出会独立保存为AI派生知识，不替换本地审核知识。',
-      confirmLabel: '同意并生成',
+      title: '同步到${_remoteKnowledgeProvider.label}？',
+      body: '将上传“$label”共${books.length}本著作，并保存服务商返回的文件／知识库 ID。'
+          '${_remoteKnowledgeProvider.retentionLabel}。之后的远端问答、思想融合、行动和复盘都会通过这些 ID 检索；可随时删除远端副本。',
+      confirmLabel: '上传并保存 ID',
     );
     if (!confirmed || !mounted) return;
     setState(() => _working = true);
     try {
+      final results = await _aiKnowledge.syncBooksToRemote(
+        books,
+        provider: _remoteKnowledgeProvider,
+      );
+      await _refreshLocalState();
+      if (!mounted) return;
+      final ready = results.where((item) => item.isReady).length;
+      final processing = results
+          .where((item) => item.status == ZxRemoteKnowledgeStatus.processing)
+          .length;
+      final failed = results
+          .where((item) => item.status == ZxRemoteKnowledgeStatus.failed)
+          .toList(growable: false);
+      final detail = failed.isEmpty
+          ? ''
+          : '；失败 ${failed.length} 本：${failed.first.lastError}';
+      _snack(
+        '远端书库：已就绪 $ready 本${processing > 0 ? '；正在索引 $processing 本' : ''}$detail',
+      );
+    } catch (error) {
+      if (mounted) _snack('远端同步失败：$error');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _deleteRemoteBookCopy(
+    ZxAiBook book,
+    ZxRemoteKnowledgeItem item,
+  ) async {
+    final confirmed = await _confirm(
+      title: '删除服务商副本？',
+      body: '将从${item.provider.label}删除“${book.title}”对应的远端文件或检索文档。'
+          '本机著作、已保存的 AI 派生思想和本地审核知识库不会删除。',
+      confirmLabel: '删除远端副本',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _working = true);
+    try {
+      await _aiKnowledge.deleteRemoteBook(item);
+      await _refreshLocalState();
+      if (mounted) _snack('已删除服务商副本；本机著作仍保留。');
+    } catch (error) {
+      if (mounted) _snack('删除远端副本失败：$error');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _askRemoteBooksFor(String thinker) async {
+    final books = _aiBooks
+        .where((item) => item.thinker == thinker)
+        .toList(growable: false);
+    final unavailable = books
+        .where((book) => !(_remoteItemForBook(book)?.isReady ?? false))
+        .length;
+    if (unavailable > 0) {
+      _snack('“$thinker”还有 $unavailable 本著作未在当前远端书库就绪，请先同步。');
+      return;
+    }
+    final question = TextEditingController();
+    final submitted = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('基于“$thinker”著作提问'),
+        content: _dialogField(
+          question,
+          '你的问题',
+          maxLines: 4,
+          hint: '例如：这一体系如何把“知行合一”转化为今天的行动？',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = question.text.trim();
+              if (value.isEmpty) return;
+              Navigator.pop(dialogContext, value);
+            },
+            child: const Text('提问'),
+          ),
+        ],
+      ),
+    );
+    question.dispose();
+    if (submitted == null || !mounted) return;
+    setState(() => _working = true);
+    try {
+      final answer = await _aiKnowledge.askRemoteBooks(
+        bookIds: books.map((book) => book.id).toList(growable: false),
+        provider: _remoteKnowledgeProvider,
+        question: submitted,
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('${answer.provider.label} · 著作回答'),
+          content: SingleChildScrollView(child: SelectableText(answer.text)),
+          actions: <Widget>[
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) _snack('远端书库回答失败：$error');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _analyzeBooksFor(String thinker) async {
+    final books =
+        _aiBooks.where((item) => item.thinker == thinker).toList(growable: false);
+    if (books.isEmpty) return;
+    final config = await _aiKnowledge.remoteKnowledgeConfig(
+      provider: _remoteKnowledgeProvider,
+    );
+    if (!config.isConfigured) {
+      _snack('请先在“远端书库”中配置${_remoteKnowledgeProvider.label}。');
+      return;
+    }
+    final confirmed = await _confirm(
+      title: '上传著作并融合思想？',
+      body: '将把${books.length}本“$thinker”著作上传至${_remoteKnowledgeProvider.label}，'
+          '并保存服务商文件／知识库 ID。${_remoteKnowledgeProvider.retentionLabel}。'
+          '融合、后续行动和复盘均通过这些已保存的远端资源检索；输出只保存为 AI 派生思想，不替换本地审核知识。',
+      confirmLabel: '上传并生成',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _working = true);
+    try {
+      final synced = await _aiKnowledge.syncBooksToRemote(
+        books,
+        provider: _remoteKnowledgeProvider,
+      );
+      final notReady = synced.where((item) => !item.isReady).toList(
+            growable: false,
+          );
+      if (notReady.isNotEmpty) {
+        await _refreshLocalState();
+        if (!mounted) return;
+        final failed = notReady
+            .where((item) => item.status == ZxRemoteKnowledgeStatus.failed)
+            .toList(growable: false);
+        final reason = failed.isEmpty
+            ? '远端索引仍在进行，请稍后点击“融合思想”。'
+            : failed.first.lastError;
+        _snack('尚未生成融合结果：$reason');
+        return;
+      }
       final draft = await _aiKnowledge.analyzeAndSave(
         thinker: thinker,
         books: books,
+        requireRemoteKnowledge: true,
       );
       await _refreshLocalState();
       if (!mounted) return;
       setState(() {
         _selectedAiKnowledge = draft;
-        _working = false;
       });
-      _snack('已生成并保存AI派生思想；本地审核知识未改变。');
+      _snack('已通过已保存的远端书库生成 AI 派生思想；本地审核知识未改变。');
     } catch (error) {
-      if (!mounted) return;
-      setState(() => _working = false);
-      _snack('AI分析失败：$error');
+      if (mounted) _snack('AI分析失败：$error');
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
@@ -4091,11 +4579,22 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Future<void> _deleteAllData() async {
     final confirmed = await _confirm(
       title: '删除全部用户数据？',
-      body: '所选思想、目标、行动、复盘、AI派生知识、已导入著作文件、导师提醒、金币/XP账本、成长树、反馈和候选都会永久删除。只读审核知识包会保留。',
+      body: '所选思想、目标、行动、复盘、AI派生知识、已导入著作文件、远端书库副本、导师提醒、金币/XP账本、成长树、反馈和候选都会永久删除。只读审核知识包会保留。',
       confirmLabel: '永久删除',
       destructive: true,
     );
     if (!confirmed) return;
+    final remoteItems = await _dao.remoteKnowledgeItems();
+    for (final item in remoteItems) {
+      try {
+        await _aiKnowledge.deleteRemoteBook(item);
+      } catch (error) {
+        if (mounted) {
+          _snack('未能删除${item.provider.label}远端副本；已停止清除本机数据：$error');
+        }
+        return;
+      }
+    }
     await _agent.disable();
     final importedBooks = await _dao.aiBooks();
     for (final book in importedBooks) {
@@ -4145,8 +4644,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 10),
-            Text(body, style: const TextStyle(color: Colors.white, height: 1.5)),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+              onPressed: () => _showDetail(title, body),
+              icon: const Icon(Icons.expand_more),
+              label: const Text('查看说明'),
+            ),
             const SizedBox(height: 16),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -4165,6 +4669,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     required Widget child,
     String subtitle = '',
     Widget? leading,
+    bool initiallyExpanded = false,
   }) =>
       Card(
         elevation: 0,
@@ -4175,46 +4680,33 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             color: Theme.of(context).colorScheme.outlineVariant,
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  if (leading != null) ...<Widget>[
-                    leading,
-                    const SizedBox(width: 10),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: _ink,
-                          ),
-                        ),
-                        if (subtitle.isNotEmpty) ...<Widget>[
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              child,
-            ],
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: leading,
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+            ),
           ),
+          children: <Widget>[
+            if (subtitle.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
+            child,
+          ],
         ),
       );
 
@@ -4238,17 +4730,25 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         ),
       );
 
-  Widget _dialogField(TextEditingController controller, String label) =>
+  Widget _dialogField(
+    TextEditingController controller,
+    String label, {
+    String hint = '',
+    int maxLines = 3,
+    bool obscureText = false,
+  }) =>
       Padding(
         padding: const EdgeInsets.only(top: 10),
         child: TextField(
           controller: controller,
           minLines: 1,
-          maxLines: 3,
+          maxLines: obscureText ? 1 : maxLines,
+          obscureText: obscureText,
           decoration: InputDecoration(
             labelText: label,
+            hintText: hint.isEmpty ? null : hint,
             border: const OutlineInputBorder(),
-            alignLabelWithHint: true,
+            alignLabelWithHint: !obscureText && maxLines > 1,
           ),
         ),
       );
@@ -4264,19 +4764,20 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
 
   Widget _statusBanner(String title, String body, Color color) => Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: Text(
+            title,
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+          ),
           children: <Widget>[
-            Text(title,
-                style: TextStyle(color: color, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 3),
-            Text(body),
+            Align(alignment: Alignment.centerLeft, child: Text(body)),
           ],
         ),
       );
@@ -4302,22 +4803,16 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 : Theme.of(context).colorScheme.outlineVariant,
           ),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(left: 34, right: 8, bottom: 6),
+          leading: Icon(icon, color: emphasized ? _green : null),
+          title: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
           children: <Widget>[
-            Icon(icon, color: emphasized ? _green : null),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(label,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 3),
-                  Text(body),
-                ],
-              ),
-            ),
+            Align(alignment: Alignment.centerLeft, child: Text(body)),
           ],
         ),
       );
@@ -4325,20 +4820,43 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Widget _labelValue(String label, String value) {
     if (value.trim().isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text.rich(
-        TextSpan(
-          children: <InlineSpan>[
-            TextSpan(
-              text: '$label：',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            TextSpan(text: value),
-          ],
+      padding: const EdgeInsets.only(bottom: 4),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        dense: true,
+        title: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
+        childrenPadding: const EdgeInsets.only(left: 2, right: 8, bottom: 8),
+        children: <Widget>[
+          Align(alignment: Alignment.centerLeft, child: Text(value)),
+        ],
       ),
     );
   }
+
+  Future<void> _showDetail(String title, String body) => showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                Text(body),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Widget _bullet(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 5),

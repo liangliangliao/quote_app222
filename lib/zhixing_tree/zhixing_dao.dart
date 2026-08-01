@@ -7,6 +7,7 @@ import '../data/kv_dao.dart';
 import 'zhixing_extended_models.dart';
 import 'zhixing_knowledge_repository.dart';
 import 'zhixing_models.dart';
+import 'zhixing_remote_knowledge_models.dart';
 
 class ZxRewardContext {
   final int sameActionRewardedCount;
@@ -203,8 +204,49 @@ class ZxDao {
         boundaries_json TEXT NOT NULL,
         provider TEXT NOT NULL DEFAULT '',
         model_label TEXT NOT NULL DEFAULT '',
+        source_mode TEXT NOT NULL DEFAULT 'local_upload',
         status TEXT NOT NULL DEFAULT 'saved',
         created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await _addColumnIfMissing(
+      database,
+      'zhixing_ai_knowledge_drafts',
+      'source_mode',
+      "TEXT NOT NULL DEFAULT 'local_upload'",
+    );
+    // Provider-side copies are stored separately from local book files and
+    // separately from the reviewed knowledge package.  Only opaque provider
+    // resource IDs are persisted here; API credentials remain in settings.
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS zhixing_remote_knowledge_stores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        thinker TEXT NOT NULL,
+        remote_store_id TEXT NOT NULL,
+        provider_model TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'ready',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        UNIQUE(provider, thinker)
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS zhixing_remote_knowledge_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        remote_file_id TEXT NOT NULL DEFAULT '',
+        remote_store_id TEXT NOT NULL DEFAULT '',
+        remote_document_id TEXT NOT NULL DEFAULT '',
+        storage_kind TEXT NOT NULL DEFAULT '',
+        retention_label TEXT NOT NULL DEFAULT '',
+        provider_model TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'ready',
+        last_error TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        UNIQUE(book_id, provider)
       )
     ''');
     await database.execute('''
@@ -262,6 +304,12 @@ class ZxDao {
         )
       ''');
     }
+    // `CREATE TABLE IF NOT EXISTS` does not evolve a table that was created by
+    // an earlier app build.  In particular, some released builds created
+    // zhixing_actions before action_uid was introduced.  Do this before
+    // creating indexes so an existing database can be repaired in place rather
+    // than failing when the user taps “开始并记录”.
+    await _repairLegacyActionTable(database);
     await database.execute(
       'CREATE INDEX IF NOT EXISTS idx_zhixing_goals_status '
       'ON zhixing_goals(status, updated_at_ms DESC)',
@@ -291,8 +339,103 @@ class ZxDao {
       'ON zhixing_ai_knowledge_drafts(created_at_ms DESC)',
     );
     await database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_zhixing_remote_books_provider '
+      'ON zhixing_remote_knowledge_items(provider, book_id)',
+    );
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_zhixing_remote_stores_provider '
+      'ON zhixing_remote_knowledge_stores(provider, thinker)',
+    );
+    await database.execute(
       'CREATE INDEX IF NOT EXISTS idx_zhixing_report_action '
       'ON zhixing_review_reports(action_uid, created_at_ms DESC)',
+    );
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database database,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final info = await database.rawQuery('PRAGMA table_info($table)');
+    final hasColumn = info.any(
+      (row) => (row['name'] ?? '').toString() == column,
+    );
+    if (!hasColumn) {
+      await database.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+    }
+  }
+
+  /// Repairs old on-device action tables without deleting any user data.
+  ///
+  /// SQLite cannot add a non-null unique column to a populated table in one
+  /// operation.  We therefore add a nullable column, give every existing row
+  /// a stable legacy id, and enforce uniqueness with an index.  New writes
+  /// continue to provide a real [ZxActionPrescription.id].
+  Future<void> _repairLegacyActionTable(Database database) async {
+    final info = await database.rawQuery('PRAGMA table_info(zhixing_actions)');
+    final columns = info
+        .map((row) => (row['name'] ?? '').toString())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    Future<void> addIfMissing(String name, String definition) async {
+      if (columns.contains(name)) return;
+      await database.execute(
+        'ALTER TABLE zhixing_actions ADD COLUMN $name $definition',
+      );
+      columns.add(name);
+    }
+
+    // Keep every historical record readable.  Defaults only apply to old rows
+    // that predate the complete action prescription format.
+    await addIfMissing('action_uid', 'TEXT');
+    await addIfMissing('goal_id', 'INTEGER');
+    await addIfMissing('session_id', 'INTEGER');
+    await addIfMissing('title', "TEXT NOT NULL DEFAULT ''");
+    await addIfMissing('status', "TEXT NOT NULL DEFAULT 'active'");
+    await addIfMissing('difficulty', "TEXT NOT NULL DEFAULT 'l0'");
+    await addIfMissing(
+      'barrier',
+      "TEXT NOT NULL DEFAULT 'reflectiveMotivation'",
+    );
+    await addIfMissing('risk_level', "TEXT NOT NULL DEFAULT 'r0'");
+    await addIfMissing('prescription_json', "TEXT NOT NULL DEFAULT '{}'");
+    await addIfMissing('created_at_ms', 'INTEGER NOT NULL DEFAULT 0');
+    await addIfMissing('updated_at_ms', 'INTEGER NOT NULL DEFAULT 0');
+
+    // All released variants have an `id` primary key, but rowid keeps this
+    // repair safe for an unexpectedly hand-migrated table as well.
+    final rowIdentity = columns.contains('id') ? 'id' : 'rowid';
+    final rows = await database.rawQuery(
+      'SELECT $rowIdentity AS legacy_id, action_uid '
+      'FROM zhixing_actions ORDER BY $rowIdentity ASC',
+    );
+    final used = <String>{};
+    for (final row in rows) {
+      final id = _asInt(row['legacy_id']);
+      final current = (row['action_uid'] ?? '').toString().trim();
+      var fallback = 'legacy_action_$id';
+      var suffix = 2;
+      while (used.contains(fallback)) {
+        fallback = 'legacy_action_${id}_$suffix';
+        suffix++;
+      }
+      final next = current.isEmpty || used.contains(current) ? fallback : current;
+      used.add(next);
+      if (next != current) {
+        await database.update(
+          'zhixing_actions',
+          <String, Object?>{'action_uid': next},
+          where: '$rowIdentity = ?',
+          whereArgs: <Object?>[id],
+        );
+      }
+    }
+    await database.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_zhixing_actions_uid '
+      'ON zhixing_actions(action_uid)',
     );
   }
 
@@ -776,6 +919,149 @@ class ZxDao {
     return rows.map(ZxAiBook.fromMap).toList(growable: false);
   }
 
+  Future<ZxRemoteKnowledgeStore?> remoteKnowledgeStore({
+    required ZxRemoteKnowledgeProvider provider,
+    required String thinker,
+  }) async {
+    final database = await _db;
+    final rows = await database.query(
+      'zhixing_remote_knowledge_stores',
+      where: 'provider = ? AND thinker = ?',
+      whereArgs: <Object?>[provider.key, thinker.trim()],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ZxRemoteKnowledgeStore.fromMap(rows.first);
+  }
+
+  Future<ZxRemoteKnowledgeStore> saveRemoteKnowledgeStore(
+    ZxRemoteKnowledgeStore store,
+  ) async {
+    final database = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final existing = await remoteKnowledgeStore(
+      provider: store.provider,
+      thinker: store.thinker,
+    );
+    final row = <String, Object?>{
+      ...store.toMap(),
+      'created_at_ms': existing?.createdAtMs ??
+          (store.createdAtMs == 0 ? now : store.createdAtMs),
+      'updated_at_ms': now,
+    };
+    late final int id;
+    if (existing == null) {
+      id = await database.insert('zhixing_remote_knowledge_stores', row);
+    } else {
+      await database.update(
+        'zhixing_remote_knowledge_stores',
+        row,
+        where: 'id = ?',
+        whereArgs: <Object?>[existing.id],
+      );
+      id = existing.id;
+    }
+    final rows = await database.query(
+      'zhixing_remote_knowledge_stores',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? ZxRemoteKnowledgeStore(
+            id: id,
+            provider: store.provider,
+            thinker: store.thinker,
+            remoteStoreId: store.remoteStoreId,
+            providerModel: store.providerModel,
+            status: store.status,
+            createdAtMs: _asInt(row['created_at_ms']),
+            updatedAtMs: now,
+          )
+        : ZxRemoteKnowledgeStore.fromMap(rows.first);
+  }
+
+  Future<ZxRemoteKnowledgeItem?> remoteKnowledgeItem({
+    required int bookId,
+    required ZxRemoteKnowledgeProvider provider,
+  }) async {
+    final database = await _db;
+    final rows = await database.query(
+      'zhixing_remote_knowledge_items',
+      where: 'book_id = ? AND provider = ?',
+      whereArgs: <Object?>[bookId, provider.key],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ZxRemoteKnowledgeItem.fromMap(rows.first);
+  }
+
+  Future<List<ZxRemoteKnowledgeItem>> remoteKnowledgeItems({
+    ZxRemoteKnowledgeProvider? provider,
+    List<int>? bookIds,
+    bool includeDeleted = false,
+  }) async {
+    final database = await _db;
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (provider != null) {
+      clauses.add('provider = ?');
+      args.add(provider.key);
+    }
+    if (bookIds != null && bookIds.isNotEmpty) {
+      clauses.add('book_id IN (${List.filled(bookIds.length, '?').join(',')})');
+      args.addAll(bookIds);
+    }
+    if (!includeDeleted) {
+      clauses.add("status != 'deleted'");
+    }
+    final rows = await database.query(
+      'zhixing_remote_knowledge_items',
+      where: clauses.isEmpty ? null : clauses.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'updated_at_ms DESC',
+    );
+    return rows
+        .map(ZxRemoteKnowledgeItem.fromMap)
+        .toList(growable: false);
+  }
+
+  Future<ZxRemoteKnowledgeItem> saveRemoteKnowledgeItem(
+    ZxRemoteKnowledgeItem item,
+  ) async {
+    final database = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final existing = await remoteKnowledgeItem(
+      bookId: item.bookId,
+      provider: item.provider,
+    );
+    final row = <String, Object?>{
+      ...item.toMap(),
+      'created_at_ms': existing?.createdAtMs ??
+          (item.createdAtMs == 0 ? now : item.createdAtMs),
+      'updated_at_ms': now,
+    };
+    late final int id;
+    if (existing == null) {
+      id = await database.insert('zhixing_remote_knowledge_items', row);
+    } else {
+      await database.update(
+        'zhixing_remote_knowledge_items',
+        row,
+        where: 'id = ?',
+        whereArgs: <Object?>[existing.id],
+      );
+      id = existing.id;
+    }
+    final rows = await database.query(
+      'zhixing_remote_knowledge_items',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? item.copyWith(updatedAtMs: now)
+        : ZxRemoteKnowledgeItem.fromMap(rows.first);
+  }
+
   Future<int> saveAiKnowledgeDraft(ZxAiKnowledgeDraft draft) async {
     final database = await _db;
     return database.insert(
@@ -891,7 +1177,7 @@ class ZxDao {
     final treeRows = await database.query('zhixing_tree_state');
     final selectedLensIds = (await selectedLenses()).toList()..sort();
     return <String, dynamic>{
-      'schema': 'zhixing-tree-export-v2',
+      'schema': 'zhixing-tree-export-v3',
       'exported_at': DateTime.now().toIso8601String(),
       'goals': await table('zhixing_goals'),
       'sessions': await table('zhixing_sessions'),
@@ -905,6 +1191,10 @@ class ZxDao {
       'candidates': await table('zhixing_candidates'),
       'ai_books': await table('zhixing_ai_books'),
       'ai_knowledge_drafts': await table('zhixing_ai_knowledge_drafts'),
+      'remote_knowledge_stores':
+          await table('zhixing_remote_knowledge_stores'),
+      'remote_knowledge_items':
+          await table('zhixing_remote_knowledge_items'),
       'review_reports': await table('zhixing_review_reports'),
       'agent_events': await table('zhixing_agent_events'),
       'agent_settings': await database.query('zhixing_agent_settings'),
@@ -978,6 +1268,8 @@ class ZxDao {
       'zhixing_candidates',
       'zhixing_review_reports',
       'zhixing_ai_knowledge_drafts',
+      'zhixing_remote_knowledge_items',
+      'zhixing_remote_knowledge_stores',
       'zhixing_ai_books',
       'zhixing_agent_events',
       'zhixing_agent_settings',

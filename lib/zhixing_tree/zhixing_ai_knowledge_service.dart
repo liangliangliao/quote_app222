@@ -14,6 +14,8 @@ import 'zhixing_engines.dart';
 import 'zhixing_extended_models.dart';
 import 'zhixing_models.dart';
 import 'zhixing_review_engine.dart';
+import 'zhixing_remote_knowledge_models.dart';
+import 'zhixing_remote_knowledge_service.dart';
 import 'zhixing_thinker_catalog.dart';
 
 class ZxAiKnowledgeService {
@@ -21,9 +23,11 @@ class ZxAiKnowledgeService {
     ZxDao? dao,
     UnifiedAiService? ai,
     GlobalAiSettings? settings,
+    ZxRemoteKnowledgeService? remoteKnowledge,
   })  : _dao = dao ?? ZxDao(),
         _ai = ai ?? UnifiedAiService(),
-        _settings = settings ?? GlobalAiSettings();
+        _settings = settings ?? GlobalAiSettings(),
+        _remote = remoteKnowledge ?? ZxRemoteKnowledgeService();
 
   static const int maxImportedBytes = 30 * 1024 * 1024;
   static const int maxPromptCharacters = 48000;
@@ -36,6 +40,59 @@ class ZxAiKnowledgeService {
       AiAssistantFileTextExtractor();
   final ZxActionGenerator _validator = const ZxActionGenerator();
   final ZxLocalReviewEngine _localReview = const ZxLocalReviewEngine();
+  final ZxRemoteKnowledgeService _remote;
+
+  Future<ZxRemoteKnowledgeProvider> remoteKnowledgeProvider() =>
+      _remote.selectedProvider();
+
+  Future<ZxRemoteKnowledgeConfig> remoteKnowledgeConfig({
+    ZxRemoteKnowledgeProvider? provider,
+  }) =>
+      _remote.currentConfig(provider: provider);
+
+  Future<Map<String, String>> remoteKnowledgeEditableSettings() =>
+      _remote.editableSettings();
+
+  Future<void> saveRemoteKnowledgeSettings({
+    required ZxRemoteKnowledgeProvider provider,
+    String claudeKey = '',
+    String claudeModel = '',
+    String compatibleKey = '',
+    String compatibleBaseUrl = '',
+    String compatibleModel = '',
+  }) =>
+      _remote.saveSettings(
+        provider: provider,
+        claudeKey: claudeKey,
+        claudeModel: claudeModel,
+        compatibleKey: compatibleKey,
+        compatibleBaseUrl: compatibleBaseUrl,
+        compatibleModel: compatibleModel,
+      );
+
+  Future<List<ZxRemoteKnowledgeItem>> syncBooksToRemote(
+    List<ZxAiBook> books, {
+    ZxRemoteKnowledgeProvider? provider,
+  }) =>
+      _remote.syncBooks(books, provider: provider);
+
+  Future<ZxRemoteKnowledgeItem> deleteRemoteBook(
+    ZxRemoteKnowledgeItem item,
+  ) =>
+      _remote.deleteRemoteCopy(item);
+
+  Future<ZxRemoteKnowledgeAnswer> askRemoteBooks({
+    required List<int> bookIds,
+    required ZxRemoteKnowledgeProvider provider,
+    required String question,
+  }) =>
+      _remote.askBooks(
+        bookIds: bookIds,
+        provider: provider,
+        systemPrompt: _questionSystemPrompt,
+        userPrompt: question.trim(),
+        maxTokens: 1800,
+      );
 
   Future<ZxAiBook> importBook({
     required File source,
@@ -95,15 +152,60 @@ class ZxAiKnowledgeService {
   Future<ZxAiKnowledgeDraft> analyzeAndSave({
     required String thinker,
     required List<ZxAiBook> books,
+    bool requireRemoteKnowledge = false,
   }) async {
     if (books.isEmpty) throw ArgumentError('请至少选择一本已保存著作。');
+    final normalizedThinker = thinker.trim().isEmpty
+        ? books.map((item) => item.thinker).first
+        : thinker.trim();
+    final bookIds = books.map((item) => item.id).toList(growable: false);
+    final bookIndex = books
+        .map(
+          (item) => <String, Object?>{
+            'id': item.id,
+            'title': item.title,
+            'filename': item.fileName,
+          },
+        )
+        .toList(growable: false);
+    final remoteProvider = await _remote.selectedProvider();
+    final remoteReady = await _remote.hasReadyBooks(
+      bookIds: bookIds,
+      provider: remoteProvider,
+    );
+    if (remoteReady) {
+      final answer = await _remote.askBooks(
+        bookIds: bookIds,
+        provider: remoteProvider,
+        systemPrompt: _knowledgeSystemPrompt,
+        userPrompt: jsonEncode(<String, Object?>{
+          'thinker': normalizedThinker,
+          'books': bookIndex,
+          'instruction': '请通过已保存的远端著作检索后完成归纳。',
+        }),
+        maxTokens: 4200,
+      );
+      final map = _parseObject(answer.text);
+      if (map == null) throw const FormatException('AI没有返回有效JSON对象。');
+      final draft = ZxAiKnowledgeDraft.fromAiJson(
+        map,
+        thinker: normalizedThinker,
+        bookIds: bookIds,
+        provider: answer.provider.key,
+        modelLabel: answer.modelLabel,
+        sourceMode: 'remote_knowledge',
+      );
+      final id = await _dao.saveAiKnowledgeDraft(draft);
+      return await _dao.aiKnowledgeDraft(id) ?? draft;
+    }
+    if (requireRemoteKnowledge) {
+      throw StateError('所选著作尚未在${remoteProvider.label}就绪；请先同步到远端书库。');
+    }
+
     final state = await _settings.getState();
     if (state['available'] != '1') {
       throw StateError('请先在全局AI设置中配置可用的模型与密钥。');
     }
-    final normalizedThinker = thinker.trim().isEmpty
-        ? books.map((item) => item.thinker).first
-        : thinker.trim();
     final sourceBlocks = <Map<String, Object?>>[];
     final parts = <UnifiedAiContentPart>[];
     var remaining = maxPromptCharacters;
@@ -159,15 +261,7 @@ class ZxAiKnowledgeService {
           role: 'user',
           content: jsonEncode(<String, Object?>{
             'thinker': normalizedThinker,
-            'books': books
-                .map(
-                  (item) => <String, Object?>{
-                    'id': item.id,
-                    'title': item.title,
-                    'filename': item.fileName,
-                  },
-                )
-                .toList(growable: false),
+            'books': bookIndex,
             'extracted_sources': sourceBlocks,
           }),
           parts: parts,
@@ -179,9 +273,10 @@ class ZxAiKnowledgeService {
     final draft = ZxAiKnowledgeDraft.fromAiJson(
       map,
       thinker: normalizedThinker,
-      bookIds: books.map((item) => item.id).toList(growable: false),
+      bookIds: bookIds,
       provider: state['provider'] ?? '',
       modelLabel: state['label'] ?? state['model'] ?? '',
+      sourceMode: 'local_upload',
     );
     final id = await _dao.saveAiKnowledgeDraft(draft);
     return await _dao.aiKnowledgeDraft(id) ?? draft;
@@ -194,23 +289,42 @@ class ZxAiKnowledgeService {
     required ZxDiagnosisResult diagnosis,
   }) async {
     if (!diagnosis.safety.actionAllowed) return localBaseline;
-    final state = await _settings.getState();
-    if (state['available'] != '1') {
-      throw StateError('AI当前不可用，已保留本地规则版行动。');
+    final prompt = jsonEncode(<String, Object?>{
+      'ai_derived_knowledge': knowledge.toMap(),
+      'user_goal_and_steps': input.toJson(),
+      'local_safety_baseline': localBaseline.toJson(),
+      'safety': diagnosis.safety.toJson(),
+    });
+    late final String raw;
+    late final String appliedProvider;
+    late final String appliedModelLabel;
+    if (knowledge.usesRemoteKnowledge) {
+      final answer = await _remote.askBooks(
+        bookIds: knowledge.bookIds,
+        provider: ZxRemoteKnowledgeProviderX.parse(knowledge.provider),
+        systemPrompt: _actionSystemPrompt,
+        userPrompt: prompt,
+        maxTokens: 1300,
+      );
+      raw = answer.text;
+      appliedProvider = answer.provider.key;
+      appliedModelLabel = answer.modelLabel;
+    } else {
+      final state = await _settings.getState();
+      if (state['available'] != '1') {
+        throw StateError('AI当前不可用，已保留本地规则版行动。');
+      }
+      raw = await _ai.generateText(
+        purpose: 'zhixing_tree.ai_derived_action',
+        systemPrompt: _actionSystemPrompt,
+        maxTokens: 1300,
+        expectJson: true,
+        temperature: 0.15,
+        prompt: prompt,
+      );
+      appliedProvider = state['provider'] ?? knowledge.provider;
+      appliedModelLabel = state['label'] ?? knowledge.modelLabel;
     }
-    final raw = await _ai.generateText(
-      purpose: 'zhixing_tree.ai_derived_action',
-      systemPrompt: _actionSystemPrompt,
-      maxTokens: 1300,
-      expectJson: true,
-      temperature: 0.15,
-      prompt: jsonEncode(<String, Object?>{
-        'ai_derived_knowledge': knowledge.toMap(),
-        'user_goal_and_steps': input.toJson(),
-        'local_safety_baseline': localBaseline.toJson(),
-        'safety': diagnosis.safety.toJson(),
-      }),
-    );
     final map = _parseObject(raw);
     if (map == null) throw const FormatException('AI行动方案不是有效JSON。');
     String value(String key, String fallback) {
@@ -257,8 +371,8 @@ class ZxAiKnowledgeService {
       uncertainty: math.max(localBaseline.uncertainty, 0.35),
       guidanceOrigin: 'ai_derived',
       guidanceKnowledgeRefId: knowledge.id,
-      aiProvider: state['provider'] ?? knowledge.provider,
-      aiModelLabel: state['label'] ?? knowledge.modelLabel,
+      aiProvider: appliedProvider,
+      aiModelLabel: appliedModelLabel,
       status: localBaseline.status,
       createdAtMs: localBaseline.createdAtMs,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
@@ -276,8 +390,6 @@ class ZxAiKnowledgeService {
     required ZxReviewInput review,
   }) async {
     final localFallback = _localReview.generate(action: action, review: review);
-    final state = await _settings.getState();
-    if (state['available'] != '1') return localFallback;
     final catalog = ZxThinkerCatalog.guides
         .map(
           (guide) => <String, Object?>{
@@ -289,20 +401,41 @@ class ZxAiKnowledgeService {
         )
         .toList(growable: false);
     try {
-      final raw = await _ai.generateText(
-        purpose: 'zhixing_tree.ai_derived_review',
-        systemPrompt: _reviewSystemPrompt,
-        maxTokens: 1500,
-        expectJson: true,
-        temperature: 0.1,
-        prompt: jsonEncode(<String, Object?>{
-          'ai_derived_knowledge': knowledge.toMap(),
-          'action': action.toJson(),
-          'feedback': review.toJson(),
-          'reviewed_local_catalog_for_recommendation': catalog,
-          'local_report_fallback': localFallback.toMap(),
-        }),
-      );
+      final prompt = jsonEncode(<String, Object?>{
+        'ai_derived_knowledge': knowledge.toMap(),
+        'action': action.toJson(),
+        'feedback': review.toJson(),
+        'reviewed_local_catalog_for_recommendation': catalog,
+        'local_report_fallback': localFallback.toMap(),
+      });
+      late final String raw;
+      late final String appliedProvider;
+      late final String appliedModelLabel;
+      if (knowledge.usesRemoteKnowledge) {
+        final answer = await _remote.askBooks(
+          bookIds: knowledge.bookIds,
+          provider: ZxRemoteKnowledgeProviderX.parse(knowledge.provider),
+          systemPrompt: _reviewSystemPrompt,
+          userPrompt: prompt,
+          maxTokens: 1500,
+        );
+        raw = answer.text;
+        appliedProvider = answer.provider.key;
+        appliedModelLabel = answer.modelLabel;
+      } else {
+        final state = await _settings.getState();
+        if (state['available'] != '1') return localFallback;
+        raw = await _ai.generateText(
+          purpose: 'zhixing_tree.ai_derived_review',
+          systemPrompt: _reviewSystemPrompt,
+          maxTokens: 1500,
+          expectJson: true,
+          temperature: 0.1,
+          prompt: prompt,
+        );
+        appliedProvider = state['provider'] ?? knowledge.provider;
+        appliedModelLabel = state['label'] ?? knowledge.modelLabel;
+      }
       final map = _parseObject(raw);
       if (map == null) return localFallback;
       final decision =
@@ -333,8 +466,8 @@ class ZxAiKnowledgeService {
             validIds.isEmpty ? localFallback.recommendedSystemIds : validIds,
         rationale: value('rationale', localFallback.rationale),
         nextAction: value('next_action', localFallback.nextAction),
-        provider: state['provider'] ?? '',
-        modelLabel: state['label'] ?? state['model'] ?? '',
+        provider: appliedProvider,
+        modelLabel: appliedModelLabel,
         createdAtMs: DateTime.now().millisecondsSinceEpoch,
       );
     } catch (_) {
@@ -448,4 +581,7 @@ JSON字段：
   "next_action":"下一轮最小动作"
 }
 ''';
+
+  static const String _questionSystemPrompt = '''
+你是知行树的原著问答助手。只能依据当前远端书库中检索到的著作内容回答；区分原著事实、你的归纳和行动化解释。若书库没有足够依据，直接说明“书库依据不足”，不要补写或虚构。回答面向知行合一的理解、行动与反馈，不做疾病诊断，也不输出长篇原文。''';
 }
