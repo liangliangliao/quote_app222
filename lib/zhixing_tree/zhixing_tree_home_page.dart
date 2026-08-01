@@ -454,7 +454,6 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           _sectionCard(
             title: '当前行动与复盘',
             subtitle: '完成、未完成或改做更小一步都可以复盘；复盘后可继续、换思想或融合思想。',
-            initiallyExpanded: active.isNotEmpty,
             child: active.isEmpty
                 ? _emptyState(
                     icon: Icons.route_outlined,
@@ -538,7 +537,6 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '把一个“知”变成现在的一步',
           subtitle: '这不是疾病诊断，也不是调查。普通行动只需写下你现在想做什么。',
-          initiallyExpanded: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -1102,7 +1100,6 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     return _sectionCard(
       title: '现在就做这一步',
       subtitle: '先行动，再用事实复盘；不要求先解释清楚所有原因。',
-      initiallyExpanded: true,
       leading: const CircleAvatar(child: Icon(Icons.play_arrow_rounded)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

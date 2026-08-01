@@ -25,9 +25,8 @@ class AppDatabase {
       // so that devices upgrading from version 12 will still execute the
       // _upgrade logic which ensures the logs table exists.  Future changes
       // should increment this value accordingly.
-      // v17: add api_cache + translation_cache tables
-            // v20: add sport_records.current_speed for live speed restore
-      version: 33,
+      // v34: repair legacy 知行树 action rows before any new action is saved.
+      version: 34,
       onCreate: _create,
       onUpgrade: _upgrade,
     );
@@ -72,6 +71,16 @@ class AppDatabase {
     } catch (t) { /* ignore */ }
 
     await _db!.execute('PRAGMA foreign_keys = ON');
+
+    // This lives at the database boundary (rather than only inside the 知行树
+    // DAO) so an already-installed app repairs the legacy table as soon as it
+    // opens the database.  It prevents an old schema from reaching the
+    // “开始并记录” insert path without action_uid.
+    try {
+      await _ensureZhixingActionSchema(_db!);
+    } catch (_) {
+      // The DAO repeats this idempotent repair before every 知行树 access.
+    }
 
     // --- Ensure "Change · Self-help" and Fitbit integration tables exist ---
     // These CREATE statements are idempotent and safe to run on every open.
@@ -1096,7 +1105,77 @@ static Future<void> _addColumnIfMissing(
   }
 }
 
+/// Repairs the released pre-action_uid 知行树 action table in place.
+///
+/// Some devices already have the database at the previous app version, so
+/// relying on `CREATE TABLE IF NOT EXISTS` is insufficient: SQLite keeps the
+/// old columns.  Preserve every row and give legacy records a deterministic
+/// ID before creating the unique index required by current writes.
+static Future<void> _ensureZhixingActionSchema(Database db) async {
+  final exists = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'zhixing_actions'",
+  );
+  if (exists.isEmpty) return;
+
+  final info = await db.rawQuery('PRAGMA table_info(zhixing_actions)');
+  final columns = info
+      .map((row) => (row['name'] ?? '').toString())
+      .where((name) => name.isNotEmpty)
+      .toSet();
+
+  Future<void> addIfMissing(String name, String definition) async {
+    if (columns.contains(name)) return;
+    await db.execute('ALTER TABLE zhixing_actions ADD COLUMN $name $definition');
+    columns.add(name);
+  }
+
+  await addIfMissing('action_uid', 'TEXT');
+  await addIfMissing('goal_id', 'INTEGER');
+  await addIfMissing('session_id', 'INTEGER');
+  await addIfMissing('title', "TEXT NOT NULL DEFAULT ''");
+  await addIfMissing('status', "TEXT NOT NULL DEFAULT 'active'");
+  await addIfMissing('difficulty', "TEXT NOT NULL DEFAULT 'l0'");
+  await addIfMissing('barrier', "TEXT NOT NULL DEFAULT 'reflectiveMotivation'");
+  await addIfMissing('risk_level', "TEXT NOT NULL DEFAULT 'r0'");
+  await addIfMissing('prescription_json', "TEXT NOT NULL DEFAULT '{}'");
+  await addIfMissing('created_at_ms', 'INTEGER NOT NULL DEFAULT 0');
+  await addIfMissing('updated_at_ms', 'INTEGER NOT NULL DEFAULT 0');
+
+  final identity = columns.contains('id') ? 'id' : 'rowid';
+  final rows = await db.rawQuery(
+    'SELECT $identity AS legacy_id, action_uid '
+    'FROM zhixing_actions ORDER BY $identity ASC',
+  );
+  final used = <String>{};
+  for (final row in rows) {
+    final rowId = int.tryParse((row['legacy_id'] ?? '').toString()) ?? 0;
+    final current = (row['action_uid'] ?? '').toString().trim();
+    var candidate = 'legacy_action_$rowId';
+    var suffix = 2;
+    while (used.contains(candidate)) {
+      candidate = 'legacy_action_${rowId}_$suffix';
+      suffix++;
+    }
+    final next = current.isEmpty || used.contains(current) ? candidate : current;
+    used.add(next);
+    if (next != current) {
+      await db.update(
+        'zhixing_actions',
+        <String, Object?>{'action_uid': next},
+        where: '$identity = ?',
+        whereArgs: <Object?>[rowId],
+      );
+    }
+  }
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_zhixing_actions_uid '
+    'ON zhixing_actions(action_uid)',
+  );
+}
+
 static Future<void> _upgrade(Database db, int oldV, int newV) async {
+
+await _ensureZhixingActionSchema(db);
 
 await _ensureVoiceLabTables(db);
 await ensureAiAssistantTables(db);
