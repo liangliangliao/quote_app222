@@ -13,8 +13,8 @@ import 'zhixing_extended_models.dart';
 import 'zhixing_remote_knowledge_models.dart';
 
 /// Stores remote-provider configuration separately from the app-wide chat
-/// provider. OpenAI, xGrok and Gemini reuse the existing global credentials;
-/// Claude and a verified OpenAI-compatible endpoint are opt-in here.
+/// provider. Direct providers and named gateways reuse global credentials
+/// where possible; Azure, Claude and custom file protocols remain opt-in.
 class ZxRemoteKnowledgeSettings {
   ZxRemoteKnowledgeSettings({
     ConfigDao? configDao,
@@ -28,6 +28,14 @@ class ZxRemoteKnowledgeSettings {
   static const String claudeKeyKey = 'zhixing_remote_knowledge_claude_key_v1';
   static const String claudeModelKey =
       'zhixing_remote_knowledge_claude_model_v1';
+  static const String azureKeyKey =
+      'zhixing_remote_knowledge_azure_key_v1';
+  static const String azureEndpointKey =
+      'zhixing_remote_knowledge_azure_endpoint_v1';
+  static const String azureModelKey =
+      'zhixing_remote_knowledge_azure_model_v1';
+  static const String openRouterFileKeyKey =
+      'zhixing_remote_knowledge_openrouter_file_key_v1';
   static const String compatibleKeyKey =
       'zhixing_remote_knowledge_compatible_key_v1';
   static const String compatibleBaseUrlKey =
@@ -51,6 +59,10 @@ class ZxRemoteKnowledgeSettings {
         return ZxRemoteKnowledgeProvider.xgrok;
       case 'gemini':
         return ZxRemoteKnowledgeProvider.gemini;
+      case 'openrouter':
+        return ZxRemoteKnowledgeProvider.openRouter;
+      case 'edenai':
+        return ZxRemoteKnowledgeProvider.edenAi;
       default:
         // A generic chat endpoint may not expose Files + Vector Stores.
         // Make the user explicitly choose/configure a compatible server instead
@@ -73,6 +85,15 @@ class ZxRemoteKnowledgeSettings {
           apiKey: (row['api_key'] ?? '').toString().trim(),
           model: model,
           baseUrl: _openAiBase(endpoint),
+        );
+      case ZxRemoteKnowledgeProvider.azureOpenAi:
+        return ZxRemoteKnowledgeConfig(
+          provider: target,
+          apiKey: (await _kv.getString(azureKeyKey) ?? '').trim(),
+          model: (await _kv.getString(azureModelKey) ?? '').trim(),
+          baseUrl: _azureOpenAiBase(
+            (await _kv.getString(azureEndpointKey) ?? '').trim(),
+          ),
         );
       case ZxRemoteKnowledgeProvider.xgrok:
         return ZxRemoteKnowledgeConfig(
@@ -97,6 +118,22 @@ class ZxRemoteKnowledgeSettings {
               .trim(),
           baseUrl: 'https://api.anthropic.com/v1',
         );
+      case ZxRemoteKnowledgeProvider.openRouter:
+        return ZxRemoteKnowledgeConfig(
+          provider: target,
+          apiKey: await _configDao.getOpenRouterKey(),
+          fileApiKey:
+              (await _kv.getString(openRouterFileKeyKey) ?? '').trim(),
+          model: await _global.getModelForProvider('openrouter'),
+          baseUrl: 'https://openrouter.ai/api/v1',
+        );
+      case ZxRemoteKnowledgeProvider.edenAi:
+        return ZxRemoteKnowledgeConfig(
+          provider: target,
+          apiKey: await _global.getEdenAiKey(),
+          model: await _global.getModelForProvider('edenai'),
+          baseUrl: 'https://api.edenai.run/v3',
+        );
       case ZxRemoteKnowledgeProvider.openAiCompatible:
         final rawBaseUrl =
             (await _kv.getString(compatibleBaseUrlKey) ?? '').trim();
@@ -116,6 +153,12 @@ class ZxRemoteKnowledgeSettings {
         'claude_model':
             (await _kv.getString(claudeModelKey) ?? 'claude-sonnet-4-5')
                 .trim(),
+        'azure_key': (await _kv.getString(azureKeyKey) ?? '').trim(),
+        'azure_endpoint':
+            (await _kv.getString(azureEndpointKey) ?? '').trim(),
+        'azure_model': (await _kv.getString(azureModelKey) ?? '').trim(),
+        'openrouter_file_key':
+            (await _kv.getString(openRouterFileKeyKey) ?? '').trim(),
         'compatible_key':
             (await _kv.getString(compatibleKeyKey) ?? '').trim(),
         'compatible_base_url':
@@ -129,6 +172,10 @@ class ZxRemoteKnowledgeSettings {
     required ZxRemoteKnowledgeProvider provider,
     String claudeKey = '',
     String claudeModel = '',
+    String azureKey = '',
+    String azureEndpoint = '',
+    String azureModel = '',
+    String openRouterFileKey = '',
     String compatibleKey = '',
     String compatibleBaseUrl = '',
     String compatibleModel = '',
@@ -140,6 +187,14 @@ class ZxRemoteKnowledgeSettings {
         claudeModelKey,
         claudeModel.trim().isEmpty ? 'claude-sonnet-4-5' : claudeModel.trim(),
       );
+    }
+    if (provider == ZxRemoteKnowledgeProvider.azureOpenAi) {
+      await _kv.setString(azureKeyKey, azureKey.trim());
+      await _kv.setString(azureEndpointKey, azureEndpoint.trim());
+      await _kv.setString(azureModelKey, azureModel.trim());
+    }
+    if (provider == ZxRemoteKnowledgeProvider.openRouter) {
+      await _kv.setString(openRouterFileKeyKey, openRouterFileKey.trim());
     }
     if (provider == ZxRemoteKnowledgeProvider.openAiCompatible) {
       await _kv.setString(compatibleKeyKey, compatibleKey.trim());
@@ -177,11 +232,24 @@ class ZxRemoteKnowledgeSettings {
     if (value.endsWith('/v1')) return value;
     return '$value/v1';
   }
+
+  static String _azureOpenAiBase(String raw) {
+    var value = raw.trim();
+    while (value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    if (value.isEmpty) return '';
+    final openAiPath = value.indexOf('/openai/');
+    if (openAiPath >= 0) {
+      value = value.substring(0, openAiPath);
+    }
+    return '$value/openai/v1';
+  }
 }
 
-/// Native provider adapters for persistent source references.  The service
-/// never treats a temporary attachment as a knowledge base: a call is allowed
-/// only when every selected book has a saved and ready provider-side record.
+/// Native provider adapters for reusable provider-side source references. A
+/// call is allowed only when every selected book has a saved, unexpired and
+/// ready provider record. Temporary gateway files are labelled explicitly.
 class ZxRemoteKnowledgeService {
   ZxRemoteKnowledgeService({
     ZxDao? dao,
@@ -215,6 +283,10 @@ class ZxRemoteKnowledgeService {
     required ZxRemoteKnowledgeProvider provider,
     String claudeKey = '',
     String claudeModel = '',
+    String azureKey = '',
+    String azureEndpoint = '',
+    String azureModel = '',
+    String openRouterFileKey = '',
     String compatibleKey = '',
     String compatibleBaseUrl = '',
     String compatibleModel = '',
@@ -223,6 +295,10 @@ class ZxRemoteKnowledgeService {
         provider: provider,
         claudeKey: claudeKey,
         claudeModel: claudeModel,
+        azureKey: azureKey,
+        azureEndpoint: azureEndpoint,
+        azureModel: azureModel,
+        openRouterFileKey: openRouterFileKey,
         compatibleKey: compatibleKey,
         compatibleBaseUrl: compatibleBaseUrl,
         compatibleModel: compatibleModel,
@@ -302,6 +378,7 @@ class ZxRemoteKnowledgeService {
     final items = await _readyItems(bookIds, provider);
     switch (provider) {
       case ZxRemoteKnowledgeProvider.openai:
+      case ZxRemoteKnowledgeProvider.azureOpenAi:
       case ZxRemoteKnowledgeProvider.openAiCompatible:
         return _askOpenAiStore(
           config: config,
@@ -333,6 +410,23 @@ class ZxRemoteKnowledgeService {
           userPrompt: userPrompt,
           maxTokens: maxTokens,
         );
+      case ZxRemoteKnowledgeProvider.openRouter:
+        return _askResponseFileIds(
+          config: config,
+          items: items,
+          systemPrompt: systemPrompt,
+          userPrompt: userPrompt,
+          maxTokens: maxTokens,
+          operation: '基于 OpenRouter 工作区文件回答',
+        );
+      case ZxRemoteKnowledgeProvider.edenAi:
+        return _askEdenFiles(
+          config: config,
+          items: items,
+          systemPrompt: systemPrompt,
+          userPrompt: userPrompt,
+          maxTokens: maxTokens,
+        );
     }
   }
 
@@ -342,17 +436,30 @@ class ZxRemoteKnowledgeService {
     ZxRemoteKnowledgeItem item,
   ) async {
     if (item.status == ZxRemoteKnowledgeStatus.deleted) return item;
+    if (item.provider == ZxRemoteKnowledgeProvider.edenAi) {
+      // Eden AI V3 exposes automatic expiry (normally seven days) but no
+      // public immediate file-delete endpoint. No credential is needed to
+      // stop selecting the saved ID locally while the provider expires it.
+      return _dao.saveRemoteKnowledgeItem(
+        item.copyWith(
+          status: ZxRemoteKnowledgeStatus.deleted,
+          lastError: '已停止在本应用中使用；Eden AI 未提供即时删除文件接口，远端副本将在到期时间自动删除。',
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+    }
     final config = await _settings.resolve(provider: item.provider);
     _ensureConfigured(config);
     switch (item.provider) {
       case ZxRemoteKnowledgeProvider.openai:
+      case ZxRemoteKnowledgeProvider.azureOpenAi:
       case ZxRemoteKnowledgeProvider.openAiCompatible:
         if (item.remoteStoreId.isNotEmpty && item.remoteFileId.isNotEmpty) {
           await _deleteIgnoringNotFound(
             Uri.parse(
               '${config.baseUrl}/vector_stores/${Uri.encodeComponent(item.remoteStoreId)}/files/${Uri.encodeComponent(item.remoteFileId)}',
             ),
-            _bearer(config.apiKey),
+            _openAiHeaders(config),
           );
         }
         if (item.remoteFileId.isNotEmpty) {
@@ -360,7 +467,7 @@ class ZxRemoteKnowledgeService {
             Uri.parse(
               '${config.baseUrl}/files/${Uri.encodeComponent(item.remoteFileId)}',
             ),
-            _bearer(config.apiKey),
+            _openAiHeaders(config),
           );
         }
         break;
@@ -390,6 +497,17 @@ class ZxRemoteKnowledgeService {
           _claudeHeaders(config.apiKey),
         );
         break;
+      case ZxRemoteKnowledgeProvider.openRouter:
+        await _deleteIgnoringNotFound(
+          Uri.parse(
+            '${config.baseUrl}/files/${Uri.encodeComponent(item.remoteFileId)}',
+          ),
+          _bearer(config.fileApiKey),
+        );
+        break;
+      case ZxRemoteKnowledgeProvider.edenAi:
+        // Handled before configuration because there is no delete request.
+        break;
     }
     return _dao.saveRemoteKnowledgeItem(
       item.copyWith(
@@ -407,6 +525,7 @@ class ZxRemoteKnowledgeService {
   }) async {
     switch (config.provider) {
       case ZxRemoteKnowledgeProvider.openai:
+      case ZxRemoteKnowledgeProvider.azureOpenAi:
       case ZxRemoteKnowledgeProvider.openAiCompatible:
         return _syncOpenAiBook(book, config, existing: existing);
       case ZxRemoteKnowledgeProvider.xgrok:
@@ -415,6 +534,10 @@ class ZxRemoteKnowledgeService {
         return _syncGeminiBook(book, config, existing: existing);
       case ZxRemoteKnowledgeProvider.claude:
         return _syncClaudeBook(book, config);
+      case ZxRemoteKnowledgeProvider.openRouter:
+        return _syncOpenRouterBook(book, config);
+      case ZxRemoteKnowledgeProvider.edenAi:
+        return _syncEdenBook(book, config);
     }
   }
 
@@ -444,7 +567,7 @@ class ZxRemoteKnowledgeService {
         : await _ensureOpenAiStore(book.thinker, config);
     final uploaded = await _uploadMultipart(
       Uri.parse('${config.baseUrl}/files'),
-      _bearer(config.apiKey),
+      _openAiHeaders(config),
       file: File(book.localPath),
       filename: book.fileName,
       mimeType: book.mimeType,
@@ -457,7 +580,7 @@ class ZxRemoteKnowledgeService {
         Uri.parse(
           '${config.baseUrl}/vector_stores/${Uri.encodeComponent(storeId)}/files',
         ),
-        _bearer(config.apiKey),
+        _openAiHeaders(config),
         <String, Object?>{'file_id': fileId},
         operation: '附加到远端知识库',
       );
@@ -482,7 +605,7 @@ class ZxRemoteKnowledgeService {
       try {
         await _deleteIgnoringNotFound(
           Uri.parse('${config.baseUrl}/files/${Uri.encodeComponent(fileId)}'),
-          _bearer(config.apiKey),
+          _openAiHeaders(config),
         );
       } catch (_) {}
       rethrow;
@@ -502,7 +625,7 @@ class ZxRemoteKnowledgeService {
     }
     final response = await _postJson(
       Uri.parse('${config.baseUrl}/vector_stores'),
-      _bearer(config.apiKey),
+      _openAiHeaders(config),
       <String, Object?>{'name': '知行树 · ${thinker.trim()}'},
       operation: '创建远端知识库',
     );
@@ -530,7 +653,7 @@ class ZxRemoteKnowledgeService {
     );
     for (var attempt = 0; attempt < 8; attempt++) {
       final response = await _client
-          .get(uri, headers: _bearer(config.apiKey))
+          .get(uri, headers: _openAiHeaders(config))
           .timeout(_timeout);
       final payload = _jsonObject(response, operation: '查询远端索引状态');
       final status = (payload['status'] ?? '').toString().toLowerCase();
@@ -567,6 +690,69 @@ class ZxRemoteKnowledgeService {
       status: ZxRemoteKnowledgeStatus.ready,
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  Future<ZxRemoteKnowledgeItem> _syncOpenRouterBook(
+    ZxAiBook book,
+    ZxRemoteKnowledgeConfig config,
+  ) async {
+    final response = await _uploadMultipart(
+      Uri.parse('${config.baseUrl}/files'),
+      _bearer(config.fileApiKey),
+      file: File(book.localPath),
+      filename: book.fileName,
+      mimeType: book.mimeType,
+    );
+    final fileId = (response['id'] ?? '').toString().trim();
+    if (fileId.isEmpty) {
+      throw const FormatException('OpenRouter没有返回工作区文件ID。');
+    }
+    return ZxRemoteKnowledgeItem(
+      bookId: book.id,
+      provider: config.provider,
+      remoteFileId: fileId,
+      storageKind: 'openrouter_workspace_file',
+      retentionLabel: config.provider.retentionLabel,
+      providerModel: config.model,
+      status: ZxRemoteKnowledgeStatus.ready,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  Future<ZxRemoteKnowledgeItem> _syncEdenBook(
+    ZxAiBook book,
+    ZxRemoteKnowledgeConfig config,
+  ) async {
+    final response = await _uploadMultipart(
+      Uri.parse('${config.baseUrl}/upload'),
+      _bearer(config.apiKey),
+      file: File(book.localPath),
+      filename: book.fileName,
+      mimeType: book.mimeType,
+      fields: const <String, String>{'purpose': 'assistants'},
+    );
+    final fileId = (response['file_id'] ?? response['id'] ?? '')
+        .toString()
+        .trim();
+    if (fileId.isEmpty) throw const FormatException('Eden AI没有返回file_id。');
+    final now = DateTime.now();
+    final expiresAt = DateTime.tryParse(
+          (response['expires_at'] ?? '').toString(),
+        ) ??
+        now.add(const Duration(days: 7));
+    return ZxRemoteKnowledgeItem(
+      bookId: book.id,
+      provider: config.provider,
+      remoteFileId: fileId,
+      storageKind: 'eden_gateway_file_7d',
+      retentionLabel: config.provider.retentionLabel,
+      providerModel: config.model,
+      expiresAtMs: expiresAt.millisecondsSinceEpoch,
+      status: ZxRemoteKnowledgeStatus.ready,
+      createdAtMs: now.millisecondsSinceEpoch,
+      updatedAtMs: now.millisecondsSinceEpoch,
     );
   }
 
@@ -868,7 +1054,7 @@ class ZxRemoteKnowledgeService {
         .toList(growable: false);
     final response = await _postJson(
       Uri.parse('${config.baseUrl}/responses'),
-      _bearer(config.apiKey),
+      _openAiHeaders(config),
       <String, Object?>{
         'model': config.model,
         'input': <Object?>[
@@ -909,6 +1095,24 @@ class ZxRemoteKnowledgeService {
     required String userPrompt,
     required int maxTokens,
   }) async {
+    return _askResponseFileIds(
+      config: config,
+      items: items,
+      systemPrompt: systemPrompt,
+      userPrompt: userPrompt,
+      maxTokens: maxTokens,
+      operation: '基于 Grok 远端书库回答',
+    );
+  }
+
+  Future<ZxRemoteKnowledgeAnswer> _askResponseFileIds({
+    required ZxRemoteKnowledgeConfig config,
+    required List<ZxRemoteKnowledgeItem> items,
+    required String systemPrompt,
+    required String userPrompt,
+    required int maxTokens,
+    required String operation,
+  }) async {
     final content = <Object?>[
       <String, Object?>{
         'type': 'input_text',
@@ -931,10 +1135,48 @@ class ZxRemoteKnowledgeService {
         ],
         'max_output_tokens': maxTokens,
       },
-      operation: '基于 Grok 远端书库回答',
+      operation: operation,
     );
     return ZxRemoteKnowledgeAnswer(
       text: _responseText(response),
+      provider: config.provider,
+      modelLabel: config.label,
+    );
+  }
+
+  Future<ZxRemoteKnowledgeAnswer> _askEdenFiles({
+    required ZxRemoteKnowledgeConfig config,
+    required List<ZxRemoteKnowledgeItem> items,
+    required String systemPrompt,
+    required String userPrompt,
+    required int maxTokens,
+  }) async {
+    final response = await _postJson(
+      Uri.parse('${config.baseUrl}/chat/completions'),
+      _bearer(config.apiKey),
+      <String, Object?>{
+        'model': config.model,
+        'messages': <Object?>[
+          <String, Object?>{'role': 'system', 'content': systemPrompt},
+          <String, Object?>{
+            'role': 'user',
+            'content': <Object?>[
+              <String, Object?>{'type': 'text', 'text': userPrompt},
+              ...items.map(
+                (item) => <String, Object?>{
+                  'type': 'file',
+                  'file': <String, Object?>{'file_id': item.remoteFileId},
+                },
+              ),
+            ],
+          },
+        ],
+        'max_tokens': maxTokens,
+      },
+      operation: '基于 Eden AI 临时文件 ID 回答',
+    );
+    return ZxRemoteKnowledgeAnswer(
+      text: _chatText(response),
       provider: config.provider,
       modelLabel: config.label,
     );
@@ -1081,6 +1323,13 @@ class ZxRemoteKnowledgeService {
         'Authorization': 'Bearer ${key.trim()}',
       };
 
+  static Map<String, String> _openAiHeaders(
+    ZxRemoteKnowledgeConfig config,
+  ) =>
+      config.provider == ZxRemoteKnowledgeProvider.azureOpenAi
+          ? <String, String>{'api-key': config.apiKey.trim()}
+          : _bearer(config.apiKey);
+
   static Map<String, String> _claudeHeaders(String key) => <String, String>{
         'x-api-key': key.trim(),
         'anthropic-version': _anthropicVersion,
@@ -1094,9 +1343,14 @@ class ZxRemoteKnowledgeService {
     if (config.model.trim().isEmpty) {
       throw StateError('${config.provider.label}尚未配置模型。');
     }
-    if ((config.provider == ZxRemoteKnowledgeProvider.openAiCompatible) &&
+    if ((config.provider == ZxRemoteKnowledgeProvider.openAiCompatible ||
+            config.provider == ZxRemoteKnowledgeProvider.azureOpenAi) &&
         config.baseUrl.trim().isEmpty) {
-      throw StateError('请填写兼容服务商的 API 基地址。');
+      throw StateError('请填写服务商的 API 基地址。');
+    }
+    if (config.provider == ZxRemoteKnowledgeProvider.openRouter &&
+        config.fileApiKey.trim().isEmpty) {
+      throw StateError('请配置 OpenRouter Management Key；普通推理 Key 不能管理工作区文件。');
     }
   }
 
@@ -1135,6 +1389,28 @@ class ZxRemoteKnowledgeService {
       if (parts.isNotEmpty) return parts.join('\n');
     }
     throw const FormatException('服务商没有返回可读答案。');
+  }
+
+  static String _chatText(Map<String, dynamic> response) {
+    final choices = response['choices'];
+    if (choices is List && choices.isNotEmpty && choices.first is Map) {
+      final message = (choices.first as Map)['message'];
+      if (message is Map) {
+        final content = message['content'];
+        if (content is String && content.trim().isNotEmpty) {
+          return content.trim();
+        }
+        if (content is List) {
+          final parts = content
+              .whereType<Map>()
+              .map((part) => (part['text'] ?? '').toString().trim())
+              .where((text) => text.isNotEmpty)
+              .toList(growable: false);
+          if (parts.isNotEmpty) return parts.join('\n');
+        }
+      }
+    }
+    throw const FormatException('中转服务商没有返回可读答案。');
   }
 
   static String _geminiText(Map<String, dynamic> response) {

@@ -127,6 +127,82 @@ void main() {
         contains('原始文件'),
       );
     });
+
+    test('direct and gateway providers preserve their distinct ID contracts',
+        () {
+      const azure = ZxRemoteKnowledgeItem(
+        bookId: 3,
+        provider: ZxRemoteKnowledgeProvider.azureOpenAi,
+        remoteFileId: 'file_azure',
+        remoteStoreId: 'vs_azure',
+      );
+      const openRouter = ZxRemoteKnowledgeItem(
+        bookId: 4,
+        provider: ZxRemoteKnowledgeProvider.openRouter,
+        remoteFileId: 'or_file_123',
+      );
+
+      expect(azure.isReady, isTrue);
+      expect(openRouter.isReady, isTrue);
+      expect(ZxRemoteKnowledgeProvider.openRouter.isGateway, isTrue);
+      expect(ZxRemoteKnowledgeProvider.azureOpenAi.isGateway, isFalse);
+      expect(
+        ZxRemoteKnowledgeProvider.openAiCompatible.isPersistentKnowledge,
+        isFalse,
+      );
+      expect(
+        ZxRemoteKnowledgeProviderX.parse('azureopenai'),
+        ZxRemoteKnowledgeProvider.azureOpenAi,
+      );
+      expect(
+        ZxRemoteKnowledgeProviderX.parse('eden_ai'),
+        ZxRemoteKnowledgeProvider.edenAi,
+      );
+    });
+
+    test('OpenRouter requires a separate management key for workspace files',
+        () {
+      const missingManagementKey = ZxRemoteKnowledgeConfig(
+        provider: ZxRemoteKnowledgeProvider.openRouter,
+        apiKey: 'inference-key',
+        model: 'anthropic/claude-sonnet-4',
+      );
+      const configured = ZxRemoteKnowledgeConfig(
+        provider: ZxRemoteKnowledgeProvider.openRouter,
+        apiKey: 'inference-key',
+        fileApiKey: 'management-key',
+        model: 'anthropic/claude-sonnet-4',
+      );
+
+      expect(missingManagementKey.isConfigured, isFalse);
+      expect(configured.isConfigured, isTrue);
+    });
+
+    test('Eden AI expiry prevents stale IDs from being reused', () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final expired = ZxRemoteKnowledgeItem(
+        bookId: 5,
+        provider: ZxRemoteKnowledgeProvider.edenAi,
+        remoteFileId: 'eden-expired',
+        expiresAtMs: now - 1000,
+      );
+      final live = ZxRemoteKnowledgeItem(
+        bookId: 6,
+        provider: ZxRemoteKnowledgeProvider.edenAi,
+        remoteFileId: 'eden-live',
+        expiresAtMs: now + const Duration(days: 7).inMilliseconds,
+      );
+
+      expect(expired.isReady, isFalse);
+      expect(live.isReady, isTrue);
+      expect(ZxRemoteKnowledgeProvider.edenAi.isPersistentKnowledge, isFalse);
+      expect(
+        ZxRemoteKnowledgeProvider.edenAi.supportsImmediateDelete,
+        isFalse,
+      );
+      expect(ZxRemoteKnowledgeProvider.edenAi.retentionLabel, contains('7 天'));
+      expect(ZxRemoteKnowledgeProvider.edenAi.retentionLabel, contains('不是永久'));
+    });
   });
 
   group('automatic local review report', () {

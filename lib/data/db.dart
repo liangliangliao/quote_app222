@@ -25,8 +25,9 @@ class AppDatabase {
       // so that devices upgrading from version 12 will still execute the
       // _upgrade logic which ensures the logs table exists.  Future changes
       // should increment this value accordingly.
-      // v34: repair legacy 知行树 action rows before any new action is saved.
-      version: 34,
+      // v35: rebuild legacy 知行树 action tables that still contain required
+      // columns such as diagnosis_id from pre-product schemas.
+      version: 35,
       onCreate: _create,
       onUpgrade: _upgrade,
     );
@@ -77,7 +78,7 @@ class AppDatabase {
     // opens the database.  It prevents an old schema from reaching the
     // “开始并记录” insert path without action_uid.
     try {
-      await _ensureZhixingActionSchema(_db!);
+      await ensureZhixingActionSchema(_db!);
     } catch (_) {
       // The DAO repeats this idempotent repair before every 知行树 access.
     }
@@ -1111,61 +1112,152 @@ static Future<void> _addColumnIfMissing(
 /// relying on `CREATE TABLE IF NOT EXISTS` is insufficient: SQLite keeps the
 /// old columns.  Preserve every row and give legacy records a deterministic
 /// ID before creating the unique index required by current writes.
-static Future<void> _ensureZhixingActionSchema(Database db) async {
+static Future<void> ensureZhixingActionSchema(Database db) async {
   final exists = await db.rawQuery(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'zhixing_actions'",
   );
   if (exists.isEmpty) return;
 
   final info = await db.rawQuery('PRAGMA table_info(zhixing_actions)');
-  final columns = info
+  final existingColumns = info
       .map((row) => (row['name'] ?? '').toString())
       .where((name) => name.isNotEmpty)
       .toSet();
+  const canonicalColumns = <String>{
+    'id',
+    'action_uid',
+    'goal_id',
+    'session_id',
+    'title',
+    'status',
+    'difficulty',
+    'barrier',
+    'risk_level',
+    'prescription_json',
+    'created_at_ms',
+    'updated_at_ms',
+  };
+  const requiredColumns = <String>{
+    'action_uid',
+    'title',
+    'status',
+    'difficulty',
+    'barrier',
+    'risk_level',
+    'prescription_json',
+    'created_at_ms',
+    'updated_at_ms',
+  };
+  final nullableColumns = <String>{'goal_id', 'session_id'};
+  final constraintsAreCanonical = info.every((row) {
+    final name = (row['name'] ?? '').toString();
+    final notNull = (row['notnull'] as num?)?.toInt() == 1;
+    final primaryKey = (row['pk'] as num?)?.toInt() == 1;
+    if (name == 'id') return primaryKey;
+    if (requiredColumns.contains(name)) return notNull;
+    if (nullableColumns.contains(name)) return !notNull;
+    return false;
+  });
+  final needsRebuild = existingColumns.length != canonicalColumns.length ||
+      !existingColumns.containsAll(canonicalColumns) ||
+      !constraintsAreCanonical;
 
-  Future<void> addIfMissing(String name, String definition) async {
-    if (columns.contains(name)) return;
-    await db.execute('ALTER TABLE zhixing_actions ADD COLUMN $name $definition');
-    columns.add(name);
-  }
+  if (needsRebuild) {
+    final identity = existingColumns.contains('id') ? 'id' : 'rowid';
+    final rows = await db.rawQuery(
+      'SELECT $identity AS legacy_row_id, * '
+      'FROM zhixing_actions ORDER BY $identity ASC',
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final usedActionIds = <String>{};
 
-  await addIfMissing('action_uid', 'TEXT');
-  await addIfMissing('goal_id', 'INTEGER');
-  await addIfMissing('session_id', 'INTEGER');
-  await addIfMissing('title', "TEXT NOT NULL DEFAULT ''");
-  await addIfMissing('status', "TEXT NOT NULL DEFAULT 'active'");
-  await addIfMissing('difficulty', "TEXT NOT NULL DEFAULT 'l0'");
-  await addIfMissing('barrier', "TEXT NOT NULL DEFAULT 'reflectiveMotivation'");
-  await addIfMissing('risk_level', "TEXT NOT NULL DEFAULT 'r0'");
-  await addIfMissing('prescription_json', "TEXT NOT NULL DEFAULT '{}'");
-  await addIfMissing('created_at_ms', 'INTEGER NOT NULL DEFAULT 0');
-  await addIfMissing('updated_at_ms', 'INTEGER NOT NULL DEFAULT 0');
-
-  final identity = columns.contains('id') ? 'id' : 'rowid';
-  final rows = await db.rawQuery(
-    'SELECT $identity AS legacy_id, action_uid '
-    'FROM zhixing_actions ORDER BY $identity ASC',
-  );
-  final used = <String>{};
-  for (final row in rows) {
-    final rowId = int.tryParse((row['legacy_id'] ?? '').toString()) ?? 0;
-    final current = (row['action_uid'] ?? '').toString().trim();
-    var candidate = 'legacy_action_$rowId';
-    var suffix = 2;
-    while (used.contains(candidate)) {
-      candidate = 'legacy_action_${rowId}_$suffix';
-      suffix++;
+    int integer(Object? value, [int fallback = 0]) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? fallback;
     }
-    final next = current.isEmpty || used.contains(current) ? candidate : current;
-    used.add(next);
-    if (next != current) {
-      await db.update(
-        'zhixing_actions',
-        <String, Object?>{'action_uid': next},
-        where: '$identity = ?',
-        whereArgs: <Object?>[rowId],
+
+    int? nullableInteger(Object? value) {
+      if (value == null) return null;
+      final parsed = integer(value, -1);
+      return parsed < 0 ? null : parsed;
+    }
+
+    String stringValue(Object? value, String fallback) {
+      final text = (value ?? '').toString().trim();
+      return text.isEmpty ? fallback : text;
+    }
+
+    String uniqueActionId(Map<String, Object?> row, int rowId) {
+      final current = (row['action_uid'] ?? '').toString().trim();
+      final fallback = 'legacy_action_$rowId';
+      final base = current.isEmpty ? fallback : current;
+      var candidate = base;
+      var suffix = 2;
+      while (usedActionIds.contains(candidate)) {
+        candidate = '${base}_$suffix';
+        suffix++;
+      }
+      usedActionIds.add(candidate);
+      return candidate;
+    }
+
+    await db.transaction((txn) async {
+      await txn.execute(
+        'DROP TABLE IF EXISTS zhixing_actions__canonical_v35',
       );
-    }
+      await txn.execute('''
+        CREATE TABLE zhixing_actions__canonical_v35 (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action_uid TEXT NOT NULL UNIQUE,
+          goal_id INTEGER,
+          session_id INTEGER,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL,
+          difficulty TEXT NOT NULL,
+          barrier TEXT NOT NULL,
+          risk_level TEXT NOT NULL,
+          prescription_json TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL
+        )
+      ''');
+      for (final row in rows) {
+        final rowId = integer(row['legacy_row_id']);
+        final storedId = integer(row['id'], rowId);
+        final createdAt = integer(row['created_at_ms'], now);
+        await txn.insert(
+          'zhixing_actions__canonical_v35',
+          <String, Object?>{
+            if (storedId > 0) 'id': storedId,
+            'action_uid': uniqueActionId(row, rowId),
+            'goal_id': nullableInteger(row['goal_id']),
+            'session_id': nullableInteger(
+              row['session_id'] ?? row['diagnosis_id'],
+            ),
+            'title': stringValue(row['title'], '历史行动'),
+            'status': stringValue(row['status'], 'active'),
+            'difficulty': stringValue(row['difficulty'], 'l0'),
+            'barrier': stringValue(
+              row['barrier'],
+              'reflectiveMotivation',
+            ),
+            'risk_level': stringValue(row['risk_level'], 'r0'),
+            'prescription_json': stringValue(
+              row['prescription_json'],
+              '{}',
+            ),
+            'created_at_ms': createdAt,
+            'updated_at_ms': integer(row['updated_at_ms'], createdAt),
+          },
+        );
+      }
+      await txn.execute('DROP TABLE zhixing_actions');
+      await txn.execute(
+        'ALTER TABLE zhixing_actions__canonical_v35 '
+        'RENAME TO zhixing_actions',
+      );
+    });
   }
   await db.execute(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_zhixing_actions_uid '
@@ -1174,8 +1266,6 @@ static Future<void> _ensureZhixingActionSchema(Database db) async {
 }
 
 static Future<void> _upgrade(Database db, int oldV, int newV) async {
-
-await _ensureZhixingActionSchema(db);
 
 await _ensureVoiceLabTables(db);
 await ensureAiAssistantTables(db);

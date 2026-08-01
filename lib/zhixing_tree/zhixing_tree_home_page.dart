@@ -454,6 +454,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           _sectionCard(
             title: '当前行动与复盘',
             subtitle: '完成、未完成或改做更小一步都可以复盘；复盘后可继续、换思想或融合思想。',
+            initiallyExpanded: active.isNotEmpty,
             child: active.isEmpty
                 ? _emptyState(
                     icon: Icons.route_outlined,
@@ -473,6 +474,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               title: '最近复盘报告',
               subtitle: _reviewReports.first.origin.label +
                   ' · 自动依据行动反馈生成',
+              initiallyExpanded: true,
               leading: CircleAvatar(
                 child: Icon(
                   _reviewReports.first.origin ==
@@ -537,6 +539,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '把一个“知”变成现在的一步',
           subtitle: '这不是疾病诊断，也不是调查。普通行动只需写下你现在想做什么。',
+          expansionKey: ValueKey<bool>(_prescription == null),
+          initiallyExpanded: _prescription == null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -1068,6 +1072,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     return _sectionCard(
       title: '这次先不要生成普通行动',
       subtitle: '这不是疾病判断，只是保护本次行动的安全边界。',
+      initiallyExpanded: true,
       leading: CircleAvatar(
         backgroundColor: riskColor.withValues(alpha: 0.12),
         child: Icon(Icons.shield_outlined, color: riskColor),
@@ -1100,6 +1105,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     return _sectionCard(
       title: '现在就做这一步',
       subtitle: '先行动，再用事实复盘；不要求先解释清楚所有原因。',
+      initiallyExpanded: true,
       leading: const CircleAvatar(child: Icon(Icons.play_arrow_rounded)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1142,7 +1148,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             emphasized: true,
           ),
           const SizedBox(height: 8),
-          _labelValue('做到什么算完成', item.completionDefinition),
+          const Text(
+            '做到什么算完成',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(item.completionDefinition),
+          const SizedBox(height: 6),
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
             title: const Text('这一步太难或太轻？'),
@@ -1803,6 +1815,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               '以$recordCount条可回定位文本和${info.evidenceCount}条重点证据'
               '整合成${info.systemCount}套思想体系。'
               '每次引入都说明上一层缺口、共同点、差异、本次质变和融合后的新能力。',
+          initiallyExpanded: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -2957,6 +2970,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           title: '我的知行树',
           subtitle:
               '${_tree.stageLabel} · ${_tree.visualState} · 生命力 ${_tree.vitality.toStringAsFixed(0)}',
+          initiallyExpanded: true,
           child: Column(
             children: <Widget>[
               Semantics(
@@ -3184,6 +3198,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '两套知识方案',
           subtitle: '本地审核知识是稳定基线；AI派生知识来自你保存的著作，可选用但不会覆盖基线。',
+          initiallyExpanded: true,
           leading: const CircleAvatar(
             child: Icon(Icons.account_tree_outlined),
           ),
@@ -3209,7 +3224,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         const SizedBox(height: 12),
         _sectionCard(
           title: '远端书库',
-          subtitle: '服务商只保存文件／知识库 ID；AI 派生内容仍与本地审核知识库分离。',
+          subtitle: '著作保存在所选服务商；本应用保存其文件／知识库 ID。直连与中转能力均按真实保留期限标记。',
+          initiallyExpanded: true,
           leading: const CircleAvatar(
             child: Icon(Icons.cloud_done_outlined),
           ),
@@ -3224,6 +3240,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 remoteConfig?.isConfigured == true
                     ? _green
                     : Colors.orange.shade800,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _remoteKnowledgeProvider.isGateway
+                    ? '当前类型：第三方中转服务'
+                    : '当前类型：服务商直连',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -3251,6 +3274,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '著作文件库',
           subtitle: '同一思想家的著作先统一归类；展开后可同步远端、问书或融合成派生思想。',
+          initiallyExpanded: true,
           leading: const CircleAvatar(
             child: Icon(Icons.folder_copy_outlined),
           ),
@@ -3285,6 +3309,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '已保存的AI派生思想',
           subtitle: '可用于目标转行动、复盘报告和思想推荐；每条都保留模型与著作引用。',
+          initiallyExpanded: _selectedAiKnowledge != null,
           leading: const CircleAvatar(
             child: Icon(Icons.auto_awesome_outlined),
           ),
@@ -3383,6 +3408,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _sectionCard(
           title: '行动导师 Agent',
           subtitle: '提醒目标、思想选择、执行、反馈与复盘；报告只依据用户实际反馈自动生成。',
+          initiallyExpanded: _agentSettings.enabled,
           leading: const CircleAvatar(
             child: Icon(Icons.notifications_active_outlined),
           ),
@@ -3543,6 +3569,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         if (remote != null) ...<Widget>[
           _labelValue('远端保留方式', remote.retentionLabel),
           _labelValue('服务商资源 ID', _remoteResourceSummary(remote)),
+          if (remote.expiresAtMs > 0)
+            _labelValue('到期时间', _dateLabel(remote.expiresAtMs)),
           if (remote.lastError.trim().isNotEmpty)
             _labelValue('同步状态', remote.lastError),
         ],
@@ -3567,7 +3595,11 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                       ? null
                       : () => _deleteRemoteBookCopy(book, remote),
                   icon: const Icon(Icons.delete_outline),
-                  label: const Text('删除远端副本'),
+                  label: Text(
+                    remote.provider.supportsImmediateDelete
+                        ? '删除远端副本'
+                        : '停止使用（到期自动删）',
+                  ),
                 ),
             ],
           ),
@@ -3586,6 +3618,15 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   Widget _remoteStatusChip(ZxRemoteKnowledgeItem? item) {
+    if (item?.isExpired == true) {
+      final color = Colors.orange.shade800;
+      return Chip(
+        visualDensity: VisualDensity.compact,
+        label: Text('已过期', style: TextStyle(color: color)),
+        side: BorderSide(color: color.withValues(alpha: 0.35)),
+        backgroundColor: color.withValues(alpha: 0.08),
+      );
+    }
     final status = item?.status;
     final Color color;
     final String label;
@@ -3604,7 +3645,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         break;
       case ZxRemoteKnowledgeStatus.deleted:
         color = Colors.grey.shade700;
-        label = '已删除';
+        label = item?.provider == ZxRemoteKnowledgeProvider.edenAi
+            ? '已停用·等待到期'
+            : '已删除';
         break;
       case null:
         color = Colors.blueGrey;
@@ -3710,6 +3753,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     final claudeKey = TextEditingController(text: values['claude_key'] ?? '');
     final claudeModel =
         TextEditingController(text: values['claude_model'] ?? 'claude-sonnet-4-5');
+    final azureKey =
+        TextEditingController(text: values['azure_key'] ?? '');
+    final azureEndpoint =
+        TextEditingController(text: values['azure_endpoint'] ?? '');
+    final azureModel =
+        TextEditingController(text: values['azure_model'] ?? '');
+    final openRouterFileKey =
+        TextEditingController(text: values['openrouter_file_key'] ?? '');
     final compatibleKey =
         TextEditingController(text: values['compatible_key'] ?? '');
     final compatibleBase =
@@ -3757,6 +3808,24 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   _dialogField(claudeKey, 'Claude API Key', obscureText: true),
                   _dialogField(claudeModel, 'Claude 模型'),
                 ],
+                if (provider == ZxRemoteKnowledgeProvider.azureOpenAi)
+                  ...<Widget>[
+                    _dialogField(
+                      azureEndpoint,
+                      'Azure 资源地址',
+                      hint: 'https://你的资源名.openai.azure.com',
+                    ),
+                    _dialogField(azureKey, 'Azure OpenAI API Key',
+                        obscureText: true),
+                    _dialogField(azureModel, '模型部署名'),
+                  ],
+                if (provider == ZxRemoteKnowledgeProvider.openRouter)
+                  _dialogField(
+                    openRouterFileKey,
+                    'OpenRouter Management Key',
+                    hint: '工作区文件上传和删除必填；与全局推理 Key 分开',
+                    obscureText: true,
+                  ),
                 if (provider == ZxRemoteKnowledgeProvider.openAiCompatible)
                   ...<Widget>[
                     _dialogField(compatibleBase, 'API 基地址（含或不含 /v1）'),
@@ -3765,7 +3834,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   ],
                 if (provider == ZxRemoteKnowledgeProvider.openai ||
                     provider == ZxRemoteKnowledgeProvider.xgrok ||
-                    provider == ZxRemoteKnowledgeProvider.gemini)
+                    provider == ZxRemoteKnowledgeProvider.gemini ||
+                    provider == ZxRemoteKnowledgeProvider.openRouter ||
+                    provider == ZxRemoteKnowledgeProvider.edenAi)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
                     child: Text(
@@ -3794,6 +3865,10 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         provider: provider,
         claudeKey: claudeKey.text,
         claudeModel: claudeModel.text,
+        azureKey: azureKey.text,
+        azureEndpoint: azureEndpoint.text,
+        azureModel: azureModel.text,
+        openRouterFileKey: openRouterFileKey.text,
         compatibleKey: compatibleKey.text,
         compatibleBaseUrl: compatibleBase.text,
         compatibleModel: compatibleModel.text,
@@ -3803,6 +3878,10 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     }
     claudeKey.dispose();
     claudeModel.dispose();
+    azureKey.dispose();
+    azureEndpoint.dispose();
+    azureModel.dispose();
+    openRouterFileKey.dispose();
     compatibleKey.dispose();
     compatibleBase.dispose();
     compatibleModel.dispose();
@@ -3826,7 +3905,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     final confirmed = await _confirm(
       title: '同步到${_remoteKnowledgeProvider.label}？',
       body: '将上传“$label”共${books.length}本著作，并保存服务商返回的文件／知识库 ID。'
-          '${_remoteKnowledgeProvider.retentionLabel}。之后的远端问答、思想融合、行动和复盘都会通过这些 ID 检索；可随时删除远端副本。',
+          '${_remoteKnowledgeProvider.retentionLabel}。之后的远端问答、思想融合、行动和复盘都会通过这些 ID 检索；'
+          '${_remoteKnowledgeProvider.supportsImmediateDelete ? '可随时删除远端副本。' : '本应用可立即停止使用该 ID，但服务商未提供即时删除接口，远端副本会在到期时间自动删除。'}',
       confirmLabel: '上传并保存 ID',
     );
     if (!confirmed || !mounted) return;
@@ -3862,11 +3942,15 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     ZxAiBook book,
     ZxRemoteKnowledgeItem item,
   ) async {
+    final canDeleteNow = item.provider.supportsImmediateDelete;
     final confirmed = await _confirm(
-      title: '删除服务商副本？',
-      body: '将从${item.provider.label}删除“${book.title}”对应的远端文件或检索文档。'
-          '本机著作、已保存的 AI 派生思想和本地审核知识库不会删除。',
-      confirmLabel: '删除远端副本',
+      title: canDeleteNow ? '删除服务商副本？' : '停止使用远端副本？',
+      body: canDeleteNow
+          ? '将从${item.provider.label}删除“${book.title}”对应的远端文件或检索文档。'
+              '本机著作、已保存的 AI 派生思想和本地审核知识库不会删除。'
+          : '${item.provider.label}没有公开即时删除接口。本应用将立即停止使用“${book.title}”的远端 ID，'
+              '服务商副本会在${_dateLabel(item.expiresAtMs)}自动到期；本机著作和本地知识库不受影响。',
+      confirmLabel: canDeleteNow ? '删除远端副本' : '停止使用',
       destructive: true,
     );
     if (!confirmed || !mounted) return;
@@ -3874,7 +3958,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     try {
       await _aiKnowledge.deleteRemoteBook(item);
       await _refreshLocalState();
-      if (mounted) _snack('已删除服务商副本；本机著作仍保留。');
+      if (mounted) {
+        _snack(
+          canDeleteNow
+              ? '已删除服务商副本；本机著作仍保留。'
+              : '已停止使用该远端 ID；服务商副本将在到期时间自动删除。',
+        );
+      }
     } catch (error) {
       if (mounted) _snack('删除远端副本失败：$error');
     } finally {
@@ -4574,9 +4664,16 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   Future<void> _deleteAllData() async {
+    final hasDeferredRemoteDeletion = _remoteKnowledgeItems.any(
+      (item) =>
+          item.status != ZxRemoteKnowledgeStatus.deleted &&
+          !item.provider.supportsImmediateDelete,
+    );
     final confirmed = await _confirm(
       title: '删除全部用户数据？',
-      body: '所选思想、目标、行动、复盘、AI派生知识、已导入著作文件、远端书库副本、导师提醒、金币/XP账本、成长树、反馈和候选都会永久删除。只读审核知识包会保留。',
+      body: '所选思想、目标、行动、复盘、AI派生知识、已导入著作文件、导师提醒、金币/XP账本、成长树、反馈和候选都会永久删除。'
+          '支持即时删除的服务商副本会先删除；${hasDeferredRemoteDeletion ? 'Eden AI 等临时文件会立即停用其 ID，并按服务商到期时间自动删除；' : ''}'
+          '只读审核知识包会保留。',
       confirmLabel: '永久删除',
       destructive: true,
     );
@@ -4641,12 +4738,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 4),
-            TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: Colors.white),
-              onPressed: () => _showDetail(title, body),
-              icon: const Icon(Icons.expand_more),
-              label: const Text('查看说明'),
+            const SizedBox(height: 8),
+            Text(
+              body,
+              style: const TextStyle(
+                color: Colors.white,
+                height: 1.45,
+              ),
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -4666,6 +4764,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     required Widget child,
     String subtitle = '',
     Widget? leading,
+    Key? expansionKey,
     bool initiallyExpanded = false,
   }) =>
       Card(
@@ -4678,6 +4777,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           ),
         ),
         child: ExpansionTile(
+          key: expansionKey,
           initiallyExpanded: initiallyExpanded,
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -4759,23 +4859,30 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         onChanged: onChanged,
       );
 
-  Widget _statusBanner(String title, String body, Color color) => Container(
+  Widget _statusBanner(String title, String body, Color color) =>
+      Container(
         width: double.infinity,
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          title: Text(
-            title,
-            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(body),
+            ],
           ),
-          children: <Widget>[
-            Align(alignment: Alignment.centerLeft, child: Text(body)),
-          ],
         ),
       );
 
@@ -4800,16 +4907,27 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 : Theme.of(context).colorScheme.outlineVariant,
           ),
         ),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          childrenPadding: const EdgeInsets.only(left: 34, right: 8, bottom: 6),
-          leading: Icon(icon, color: emphasized ? _green : null),
-          title: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Align(alignment: Alignment.centerLeft, child: Text(body)),
+            Icon(icon, color: emphasized ? _green : null),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight:
+                          emphasized ? FontWeight.w800 : FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(body),
+                ],
+              ),
+            ),
           ],
         ),
       );
@@ -4817,41 +4935,16 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Widget _labelValue(String label, String value) {
     if (value.trim().isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        dense: true,
-        title: Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        childrenPadding: const EdgeInsets.only(left: 2, right: 8, bottom: 8),
-        children: <Widget>[
-          Align(alignment: Alignment.centerLeft, child: Text(value)),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showDetail(String title, String body) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 10),
-              Text(body),
-            ],
-          ),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text.rich(
+        TextSpan(
+          children: <InlineSpan>[
+            TextSpan(
+              text: '$label：',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            TextSpan(text: value),
+          ],
         ),
       ),
     );

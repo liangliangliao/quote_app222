@@ -242,6 +242,7 @@ class ZxDao {
         storage_kind TEXT NOT NULL DEFAULT '',
         retention_label TEXT NOT NULL DEFAULT '',
         provider_model TEXT NOT NULL DEFAULT '',
+        expires_at_ms INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'ready',
         last_error TEXT NOT NULL DEFAULT '',
         created_at_ms INTEGER NOT NULL,
@@ -249,6 +250,12 @@ class ZxDao {
         UNIQUE(book_id, provider)
       )
     ''');
+    await _addColumnIfMissing(
+      database,
+      'zhixing_remote_knowledge_items',
+      'expires_at_ms',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
     await database.execute('''
       CREATE TABLE IF NOT EXISTS zhixing_review_reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -368,76 +375,11 @@ class ZxDao {
   }
 
   /// Repairs old on-device action tables without deleting any user data.
-  ///
-  /// SQLite cannot add a non-null unique column to a populated table in one
-  /// operation.  We therefore add a nullable column, give every existing row
-  /// a stable legacy id, and enforce uniqueness with an index.  New writes
-  /// continue to provide a real [ZxActionPrescription.id].
-  Future<void> _repairLegacyActionTable(Database database) async {
-    final info = await database.rawQuery('PRAGMA table_info(zhixing_actions)');
-    final columns = info
-        .map((row) => (row['name'] ?? '').toString())
-        .where((name) => name.isNotEmpty)
-        .toSet();
-
-    Future<void> addIfMissing(String name, String definition) async {
-      if (columns.contains(name)) return;
-      await database.execute(
-        'ALTER TABLE zhixing_actions ADD COLUMN $name $definition',
-      );
-      columns.add(name);
-    }
-
-    // Keep every historical record readable.  Defaults only apply to old rows
-    // that predate the complete action prescription format.
-    await addIfMissing('action_uid', 'TEXT');
-    await addIfMissing('goal_id', 'INTEGER');
-    await addIfMissing('session_id', 'INTEGER');
-    await addIfMissing('title', "TEXT NOT NULL DEFAULT ''");
-    await addIfMissing('status', "TEXT NOT NULL DEFAULT 'active'");
-    await addIfMissing('difficulty', "TEXT NOT NULL DEFAULT 'l0'");
-    await addIfMissing(
-      'barrier',
-      "TEXT NOT NULL DEFAULT 'reflectiveMotivation'",
-    );
-    await addIfMissing('risk_level', "TEXT NOT NULL DEFAULT 'r0'");
-    await addIfMissing('prescription_json', "TEXT NOT NULL DEFAULT '{}'");
-    await addIfMissing('created_at_ms', 'INTEGER NOT NULL DEFAULT 0');
-    await addIfMissing('updated_at_ms', 'INTEGER NOT NULL DEFAULT 0');
-
-    // All released variants have an `id` primary key, but rowid keeps this
-    // repair safe for an unexpectedly hand-migrated table as well.
-    final rowIdentity = columns.contains('id') ? 'id' : 'rowid';
-    final rows = await database.rawQuery(
-      'SELECT $rowIdentity AS legacy_id, action_uid '
-      'FROM zhixing_actions ORDER BY $rowIdentity ASC',
-    );
-    final used = <String>{};
-    for (final row in rows) {
-      final id = _asInt(row['legacy_id']);
-      final current = (row['action_uid'] ?? '').toString().trim();
-      var fallback = 'legacy_action_$id';
-      var suffix = 2;
-      while (used.contains(fallback)) {
-        fallback = 'legacy_action_${id}_$suffix';
-        suffix++;
-      }
-      final next = current.isEmpty || used.contains(current) ? fallback : current;
-      used.add(next);
-      if (next != current) {
-        await database.update(
-          'zhixing_actions',
-          <String, Object?>{'action_uid': next},
-          where: '$rowIdentity = ?',
-          whereArgs: <Object?>[id],
-        );
-      }
-    }
-    await database.execute(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_zhixing_actions_uid '
-      'ON zhixing_actions(action_uid)',
-    );
-  }
+  /// Legacy variants contained extra required columns such as diagnosis_id.
+  /// AppDatabase rebuilds those tables transactionally into the one canonical
+  /// schema before this DAO creates indexes or writes a new action.
+  Future<void> _repairLegacyActionTable(Database database) =>
+      AppDatabase.ensureZhixingActionSchema(database);
 
   Future<void> seedKnowledge(ZxKnowledgeRepository repository) async {
     final version = repository.packageInfo.version;
