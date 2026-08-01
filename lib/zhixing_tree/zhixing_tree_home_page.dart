@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import 'zhixing_ai_service.dart';
 import 'zhixing_dao.dart';
@@ -392,7 +393,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               if (selectedSystems.isEmpty)
                 _statusBanner(
                   '尚未选择行动思想',
-                  '可以先从17套完整思想体系中自主选择；也可直接生成，由系统给出推荐供你决定。',
+                  '可以先从${_knowledge.packageInfo.systemCount}套完整思想体系中自主选择；'
+                      '也可直接生成，由系统给出推荐供你决定。',
                   Colors.orange.shade800,
                 )
               else
@@ -1309,14 +1311,18 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
 
   Widget _buildKnowledgePage() {
     final selected = _selectedSystems;
+    final info = _knowledge.packageInfo;
+    final recordCount = NumberFormat.decimalPattern('en_US')
+        .format(info.recordCount);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
       children: <Widget>[
         _sectionCard(
           title: '以王阳明为主干，逐层推进知行合一',
           subtitle:
-              'V${ZxThinkerCatalog.knowledgeVersion}已重新打开22部登记原著/材料，'
-              '以69,541条可回定位文本和256条重点证据整合成17套思想体系。'
+              'V${info.version}已重新打开${info.sourceCount}部登记原著/材料，'
+              '以$recordCount条可回定位文本和${info.evidenceCount}条重点证据'
+              '整合成${info.systemCount}套思想体系。'
               '每次引入都说明上一层缺口、共同点、差异、本次质变和融合后的新能力。',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1464,9 +1470,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   isDense: true,
                 ),
                 items: <DropdownMenuItem<String>>[
-                  const DropdownMenuItem<String>(
+                  DropdownMenuItem<String>(
                     value: '',
-                    child: Text('全部22部登记原著/材料'),
+                    child: Text('全部${info.sourceCount}部登记原著/材料'),
                   ),
                   ..._knowledge.works.map(
                     (work) => DropdownMenuItem<String>(
@@ -2145,7 +2151,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               children: <Widget>[
                 _miniTag(_contentTypeLabel(item.contentType)),
                 const SizedBox(height: 10),
-                _labelValue('原主张/摘要', item.summary),
+                _labelValue('原主张/来源内综合', item.title),
+                _labelValue('证据摘要', item.summary),
                 _labelValue('产品用途', item.use),
                 _labelValue('适用边界', item.boundary),
                 _labelValue('来源', item.sourceId),
@@ -2704,6 +2711,10 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               _labelValue('规则版本', info.ruleVersion),
               _labelValue('审阅状态', info.reviewStatus),
               _labelValue('来源数量', '${info.sourceCount}部登记原著/材料'),
+              _labelValue(
+                '可回定位文本',
+                '${NumberFormat.decimalPattern('en_US').format(info.recordCount)}条抽取记录',
+              ),
               _labelValue(
                 '完整思想体系',
                 '${info.systemCount}套作者/理论整合体系',

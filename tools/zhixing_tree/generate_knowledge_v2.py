@@ -158,7 +158,10 @@ def validate_payload(payload: dict) -> None:
     work_ids = [work["source_id"] for work in works]
     lens_ids = [lens["lens_id"] for lens in lenses]
     covered_lenses: list[str] = []
+    evidence_ids: set[str] = set()
     evidence_locators: set[str] = set()
+    evidence_total = 0
+    evidence_by_source = {work_id: 0 for work_id in work_ids}
     for system in systems:
         if len(system["coreIdeas"]) < 8:
             raise ValueError(f"{system['systemId']} has fewer than 8 core ideas.")
@@ -174,18 +177,48 @@ def validate_payload(payload: dict) -> None:
             raise ValueError(f"{system['systemId']} references a missing work.")
         covered_lenses.extend(system["lensIds"])
         for evidence in system["evidenceHighlights"]:
+            evidence_total += 1
             if evidence["source_id"] not in system["sourceIds"]:
                 raise ValueError(
                     f"{system['systemId']} contains cross-system evidence "
                     f"{evidence['locator']}."
                 )
+            if evidence["evidence_id"] in evidence_ids:
+                raise ValueError(
+                    f"Duplicate evidence id: {evidence['evidence_id']}."
+                )
+            evidence_ids.add(evidence["evidence_id"])
+            evidence_by_source[evidence["source_id"]] += 1
             evidence_locators.add(evidence["locator"])
     if sorted(covered_lenses) != sorted(lens_ids):
         raise ValueError("The 17 systems must cover every lens exactly once.")
+    if evidence_total != payload["evidence_count"]:
+        raise ValueError("Evidence item count does not match the catalog.")
+    if len(evidence_ids) != payload["evidence_count"]:
+        raise ValueError("Evidence identifiers must be unique.")
     if len(evidence_locators) != payload["evidence_count"]:
         raise ValueError(
             "Evidence count does not match the unique locator catalog."
         )
+    lens_locators = [
+        locator
+        for lens in lenses
+        for locator in lens["evidence_links"]
+    ]
+    if len(lens_locators) != len(set(lens_locators)):
+        raise ValueError("Mechanism-lens evidence locators must be unique.")
+    if set(lens_locators) != evidence_locators:
+        raise ValueError(
+            "Mechanism lenses must cover every highlighted evidence locator."
+        )
+    for work in works:
+        expected = int(work["primary_evidence_count"])
+        actual = evidence_by_source[work["source_id"]]
+        if actual != expected:
+            raise ValueError(
+                f"{work['source_id']} evidence count mismatch: "
+                f"{actual}/{expected}."
+            )
     if len(set(work_ids)) != len(work_ids) or len(set(lens_ids)) != len(lens_ids):
         raise ValueError("Work and lens identifiers must be unique.")
 
@@ -359,6 +392,9 @@ def main() -> None:
     validate_payload(payload)
     previous = PREVIOUS_KNOWLEDGE.read_text(encoding="utf-8")
     catalog_sha256 = sha256_text(source_raw)
+    record_count = sum(
+        int(work["extract_record_count"]) for work in payload["works"]
+    )
 
     knowledge = generate_markdown(payload, previous)
     for lens in payload["lenses"]:
@@ -377,6 +413,7 @@ def main() -> None:
             "rule_version": "2.0.0",
             "published_at": payload["generated_at"],
             "source_count": payload["source_count"],
+            "record_count": record_count,
             "system_count": payload["system_count"],
             "evidence_count": payload["evidence_count"],
             "review_status": "primary_source_reanalysis",

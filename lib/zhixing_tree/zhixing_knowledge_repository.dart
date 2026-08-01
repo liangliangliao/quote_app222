@@ -11,6 +11,7 @@ class ZxKnowledgePackageInfo {
   final String ruleVersion;
   final String publishedAt;
   final int sourceCount;
+  final int recordCount;
   final String reviewStatus;
   final int systemCount;
   final int evidenceCount;
@@ -28,6 +29,7 @@ class ZxKnowledgePackageInfo {
     required this.ruleVersion,
     required this.publishedAt,
     required this.sourceCount,
+    required this.recordCount,
     required this.reviewStatus,
     required this.systemCount,
     required this.evidenceCount,
@@ -106,6 +108,7 @@ class ZxKnowledgeRepository {
       ruleVersion: (manifest['rule_version'] ?? '').toString(),
       publishedAt: (manifest['published_at'] ?? '').toString(),
       sourceCount: _asInt(manifest['source_count']),
+      recordCount: _asInt(manifest['record_count']),
       reviewStatus: (manifest['review_status'] ?? '').toString(),
       systemCount: _asInt(manifest['system_count']),
       evidenceCount: _asInt(manifest['evidence_count']),
@@ -129,6 +132,9 @@ class ZxKnowledgeRepository {
       throw StateError(
         'Knowledge source count mismatch: ${_works.length}/${info.sourceCount}.',
       );
+    }
+    if (info.recordCount <= 0) {
+      throw StateError('Knowledge extract record count is missing.');
     }
     if (info.systemCount != 17) {
       throw StateError(
@@ -332,6 +338,9 @@ class ZxKnowledgeRepository {
   List<ZxEvidenceItem> _parseEvidence(String markdown) {
     final items = <ZxEvidenceItem>[];
     final seen = <String>{};
+    final currentPackage = RegExp(
+      r'^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$',
+    );
     final detailed = RegExp(
       r'^\|\s*(KB-([A-Z]+)-\d+)\s+\[([^\]]+)\][^|]*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|',
     );
@@ -341,6 +350,35 @@ class ZxKnowledgeRepository {
 
     for (final rawLine in const LineSplitter().convert(markdown)) {
       final line = rawLine.trim();
+      // V1.2 is retained verbatim below this marker for audit/history only.
+      // Runtime search and package counts must index the active V2 evidence
+      // layer once, otherwise the preserved legacy tables are double-counted.
+      if (line.startsWith('# V1.2累计知识库原文')) break;
+
+      final currentMatch = currentPackage.firstMatch(line);
+      if (currentMatch != null) {
+        final locator = (currentMatch.group(1) ?? '').trim();
+        if (_looksLikeLocator(locator) &&
+            seen.add(_normalizeLocator(locator))) {
+          items.add(
+            ZxEvidenceItem(
+              id: 'EV-${_safeId(locator)}',
+              sourceId: locator.split('-').first,
+              locator: locator,
+              title: (currentMatch.group(2) ?? '').trim(),
+              summary: (currentMatch.group(3) ?? '').trim(),
+              use: (currentMatch.group(4) ?? '').trim(),
+              boundary: (currentMatch.group(5) ?? '').trim(),
+              contentType: 'original_claim',
+              tags: _evidenceTags(
+                '${currentMatch.group(2)} ${currentMatch.group(4)}',
+              ),
+            ),
+          );
+          continue;
+        }
+      }
+
       final detailedMatch = detailed.firstMatch(line);
       if (detailedMatch != null) {
         final locator = (detailedMatch.group(3) ?? '').trim();

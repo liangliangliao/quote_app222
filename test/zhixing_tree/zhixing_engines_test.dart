@@ -18,9 +18,21 @@ void main() {
       expect(repository.packageInfo.catalogIntegrityValid, isTrue);
       expect(repository.packageInfo.version, '2.0.0');
       expect(repository.packageInfo.sourceCount, 22);
+      expect(repository.packageInfo.recordCount, 69541);
       expect(repository.packageInfo.systemCount, 17);
       expect(repository.packageInfo.evidenceCount, 256);
       expect(repository.evidence, hasLength(256));
+      expect(
+        repository.evidence.any((item) => item.locator.startsWith('KB-')),
+        isFalse,
+      );
+      final yangmingEvidence =
+          repository.evidenceByLocator('WY-S003-P0108');
+      expect(yangmingEvidence, isNotNull);
+      expect(yangmingEvidence!.title, '心即理');
+      expect(yangmingEvidence.summary, contains('否定把事与理'));
+      expect(yangmingEvidence.use, contains('主体判断与行动'));
+      expect(yangmingEvidence.boundary, contains('不等于主观感受'));
       expect(
         repository.packageInfo.actualCatalogSha256,
         ZxThinkerCatalog.catalogSha256,
