@@ -691,6 +691,12 @@ class ZxActionPrescription {
   final String reviewQuestion;
   final List<String> evidenceLocators;
   final double uncertainty;
+  /// local_reviewed or ai_derived. AI-derived actions keep a reference to
+  /// their separate saved draft and never overwrite the reviewed package.
+  final String guidanceOrigin;
+  final int guidanceKnowledgeRefId;
+  final String aiProvider;
+  final String aiModelLabel;
   final ZxActionStatus status;
   final int createdAtMs;
   final int updatedAtMs;
@@ -719,6 +725,10 @@ class ZxActionPrescription {
     required this.reviewQuestion,
     required this.evidenceLocators,
     required this.uncertainty,
+    this.guidanceOrigin = 'local_reviewed',
+    this.guidanceKnowledgeRefId = 0,
+    this.aiProvider = '',
+    this.aiModelLabel = '',
     this.status = ZxActionStatus.proposed,
     this.createdAtMs = 0,
     this.updatedAtMs = 0,
@@ -730,6 +740,10 @@ class ZxActionPrescription {
     String? lowerLoadAlternative,
     String? challengeAlternative,
     ZxDifficulty? difficulty,
+    String? guidanceOrigin,
+    int? guidanceKnowledgeRefId,
+    String? aiProvider,
+    String? aiModelLabel,
     ZxActionStatus? status,
     int? updatedAtMs,
   }) =>
@@ -758,6 +772,11 @@ class ZxActionPrescription {
         reviewQuestion: reviewQuestion,
         evidenceLocators: evidenceLocators,
         uncertainty: uncertainty,
+        guidanceOrigin: guidanceOrigin ?? this.guidanceOrigin,
+        guidanceKnowledgeRefId:
+            guidanceKnowledgeRefId ?? this.guidanceKnowledgeRefId,
+        aiProvider: aiProvider ?? this.aiProvider,
+        aiModelLabel: aiModelLabel ?? this.aiModelLabel,
         status: status ?? this.status,
         createdAtMs: createdAtMs,
         updatedAtMs: updatedAtMs ?? this.updatedAtMs,
@@ -787,6 +806,10 @@ class ZxActionPrescription {
         'review_question': reviewQuestion,
         'evidence_locators': evidenceLocators,
         'uncertainty': uncertainty,
+        'guidance_origin': guidanceOrigin,
+        'guidance_knowledge_ref_id': guidanceKnowledgeRefId,
+        'ai_provider': aiProvider,
+        'ai_model_label': aiModelLabel,
         'status': status.name,
         'created_at_ms': createdAtMs,
         'updated_at_ms': updatedAtMs,
@@ -827,6 +850,10 @@ class ZxActionPrescription {
         reviewQuestion: (map['review_question'] ?? '').toString(),
         evidenceLocators: _stringList(map['evidence_locators']),
         uncertainty: _asDouble(map['uncertainty'], 0.4),
+        guidanceOrigin: (map['guidance_origin'] ?? 'local_reviewed').toString(),
+        guidanceKnowledgeRefId: _asInt(map['guidance_knowledge_ref_id']),
+        aiProvider: (map['ai_provider'] ?? '').toString(),
+        aiModelLabel: (map['ai_model_label'] ?? '').toString(),
         status: ZxActionStatus.values.firstWhere(
           (item) => item.name == map['status'],
           orElse: () => ZxActionStatus.proposed,

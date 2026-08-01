@@ -1,4 +1,5 @@
 import '../services/native_guard.dart';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -6,6 +7,7 @@ import 'native_guard.dart';
 import '../data/dao.dart';
 import '../pages/discover_page.dart';
 import '../realistic_optimism_training/realistic_optimism_training_home_page.dart';
+import '../zhixing_tree/zhixing_tree_home_page.dart';
 import '../health_diet/pages/today_meal_plan_page.dart';
 import '../health_diet/daily_share/daily_diet_share_page.dart';
 import '../health_diet/daily_share/daily_diet_review_page.dart';
@@ -59,10 +61,50 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateZhixingTree(payload)) return;
     if (await _tryNavigateRealisticOptimismTraining(payload)) return;
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateZhixingTree(String? payload) async {
+    final p = (payload ?? '').trim();
+    if (p.isEmpty) return false;
+    String scene = '';
+    var matched = p.startsWith('zhixing_tree');
+    if (matched && p.contains(':')) {
+      scene = p.substring(p.indexOf(':') + 1).trim();
+    }
+    if (p.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(p);
+        if (decoded is Map &&
+            (decoded['module'] ?? '').toString() == 'zhixing_tree') {
+          matched = true;
+          scene = (decoded['scene'] ?? '').toString();
+        }
+      } catch (_) {}
+    }
+    if (!matched) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = p;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await NotificationService.handlePendingNotificationNavigation();
+        } catch (_) {}
+      });
+      return true;
+    }
+    nav.popUntil((route) => route.isFirst);
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => ZhixingTreeHomePage(initialAgentScene: scene),
+      ),
+    );
+    return true;
   }
 
   static Future<bool> _tryNavigateRealisticOptimismTraining(String? payload) async {
@@ -188,6 +230,8 @@ class NotificationService {
           // Fallback to home if something fails
           SimpleBus.navHome();
           SimpleBus.pokeHome();
+        } else if (await NotificationService._tryNavigateZhixingTree(p)) {
+          return;
         } else if (await NotificationService._tryNavigateRealisticOptimismTraining(p)) {
           return;
         } else if (await NotificationService._tryNavigateHealthDiet(p)) {

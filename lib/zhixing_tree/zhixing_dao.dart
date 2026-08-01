@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
 import '../data/kv_dao.dart';
+import 'zhixing_extended_models.dart';
 import 'zhixing_knowledge_repository.dart';
 import 'zhixing_models.dart';
 
@@ -167,6 +168,85 @@ class ZxDao {
         review_status TEXT NOT NULL
       )
     ''');
+    // AI content is stored in dedicated tables. No AI write path targets
+    // zhixing_knowledge_items, which remains the reviewed package index.
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS zhixing_ai_books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thinker TEXT NOT NULL,
+        title TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        local_path TEXT NOT NULL,
+        mime_type TEXT NOT NULL DEFAULT '',
+        byte_size INTEGER NOT NULL DEFAULT 0,
+        sha256 TEXT NOT NULL,
+        extracted_characters INTEGER NOT NULL DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS zhixing_ai_knowledge_drafts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        origin TEXT NOT NULL DEFAULT 'ai_derived',
+        thinker TEXT NOT NULL,
+        title TEXT NOT NULL,
+        book_ids_json TEXT NOT NULL,
+        core_values_json TEXT NOT NULL,
+        core_ideas_json TEXT NOT NULL,
+        knowledge_view TEXT NOT NULL,
+        action_view TEXT NOT NULL,
+        transformation_path TEXT NOT NULL,
+        decision_cue TEXT NOT NULL,
+        yangming_connection TEXT NOT NULL,
+        common_ground_json TEXT NOT NULL,
+        differences_json TEXT NOT NULL,
+        boundaries_json TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT '',
+        model_label TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'saved',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS zhixing_review_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action_uid TEXT NOT NULL,
+        origin TEXT NOT NULL,
+        knowledge_ref_id INTEGER NOT NULL DEFAULT 0,
+        summary TEXT NOT NULL,
+        progress_evidence TEXT NOT NULL,
+        barrier_finding TEXT NOT NULL,
+        recommended_decision TEXT NOT NULL,
+        current_system_id TEXT NOT NULL DEFAULT '',
+        recommended_system_ids_json TEXT NOT NULL,
+        rationale TEXT NOT NULL,
+        next_action TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT '',
+        model_label TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS zhixing_agent_settings (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        hour INTEGER NOT NULL DEFAULT 9,
+        minute INTEGER NOT NULL DEFAULT 0,
+        review_hour INTEGER NOT NULL DEFAULT 20,
+        review_minute INTEGER NOT NULL DEFAULT 30,
+        days_ahead INTEGER NOT NULL DEFAULT 7,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS zhixing_agent_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scene TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        detail_json TEXT NOT NULL DEFAULT '{}',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
     try {
       await database.execute('''
         CREATE VIRTUAL TABLE IF NOT EXISTS zhixing_knowledge_fts
@@ -201,6 +281,18 @@ class ZxDao {
     await database.execute(
       'CREATE INDEX IF NOT EXISTS idx_zhixing_feedback_lens '
       'ON zhixing_lens_feedback(lens_id, created_at_ms DESC)',
+    );
+    await database.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_zhixing_ai_book_sha '
+      'ON zhixing_ai_books(sha256)',
+    );
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_zhixing_ai_draft_created '
+      'ON zhixing_ai_knowledge_drafts(created_at_ms DESC)',
+    );
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_zhixing_report_action '
+      'ON zhixing_review_reports(action_uid, created_at_ms DESC)',
     );
   }
 
@@ -654,6 +746,144 @@ class ZxDao {
     );
   }
 
+  Future<int> saveAiBook(ZxAiBook book) async {
+    final database = await _db;
+    final existing = await database.query(
+      'zhixing_ai_books',
+      columns: <String>['id'],
+      where: 'sha256 = ?',
+      whereArgs: <Object?>[book.sha256],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return _asInt(existing.first['id']);
+    return database.insert(
+      'zhixing_ai_books',
+      <String, Object?>{
+        ...book.toMap(),
+        'created_at_ms': book.createdAtMs == 0
+            ? DateTime.now().millisecondsSinceEpoch
+            : book.createdAtMs,
+      },
+    );
+  }
+
+  Future<List<ZxAiBook>> aiBooks() async {
+    final database = await _db;
+    final rows = await database.query(
+      'zhixing_ai_books',
+      orderBy: 'created_at_ms DESC',
+    );
+    return rows.map(ZxAiBook.fromMap).toList(growable: false);
+  }
+
+  Future<int> saveAiKnowledgeDraft(ZxAiKnowledgeDraft draft) async {
+    final database = await _db;
+    return database.insert(
+      'zhixing_ai_knowledge_drafts',
+      <String, Object?>{
+        ...draft.toMap(),
+        'origin': 'ai_derived',
+        'created_at_ms': draft.createdAtMs == 0
+            ? DateTime.now().millisecondsSinceEpoch
+            : draft.createdAtMs,
+      },
+    );
+  }
+
+  Future<List<ZxAiKnowledgeDraft>> aiKnowledgeDrafts({
+    String status = 'saved',
+  }) async {
+    final database = await _db;
+    final rows = await database.query(
+      'zhixing_ai_knowledge_drafts',
+      where: status.trim().isEmpty ? null : 'status = ?',
+      whereArgs:
+          status.trim().isEmpty ? null : <Object?>[status.trim()],
+      orderBy: 'created_at_ms DESC',
+    );
+    return rows.map(ZxAiKnowledgeDraft.fromMap).toList(growable: false);
+  }
+
+  Future<ZxAiKnowledgeDraft?> aiKnowledgeDraft(int id) async {
+    final database = await _db;
+    final rows = await database.query(
+      'zhixing_ai_knowledge_drafts',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ZxAiKnowledgeDraft.fromMap(rows.first);
+  }
+
+  Future<int> saveReviewReport(ZxReviewReport report) async {
+    final database = await _db;
+    return database.insert(
+      'zhixing_review_reports',
+      <String, Object?>{
+        ...report.toMap(),
+        'created_at_ms': report.createdAtMs == 0
+            ? DateTime.now().millisecondsSinceEpoch
+            : report.createdAtMs,
+      },
+    );
+  }
+
+  Future<List<ZxReviewReport>> reviewReports({
+    String actionUid = '',
+    int limit = 50,
+  }) async {
+    final database = await _db;
+    final rows = await database.query(
+      'zhixing_review_reports',
+      where: actionUid.trim().isEmpty ? null : 'action_uid = ?',
+      whereArgs: actionUid.trim().isEmpty
+          ? null
+          : <Object?>[actionUid.trim()],
+      orderBy: 'created_at_ms DESC',
+      limit: limit,
+    );
+    return rows.map(ZxReviewReport.fromMap).toList(growable: false);
+  }
+
+  Future<ZxAgentSettings> agentSettings() async {
+    final database = await _db;
+    final rows = await database.query(
+      'zhixing_agent_settings',
+      where: 'singleton_id = 1',
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? const ZxAgentSettings()
+        : ZxAgentSettings.fromMap(rows.first);
+  }
+
+  Future<void> saveAgentSettings(ZxAgentSettings settings) async {
+    final database = await _db;
+    await database.insert(
+      'zhixing_agent_settings',
+      <String, Object?>{
+        ...settings.toMap(),
+        'singleton_id': 1,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> recordAgentEvent(
+    ZxAgentScene scene,
+    String eventType, {
+    Map<String, Object?> detail = const <String, Object?>{},
+  }) async {
+    final database = await _db;
+    await database.insert('zhixing_agent_events', <String, Object?>{
+      'scene': scene.key,
+      'event_type': eventType,
+      'detail_json': jsonEncode(detail),
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
   Future<Map<String, dynamic>> exportSnapshot() async {
     final database = await _db;
     Future<List<Map<String, Object?>>> table(String name) =>
@@ -661,7 +891,7 @@ class ZxDao {
     final treeRows = await database.query('zhixing_tree_state');
     final selectedLensIds = (await selectedLenses()).toList()..sort();
     return <String, dynamic>{
-      'schema': 'zhixing-tree-export-v1',
+      'schema': 'zhixing-tree-export-v2',
       'exported_at': DateTime.now().toIso8601String(),
       'goals': await table('zhixing_goals'),
       'sessions': await table('zhixing_sessions'),
@@ -673,6 +903,11 @@ class ZxDao {
       'lens_feedback': await table('zhixing_lens_feedback'),
       'selected_lenses': selectedLensIds,
       'candidates': await table('zhixing_candidates'),
+      'ai_books': await table('zhixing_ai_books'),
+      'ai_knowledge_drafts': await table('zhixing_ai_knowledge_drafts'),
+      'review_reports': await table('zhixing_review_reports'),
+      'agent_events': await table('zhixing_agent_events'),
+      'agent_settings': await database.query('zhixing_agent_settings'),
       'tree_state': treeRows,
     };
   }
@@ -688,6 +923,11 @@ class ZxDao {
     final ids = actions.map((row) => row['action_uid'].toString()).toList();
     await database.transaction((txn) async {
       for (final id in ids) {
+        await txn.delete(
+          'zhixing_review_reports',
+          where: 'action_uid = ?',
+          whereArgs: <Object?>[id],
+        );
         await txn.delete(
           'zhixing_reviews',
           where: 'action_uid = ?',
@@ -736,6 +976,11 @@ class ZxDao {
       'zhixing_tree_state',
       'zhixing_lens_feedback',
       'zhixing_candidates',
+      'zhixing_review_reports',
+      'zhixing_ai_knowledge_drafts',
+      'zhixing_ai_books',
+      'zhixing_agent_events',
+      'zhixing_agent_settings',
     ];
     await database.transaction((txn) async {
       for (final table in tables) {

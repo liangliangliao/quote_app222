@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -8,16 +9,26 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import 'zhixing_ai_service.dart';
+import 'zhixing_agent_service.dart';
+import 'zhixing_ai_knowledge_service.dart';
 import 'zhixing_dao.dart';
 import 'zhixing_engines.dart';
+import 'zhixing_extended_models.dart';
+import 'zhixing_goal_source_service.dart';
 import 'zhixing_knowledge_repository.dart';
 import 'zhixing_models.dart';
 import 'zhixing_prompt_config.dart';
+import 'zhixing_review_engine.dart';
 import 'zhixing_thinker_catalog.dart';
 import 'zhixing_tree_visual.dart';
 
 class ZhixingTreeHomePage extends StatefulWidget {
-  const ZhixingTreeHomePage({super.key});
+  const ZhixingTreeHomePage({
+    super.key,
+    this.initialAgentScene = '',
+  });
+
+  final String initialAgentScene;
 
   @override
   State<ZhixingTreeHomePage> createState() => _ZhixingTreeHomePageState();
@@ -32,6 +43,10 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   final ZxKnowledgeRepository _knowledge = ZxKnowledgeRepository();
   final ZxDao _dao = ZxDao();
   final ZxAiService _ai = ZxAiService();
+  final ZxAiKnowledgeService _aiKnowledge = ZxAiKnowledgeService();
+  final ZxGoalSourceService _goalSources = ZxGoalSourceService();
+  final ZxAgentService _agent = ZxAgentService();
+  final ZxLocalReviewEngine _localReview = const ZxLocalReviewEngine();
   final ZxBehaviourDiagnoser _diagnoser = const ZxBehaviourDiagnoser();
   final ZxThinkerMatcher _matcher = const ZxThinkerMatcher();
   final ZxActionGenerator _actionGenerator = const ZxActionGenerator();
@@ -61,6 +76,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   ZxTreeState _tree = const ZxTreeState();
   List<ZxActionPrescription> _actions = const <ZxActionPrescription>[];
   List<ZxCandidateLens> _candidates = const <ZxCandidateLens>[];
+  List<ZxAiBook> _aiBooks = const <ZxAiBook>[];
+  List<ZxAiKnowledgeDraft> _aiDrafts = const <ZxAiKnowledgeDraft>[];
+  List<ZxReviewReport> _reviewReports = const <ZxReviewReport>[];
+  ZxAiKnowledgeDraft? _selectedAiKnowledge;
+  bool _useAiKnowledge = false;
+  ZxGoalSource _lastGoalSource = ZxGoalSource.zhixingLocal;
+  ZxAgentSettings _agentSettings = const ZxAgentSettings();
+  ZxAgentScene _agentScene = ZxAgentScene.setGoal;
   Map<String, String> _providerState = const <String, String>{};
   Map<String, double> _lensHistory = const <String, double>{};
   Set<String> _disabledLenses = <String>{};
@@ -107,7 +130,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 6, vsync: this);
+    _tabs = TabController(length: 7, vsync: this);
     _challenges = _challengeFactory.buildAll();
     _initialize();
   }
@@ -168,6 +191,11 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       final tree = _treeEngine.refreshTemporalState(await _dao.loadTree());
       final actions = await _dao.actions();
       final candidates = await _dao.candidates();
+      final aiBooks = await _dao.aiBooks();
+      final aiDrafts = await _dao.aiKnowledgeDrafts();
+      final reviewReports = await _dao.reviewReports();
+      final agentSettings = await _dao.agentSettings();
+      final goals = await _dao.goals();
       final provider = await _ai.providerState();
       final history = await _dao.historicalLensResponse();
       final disabled = await _dao.disabledLenses();
@@ -185,11 +213,24 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       if (!setEquals(selected, normalizedSelected)) {
         await _dao.setSelectedLenses(normalizedSelected);
       }
+      final agentScene = _agent.decide(
+        goals: goals,
+        actions: actions,
+        selectedThoughtCount: normalizedSelected.length,
+        hasRecentReport: reviewReports.isNotEmpty,
+      );
       if (!mounted) return;
       setState(() {
         _tree = tree;
         _actions = actions;
         _candidates = candidates;
+        _aiBooks = aiBooks;
+        _aiDrafts = aiDrafts;
+        _reviewReports = reviewReports;
+        _selectedAiKnowledge =
+            aiDrafts.isEmpty ? null : aiDrafts.first;
+        _agentSettings = agentSettings;
+        _agentScene = agentScene;
         _providerState = provider;
         _lensHistory = history;
         _disabledLenses = disabled;
@@ -198,6 +239,15 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _searchResults = _knowledge.search('');
         _loading = false;
       });
+      if (widget.initialAgentScene.trim().isNotEmpty) {
+        final requested =
+            ZxAgentSceneX.parse(widget.initialAgentScene.trim());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _tabs.animateTo(_tabForAgentScene(requested));
+          _snack('行动导师：' + requested.title);
+        });
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -210,13 +260,51 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Future<void> _refreshLocalState() async {
     final actions = await _dao.actions();
     final candidates = await _dao.candidates();
+    final aiBooks = await _dao.aiBooks();
+    final aiDrafts = await _dao.aiKnowledgeDrafts();
+    final reports = await _dao.reviewReports();
+    final goals = await _dao.goals();
+    final agentSettings = await _dao.agentSettings();
     final tree = _treeEngine.refreshTemporalState(await _dao.loadTree());
+    final selectedDraftId = _selectedAiKnowledge?.id ?? 0;
+    final nextSelectedDraft = aiDrafts.where(
+      (item) => item.id == selectedDraftId,
+    );
     if (!mounted) return;
     setState(() {
       _actions = actions;
       _candidates = candidates;
+      _aiBooks = aiBooks;
+      _aiDrafts = aiDrafts;
+      _reviewReports = reports;
+      _selectedAiKnowledge = nextSelectedDraft.isNotEmpty
+          ? nextSelectedDraft.first
+          : aiDrafts.isEmpty
+              ? null
+              : aiDrafts.first;
+      _agentSettings = agentSettings;
+      _agentScene = _agent.decide(
+        goals: goals,
+        actions: actions,
+        selectedThoughtCount: _selectedLensIds.length,
+        hasRecentReport: reports.isNotEmpty,
+      );
       _tree = tree;
     });
+  }
+
+  int _tabForAgentScene(ZxAgentScene scene) {
+    switch (scene) {
+      case ZxAgentScene.chooseThought:
+        return 1;
+      case ZxAgentScene.setGoal:
+      case ZxAgentScene.startAction:
+        return 2;
+      case ZxAgentScene.trackProgress:
+      case ZxAgentScene.requestReview:
+      case ZxAgentScene.continueCycle:
+        return 0;
+    }
   }
 
   @override
@@ -252,6 +340,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               Tab(text: '挑战花园'),
               Tab(text: '知行树'),
               Tab(text: '证据与隐私'),
+              Tab(text: 'AI与导师'),
             ],
           ),
         ),
@@ -270,6 +359,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                           _buildChallengeGarden(),
                           _buildTreePage(),
                           _buildEvidencePrivacyPage(),
+                          _buildAiMentorPage(),
                         ],
                       ),
                       if (_working)
@@ -350,6 +440,38 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   ),
           ),
           const SizedBox(height: 14),
+          if (_reviewReports.isNotEmpty) ...<Widget>[
+            _sectionCard(
+              title: '最近复盘报告',
+              subtitle: _reviewReports.first.origin.label +
+                  ' · 自动依据行动反馈生成',
+              leading: CircleAvatar(
+                child: Icon(
+                  _reviewReports.first.origin ==
+                          ZxKnowledgeOrigin.aiDerived
+                      ? Icons.auto_awesome_outlined
+                      : Icons.fact_check_outlined,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _labelValue('总结', _reviewReports.first.summary),
+                  _labelValue(
+                    '关键发现',
+                    _reviewReports.first.barrierFinding,
+                  ),
+                  _labelValue(
+                    '建议',
+                    _reviewReports.first.recommendedDecision.label,
+                  ),
+                  _labelValue('理由', _reviewReports.first.rationale),
+                  _labelValue('下一小步', _reviewReports.first.nextAction),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           _sectionCard(
             title: '能力不是金币',
             subtitle: 'XP来自现实练习与复盘，金币只能兑换成长树资源。',
@@ -390,7 +512,47 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (selectedSystems.isEmpty)
+              const Text(
+                '知识方案',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 7),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  ChoiceChip(
+                    label: const Text('本地审核知识库'),
+                    avatar: const Icon(Icons.verified_outlined, size: 17),
+                    selected: !_useAiKnowledge,
+                    onSelected: (_) =>
+                        setState(() => _useAiKnowledge = false),
+                  ),
+                  ChoiceChip(
+                    label: const Text('AI派生知识'),
+                    avatar: const Icon(Icons.auto_awesome_outlined, size: 17),
+                    selected: _useAiKnowledge,
+                    onSelected: (_) {
+                      if (_selectedAiKnowledge == null) {
+                        _snack('请先在“AI与导师”中上传著作并生成派生思想。');
+                        _tabs.animateTo(6);
+                        return;
+                      }
+                      setState(() => _useAiKnowledge = true);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (_useAiKnowledge && _selectedAiKnowledge != null)
+                _statusBanner(
+                  'AI派生 · 本地保存 · 不替换核心库',
+                  _selectedAiKnowledge!.thinker +
+                      ' · ' +
+                      _selectedAiKnowledge!.title,
+                  Colors.deepPurple,
+                )
+              else if (selectedSystems.isEmpty)
                 _statusBanner(
                   '尚未选择行动思想',
                   '可以先从${_knowledge.packageInfo.systemCount}套完整思想体系中自主选择；'
@@ -407,16 +569,59 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                       .join('  +  '),
                   _green,
                 ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => _tabs.animateTo(1),
-                  icon: const Icon(Icons.account_tree_outlined),
-                  label: Text(
-                    selectedSystems.isEmpty ? '先看懂并选择思想' : '修改所选思想',
+              if (_useAiKnowledge && _aiDrafts.length > 1) ...<Widget>[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  value: _selectedAiKnowledge?.id,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: '本轮使用的AI派生思想',
+                    border: OutlineInputBorder(),
                   ),
+                  items: _aiDrafts
+                      .map(
+                        (draft) => DropdownMenuItem<int>(
+                          value: draft.id,
+                          child: Text(draft.thinker + ' · ' + draft.title),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (id) {
+                    if (id == null) return;
+                    setState(
+                      () => _selectedAiKnowledge =
+                          _aiDrafts.firstWhere((item) => item.id == id),
+                    );
+                  },
                 ),
+              ],
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: <Widget>[
+                  TextButton.icon(
+                    onPressed: () =>
+                        _tabs.animateTo(_useAiKnowledge ? 6 : 1),
+                    icon: Icon(
+                      _useAiKnowledge
+                          ? Icons.folder_copy_outlined
+                          : Icons.account_tree_outlined,
+                    ),
+                    label: Text(
+                      _useAiKnowledge
+                          ? '管理AI派生思想'
+                          : selectedSystems.isEmpty
+                              ? '先看懂并选择思想'
+                              : '修改所选思想',
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _pickGoalFromSources,
+                    icon: const Icon(Icons.move_to_inbox_outlined),
+                    label: Text('从已有目标导入 · ' + _lastGoalSource.label),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               _field(
@@ -529,6 +734,144 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     );
   }
 
+  Future<void> _pickGoalFromSources() async {
+    var source = _lastGoalSource;
+    var loading = true;
+    var error = '';
+    var candidates = <ZxGoalCandidate>[];
+    try {
+      candidates = await _goalSources.load(source);
+      loading = false;
+    } catch (e) {
+      loading = false;
+      error = e.toString();
+    }
+    if (!mounted) return;
+    final selected = await showDialog<ZxGoalCandidate>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('导入已有目标'),
+          content: SizedBox(
+            width: 620,
+            height: 470,
+            child: Column(
+              children: <Widget>[
+                DropdownButtonFormField<ZxGoalSource>(
+                  value: source,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: '目标来源',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ZxGoalSource.values
+                      .map(
+                        (item) => DropdownMenuItem<ZxGoalSource>(
+                          value: item,
+                          child: Text(item.label),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (next) async {
+                    if (next == null) return;
+                    setDialogState(() {
+                      source = next;
+                      loading = true;
+                      error = '';
+                      candidates = <ZxGoalCandidate>[];
+                    });
+                    try {
+                      final loaded = await _goalSources.load(next);
+                      if (!dialogContext.mounted) return;
+                      setDialogState(() {
+                        candidates = loaded;
+                        loading = false;
+                      });
+                    } catch (e) {
+                      if (!dialogContext.mounted) return;
+                      setDialogState(() {
+                        error = e.toString();
+                        loading = false;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : error.isNotEmpty
+                          ? Center(child: SelectableText(error))
+                          : candidates.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                    '没有可导入的目标。Microsoft To Do 会读取外部数据同步模块最近一次同步的未完成任务。',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                )
+                              : ListView.separated(
+                                  itemCount: candidates.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final item = candidates[index];
+                                    return ListTile(
+                                      leading: Icon(
+                                        item.source ==
+                                                ZxGoalSource.microsoftTodo
+                                            ? Icons.check_circle_outline
+                                            : item.source ==
+                                                    ZxGoalSource.todoGoalValue
+                                                ? Icons.flag_outlined
+                                                : Icons.park_outlined,
+                                      ),
+                                      title: Text(item.title),
+                                      subtitle: Text(
+                                        <String>[
+                                          item.valueDirection,
+                                          item.nextStep,
+                                          item.dueLabel,
+                                        ]
+                                            .where(
+                                              (value) =>
+                                                  value.trim().isNotEmpty,
+                                            )
+                                            .join('\n'),
+                                        maxLines: 4,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      onTap: () =>
+                                          Navigator.pop(dialogContext, item),
+                                    );
+                                  },
+                                ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+    setState(() {
+      _lastGoalSource = selected.source;
+      _goalController.text = selected.title;
+      if (selected.valueDirection.trim().isNotEmpty) {
+        _valueController.text = selected.valueDirection.trim();
+      }
+      if (selected.nextStep.trim().isNotEmpty) {
+        _targetController.text = selected.nextStep.trim();
+      }
+    });
+    _snack('已从' + selected.source.label + '导入；原目标数据不会被修改。');
+  }
+
   Future<void> _generatePrescription() async {
     if (_goalController.text.trim().isEmpty) {
       _snack('只需先写下你现在想推进什么。');
@@ -539,6 +882,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     final diagnosis = _diagnoser.diagnose(input);
     ZxMatchResult? match;
     ZxActionPrescription? prescription;
+    String aiError = '';
     if (diagnosis.safety.actionAllowed) {
       final selectedSystems = _selectedSystems;
       final manuallySelected = selectedSystems
@@ -554,19 +898,38 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         disabledLensIds: _disabledLenses,
       );
       match = _alignMatchToThoughtSystems(matched, selectedSystems);
-      prescription = _actionGenerator.generate(
+      final localPrescription = _actionGenerator.generate(
         input: input,
         diagnosis: diagnosis,
         match: match,
-      );
+      )!;
+      prescription = localPrescription;
+      if (_useAiKnowledge && _selectedAiKnowledge != null) {
+        setState(() => _working = true);
+        try {
+          prescription = await _aiKnowledge.generateAction(
+            knowledge: _selectedAiKnowledge!,
+            localBaseline: localPrescription,
+            input: input,
+            diagnosis: diagnosis,
+          );
+        } catch (error) {
+          aiError = error.toString();
+        }
+      }
     }
+    if (!mounted) return;
     setState(() {
       _currentInput = input;
       _diagnosis = diagnosis;
       _match = match;
       _prescription = prescription;
       _selectedDifficulty = diagnosis.suggestedDifficulty;
+      _working = false;
     });
+    if (aiError.isNotEmpty) {
+      _snack('AI派生方案生成失败，已安全回退到本地方案：$aiError');
+    }
   }
 
   ZxMatchResult _alignMatchToThoughtSystems(
@@ -713,6 +1076,18 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          if (item.guidanceOrigin == 'ai_derived') ...<Widget>[
+            _statusBanner(
+              'AI派生行动 · 与本地核心库分开',
+              (_selectedAiKnowledge?.thinker ?? '已保存派生思想') +
+                  ' · ' +
+                  (item.aiModelLabel.isEmpty
+                      ? '全局AI模型'
+                      : item.aiModelLabel),
+              Colors.deepPurple,
+            ),
+            const SizedBox(height: 10),
+          ],
           _statusBanner(
             match.complementary == null ? '本次指导思想' : '本次融合思想',
             <String>[
@@ -959,6 +1334,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
 
   Widget _buildActionCard(ZxActionPrescription action) {
     final lens = _knowledge.lensById(action.primaryLensId);
+    ZxAiKnowledgeDraft? aiKnowledge;
+    for (final draft in _aiDrafts) {
+      if (draft.id == action.guidanceKnowledgeRefId) {
+        aiKnowledge = draft;
+        break;
+      }
+    }
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       color: Theme.of(context).colorScheme.surface,
@@ -987,6 +1369,22 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               '指导思想：${lens == null ? action.primaryLensId : _systemLabelForLens(lens)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (action.guidanceOrigin == 'ai_derived') ...<Widget>[
+              const SizedBox(height: 5),
+              Text(
+                '知识来源：AI派生 · 本地保存 · 不替换核心库' +
+                    (aiKnowledge == null
+                        ? ''
+                        : ' · ' + aiKnowledge.thinker) +
+                    (action.aiModelLabel.isEmpty
+                        ? ''
+                        : ' · ' + action.aiModelLabel),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.deepPurple,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -1013,7 +1411,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Future<void> _reviewAction(ZxActionPrescription action) async {
     var completion = ZxCompletionStatus.completed;
     var difficultyFit = '合适';
-    var thoughtDecision = 'continue';
+    var thoughtDecision = 'auto';
     final currentSystem = _systemForLens(action.primaryLensId);
     final alternatives = ZxThinkerCatalog.guides
         .where((guide) => guide.systemId != currentSystem?.systemId)
@@ -1092,10 +1490,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   DropdownButtonFormField<String>(
                     value: thoughtDecision,
                     decoration: const InputDecoration(
-                      labelText: '3 · 下一轮怎样使用思想？',
+                      labelText: '3 · 思想调整方式',
                       border: OutlineInputBorder(),
                     ),
                     items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem(
+                        value: 'auto',
+                        child: Text('由复盘报告自动推荐（建议）'),
+                      ),
                       DropdownMenuItem(
                         value: 'continue',
                         child: Text('继续当前思想'),
@@ -1115,7 +1517,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                       }
                     },
                   ),
-                  if (thoughtDecision != 'continue' &&
+                  if (thoughtDecision != 'auto' &&
+                      thoughtDecision != 'continue' &&
                       alternatives.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -1156,7 +1559,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             FilledButton(
               onPressed: () {
                 final hasLearning = insight.text.trim().isNotEmpty ||
-                    thoughtDecision != 'continue';
+                    (thoughtDecision != 'continue' &&
+                        thoughtDecision != 'auto');
                 final depth = 1 +
                     <String>[insight.text, nextAction.text]
                         .where((value) => value.trim().isNotEmpty)
@@ -1211,11 +1615,46 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       reward: reward,
       tree: nextTree,
     );
+    final localReport = _localReview.generate(
+      action: action,
+      review: review,
+    );
+    await _dao.saveReviewReport(localReport);
+    var report = localReport;
+    if (action.guidanceOrigin == 'ai_derived' &&
+        action.guidanceKnowledgeRefId > 0) {
+      final aiDraft =
+          await _dao.aiKnowledgeDraft(action.guidanceKnowledgeRefId);
+      if (aiDraft != null) {
+        final aiReport = await _aiKnowledge.generateReviewReport(
+          knowledge: aiDraft,
+          action: action,
+          review: review,
+        );
+        if (aiReport.origin == ZxKnowledgeOrigin.aiDerived) {
+          await _dao.saveReviewReport(aiReport);
+          report = aiReport;
+        }
+      }
+    }
     final decisionParts = review.nextDecision.split('|');
-    final decision =
+    var decision =
         decisionParts.isEmpty ? 'continue' : decisionParts.first;
-    final alternativeId =
+    var alternativeId =
         decisionParts.length < 2 ? '' : decisionParts[1];
+    if (decision == 'auto') {
+      decision = report.recommendedDecision.key;
+      final recommendedAlternative = report.recommendedSystemIds
+          .map(ZxThinkerCatalog.guideFor)
+          .whereType<ZxThinkerGuide>()
+          .where((guide) => guide.systemId != currentSystem?.systemId);
+      alternativeId = recommendedAlternative.isEmpty
+          ? ''
+          : recommendedAlternative.first.primaryLensId;
+      if (decision != 'continue' && alternativeId.isEmpty) {
+        decision = 'continue';
+      }
+    }
     final currentSelectionToken =
         currentSystem?.primaryLensId ?? action.primaryLensId;
     final nextSelected = <String>{..._selectedLensIds};
@@ -1258,7 +1697,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       await _dao.setDisabledLenses(nextDisabled);
     }
     _goalController.text = action.goalTitle;
-    _targetController.text = review.nextAction;
+    _targetController.text = report.nextAction;
     await _refreshLocalState();
     if (!mounted) return;
     final selectedNames = nextSelected
@@ -1286,9 +1725,21 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             Text('学习金币 ${reward.learningCoins}'),
             Text('${reward.abilityDimension} +${reward.xp.toStringAsFixed(1)} XP'),
             const SizedBox(height: 10),
+            _statusBanner(
+              report.origin.label + '复盘报告',
+              report.summary,
+              report.origin == ZxKnowledgeOrigin.aiDerived
+                  ? Colors.deepPurple
+                  : _green,
+            ),
+            const SizedBox(height: 10),
+            _labelValue('行动证据', report.progressEvidence),
+            _labelValue('关键发现', report.barrierFinding),
+            _labelValue('系统建议', report.recommendedDecision.label),
+            _labelValue('建议理由', report.rationale),
             _labelValue('下一轮思想', selectedNames),
-            if (review.nextAction.isNotEmpty)
-              _labelValue('下一小步', review.nextAction),
+            if (report.nextAction.isNotEmpty)
+              _labelValue('下一小步', report.nextAction),
           ],
         ),
         actions: <Widget>[
@@ -2687,6 +3138,439 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     if (mounted) setState(() => _tree = next);
   }
 
+  Widget _buildAiMentorPage() {
+    final thinkerNames =
+        _aiBooks.map((item) => item.thinker).toSet().toList(growable: false);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
+      children: <Widget>[
+        _sectionCard(
+          title: '两套知识方案',
+          subtitle: '本地审核知识是稳定基线；AI派生知识来自你保存的著作，可选用但不会覆盖基线。',
+          leading: const CircleAvatar(
+            child: Icon(Icons.account_tree_outlined),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _statusBanner(
+                '本地审核知识库',
+                '离线可用 · ' +
+                    _knowledge.packageInfo.systemCount.toString() +
+                    '套思想体系 · 用于行动、复盘与推荐',
+                _green,
+              ),
+              const SizedBox(height: 8),
+              _statusBanner(
+                'AI派生知识库',
+                '独立表与独立文件目录 · 清楚标记来源 · 仅由用户主动选择',
+                Colors.deepPurple,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: '著作文件库与AI分析',
+          subtitle: '先把著作复制到本机文件库，再由已配置AI融合多本著作，生成详细思想体系。',
+          leading: const CircleAvatar(
+            child: Icon(Icons.folder_copy_outlined),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  FilledButton.tonalIcon(
+                    onPressed: _working ? null : _importAiBooks,
+                    icon: const Icon(Icons.upload_file_outlined),
+                    label: const Text('导入思想家著作'),
+                  ),
+                  for (final thinker in thinkerNames)
+                    OutlinedButton.icon(
+                      onPressed: _working
+                          ? null
+                          : () => _analyzeBooksFor(thinker),
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      label: Text('AI融合 · ' + thinker),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (_aiBooks.isEmpty)
+                const Text('还没有保存著作。支持 PDF、DOC/DOCX、EPUB、MOBI、AZW、FB2、RTF、TXT、MD。')
+              else
+                ..._aiBooks.map(
+                  (book) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.menu_book_outlined),
+                    title: Text(book.thinker + ' · ' + book.title),
+                    subtitle: Text(
+                      book.fileName +
+                          ' · ' +
+                          (book.byteSize / 1024 / 1024).toStringAsFixed(1) +
+                          ' MB · 已提取' +
+                          book.extractedCharacters.toString() +
+                          '字',
+                    ),
+                    trailing: const Chip(label: Text('本机文件')),
+                  ),
+                ),
+              const SizedBox(height: 6),
+              const Text(
+                '点击“AI融合”时，所选著作内容会发送给全局设置中的AI提供方；生成内容只保存为“AI派生”，不会写入本地审核知识表。',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: '已保存的AI派生思想',
+          subtitle: '可用于目标转行动、复盘报告和思想推荐；每条都保留模型与著作引用。',
+          leading: const CircleAvatar(
+            child: Icon(Icons.auto_awesome_outlined),
+          ),
+          child: _aiDrafts.isEmpty
+              ? const Text('尚未生成AI派生思想。')
+              : Column(
+                  children: _aiDrafts
+                      .map(
+                        (draft) => Card(
+                          child: ExpansionTile(
+                            leading: Icon(
+                              _selectedAiKnowledge?.id == draft.id
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                              color: Colors.deepPurple,
+                            ),
+                            title: Text(draft.thinker + ' · ' + draft.title),
+                            subtitle: Text(
+                              'AI派生 · ' +
+                                  draft.modelLabel +
+                                  ' · ' +
+                                  draft.bookIds.length.toString() +
+                                  '本著作',
+                            ),
+                            onExpansionChanged: (expanded) {
+                              if (expanded) {
+                                setState(() => _selectedAiKnowledge = draft);
+                              }
+                            },
+                            childrenPadding:
+                                const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                            children: <Widget>[
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: draft.coreValues
+                                      .map((value) => Chip(label: Text(value)))
+                                      .toList(growable: false),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _labelValue('怎样理解知', draft.knowledgeView),
+                              _labelValue('怎样理解行', draft.actionView),
+                              _labelValue(
+                                '知—行—反馈路径',
+                                draft.transformationPath,
+                              ),
+                              _labelValue(
+                                '与王阳明主线的关系',
+                                draft.yangmingConnection,
+                              ),
+                              _labelValue(
+                                '共同点',
+                                draft.commonGround.join('；'),
+                              ),
+                              _labelValue(
+                                '差异',
+                                draft.differences.join('；'),
+                              ),
+                              _labelValue(
+                                '适用边界',
+                                draft.boundaries.join('；'),
+                              ),
+                              const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '核心思想',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              ...draft.coreIdeas.map(_bullet),
+                              const SizedBox(height: 8),
+                              FilledButton.tonalIcon(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedAiKnowledge = draft;
+                                    _useAiKnowledge = true;
+                                  });
+                                  _tabs.animateTo(2);
+                                },
+                                icon: const Icon(Icons.play_arrow_outlined),
+                                label: const Text('选用并转成行动'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: '行动导师 Agent',
+          subtitle: '提醒目标、思想选择、执行、反馈与复盘；报告只依据用户实际反馈自动生成。',
+          leading: const CircleAvatar(
+            child: Icon(Icons.notifications_active_outlined),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _statusBanner(
+                _agentSettings.enabled ? '导师提醒已开启' : '导师提醒未开启',
+                '当前建议：' + _agentScene.title,
+                _agentSettings.enabled ? _green : Colors.orange.shade800,
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.wb_sunny_outlined),
+                title: const Text('推进提醒'),
+                subtitle: Text(
+                  TimeOfDay(
+                    hour: _agentSettings.hour,
+                    minute: _agentSettings.minute,
+                  ).format(context),
+                ),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () => _pickAgentTime(review: false),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.rate_review_outlined),
+                title: const Text('反馈与复盘提醒'),
+                subtitle: Text(
+                  TimeOfDay(
+                    hour: _agentSettings.reviewHour,
+                    minute: _agentSettings.reviewMinute,
+                  ).format(context),
+                ),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () => _pickAgentTime(review: true),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('启用行动导师提醒'),
+                subtitle: const Text('未来7天每天两次；修改时间后会重新登记。'),
+                value: _agentSettings.enabled,
+                onChanged: _working ? null : _toggleAgent,
+              ),
+              const Text(
+                '导师状态流：选择目标 → 选择思想 → 生成行动 → 跟踪推进 → 请求反馈 → 自动复盘/推荐 → 下一轮。AI不会在没有反馈时虚构结果。',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+        if (_reviewReports.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 12),
+          _sectionCard(
+            title: '报告记录',
+            subtitle: '本地报告与AI派生报告同时保留并清楚区分。',
+            child: Column(
+              children: _reviewReports
+                  .take(8)
+                  .map(
+                    (report) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        report.origin == ZxKnowledgeOrigin.aiDerived
+                            ? Icons.auto_awesome_outlined
+                            : Icons.fact_check_outlined,
+                      ),
+                      title: Text(
+                        report.origin.label +
+                            ' · ' +
+                            report.recommendedDecision.label,
+                      ),
+                      subtitle: Text(
+                        report.summary + '\n下一步：' + report.nextAction,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _importAiBooks() async {
+    final thinker = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('导入思想家著作'),
+        content: _dialogField(
+          thinker,
+          '思想家或理论体系（同一作者多本书将统一融合）',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (thinker.text.trim().isEmpty) return;
+              Navigator.pop(dialogContext, thinker.text.trim());
+            },
+            child: const Text('选择文件'),
+          ),
+        ],
+      ),
+    );
+    thinker.dispose();
+    if (name == null || !mounted) return;
+    final picked = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const <String>[
+        'pdf',
+        'doc',
+        'docx',
+        'epub',
+        'mobi',
+        'azw',
+        'azw3',
+        'fb2',
+        'rtf',
+        'txt',
+        'md',
+      ],
+    );
+    if (picked == null) return;
+    setState(() => _working = true);
+    var imported = 0;
+    final failures = <String>[];
+    for (final selected in picked.files) {
+      final path = selected.path;
+      if (path == null || path.trim().isEmpty) {
+        failures.add(selected.name + '：无法取得本机路径');
+        continue;
+      }
+      try {
+        await _aiKnowledge.importBook(
+          source: File(path),
+          thinker: name,
+        );
+        imported++;
+      } catch (error) {
+        failures.add(selected.name + '：' + error.toString());
+      }
+    }
+    await _refreshLocalState();
+    if (!mounted) return;
+    setState(() => _working = false);
+    _snack(
+      '已保存' +
+          imported.toString() +
+          '本著作' +
+          (failures.isEmpty ? '。' : '；失败：' + failures.join('；')),
+    );
+  }
+
+  Future<void> _analyzeBooksFor(String thinker) async {
+    final books =
+        _aiBooks.where((item) => item.thinker == thinker).toList(growable: false);
+    if (books.isEmpty) return;
+    final confirmed = await _confirm(
+      title: '将著作发送给AI分析？',
+      body: '将把' +
+          books.length.toString() +
+          '本“' +
+          thinker +
+          '”著作的附件或提取文字发送给全局AI提供方。输出会独立保存为AI派生知识，不替换本地审核知识。',
+      confirmLabel: '同意并生成',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _working = true);
+    try {
+      final draft = await _aiKnowledge.analyzeAndSave(
+        thinker: thinker,
+        books: books,
+      );
+      await _refreshLocalState();
+      if (!mounted) return;
+      setState(() {
+        _selectedAiKnowledge = draft;
+        _working = false;
+      });
+      _snack('已生成并保存AI派生思想；本地审核知识未改变。');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _working = false);
+      _snack('AI分析失败：$error');
+    }
+  }
+
+  Future<void> _pickAgentTime({required bool review}) async {
+    final current = TimeOfDay(
+      hour: review ? _agentSettings.reviewHour : _agentSettings.hour,
+      minute: review ? _agentSettings.reviewMinute : _agentSettings.minute,
+    );
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: current,
+      helpText: review ? '选择复盘提醒时间' : '选择推进提醒时间',
+    );
+    if (picked == null) return;
+    final next = ZxAgentSettings(
+      enabled: _agentSettings.enabled,
+      hour: review ? _agentSettings.hour : picked.hour,
+      minute: review ? _agentSettings.minute : picked.minute,
+      reviewHour: review ? picked.hour : _agentSettings.reviewHour,
+      reviewMinute: review ? picked.minute : _agentSettings.reviewMinute,
+      daysAhead: _agentSettings.daysAhead,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    setState(() => _agentSettings = next);
+    if (next.enabled) await _toggleAgent(true);
+  }
+
+  Future<void> _toggleAgent(bool enabled) async {
+    setState(() => _working = true);
+    if (!enabled) {
+      await _agent.disable();
+      await _refreshLocalState();
+      if (!mounted) return;
+      setState(() => _working = false);
+      _snack('行动导师提醒已关闭。');
+      return;
+    }
+    final result = await _agent.enableAndSchedule(
+      _agentSettings,
+      selectedThoughtCount: _selectedLensIds.length,
+    );
+    await _refreshLocalState();
+    if (!mounted) return;
+    setState(() => _working = false);
+    _snack(
+      result.ready
+          ? '已登记' + result.scheduledCount.toString() + '个行动导师提醒。'
+          : '提醒未完全启用，请授予通知与精确闹钟权限后重试。',
+    );
+  }
+
   Widget _buildEvidencePrivacyPage() {
     final info = _knowledge.packageInfo;
     return ListView(
@@ -2754,7 +3638,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         const SizedBox(height: 12),
         _sectionCard(
           title: 'AI与本地规则',
-          subtitle: '不登录也可离线完成全闭环。',
+          subtitle: '本地审核方案可离线完成全闭环；AI派生方案由用户主动启用。',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -2765,7 +3649,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                     : '未配置 · 使用本地确定性引擎',
               ),
               const Text(
-                'AI只能优化表达或整理扩展候选；安全边界、行动匹配、思想选择、证据定位、奖励与成长均由本地规则决定。',
+                '本地审核知识与AI派生知识分表保存。AI可以基于用户上传著作生成详细思想、行动和复盘报告，但不能覆盖本地审核知识，也不能放宽安全、奖励和成长规则。',
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
@@ -2914,7 +3798,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.download_outlined),
                 title: const Text('导出全部知行树数据'),
-                subtitle: const Text('JSON含所选思想、行动、复盘、双账本、树状态与候选。'),
+                subtitle: const Text('JSON含本地行动、复盘、AI著作元数据、AI派生知识、导师事件、双账本与树状态。'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _exportData,
               ),
@@ -3207,11 +4091,21 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Future<void> _deleteAllData() async {
     final confirmed = await _confirm(
       title: '删除全部用户数据？',
-      body: '所选思想、目标、行动、复盘、金币/XP账本、成长树、反馈和候选都会永久删除。只读知识包会保留。',
+      body: '所选思想、目标、行动、复盘、AI派生知识、已导入著作文件、导师提醒、金币/XP账本、成长树、反馈和候选都会永久删除。只读审核知识包会保留。',
       confirmLabel: '永久删除',
       destructive: true,
     );
     if (!confirmed) return;
+    await _agent.disable();
+    final importedBooks = await _dao.aiBooks();
+    for (final book in importedBooks) {
+      final file = File(book.localPath);
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+    }
     await _dao.deleteAllUserData();
     await _refreshLocalState();
     if (!mounted) return;
