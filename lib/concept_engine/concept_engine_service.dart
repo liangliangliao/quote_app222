@@ -14,10 +14,16 @@ import 'action_engine/models/action_engine_models.dart';
 import 'concept_engine_models.dart';
 
 class ConceptEngineRuntimeConfig {
-  final String provider; // deepseek / openai / openrouter / edenai / xgrok / gemini
+  final String provider; // deepseek / openai / openrouter / edenai / xgrok / gemini / azure
   final String apiKey;
   final String endpoint;
   final String model;
+
+  /// Azure 专用：真正下发给服务端的部署名。其它服务商与 [model] 相同。
+  final String deployment;
+
+  /// 鉴权头。OpenAI 系是 `Authorization: Bearer`，Azure 是 `api-key`。
+  final Map<String, String> authHeaders;
   final int timeoutSeconds;
   final int sceneCount;
   final int turnTarget;
@@ -49,6 +55,8 @@ class ConceptEngineRuntimeConfig {
     required this.apiKey,
     required this.endpoint,
     required this.model,
+    String? deployment,
+    this.authHeaders = const <String, String>{},
     required this.timeoutSeconds,
     required this.sceneCount,
     required this.turnTarget,
@@ -74,7 +82,7 @@ class ConceptEngineRuntimeConfig {
     required this.transportMode,
     required this.proxyEndpoint,
     required this.proxyAuthToken,
-  });
+  }) : deployment = deployment ?? model;
 
   String get providerLabel => provider == 'openai'
       ? 'OpenAI'
@@ -86,8 +94,13 @@ class ConceptEngineRuntimeConfig {
                   ? 'xGrok'
                   : provider == 'gemini'
                       ? 'Gemini'
-                      : 'DeepSeek';
+                      : provider == 'azure'
+                          ? 'Azure'
+                          : 'DeepSeek';
   bool get useProxy => transportMode == 'proxy' && proxyEndpoint.trim().isNotEmpty;
+
+  Map<String, String> get effectiveAuthHeaders =>
+      authHeaders.isNotEmpty ? authHeaders : <String, String>{'Authorization': 'Bearer $apiKey'};
 }
 
 
@@ -125,6 +138,9 @@ class ConceptEngineService {
     if (p == 'edenai') return 'edenai';
     if (p == 'xgrok' || p == 'xai' || p == 'grok') return 'xgrok';
     if (p == 'gemini' || p == 'google' || p == 'googleai') return 'gemini';
+    if (p == 'azure' || p == 'azureopenai' || p == 'azure_openai' || p == 'foundry' || p == 'msfoundry') {
+      return 'azure';
+    }
     return 'deepseek';
   }
 
@@ -246,6 +262,8 @@ class ConceptEngineService {
       apiKey: resolved.apiKey,
       endpoint: resolved.endpoint,
       model: resolved.model,
+      deployment: resolved.deployment,
+      authHeaders: resolved.effectiveAuthHeaders,
       timeoutSeconds: timeoutSeconds < 15 ? 15 : timeoutSeconds,
       sceneCount: sceneCount.clamp(2, 5).toInt(),
       turnTarget: turnTarget.clamp(4, 12).toInt(),
@@ -1314,10 +1332,19 @@ class ConceptEngineService {
     final effectiveTimeoutSeconds = timeoutOverrideSeconds ?? cfg.timeoutSeconds;
     final uri = Uri.parse(cfg.endpoint);
     final isResponsesApi = cfg.provider == 'openai' && uri.path.contains('/responses');
-    final effectiveModel = (modelOverride?.trim().isNotEmpty == true) ? modelOverride!.trim() : cfg.model;
+    // Azure 的调用地址里已经带上了部署名，请求体要下发部署名而不是
+    // 设置页展示用的“资源名/部署名”限定写法。
+    final defaultModel = cfg.provider == 'azure' ? cfg.deployment : cfg.model;
+    final effectiveModel = (modelOverride?.trim().isNotEmpty == true) ? modelOverride!.trim() : defaultModel;
     final effectiveMaxTokens = cfg.globalMaxOutputTokens == null || cfg.globalMaxOutputTokens! <= 0
         ? maxTokens
         : cfg.globalMaxOutputTokens!.clamp(64, 64000).toInt();
+    // Azure OpenAI 的 gpt-5 / o 系列只认 max_completion_tokens，且不接受自定义
+    // temperature / top_p；Foundry 上的 Claude / Grok 则不支持 json_object。
+    final azureReasoning = cfg.provider == 'azure' && UnifiedAiService.isAzureReasoningDeployment(effectiveModel);
+    final allowJsonResponseFormat = useJsonResponseFormat &&
+        (cfg.provider != 'azure' || UnifiedAiService.azureSupportsJsonResponseFormat(effectiveModel));
+    final allowSamplingParams = !azureReasoning;
 
     final body = isResponsesApi
         ? {
@@ -1336,14 +1363,15 @@ class ConceptEngineService {
               {'role': 'system', 'content': systemPrompt},
               {'role': 'user', 'content': jsonEncode(userPayload)},
             ],
-            if (cfg.globalTemperature != null) 'temperature': cfg.globalTemperature,
-            if (cfg.globalTopP != null) 'top_p': cfg.globalTopP,
-            if (useJsonResponseFormat) 'response_format': {'type': 'json_object'},
-            'max_tokens': effectiveMaxTokens,
+            if (allowSamplingParams && cfg.globalTemperature != null) 'temperature': cfg.globalTemperature,
+            if (allowSamplingParams && cfg.globalTopP != null) 'top_p': cfg.globalTopP,
+            if (allowJsonResponseFormat) 'response_format': {'type': 'json_object'},
+            if (azureReasoning) 'max_completion_tokens': effectiveMaxTokens,
+            if (!azureReasoning) 'max_tokens': effectiveMaxTokens,
           };
 
     final headers = {
-      'Authorization': 'Bearer ${cfg.apiKey}',
+      ...cfg.effectiveAuthHeaders,
       'Content-Type': 'application/json',
       if (cfg.provider == 'openrouter') 'X-OpenRouter-Title': 'Quote App',
       'X-Concept-Engine-Trace-Id': traceId,
