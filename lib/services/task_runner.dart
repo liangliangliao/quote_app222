@@ -1,5 +1,4 @@
 import 'dart:ui' as ui;
-import 'dart:isolate';
 
 import '../data/dao.dart';
 import '../services/global_ai_settings.dart';
@@ -89,9 +88,7 @@ class TaskRunner {
         // Update notified
         await QuoteDao().markNotifiedByUid(qUid);
         _notifyHomeRefresh();
-return;_notifyHomeRefresh();
-                SimpleBus.pokeHome();
-return;
+        return;
       } catch (e) {
         if (e.toString().contains('统一 AI') || e.toString().contains('OPENAI_FAIL') || e.toString().contains('OpenAI API 调用失败')) {
           await LogDao().add(taskUid: uid, detail: '调用统一 AI 接口发生错误或失败!');
