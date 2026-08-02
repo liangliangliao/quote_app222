@@ -60,12 +60,11 @@ void main() {
     expect(exported['xiangji_reminder_deliveries'], hasLength(1));
 
     await dao.deleteAllData();
+    final deliveryCount = await database.rawQuery(
+      'SELECT COUNT(*) AS delivery_count FROM xiangji_reminder_deliveries',
+    );
     expect(
-      Sqflite.firstIntValue(
-        await database.rawQuery(
-          'SELECT COUNT(*) FROM xiangji_reminder_deliveries',
-        ),
-      ),
+      deliveryCount.single['delivery_count'],
       0,
     );
   });
