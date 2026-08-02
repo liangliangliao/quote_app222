@@ -1,0 +1,5704 @@
+{
+  "schema_version": "2.0",
+  "knowledge_version": "2.0.0",
+  "knowledge_title": "知行合一智能行动成长系统：22部原著与登记材料重构累计知识库",
+  "generated_at": "2026-07-30",
+  "source_count": 22,
+  "system_count": 17,
+  "evidence_count": 256,
+  "evidence_policy": {
+    "A": "原著中可回定位的作者表述",
+    "B": "同一作品内的忠实综合",
+    "C": "跨作品、跨作者的比较与融合",
+    "D": "产品为了选择、行动、复盘和安全所作的设计推论"
+  },
+  "common_ground": [
+    "知不能只按“说得正确”判断，还要进入具体情境、动作与后果。",
+    "行动不是知识的附属品；它会检验预测、暴露条件并生成新的认识。",
+    "知行分裂不等于意志薄弱，可能来自价值、认知、情绪、能力、机会、习惯或容量。",
+    "稳定行动依靠自主认领、具体技能、环境支持、反馈和恢复，不能长期依靠羞耻。",
+    "高水平知行合一包括选择、开始、坚持、修正、退出、恢复、协作并承担后果。",
+    "每种思想都只回答知行合一的一部分问题，必须保留共同点、真实差异、适用条件与不可合并张力。"
+  ],
+  "evolution_stage_guidance": [
+    {
+      "stage": "第一层 · 立根：王阳明知行合一主线",
+      "guidance": "确立总纲：真知包含行动方向，行动成就并检验所知。"
+    },
+    {
+      "stage": "第二层 · 心理落地：观念、认知与非强迫行动",
+      "guidance": "解释“道理怎样进入动作”，并清除错误预测、绝对要求和过度用力。"
+    },
+    {
+      "stage": "第三层 · 主体升华：接纳、自主、价值与意义",
+      "guidance": "让行动从消除不适、外部服从和继承价值，升级为自主、创造和责任。"
+    },
+    {
+      "stage": "第四层 · 行动实现：探究、启动、学习与反回避",
+      "guidance": "把已认领方向编译为可学习、可启动、可检验、可修正的现实行动。"
+    },
+    {
+      "stage": "第五层 · 系统整合：容量、日常转化与行为工程",
+      "guidance": "保护人的有限容量，把练习沉淀为生活，并用统一工程框架选择干预。"
+    }
+  ],
+  "decision_routes": [
+    {
+      "route": "方向与正当性",
+      "guidance": "先判断什么值得做、是不是自己认领、会让谁承担代价。"
+    },
+    {
+      "route": "事实与解释",
+      "guidance": "区分事实、预测、自动思维、绝对要求和仍未知的条件。"
+    },
+    {
+      "route": "情绪与心理关系",
+      "guidance": "不等待不适消失，区分需要接纳的体验与需要改变的伤害。"
+    },
+    {
+      "route": "启动与现场入口",
+      "guidance": "把方向缩成下一小步、动作表象和如果—那么线索。"
+    },
+    {
+      "route": "学习与胜任",
+      "guidance": "通过榜样、子技能、掌握经验和反馈形成真实能力。"
+    },
+    {
+      "route": "容量与恢复",
+      "guidance": "先检查身体、睡眠、安全、时间、工具、关系和支持。"
+    },
+    {
+      "route": "求证与内化",
+      "guidance": "让结果回写原判断，逐步形成习惯、能力、身份与贡献。"
+    }
+  ],
+  "works": [
+    {
+      "batch": 1,
+      "source_id": "WY",
+      "title": "《传习录》",
+      "author": "王阳明",
+      "evidence_role": "良知、格物、知行合一、事上磨",
+      "evidence_tier": "P1",
+      "edition": "武汉出版社，2014，EPUB",
+      "source_sha256": "027aaa73c7b899f8f23c7c639d2b49bd96bfb1807f71d6833466fd5ac321fefc",
+      "source_file_size": 440752,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2818,
+      "primary_evidence_count": 16,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "LZ",
+      "title": "Te-Tao Ching",
+      "author": "老子；Henricks译",
+      "evidence_role": "无为、柔弱、微小介入",
+      "evidence_tier": "P1经现代译本转述",
+      "edition": "Ballantine/Random House，MOBI",
+      "source_sha256": "5b7c56406f1f20d5146a74df2e1f3586bdd29822532b4cc558057c32619e7699",
+      "source_file_size": 1795348,
+      "locator_kind": "mobi_block",
+      "extract_record_count": 2028,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "WJ",
+      "title": "The Principles of Psychology",
+      "author": "William James",
+      "evidence_role": "注意、意志、习惯",
+      "evidence_tier": "P1经典心理学",
+      "edition": "Harvard University Press，1983，扫描转 EPUB",
+      "source_sha256": "f55dce8d1be317a330fe16506771279e6ca2d694ff2db766c54c0cee258393e3",
+      "source_file_size": 2474990,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 9129,
+      "primary_evidence_count": 10,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "NZ",
+      "title": "Also sprach Zarathustra",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "自我超越、创造与肯定",
+      "evidence_tier": "P1",
+      "edition": "Gutenberg 文本，文件标 2004，EPUB",
+      "source_sha256": "fc21593d63abe1fbf9a3a56ad488a86e66eddb21bba7658292d031e4bda47b3f",
+      "source_file_size": 324360,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 3871,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "AB",
+      "title": "Cognitive Therapy and the Emotional Disorders",
+      "author": "Aaron T. Beck",
+      "evidence_role": "自动思维、认知检验与行为实验",
+      "evidence_tier": "P2",
+      "edition": "Plume/Penguin，1979，EPUB",
+      "source_sha256": "975ec40e7eeb4918d8b32be0eeb304cc9ac4b648d47dfe4cbc61ed5fa010ee75",
+      "source_file_size": 453641,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 1979,
+      "primary_evidence_count": 10,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "AE",
+      "title": "Reason and Emotion in Psychotherapy",
+      "author": "Albert Ellis",
+      "evidence_role": "绝对要求、辩驳与实践",
+      "evidence_tier": "P2历史原著",
+      "edition": "Institute for Rational Living，1963，PDF 转 EPUB",
+      "source_sha256": "4f5c33d46dce005006abcbd7191634264223356ae9d8cc4a069c1a527acc1e7a",
+      "source_file_size": 784496,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2102,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "ACT",
+      "title": "Acceptance and Commitment Therapy",
+      "author": "Hayes、Strosahl、Wilson",
+      "evidence_role": "接纳、解离、价值与承诺行动",
+      "evidence_tier": "P2",
+      "edition": "2008 EPUB 版本线索",
+      "source_sha256": "ae8586a59d02ad5c5a46bbe385c3d63b4930646ede7e4e9f6b0447b5757a11d9",
+      "source_file_size": 607351,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 4553,
+      "primary_evidence_count": 10,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "SDT",
+      "title": "Self-Determination Theory",
+      "author": "Ryan、Deci",
+      "evidence_role": "自主、胜任、关系与内化",
+      "evidence_tier": "P2/E",
+      "edition": "Guilford，2017，EPUB",
+      "source_sha256": "1c85f400b1552f840f76db1426cc14d9c684380b1e06351801af0242fd42bd99",
+      "source_file_size": 3125000,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 10734,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 1,
+      "source_id": "HPL",
+      "title": "哈佛幸福课讲稿",
+      "author": "课程转录整理",
+      "evidence_role": "练习、仪式、恢复",
+      "evidence_tier": "S，需外部复核",
+      "edition": "DOCX，版本来源未详，教学性二手源",
+      "source_sha256": "e1ba42b234287180e95daccf82e5ffebc3391524b2ff41dd49d0f9fdef8c6778",
+      "source_file_size": 579825,
+      "locator_kind": "lecture_paragraph",
+      "extract_record_count": 1572,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "secondary_teaching_source"
+    },
+    {
+      "batch": 2,
+      "source_id": "DHT",
+      "title": "How We Think",
+      "author": "John Dewey",
+      "evidence_role": "反思探究和行动检验",
+      "evidence_tier": "P1",
+      "edition": "1933，扫描/OCR PDF",
+      "source_sha256": "581888711068b07b00ac3f0bfc7b02d6a0eb9a62e676e4f7c6d07f6a2839cb8b",
+      "source_file_size": 9861281,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 1548,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "DHC",
+      "title": "Human Nature and Conduct",
+      "author": "John Dewey",
+      "evidence_role": "习惯、环境、审议与生长",
+      "evidence_tier": "P1",
+      "edition": "Serapis Classics，EPUB",
+      "source_sha256": "95dbc2d25489608eaa66103d762c7d5e0bf29859a262b7c4bfe0cd36242994bd",
+      "source_file_size": 787505,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 435,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "II",
+      "title": "Implementation Intentions",
+      "author": "Peter M. Gollwitzer",
+      "evidence_role": "如果—那么计划",
+      "evidence_tier": "E/理论论文",
+      "edition": "American Psychologist 54(7)，1999，PDF",
+      "source_sha256": "a55f4799acaa9679ae8db6a3c91c4ec86080bc20466e0eb85f747f862481897f",
+      "source_file_size": 1893482,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 206,
+      "primary_evidence_count": 9,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "SLT",
+      "title": "Social Learning Theory",
+      "author": "Albert Bandura",
+      "evidence_role": "观察学习和自我调节",
+      "evidence_tier": "P2历史理论",
+      "edition": "Prentice-Hall，1976，EPUB",
+      "source_sha256": "92f2afbf6d1aa465b6db1897f90c9bce92963ee45daedd827120255db3d7a199",
+      "source_file_size": 449547,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 1487,
+      "primary_evidence_count": 13,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "BA",
+      "title": "Behavioral Activation for Depression",
+      "author": "Martell等",
+      "evidence_role": "功能分析与分级激活",
+      "evidence_tier": "P2/E临床指南",
+      "edition": "Guilford，第二版，2022，PDF",
+      "source_sha256": "014610f11c1be9293e90fc16e9dd4899f4fbc56782405c5cc84ebed0cd8a3ba1",
+      "source_file_size": 8852444,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 2804,
+      "primary_evidence_count": 14,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "MMP",
+      "title": "Motivation and Personality",
+      "author": "Abraham H. Maslow",
+      "evidence_role": "需要、成长和自我实现",
+      "evidence_tier": "P2历史理论",
+      "edition": "第二版转制 EPUB",
+      "source_sha256": "ff0c3cc39f4aa674b99cf620f2a7ec0270a88ba628434f319bca81cf5fc7f468",
+      "source_file_size": 3029362,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2279,
+      "primary_evidence_count": 12,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "NGS",
+      "title": "Die fröhliche Wissenschaft",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "生命肯定、风格与动机谱系",
+      "evidence_tier": "P1",
+      "edition": "2011 德文公版 EPUB",
+      "source_sha256": "363ded6d4cd912b7675017a3922d133ad96bec1839aa5eb0f568f90b736f3df9",
+      "source_file_size": 317282,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 2493,
+      "primary_evidence_count": 6,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 2,
+      "source_id": "NBG",
+      "title": "Jenseits von Gut und Böse",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "意志复杂性与价值创造",
+      "evidence_tier": "P1公版替代文本",
+      "edition": "2011 德文公版 EPUB；正式证据以 Project Gutenberg ebook 7204 节号为准",
+      "source_sha256": "3488a918dd89b281476764839a1a6a4b577cd610371d7405ed3f00e208e36a61",
+      "source_file_size": 241280,
+      "locator_kind": "numbered_section",
+      "extract_record_count": 658,
+      "primary_evidence_count": 3,
+      "substitute_for": "用户原 Apple FairPlay 加密 EPUB",
+      "source_status": "public_substitute_verified"
+    },
+    {
+      "batch": 2,
+      "source_id": "NGM",
+      "title": "Zur Genealogie der Moral",
+      "author": "Friedrich Nietzsche",
+      "evidence_role": "价值谱系、承诺、坏良心与意义",
+      "evidence_tier": "P1",
+      "edition": "1887 德文原典转制 PDF",
+      "source_sha256": "35a94c560c4ef74e2db66833752e2d035da797f6e986b2072c881fa705f8606d",
+      "source_file_size": 831241,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 3743,
+      "primary_evidence_count": 8,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "OET",
+      "title": "Rethinking Positive Thinking",
+      "author": "Gabriele Oettingen",
+      "evidence_role": "心理对照、可行性与WOOP",
+      "evidence_tier": "S/E研究综述",
+      "edition": "Penguin Random House，2014，EPUB",
+      "source_sha256": "24d203e00fe62d833b7504f789052aa5f56d33d291fed0cd3ab65d38d2ff955e",
+      "source_file_size": 1815232,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 1326,
+      "primary_evidence_count": 16,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "SEF",
+      "title": "Self-Efficacy: The Exercise of Control",
+      "author": "Albert Bandura",
+      "evidence_role": "效能来源、过程与集体层面",
+      "evidence_tier": "P2历史理论专著",
+      "edition": "W. H. Freeman，1997，OCR 转制 EPUB",
+      "source_sha256": "835f4ecb1062ffe10ad2794a26e81af5e64fe088960e99e00fff321bf526d119",
+      "source_file_size": 1743025,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 10386,
+      "primary_evidence_count": 17,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "FRK",
+      "title": "Man’s Search for Meaning",
+      "author": "Viktor E. Frankl",
+      "evidence_role": "意义、责任与受限自由",
+      "evidence_tier": "P1/P2",
+      "edition": "Beacon Press，2006，EPUB；含 1984 年后记",
+      "source_sha256": "50332be9defa66b3d6713878bf252bea81862e8b20f82645282e9b3ac8cd52b7",
+      "source_file_size": 129985,
+      "locator_kind": "epub_spine_block",
+      "extract_record_count": 452,
+      "primary_evidence_count": 16,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    },
+    {
+      "batch": 3,
+      "source_id": "BCW",
+      "title": "The Behaviour Change Wheel",
+      "author": "Michie、Atkins、West",
+      "evidence_role": "COM-B、干预设计与APEASE",
+      "evidence_tier": "E/方法指南",
+      "edition": "Silverback，2014，PDF",
+      "source_sha256": "bcfe7ba7bf63c159db9a3b36dccd714b20887d056ae17386634c18072da2d902",
+      "source_file_size": 10863684,
+      "locator_kind": "pdf_page_block",
+      "extract_record_count": 2938,
+      "primary_evidence_count": 21,
+      "substitute_for": "",
+      "source_status": "primary_source_opened"
+    }
+  ],
+  "lenses": [
+    {
+      "lens_id": "WY_KNOW_ACT",
+      "source_id": "WY",
+      "thinker": "王阳明",
+      "name": "良知与知行合一",
+      "core_question": "你声称知道和重视的，是否已经在意念发动与现实行为中显现？",
+      "mechanism": "真知已经包含好恶、意向和行动方向；在具体事情上行动，既成就也检验所知。",
+      "best_fit": "方向不清、言行不一致、只谈不做、需要在真实情境求证。",
+      "non_fit": "时间、工具、身体容量或结构性机会明显不足时，不应先把问题归为意志。",
+      "prerequisites": "目标合法、低风险，并经过事实与外部条件检查。",
+      "contraindications": "不得把压迫、疾病、贫困或真实受害归因为“不够致良知”。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "省察",
+        "价值校准",
+        "事上磨",
+        "现实求证"
+      ],
+      "action_templates": [
+        "写下这项价值今天唯一可见的行为",
+        "在一件具体小事上做一次最小验证"
+      ],
+      "tension_links": [
+        "与ACT的个人价值存在道德真理张力",
+        "需由COM-B补足外部条件诊断"
+      ],
+      "evidence_links": [
+        "WY-S003-P0108",
+        "WY-S003-P0110",
+        "WY-S003-P0138",
+        "WY-S003-P0146",
+        "WY-S003-P0288",
+        "WY-S003-P0289",
+        "WY-S003-P0326",
+        "WY-S003-P0364",
+        "WY-S003-P0411",
+        "WY-S003-P0470",
+        "WY-S003-P1151",
+        "WY-S003-P1527",
+        "WY-S003-P2025",
+        "WY-S003-P2381",
+        "WY-S003-P2634",
+        "WY-S003-P2713"
+      ],
+      "evidence_directness": 0.72,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "LZ_REDUCE_FORCE",
+      "source_id": "LZ",
+      "thinker": "老子",
+      "name": "减法、微小与柔韧行动",
+      "core_question": "哪些过度控制、无效步骤或僵持正在让行动更难？",
+      "mechanism": "先减少妄为和摩擦，在问题尚微时介入，并在保持方向时调整方法。",
+      "best_fit": "过度用力、完美主义式加码、恢复失败、计划僵硬、同时目标过多。",
+      "non_fit": "紧急风险、明确责任或需要专业治疗时，不能用“无为”逃避。",
+      "prerequisites": "能区分减少无效控制与放弃必要责任。",
+      "contraindications": "无为不得解释为放弃治疗、求助、边界或对他人的责任。",
+      "barriers": [
+        "capacity",
+        "automatic_motivation",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "减法",
+        "环境去摩擦",
+        "微小行动",
+        "柔性计划"
+      ],
+      "action_templates": [
+        "删掉一个非必要步骤后再开始",
+        "把动作缩到两分钟并保留退出条件"
+      ],
+      "tension_links": [
+        "与强纪律路径存在坚持—无为张力",
+        "需由Dewey或BCW明确技术条件"
+      ],
+      "evidence_links": [
+        "LZ-C023-P0002",
+        "LZ-C038-P0002",
+        "LZ-C039-P0002",
+        "LZ-C039-P0003",
+        "LZ-C047-P0002",
+        "LZ-C048-P0002",
+        "LZ-C053-P0002",
+        "LZ-C055-P0002",
+        "LZ-C090-P0002"
+      ],
+      "evidence_directness": 0.58,
+      "review_status": "approved_with_translation_note",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "WJ_ATTENTION_HABIT",
+      "source_id": "WJ",
+      "thinker": "William James",
+      "name": "注意、动作表象与习惯",
+      "core_question": "关键时刻，怎样让困难但重要的动作表象继续占据注意？",
+      "mechanism": "清楚动作表象和注意保持帮助启动；重复行动把选择沉淀为习惯并释放注意。",
+      "best_fit": "分心、临场摇摆、入口不清、需要把高频基础动作自动化。",
+      "non_fit": "方向尚未认领、身体或机会不足时，不应只加强注意。",
+      "prerequisites": "动作已经具体，并且目标由用户认可。",
+      "contraindications": "历史性刚性习惯建议需更新；中断不归零，不以人格责备注意困难。",
+      "barriers": [
+        "automatic_motivation",
+        "physical_opportunity",
+        "psychological_capability"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "单任务",
+        "注意锚点",
+        "动作脚本",
+        "习惯线索"
+      ],
+      "action_templates": [
+        "让当前页面只保留一个动作入口",
+        "抓住下一个自然线索立即做首个微动作"
+      ],
+      "tension_links": [
+        "需由SDT审查目标自主性",
+        "习惯连续性须由恢复友好规则限定"
+      ],
+      "evidence_links": [
+        "WJ-S124-P0002",
+        "WJ-S140-P0004",
+        "WJ-S141-P0003",
+        "WJ-S141-P0004",
+        "WJ-S142-P0005",
+        "WJ-S1143-P0005",
+        "WJ-S1144-P0002",
+        "WJ-S1177-P0002",
+        "WJ-S1181-P0003",
+        "WJ-S1195-P0005"
+      ],
+      "evidence_directness": 0.6,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NZ_SELF_OVERCOMING",
+      "source_id": "NZ",
+      "thinker": "Friedrich Nietzsche",
+      "name": "自我超越与价值创造",
+      "core_question": "你是在承担、挣脱“你应当”，还是已准备创造一个能肯定的方向？",
+      "mechanism": "骆驼—狮子—孩子区分承担、争取自主与积极创造；身体也是行动判断的一部分。",
+      "best_fit": "被动继承目标、身份僵化、长期创造和反应性反抗之后的正向建设。",
+      "non_fit": "急性风险、低容量或需要具体技能时不宜用宏大超越语言。",
+      "prerequisites": "先保护身体、安全、他人权益和现实可行性。",
+      "contraindications": "禁止用力量、超人或超越正当化支配、冒险、轻视弱者或持续自我压迫。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "价值谱系",
+        "身份实验",
+        "身体审查",
+        "创造"
+      ],
+      "action_templates": [
+        "识别一个“别人说我必须”的目标并写出自己的选择",
+        "做一个七天新风格实验"
+      ],
+      "tension_links": [
+        "需由王阳明或伦理规则防止支配化",
+        "与SDT共同审查外控但价值根据不同"
+      ],
+      "evidence_links": [
+        "NZ-S003-P0039",
+        "NZ-S003-P0069",
+        "NZ-S004-P0003",
+        "NZ-S004-P0016",
+        "NZ-S004-P0021",
+        "NZ-S004-P0026",
+        "NZ-S007-P0004",
+        "NZ-S018-P0014",
+        "NZ-S038-P0027"
+      ],
+      "evidence_directness": 0.56,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "AB_COGNITIVE_TEST",
+      "source_id": "AB",
+      "thinker": "Aaron T. Beck",
+      "name": "想法是假设，行动是实验",
+      "core_question": "阻断行动的预测和解释，有哪些证据、反证和可做的低风险检验？",
+      "mechanism": "把自动思维显性化并当作可修订假设，用分级行为实验产生新证据。",
+      "best_fit": "灾难化、失败定性、读心、负面预测、把一次失败泛化成无能力。",
+      "non_fit": "真实危险、结构性伤害或事实充分时，不能把问题说成“只是想法”。",
+      "prerequisites": "区分事实、解释、预测，并设计低风险可逆实验。",
+      "contraindications": "不得否认真实受害或以认知重评代替安全措施和专业评估。",
+      "barriers": [
+        "psychological_capability",
+        "automatic_motivation",
+        "self_efficacy"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "事实—解释分离",
+        "证据表",
+        "替代解释",
+        "行为实验"
+      ],
+      "action_templates": [
+        "写下一个可反驳预测并做最小实验",
+        "为“我不能”设计一个分级任务"
+      ],
+      "tension_links": [
+        "需由ACT防止无休止争辩内在体验",
+        "需由BCW检查现实机会"
+      ],
+      "evidence_links": [
+        "AB-S006-P0006",
+        "AB-S007-P0022",
+        "AB-S008-P0034",
+        "AB-S009-P0035",
+        "AB-S016-P0004",
+        "AB-S016-P0029",
+        "AB-S017-P0035",
+        "AB-S017-P0039",
+        "AB-S017-P0130",
+        "AB-S018-P0078"
+      ],
+      "evidence_directness": 0.76,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "AE_PREFERENCE_TOLERANCE",
+      "source_id": "AE",
+      "thinker": "Albert Ellis",
+      "name": "从绝对要求退回偏好",
+      "core_question": "哪一句“必须、应该、受不了”正在把困难升级为人格或灾难？",
+      "mechanism": "识别绝对化评价，检验其逻辑和现实后果，并在触发情境练习更可行的偏好与挫折耐受。",
+      "best_fit": "完美主义、绝对要求、低挫折耐受、敌意和表现—人格混同。",
+      "non_fit": "真实侵害、权利受损或安全威胁不应只做信念辩驳。",
+      "prerequisites": "先确认事实和关系边界，再审查自我生成的绝对要求。",
+      "contraindications": "不得把他人侵害合理化；原著强硬语气不得复制为羞耻式交互。",
+      "barriers": [
+        "automatic_motivation",
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "ABC",
+        "语义探测",
+        "去灾难化",
+        "现场练习"
+      ],
+      "action_templates": [
+        "把一个“必须”改写成强烈偏好并写出可承受后果",
+        "在低风险现场练习一次不完美行动"
+      ],
+      "tension_links": [
+        "需由关系与环境镜头检查真实约束",
+        "与ACT在纠正内容或改变关系上有张力"
+      ],
+      "evidence_links": [
+        "AE-S037-P0005",
+        "AE-S054-P0001",
+        "AE-S058-P0002",
+        "AE-S060-P0003",
+        "AE-S199-P0001",
+        "AE-S202-P0001",
+        "AE-S394-P0001",
+        "AE-S421-P0002",
+        "AE-S429-P0003"
+      ],
+      "evidence_directness": 0.66,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "ACT_FLEXIBILITY",
+      "source_id": "ACT",
+      "thinker": "Hayes、Strosahl、Wilson",
+      "name": "心理灵活性与价值行动",
+      "core_question": "如果不必先消除不适，你愿意带着它朝哪个价值迈一小步？",
+      "mechanism": "通过接纳、解离、当下觉察、价值和承诺行动，改变与内在体验的关系，以可行性而非舒适度选择行为。",
+      "best_fit": "体验回避、情绪等待、与念头融合、偏离后全盘放弃。",
+      "non_fit": "真实危险和可避免伤害必须先移除，不用接纳要求用户忍受。",
+      "prerequisites": "价值由用户选择，动作可逆且有停止条件。",
+      "contraindications": "接纳不等于忍受虐待、危险、疾病或可避免伤害。",
+      "barriers": [
+        "automatic_motivation",
+        "reflective_motivation",
+        "value_ethics"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "接纳",
+        "认知解离",
+        "价值",
+        "承诺行动"
+      ],
+      "action_templates": [
+        "命名感受和头脑故事后做一分钟价值动作",
+        "偏离后把步幅减半并重新承诺"
+      ],
+      "tension_links": [
+        "与CBT在纠正想法内容或改变关系上有张力",
+        "需由安全规则区分可避免伤害"
+      ],
+      "evidence_links": [
+        "ACT-S003-P0177",
+        "ACT-S003-P0283",
+        "ACT-S003-P0316",
+        "ACT-S005-P0461",
+        "ACT-S005-P0511",
+        "ACT-S006-P0337",
+        "ACT-S006-P0447",
+        "ACT-S006-P0483",
+        "ACT-S007-P0120",
+        "ACT-S007-P0288"
+      ],
+      "evidence_directness": 0.8,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "SDT_INTERNALIZATION",
+      "source_id": "SDT",
+      "thinker": "Ryan、Deci",
+      "name": "自主、胜任、关系与内化",
+      "core_question": "这个行动由你认领吗？它是否同时得到胜任结构和关系支持？",
+      "mechanism": "行动理由从外控、内摄走向认同与整合；自主、胜任和关系支持提高维持与迁移质量。",
+      "best_fit": "被迫目标、奖励依赖、羞耻驱动、无意义坚持、提醒撤除后崩溃。",
+      "non_fit": "已经认领但现场线索或技能不足时，应补充实施意向或掌握训练。",
+      "prerequisites": "用户有真实选择权，反馈是信息性的而非控制性的。",
+      "contraindications": "不得把“内化”当操纵技巧；收入或外在目标不被简单道德化。",
+      "barriers": [
+        "reflective_motivation",
+        "social_opportunity",
+        "self_efficacy",
+        "value_ethics"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "自主选择",
+        "胜任支架",
+        "关系支持",
+        "理由内化"
+      ],
+      "action_templates": [
+        "写下继续、修改或退出目标的自主理由",
+        "把控制性提醒换成可撤除的结构支持"
+      ],
+      "tension_links": [
+        "需由II或WOOP转成现场动作",
+        "奖励系统必须允许关闭并逐步撤除"
+      ],
+      "evidence_links": [
+        "SDT-S009-P0039",
+        "SDT-S009-P0040",
+        "SDT-S009-P0041",
+        "SDT-S009-P0047",
+        "SDT-S009-P0057",
+        "SDT-S018-P0021",
+        "SDT-S018-P0037",
+        "SDT-S018-P0172",
+        "SDT-S018-P0195",
+        "SDT-S021-P0021",
+        "SDT-S029-P0117",
+        "SDT-S029-P0123"
+      ],
+      "evidence_directness": 0.83,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "HPL_TRANSFORMATION",
+      "source_id": "HPL",
+      "thinker": "哈佛幸福课材料",
+      "name": "从信息到转化的日常练习",
+      "core_question": "这条信息怎样通过情感、行为或认知中的一条通道进入今天？",
+      "mechanism": "知识只有与练习、过程想象、仪式、恢复和现实反馈结合，才可能发生转化。",
+      "best_fit": "需要简单日常练习、过程脚本、五分钟启动和恢复节律。",
+      "non_fit": "高风险或复杂临床问题不能由课程练习替代评估。",
+      "prerequisites": "课程材料作为教学源使用，关键疗效主张需外部复核。",
+      "contraindications": "不把固定天数、意志配额或单一课堂研究冒充普遍定律。",
+      "barriers": [
+        "psychological_capability",
+        "automatic_motivation",
+        "capacity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "ABC三通道",
+        "允许为人",
+        "过程想象",
+        "仪式与恢复"
+      ],
+      "action_templates": [
+        "为一个知识点绑定今天的五分钟练习",
+        "同时想象准备、受阻、调整和完成"
+      ],
+      "tension_links": [
+        "教学材料需由原研究和容量守门补足",
+        "积极资源不得否认痛苦事实"
+      ],
+      "evidence_links": [
+        "HPL-C002-P0034—P0037",
+        "HPL-C002-P0071",
+        "HPL-C005-P0038—P0041",
+        "HPL-C008-P0014",
+        "HPL-C011-P0016",
+        "HPL-C011-P0044",
+        "HPL-C012-P0023",
+        "HPL-C012-P0031",
+        "HPL-C013-P0060—P0062",
+        "HPL-C014-P0085",
+        "HPL-C015-P0028",
+        "HPL-C015-P0034"
+      ],
+      "evidence_directness": 0.52,
+      "review_status": "approved_secondary",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "DHT_REFLECTIVE_INQUIRY",
+      "source_id": "DHT",
+      "thinker": "John Dewey",
+      "name": "反思性探究",
+      "core_question": "当前疑惑是什么？有哪些竞争假设，怎样通过行动检验其依据与后果？",
+      "mechanism": "受阻触发问题形成、假设、推理和检验；错误不是人格判决，而是下一轮观察与修正的材料。",
+      "best_fit": "问题模糊、反复失败、多个解释竞争、需要设计行动实验。",
+      "non_fit": "紧急场景不应延迟必要行动做长篇反思。",
+      "prerequisites": "愿意保留替代解释，并考虑判断和行动的后果。",
+      "contraindications": "反思不能成为拖延；实际行动可能不可逆，需先做风险检查。",
+      "barriers": [
+        "psychological_capability",
+        "value_ethics",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "问题形成",
+        "竞争假设",
+        "行动检验",
+        "无羞耻复盘"
+      ],
+      "action_templates": [
+        "列出最多三个假设并选一个最低风险检验",
+        "行动后记录哪条证据支持或反驳假设"
+      ],
+      "tension_links": [
+        "技术探究不能独自决定伦理方向",
+        "与王阳明共同重视事上检验但真理根据不同"
+      ],
+      "evidence_links": [
+        "DHT-P0023-B003",
+        "DHT-P0026-B004",
+        "DHT-P0028-B003",
+        "DHT-P0029-B004",
+        "DHT-P0044-B004",
+        "DHT-P0046-B003",
+        "DHT-P0100-B003",
+        "DHT-P0101-B003",
+        "DHT-P0121-B003",
+        "DHT-P0128-B004",
+        "DHT-P0129-B003",
+        "DHT-P0130-B003"
+      ],
+      "evidence_directness": 0.67,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "DHC_HABIT_ENVIRONMENT",
+      "source_id": "DHC",
+      "thinker": "John Dewey",
+      "name": "人—环境习惯系统",
+      "core_question": "当前行为由哪些环境条件和习得倾向共同维持？下一行动是什么？",
+      "mechanism": "习惯是主体与环境的互动倾向；改变既需要人的审议，也需要重构条件和下一行动。",
+      "best_fit": "环境摩擦、旧习惯、目标过远、冲动与习惯冲突。",
+      "non_fit": "不能用环境解释取消用户选择，也不能只改内心忽略资源。",
+      "prerequisites": "明确可改变的环境变量和用户可控部分。",
+      "contraindications": "固定目的不可为不当手段辩护。",
+      "barriers": [
+        "physical_opportunity",
+        "automatic_motivation",
+        "psychological_capability"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "环境重构",
+        "习惯分析",
+        "下一行动",
+        "审议预演"
+      ],
+      "action_templates": [
+        "把遥远目标改写成环境中的下一可见动作",
+        "移除一个旧路径线索并放入新入口"
+      ],
+      "tension_links": [
+        "需由伦理镜头审查目的",
+        "补足只强调内在意志的路径"
+      ],
+      "evidence_links": [
+        "DHC-S004-P0012",
+        "DHC-S005-P0003",
+        "DHC-S005-P0016",
+        "DHC-S005-P0035",
+        "DHC-S005-P0028",
+        "DHC-S006-P0028",
+        "DHC-S007-P0027",
+        "DHC-S007-P0058",
+        "DHC-S007-P0068",
+        "DHC-S007-P0076",
+        "DHC-S008-P0004",
+        "DHC-S008-P0011"
+      ],
+      "evidence_directness": 0.66,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "II_CUE_ACTION",
+      "source_id": "II",
+      "thinker": "Peter M. Gollwitzer",
+      "name": "如果—那么情境启动",
+      "core_question": "哪个可识别线索出现时，你将自动进入哪个具体反应？",
+      "mechanism": "把关键情境X与反应Y预先绑定，提高线索可及性并减少现场决策负担。",
+      "best_fit": "目标已认领但忘记、犹豫、容易被现场干扰。",
+      "non_fit": "目标未认领、不可行、危险或关键障碍尚不清楚时不应先编译。",
+      "prerequisites": "存在较强目标意向，线索具体可识别，计划可撤销。",
+      "contraindications": "自动化可能刚性化，必须包含例外、替代和到期复审。",
+      "barriers": [
+        "automatic_motivation",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "实施意向",
+        "线索绑定",
+        "预决策",
+        "例外规则"
+      ],
+      "action_templates": [
+        "如果X发生，那么我做Y；若条件不安全则改做Z",
+        "为计划设置一周到期复审"
+      ],
+      "tension_links": [
+        "先由WOOP筛目标与障碍",
+        "需由SDT保证目标自主"
+      ],
+      "evidence_links": [
+        "II-P0001-B004",
+        "II-P0001-B006",
+        "II-P0002-B005",
+        "II-P0002-B007",
+        "II-P0002-B008",
+        "II-P0003-B002",
+        "II-P0003-B003",
+        "II-P0009-B003",
+        "II-P0009-B004"
+      ],
+      "evidence_directness": 0.86,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "SLT_MODELING",
+      "source_id": "SLT",
+      "thinker": "Albert Bandura",
+      "name": "观察学习与微榜样",
+      "core_question": "你缺的是注意、保持、动作再现、技能成分还是实施动机？",
+      "mechanism": "观察相似榜样、心理和实际演练、子技能训练与信息反馈可降低昂贵试错。",
+      "best_fit": "不会做、缺少示范、动作复杂、需要反馈精炼。",
+      "non_fit": "学会不等于会实施；价值和结果后果仍需另行检查。",
+      "prerequisites": "榜样与用户任务相似，动作可拆解，反馈不羞辱。",
+      "contraindications": "影响技术不授予强加权力，不以榜样比较贬低用户。",
+      "barriers": [
+        "psychological_capability",
+        "self_efficacy",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "观察学习",
+        "子技能",
+        "演练",
+        "信息反馈"
+      ],
+      "action_templates": [
+        "找一个相似微榜样，只观察一个子步骤",
+        "模仿近似动作并记录一条修正反馈"
+      ],
+      "tension_links": [
+        "需由价值守门决定是否值得学",
+        "与SEF掌握经验互补但不可混同"
+      ],
+      "evidence_links": [
+        "SLT-S008-P0003",
+        "SLT-S008-P0005",
+        "SLT-S021-P0003",
+        "SLT-S032-P0002",
+        "SLT-S034-P0005",
+        "SLT-S035-P0006",
+        "SLT-S036-P0002",
+        "SLT-S036-P0004",
+        "SLT-S036-P0007",
+        "SLT-S037-P0003",
+        "SLT-S136-P0005",
+        "SLT-S142-P0003",
+        "SLT-S215-P0003"
+      ],
+      "evidence_directness": 0.7,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "BA_ACTIVATION",
+      "source_id": "BA",
+      "thinker": "Martell等",
+      "name": "行为激活与反回避",
+      "core_question": "这个行为短期帮你避开什么，长期又维持了什么？",
+      "mechanism": "通过ABC功能分析、分级活动和TRAP—TRAC，把情绪等待与短期回避转为可测试的替代应对。",
+      "best_fit": "低活动、情绪等待、刷视频式短期缓解、回避循环和行动复苏。",
+      "non_fit": "严重功能崩溃、自伤风险或需临床评估时不进入普通挑战。",
+      "prerequisites": "先做临床风险和容量守门，行动按计划协商而非强迫。",
+      "contraindications": "不得把临床指南当自助诊断；不用任务完成替代专业照护。",
+      "barriers": [
+        "automatic_motivation",
+        "capacity",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "ABC功能分析",
+        "分级活动",
+        "TRAP—TRAC",
+        "自然强化"
+      ],
+      "action_templates": [
+        "识别触发—反应—回避模式并选一个两分钟替代",
+        "按协商计划接触一个有自然回报的活动"
+      ],
+      "tension_links": [
+        "需由Maslow和临床风险检查容量",
+        "与ACT共同取消情绪许可但机制不同"
+      ],
+      "evidence_links": [
+        "BA-P0037-B003",
+        "BA-P0037-B004",
+        "BA-P0038-B003",
+        "BA-P0040-B003",
+        "BA-P0041-B003",
+        "BA-P0042-B003",
+        "BA-P0044-B003",
+        "BA-P0045-B003",
+        "BA-P0098-B004",
+        "BA-P0102-B003",
+        "BA-P0106-B003",
+        "BA-P0213-B002",
+        "BA-P0214-B005",
+        "BA-P0097-B004"
+      ],
+      "evidence_directness": 0.88,
+      "review_status": "approved_with_clinical_boundary",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "MMP_CAPACITY",
+      "source_id": "MMP",
+      "thinker": "Abraham H. Maslow",
+      "name": "需要与行动容量守门",
+      "core_question": "安全、睡眠、身体、归属或负荷中，哪项需要现在具有相对优先？",
+      "mechanism": "需要有动态相对优先且可同时存在；容量不足时先恢复和获得支持，再谈成长挑战。",
+      "best_fit": "睡眠不足、身体不适、安全/归属缺口、过载和恢复期。",
+      "non_fit": "不能用刚性金字塔阻止用户在困难条件下追求高层价值。",
+      "prerequisites": "把需要层级视为动态预算而非人格等级。",
+      "contraindications": "禁止“低层人”标签；历史样本和自我实现材料有证据限制。",
+      "barriers": [
+        "capacity",
+        "physical_capability",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2"
+      ],
+      "methods": [
+        "容量预算",
+        "恢复",
+        "减负",
+        "支持"
+      ],
+      "action_templates": [
+        "从睡眠、饮食、身体、秩序、关系或求助中选一个L0动作",
+        "把本周挑战降到不挤压基本需要的水平"
+      ],
+      "tension_links": [
+        "需由Frankl说明基本满足不会自动产生意义",
+        "需要顺序允许例外和反转"
+      ],
+      "evidence_links": [
+        "MMP-S002-P0044",
+        "MMP-S002-P0045",
+        "MMP-S002-P0051",
+        "MMP-S002-P0222",
+        "MMP-S002-P0283",
+        "MMP-S002-P0348",
+        "MMP-S002-P0353",
+        "MMP-S002-P0360",
+        "MMP-S002-P0780",
+        "MMP-S002-P0858",
+        "MMP-S002-P0876",
+        "MMP-S002-P0791"
+      ],
+      "evidence_directness": 0.55,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NGS_STYLE",
+      "source_id": "NGS",
+      "thinker": "Friedrich Nietzsche",
+      "name": "生命肯定与长期风格",
+      "core_question": "这个选择来自充盈还是匮乏？你愿意把它重复为长期风格吗？",
+      "mechanism": "从身体和健康经验审查思想，用长期工作赋予性格风格，并以永恒回归作长期选择试验。",
+      "best_fit": "长期身份实践、生命肯定、创造动机和高阶选择。",
+      "non_fit": "急性低容量、真实受害或需要具体技术时不首选。",
+      "prerequisites": "先检查身体、现实和伦理边界。",
+      "contraindications": "命运之爱不等于赞美伤害；长期风格不等于强迫重复错误目标。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics",
+        "capacity"
+      ],
+      "stages": [
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "身体审查",
+        "长期风格",
+        "动机谱系",
+        "永恒回归试验"
+      ],
+      "action_templates": [
+        "问自己是否愿意把今天的选择重复一百次",
+        "为一个认可品质设计连续七天的小风格实践"
+      ],
+      "tension_links": [
+        "需由恢复镜头防止肯定变成压抑",
+        "与Frankl在意义来源上不同"
+      ],
+      "evidence_links": [
+        "NGS-S005-P0005",
+        "NGS-S342-P0002",
+        "NGS-S349-P0002",
+        "NGS-S363-P0002",
+        "NGS-S414-P0002",
+        "NGS-S444-P0002"
+      ],
+      "evidence_directness": 0.48,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NBG_WILL_COMPLEXITY",
+      "source_id": "NBG",
+      "thinker": "Friedrich Nietzsche",
+      "name": "意志复合与自主纪律",
+      "core_question": "这次“我想要”由哪些感受、命令、服从、条件和行动能力共同构成？",
+      "mechanism": "意志不是单一按钮；长期自选约束可塑造形式，也可能压抑力量，需审查代价。",
+      "best_fit": "把愿望误当执行、长期纪律设计、复杂动机和高阶创造。",
+      "non_fit": "不适合用作启动困难的唯一解释。",
+      "prerequisites": "区分愿意、能够、机会和实际行动。",
+      "contraindications": "不得合理化外部强制、等级服从或单一路径。",
+      "barriers": [
+        "reflective_motivation",
+        "psychological_capability",
+        "value_ethics"
+      ],
+      "stages": [
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "意志拆解",
+        "代价审查",
+        "自选约束",
+        "创造"
+      ],
+      "action_templates": [
+        "把“我想”拆成想要、能做、机会、命令感和实际下一步",
+        "为自选纪律写明收益、代价和退出条件"
+      ],
+      "tension_links": [
+        "需由COM-B提供行为工程拆分",
+        "长期约束与自主存在真实张力"
+      ],
+      "evidence_links": [
+        "NBG-PG-§019",
+        "NBG-PG-§188",
+        "NBG-PG-§211"
+      ],
+      "evidence_directness": 0.46,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "NGM_GENEALOGY",
+      "source_id": "NGM",
+      "thinker": "Friedrich Nietzsche",
+      "name": "价值谱系、承诺与罪责风险",
+      "core_question": "这个目标和价值怎样形成？它来自创造、承诺，还是怨恨与罪责化？",
+      "mechanism": "追踪价值生成条件和功能，区分跨时间可依赖的承诺与坏良心、反应性价值及自责。",
+      "best_fit": "反应性目标、羞耻驱动承诺、过度罪责、长期主权承诺。",
+      "non_fit": "事实尚不清、急性风险或普通微启动不需要复杂谱系分析。",
+      "prerequisites": "事实、责任和受到影响者先被明确。",
+      "contraindications": "不得把受害者的痛苦解释成软弱；谱系怀疑不能取消真实责任。",
+      "barriers": [
+        "value_ethics",
+        "reflective_motivation",
+        "automatic_motivation"
+      ],
+      "stages": [
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "价值谱系",
+        "反应性审查",
+        "承诺能力",
+        "去罪责化"
+      ],
+      "action_templates": [
+        "写下目标最早来自谁的评价以及现在服务什么",
+        "区分事实责任、修复责任和人格自责"
+      ],
+      "tension_links": [
+        "与王阳明的良知根据存在真实张力",
+        "需由Beck区分事实有罪与感到有罪"
+      ],
+      "evidence_links": [
+        "NGM-P0004-B022",
+        "NGM-P0012-B001",
+        "NGM-P0022-B013",
+        "NGM-P0036-B004",
+        "NGM-P0060-B001",
+        "NGM-P0061-B003",
+        "NGM-P0077-B021",
+        "NGM-P0078-B009"
+      ],
+      "evidence_directness": 0.5,
+      "review_status": "approved_philosophical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "OET_WOOP",
+      "source_id": "OET",
+      "thinker": "Gabriele Oettingen",
+      "name": "心理对照与WOOP",
+      "core_question": "愿望的最佳结果是什么，现实关键障碍是什么，它是否可行，出现时做什么？",
+      "mechanism": "把最佳未来与当前障碍连接，让可行性调节投入，再用实施意向连接障碍和工具行为。",
+      "best_fit": "积极幻想、愿景强但未行动、障碍不清、需要投入或退出分流。",
+      "non_fit": "外部可行性不足时不能把所有障碍转成用户内部问题。",
+      "prerequisites": "愿望重要、挑战且可能实现；先检查外部条件。",
+      "contraindications": "WOOP不是四个普通文本框；退出不可行愿望不是失败。",
+      "barriers": [
+        "reflective_motivation",
+        "automatic_motivation",
+        "physical_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "心理对照",
+        "可行性分流",
+        "WOOP",
+        "实施意向"
+      ],
+      "action_templates": [
+        "完成Wish—Outcome—Obstacle—Plan并判断投入、缩小、延后或退出",
+        "把if端写成障碍/情境而非另一个动作"
+      ],
+      "tension_links": [
+        "需由COM-B检查结构性外部障碍",
+        "与积极结果想象材料存在补充和限制关系"
+      ],
+      "evidence_links": [
+        "OET-S007-P0006",
+        "OET-S007-P0007",
+        "OET-S007-P0009",
+        "OET-S008-P0022",
+        "OET-S011-P0025",
+        "OET-S011-P0026",
+        "OET-S012-P0021",
+        "OET-S012-P0034",
+        "OET-S012-P0063",
+        "OET-S013-P0025",
+        "OET-S013-P0029",
+        "OET-S013-P0040",
+        "OET-S013-P0042",
+        "OET-S013-P0044",
+        "OET-S013-P0048",
+        "OET-S013-P0050"
+      ],
+      "evidence_directness": 0.84,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "SEF_MASTERY",
+      "source_id": "SEF",
+      "thinker": "Albert Bandura",
+      "name": "任务特定效能与掌握阶梯",
+      "core_question": "在这个具体任务和情境中，你有什么真实掌握证据，判断误差在哪里？",
+      "mechanism": "效能来自掌握、替代、劝导与身心状态信息；亲历掌握最有影响，更新必须限于相似任务和情境。",
+      "best_fit": "“我肯定做不到”、低任务特定信心、能力高估/低估、需要迁移。",
+      "non_fit": "结果受外部结构限制时，不应把效能当唯一原因。",
+      "prerequisites": "任务、难度和情境被具体规定，并把效能与结果预期分开。",
+      "contraindications": "禁止空泛“相信自己”；效能不等于能力，更不等于人格价值。",
+      "barriers": [
+        "self_efficacy",
+        "psychological_capability",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "掌握阶梯",
+        "相似榜样",
+        "效能校准",
+        "迁移边界"
+      ],
+      "action_templates": [
+        "完成比当前证据略高的一小步并限定更新范围",
+        "记录预测把握、实际结果和校准误差"
+      ],
+      "tension_links": [
+        "由COM-B防止过度个人归因",
+        "与SLT观察学习互补但掌握证据权重更高"
+      ],
+      "evidence_links": [
+        "SEF-S009-P0002",
+        "SEF-S015-P0001",
+        "SEF-S015-P0002",
+        "SEF-S026-P0003",
+        "SEF-S033-P0009",
+        "SEF-S060-P0007",
+        "SEF-S063-P0028",
+        "SEF-S084-P0003",
+        "SEF-S091-P0005",
+        "SEF-S092-P0004",
+        "SEF-S098-P0008",
+        "SEF-S113-P0005",
+        "SEF-S118-P0005",
+        "SEF-S125-P0028",
+        "SEF-S128-P0004",
+        "SEF-S141-P0009",
+        "SEF-S490-P0001"
+      ],
+      "evidence_directness": 0.79,
+      "review_status": "approved_historical",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "FRK_MEANING",
+      "source_id": "FRK",
+      "thinker": "Viktor E. Frankl",
+      "name": "情境意义、责任与受限自由",
+      "core_question": "此时此地，生活向你提出了什么可认领的问题，你愿意对谁或何事负责？",
+      "mechanism": "意义随人和时刻变化；行动可通过创造、体验/相遇或对不可避免痛苦采取立场而指向自身以外。",
+      "best_fit": "无意义、控制性目标、受限处境、需要责任边界和自我超越。",
+      "non_fit": "可避免的痛苦应先移除原因，治疗者或AI不能替用户指定意义。",
+      "prerequisites": "区分可改变条件、不可改变条件和用户自选责任。",
+      "contraindications": "禁止浪漫化痛苦、要求自我牺牲或用意义压迫用户。",
+      "barriers": [
+        "reflective_motivation",
+        "value_ethics",
+        "social_opportunity"
+      ],
+      "stages": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3"
+      ],
+      "methods": [
+        "具体意义问题",
+        "责任边界",
+        "受限自由",
+        "自我超越"
+      ],
+      "action_templates": [
+        "写下此刻谁或什么值得你回应，以及边界是什么",
+        "先移除一种可避免痛苦，再选择剩余条件中的小立场"
+      ],
+      "tension_links": [
+        "与Nietzsche在意义创造/发现上有张力",
+        "与SDT共同防止他人控制但语言不同"
+      ],
+      "evidence_links": [
+        "FRK-S008-P0005",
+        "FRK-S008-P0007",
+        "FRK-S008-P0020",
+        "FRK-S008-P0025",
+        "FRK-S008-P0028",
+        "FRK-S008-P0036",
+        "FRK-S008-P0037",
+        "FRK-S008-P0040",
+        "FRK-S008-P0043",
+        "FRK-S008-P0044",
+        "FRK-S008-P0051",
+        "FRK-S008-P0054",
+        "FRK-S008-P0097",
+        "FRK-S008-P0100",
+        "FRK-S008-P0103",
+        "FRK-S009-P0004"
+      ],
+      "evidence_directness": 0.61,
+      "review_status": "approved_with_genre_note",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    },
+    {
+      "lens_id": "BCW_COMB",
+      "source_id": "BCW",
+      "thinker": "Michie、Atkins、West",
+      "name": "COM-B情境诊断与行为工程",
+      "core_question": "这个具体行为缺的是身体/心理能力、物理/社会机会，还是反思/自动动机？",
+      "mechanism": "先规定目标行为，再用能力、机会和动机六格形成竞争假设，并以APEASE审查干预。",
+      "best_fit": "多因问题、建议反复错配、目标还是结果词、外部条件可能被忽略。",
+      "non_fit": "COM-B不能决定人生价值、意义或道德方向。",
+      "prerequisites": "行为被写成谁、何时、何地、做什么、频率与谁，并使用多来源证据。",
+      "contraindications": "有效不是唯一标准；必须检查可行、接受度、副作用、安全与公平。",
+      "barriers": [
+        "physical_capability",
+        "psychological_capability",
+        "physical_opportunity",
+        "social_opportunity",
+        "reflective_motivation",
+        "automatic_motivation",
+        "capacity"
+      ],
+      "stages": [
+        "s0",
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "difficulties": [
+        "l0",
+        "l1",
+        "l2",
+        "l3",
+        "l4"
+      ],
+      "methods": [
+        "行为规定",
+        "COM-B六格",
+        "竞争假设",
+        "APEASE"
+      ],
+      "action_templates": [
+        "把结果词改写成可观察目标行为",
+        "只选一个首要障碍并设计一个可逆干预"
+      ],
+      "tension_links": [
+        "不能替代王阳明、SDT或Frankl的方向判断",
+        "用外部机会检查纠正过度内在归因"
+      ],
+      "evidence_links": [
+        "BCW-P0018-B002",
+        "BCW-P0022-B005",
+        "BCW-P0023-B002",
+        "BCW-P0023-B006",
+        "BCW-P0025-B005",
+        "BCW-P0028-B002",
+        "BCW-P0032-B002",
+        "BCW-P0033-B002",
+        "BCW-P0060-B002",
+        "BCW-P0061-B002",
+        "BCW-P0062-B002",
+        "BCW-P0064-B004",
+        "BCW-P0064-B006",
+        "BCW-P0064-B008",
+        "BCW-P0064-B010",
+        "BCW-P0064-B012",
+        "BCW-P0064-B014",
+        "BCW-P0067-B002",
+        "BCW-P0111-B002",
+        "BCW-P0151-B002",
+        "BCW-P0245-B002"
+      ],
+      "evidence_directness": 0.9,
+      "review_status": "approved",
+      "knowledge_version": "2.0.0",
+      "claim_scope": "primary_source_and_source_internal_synthesis"
+    }
+  ],
+  "systems": [
+    {
+      "sequence": 1,
+      "systemId": "yangming",
+      "displayName": "王阳明 · 知行合一总纲",
+      "thinker": "王阳明",
+      "category": "方向、伦理与工夫",
+      "evolutionStage": "第一层 · 立根：王阳明知行合一主线",
+      "primaryLensId": "WY_KNOW_ACT",
+      "lensIds": [
+        "WY_KNOW_ACT"
+      ],
+      "coreValues": [
+        "良知",
+        "诚意",
+        "责任",
+        "知行一体",
+        "事上磨"
+      ],
+      "coreIdeas": [
+        "知是行的主意，行是知的功夫；没有进入意向和行动的“知道”仍未完成。",
+        "良知提供是非与责任方向，格物是在具体事情上纠正意念、对象和做法。",
+        "立志使长期方向持续在场，省察克治处理意念发动处的遮蔽与自欺。",
+        "事上磨让判断接受现实检验，行动结果再回到省察，使知不断加深。",
+        "“心即理”不是把一时感受当真理，而是要求价值判断在关系责任和现实行为中显现，并接受私欲、自欺与事实的反复校验。",
+        "“知行合一”是针对悬空求知和冥行妄作的双向纠偏：既反对等全部想明白才行动，也反对没有省察、方向和后果意识的冲动。",
+        "“一念发动处便是行”把工夫前移到意向形成处；产品必须同时区分念头自然出现、主动认同与外显行为，避免把思想本身定罪。",
+        "良知“不滞见闻而不离见闻”：原则不能被经验碎片牵走，也不能脱离日用见闻、他人处境和行动结果自我封闭。",
+        "“因病而药”意味着方法必须随卡点变化；静、学、做、减负、求助和退出都可能是当下正确工夫，不存在一套万能动作。",
+        "种树与婴儿隐喻说明成长先固根、再扩展，不能用高阶结果逼迫低容量阶段；真正稳定来自日日实落用功而不是一次激情。"
+      ],
+      "knowledgeView": "知不是外置的信息库存，而是包含好恶、判断、责任和行动趋向的切身认识；真知会改变人怎样面对眼前之事。",
+      "actionView": "行是意念发动后的现实工夫，包括选择、实行、承担后果和继续省察，不等于无辨别的冲动。",
+      "splitDiagnosis": "把口头理解与真实意向分开，以借来的道理替代切身判断，或让私欲、自欺和情境压力遮蔽已经认领的方向。",
+      "transformationPath": "立志与伦理校准 → 检查意念发动 → 在一件具体事上格物 → 做出可承担的一步 → 事上磨与省察 → 更新下一步。",
+      "actionFeedback": "行动会显出所知是否真切、意图是否诚实、方法是否适当；结果不是简单奖惩，而是继续致知和修正工夫的材料。",
+      "yangmingConnection": "这是全产品的主干。其他思想不取代知行合一，而是分别补足心理机制、价值辨析、行动技术、环境条件和反馈工程。",
+      "inheritedLimit": "作为第一层没有前置理论缺口；它主动留下的问题是：具体心理机制、能力机会、经验检验和现代安全边界怎样被细化。",
+      "qualitativeLeap": "把“知”从正确陈述提升为必须在真实意向、现实行动和后果承担中成立的生命实践。",
+      "synthesisOutcome": "形成产品不可改变的总原则：先辨方向与责任，再让一个具体行动成就并检验所知。",
+      "workSynthesis": "以《传习录》中的心即理、良知、致良知、格物、立志、知行合一、事上磨和省察克治构成一条完整工夫链。",
+      "sevenLoopRoles": [
+        "方向",
+        "澄清",
+        "求证",
+        "内化"
+      ],
+      "distinctiveFocus": "最关心“你声称知道和重视的，是否已经成为真实意向并在一件事上表现出来”。",
+      "decisionCue": "你理解了很多，也真心说它重要，但现实中长期没有任何与之相称的具体行动。",
+      "buildsOnSystemIds": [],
+      "relatedSystemIds": [
+        "william_james",
+        "dewey",
+        "act",
+        "self_determination",
+        "nietzsche",
+        "frankl",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "不得把知行合一简化成“想到就做”，否则会把冥行妄作误认为行动。",
+        "若把所有失败解释为私欲或不诚，容易忽略身体容量、技能、机会、结构伤害和专业风险。"
+      ],
+      "sourceIds": [
+        "WY"
+      ],
+      "commonGroundWithYangming": [
+        "本体系自身就是主线：知必须在意向、行动和后果中成立。",
+        "工夫既防空谈，也防不经省察的盲动。",
+        "现实事情是知被成就、检验和继续深化的场所。"
+      ],
+      "differencesFromYangming": [
+        "它提供规范方向和工夫总纲，但不独自解释现代心理机制、能力机会、临床风险和行为工程。",
+        "古代角色伦理和“私欲”语言必须经现代权利、事实与安全边界转译。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 2818 条可回定位文本记录；本体系保留 16 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-WY-001",
+          "source_id": "WY",
+          "locator": "WY-S003-P0108",
+          "claim": "心即理",
+          "summary": "原文提出“心即理”，否定把事与理彻底放在心外",
+          "use": "价值须进入主体判断与行动",
+          "boundary": "不等于主观感受即真理",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-002",
+          "source_id": "WY",
+          "locator": "WY-S003-P0110",
+          "claim": "心在关系中发为理",
+          "summary": "无私欲遮蔽之心，发于父、君、友、民而为孝忠信仁",
+          "use": "用关系和行为验证价值",
+          "boundary": "古代角色伦理需现代转译",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-003",
+          "source_id": "WY",
+          "locator": "WY-S003-P0138",
+          "claim": "知而不行，只是未知",
+          "summary": "以好色、恶臭、痛、寒、饥说明真知已含真实反应",
+          "use": "将行为一致性纳入“知”的判断",
+          "boundary": "不能否认陈述性知识存在",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-004",
+          "source_id": "WY",
+          "locator": "WY-S003-P0146",
+          "claim": "知主行功、知始行成",
+          "summary": "同时批评悬空思索与不经省察的妄作",
+          "use": "双向防止空谈和盲动",
+          "boundary": "不是取消分析与计划",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-005",
+          "source_id": "WY",
+          "locator": "WY-S003-P0288",
+          "claim": "立志是持续存养",
+          "summary": "立志被表述为念念存其方向并逐渐扩充",
+          "use": "方向要反复被唤起",
+          "boundary": "不以宏愿替代当下行动",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-006",
+          "source_id": "WY",
+          "locator": "WY-S003-P0289",
+          "claim": "因病而药",
+          "summary": "纷扰时静坐，懒读时且读，方法随障碍变化",
+          "use": "干预要按障碍匹配",
+          "boundary": "不把单一练习普遍化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-007",
+          "source_id": "WY",
+          "locator": "WY-S003-P0326",
+          "claim": "事上磨",
+          "summary": "只静养而不克己，临事会倒；须在事上磨",
+          "use": "真实场景是能力训练场",
+          "boundary": "挑战须按容量分级",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-008",
+          "source_id": "WY",
+          "locator": "WY-S003-P0364",
+          "claim": "成长有根有序",
+          "summary": "婴儿与种树隐喻强调从本原渐进，不悬想花果",
+          "use": "设计渐进阶段和前置能力",
+          "boundary": "不承诺线性增长",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-009",
+          "source_id": "WY",
+          "locator": "WY-S003-P0411",
+          "claim": "静定后仍须省察",
+          "summary": "静坐不能停在空守；须辨认并处理具体私欲",
+          "use": "觉察之后必须有行为选择",
+          "boundary": "不把自然情绪等同私欲",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-010",
+          "source_id": "WY",
+          "locator": "WY-S003-P0470",
+          "claim": "志熟而行自如",
+          "summary": "长存善念，如树根成熟后可从心而不逾矩",
+          "use": "高阶表现是稳定自我治理",
+          "boundary": "“善”需伦理与事实审查",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-011",
+          "source_id": "WY",
+          "locator": "WY-S003-P1151",
+          "claim": "知行互相定义",
+          "summary": "真切笃实的知即行，明觉精察的行即知",
+          "use": "行动质量含觉察，知识质量含实践",
+          "boundary": "不能把二者概念上完全混同",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-012",
+          "source_id": "WY",
+          "locator": "WY-S003-P1527",
+          "claim": "良知不滞见闻也不离见闻",
+          "summary": "日用见闻酬酢皆是良知发用",
+          "use": "原则与经验必须往返",
+          "boundary": "防止反智或只凭内心",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-013",
+          "source_id": "WY",
+          "locator": "WY-S003-P2025",
+          "claim": "一念发动处便是行",
+          "summary": "恶念初发即应处理，不等外显后才负责",
+          "use": "在冲动和合理化早期介入",
+          "boundary": "思想出现不等于完成行为；避免思想定罪",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-014",
+          "source_id": "WY",
+          "locator": "WY-S003-P2381",
+          "claim": "实落用功",
+          "summary": "只在语言上转说会越说越糊涂",
+          "use": "对话必须导向可验证行动",
+          "boundary": "复杂问题仍需要充分理解",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-015",
+          "source_id": "WY",
+          "locator": "WY-S003-P2634",
+          "claim": "格物落在实事",
+          "summary": "知善不做会遮蔽良知；致知须在具体事上正其不正",
+          "use": "建立情境任务和反馈",
+          "boundary": "古代道德术语不能直接算法化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WY-016",
+          "source_id": "WY",
+          "locator": "WY-S003-P2713",
+          "claim": "无往非工夫",
+          "summary": "致良知是持续“必有事”的工夫，日常皆可实践",
+          "use": "把练习嵌入生活而非另设孤岛",
+          "boundary": "防止把生活变成全天自我监控",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 2,
+      "systemId": "william_james",
+      "displayName": "威廉·詹姆斯 · 观念如何成为动作",
+      "thinker": "William James",
+      "category": "注意、意志与习惯",
+      "evolutionStage": "第二层 · 心理落地：观念、认知与非强迫行动",
+      "primaryLensId": "WJ_ATTENTION_HABIT",
+      "lensIds": [
+        "WJ_ATTENTION_HABIT"
+      ],
+      "coreValues": [
+        "注意",
+        "实践",
+        "意志努力",
+        "习惯",
+        "可塑性"
+      ],
+      "coreIdeas": [
+        "行动观念若在关键时刻清楚地占据注意，常会直接释放相应动作；犹豫来自竞争观念和抑制。",
+        "意志努力的重要部分不是凭空制造力量，而是让困难但重要的动作表象继续留在注意中心。",
+        "先完成第一次真实动作，再通过重复和稳定线索把费力选择沉淀为习惯。",
+        "习惯保存行动成果并释放注意，但必须服务于经过审查的方向，而不是刚性连续或自我惩罚。",
+        "习惯建立依赖可塑性、重复和有利条件；它保存过去选择的成果并释放注意，但不是固定天数形成，也不是越自动越好。",
+        "决心若没有抓住第一个真实机会产生动作效果，就难以塑造新习惯；所以每次洞见都要有一个可立即发生的身体或操作入口。",
+        "意志努力的核心常是把困难但重要的行动观念保持在注意中心，使其不被竞争观念、诱惑和抑制取代。",
+        "兴趣影响观念的促发与抑制力量，因此行动设计既要说明长期价值，也要让下一步的意义、反馈和可感效果在当下可见。",
+        "意志教育同时包括发起、制动以及使手段适合目的；能停止错误动作和能开始正确动作同样属于执行力。"
+      ],
+      "knowledgeView": "观念和动作表象是心理中的可能行动；它只有获得清晰度、注意优势并接通现实条件，才会成为有效的行动知识。",
+      "actionView": "行从第一个身体或操作动作开始，通过注意保持、动作反馈和重复逐步形成更自动的习惯倾向。",
+      "splitDiagnosis": "知道目标却没有清楚动作表象，关键时刻注意被竞争观念占据，入口不可见，或新选择尚未形成稳定习惯。",
+      "transformationPath": "把目标改写为可见动作 → 形成清楚动作表象 → 在关键时刻保持注意 → 立即完成首个微动作 → 用线索和重复形成习惯。",
+      "actionFeedback": "实际动作产生感觉、结果和熟练度信息，使原本抽象的观念获得现实内容，并告诉人下一次注意和动作应怎样调整。",
+      "yangmingConnection": "它把王阳明“意念发动”和“事上磨”补成可观察的心理—动作机制，但本身不提供良知和伦理方向。",
+      "inheritedLimit": "王阳明说明真知应当包含行，却没有细分关键时刻观念、注意、抑制、动作释放和习惯形成的心理过程。",
+      "qualitativeLeap": "从“真心知道就会做”推进到“必须让正确动作表象获得注意优势并进入身体行动”。",
+      "synthesisOutcome": "知行合一第一次获得微观启动机制：价值方向不再停在道理，而被编译成当下可见的动作入口。",
+      "workSynthesis": "综合《心理学原理》中注意、意志、观念运动、感觉—运动反馈与习惯章节；历史神经表述只作机制启发，不当作当代定论。",
+      "sevenLoopRoles": [
+        "启动",
+        "稳定",
+        "内化"
+      ],
+      "distinctiveFocus": "最关心关键时刻究竟是哪一个动作表象占据注意，以及首个动作怎样被重复成习惯。",
+      "decisionCue": "你认可目标，也知道大致怎么做，却总在临场分心、摇摆、忘记开始或停在准备中。",
+      "buildsOnSystemIds": [
+        "yangming"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "dewey",
+        "gollwitzer",
+        "bandura",
+        "harvard_positive_psychology"
+      ],
+      "tensions": [
+        "注意和习惯是方向中性的，高效习惯不等于正当行动。",
+        "历史性刚性习惯建议必须由恢复、可塑性和中断后重启原则修正。"
+      ],
+      "sourceIds": [
+        "WJ"
+      ],
+      "commonGroundWithYangming": [
+        "都反对把认识停在口头，重视意念进入真实动作。",
+        "都把重复实践看成能力和品格稳定的条件。",
+        "都强调关键当下的意念与注意，而非只讨论抽象目标。"
+      ],
+      "differencesFromYangming": [
+        "詹姆斯主要是描述性心理学，不提供良知、正当性和责任的最终标准。",
+        "它把知行缺口细分为注意、竞争观念、抑制和习惯机制，而不是主要解释为真知未切。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 9129 条可回定位文本记录；本体系保留 10 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-WJ-001",
+          "source_id": "WJ",
+          "locator": "WJ-S124-P0002",
+          "claim": "可塑性使习惯可能",
+          "summary": "有机材料在不被破坏的条件下能保留结构改变",
+          "use": "重复行动改变未来行动概率",
+          "boundary": "不是简单“21天定型”",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-002",
+          "source_id": "WJ",
+          "locator": "WJ-S140-P0004",
+          "claim": "自动化释放心智",
+          "summary": "教育要使有用行动尽早成为自动与习惯，以节省高层心智",
+          "use": "把高频基础动作程序化",
+          "boundary": "不把全部生活机械化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-003",
+          "source_id": "WJ",
+          "locator": "WJ-S141-P0003",
+          "claim": "强而明确地启动",
+          "summary": "建立新习惯需有决定性的发起与有利条件",
+          "use": "用环境承诺强化第一次行动",
+          "boundary": "外部承诺须自愿",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-004",
+          "source_id": "WJ",
+          "locator": "WJ-S141-P0004",
+          "claim": "连续训练",
+          "summary": "原著主张新习惯扎根前避免例外",
+          "use": "说明早期重复的重要性",
+          "boundary": "原建议过刚；产品应允许复发后重启",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-005",
+          "source_id": "WJ",
+          "locator": "WJ-S142-P0005",
+          "claim": "决意要抓住首个机会行动",
+          "summary": "情绪和决心只有在产生动作效果时才塑造习惯",
+          "use": "每次洞见绑定一个即时微动作",
+          "boundary": "紧急行动仍需安全检查",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-006",
+          "source_id": "WJ",
+          "locator": "WJ-S1143-P0005",
+          "claim": "动作有时由纯观念引发",
+          "summary": "有时动作表象已足够，有时还需明确同意或命令",
+          "use": "设计清晰动作表象与启动词",
+          "boundary": "不能保证观念必然成功",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-007",
+          "source_id": "WJ",
+          "locator": "WJ-S1144-P0002",
+          "claim": "观念运动是常态机制",
+          "summary": "人常“想到动作，动作便发生”，不必先觉察复杂中介",
+          "use": "减少启动前的额外步骤",
+          "boundary": "疾病、疲劳与抑制会改变机制",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-008",
+          "source_id": "WJ",
+          "locator": "WJ-S1177-P0002",
+          "claim": "兴趣决定促发与抑制",
+          "summary": "对象的兴趣性影响其冲动和抑制力量",
+          "use": "提升行动的即时意义与可见反馈",
+          "boundary": "兴趣不等于价值",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-009",
+          "source_id": "WJ",
+          "locator": "WJ-S1181-P0003",
+          "claim": "意志是注意的努力",
+          "summary": "强意志者能在竞争意象中保持困难观念",
+          "use": "单任务、注意回置、承诺提醒",
+          "boundary": "不把注意困难归咎人格",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-WJ-010",
+          "source_id": "WJ",
+          "locator": "WJ-S1195-P0005",
+          "claim": "意志教育含手段—目的适配",
+          "summary": "广义意志教育包括抑制、发起和使手段适应目的",
+          "use": "执行既要启动也要制动",
+          "boundary": "历史心理学需现代证据更新",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 3,
+      "systemId": "beck_cognitive_therapy",
+      "displayName": "贝克 · 认知检验与行为实验",
+      "thinker": "Aaron T. Beck",
+      "category": "事实、解释与预测",
+      "evolutionStage": "第二层 · 心理落地：观念、认知与非强迫行动",
+      "primaryLensId": "AB_COGNITIVE_TEST",
+      "lensIds": [
+        "AB_COGNITIVE_TEST"
+      ],
+      "coreValues": [
+        "求真",
+        "合作检验",
+        "可修正",
+        "现实证据",
+        "行动实验"
+      ],
+      "coreIdeas": [
+        "自动思维是迅速出现的解释和预测，不应因为感觉真实就被当成事实。",
+        "把事实、解释、预测和人格结论分开，寻找证据、反证及可行的替代解释。",
+        "重要预测需要通过低风险、分级、可逆的行为实验接受现实检验。",
+        "一次失败只能更新一个具体假设，不能直接证明“我这个人不行”。",
+        "人可以作为“实践科学家”观察情境、提出假设并检验；系统只能协作提问，不能把自己的解释宣布成用户事实。",
+        "自动思维往往在情绪之后才被注意到；训练重点是捕捉具体场景中的快速解释，而不是要求用户填写冗长人格问卷。",
+        "事件对人的意义影响情绪与行动，但重评不能用来否认真实伤害、资源匮乏或结构风险。",
+        "去中心化使“我正在想到”与“事情就是如此”分开；随后仍须用证据和行动检验内容，而不是一律把想法判错。",
+        "认知预演、活动安排、分级任务和行为实验让行动产生新资料；小成功的价值在于更新“我不能”的结论，不只是提高完成率。"
+      ],
+      "knowledgeView": "当前理解是一组可观察、可检验、可修订的假设；确信感不等于证据，解释必须接受事实和结果约束。",
+      "actionView": "行动既是目标行为，也是产生新证据的实验；它用实际结果校正预测、信念和下一步难度。",
+      "splitDiagnosis": "灾难化、负面预测、读心、过度概括或失败人格化，使人把未经检验的解释当成已经发生的事实。",
+      "transformationPath": "捕捉自动思维 → 分开事实/解释/预测 → 检查证据与替代解释 → 设计最小行为实验 → 比较预测和实际结果 → 更新判断。",
+      "actionFeedback": "预测误差为认识提供直接回写：结果可能支持、部分支持或反驳原判断，并指出需要改变的是信念、技能还是条件。",
+      "yangmingConnection": "它把“格物”和“事上磨”转化为现代可检验协议，但贝克的经验检验不能替代王阳明关于行动方向和责任正当性的判断。",
+      "inheritedLimit": "即使动作表象足够清楚，若“我一定失败”“别人必定否定我”等预测被当成事实，注意仍会服务于回避。",
+      "qualitativeLeap": "从保持一个行动观念，升级为先审查这个观念所依赖的事实模型，再让行动主动制造证据。",
+      "synthesisOutcome": "知行循环加入“假设—实验—预测误差—更新”，行动不仅实行所知，也系统地修正所知。",
+      "workSynthesis": "以《认知治疗与情绪障碍》中的自动思维、认知检验、替代解释、分级任务和行为实验构成证据更新链。",
+      "sevenLoopRoles": [
+        "澄清",
+        "求证"
+      ],
+      "distinctiveFocus": "最关心阻断行动的具体预测是否有证据，以及能否用一个小实验得到新事实。",
+      "decisionCue": "“一定失败、别人会否定我、一次失败说明我没有能力”等未经验证的判断让你不敢开始。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "william_james"
+      ],
+      "relatedSystemIds": [
+        "ellis_rebt",
+        "act",
+        "dewey",
+        "behavioral_activation",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "真实危险、歧视、资源不足和结构伤害不能被说成“只是你的想法”。",
+        "对不可即时判定或反复纠缠的念头，持续辩论可能加重融合，需要ACT补足。"
+      ],
+      "sourceIds": [
+        "AB"
+      ],
+      "commonGroundWithYangming": [
+        "都要求反求诸己，观察自己在具体事情中的真实判断。",
+        "都让行动检验认识，而不是把道理当最终证明。",
+        "都承认认识可因自欺、偏差或遮蔽而与行动脱节。"
+      ],
+      "differencesFromYangming": [
+        "贝克把解释视为可证伪假设，而不是从良知推出规范真理。",
+        "它源于临床认知治疗，适用边界、合作方式和证据要求不同于儒家工夫论。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 1979 条可回定位文本记录；本体系保留 10 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-AB-001",
+          "source_id": "AB",
+          "locator": "AB-S006-P0006",
+          "claim": "有意识概念可被观察和修正",
+          "summary": "情绪问题与可意识到的概念、歪曲和学习有关，人可重新学习",
+          "use": "把阻断行动的解释显性化",
+          "boundary": "不是所有过程都可直接意识",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-002",
+          "source_id": "AB",
+          "locator": "AB-S007-P0022",
+          "claim": "人可作为“实践科学家”",
+          "summary": "个体形成观察、假设并检验；治疗强调共同探索",
+          "use": "产品用提问而非权威断言",
+          "boundary": "用户不是实验对象而是共同决策者",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-003",
+          "source_id": "AB",
+          "locator": "AB-S008-P0034",
+          "claim": "自动思维常先于情绪被觉察",
+          "summary": "训练能让人捕捉情境中的快速想法",
+          "use": "在情绪—行动之间插入观察",
+          "boundary": "不要求实时记录到妨碍生活",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-004",
+          "source_id": "AB",
+          "locator": "AB-S009-P0035",
+          "claim": "事件意义影响情绪",
+          "summary": "同一事件因解释不同而产生不同反应",
+          "use": "事实与意义分离",
+          "boundary": "不能用重评否认真实伤害",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-005",
+          "source_id": "AB",
+          "locator": "AB-S016-P0004",
+          "claim": "以实验方法检验解释",
+          "summary": "认知治疗把解释当假设，以观察和现实检验",
+          "use": "构建低风险行为实验",
+          "boundary": "临床实验需专业边界",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-006",
+          "source_id": "AB",
+          "locator": "AB-S016-P0029",
+          "claim": "去中心化",
+          "summary": "想法可被看作心理现象或假设，而非事实",
+          "use": "降低“我想=事实”的融合",
+          "boundary": "仍需评估想法可能为真",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-007",
+          "source_id": "AB",
+          "locator": "AB-S017-P0035",
+          "claim": "认知预演暴露障碍",
+          "summary": "在行动前预演步骤可发现具体阻力",
+          "use": "生成障碍清单与备选动作",
+          "boundary": "预演不能替代行动",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-008",
+          "source_id": "AB",
+          "locator": "AB-S017-P0039",
+          "claim": "活动安排反制惰性",
+          "summary": "在日程中安排活动可打破不活动并改变自我概念",
+          "use": "用行为激活恢复行动",
+          "boundary": "严重症状需专业评估",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-009",
+          "source_id": "AB",
+          "locator": "AB-S017-P0130",
+          "claim": "讨论后要有行动检验",
+          "summary": "对能力的讨论须接实际任务，任务检验“不能”的信念",
+          "use": "每次洞见绑定实验",
+          "boundary": "任务难度要安全、可承受",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AB-010",
+          "source_id": "AB",
+          "locator": "AB-S018-P0078",
+          "claim": "分级任务通过概念改变起效",
+          "summary": "小成功不仅完成任务，也改变“我无能”的结论",
+          "use": "追踪胜任证据",
+          "boundary": "不用完成率定义人的价值",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 4,
+      "systemId": "ellis_rebt",
+      "displayName": "埃利斯 · 从“必须”退回偏好",
+      "thinker": "Albert Ellis",
+      "category": "绝对要求与挫折耐受",
+      "evolutionStage": "第二层 · 心理落地：观念、认知与非强迫行动",
+      "primaryLensId": "AE_PREFERENCE_TOLERANCE",
+      "lensIds": [
+        "AE_PREFERENCE_TOLERANCE"
+      ],
+      "coreValues": [
+        "理性弹性",
+        "偏好",
+        "挫折耐受",
+        "无条件自我接纳",
+        "实践"
+      ],
+      "coreIdeas": [
+        "事件并不直接决定反应，人对事件的信念和评价会放大或缓冲其影响。",
+        "“必须、应该、绝不能失败、我受不了”会把困难升级为灾难和人格判决。",
+        "把绝对要求退回强烈偏好，承认不理想、困难和失败可以令人痛苦但仍可承受。",
+        "辩驳若不进入现实触发情境中的练习，仍只是新的漂亮说法。",
+        "思考、情绪和动作是互相作用的复合过程，改变可从任一通道进入，不能把所有反应都简化为一句自我对话。",
+        "把“我强烈希望”升级为“我必须、别人必须、世界绝不能”会放大挫折、羞耻与敌意；辩驳的目标是退回坚定偏好和现实责任。",
+        "表现失败不能推出整个人无价值；无条件自我接纳保护行动者在失误后继续修正，而不是以人格审判维持动力。",
+        "洞见过去如何形成并不足以改变当下，关键是持续审查仍在重复的前提，并在触发情境中练习新的认知、情绪和行为反应。",
+        "高挫折耐受不是强忍伤害，而是承认困难、拒绝灾难化，并在安全和知情同意下逐步接触可承受的不适。"
+      ],
+      "knowledgeView": "理性认识不仅要符合事实，还要检查逻辑一致性、现实后果和语言中的绝对化要求。",
+      "actionView": "行是在真实触发中带着不完美练习偏好、耐受和无条件自我接纳，而不是等说服自己后才行动。",
+      "splitDiagnosis": "绝对要求、低挫折耐受、灾难化和表现—人格混同，使人宁愿回避也不愿承担不完美行动。",
+      "transformationPath": "识别A情境与C反应 → 找到B中的“必须/受不了” → 逻辑、证据和效用辩驳 → 改写为偏好 → 在低风险现场练习。",
+      "actionFeedback": "现实练习会显示不完美结果是否真的不可承受，并让挫折耐受从一句话变成可调用的经验。",
+      "yangmingConnection": "它帮助区分诚意工夫与羞耻式自逼，防止把“克治”误用成对人格的绝对否定；但不决定何者是良知方向。",
+      "inheritedLimit": "贝克能修正预测内容，但人仍可能用“我必须成功、不能难受”把任何行动结果变成自我价值审判。",
+      "qualitativeLeap": "从“这个预测真实吗”推进到“即使结果不理想，我是否仍能承受并继续选择”。",
+      "synthesisOutcome": "知行合一获得反完美主义保护：真知不再等同于无误行动，行动者可以在失误中保留尊严和修正能力。",
+      "workSynthesis": "以《心理治疗中的理性与情绪》中的ABC、绝对化信念、积极辩驳、挫折耐受和无条件自我接纳构成实践路径。",
+      "sevenLoopRoles": [
+        "澄清",
+        "容纳",
+        "启动"
+      ],
+      "distinctiveFocus": "最关心“必须、应该、受不了”和整个人格评价怎样把普通困难升级为无法行动。",
+      "decisionCue": "你并非不知道怎么做，而是要求自己必须完美、不能失败、不能被否定或不能感到难受。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "beck_cognitive_therapy"
+      ],
+      "relatedSystemIds": [
+        "beck_cognitive_therapy",
+        "act",
+        "laozi",
+        "behavioral_activation"
+      ],
+      "tensions": [
+        "真实侵害、权利受损和不公不能只靠改变信念来适应。",
+        "原著的强硬辩驳语气不能复制成产品中的羞耻、责备或强迫。"
+      ],
+      "sourceIds": [
+        "AE"
+      ],
+      "commonGroundWithYangming": [
+        "都认为只懂道理不足，必须在触发情境中反复练习。",
+        "都关注意念和评价如何牵动情绪与行为。",
+        "都要求行动者对当下可选择的反应承担责任。"
+      ],
+      "differencesFromYangming": [
+        "埃利斯更直接处理绝对要求、灾难化和人格自评，不以良知为核心概念。",
+        "其历史性强硬、辩论式语言需要由同情、自主和安全原则修正。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 2102 条可回定位文本记录；本体系保留 9 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-AE-001",
+          "source_id": "AE",
+          "locator": "AE-S037-P0005",
+          "claim": "完美主义前提可被检验",
+          "summary": "以“若不完美便无价值”为例，把绝对前提与事实对照",
+          "use": "识别表现—人格混同",
+          "boundary": "OCR章节元数据失真",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-002",
+          "source_id": "AE",
+          "locator": "AE-S054-P0001",
+          "claim": "评价连接情绪与行动倾向",
+          "summary": "对事物的感知和评价唤起趋近或回避倾向",
+          "use": "在情绪前后寻找评价",
+          "boundary": "生理反应不都由语言评价引起",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-003",
+          "source_id": "AE",
+          "locator": "AE-S058-P0002",
+          "claim": "思考—情绪—动作是复合过程",
+          "summary": "原著反对把情绪当孤立实体",
+          "use": "多通道干预而非只改想法",
+          "boundary": "理论为历史版本",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-004",
+          "source_id": "AE",
+          "locator": "AE-S060-P0003",
+          "claim": "持续情绪常被重复自语维持",
+          "summary": "情绪爆发可能由事件触发，延续常伴反复观念",
+          "use": "捕捉循环自语",
+          "boundary": "不责怪用户有自动想法",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-005",
+          "source_id": "AE",
+          "locator": "AE-S199-P0001",
+          "claim": "洞见不足，需持续实践",
+          "summary": "仅知道成因不足以改变，须持续反驳并练习新行为",
+          "use": "洞见绑定重复练习",
+          "boundary": "原著措辞强硬，产品须柔化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-006",
+          "source_id": "AE",
+          "locator": "AE-S202-P0001",
+          "claim": "过去不机械决定现在",
+          "summary": "当前持续接受的非理性前提可被重新审查",
+          "use": "强化当下可选择性",
+          "boundary": "不否认创伤与条件作用",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-007",
+          "source_id": "AE",
+          "locator": "AE-S394-P0001",
+          "claim": "恐惧需在行动中学习",
+          "summary": "仅理解骑车恐惧不足，需实际骑行练习",
+          "use": "分级暴露与能力实践",
+          "boundary": "暴露任务须安全、知情同意",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-008",
+          "source_id": "AE",
+          "locator": "AE-S421-P0002",
+          "claim": "在触发情境中练习",
+          "summary": "事后理解若不带入下一次现场，改变有限",
+          "use": "现场提示与事后复盘联动",
+          "boundary": "高冲突场景需退出和保护选项",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-AE-009",
+          "source_id": "AE",
+          "locator": "AE-S429-P0003",
+          "claim": "识别自我生成的绝对要求",
+          "summary": "敌意与“他人必须如何”的要求相关，可在出现时审查",
+          "use": "must/should语言探测",
+          "boundary": "不把他人侵害合理化",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 5,
+      "systemId": "laozi",
+      "displayName": "老子 · 无为、减法与柔韧行动",
+      "thinker": "老子",
+      "category": "非强迫行动与恢复",
+      "evolutionStage": "第二层 · 心理落地：观念、认知与非强迫行动",
+      "primaryLensId": "LZ_REDUCE_FORCE",
+      "lensIds": [
+        "LZ_REDUCE_FORCE"
+      ],
+      "coreValues": [
+        "自然",
+        "无为",
+        "节制",
+        "柔弱",
+        "知止",
+        "微小"
+      ],
+      "coreIdeas": [
+        "无为不是不行动，而是不以过度控制、虚妄加码和僵硬执持破坏行动条件。",
+        "先删除无效步骤、过多目标和人为摩擦，在问题尚微时采取最小必要介入。",
+        "柔弱意味着保持方向时允许方法、节奏和姿态随条件调整。",
+        "知道何时停止、留白和恢复，是行动智慧的一部分，不是失败。",
+        "“为道日损”要求删去多余控制、步骤、比较和自我表演，让真正需要的行动更容易发生，而不是反知识或反学习。",
+        "难事作于易、大事作于细，把行动前移到尚未混乱、尚可微调的阶段；小步必须持续指向真实后果，而不是以小代真。",
+        "“为者败之，执者失之”警告过度操控和僵持会破坏过程；慎终如始意味着持续调整，不是遇阻即放弃。",
+        "“知不知”把知道自己不知道纳入高阶认识，使求助、试验、留白和暂缓成为知行合一的一部分。",
+        "柔弱、水与生命的意象支持低摩擦、可恢复和长期作用；柔韧仍需边界，不能被用来合理化被动承受或不抵抗伤害。"
+      ],
+      "knowledgeView": "知包含对时机、限度、关系和整体过程的体察；不是掌握越多规则、施加越多控制就越接近现实。",
+      "actionView": "行是与现实条件协调的必要介入：少而准确、可退可调、在尚微处开始，不以强制制造表面服从。",
+      "splitDiagnosis": "越想控制越僵硬，把恢复也变成任务，不断增加计划和意志要求，最终让行动入口被自身设计压垮。",
+      "transformationPath": "辨认妄为和过控 → 删除一个非必要步骤 → 缩小到尚微可做的一步 → 保留停止和调整条件 → 观察系统是否重新流动。",
+      "actionFeedback": "反馈不只看是否完成，还看摩擦是否下降、身体和关系是否可持续、过程是否因少做而更准确。",
+      "yangmingConnection": "王阳明提供“为何做、向何处做”的规范主线；老子补充“不要把致知工夫做成过度强迫”，形成方向坚定、方法柔韧。",
+      "inheritedLimit": "认知检验和挫折耐受仍可能被误用成“更正确、更能忍、更用力”，行动系统反而因过控而失去弹性。",
+      "qualitativeLeap": "从不断增加认知和意志，转向识别哪些多余控制必须撤掉，行动才会重新发生。",
+      "synthesisOutcome": "知行合一不再等于持续加压，而成为“守住方向、减去妄为、在微处行动、随反馈调整”的柔性工夫。",
+      "workSynthesis": "综合《道德经/德道经》中的无为、少私寡欲、图难于易、为大于细、柔弱胜刚强和知止；翻译差异保留版本说明。",
+      "sevenLoopRoles": [
+        "容纳",
+        "启动",
+        "稳定",
+        "恢复"
+      ],
+      "distinctiveFocus": "最关心是不是行动方式本身过重、过多、过急，正在制造原本不存在的阻力。",
+      "decisionCue": "你越逼自己越僵硬，计划越来越复杂，连休息和恢复都被变成了必须完成的任务。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "william_james",
+        "ellis_rebt"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "act",
+        "maslow",
+        "dewey",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "无为不得被解释为逃避责任、放弃必要治疗、求助、边界或明确紧急行动。",
+        "与强调纪律和重复的路径存在真实张力，需要区分方向坚持与方法僵化。"
+      ],
+      "sourceIds": [
+        "LZ"
+      ],
+      "commonGroundWithYangming": [
+        "都反对悬空言说，要求在日用和细微处落实。",
+        "都重视自知、自胜以及对过度欲望和私意的节制。",
+        "都认为成熟行动不是盲目增加力量，而是合宜地用力。"
+      ],
+      "differencesFromYangming": [
+        "老子不建立与良知相同的积极道德判断体系，更强调减损、反强为和不执。",
+        "它对制度行动、权利保护和必须明确介入的伤害情境提供的操作标准较少。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 2028 条可回定位文本记录；本体系保留 9 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-LZ-001",
+          "source_id": "LZ",
+          "locator": "LZ-C023-P0002",
+          "claim": "行道用减",
+          "summary": "求学日益与行道日损对照，直至无强为而事可成",
+          "use": "删除无效控制与步骤",
+          "boundary": "不是反知识或反学习",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-002",
+          "source_id": "LZ",
+          "locator": "LZ-C038-P0002",
+          "claim": "大事从细处开始",
+          "summary": "难事在其易时处理，大事在其细时处理",
+          "use": "最小行动与早期干预",
+          "boundary": "小步仍须指向真实结果",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-003",
+          "source_id": "LZ",
+          "locator": "LZ-C039-P0002",
+          "claim": "治于未乱",
+          "summary": "事物安定、未兆、尚脆时更易处理",
+          "use": "预防性设计、环境准备",
+          "boundary": "不可能预测所有变化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-004",
+          "source_id": "LZ",
+          "locator": "LZ-C039-P0003",
+          "claim": "为者败之，执者失之",
+          "summary": "过度操控和僵持可能破坏结果；慎终如始",
+          "use": "允许更新计划与退出无效路径",
+          "boundary": "不等于遇阻就放弃",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-005",
+          "source_id": "LZ",
+          "locator": "LZ-C047-P0002",
+          "claim": "易知难行",
+          "summary": "话容易理解、容易实行，却少有人真正做到",
+          "use": "把“懂”转成现场练习",
+          "boundary": "现代产品不能只靠箴言",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-006",
+          "source_id": "LZ",
+          "locator": "LZ-C048-P0002",
+          "claim": "知不知",
+          "summary": "能知道自己的未知是高阶认识",
+          "use": "加入不确定性和求助机制",
+          "boundary": "不把谦逊变成犹豫",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-007",
+          "source_id": "LZ",
+          "locator": "LZ-C053-P0002",
+          "claim": "柔韧属于生",
+          "summary": "柔软可变与生命相联，僵硬与衰败相联",
+          "use": "执行要可调整、可恢复",
+          "boundary": "柔韧不等于无边界",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-008",
+          "source_id": "LZ",
+          "locator": "LZ-C055-P0002",
+          "claim": "水的弱胜强",
+          "summary": "人人知道柔弱胜刚强，却少有人实践",
+          "use": "用低摩擦、持续作用替代蛮力",
+          "boundary": "需防止浪漫化被动",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-LZ-009",
+          "source_id": "LZ",
+          "locator": "LZ-C090-P0002",
+          "claim": "自知、自胜、知足",
+          "summary": "了解自己与克服自身被视为更深的智慧和力量",
+          "use": "内在基准优先于外部排名",
+          "boundary": "自胜不等于敌视自己",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 6,
+      "systemId": "act",
+      "displayName": "ACT · 带着不适走向价值",
+      "thinker": "Hayes、Strosahl、Wilson",
+      "category": "心理灵活性与承诺行动",
+      "evolutionStage": "第三层 · 主体升华：接纳、自主、价值与意义",
+      "primaryLensId": "ACT_FLEXIBILITY",
+      "lensIds": [
+        "ACT_FLEXIBILITY"
+      ],
+      "coreValues": [
+        "心理灵活性",
+        "接纳",
+        "解离",
+        "当下",
+        "价值",
+        "承诺行动"
+      ],
+      "coreIdeas": [
+        "不必先消除焦虑、羞耻、厌烦或怀疑，先改变自己与这些体验的关系。",
+        "认知解离让念头从命令退回为正在发生的心理事件，接纳允许不可避免体验存在。",
+        "价值是持续可选择的行动方向，不是一次完成的目标、社会标准或情绪状态。",
+        "承诺行动允许偏离、复发和重新选择，心理灵活性比完美控制更重要。",
+        "认知融合使语言评价像现实命令一样支配行为；解离改变人与思想的关系，但不自动证明思想内容为假。",
+        "经验回避的问题不在短期舒缓本身，而在生活长期围绕消除内在体验组织，导致价值行动不断延期和范围收缩。",
+        "接纳是为可选择行动腾出空间，不是赞同伤害、放弃解决问题或要求在危险中停留。",
+        "价值是持续活出的行动方向，目标是可完成的里程碑；感觉会波动，价值品质今天仍可由一个动作表达。",
+        "承诺行动是可返回的过程而非结果保证；偏离后应检查融合、回避、步幅、资源和价值认领，再缩小动作重新进入。",
+        "功能上的“有效”不能替代伦理正当性，产品必须另加不伤害、同意、公平、法律和长期后果守门。"
+      ],
+      "knowledgeView": "除了判断念头内容真假，还要知道它在此刻怎样发挥功能；一种想法即使无法立即解决，也不必继续支配行动。",
+      "actionView": "行是在当下与价值保持联系，愿意携带允许存在的不适，完成一个可调整的承诺动作。",
+      "splitDiagnosis": "认知融合和经验回避把“先感觉好、先想明白、先消除恐惧”设为行动许可证，导致生活范围不断缩小。",
+      "transformationPath": "觉察当下 → 命名头脑故事并解离 → 区分可避免伤害与可允许体验 → 澄清价值 → 选择小承诺行动 → 偏离后重承诺。",
+      "actionFeedback": "结果不仅回答任务是否完成，还回答这种行动是否让生活更接近价值、是否扩大可选择行为范围。",
+      "yangmingConnection": "它把“允许感受存在”与“是否按冲动行动”分开，补足王阳明工夫中对非自愿内在体验的现代处理；价值根据与良知本体仍不同。",
+      "inheritedLimit": "即使减少用力、修正信念，某些不适仍会持续；若仍把舒适当作前提，行动会再次被内在体验控制。",
+      "qualitativeLeap": "从“先改变想法和感觉再行动”推进到“可以带着它们行动，并由价值而非舒适决定方向”。",
+      "synthesisOutcome": "知行合一获得心理灵活性：知不必等内心完全一致，行也不要求压抑体验，而是在不适中保持可选择。",
+      "workSynthesis": "整合ACT的接触当下、认知解离、接纳、自我即情境、价值和承诺行动六类过程，并保留功能语境边界。",
+      "sevenLoopRoles": [
+        "方向",
+        "容纳",
+        "启动",
+        "内化"
+      ],
+      "distinctiveFocus": "最关心人是否为了控制内在体验而远离生活，以及能否带着体验向价值移动。",
+      "decisionCue": "你总在等焦虑、羞耻、厌烦、怀疑或低落消失以后才允许自己开始。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "beck_cognitive_therapy",
+        "ellis_rebt",
+        "laozi"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "beck_cognitive_therapy",
+        "ellis_rebt",
+        "laozi",
+        "self_determination",
+        "behavioral_activation"
+      ],
+      "tensions": [
+        "接纳内部体验不等于接受外部侵害、结构不公或可避免伤害。",
+        "与贝克、埃利斯在“改变思想内容还是改变与思想的关系”上存在方法张力。"
+      ],
+      "sourceIds": [
+        "ACT"
+      ],
+      "commonGroundWithYangming": [
+        "都把价值方向和现实行动连在一起，不接受只谈不做。",
+        "都强调在真实事件中磨炼，而不是等待内部状态完美。",
+        "都把偏离后的重新进入视为持续工夫。"
+      ],
+      "differencesFromYangming": [
+        "ACT按既定目标下的长期可行性评估行为，不宣布类似良知的道德真理。",
+        "它更强调接纳和改变与思想的关系，而王阳明更强调意念的是非与诚伪。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 4553 条可回定位文本记录；本体系保留 10 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-ACT-001",
+          "source_id": "ACT",
+          "locator": "ACT-S003-P0177",
+          "claim": "认知融合",
+          "summary": "人可能把语言关系及评价当作事物本身，使规则支配行为",
+          "use": "标记“我正在想到……”",
+          "boundary": "仍需检验想法内容",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-002",
+          "source_id": "ACT",
+          "locator": "ACT-S003-P0283",
+          "claim": "经验回避",
+          "summary": "试图改变内在经验的形式、频率或情境，即使长期有害",
+          "use": "识别以消除感受为前提的拖延",
+          "boundary": "某些危险需真实回避",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-003",
+          "source_id": "ACT",
+          "locator": "ACT-S003-P0316",
+          "claim": "回避规则可制造反效果",
+          "summary": "内在控制规则可能与原想获得的生活结果相冲突",
+          "use": "以长期可行性评估策略",
+          "boundary": "不把短期舒缓一概否定",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-004",
+          "source_id": "ACT",
+          "locator": "ACT-S005-P0461",
+          "claim": "价值提供稳定方向",
+          "summary": "感受和想法常互相矛盾，选择的价值可作较稳定罗盘",
+          "use": "在情绪波动中保留方向",
+          "boundary": "价值须伦理审查",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-005",
+          "source_id": "ACT",
+          "locator": "ACT-S005-P0511",
+          "claim": "重视是行动而非感觉",
+          "summary": "爱的感觉会波动，关爱行为仍可被选择",
+          "use": "把价值翻译为行动品质",
+          "boundary": "不要求在虐待关系中继续付出",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-006",
+          "source_id": "ACT",
+          "locator": "ACT-S006-P0337",
+          "claim": "行动把“想要”变成“知道什么有效”",
+          "summary": "确定方向是语言活动，迈步和结果才揭示实际可行性",
+          "use": "行动作为认识和反馈",
+          "boundary": "结果不只看短期效率",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-007",
+          "source_id": "ACT",
+          "locator": "ACT-S006-P0447",
+          "claim": "怕失败会回避承诺",
+          "summary": "把承诺当结果保证会放大失败恐惧；应强调持续过程",
+          "use": "设计可重返的承诺",
+          "boundary": "责任不等于自责",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-008",
+          "source_id": "ACT",
+          "locator": "ACT-S006-P0483",
+          "claim": "失守有多种机制",
+          "summary": "价值非自我认可、认知融合或步幅过大都会阻断持续行动",
+          "use": "失败后先诊断，不立即加压",
+          "boundary": "还应检查资源与健康",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-009",
+          "source_id": "ACT",
+          "locator": "ACT-S007-P0120",
+          "claim": "可缩小动作并重新承诺",
+          "summary": "偏离后可选择更小而同样真诚的行动，再次进入过程",
+          "use": "“价值不降级，步幅可降级”",
+          "boundary": "不用无限重试掩盖错误目标",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-ACT-010",
+          "source_id": "ACT",
+          "locator": "ACT-S007-P0288",
+          "claim": "对模型保持谨慎和谦逊",
+          "summary": "作者明确要求对接纳、解离、承诺等概念谨慎应用",
+          "use": "产品持续监测副作用和适配性",
+          "boundary": "1999/2008书中证据需更新",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 7,
+      "systemId": "self_determination",
+      "displayName": "自我决定理论 · 从外控到内化",
+      "thinker": "Ryan、Deci",
+      "category": "自主、胜任与关系",
+      "evolutionStage": "第三层 · 主体升华：接纳、自主、价值与意义",
+      "primaryLensId": "SDT_INTERNALIZATION",
+      "lensIds": [
+        "SDT_INTERNALIZATION"
+      ],
+      "coreValues": [
+        "自主",
+        "胜任",
+        "关系",
+        "内化",
+        "整合",
+        "支持性环境"
+      ],
+      "coreIdeas": [
+        "动机不只有多少，还有质量：外部控制、内摄压力、认同和整合会产生不同的持续方式。",
+        "自主不是任性，而是体验到行动由自己认领；胜任需要适配挑战和有效反馈。",
+        "关系需要让人感到被看见、被尊重且与重要他人相连，而不是被孤立地要求自律。",
+        "高质量持续来自自主、胜任和关系共同支持，奖励不能取代行动意义。",
+        "动机不仅有强弱，更有质量；外部奖惩、内疚和条件性自尊能推动短期行为，却可能损害维持、迁移和体验。",
+        "自主不是独立或选项数量，而是自愿、自我认可和内在一致；求助、依赖与互赖也可以是自主选择。",
+        "胜任需要适配挑战、清晰结构和信息性反馈；虚假表扬、普遍负评和人身比较都不能替代真实掌握。",
+        "关系需要同时包含被关心、归属和能够贡献，并必须防止支持关系变成控制、曝光和讨好压力。",
+        "内化从外在调节、内摄、认同走向整合；“没有人逼我”不代表自主，内在监督者仍可能以羞耻继续控制。",
+        "目标既要看为何追求，也要看追求什么；成长、关系和贡献与金钱、名望、形象具有不同经验后果，但不能简单道德化。"
+      ],
+      "knowledgeView": "知道目标“有好处”还不够，还要知道它是否被主体认领、与自我整合，以及当前环境是否支持三种基本心理需要。",
+      "actionView": "行是由自己认领、难度适配、获得真实反馈并处于支持关系中的持续实践，而非被监控后的短期服从。",
+      "splitDiagnosis": "目标主要由奖励、羞耻、内疚、威胁或他人期待驱动；提醒撤除后行动消失，或挑战持续破坏胜任与关系。",
+      "transformationPath": "识别动机调节位置 → 给出选择和真实理由 → 调整难度以形成胜任证据 → 建立关系支持 → 逐步撤除控制性支架。",
+      "actionFeedback": "复盘要观察自主感、胜任证据、关系质量和提醒依赖是否变化，而不只看打卡次数。",
+      "yangmingConnection": "它把“立志”和真实认领细化为动机内化过程，并提醒良好方向若依靠控制性方式推进，也可能制造新的知行分裂。",
+      "inheritedLimit": "一个人能够带着不适行动，并不说明目标真正属于自己；羞耻和外控同样可以制造高执行。",
+      "qualitativeLeap": "从“我能否做出来”提升到“是谁在决定、为什么做，以及这种动力能否成为我自己的”。",
+      "synthesisOutcome": "知行合一加入主体性检验：行动必须逐步从外部控制转为自主认同、能力掌握和关系支持。",
+      "workSynthesis": "综合自我决定理论的三种基本心理需要、动机内化连续体、自主支持、胜任反馈和关系情境。",
+      "sevenLoopRoles": [
+        "方向",
+        "稳定",
+        "内化"
+      ],
+      "distinctiveFocus": "最关心目标是不是用户自己的，以及持续行动是否由自主、胜任和关系共同支持。",
+      "decisionCue": "你主要因为别人要求、怕内疚或为了奖励而行动，一旦监督和提醒撤掉就停止。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "act"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "act",
+        "nietzsche",
+        "bandura",
+        "frankl",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "自主不能被误读为无需结构、责任和他人边界。",
+        "金币和奖励只能确认进展，若成为主要控制手段会削弱内化。"
+      ],
+      "sourceIds": [
+        "SDT"
+      ],
+      "commonGroundWithYangming": [
+        "都要求方向被主体真实认领，而非停留在外部教条。",
+        "都关心长期内化，使行动从勉强服从变成稳定自我治理。",
+        "都承认关系和环境会影响价值怎样进入实践。"
+      ],
+      "differencesFromYangming": [
+        "SDT以心理需要、动机质量和经验研究解释内化条件，不判断终极善恶。",
+        "自主认可并不自动保证目标正当，仍需伦理和他人后果审查。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 10734 条可回定位文本记录；本体系保留 12 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-SDT-001",
+          "source_id": "SDT",
+          "locator": "SDT-S009-P0039",
+          "claim": "自主不等于独立",
+          "summary": "自主是自愿、一致和自我认可，可与依赖或互赖并存",
+          "use": "不把求助视为失去自主",
+          "boundary": "选择仍受现实限制",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-002",
+          "source_id": "SDT",
+          "locator": "SDT-S009-P0040",
+          "claim": "胜任需要掌握感",
+          "summary": "胜任在过难挑战、普遍负反馈和人身比较中受挫",
+          "use": "动态难度与具体反馈",
+          "boundary": "不用虚假表扬替代能力",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-003",
+          "source_id": "SDT",
+          "locator": "SDT-S009-P0041",
+          "claim": "关系包含被关心与贡献",
+          "summary": "关系既是被照顾、归属，也包括对他人的重要贡献",
+          "use": "设计互助和贡献路径",
+          "boundary": "防止关系压力与曝光",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-004",
+          "source_id": "SDT",
+          "locator": "SDT-S009-P0047",
+          "claim": "三需要有不同环境支持",
+          "summary": "选择与自我调节、结构与信息反馈、关心投入分别支持三需要",
+          "use": "环境干预与个人干预并重",
+          "boundary": "支持方式需文化适配",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-005",
+          "source_id": "SDT",
+          "locator": "SDT-S009-P0057",
+          "claim": "内摄仍是控制",
+          "summary": "羞耻、内疚、条件性自尊可在无外部监控时继续逼迫行动",
+          "use": "识别“内在监督者”",
+          "boundary": "责任感不全是内摄",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-006",
+          "source_id": "SDT",
+          "locator": "SDT-S018-P0021",
+          "claim": "内化把规定转为自我调节",
+          "summary": "外部规定通过吸收与整合转成真正自我调节，需基本需要支持",
+          "use": "设计从理解理由到自我认领的过程",
+          "boundary": "内化不是操控技巧",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-007",
+          "source_id": "SDT",
+          "locator": "SDT-S018-P0037",
+          "claim": "外控短期强、维持和迁移差",
+          "summary": "奖惩可快速动员，但常质量较低且难迁移",
+          "use": "慎用积分、惩罚与连续签到",
+          "boundary": "某些安全规则仍需明确约束",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-008",
+          "source_id": "SDT",
+          "locator": "SDT-S018-P0172",
+          "claim": "内化支持长期维持",
+          "summary": "控制撤除后，真正接受行为价值者更可能继续",
+          "use": "衡量无提醒后的自主维持",
+          "boundary": "原著例证不等于所有领域因果",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-009",
+          "source_id": "SDT",
+          "locator": "SDT-S018-P0195",
+          "claim": "自我一致目标带来持续努力",
+          "summary": "自主且一致的目标与更持续努力、达成和需要满足相关",
+          "use": "目标立项前做一致性检查",
+          "boundary": "相关强度受情境影响",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-010",
+          "source_id": "SDT",
+          "locator": "SDT-S021-P0021",
+          "claim": "内在与外在目标内容不同",
+          "summary": "关系、成长、社区贡献与金钱、名望、形象位于不同目标轴",
+          "use": "既看动机理由，也看目标内容",
+          "boundary": "不把收入目标道德化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-011",
+          "source_id": "SDT",
+          "locator": "SDT-S029-P0117",
+          "claim": "意义充分的理由支持自主",
+          "summary": "清晰、个体相关的理由帮助人认可活动并知情参与",
+          "use": "每个干预附可理解理由",
+          "boundary": "理由不能包装操控",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-SDT-012",
+          "source_id": "SDT",
+          "locator": "SDT-S029-P0123",
+          "claim": "真实选择不是选项数量",
+          "summary": "选择是主观的自愿体验，需要觉察和响应式支持",
+          "use": "提供拒绝、修改与延期",
+          "boundary": "不把无限选项当自主",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 8,
+      "systemId": "nietzsche",
+      "displayName": "尼采 · 谱系、自我克服与价值创造",
+      "thinker": "Friedrich Nietzsche",
+      "category": "价值来源、生命肯定与风格",
+      "evolutionStage": "第三层 · 主体升华：接纳、自主、价值与意义",
+      "primaryLensId": "NZ_SELF_OVERCOMING",
+      "lensIds": [
+        "NZ_SELF_OVERCOMING",
+        "NGS_STYLE",
+        "NBG_WILL_COMPLEXITY",
+        "NGM_GENEALOGY"
+      ],
+      "coreValues": [
+        "生命肯定",
+        "自我克服",
+        "价值创造",
+        "身体诚实",
+        "风格",
+        "承诺能力"
+      ],
+      "coreIdeas": [
+        "价值谱系追问目标如何形成、服务何种力量，区分主动创造与怨恨、罪责和反应性证明。",
+        "“我想要”不是一个按钮，而是感觉、命令、服从、能力、冲动和长期纪律的复杂关系。",
+        "骆驼—狮子—孩子呈现承担、争取自主和积极创造三个不能互相替代的转化任务。",
+        "身体、健康、充盈或匮乏参与思想判断；生命肯定要求审查自己是否愿意重复这种生活方式。",
+        "自我克服不是压倒别人，而是重组自身力量，以长期实践赋予性格风格并形成可承担的承诺。",
+        "《查拉图斯特拉》以骆驼—狮子—孩子呈现承担、解放和创造：说出“我愿意”只是取得自由，尚未完成价值创造。",
+        "身体作为“大理性”提醒思想、健康、能量和冲动共同参与判断；身体信息重要，但不能未经审查就等同正当方向。",
+        "《快乐的科学》把“成为你自己”、命运之爱和赋予性格以风格连成长期实践，并以永恒回归检验是否愿意承担这种生活。",
+        "创造可能来自充盈，也可能来自匮乏、怨恨和补偿；因此高强度目标要接受动机谱系和生命后果审查。",
+        "《善恶的彼岸》拆解“意志”中的感觉、思想、命令、服从和身体条件，否定愿意就必然行动的单按钮模型。",
+        "长期自我约束能塑造形式与能力，也可能成为自我暴政；纪律必须由主体认领、可复审并增加未来自由。",
+        "《道德谱系》追问价值的生成条件、权力关系和功能，揭示怨恨、坏良心和罪责如何把能量转成反应性目标与自罚。",
+        "承诺能力使人跨时间可依赖，但不等于永不改变；成熟主体也要能重议、承担代价并诚实撤销错误承诺。"
+      ],
+      "knowledgeView": "认识总带着视角、身体状态、欲望和价值判断；更深的知需要追问解释来自何种生命条件和权力关系。",
+      "actionView": "行是对自身力量的组织、对继承价值的实验性超越，以及通过长期选择创造能够肯定的生活风格。",
+      "splitDiagnosis": "目标看似自主，实则由“你应当”、怨恨、坏良心、羞耻证明或未整合的冲动支配；意志语言掩盖了真实条件和代价。",
+      "transformationPath": "价值谱系审查 → 身体与动机检查 → 拆解意志中的命令/服从/能力 → 完成骆驼/狮子/孩子当前任务 → 做价值实验 → 形成风格与承诺。",
+      "actionFeedback": "行动要检验它是否扩大创造能力、减少反应性、能够承担代价，并能否在“愿意再次如此选择”的试验中被肯定。",
+      "yangmingConnection": "二者都反对把思想停在言辞并强调自我工夫；但王阳明以良知作为规范根据，尼采则对价值来源进行谱系追问并强调创造，张力必须保留。",
+      "inheritedLimit": "自主认领仍可能只是内化了旧命令；一个目标即使“是我选择的”，也可能源于怨恨、亏欠、证明欲或生命否定。",
+      "qualitativeLeap": "从认领现有价值提升到追问价值的生成史，并在身体、力量和长期实践中创造新的可肯定方向。",
+      "synthesisOutcome": "知行合一从“执行正确目标”升华为“在行动中审查、克服并创造自己愿意承担的价值风格”。",
+      "workSynthesis": "《道德谱系》负责来源与罪责审查，《善恶的彼岸》拆解意志和纪律，《快乐的科学》加入身体、命运之爱与风格，《查拉图斯特拉》完成自我克服和价值创造；四书保留分工与张力。",
+      "sevenLoopRoles": [
+        "方向",
+        "澄清",
+        "内化",
+        "生成性行动"
+      ],
+      "distinctiveFocus": "最关心目标来自创造还是反应、意志内部如何组织，以及行动正在把人塑造成怎样的生命风格。",
+      "decisionCue": "你正在挣脱别人规定的人生，却仍被羞耻、怨恨、证明欲或继承的“你应当”推动。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "self_determination"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "self_determination",
+        "frankl",
+        "act",
+        "maslow"
+      ],
+      "tensions": [
+        "不得用力量、自我超越或“强者”语言正当化支配、轻视弱者、冒险和持续自我压迫。",
+        "与王阳明在普遍良知和价值创造之间、与Frankl在意义发现和创造之间存在真实张力。"
+      ],
+      "sourceIds": [
+        "NZ",
+        "NGS",
+        "NBG",
+        "NGM"
+      ],
+      "commonGroundWithYangming": [
+        "都反对借来的言辞和外在规范替代自身工夫。",
+        "都把人视为在长期实践中形成和超越自己的行动者。",
+        "都要求思想进入身体、品格、承诺和生活形式。"
+      ],
+      "differencesFromYangming": [
+        "尼采对普遍道德真理和固定善恶进行谱系怀疑，与良知的规范基础存在根本张力。",
+        "其力量、等级和自我超越语言可能被误用为支配、冒险崇拜或受害者归责。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 4 部登记来源，形成 10765 条可回定位文本记录；本体系保留 26 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-NZ-001",
+          "source_id": "NZ",
+          "locator": "NZ-S003-P0039",
+          "claim": "人是应被超越之物",
+          "summary": "查拉图斯特拉把人描述为需被克服的存在",
+          "use": "成长是持续生成而非固定标签",
+          "boundary": "不作人群优劣排序",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-002",
+          "source_id": "NZ",
+          "locator": "NZ-S003-P0069",
+          "claim": "人是桥而非目的",
+          "summary": "人被描述为过渡与桥梁",
+          "use": "身份可更新，阶段不是终局",
+          "boundary": "不否定当下人的尊严",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-003",
+          "source_id": "NZ",
+          "locator": "NZ-S004-P0003",
+          "claim": "三种精神变形",
+          "summary": "骆驼、狮子、孩子构成承担—解放—创造序列",
+          "use": "训练负重、自主与创造的不同能力",
+          "boundary": "不是僵硬人格类型",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-004",
+          "source_id": "NZ",
+          "locator": "NZ-S004-P0016",
+          "claim": "“我愿意”对抗“你应当”",
+          "summary": "狮子争取说出自身意志的自由",
+          "use": "识别内摄命令和外部控制",
+          "boundary": "自主仍受伦理与事实约束",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-005",
+          "source_id": "NZ",
+          "locator": "NZ-S004-P0021",
+          "claim": "自由还不是创造",
+          "summary": "狮子能取得创造所需的自由，却不能独自创造价值",
+          "use": "反抗之后必须建立正向方向",
+          "boundary": "不能永远停在否定",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-006",
+          "source_id": "NZ",
+          "locator": "NZ-S004-P0026",
+          "claim": "孩子是新的开始",
+          "summary": "孩子被写为游戏、自转之轮和神圣肯定",
+          "use": "高阶行动含探索、游戏与创造",
+          "boundary": "游戏不取消责任",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-007",
+          "source_id": "NZ",
+          "locator": "NZ-S007-P0004",
+          "claim": "身体是“大理性”",
+          "summary": "身体被置于思想与感受背后的组织地位",
+          "use": "把睡眠、能量、感受和动作纳入决策",
+          "boundary": "不以身体冲动代替判断",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-008",
+          "source_id": "NZ",
+          "locator": "NZ-S018-P0014",
+          "claim": "人创造价值与意义",
+          "summary": "价值活动使世界获得人的意义",
+          "use": "允许用户形成自我认可的长期方向",
+          "boundary": "价值创造不得正当化伤害",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-NZ-009",
+          "source_id": "NZ",
+          "locator": "NZ-S038-P0027",
+          "claim": "生命不断超越自身",
+          "summary": "生命被描述为必须不断克服自己",
+          "use": "成长需要更新旧身份和旧成功公式",
+          "boundary": "不把持续不满当美德",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGS-S005-P0005",
+          "source_id": "NGS",
+          "locator": "NGS-S005-P0005",
+          "claim": "身体条件审查",
+          "summary": "思想与身体、健康经验相连",
+          "use": "身体条件审查",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGS-S342-P0002",
+          "source_id": "NGS",
+          "locator": "NGS-S342-P0002",
+          "claim": "身份方向",
+          "summary": "成为自己",
+          "use": "身份方向",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGS-S349-P0002",
+          "source_id": "NGS",
+          "locator": "NGS-S349-P0002",
+          "claim": "现实肯定",
+          "summary": "命运之爱",
+          "use": "现实肯定",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGS-S363-P0002",
+          "source_id": "NGS",
+          "locator": "NGS-S363-P0002",
+          "claim": "身份实践",
+          "summary": "以长期工作赋予性格风格",
+          "use": "身份实践",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGS-S414-P0002",
+          "source_id": "NGS",
+          "locator": "NGS-S414-P0002",
+          "claim": "长期选择",
+          "summary": "永恒回归思想试验",
+          "use": "长期选择",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGS-S444-P0002",
+          "source_id": "NGS",
+          "locator": "NGS-S444-P0002",
+          "claim": "动机谱系",
+          "summary": "创造可来自充盈或匮乏",
+          "use": "动机谱系",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NBG-PG-019",
+          "source_id": "NBG",
+          "locator": "NBG-PG-§019",
+          "claim": "意志拆解",
+          "summary": "意志是复合过程，愿意不自动等于行动",
+          "use": "意志拆解",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NBG-PG-188",
+          "source_id": "NBG",
+          "locator": "NBG-PG-§188",
+          "claim": "自主纪律",
+          "summary": "长期自我约束可塑造形式，也会带来代价",
+          "use": "自主纪律",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NBG-PG-211",
+          "source_id": "NBG",
+          "locator": "NBG-PG-§211",
+          "claim": "高阶创造",
+          "summary": "哲学不仅批评，也创造价值",
+          "use": "高阶创造",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0004-B022",
+          "source_id": "NGM",
+          "locator": "NGM-P0004-B022",
+          "claim": "谱系方法",
+          "summary": "价值须结合生成条件和功能审查",
+          "use": "谱系方法",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0012-B001",
+          "source_id": "NGM",
+          "locator": "NGM-P0012-B001",
+          "claim": "目标来源",
+          "summary": "怨恨可生产反应性价值",
+          "use": "目标来源",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0022-B013",
+          "source_id": "NGM",
+          "locator": "NGM-P0022-B013",
+          "claim": "承诺管理",
+          "summary": "承诺能力使主体跨时间可依赖",
+          "use": "承诺管理",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0036-B004",
+          "source_id": "NGM",
+          "locator": "NGM-P0036-B004",
+          "claim": "坏良心机制",
+          "summary": "外向冲动受阻后可能内化",
+          "use": "坏良心机制",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0060-B001",
+          "source_id": "NGM",
+          "locator": "NGM-P0060-B001",
+          "claim": "罪责风险",
+          "summary": "痛苦可能寻找责任者并被导向自责",
+          "use": "罪责风险",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0061-B003",
+          "source_id": "NGM",
+          "locator": "NGM-P0061-B003",
+          "claim": "事实拆解",
+          "summary": "感到有罪不证明事实有罪",
+          "use": "事实拆解",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0077-B021",
+          "source_id": "NGM",
+          "locator": "NGM-P0077-B021",
+          "claim": "意义",
+          "summary": "痛苦的意义问题组织意志",
+          "use": "意义",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-NGM-P0078-B009",
+          "source_id": "NGM",
+          "locator": "NGM-P0078-B009",
+          "claim": "意义边界",
+          "summary": "某些意义解释会加深内在罪责",
+          "use": "意义边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 9,
+      "systemId": "frankl",
+      "displayName": "弗兰克尔 · 意义、责任与受限自由",
+      "thinker": "Viktor E. Frankl",
+      "category": "具体意义与自我超越",
+      "evolutionStage": "第三层 · 主体升华：接纳、自主、价值与意义",
+      "primaryLensId": "FRK_MEANING",
+      "lensIds": [
+        "FRK_MEANING"
+      ],
+      "coreValues": [
+        "具体意义",
+        "责任",
+        "受限自由",
+        "自我超越",
+        "人的尊严"
+      ],
+      "coreIdeas": [
+        "意义不是一条普遍口号，而是此人此刻面对的具体任务、关系或立场。",
+        "责任是对生活提出的问题作答，不是被羞耻和他人控制所追责。",
+        "意义可通过创造、体验/相遇，以及对真正不可避免痛苦采取立场而实现。",
+        "自由总是受条件限制，但人在部分条件中仍可能选择态度和可承担行动。",
+        "自我超越把注意从不断评估自我，转向值得服务的人、事、作品或责任。",
+        "意义不是脱离情境的标准答案，而是具体的人在具体时刻面对的独特任务；系统不能替用户宣布“人生意义”。",
+        "“生活向人发问”把责任理解为以行动作答，而不是被导师、算法或痛苦追责。",
+        "存在困扰并不自动等于疾病；人也可能需要一种指向值得任务的健康张力，而不是只追求内在平衡。",
+        "自我超越使行动指向事业、意义或他人，帮助高阶成长越过持续关注自我状态的封闭循环。",
+        "意义可经由创造与工作、体验与相遇、以及对真正不可避免痛苦采取态度而实现；可避免的痛苦应先改变原因。",
+        "自由不是脱离条件的全能，而是在条件中采取立场，并始终与责任相连；现实可改变时应改变世界，不能只要求自己适应。"
+      ],
+      "knowledgeView": "知是辨认此刻生活向自己提出的具体问题，区分可改变条件、不可改变条件和不能转嫁的责任。",
+      "actionView": "行是在限制中作出具体回应：创造、相遇、照料、完成责任，或在不可避免处境中选择不被夺走的立场。",
+      "splitDiagnosis": "行动失去意义对象，只剩自我评分；把所有痛苦浪漫化，或反过来因为不能完全控制处境而放弃仍有的自由。",
+      "transformationPath": "先移除可避免痛苦并求助 → 确认真实限制 → 询问此刻谁或什么值得回应 → 划清责任边界 → 完成一个指向自身之外的动作。",
+      "actionFeedback": "复盘观察行动是否真正服务了某人某事、是否尊重限制与边界，以及责任感是变得具体还是再次变成自责。",
+      "yangmingConnection": "二者都把知与责任性行动相连；弗兰克尔补足极端限制和具体意义情境，王阳明则提供更明确的良知与成德主线。",
+      "inheritedLimit": "价值创造和自主可能仍以自我为中心；当处境不可改变时，仅强调创造自己也可能无法回答“我仍能对什么负责”。",
+      "qualitativeLeap": "从“我想成为谁”推进到“此刻生活在向我提出什么问题，我愿意对谁或什么作答”。",
+      "synthesisOutcome": "知行合一获得受限处境中的意义轴：行动不要求全能控制，而要求在边界内承担具体、非浪漫化的责任。",
+      "workSynthesis": "以《活出意义来/Man’s Search for Meaning》中的具体意义、责任、三条意义道路、自我超越、自由与态度价值构成体系。",
+      "sevenLoopRoles": [
+        "方向",
+        "容纳",
+        "内化",
+        "生成性行动"
+      ],
+      "distinctiveFocus": "最关心人在限制、失向和不可控条件中，仍愿意对谁、对什么、以何种边界作答。",
+      "decisionCue": "你感到无意义、受限或失去方向，需要找到一个不是抽象口号的具体责任对象。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "act",
+        "self_determination",
+        "nietzsche"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "act",
+        "self_determination",
+        "nietzsche",
+        "maslow"
+      ],
+      "tensions": [
+        "不得把可避免的痛苦神圣化，也不得要求用户从创伤、疾病或压迫中“找到意义”来证明自己。",
+        "意义建议不能替用户规定使命，必须由用户在事实和边界中认领。"
+      ],
+      "sourceIds": [
+        "FRK"
+      ],
+      "commonGroundWithYangming": [
+        "都把价值与责任落实到具体时刻的行动，而非抽象答案。",
+        "都认为人的自由需要在现实限制和后果承担中体现。",
+        "都拒绝让导师替主体完成最终价值选择。"
+      ],
+      "differencesFromYangming": [
+        "Frankl强调每个时刻的独特意义和受限自由，不给出与良知同构的统一道德本体。",
+        "它处理不可避免痛苦的态度，但必须防止被用来要求用户忍受本可改变的伤害。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 452 条可回定位文本记录；本体系保留 16 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-FRK-S008-P0005",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0005",
+          "claim": "方向",
+          "summary": "意义中心取向面向未来需要实现的意义",
+          "use": "方向",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0007",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0007",
+          "claim": "核心概念",
+          "summary": "意志求意义被视为主要动力",
+          "use": "核心概念",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0020",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0020",
+          "claim": "防病理化",
+          "summary": "存在困扰并不自动等于疾病",
+          "use": "防病理化",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0025",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0025",
+          "claim": "挑战设计",
+          "summary": "人可能需要面向值得任务的健康张力",
+          "use": "挑战设计",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0028",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0028",
+          "claim": "失向",
+          "summary": "传统减弱后，人需要选择，可能陷入从众或他人控制",
+          "use": "失向",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0036",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0036",
+          "claim": "情境意义",
+          "summary": "意义随人和时刻变化，没有脱离情境的最佳一步",
+          "use": "情境意义",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0037",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0037",
+          "claim": "责任",
+          "summary": "生活发问，人以承担生活作答",
+          "use": "责任",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0040",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0040",
+          "claim": "AI边界",
+          "summary": "治疗者不替用户决定其责任对象或价值",
+          "use": "AI边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0043",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0043",
+          "claim": "高阶行动",
+          "summary": "自我超越指向意义、事业或他人",
+          "use": "高阶行动",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0044",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0044",
+          "claim": "意义路径",
+          "summary": "创造、体验/相遇、面对不可避免痛苦的态度三条道路",
+          "use": "意义路径",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0051",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0051",
+          "claim": "受限行动",
+          "summary": "不可改变情境中仍可改变立场",
+          "use": "受限行动",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0054",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0054",
+          "claim": "反浪漫化",
+          "summary": "痛苦非必要；可避免时应移除原因",
+          "use": "反浪漫化",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0097",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0097",
+          "claim": "受限自由",
+          "summary": "自由不是脱离条件，而是对条件采取立场",
+          "use": "受限自由",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0100",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0100",
+          "claim": "双向改变",
+          "summary": "可行时改变世界，必要时改变自己",
+          "use": "双向改变",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S008-P0103",
+          "source_id": "FRK",
+          "locator": "FRK-S008-P0103",
+          "claim": "伦理边界",
+          "summary": "自由需与责任相连",
+          "use": "伦理边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-FRK-S009-P0004",
+          "source_id": "FRK",
+          "locator": "FRK-S009-P0004",
+          "claim": "现实肯定",
+          "summary": "悲剧乐观是在痛苦、罪责和死亡面前寻找建设性回应",
+          "use": "现实肯定",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 10,
+      "systemId": "dewey",
+      "displayName": "杜威 · 探究、习惯与环境重构",
+      "thinker": "John Dewey",
+      "category": "反思性探究与经验生长",
+      "evolutionStage": "第四层 · 行动实现：探究、启动、学习与反回避",
+      "primaryLensId": "DHT_REFLECTIVE_INQUIRY",
+      "lensIds": [
+        "DHT_REFLECTIVE_INQUIRY",
+        "DHC_HABIT_ENVIRONMENT"
+      ],
+      "coreValues": [
+        "经验",
+        "探究",
+        "开放心态",
+        "智识责任",
+        "生长",
+        "人境互动"
+      ],
+      "coreIdeas": [
+        "反思从真实行动受阻和疑惑开始，经建议、问题化、假设、推演与行动检验形成可靠判断。",
+        "错误不是人格判决，而是指出还需观察什么、假设和方法应怎样修正。",
+        "习惯是人与物质、社会环境共同形成的行动倾向，不是头脑中的孤立程序。",
+        "目的只有转化为当前下一行动才发挥作用，手段和目的在后果中连续并共同接受修正。",
+        "生长不是到达固定终点，而是持续重建经验、习惯、能力、关系和判断。",
+        "反思是对信念根据和可能后果的主动、持续、审慎考察；它从真实疑惑开始，而不是在脑内无限反刍。",
+        "受阻情境产生问题，既往经验生成暂定建议，推演后果形成假设，观察和行动再检验；五阶段在现实中可往返而非固定问卷。",
+        "开放心态要求主动考虑替代解释和自己可能出错，智识责任要求把判断将带来的后果纳入知。",
+        "失败不是人格判决，而是新观察和假设修正的资料；行动具有不可逆性时，试验必须先缩小风险。",
+        "习惯是人在环境中形成的习得倾向，构成有效自我和意志；改变行为也要改变线索、工具、关系和后果。",
+        "冲动可成为旧习惯重组的转轴，审议是竞争行动的想象排演，目的则是在行动中形成并可修订的“眼前目的”。",
+        "固定终局可能替不当手段辩护；生长不是抵达终局，而是持续重建能力、习惯、目的与环境关系。"
+      ],
+      "knowledgeView": "知是在受阻情境中主动、持续、审慎地考察信念的依据和后果，并通过行动检验形成的暂定可靠判断。",
+      "actionView": "行既是解决问题的尝试，也是探究的一部分；它同时改变外部条件、习惯结构和未来可采取的行动。",
+      "splitDiagnosis": "问题未被具体化就套用答案，把失败归因于固定人格，目标与当前条件脱节，或忽略维持旧习惯的工具、空间和关系。",
+      "transformationPath": "受阻事实 → 问题化 → 竞争假设 → 推演可观察结果 → 小型行动检验 → 环境/习惯重构 → 结果回写与下一轮探究。",
+      "actionFeedback": "后果用于修改问题定义、假设、手段、目的和环境条件；有效答案始终保留复审期限。",
+      "yangmingConnection": "它把“事上磨”补成问题—假设—检验协议，并把环境重构纳入工夫；但杜威不诉诸良知本体，产品仍需独立伦理守门。",
+      "inheritedLimit": "价值、意义和心理灵活性仍不足以处理“究竟卡在哪里”的模糊失败，也容易把习惯和环境问题重新内化为主体缺陷。",
+      "qualitativeLeap": "从在行动中体现既有认识，推进到把行动本身组织成能够生成、检验和修正认识的持续探究。",
+      "synthesisOutcome": "知行合一形成完整回路：行动受阻产生问题，探究生成假设，行动检验假设，结果重构知识、习惯和环境。",
+      "workSynthesis": "《我们怎样思维》提供问题化、假设、推演和检验；《人性与行为》补入习惯、冲动、环境、审议、目的—手段连续性和生长，二书统一为经验探究系统。",
+      "sevenLoopRoles": [
+        "澄清",
+        "稳定",
+        "求证",
+        "内化"
+      ],
+      "distinctiveFocus": "最关心受阻情境如何被转成可检验问题，以及人和环境怎样共同维持或重构习惯。",
+      "decisionCue": "你反复失败，却仍说不清真正问题，多个解释彼此竞争，同一个环境还总触发旧习惯。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "william_james",
+        "beck_cognitive_therapy"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "william_james",
+        "beck_cognitive_therapy",
+        "gollwitzer",
+        "bandura",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "不能把一切人生关系都实验化；不可逆、第三方、医疗、法律和重大财务问题必须先限缩风险。",
+        "有效和可修正不自动等于道德正当，伦理方向不能由问题解决效率代替。"
+      ],
+      "sourceIds": [
+        "DHT",
+        "DHC"
+      ],
+      "commonGroundWithYangming": [
+        "都让认识在事情和行动后果中形成、检验和修正。",
+        "都反对知与行被切成先后隔绝的两项工作。",
+        "都把成长理解为持续工夫，而非一次获得正确答案。"
+      ],
+      "differencesFromYangming": [
+        "杜威把知识视为从问题、假设和后果中不断形成的探究成果，规范基础更实验性、可修订。",
+        "它更系统地把环境和习惯纳入行为解释，避免把障碍主要定位在主体内心。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 2 部登记来源，形成 1983 条可回定位文本记录；本体系保留 24 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-DHT-P0023-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0023-B003",
+          "claim": "定义反思性知",
+          "summary": "反思是对信念依据与后果的主动、持续、审慎考察",
+          "use": "定义反思性知",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0026-B004",
+          "source_id": "DHT",
+          "locator": "DHT-P0026-B004",
+          "claim": "受阻进入问题",
+          "summary": "疑惑与探究构成反思的两个基本面",
+          "use": "受阻进入问题",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0028-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0028-B003",
+          "claim": "识别行动节点",
+          "summary": "岔路情境打断直接行动",
+          "use": "识别行动节点",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0029-B004",
+          "source_id": "DHT",
+          "locator": "DHT-P0029-B004",
+          "claim": "形成假设",
+          "summary": "困难引出暂定计划，并调动既往经验",
+          "use": "形成假设",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0044-B004",
+          "source_id": "DHT",
+          "locator": "DHT-P0044-B004",
+          "claim": "防确认偏误",
+          "summary": "开放心态主动考虑替代与出错",
+          "use": "防确认偏误",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0046-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0046-B003",
+          "claim": "风险与伦理",
+          "summary": "智识责任要求考虑判断后果",
+          "use": "风险与伦理",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0100-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0100-B003",
+          "claim": "重新定义执行力",
+          "summary": "纪律是掌握手段并检验目的的积极能力",
+          "use": "重新定义执行力",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0101-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0101-B003",
+          "claim": "重新定义自主",
+          "summary": "自由是能够独立执行的掌握，不是冲动释放",
+          "use": "重新定义自主",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0121-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0121-B003",
+          "claim": "行动实验协议",
+          "summary": "五个反思阶段",
+          "use": "行动实验协议",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0128-B004",
+          "source_id": "DHT",
+          "locator": "DHT-P0128-B004",
+          "claim": "无羞耻复盘",
+          "summary": "失败可指导新观察与假设修正",
+          "use": "无羞耻复盘",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0129-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0129-B003",
+          "claim": "迭代和风险",
+          "summary": "五阶段无固定顺序，实际行动有不可逆性",
+          "use": "迭代和风险",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHT-P0130-B003",
+          "source_id": "DHT",
+          "locator": "DHT-P0130-B003",
+          "claim": "事后学习",
+          "summary": "行动后审查后果、习惯与欲望",
+          "use": "事后学习",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S004-P0012",
+          "source_id": "DHC",
+          "locator": "DHC-S004-P0012",
+          "claim": "系统解释",
+          "summary": "行为是主体与环境互动",
+          "use": "系统解释",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S005-P0003",
+          "source_id": "DHC",
+          "locator": "DHC-S005-P0003",
+          "claim": "环境设计",
+          "summary": "环境参与习惯形成和运作",
+          "use": "环境设计",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S005-P0016",
+          "source_id": "DHC",
+          "locator": "DHC-S005-P0016",
+          "claim": "身份与行为",
+          "summary": "习惯构成有效自我和意志",
+          "use": "身份与行为",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S005-P0035",
+          "source_id": "DHC",
+          "locator": "DHC-S005-P0035",
+          "claim": "反固定天数",
+          "summary": "习惯是习得倾向，不只是重复",
+          "use": "反固定天数",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S005-P0028",
+          "source_id": "DHC",
+          "locator": "DHC-S005-P0028",
+          "claim": "下一步编译",
+          "summary": "遥远目的须转成下一行动",
+          "use": "下一步编译",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S006-P0028",
+          "source_id": "DHC",
+          "locator": "DHC-S006-P0028",
+          "claim": "变化机会",
+          "summary": "冲动是习惯重组的转轴",
+          "use": "变化机会",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S007-P0027",
+          "source_id": "DHC",
+          "locator": "DHC-S007-P0027",
+          "claim": "低风险预演",
+          "summary": "审议是竞争行动的想象排演",
+          "use": "低风险预演",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S007-P0058",
+          "source_id": "DHC",
+          "locator": "DHC-S007-P0058",
+          "claim": "目标重选",
+          "summary": "审议也可修订目的",
+          "use": "目标重选",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S007-P0068",
+          "source_id": "DHC",
+          "locator": "DHC-S007-P0068",
+          "claim": "动态目标",
+          "summary": "目的在行动中形成并指导现在",
+          "use": "动态目标",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S007-P0076",
+          "source_id": "DHC",
+          "locator": "DHC-S007-P0076",
+          "claim": "伦理防护",
+          "summary": "固定目的可能为不当手段辩护",
+          "use": "伦理防护",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S008-P0004",
+          "source_id": "DHC",
+          "locator": "DHC-S008-P0004",
+          "claim": "道德判断",
+          "summary": "有更好与更坏的替代时，道德进入行动",
+          "use": "道德判断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-DHC-S008-P0011",
+          "source_id": "DHC",
+          "locator": "DHC-S008-P0011",
+          "claim": "非终局成长",
+          "summary": "生长是持续重建",
+          "use": "非终局成长",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 11,
+      "systemId": "gollwitzer",
+      "displayName": "Gollwitzer · 把意图编译成现场行动",
+      "thinker": "Peter M. Gollwitzer",
+      "category": "实施意向与情境启动",
+      "evolutionStage": "第四层 · 行动实现：探究、启动、学习与反回避",
+      "primaryLensId": "II_CUE_ACTION",
+      "lensIds": [
+        "II_CUE_ACTION"
+      ],
+      "coreValues": [
+        "具体",
+        "预承诺",
+        "情境线索",
+        "减少决策负担",
+        "复审"
+      ],
+      "coreIdeas": [
+        "目标意向回答“我要达到什么”，实施意向回答“当X出现时，我就做Y”。",
+        "清楚且可识别的线索会提高现场可及性，具体反应会减少临场重新决定。",
+        "如果—那么计划只适用于已经认领、可行且风险受控的目标。",
+        "自动启动不是永久命令，规则需要例外、有效期和触发复审。",
+        "目标意向回答“我要实现什么”，实施意向回答“情境 X 出现时我就做 Y”；二者不能混成一句愿望。",
+        "预先决定何时、何地和怎样行动，使关键线索更易被察觉并把部分现场控制委托给情境，减少临场再决策。",
+        "实施意向对困难启动和易被打断的情境尤其有用，但依赖真正认领的目标和对计划的承诺。",
+        "自动化并非绝对僵化：规则要有例外、替代动作和失效期限，可在目标改变、风险出现或现实反证时撤销。",
+        "如果端必须是可识别的外部情境、内部信号或障碍，不能写成自己要做的行为；那么端只绑定一个清楚反应。"
+      ],
+      "knowledgeView": "程序性知必须包含何时、何地、出现什么线索以及立即采取什么反应，而不只是目标和理由。",
+      "actionView": "行是在预定情境出现时执行一个具体可控反应，使行动入口不再依赖临场动机和重新决策。",
+      "splitDiagnosis": "目标和理由都清楚，却在关键时刻忘记、犹豫、被干扰或把决定无限推迟。",
+      "transformationPath": "确认目标已认领且可行 → 选择高辨识度线索X → 指定单一可控反应Y → 预演一次 → 设定例外与复审时间。",
+      "actionFeedback": "观察线索是否真正出现、是否被识别、反应是否可执行，以及规则是否产生意外僵化，再修改X或Y。",
+      "yangmingConnection": "它把立志后的具体意向编译成现场入口，使“知是行的主意”获得时间和情境结构，但不能判断目标是否合乎良知。",
+      "inheritedLimit": "探究已经找到了合理下一步，仍不能保证关键情境中它会被想起和启动。",
+      "qualitativeLeap": "从“我决定要做”推进到“现实中一旦出现哪个信号，我立即做哪个动作”。",
+      "synthesisOutcome": "知行之间增加情境桥梁，减少每次行动都重新调用意志和决策的成本。",
+      "workSynthesis": "综合实施意向研究中的目标意向—实施意向区分、线索可及性、反应自动启动、边界条件和计划僵化风险。",
+      "sevenLoopRoles": [
+        "启动",
+        "稳定"
+      ],
+      "distinctiveFocus": "最关心已认领目标为何在关键时刻没有被触发，以及线索和反应能否预先绑定。",
+      "decisionCue": "你知道、愿意也会做，但总在关键时刻忘记、拖延、犹豫或被别的事情带走。",
+      "buildsOnSystemIds": [
+        "william_james",
+        "self_determination",
+        "dewey"
+      ],
+      "relatedSystemIds": [
+        "william_james",
+        "dewey",
+        "bandura",
+        "oettingen",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "线索—反应自动化不能替代价值、可行性、能力和风险判断。",
+        "把所有生活脚本化会压缩反思和适应性，规则必须允许例外和过期。"
+      ],
+      "sourceIds": [
+        "II"
+      ],
+      "commonGroundWithYangming": [
+        "都要求志向进入眼前可做的具体事情。",
+        "都重视意念发动与现场触发的连接。",
+        "都把重复落实视为避免终身空谈的办法。"
+      ],
+      "differencesFromYangming": [
+        "实施意向只解决已认领目标的现场启动，不判断目标是否值得，也不保证能力和机会存在。",
+        "它追求局部自动化，而王阳明更关注意向、诚意和整个生命方向。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 206 条可回定位文本记录；本体系保留 9 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-II-P0001-B004",
+          "source_id": "II",
+          "locator": "II-P0001-B004",
+          "claim": "核心机制",
+          "summary": "情境X与反应Y绑定并促进自动启动",
+          "use": "核心机制",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0001-B006",
+          "source_id": "II",
+          "locator": "II-P0001-B006",
+          "claim": "问题定义",
+          "summary": "良好意图与实际行动存在缺口",
+          "use": "问题定义",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0002-B005",
+          "source_id": "II",
+          "locator": "II-P0002-B005",
+          "claim": "计划字段",
+          "summary": "预先决定何时、何地、怎样行动",
+          "use": "计划字段",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0002-B007",
+          "source_id": "II",
+          "locator": "II-P0002-B007",
+          "claim": "抗干扰",
+          "summary": "预决策减少现场负担并保护行动",
+          "use": "抗干扰",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0002-B008",
+          "source_id": "II",
+          "locator": "II-P0002-B008",
+          "claim": "分层设计",
+          "summary": "目标意向与实施意向不同",
+          "use": "分层设计",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0003-B002",
+          "source_id": "II",
+          "locator": "II-P0003-B002",
+          "claim": "情境委托",
+          "summary": "关键线索可获得可及性并触发动作",
+          "use": "情境委托",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0003-B003",
+          "source_id": "II",
+          "locator": "II-P0003-B003",
+          "claim": "适用判断",
+          "summary": "对困难启动情境更有帮助",
+          "use": "适用判断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0009-B003",
+          "source_id": "II",
+          "locator": "II-P0009-B003",
+          "claim": "前置条件",
+          "summary": "依赖强目标意向和计划承诺",
+          "use": "前置条件",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-II-P0009-B004",
+          "source_id": "II",
+          "locator": "II-P0009-B004",
+          "claim": "例外与复审",
+          "summary": "自动化可能造成刚性，但计划可撤销",
+          "use": "例外与复审",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 12,
+      "systemId": "bandura",
+      "displayName": "班杜拉 · 榜样、效能与能动性",
+      "thinker": "Albert Bandura",
+      "category": "社会学习、自我效能与自我调节",
+      "evolutionStage": "第四层 · 行动实现：探究、启动、学习与反回避",
+      "primaryLensId": "SLT_MODELING",
+      "lensIds": [
+        "SLT_MODELING",
+        "SEF_MASTERY"
+      ],
+      "coreValues": [
+        "能动性",
+        "观察学习",
+        "掌握经验",
+        "效能校准",
+        "自我调节",
+        "集体效能"
+      ],
+      "coreIdeas": [
+        "个人、行为和环境相互影响，人既受条件塑造，也能通过行动改变条件。",
+        "观察学习通过注意、保持、动作再现和动机过程降低昂贵试错。",
+        "自我效能是对特定情境中组织并执行行动能力的判断，不等于自尊和空泛积极思考。",
+        "掌握经验是最强效能信息，榜样、劝导和身心状态只能在真实技能与反馈中校准。",
+        "自我调节和集体效能把行动从孤立意志扩展到目标、监测、反馈、协作和共同能力。",
+        "个人认知、行为和环境是互惠作用系统；人既受社会结构塑造，也会选择、改变和共同建造环境。",
+        "符号表征使人能够预见、计划和创造，观察学习则通过注意、保持、动作再现和动机四类过程降低昂贵试错。",
+        "学会不等于表现：没有行动可能来自未注意、未记住、缺子技能、价值后果不足或环境受阻，不能一概判为不努力。",
+        "示范应展示可达到的近似动作，配合心理与实际演练、信息性反馈和逐步精炼，而不是只展示完美结果。",
+        "自我效能是对组织并执行某类具体行动之能力的信念，不是跨领域人格特质，也不是结果的唯一决定者。",
+        "效能与结果预期必须分开：相信自己能做，不等于环境会回报；反之，结果有价值也不等于相信自己做得到。",
+        "掌握经验、替代经验、现实范围内的劝导以及生理情绪状态共同形成效能；其中亲历克服可承受障碍最有力。",
+        "效能经认知、动机、情感和选择过程影响行动；目标是校准而非盲目提高，危险任务中过度乐观会增加风险。",
+        "集体效能依赖能力组合、结构、协调和互动，个人鼓励不能弥补缺失的工具、权限、支持和制度机会。"
+      ],
+      "knowledgeView": "知不仅是理解道理，还包括“我是否知道怎么做、能否在此情境组织行动、可以从谁和什么反馈中学习”。",
+      "actionView": "行是观察、演练、分级掌握、自我监测和协作调节的能动过程，并会反过来改变环境与自我效能判断。",
+      "splitDiagnosis": "缺少子技能和过程示范，把他人结果当成自己的能力证据，低估或高估特定任务效能，或孤立行动缺少团队支持。",
+      "transformationPath": "定义具体子技能 → 选择相似且过程透明的榜样 → 观察与演练 → 完成略高于现有掌握的一步 → 获取信息性反馈 → 更新任务特定效能。",
+      "actionFeedback": "真实掌握、错误位置、投入质量和协作结果共同校准效能；信心只迁移到相似任务和条件。",
+      "yangmingConnection": "它为事上磨补入“不会做”和“尚不相信能做”的学习机制，并把环境与集体能动性纳入知行；效能本身仍需良知守门。",
+      "inheritedLimit": "一个清楚的如果—那么计划无法弥补技能缺口，也无法凭空产生有证据的行动信心。",
+      "qualitativeLeap": "从“把行动触发出来”推进到“通过榜样、掌握和反馈真正学会，并形成可校准的能动信念”。",
+      "synthesisOutcome": "知行合一获得能力成长轴：行动不只是实行意志，而是在社会环境中学习、掌握和扩大真实可行性。",
+      "workSynthesis": "《社会学习理论》提供观察学习、相互决定和自我调节；《自我效能》补入任务特定效能、四类信息来源、中介过程与集体效能，统一为能动学习系统。",
+      "sevenLoopRoles": [
+        "启动",
+        "稳定",
+        "求证",
+        "内化"
+      ],
+      "distinctiveFocus": "最关心用户是否真正会做、是否有相似榜样和掌握证据，以及信心是否与具体能力匹配。",
+      "decisionCue": "你并非不想做，而是不知道动作细节、缺少示范，或“我做不到”的判断没有经过真实掌握检验。",
+      "buildsOnSystemIds": [
+        "william_james",
+        "dewey",
+        "gollwitzer"
+      ],
+      "relatedSystemIds": [
+        "william_james",
+        "self_determination",
+        "dewey",
+        "gollwitzer",
+        "oettingen",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "效能是价值中性的，高自我效能可以服务于不正当目标，必须先通过伦理和第三方守门。",
+        "言语鼓励不能替代技能、机会和亲历掌握，产品不得制造虚假自信。"
+      ],
+      "sourceIds": [
+        "SLT",
+        "SEF"
+      ],
+      "commonGroundWithYangming": [
+        "都认为能力要在事上练出，不能只靠言说和鼓励。",
+        "都重视榜样、反馈和反复实践对行动者的塑造。",
+        "都把行动结果看作认识自身能力和修正做法的材料。"
+      ],
+      "differencesFromYangming": [
+        "班杜拉用社会认知、互惠决定和效能信念解释能动性，不把价值方向归于良知。",
+        "效能可以服务有害目标，必须由伦理和现实后果另行守门。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 2 部登记来源，形成 11873 条可回定位文本记录；本体系保留 30 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-SLT-S008-P0003",
+          "source_id": "SLT",
+          "locator": "SLT-S008-P0003",
+          "claim": "行动表征",
+          "summary": "符号表征支持预见、规划与创造",
+          "use": "行动表征",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S008-P0005",
+          "source_id": "SLT",
+          "locator": "SLT-S008-P0005",
+          "claim": "互惠模型",
+          "summary": "认知、行为与环境相互作用",
+          "use": "互惠模型",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S021-P0003",
+          "source_id": "SLT",
+          "locator": "SLT-S021-P0003",
+          "claim": "榜样价值",
+          "summary": "观察学习减少昂贵试错",
+          "use": "榜样价值",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S032-P0002",
+          "source_id": "SLT",
+          "locator": "SLT-S032-P0002",
+          "claim": "模块总纲",
+          "summary": "观察学习有四类成分过程",
+          "use": "模块总纲",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S034-P0005",
+          "source_id": "SLT",
+          "locator": "SLT-S034-P0005",
+          "claim": "演练设计",
+          "summary": "心理和实际演练促进保持",
+          "use": "演练设计",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S035-P0006",
+          "source_id": "SLT",
+          "locator": "SLT-S035-P0006",
+          "claim": "执行分解",
+          "summary": "动作再现包含组织、启动、监测和修正",
+          "use": "执行分解",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S036-P0002",
+          "source_id": "SLT",
+          "locator": "SLT-S036-P0002",
+          "claim": "难度适配",
+          "summary": "缺少基本成分时应先训练子技能",
+          "use": "难度适配",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S036-P0004",
+          "source_id": "SLT",
+          "locator": "SLT-S036-P0004",
+          "claim": "反馈设计",
+          "summary": "示范近似动作并用信息反馈精炼",
+          "use": "反馈设计",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S036-P0007",
+          "source_id": "SLT",
+          "locator": "SLT-S036-P0007",
+          "claim": "动机边界",
+          "summary": "学会不等于表现，价值后果影响实施",
+          "use": "动机边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S037-P0003",
+          "source_id": "SLT",
+          "locator": "SLT-S037-P0003",
+          "claim": "失败诊断",
+          "summary": "未模仿可由注意、保持、能力或动机缺口造成",
+          "use": "失败诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S136-P0005",
+          "source_id": "SLT",
+          "locator": "SLT-S136-P0005",
+          "claim": "自我调节",
+          "summary": "自设后果可通过动机功能支持坚持",
+          "use": "自我调节",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S142-P0003",
+          "source_id": "SLT",
+          "locator": "SLT-S142-P0003",
+          "claim": "反过高标准",
+          "summary": "严苛标准会使自我肯定难以获得",
+          "use": "反过高标准",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SLT-S215-P0003",
+          "source_id": "SLT",
+          "locator": "SLT-S215-P0003",
+          "claim": "产品伦理",
+          "summary": "影响技术不授予强加权力",
+          "use": "产品伦理",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S009-P0002",
+          "source_id": "SEF",
+          "locator": "SEF-S009-P0002",
+          "claim": "系统边界",
+          "summary": "自我效能处于社会认知与结构影响网络，不是唯一决定者",
+          "use": "系统边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S015-P0001",
+          "source_id": "SEF",
+          "locator": "SEF-S015-P0001",
+          "claim": "定义",
+          "summary": "自我效能是组织并执行特定行动以取得成就的能力信念",
+          "use": "定义",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S015-P0002",
+          "source_id": "SEF",
+          "locator": "SEF-S015-P0002",
+          "claim": "反个人归因",
+          "summary": "人是结果的贡献者而非唯一决定者；能动性可有益或有害",
+          "use": "反个人归因",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S026-P0003",
+          "source_id": "SEF",
+          "locator": "SEF-S026-P0003",
+          "claim": "情境化",
+          "summary": "效能并非脱离情境的特质",
+          "use": "情境化",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S033-P0009",
+          "source_id": "SEF",
+          "locator": "SEF-S033-P0009",
+          "claim": "双轴路由",
+          "summary": "区分自我效能与结果预期",
+          "use": "双轴路由",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S060-P0007",
+          "source_id": "SEF",
+          "locator": "SEF-S060-P0007",
+          "claim": "精准画像",
+          "summary": "一般化量表预测力有限，领域测量更合适",
+          "use": "精准画像",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S063-P0028",
+          "source_id": "SEF",
+          "locator": "SEF-S063-P0028",
+          "claim": "迁移",
+          "summary": "效能迁移受活动相似性和自我调节技能影响",
+          "use": "迁移",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S084-P0003",
+          "source_id": "SEF",
+          "locator": "SEF-S084-P0003",
+          "claim": "校准",
+          "summary": "非危险活动中适度乐观可支持挑战",
+          "use": "校准",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S091-P0005",
+          "source_id": "SEF",
+          "locator": "SEF-S091-P0005",
+          "claim": "来源总纲",
+          "summary": "四类来源：掌握、替代、劝导、身心状态",
+          "use": "来源总纲",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S092-P0004",
+          "source_id": "SEF",
+          "locator": "SEF-S092-P0004",
+          "claim": "掌握阶梯",
+          "summary": "亲历掌握最有影响，克服障碍比容易成功更能形成韧性",
+          "use": "掌握阶梯",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S098-P0008",
+          "source_id": "SEF",
+          "locator": "SEF-S098-P0008",
+          "claim": "榜样",
+          "summary": "替代经验通过榜样表现影响效能",
+          "use": "榜样",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S113-P0005",
+          "source_id": "SEF",
+          "locator": "SEF-S113-P0005",
+          "claim": "禁空泛鼓励",
+          "summary": "言语劝导单独作用有限，需在现实范围内",
+          "use": "禁空泛鼓励",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S118-P0005",
+          "source_id": "SEF",
+          "locator": "SEF-S118-P0005",
+          "claim": "状态解释",
+          "summary": "生理与情绪状态参与效能判断",
+          "use": "状态解释",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S125-P0028",
+          "source_id": "SEF",
+          "locator": "SEF-S125-P0028",
+          "claim": "误差校准",
+          "summary": "情绪可能造成能力高估或低估",
+          "use": "误差校准",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S128-P0004",
+          "source_id": "SEF",
+          "locator": "SEF-S128-P0004",
+          "claim": "中介",
+          "summary": "效能通过认知、动机、情感与选择过程起作用",
+          "use": "中介",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S141-P0009",
+          "source_id": "SEF",
+          "locator": "SEF-S141-P0009",
+          "claim": "坚持",
+          "summary": "强效能支持失败后增加努力和坚持",
+          "use": "坚持",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-SEF-S490-P0001",
+          "source_id": "SEF",
+          "locator": "SEF-S490-P0001",
+          "claim": "集体效能",
+          "summary": "集体表现取决于能力组合、结构、协调与互动",
+          "use": "集体效能",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 13,
+      "systemId": "oettingen",
+      "displayName": "Oettingen · 心理对照与WOOP",
+      "thinker": "Gabriele Oettingen",
+      "category": "愿望、障碍与可行承诺",
+      "evolutionStage": "第四层 · 行动实现：探究、启动、学习与反回避",
+      "primaryLensId": "OET_WOOP",
+      "lensIds": [
+        "OET_WOOP"
+      ],
+      "coreValues": [
+        "现实主义",
+        "愿望",
+        "可行性",
+        "障碍",
+        "投入或退出"
+      ],
+      "coreIdeas": [
+        "单纯沉浸在最佳未来可能提前带来满足感，却没有产生面对现实障碍的能量。",
+        "心理对照把期待未来与当前现实并置，让可行性调节承诺和投入。",
+        "WOOP依次澄清愿望、最佳结果、关键内部障碍和针对障碍的计划。",
+        "低可行愿望允许降级、延期或退出，退出不等于意志失败。",
+        "基于经验的积极预期与脱离现实的积极幻想不同；后者可能提前带来仿佛已经实现的舒缓，降低现实投入所需能量。",
+        "心理对照依次接触愿望的最佳结果与当前关键障碍，使未来和现实形成联系，让可行性调节投入。",
+        "高可行愿望更易形成行动承诺，低可行愿望则应支持退出、延期或重选；因此方法不是普遍正向激励。",
+        "WOOP 依次是愿望、结果、障碍、计划；障碍需聚焦真正阻断行动的内部过程，计划再把它绑定一个可执行反应。",
+        "WOOP 不是四个文本框：Wish 要重要且可能，Outcome 要可感，Obstacle 要关键，Plan 的 if 端是障碍/情境而不是自己的动作。",
+        "心理对照与实施意向互补，并可在负面反馈后支持修订；计划若多次被现实反驳，应重估愿望与障碍而不是继续加压。"
+      ],
+      "knowledgeView": "知包含对愿望价值、现实障碍和可行性的同时认识；积极图景只有与现实对照才成为行动信息。",
+      "actionView": "行是在确认可行后针对关键障碍采取工具行为；若不可行，则主动修改目标、增加资源或退出。",
+      "splitDiagnosis": "愿景和积极幻想很强，却没有识别现实障碍、没有做可行性判断，或把所有外部限制错误写成内部心态。",
+      "transformationPath": "Wish愿望 → Outcome最佳结果 → Obstacle关键障碍 → 可行性分流 → Plan为障碍写如果—那么工具反应。",
+      "actionFeedback": "行动结果验证障碍识别和可行性判断；若反复失败，应重新区分内部障碍、结构条件和资源缺口。",
+      "yangmingConnection": "它使立志不再停留于愿景，把“知而不行”具体化为尚未正视障碍或尚未决定真实投入；但不决定愿望的伦理方向。",
+      "inheritedLimit": "技能和效能都可能存在，人仍可停留在积极想象中，未把未来图景与当前障碍放在一起。",
+      "qualitativeLeap": "从“相信自己并制定计划”推进到“让现实可行性决定承诺、降级、增加条件或退出”。",
+      "synthesisOutcome": "知行合一加入愿望—现实对照：不是所有愿望都应强行执行，真实知道也包含知道何时不投入。",
+      "workSynthesis": "以《Rethinking Positive Thinking》及其研究综述中的心理对照、期待依赖、WOOP和脱离低可行目标构成体系。",
+      "sevenLoopRoles": [
+        "方向",
+        "澄清",
+        "启动"
+      ],
+      "distinctiveFocus": "最关心积极愿景为何没有进入现实，以及关键障碍和可行性是否被诚实面对。",
+      "decisionCue": "你想象了许多成功画面、愿望也很强，却始终没有正视真正障碍或决定是否值得投入。",
+      "buildsOnSystemIds": [
+        "self_determination",
+        "gollwitzer",
+        "bandura"
+      ],
+      "relatedSystemIds": [
+        "gollwitzer",
+        "bandura",
+        "behavioral_activation",
+        "comb_bcw",
+        "harvard_positive_psychology"
+      ],
+      "tensions": [
+        "WOOP中的障碍不能默认是“内心问题”，结构性机会必须由COM-B先行检查。",
+        "不应把四步做成新的冗长问卷；产品只在真正需要时展开关键一步。"
+      ],
+      "sourceIds": [
+        "OET"
+      ],
+      "commonGroundWithYangming": [
+        "都反对把愿望和言辞误当成已经实现的真知。",
+        "都要求直面现实障碍并用行动检验志向。",
+        "都允许在事实面前修正目标和工夫。"
+      ],
+      "differencesFromYangming": [
+        "Oettingen首先按经验可行性调节投入，低可行愿望可退出；价值重要性本身不能替代可行性。",
+        "它聚焦愿望—障碍—计划机制，不提供完整伦理、身份和长期工夫论。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 1326 条可回定位文本记录；本体系保留 16 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-OET-S007-P0006",
+          "source_id": "OET",
+          "locator": "OET-S007-P0006",
+          "claim": "反空想",
+          "summary": "脱离现实的积极幻想可能降低现实努力所需能量",
+          "use": "反空想",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S007-P0007",
+          "source_id": "OET",
+          "locator": "OET-S007-P0007",
+          "claim": "核心机制",
+          "summary": "心理对照依次连接愿望与障碍，并可再接行动计划",
+          "use": "核心机制",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S007-P0009",
+          "source_id": "OET",
+          "locator": "OET-S007-P0009",
+          "claim": "四步定义",
+          "summary": "WOOP为Wish、Outcome、Obstacle、Plan",
+          "use": "四步定义",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S008-P0022",
+          "source_id": "OET",
+          "locator": "OET-S008-P0022",
+          "claim": "概念边界",
+          "summary": "区分基于经验的预期与自由幻想",
+          "use": "概念边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S011-P0025",
+          "source_id": "OET",
+          "locator": "OET-S011-P0025",
+          "claim": "可行性守门",
+          "summary": "可行愿望更适合投入",
+          "use": "可行性守门",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S011-P0026",
+          "source_id": "OET",
+          "locator": "OET-S011-P0026",
+          "claim": "双向分流",
+          "summary": "心理对照可支持投入或退出",
+          "use": "双向分流",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S012-P0021",
+          "source_id": "OET",
+          "locator": "OET-S012-P0021",
+          "claim": "机制",
+          "summary": "可行性调节未来—现实联系",
+          "use": "机制",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S012-P0034",
+          "source_id": "OET",
+          "locator": "OET-S012-P0034",
+          "claim": "行动连接",
+          "summary": "障碍与工具行为形成联系",
+          "use": "行动连接",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S012-P0063",
+          "source_id": "OET",
+          "locator": "OET-S012-P0063",
+          "claim": "复盘",
+          "summary": "心理对照可促进处理负面反馈与计划修正",
+          "use": "复盘",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S013-P0025",
+          "source_id": "OET",
+          "locator": "OET-S013-P0025",
+          "claim": "计划结构",
+          "summary": "实施意向采用如果情境X、那么反应Y",
+          "use": "计划结构",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S013-P0029",
+          "source_id": "OET",
+          "locator": "OET-S013-P0029",
+          "claim": "WOOP整合",
+          "summary": "心理对照与实施意向互补",
+          "use": "WOOP整合",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S013-P0040",
+          "source_id": "OET",
+          "locator": "OET-S013-P0040",
+          "claim": "愿望字段",
+          "summary": "Wish应重要、挑战且可能实现",
+          "use": "愿望字段",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S013-P0042",
+          "source_id": "OET",
+          "locator": "OET-S013-P0042",
+          "claim": "障碍边界",
+          "summary": "Obstacle聚焦关键内部障碍，并以愿望可行为前提",
+          "use": "障碍边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S013-P0044",
+          "source_id": "OET",
+          "locator": "OET-S013-P0044",
+          "claim": "触发计划",
+          "summary": "Plan绑定障碍发生的时间地点与一个反应",
+          "use": "触发计划",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S013-P0048",
+          "source_id": "OET",
+          "locator": "OET-S013-P0048",
+          "claim": "语法验证",
+          "summary": "常见错误是把if端写成自己的行为而非障碍/情境",
+          "use": "语法验证",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-OET-S013-P0050",
+          "source_id": "OET",
+          "locator": "OET-S013-P0050",
+          "claim": "重选目标",
+          "summary": "WOOP可使用户调整或退出不可行愿望",
+          "use": "重选目标",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 14,
+      "systemId": "behavioral_activation",
+      "displayName": "行为激活 · 从回避循环重新接触生活",
+      "thinker": "Martell等行为激活体系",
+      "category": "功能分析、分级活动与自然强化",
+      "evolutionStage": "第四层 · 行动实现：探究、启动、学习与反回避",
+      "primaryLensId": "BA_ACTIVATION",
+      "lensIds": [
+        "BA_ACTIVATION"
+      ],
+      "coreValues": [
+        "行动接触",
+        "功能分析",
+        "反回避",
+        "分级",
+        "自然强化",
+        "同情边界"
+      ],
+      "coreIdeas": [
+        "回避常在短期减轻不适，因此被强化，却在长期缩小生活并增加困难。",
+        "功能分析不问行为抽象上好坏，而问触发、反应、短期结果和长期代价。",
+        "不必等情绪改善才行动，可先安排与价值、掌握或连接有关的分级活动。",
+        "TRAP识别触发—反应—回避模式，TRAC把替代应对落实为可做的一步。",
+        "行动可以先于情绪改善；按协商计划而不是完全按心境行动，让环境接触和反馈重新进入生活。",
+        "功能分析关心行为前因、短期后果和长期后果，不按行为外观简单判断；回避常因短期缓解而被负强化。",
+        "活动必须与个人价值、现实处境和可接触的自然强化相连，不能把忙碌、运动或打卡本身当治疗目标。",
+        "从小开始、拆解全有全无任务、先打断维持循环，再逐步进入长期目标；步幅由容量和风险决定。",
+        "TRAP 把触发—反应—回避模式显性化，TRAC 用替代应对进入现实；替代动作需融入日常并反复测试。",
+        "行动结果要以同情、协作和实验态度复盘；临床原著的适应证、风险和专业判断不能由通用成长产品替代。"
+      ],
+      "knowledgeView": "知是看见行为在具体情境中的功能和强化后果，而不是用“懒惰、意志差”概括整个人。",
+      "actionView": "行是按计划接触现实、减少回避、获得自然结果和新信息；步幅随容量调整。",
+      "splitDiagnosis": "刷手机、躺下、取消、拖延等行为带来短期轻松，因此不断被强化；情绪好转被设成开始条件。",
+      "transformationPath": "记录触发与短期缓解 → 看见长期代价 → 选择价值/掌握/连接活动 → 缩成可完成一步 → 按计划接触 → 观察自然后果。",
+      "actionFeedback": "复盘区分完成、情绪变化、回避功能和现实强化；未完成用于调整活动、时间、难度和支持。",
+      "yangmingConnection": "它把“事上磨”落到反回避和现实接触，但必须避免把临床方法道德化；行动方向仍由良知、价值和安全决定。",
+      "inheritedLimit": "人可能已经理解障碍、拥有计划和效能，却仍因回避立即带来的轻松而维持不行动。",
+      "qualitativeLeap": "从继续分析和准备，推进到用一个分级现实接触改变正在维持问题的行为—后果循环。",
+      "synthesisOutcome": "知行合一获得反回避机制：行动先带来环境反馈和生活接触，情绪不再垄断开始权。",
+      "workSynthesis": "综合行为激活中的活动监测、功能分析、按计划行动、分级任务、TRAP—TRAC和自然强化；仅作自助行动框架，不作疾病诊断。",
+      "sevenLoopRoles": [
+        "容纳",
+        "启动",
+        "求证",
+        "恢复"
+      ],
+      "distinctiveFocus": "最关心当前行为短期避开了什么、长期又维持了什么，以及哪个替代动作能重新接触生活。",
+      "decisionCue": "刷手机、躺着、取消或逃开会立刻轻松一些，却让长期活动、掌握和联系越来越少。",
+      "buildsOnSystemIds": [
+        "beck_cognitive_therapy",
+        "act",
+        "oettingen"
+      ],
+      "relatedSystemIds": [
+        "beck_cognitive_therapy",
+        "act",
+        "oettingen",
+        "maslow",
+        "harvard_positive_psychology"
+      ],
+      "tensions": [
+        "不得把严重低落、急性风险或功能显著受损简化为“先做起来”，需要专业评估时必须转介。",
+        "行动优先不能覆盖容量、疼痛、安全和不可逆后果。"
+      ],
+      "sourceIds": [
+        "BA"
+      ],
+      "commonGroundWithYangming": [
+        "都主张不把行动无限推迟到想通或感觉好之后。",
+        "都依靠具体事情中的实践改变认识和生活。",
+        "都需要复盘行动后果并据此修正下一步。"
+      ],
+      "differencesFromYangming": [
+        "行为激活依据行为功能和环境接触工作，不把行动停滞首先解释为道德或诚意问题。",
+        "它是临床方法，产品只能采用通用的分级行动和复盘原则，不能替代诊疗。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 2804 条可回定位文本记录；本体系保留 14 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-BA-P0037-B003",
+          "source_id": "BA",
+          "locator": "BA-P0037-B003",
+          "claim": "模块框架",
+          "summary": "十项核心原则",
+          "use": "模块框架",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0037-B004",
+          "source_id": "BA",
+          "locator": "BA-P0037-B004",
+          "claim": "由外而内",
+          "summary": "行动可先于情绪改善",
+          "use": "由外而内",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0038-B003",
+          "source_id": "BA",
+          "locator": "BA-P0038-B003",
+          "claim": "功能与方向",
+          "summary": "价值须个体化；回避有短期缓解和长期维持",
+          "use": "功能与方向",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0040-B003",
+          "source_id": "BA",
+          "locator": "BA-P0040-B003",
+          "claim": "事件链",
+          "summary": "ABC功能分析",
+          "use": "事件链",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0041-B003",
+          "source_id": "BA",
+          "locator": "BA-P0041-B003",
+          "claim": "取消情绪门槛",
+          "summary": "按协商计划而非完全按心境行动",
+          "use": "取消情绪门槛",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0042-B003",
+          "source_id": "BA",
+          "locator": "BA-P0042-B003",
+          "claim": "微启动",
+          "summary": "从小开始，拆解全有全无行为",
+          "use": "微启动",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0044-B003",
+          "source_id": "BA",
+          "locator": "BA-P0044-B003",
+          "claim": "交互语气",
+          "summary": "同情性教练风格",
+          "use": "交互语气",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0045-B003",
+          "source_id": "BA",
+          "locator": "BA-P0045-B003",
+          "claim": "复盘",
+          "summary": "以经验试验和结果学习",
+          "use": "复盘",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0098-B004",
+          "source_id": "BA",
+          "locator": "BA-P0098-B004",
+          "claim": "阶段顺序",
+          "summary": "先打断维持循环，再进入长期目标",
+          "use": "阶段顺序",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0102-B003",
+          "source_id": "BA",
+          "locator": "BA-P0102-B003",
+          "claim": "反应用奖励依赖",
+          "summary": "通过活动接触自然强化",
+          "use": "反应用奖励依赖",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0106-B003",
+          "source_id": "BA",
+          "locator": "BA-P0106-B003",
+          "claim": "回避机制",
+          "summary": "回避可能由短期负强化维持",
+          "use": "回避机制",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0213-B002",
+          "source_id": "BA",
+          "locator": "BA-P0213-B002",
+          "claim": "替代应对",
+          "summary": "TRAP转为TRAC",
+          "use": "替代应对",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0214-B005",
+          "source_id": "BA",
+          "locator": "BA-P0214-B005",
+          "claim": "稳定",
+          "summary": "替代行动需融入日常并重复测试",
+          "use": "稳定",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BA-P0097-B004",
+          "source_id": "BA",
+          "locator": "BA-P0097-B004",
+          "claim": "安全边界",
+          "summary": "临床风险需要评估",
+          "use": "安全边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 15,
+      "systemId": "maslow",
+      "displayName": "马斯洛 · 需要、容量与成长条件",
+      "thinker": "Abraham H. Maslow",
+      "category": "需要、恢复与成长容量",
+      "evolutionStage": "第五层 · 系统整合：容量、日常转化与行为工程",
+      "primaryLensId": "MMP_CAPACITY",
+      "lensIds": [
+        "MMP_CAPACITY"
+      ],
+      "coreValues": [
+        "基本需要",
+        "安全",
+        "归属",
+        "成长",
+        "整体人",
+        "容量保护"
+      ],
+      "coreIdeas": [
+        "需要具有动态相对优先性，不是人人按固定台阶逐级通关。",
+        "安全、睡眠、身体、归属和支持不足会真实压缩行动容量，不能先解释为懒惰。",
+        "缺失动机试图填补不足，成长动机趋向表达和实现可能性，两者可以同时存在。",
+        "自我实现不是精英等级，而是更充分地实现真实能力、价值和创造。",
+        "需要不是固定层级开关，而具有相对优先性；多种需要可同时存在，顺序会因个体、文化、承诺和情境发生例外。",
+        "较高需要不要求较低需要百分之百满足才出现，行动设计应看当前满足程度、突出程度和可用容量，而非套金字塔标签。",
+        "行为通常由多重动机共同决定，完成同一任务可能同时服务安全、归属、尊严、成长或补偿。",
+        "缺失性应对与成长方向需要区分：前者先恢复安全和资源，后者才适合扩大挑战、探索和创造。",
+        "基本满足不会自动产生意义和价值；自我实现是发挥能力和潜能的持续过程，不是少数“优秀者”的身份勋章。",
+        "成长也会令人恐惧并被回避；原著自我实现样本和历史方法有限，不能把描述直接当普遍因果规律。"
+      ],
+      "knowledgeView": "知必须包括对身体、基本需要、负荷和当前成长容量的现实判断，不能只知道理想目标。",
+      "actionView": "行既可以是挑战，也可以是睡眠、进食、就医、求助、减负、建立安全和恢复秩序等支持动作。",
+      "splitDiagnosis": "把过载、疼痛、缺睡、安全不足和关系孤立解释为意志问题，用更高目标持续压迫已经不足的容量。",
+      "transformationPath": "检查安全与身体 → 找到当前最紧迫的需要缺口 → 选择恢复、减负或支持动作 → 重新评估容量 → 再决定挑战难度。",
+      "actionFeedback": "观察睡眠、疼痛、注意、压力、支持和功能是否恢复，以及挑战是否扩大能力而非继续透支。",
+      "yangmingConnection": "它提醒致良知和事上磨发生在有限身体与现实条件中，防止把一切困难道德化；需要满足本身仍不决定行动方向。",
+      "inheritedLimit": "行动优先、意义张力和自我超越若缺少容量守门，可能把疲惫、病痛和缺乏支持误称为成长机会。",
+      "qualitativeLeap": "从“怎样让自己继续行动”推进到“当前是否具备行动容量，以及恢复本身是不是最必要的行”。",
+      "synthesisOutcome": "知行合一纳入有限人性：休息、求助、治疗、减负和建立安全可以是服务长期方向的正当行动。",
+      "workSynthesis": "以《动机与人格》中的动态需要优先、缺失/成长动机、整体人和自我实现构成容量守门；拒绝刚性金字塔解释。",
+      "sevenLoopRoles": [
+        "方向",
+        "容纳",
+        "恢复",
+        "稳定"
+      ],
+      "distinctiveFocus": "最关心当前身体和基本需要是否允许挑战，以及恢复、减负或支持是否应先于执行。",
+      "decisionCue": "你睡眠不足、身体不适、过载、缺少安全或支持，继续硬逼只会把行动变成透支。",
+      "buildsOnSystemIds": [
+        "self_determination",
+        "behavioral_activation"
+      ],
+      "relatedSystemIds": [
+        "laozi",
+        "self_determination",
+        "frankl",
+        "behavioral_activation",
+        "harvard_positive_psychology",
+        "comb_bcw"
+      ],
+      "tensions": [
+        "需要层级不能用于给人贴等级、推迟一切成长或诊断人格。",
+        "容量保护不是无限回避挑战，恢复后仍要重新评估可行的小步。"
+      ],
+      "sourceIds": [
+        "MMP"
+      ],
+      "commonGroundWithYangming": [
+        "都关注长期成长而不是单次任务完成。",
+        "都承认工夫须从当前根基和真实容量出发。",
+        "都把人的潜能理解为在生活中展开，而非口头身份。"
+      ],
+      "differencesFromYangming": [
+        "马斯洛从需要满足、容量和成长动机解释行动条件，不提供良知式规范方向。",
+        "其历史样本与层级模型证据有限，不能把需要顺序固化为用户等级。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 2279 条可回定位文本记录；本体系保留 12 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-MMP-S002-P0044",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0044",
+          "claim": "成长方向",
+          "summary": "成长、身份、自主和卓越是重要问题",
+          "use": "成长方向",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0045",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0045",
+          "claim": "非浪漫化成长",
+          "summary": "成长可能令人恐惧并被回避",
+          "use": "非浪漫化成长",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0051",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0051",
+          "claim": "目标内容",
+          "summary": "基本满足不会自动产生价值和意义",
+          "use": "目标内容",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0222",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0222",
+          "claim": "动机状态",
+          "summary": "人持续有欲求，需要具有相对优先",
+          "use": "动机状态",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0283",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0283",
+          "claim": "容量适配",
+          "summary": "基本需要相对满足后，高层需要更突出",
+          "use": "容量适配",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0348",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0348",
+          "claim": "反刚性层级",
+          "summary": "需要顺序存在例外和反转",
+          "use": "反刚性层级",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0353",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0353",
+          "claim": "反金字塔误读",
+          "summary": "不需百分之百满足才出现下一需要",
+          "use": "反金字塔误读",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0360",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0360",
+          "claim": "多因诊断",
+          "summary": "行为通常由多重动机共同决定",
+          "use": "多因诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0780",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0780",
+          "claim": "行动预算",
+          "summary": "区分缺失应对与成长方向",
+          "use": "行动预算",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0858",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0858",
+          "claim": "高阶成长",
+          "summary": "自我实现涉及发挥能力与潜能",
+          "use": "高阶成长",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0876",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0876",
+          "claim": "证据限制",
+          "summary": "自我实现研究样本与资料有限",
+          "use": "证据限制",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-MMP-S002-P0791",
+          "source_id": "MMP",
+          "locator": "MMP-S002-P0791",
+          "claim": "自我调节",
+          "summary": "健康包含适当控制和表达的弹性",
+          "use": "自我调节",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 16,
+      "systemId": "harvard_positive_psychology",
+      "displayName": "哈佛积极心理学课程 · 从信息到转化",
+      "thinker": "Tal Ben-Shahar课程体系",
+      "category": "练习、仪式、允许为人与恢复",
+      "evolutionStage": "第五层 · 系统整合：容量、日常转化与行为工程",
+      "primaryLensId": "HPL_TRANSFORMATION",
+      "lensIds": [
+        "HPL_TRANSFORMATION"
+      ],
+      "coreValues": [
+        "转化",
+        "日常练习",
+        "允许为人",
+        "现实主义乐观",
+        "恢复",
+        "仪式"
+      ],
+      "coreIdeas": [
+        "信息本身不会自动带来改变，理解必须通过认知、情感和行为通道进入生活。",
+        "允许自己为人承认正常情绪和有限性，避免用积极要求制造二次痛苦。",
+        "过程想象比只想象结果更接近行动，仪式把重要行为安置在稳定时间和情境中。",
+        "短练习、恢复、运动、感恩、优势和关系表达为长期行动提供积极资源。",
+        "改变依靠反复实践与反思，而不是一次高峰体验或知识消费。",
+        "课程反复区分信息与转化：知道概念若没有观察、练习、体验和行为改变，不会自动进入生活。",
+        "ABC 三通道把情感、行为和认知视为互联入口；用户卡住时可换通道，而不是继续追问直到得到完整解释。",
+        "允许为人意味着接纳自然情绪，同时保留对行为和判断的选择；情绪接纳不等于许可伤害。",
+        "过程想象同时预演步骤、障碍和坚持，比只想象结果更接近现实准备；其研究依据仍须回到原研究复核。",
+        "仪式把明确行为、时间和价值相连，降低每次重新决策的消耗；仪式应可调整，不能变成连续签到压力。",
+        "自我一致目标、日内短休、睡眠、周休和假期共同形成压力—恢复节律，恢复属于执行系统而非完成后的奖品。",
+        "五分钟启动可打断拖延并开启上升循环，但必须先排除真实疲劳、安全风险和需要专业支持的情况。"
+      ],
+      "knowledgeView": "知必须从information转化为transformation：它在认知、情感、行为和日常仪式中产生可观察变化。",
+      "actionView": "行是小而重复、对人性友好、包含恢复的日常练习，并通过复盘逐渐成为生活结构。",
+      "splitDiagnosis": "不断阅读、听课和理解，却没有练习编排；只想象成功结果，不想象过程；把正常情绪和休息当成失败。",
+      "transformationPath": "选择一个原则 → 指定认知/情感/行为入口 → 过程想象 → 设计最小日常仪式 → 安排恢复 → 周期复盘与调整。",
+      "actionFeedback": "观察练习是否真正进入生活、是否提高积极资源和可恢复性，而不是只记录知识量和连续打卡。",
+      "yangmingConnection": "它把知行合一转成日常转化课程：道理只有被练习、体验、仪式和反思吸收才改变生活；课程材料不提供良知本体。",
+      "inheritedLimit": "前述理论即使结构完整，也可能再次成为信息收藏；缺少简洁练习、仪式、允许为人和恢复，就难以进入日常。",
+      "qualitativeLeap": "从拥有一套解释和方法，推进到把它们编排成可以长期生活、偏离后能够恢复的日常实践。",
+      "synthesisOutcome": "知行合一获得转化节律：学到—练习—体验—恢复—反思—再练习，知识逐步沉淀为生活。",
+      "workSynthesis": "整合课程中的information/transformation、ABC通道、允许为人、过程想象、仪式、恢复、优势、感恩和关系练习；转录材料标明需外部复核。",
+      "sevenLoopRoles": [
+        "启动",
+        "稳定",
+        "恢复",
+        "内化"
+      ],
+      "distinctiveFocus": "最关心丰富知识怎样被安排成今天可练、能够恢复、最终改变生活的日常结构。",
+      "decisionCue": "你阅读和理解了很多，甚至能清楚解释，却没有形成任何稳定练习和生活变化。",
+      "buildsOnSystemIds": [
+        "william_james",
+        "self_determination",
+        "behavioral_activation",
+        "maslow"
+      ],
+      "relatedSystemIds": [
+        "william_james",
+        "act",
+        "self_determination",
+        "oettingen",
+        "behavioral_activation",
+        "maslow"
+      ],
+      "tensions": [
+        "课程转录和教学简化不能被当成临床疗效证据，具体主张需要按来源等级使用。",
+        "积极练习不得否认痛苦、结构障碍和专业照护需要。"
+      ],
+      "sourceIds": [
+        "HPL"
+      ],
+      "commonGroundWithYangming": [
+        "都明确区分知道信息与发生转化。",
+        "都把日常练习、反思和持续实践作为改变条件。",
+        "都要求理念通过具体生活方式被内化。"
+      ],
+      "differencesFromYangming": [
+        "课程讲稿是教学性二手材料，不能与原著和现代系统证据等量齐观。",
+        "它提供练习编排和恢复节律，而不是知行合一的哲学根据。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 1572 条可回定位文本记录；本体系保留 12 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "KB-HPL-001",
+          "source_id": "HPL",
+          "locator": "HPL-C002-P0034—P0037",
+          "claim": "信息不等于转化",
+          "summary": "同一信息因解释和注意形态不同产生不同能量与行动",
+          "use": "每个知识点绑定实践",
+          "boundary": "讲稿为教学源",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-002",
+          "source_id": "HPL",
+          "locator": "HPL-C002-P0071",
+          "claim": "认知情感改变不足",
+          "summary": "若没有行为改变，改变难以落地；行动常需要勇气",
+          "use": "强制形成行动出口",
+          "boundary": "不对高风险情境贸然行动",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-003",
+          "source_id": "HPL",
+          "locator": "HPL-C005-P0038—P0041",
+          "claim": "允许痛苦情绪",
+          "summary": "拒绝自然情绪会付出能量和创造力代价，压制可能反弹",
+          "use": "非评判情绪接纳",
+          "boundary": "情绪接纳不等于行为许可",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-004",
+          "source_id": "HPL",
+          "locator": "HPL-C008-P0014",
+          "claim": "同时想象过程和结果",
+          "summary": "只想结果与想象准备和坚持相比，后者更接近有效行动",
+          "use": "生成含障碍的过程脚本",
+          "boundary": "单一课堂引述需原研究复核",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-005",
+          "source_id": "HPL",
+          "locator": "HPL-C011-P0016",
+          "claim": "ABC三条改变通道",
+          "summary": "情感、行为、认知各有渐进和急性路径，彼此连接",
+          "use": "卡住时切换入口",
+          "boundary": "不将三通道视为完备诊断",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-006",
+          "source_id": "HPL",
+          "locator": "HPL-C011-P0044",
+          "claim": "行为也会改变态度",
+          "summary": "态度影响行为，行为反过来改变自我态度",
+          "use": "用小行动产生自我证据",
+          "boundary": "防止不真实的表演性行为",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-007",
+          "source_id": "HPL",
+          "locator": "HPL-C012-P0023",
+          "claim": "仪式降低意志消耗",
+          "summary": "从依赖自律转向建立固定仪式，可提高持续性",
+          "use": "环境提示、固定时段和动作",
+          "boundary": "自律“配额”理论需现代核验",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-008",
+          "source_id": "HPL",
+          "locator": "HPL-C012-P0031",
+          "claim": "仪式要具体",
+          "summary": "明确行为、时间和价值连接",
+          "use": "用“何时何地做什么”表达",
+          "boundary": "不把日程僵化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-009",
+          "source_id": "HPL",
+          "locator": "HPL-C013-P0060—P0062",
+          "claim": "自我一致目标",
+          "summary": "与个人兴趣和价值一致的目标更有意义，需留时间反思",
+          "use": "目标立项前做一致性访谈",
+          "boundary": "与SDT原著交叉验证",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-010",
+          "source_id": "HPL",
+          "locator": "HPL-C014-P0085",
+          "claim": "恢复有层级",
+          "summary": "日内短休、睡眠、周休和假期构成不同恢复尺度",
+          "use": "产品安排微—中—宏恢复",
+          "boundary": "具体时长个体化",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-011",
+          "source_id": "HPL",
+          "locator": "HPL-C015-P0028",
+          "claim": "可持续成长需补充",
+          "summary": "压力与恢复应形成可持续循环，否则出现耗竭",
+          "use": "把恢复计入执行力",
+          "boundary": "不用幸福语言淡化职业伤害",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "KB-HPL-012",
+          "source_id": "HPL",
+          "locator": "HPL-C015-P0034",
+          "claim": "五分钟启动",
+          "summary": "若为拖延可先推动五分钟，常由行动开启上升循环",
+          "use": "最小可行动作和重新启动",
+          "boundary": "先排除真实疲劳与风险",
+          "evidence_layer": "A/B"
+        }
+      ]
+    },
+    {
+      "sequence": 17,
+      "systemId": "comb_bcw",
+      "displayName": "COM-B/BCW · 把全部思想编排成行为工程",
+      "thinker": "Michie、Atkins、West",
+      "category": "能力、机会、动机与干预设计",
+      "evolutionStage": "第五层 · 系统整合：容量、日常转化与行为工程",
+      "primaryLensId": "BCW_COMB",
+      "lensIds": [
+        "BCW_COMB"
+      ],
+      "coreValues": [
+        "具体行为",
+        "系统性",
+        "多因诊断",
+        "可行性",
+        "可接受性",
+        "公平"
+      ],
+      "coreIdeas": [
+        "先把结果词改写成谁在何时、何地、多久、与谁做什么的具体行为。",
+        "用身体/心理能力、物理/社会机会、反思/自动动机六格形成竞争假设。",
+        "干预必须针对首要机制，不用励志语言覆盖技能、工具、关系和环境缺口。",
+        "APEASE要求同时审查可负担性、可实施性、有效性、可接受性、副作用/安全与公平。",
+        "思想镜头负责解释和方向，行为技术负责落地，现实结果负责重新诊断。",
+        "先把“变健康、变自律”等结果词改写为谁在何时何地与谁一起做什么、频率多少的具体行为。",
+        "COM-B 同时检查身体/心理能力、物理/社会机会、反思/自动动机；任何一格都不能被默认成意志问题。",
+        "能力、机会、动机彼此作用，行为结果也会反向改变三者，因此诊断是当前假设而不是永久类型。",
+        "影响因素应由自述、行为记录、环境观察和相关人反馈三角校验；极简入口不等于没有后续复盘证据。",
+        "TDF 用于细化障碍，九类干预功能决定干预方向，BCT 把方向落实成可复现组件，政策层处理更大环境。",
+        "APEASE 同时审查可负担性、可实施性、效果/成本、可接受性、副作用/安全和公平，效果不是唯一标准。",
+        "八步流程从理解行为、选择目标、规定目标、识别改变点，走到干预功能、政策、技术和交付方式。",
+        "行为改变轮是寻找答案的方法而非魔法子弹；它不提供终极价值，必须由王阳明主线、用户选择和伦理守门确定方向。"
+      ],
+      "knowledgeView": "知是关于一个具体行为在此情境下的能力、机会、动机及其证据置信度的可修正系统模型。",
+      "actionView": "行是经过安全、伦理、容量和APEASE审查的单一干预动作，并包含支持条件、停止规则、证据和复审。",
+      "splitDiagnosis": "把目标写成抽象结果，把所有失败归因于动机，多个方法随意堆叠，或没有检查实施负担、副作用和公平。",
+      "transformationPath": "规定目标行为 → 安全/伦理/容量守门 → COM-B初筛 → 定位七环断点 → 选择主思想与互补思想 → 选择单一干预 → APEASE审查 → 行动与复盘。",
+      "actionFeedback": "结果更新首要障碍、思想匹配、效能、难度和环境假设；两次现实反驳后必须重新诊断而非继续加码。",
+      "yangmingConnection": "它是王阳明主线的工程编排层：帮助回答“这一件事怎样做出来并被检验”，但不能替代良知、价值、意义和责任判断。",
+      "inheritedLimit": "十六套思想已经提供丰富方向与方法，但若没有统一行为规定、障碍路由和干预审查，仍会出现建议堆叠与错配。",
+      "qualitativeLeap": "从拥有多种思想工具，升级为能够说明“为什么此时选这一套、怎样安全落地、结果如何改变下一轮”的完整系统。",
+      "synthesisOutcome": "最终形成知行合一行为工程：王阳明定主线，各思想补机制，COM-B负责路由，单一行动负责求证，复盘负责再知。",
+      "workSynthesis": "以《The Behaviour Change Wheel》中的行为规定、COM-B、TDF、干预功能、行为改变技术、APEASE和八步设计流程完成总编排。",
+      "sevenLoopRoles": [
+        "澄清",
+        "启动",
+        "稳定",
+        "求证",
+        "系统编排"
+      ],
+      "distinctiveFocus": "最关心这个具体行为究竟缺能力、机会还是动机，以及哪一种干预在现实中最可行、可接受和安全。",
+      "decisionCue": "你已经尝试多种思想和技巧却反复错配，真正障碍可能来自多个条件或目标仍然过于抽象。",
+      "buildsOnSystemIds": [
+        "yangming",
+        "dewey",
+        "gollwitzer",
+        "bandura",
+        "oettingen",
+        "behavioral_activation",
+        "maslow",
+        "harvard_positive_psychology"
+      ],
+      "relatedSystemIds": [
+        "yangming",
+        "dewey",
+        "gollwitzer",
+        "bandura",
+        "oettingen",
+        "behavioral_activation",
+        "maslow"
+      ],
+      "tensions": [
+        "行为工程不能决定终极价值、意义和道德方向，有效不等于正当。",
+        "诊断只针对当前行为情境，不能变成疾病诊断、人格标签或永久哲学类型。"
+      ],
+      "sourceIds": [
+        "BCW"
+      ],
+      "commonGroundWithYangming": [
+        "都把抽象方向落到具体行为和现实情境。",
+        "都把行动结果用于继续认识和修正。",
+        "都反对用单一标签解释所有知行分裂。"
+      ],
+      "differencesFromYangming": [
+        "COM-B/BCW是行为设计框架，不决定意义、价值与道德方向。",
+        "它把诊断限定为具体行为情境；若扩张为疾病或人格诊断，就违背本产品边界。"
+      ],
+      "primarySourceFoundation": "V2.0 已重新打开并抽取 1 部登记来源，形成 2938 条可回定位文本记录；本体系保留 21 条重点原著证据，作者主张、跨源综合和产品推论分层呈现。",
+      "evidenceHighlights": [
+        {
+          "evidence_id": "EV-BCW-P0018-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0018-B002",
+          "claim": "总体结构",
+          "summary": "行为改变轮三层：COM-B、九类干预功能、七类政策",
+          "use": "总体结构",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0022-B005",
+          "source_id": "BCW",
+          "locator": "BCW-P0022-B005",
+          "claim": "非自动答案",
+          "summary": "复杂现实仍需基于证据的判断",
+          "use": "非自动答案",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0023-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0023-B002",
+          "claim": "迭代",
+          "summary": "条件会变化，干预需直接评估",
+          "use": "迭代",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0023-B006",
+          "source_id": "BCW",
+          "locator": "BCW-P0023-B006",
+          "claim": "多目标评估",
+          "summary": "APEASE用于干预判断",
+          "use": "多目标评估",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0025-B005",
+          "source_id": "BCW",
+          "locator": "BCW-P0025-B005",
+          "claim": "安全",
+          "summary": "有效干预也可能产生副作用",
+          "use": "安全",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0028-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0028-B002",
+          "claim": "边界",
+          "summary": "BCW是寻找答案的方法，不是魔法子弹",
+          "use": "边界",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0032-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0032-B002",
+          "claim": "四步理解行为",
+          "summary": "先定义、选择、规定和诊断目标行为",
+          "use": "四步理解行为",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0033-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0033-B002",
+          "claim": "目标行为",
+          "summary": "结果词不是行为，需要具体化",
+          "use": "目标行为",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0060-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0060-B002",
+          "claim": "COM-B总纲",
+          "summary": "行为需要能力、机会、动机",
+          "use": "COM-B总纲",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0061-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0061-B002",
+          "claim": "动机拆分",
+          "summary": "动机区分反思与自动",
+          "use": "动机拆分",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0062-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0062-B002",
+          "claim": "动态模型",
+          "summary": "COM-B各部分相互作用并可被行为反向改变",
+          "use": "动态模型",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0064-B004",
+          "source_id": "BCW",
+          "locator": "BCW-P0064-B004",
+          "claim": "六格诊断",
+          "summary": "身体能力定义",
+          "use": "六格诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0064-B006",
+          "source_id": "BCW",
+          "locator": "BCW-P0064-B006",
+          "claim": "六格诊断",
+          "summary": "心理能力定义",
+          "use": "六格诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0064-B008",
+          "source_id": "BCW",
+          "locator": "BCW-P0064-B008",
+          "claim": "六格诊断",
+          "summary": "物理机会定义",
+          "use": "六格诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0064-B010",
+          "source_id": "BCW",
+          "locator": "BCW-P0064-B010",
+          "claim": "六格诊断",
+          "summary": "社会机会定义",
+          "use": "六格诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0064-B012",
+          "source_id": "BCW",
+          "locator": "BCW-P0064-B012",
+          "claim": "六格诊断",
+          "summary": "反思动机定义",
+          "use": "六格诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0064-B014",
+          "source_id": "BCW",
+          "locator": "BCW-P0064-B014",
+          "claim": "六格诊断",
+          "summary": "自动动机定义",
+          "use": "六格诊断",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0067-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0067-B002",
+          "claim": "精准分析",
+          "summary": "多来源、多方法三角校验行为影响因素",
+          "use": "精准分析",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0111-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0111-B002",
+          "claim": "干预路由",
+          "summary": "九类干预功能",
+          "use": "干预路由",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0151-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0151-B002",
+          "claim": "可复现组件",
+          "summary": "从干预功能继续选择具体BCT",
+          "use": "可复现组件",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        },
+        {
+          "evidence_id": "EV-BCW-P0245-B002",
+          "source_id": "BCW",
+          "locator": "BCW-P0245-B002",
+          "claim": "行为字段",
+          "summary": "谁、做什么、何时、何地、频率、与谁",
+          "use": "行为字段",
+          "boundary": "适用边界与证据质量须结合该来源章节和思想体系边界解释。",
+          "evidence_layer": "A/B"
+        }
+      ]
+    }
+  ]
+}

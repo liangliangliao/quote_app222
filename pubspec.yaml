@@ -2,7 +2,7 @@ name: quote_app
 description: "\u540D\u4EBA\u540D\u8A00\u83B7\u53D6\u5668\uFF08\u672C\u5730\u539F\u578B\
   \ + \u5B9A\u65F6 + \u5386\u53F2 + \u901A\u77E5\uFF09"
 publish_to: none
-version: 0.1.0+1
+version: 0.1.0+3
 environment:
   sdk: '>=3.2.0 <4.0.0'
 dependencies:
@@ -56,6 +56,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  sqflite_common_ffi: ^2.3.3
 flutter:
   uses-material-design: true
   assets:
@@ -81,3 +82,6 @@ flutter:
     - assets/yangming_module/mission_state_machines.json
     - assets/yangming_module/zhixing15_content.txt
     - assets/yangming_module/lizhi12_content.txt
+    - assets/zhixing_tree/knowledge_manifest_v2_0.json
+    - assets/zhixing_tree/knowledge_systems_v2_0.json
+    - assets/zhixing_tree/knowledge_v2_0.md
