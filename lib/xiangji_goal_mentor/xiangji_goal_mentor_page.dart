@@ -1626,7 +1626,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               const Expanded(
                 child: Text('今天的一步', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               ),
-              _Pill(text: step!.status == 'in_progress' ? '已开始' : '待开始'),
+              _Pill(text: step.status == 'in_progress' ? '已开始' : '待开始'),
             ],
           ),
           const SizedBox(height: 14),
