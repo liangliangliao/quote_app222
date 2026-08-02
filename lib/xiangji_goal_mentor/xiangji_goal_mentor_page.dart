@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'xiangji_book_service.dart';
 import 'xiangji_dao.dart';
 import 'xiangji_engine.dart';
+import 'xiangji_grounded_ai_service.dart';
 import 'xiangji_knowledge_repository.dart';
 import 'xiangji_models.dart';
 import 'xiangji_reminder_service.dart';
@@ -33,6 +34,8 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   late final XiangjiReminderService _reminders =
       XiangjiReminderService(dao: _dao);
   late final XiangjiBookService _books = XiangjiBookService(dao: _dao);
+  late final XiangjiGroundedAiService _grounded =
+      XiangjiGroundedAiService(dao: _dao);
   final TextEditingController _goalController = TextEditingController();
   final FocusNode _goalFocus = FocusNode();
 
@@ -50,6 +53,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   List<Map<String, Object?>> _versions = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _events = const <Map<String, Object?>>[];
   List<XiangjiBookInfo> _importedBooks = const <XiangjiBookInfo>[];
+  int _pendingRemoteDeletions = 0;
   XiangjiReminderSettings _reminderSettings =
       XiangjiReminderSettings.defaults();
   XiangjiZoomMode _zoomMode = XiangjiZoomMode.panorama;
@@ -75,6 +79,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       });
     }
     try {
+      try {
+        await _books.retryPendingProviderDeletions();
+      } catch (_) {}
       final catalog = await _knowledge.load();
       final goal = await _dao.activeGoal();
       if (goal != null) await _dao.markGoalSeen(goal.id);
@@ -90,6 +97,8 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           : await _dao.stateEvents(goal.id);
       final settings = await _dao.reminderSettings();
       final imported = await _dao.importedBooks();
+      final pendingRemoteDeletions =
+          (await _dao.pendingProviderDeletions()).length;
       XiangjiGuidance? guidance;
       if (goal != null) {
         guidance = _engine.guidanceFor(
@@ -110,6 +119,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         _events = events;
         _reminderSettings = settings;
         _importedBooks = imported;
+        _pendingRemoteDeletions = pendingRemoteDeletions;
         _guidance = guidance;
         _loading = false;
       });
@@ -1073,7 +1083,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除本地书籍？'),
-        content: Text('将删除“${book.title}”的本地文件与元数据。内置授权书库不受影响。'),
+        content: Text(
+          book.providerMirror?.hasRemoteResources ?? false
+              ? '将立即停止检索“${book.title}”，删除本地文件与索引，并请求删除 OpenAI 文件和向量库。远端失败时会明确显示“处理中”并保留重试记录。'
+              : '将删除“${book.title}”的本地文件、索引与元数据。内置授权书库不受影响。',
+        ),
         actions: <Widget>[
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
           FilledButton(
@@ -1086,14 +1100,231 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     if (confirmed != true) return;
     setState(() => _working = true);
     try {
-      await _books.deletePrivateBook(book);
+      final result = await _books.deletePrivateBook(book);
       await _reload();
-      _showMessage('私人书籍文件和本地元数据已删除。');
+      _showMessage(
+        result.remoteDeletionPending
+            ? '本地内容已删除；OpenAI 远端副本删除处理中，系统会继续重试。'
+            : '私人书籍、本地索引和远端镜像已删除。',
+      );
     } catch (error) {
       _showMessage('删除未完成：${_cleanError(error)}');
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  Future<void> _syncPrivateBook(XiangjiBookInfo book) async {
+    if (!book.isLocallySearchable) {
+      _showMessage('这本书尚未完成可检索解析。');
+      return;
+    }
+    var legalUseConfirmed = false;
+    final consented = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('同步到 OpenAI 远端书库？'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('对象：“${book.title}”'),
+                const SizedBox(height: 10),
+                const Text(
+                  '将上传带本地来源 ID 与定位的可检索文本镜像，用于 OpenAI Vector Store 检索；不会上传目标历史。文件与向量库默认保留到你手动删除。OpenAI API 业务数据默认不用于训练，除非你的账户明确选择共享。存储与调用可能产生费用。你也可以取消并继续使用纯本地索引。',
+                  style: TextStyle(height: 1.5),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '删除方式：本应用会删除向量库关联、文件和向量库；失败时显示“处理中”并可重试。',
+                  style: TextStyle(height: 1.45),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: legalUseConfirmed,
+                  onChanged: (value) => setDialogState(
+                    () => legalUseConfirmed = value ?? false,
+                  ),
+                  title: const Text('我确认拥有这本书的合法使用权，并同意上述处理'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('保持纯本地'),
+            ),
+            FilledButton(
+              onPressed: legalUseConfirmed
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              child: const Text('同意并同步'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (consented != true) return;
+    setState(() => _working = true);
+    try {
+      final mirror = await _books.syncProviderMirror(
+        book,
+        consentedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      await _reload();
+      if (mirror.syncStatus == 'ready') {
+        _showMessage('OpenAI 远端镜像已就绪，内容哈希校验通过。');
+      } else if (mirror.syncStatus == 'processing') {
+        _showMessage('OpenAI 正在建立索引；稍后点击“刷新同步”即可继续检查。');
+      } else {
+        _showMessage('远端同步未完成：${mirror.lastError}');
+      }
+    } catch (error) {
+      _showMessage('远端同步未完成：${_cleanError(error)}');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _askPrivateBook(XiangjiBookInfo book) async {
+    if (!book.isLocallySearchable) {
+      _showMessage('这本书尚未完成可检索解析。');
+      return;
+    }
+    final controller = TextEditingController();
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('严格问书 · ${book.title}'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                '只允许本书的可回定位片段进入回答。远端镜像就绪时先由 OpenAI Vector Store 检索；否则只发送本地命中的有限片段，不发送整本书。引用不一致会直接拦截。',
+                style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: '你想核对什么？',
+                  hintText: '例如：这本书如何区分自己的目标与外部期待？',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              controller.text.trim(),
+            ),
+            child: const Text('检索并校验'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query == null || query.trim().isEmpty) return;
+    final safety = _engine.assessSafety(query);
+    if (safety.highRisk) {
+      await _showSafetyDialog(safety.message);
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      final answer = await _grounded.ask(
+        query: query,
+        allowedBookIds: <String>[book.id],
+        goalId: _goal?.id,
+        goalContext: _goal?.originalText ?? '',
+        kbVersion: _catalog?.version ?? '',
+      );
+      if (!mounted) return;
+      await _showGroundedAnswer(answer);
+    } on XiangjiGroundingException catch (error) {
+      _showMessage(error.message);
+    } catch (error) {
+      _showMessage('严格问书未完成：${_cleanError(error)}');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _showGroundedAnswer(XiangjiGroundedAnswer answer) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.78,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+            children: <Widget>[
+              const Text(
+                '严格问书结果',
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${_sourceModeLabel(answer.sourceMode)} · ${answer.modelLabel}',
+                style: const TextStyle(color: _moss, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 14),
+              _ContentTypeLabel(text: _contentTypeLabel(answer.contentType)),
+              const SizedBox(height: 8),
+              SelectableText(answer.text, style: const TextStyle(height: 1.6)),
+              const SizedBox(height: 12),
+              Text(
+                '边界：${answer.boundary}',
+                style: const TextStyle(fontSize: 12, color: Colors.black54, height: 1.45),
+              ),
+              const Divider(height: 30),
+              const Text('已通过本地校验的来源', style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              ...answer.citations.map(
+                (citation) => Card(
+                  color: _sand,
+                  child: Padding(
+                    padding: const EdgeInsets.all(13),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(citation.bookTitle, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 3),
+                        Text(citation.locator, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                        const SizedBox(height: 7),
+                        SelectableText('“${citation.excerpt}”', style: const TextStyle(height: 1.45)),
+                        const SizedBox(height: 5),
+                        Text(citation.sourceId, style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _exportData() async {
@@ -1135,7 +1366,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清除向己的全部数据？'),
-        content: const Text('这会删除目标、版本、行动、成长证据、校准记录、提醒设置、私人书籍和应用内历史导出文件。此操作无法撤销。'),
+        content: const Text('这会先停止私人书籍检索并删除本地索引，再删除已授权的 OpenAI 文件与向量库，最后清除目标、版本、行动、成长证据、校准、提醒和历史导出。若远端删除失败，清除会停在“处理中”而不会谎称完成。'),
         actions: <Widget>[
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
           FilledButton(
@@ -1948,24 +2179,90 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
             ],
           ),
           const SizedBox(height: 6),
-          const Text('私人文件默认只保存在设备。未完成受控解析、来源定位和授权前，不会用于思想家观点生成。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const Text('导入后在设备内解析为可定位短片段。严格问书只使用本轮允许书籍；远端镜像必须另行授权，且内容哈希一致才可检索。', style: TextStyle(fontSize: 12, color: Colors.black54)),
           const SizedBox(height: 10),
+          if (_pendingRemoteDeletions > 0)
+            Card(
+              color: Colors.orange.shade50,
+              child: ListTile(
+                leading: const Icon(Icons.sync_problem_outlined, color: Colors.orange),
+                title: Text('$_pendingRemoteDeletions 个 OpenAI 远端副本删除处理中'),
+                subtitle: const Text('本地内容已停止检索；请保留 API Key，系统会继续重试。'),
+                trailing: TextButton(
+                  onPressed: _working
+                      ? null
+                      : () async {
+                          setState(() => _working = true);
+                          try {
+                            await _books.retryPendingProviderDeletions();
+                            await _reload();
+                          } finally {
+                            if (mounted) setState(() => _working = false);
+                          }
+                        },
+                  child: const Text('重试'),
+                ),
+              ),
+            ),
           if (_importedBooks.isEmpty)
             const _EmptyState(icon: Icons.menu_book_outlined, title: '尚未导入私人书籍', message: '支持 PDF、EPUB、DOCX、TXT、Markdown 和 AZW3。')
           else
             ..._importedBooks.map(
-              (book) => Card(
-                child: ListTile(
-                  leading: const CircleAvatar(backgroundColor: _sand, child: Icon(Icons.lock_outline, color: _moss)),
-                  title: Text(book.title),
-                  subtitle: const Text('本地私密 · 尚未索引，不参与严格生成'),
-                  trailing: IconButton(
-                    tooltip: '删除本地书籍',
-                    onPressed: () => _deletePrivateBook(book),
-                    icon: const Icon(Icons.delete_outline),
+              (book) {
+                final mirrorReady =
+                    book.providerMirror?.isReadyFor(book.contentHash) ?? false;
+                final mirrorStatus = _mirrorStatus(book);
+                return Card(
+                  child: Column(
+                    children: <Widget>[
+                      ListTile(
+                        leading: const CircleAvatar(backgroundColor: _sand, child: Icon(Icons.lock_outline, color: _moss)),
+                        title: Text(book.title),
+                        subtitle: Text(
+                          '${_bookParseStatus(book)}\n$mirrorStatus',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        isThreeLine: true,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 8, 8),
+                        child: Row(
+                          children: <Widget>[
+                            OutlinedButton.icon(
+                              onPressed: _working || !book.isLocallySearchable
+                                  ? null
+                                  : () => _askPrivateBook(book),
+                              icon: const Icon(Icons.manage_search_outlined),
+                              label: const Text('严格问书'),
+                            ),
+                            const SizedBox(width: 8),
+                            if (!mirrorReady &&
+                                book.providerMirror?.syncStatus != 'delete_pending')
+                              FilledButton.tonalIcon(
+                                onPressed: _working || !book.isLocallySearchable
+                                    ? null
+                                    : () => _syncPrivateBook(book),
+                                icon: const Icon(Icons.cloud_upload_outlined),
+                                label: Text(
+                                  book.providerMirror?.syncStatus == 'processing'
+                                      ? '刷新同步'
+                                      : '同步 OpenAI',
+                                ),
+                              ),
+                            const Spacer(),
+                            IconButton(
+                              tooltip: '删除本地与远端书籍副本',
+                              onPressed: _working ? null : () => _deletePrivateBook(book),
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
+                );
+              },
             ),
           const SizedBox(height: 22),
           const Text('内置来源', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
@@ -2082,8 +2379,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.offline_bolt_outlined, color: _moss),
                 title: Text('本地严格模式'),
-                subtitle: Text('内置知识与来源可离线使用；没有依据时停止，不凭模型记忆补写。'),
+                subtitle: Text('私人书籍在设备内解析与检索；只发送命中的有限片段，没有依据时停止。'),
                 trailing: Icon(Icons.check_circle, color: _moss),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.cloud_outlined, color: _moss),
+                title: Text('OpenAI 镜像（逐书授权）'),
+                subtitle: Text('仅在哈希一致且索引就绪时参与检索；可删除并保留无正文审计。'),
               ),
               _BoundaryNote(),
             ],
@@ -2119,6 +2422,75 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         ),
       ],
     );
+  }
+
+  String _bookParseStatus(XiangjiBookInfo book) {
+    switch (book.parseStatus) {
+      case 'ready':
+        return '本地可检索 · ${book.chunkCount} 个片段 · ${book.parsedCharacters} 字';
+      case 'partial':
+        return '本地部分索引 · ${book.chunkCount} 个片段 · 严格回答会提示覆盖边界';
+      case 'failed':
+        return '解析未完成 · ${book.parseError.isEmpty ? '可删除后重新导入' : book.parseError}';
+      case 'pending':
+        return '正在建立本地索引';
+      default:
+        return '本地状态：${book.parseStatus.isEmpty ? '未知' : book.parseStatus}';
+    }
+  }
+
+  String _mirrorStatus(XiangjiBookInfo book) {
+    final mirror = book.providerMirror;
+    if (mirror == null) return 'OpenAI 镜像：未授权（纯本地）';
+    if (mirror.syncStatus == 'ready' &&
+        !mirror.isReadyFor(book.contentHash)) {
+      return 'OpenAI 镜像：哈希不一致，已禁止检索';
+    }
+    switch (mirror.syncStatus) {
+      case 'ready':
+        return 'OpenAI 镜像：已就绪且哈希一致';
+      case 'processing':
+      case 'uploading':
+        return 'OpenAI 镜像：正在建立索引';
+      case 'failed':
+        return 'OpenAI 镜像：同步失败 · ${mirror.lastError}';
+      case 'delete_pending':
+        return 'OpenAI 镜像：删除处理中';
+      case 'deleted':
+        return 'OpenAI 镜像：已删除';
+      default:
+        return 'OpenAI 镜像：${mirror.syncStatus}';
+    }
+  }
+
+  static String _sourceModeLabel(String mode) {
+    switch (mode) {
+      case 'provider_mirror':
+        return 'OpenAI 镜像检索';
+      case 'local_index_after_remote_failure':
+        return '远端失败后安全降级到本地索引';
+      case 'local_index_no_model':
+        return '纯本地检索（未调用模型）';
+      default:
+        return '本地严格索引';
+    }
+  }
+
+  static String _contentTypeLabel(String value) {
+    switch (value) {
+      case 'direct_quote':
+        return '原书短摘录';
+      case 'source_paraphrase':
+        return '根据本书转述';
+      case 'multi_source_synthesis':
+        return '多书综合';
+      case 'kb_application':
+        return '知识库应用推导';
+      case 'ai_contextual_inference':
+        return '结合情境的 AI 推断';
+      default:
+        return value;
+    }
   }
 
   String _dateText(int milliseconds) {

@@ -203,6 +203,78 @@ class XiangjiGoalMentorDao {
         deleted_at_ms INTEGER
       )
     ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_book_chunks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        chunk_uid TEXT NOT NULL UNIQUE,
+        chunk_index INTEGER NOT NULL,
+        section_title TEXT NOT NULL DEFAULT '',
+        source_locator TEXT NOT NULL,
+        text_content TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        UNIQUE(book_id, chunk_index),
+        FOREIGN KEY(book_id) REFERENCES xiangji_local_books(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
+      CREATE INDEX IF NOT EXISTS idx_xiangji_book_chunks_book
+      ON xiangji_book_chunks(book_id, chunk_index)
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_provider_mirrors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        provider_file_id TEXT NOT NULL DEFAULT '',
+        provider_index_id TEXT NOT NULL DEFAULT '',
+        synced_hash TEXT NOT NULL DEFAULT '',
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        indexed_status TEXT NOT NULL DEFAULT 'pending',
+        consented_at_ms INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        UNIQUE(book_id, provider),
+        FOREIGN KEY(book_id) REFERENCES xiangji_local_books(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_provider_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        action TEXT NOT NULL,
+        status TEXT NOT NULL,
+        content_hash TEXT NOT NULL DEFAULT '',
+        provider_file_id TEXT NOT NULL DEFAULT '',
+        provider_index_id TEXT NOT NULL DEFAULT '',
+        error_summary TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(book_id) REFERENCES xiangji_local_books(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_generation_audits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id INTEGER,
+        query_hash TEXT NOT NULL,
+        output_hash TEXT NOT NULL DEFAULT '',
+        provider TEXT NOT NULL,
+        model_label TEXT NOT NULL DEFAULT '',
+        source_mode TEXT NOT NULL,
+        allowed_book_ids_json TEXT NOT NULL,
+        source_chunk_ids_json TEXT NOT NULL,
+        validation_status TEXT NOT NULL,
+        validation_errors_json TEXT NOT NULL,
+        prompt_version TEXT NOT NULL,
+        schema_version TEXT NOT NULL,
+        kb_version TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE SET NULL
+      )
+    ''');
     await batch.commit(noResult: true);
     final goalColumns = await db.rawQuery('PRAGMA table_info(xiangji_goals)');
     if (!goalColumns.any(
@@ -212,6 +284,53 @@ class XiangjiGoalMentorDao {
         'ALTER TABLE xiangji_goals ADD COLUMN last_interaction_at_ms INTEGER',
       );
     }
+    await _addColumnIfMissing(
+      db,
+      'xiangji_local_books',
+      'mime_type',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'xiangji_local_books',
+      'size_bytes',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'xiangji_local_books',
+      'parsed_characters',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'xiangji_local_books',
+      'chunk_count',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'xiangji_local_books',
+      'parse_error',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'xiangji_local_books',
+      'updated_at_ms',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  static Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((row) => row['name']?.toString() == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   Future<XiangjiGoal?> activeGoal() async {
@@ -1002,58 +1121,366 @@ class XiangjiGoalMentorDao {
 
   Future<List<XiangjiBookInfo>> importedBooks() async {
     final db = await _database();
+    final rows = await db.rawQuery('''
+      SELECT b.*,
+             m.provider AS mirror_provider,
+             m.provider_file_id AS mirror_file_id,
+             m.provider_index_id AS mirror_index_id,
+             m.synced_hash AS mirror_synced_hash,
+             m.sync_status AS mirror_sync_status,
+             m.indexed_status AS mirror_indexed_status,
+             m.consented_at_ms AS mirror_consented_at_ms,
+             m.last_error AS mirror_last_error,
+             m.created_at_ms AS mirror_created_at_ms,
+             m.updated_at_ms AS mirror_updated_at_ms
+      FROM xiangji_local_books b
+      LEFT JOIN xiangji_provider_mirrors m
+        ON m.id = (
+          SELECT newest.id
+          FROM xiangji_provider_mirrors newest
+          WHERE newest.book_id = b.id
+          ORDER BY newest.updated_at_ms DESC
+          LIMIT 1
+        )
+      WHERE b.deleted_at_ms IS NULL
+      ORDER BY b.created_at_ms DESC
+    ''');
+    return rows.map(_bookFromRow).toList(growable: false);
+  }
+
+  Future<XiangjiBookInfo?> importedBookById(
+    String id, {
+    bool includeDeleted = false,
+  }) async {
+    final numericId = _localBookId(id);
+    if (numericId == null) return null;
+    final db = await _database();
+    final rows = await db.rawQuery('''
+      SELECT b.*,
+             m.provider AS mirror_provider,
+             m.provider_file_id AS mirror_file_id,
+             m.provider_index_id AS mirror_index_id,
+             m.synced_hash AS mirror_synced_hash,
+             m.sync_status AS mirror_sync_status,
+             m.indexed_status AS mirror_indexed_status,
+             m.consented_at_ms AS mirror_consented_at_ms,
+             m.last_error AS mirror_last_error,
+             m.created_at_ms AS mirror_created_at_ms,
+             m.updated_at_ms AS mirror_updated_at_ms
+      FROM xiangji_local_books b
+      LEFT JOIN xiangji_provider_mirrors m
+        ON m.id = (
+          SELECT newest.id
+          FROM xiangji_provider_mirrors newest
+          WHERE newest.book_id = b.id
+          ORDER BY newest.updated_at_ms DESC
+          LIMIT 1
+        )
+      WHERE b.id = ? ${includeDeleted ? '' : 'AND b.deleted_at_ms IS NULL'}
+      LIMIT 1
+    ''', <Object?>[numericId]);
+    return rows.isEmpty ? null : _bookFromRow(rows.first);
+  }
+
+  Future<XiangjiBookInfo?> activeBookByHash(String contentHash) async {
+    final db = await _database();
     final rows = await db.query(
       'xiangji_local_books',
-      where: 'deleted_at_ms IS NULL',
-      orderBy: 'created_at_ms DESC',
+      where: 'content_hash = ? AND deleted_at_ms IS NULL',
+      whereArgs: <Object?>[contentHash],
+      limit: 1,
     );
-    return rows
-        .map(
-          (row) => XiangjiBookInfo(
-            id: 'local_${row['id']}',
-            title: (row['title'] ?? '').toString(),
-            author: (row['author'] ?? '').toString(),
-            edition: (row['edition'] ?? '').toString(),
-            sourceStatus: 'private_local',
-            builtIn: false,
-            localPath: (row['local_uri'] ?? '').toString(),
-            contentHash: (row['content_hash'] ?? '').toString(),
-            parseStatus: (row['parse_status'] ?? 'pending').toString(),
-          ),
-        )
-        .toList(growable: false);
+    return rows.isEmpty ? null : _bookFromRow(rows.first);
   }
 
   Future<int> saveImportedBook({
     required String title,
     required String localPath,
     required String contentHash,
+    String mimeType = '',
+    int sizeBytes = 0,
+    String parseStatus = 'pending',
   }) async {
     final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
     return db.insert('xiangji_local_books', <String, Object?>{
       'title': title,
       'author': '',
       'edition': '',
       'local_uri': localPath,
       'content_hash': contentHash,
-      'parse_status': 'local_only',
+      'parse_status': parseStatus,
       'permission_scope': 'private',
+      'mime_type': mimeType,
+      'size_bytes': sizeBytes,
+      'parsed_characters': 0,
+      'chunk_count': 0,
+      'parse_error': '',
+      'created_at_ms': now,
+      'updated_at_ms': now,
+    });
+  }
+
+  Future<void> replaceBookChunks({
+    required int bookId,
+    required List<XiangjiBookChunk> chunks,
+    required int parsedCharacters,
+    required bool partial,
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction<void>((txn) async {
+      await txn.delete(
+        'xiangji_book_chunks',
+        where: 'book_id = ?',
+        whereArgs: <Object?>[bookId],
+      );
+      for (final chunk in chunks) {
+        await txn.insert('xiangji_book_chunks', <String, Object?>{
+          'book_id': bookId,
+          'chunk_uid': chunk.id,
+          'chunk_index': chunk.chunkIndex,
+          'section_title': chunk.sectionTitle,
+          'source_locator': chunk.locator,
+          'text_content': chunk.text,
+          'content_hash': chunk.contentHash,
+          'created_at_ms': now,
+        });
+      }
+      await txn.update(
+        'xiangji_local_books',
+        <String, Object?>{
+          'parse_status': partial ? 'partial' : 'ready',
+          'parsed_characters': parsedCharacters,
+          'chunk_count': chunks.length,
+          'parse_error': '',
+          'updated_at_ms': now,
+        },
+        where: 'id = ? AND deleted_at_ms IS NULL',
+        whereArgs: <Object?>[bookId],
+      );
+    });
+  }
+
+  Future<void> markBookParseFailed(int bookId, String error) async {
+    final db = await _database();
+    await db.update(
+      'xiangji_local_books',
+      <String, Object?>{
+        'parse_status': 'failed',
+        'parsed_characters': 0,
+        'chunk_count': 0,
+        'parse_error': _safeAuditText(error),
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ? AND deleted_at_ms IS NULL',
+      whereArgs: <Object?>[bookId],
+    );
+  }
+
+  Future<List<XiangjiBookChunk>> chunksForBooks(
+    List<String> bookIds,
+  ) async {
+    final ids = bookIds.map(_localBookId).whereType<int>().toSet().toList();
+    if (ids.isEmpty) return const <XiangjiBookChunk>[];
+    final db = await _database();
+    final placeholders = List<String>.filled(ids.length, '?').join(',');
+    final rows = await db.rawQuery('''
+      SELECT c.*, b.title AS book_title
+      FROM xiangji_book_chunks c
+      JOIN xiangji_local_books b ON b.id = c.book_id
+      WHERE c.book_id IN ($placeholders)
+        AND b.deleted_at_ms IS NULL
+        AND b.permission_scope = 'private'
+        AND b.parse_status IN ('ready', 'partial')
+      ORDER BY c.book_id, c.chunk_index
+    ''', ids.cast<Object?>());
+    return rows.map(_chunkFromRow).toList(growable: false);
+  }
+
+  Future<List<XiangjiBookChunk>> chunksByIds(
+    List<String> chunkIds, {
+    List<String>? allowedBookIds,
+  }) async {
+    final unique = chunkIds.where((id) => id.trim().isNotEmpty).toSet().toList();
+    if (unique.isEmpty) return const <XiangjiBookChunk>[];
+    final allowed = (allowedBookIds ?? const <String>[])
+        .map(_localBookId)
+        .whereType<int>()
+        .toSet()
+        .toList();
+    if (allowedBookIds != null && allowed.isEmpty) {
+      return const <XiangjiBookChunk>[];
+    }
+    final db = await _database();
+    final chunkPlaceholders = List<String>.filled(unique.length, '?').join(',');
+    final bookClause = allowedBookIds == null
+        ? ''
+        : 'AND c.book_id IN (${List<String>.filled(allowed.length, '?').join(',')})';
+    final rows = await db.rawQuery('''
+      SELECT c.*, b.title AS book_title
+      FROM xiangji_book_chunks c
+      JOIN xiangji_local_books b ON b.id = c.book_id
+      WHERE c.chunk_uid IN ($chunkPlaceholders)
+        $bookClause
+        AND b.deleted_at_ms IS NULL
+        AND b.permission_scope = 'private'
+        AND b.parse_status IN ('ready', 'partial')
+    ''', <Object?>[...unique, ...allowed]);
+    final byId = <String, XiangjiBookChunk>{
+      for (final row in rows) (row['chunk_uid'] ?? '').toString(): _chunkFromRow(row),
+    };
+    return unique.map((id) => byId[id]).whereType<XiangjiBookChunk>().toList();
+  }
+
+  Future<XiangjiProviderMirror?> providerMirror(
+    String bookId, {
+    String provider = 'openai',
+  }) async {
+    final numericId = _localBookId(bookId);
+    if (numericId == null) return null;
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_provider_mirrors',
+      where: 'book_id = ? AND provider = ?',
+      whereArgs: <Object?>[numericId, provider],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _mirrorFromRow(rows.first);
+  }
+
+  Future<XiangjiProviderMirror> saveProviderMirror(
+    XiangjiProviderMirror mirror,
+  ) async {
+    final numericId = _localBookId(mirror.bookId);
+    if (numericId == null) throw ArgumentError('无效的本地书籍ID。');
+    final db = await _database();
+    final existing = await providerMirror(
+      mirror.bookId,
+      provider: mirror.provider,
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final row = <String, Object?>{
+      'book_id': numericId,
+      'provider': mirror.provider,
+      'provider_file_id': mirror.providerFileId,
+      'provider_index_id': mirror.providerIndexId,
+      'synced_hash': mirror.syncedHash,
+      'sync_status': mirror.syncStatus,
+      'indexed_status': mirror.indexedStatus,
+      'consented_at_ms': mirror.consentedAtMs,
+      'last_error': _safeAuditText(mirror.lastError),
+      'created_at_ms': existing?.createdAtMs ??
+          (mirror.createdAtMs > 0 ? mirror.createdAtMs : now),
+      'updated_at_ms': now,
+    };
+    if (existing == null) {
+      await db.insert('xiangji_provider_mirrors', row);
+    } else {
+      await db.update(
+        'xiangji_provider_mirrors',
+        row,
+        where: 'book_id = ? AND provider = ?',
+        whereArgs: <Object?>[numericId, mirror.provider],
+      );
+    }
+    return (await providerMirror(mirror.bookId, provider: mirror.provider))!;
+  }
+
+  Future<List<XiangjiProviderMirror>> pendingProviderDeletions() async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_provider_mirrors',
+      where: "sync_status = 'delete_pending'",
+      orderBy: 'updated_at_ms',
+    );
+    return rows.map(_mirrorFromRow).toList(growable: false);
+  }
+
+  Future<void> recordProviderEvent({
+    required String bookId,
+    required String provider,
+    required String action,
+    required String status,
+    required String contentHash,
+    String providerFileId = '',
+    String providerIndexId = '',
+    String errorSummary = '',
+  }) async {
+    final numericId = _localBookId(bookId);
+    if (numericId == null) return;
+    final db = await _database();
+    await db.insert('xiangji_provider_events', <String, Object?>{
+      'book_id': numericId,
+      'provider': provider,
+      'action': action,
+      'status': status,
+      'content_hash': contentHash,
+      'provider_file_id': providerFileId,
+      'provider_index_id': providerIndexId,
+      'error_summary': _safeAuditText(errorSummary),
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> recordGenerationAudit({
+    int? goalId,
+    required String queryHash,
+    required String outputHash,
+    required String provider,
+    required String modelLabel,
+    required String sourceMode,
+    required List<String> allowedBookIds,
+    required List<String> sourceChunkIds,
+    required String validationStatus,
+    required List<String> validationErrors,
+    String kbVersion = '',
+  }) async {
+    final db = await _database();
+    await db.insert('xiangji_generation_audits', <String, Object?>{
+      'goal_id': goalId,
+      'query_hash': queryHash,
+      'output_hash': outputHash,
+      'provider': provider,
+      'model_label': modelLabel,
+      'source_mode': sourceMode,
+      'allowed_book_ids_json': jsonEncode(allowedBookIds),
+      'source_chunk_ids_json': jsonEncode(sourceChunkIds),
+      'validation_status': validationStatus,
+      'validation_errors_json': jsonEncode(validationErrors),
+      'prompt_version': 'xiangji_grounded_guidance_v1',
+      'schema_version': 'xiangji_grounded_answer_v1',
+      'kb_version': kbVersion,
       'created_at_ms': DateTime.now().millisecondsSinceEpoch,
     });
   }
 
   Future<void> markImportedBookDeleted(String id) async {
-    final numericId = int.tryParse(id.replaceFirst('local_', ''));
+    final numericId = _localBookId(id);
     if (numericId == null) return;
     final db = await _database();
-    await db.update(
-      'xiangji_local_books',
-      <String, Object?>{
-        'deleted_at_ms': DateTime.now().millisecondsSinceEpoch,
-      },
-      where: 'id = ?',
-      whereArgs: <Object?>[numericId],
-    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction<void>((txn) async {
+      await txn.delete(
+        'xiangji_book_chunks',
+        where: 'book_id = ?',
+        whereArgs: <Object?>[numericId],
+      );
+      await txn.update(
+        'xiangji_local_books',
+        <String, Object?>{
+          'local_uri': '',
+          'parse_status': 'deleted',
+          'parsed_characters': 0,
+          'chunk_count': 0,
+          'parse_error': '',
+          'updated_at_ms': now,
+          'deleted_at_ms': now,
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>[numericId],
+      );
+    });
   }
 
   Future<String> exportJson() async {
@@ -1070,6 +1497,9 @@ class XiangjiGoalMentorDao {
       'xiangji_reminder_settings',
       'xiangji_reminder_deliveries',
       'xiangji_local_books',
+      'xiangji_provider_mirrors',
+      'xiangji_provider_events',
+      'xiangji_generation_audits',
     ];
     final payload = <String, Object?>{
       'product': '向己智能目标导师',
@@ -1085,6 +1515,10 @@ class XiangjiGoalMentorDao {
   Future<void> deleteAllData() async {
     final db = await _database();
     const tables = <String>[
+      'xiangji_generation_audits',
+      'xiangji_provider_events',
+      'xiangji_provider_mirrors',
+      'xiangji_book_chunks',
       'xiangji_growth_evidence',
       'xiangji_checkins',
       'xiangji_daily_steps',
@@ -1192,6 +1626,90 @@ class XiangjiGoalMentorDao {
       'actor': 'user',
       'created_at_ms': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  static XiangjiBookInfo _bookFromRow(Map<String, Object?> row) {
+    final numericId = _int(row['id']);
+    final provider = (row['mirror_provider'] ?? '').toString();
+    final mirror = provider.isEmpty
+        ? null
+        : XiangjiProviderMirror(
+            bookId: 'local_$numericId',
+            provider: provider,
+            providerFileId: (row['mirror_file_id'] ?? '').toString(),
+            providerIndexId: (row['mirror_index_id'] ?? '').toString(),
+            syncedHash: (row['mirror_synced_hash'] ?? '').toString(),
+            syncStatus:
+                (row['mirror_sync_status'] ?? 'pending').toString(),
+            indexedStatus:
+                (row['mirror_indexed_status'] ?? 'pending').toString(),
+            consentedAtMs: _int(row['mirror_consented_at_ms']),
+            lastError: (row['mirror_last_error'] ?? '').toString(),
+            createdAtMs: _int(row['mirror_created_at_ms']),
+            updatedAtMs: _int(row['mirror_updated_at_ms']),
+          );
+    return XiangjiBookInfo(
+      id: 'local_$numericId',
+      title: (row['title'] ?? '').toString(),
+      author: (row['author'] ?? '').toString(),
+      edition: (row['edition'] ?? '').toString(),
+      sourceStatus: 'private_local',
+      builtIn: false,
+      localPath: (row['local_uri'] ?? '').toString(),
+      contentHash: (row['content_hash'] ?? '').toString(),
+      parseStatus: (row['parse_status'] ?? 'pending').toString(),
+      mimeType: (row['mime_type'] ?? '').toString(),
+      sizeBytes: _int(row['size_bytes']),
+      parsedCharacters: _int(row['parsed_characters']),
+      chunkCount: _int(row['chunk_count']),
+      parseError: (row['parse_error'] ?? '').toString(),
+      providerMirror: mirror,
+    );
+  }
+
+  static XiangjiBookChunk _chunkFromRow(Map<String, Object?> row) =>
+      XiangjiBookChunk(
+        id: (row['chunk_uid'] ?? '').toString(),
+        bookId: 'local_${_int(row['book_id'])}',
+        bookTitle: (row['book_title'] ?? '').toString(),
+        chunkIndex: _int(row['chunk_index']),
+        sectionTitle: (row['section_title'] ?? '').toString(),
+        locator: (row['source_locator'] ?? '').toString(),
+        text: (row['text_content'] ?? '').toString(),
+        contentHash: (row['content_hash'] ?? '').toString(),
+      );
+
+  static XiangjiProviderMirror _mirrorFromRow(Map<String, Object?> row) =>
+      XiangjiProviderMirror(
+        bookId: 'local_${_int(row['book_id'])}',
+        provider: (row['provider'] ?? 'openai').toString(),
+        providerFileId: (row['provider_file_id'] ?? '').toString(),
+        providerIndexId: (row['provider_index_id'] ?? '').toString(),
+        syncedHash: (row['synced_hash'] ?? '').toString(),
+        syncStatus: (row['sync_status'] ?? 'pending').toString(),
+        indexedStatus: (row['indexed_status'] ?? 'pending').toString(),
+        consentedAtMs: _int(row['consented_at_ms']),
+        lastError: (row['last_error'] ?? '').toString(),
+        createdAtMs: _int(row['created_at_ms']),
+        updatedAtMs: _int(row['updated_at_ms']),
+      );
+
+  static int? _localBookId(String id) {
+    final normalized = id.trim();
+    if (!normalized.startsWith('local_')) return null;
+    return int.tryParse(normalized.substring('local_'.length));
+  }
+
+  static int _int(Object? value) {
+    if (value is int) return value;
+    return int.tryParse((value ?? '0').toString()) ?? 0;
+  }
+
+  static String _safeAuditText(String value) {
+    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return normalized.length <= 240
+        ? normalized
+        : '${normalized.substring(0, 237)}...';
   }
 
   static XiangjiGoalState _stateForCalibration(

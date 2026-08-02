@@ -56,4 +56,49 @@ void main() {
     expect(await newerExport.exists(), isFalse);
     expect(await unrelated.exists(), isTrue);
   });
+
+  test('import immediately builds a local index and deduplicates by hash',
+      () async {
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+    );
+    addTearDown(database.close);
+    final root = await Directory.systemTemp.createTemp('xiangji_import_test_');
+    addTearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+    final source = File(p.join(root.path, 'source.md'));
+    await source.writeAsString('''
+# 自己的目标
+先区分自己愿意承担的目标与仅仅为了外部评价而接受的目标。
+
+# 可控行动
+选择一个今天能够启动并留下证据的小动作。
+''');
+    final dao = XiangjiGoalMentorDao(database: database);
+    final service = XiangjiBookService(
+      dao: dao,
+      documentsDirectory: () async => root,
+    );
+
+    final first = await service.importPrivateBookFromFile(
+      source,
+      displayName: 'source.md',
+      mimeType: 'text/markdown',
+    );
+    final second = await service.importPrivateBookFromFile(
+      source,
+      displayName: 'copy.md',
+      mimeType: 'text/markdown',
+    );
+
+    expect(first.imported, isTrue);
+    expect(first.parseStatus, 'ready');
+    final books = await dao.importedBooks();
+    expect(books, hasLength(1));
+    expect(books.single.isLocallySearchable, isTrue);
+    expect(books.single.chunkCount, greaterThan(0));
+    expect(second.imported, isFalse);
+    expect(second.bookId, first.bookId);
+  });
 }

@@ -591,6 +591,12 @@ class XiangjiBookInfo {
     this.localPath = '',
     this.contentHash = '',
     this.parseStatus = '',
+    this.mimeType = '',
+    this.sizeBytes = 0,
+    this.parsedCharacters = 0,
+    this.chunkCount = 0,
+    this.parseError = '',
+    this.providerMirror,
   });
 
   final String id;
@@ -602,6 +608,151 @@ class XiangjiBookInfo {
   final String localPath;
   final String contentHash;
   final String parseStatus;
+  final String mimeType;
+  final int sizeBytes;
+  final int parsedCharacters;
+  final int chunkCount;
+  final String parseError;
+  final XiangjiProviderMirror? providerMirror;
+
+  bool get isLocallySearchable =>
+      !builtIn &&
+      (parseStatus == 'ready' || parseStatus == 'partial') &&
+      chunkCount > 0;
+}
+
+class XiangjiBookChunk {
+  const XiangjiBookChunk({
+    required this.id,
+    required this.bookId,
+    required this.bookTitle,
+    required this.chunkIndex,
+    required this.sectionTitle,
+    required this.locator,
+    required this.text,
+    required this.contentHash,
+    this.relevanceScore = 0,
+  });
+
+  final String id;
+  final String bookId;
+  final String bookTitle;
+  final int chunkIndex;
+  final String sectionTitle;
+  final String locator;
+  final String text;
+  final String contentHash;
+  final double relevanceScore;
+
+  XiangjiBookChunk copyWith({double? relevanceScore}) => XiangjiBookChunk(
+        id: id,
+        bookId: bookId,
+        bookTitle: bookTitle,
+        chunkIndex: chunkIndex,
+        sectionTitle: sectionTitle,
+        locator: locator,
+        text: text,
+        contentHash: contentHash,
+        relevanceScore: relevanceScore ?? this.relevanceScore,
+      );
+}
+
+class XiangjiProviderMirror {
+  const XiangjiProviderMirror({
+    required this.bookId,
+    required this.provider,
+    required this.providerFileId,
+    required this.providerIndexId,
+    required this.syncedHash,
+    required this.syncStatus,
+    required this.indexedStatus,
+    required this.consentedAtMs,
+    required this.lastError,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  final String bookId;
+  final String provider;
+  final String providerFileId;
+  final String providerIndexId;
+  final String syncedHash;
+  final String syncStatus;
+  final String indexedStatus;
+  final int consentedAtMs;
+  final String lastError;
+  final int createdAtMs;
+  final int updatedAtMs;
+
+  bool get hasRemoteResources =>
+      providerFileId.isNotEmpty || providerIndexId.isNotEmpty;
+
+  bool isReadyFor(String contentHash) =>
+      syncStatus == 'ready' &&
+      indexedStatus == 'ready' &&
+      syncedHash.isNotEmpty &&
+      syncedHash == contentHash;
+
+  XiangjiProviderMirror copyWith({
+    String? providerFileId,
+    String? providerIndexId,
+    String? syncedHash,
+    String? syncStatus,
+    String? indexedStatus,
+    int? consentedAtMs,
+    String? lastError,
+    int? createdAtMs,
+    int? updatedAtMs,
+  }) =>
+      XiangjiProviderMirror(
+        bookId: bookId,
+        provider: provider,
+        providerFileId: providerFileId ?? this.providerFileId,
+        providerIndexId: providerIndexId ?? this.providerIndexId,
+        syncedHash: syncedHash ?? this.syncedHash,
+        syncStatus: syncStatus ?? this.syncStatus,
+        indexedStatus: indexedStatus ?? this.indexedStatus,
+        consentedAtMs: consentedAtMs ?? this.consentedAtMs,
+        lastError: lastError ?? this.lastError,
+        createdAtMs: createdAtMs ?? this.createdAtMs,
+        updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      );
+}
+
+class XiangjiGroundedCitation {
+  const XiangjiGroundedCitation({
+    required this.sourceId,
+    required this.bookId,
+    required this.bookTitle,
+    required this.locator,
+    required this.excerpt,
+  });
+
+  final String sourceId;
+  final String bookId;
+  final String bookTitle;
+  final String locator;
+  final String excerpt;
+}
+
+class XiangjiGroundedAnswer {
+  const XiangjiGroundedAnswer({
+    required this.text,
+    required this.boundary,
+    required this.contentType,
+    required this.citations,
+    required this.sourceMode,
+    required this.provider,
+    required this.modelLabel,
+  });
+
+  final String text;
+  final String boundary;
+  final String contentType;
+  final List<XiangjiGroundedCitation> citations;
+  final String sourceMode;
+  final String provider;
+  final String modelLabel;
 }
 
 int _asInt(Object? value) {
