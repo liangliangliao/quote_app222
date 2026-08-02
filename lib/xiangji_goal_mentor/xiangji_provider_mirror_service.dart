@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import '../services/unified_ai_service.dart';
 import 'xiangji_dao.dart';
 import 'xiangji_models.dart';
 
@@ -31,7 +30,7 @@ class XiangjiProviderMirrorService {
     int pollAttempts = 8,
   })  : _dao = dao ?? XiangjiGoalMentorDao(),
         _client = client ?? http.Client(),
-        _configResolver = configResolver ?? _resolveOpenAiConfig,
+        _configResolver = configResolver ?? _missingOpenAiConfig,
         _pollDelay = pollDelay,
         _pollAttempts = pollAttempts;
 
@@ -559,35 +558,8 @@ class XiangjiProviderMirrorService {
     return buffer.toString();
   }
 
-  static Future<XiangjiOpenAiConfig> _resolveOpenAiConfig() async {
-    final resolved = await UnifiedAiService().resolveGlobalConfig(
-      forcedProvider: 'openai',
-    );
-    if (!resolved.available || resolved.apiKey.trim().isEmpty) {
-      throw StateError('请先在全局 AI 设置中配置 OpenAI API Key。');
-    }
-    final endpoint = Uri.tryParse(resolved.endpoint);
-    if (endpoint == null || endpoint.host != 'api.openai.com') {
-      throw StateError('首发远端书库只允许 OpenAI 官方 API 端点。');
-    }
-    var path = endpoint.path;
-    for (final suffix in const <String>['/responses', '/chat/completions']) {
-      if (path.endsWith(suffix)) {
-        path = path.substring(0, path.length - suffix.length);
-      }
-    }
-    if (path.isEmpty) path = '/v1';
-    final apiBase = Uri(
-      scheme: endpoint.scheme,
-      host: endpoint.host,
-      port: endpoint.hasPort ? endpoint.port : null,
-      path: path,
-    ).toString();
-    return XiangjiOpenAiConfig(
-      apiKey: resolved.apiKey,
-      model: resolved.model,
-      apiBase: apiBase,
-    );
+  static Future<XiangjiOpenAiConfig> _missingOpenAiConfig() async {
+    throw StateError('请先在全局 AI 设置中配置 OpenAI API Key。');
   }
 
   static String _safeError(Object error) {

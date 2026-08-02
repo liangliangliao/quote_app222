@@ -12,7 +12,9 @@ import 'xiangji_engine.dart';
 import 'xiangji_grounded_ai_service.dart';
 import 'xiangji_knowledge_repository.dart';
 import 'xiangji_models.dart';
+import 'xiangji_provider_mirror_service.dart';
 import 'xiangji_reminder_service.dart';
+import 'xiangji_unified_ai_adapter.dart';
 
 const Color _ink = Color(0xFF20342D);
 const Color _moss = Color(0xFF3D725D);
@@ -33,9 +35,21 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   final XiangjiGoalMentorEngine _engine = XiangjiGoalMentorEngine();
   late final XiangjiReminderService _reminders =
       XiangjiReminderService(dao: _dao);
-  late final XiangjiBookService _books = XiangjiBookService(dao: _dao);
-  late final XiangjiGroundedAiService _grounded =
-      XiangjiGroundedAiService(dao: _dao);
+  late final XiangjiUnifiedAiAdapter _aiAdapter = XiangjiUnifiedAiAdapter();
+  late final XiangjiProviderMirrorService _providerMirror =
+      XiangjiProviderMirrorService(
+    dao: _dao,
+    configResolver: _aiAdapter.resolveOpenAiConfig,
+  );
+  late final XiangjiBookService _books = XiangjiBookService(
+    dao: _dao,
+    mirrorService: _providerMirror,
+  );
+  late final XiangjiGroundedAiService _grounded = XiangjiGroundedAiService(
+    dao: _dao,
+    mirrorService: _providerMirror,
+    generator: _aiAdapter.generate,
+  );
   final TextEditingController _goalController = TextEditingController();
   final FocusNode _goalFocus = FocusNode();
 

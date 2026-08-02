@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
-import '../services/unified_ai_service.dart';
 import 'xiangji_book_index_service.dart';
 import 'xiangji_dao.dart';
 import 'xiangji_engine.dart';
@@ -49,7 +48,7 @@ class XiangjiGroundedAiService {
             XiangjiBookIndexService(dao: dao ?? XiangjiGoalMentorDao()),
         _mirrorService = mirrorService ??
             XiangjiProviderMirrorService(dao: dao ?? XiangjiGoalMentorDao()),
-        _generator = generator ?? _defaultGenerate,
+        _generator = generator ?? _localOnlyGenerate,
         _engine = engine ?? XiangjiGoalMentorEngine();
 
   static const Set<String> _contentTypes = <String>{
@@ -400,35 +399,16 @@ class XiangjiGroundedAiService {
         kbVersion: kbVersion,
       );
 
-  static Future<XiangjiGeneratedText> _defaultGenerate({
+  static Future<XiangjiGeneratedText> _localOnlyGenerate({
     required String systemPrompt,
     required String prompt,
     String? forcedProvider,
-  }) async {
-    final ai = UnifiedAiService();
-    final config = await ai.resolveGlobalConfig(forcedProvider: forcedProvider);
-    if (!config.available) {
-      return const XiangjiGeneratedText(
+  }) async =>
+      const XiangjiGeneratedText(
         text: '',
         provider: 'local',
         modelLabel: '本地检索',
       );
-    }
-    final text = await ai.generateText(
-      prompt: prompt,
-      purpose: 'xiangji_goal_mentor.grounded_guidance',
-      systemPrompt: systemPrompt,
-      maxTokens: 1500,
-      expectJson: true,
-      forcedProvider: forcedProvider,
-      temperature: 0.1,
-    );
-    return XiangjiGeneratedText(
-      text: text,
-      provider: config.provider,
-      modelLabel: config.label,
-    );
-  }
 
   static const String _systemPrompt = '''
 你是“向己智能目标导师”的受控知识解释器。
