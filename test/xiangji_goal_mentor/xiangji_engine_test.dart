@@ -45,8 +45,9 @@ void main() {
       final smaller = engine.shrinkStep(step);
 
       expect(smaller.actionText, step.smallerVariant);
+      expect(smaller.actionText, isNot(step.actionText));
       expect(smaller.sourceSystemId, step.sourceSystemId);
-      expect(smaller.controllabilityReason, contains('降低'));
+      expect(smaller.controllabilityReason, contains('只要求启动'));
     });
 
     test('stops when a selected system has no traceable evidence', () {
