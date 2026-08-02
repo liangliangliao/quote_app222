@@ -74,20 +74,26 @@ void main() {
       }
       if (request.method == 'POST' &&
           request.url.path == '/v1/vector_stores/vs_test/search') {
-        return http.Response(
-          jsonEncode(<String, Object?>{
-            'data': <Object?>[
-              <String, Object?>{
-                'content': <Object?>[
-                  <String, Object?>{
-                    'type': 'text',
-                    'text': '[[SOURCE_ID:$chunkId]]\n远端检索只能返回当前书籍范围内的来源标识和片段。',
-                  },
-                ],
-              },
-            ],
-          }),
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode(<String, Object?>{
+              'data': <Object?>[
+                <String, Object?>{
+                  'content': <Object?>[
+                    <String, Object?>{
+                      'type': 'text',
+                      'text':
+                          '[[SOURCE_ID:$chunkId]]\n远端检索只能返回当前书籍范围内的来源标识和片段。',
+                    },
+                  ],
+                },
+              ],
+            }),
+          ),
           200,
+          headers: const <String, String>{
+            'content-type': 'application/json; charset=utf-8',
+          },
         );
       }
       if (request.method == 'DELETE') return http.Response('{}', 200);

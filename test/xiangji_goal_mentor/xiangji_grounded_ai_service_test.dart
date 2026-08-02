@@ -111,8 +111,8 @@ void main() {
       ),
     );
 
-    expect(
-      () => service.ask(
+    await expectLater(
+      service.ask(
         query: '外部期待意味着什么？',
         allowedBookIds: <String>['local_$bookId'],
       ),
@@ -149,8 +149,8 @@ void main() {
       },
     );
 
-    expect(
-      () => service.ask(
+    await expectLater(
+      service.ask(
         query: '我不想活了',
         allowedBookIds: <String>['local_$bookId'],
       ),
