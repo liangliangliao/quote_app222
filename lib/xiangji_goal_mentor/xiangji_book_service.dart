@@ -19,10 +19,15 @@ class XiangjiBookImportResult {
 }
 
 class XiangjiBookService {
-  XiangjiBookService({XiangjiGoalMentorDao? dao})
-      : _dao = dao ?? XiangjiGoalMentorDao();
+  XiangjiBookService({
+    XiangjiGoalMentorDao? dao,
+    Future<Directory> Function()? documentsDirectory,
+  })  : _dao = dao ?? XiangjiGoalMentorDao(),
+        _documentsDirectory =
+            documentsDirectory ?? getApplicationDocumentsDirectory;
 
   final XiangjiGoalMentorDao _dao;
+  final Future<Directory> Function() _documentsDirectory;
 
   Future<XiangjiBookImportResult> importPrivateBook() async {
     final picked = await FilePicker.platform.pickFiles(
@@ -56,7 +61,7 @@ class XiangjiBookService {
         message: '所选文件不存在或已被移动',
       );
     }
-    final root = await getApplicationDocumentsDirectory();
+    final root = await _documentsDirectory();
     final directory = Directory(p.join(root.path, 'xiangji_private_books'));
     await directory.create(recursive: true);
     final safeName = p.basename(sourcePath).replaceAll(
@@ -97,5 +102,36 @@ class XiangjiBookService {
       if (await file.exists()) await file.delete();
     }
     await _dao.markImportedBookDeleted(book.id);
+  }
+
+  /// Removes every registered private book and the narrowly scoped storage
+  /// directory, including orphan files left by an interrupted import.
+  Future<void> deleteAllPrivateBooks() async {
+    final books = await _dao.importedBooks();
+    for (final book in books) {
+      await deletePrivateBook(book);
+    }
+    final root = await _documentsDirectory();
+    final directory = Directory(p.join(root.path, 'xiangji_private_books'));
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  }
+
+  /// Export files contain the same sensitive goal text as the database, so
+  /// "clear all" must remove prior exports created inside app storage too.
+  Future<int> deleteGeneratedExports() async {
+    final root = await _documentsDirectory();
+    var deleted = 0;
+    await for (final entity in root.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = p.basename(entity.path);
+      if (!name.startsWith('xiangji_export_') || !name.endsWith('.json')) {
+        continue;
+      }
+      await entity.delete();
+      deleted += 1;
+    }
+    return deleted;
   }
 }

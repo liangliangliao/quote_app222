@@ -4,11 +4,27 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
 import 'xiangji_models.dart';
+import 'xiangji_policies.dart';
 
 class XiangjiGoalMentorDao {
+  XiangjiGoalMentorDao({Database? database}) : _providedDatabase = database;
+
   static Future<void>? _schemaFuture;
+  final Database? _providedDatabase;
+  Future<void>? _providedSchemaFuture;
 
   Future<Database> _database() async {
+    final provided = _providedDatabase;
+    if (provided != null) {
+      _providedSchemaFuture ??= _ensureSchema(provided);
+      try {
+        await _providedSchemaFuture;
+      } catch (_) {
+        _providedSchemaFuture = null;
+        rethrow;
+      }
+      return provided;
+    }
     final db = await AppDatabase.instance();
     _schemaFuture ??= _ensureSchema(db);
     try {
@@ -155,6 +171,22 @@ class XiangjiGoalMentorDao {
         quiet_end TEXT NOT NULL DEFAULT '08:00',
         task_uid TEXT,
         updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_reminder_deliveries (
+        delivery_key TEXT PRIMARY KEY,
+        goal_id INTEGER NOT NULL,
+        local_day TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 1,
+        claimed_at_ms INTEGER NOT NULL,
+        delivered_at_ms INTEGER,
+        last_error TEXT,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE CASCADE
       )
     ''');
     batch.execute('''
@@ -493,15 +525,11 @@ class XiangjiGoalMentorDao {
         'CHECKIN_NOT_ALLOWED:${goal.state.value}/${step.status}',
       );
     }
-    final allowed = <String>{
-      'completed',
-      'partially_completed',
-      'not_started',
-      'blocked',
-      'no_longer_relevant',
-    };
-    if (!allowed.contains(resultType)) {
+    if (tryParseXiangjiCheckinResult(resultType) == null) {
       throw ArgumentError.value(resultType, 'resultType');
+    }
+    if (tryParseXiangjiEvidenceType(evidenceType) == null) {
+      throw ArgumentError.value(evidenceType, 'evidenceType');
     }
     final db = await _database();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -626,13 +654,19 @@ class XiangjiGoalMentorDao {
     XiangjiCalibrationDecision decision,
   ) async {
     if (goal.state != XiangjiGoalState.calibrating &&
-        !_allowedTransition(goal.state, XiangjiGoalState.calibrating)) {
+        !XiangjiGoalTransitionPolicy.canTransition(
+          goal.state,
+          XiangjiGoalState.calibrating,
+        )) {
       throw StateError(
         'INVALID_GOAL_TRANSITION:${goal.state.value}->${XiangjiGoalState.calibrating.value}',
       );
     }
     final target = _stateForCalibration(decision.result);
-    if (!_allowedTransition(XiangjiGoalState.calibrating, target)) {
+    if (!XiangjiGoalTransitionPolicy.canTransition(
+      XiangjiGoalState.calibrating,
+      target,
+    )) {
       throw StateError(
         'INVALID_GOAL_TRANSITION:${XiangjiGoalState.calibrating.value}->${target.value}',
       );
@@ -690,7 +724,7 @@ class XiangjiGoalMentorDao {
     required String trigger,
     required String reason,
   }) async {
-    if (!_allowedTransition(goal.state, target)) {
+    if (!XiangjiGoalTransitionPolicy.canTransition(goal.state, target)) {
       throw StateError(
         'INVALID_GOAL_TRANSITION:${goal.state.value}->${target.value}',
       );
@@ -767,45 +801,176 @@ class XiangjiGoalMentorDao {
   Future<String?> reminderContent() async {
     final goal = await activeGoal();
     if (goal == null || goal.state == XiangjiGoalState.archived) return null;
-    return _reminderContentForGoal(goal);
+    return (await _reminderForGoal(goal)).body;
   }
 
-  Future<String?> scheduledReminderContent() async {
+  Future<String?> scheduledReminderContent({DateTime? now}) async {
+    return (await _scheduledReminderCandidate(now: now))?.body;
+  }
+
+  /// Atomically claims today's proactive reminder. A second worker receives
+  /// null, so duplicate scheduler wakeups cannot notify twice on the same day.
+  Future<XiangjiScheduledReminder?> claimScheduledReminder({
+    DateTime? now,
+  }) async {
+    final candidate = await _scheduledReminderCandidate(now: now);
+    if (candidate == null) return null;
+    final claimedAt = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    final db = await _database();
+    return db.transaction<XiangjiScheduledReminder?>((txn) async {
+      final existing = await txn.query(
+        'xiangji_reminder_deliveries',
+        where: 'delivery_key = ?',
+        whereArgs: <Object?>[candidate.deliveryKey],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        final row = existing.first;
+        if ((row['status'] ?? '').toString() != 'failed') return null;
+        final rawAttempts = row['attempt_count'];
+        final attempts = rawAttempts is int
+            ? rawAttempts
+            : int.tryParse((rawAttempts ?? '1').toString()) ?? 1;
+        await txn.update(
+          'xiangji_reminder_deliveries',
+          <String, Object?>{
+            'status': 'claimed',
+            'attempt_count': attempts + 1,
+            'claimed_at_ms': claimedAt,
+            'last_error': null,
+            'updated_at_ms': claimedAt,
+          },
+          where: 'delivery_key = ? AND status = ?',
+          whereArgs: <Object?>[candidate.deliveryKey, 'failed'],
+        );
+        return candidate;
+      }
+      await txn.insert(
+        'xiangji_reminder_deliveries',
+        <String, Object?>{
+          'delivery_key': candidate.deliveryKey,
+          'goal_id': candidate.goalId,
+          'local_day': candidate.deliveryKey.split(':').last,
+          'content_type': candidate.contentType,
+          'status': 'claimed',
+          'attempt_count': 1,
+          'claimed_at_ms': claimedAt,
+          'created_at_ms': claimedAt,
+          'updated_at_ms': claimedAt,
+        },
+      );
+      return candidate;
+    });
+  }
+
+  Future<void> markScheduledReminderDelivered(String deliveryKey) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      'xiangji_reminder_deliveries',
+      <String, Object?>{
+        'status': 'delivered',
+        'delivered_at_ms': now,
+        'last_error': null,
+        'updated_at_ms': now,
+      },
+      where: 'delivery_key = ? AND status = ?',
+      whereArgs: <Object?>[deliveryKey, 'claimed'],
+    );
+  }
+
+  Future<void> markScheduledReminderFailed(
+    String deliveryKey,
+    Object error,
+  ) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final errorText = error.toString();
+    await db.update(
+      'xiangji_reminder_deliveries',
+      <String, Object?>{
+        'status': 'failed',
+        'last_error': errorText.length <= 300
+            ? errorText
+            : errorText.substring(0, 300),
+        'updated_at_ms': now,
+      },
+      where: 'delivery_key = ? AND status = ?',
+      whereArgs: <Object?>[deliveryKey, 'claimed'],
+    );
+  }
+
+  Future<XiangjiScheduledReminder?> _scheduledReminderCandidate({
+    DateTime? now,
+  }) async {
+    final settings = await reminderSettings();
+    if (!settings.enabled) return null;
     final goal = await activeGoal();
     if (goal == null || goal.state == XiangjiGoalState.archived) return null;
+    final localNow = now ?? DateTime.now();
     final lastInteraction = await _lastInteractionAtMs(goal.id);
-    final silenceDays = DateTime.now()
+    final silenceDays = localNow
         .difference(DateTime.fromMillisecondsSinceEpoch(lastInteraction))
         .inDays;
-    if (silenceDays >= 21) {
-      if ((silenceDays - 21) % 7 != 0) return null;
-      return '你曾经说过：“${goal.originalText}”\n'
-          '现在是目标变了，还是生活暂时占据了注意力？不必用补作业的方式回来。';
+    if (!XiangjiReminderPolicy.shouldSendForSilence(silenceDays)) {
+      return null;
     }
-    if (silenceDays >= 7 && (silenceDays - 7) % 3 != 0) return null;
-    return _reminderContentForGoal(goal);
+    final content = XiangjiReminderPolicy.isLongSilence(silenceDays)
+        ? _XiangjiReminderContent(
+            type: 'reconnect',
+            body: '你曾经说过：“${goal.originalText}”\n'
+                '现在是目标变了，还是生活暂时占据了注意力？不必用补作业的方式回来。',
+          )
+        : await _reminderForGoal(goal);
+    return XiangjiScheduledReminder(
+      deliveryKey: XiangjiReminderPolicy.deliveryKey(
+        goalId: goal.id,
+        localDate: localNow,
+      ),
+      goalId: goal.id,
+      contentType: content.type,
+      body: content.body,
+    );
   }
 
-  Future<String?> _reminderContentForGoal(XiangjiGoal goal) async {
+  Future<_XiangjiReminderContent> _reminderForGoal(XiangjiGoal goal) async {
     if (goal.state == XiangjiGoalState.completed) {
-      return '你已经完成“${goal.originalText}”。先不急着制造更高目标，看看这段经历形成了什么能力，以及是否需要巩固、分享或休息。';
+      return _XiangjiReminderContent(
+        type: 'evidence',
+        body: '你已经完成“${goal.originalText}”。先不急着制造更高目标，看看这段经历形成了什么能力，以及是否需要巩固、分享或休息。',
+      );
     }
     if (goal.state == XiangjiGoalState.paused) {
-      return '你暂停的是推进，不是你重视的“${goal.higherValues.join('、')}”。现在不必催促自己。';
+      return _XiangjiReminderContent(
+        type: 'value',
+        body: '你暂停的是推进，不是你重视的“${goal.higherValues.join('、')}”。现在不必催促自己。',
+      );
     }
     if (goal.state == XiangjiGoalState.reselecting) {
-      return '具体路径可以改变，你仍可以保留“${goal.higherValues.join('、')}”这些高层价值。';
+      return _XiangjiReminderContent(
+        type: 'value',
+        body: '具体路径可以改变，你仍可以保留“${goal.higherValues.join('、')}”这些高层价值。',
+      );
     }
     final step = await currentStep(goal.id);
     if (step != null &&
         (step.status == 'ready' || step.status == 'in_progress')) {
-      return '你曾说：“${goal.originalText}”\n今日一步：${step.actionText}';
+      return _XiangjiReminderContent(
+        type: 'action',
+        body: '你曾说：“${goal.originalText}”\n今日一步：${step.actionText}',
+      );
     }
     final evidence = await evidenceForGoal(goal.id);
     if (evidence.isNotEmpty) {
-      return '你曾说：“${goal.originalText}”\n最近的成长证据：${evidence.first.summary}';
+      return _XiangjiReminderContent(
+        type: 'evidence',
+        body: '你曾说：“${goal.originalText}”\n最近的成长证据：${evidence.first.summary}',
+      );
     }
-    return '你曾经说过，这件事对你很重要。现在是目标变了，还是生活暂时占据了注意力？';
+    return const _XiangjiReminderContent(
+      type: 'reconnect',
+      body: '你曾经说过，这件事对你很重要。现在是目标变了，还是生活暂时占据了注意力？',
+    );
   }
 
   Future<int> _lastInteractionAtMs(int goalId) async {
@@ -903,6 +1068,7 @@ class XiangjiGoalMentorDao {
       'xiangji_mentor_sessions',
       'xiangji_calibrations',
       'xiangji_reminder_settings',
+      'xiangji_reminder_deliveries',
       'xiangji_local_books',
     ];
     final payload = <String, Object?>{
@@ -925,6 +1091,7 @@ class XiangjiGoalMentorDao {
       'xiangji_mentor_sessions',
       'xiangji_calibrations',
       'xiangji_goal_state_events',
+      'xiangji_reminder_deliveries',
       'xiangji_goal_versions',
       'xiangji_goals',
       'xiangji_reminder_settings',
@@ -1042,56 +1209,11 @@ class XiangjiGoalMentorDao {
     }
   }
 
-  static bool _allowedTransition(
-    XiangjiGoalState from,
-    XiangjiGoalState to,
-  ) {
-    const allowed = <XiangjiGoalState, Set<XiangjiGoalState>>{
-      XiangjiGoalState.mist: <XiangjiGoalState>{XiangjiGoalState.spark},
-      XiangjiGoalState.spark: <XiangjiGoalState>{
-        XiangjiGoalState.anchored,
-        XiangjiGoalState.mist,
-        XiangjiGoalState.archived,
-      },
-      XiangjiGoalState.anchored: <XiangjiGoalState>{
-        XiangjiGoalState.active,
-        XiangjiGoalState.paused,
-        XiangjiGoalState.reselecting,
-      },
-      XiangjiGoalState.active: <XiangjiGoalState>{
-        XiangjiGoalState.feedback,
-        XiangjiGoalState.paused,
-        XiangjiGoalState.calibrating,
-        XiangjiGoalState.completed,
-      },
-      XiangjiGoalState.feedback: <XiangjiGoalState>{
-        XiangjiGoalState.active,
-        XiangjiGoalState.calibrating,
-        XiangjiGoalState.completed,
-      },
-      XiangjiGoalState.calibrating: <XiangjiGoalState>{
-        XiangjiGoalState.active,
-        XiangjiGoalState.paused,
-        XiangjiGoalState.reselecting,
-        XiangjiGoalState.completed,
-      },
-      XiangjiGoalState.paused: <XiangjiGoalState>{
-        XiangjiGoalState.active,
-        XiangjiGoalState.calibrating,
-        XiangjiGoalState.reselecting,
-        XiangjiGoalState.archived,
-      },
-      XiangjiGoalState.reselecting: <XiangjiGoalState>{
-        XiangjiGoalState.spark,
-        XiangjiGoalState.anchored,
-        XiangjiGoalState.archived,
-      },
-      XiangjiGoalState.completed: <XiangjiGoalState>{
-        XiangjiGoalState.archived,
-        XiangjiGoalState.spark,
-      },
-      XiangjiGoalState.archived: <XiangjiGoalState>{},
-    };
-    return allowed[from]?.contains(to) ?? false;
-  }
+}
+
+class _XiangjiReminderContent {
+  const _XiangjiReminderContent({required this.type, required this.body});
+
+  final String type;
+  final String body;
 }

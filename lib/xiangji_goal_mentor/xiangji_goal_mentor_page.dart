@@ -352,7 +352,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     }
   }
 
-  Future<void> _submitCheckin(String resultType) async {
+  Future<void> _submitCheckin(XiangjiCheckinResult result) async {
     final goal = _goal;
     final step = _step;
     if (goal == null || step == null) return;
@@ -360,14 +360,16 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     final note = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(resultType == 'blocked' ? '今天是什么条件不允许？' : '留下真实发生过的事实'),
+        title: Text(result.prompt),
         content: TextField(
           controller: controller,
           maxLines: 4,
           decoration: InputDecoration(
-            hintText: resultType == 'blocked'
+            hintText: result == XiangjiCheckinResult.blocked
                 ? '例如：精力不足、缺少信息、时间窗口消失……'
-                : '完成了什么、学到了什么，或调整了什么？',
+                : result == XiangjiCheckinResult.noLongerRelevant
+                    ? '例如：目标改变、路径不再匹配，或现实条件已经变化……'
+                    : '完成了什么、学到了什么，或调整了什么？',
             border: const OutlineInputBorder(),
           ),
         ),
@@ -378,7 +380,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('形成证据草案'),
+            child: const Text('继续'),
           ),
         ],
       ),
@@ -390,17 +392,19 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       await _showSafetyDialog(safety.message);
       return;
     }
+    final evidenceType = await _chooseEvidenceType(result.defaultEvidenceType);
+    if (evidenceType == null) return;
     final summary = _engine.evidenceSummary(
       step: step,
-      resultType: resultType,
+      resultType: result.value,
       userText: note,
     );
     final evidenceId = await _dao.addCheckinAndEvidenceDraft(
       goal: goal,
       step: step,
-      resultType: resultType,
+      resultType: result.value,
       userText: note,
-      evidenceType: resultType == 'blocked' ? 'learning' : 'action',
+      evidenceType: evidenceType.value,
       evidenceSummary: summary,
     );
     if (!mounted) return;
@@ -428,7 +432,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       await _dao.discardEvidenceDraft(evidenceId);
     }
     await _reload();
-    if (resultType == 'blocked' && mounted) {
+    if ((result == XiangjiCheckinResult.blocked ||
+            result == XiangjiCheckinResult.noLongerRelevant) &&
+        mounted) {
       final calibrate = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -448,6 +454,41 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       );
       if (calibrate == true) await _openCalibration();
     }
+  }
+
+  Future<XiangjiEvidenceType?> _chooseEvidenceType(
+    XiangjiEvidenceType suggested,
+  ) {
+    return showDialog<XiangjiEvidenceType>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('这更像哪一种成长证据？'),
+        children: XiangjiEvidenceType.values
+            .map(
+              (type) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, type),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      type == suggested
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      color: type == suggested ? _moss : Colors.black38,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(type.label)),
+                    if (type == suggested)
+                      const Text(
+                        '建议',
+                        style: TextStyle(color: _moss, fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
   }
 
   Future<void> _generateNextStep() async {
@@ -1065,14 +1106,24 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       ),
     );
     await file.writeAsString(data, flush: true);
-    await Clipboard.setData(ClipboardData(text: data));
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('导出完成'),
-        content: SelectableText('JSON 已保存并复制到剪贴板：\n${file.path}'),
+        content: SelectableText(
+          'JSON 已保存到应用私有目录。为避免意外泄露，只有你明确选择时才会复制：\n${file.path}',
+        ),
         actions: <Widget>[
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: data));
+              if (!context.mounted) return;
+              Navigator.pop(context);
+              _showMessage('已按你的选择复制 JSON。');
+            },
+            child: const Text('复制 JSON'),
+          ),
           FilledButton(onPressed: () => Navigator.pop(context), child: const Text('完成')),
         ],
       ),
@@ -1084,7 +1135,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清除向己的全部数据？'),
-        content: const Text('这会删除目标、版本、行动、成长证据、校准记录、提醒设置和私人书籍。此操作无法撤销。'),
+        content: const Text('这会删除目标、版本、行动、成长证据、校准记录、提醒设置、私人书籍和应用内历史导出文件。此操作无法撤销。'),
         actions: <Widget>[
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
           FilledButton(
@@ -1099,15 +1150,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     setState(() => _working = true);
     try {
       await _reminders.cancelAndRemoveTask();
-      for (final book in _importedBooks) {
-        await _books.deletePrivateBook(book);
-      }
+      await _books.deleteAllPrivateBooks();
+      await _books.deleteGeneratedExports();
       await _dao.deleteAllData();
       _goalController.clear();
       _draft = null;
       _tabIndex = 0;
       await _reload();
-      _showMessage('向己的目标数据、私人书籍和提醒已清除。');
+      _showMessage('向己的目标数据、私人书籍、历史导出和提醒已清除。');
     } catch (error) {
       _showMessage('清除未完成：${_cleanError(error)}');
     } finally {
@@ -1602,9 +1652,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
             children: <Widget>[
               TextButton.icon(onPressed: _shrinkStep, icon: const Icon(Icons.compress), label: const Text('再缩小一点')),
               TextButton.icon(onPressed: _replaceStep, icon: const Icon(Icons.swap_horiz), label: const Text('换一种方式')),
-              TextButton.icon(onPressed: () => _submitCheckin('blocked'), icon: const Icon(Icons.event_busy_outlined), label: const Text('今天条件不允许')),
-              TextButton.icon(onPressed: () => _submitCheckin('partially_completed'), icon: const Icon(Icons.timelapse), label: const Text('部分完成')),
-              TextButton.icon(onPressed: () => _submitCheckin('completed'), icon: const Icon(Icons.done_all), label: const Text('已经完成')),
+              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.notStarted), icon: const Icon(Icons.schedule_outlined), label: const Text('尚未开始')),
+              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.blocked), icon: const Icon(Icons.event_busy_outlined), label: const Text('今天条件不允许')),
+              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.partiallyCompleted), icon: const Icon(Icons.timelapse), label: const Text('部分完成')),
+              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.completed), icon: const Icon(Icons.done_all), label: const Text('已经完成')),
+              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.noLongerRelevant), icon: const Icon(Icons.alt_route_outlined), label: const Text('这一步已不再适用')),
             ],
           ),
         ],
@@ -2050,7 +2102,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.download_outlined),
                 title: const Text('导出我的向己数据'),
-                subtitle: const Text('生成可读 JSON，并复制到剪贴板'),
+                subtitle: const Text('生成可读 JSON；复制需要再次明确选择'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _exportData,
               ),

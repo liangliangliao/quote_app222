@@ -323,7 +323,13 @@ class XiangjiGoalMentorEngine {
       return '你识别了这一步当前不适配的现实条件'
           '${note.isEmpty ? '，这为缩小范围或改变方法提供了依据。' : '：$note。'}';
     }
-    return note.isEmpty ? '你如实记录了当前状态，没有把未开始解释成人格失败。' : note;
+    if (resultType == 'no_longer_relevant') {
+      return '你识别出这一步已经不再适合作为当前目标的载体'
+          '${note.isEmpty ? '，及时退出不合适的路径也是成长证据。' : '：$note。'}';
+    }
+    return note.isEmpty
+        ? '你如实记录了当前状态，没有把未开始解释成人格失败。'
+        : '你如实记录了尚未开始的现实条件：$note。';
   }
 
   XiangjiCalibrationDecision calibrationDecision({

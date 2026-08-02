@@ -210,19 +210,40 @@ return;
   /// it never contains streak loss, ranking, or comparison language.
   static Future<void> _runXiangjiGoal(Map<String, dynamic> task) async {
     final uid = (task['task_uid'] ?? '').toString();
+    final dao = XiangjiGoalMentorDao();
     try {
-      final body = await XiangjiGoalMentorDao().scheduledReminderContent();
-      if (body == null || body.trim().isEmpty) {
-        await LogDao().add(taskUid: uid, detail: '跳过：当前无需发送向己目标守护提醒');
+      final reminder = await dao.claimScheduledReminder();
+      if (reminder == null || reminder.body.trim().isEmpty) {
+        try {
+          await LogDao().add(
+            taskUid: uid,
+            detail: '跳过：当前无需发送或今日已发送向己目标守护提醒',
+          );
+        } catch (_) {}
         return;
       }
-      await NotificationService.show(
-        id: uid.hashCode & 0x7fffffff,
-        title: '向己 · 记得你重视的方向',
-        body: body,
-        payload: 'xiangji_goal',
-      );
-      await LogDao().add(taskUid: uid, detail: '成功! 已发送向己目标守护提醒');
+      try {
+        await NotificationService.show(
+          id: uid.hashCode & 0x7fffffff,
+          title: '向己 · 记得你重视的方向',
+          body: reminder.body,
+          payload: 'xiangji_goal',
+        );
+      } catch (error) {
+        try {
+          await dao.markScheduledReminderFailed(reminder.deliveryKey, error);
+        } catch (_) {}
+        rethrow;
+      }
+      // Mark immediately after notification delivery. A later logging failure
+      // must never make the scheduler send the same reminder again.
+      await dao.markScheduledReminderDelivered(reminder.deliveryKey);
+      try {
+        await LogDao().add(
+          taskUid: uid,
+          detail: '成功! 已发送向己目标守护提醒（${reminder.contentType}）',
+        );
+      } catch (_) {}
     } catch (error) {
       try {
         await LogDao().add(

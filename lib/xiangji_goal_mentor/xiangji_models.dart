@@ -77,6 +77,145 @@ enum XiangjiCalibrationResult {
   reselect,
 }
 
+enum XiangjiCheckinResult {
+  completed,
+  partiallyCompleted,
+  notStarted,
+  blocked,
+  noLongerRelevant,
+}
+
+extension XiangjiCheckinResultX on XiangjiCheckinResult {
+  String get value {
+    switch (this) {
+      case XiangjiCheckinResult.completed:
+        return 'completed';
+      case XiangjiCheckinResult.partiallyCompleted:
+        return 'partially_completed';
+      case XiangjiCheckinResult.notStarted:
+        return 'not_started';
+      case XiangjiCheckinResult.blocked:
+        return 'blocked';
+      case XiangjiCheckinResult.noLongerRelevant:
+        return 'no_longer_relevant';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case XiangjiCheckinResult.completed:
+        return '已经完成';
+      case XiangjiCheckinResult.partiallyCompleted:
+        return '部分完成';
+      case XiangjiCheckinResult.notStarted:
+        return '尚未开始';
+      case XiangjiCheckinResult.blocked:
+        return '今天条件不允许';
+      case XiangjiCheckinResult.noLongerRelevant:
+        return '这一步已不再适用';
+    }
+  }
+
+  String get prompt {
+    switch (this) {
+      case XiangjiCheckinResult.completed:
+      case XiangjiCheckinResult.partiallyCompleted:
+        return '留下真实发生过的事实';
+      case XiangjiCheckinResult.notStarted:
+        return '如实记录尚未开始的条件';
+      case XiangjiCheckinResult.blocked:
+        return '今天是什么条件不允许？';
+      case XiangjiCheckinResult.noLongerRelevant:
+        return '为什么这一步已经不再适用？';
+    }
+  }
+
+  XiangjiEvidenceType get defaultEvidenceType {
+    switch (this) {
+      case XiangjiCheckinResult.completed:
+      case XiangjiCheckinResult.partiallyCompleted:
+        return XiangjiEvidenceType.action;
+      case XiangjiCheckinResult.notStarted:
+        return XiangjiEvidenceType.restAndRecovery;
+      case XiangjiCheckinResult.blocked:
+        return XiangjiEvidenceType.learning;
+      case XiangjiCheckinResult.noLongerRelevant:
+        return XiangjiEvidenceType.goalExit;
+    }
+  }
+}
+
+XiangjiCheckinResult? tryParseXiangjiCheckinResult(Object? raw) {
+  final value = (raw ?? '').toString();
+  for (final result in XiangjiCheckinResult.values) {
+    if (result.value == value) return result;
+  }
+  return null;
+}
+
+enum XiangjiEvidenceType {
+  action,
+  learning,
+  strategyChange,
+  boundary,
+  helpSeeking,
+  restAndRecovery,
+  goalExit,
+  contribution,
+}
+
+extension XiangjiEvidenceTypeX on XiangjiEvidenceType {
+  String get value {
+    switch (this) {
+      case XiangjiEvidenceType.action:
+        return 'action';
+      case XiangjiEvidenceType.learning:
+        return 'learning';
+      case XiangjiEvidenceType.strategyChange:
+        return 'strategy_change';
+      case XiangjiEvidenceType.boundary:
+        return 'boundary';
+      case XiangjiEvidenceType.helpSeeking:
+        return 'help_seeking';
+      case XiangjiEvidenceType.restAndRecovery:
+        return 'rest_and_recovery';
+      case XiangjiEvidenceType.goalExit:
+        return 'goal_exit';
+      case XiangjiEvidenceType.contribution:
+        return 'contribution';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case XiangjiEvidenceType.action:
+        return '真实行动';
+      case XiangjiEvidenceType.learning:
+        return '形成学习';
+      case XiangjiEvidenceType.strategyChange:
+        return '调整策略';
+      case XiangjiEvidenceType.boundary:
+        return '守住边界';
+      case XiangjiEvidenceType.helpSeeking:
+        return '主动求助';
+      case XiangjiEvidenceType.restAndRecovery:
+        return '休息与恢复';
+      case XiangjiEvidenceType.goalExit:
+        return '退出不适合的目标';
+      case XiangjiEvidenceType.contribution:
+        return '产生贡献';
+    }
+  }
+}
+
+XiangjiEvidenceType? tryParseXiangjiEvidenceType(Object? raw) {
+  final value = (raw ?? '').toString();
+  for (final type in XiangjiEvidenceType.values) {
+    if (type.value == value) return type;
+  }
+  return null;
+}
+
 extension XiangjiCalibrationResultX on XiangjiCalibrationResult {
   String get value {
     switch (this) {
@@ -425,6 +564,20 @@ class XiangjiReminderSettings {
       taskUid: taskUid ?? this.taskUid,
     );
   }
+}
+
+class XiangjiScheduledReminder {
+  const XiangjiScheduledReminder({
+    required this.deliveryKey,
+    required this.goalId,
+    required this.contentType,
+    required this.body,
+  });
+
+  final String deliveryKey;
+  final int goalId;
+  final String contentType;
+  final String body;
 }
 
 class XiangjiBookInfo {

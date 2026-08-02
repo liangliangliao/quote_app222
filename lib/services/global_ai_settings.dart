@@ -1,6 +1,7 @@
 import '../data/dao.dart';
 import '../data/kv_dao.dart';
 import '../goal_setting_module/goal_setting_remote_sync.dart';
+import 'azure_ai_settings.dart';
 
 class GlobalAiSettings {
   static const String providerKey = 'global_ai_provider';
@@ -10,6 +11,7 @@ class GlobalAiSettings {
   static const String edenAiModelKey = 'global_ai_model_edenai';
   static const String xGrokModelKey = 'global_ai_model_xgrok';
   static const String geminiModelKey = 'global_ai_model_gemini';
+  static const String azureModelKey = 'global_ai_model_azure';
   static const String edenAiKeyKey = 'global_ai_edenai_key';
   static const String xGrokKeyKey = 'global_ai_xgrok_key';
   static const String geminiKeyKey = 'global_ai_gemini_key';
@@ -39,6 +41,9 @@ class GlobalAiSettings {
   final ConfigDao _configDao = ConfigDao();
   final KeyValueDao _kvDao = KeyValueDao();
   final GoalSettingRemoteSync _remoteSync = GoalSettingRemoteSync();
+  final AzureAiSettings _azureSettings = AzureAiSettings();
+
+  AzureAiSettings get azure => _azureSettings;
 
   String _normalizeDeepseekModel(String model) {
     final m = model.trim();
@@ -130,12 +135,15 @@ class GlobalAiSettings {
     final edenAiKey = await getEdenAiKey();
     final xGrokKey = await getXGrokKey();
     final geminiKey = await getGeminiKey();
+    final azureResources = await _azureSettings.listUsableResources();
+    final azureConfigured = azureResources.isNotEmpty;
     final provider = _normalizeProviderKey((await _kvDao.getString(providerKey)) ?? '');
     final resolvedProvider = provider == 'openai' ||
             provider == 'openrouter' ||
             provider == 'edenai' ||
             provider == 'xgrok' ||
             provider == 'gemini' ||
+            provider == 'azure' ||
             provider == 'deepseek'
         ? provider
         : (deepseekKey.isNotEmpty
@@ -144,13 +152,16 @@ class GlobalAiSettings {
                 ? 'openrouter'
                 : (edenAiKey.isNotEmpty
                     ? 'edenai'
-                    : (xGrokKey.isNotEmpty ? 'xgrok' : (geminiKey.isNotEmpty ? 'gemini' : 'openai')))));
+                    : (xGrokKey.isNotEmpty
+                        ? 'xgrok'
+                        : (geminiKey.isNotEmpty ? 'gemini' : (azureConfigured ? 'azure' : 'openai'))))));
     final deepseekModel = ((await _kvDao.getString(deepSeekModelKey)) ?? await _configDao.getDeepseekModel()).trim();
     final openaiModel = ((await _kvDao.getString(openAiModelKey)) ?? (global['model'] ?? 'gpt-5').toString()).trim();
     final openrouterModel = ((await _kvDao.getString(openRouterModelKey)) ?? 'openai/gpt-4.1-mini').trim();
     final edenAiModel = ((await _kvDao.getString(edenAiModelKey)) ?? edenAiDefaultModel).trim();
     final xGrokModel = ((await _kvDao.getString(xGrokModelKey)) ?? xGrokDefaultModel).trim();
     final geminiModel = _normalizeGeminiModel(((await _kvDao.getString(geminiModelKey)) ?? geminiDefaultModel).trim());
+    final azureModel = await _resolveAzureModel(azureResources);
     final model = resolvedProvider == 'openai'
         ? (openaiModel.isEmpty ? 'gpt-5' : openaiModel)
         : resolvedProvider == 'openrouter'
@@ -161,7 +172,9 @@ class GlobalAiSettings {
                     ? (xGrokModel.isEmpty ? xGrokDefaultModel : xGrokModel)
                     : resolvedProvider == 'gemini'
                         ? (geminiModel.isEmpty ? geminiDefaultModel : geminiModel)
-                        : (_normalizeDeepseekModel(deepseekModel.isEmpty ? 'deepseek-v4-pro' : deepseekModel));
+                        : resolvedProvider == 'azure'
+                            ? azureModel
+                            : (_normalizeDeepseekModel(deepseekModel.isEmpty ? 'deepseek-v4-pro' : deepseekModel));
     final available = resolvedProvider == 'openai'
         ? openaiKey.isNotEmpty
         : resolvedProvider == 'openrouter'
@@ -172,7 +185,9 @@ class GlobalAiSettings {
                     ? xGrokKey.isNotEmpty
                     : resolvedProvider == 'gemini'
                         ? geminiKey.isNotEmpty
-                        : deepseekKey.isNotEmpty;
+                        : resolvedProvider == 'azure'
+                            ? (azureConfigured && azureModel.isNotEmpty)
+                            : deepseekKey.isNotEmpty;
     final label = resolvedProvider == 'openai'
         ? 'OpenAI · $model'
         : resolvedProvider == 'openrouter'
@@ -183,8 +198,14 @@ class GlobalAiSettings {
                     ? 'xGrok · $model'
                     : resolvedProvider == 'gemini'
                         ? 'Gemini · $model'
-                        : 'DeepSeek · $model';
-    final displayModel = resolvedProvider == 'openrouter' ? 'openrouter / $model' : model;
+                        : resolvedProvider == 'azure'
+                            ? 'Azure · $model'
+                            : 'DeepSeek · $model';
+    final displayModel = resolvedProvider == 'openrouter'
+        ? 'openrouter / $model'
+        : resolvedProvider == 'azure'
+            ? 'azure / $model'
+            : model;
     return <String, String>{
       'provider': resolvedProvider,
       'model': model,
@@ -195,10 +216,35 @@ class GlobalAiSettings {
       'edenai_model': edenAiModel.isEmpty ? edenAiDefaultModel : edenAiModel,
       'xgrok_model': xGrokModel.isEmpty ? xGrokDefaultModel : xGrokModel,
       'gemini_model': geminiModel.isEmpty ? geminiDefaultModel : geminiModel,
+      'azure_model': azureModel,
+      'azure_resource_count': azureResources.length.toString(),
       'label': label,
       'available': available ? '1' : '0',
       'note': '该配置由设置页统一管理，模块内只读。',
     };
+  }
+
+  /// Azure 没有“默认模型”这种东西：可用模型完全取决于用户在各个资源里部署了什么。
+  /// 所以这里只做一件事——把已保存的选择规范成 `资源名/部署名`；如果用户还没选，
+  /// 就退回第一个资源里手工登记的第一个部署名，实在没有就返回空串（=不可用）。
+  Future<String> _resolveAzureModel(List<AzureAiResource> usableResources) async {
+    final saved = ((await _kvDao.getString(azureModelKey)) ?? '').trim();
+    if (saved.isNotEmpty) {
+      final parts = AzureAiSettings.splitModel(saved);
+      if (parts.deployment.isNotEmpty) {
+        if (parts.resourceName.isNotEmpty) return saved;
+        if (usableResources.isNotEmpty) {
+          return AzureAiSettings.qualifyModel(usableResources.first.name, parts.deployment);
+        }
+        return parts.deployment;
+      }
+    }
+    for (final resource in usableResources) {
+      if (resource.deployments.isNotEmpty) {
+        return AzureAiSettings.qualifyModel(resource.name, resource.deployments.first);
+      }
+    }
+    return '';
   }
 
   String get defaultGoalSettingUnderstandingPrompt =>
@@ -1554,6 +1600,9 @@ ending_reflection''';
     if (raw == 'edenai') return 'edenai';
     if (raw == 'xgrok' || raw == 'xai' || raw == 'grok') return 'xgrok';
     if (raw == 'gemini' || raw == 'google' || raw == 'googleai') return 'gemini';
+    if (raw == 'azure' || raw == 'azureopenai' || raw == 'azure_openai' || raw == 'foundry' || raw == 'msfoundry') {
+      return 'azure';
+    }
     if (raw == 'deepseek') return 'deepseek';
     return '';
   }
@@ -1596,6 +1645,9 @@ ending_reflection''';
     } else if (normalizedProvider == 'gemini') {
       final geminiModel = _normalizeGeminiModel(model.trim().isEmpty ? geminiDefaultModel : model.trim());
       await _kvDao.setString(geminiModelKey, geminiModel.isEmpty ? geminiDefaultModel : geminiModel);
+    } else if (normalizedProvider == 'azure') {
+      // Azure 的模型没有内置默认值：用户选什么就存什么，留空表示还没有选好部署。
+      await _kvDao.setString(azureModelKey, model.trim());
     } else {
       await _kvDao.setString(deepSeekModelKey, _normalizeDeepseekModel(model.trim().isEmpty ? 'deepseek-v4-pro' : model.trim()));
     }
@@ -1623,6 +1675,9 @@ ending_reflection''';
     if (normalizedProvider == 'gemini') {
       final model = _normalizeGeminiModel(((await _kvDao.getString(geminiModelKey)) ?? geminiDefaultModel).trim());
       return model.isEmpty ? geminiDefaultModel : model;
+    }
+    if (normalizedProvider == 'azure') {
+      return _resolveAzureModel(await _azureSettings.listUsableResources());
     }
     final model = ((await _kvDao.getString(deepSeekModelKey)) ?? await _configDao.getDeepseekModel()).trim();
     return _normalizeDeepseekModel(model.isEmpty ? 'deepseek-v4-pro' : model);

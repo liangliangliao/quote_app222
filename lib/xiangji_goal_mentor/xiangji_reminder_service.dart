@@ -4,6 +4,7 @@ import '../services/notification_service.dart';
 import '../services/scheduler_service.dart';
 import 'xiangji_dao.dart';
 import 'xiangji_models.dart';
+import 'xiangji_policies.dart';
 
 class XiangjiReminderService {
   XiangjiReminderService({XiangjiGoalMentorDao? dao})
@@ -19,7 +20,7 @@ class XiangjiReminderService {
   }) async {
     var current = await _dao.reminderSettings();
     var taskUid = current.taskUid;
-    final normalizedTime = _outsideQuietHours(
+    final normalizedTime = XiangjiReminderPolicy.outsideQuietHours(
       timeOfDay,
       quietStart: quietStart,
       quietEnd: quietEnd,
@@ -104,26 +105,4 @@ class XiangjiReminderService {
     } catch (_) {}
   }
 
-  String _outsideQuietHours(
-    String selected, {
-    required String quietStart,
-    required String quietEnd,
-  }) {
-    final minute = _minutes(selected);
-    final start = _minutes(quietStart);
-    final end = _minutes(quietEnd);
-    final inQuiet = start <= end
-        ? minute >= start && minute < end
-        : minute >= start || minute < end;
-    return inQuiet ? quietEnd : selected;
-  }
-
-  int _minutes(String value) {
-    final parts = value.split(':');
-    final hour = parts.isEmpty ? 9 : int.tryParse(parts.first) ?? 9;
-    final minute = parts.length < 2 ? 0 : int.tryParse(parts[1]) ?? 0;
-    final safeHour = hour.clamp(0, 23).toInt();
-    final safeMinute = minute.clamp(0, 59).toInt();
-    return safeHour * 60 + safeMinute;
-  }
 }

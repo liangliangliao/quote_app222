@@ -626,7 +626,9 @@ class ConceptEngineSessionRecord {
                   ? 'xGrok'
                   : provider == 'gemini'
                       ? 'Gemini'
-                      : 'DeepSeek';
+                      : provider == 'azure'
+                          ? 'Azure'
+                          : 'DeepSeek';
 
   Map<String, dynamic> get processMap {
     try {
