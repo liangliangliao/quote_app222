@@ -13,6 +13,7 @@ import '../health_diet/daily_share/daily_diet_share_page.dart';
 import '../health_diet/daily_share/daily_diet_review_page.dart';
 import '../health_diet/habit/diet_long_term_report_page.dart';
 import '../health_diet/expert/health_diet_expert_dashboard_page.dart';
+import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
 import 'package:flutter/material.dart';
 
 @pragma('vm:entry-point')
@@ -61,11 +62,35 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateXiangjiGoal(payload)) return;
     if (await _tryNavigateZhixingTree(payload)) return;
     if (await _tryNavigateRealisticOptimismTraining(payload)) return;
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateXiangjiGoal(String? payload) async {
+    final value = (payload ?? '').trim();
+    if (!value.startsWith('xiangji_goal')) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = value;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await NotificationService.handlePendingNotificationNavigation();
+        } catch (_) {}
+      });
+      return true;
+    }
+    _pendingPayload = null;
+    _launchFromNotif = false;
+    nav.popUntil((route) => route.isFirst);
+    nav.push(
+      MaterialPageRoute(builder: (_) => const XiangjiGoalMentorPage()),
+    );
+    return true;
   }
 
   static Future<bool> _tryNavigateZhixingTree(String? payload) async {
@@ -230,6 +255,8 @@ class NotificationService {
           // Fallback to home if something fails
           SimpleBus.navHome();
           SimpleBus.pokeHome();
+        } else if (await NotificationService._tryNavigateXiangjiGoal(p)) {
+          return;
         } else if (await NotificationService._tryNavigateZhixingTree(p)) {
           return;
         } else if (await NotificationService._tryNavigateRealisticOptimismTraining(p)) {

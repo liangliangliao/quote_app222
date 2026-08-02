@@ -7,6 +7,7 @@ import '../services/unified_ai_service.dart';
 import '../services/notification_service.dart';
 import '../platform/native_notify.dart';
 import '../services/native_guard.dart';
+import '../xiangji_goal_mentor/xiangji_dao.dart';
 
 class TaskRunner {
   static void _notifyHomeRefresh(){
@@ -21,7 +22,7 @@ class TaskRunner {
     final status = (task['status'] ?? 'on').toString();
     if (status != 'on') return; // 2.1.2 关闭状态直接退出
 
-    final type = (task['type'] ?? 'manual').toString(); // manual | auto | carousel | vision_focus
+    final type = (task['type'] ?? 'manual').toString(); // manual | auto | carousel | vision_focus | xiangji_goal
 
     if (type == 'auto') {
       await _runAuto(task);
@@ -31,6 +32,8 @@ class TaskRunner {
       await _runCarousel(task);
     } else if (type == 'vision_focus') {
       await _runVisionFocus(task);
+    } else if (type == 'xiangji_goal') {
+      await _runXiangjiGoal(task);
     } else {
       await LogDao().add(taskUid: uid, detail: '错误! 未知任务类型: '+type);
     }
@@ -199,6 +202,35 @@ return;
         await LogDao().add(taskUid: uid, detail: '错误! 愿景提醒发送失败: '+e.toString());
       } catch (_) {}
       throw e;
+    }
+  }
+
+  /// Send one gentle goal-protection reminder. The copy is assembled from the
+  /// user's active goal, current step, or latest confirmed growth evidence;
+  /// it never contains streak loss, ranking, or comparison language.
+  static Future<void> _runXiangjiGoal(Map<String, dynamic> task) async {
+    final uid = (task['task_uid'] ?? '').toString();
+    try {
+      final body = await XiangjiGoalMentorDao().scheduledReminderContent();
+      if (body == null || body.trim().isEmpty) {
+        await LogDao().add(taskUid: uid, detail: '跳过：当前无需发送向己目标守护提醒');
+        return;
+      }
+      await NotificationService.show(
+        id: uid.hashCode & 0x7fffffff,
+        title: '向己 · 记得你重视的方向',
+        body: body,
+        payload: 'xiangji_goal',
+      );
+      await LogDao().add(taskUid: uid, detail: '成功! 已发送向己目标守护提醒');
+    } catch (error) {
+      try {
+        await LogDao().add(
+          taskUid: uid,
+          detail: '错误! 向己目标守护提醒发送失败: $error',
+        );
+      } catch (_) {}
+      rethrow;
     }
   }
 }
