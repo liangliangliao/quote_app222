@@ -2150,7 +2150,7 @@ class XiangjiDao {
       ''', <Object?>[limit]);
     }
     try {
-      return await db.rawQuery('''
+      final indexed = await db.rawQuery('''
         SELECT p.*, s.title AS source_title
         FROM xf_knowledge_passage_fts f
         JOIN xf_knowledge_passage p ON p.id = f.passage_id
@@ -2158,16 +2158,20 @@ class XiangjiDao {
         WHERE xf_knowledge_passage_fts MATCH ?
         LIMIT ?
       ''', <Object?>[value, limit]);
+      if (indexed.isNotEmpty) return indexed;
     } catch (_) {
-      final like = '%$value%';
-      return db.rawQuery('''
-        SELECT p.*, s.title AS source_title
-        FROM xf_knowledge_passage p
-        JOIN xf_knowledge_source s ON s.id = p.source_id
-        WHERE p.locator LIKE ? OR p.original_text LIKE ? OR p.translation LIKE ? OR s.title LIKE ?
-        LIMIT ?
-      ''', <Object?>[like, like, like, like, limit]);
+      // Fall through to exact substring search when FTS is unavailable.
     }
+    // FTS4's default tokenizer can legitimately return no rows for CJK
+    // substrings even though the authoritative passage contains the query.
+    final like = '%$value%';
+    return db.rawQuery('''
+      SELECT p.*, s.title AS source_title
+      FROM xf_knowledge_passage p
+      JOIN xf_knowledge_source s ON s.id = p.source_id
+      WHERE p.locator LIKE ? OR p.original_text LIKE ? OR p.translation LIKE ? OR s.title LIKE ?
+      LIMIT ?
+    ''', <Object?>[like, like, like, like, limit]);
   }
 
   Future<List<Map<String, Object?>>> sourcePassages(String sourceId) async {
