@@ -10,12 +10,14 @@ void main() {
 
   testWidgets('PR146 旧导师不会再触发全屏错误并可重新选择', (tester) async {
     final dao = _UpgradePageDao();
+    final knowledge = XiangjiKnowledgeRepository();
+    await knowledge.load();
 
     await tester.pumpWidget(
       MaterialApp(
         home: XiangjiGoalMentorPage(
           dao: dao,
-          knowledgeRepository: XiangjiKnowledgeRepository(),
+          knowledgeRepository: knowledge,
         ),
       ),
     );
