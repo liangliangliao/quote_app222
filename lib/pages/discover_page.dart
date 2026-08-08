@@ -40,6 +40,8 @@ import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
 import '../zhixing_tree/zhixing_tree_home_page.dart';
+import '../xiangji_future_strategist/xiangji_home_page.dart';
+import '../xiangji_goal_mentor/xiangji_discover_entries.dart';
 import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
@@ -2553,65 +2555,22 @@ Widget _buildEmotionPieChart() {
                       onTap: _openDiaryFromDiscover,
                     ),
                     const SizedBox(height: 12),
-                    Material(
-                      color: const Color(0xFFEEF5F1),
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (context) =>
-                                  const XiangjiGoalMentorPage(),
-                            ),
-                          );
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 13,
+                    XiangjiDiscoverEntries(
+                      onGoalMentorTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const XiangjiGoalMentorPage(),
                           ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundColor: Color(0xFFD9E9E1),
-                                child: Icon(
-                                  Icons.explore_outlined,
-                                  size: 21,
-                                  color: Color(0xFF245C4A),
-                                ),
-                              ),
-                              SizedBox(width: 11),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '向己 · 智能目标导师',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      '一位导师 · 一个目标 · 一个行动 · 提醒 · 校准',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF557064),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(Icons.chevron_right),
-                            ],
+                        );
+                      },
+                      onFutureStrategistTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) =>
+                                const XiangjiFutureStrategistHomePage(),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     Material(

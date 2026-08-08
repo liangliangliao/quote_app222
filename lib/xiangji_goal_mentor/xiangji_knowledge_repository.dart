@@ -508,6 +508,32 @@ class XiangjiKnowledgeRepository {
   static const String conciseAssetPath =
       'assets/xiangji_goal_mentor/thinker_concise_profiles.example.json';
 
+  static const Map<String, String> legacySystemDisplayNames = <String, String>{
+    'yangming': '王阳明 · 知行合一总纲',
+    'william_james': '威廉·詹姆斯 · 观念如何成为动作',
+    'beck_cognitive_therapy': '贝克 · 认知检验与行为实验',
+    'ellis_rebt': '埃利斯 · 从“必须”退回偏好',
+    'laozi': '老子 · 无为、减法与柔韧行动',
+    'act': 'ACT · 带着不适走向价值',
+    'self_determination': '自我决定理论 · 从外控到内化',
+    'nietzsche': '尼采 · 谱系、自我克服与价值创造',
+    'frankl': '弗兰克尔 · 意义、责任与受限自由',
+    'dewey': '杜威 · 探究、习惯与环境重构',
+    'gollwitzer': 'Gollwitzer · 把意图编译成现场行动',
+    'bandura': '班杜拉 · 榜样、效能与能动性',
+    'oettingen': 'Oettingen · 心理对照与 WOOP',
+    'behavioral_activation': '行为激活 · 从回避循环重新接触生活',
+    'maslow': '马斯洛 · 需要、容量与成长条件',
+    'harvard_positive_psychology': '哈佛积极心理学 · 从信息到转化',
+    'comb_bcw': 'COM-B/BCW · 行为工程编排',
+  };
+
+  static String legacySystemDisplayName(String id) {
+    final normalized = id.trim();
+    if (normalized.isEmpty) return '旧版本未记录导师';
+    return legacySystemDisplayNames[normalized] ?? '旧版导师（$normalized）';
+  }
+
   XiangjiKnowledgeCatalog? _cache;
 
   Future<XiangjiKnowledgeCatalog> load() async {

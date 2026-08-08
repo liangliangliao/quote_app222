@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'xiangji_dao.dart';
 import 'xiangji_knowledge_repository.dart';
+import 'xiangji_models.dart';
 
 class XiangjiOperationsPage extends StatefulWidget {
   const XiangjiOperationsPage({
@@ -24,6 +25,7 @@ class _XiangjiOperationsPageState extends State<XiangjiOperationsPage> {
   Map<String, int> _events = const <String, int>{};
   List<Map<String, Object?>> _flags = const <Map<String, Object?>>[];
   int _pendingDeletions = 0;
+  int _pendingMentorMigrations = 0;
 
   @override
   void initState() {
@@ -42,6 +44,7 @@ class _XiangjiOperationsPageState extends State<XiangjiOperationsPage> {
         widget.dao.analyticsSnapshot(),
         widget.dao.featureFlags(),
         widget.dao.pendingProviderDeletions(),
+        widget.dao.mentorKnowledgeMigrations(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -50,6 +53,13 @@ class _XiangjiOperationsPageState extends State<XiangjiOperationsPage> {
         _flags = values[2] as List<Map<String, Object?>>;
         _pendingDeletions =
             (values[3] as List).length;
+        _pendingMentorMigrations = (values[4]
+                as List)
+            .where(
+              (item) => item is XiangjiMentorKnowledgeMigration &&
+                  item.requiresReselection,
+            )
+            .length;
         _loading = false;
       });
     } catch (error) {
@@ -143,6 +153,7 @@ class _XiangjiOperationsPageState extends State<XiangjiOperationsPage> {
                       title: '韧性与删除传播',
                       children: <Widget>[
                         _row('远端删除待重试', _pendingDeletions),
+                        _row('导师知识升级待重新选择', _pendingMentorMigrations),
                         _row('每日提醒幂等', '按 goal + local_day 唯一键'),
                         _row('知识资产故障策略', '完整性校验失败即停止加载'),
                         _row('生成故障策略', '不覆盖目标与行动记录'),
