@@ -92,3 +92,6 @@ flutter:
     - assets/zhixing_tree/knowledge_manifest_v2_0.json
     - assets/zhixing_tree/knowledge_systems_v2_0.json
     - assets/zhixing_tree/knowledge_v2_0.md
+    - assets/xiangji_goal_mentor/goal_first_mentor_knowledge_v2_1.json
+    - assets/xiangji_goal_mentor/deep_mentor_knowledge_v2.json
+    - assets/xiangji_goal_mentor/thinker_concise_profiles.example.json
