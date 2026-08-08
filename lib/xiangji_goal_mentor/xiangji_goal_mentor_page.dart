@@ -3140,7 +3140,6 @@ class _XiangjiCalibrationPageState extends State<XiangjiCalibrationPage> {
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
-    super.key,
     required this.child,
     this.color = Colors.white,
   });
