@@ -13,6 +13,7 @@ import 'xiangji_engine.dart';
 import 'xiangji_grounded_ai_service.dart';
 import 'xiangji_knowledge_repository.dart';
 import 'xiangji_mentor_knowledge_page.dart';
+import 'xiangji_mentor_upgrade_card.dart';
 import 'xiangji_mentor_setting_page.dart';
 import 'xiangji_models.dart';
 import 'xiangji_operations_page.dart';
@@ -1953,43 +1954,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
 
   Widget _buildMentorKnowledgeUpgradeCard() {
     final migration = _mentorMigration!;
-    final legacyName = XiangjiKnowledgeRepository.legacySystemDisplayName(
-      migration.fromThinkerId,
-    );
-    return _SectionCard(
-      key: const ValueKey<String>('xiangji_mentor_upgrade_reselection'),
-      color: _sand,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Icon(Icons.system_update_alt, color: _moss, size: 32),
-          const SizedBox(height: 10),
-          const Text(
-            '知识库已升级，请重新选择目标导师',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '原导师：$legacyName。旧版体系不能被静默等同为新的 10 位目标核心导师，因此由你重新选择。',
-            style: const TextStyle(height: 1.5),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '你的目标原话、版本、行动、证据、私人书籍和历史记录均已保留；选定后只会重算当前行动。',
-            style: TextStyle(height: 1.5, color: Colors.black54),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              key: const ValueKey<String>('xiangji_reselect_mentor_after_upgrade'),
-              onPressed: _openMentorKnowledge,
-              icon: const Icon(Icons.person_search_outlined),
-              label: const Text('查看 10 位导师并重新选择'),
-            ),
-          ),
-        ],
-      ),
+    return XiangjiMentorUpgradeCard(
+      fromThinkerId: migration.fromThinkerId,
+      onReselect: _openMentorKnowledge,
     );
   }
 
