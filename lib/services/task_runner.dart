@@ -1,5 +1,4 @@
 import 'dart:ui' as ui;
-import 'dart:isolate';
 
 import '../data/dao.dart';
 import '../services/global_ai_settings.dart';
@@ -7,6 +6,7 @@ import '../services/unified_ai_service.dart';
 import '../services/notification_service.dart';
 import '../platform/native_notify.dart';
 import '../services/native_guard.dart';
+import '../xiangji_goal_mentor/xiangji_dao.dart';
 
 class TaskRunner {
   static void _notifyHomeRefresh(){
@@ -21,7 +21,7 @@ class TaskRunner {
     final status = (task['status'] ?? 'on').toString();
     if (status != 'on') return; // 2.1.2 关闭状态直接退出
 
-    final type = (task['type'] ?? 'manual').toString(); // manual | auto | carousel | vision_focus
+    final type = (task['type'] ?? 'manual').toString(); // manual | auto | carousel | vision_focus | xiangji_goal
 
     if (type == 'auto') {
       await _runAuto(task);
@@ -31,6 +31,8 @@ class TaskRunner {
       await _runCarousel(task);
     } else if (type == 'vision_focus') {
       await _runVisionFocus(task);
+    } else if (type == 'xiangji_goal') {
+      await _runXiangjiGoal(task);
     } else {
       await LogDao().add(taskUid: uid, detail: '错误! 未知任务类型: '+type);
     }
@@ -86,9 +88,7 @@ class TaskRunner {
         // Update notified
         await QuoteDao().markNotifiedByUid(qUid);
         _notifyHomeRefresh();
-return;_notifyHomeRefresh();
-                SimpleBus.pokeHome();
-return;
+        return;
       } catch (e) {
         if (e.toString().contains('统一 AI') || e.toString().contains('OPENAI_FAIL') || e.toString().contains('OpenAI API 调用失败')) {
           await LogDao().add(taskUid: uid, detail: '调用统一 AI 接口发生错误或失败!');
@@ -199,6 +199,53 @@ return;
         await LogDao().add(taskUid: uid, detail: '错误! 愿景提醒发送失败: '+e.toString());
       } catch (_) {}
       throw e;
+    }
+  }
+
+  /// Send one gentle goal-protection reminder. Reminder claiming is idempotent
+  /// per local day and paused/reselecting goals are suppressed by the DAO.
+  static Future<void> _runXiangjiGoal(Map<String, dynamic> task) async {
+    final uid = (task['task_uid'] ?? '').toString();
+    final dao = XiangjiGoalMentorDao();
+    try {
+      final reminder = await dao.claimScheduledReminder();
+      if (reminder == null || reminder.body.trim().isEmpty) {
+        try {
+          await LogDao().add(
+            taskUid: uid,
+            detail: '跳过：当前无需发送或今日已发送向己目标守护提醒',
+          );
+        } catch (_) {}
+        return;
+      }
+      try {
+        await NotificationService.show(
+          id: uid.hashCode & 0x7fffffff,
+          title: '向己 · 记得你重视的方向',
+          body: reminder.body,
+          payload: 'xiangji_goal',
+        );
+      } catch (error) {
+        try {
+          await dao.markScheduledReminderFailed(reminder.deliveryKey, error);
+        } catch (_) {}
+        rethrow;
+      }
+      await dao.markScheduledReminderDelivered(reminder.deliveryKey);
+      try {
+        await LogDao().add(
+          taskUid: uid,
+          detail: '成功! 已发送向己目标守护提醒（${reminder.contentType}）',
+        );
+      } catch (_) {}
+    } catch (error) {
+      try {
+        await LogDao().add(
+          taskUid: uid,
+          detail: '错误! 向己目标守护提醒发送失败: $error',
+        );
+      } catch (_) {}
+      rethrow;
     }
   }
 }

@@ -40,7 +40,7 @@ import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
 import '../zhixing_tree/zhixing_tree_home_page.dart';
-import '../xiangji_future_strategist/xiangji_home_page.dart';
+import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2562,7 +2562,7 @@ Widget _buildEmotionPieChart() {
                           Navigator.of(context).push(
                             CupertinoPageRoute(
                               builder: (context) =>
-                                  const XiangjiFutureStrategistHomePage(),
+                                  const XiangjiGoalMentorPage(),
                             ),
                           );
                         },
@@ -2588,7 +2588,7 @@ Widget _buildEmotionPieChart() {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '向己 · 未来军师',
+                                      '向己 · 智能目标导师',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
@@ -2596,7 +2596,7 @@ Widget _buildEmotionPieChart() {
                                     ),
                                     SizedBox(height: 2),
                                     Text(
-                                      '认识审查 · 真问题 · 战略决断 · 行动验算 · 个人战史',
+                                      '一位导师 · 一个目标 · 一个行动 · 提醒 · 校准',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
