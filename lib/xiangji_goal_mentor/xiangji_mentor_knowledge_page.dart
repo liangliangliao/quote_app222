@@ -85,7 +85,7 @@ class _XiangjiMentorKnowledgePageState
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
-                    value: mentor.id,
+                    initialValue: mentor.id,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: '当前查看',
