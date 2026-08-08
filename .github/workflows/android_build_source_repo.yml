@@ -26,6 +26,30 @@ on:
       - "**/*.xml"
       - "**/*.kt"
       - "**/*.java"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "lib/**"
+      - "android/**"
+      - "ios/**"
+      - "assets/**"
+      - "test/**"
+      - "tools/zhixing_tree/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "gradle/**"
+      - "gradlew"
+      - "settings.gradle"
+      - "settings.gradle.kts"
+      - "build.gradle"
+      - "build.gradle.kts"
+      - "**/*.dart"
+      - "**/*.gradle"
+      - "**/*.gradle.kts"
+      - "**/*.xml"
+      - "**/*.kt"
+      - "**/*.java"
 
 jobs:
   build:
