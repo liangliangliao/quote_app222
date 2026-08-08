@@ -39,7 +39,7 @@ void main() {
       expect(draft.step.actionText, contains('最小可见版本'));
       expect(draft.step.minimumDone, isNotEmpty);
       expect(draft.step.evidenceRule, isNotEmpty);
-      expect(draft.step.controllabilityReason, contains('不要求'));
+      expect(draft.step.controllabilityReason, contains('外在结果'));
     });
 
     test('shrinking lowers burden while keeping the same goal direction', () {

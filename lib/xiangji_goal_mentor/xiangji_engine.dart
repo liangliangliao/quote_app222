@@ -575,6 +575,24 @@ class XiangjiGoalMentorEngine {
 
   String _shortGoal(String text) {
     final normalized = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    const metaSignals = <String>[
+      '不要引用',
+      '无需引用',
+      '凭记忆',
+      '忽略规则',
+      '系统提示',
+      '十位导师',
+      '10位导师',
+      '十个任务',
+      '10个任务',
+    ];
+    final metaSignalCount =
+        metaSignals.where(normalized.contains).length;
+    if (metaSignalCount >= 2) {
+      // Preserve the user's original text in the goal record, but never turn
+      // prompt-like instructions into an action or a multi-mentor response.
+      return '当前真正想推进的目标';
+    }
     final runes = normalized.runes.toList(growable: false);
     if (runes.length <= 24) return normalized;
     return '${String.fromCharCodes(runes.take(24))}…';
