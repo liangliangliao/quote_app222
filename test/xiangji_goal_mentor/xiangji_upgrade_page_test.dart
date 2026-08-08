@@ -4,18 +4,12 @@ import 'package:quote_app/xiangji_goal_mentor/xiangji_dao.dart';
 import 'package:quote_app/xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
 import 'package:quote_app/xiangji_goal_mentor/xiangji_knowledge_repository.dart';
 import 'package:quote_app/xiangji_goal_mentor/xiangji_models.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
 
   testWidgets('PR146 旧导师不会再触发全屏错误并可重新选择', (tester) async {
-    final database =
-        await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    addTearDown(database.close);
-    final dao = XiangjiGoalMentorDao(database: database);
-    await dao.createAndActivateGoal(_legacyDraft());
+    final dao = _UpgradePageDao();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -64,35 +58,35 @@ void main() {
     );
 
     expect(find.text('知识库已升级，请重新选择目标导师'), findsNothing);
-    final upgradedGoal = (await dao.activeGoal())!;
+    final upgradedGoal = dao.goal;
     expect(upgradedGoal.primaryThinkerId, 'adler');
-    final migrations = await dao.mentorKnowledgeMigrations();
-    expect(migrations.single.status, 'resolved');
-    expect(migrations.single.resolvedThinkerId, 'adler');
-    expect((await dao.currentStep(upgradedGoal.id))!.sourceSystemId, 'adler');
+    expect(dao.migration.status, 'resolved');
+    expect(dao.migration.resolvedThinkerId, 'adler');
+    expect(dao.step.sourceSystemId, 'adler');
   });
 }
 
-XiangjiGoalDraft _legacyDraft() {
-  const guidance = XiangjiGuidance(
-    systemId: 'yangming',
-    mentorName: '王阳明',
-    mechanismId: 'knowledge_action_gap',
-    mechanismLabel: '知行连接',
-    coreJudgment: '先形成一个真实行动。',
-    selectionReason: 'PR146 旧知识体系。',
-    boundaryNote: '不替代专业支持。',
-    knowledgeView: '知识需要进入行动。',
-    structureText: '目标—行动—反馈。',
-    detailText: '根据现实反馈调整。',
-    actionDerivation: '写下第一句。',
-    confidence: 0.8,
-    sources: <XiangjiSourceCitation>[],
+class _UpgradePageDao extends XiangjiGoalMentorDao {
+  XiangjiGoal goal = const XiangjiGoal(
+    id: 1,
+    versionId: 1,
+    state: XiangjiGoalState.active,
+    isActive: true,
+    originalText: '保留覆盖安装前的目标',
+    whyText: '保留覆盖安装前的原因',
+    higherValues: <String>['自主', '成长'],
+    successDefinition: '留下现实证据',
+    scopeText: '未来七天',
+    primaryThinkerId: 'yangming',
+    currentNodeId: 'knowledge_action_gap',
+    createdAtMs: 1,
+    updatedAtMs: 1,
   );
-  const step = XiangjiDailyStep(
-    id: 0,
-    goalId: 0,
-    goalVersionId: 0,
+
+  XiangjiDailyStep step = const XiangjiDailyStep(
+    id: 1,
+    goalId: 1,
+    goalVersionId: 1,
     actionText: '保留覆盖安装前的行动',
     triggerContext: '打开应用时',
     minimumDone: '完成一分钟',
@@ -101,17 +95,134 @@ XiangjiGoalDraft _legacyDraft() {
     smallerVariant: '先做十秒',
     sourceSystemId: 'yangming',
     status: 'ready',
-    createdAtMs: 0,
+    createdAtMs: 1,
   );
-  return const XiangjiGoalDraft(
-    originalText: '保留覆盖安装前的目标',
-    whyText: '保留覆盖安装前的原因',
-    higherValues: <String>['自主', '成长'],
-    successDefinition: '留下现实证据',
-    scopeText: '未来七天',
-    guidance: guidance,
-    step: step,
+
+  XiangjiMentorKnowledgeMigration migration =
+      const XiangjiMentorKnowledgeMigration(
+    id: 1,
+    goalId: 1,
+    fromThinkerId: 'yangming',
+    targetKnowledgeVersion: '2.1.0',
+    status: 'reselection_required',
+    resolvedThinkerId: '',
+    detectedAtMs: 1,
+    resolvedAtMs: 0,
   );
+
+  @override
+  Future<XiangjiGoal?> activeGoal() async => goal;
+
+  @override
+  Future<void> markGoalSeen(int goalId) async {}
+
+  @override
+  Future<XiangjiMentorKnowledgeMigration?>
+      ensureMentorKnowledgeCompatibility({
+    required XiangjiGoal goal,
+    required Set<String> validMentorIds,
+    required String targetKnowledgeVersion,
+  }) async =>
+          migration.requiresReselection ? migration : null;
+
+  @override
+  Future<XiangjiDailyStep?> currentStep(int goalId) async => step;
+
+  @override
+  Future<List<XiangjiGrowthEvidence>> evidenceForGoal(int goalId) async =>
+      const <XiangjiGrowthEvidence>[];
+
+  @override
+  Future<List<XiangjiGoal>> allGoals() async => <XiangjiGoal>[goal];
+
+  @override
+  Future<List<Map<String, Object?>>> goalVersions(int goalId) async =>
+      const <Map<String, Object?>>[];
+
+  @override
+  Future<List<Map<String, Object?>>> stateEvents(int goalId) async =>
+      const <Map<String, Object?>>[];
+
+  @override
+  Future<XiangjiReminderSettings> reminderSettings() async =>
+      XiangjiReminderSettings.defaults();
+
+  @override
+  Future<List<XiangjiBookInfo>> importedBooks() async =>
+      const <XiangjiBookInfo>[];
+
+  @override
+  Future<List<XiangjiProviderMirror>> pendingProviderDeletions() async =>
+      const <XiangjiProviderMirror>[];
+
+  @override
+  Future<bool> featureEnabled(String flagKey) async => true;
+
+  @override
+  Future<void> recordAnalyticsEvent(
+    String eventName, {
+    int? goalId,
+    Map<String, Object?> properties = const <String, Object?>{},
+  }) async {}
+
+  @override
+  Future<XiangjiGoal> changeMentor({
+    required XiangjiGoal goal,
+    required XiangjiGuidance guidance,
+    String reason = '用户主动更换导师',
+    String reasonCode = 'user_changed',
+    String kbVersion = '2.1.0',
+  }) async {
+    this.goal = XiangjiGoal(
+      id: goal.id,
+      versionId: goal.versionId,
+      state: goal.state,
+      isActive: goal.isActive,
+      originalText: goal.originalText,
+      whyText: goal.whyText,
+      higherValues: goal.higherValues,
+      successDefinition: goal.successDefinition,
+      scopeText: goal.scopeText,
+      primaryThinkerId: guidance.systemId,
+      currentNodeId: guidance.mechanismId,
+      createdAtMs: goal.createdAtMs,
+      updatedAtMs: 2,
+    );
+    migration = XiangjiMentorKnowledgeMigration(
+      id: migration.id,
+      goalId: migration.goalId,
+      fromThinkerId: migration.fromThinkerId,
+      targetKnowledgeVersion: migration.targetKnowledgeVersion,
+      status: 'resolved',
+      resolvedThinkerId: guidance.systemId,
+      detectedAtMs: migration.detectedAtMs,
+      resolvedAtMs: 2,
+    );
+    return this.goal;
+  }
+
+  @override
+  Future<XiangjiDailyStep> replaceCurrentStep(
+    XiangjiGoal goal,
+    XiangjiDailyStep next, {
+    String trigger = 'step_replaced',
+  }) async {
+    step = XiangjiDailyStep(
+      id: 2,
+      goalId: goal.id,
+      goalVersionId: goal.versionId,
+      actionText: next.actionText,
+      triggerContext: next.triggerContext,
+      minimumDone: next.minimumDone,
+      evidenceRule: next.evidenceRule,
+      controllabilityReason: next.controllabilityReason,
+      smallerVariant: next.smallerVariant,
+      sourceSystemId: next.sourceSystemId,
+      status: next.status,
+      createdAtMs: 2,
+    );
+    return step;
+  }
 }
 
 Future<void> _pumpUntil(
