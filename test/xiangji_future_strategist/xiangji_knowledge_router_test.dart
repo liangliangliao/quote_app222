@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
-import 'package:quote_app/xiangji_future_strategist/xiangji_knowledge_router.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_knowledge_route_core.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 

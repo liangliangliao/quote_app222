@@ -20,7 +20,8 @@
 - 领域模型：`xiangji_models.dart`
 - P0 状态机与 K0 离线规则：`xiangji_state_machine.dart`
 - SQLite 数据/知识/审计层：`xiangji_database.dart`
-- A12 知识路由、导入、Provider 生命周期：`xiangji_knowledge_router.dart`
+- A12 纯路由内核：`xiangji_knowledge_route_core.dart`
+- 知识导入与 Provider 生命周期适配：`xiangji_knowledge_router.dart`
 - A00—A12 Agent 编排：`xiangji_agent_service.dart`
 - 问题—行动—Todo—现实验算编排：`xiangji_repository.dart`
 
