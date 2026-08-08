@@ -154,6 +154,11 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter test test/xiangji_future_strategist
 
+      - name: Test Xiangji Goal Mentor V1.4 and KB V2.1 gates
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: flutter test test/xiangji_goal_mentor
+
       - name: Preload Gradle wrapper with retries
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}
