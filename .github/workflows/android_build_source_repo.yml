@@ -125,6 +125,11 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter test test/zhixing_tree
 
+      - name: Test Xiangji Future Strategist V6.1 Rev2 gates
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: flutter test test/xiangji_future_strategist
+
       - name: Preload Gradle wrapper with retries
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}

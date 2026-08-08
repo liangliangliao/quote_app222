@@ -40,6 +40,7 @@ import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
 import '../zhixing_tree/zhixing_tree_home_page.dart';
+import '../xiangji_future_strategist/xiangji_home_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2550,6 +2551,67 @@ Widget _buildEmotionPieChart() {
                       icon: Icons.edit_note_outlined,
                       title: '写日记',
                       onTap: _openDiaryFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    Material(
+                      color: const Color(0xFFEEF5F1),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (context) =>
+                                  const XiangjiFutureStrategistHomePage(),
+                            ),
+                          );
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 13,
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Color(0xFFD9E9E1),
+                                child: Icon(
+                                  Icons.explore_outlined,
+                                  size: 21,
+                                  color: Color(0xFF245C4A),
+                                ),
+                              ),
+                              SizedBox(width: 11),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '向己 · 未来军师',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      '认识审查 · 真问题 · 战略决断 · 行动验算 · 个人战史',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF557064),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.chevron_right),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Material(
