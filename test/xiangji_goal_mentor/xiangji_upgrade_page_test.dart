@@ -25,7 +25,14 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await _pumpUntil(
+      tester,
+      () => find
+          .text('知识库已升级，请重新选择目标导师')
+          .evaluate()
+          .isNotEmpty,
+      '旧导师升级提示出现',
+    );
 
     expect(find.text('知识库已升级，请重新选择目标导师'), findsOneWidget);
     expect(find.text('保留覆盖安装前的目标'), findsOneWidget);
@@ -41,12 +48,20 @@ void main() {
     await tester.ensureVisible(reselectButton);
     await tester.pump();
     await tester.tap(reselectButton);
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await _pumpUntil(
+      tester,
+      () => find.text('目标导师与知识路径').evaluate().isNotEmpty,
+      '导师重新选择页打开',
+    );
     expect(find.text('目标导师与知识路径'), findsOneWidget);
     expect(find.text('选择一位导师，保持一条判断路径'), findsOneWidget);
 
     await tester.tap(find.text('选择这位导师'));
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await _pumpUntil(
+      tester,
+      () => find.text('目标导师与知识路径').evaluate().isEmpty,
+      '导师选择完成并返回目标页',
+    );
 
     expect(find.text('知识库已升级，请重新选择目标导师'), findsNothing);
     final upgradedGoal = (await dao.activeGoal())!;
@@ -97,4 +112,16 @@ XiangjiGoalDraft _legacyDraft() {
     guidance: guidance,
     step: step,
   );
+}
+
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() condition,
+  String description,
+) async {
+  for (var attempt = 0; attempt < 200; attempt += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (condition()) return;
+  }
+  fail('等待超时：$description');
 }
