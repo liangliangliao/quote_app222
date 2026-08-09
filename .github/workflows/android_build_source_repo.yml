@@ -144,20 +144,9 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter pub get
 
-      - name: Test Zhixing Tree rules and knowledge package
-        if: steps.detect.outputs.project_type == 'flutter'
-        working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: flutter test test/zhixing_tree
-
-      - name: Test Xiangji Future Strategist V6.1 Rev3 gates
-        if: steps.detect.outputs.project_type == 'flutter'
-        working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: flutter test test/xiangji_future_strategist
-
-      - name: Test Xiangji Goal Mentor V1.4 and KB V2.1 gates
-        if: steps.detect.outputs.project_type == 'flutter'
-        working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: flutter test test/xiangji_goal_mentor
+      # APK delivery is intentionally compile-only. Module test suites run in
+      # their own workflows and must not prevent a build artifact from being
+      # produced when the application source itself compiles successfully.
 
       - name: Preload Gradle wrapper with retries
         if: steps.detect.outputs.project_type == 'flutter'
