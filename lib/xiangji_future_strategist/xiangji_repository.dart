@@ -905,6 +905,11 @@ class XiangjiRepository {
       problem.state,
       next,
       XiangjiProblemTransitionContext(
+        // Re-entering SOLVING after a completed reality cycle continues the
+        // problem boundary that the user already confirmed before execution;
+        // it is not a fresh AI rewrite of the original question.
+        conceptsReviewed: next == XiangjiProblemState.solving,
+        reframedQuestionConfirmed: next == XiangjiProblemState.solving,
         realityResultPresent: true,
         resolutionCriteriaMet: resolutionCriteriaMet,
       ),

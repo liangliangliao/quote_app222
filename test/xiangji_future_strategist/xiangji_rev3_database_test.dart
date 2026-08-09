@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:quote_app/external_data/todo_dao.dart';
 import 'package:quote_app/external_data/todo_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_agent_service.dart';
@@ -444,7 +446,11 @@ void main() {
 
   test('legacy Rev2 tables receive all Rev3 columns without data reset',
       () async {
-    final legacy = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    final legacyDirectory =
+        await Directory.systemTemp.createTemp('xiangji_rev3_legacy_');
+    final legacy = await databaseFactoryFfi.openDatabase(
+      p.join(legacyDirectory.path, 'legacy.db'),
+    );
     try {
       await legacy.execute(
         'CREATE TABLE xf_problem (id TEXT PRIMARY KEY, state TEXT, updated_at_ms INTEGER)',
@@ -488,6 +494,7 @@ void main() {
       expect(await columns('xf_reality_result'), contains('experience_json'));
     } finally {
       await legacy.close();
+      await legacyDirectory.delete(recursive: true);
     }
   });
 
