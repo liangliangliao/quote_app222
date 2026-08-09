@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quote_app/external_data/todo_dao.dart';
+import 'package:quote_app/external_data/todo_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_agent_service.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
@@ -396,6 +398,7 @@ void main() {
       () async {
     final repository = XiangjiRepository(
       dao: dao,
+      todoDao: _EmptyTodoDao(),
       agentService: _UnavailableAgentService(dao),
     );
     const cases = <(String, String)>[
@@ -505,4 +508,15 @@ class _UnavailableAgentService extends XiangjiAgentService {
   Future<XiangjiAgentResult> run(XiangjiAgentRequest request) async {
     throw StateError('Test provider intentionally unavailable.');
   }
+}
+
+class _EmptyTodoDao extends TodoDao {
+  @override
+  Future<List<TodoTaskRecord>> listTasks(
+    String listId, {
+    String filter = 'all',
+    int limit = 50,
+    int offset = 0,
+  }) async =>
+      <TodoTaskRecord>[];
 }
