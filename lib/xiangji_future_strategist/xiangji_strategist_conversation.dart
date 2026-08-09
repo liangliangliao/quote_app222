@@ -34,7 +34,7 @@ class XiangjiStrategistConversationPanel extends StatefulWidget {
 class _XiangjiStrategistConversationPanelState
     extends State<XiangjiStrategistConversationPanel> {
   final TextEditingController _controller = TextEditingController();
-  final SpeechToText _speech = SpeechToText();
+  SpeechToText? _speech;
   final AiAssistantFileTextExtractor _attachmentExtractor =
       AiAssistantFileTextExtractor();
   List<PlatformFile> _attachments = const <PlatformFile>[];
@@ -50,12 +50,14 @@ class _XiangjiStrategistConversationPanelState
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadHistory();
+    });
   }
 
   @override
   void dispose() {
-    _speech.stop();
+    _speech?.stop();
     _controller.dispose();
     super.dispose();
   }
@@ -126,12 +128,13 @@ class _XiangjiStrategistConversationPanelState
   }
 
   Future<void> _toggleVoice() async {
-    if (_speech.isListening) {
-      await _speech.stop();
+    final speech = _speech ??= SpeechToText();
+    if (speech.isListening) {
+      await speech.stop();
       if (mounted) setState(() => _listening = false);
       return;
     }
-    final available = await _speech.initialize(
+    final available = await speech.initialize(
       onStatus: (status) {
         if (mounted && status == 'done') {
           setState(() => _listening = false);
@@ -149,7 +152,7 @@ class _XiangjiStrategistConversationPanelState
       return;
     }
     setState(() => _listening = true);
-    await _speech.listen(
+    await speech.listen(
       localeId: 'zh_CN',
       onResult: (result) {
         if (!mounted) return;

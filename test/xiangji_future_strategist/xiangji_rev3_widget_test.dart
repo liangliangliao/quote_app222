@@ -4,20 +4,13 @@ import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_repository.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_strategist_conversation.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
-  sqfliteFfiInit();
-
   testWidgets('TC-UX-R3-01/accessible natural-language entry at 200% text',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() async => tester.binding.setSurfaceSize(null));
-    final database =
-        await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    addTearDown(() => database.close());
-    final dao = XiangjiDao(database: database);
-    await dao.ensureSchema(database);
+    final dao = XiangjiDao();
     final repository = _EmptyHistoryRepository(dao);
 
     await tester.pumpWidget(
