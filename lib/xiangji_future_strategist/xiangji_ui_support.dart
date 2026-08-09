@@ -9,6 +9,7 @@ class XiangjiPalette {
   static const Color pine = Color(0xFF245C4A);
   static const Color mist = Color(0xFFF2F6F3);
   static const Color gold = Color(0xFFB88438);
+  static const Color sand = Color(0xFFF4E8D3);
   static const Color line = Color(0xFFDCE5DF);
   static const Color muted = Color(0xFF63736B);
 }
