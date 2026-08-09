@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_agent_service.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_sck_runtime.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_state_machine.dart';

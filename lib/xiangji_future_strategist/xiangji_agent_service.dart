@@ -802,7 +802,7 @@ class XiangjiAgentService {
         },
       XiangjiAgentId.knowledgeRouter => <String, Object?>{
           'sources_used': knowledge.trace.sourcesUsed,
-          'sources_excluded': knowledge.trace.sourcesExcluded,
+          'sources_excluded': knowledge.trace.rejectedSources,
           'rule_ids': knowledge.preflight.ruleIds,
           'message': '检索命中只提供上下文，不自动升级为事实。',
         },
