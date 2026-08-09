@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
 import 'xiangji_models.dart';
+import 'xiangji_rev3_models.dart';
 
 /// SQLite is the authoritative local store for the strategist. Every table is
 /// prefixed so the module can coexist with the app's existing goal/Todo data.
@@ -30,6 +31,7 @@ class XiangjiDao {
       batch.execute(statement);
     }
     await batch.commit(noResult: true);
+    await _ensureRev3Columns(db);
     try {
       await db.execute('''
         CREATE VIRTUAL TABLE IF NOT EXISTS xf_knowledge_passage_fts
@@ -40,8 +42,61 @@ class XiangjiDao {
       // available and the UI exposes the index state truthfully.
     }
     await _seedCoreKnowledge(db);
+    await _ensureRev3SckRules(db);
     await _seedProviderCapabilities(db);
     _ensured = true;
+  }
+
+  Future<void> _ensureRev3Columns(Database db) async {
+    Future<void> add(
+      String table,
+      String column,
+      String definition,
+    ) async {
+      final columns = await db.rawQuery('PRAGMA table_info($table)');
+      final exists = columns.any(
+        (row) => (row['name'] ?? '').toString() == column,
+      );
+      if (!exists) {
+        await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+      }
+    }
+
+    await add(
+      'xf_concept_version',
+      'support_refs_json',
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
+    await add(
+      'xf_concept_version',
+      'counterexample_refs_json',
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
+    await add(
+      'xf_problem',
+      'situation_model_id',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_information_need',
+      'resolution_action_id',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_decision_draft',
+      'agent_run_id',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'opportunity_cost',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_reality_result',
+      'experience_json',
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
   }
 
   static const List<String> _schemaStatements = <String>[
@@ -182,6 +237,8 @@ class XiangjiDao {
         change_reason TEXT NOT NULL,
         supersedes_id TEXT,
         source_refs_json TEXT NOT NULL DEFAULT '[]',
+        support_refs_json TEXT NOT NULL DEFAULT '[]',
+        counterexample_refs_json TEXT NOT NULL DEFAULT '[]',
         created_at_ms INTEGER NOT NULL,
         UNIQUE(concept_id, version_no)
       )
@@ -204,6 +261,7 @@ class XiangjiDao {
         reframed_question TEXT NOT NULL DEFAULT '',
         state TEXT NOT NULL,
         campaign_id TEXT,
+        situation_model_id TEXT NOT NULL DEFAULT '',
         goal_text TEXT NOT NULL DEFAULT '',
         value_link TEXT NOT NULL DEFAULT '',
         success_criteria TEXT NOT NULL DEFAULT '',
@@ -227,6 +285,156 @@ class XiangjiDao {
         status TEXT NOT NULL DEFAULT 'active',
         data_json TEXT NOT NULL DEFAULT '{}',
         created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_situation_model (
+        id TEXT PRIMARY KEY,
+        object_type TEXT NOT NULL,
+        object_id TEXT NOT NULL,
+        version_no INTEGER NOT NULL,
+        state TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        current_need TEXT NOT NULL,
+        model_json TEXT NOT NULL DEFAULT '{}',
+        source_refs_json TEXT NOT NULL DEFAULT '[]',
+        generated_at_ms INTEGER NOT NULL,
+        stale_reason TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        UNIQUE(object_type, object_id, version_no)
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_ai_inference (
+        id TEXT PRIMARY KEY,
+        situation_model_id TEXT NOT NULL,
+        problem_id TEXT,
+        text TEXT NOT NULL,
+        inference_type TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL DEFAULT '[]',
+        agent_run_id TEXT,
+        epistemic_status TEXT NOT NULL,
+        user_confirmed INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_information_need (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        situation_model_id TEXT NOT NULL,
+        question TEXT NOT NULL,
+        missing_field TEXT NOT NULL,
+        missing INTEGER NOT NULL DEFAULT 1,
+        decision_impact TEXT NOT NULL,
+        can_infer INTEGER NOT NULL DEFAULT 0,
+        infer_source_refs_json TEXT NOT NULL DEFAULT '[]',
+        scouting_possible INTEGER NOT NULL DEFAULT 0,
+        scouting_option TEXT NOT NULL DEFAULT '',
+        resolution_action_id TEXT NOT NULL DEFAULT '',
+        evsi_rank REAL NOT NULL DEFAULT 0,
+        expected_value TEXT NOT NULL DEFAULT '',
+        user_burden REAL NOT NULL DEFAULT 1,
+        selected_for_question INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'OPEN',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_clarification_question (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        information_need_id TEXT NOT NULL,
+        wording TEXT NOT NULL,
+        burden_estimate REAL NOT NULL DEFAULT 1,
+        asked_at_ms INTEGER NOT NULL,
+        answer_ref TEXT NOT NULL DEFAULT '',
+        answered_at_ms INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'ASKED'
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_user_correction (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        target_ref TEXT NOT NULL,
+        old_value TEXT NOT NULL DEFAULT '',
+        corrected_value TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_agent_run (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT,
+        campaign_id TEXT,
+        agent_role TEXT NOT NULL,
+        orchestration_state TEXT NOT NULL,
+        model_run_id TEXT,
+        input_refs_json TEXT NOT NULL DEFAULT '[]',
+        output_refs_json TEXT NOT NULL DEFAULT '[]',
+        output_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL,
+        started_at_ms INTEGER NOT NULL,
+        ended_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_reasoning_artifact (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT,
+        campaign_id TEXT,
+        situation_model_id TEXT NOT NULL,
+        agent_run_id TEXT,
+        kind TEXT NOT NULL,
+        json_payload TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_judgment (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        situation_model_id TEXT NOT NULL,
+        purpose_scope TEXT NOT NULL,
+        compared_cases_json TEXT NOT NULL DEFAULT '[]',
+        relevant_similarities_json TEXT NOT NULL DEFAULT '[]',
+        relevant_differences_json TEXT NOT NULL DEFAULT '[]',
+        counterexamples_json TEXT NOT NULL DEFAULT '[]',
+        conclusion TEXT NOT NULL,
+        agent_run_id TEXT,
+        state TEXT NOT NULL DEFAULT 'DRAFT',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_decision_draft (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        campaign_id TEXT,
+        action_id TEXT,
+        situation_model_id TEXT NOT NULL,
+        true_problem TEXT NOT NULL DEFAULT '',
+        recommendation TEXT NOT NULL,
+        judgment TEXT NOT NULL,
+        why_text TEXT NOT NULL,
+        current_action TEXT NOT NULL,
+        change_signals TEXT NOT NULL,
+        epistemic_status TEXT NOT NULL,
+        clarification_question TEXT NOT NULL DEFAULT '',
+        options_json TEXT NOT NULL DEFAULT '[]',
+        uncertainty_json TEXT NOT NULL DEFAULT '{}',
+        weakest_premise TEXT NOT NULL DEFAULT '',
+        unresolved_items_json TEXT NOT NULL DEFAULT '[]',
+        agent_run_id TEXT NOT NULL DEFAULT '',
+        user_status TEXT NOT NULL DEFAULT 'PROPOSED',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
       )
     ''',
     '''
@@ -258,6 +466,7 @@ class XiangjiDao {
         strategy_type TEXT NOT NULL,
         benefits_json TEXT NOT NULL DEFAULT '[]',
         costs_json TEXT NOT NULL DEFAULT '[]',
+        opportunity_cost TEXT NOT NULL DEFAULT '',
         reversibility TEXT NOT NULL,
         key_assumptions_json TEXT NOT NULL DEFAULT '[]',
         stop_conditions_json TEXT NOT NULL DEFAULT '[]',
@@ -351,6 +560,7 @@ class XiangjiDao {
         action_id TEXT NOT NULL,
         observed_at_ms INTEGER NOT NULL,
         facts_json TEXT NOT NULL,
+        experience_json TEXT NOT NULL DEFAULT '[]',
         unexpected_json TEXT NOT NULL DEFAULT '[]',
         source_refs_json TEXT NOT NULL DEFAULT '[]',
         user_interpretation TEXT,
@@ -686,6 +896,12 @@ class XiangjiDao {
     'CREATE INDEX IF NOT EXISTS idx_xf_debt_problem ON xf_epistemic_debt(problem_id, status)',
     'CREATE INDEX IF NOT EXISTS idx_xf_problem_state ON xf_problem(state, updated_at_ms DESC)',
     'CREATE INDEX IF NOT EXISTS idx_xf_problem_item ON xf_problem_item(problem_id, kind, sort_order)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_situation_object ON xf_situation_model(object_type, object_id, version_no DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_inference_problem ON xf_ai_inference(problem_id, status, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_info_need_problem ON xf_information_need(problem_id, status, evsi_rank DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_agent_run_problem ON xf_agent_run(problem_id, started_at_ms)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_artifact_problem ON xf_reasoning_artifact(problem_id, status, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_decision_problem ON xf_decision_draft(problem_id, updated_at_ms DESC)',
     'CREATE INDEX IF NOT EXISTS idx_xf_campaign_primary ON xf_campaign(is_primary, state)',
     'CREATE INDEX IF NOT EXISTS idx_xf_action_current ON xf_action(state, updated_at_ms DESC)',
     'CREATE INDEX IF NOT EXISTS idx_xf_passage_source ON xf_knowledge_passage(source_id, locator)',
@@ -711,9 +927,9 @@ class XiangjiDao {
         'layer': 'K0',
         'kind': 'original_source_framework',
         'title': '叔本华认识论内核 - 《作为意志和表象的世界》第一篇',
-        'version': 'V6.1-Rev2',
+        'version': 'V6.1-Rev3',
         'status': 'active',
-        'content_hash': 'bundled-k0-v6.1-rev2',
+        'content_hash': 'bundled-k0-v6.1-rev3',
         'sensitivity': 'normal',
         'created_at_ms': now,
         'updated_at_ms': now,
@@ -725,7 +941,7 @@ class XiangjiDao {
         'mime': 'application/x-structured-knowledge',
         'parse_status': 'READY',
         'index_status': 'READY',
-        'checksum': 'bundled-k0-v6.1-rev2',
+        'checksum': 'bundled-k0-v6.1-rev3',
         'byte_size': 0,
         'last_error': '',
         'created_at_ms': now,
@@ -787,7 +1003,7 @@ class XiangjiDao {
           'action_json': jsonEncode(<String, Object?>{
             'description': rule['action'],
           }),
-          'version': 'V6.1-Rev2',
+          'version': 'V6.1-Rev3',
           'enabled': 1,
           'protected': 1,
           'created_at_ms': now,
@@ -806,6 +1022,62 @@ class XiangjiDao {
       }
     });
     await rebuildPassageIndex(db);
+  }
+
+  Future<void> _ensureRev3SckRules(Database db) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.update(
+        'xf_knowledge_source',
+        <String, Object?>{
+          'version': 'V6.1-Rev3',
+          'content_hash': 'bundled-k0-v6.1-rev3',
+          'updated_at_ms': now,
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>['XF-K0-SCHOPENHAUER'],
+      );
+      for (final rule in _coreRuleSeeds.where(
+        (item) => (item['code'] ?? '').startsWith('SCK-'),
+      )) {
+        final code = rule['code']!;
+        final ruleId = 'XF-$code';
+        await txn.insert(
+          'xf_knowledge_rule',
+          <String, Object?>{
+            'id': ruleId,
+            'source_id': 'XF-K0-SCHOPENHAUER',
+            'rule_code': code,
+            'severity': rule['severity'],
+            'condition_json': jsonEncode(<String, Object?>{
+              'description': rule['condition'],
+            }),
+            'action_json': jsonEncode(<String, Object?>{
+              'description': rule['action'],
+            }),
+            'version': 'V6.1-Rev3',
+            'enabled': 1,
+            'protected': 1,
+            'created_at_ms': now,
+            'updated_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        for (final requirement in rule['requirements']!.split(',')) {
+          await txn.insert(
+            'xf_rule_source_binding',
+            <String, Object?>{
+              'id': '$ruleId-${requirement.trim()}',
+              'rule_id': ruleId,
+              'passage_id': rule['passage'],
+              'requirement_id': requirement.trim(),
+              'created_at_ms': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+      }
+    });
   }
 
   static const List<Map<String, String>> _coreRuleSeeds =
@@ -945,6 +1217,114 @@ class XiangjiDao {
       'action': '只作为候选召回，另行核查正式依据',
       'requirements': 'KB-025',
       'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'SCK-001', 'severity': 'P0',
+      'condition': 'AI 态势模型被当作客观现实或身份定论',
+      'action': '标记为可修订 SituationModel，保留来源和版本',
+      'requirements': 'SCK-001', 'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'SCK-002', 'severity': 'P0',
+      'condition': '经验、观察、解释、预测或抽象混写',
+      'action': 'A01 自动分层并保留用户原话',
+      'requirements': 'SCK-002', 'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'SCK-003', 'severity': 'P0',
+      'condition': '未理解具体态势就直接套抽象规则',
+      'action': '先形成具体因果候选，再进入概念与规则',
+      'requirements': 'SCK-003', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-004', 'severity': 'P0',
+      'condition': '重要结果只保留单一原因',
+      'action': '生成竞争性原因和能区分它们的现实行动',
+      'requirements': 'SCK-004', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-005', 'severity': 'P0',
+      'condition': '高影响求解前缺少判断力审查',
+      'action': '强制 A02 先比较目的相关同异、边界与反例',
+      'requirements': 'SCK-005', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-006', 'severity': 'P0',
+      'condition': '概念被当作新的外部事实',
+      'action': '标记为二阶表示并回到具体实例',
+      'requirements': 'SCK-006', 'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'SCK-007', 'severity': 'P0',
+      'condition': '重大判断无法递归追溯',
+      'action': '追溯到 Experience/Evidence/Claim 或明确悬空',
+      'requirements': 'SCK-007', 'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'SCK-008', 'severity': 'P0',
+      'condition': '抽象、学术或复杂被用来提高确定性',
+      'action': '取消复杂度加成，按现实根据重新画像',
+      'requirements': 'SCK-008', 'passage': 'XF-K0-PASSAGE-14',
+    },
+    <String, String>{
+      'code': 'SCK-009', 'severity': 'P0',
+      'condition': '系统化程度与认识状态混为一体',
+      'action': '分别保存和显示 Systematicity/EpistemicStatus',
+      'requirements': 'SCK-009', 'passage': 'XF-K0-PASSAGE-14',
+    },
+    <String, String>{
+      'code': 'SCK-010', 'severity': 'P0',
+      'condition': '形式有效被用于掩盖无根据前提',
+      'action': '同时显示形式成立和前提未决',
+      'requirements': 'SCK-010', 'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'SCK-011', 'severity': 'P0',
+      'condition': '直接观察被当作绝对无误',
+      'action': '保留观察条件、模糊度与替代解释',
+      'requirements': 'SCK-011', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-012', 'severity': 'P1',
+      'condition': '身体感觉/情绪被抹平成外部原因',
+      'action': '保留非概念经验异质性，外因另行审查',
+      'requirements': 'SCK-012', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-013', 'severity': 'P0',
+      'condition': '抽象标签无法回到实例与反例',
+      'action': '展示原始事件、支持实例、反例和未解释细节',
+      'requirements': 'SCK-013', 'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'SCK-014', 'severity': 'P0',
+      'condition': '概念/规则持续与现实不一致',
+      'action': '触发 UNDER_REVIEW/CONFLICTED 并创建修订版本',
+      'requirements': 'SCK-014', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-015', 'severity': 'P0',
+      'condition': '关键行动缺少机制、Gap、高层意义或根据',
+      'action': '禁止进入 ACTION_READY，先补齐 why-chain',
+      'requirements': 'SCK-015', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-016', 'severity': 'P0',
+      'condition': '用户给出的路径/证明欲被直接当作目标',
+      'action': '先执行 Goal Audit，价值选择保留给用户',
+      'requirements': 'SCK-016', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-017', 'severity': 'P1',
+      'condition': '信息已足以支持可逆一步仍继续反思',
+      'action': '停止分析并压缩为唯一当前行动',
+      'requirements': 'SCK-017', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'SCK-018', 'severity': 'P0',
+      'condition': 'RealityResult 与 Prediction 冲突',
+      'action': '保留事前预测，标派生模型 STALE，回溯并修订',
+      'requirements': 'SCK-018', 'passage': 'XF-K0-PASSAGE-JUDGMENT',
     },
   ];
 
@@ -1133,6 +1513,54 @@ class XiangjiDao {
     return id;
   }
 
+  Future<void> addProblemUtterance({
+    required String eventId,
+    required String experienceId,
+    required String problemId,
+    required String text,
+    String contextText = '',
+    List<String> sourceRefs = const <String>[],
+    String sensitivity = 'sensitive',
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.insert('xf_raw_event', <String, Object?>{
+        'id': eventId,
+        'occurred_at_ms': now,
+        'context_text': contextText.trim().isEmpty ? text : contextText.trim(),
+        'source_type': 'conversation_followup',
+        'source_ref': problemId,
+        'sensitivity': sensitivity,
+        'created_at_ms': now,
+      });
+      await txn.insert('xf_experience', <String, Object?>{
+        'id': experienceId,
+        'raw_event_id': eventId,
+        'problem_id': problemId,
+        'experience_type': 'user_utterance',
+        'content': text,
+        'is_user_wording': 1,
+        'observation_conditions_json': jsonEncode(<String, Object?>{
+          'source': 'conversation_followup',
+          'source_refs': sourceRefs,
+        }),
+        'user_confirmed': 1,
+        'created_at_ms': now,
+      });
+      await _insertAudit(
+        txn,
+        id: '$eventId-captured',
+        objectType: 'problem',
+        objectId: problemId,
+        eventType: 'user_utterance_added',
+        actor: 'user',
+        after: <String, Object?>{'raw_event_id': eventId},
+        now: now,
+      );
+    });
+  }
+
   Future<XiangjiProblemRecord?> problem(String id) async {
     final db = await _database();
     final rows = await db.query(
@@ -1273,6 +1701,475 @@ class XiangjiDao {
     );
   }
 
+  Future<int> nextSituationModelVersion({
+    required String objectType,
+    required String objectId,
+  }) async {
+    final db = await _database();
+    final value = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT MAX(version_no) FROM xf_situation_model WHERE object_type = ? AND object_id = ?',
+          <Object?>[objectType, objectId],
+        )) ??
+        0;
+    return value + 1;
+  }
+
+  Future<void> saveSituationModel({
+    required String id,
+    required String objectType,
+    required String objectId,
+    required int version,
+    required XiangjiSituationModelState state,
+    required String summary,
+    required String currentNeed,
+    required Map<String, Object?> model,
+    required List<String> sourceRefs,
+    String staleReason = '',
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xf_situation_model',
+      <String, Object?>{
+        'id': id,
+        'object_type': objectType,
+        'object_id': objectId,
+        'version_no': version,
+        'state': state.wire,
+        'summary': summary,
+        'current_need': currentNeed,
+        'model_json': jsonEncode(model),
+        'source_refs_json': jsonEncode(sourceRefs),
+        'generated_at_ms': now,
+        'stale_reason': staleReason,
+        'created_at_ms': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    if (objectType == 'problem') {
+      await db.update(
+        'xf_problem',
+        <String, Object?>{
+          'situation_model_id': id,
+          'updated_at_ms': now,
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>[objectId],
+      );
+    }
+  }
+
+  Future<Map<String, Object?>?> latestSituationModel({
+    required String objectType,
+    required String objectId,
+  }) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_situation_model',
+      where: 'object_type = ? AND object_id = ?',
+      whereArgs: <Object?>[objectType, objectId],
+      orderBy: 'version_no DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> saveAiInference(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_ai_inference',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> aiInferences(String problemId) async {
+    final db = await _database();
+    return db.query(
+      'xf_ai_inference',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+    );
+  }
+
+  Future<void> saveInformationNeed(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_information_need',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> informationNeeds(
+    String problemId, {
+    bool openOnly = false,
+  }) async {
+    final db = await _database();
+    return db.query(
+      'xf_information_need',
+      where: openOnly ? 'problem_id = ? AND status = ?' : 'problem_id = ?',
+      whereArgs: openOnly
+          ? <Object?>[problemId, 'OPEN']
+          : <Object?>[problemId],
+      orderBy: 'selected_for_question DESC, evsi_rank DESC, created_at_ms DESC',
+    );
+  }
+
+  Future<void> supersedeOpenInformationNeeds(String problemId) async {
+    final db = await _database();
+    await db.update(
+      'xf_information_need',
+      <String, Object?>{
+        'status': 'SUPERSEDED',
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'problem_id = ? AND status = ?',
+      whereArgs: <Object?>[problemId, 'OPEN'],
+    );
+  }
+
+  Future<void> linkScoutingInformationNeeds(
+    String problemId,
+    String actionId,
+  ) async {
+    final db = await _database();
+    await db.update(
+      'xf_information_need',
+      <String, Object?>{
+        'resolution_action_id': actionId,
+        'status': 'SCOUTING',
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'problem_id = ? AND status = ? AND scouting_possible = 1',
+      whereArgs: <Object?>[problemId, 'OPEN'],
+    );
+  }
+
+  Future<void> saveClarificationQuestion(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_clarification_question',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> answerOpenClarification({
+    required String problemId,
+    required String answerRef,
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      'xf_clarification_question',
+      <String, Object?>{
+        'answer_ref': answerRef,
+        'answered_at_ms': now,
+        'status': 'ANSWERED',
+      },
+      where: 'problem_id = ? AND status = ?',
+      whereArgs: <Object?>[problemId, 'ASKED'],
+    );
+    await db.update(
+      'xf_information_need',
+      <String, Object?>{'status': 'ANSWERED', 'updated_at_ms': now},
+      where: 'problem_id = ? AND selected_for_question = 1 AND status = ?',
+      whereArgs: <Object?>[problemId, 'OPEN'],
+    );
+  }
+
+  Future<void> saveAgentRun(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_agent_run',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> agentRuns(String problemId) async {
+    final db = await _database();
+    return db.query(
+      'xf_agent_run',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'started_at_ms ASC',
+    );
+  }
+
+  Future<void> saveReasoningArtifact(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_reasoning_artifact',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> reasoningArtifacts({
+    String problemId = '',
+    String campaignId = '',
+  }) async {
+    final db = await _database();
+    if (problemId.isNotEmpty) {
+      return db.query(
+        'xf_reasoning_artifact',
+        where: 'problem_id = ? AND status = ?',
+        whereArgs: <Object?>[problemId, 'ACTIVE'],
+        orderBy: 'created_at_ms DESC',
+      );
+    }
+    return db.query(
+      'xf_reasoning_artifact',
+      where: 'campaign_id = ? AND status = ?',
+      whereArgs: <Object?>[campaignId, 'ACTIVE'],
+      orderBy: 'created_at_ms DESC',
+    );
+  }
+
+  Future<void> saveJudgment(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_judgment',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> judgments(String problemId) async {
+    final db = await _database();
+    return db.query(
+      'xf_judgment',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+    );
+  }
+
+  Future<void> saveDecisionDraft(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_decision_draft',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<XiangjiDecisionDraftRecord?> decisionDraft(String id) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_decision_draft',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? null
+        : XiangjiDecisionDraftRecord.fromMap(rows.first);
+  }
+
+  Future<XiangjiDecisionDraftRecord?> latestDecisionDraft({
+    String problemId = '',
+    String campaignId = '',
+  }) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_decision_draft',
+      where: problemId.isNotEmpty ? 'problem_id = ?' : 'campaign_id = ?',
+      whereArgs: <Object?>[problemId.isNotEmpty ? problemId : campaignId],
+      orderBy: 'created_at_ms DESC',
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? null
+        : XiangjiDecisionDraftRecord.fromMap(rows.first);
+  }
+
+  Future<List<XiangjiDecisionDraftRecord>> latestDecisionDrafts({
+    int limit = 20,
+  }) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_decision_draft',
+      orderBy: 'created_at_ms DESC',
+      limit: limit,
+    );
+    return rows.map(XiangjiDecisionDraftRecord.fromMap).toList();
+  }
+
+  Future<void> updateDecisionDraftStatus(
+    String id,
+    XiangjiDecisionDraftStatus status, {
+    String recommendation = '',
+    String currentAction = '',
+  }) async {
+    final db = await _database();
+    await db.update(
+      'xf_decision_draft',
+      <String, Object?>{
+        'user_status': status.wire,
+        if (recommendation.trim().isNotEmpty)
+          'recommendation': recommendation.trim(),
+        if (currentAction.trim().isNotEmpty)
+          'current_action': currentAction.trim(),
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
+  Future<void> saveUserCorrectionAndInvalidate({
+    required String id,
+    required String problemId,
+    required String targetRef,
+    required String oldValue,
+    required String correctedValue,
+    required String reason,
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.insert('xf_user_correction', <String, Object?>{
+        'id': id,
+        'problem_id': problemId,
+        'target_ref': targetRef,
+        'old_value': oldValue,
+        'corrected_value': correctedValue,
+        'reason': reason,
+        'created_at_ms': now,
+      });
+      await txn.update(
+        'xf_situation_model',
+        <String, Object?>{
+          'state': XiangjiSituationModelState.stale.wire,
+          'stale_reason': reason,
+        },
+        where: 'object_type = ? AND object_id = ? AND state != ?',
+        whereArgs: <Object?>[
+          'problem',
+          problemId,
+          XiangjiSituationModelState.stale.wire,
+        ],
+      );
+      await txn.update(
+        'xf_ai_inference',
+        <String, Object?>{'status': 'STALE'},
+        where: 'problem_id = ? AND status = ?',
+        whereArgs: <Object?>[problemId, 'ACTIVE'],
+      );
+      await txn.update(
+        'xf_reasoning_artifact',
+        <String, Object?>{'status': 'STALE'},
+        where: 'problem_id = ? AND status = ?',
+        whereArgs: <Object?>[problemId, 'ACTIVE'],
+      );
+      await txn.update(
+        'xf_judgment',
+        <String, Object?>{
+          'state': XiangjiJudgmentState.contested.wire,
+          'updated_at_ms': now,
+        },
+        where: 'problem_id = ? AND state IN (?, ?)',
+        whereArgs: <Object?>[
+          problemId,
+          XiangjiJudgmentState.draft.wire,
+          XiangjiJudgmentState.accepted.wire,
+        ],
+      );
+      await txn.update(
+        'xf_decision_draft',
+        <String, Object?>{
+          'user_status': XiangjiDecisionDraftStatus.stale.wire,
+          'updated_at_ms': now,
+        },
+        where: 'problem_id = ? AND user_status != ?',
+        whereArgs: <Object?>[
+          problemId,
+          XiangjiDecisionDraftStatus.stale.wire,
+        ],
+      );
+      await txn.update(
+        'xf_claim',
+        <String, Object?>{
+          'epistemic_status': XiangjiClaimState.unresolved.wire,
+          'updated_at_ms': now,
+        },
+        where: 'problem_id = ? AND source_kind = ?',
+        whereArgs: <Object?>[problemId, 'ai_inference'],
+      );
+      await txn.update(
+        'xf_concept',
+        <String, Object?>{'status': 'UNDER_REVIEW', 'updated_at_ms': now},
+        where: 'scope = ?',
+        whereArgs: <Object?>[problemId],
+      );
+    });
+  }
+
+  Future<void> retireGeneratedProblemItems(String problemId) async {
+    final db = await _database();
+    await db.update(
+      'xf_problem_item',
+      <String, Object?>{'status': 'stale'},
+      where: "problem_id = ? AND status = 'active' AND source_ref LIKE 'situation:%'",
+      whereArgs: <Object?>[problemId],
+    );
+  }
+
+  Future<void> acceptSituationModel(String situationModelId) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.update(
+        'xf_ai_inference',
+        <String, Object?>{'user_confirmed': 1},
+        where: 'situation_model_id = ? AND status = ?',
+        whereArgs: <Object?>[situationModelId, 'ACTIVE'],
+      );
+      await txn.update(
+        'xf_judgment',
+        <String, Object?>{
+          'state': XiangjiJudgmentState.accepted.wire,
+          'updated_at_ms': now,
+        },
+        where: 'situation_model_id = ? AND state = ?',
+        whereArgs: <Object?>[
+          situationModelId,
+          XiangjiJudgmentState.draft.wire,
+        ],
+      );
+    });
+  }
+
+  Future<void> invalidateReadyActions(String problemId) async {
+    final db = await _database();
+    await db.update(
+      'xf_action',
+      <String, Object?>{
+        'state': XiangjiActionState.invalidated.wire,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'problem_id = ? AND state = ?',
+      whereArgs: <Object?>[problemId, XiangjiActionState.ready.wire],
+    );
+  }
+
+  Future<void> linkProblemCampaign(String problemId, String campaignId) async {
+    final db = await _database();
+    await db.update(
+      'xf_problem',
+      <String, Object?>{
+        'campaign_id': campaignId,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[problemId],
+    );
+  }
+
   Future<void> addCausalHypothesis({
     required String id,
     required String problemId,
@@ -1313,6 +2210,8 @@ class XiangjiDao {
     required String definition,
     required String scope,
     required List<String> observableCriteria,
+    List<String> supportRefs = const <String>[],
+    List<String> counterexampleRefs = const <String>[],
     required String changeReason,
     String origin = 'user_problem_review',
   }) async {
@@ -1355,7 +2254,9 @@ class XiangjiDao {
         'observable_criteria_json': jsonEncode(observableCriteria),
         'change_reason': changeReason,
         'supersedes_id': supersedes,
-        'source_refs_json': '[]',
+        'source_refs_json': jsonEncode(supportRefs),
+        'support_refs_json': jsonEncode(supportRefs),
+        'counterexample_refs_json': jsonEncode(counterexampleRefs),
         'created_at_ms': now,
       });
       await txn.update(
@@ -1364,6 +2265,7 @@ class XiangjiDao {
           'name': name,
           'scope': scope,
           'current_version_id': versionId,
+          'status': 'ACTIVE',
           'updated_at_ms': now,
         },
         where: 'id = ?',
@@ -1693,12 +2595,14 @@ class XiangjiDao {
 
   Future<List<Map<String, Object?>>> strategyOptions(String campaignId) async {
     final db = await _database();
-    return db.query(
-      'xf_strategy_option',
-      where: 'campaign_id = ?',
-      whereArgs: <Object?>[campaignId],
-      orderBy: 'selected DESC, created_at_ms ASC',
-    );
+    return db.rawQuery('''
+      SELECT * FROM xf_strategy_option
+      WHERE campaign_id = ?
+        AND version_no = (
+          SELECT MAX(version_no) FROM xf_strategy_option WHERE campaign_id = ?
+        )
+      ORDER BY selected DESC, created_at_ms ASC
+    ''', <Object?>[campaignId, campaignId]);
   }
 
   Future<void> addCampaignIntel(Map<String, Object?> values) async {
@@ -1713,6 +2617,44 @@ class XiangjiDao {
       where: 'campaign_id = ?',
       whereArgs: <Object?>[campaignId],
       orderBy: 'created_at_ms ASC',
+    );
+  }
+
+  Future<void> saveContingency(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_contingency',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> contingencies(String campaignId) async {
+    final db = await _database();
+    return db.query(
+      'xf_contingency',
+      where: 'campaign_id = ? AND active = 1',
+      whereArgs: <Object?>[campaignId],
+      orderBy: 'created_at_ms ASC',
+    );
+  }
+
+  Future<void> saveIndicator(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_indicator',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> indicators(String campaignId) async {
+    final db = await _database();
+    return db.query(
+      'xf_indicator',
+      where: 'campaign_id = ?',
+      whereArgs: <Object?>[campaignId],
+      orderBy: 'indicator_type ASC, created_at_ms ASC',
     );
   }
 
@@ -1826,6 +2768,7 @@ class XiangjiDao {
     required String id,
     required String actionId,
     required List<String> facts,
+    List<String> experiences = const <String>[],
     required List<String> unexpected,
     required List<String> sourceRefs,
     required String userInterpretation,
@@ -1841,6 +2784,7 @@ class XiangjiDao {
         'action_id': actionId,
         'observed_at_ms': DateTime.now().millisecondsSinceEpoch,
         'facts_json': jsonEncode(facts),
+        'experience_json': jsonEncode(experiences),
         'unexpected_json': jsonEncode(unexpected),
         'source_refs_json': jsonEncode(sourceRefs),
         'user_interpretation': userInterpretation,
@@ -1946,6 +2890,190 @@ class XiangjiDao {
       limit: 1,
     );
     return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<Map<String, Object?>?> blockingRedAlert({
+    String problemId = '',
+    String campaignId = '',
+  }) async {
+    final db = await _database();
+    final rows = await db.rawQuery('''
+      SELECT * FROM xf_alert
+      WHERE status = 'open' AND state = 'RED'
+        AND (
+          (COALESCE(problem_id, '') = '' AND COALESCE(campaign_id, '') = '')
+          OR problem_id = ?
+          OR campaign_id = ?
+          OR (? != '' AND problem_id IN (
+            SELECT id FROM xf_problem WHERE campaign_id = ?
+          ))
+        )
+      ORDER BY created_at_ms DESC
+      LIMIT 1
+    ''', <Object?>[problemId, campaignId, campaignId, campaignId]);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<Map<String, Object?>?> latestOpenAlertForType(String alertType) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_alert',
+      where: 'status = ? AND alert_type = ?',
+      whereArgs: <Object?>['open', alertType],
+      orderBy: 'created_at_ms DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> resolveOpenAlertsOfType(
+    String alertType, {
+    String problemId = '',
+  }) async {
+    final db = await _database();
+    await db.update(
+      'xf_alert',
+      <String, Object?>{
+        'status': 'resolved',
+        'resolved_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: problemId.isEmpty
+          ? 'status = ? AND alert_type = ?'
+          : 'status = ? AND alert_type = ? AND problem_id = ?',
+      whereArgs: problemId.isEmpty
+          ? <Object?>['open', alertType]
+          : <Object?>['open', alertType, problemId],
+    );
+  }
+
+  Future<Map<String, Object?>> automaticMonitorSignals() async {
+    final db = await _database();
+    final criticalUnknownCount = Sqflite.firstIntValue(await db.rawQuery('''
+          SELECT COUNT(*) FROM xf_information_need
+          WHERE status = 'OPEN' AND decision_impact IN ('HIGH','CRITICAL')
+        ''')) ??
+        0;
+    final highDebtCount = Sqflite.firstIntValue(await db.rawQuery('''
+          SELECT COUNT(*) FROM xf_epistemic_debt
+          WHERE status = 'open' AND decision_impact IN ('high','critical')
+        ''')) ??
+        0;
+    final parallelHighLoadCampaigns =
+        Sqflite.firstIntValue(await db.rawQuery('''
+          SELECT COUNT(*) FROM xf_campaign
+          WHERE state IN ('PREPARE','EXECUTING','ADJUST')
+            AND resource_budget_json != '{}'
+        ''')) ??
+            0;
+    final strategyResourceDriftCount =
+        Sqflite.firstIntValue(await db.rawQuery('''
+          SELECT COUNT(*) FROM xf_campaign
+          WHERE is_primary = 0 AND state IN ('PREPARE','EXECUTING','ADJUST')
+            AND resource_budget_json != '{}'
+        ''')) ??
+            0;
+    final conceptRealityConflicts =
+        Sqflite.firstIntValue(await db.rawQuery('''
+          SELECT COUNT(*) FROM xf_concept
+          WHERE status IN ('UNDER_REVIEW','CONFLICTED')
+        ''')) ??
+            0;
+    final highRiskRows = await db.rawQuery('''
+          SELECT object_id FROM xf_situation_model
+          WHERE state != 'STALE'
+            AND object_type = 'problem'
+            AND model_json LIKE '%"high_risk":true%'
+            AND model_json LIKE '%"irreversible":true%'
+          ORDER BY generated_at_ms DESC
+          LIMIT 1
+        ''');
+    final riskProblemId = highRiskRows.isEmpty
+        ? ''
+        : (highRiskRows.first['object_id'] ?? '').toString();
+    final highRiskIrreversible = riskProblemId.isNotEmpty;
+    final riskProblemDebtCount = riskProblemId.isEmpty
+        ? 0
+        : Sqflite.firstIntValue(await db.rawQuery('''
+            SELECT
+              (SELECT COUNT(*) FROM xf_epistemic_debt
+               WHERE problem_id = ? AND status = 'open'
+                 AND decision_impact IN ('high','critical')) +
+              (SELECT COUNT(*) FROM xf_information_need
+               WHERE problem_id = ? AND status = 'OPEN'
+                 AND decision_impact IN ('HIGH','CRITICAL'))
+          ''', <Object?>[riskProblemId, riskProblemId])) ??
+            0;
+    final outcomes = await db.rawQuery('''
+      SELECT r.verdict, a.expected_minutes
+      FROM xf_reality_result r
+      JOIN xf_action a ON a.id = r.action_id
+      WHERE r.verdict != 'unreviewed'
+      ORDER BY r.observed_at_ms DESC
+      LIMIT 6
+    ''');
+    var consecutivePredictionMisses = 0;
+    for (final row in outcomes) {
+      if ((row['verdict'] ?? '').toString() != 'refutes') break;
+      consecutivePredictionMisses++;
+    }
+    var investmentRisingWithoutResultCycles = 0;
+    for (var index = 0; index + 1 < outcomes.length; index++) {
+      final newest = outcomes[index];
+      final older = outcomes[index + 1];
+      final newestVerdict = (newest['verdict'] ?? '').toString();
+      final olderVerdict = (older['verdict'] ?? '').toString();
+      final bothIneffective =
+          <String>{'refutes', 'partly_supports'}.contains(newestVerdict) &&
+              <String>{'refutes', 'partly_supports'}.contains(olderVerdict);
+      final newestEffort = (newest['expected_minutes'] as num?)?.toInt() ?? 0;
+      final olderEffort = (older['expected_minutes'] as num?)?.toInt() ?? 0;
+      if (!bothIneffective || newestEffort < olderEffort) break;
+      investmentRisingWithoutResultCycles++;
+    }
+    if (investmentRisingWithoutResultCycles > 0) {
+      investmentRisingWithoutResultCycles++;
+    }
+
+    final indicatorRows = await db.query(
+      'xf_indicator',
+      where: "latest_value IS NOT NULL AND TRIM(latest_value) != '' AND TRIM(threshold_text) != ''",
+    );
+    double? number(Object? raw) {
+      final match = RegExp(r'-?\d+(?:\.\d+)?').firstMatch('$raw');
+      return match == null ? null : double.tryParse(match.group(0)!);
+    }
+    var opportunityConditionTotal = 0;
+    var opportunityConditionsMet = 0;
+    for (final indicator in indicatorRows) {
+      final latest = number(indicator['latest_value']);
+      final threshold = number(indicator['threshold_text']);
+      if (latest == null || threshold == null) continue;
+      opportunityConditionTotal++;
+      final direction = (indicator['direction'] ?? '').toString().toLowerCase();
+      final met = direction.contains('down') ||
+              direction.contains('below') ||
+              direction.contains('下降') ||
+              direction.contains('低于')
+          ? latest <= threshold
+          : latest >= threshold;
+      if (met) opportunityConditionsMet++;
+    }
+    return <String, Object?>{
+      'critical_unknown_count': criticalUnknownCount,
+      'consecutive_prediction_misses': consecutivePredictionMisses,
+      'investment_rising_without_result_cycles':
+          investmentRisingWithoutResultCycles,
+      'parallel_high_load_campaigns': parallelHighLoadCampaigns,
+      'high_risk_irreversible': highRiskIrreversible,
+      'high_epistemic_debt': riskProblemId.isNotEmpty
+          ? riskProblemDebtCount > 0
+          : highDebtCount > 0 || criticalUnknownCount > 0,
+      'risk_problem_id': riskProblemId,
+      'opportunity_conditions_met': opportunityConditionsMet,
+      'opportunity_condition_total': opportunityConditionTotal,
+      'concept_reality_conflicts': conceptRealityConflicts,
+      'strategy_resource_drift_count': strategyResourceDriftCount,
+    };
   }
 
   Future<void> saveBattleReview(Map<String, Object?> values) async {
@@ -2490,7 +3618,7 @@ class XiangjiDao {
       }
     }
     return <String, Object?>{
-      'format': 'xiangji-future-strategist-v6.1-rev2',
+      'format': 'xiangji-future-strategist-v6.1-rev3',
       'exported_at': DateTime.now().toUtc().toIso8601String(),
       'tables': tables,
     };
@@ -2519,6 +3647,7 @@ class XiangjiDao {
       }
     });
     await _seedCoreKnowledge(db);
+    await _ensureRev3SckRules(db);
     await _seedProviderCapabilities(db);
     await rebuildPassageIndex(db);
   }
@@ -2538,9 +3667,13 @@ class XiangjiDao {
       limit: 1,
     );
     final alert = await latestOpenAlert();
-    final debtCount = Sqflite.firstIntValue(await db.rawQuery(
-          "SELECT COUNT(*) FROM xf_epistemic_debt WHERE status = 'open' AND decision_impact IN ('high','critical')",
-        )) ??
+    final debtCount = Sqflite.firstIntValue(await db.rawQuery('''
+          SELECT
+            (SELECT COUNT(*) FROM xf_epistemic_debt
+             WHERE status = 'open' AND decision_impact IN ('high','critical')) +
+            (SELECT COUNT(*) FROM xf_information_need
+             WHERE status = 'OPEN' AND decision_impact IN ('HIGH','CRITICAL'))
+        ''')) ??
         0;
     final primary = campaignRows.isEmpty
         ? null
@@ -2548,23 +3681,28 @@ class XiangjiDao {
     final currentAction = actionRows.isEmpty
         ? null
         : XiangjiActionRecord.fromMap(actionRows.first);
-    final gapRows = primary == null
-        ? const <Map<String, Object?>>[]
-        : await db.query(
+    final problemRows = await db.query(
+      'xf_problem',
+      where: "state != 'ARCHIVED'",
+      orderBy: 'updated_at_ms DESC',
+      limit: 1,
+    );
+    final latestProblem = problemRows.isEmpty
+        ? null
+        : XiangjiProblemRecord.fromMap(problemRows.first);
+    final decisionRows = await db.query(
+      'xf_decision_draft',
+      where: "user_status != 'STALE'",
+      orderBy: 'updated_at_ms DESC',
+      limit: 1,
+    );
+    final gapRows = await db.query(
             'xf_problem_item',
-            where:
-                "kind = 'gap' AND status = 'active' AND problem_id IN (SELECT id FROM xf_problem WHERE campaign_id = ?)",
-            whereArgs: <Object?>[primary.id],
+            where: primary == null
+                ? "kind = 'gap' AND status = 'active'"
+                : "kind = 'gap' AND status = 'active' AND problem_id IN (SELECT id FROM xf_problem WHERE campaign_id = ?)",
+            whereArgs: primary == null ? null : <Object?>[primary.id],
             orderBy: 'critical DESC, sort_order ASC',
-            limit: 1,
-          );
-    final latestClaimRows = primary == null
-        ? const <Map<String, Object?>>[]
-        : await db.query(
-            'xf_claim',
-            where: 'campaign_id = ?',
-            whereArgs: <Object?>[primary.id],
-            orderBy: 'updated_at_ms DESC',
             limit: 1,
           );
     final contingencyRows = primary == null
@@ -2577,20 +3715,26 @@ class XiangjiDao {
             limit: 1,
           );
     return XiangjiDashboardSnapshot(
-      northStar: primary?.northStar ?? '',
+      northStar: primary?.northStar ?? latestProblem?.goalText ?? '',
       primaryCampaign: primary,
       currentAction: currentAction,
       alertState:
           alert == null ? XiangjiAlertState.green : parseAlertState(alert['state']),
       alertReason: (alert?['reason'] ?? '').toString(),
+      alertDefaultAction: (alert?['default_action'] ?? '').toString(),
       keyGap: gapRows.isEmpty ? '' : (gapRows.first['text'] ?? '').toString(),
-      strategistJudgment: latestClaimRows.isEmpty
+      strategistJudgment: decisionRows.isEmpty
           ? ''
-          : (latestClaimRows.first['text'] ?? '').toString(),
-      contingency: contingencyRows.isEmpty
+          : (decisionRows.first['judgment'] ?? '').toString(),
+      strategistEpistemicStatus: decisionRows.isEmpty
           ? ''
-          : '${contingencyRows.first['trigger_expression']} -> ${contingencyRows.first['action_plan']}',
-      nextReviewAtMs: primary?.reviewAtMs ?? 0,
+          : (decisionRows.first['epistemic_status'] ?? '').toString(),
+      contingency: contingencyRows.isNotEmpty
+          ? '${contingencyRows.first['trigger_expression']} -> ${contingencyRows.first['action_plan']}'
+          : decisionRows.isEmpty
+              ? ''
+              : (decisionRows.first['change_signals'] ?? '').toString(),
+      nextReviewAtMs: primary?.reviewAtMs ?? latestProblem?.reviewAtMs ?? 0,
       unresolvedDebtCount: debtCount,
     );
   }

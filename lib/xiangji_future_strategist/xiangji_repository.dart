@@ -2,8 +2,11 @@ import 'dart:convert';
 
 import '../external_data/todo_dao.dart';
 import 'xiangji_agent_service.dart';
+import 'xiangji_cognitive_orchestrator.dart';
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
+import 'xiangji_rev3_models.dart';
+import 'xiangji_sck_runtime.dart';
 import 'xiangji_state_machine.dart';
 
 class XiangjiRepository {
@@ -35,6 +38,7 @@ class XiangjiRepository {
 
   Future<XiangjiDashboardSnapshot> dashboard() async {
     await refreshTodoBindings();
+    await refreshAutomaticWatch();
     return _dao.dashboard();
   }
 
@@ -46,6 +50,274 @@ class XiangjiRepository {
 
   Future<List<XiangjiActionRecord>> currentActions() =>
       _dao.actions(currentOnly: true);
+
+  Future<List<XiangjiDecisionDraftRecord>> decisionDrafts({int limit = 20}) =>
+      _dao.latestDecisionDrafts(limit: limit);
+
+  Future<XiangjiDecisionDraftRecord?> latestDecisionDraft(String problemId) =>
+      _dao.latestDecisionDraft(problemId: problemId);
+
+  /// Rev.3 default entry: one natural-language utterance starts the complete
+  /// cognitive route. Internal structures are AI-prefilled and persisted;
+  /// users are never routed into a blank mandatory worksheet.
+  Future<XiangjiCouncilResult> consultStrategist({
+    required String utterance,
+    String problemId = '',
+    bool authorizedSensitiveContext = false,
+    List<String> attachmentRefs = const <String>[],
+    String attachmentText = '',
+    bool forceStrategic = false,
+    bool clarificationAnswer = false,
+    XiangjiOrchestrationProgress? onProgress,
+  }) async {
+    final text = utterance.trim();
+    if (text.isEmpty) {
+      throw ArgumentError('请告诉军师你想要什么、发生了什么，或卡在哪里。');
+    }
+    var targetProblemId = problemId;
+    if (targetProblemId.isEmpty) {
+      targetProblemId = await createProblem(
+        rawQuestion: text,
+        rawContext: attachmentText.trim().isEmpty
+            ? text
+            : '$text\n\n附件摘录：\n${attachmentText.trim()}',
+      );
+    }
+    final orchestrator = XiangjiCognitiveOrchestrator(
+      dao: _dao,
+      agentService: _agentService,
+      idFactory: newId,
+    );
+    var retrievableContext = '';
+    var retrievableSourceRefs = const <String>[];
+    try {
+      final allTasks = await _todoDao.listTasks('smart_all', limit: 50);
+      final terms = _retrievalTerms(text);
+      final tasks = allTasks.where((task) {
+        if (terms.isEmpty) return false;
+        final haystack = '${task.title}\n${task.bodyText}'.toLowerCase();
+        return terms.any((term) => haystack.contains(term));
+      }).take(20).toList();
+      retrievableContext = tasks.map((task) {
+        final body = task.bodyText.trim();
+        final clippedBody = body.length <= 240 ? body : body.substring(0, 240);
+        return <String>[
+          'Todo：${task.title}',
+          if (task.dueDateTime.trim().isNotEmpty)
+            '截止：${task.dueDateTime.trim()}',
+          if (clippedBody.isNotEmpty) '备注：$clippedBody',
+        ].join('；');
+      }).join('\n');
+      retrievableSourceRefs = tasks
+          .map((task) => 'todo:${task.taskId}')
+          .toList(growable: false);
+    } catch (_) {
+      // Todo is helpful retrieval context, never a prerequisite for counsel.
+    }
+    return orchestrator.consult(
+      problemId: targetProblemId,
+      utterance: text,
+      authorizedSensitiveContext: authorizedSensitiveContext,
+      attachmentRefs: attachmentRefs,
+      attachmentText: attachmentText,
+      retrievableSourceRefs: retrievableSourceRefs,
+      retrievableContext: retrievableContext,
+      forceStrategic: forceStrategic,
+      clarificationAnswer: clarificationAnswer,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<XiangjiCouncilResult> planCampaignWithStrategist({
+    required String campaignId,
+    required String utterance,
+    bool authorizedSensitiveContext = false,
+    XiangjiOrchestrationProgress? onProgress,
+  }) async {
+    final campaign = await _requireCampaign(campaignId);
+    final linkedProblems = (await problems())
+        .where((problem) => problem.campaignId == campaignId)
+        .toList();
+    var problemId = linkedProblems.isEmpty ? '' : linkedProblems.first.id;
+    if (problemId.isEmpty) {
+      problemId = await createProblem(
+        rawQuestion: utterance.trim().isEmpty ? campaign.title : utterance,
+        rawContext:
+            '${campaign.title}\n北极星：${campaign.northStar}\n战略价值：${campaign.strategicValue}',
+      );
+      await _dao.linkProblemCampaign(problemId, campaignId);
+    }
+    return consultStrategist(
+      utterance: utterance.trim().isEmpty ? campaign.title : utterance,
+      problemId: problemId,
+      authorizedSensitiveContext: authorizedSensitiveContext,
+      forceStrategic: true,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<void> respondToDecisionDraft({
+    required String decisionDraftId,
+    required XiangjiDecisionDraftStatus status,
+    String recommendation = '',
+    String currentAction = '',
+  }) async {
+    final draft = await _dao.decisionDraft(decisionDraftId);
+    if (draft == null) throw StateError('军师草案不存在。');
+    await _dao.updateDecisionDraftStatus(
+      decisionDraftId,
+      status,
+      recommendation: recommendation,
+      currentAction: currentAction,
+    );
+    if (status == XiangjiDecisionDraftStatus.adopted) {
+      await _dao.acceptSituationModel(draft.situationModelId);
+    }
+    if (status == XiangjiDecisionDraftStatus.modified &&
+        draft.actionId.isNotEmpty &&
+        currentAction.trim().isNotEmpty) {
+      await _dao.updateAction(
+        draft.actionId,
+        <String, Object?>{'title': currentAction.trim()},
+        eventType: 'user_modified_ai_draft',
+      );
+    }
+    if (status == XiangjiDecisionDraftStatus.adopted &&
+        draft.campaignId.isNotEmpty) {
+      final campaign = await _dao.campaign(draft.campaignId);
+      if (campaign?.state == XiangjiCampaignState.decision) {
+        await transitionCampaign(
+          campaignId: draft.campaignId,
+          target: XiangjiCampaignState.prepare,
+          userConfirmed: true,
+        );
+      }
+    }
+  }
+
+  Future<XiangjiCouncilResult> correctAndRecalculate({
+    required String problemId,
+    required String targetRef,
+    required String oldValue,
+    required String correctedValue,
+    String reason = '用户指出 AI 理解有误',
+    bool authorizedSensitiveContext = false,
+    XiangjiOrchestrationProgress? onProgress,
+  }) async {
+    final correction = correctedValue.trim();
+    if (correction.isEmpty) throw ArgumentError('请告诉军师正确情况。');
+    await _dao.saveUserCorrectionAndInvalidate(
+      id: newId('xf_correction'),
+      problemId: problemId,
+      targetRef: targetRef,
+      oldValue: oldValue,
+      correctedValue: correction,
+      reason: reason,
+    );
+    return consultStrategist(
+      utterance: '更正：$correction',
+      problemId: problemId,
+      authorizedSensitiveContext: authorizedSensitiveContext,
+      clarificationAnswer: true,
+      onProgress: onProgress,
+    );
+  }
+
+  /// Natural-language reality feedback is extracted and reconciled by AI/SCK;
+  /// the user does not choose a verdict or complete a post-mortem form.
+  Future<XiangjiCouncilResult> reconcileRealityFromNaturalLanguage({
+    required String actionId,
+    required String feedback,
+    bool authorizedSensitiveContext = false,
+    XiangjiOrchestrationProgress? onProgress,
+  }) async {
+    final text = feedback.trim();
+    if (text.isEmpty) throw ArgumentError('请直接告诉军师实际发生了什么。');
+    var action = await _requireAction(actionId);
+    if (action.problemId.isEmpty) throw StateError('该行动没有关联问题，无法回溯模型。');
+    if (action.state == XiangjiActionState.ready) {
+      await startAction(actionId: actionId, userConfirmed: true);
+      action = await _requireAction(actionId);
+    }
+    const sck = XiangjiSckRuntime();
+    final extraction = sck.extractRealityFeedback(text);
+    final facts = extraction.facts;
+    final unexpected = extraction.unexpected;
+    if (action.state == XiangjiActionState.done) {
+      if (await _dao.realityResult(actionId) == null) {
+        await recordRealityForCompletedAction(
+          actionId: actionId,
+          realityFacts: facts,
+          experiences: extraction.experiences,
+          unexpected: unexpected,
+          userInterpretation: extraction.interpretations.join('\n'),
+        );
+      }
+    } else {
+      await completeAction(
+        actionId: actionId,
+        realityFacts: facts,
+        experiences: extraction.experiences,
+        unexpected: unexpected,
+        userInterpretation: extraction.interpretations.join('\n'),
+      );
+    }
+    final sckVerdict = sck.reconcilePrediction(
+      prediction: action.prediction,
+      realityFeedback: text,
+    );
+    final verdict = switch (sckVerdict) {
+      'contradicts' => 'refutes',
+      'partially_supports' => 'partly_supports',
+      'supports' => 'supports',
+      _ => 'unknown',
+    };
+    XiangjiAgentResult? review;
+    try {
+      review = await _agentService.run(XiangjiAgentRequest(
+        requestId: newId('xf_request'),
+        task: '对照事前预测与现实反馈，定位最早错误层并形成修订。',
+        agent: XiangjiAgentId.reviewHistorian,
+        problemId: action.problemId,
+        problemState: XiangjiProblemState.verifying,
+        authorizedSensitiveContext: authorizedSensitiveContext,
+        additionalContext: <String, Object?>{
+          'prediction': action.prediction,
+          'reality_feedback': text,
+          'local_verdict': verdict,
+          'has_reality_result': true,
+          'sck_rules': const <String>['SCK-014', 'SCK-018'],
+        },
+      ));
+    } catch (_) {
+      // The deterministic SCK verdict remains sufficient for local continuity.
+    }
+    if (verdict == 'refutes') {
+      await _dao.saveUserCorrectionAndInvalidate(
+        id: newId('xf_reality_correction'),
+        problemId: action.problemId,
+        targetRef: 'prediction:$actionId',
+        oldValue: action.prediction,
+        correctedValue: text,
+        reason: 'RealityResult 与事前 Prediction 冲突（SCK-018）',
+      );
+    }
+    await verifyAction(
+      actionId: actionId,
+      verdict: verdict,
+      resolutionCriteriaMet: false,
+      aiModelRunId: review?.modelRunId ?? '',
+      correction: verdict == 'refutes' ? text : '',
+    );
+    final problem = await _requireProblem(action.problemId);
+    return consultStrategist(
+      utterance: '现实反馈：$text',
+      problemId: action.problemId,
+      authorizedSensitiveContext: authorizedSensitiveContext,
+      forceStrategic: problem.campaignId.isNotEmpty,
+      onProgress: onProgress,
+    );
+  }
 
   Future<String> createProblem({
     required String rawQuestion,
@@ -379,13 +651,17 @@ class XiangjiRepository {
       throw StateError('只有 READY 行动可以开始。');
     }
     if (!userConfirmed) throw StateError('用户未确认当前行动。');
-    final alert = await _dao.latestOpenAlert();
-    if ((alert?['state'] ?? '').toString() == XiangjiAlertState.red.wire) {
+    final alert = await _dao.blockingRedAlert(
+      problemId: action.problemId,
+      campaignId: action.campaignId,
+    );
+    if (alert != null) {
       throw StateError('当前为红色预警，原计划已冻结；请先补证、降风险或完成战略复核。');
     }
+    XiangjiTransitionDecision<XiangjiProblemState>? problemDecision;
     if (action.problemId.isNotEmpty) {
       final problem = await _requireProblem(action.problemId);
-      final decision = _problemMachine.evaluate(
+      problemDecision = _problemMachine.evaluate(
         problem.state,
         XiangjiProblemState.executing,
         XiangjiProblemTransitionContext(
@@ -394,7 +670,25 @@ class XiangjiRepository {
           userConfirmedAction: userConfirmed,
         ),
       );
-      decision.requireAllowed();
+      problemDecision.requireAllowed();
+    }
+    if (action.campaignId.isNotEmpty) {
+      final campaign = await _requireCampaign(action.campaignId);
+      if (campaign.state != XiangjiCampaignState.executing) {
+        if (!<XiangjiCampaignState>{
+          XiangjiCampaignState.prepare,
+          XiangjiCampaignState.hold,
+        }.contains(campaign.state)) {
+          throw StateError('重大策略尚未经过用户决断与准备，不能进入执行。');
+        }
+        await transitionCampaign(
+          campaignId: action.campaignId,
+          target: XiangjiCampaignState.executing,
+          userConfirmed: true,
+        );
+      }
+    }
+    if (action.problemId.isNotEmpty) {
       await _dao.updateProblemState(
         action.problemId,
         XiangjiProblemState.executing,
@@ -428,8 +722,11 @@ class XiangjiRepository {
     if (action.state != XiangjiActionState.blocked) {
       throw StateError('只有受阻行动可以恢复。');
     }
-    final alert = await _dao.latestOpenAlert();
-    if ((alert?['state'] ?? '').toString() == XiangjiAlertState.red.wire) {
+    final alert = await _dao.blockingRedAlert(
+      problemId: action.problemId,
+      campaignId: action.campaignId,
+    );
+    if (alert != null) {
       throw StateError('当前为红色预警，不能恢复原计划。');
     }
     await _dao.updateAction(
@@ -445,6 +742,7 @@ class XiangjiRepository {
   Future<void> completeAction({
     required String actionId,
     required List<String> realityFacts,
+    List<String> experiences = const <String>[],
     List<String> unexpected = const <String>[],
     List<String> evidenceRefs = const <String>[],
     String userInterpretation = '',
@@ -453,7 +751,6 @@ class XiangjiRepository {
     if (!<XiangjiActionState>{
       XiangjiActionState.inProgress,
       XiangjiActionState.blocked,
-      XiangjiActionState.ready,
     }.contains(action.state)) {
       throw StateError('当前行动不能完成。');
     }
@@ -481,6 +778,7 @@ class XiangjiRepository {
       id: newId('xf_reality'),
       actionId: actionId,
       facts: realityFacts.map((item) => item.trim()).where((item) => item.isNotEmpty).toList(),
+      experiences: experiences,
       unexpected: unexpected,
       sourceRefs: evidenceRefs,
       userInterpretation: userInterpretation,
@@ -503,6 +801,7 @@ class XiangjiRepository {
   Future<void> recordRealityForCompletedAction({
     required String actionId,
     required List<String> realityFacts,
+    List<String> experiences = const <String>[],
     List<String> unexpected = const <String>[],
     List<String> evidenceRefs = const <String>[],
     String userInterpretation = '',
@@ -517,28 +816,66 @@ class XiangjiRepository {
     if (await _dao.realityResult(actionId) != null) {
       throw StateError('该行动已经有现实结果，请进入验算。');
     }
+    if (action.problemId.isNotEmpty) {
+      var problem = await _requireProblem(action.problemId);
+      if (problem.state == XiangjiProblemState.actionReady) {
+        if (action.campaignId.isNotEmpty) {
+          final campaign = await _requireCampaign(action.campaignId);
+          if (campaign.state != XiangjiCampaignState.executing) {
+            if (!<XiangjiCampaignState>{
+              XiangjiCampaignState.prepare,
+              XiangjiCampaignState.hold,
+            }.contains(campaign.state)) {
+              throw StateError('重大策略尚未经过用户决断，不能用任务完成绕过执行门。');
+            }
+            await transitionCampaign(
+              campaignId: action.campaignId,
+              target: XiangjiCampaignState.executing,
+              userConfirmed: true,
+            );
+          }
+        }
+        final startDecision = _problemMachine.evaluate(
+          problem.state,
+          XiangjiProblemState.executing,
+          XiangjiProblemTransitionContext(
+            operatorSelected: true,
+            predictionPrecommitted: action.prediction.trim().isNotEmpty,
+            userConfirmedAction: true,
+          ),
+        );
+        startDecision.requireAllowed();
+        await _dao.updateProblemState(
+          action.problemId,
+          XiangjiProblemState.executing,
+        );
+        problem = await _requireProblem(action.problemId);
+      }
+      if (problem.state != XiangjiProblemState.executing) {
+        throw StateError('问题不在执行阶段，不能用现实回填绕过状态机。');
+      }
+    }
     await _dao.recordRealityResult(
       id: newId('xf_reality'),
       actionId: actionId,
       facts: realityFacts,
+      experiences: experiences,
       unexpected: unexpected,
       sourceRefs: evidenceRefs,
       userInterpretation: userInterpretation,
     );
     if (action.problemId.isEmpty) return;
     final problem = await _requireProblem(action.problemId);
-    if (problem.state == XiangjiProblemState.executing) {
-      final decision = _problemMachine.evaluate(
-        problem.state,
-        XiangjiProblemState.verifying,
-        const XiangjiProblemTransitionContext(realityResultPresent: true),
-      );
-      decision.requireAllowed();
-      await _dao.updateProblemState(
-        action.problemId,
-        XiangjiProblemState.verifying,
-      );
-    }
+    final decision = _problemMachine.evaluate(
+      problem.state,
+      XiangjiProblemState.verifying,
+      const XiangjiProblemTransitionContext(realityResultPresent: true),
+    );
+    decision.requireAllowed();
+    await _dao.updateProblemState(
+      action.problemId,
+      XiangjiProblemState.verifying,
+    );
   }
 
   Future<void> verifyAction({
@@ -574,11 +911,13 @@ class XiangjiRepository {
     );
     decision.requireAllowed();
     await _dao.updateProblemState(action.problemId, next);
-    if (verdict == 'refutes' && aiModelRunId.isNotEmpty) {
+    if (verdict == 'refutes') {
       final now = DateTime.now().millisecondsSinceEpoch;
       await _dao.saveAiError(<String, Object?>{
         'id': newId('xf_ai_error'),
-        'model_run_id': aiModelRunId,
+        'model_run_id': aiModelRunId.isEmpty
+            ? 'local_sck_reconciliation:$actionId'
+            : aiModelRunId,
         'wrong_claim_id': wrongClaimId,
         'discovered_by': 'reality_result:${reality['id']}',
         'impact': '行动现实反驳了 AI 参与形成的预测/判断',
@@ -657,6 +996,7 @@ class XiangjiRepository {
     required String type,
     required List<String> benefits,
     required List<String> costs,
+    required String opportunityCost,
     required String reversibility,
     required List<String> assumptions,
     required List<String> stopConditions,
@@ -669,6 +1009,7 @@ class XiangjiRepository {
         'strategy_type': type,
         'benefits_json': jsonEncode(benefits),
         'costs_json': jsonEncode(costs),
+        'opportunity_cost': opportunityCost,
         'reversibility': reversibility,
         'key_assumptions_json': jsonEncode(assumptions),
         'stop_conditions_json': jsonEncode(stopConditions),
@@ -686,8 +1027,8 @@ class XiangjiRepository {
   }) async {
     final campaign = await _requireCampaign(campaignId);
     if (target == XiangjiCampaignState.executing) {
-      final alert = await _dao.latestOpenAlert();
-      if ((alert?['state'] ?? '').toString() == XiangjiAlertState.red.wire) {
+      final alert = await _dao.blockingRedAlert(campaignId: campaignId);
+      if (alert != null) {
         throw StateError('当前为红色预警，战役推进已冻结；请先完成补证与复核。');
       }
     }
@@ -810,6 +1151,119 @@ class XiangjiRepository {
     return result;
   }
 
+  Future<XiangjiMonitorResult> refreshAutomaticWatch() async {
+    const alertType = 'rev3_background_watch';
+    final values = await _dao.automaticMonitorSignals();
+    int count(String key) => (values[key] as num?)?.toInt() ?? 0;
+    bool flag(String key) => values[key] == true;
+    final result = _monitor.evaluate(XiangjiMonitorInput(
+      criticalUnknownCount: count('critical_unknown_count'),
+      consecutivePredictionMisses:
+          count('consecutive_prediction_misses'),
+      investmentRisingWithoutResultCycles:
+          count('investment_rising_without_result_cycles'),
+      parallelHighLoadCampaigns: count('parallel_high_load_campaigns'),
+      highRiskIrreversible: flag('high_risk_irreversible'),
+      highEpistemicDebt: flag('high_epistemic_debt'),
+      opportunityConditionsMet: count('opportunity_conditions_met'),
+      opportunityConditionTotal: count('opportunity_condition_total'),
+      conceptRealityConflicts: count('concept_reality_conflicts'),
+      strategyResourceDriftCount: count('strategy_resource_drift_count'),
+    ));
+    final existing = await _dao.latestOpenAlertForType(alertType);
+    if (result.state == XiangjiAlertState.green) {
+      if (existing != null) await _dao.resolveOpenAlertsOfType(alertType);
+      return result;
+    }
+    final unchanged = existing != null &&
+        (existing['state'] ?? '').toString() == result.state.wire &&
+        (existing['reason'] ?? '').toString() == result.reason &&
+        (result.state != XiangjiAlertState.red ||
+            (existing['problem_id'] ?? '').toString() ==
+                (values['risk_problem_id'] ?? '').toString());
+    if (!unchanged) {
+      if (existing != null) await _dao.resolveOpenAlertsOfType(alertType);
+      final alertId = newId('xf_watch_alert');
+      await _dao.saveAlert(
+        id: alertId,
+        state: result.state,
+        alertType: alertType,
+        reason: result.reason,
+        defaultAction: result.defaultAction,
+        problemId: result.state == XiangjiAlertState.red
+            ? (values['risk_problem_id'] ?? '').toString()
+            : '',
+      );
+      if (<XiangjiAlertState>{
+        XiangjiAlertState.orange,
+        XiangjiAlertState.red,
+        XiangjiAlertState.blue,
+      }.contains(result.state)) {
+        await _persistBackgroundCouncil(
+          alertId: alertId,
+          result: result,
+          signals: values,
+        );
+      }
+    }
+    return result;
+  }
+
+  Future<void> _persistBackgroundCouncil({
+    required String alertId,
+    required XiangjiMonitorResult result,
+    required Map<String, Object?> signals,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final problemId = (signals['risk_problem_id'] ?? '').toString();
+    final monitorRunId = newId('xf_agent_run');
+    final chiefRunId = newId('xf_agent_run');
+    final inputRefs = <String>['alert:$alertId'];
+    final monitorOutput = <String, Object?>{
+      'high_value_change': true,
+      'alert_state': result.state.wire,
+      'reason': result.reason,
+      'signals': signals,
+      'sck_rules': const <String>['SCK-014', 'SCK-017', 'SCK-018'],
+      'next_agent': XiangjiAgentId.chiefStrategist.code,
+    };
+    await _dao.saveAgentRun(<String, Object?>{
+      'id': monitorRunId,
+      'problem_id': problemId,
+      'campaign_id': '',
+      'agent_role': XiangjiAgentId.monitor.code,
+      'orchestration_state': XiangjiOrchestrationState.backgroundWatch.wire,
+      'model_run_id': '',
+      'input_refs_json': jsonEncode(inputRefs),
+      'output_refs_json': jsonEncode(<String>['agent_run:$chiefRunId']),
+      'output_json': jsonEncode(monitorOutput),
+      'status': 'LOCAL_COMPLETE',
+      'started_at_ms': now,
+      'ended_at_ms': now,
+    });
+    await _dao.saveAgentRun(<String, Object?>{
+      'id': chiefRunId,
+      'problem_id': problemId,
+      'campaign_id': '',
+      'agent_role': XiangjiAgentId.chiefStrategist.code,
+      'orchestration_state': XiangjiOrchestrationState.backgroundWatch.wire,
+      'model_run_id': '',
+      'input_refs_json': jsonEncode(<String>['agent_run:$monitorRunId']),
+      'output_refs_json': jsonEncode(<String>['alert:$alertId']),
+      'output_json': jsonEncode(<String, Object?>{
+        'strategist_judgment': result.reason,
+        'recommendation': result.defaultAction,
+        'why': '跨周期信号已达到高价值变化门槛；只发起本次军议，不自动执行重大承诺。',
+        'current_action': result.defaultAction,
+        'change_signals': signals,
+        'user_decision_required': true,
+      }),
+      'status': 'LOCAL_COMPLETE',
+      'started_at_ms': now,
+      'ended_at_ms': now,
+    });
+  }
+
   Future<XiangjiAgentResult> runAgent(XiangjiAgentRequest request) =>
       _agentService.run(request);
 
@@ -829,5 +1283,22 @@ class XiangjiRepository {
     final value = await _dao.action(id);
     if (value == null) throw StateError('行动不存在或已删除。');
     return value;
+  }
+
+  List<String> _retrievalTerms(String text) {
+    final lower = text.toLowerCase();
+    const domainTerms = <String>[
+      '辞职', '离职', '工作', '职业', '项目', '合同', '签约', '创业', '投资',
+      '结婚', '离婚', '买房', '卖房', '搬家', '移民', '手术', '健康', '收入',
+      '预算', '截止', '期限', '面试', '简历', '客户', '邮件', '合伙',
+    ];
+    final values = <String>{
+      ...domainTerms.where(lower.contains),
+      ...RegExp(r'[a-z0-9][a-z0-9_-]{2,}')
+          .allMatches(lower)
+          .map((match) => match.group(0)!)
+          .where((term) => !<String>{'the', 'and', 'with'}.contains(term)),
+    };
+    return values.toList();
   }
 }

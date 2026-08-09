@@ -1,4 +1,123 @@
 import 'xiangji_models.dart';
+import 'xiangji_rev3_models.dart';
+
+class XiangjiSituationModelTransitionContext {
+  const XiangjiSituationModelTransitionContext({
+    this.rawSourceSaved = false,
+    this.experienceAndInferenceSeparated = false,
+    this.judgmentCompleted = false,
+    this.groundingCompleted = false,
+    this.askUserGuardAllowsProgress = false,
+    this.problemFramed = false,
+    this.newRealityContradictsModel = false,
+  });
+
+  final bool rawSourceSaved;
+  final bool experienceAndInferenceSeparated;
+  final bool judgmentCompleted;
+  final bool groundingCompleted;
+  final bool askUserGuardAllowsProgress;
+  final bool problemFramed;
+  final bool newRealityContradictsModel;
+}
+
+class XiangjiSituationModelStateMachine {
+  const XiangjiSituationModelStateMachine();
+
+  static const Map<XiangjiSituationModelState,
+      Set<XiangjiSituationModelState>> _edges =
+      <XiangjiSituationModelState, Set<XiangjiSituationModelState>>{
+    XiangjiSituationModelState.raw: <XiangjiSituationModelState>{
+      XiangjiSituationModelState.parsed,
+    },
+    XiangjiSituationModelState.parsed: <XiangjiSituationModelState>{
+      XiangjiSituationModelState.judged,
+      XiangjiSituationModelState.needsClarification,
+      XiangjiSituationModelState.stale,
+    },
+    XiangjiSituationModelState.judged: <XiangjiSituationModelState>{
+      XiangjiSituationModelState.grounded,
+      XiangjiSituationModelState.needsClarification,
+      XiangjiSituationModelState.stale,
+    },
+    XiangjiSituationModelState.grounded: <XiangjiSituationModelState>{
+      XiangjiSituationModelState.framed,
+      XiangjiSituationModelState.needsClarification,
+      XiangjiSituationModelState.stale,
+    },
+    XiangjiSituationModelState.needsClarification:
+        <XiangjiSituationModelState>{
+      XiangjiSituationModelState.parsed,
+      XiangjiSituationModelState.judged,
+      XiangjiSituationModelState.stale,
+    },
+    XiangjiSituationModelState.framed: <XiangjiSituationModelState>{
+      XiangjiSituationModelState.stale,
+    },
+    XiangjiSituationModelState.stale: <XiangjiSituationModelState>{
+      XiangjiSituationModelState.parsed,
+    },
+  };
+
+  XiangjiTransitionDecision<XiangjiSituationModelState> evaluate(
+    XiangjiSituationModelState from,
+    XiangjiSituationModelState to,
+    XiangjiSituationModelTransitionContext context,
+  ) {
+    if (!(_edges[from]?.contains(to) ?? false)) {
+      return XiangjiTransitionDecision<XiangjiSituationModelState>.reject(
+        from,
+        to,
+        'SituationModel 不能从 ${from.wire} 直接进入 ${to.wire}。',
+      );
+    }
+    if (to == XiangjiSituationModelState.parsed &&
+        (!context.rawSourceSaved ||
+            !context.experienceAndInferenceSeparated)) {
+      return XiangjiTransitionDecision<XiangjiSituationModelState>.reject(
+        from,
+        to,
+        '必须先保存用户原话，并把用户经验与 AI 推断分开。',
+      );
+    }
+    if (to == XiangjiSituationModelState.judged &&
+        !context.judgmentCompleted) {
+      return XiangjiTransitionDecision<XiangjiSituationModelState>.reject(
+        from,
+        to,
+        'A02 尚未完成目的相关同异、边界与反例审查。',
+      );
+    }
+    if (to == XiangjiSituationModelState.grounded &&
+        !context.groundingCompleted) {
+      return XiangjiTransitionDecision<XiangjiSituationModelState>.reject(
+        from,
+        to,
+        'A03 尚未完成根据链与认识债务审查。',
+      );
+    }
+    if (to == XiangjiSituationModelState.framed &&
+        (!context.askUserGuardAllowsProgress || !context.problemFramed)) {
+      return XiangjiTransitionDecision<XiangjiSituationModelState>.reject(
+        from,
+        to,
+        'AskUserGuard 尚未放行，或真问题候选尚未形成。',
+      );
+    }
+    if (context.newRealityContradictsModel &&
+        to != XiangjiSituationModelState.stale) {
+      return XiangjiTransitionDecision<XiangjiSituationModelState>.reject(
+        from,
+        to,
+        '新现实反驳当前模型时必须先进入 STALE（SCK-018）。',
+      );
+    }
+    return XiangjiTransitionDecision<XiangjiSituationModelState>.allow(
+      from,
+      to,
+    );
+  }
+}
 
 class XiangjiTransitionDecision<T> {
   const XiangjiTransitionDecision._({
@@ -963,6 +1082,8 @@ class XiangjiMonitorInput {
     this.highEpistemicDebt = false,
     this.opportunityConditionsMet = 0,
     this.opportunityConditionTotal = 0,
+    this.conceptRealityConflicts = 0,
+    this.strategyResourceDriftCount = 0,
   });
 
   final int criticalUnknownCount;
@@ -973,6 +1094,8 @@ class XiangjiMonitorInput {
   final bool highEpistemicDebt;
   final int opportunityConditionsMet;
   final int opportunityConditionTotal;
+  final int conceptRealityConflicts;
+  final int strategyResourceDriftCount;
 }
 
 class XiangjiMonitorResult {
@@ -996,7 +1119,9 @@ class XiangjiMonitorEngine {
     }
     if (input.consecutivePredictionMisses >= 2 ||
         input.investmentRisingWithoutResultCycles >= 2 ||
-        input.parallelHighLoadCampaigns >= 3) {
+        input.parallelHighLoadCampaigns >= 3 ||
+        input.conceptRealityConflicts >= 2 ||
+        input.strategyResourceDriftCount >= 2) {
       return const XiangjiMonitorResult(
         XiangjiAlertState.orange,
         '预测-现实持续冲突、投入无效或战线过多',
@@ -1016,6 +1141,14 @@ class XiangjiMonitorEngine {
         XiangjiAlertState.yellow,
         '存在足以改变决定的关键未知',
         '开始侦察或补充证据',
+      );
+    }
+    if (input.conceptRealityConflicts > 0 ||
+        input.strategyResourceDriftCount > 0) {
+      return const XiangjiMonitorResult(
+        XiangjiAlertState.yellow,
+        '出现概念-现实或资源-战略不一致，尚未达到连续偏航门槛',
+        '保持当前行动可逆，并在下一复核点核对模型与主战线',
       );
     }
     return const XiangjiMonitorResult(

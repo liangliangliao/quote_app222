@@ -135,10 +135,12 @@ class XiangjiAlertBanner extends StatelessWidget {
     super.key,
     required this.state,
     required this.reason,
+    this.defaultAction = '',
   });
 
   final XiangjiAlertState state;
   final String reason;
+  final String defaultAction;
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +179,16 @@ class XiangjiAlertBanner extends StatelessWidget {
                 if (reason.trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(reason, style: const TextStyle(height: 1.35)),
+                ],
+                if (defaultAction.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '建议行动：$defaultAction',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -239,11 +251,13 @@ class XiangjiLabeledValue extends StatelessWidget {
     required this.label,
     required this.value,
     this.empty = '尚未形成',
+    this.maxLines,
   });
 
   final String label;
   final String value;
   final String empty;
+  final int? maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +276,12 @@ class XiangjiLabeledValue extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 3),
-          Text(shown, style: const TextStyle(height: 1.4)),
+          Text(
+            shown,
+            maxLines: maxLines,
+            overflow: maxLines == null ? null : TextOverflow.ellipsis,
+            style: const TextStyle(height: 1.4),
+          ),
         ],
       ),
     );

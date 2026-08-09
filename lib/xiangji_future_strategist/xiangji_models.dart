@@ -578,8 +578,10 @@ class XiangjiDashboardSnapshot {
     this.currentAction,
     this.alertState = XiangjiAlertState.green,
     this.alertReason = '',
+    this.alertDefaultAction = '',
     this.keyGap = '',
     this.strategistJudgment = '',
+    this.strategistEpistemicStatus = '',
     this.contingency = '',
     this.nextReviewAtMs = 0,
     this.unresolvedDebtCount = 0,
@@ -590,8 +592,10 @@ class XiangjiDashboardSnapshot {
   final XiangjiActionRecord? currentAction;
   final XiangjiAlertState alertState;
   final String alertReason;
+  final String alertDefaultAction;
   final String keyGap;
   final String strategistJudgment;
+  final String strategistEpistemicStatus;
   final String contingency;
   final int nextReviewAtMs;
   final int unresolvedDebtCount;

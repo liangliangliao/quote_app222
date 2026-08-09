@@ -42,7 +42,7 @@ class XiangjiDiscoverEntries extends StatelessWidget {
           iconColor: const Color(0xFF705A2D),
           icon: Icons.hub_outlined,
           title: '向己 · 未来军师',
-          subtitle: '认识审查 · 真问题 · 战略决断 · 行动验算 · 个人战史',
+          subtitle: 'AI 总军师 · 自然语言求解 · 自动战略红队 · 现实验算',
           onTap: onFutureStrategistTap,
         ),
       ],

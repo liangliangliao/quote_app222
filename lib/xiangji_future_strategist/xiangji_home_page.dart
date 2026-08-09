@@ -7,6 +7,7 @@ import 'xiangji_knowledge_pages.dart';
 import 'xiangji_models.dart';
 import 'xiangji_problem_pages.dart';
 import 'xiangji_repository.dart';
+import 'xiangji_strategist_conversation.dart';
 import 'xiangji_ui_support.dart';
 
 class XiangjiFutureStrategistHomePage extends StatefulWidget {
@@ -21,10 +22,9 @@ class _XiangjiFutureStrategistHomePageState
     extends State<XiangjiFutureStrategistHomePage> {
   late final XiangjiDao _dao;
   late final XiangjiRepository _repository;
-  final TextEditingController _firstQuestion = TextEditingController();
   bool _loading = true;
-  bool _working = false;
   bool _plainLanguage = false;
+  int _section = 0;
   Object? _loadError;
   XiangjiDashboardSnapshot _dashboard = const XiangjiDashboardSnapshot();
   List<XiangjiProblemRecord> _problems = const <XiangjiProblemRecord>[];
@@ -37,12 +37,6 @@ class _XiangjiFutureStrategistHomePageState
     _dao = XiangjiDao();
     _repository = XiangjiRepository(dao: _dao);
     _load();
-  }
-
-  @override
-  void dispose() {
-    _firstQuestion.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -74,37 +68,6 @@ class _XiangjiFutureStrategistHomePageState
     }
   }
 
-  Future<void> _captureFirstProblem() async {
-    final question = _firstQuestion.text.trim();
-    if (question.isEmpty) {
-      xiangjiShowMessage(context, '请先写下一个真实问题。');
-      return;
-    }
-    setState(() => _working = true);
-    try {
-      final id = await _repository.createProblem(
-        rawQuestion: question,
-        rawContext: question,
-      );
-      _firstQuestion.clear();
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => XiangjiProblemWorkspacePage(
-            problemId: id,
-            repository: _repository,
-            dao: _dao,
-          ),
-        ),
-      );
-      await _load();
-    } catch (error) {
-      if (mounted) xiangjiShowMessage(context, error);
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
   Future<void> _open(Widget page) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
     await _load();
@@ -118,7 +81,11 @@ class _XiangjiFutureStrategistHomePageState
     return Scaffold(
       backgroundColor: XiangjiPalette.mist,
       appBar: AppBar(
-        title: Text(_word('向己 · 未来军师', '向己 · 未来决策助手')),
+        title: Text(
+          _section == 0
+              ? _word('与军师对话', '与决策助手对话')
+              : _word('今日指挥部', '今日概览'),
+        ),
         backgroundColor: XiangjiPalette.mist,
         actions: [
           IconButton(
@@ -129,6 +96,24 @@ class _XiangjiFutureStrategistHomePageState
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
       ),
+      bottomNavigationBar: _loadError == null && !_loading
+          ? NavigationBar(
+              selectedIndex: _section,
+              onDestinationSelected: (value) => setState(() => _section = value),
+              destinations: const <NavigationDestination>[
+                NavigationDestination(
+                  icon: Icon(Icons.auto_awesome_outlined),
+                  selectedIcon: Icon(Icons.auto_awesome),
+                  label: '与军师对话',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard),
+                  label: '今日指挥部',
+                ),
+              ],
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _loadError != null
@@ -141,28 +126,46 @@ class _XiangjiFutureStrategistHomePageState
                     child: const Text('重试'),
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
-                    children: [
-                      _hero(),
-                      const SizedBox(height: 12),
-                      XiangjiAlertBanner(
-                        state: _dashboard.alertState,
-                        reason: _dashboard.alertReason,
+              : _section == 0
+                  ? XiangjiStrategistConversationPanel(
+                      repository: _repository,
+                      dao: _dao,
+                      onDataChanged: _load,
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
+                        children: [
+                          _hero(),
+                          const SizedBox(height: 12),
+                          XiangjiAlertBanner(
+                            state: _dashboard.alertState,
+                            reason: _dashboard.alertReason,
+                            defaultAction: _dashboard.alertDefaultAction,
+                          ),
+                          const SizedBox(height: 12),
+                          _commandCenter(),
+                          if (_problems.isEmpty) ...[
+                            const SizedBox(height: 12),
+                            XiangjiSectionCard(
+                              title: '带一个真实问题来',
+                              subtitle: '不需要先整理或填表，军师会自动完成认识建模、求解与红队。',
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FilledButton.icon(
+                                  onPressed: () => setState(() => _section = 0),
+                                  icon: const Icon(Icons.chat_outlined),
+                                  label: const Text('与军师对话'),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          _navigation(),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      _commandCenter(),
-                      if (_problems.isEmpty) ...[
-                        const SizedBox(height: 12),
-                        _firstProblemCard(),
-                      ],
-                      const SizedBox(height: 12),
-                      _navigation(),
-                    ],
-                  ),
-                ),
+                    ),
     );
   }
 
@@ -186,7 +189,7 @@ class _XiangjiFutureStrategistHomePageState
           ),
           const SizedBox(height: 7),
           const Text(
-            '从认识事实，到定义真问题，再到一个可验算的行动。',
+            '军师在后台完成认识建模、判断、求解与红队；这里只保留真正重要的决定和行动。',
             style: TextStyle(color: Color(0xFFDDECE6), height: 1.4),
           ),
           const SizedBox(height: 16),
@@ -266,8 +269,10 @@ class _XiangjiFutureStrategistHomePageState
             ),
           if (_dashboard.strategistJudgment.isNotEmpty)
             XiangjiLabeledValue(
-              label: '当前候选判断（不是事实）',
+              label:
+                  '军师判断（${_dashboard.strategistEpistemicStatus.isEmpty ? '可修订' : _dashboard.strategistEpistemicStatus}）',
               value: _dashboard.strategistJudgment,
+              maxLines: 3,
             ),
           if (_dashboard.contingency.isNotEmpty)
             XiangjiLabeledValue(
@@ -282,7 +287,7 @@ class _XiangjiFutureStrategistHomePageState
           const Divider(height: 24),
           if (action == null)
             const Text(
-              '当前没有已选定行动。请先完成一个问题的认识与概念审查。',
+              '当前没有已选定行动。直接告诉军师真实处境，系统会自动形成可确认的下一步。',
               style: TextStyle(color: XiangjiPalette.muted, height: 1.4),
             )
           else
@@ -327,34 +332,6 @@ class _XiangjiFutureStrategistHomePageState
                 ],
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _firstProblemCard() {
-    return XiangjiSectionCard(
-      title: '第一次使用：带一个真实问题来',
-      subtitle: '不需要先整理成完美表达。系统先保留原话，再带你分开事实、解释和未知项。',
-      child: Column(
-        children: [
-          TextField(
-            controller: _firstQuestion,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              hintText: '最近哪个问题最消耗你，而且现实结果很重要？',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _working ? null : _captureFirstProblem,
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('保存原话并开始'),
-            ),
-          ),
         ],
       ),
     );
@@ -419,54 +396,43 @@ class _XiangjiFutureStrategistHomePageState
     ];
     return XiangjiSectionCard(
       title: '工作区',
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 680 ? 2 : 1;
-          return GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              mainAxisExtent: 92,
-              mainAxisSpacing: 9,
-              crossAxisSpacing: 9,
-            ),
-            itemCount: entries.length,
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              return InkWell(
-                onTap: entry.open,
+      child: Column(
+        children: [
+          for (var index = 0; index < entries.length; index++) ...[
+            Semantics(
+              button: true,
+              label: '${entries[index].title}，${entries[index].subtitle}',
+              child: InkWell(
+                onTap: entries[index].open,
                 borderRadius: BorderRadius.circular(13),
                 child: Container(
-                  padding: const EdgeInsets.all(12),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(13),
                   decoration: BoxDecoration(
                     color: XiangjiPalette.mist,
                     borderRadius: BorderRadius.circular(13),
                   ),
                   child: Row(
                     children: [
-                      Icon(entry.icon, color: XiangjiPalette.pine),
+                      Icon(entries[index].icon, color: XiangjiPalette.pine),
                       const SizedBox(width: 11),
                       Expanded(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              entry.title,
+                              entries[index].title,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              entry.subtitle,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                              entries[index].subtitle,
                               style: const TextStyle(
                                 color: XiangjiPalette.muted,
-                                fontSize: 11,
-                                height: 1.25,
+                                fontSize: 12,
+                                height: 1.35,
                               ),
                             ),
                           ],
@@ -476,10 +442,11 @@ class _XiangjiFutureStrategistHomePageState
                     ],
                   ),
                 ),
-              );
-            },
-          );
-        },
+              ),
+            ),
+            if (index != entries.length - 1) const SizedBox(height: 9),
+          ],
+        ],
       ),
     );
   }
