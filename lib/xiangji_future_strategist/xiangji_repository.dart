@@ -1,11 +1,14 @@
 import 'dart:convert';
 
+import '../data/kv_dao.dart';
 import '../external_data/todo_dao.dart';
 import 'xiangji_agent_service.dart';
 import 'xiangji_cognitive_orchestrator.dart';
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
+import 'xiangji_persistent_solver.dart';
 import 'xiangji_rev3_models.dart';
+import 'xiangji_rev4_models.dart';
 import 'xiangji_sck_runtime.dart';
 import 'xiangji_state_machine.dart';
 
@@ -21,6 +24,9 @@ class XiangjiRepository {
   final XiangjiDao _dao;
   final TodoDao _todoDao;
   final XiangjiAgentService _agentService;
+  final KeyValueDao _kv = KeyValueDao();
+  final XiangjiInputClassifier _inputClassifier =
+      const XiangjiInputClassifier();
   final XiangjiProblemStateMachine _problemMachine =
       const XiangjiProblemStateMachine();
   final XiangjiCampaignStateMachine _campaignMachine =
@@ -28,6 +34,8 @@ class XiangjiRepository {
   final XiangjiMonitorEngine _monitor = const XiangjiMonitorEngine();
 
   static int _idCounter = 0;
+  static const String monitorEnabledKey = 'xiangji_monitor_enabled_v1';
+  static const String methodTrainingKey = 'xiangji_method_training_v1';
 
   String newId(String prefix) {
     _idCounter = (_idCounter + 1) % 1000000;
@@ -38,7 +46,9 @@ class XiangjiRepository {
 
   Future<XiangjiDashboardSnapshot> dashboard() async {
     await refreshTodoBindings();
-    await refreshAutomaticWatch();
+    if ((await _kv.getString(monitorEnabledKey)) != '0') {
+      await refreshAutomaticWatch();
+    }
     return _dao.dashboard();
   }
 
@@ -57,7 +67,36 @@ class XiangjiRepository {
   Future<XiangjiDecisionDraftRecord?> latestDecisionDraft(String problemId) =>
       _dao.latestDecisionDraft(problemId: problemId);
 
-  /// Rev.3 default entry: one natural-language utterance starts the complete
+  Future<XiangjiProblemProgress?> problemProgress(String problemId) =>
+      _dao.problemProgress(problemId);
+
+  Future<List<XiangjiCognitiveExperienceDraft>> cognitiveExperiences({
+    String problemId = '',
+    int limit = 100,
+  }) =>
+      _dao.cognitiveExperiences(problemId: problemId, limit: limit);
+
+  Future<XiangjiCouncilResult> submitMethodExercise({
+    required String problemId,
+    required String cognitiveExperienceId,
+    required String response,
+    bool authorizedSensitiveContext = false,
+  }) async {
+    final value = response.trim();
+    if (value.isEmpty) throw ArgumentError('请写下这一步练习带来的观察。');
+    await _dao.recordMethodExerciseResponse(
+      cognitiveExperienceId: cognitiveExperienceId,
+      response: value,
+    );
+    return consultStrategist(
+      utterance: '方法练习反馈：$value',
+      problemId: problemId,
+      authorizedSensitiveContext: authorizedSensitiveContext,
+      clarificationAnswer: true,
+    );
+  }
+
+  /// Rev.4 default entry: one natural-language utterance starts the complete
   /// cognitive route. Internal structures are AI-prefilled and persisted;
   /// users are never routed into a blank mandatory worksheet.
   Future<XiangjiCouncilResult> consultStrategist({
@@ -68,19 +107,96 @@ class XiangjiRepository {
     String attachmentText = '',
     bool forceStrategic = false,
     bool clarificationAnswer = false,
+    bool forceNewProblem = false,
+    String parentProblemId = '',
+    bool userDoesNotKnow = false,
+    bool realityContradicted = false,
+    bool skipAutomaticRealityRouting = false,
     XiangjiOrchestrationProgress? onProgress,
   }) async {
     final text = utterance.trim();
     if (text.isEmpty) {
       throw ArgumentError('请告诉军师你想要什么、发生了什么，或卡在哪里。');
     }
-    var targetProblemId = problemId;
+    final requestedProblem = problemId.isEmpty
+        ? await _dao.latestActiveProblem()
+        : await _dao.problem(problemId);
+    final activeActions = await _dao.actions(currentOnly: true);
+    var classification = _inputClassifier.classify(
+      input: text,
+      activeProblem: requestedProblem,
+      explicitNewProblem: forceNewProblem,
+      hasActiveAction: activeActions.any(
+        (action) => requestedProblem == null ||
+            action.problemId == requestedProblem.id,
+      ),
+    );
+    final explicitlySeparateTopic =
+        classification.type == XiangjiInputType.newProblem &&
+            classification.reason.startsWith('用户明确');
+    var targetProblemId = '';
+    if (!forceNewProblem &&
+        requestedProblem != null &&
+        ((!explicitlySeparateTopic && problemId.isNotEmpty) ||
+            classification.type != XiangjiInputType.newProblem)) {
+      targetProblemId = requestedProblem.id;
+      if (!classification.updateExistingProblem ||
+          classification.targetProblemId != targetProblemId ||
+          classification.type == XiangjiInputType.newProblem) {
+        classification = XiangjiInputClassification(
+          type: classification.type == XiangjiInputType.newProblem
+              ? XiangjiInputType.need
+              : classification.type,
+          updateExistingProblem: true,
+          targetProblemId: targetProblemId,
+          reason: problemId.isNotEmpty
+              ? '用户正在当前问题工作台继续对话，因此更新同一道题。'
+              : '输入与最近的活跃问题相连，因此继续更新稳定问题身份。',
+          confidence: classification.confidence,
+        );
+      }
+    }
+    if (targetProblemId.isNotEmpty &&
+        requestedProblem?.state == XiangjiProblemState.resolved) {
+      await _dao.updateProblemState(
+        targetProblemId,
+        XiangjiProblemState.solving,
+        actor: 'system_reopen_on_new_reality',
+      );
+    }
     if (targetProblemId.isEmpty) {
       targetProblemId = await createProblem(
         rawQuestion: text,
         rawContext: attachmentText.trim().isEmpty
             ? text
             : '$text\n\n附件摘录：\n${attachmentText.trim()}',
+        parentProblemId: parentProblemId,
+      );
+      classification = XiangjiInputClassification(
+        type: XiangjiInputType.newProblem,
+        updateExistingProblem: false,
+        targetProblemId: targetProblemId,
+        reason: forceNewProblem
+            ? '用户明确开启新问题；旧问题及历史保持不变。'
+            : classification.reason,
+        confidence: classification.confidence,
+      );
+    }
+    final matchingActiveActions = activeActions
+        .where((action) => action.problemId == targetProblemId)
+        .toList();
+    if (!skipAutomaticRealityRouting &&
+        classification.type == XiangjiInputType.actionFeedback &&
+        matchingActiveActions.isNotEmpty &&
+        _inputClassifier.isExplicitActionFeedback(
+          text,
+          hasActiveAction: true,
+        )) {
+      return reconcileRealityFromNaturalLanguage(
+        actionId: matchingActiveActions.first.id,
+        feedback: text,
+        authorizedSensitiveContext: authorizedSensitiveContext,
+        onProgress: onProgress,
       );
     }
     final orchestrator = XiangjiCognitiveOrchestrator(
@@ -114,6 +230,8 @@ class XiangjiRepository {
     } catch (_) {
       // Todo is helpful retrieval context, never a prerequisite for counsel.
     }
+    final methodTrainingEnabled =
+        (await _kv.getString(methodTrainingKey)) == '1';
     return orchestrator.consult(
       problemId: targetProblemId,
       utterance: text,
@@ -124,6 +242,10 @@ class XiangjiRepository {
       retrievableContext: retrievableContext,
       forceStrategic: forceStrategic,
       clarificationAnswer: clarificationAnswer,
+      classification: classification,
+      userDoesNotKnow: userDoesNotKnow,
+      realityContradicted: realityContradicted,
+      methodTrainingEnabled: methodTrainingEnabled,
       onProgress: onProgress,
     );
   }
@@ -184,6 +306,7 @@ class XiangjiRepository {
     }
     if (status == XiangjiDecisionDraftStatus.adopted &&
         draft.campaignId.isNotEmpty) {
+      await _dao.selectPreferredStrategy(draft.campaignId);
       final campaign = await _dao.campaign(draft.campaignId);
       if (campaign?.state == XiangjiCampaignState.decision) {
         await transitionCampaign(
@@ -301,7 +424,64 @@ class XiangjiRepository {
         correctedValue: text,
         reason: 'RealityResult 与事前 Prediction 冲突（SCK-018）',
       );
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final attempts = await _dao.solutionAttempts(action.problemId);
+      final matchingAttempts = attempts
+          .where((attempt) =>
+              (attempt['action_id'] ?? '').toString() == actionId)
+          .toList();
+      await _dao.saveConceptRealityConflict(<String, Object?>{
+        'id': newId('xf_concept_conflict'),
+        'problem_id': action.problemId,
+        'concept_version_id': '',
+        'reality_refs_json': jsonEncode(<String>['reality:$actionId']),
+        'mismatch_pattern': '事前预测与行动后的现实结果不一致',
+        'repetitions': 1,
+        'impact': '需要复核行动机制、关键前提与当前问题框架',
+        'status': XiangjiConceptConflictState.mismatchDetected.wire,
+        'review_result': '已启动从算子到事实层的最早错误回溯',
+        'created_at_ms': now,
+        'updated_at_ms': now,
+      });
+      await _dao.saveBacktrackEvent(<String, Object?>{
+        'id': newId('xf_backtrack'),
+        'problem_id': action.problemId,
+        'attempt_id': matchingAttempts.isEmpty
+            ? ''
+            : (matchingAttempts.first['id'] ?? '').toString(),
+        'earliest_failed_layer':
+            (review?.output['earliest_error_layer'] ?? 'operator_or_premise')
+                .toString(),
+        'old_ref': 'prediction:$actionId',
+        'new_ref': 'reality:$actionId',
+        'reason': '现实没有产生事前预测的可观察结果，先修订模型而不是归咎用户。',
+        'evidence_refs_json': jsonEncode(<String>['reality:$actionId']),
+        'created_at_ms': now,
+      });
+      await _dao.saveLearningMoment(<String, Object?>{
+        'id': newId('xf_learning_moment'),
+        'problem_id': action.problemId,
+        'old_model': action.prediction,
+        'new_reality': text,
+        'revised_model': '原行动机制或其关键前提不足以解释这次现实，需要回溯后形成新版本。',
+        'method_learned': '预测落空时先区分执行失败与机制失败，并让现实修订解释。',
+        'evidence_refs_json': jsonEncode(<String>['reality:$actionId']),
+        'created_at_ms': now,
+      });
     }
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'ended_at_ms': DateTime.now().millisecondsSinceEpoch,
+        'outcome_ref': 'reality:$actionId',
+        'result_class': verdict.toUpperCase(),
+        'failure_layer': verdict == 'refutes'
+            ? (review?.output['earliest_error_layer'] ?? 'operator_or_premise')
+                .toString()
+            : '',
+        'status': 'RESULT_AVAILABLE',
+      },
+    );
     await verifyAction(
       actionId: actionId,
       verdict: verdict,
@@ -310,30 +490,54 @@ class XiangjiRepository {
       correction: verdict == 'refutes' ? text : '',
     );
     final problem = await _requireProblem(action.problemId);
-    return consultStrategist(
+    final resolutionCriteriaMet = verdict == 'supports' &&
+        ((review?.output['resolution_criteria_met'] == true) ||
+            _feedbackMeetsSuccessCriteria(
+              feedback: text,
+              successCriteria: problem.successCriteria,
+            ));
+    final result = await consultStrategist(
       utterance: '现实反馈：$text',
       problemId: action.problemId,
       authorizedSensitiveContext: authorizedSensitiveContext,
       forceStrategic: problem.campaignId.isNotEmpty,
+      realityContradicted: verdict == 'refutes',
+      skipAutomaticRealityRouting: true,
       onProgress: onProgress,
     );
+    if (resolutionCriteriaMet) {
+      await _markProblemResolved(
+        problem: problem,
+        result: result,
+        realityRef: 'reality:$actionId',
+      );
+    }
+    return result;
   }
 
   Future<String> createProblem({
     required String rawQuestion,
     required String rawContext,
     String sensitivity = 'sensitive',
+    String parentProblemId = '',
   }) async {
     final question = rawQuestion.trim();
     if (question.isEmpty) throw ArgumentError('请先写下真实问题。');
     final problemId = newId('xf_problem');
     final eventId = newId('xf_event');
+    final parent = parentProblemId.isEmpty
+        ? null
+        : await _dao.problem(parentProblemId);
     await _dao.createProblem(
       id: problemId,
       rawEventId: eventId,
       rawQuestion: question,
       contextText: rawContext.trim().isEmpty ? question : rawContext.trim(),
       sensitivity: sensitivity,
+      parentProblemId: parentProblemId,
+      rootGoalId: parent?.rootGoalId.isNotEmpty == true
+          ? parent!.rootGoalId
+          : parentProblemId,
     );
     return problemId;
   }
@@ -635,6 +839,23 @@ class XiangjiRepository {
         'epistemic_grounding': groundingReason.trim(),
       },
     );
+    final stateVersion = await _dao.latestProblemStateVersion(problemId);
+    await _dao.saveSolutionAttempt(<String, Object?>{
+      'id': newId('xf_solution_attempt'),
+      'problem_id': problemId,
+      'state_version_id':
+          (stateVersion?['id'] ?? 'legacy_problem:$problemId').toString(),
+      'action_id': actionId,
+      'operator_id': 'manual_operator:$actionId',
+      'rationale': '$mechanism；目标差距：$targetGap',
+      'prediction_id': '',
+      'started_at_ms': 0,
+      'ended_at_ms': 0,
+      'outcome_ref': '',
+      'result_class': 'PENDING',
+      'failure_layer': '',
+      'status': 'PLANNED',
+    });
     await _dao.updateProblemState(
       problemId,
       XiangjiProblemState.actionReady,
@@ -702,13 +923,31 @@ class XiangjiRepository {
       },
       eventType: 'started',
     );
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'started_at_ms': DateTime.now().millisecondsSinceEpoch,
+        'status': 'EXECUTING',
+      },
+    );
+    if (action.problemId.isNotEmpty) {
+      await _appendLifecycleSnapshot(
+        problemId: action.problemId,
+        state: XiangjiPersistentProblemState.executing,
+        currentFocus: '执行已确认的当前一步，并保留事前预测',
+        currentExperiment: action.title,
+        nextVerification: action.prediction,
+        sourceRef: 'action:$actionId',
+      );
+    }
   }
 
   Future<void> blockAction({
     required String actionId,
     required String blockerType,
-  }) =>
-      _dao.updateAction(
+  }) async {
+    final action = await _requireAction(actionId);
+    await _dao.updateAction(
         actionId,
         <String, Object?>{
           'state': XiangjiActionState.blocked.wire,
@@ -716,6 +955,24 @@ class XiangjiRepository {
         },
         eventType: 'blocked',
       );
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'status': 'BLOCKED',
+        'failure_layer': 'execution_blocker',
+      },
+    );
+    if (action.problemId.isNotEmpty) {
+      await _appendLifecycleSnapshot(
+        problemId: action.problemId,
+        state: XiangjiPersistentProblemState.executing,
+        currentFocus: '当前行动遇到现实阻碍，等待解除或改变路线',
+        currentExperiment: action.title,
+        nextVerification: '阻碍解除后重新核对原预测是否仍然适用',
+        sourceRef: 'action:$actionId',
+      );
+    }
+  }
 
   Future<void> resumeAction(String actionId) async {
     final action = await _requireAction(actionId);
@@ -737,6 +994,23 @@ class XiangjiRepository {
       },
       eventType: 'resumed',
     );
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'status': 'EXECUTING',
+        'failure_layer': '',
+      },
+    );
+    if (action.problemId.isNotEmpty) {
+      await _appendLifecycleSnapshot(
+        problemId: action.problemId,
+        state: XiangjiPersistentProblemState.executing,
+        currentFocus: '阻碍已解除，继续执行原来的当前一步',
+        currentExperiment: action.title,
+        nextVerification: action.prediction,
+        sourceRef: 'action:$actionId',
+      );
+    }
   }
 
   Future<void> completeAction({
@@ -763,6 +1037,16 @@ class XiangjiRepository {
       },
       eventType: 'done',
     );
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'ended_at_ms': now,
+        'status': realityFacts.isEmpty
+            ? 'ACTION_DONE_AWAITING_REALITY'
+            : 'RESULT_AVAILABLE',
+        'outcome_ref': realityFacts.isEmpty ? '' : 'reality_pending:$actionId',
+      },
+    );
     if (action.todoRef.isNotEmpty) {
       await _todoDao.updateTaskCompletion(
         taskId: action.todoRef,
@@ -772,6 +1056,16 @@ class XiangjiRepository {
     if (realityFacts.isEmpty) {
       // Action DONE is valid, but the Problem remains EXECUTING until reality
       // is captured. This is an explicit state-machine invariant.
+      if (action.problemId.isNotEmpty) {
+        await _appendLifecycleSnapshot(
+          problemId: action.problemId,
+          state: XiangjiPersistentProblemState.executing,
+          currentFocus: '行动已完成，但现实结果尚未回填',
+          currentExperiment: action.title,
+          nextVerification: '记录实际发生的事实，再与事前预测验算',
+          sourceRef: 'action:$actionId',
+        );
+      }
       return;
     }
     await _dao.recordRealityResult(
@@ -782,6 +1076,14 @@ class XiangjiRepository {
       unexpected: unexpected,
       sourceRefs: evidenceRefs,
       userInterpretation: userInterpretation,
+    );
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'ended_at_ms': DateTime.now().millisecondsSinceEpoch,
+        'outcome_ref': 'reality:$actionId',
+        'status': 'RESULT_AVAILABLE',
+      },
     );
     if (action.problemId.isNotEmpty) {
       final problem = await _requireProblem(action.problemId);
@@ -794,6 +1096,15 @@ class XiangjiRepository {
       await _dao.updateProblemState(
         action.problemId,
         XiangjiProblemState.verifying,
+      );
+      await _appendLifecycleSnapshot(
+        problemId: action.problemId,
+        state: XiangjiPersistentProblemState.realityReturn,
+        currentFocus: '现实结果已经回来，正在与事前预测对照',
+        currentExperiment: action.title,
+        nextVerification: action.prediction,
+        sourceRef: 'reality:$actionId',
+        additionalFacts: realityFacts,
       );
     }
   }
@@ -864,6 +1175,14 @@ class XiangjiRepository {
       sourceRefs: evidenceRefs,
       userInterpretation: userInterpretation,
     );
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'ended_at_ms': DateTime.now().millisecondsSinceEpoch,
+        'outcome_ref': 'reality:$actionId',
+        'status': 'RESULT_AVAILABLE',
+      },
+    );
     if (action.problemId.isEmpty) return;
     final problem = await _requireProblem(action.problemId);
     final decision = _problemMachine.evaluate(
@@ -875,6 +1194,15 @@ class XiangjiRepository {
     await _dao.updateProblemState(
       action.problemId,
       XiangjiProblemState.verifying,
+    );
+    await _appendLifecycleSnapshot(
+      problemId: action.problemId,
+      state: XiangjiPersistentProblemState.realityReturn,
+      currentFocus: '现实结果已经回来，正在与事前预测对照',
+      currentExperiment: action.title,
+      nextVerification: action.prediction,
+      sourceRef: 'reality:$actionId',
+      additionalFacts: realityFacts,
     );
   }
 
@@ -894,6 +1222,33 @@ class XiangjiRepository {
       throw ArgumentError('未知验算结论。');
     }
     await _dao.setRealityVerdict(actionId, verdict);
+    final hypothesisStatus = switch (verdict) {
+      'supports' => XiangjiHypothesisStatus.supported,
+      'partly_supports' => XiangjiHypothesisStatus.weakened,
+      'refutes' => XiangjiHypothesisStatus.contradicted,
+      _ => XiangjiHypothesisStatus.indeterminate,
+    };
+    final hypothesisConclusion = switch (verdict) {
+      'supports' => '这次现实结果与事前预测一致，当前解释得到有限支持。',
+      'partly_supports' => '现实只支持了部分预测，需要收窄解释边界后继续验证。',
+      'refutes' => '现实没有出现事前预测的结果，当前解释或关键前提受到挑战。',
+      _ => '这次现实结果不足以区分候选解释，需要新的低成本检验。',
+    };
+    await _dao.reconcileHypothesisTestsForAction(
+      actionId: actionId,
+      resultRef: 'reality:${reality['id']}',
+      conclusion: hypothesisConclusion,
+      status: hypothesisStatus,
+    );
+    await _dao.updateSolutionAttemptForAction(
+      actionId,
+      <String, Object?>{
+        'outcome_ref': 'reality:${reality['id']}',
+        'result_class': verdict.toUpperCase(),
+        'failure_layer': verdict == 'refutes' ? 'operator_or_premise' : '',
+        'status': 'VERIFIED',
+      },
+    );
     if (action.problemId.isEmpty) return;
     final problem = await _requireProblem(action.problemId);
     final next = resolutionCriteriaMet && verdict == 'supports'
@@ -916,6 +1271,29 @@ class XiangjiRepository {
     );
     decision.requireAllowed();
     await _dao.updateProblemState(action.problemId, next);
+    await _appendLifecycleSnapshot(
+      problemId: action.problemId,
+      state: switch (next) {
+        XiangjiProblemState.resolved =>
+          XiangjiPersistentProblemState.resolved,
+        XiangjiProblemState.backtracking =>
+          XiangjiPersistentProblemState.backtrack,
+        _ => XiangjiPersistentProblemState.continuing,
+      },
+      currentFocus: switch (next) {
+        XiangjiProblemState.resolved => '阶段性成功判据已经由现实满足',
+        XiangjiProblemState.backtracking => '现实反驳旧预测，正在定位最早错误层',
+        _ => '根据本次现实结果继续缩小关键差距',
+      },
+      currentExperiment: '',
+      nextVerification: next == XiangjiProblemState.resolved
+          ? '若成功判据失效或出现新反例，在同一问题身份下重开'
+          : '根据新版本选择下一项可逆实验',
+      sourceRef: 'reality:${reality['id']}',
+      resolvedItem: next == XiangjiProblemState.resolved
+          ? problem.successCriteria
+          : '',
+    );
     if (verdict == 'refutes') {
       final now = DateTime.now().millisecondsSinceEpoch;
       await _dao.saveAiError(<String, Object?>{
@@ -1005,9 +1383,19 @@ class XiangjiRepository {
     required String reversibility,
     required List<String> assumptions,
     required List<String> stopConditions,
+    String targetGap = '',
+    String mechanismForThisCase = '',
+    String whyNotOtherOptions = '',
+    String switchTrigger = '',
+    String userSummary = '',
     String evidenceLevel = 'hypothesis',
-  }) =>
-      _dao.addStrategyOption(<String, Object?>{
+  }) async {
+    final existingOptions = await _dao.strategyOptions(campaignId);
+    final preferred = existingOptions.isEmpty;
+    final currentVersion = existingOptions.isEmpty
+        ? 1
+        : (existingOptions.first['version_no'] as num?)?.toInt() ?? 1;
+    await _dao.addStrategyOption(<String, Object?>{
         'id': newId('xf_strategy'),
         'campaign_id': campaignId,
         'name': name,
@@ -1018,11 +1406,30 @@ class XiangjiRepository {
         'reversibility': reversibility,
         'key_assumptions_json': jsonEncode(assumptions),
         'stop_conditions_json': jsonEncode(stopConditions),
+        'target_gap': targetGap.trim().isEmpty
+            ? '缩小当前战役目标与现实之间最关键的差距'
+            : targetGap.trim(),
+        'mechanism_for_this_case': mechanismForThisCase.trim().isEmpty
+            ? '通过“${name.trim()}”在当前约束下改变关键条件，并用停止条件限制风险。'
+            : mechanismForThisCase.trim(),
+        'key_assumption': assumptions.isEmpty ? '' : assumptions.first,
+        'why_preferred': preferred
+            ? '这是当前首个完整候选路线；形成其他真正不同的路线后应重新比较。'
+            : '',
+        'why_not_other_options': whyNotOtherOptions.trim(),
+        'switch_trigger': switchTrigger.trim().isEmpty
+            ? (stopConditions.isEmpty ? '' : stopConditions.first)
+            : switchTrigger.trim(),
+        'user_summary': userSummary.trim().isEmpty
+            ? '${name.trim()}：${benefits.join('；')}'
+            : userSummary.trim(),
+        'preferred': preferred ? 1 : 0,
         'evidence_level': evidenceLevel,
         'selected': 0,
-        'version_no': 1,
+        'version_no': currentVersion,
         'created_at_ms': DateTime.now().millisecondsSinceEpoch,
       });
+  }
 
   Future<void> transitionCampaign({
     required String campaignId,
@@ -1059,6 +1466,9 @@ class XiangjiRepository {
     );
     final decision = _campaignMachine.evaluate(campaign.state, target, context);
     decision.requireAllowed();
+    if (target == XiangjiCampaignState.prepare) {
+      await _dao.selectPreferredStrategy(campaignId);
+    }
     await _dao.updateCampaign(
       campaignId,
       <String, Object?>{
@@ -1077,10 +1487,24 @@ class XiangjiRepository {
     final listId = target.isEmpty
         ? await _todoDao.createLocalList('向己·未来军师')
         : target.first.listId;
+    const whyLabels = <String, String>{
+      'strategic_meaning': '它服务的更高目标',
+      'key_gap': '目标差距',
+      'operator_mechanism': '为什么这一步可能有效',
+      'epistemic_grounding': '当前依据',
+    };
+    final whyText = action.whyChain.entries
+        .where((entry) =>
+            whyLabels.containsKey(entry.key) &&
+            entry.value.toString().trim().isNotEmpty)
+        .map((entry) =>
+            '${whyLabels[entry.key] ?? '理由'}：${entry.value.toString().trim()}')
+        .join('\n');
     final taskId = await _todoDao.createLocalTask(
       listId: listId,
       title: action.title,
-      bodyText: '来自向己·未来军师\n为什么：${jsonEncode(action.whyChain)}\n事前预测：${action.prediction}',
+      bodyText:
+          '来自向己·未来军师\n${whyText.isEmpty ? '为什么：等待进一步说明' : whyText}\n事前预测：${action.prediction}',
       status: 'notStarted',
       importance: 'high',
       isMyDay: true,
@@ -1124,14 +1548,32 @@ class XiangjiRepository {
       if (task?.isCompleted == true &&
           action != null &&
           action.state != XiangjiActionState.done) {
+        final now = DateTime.now().millisecondsSinceEpoch;
         await _dao.updateAction(
           actionId,
           <String, Object?>{
             'state': XiangjiActionState.done.wire,
-            'completed_at_ms': DateTime.now().millisecondsSinceEpoch,
+            'completed_at_ms': now,
           },
           eventType: 'todo_completed',
         );
+        await _dao.updateSolutionAttemptForAction(
+          actionId,
+          <String, Object?>{
+            'ended_at_ms': now,
+            'status': 'ACTION_DONE_AWAITING_REALITY',
+          },
+        );
+        if (action.problemId.isNotEmpty) {
+          await _appendLifecycleSnapshot(
+            problemId: action.problemId,
+            state: XiangjiPersistentProblemState.executing,
+            currentFocus: '行动已完成，但现实结果尚未回填',
+            currentExperiment: action.title,
+            nextVerification: '记录实际发生的事实，再与事前预测验算',
+            sourceRef: 'todo:$taskId',
+          );
+        }
       }
     }
   }
@@ -1157,7 +1599,7 @@ class XiangjiRepository {
   }
 
   Future<XiangjiMonitorResult> refreshAutomaticWatch() async {
-    const alertType = 'rev3_background_watch';
+    const alertType = 'rev4_background_watch';
     final values = await _dao.automaticMonitorSignals();
     int count(String key) => (values[key] as num?)?.toInt() ?? 0;
     bool flag(String key) => values[key] == true;
@@ -1176,6 +1618,9 @@ class XiangjiRepository {
       strategyResourceDriftCount: count('strategy_resource_drift_count'),
     ));
     final existing = await _dao.latestOpenAlertForType(alertType);
+    final relatedProblemId =
+        (values['related_problem_id'] ?? values['risk_problem_id'] ?? '')
+            .toString();
     if (result.state == XiangjiAlertState.green) {
       if (existing != null) await _dao.resolveOpenAlertsOfType(alertType);
       return result;
@@ -1183,9 +1628,7 @@ class XiangjiRepository {
     final unchanged = existing != null &&
         (existing['state'] ?? '').toString() == result.state.wire &&
         (existing['reason'] ?? '').toString() == result.reason &&
-        (result.state != XiangjiAlertState.red ||
-            (existing['problem_id'] ?? '').toString() ==
-                (values['risk_problem_id'] ?? '').toString());
+        (existing['problem_id'] ?? '').toString() == relatedProblemId;
     if (!unchanged) {
       if (existing != null) await _dao.resolveOpenAlertsOfType(alertType);
       final alertId = newId('xf_watch_alert');
@@ -1195,9 +1638,7 @@ class XiangjiRepository {
         alertType: alertType,
         reason: result.reason,
         defaultAction: result.defaultAction,
-        problemId: result.state == XiangjiAlertState.red
-            ? (values['risk_problem_id'] ?? '').toString()
-            : '',
+        problemId: relatedProblemId,
       );
       if (<XiangjiAlertState>{
         XiangjiAlertState.orange,
@@ -1220,7 +1661,9 @@ class XiangjiRepository {
     required Map<String, Object?> signals,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final problemId = (signals['risk_problem_id'] ?? '').toString();
+    final problemId =
+        (signals['related_problem_id'] ?? signals['risk_problem_id'] ?? '')
+            .toString();
     final monitorRunId = newId('xf_agent_run');
     final chiefRunId = newId('xf_agent_run');
     final inputRefs = <String>['alert:$alertId'];
@@ -1267,6 +1710,128 @@ class XiangjiRepository {
       'started_at_ms': now,
       'ended_at_ms': now,
     });
+  }
+
+  bool _feedbackMeetsSuccessCriteria({
+    required String feedback,
+    required String successCriteria,
+  }) {
+    final criteria = successCriteria.trim().toLowerCase();
+    final reality = feedback.trim().toLowerCase();
+    if (criteria.isEmpty || reality.isEmpty) return false;
+    final positiveResult = const <String>[
+      '达到',
+      '满足',
+      '实现',
+      '已经解决',
+      '成功',
+      '收到',
+      '获得',
+      '完成',
+    ].any(reality.contains);
+    if (!positiveResult) return false;
+    final criteriaTerms = RegExp(r'[a-z0-9]+|[\u4e00-\u9fff]{2,}')
+        .allMatches(criteria)
+        .map((match) => match.group(0)!)
+        .where((term) => term.length >= 2)
+        .toSet();
+    return criteriaTerms.any(reality.contains);
+  }
+
+  Future<void> _appendLifecycleSnapshot({
+    required String problemId,
+    required XiangjiPersistentProblemState state,
+    required String currentFocus,
+    required String currentExperiment,
+    required String nextVerification,
+    required String sourceRef,
+    String resolvedItem = '',
+    List<String> additionalFacts = const <String>[],
+  }) async {
+    final latest = await _dao.latestProblemStateVersion(problemId);
+    List<String> strings(Object? raw) {
+      try {
+        final value = raw is String ? jsonDecode(raw) : raw;
+        if (value is! List) return const <String>[];
+        return value
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+      } catch (_) {
+        return const <String>[];
+      }
+    }
+
+    final facts = <String>{
+      ...strings(latest?['facts_json']),
+      ...additionalFacts.map((item) => item.trim()).where((item) => item.isNotEmpty),
+    };
+    final resolved = <String>{
+      ...strings(latest?['resolved_items_json']),
+      if (resolvedItem.trim().isNotEmpty) resolvedItem.trim(),
+    };
+    await _dao.saveProblemStateVersion(<String, Object?>{
+      'id': newId('xf_problem_state'),
+      'problem_id': problemId,
+      'version_no': await _dao.nextProblemStateVersion(problemId),
+      'lifecycle_state': state.wire,
+      'facts_json': jsonEncode(facts.toList()),
+      'unknowns_json': latest?['unknowns_json'] ?? '[]',
+      'assumptions_json': latest?['assumptions_json'] ?? '[]',
+      'constraints_json': latest?['constraints_json'] ?? '[]',
+      'key_gap': latest?['key_gap'] ?? '',
+      'current_hypotheses_json':
+          latest?['current_hypotheses_json'] ?? '[]',
+      'selected_operator_json':
+          latest?['selected_operator_json'] ?? '{}',
+      'resolved_items_json': jsonEncode(resolved.toList()),
+      'current_focus': currentFocus,
+      'current_experiment': currentExperiment,
+      'next_verification': nextVerification,
+      'generated_by': 'PERSISTENT_LIFECYCLE_GUARD',
+      'source_refs_json': jsonEncode(<String>[sourceRef]),
+      'stale_reason': '',
+    });
+  }
+
+  Future<void> _markProblemResolved({
+    required XiangjiProblemRecord problem,
+    required XiangjiCouncilResult result,
+    required String realityRef,
+  }) async {
+    final latest = await _dao.latestProblemStateVersion(problem.id);
+    final resolvedItems = <String>{
+      ...?result.problemProgress?.resolvedItems,
+      if (problem.successCriteria.trim().isNotEmpty)
+        problem.successCriteria.trim(),
+    };
+    await _dao.saveProblemStateVersion(<String, Object?>{
+      'id': newId('xf_problem_state'),
+      'problem_id': problem.id,
+      'version_no': await _dao.nextProblemStateVersion(problem.id),
+      'lifecycle_state': XiangjiPersistentProblemState.resolved.wire,
+      'facts_json': latest?['facts_json'] ?? '[]',
+      'unknowns_json': latest?['unknowns_json'] ?? '[]',
+      'assumptions_json': latest?['assumptions_json'] ?? '[]',
+      'constraints_json': latest?['constraints_json'] ?? '[]',
+      'key_gap': '',
+      'current_hypotheses_json':
+          latest?['current_hypotheses_json'] ?? '[]',
+      'selected_operator_json':
+          latest?['selected_operator_json'] ?? '{}',
+      'resolved_items_json': jsonEncode(resolvedItems.toList()),
+      'current_focus': '阶段性成功判据已经由现实结果满足',
+      'current_experiment': '',
+      'next_verification': '若成功判据失效或出现新的反例，在同一问题身份下重开。',
+      'generated_by': 'PS-024_RESOLUTION_GUARD',
+      'source_refs_json': jsonEncode(<String>[realityRef]),
+      'stale_reason': '',
+    });
+    await _dao.updateProblemState(
+      problem.id,
+      XiangjiProblemState.resolved,
+      actor: 'resolution_guard',
+    );
   }
 
   Future<XiangjiAgentResult> runAgent(XiangjiAgentRequest request) =>

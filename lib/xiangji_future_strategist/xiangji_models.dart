@@ -429,6 +429,12 @@ class XiangjiProblemRecord {
     this.priority = 0,
     this.createdAtMs = 0,
     this.updatedAtMs = 0,
+    this.need = '',
+    this.rootGoalId = '',
+    this.parentProblemId = '',
+    this.currentStateVersionId = '',
+    this.canonicalProblemId = '',
+    this.problemStatus = 'ACTIVE',
   });
 
   final String id;
@@ -443,6 +449,12 @@ class XiangjiProblemRecord {
   final int priority;
   final int createdAtMs;
   final int updatedAtMs;
+  final String need;
+  final String rootGoalId;
+  final String parentProblemId;
+  final String currentStateVersionId;
+  final String canonicalProblemId;
+  final String problemStatus;
 
   factory XiangjiProblemRecord.fromMap(Map<String, Object?> row) =>
       XiangjiProblemRecord(
@@ -458,6 +470,13 @@ class XiangjiProblemRecord {
         priority: _asInt(row['priority']),
         createdAtMs: _asInt(row['created_at_ms']),
         updatedAtMs: _asInt(row['updated_at_ms']),
+        need: (row['need'] ?? '').toString(),
+        rootGoalId: (row['root_goal_id'] ?? '').toString(),
+        parentProblemId: (row['parent_problem_id'] ?? '').toString(),
+        currentStateVersionId:
+            (row['current_state_version_id'] ?? '').toString(),
+        canonicalProblemId: (row['canonical_problem_id'] ?? '').toString(),
+        problemStatus: (row['problem_status'] ?? 'ACTIVE').toString(),
       );
 }
 

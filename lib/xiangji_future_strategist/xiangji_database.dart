@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import '../data/db.dart';
 import 'xiangji_models.dart';
 import 'xiangji_rev3_models.dart';
+import 'xiangji_rev4_models.dart';
 
 /// SQLite is the authoritative local store for the strategist. Every table is
 /// prefixed so the module can coexist with the app's existing goal/Todo data.
@@ -32,6 +33,7 @@ class XiangjiDao {
     }
     await batch.commit(noResult: true);
     await _ensureRev3Columns(db);
+    await _ensureRev4Columns(db);
     try {
       await db.execute('''
         CREATE VIRTUAL TABLE IF NOT EXISTS xf_knowledge_passage_fts
@@ -43,6 +45,7 @@ class XiangjiDao {
     }
     await _seedCoreKnowledge(db);
     await _ensureRev3SckRules(db);
+    await _ensureRev4Rules(db);
     await _seedProviderCapabilities(db);
     _ensured = true;
   }
@@ -96,6 +99,91 @@ class XiangjiDao {
       'xf_reality_result',
       'experience_json',
       "TEXT NOT NULL DEFAULT '[]'",
+    );
+  }
+
+  Future<void> _ensureRev4Columns(Database db) async {
+    Future<void> add(
+      String table,
+      String column,
+      String definition,
+    ) async {
+      final columns = await db.rawQuery('PRAGMA table_info($table)');
+      final exists = columns.any(
+        (row) => (row['name'] ?? '').toString() == column,
+      );
+      if (!exists) {
+        await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+      }
+    }
+
+    await add('xf_problem', 'need', "TEXT NOT NULL DEFAULT ''");
+    await add('xf_problem', 'root_goal_id', "TEXT NOT NULL DEFAULT ''");
+    await add('xf_problem', 'parent_problem_id', "TEXT NOT NULL DEFAULT ''");
+    await add(
+      'xf_problem',
+      'current_state_version_id',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_problem',
+      'canonical_problem_id',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_problem',
+      'problem_status',
+      "TEXT NOT NULL DEFAULT 'ACTIVE'",
+    );
+    await add(
+      'xf_concept_version',
+      'applicability_boundary',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_concept_version',
+      'unexplained_details_json',
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
+    await add(
+      'xf_strategy_option',
+      'target_gap',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'mechanism_for_this_case',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'key_assumption',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'why_preferred',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'why_not_other_options',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'switch_trigger',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'user_summary',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await add(
+      'xf_strategy_option',
+      'preferred',
+      'INTEGER NOT NULL DEFAULT 0',
     );
   }
 
@@ -239,6 +327,8 @@ class XiangjiDao {
         source_refs_json TEXT NOT NULL DEFAULT '[]',
         support_refs_json TEXT NOT NULL DEFAULT '[]',
         counterexample_refs_json TEXT NOT NULL DEFAULT '[]',
+        applicability_boundary TEXT NOT NULL DEFAULT '',
+        unexplained_details_json TEXT NOT NULL DEFAULT '[]',
         created_at_ms INTEGER NOT NULL,
         UNIQUE(concept_id, version_no)
       )
@@ -889,6 +979,214 @@ class XiangjiDao {
         created_at_ms INTEGER NOT NULL
       )
     ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_input_classification (
+        id TEXT PRIMARY KEY,
+        raw_event_id TEXT NOT NULL,
+        input_text TEXT NOT NULL,
+        input_type TEXT NOT NULL,
+        updates_existing_problem INTEGER NOT NULL DEFAULT 0,
+        target_problem_id TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0,
+        classified_by TEXT NOT NULL DEFAULT 'A13_LOCAL_GUARD',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_problem_state_version (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        version_no INTEGER NOT NULL,
+        lifecycle_state TEXT NOT NULL,
+        facts_json TEXT NOT NULL DEFAULT '[]',
+        unknowns_json TEXT NOT NULL DEFAULT '[]',
+        assumptions_json TEXT NOT NULL DEFAULT '[]',
+        constraints_json TEXT NOT NULL DEFAULT '[]',
+        key_gap TEXT NOT NULL DEFAULT '',
+        current_hypotheses_json TEXT NOT NULL DEFAULT '[]',
+        selected_operator_json TEXT NOT NULL DEFAULT '{}',
+        resolved_items_json TEXT NOT NULL DEFAULT '[]',
+        current_focus TEXT NOT NULL DEFAULT '',
+        current_experiment TEXT NOT NULL DEFAULT '',
+        next_verification TEXT NOT NULL DEFAULT '',
+        generated_by TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL DEFAULT '[]',
+        stale_reason TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        UNIQUE(problem_id, version_no)
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_solution_attempt (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        state_version_id TEXT NOT NULL,
+        action_id TEXT NOT NULL DEFAULT '',
+        operator_id TEXT NOT NULL DEFAULT '',
+        rationale TEXT NOT NULL,
+        prediction_id TEXT NOT NULL DEFAULT '',
+        started_at_ms INTEGER NOT NULL DEFAULT 0,
+        ended_at_ms INTEGER NOT NULL DEFAULT 0,
+        outcome_ref TEXT NOT NULL DEFAULT '',
+        result_class TEXT NOT NULL DEFAULT 'PENDING',
+        failure_layer TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'PLANNED',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_hypothesis (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        effect_ref TEXT NOT NULL DEFAULT '',
+        statement TEXT NOT NULL,
+        mechanism TEXT NOT NULL DEFAULT '',
+        support_refs_json TEXT NOT NULL DEFAULT '[]',
+        counter_refs_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'PROPOSED',
+        scope TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_hypothesis_test (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        hypothesis_ids_json TEXT NOT NULL DEFAULT '[]',
+        discriminating_action_id TEXT NOT NULL DEFAULT '',
+        expected_patterns_json TEXT NOT NULL DEFAULT '[]',
+        result_ref TEXT NOT NULL DEFAULT '',
+        conclusion TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'TEST_DESIGNED',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_case_comparison (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        situation_model_id TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        current_case_refs_json TEXT NOT NULL DEFAULT '[]',
+        historical_case_refs_json TEXT NOT NULL DEFAULT '[]',
+        similarities_json TEXT NOT NULL DEFAULT '[]',
+        differences_json TEXT NOT NULL DEFAULT '[]',
+        decisive_differences_json TEXT NOT NULL DEFAULT '[]',
+        conclusion TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_relevant_difference (
+        id TEXT PRIMARY KEY,
+        comparison_id TEXT NOT NULL,
+        feature TEXT NOT NULL,
+        why_it_matters TEXT NOT NULL,
+        evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+        impact_on_decision TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_concept_reality_conflict (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        concept_version_id TEXT NOT NULL DEFAULT '',
+        reality_refs_json TEXT NOT NULL DEFAULT '[]',
+        mismatch_pattern TEXT NOT NULL,
+        repetitions INTEGER NOT NULL DEFAULT 1,
+        impact TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'MISMATCH_DETECTED',
+        review_result TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_cognitive_experience (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        situation_model_id TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        sck_rule_ids_json TEXT NOT NULL DEFAULT '[]',
+        headline TEXT NOT NULL,
+        user_message TEXT NOT NULL,
+        presentation_type TEXT NOT NULL,
+        details_json TEXT NOT NULL DEFAULT '{}',
+        method_text TEXT NOT NULL DEFAULT '',
+        transfer_prompt TEXT NOT NULL DEFAULT '',
+        linked_claims_json TEXT NOT NULL DEFAULT '[]',
+        user_viewed INTEGER NOT NULL DEFAULT 0,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_method_experience (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        cognitive_experience_id TEXT NOT NULL,
+        method_id TEXT NOT NULL,
+        context TEXT NOT NULL,
+        explanation TEXT NOT NULL,
+        user_viewed INTEGER NOT NULL DEFAULT 0,
+        user_response TEXT NOT NULL DEFAULT '',
+        transfer_prompt TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_learning_moment (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        old_model TEXT NOT NULL,
+        new_reality TEXT NOT NULL,
+        revised_model TEXT NOT NULL,
+        method_learned TEXT NOT NULL,
+        evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_backtrack_event (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        attempt_id TEXT NOT NULL DEFAULT '',
+        earliest_failed_layer TEXT NOT NULL,
+        old_ref TEXT NOT NULL DEFAULT '',
+        new_ref TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL,
+        evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_explanation_card (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        situation_model_id TEXT NOT NULL,
+        target_ref TEXT NOT NULL,
+        headline TEXT NOT NULL,
+        facts_json TEXT NOT NULL DEFAULT '[]',
+        interpretation TEXT NOT NULL,
+        counterevidence_json TEXT NOT NULL DEFAULT '[]',
+        weakest_premise TEXT NOT NULL DEFAULT '',
+        uncertainty TEXT NOT NULL DEFAULT '',
+        what_changes_it TEXT NOT NULL DEFAULT '',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_problem_alias (
+        alias_problem_id TEXT PRIMARY KEY,
+        canonical_problem_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
     'CREATE INDEX IF NOT EXISTS idx_xf_experience_problem ON xf_experience(problem_id, created_at_ms)',
     'CREATE INDEX IF NOT EXISTS idx_xf_claim_problem ON xf_claim(problem_id, epistemic_status)',
     'CREATE INDEX IF NOT EXISTS idx_xf_grounding_claim ON xf_grounding_relation(claim_id)',
@@ -909,6 +1207,17 @@ class XiangjiDao {
     'CREATE INDEX IF NOT EXISTS idx_xf_edge_from ON xf_knowledge_edge(from_id, relation_type)',
     'CREATE INDEX IF NOT EXISTS idx_xf_provider_source ON xf_provider_file(source_id, provider_id)',
     'CREATE INDEX IF NOT EXISTS idx_xf_trace_request ON xf_retrieval_trace(request_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_input_problem ON xf_input_classification(target_problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_problem_version ON xf_problem_state_version(problem_id, version_no DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_attempt_problem ON xf_solution_attempt(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_hypothesis_problem ON xf_hypothesis(problem_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_hypothesis_test_problem ON xf_hypothesis_test(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_case_problem ON xf_case_comparison(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_conflict_problem ON xf_concept_reality_conflict(problem_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_cel_problem ON xf_cognitive_experience(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_learning_problem ON xf_learning_moment(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_backtrack_problem ON xf_backtrack_event(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_explanation_problem ON xf_explanation_card(problem_id, created_at_ms DESC)',
   ];
 
   Future<void> _seedCoreKnowledge(Database db) async {
@@ -927,9 +1236,9 @@ class XiangjiDao {
         'layer': 'K0',
         'kind': 'original_source_framework',
         'title': '叔本华认识论内核 - 《作为意志和表象的世界》第一篇',
-        'version': 'V6.1-Rev3',
+        'version': 'V6.1-Rev4',
         'status': 'active',
-        'content_hash': 'bundled-k0-v6.1-rev3',
+        'content_hash': 'bundled-k0-v6.1-rev4',
         'sensitivity': 'normal',
         'created_at_ms': now,
         'updated_at_ms': now,
@@ -941,7 +1250,7 @@ class XiangjiDao {
         'mime': 'application/x-structured-knowledge',
         'parse_status': 'READY',
         'index_status': 'READY',
-        'checksum': 'bundled-k0-v6.1-rev3',
+        'checksum': 'bundled-k0-v6.1-rev4',
         'byte_size': 0,
         'last_error': '',
         'created_at_ms': now,
@@ -1003,7 +1312,7 @@ class XiangjiDao {
           'action_json': jsonEncode(<String, Object?>{
             'description': rule['action'],
           }),
-          'version': 'V6.1-Rev3',
+          'version': 'V6.1-Rev4',
           'enabled': 1,
           'protected': 1,
           'created_at_ms': now,
@@ -1079,6 +1388,295 @@ class XiangjiDao {
       }
     });
   }
+
+  Future<void> _ensureRev4Rules(Database db) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.update(
+        'xf_knowledge_source',
+        <String, Object?>{
+          'version': 'V6.1-Rev4',
+          'content_hash': 'bundled-k0-v6.1-rev4',
+          'updated_at_ms': now,
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>['XF-K0-SCHOPENHAUER'],
+      );
+      await txn.update(
+        'xf_knowledge_document',
+        <String, Object?>{
+          'checksum': 'bundled-k0-v6.1-rev4',
+          'updated_at_ms': now,
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>['XF-K0-DOC-WWR-I'],
+      );
+      for (final rule in _rev4RuleSeeds) {
+        final code = rule['code']!;
+        final ruleId = 'XF-$code';
+        await txn.insert(
+          'xf_knowledge_rule',
+          <String, Object?>{
+            'id': ruleId,
+            'source_id': 'XF-K0-SCHOPENHAUER',
+            'rule_code': code,
+            'severity': rule['severity'],
+            'condition_json': jsonEncode(<String, Object?>{
+              'description': rule['condition'],
+            }),
+            'action_json': jsonEncode(<String, Object?>{
+              'description': rule['action'],
+            }),
+            'version': 'V6.1-Rev4',
+            'enabled': 1,
+            'protected': 1,
+            'created_at_ms': now,
+            'updated_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        await txn.insert(
+          'xf_rule_source_binding',
+          <String, Object?>{
+            'id': '$ruleId-${rule['requirement']}',
+            'rule_id': ruleId,
+            'passage_id': rule['passage'],
+            'requirement_id': rule['requirement'],
+            'created_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+    });
+  }
+
+  static const List<Map<String, String>> _rev4RuleSeeds =
+      <Map<String, String>>[
+    <String, String>{
+      'code': 'CEL-001',
+      'severity': 'P0',
+      'condition': '高影响SCK机制已经运行但用户看不到其作用',
+      'action': '生成自然语言CognitiveExperience并进入双层交互',
+      'requirement': 'CEL-001',
+      'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'CEL-002',
+      'severity': 'P0',
+      'condition': '体验、观察、用户解释或AI判断可能混写',
+      'action': '分别展示实际发生、真实体验、用户解释和军师判断',
+      'requirement': 'CEL-002',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'CEL-003',
+      'severity': 'P0',
+      'condition': '形成关于用户或现实的高影响AI判断',
+      'action': '明确标为当前可修订理解并显示改变判断的现实',
+      'requirement': 'CEL-003',
+      'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'CEL-004',
+      'severity': 'P0',
+      'condition': '重要结果需要归因',
+      'action': '展示多个机制不同的候选原因及区分实验',
+      'requirement': 'CEL-004',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'CEL-005',
+      'severity': 'P0',
+      'condition': '准备复用历史案例、旧标签或概念',
+      'action': '显示目标相关相同点、关键差异及对下一步的影响',
+      'requirement': 'CEL-005',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'CEL-006',
+      'severity': 'P0',
+      'condition': '用户展开高影响建议的原因',
+      'action': '下钻事实、体验、反例、最弱前提、未知和改变信号',
+      'requirement': 'CEL-006',
+      'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'CEL-007',
+      'severity': 'P0',
+      'condition': '形成个人标签或抽象概念',
+      'action': '同时显示支持例、反例、适用边界和未解释细节',
+      'requirement': 'CEL-007',
+      'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'CEL-008',
+      'severity': 'P1',
+      'condition': '用户报告说不清但不对劲的体验',
+      'action': '先保存未概念化体验并收集场景，不强迫立即命名',
+      'requirement': 'CEL-008',
+      'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'CEL-009',
+      'severity': 'P0',
+      'condition': '概念、规则或预测持续不能解释现实',
+      'action': '呈现现实正在挑战旧解释并启动回溯复核',
+      'requirement': 'CEL-009',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'CEL-010',
+      'severity': 'P0',
+      'condition': '模型或报告结构复杂完整',
+      'action': '体系完整度与认识根据强度分开显示',
+      'requirement': 'CEL-010',
+      'passage': 'XF-K0-PASSAGE-14',
+    },
+    <String, String>{
+      'code': 'CEL-011',
+      'severity': 'P0',
+      'condition': '推理形式成立但关键前提未获现实支持',
+      'action': '显示逻辑成立不等于现实已证明及最弱前提',
+      'requirement': 'CEL-011',
+      'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'CEL-012',
+      'severity': 'P0',
+      'condition': '推荐关键行动',
+      'action': '用用户语言说明行动机制、目标差距和可观察预测',
+      'requirement': 'CEL-012',
+      'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'CEL-013',
+      'severity': 'P1',
+      'condition': '用户按需展开为什么或方法',
+      'action': '结合当前真实问题解释方法，不展示独立课程墙',
+      'requirement': 'CEL-013',
+      'passage': 'XF-K0-PASSAGE-14',
+    },
+    <String, String>{
+      'code': 'CEL-014',
+      'severity': 'P1',
+      'condition': '现实促成重要模型修订',
+      'action': '保存旧认识、新现实、修订模型和可迁移方法',
+      'requirement': 'CEL-014',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'CEL-015',
+      'severity': 'P1',
+      'condition': '用户开启方法训练模式',
+      'action': '提供与当前问题相关的一步迁移练习并由AI反馈',
+      'requirement': 'CEL-015',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'CEL-016',
+      'severity': 'P0',
+      'condition': '生产前台准备显示内部对象名或JSON',
+      'action': '隔离开发者语言，只呈现自然语言认知体验',
+      'requirement': 'CEL-016',
+      'passage': 'XF-K0-PASSAGE-09',
+    },
+    <String, String>{
+      'code': 'CEL-017',
+      'severity': 'P0',
+      'condition': '军师形成下一步和解释',
+      'action': '第一层直接回答现在怎么办，第二层按需展示原因、证据和方法',
+      'requirement': 'CEL-017',
+      'passage': 'XF-K0-PASSAGE-14',
+    },
+    <String, String>{
+      'code': 'CEL-018',
+      'severity': 'P0',
+      'condition': '声明SCK功能已完成',
+      'action': '后台执行与用户体验两侧都必须通过验收',
+      'requirement': 'CEL-018',
+      'passage': 'XF-K0-PASSAGE-14',
+    },
+    <String, String>{
+      'code': 'PS-016',
+      'severity': 'P0',
+      'condition': '新输入与当前核心问题相关',
+      'action': '复用稳定problem_id并写入新状态版本',
+      'requirement': 'PS-016',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'PS-017',
+      'severity': 'P0',
+      'condition': '收到任何自然语言输入',
+      'action': '先分类Need、Fact、Experience、Correction、RealityResult或NewProblem',
+      'requirement': 'PS-017',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'PS-018',
+      'severity': 'P0',
+      'condition': '存在会影响决定的关键未知',
+      'action': '保存竞争假设和能区分它们的低成本HypothesisTest',
+      'requirement': 'PS-018',
+      'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'PS-019',
+      'severity': 'P0',
+      'condition': '相似历史案例准备进入求解',
+      'action': '先保存案例比较及决定性差异，满足目标相关相同点后才迁移',
+      'requirement': 'PS-019',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'PS-020',
+      'severity': 'P0',
+      'condition': '用户查看持久问题',
+      'action': '展示已解决、当前焦点、关键未知、当前实验和下一次验证',
+      'requirement': 'PS-020',
+      'passage': 'XF-K0-PASSAGE-14',
+    },
+    <String, String>{
+      'code': 'PS-021',
+      'severity': 'P0',
+      'condition': '现实不支持方案或预测',
+      'action': '定位执行至事实链中最早错误层并向用户解释',
+      'requirement': 'PS-021',
+      'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'PS-022',
+      'severity': 'P1',
+      'condition': '出现真正独立的子问题',
+      'action': '用parent_problem_id建立分支；普通反馈不生成平行问题',
+      'requirement': 'PS-022',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+    <String, String>{
+      'code': 'PS-023',
+      'severity': 'P0',
+      'condition': '形成或执行一个新方案',
+      'action': '追加不可覆盖SolutionAttempt及依据、预测、结果和回溯点',
+      'requirement': 'PS-023',
+      'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'PS-024',
+      'severity': 'P0',
+      'condition': '行动完成或准备关闭问题',
+      'action': '按阶段性解决判据与重开条件判断，禁止用行动完成冒充问题解决',
+      'requirement': 'PS-024',
+      'passage': 'XF-K0-PASSAGE-15',
+    },
+    <String, String>{
+      'code': 'PS-025',
+      'severity': 'P0',
+      'condition': '关键行动产生可观察结果',
+      'action': '结果必须更新事实、假设、差距和算子优先级',
+      'requirement': 'PS-025',
+      'passage': 'XF-K0-PASSAGE-JUDGMENT',
+    },
+  ];
 
   static const List<Map<String, String>> _coreRuleSeeds =
       <Map<String, String>>[
@@ -1455,6 +2053,8 @@ class XiangjiDao {
     required String rawQuestion,
     required String contextText,
     String sensitivity = 'sensitive',
+    String parentProblemId = '',
+    String rootGoalId = '',
   }) async {
     final db = await _database();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -1482,6 +2082,12 @@ class XiangjiDao {
         'review_at_ms': 0,
         'priority': 0,
         'version_no': 1,
+        'need': rawQuestion,
+        'root_goal_id': rootGoalId.trim().isEmpty ? id : rootGoalId,
+        'parent_problem_id': parentProblemId,
+        'current_state_version_id': '',
+        'canonical_problem_id': id,
+        'problem_status': 'ACTIVE',
         'created_at_ms': now,
         'updated_at_ms': now,
       });
@@ -1588,11 +2194,545 @@ class XiangjiDao {
     final db = await _database();
     final rows = await db.query(
       'xf_problem',
-      where: includeArchived ? null : 'state != ?',
+      where: includeArchived
+          ? null
+          : "state != ? AND problem_status NOT IN ('ARCHIVED','MERGED')",
       whereArgs: includeArchived ? null : <Object?>['ARCHIVED'],
       orderBy: 'updated_at_ms DESC',
     );
     return rows.map(XiangjiProblemRecord.fromMap).toList();
+  }
+
+  Future<XiangjiProblemRecord?> latestActiveProblem() async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_problem',
+      where:
+          "state NOT IN ('ARCHIVED','RESOLVED') AND problem_status NOT IN ('ARCHIVED','MERGED','RESOLVED')",
+      orderBy: 'updated_at_ms DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : XiangjiProblemRecord.fromMap(rows.first);
+  }
+
+  Future<void> saveInputClassification({
+    required String id,
+    required String rawEventId,
+    required String inputText,
+    required XiangjiInputClassification classification,
+    String classifiedBy = 'A13_LOCAL_GUARD',
+  }) async {
+    final db = await _database();
+    await db.insert(
+      'xf_input_classification',
+      <String, Object?>{
+        'id': id,
+        'raw_event_id': rawEventId,
+        'input_text': inputText,
+        'input_type': classification.type.wire,
+        'updates_existing_problem':
+            classification.updateExistingProblem ? 1 : 0,
+        'target_problem_id': classification.targetProblemId,
+        'reason': classification.reason,
+        'confidence': classification.confidence,
+        'classified_by': classifiedBy,
+        'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<int> nextProblemStateVersion(String problemId) async {
+    final db = await _database();
+    final value = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT MAX(version_no) FROM xf_problem_state_version WHERE problem_id = ?',
+          <Object?>[problemId],
+        )) ??
+        0;
+    return value + 1;
+  }
+
+  Future<Map<String, Object?>?> latestProblemStateVersion(
+    String problemId,
+  ) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_problem_state_version',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'version_no DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> saveProblemStateVersion(Map<String, Object?> values) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final row = <String, Object?>{
+      ...values,
+      'created_at_ms': values['created_at_ms'] ?? now,
+    };
+    await db.transaction((txn) async {
+      await txn.insert(
+        'xf_problem_state_version',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+      await txn.update(
+        'xf_problem',
+        <String, Object?>{
+          'current_state_version_id': row['id'],
+          if (row['lifecycle_state'] == 'RESOLVED')
+            'problem_status': 'RESOLVED',
+          if (row['lifecycle_state'] == 'ARCHIVED')
+            'problem_status': 'ARCHIVED',
+          'updated_at_ms': now,
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>[row['problem_id']],
+      );
+    });
+  }
+
+  Future<List<Map<String, Object?>>> problemStateVersions(
+    String problemId, {
+    int limit = 50,
+  }) async {
+    final db = await _database();
+    return db.query(
+      'xf_problem_state_version',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'version_no DESC',
+      limit: limit,
+    );
+  }
+
+  Future<XiangjiProblemProgress?> problemProgress(String problemId) async {
+    final latest = await latestProblemStateVersion(problemId);
+    if (latest == null) return null;
+    final hypotheses = await hypothesesForProblem(problemId);
+    final attempts = await solutionAttempts(problemId);
+    final backtracks = await backtrackEvents(problemId);
+    List<String> strings(Object? raw) {
+      try {
+        final decoded = raw is String ? jsonDecode(raw) : raw;
+        if (decoded is! List) return const <String>[];
+        return decoded
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+      } catch (_) {
+        return const <String>[];
+      }
+    }
+
+    final wire = (latest['lifecycle_state'] ?? '').toString();
+    final state = XiangjiPersistentProblemState.values.firstWhere(
+      (value) => value.wire == wire,
+      orElse: () => XiangjiPersistentProblemState.captured,
+    );
+    return XiangjiProblemProgress(
+      problemId: problemId,
+      state: state,
+      version: (latest['version_no'] as num?)?.toInt() ?? 0,
+      resolvedItems: strings(latest['resolved_items_json']),
+      currentFocus: (latest['current_focus'] ?? '').toString(),
+      keyUnknowns: strings(latest['unknowns_json']),
+      currentExperiment: (latest['current_experiment'] ?? '').toString(),
+      nextVerification: (latest['next_verification'] ?? '').toString(),
+      hypotheses: hypotheses,
+      attempts: attempts,
+      backtracks: backtracks,
+    );
+  }
+
+  Future<void> saveHypothesis(Map<String, Object?> values) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xf_hypothesis',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ?? now,
+        'updated_at_ms': values['updated_at_ms'] ?? now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> hypothesesForProblem(
+    String problemId,
+  ) async {
+    final db = await _database();
+    return db.query(
+      'xf_hypothesis',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'updated_at_ms DESC',
+    );
+  }
+
+  Future<void> saveHypothesisTest(Map<String, Object?> values) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xf_hypothesis_test',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ?? now,
+        'updated_at_ms': values['updated_at_ms'] ?? now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> hypothesisTests(
+    String problemId,
+  ) async {
+    final db = await _database();
+    return db.query(
+      'xf_hypothesis_test',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+    );
+  }
+
+  Future<void> reconcileHypothesisTestsForAction({
+    required String actionId,
+    required String resultRef,
+    required String conclusion,
+    required XiangjiHypothesisStatus status,
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      final tests = await txn.query(
+        'xf_hypothesis_test',
+        where: 'discriminating_action_id = ?',
+        whereArgs: <Object?>[actionId],
+      );
+      for (final test in tests) {
+        await txn.update(
+          'xf_hypothesis_test',
+          <String, Object?>{
+            'result_ref': resultRef,
+            'conclusion': conclusion,
+            'status': status.wire,
+            'updated_at_ms': now,
+          },
+          where: 'id = ?',
+          whereArgs: <Object?>[test['id']],
+        );
+        try {
+          final decoded = jsonDecode(
+            (test['hypothesis_ids_json'] ?? '[]').toString(),
+          );
+          if (decoded is! List) continue;
+          for (final hypothesisId in decoded) {
+            await txn.update(
+              'xf_hypothesis',
+              <String, Object?>{
+                'status': status.wire,
+                'updated_at_ms': now,
+              },
+              where: 'id = ?',
+              whereArgs: <Object?>[hypothesisId.toString()],
+            );
+          }
+        } catch (_) {
+          // The test result remains authoritative if a legacy hypothesis list
+          // cannot be decoded.
+        }
+      }
+    });
+  }
+
+  Future<void> saveSolutionAttempt(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_solution_attempt',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ??
+            DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateSolutionAttemptForAction(
+    String actionId,
+    Map<String, Object?> values,
+  ) async {
+    final db = await _database();
+    await db.update(
+      'xf_solution_attempt',
+      values,
+      where: 'action_id = ?',
+      whereArgs: <Object?>[actionId],
+    );
+  }
+
+  Future<List<Map<String, Object?>>> solutionAttempts(
+    String problemId,
+  ) async {
+    final db = await _database();
+    return db.query(
+      'xf_solution_attempt',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+    );
+  }
+
+  Future<void> saveCaseComparison(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_case_comparison',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ??
+            DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> saveRelevantDifference(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_relevant_difference',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ??
+            DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> caseComparisons(
+    String problemId,
+  ) async {
+    final db = await _database();
+    return db.query(
+      'xf_case_comparison',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+    );
+  }
+
+  Future<void> saveCognitiveExperience({
+    required String problemId,
+    required String situationModelId,
+    required XiangjiCognitiveExperienceDraft experience,
+  }) async {
+    final db = await _database();
+    await db.insert(
+      'xf_cognitive_experience',
+      <String, Object?>{
+        ...experience.toMap(),
+        'problem_id': problemId,
+        'situation_model_id': situationModelId,
+        'user_viewed': 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<XiangjiCognitiveExperienceDraft>> cognitiveExperiences({
+    String problemId = '',
+    int limit = 100,
+  }) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_cognitive_experience',
+      where: problemId.isEmpty ? null : 'problem_id = ?',
+      whereArgs: problemId.isEmpty ? null : <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+      limit: limit,
+    );
+    return rows.map(XiangjiCognitiveExperienceDraft.fromMap).toList();
+  }
+
+  Future<void> markCognitiveExperienceViewed(String id) async {
+    final db = await _database();
+    await db.update(
+      'xf_cognitive_experience',
+      <String, Object?>{'user_viewed': 1},
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
+  Future<void> saveMethodExperience(Map<String, Object?> values) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xf_method_experience',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ?? now,
+        'updated_at_ms': values['updated_at_ms'] ?? now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> methodExperiences({
+    String problemId = '',
+    int limit = 100,
+  }) async {
+    final db = await _database();
+    return db.query(
+      'xf_method_experience',
+      where: problemId.isEmpty ? null : 'problem_id = ?',
+      whereArgs: problemId.isEmpty ? null : <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+      limit: limit,
+    );
+  }
+
+  Future<void> recordMethodExerciseResponse({
+    required String cognitiveExperienceId,
+    required String response,
+  }) async {
+    final db = await _database();
+    await db.update(
+      'xf_method_experience',
+      <String, Object?>{
+        'user_viewed': 1,
+        'user_response': response,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'cognitive_experience_id = ?',
+      whereArgs: <Object?>[cognitiveExperienceId],
+    );
+  }
+
+  Future<void> saveExplanationCard(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_explanation_card',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ??
+            DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, Object?>?> latestExplanationCard(
+    String problemId,
+  ) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_explanation_card',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, Object?>>> explanationCards({
+    String problemId = '',
+    int limit = 100,
+  }) async {
+    final db = await _database();
+    return db.query(
+      'xf_explanation_card',
+      where: problemId.isEmpty ? null : 'problem_id = ?',
+      whereArgs: problemId.isEmpty ? null : <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+      limit: limit,
+    );
+  }
+
+  Future<void> saveConceptRealityConflict(Map<String, Object?> values) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xf_concept_reality_conflict',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ?? now,
+        'updated_at_ms': values['updated_at_ms'] ?? now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> conceptRealityConflicts({
+    String problemId = '',
+    int limit = 100,
+  }) async {
+    final db = await _database();
+    return db.query(
+      'xf_concept_reality_conflict',
+      where: problemId.isEmpty ? null : 'problem_id = ?',
+      whereArgs: problemId.isEmpty ? null : <Object?>[problemId],
+      orderBy: 'updated_at_ms DESC',
+      limit: limit,
+    );
+  }
+
+  Future<void> saveLearningMoment(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_learning_moment',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ??
+            DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> learningMoments({
+    String problemId = '',
+    int limit = 100,
+  }) async {
+    final db = await _database();
+    return db.query(
+      'xf_learning_moment',
+      where: problemId.isEmpty ? null : 'problem_id = ?',
+      whereArgs: problemId.isEmpty ? null : <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+      limit: limit,
+    );
+  }
+
+  Future<void> saveBacktrackEvent(Map<String, Object?> values) async {
+    final db = await _database();
+    await db.insert(
+      'xf_backtrack_event',
+      <String, Object?>{
+        ...values,
+        'created_at_ms': values['created_at_ms'] ??
+            DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> backtrackEvents(
+    String problemId,
+  ) async {
+    final db = await _database();
+    return db.query(
+      'xf_backtrack_event',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      orderBy: 'created_at_ms DESC',
+    );
   }
 
   Future<void> updateProblemState(
@@ -1606,7 +2746,15 @@ class XiangjiDao {
     await db.transaction((txn) async {
       await txn.update(
         'xf_problem',
-        <String, Object?>{'state': state.wire, 'updated_at_ms': now},
+        <String, Object?>{
+          'state': state.wire,
+          'problem_status': switch (state) {
+            XiangjiProblemState.resolved => 'RESOLVED',
+            XiangjiProblemState.archived => 'ARCHIVED',
+            _ => 'ACTIVE',
+          },
+          'updated_at_ms': now,
+        },
         where: 'id = ?',
         whereArgs: <Object?>[id],
       );
@@ -2146,15 +3294,35 @@ class XiangjiDao {
 
   Future<void> invalidateReadyActions(String problemId) async {
     final db = await _database();
-    await db.update(
-      'xf_action',
-      <String, Object?>{
-        'state': XiangjiActionState.invalidated.wire,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-      },
-      where: 'problem_id = ? AND state = ?',
-      whereArgs: <Object?>[problemId, XiangjiActionState.ready.wire],
-    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      final actions = await txn.query(
+        'xf_action',
+        columns: const <String>['id'],
+        where: 'problem_id = ? AND state = ?',
+        whereArgs: <Object?>[problemId, XiangjiActionState.ready.wire],
+      );
+      await txn.update(
+        'xf_action',
+        <String, Object?>{
+          'state': XiangjiActionState.invalidated.wire,
+          'updated_at_ms': now,
+        },
+        where: 'problem_id = ? AND state = ?',
+        whereArgs: <Object?>[problemId, XiangjiActionState.ready.wire],
+      );
+      for (final action in actions) {
+        await txn.update(
+          'xf_solution_attempt',
+          <String, Object?>{
+            'status': 'SUPERSEDED',
+            'failure_layer': 'new_problem_state_version',
+          },
+          where: 'action_id = ? AND status = ?',
+          whereArgs: <Object?>[action['id'], 'PLANNED'],
+        );
+      }
+    });
   }
 
   Future<void> linkProblemCampaign(String problemId, String campaignId) async {
@@ -2212,6 +3380,8 @@ class XiangjiDao {
     required List<String> observableCriteria,
     List<String> supportRefs = const <String>[],
     List<String> counterexampleRefs = const <String>[],
+    String applicabilityBoundary = '',
+    List<String> unexplainedDetails = const <String>[],
     required String changeReason,
     String origin = 'user_problem_review',
   }) async {
@@ -2257,6 +3427,10 @@ class XiangjiDao {
         'source_refs_json': jsonEncode(supportRefs),
         'support_refs_json': jsonEncode(supportRefs),
         'counterexample_refs_json': jsonEncode(counterexampleRefs),
+        'applicability_boundary': applicabilityBoundary.trim().isEmpty
+            ? scope
+            : applicabilityBoundary.trim(),
+        'unexplained_details_json': jsonEncode(unexplainedDetails),
         'created_at_ms': now,
       });
       await txn.update(
@@ -2603,6 +3777,29 @@ class XiangjiDao {
         )
       ORDER BY selected DESC, created_at_ms ASC
     ''', <Object?>[campaignId, campaignId]);
+  }
+
+  Future<void> selectPreferredStrategy(String campaignId) async {
+    final db = await _database();
+    await db.transaction((txn) async {
+      await txn.update(
+        'xf_strategy_option',
+        <String, Object?>{'selected': 0},
+        where: 'campaign_id = ?',
+        whereArgs: <Object?>[campaignId],
+      );
+      await txn.rawUpdate('''
+        UPDATE xf_strategy_option
+        SET selected = 1
+        WHERE campaign_id = ?
+          AND preferred = 1
+          AND version_no = (
+            SELECT MAX(version_no)
+            FROM xf_strategy_option
+            WHERE campaign_id = ?
+          )
+      ''', <Object?>[campaignId, campaignId]);
+    });
   }
 
   Future<void> addCampaignIntel(Map<String, Object?> values) async {
@@ -2974,8 +4171,11 @@ class XiangjiDao {
             0;
     final conceptRealityConflicts =
         Sqflite.firstIntValue(await db.rawQuery('''
-          SELECT COUNT(*) FROM xf_concept
-          WHERE status IN ('UNDER_REVIEW','CONFLICTED')
+          SELECT
+            (SELECT COUNT(*) FROM xf_concept
+             WHERE status IN ('UNDER_REVIEW','CONFLICTED')) +
+            (SELECT COUNT(*) FROM xf_concept_reality_conflict
+             WHERE status IN ('MISMATCH_DETECTED','UNDER_REVIEW'))
         ''')) ??
             0;
     final highRiskRows = await db.rawQuery('''
@@ -3004,7 +4204,7 @@ class XiangjiDao {
           ''', <Object?>[riskProblemId, riskProblemId])) ??
             0;
     final outcomes = await db.rawQuery('''
-      SELECT r.verdict, a.expected_minutes
+      SELECT r.verdict, a.expected_minutes, a.problem_id
       FROM xf_reality_result r
       JOIN xf_action a ON a.id = r.action_id
       WHERE r.verdict != 'unreviewed'
@@ -3058,6 +4258,49 @@ class XiangjiDao {
           : latest >= threshold;
       if (met) opportunityConditionsMet++;
     }
+    var relatedProblemId = riskProblemId;
+    if (relatedProblemId.isEmpty &&
+        consecutivePredictionMisses > 0 &&
+        outcomes.isNotEmpty) {
+      relatedProblemId = (outcomes.first['problem_id'] ?? '').toString();
+    }
+    if (relatedProblemId.isEmpty && conceptRealityConflicts > 0) {
+      final rows = await db.rawQuery('''
+        SELECT problem_id
+        FROM xf_concept_reality_conflict
+        WHERE status IN ('MISMATCH_DETECTED','UNDER_REVIEW')
+        ORDER BY updated_at_ms DESC
+        LIMIT 1
+      ''');
+      if (rows.isNotEmpty) {
+        relatedProblemId = (rows.first['problem_id'] ?? '').toString();
+      }
+    }
+    if (relatedProblemId.isEmpty && opportunityConditionsMet > 0) {
+      final rows = await db.rawQuery('''
+        SELECT p.id AS problem_id
+        FROM xf_indicator i
+        JOIN xf_problem p ON p.campaign_id = i.campaign_id
+        WHERE p.problem_status = 'ACTIVE'
+        ORDER BY COALESCE(i.latest_at_ms, i.created_at_ms) DESC
+        LIMIT 1
+      ''');
+      if (rows.isNotEmpty) {
+        relatedProblemId = (rows.first['problem_id'] ?? '').toString();
+      }
+    }
+    if (relatedProblemId.isEmpty) {
+      final rows = await db.rawQuery('''
+        SELECT id AS problem_id
+        FROM xf_problem
+        WHERE problem_status = 'ACTIVE'
+        ORDER BY updated_at_ms DESC
+        LIMIT 1
+      ''');
+      if (rows.isNotEmpty) {
+        relatedProblemId = (rows.first['problem_id'] ?? '').toString();
+      }
+    }
     return <String, Object?>{
       'critical_unknown_count': criticalUnknownCount,
       'consecutive_prediction_misses': consecutivePredictionMisses,
@@ -3069,6 +4312,7 @@ class XiangjiDao {
           ? riskProblemDebtCount > 0
           : highDebtCount > 0 || criticalUnknownCount > 0,
       'risk_problem_id': riskProblemId,
+      'related_problem_id': relatedProblemId,
       'opportunity_conditions_met': opportunityConditionsMet,
       'opportunity_condition_total': opportunityConditionTotal,
       'concept_reality_conflicts': conceptRealityConflicts,
@@ -3618,7 +4862,7 @@ class XiangjiDao {
       }
     }
     return <String, Object?>{
-      'format': 'xiangji-future-strategist-v6.1-rev3',
+      'format': 'xiangji-future-strategist-v6.1-rev4',
       'exported_at': DateTime.now().toUtc().toIso8601String(),
       'tables': tables,
     };
@@ -3648,6 +4892,7 @@ class XiangjiDao {
     });
     await _seedCoreKnowledge(db);
     await _ensureRev3SckRules(db);
+    await _ensureRev4Rules(db);
     await _seedProviderCapabilities(db);
     await rebuildPassageIndex(db);
   }
@@ -3683,7 +4928,8 @@ class XiangjiDao {
         : XiangjiActionRecord.fromMap(actionRows.first);
     final problemRows = await db.query(
       'xf_problem',
-      where: "state != 'ARCHIVED'",
+      where:
+          "state != 'ARCHIVED' AND problem_status NOT IN ('ARCHIVED','MERGED')",
       orderBy: 'updated_at_ms DESC',
       limit: 1,
     );

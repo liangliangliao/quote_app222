@@ -8,6 +8,7 @@ import 'xiangji_database.dart';
 import 'xiangji_models.dart';
 import 'xiangji_repository.dart';
 import 'xiangji_rev3_models.dart';
+import 'xiangji_rev4_models.dart';
 import 'xiangji_ui_support.dart';
 
 class XiangjiCampaignListPage extends StatefulWidget {
@@ -343,8 +344,12 @@ class _XiangjiCampaignWorkspacePageState
         XiangjiFormFieldSpec(
           keyName: 'kind',
           label: '类型',
-          initialValue: initialKind,
-          hint: 'fact / critical_unknown / red_team_review',
+          initialValue: switch (initialKind) {
+            'critical_unknown' => '会改变路线的未知',
+            'red_team_review' => '反方与失败路径',
+            _ => '可观察事实',
+          },
+          hint: '可观察事实 / 会改变路线的未知 / 反方与失败路径',
           required: true,
         ),
         const XiangjiFormFieldSpec(
@@ -361,27 +366,36 @@ class _XiangjiCampaignWorkspacePageState
         const XiangjiFormFieldSpec(
           keyName: 'quality',
           label: '来源质量',
-          initialValue: 'user_observation',
+          initialValue: '我的直接观察',
           required: true,
         ),
         const XiangjiFormFieldSpec(
           keyName: 'freshness',
           label: '新鲜度',
-          initialValue: 'current',
+          initialValue: '当前仍有效',
           required: true,
         ),
       ],
       submitLabel: '保存情报',
     );
     if (values == null) return;
+    final kind = switch (values['kind']!.trim()) {
+      '会改变路线的未知' => 'critical_unknown',
+      '反方与失败路径' => 'red_team_review',
+      _ => 'fact',
+    };
     await _run(() => widget.repository.addCampaignIntel(
           campaignId: widget.campaignId,
-          kind: values['kind']!,
+          kind: kind,
           text: values['text']!,
           sourceRef: values['source']!,
-          sourceQuality: values['quality']!,
-          freshness: values['freshness']!,
-          state: values['kind'] == 'critical_unknown'
+          sourceQuality: values['quality'] == '我的直接观察'
+              ? 'user_observation'
+              : values['quality']!,
+          freshness: values['freshness'] == '当前仍有效'
+              ? 'current'
+              : values['freshness']!,
+          state: kind == 'critical_unknown'
               ? XiangjiClaimState.unresolved
               : XiangjiClaimState.provisional,
         ));
@@ -403,6 +417,18 @@ class _XiangjiCampaignWorkspacePageState
           label: '战略类型',
           hint: '集中 / 试探 / 结盟 / 等待 / 撤退…',
           required: true,
+        ),
+        XiangjiFormFieldSpec(
+          keyName: 'target_gap',
+          label: '这条路线要缩小的关键差距',
+          required: true,
+          maxLines: 2,
+        ),
+        XiangjiFormFieldSpec(
+          keyName: 'mechanism',
+          label: '为什么它对这次具体情况可能有效',
+          required: true,
+          maxLines: 3,
         ),
         XiangjiFormFieldSpec(
           keyName: 'benefits',
@@ -435,6 +461,18 @@ class _XiangjiCampaignWorkspacePageState
           maxLines: 3,
         ),
         XiangjiFormFieldSpec(
+          keyName: 'why_not_others',
+          label: '相比其他路线，它的取舍是什么',
+          required: true,
+          maxLines: 3,
+        ),
+        XiangjiFormFieldSpec(
+          keyName: 'switch_trigger',
+          label: '出现什么现实信号就切换路线',
+          required: true,
+          maxLines: 2,
+        ),
+        XiangjiFormFieldSpec(
           keyName: 'reversibility',
           label: '可逆性',
           initialValue: 'high',
@@ -454,6 +492,11 @@ class _XiangjiCampaignWorkspacePageState
           reversibility: values['reversibility']!,
           assumptions: xiangjiLines(values['assumptions']!),
           stopConditions: xiangjiLines(values['stops']!),
+          targetGap: values['target_gap']!,
+          mechanismForThisCase: values['mechanism']!,
+          whyNotOtherOptions: values['why_not_others']!,
+          switchTrigger: values['switch_trigger']!,
+          userSummary: '${values['name']}：${values['target_gap']}',
         ));
   }
 
@@ -537,7 +580,7 @@ class _XiangjiCampaignWorkspacePageState
     final values = await showXiangjiFormDialog(
       context,
       title: '继续与总军师议事',
-      note: '补充新的现实或要求即可；A00 会自动编排认识、求解、战略与红队，无需选择角色。',
+      note: '补充新的现实、体验或纠正即可；它会更新同一道题并自动重新比较路线，无需选择内部角色。',
       fields: const <XiangjiFormFieldSpec>[
         XiangjiFormFieldSpec(
           keyName: 'task',
@@ -664,7 +707,7 @@ class _XiangjiCampaignWorkspacePageState
     final values = await showXiangjiFormDialog(
       context,
       title: '告诉军师哪里不成立',
-      note: '旧态势模型和派生战略会标 STALE，随后自动重新谋划与红队。',
+      note: '旧理解和派生战略会保留为历史版本，随后按你的纠正自动重新谋划。',
       fields: const <XiangjiFormFieldSpec>[
         XiangjiFormFieldSpec(
           keyName: 'correction',
@@ -695,10 +738,16 @@ class _XiangjiCampaignWorkspacePageState
   Future<void> _showDecisionWhy() async {
     final draft = _decisionDraft;
     if (draft == null) return;
-    final artifacts = await widget.dao.reasoningArtifacts(
-      problemId: draft.problemId,
-    );
+    final values = await Future.wait<Object?>(<Future<Object?>>[
+      widget.dao.latestExplanationCard(draft.problemId),
+      widget.dao.cognitiveExperiences(
+        problemId: draft.problemId,
+        limit: 12,
+      ),
+    ]);
     if (!mounted) return;
+    final explanation = values[0] as Map<String, Object?>?;
+    final experiences = values[1] as List<XiangjiCognitiveExperienceDraft>;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -709,22 +758,56 @@ class _XiangjiCampaignWorkspacePageState
             padding: const EdgeInsets.all(20),
             children: [
               const Text(
-                '军师根据与反方',
+                '为什么军师这么判断？',
                 style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
               ),
-              XiangjiLabeledValue(label: '为什么', value: draft.why),
+              const Text(
+                '这是当前可修订的战略理解；新的现实、反例或边界变化都可能改变首选。',
+                style: TextStyle(color: XiangjiPalette.muted, height: 1.45),
+              ),
+              const SizedBox(height: 10),
+              XiangjiLabeledValue(
+                label: '已确认的事实 / 体验',
+                value: _listText(explanation?['facts_json']),
+              ),
+              XiangjiLabeledValue(
+                label: '当前解释',
+                value: (explanation?['interpretation'] ?? draft.judgment)
+                    .toString(),
+              ),
+              XiangjiLabeledValue(
+                label: '反例 / 不支持材料',
+                value: _listText(explanation?['counterevidence_json']),
+              ),
               XiangjiLabeledValue(
                 label: '最脆弱前提',
-                value: draft.weakestPremise,
+                value: (explanation?['weakest_premise'] ??
+                        draft.weakestPremise)
+                    .toString(),
               ),
-              for (final artifact in artifacts)
+              XiangjiLabeledValue(
+                label: '什么会改变首选',
+                value: (explanation?['what_changes_it'] ??
+                        draft.changeSignals)
+                    .toString(),
+              ),
+              const Divider(height: 28),
+              for (final experience in experiences)
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
-                  title: Text((artifact['kind'] ?? '').toString()),
+                  title: Text(experience.headline),
+                  subtitle: Text(experience.userMessage),
                   children: [
-                    SelectableText(
-                      (artifact['json_payload'] ?? '{}').toString(),
-                    ),
+                    for (final detail in experience.details.entries)
+                      XiangjiLabeledValue(
+                        label: detail.key,
+                        value: detail.value,
+                      ),
+                    if (experience.methodText.isNotEmpty)
+                      XiangjiLabeledValue(
+                        label: '这次使用的方法',
+                        value: experience.methodText,
+                      ),
                   ],
                 ),
             ],
@@ -854,7 +937,7 @@ class _XiangjiCampaignWorkspacePageState
             ),
             TextButton(
               onPressed: _working ? null : _showDecisionWhy,
-              child: const Text('为什么？'),
+              child: const Text('为什么 / 证据 / 方法'),
             ),
             TextButton(
               onPressed: _working ? null : _deferDecision,
@@ -912,6 +995,79 @@ class _XiangjiCampaignWorkspacePageState
     }
   }
 
+  String _listText(Object? raw) {
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is List) {
+        final values = decoded
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+        return values.isEmpty ? '当前没有已确认内容' : values.join('；');
+      }
+    } catch (_) {}
+    final value = (raw ?? '').toString().trim();
+    return value.isEmpty ? '当前没有已确认内容' : value;
+  }
+
+  String _budgetText(Map<String, Object?> budget) {
+    final values = <String>[];
+    final hours = budget['weekly_hours'];
+    final money = budget['money_cap'];
+    final time = budget['time'];
+    final reserve = budget['reserve'];
+    if (hours != null) values.add('每周最多 $hours 小时');
+    if (money != null) values.add('资金上限 $money');
+    if (time != null) values.add(time.toString());
+    if (reserve != null) values.add(reserve.toString());
+    return values.isEmpty ? '资源边界仍需确认' : values.join('；');
+  }
+
+  String _intelKind(String value) => switch (value) {
+        'critical_unknown' => '会改变路线的未知',
+        'red_team_review' => '反方与失败路径',
+        'fact' => '可观察事实',
+        _ => '当前战场材料',
+      };
+
+  String _epistemicLabel(String value) => switch (value.toUpperCase()) {
+        'SUPPORTED' => '现实支持较强',
+        'PROVISIONAL' => '当前材料暂时支持',
+        'SCOUTING' => '正在现实侦察',
+        'UNRESOLVED' || 'EPISTEMIC_DEBT' => '仍需补证',
+        _ => '当前可修订',
+      };
+
+  String _sourceLabel(String value) => value.trim().isEmpty
+      ? '来源尚未标注'
+      : value.startsWith('situation:') || value.startsWith('raw_event:')
+          ? '来自当前问题记录'
+          : value.contains(':')
+              ? '来自已记录的可追溯材料'
+              : '来源：$value';
+
+  String _routeType(String value) => switch (value) {
+        'case_discriminating_scout' => '现实区分路线',
+        'case_bounded_commitment' => '限额推进路线',
+        'case_hold_with_trigger' => '保全并等待触发',
+        'case_retreat' => '停止加码路线',
+        'case_opportunity_concentration' => '核实后集中路线',
+        _ => '当前案例候选路线',
+      };
+
+  String _reversibilityLabel(String value) => switch (value.toLowerCase()) {
+        'high' => '容易撤回或调整',
+        'medium' => '可调整但有一定成本',
+        'low' => '撤回成本较高',
+        _ => '可逆边界仍需确认',
+      };
+
+  String _indicatorLabel(String value) => switch (value.toLowerCase()) {
+        'leading' => '提前显示路线是否有效的信号',
+        'lagging' => '最终结果信号',
+        _ => '现实监测信号',
+      };
+
   @override
   Widget build(BuildContext context) {
     final campaign = _campaign;
@@ -956,7 +1112,7 @@ class _XiangjiCampaignWorkspacePageState
                             label: '兵力预算',
                             value: campaign.resourceBudget.isEmpty
                                 ? ''
-                                : jsonEncode(campaign.resourceBudget),
+                                : _budgetText(campaign.resourceBudget),
                           ),
                           XiangjiLabeledValue(
                             label: '下次复核',
@@ -991,7 +1147,7 @@ class _XiangjiCampaignWorkspacePageState
                                     ),
                                     title: Text((row['text'] ?? '').toString()),
                                     subtitle: Text(
-                                      '${row['kind']} · ${row['epistemic_status']} · 来源：${row['source_ref'] ?? '未标注'}',
+                                      '${_intelKind((row['kind'] ?? '').toString())} · ${_epistemicLabel((row['epistemic_status'] ?? '').toString())} · ${_sourceLabel((row['source_ref'] ?? '').toString())}',
                                     ),
                                   ),
                               ],
@@ -1012,19 +1168,44 @@ class _XiangjiCampaignWorkspacePageState
                                 for (final option in _options)
                                   ExpansionTile(
                                     tilePadding: EdgeInsets.zero,
-                                    title: Text(
-                                      (option['name'] ?? '').toString(),
-                                      style: const TextStyle(fontWeight: FontWeight.w700),
+                                    title: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            (option['name'] ?? '').toString(),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        if (option['preferred'] == 1)
+                                          const XiangjiStateBadge(
+                                            label: '军师首选',
+                                            color: XiangjiPalette.pine,
+                                          ),
+                                      ],
                                     ),
                                     subtitle: Text(
-                                      '${option['strategy_type']} · 可逆性 ${option['reversibility']} · ${option['evidence_level']}',
+                                      (option['user_summary'] ?? '')
+                                              .toString()
+                                              .trim()
+                                              .isNotEmpty
+                                          ? (option['user_summary'] ?? '')
+                                              .toString()
+                                          : '${_routeType((option['strategy_type'] ?? '').toString())} · ${_reversibilityLabel((option['reversibility'] ?? '').toString())}',
                                     ),
                                     children: [
-                                      XiangjiLabeledValue(label: '收益', value: option['benefits_json'].toString()),
-                                      XiangjiLabeledValue(label: '成本', value: option['costs_json'].toString()),
+                                      XiangjiLabeledValue(label: '这条路线要减少的差距', value: (option['target_gap'] ?? '').toString()),
+                                      XiangjiLabeledValue(label: '它在这件事里怎样起作用', value: (option['mechanism_for_this_case'] ?? '').toString()),
+                                      XiangjiLabeledValue(label: '关键假设', value: (option['key_assumption'] ?? _listText(option['key_assumptions_json'])).toString()),
+                                      if ((option['why_preferred'] ?? '').toString().trim().isNotEmpty)
+                                        XiangjiLabeledValue(label: '为什么把它作为首选', value: (option['why_preferred'] ?? '').toString()),
+                                      XiangjiLabeledValue(label: '为什么现在不选其他路线', value: (option['why_not_other_options'] ?? '').toString()),
+                                      XiangjiLabeledValue(label: '什么时候切换路线', value: (option['switch_trigger'] ?? '').toString()),
+                                      XiangjiLabeledValue(label: '可能收益', value: _listText(option['benefits_json'])),
+                                      XiangjiLabeledValue(label: '成本', value: _listText(option['costs_json'])),
                                       XiangjiLabeledValue(label: '机会成本', value: (option['opportunity_cost'] ?? '').toString()),
-                                      XiangjiLabeledValue(label: '关键假设', value: option['key_assumptions_json'].toString()),
-                                      XiangjiLabeledValue(label: '停止条件', value: option['stop_conditions_json'].toString()),
+                                      XiangjiLabeledValue(label: '停止条件', value: _listText(option['stop_conditions_json'])),
                                     ],
                                   ),
                               ],
@@ -1041,12 +1222,14 @@ class _XiangjiCampaignWorkspacePageState
                           children: [
                             for (final item in _contingencies)
                               XiangjiLabeledValue(
-                                label: 'IF ${item['trigger_expression']}',
-                                value: 'THEN ${item['action_plan']}',
+                                label: '当：${item['trigger_expression']}',
+                                value: '出现这个信号时：${item['action_plan']}',
                               ),
                             for (final item in _indicators)
                               XiangjiLabeledValue(
-                                label: '${item['indicator_type']} 指标',
+                                label: _indicatorLabel(
+                                  (item['indicator_type'] ?? '').toString(),
+                                ),
                                 value:
                                     '${item['metric']} · 阈值 ${item['threshold_text']} · 窗口 ${item['window_text']}',
                               ),
@@ -1380,18 +1563,19 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
     final values = await showXiangjiFormDialog(
       context,
       title: '预测—现实验算',
-      note: '结论只能是 supports / partly_supports / refutes / unknown。只有“支持且满足问题现实判据”才能解决问题。',
+      note: '只有“现实支持事前预测”并且满足问题的现实成功判据，才会把问题标为阶段性解决。',
       fields: const <XiangjiFormFieldSpec>[
         XiangjiFormFieldSpec(
           keyName: 'verdict',
           label: '验算结论',
-          initialValue: 'partly_supports',
+          hint: '现实支持 / 部分支持 / 现实反驳 / 仍无法判断',
+          initialValue: '部分支持',
           required: true,
         ),
         XiangjiFormFieldSpec(
           keyName: 'resolved',
-          label: '是否满足问题成功判据（yes/no）',
-          initialValue: 'no',
+          label: '是否满足问题的现实成功判据（是/否）',
+          initialValue: '否',
           required: true,
         ),
         XiangjiFormFieldSpec(
@@ -1403,9 +1587,15 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
       submitLabel: '保存验算',
     );
     if (values == null) return;
+    final verdict = switch (values['verdict']!.trim()) {
+      '现实支持' || '支持' => 'supports',
+      '现实反驳' || '反驳' => 'refutes',
+      '仍无法判断' || '无法判断' => 'unknown',
+      _ => 'partly_supports',
+    };
     await _run(() => widget.repository.verifyAction(
           actionId: widget.actionId,
-          verdict: values['verdict']!,
+          verdict: verdict,
           resolutionCriteriaMet:
               values['resolved']!.toLowerCase() == 'yes' ||
                   values['resolved'] == '是',
@@ -1541,7 +1731,7 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
                     XiangjiSectionCard(
                       title: '现在只做这一件事',
                       subtitle: action.state == XiangjiActionState.done && _reality == null
-                          ? '任务已完成，但缺少 RealityResult；问题不会因此自动解决。'
+                          ? '任务已完成，但还没有现实结果；问题不会因此自动解决。'
                           : '分析结构默认收起，需要时可回看。',
                       child: _controls(action),
                     ),
@@ -1550,7 +1740,14 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
                       tilePadding: const EdgeInsets.symmetric(horizontal: 4),
                       title: const Text('为什么做这件事（展开分析）'),
                       children: [
-                        for (final entry in action.whyChain.entries)
+                        for (final entry in action.whyChain.entries.where(
+                          (entry) => <String>{
+                            'strategic_meaning',
+                            'key_gap',
+                            'operator_mechanism',
+                            'epistemic_grounding',
+                          }.contains(entry.key),
+                        ))
                           XiangjiLabeledValue(
                             label: _whyLabel(entry.key),
                             value: entry.value.toString(),
@@ -1572,11 +1769,11 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            XiangjiLabeledValue(label: '可观察事实', value: (_reality!['facts_json'] ?? '').toString()),
-                            XiangjiLabeledValue(label: '真实体验', value: (_reality!['experience_json'] ?? '').toString()),
-                            XiangjiLabeledValue(label: '意外结果', value: (_reality!['unexpected_json'] ?? '').toString()),
+                            XiangjiLabeledValue(label: '可观察事实', value: _listText(_reality!['facts_json'])),
+                            XiangjiLabeledValue(label: '真实体验', value: _listText(_reality!['experience_json'])),
+                            XiangjiLabeledValue(label: '意外结果', value: _listText(_reality!['unexpected_json'])),
                             XiangjiLabeledValue(label: '用户解释', value: (_reality!['user_interpretation'] ?? '').toString()),
-                            XiangjiLabeledValue(label: '验算结论', value: (_reality!['verdict'] ?? '').toString()),
+                            XiangjiLabeledValue(label: '验算结论', value: _verdictLabel((_reality!['verdict'] ?? '').toString())),
                           ],
                         ),
                       ),
@@ -1596,8 +1793,31 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
         'key_gap' => '关键缺口',
         'operator_mechanism' => '作用机制',
         'epistemic_grounding' => '认识根据',
-        _ => key,
-  };
+        _ => '补充理由',
+      };
+
+  String _listText(Object? raw) {
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is List) {
+        final values = decoded
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+        return values.isEmpty ? '当前没有记录' : values.join('；');
+      }
+    } catch (_) {}
+    final value = (raw ?? '').toString().trim();
+    return value.isEmpty ? '当前没有记录' : value;
+  }
+
+  String _verdictLabel(String value) => switch (value.toLowerCase()) {
+        'supports' => '现实支持事前预测',
+        'partly_supports' => '现实只支持其中一部分',
+        'refutes' => '现实反驳了事前预测，已启动回溯',
+        'unknown' || 'unreviewed' => '现有现实还不足以判断',
+        _ => '等待进一步验算',
+      };
 }
 
 class _XiangjiRealityFeedbackDialog extends StatefulWidget {

@@ -10,7 +10,9 @@ import '../pages/settings_page.dart';
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
 import 'xiangji_repository.dart';
+import 'xiangji_rev4_models.dart';
 import 'xiangji_state_machine.dart';
+import 'xiangji_strategist_monitor_service.dart';
 import 'xiangji_ui_support.dart';
 
 class XiangjiEpistemicWorldPage extends StatefulWidget {
@@ -30,12 +32,240 @@ class _XiangjiEpistemicWorldPageState
   List<Map<String, Object?>> _claims = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _debts = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _concepts = const <Map<String, Object?>>[];
+  List<XiangjiCognitiveExperienceDraft> _cognitiveChanges =
+      const <XiangjiCognitiveExperienceDraft>[];
+  List<Map<String, Object?>> _conflicts = const <Map<String, Object?>>[];
+  List<Map<String, Object?>> _learningMoments =
+      const <Map<String, Object?>>[];
 
   @override
   void initState() {
     super.initState();
     _load();
   }
+
+  Widget _cognitiveChangeRows() {
+    if (_cognitiveChanges.isEmpty && _learningMoments.isEmpty) {
+      return const XiangjiEmptyState(
+        title: '认识还没有发生可见变化',
+        message: '当军师区分体验与解释、比较案例或被新现实修订时，这里会记录“怎样变了”。',
+        icon: Icons.auto_awesome_outlined,
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final change in _cognitiveChanges)
+          Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ExpansionTile(
+              leading: const Icon(Icons.lightbulb_outline),
+              title: Text(change.headline),
+              subtitle: Text(change.userMessage),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final detail in change.details.entries)
+                        XiangjiLabeledValue(
+                          label: detail.key,
+                          value: detail.value,
+                        ),
+                      if (change.methodText.isNotEmpty)
+                        XiangjiLabeledValue(
+                          label: '这次使用的方法',
+                          value: change.methodText,
+                        ),
+                      if (change.transferPrompt.isNotEmpty)
+                        XiangjiLabeledValue(
+                          label: '可选迁移练习',
+                          value: change.transferPrompt,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _experienceInterpretationRows() {
+    if (_experiences.isEmpty && _claims.isEmpty && _debts.isEmpty) {
+      return const XiangjiEmptyState(
+        title: '暂无经验与解释',
+        message: '用户原话、真实体验与当前解释会分层出现，解释不会伪装成外部事实。',
+        icon: Icons.visibility_outlined,
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('实际发生 / 真实体验',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        for (final row in _experiences)
+          _plainTile(
+            icon: Icons.visibility_outlined,
+            title: (row['content'] ?? '').toString(),
+            subtitle: row['is_user_wording'] == 1
+                ? '按你的原话保留'
+                : '从原话中提取，仍可由你纠正',
+          ),
+        const SizedBox(height: 12),
+        const Text('用户解释 / 军师当前判断',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        for (final row in _claims)
+          _plainTile(
+            icon: Icons.psychology_alt_outlined,
+            title: (row['text'] ?? '').toString(),
+            subtitle:
+                '${_claimKind((row['claim_type'] ?? '').toString())} · ${_epistemicLabel((row['epistemic_status'] ?? '').toString())}',
+          ),
+        if (_debts.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('仍会改变判断的未知',
+              style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          for (final row in _debts)
+            _plainTile(
+              icon: Icons.help_outline,
+              title: (row['description'] ?? '').toString(),
+              subtitle:
+                  '${_impactLabel((row['decision_impact'] ?? '').toString())}；需要补清：${row['grounding_gap'] ?? ''}',
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _conceptBoundaryRows() {
+    if (_concepts.isEmpty) {
+      return const XiangjiEmptyState(
+        title: '暂无需要审查的个人概念',
+        message: '概念会连回具体实例、反例、适用边界与仍未解释的细节，不会成为关于你的永久标签。',
+        icon: Icons.category_outlined,
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final row in _concepts)
+          Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ExpansionTile(
+              leading: const Icon(Icons.category_outlined),
+              title: Text((row['name'] ?? '当前概念').toString()),
+              subtitle: Text((row['definition'] ?? '').toString()),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                XiangjiLabeledValue(
+                  label: '支持它的具体例子 / 可观察判据',
+                  value: _naturalList(row['observable_criteria_json']),
+                ),
+                XiangjiLabeledValue(
+                  label: '支持材料',
+                  value: _naturalList(row['support_refs_json']),
+                ),
+                XiangjiLabeledValue(
+                  label: '反例',
+                  value: _naturalList(row['counterexample_refs_json']),
+                ),
+                XiangjiLabeledValue(
+                  label: '适用边界',
+                  value: (row['applicability_boundary'] ?? '').toString().trim().isEmpty
+                      ? '只适用于当前问题与已记录情境'
+                      : row['applicability_boundary'].toString(),
+                ),
+                XiangjiLabeledValue(
+                  label: '仍未解释的细节',
+                  value: _naturalList(row['unexplained_details_json']),
+                ),
+                XiangjiLabeledValue(
+                  label: '这版为什么改变',
+                  value: (row['change_reason'] ?? '').toString(),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _realityConflictRows() {
+    if (_conflicts.isEmpty && _learningMoments.isEmpty) {
+      return const XiangjiEmptyState(
+        title: '当前没有现实冲突',
+        message: '当预测或旧解释连续不能说明现实时，这里会明确显示冲突、回溯与修订。',
+        icon: Icons.compare_arrows_outlined,
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final row in _conflicts)
+          _plainTile(
+            icon: Icons.compare_arrows_outlined,
+            title: '现实正在挑战你的旧解释',
+            subtitle:
+                '${row['mismatch_pattern'] ?? ''}\n影响：${row['impact'] ?? ''}\n当前处理：${_conflictStatus((row['status'] ?? '').toString())}',
+          ),
+        for (final row in _learningMoments)
+          Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ExpansionTile(
+              leading: const Icon(Icons.school_outlined),
+              title: const Text('这次认识怎样改变了？'),
+              subtitle: Text((row['revised_model'] ?? '').toString()),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                XiangjiLabeledValue(
+                  label: '旧认识',
+                  value: (row['old_model'] ?? '').toString(),
+                ),
+                XiangjiLabeledValue(
+                  label: '新现实',
+                  value: (row['new_reality'] ?? '').toString(),
+                ),
+                XiangjiLabeledValue(
+                  label: '修订后的理解',
+                  value: (row['revised_model'] ?? '').toString(),
+                ),
+                XiangjiLabeledValue(
+                  label: '可以迁移的方法',
+                  value: (row['method_learned'] ?? '').toString(),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _plainTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) =>
+      Card(
+        elevation: 0,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          leading: Icon(icon, color: XiangjiPalette.pine),
+          title: Text(title),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Text(subtitle),
+          ),
+        ),
+      );
 
   Future<void> _load() async {
     try {
@@ -44,6 +274,9 @@ class _XiangjiEpistemicWorldPageState
         widget.dao.allClaims(),
         widget.dao.debts(openOnly: false),
         widget.dao.conceptVersions(),
+        widget.dao.cognitiveExperiences(limit: 300),
+        widget.dao.conceptRealityConflicts(limit: 300),
+        widget.dao.learningMoments(limit: 300),
       ]);
       if (!mounted) return;
       setState(() {
@@ -51,6 +284,10 @@ class _XiangjiEpistemicWorldPageState
         _claims = values[1] as List<Map<String, Object?>>;
         _debts = values[2] as List<Map<String, Object?>>;
         _concepts = values[3] as List<Map<String, Object?>>;
+        _cognitiveChanges =
+            values[4] as List<XiangjiCognitiveExperienceDraft>;
+        _conflicts = values[5] as List<Map<String, Object?>>;
+        _learningMoments = values[6] as List<Map<String, Object?>>;
         _loading = false;
       });
     } catch (error) {
@@ -72,10 +309,10 @@ class _XiangjiEpistemicWorldPageState
           bottom: const TabBar(
             isScrollable: true,
             tabs: [
-              Tab(text: '直接经验'),
-              Tab(text: '候选判断'),
-              Tab(text: '认识债务'),
-              Tab(text: '概念版本'),
+              Tab(text: '认识变化'),
+              Tab(text: '经验与解释'),
+              Tab(text: '概念边界'),
+              Tab(text: '现实冲突'),
             ],
           ),
           actions: [
@@ -86,42 +323,10 @@ class _XiangjiEpistemicWorldPageState
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(
                 children: [
-                  _rows(
-                    _experiences,
-                    emptyTitle: '暂无直接经验',
-                    emptyMessage: '问题捕捉和事实分层后，用户原话与可观察经验会出现在这里。',
-                    title: (row) => (row['content'] ?? '').toString(),
-                    subtitle: (row) =>
-                        '${row['experience_type']} · ${row['is_user_wording'] == 1 ? '用户原话' : '派生材料'}',
-                    icon: Icons.visibility_outlined,
-                  ),
-                  _rows(
-                    _claims,
-                    emptyTitle: '暂无候选判断',
-                    emptyMessage: '解释、预测和 AI 判断必须显示认识状态，不能伪装成事实。',
-                    title: (row) => (row['text'] ?? '').toString(),
-                    subtitle: (row) =>
-                        '${row['claim_type']} · 确定性 ${row['epistemic_status']} · 系统性 ${row['systematicity']}',
-                    icon: Icons.psychology_alt_outlined,
-                  ),
-                  _rows(
-                    _debts,
-                    emptyTitle: '暂无认识债务',
-                    emptyMessage: '会改变决定但暂时无法清偿的未知项，会被显式登记。',
-                    title: (row) => (row['description'] ?? '').toString(),
-                    subtitle: (row) =>
-                        '影响 ${row['decision_impact']} · ${row['status']} · ${row['grounding_gap']}',
-                    icon: Icons.report_problem_outlined,
-                  ),
-                  _rows(
-                    _concepts,
-                    emptyTitle: '暂无概念版本',
-                    emptyMessage: '概念的定义、适用范围与版本变化会保留历史，不静默覆盖。',
-                    title: (row) => (row['name'] ?? row['concept_id'] ?? '').toString(),
-                    subtitle: (row) =>
-                        'v${row['version_no']} · ${row['definition']} · 范围 ${row['scope']} · 变更原因 ${row['change_reason']}',
-                    icon: Icons.schema_outlined,
-                  ),
+                  _cognitiveChangeRows(),
+                  _experienceInterpretationRows(),
+                  _conceptBoundaryRows(),
+                  _realityConflictRows(),
                 ],
               ),
       ),
@@ -164,6 +369,53 @@ class _XiangjiEpistemicWorldPageState
       },
     );
   }
+
+  String _naturalList(Object? raw) {
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is List) {
+        final values = decoded
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+        return values.isEmpty ? '当前没有已确认材料' : values.join('；');
+      }
+    } catch (_) {}
+    final value = (raw ?? '').toString().trim();
+    return value.isEmpty ? '当前没有已确认材料' : value;
+  }
+
+  String _claimKind(String value) => switch (value.toLowerCase()) {
+        'user_interpretation' => '你的解释',
+        'prediction' => '尚待现实检验的预测',
+        'ai_inference' => '军师当前推断',
+        'causal_hypothesis' => '候选原因',
+        _ => '当前可修订判断',
+      };
+
+  String _epistemicLabel(String value) => switch (value.toUpperCase()) {
+        'SUPPORTED' => '当前有较强现实支持',
+        'PROVISIONAL' => '当前材料暂时支持',
+        'EPISTEMIC_DEBT' => '仍有会改变判断的关键未知',
+        'UNRESOLVED' => '现实根据仍不足',
+        _ => '当前理解仍可修订',
+      };
+
+  String _impactLabel(String value) => switch (value.toLowerCase()) {
+        'critical' => '会直接改变重大决定',
+        'high' => '很可能改变下一步',
+        'medium' => '可能影响路线',
+        _ => '当前影响较低',
+      };
+
+  String _conflictStatus(String value) => switch (value.toUpperCase()) {
+        'MISMATCH_DETECTED' => '已发现不一致，正在回溯',
+        'UNDER_REVIEW' => '正在比较旧解释与新现实',
+        'REFINED' => '旧解释已经收窄边界',
+        'SUPERSEDED' => '旧解释已被新版本替代',
+        'RETAINED_WITH_SCOPE' => '旧解释只在更小范围内保留',
+        _ => '等待现实复核',
+      };
 }
 
 class XiangjiHistoryPage extends StatefulWidget {
@@ -180,7 +432,7 @@ class _XiangjiHistoryPageState extends State<XiangjiHistoryPage> {
   List<Map<String, Object?>> _reviews = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _rules = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _aiErrors = const <Map<String, Object?>>[];
-  List<Map<String, Object?>> _runs = const <Map<String, Object?>>[];
+  List<Map<String, Object?>> _learning = const <Map<String, Object?>>[];
 
   @override
   void initState() {
@@ -194,14 +446,14 @@ class _XiangjiHistoryPageState extends State<XiangjiHistoryPage> {
         widget.dao.battleReviews(),
         widget.dao.personalRules(),
         widget.dao.aiErrors(),
-        widget.dao.modelRuns(),
+        widget.dao.learningMoments(limit: 300),
       ]);
       if (!mounted) return;
       setState(() {
         _reviews = values[0] as List<Map<String, Object?>>;
         _rules = values[1] as List<Map<String, Object?>>;
         _aiErrors = values[2] as List<Map<String, Object?>>;
-        _runs = values[3] as List<Map<String, Object?>>;
+        _learning = values[3] as List<Map<String, Object?>>;
         _loading = false;
       });
     } catch (error) {
@@ -225,8 +477,8 @@ class _XiangjiHistoryPageState extends State<XiangjiHistoryPage> {
             tabs: [
               Tab(text: '战史'),
               Tab(text: '个人兵法'),
-              Tab(text: 'AI 失误'),
-              Tab(text: '模型运行'),
+              Tab(text: '军师怎样修正'),
+              Tab(text: '认识变化'),
             ],
           ),
         ),
@@ -234,25 +486,72 @@ class _XiangjiHistoryPageState extends State<XiangjiHistoryPage> {
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(
                 children: [
-                  _jsonRows(
+                  _historyRows(
                     _reviews,
-                    titleKey: 'id',
                     empty: '战役关闭时必须先形成复盘，之后会出现在这里。',
+                    title: (row) => '一次战役现实复盘',
+                    subtitle: (row) => _reviewOutcome(row['outcome_json']),
+                    details: (row) => <MapEntry<String, String>>[
+                      MapEntry(
+                        '战前怎样理解',
+                        _reviewModel(row['prewar_model_json']),
+                      ),
+                      MapEntry(
+                        '采用和比较过的路线',
+                        _reviewStrategies(row['strategy_json']),
+                      ),
+                      MapEntry(
+                        '关键转折点',
+                        _naturalJsonList(row['turning_points_json']),
+                      ),
+                      MapEntry('现实结果', _reviewOutcome(row['outcome_json'])),
+                      MapEntry(
+                        '下一次可以迁移的教训',
+                        _naturalJsonList(row['lessons_json']),
+                      ),
+                    ],
                   ),
-                  _jsonRows(
+                  _historyRows(
                     _rules,
-                    titleKey: 'rule_text',
                     empty: '多事件支持、反例检查和明确确认后，个人规律才会稳定化。',
+                    title: (row) => (row['rule_text'] ?? '一条暂时规律').toString(),
+                    subtitle: (row) =>
+                        '适用范围：${row['scope'] ?? '仍需更多案例确认'}',
+                    details: (row) => <MapEntry<String, String>>[
+                      MapEntry('支持它的现实',
+                          (row['support_summary'] ?? '').toString()),
+                      MapEntry('反例与边界',
+                          (row['counterexample_summary'] ?? '').toString()),
+                      MapEntry('怎样继续验证',
+                          (row['validation_plan'] ?? '').toString()),
+                    ],
                   ),
-                  _jsonRows(
+                  _historyRows(
                     _aiErrors,
-                    titleKey: 'impact',
                     empty: '被现实结果反驳的 AI 判断会留下可追溯失误记录。',
+                    title: (row) =>
+                        (row['impact'] ?? '军师判断被现实修订').toString(),
+                    subtitle: (row) =>
+                        (row['correction'] ?? '旧判断保留，新版本继续求解').toString(),
+                    details: (row) => <MapEntry<String, String>>[
+                      MapEntry('现实怎样发现问题',
+                          _discoverySource((row['discovered_by'] ?? '').toString())),
+                      MapEntry('修订', (row['correction'] ?? '').toString()),
+                    ],
                   ),
-                  _jsonRows(
-                    _runs,
-                    titleKey: 'agent_id',
-                    empty: '军师尚未运行。',
+                  _historyRows(
+                    _learning,
+                    empty: '当新现实改变旧认识时，会形成一条可迁移的学习记录。',
+                    title: (row) => '这次认识怎样改变了？',
+                    subtitle: (row) => (row['revised_model'] ?? '').toString(),
+                    details: (row) => <MapEntry<String, String>>[
+                      MapEntry('旧认识', (row['old_model'] ?? '').toString()),
+                      MapEntry('新现实', (row['new_reality'] ?? '').toString()),
+                      MapEntry('修订后的理解',
+                          (row['revised_model'] ?? '').toString()),
+                      MapEntry('可以迁移的方法',
+                          (row['method_learned'] ?? '').toString()),
+                    ],
                   ),
                 ],
               ),
@@ -260,10 +559,14 @@ class _XiangjiHistoryPageState extends State<XiangjiHistoryPage> {
     );
   }
 
-  Widget _jsonRows(
+  Widget _historyRows(
     List<Map<String, Object?>> rows, {
-    required String titleKey,
     required String empty,
+    required String Function(Map<String, Object?> row) title,
+    required String Function(Map<String, Object?> row) subtitle,
+    required List<MapEntry<String, String>> Function(
+      Map<String, Object?> row,
+    ) details,
   }) {
     if (rows.isEmpty) {
       return XiangjiEmptyState(
@@ -288,21 +591,103 @@ class _XiangjiHistoryPageState extends State<XiangjiHistoryPage> {
             borderRadius: BorderRadius.circular(12),
           ),
           title: Text(
-            (row[titleKey] ?? '记录 ${index + 1}').toString(),
+            title(row).trim().isEmpty ? '记录 ${index + 1}' : title(row),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          subtitle: Text(subtitle(row)),
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: SelectableText(
-                const JsonEncoder.withIndent('  ').convert(row),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final detail in details(row))
+                    XiangjiLabeledValue(
+                      label: detail.key,
+                      value: detail.value,
+                    ),
+                ],
               ),
             ),
           ],
         );
       },
     );
+  }
+
+  String _discoverySource(String value) {
+    final lower = value.toLowerCase();
+    if (lower.contains('reality')) return '行动后的现实结果与事前预测不一致';
+    if (lower.contains('user')) return '你直接纠正了军师的理解';
+    return '新的可追溯现实材料触发了复核';
+  }
+
+  String _naturalJsonList(Object? raw) {
+    try {
+      final value = raw is String ? jsonDecode(raw) : raw;
+      if (value is List) {
+        final items = value
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+        return items.isEmpty ? '当前没有已确认记录' : items.join('；');
+      }
+    } catch (_) {}
+    return '当前没有已确认记录';
+  }
+
+  String _reviewModel(Object? raw) {
+    try {
+      final value = raw is String ? jsonDecode(raw) : raw;
+      if (value is Map) {
+        return <String>[
+          if ((value['north_star'] ?? '').toString().trim().isNotEmpty)
+            '核心目标：${value['north_star']}',
+          if ((value['war_worthiness'] ?? '').toString().trim().isNotEmpty)
+            '为什么值得投入：${value['war_worthiness']}',
+          if ((value['victory_criteria'] ?? '').toString().trim().isNotEmpty)
+            '胜利判据：${value['victory_criteria']}',
+          if ((value['exit_criteria'] ?? '').toString().trim().isNotEmpty)
+            '退出判据：${value['exit_criteria']}',
+        ].join('；');
+      }
+    } catch (_) {}
+    return '战前模型已保留，但当前没有可呈现摘要';
+  }
+
+  String _reviewStrategies(Object? raw) {
+    try {
+      final value = raw is String ? jsonDecode(raw) : raw;
+      if (value is List) {
+        final names = value
+            .whereType<Map>()
+            .map((item) => (item['name'] ?? '').toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+        return names.isEmpty ? '当前没有路线摘要' : names.join('；');
+      }
+    } catch (_) {}
+    return '当前没有路线摘要';
+  }
+
+  String _reviewOutcome(Object? raw) {
+    try {
+      final value = raw is String ? jsonDecode(raw) : raw;
+      if (value is Map) {
+        final reality = (value['reality'] ?? '').toString().trim();
+        final outcome = switch ((value['classification'] ?? '')
+            .toString()
+            .toUpperCase()) {
+          'WON' => '达到胜利判据',
+          'LOST' => '没有达到胜利判据',
+          'RETREAT' => '按退出条件停止投入',
+          _ => '战役已经结束并进入复盘',
+        };
+        return reality.isEmpty ? outcome : '$outcome；现实记录：$reality';
+      }
+    } catch (_) {}
+    return '战役已经结束并进入复盘';
   }
 }
 
@@ -323,12 +708,14 @@ class XiangjiSettingsPage extends StatefulWidget {
 class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
   static const String _plainLanguageKey = 'xiangji_plain_language_v1';
   static const String _monitorKey = 'xiangji_monitor_enabled_v1';
+  static const String _methodTrainingKey = 'xiangji_method_training_v1';
   static const String _cloudSensitiveKey =
       'xiangji_sensitive_cloud_authorized_v1';
 
   final KeyValueDao _kv = KeyValueDao();
   bool _plainLanguage = false;
   bool _monitorEnabled = true;
+  bool _methodTrainingEnabled = false;
   bool _sensitiveCloudAuthorized = false;
   bool _loading = true;
   bool _working = false;
@@ -345,12 +732,14 @@ class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
       _kv.getString(_plainLanguageKey),
       _kv.getString(_monitorKey),
       _kv.getString(_cloudSensitiveKey),
+      _kv.getString(_methodTrainingKey),
     ]);
     if (!mounted) return;
     setState(() {
       _plainLanguage = values[0] == '1';
       _monitorEnabled = values[1] != '0';
       _sensitiveCloudAuthorized = values[2] == '1';
+      _methodTrainingEnabled = values[3] == '1';
       _loading = false;
     });
   }
@@ -364,7 +753,7 @@ class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
     final directory = Directory(p.join(root.path, 'xiangji', 'exports'));
     await directory.create(recursive: true);
     final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
-    final file = File(p.join(directory.path, 'xiangji_v6_1_rev3_$stamp.json'));
+    final file = File(p.join(directory.path, 'xiangji_v6_1_rev4_$stamp.json'));
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(snapshot));
     if (mounted) setState(() => _lastExportPath = file.path);
     return file.path;
@@ -425,8 +814,8 @@ class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
         XiangjiFormFieldSpec(keyName: 'misses', label: '连续预测失误次数', initialValue: '0', required: true, keyboardType: TextInputType.number),
         XiangjiFormFieldSpec(keyName: 'waste', label: '投入上升但无结果周期', initialValue: '0', required: true, keyboardType: TextInputType.number),
         XiangjiFormFieldSpec(keyName: 'fronts', label: '并行高负荷战役数', initialValue: '0', required: true, keyboardType: TextInputType.number),
-        XiangjiFormFieldSpec(keyName: 'risk', label: '是否高风险不可逆（yes/no）', initialValue: 'no', required: true),
-        XiangjiFormFieldSpec(keyName: 'debt', label: '是否有高认识债务（yes/no）', initialValue: 'no', required: true),
+        XiangjiFormFieldSpec(keyName: 'risk', label: '是否高风险不可逆（是/否）', initialValue: '否', required: true),
+        XiangjiFormFieldSpec(keyName: 'debt', label: '是否有会改变决定的关键未知（是/否）', initialValue: '否', required: true),
         XiangjiFormFieldSpec(keyName: 'opportunity_met', label: '已满足机会条件数', initialValue: '0', required: true, keyboardType: TextInputType.number),
         XiangjiFormFieldSpec(keyName: 'opportunity_total', label: '机会条件总数', initialValue: '0', required: true, keyboardType: TextInputType.number),
       ],
@@ -502,10 +891,23 @@ class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
                         value: _monitorEnabled,
                         onChanged: (value) async {
                           await _set(_monitorKey, value);
+                          await XiangjiStrategistMonitorService.syncSchedule();
                           if (mounted) setState(() => _monitorEnabled = value);
                         },
                         title: const Text('开启主动监督'),
                         subtitle: const Text('按五色状态提示偏离、机会、战线过多和不可逆风险。'),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _methodTrainingEnabled,
+                        onChanged: (value) async {
+                          await _set(_methodTrainingKey, value);
+                          if (mounted) {
+                            setState(() => _methodTrainingEnabled = value);
+                          }
+                        },
+                        title: const Text('开启可选的方法训练'),
+                        subtitle: const Text('在“为什么”中加入与当前真实问题相关的一步练习；不会弹出课程墙，也不会阻塞行动。'),
                       ),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -537,7 +939,7 @@ class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.settings_suggest_outlined),
-                        title: const Text('打开全局 AI Provider 设置'),
+                        title: const Text('打开全局 AI 服务设置'),
                         subtitle: const Text('API Key 仍由全局设置管理，不写入向己数据库或导出文件。'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.of(context).push(

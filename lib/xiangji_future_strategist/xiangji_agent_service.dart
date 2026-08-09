@@ -23,6 +23,9 @@ enum XiangjiAgentId {
   reviewHistorian,
   monitor,
   knowledgeRouter,
+  problemStateManager,
+  cognitiveExperienceGenerator,
+  methodLearningAdapter,
 }
 
 extension XiangjiAgentIdX on XiangjiAgentId {
@@ -40,6 +43,9 @@ extension XiangjiAgentIdX on XiangjiAgentId {
         XiangjiAgentId.reviewHistorian => 'A10',
         XiangjiAgentId.monitor => 'A11',
         XiangjiAgentId.knowledgeRouter => 'A12',
+        XiangjiAgentId.problemStateManager => 'A13',
+        XiangjiAgentId.cognitiveExperienceGenerator => 'A14',
+        XiangjiAgentId.methodLearningAdapter => 'A15',
       };
 
   String get label => switch (this) {
@@ -56,6 +62,9 @@ extension XiangjiAgentIdX on XiangjiAgentId {
         XiangjiAgentId.reviewHistorian => '战史官',
         XiangjiAgentId.monitor => '主动监督',
         XiangjiAgentId.knowledgeRouter => '知识路由器',
+        XiangjiAgentId.problemStateManager => '持久问题状态管理',
+        XiangjiAgentId.cognitiveExperienceGenerator => '认知体验生成',
+        XiangjiAgentId.methodLearningAdapter => '方法学习适配',
       };
 }
 
@@ -126,7 +135,7 @@ class XiangjiAgentService {
         _ai = ai ?? UnifiedAiService(),
         _settings = settings ?? GlobalAiSettings();
 
-  static const String promptVersion = 'xiangji-v6.1-rev3-sck-p0';
+  static const String promptVersion = 'xiangji-v6.1-rev4-cel-persistent-solver';
 
   final XiangjiDao _dao;
   final XiangjiKnowledgeRouter _router;
@@ -465,6 +474,7 @@ class XiangjiAgentService {
       if (options.length < 2) {
         throw const FormatException('重大战役必须返回至少两个真正不同的战略选项。');
       }
+      var preferredCount = 0;
       for (final option in options) {
         if (option is! Map ||
             (option['name'] ?? '').toString().trim().isEmpty ||
@@ -472,11 +482,30 @@ class XiangjiAgentService {
             option['benefits'] is! List ||
             option['costs'] is! List ||
             (option['reversibility'] ?? '').toString().trim().isEmpty ||
-            option['stop_conditions'] is! List) {
+            option['stop_conditions'] is! List ||
+            (option['target_gap'] ?? '').toString().trim().isEmpty ||
+            (option['mechanism_for_this_case'] ?? '')
+                .toString()
+                .trim()
+                .isEmpty ||
+            (option['key_assumption'] ?? '').toString().trim().isEmpty ||
+            (option['why_not_other_options'] ?? '')
+                .toString()
+                .trim()
+                .isEmpty ||
+            (option['switch_trigger'] ?? '').toString().trim().isEmpty) {
           throw const FormatException(
-            '每条战略必须包含类型、收益、成本、可逆性与停止条件。',
+            '每条战略必须针对当前案例包含目标差距、作用机制、关键假设、路线取舍、切换触发与停止条件。',
           );
         }
+        if (option['preferred'] == true) preferredCount++;
+      }
+      if (preferredCount == 0 && options.first is Map) {
+        (options.first as Map)['preferred'] = true;
+        preferredCount = 1;
+      }
+      if (preferredCount != 1) {
+        throw const FormatException('战略路线必须且只能有一个军师首选。');
       }
       if (knowledge.trace.debtIds.isNotEmpty &&
           (input['war_worthiness'] ?? '').toString() == 'must') {
@@ -587,6 +616,7 @@ class XiangjiAgentService {
           .map((item) => (item['text'] ?? item['content'] ?? item).toString())
           .toList(),
     );
+    final caseOptions = _ensureCaseOptions(draft);
     return switch (agent) {
       XiangjiAgentId.actionOfficer => <String, Object?>{
           'current_action': currentAction,
@@ -735,8 +765,12 @@ class XiangjiAgentService {
             'money': '不触碰不可承受预算',
             'attention': '一次只推进一个关键算子',
           },
-          'options': _ensureTwoOptions(_draftMaps(draft, 'strategy_options')),
-          'recommended_option': '可逆试探',
+          'options': caseOptions,
+          'recommended_option': caseOptions
+              .firstWhere(
+                (option) => option['preferred'] == true,
+                orElse: () => caseOptions.first,
+              )['name'],
           'reasoning_summary': _draftText(draft, 'why'),
           'needs_red_team': true,
         },
@@ -806,6 +840,35 @@ class XiangjiAgentService {
           'rule_ids': knowledge.preflight.ruleIds,
           'message': '检索命中只提供上下文，不自动升级为事实。',
         },
+      XiangjiAgentId.problemStateManager => <String, Object?>{
+          'input_type':
+              request.additionalContext['input_classification'] ?? 'NEED',
+          'problem_identity': request.problemId,
+          'update_existing_problem': true,
+          'current_focus': _draftText(draft, 'target_gap'),
+          'current_experiment': currentAction,
+          'next_verification': _draftText(draft, 'prediction'),
+          'message': '这条输入继续更新同一道题，并生成不可覆盖的新状态版本。',
+        },
+      XiangjiAgentId.cognitiveExperienceGenerator =>
+        <String, Object?>{
+          'primary_answer': currentAction,
+          'experience_interpretation_split': true,
+          'model_is_revisable': true,
+          'competing_causes': _draftStrings(draft, 'causal_hypotheses'),
+          'case_differences':
+              _draftStrings(draft, 'relevant_differences'),
+          'grounding_summary': _draftText(draft, 'grounding_reason'),
+          'action_mechanism': _draftText(draft, 'operator_mechanism'),
+          'developer_language_hidden': true,
+        },
+      XiangjiAgentId.methodLearningAdapter => <String, Object?>{
+          'just_in_time_method':
+              '把当前体验与解释分开，再用能区分候选原因的现实结果继续判断。',
+          'transfer_prompt':
+              '下次遇到类似情境，先各写一句“实际发生了什么”和“我怎样解释它”。',
+          'training_optional': true,
+        },
     };
   }
 
@@ -860,30 +923,68 @@ class XiangjiAgentService {
         .toList();
   }
 
-  List<Map<String, Object?>> _ensureTwoOptions(
-    List<Map<String, Object?>> options,
+  List<Map<String, Object?>> _ensureCaseOptions(
+    Map<String, Object?> draft,
   ) {
+    final options = _draftMaps(draft, 'strategy_options');
     if (options.length >= 2) return options;
-    return const <Map<String, Object?>>[
+    final need = _draftText(draft, 'need', fallback: '当前问题');
+    final gap = _draftText(
+      draft,
+      'target_gap',
+      fallback: '缺少能改变下一步的现实信息',
+    );
+    final action = _draftText(
+      draft,
+      'current_action',
+      fallback: '取得一个能区分候选原因的现实样本',
+    );
+    final mechanism = _draftText(
+      draft,
+      'operator_mechanism',
+      fallback: '让候选原因产生不同的可观察结果',
+    );
+    final signal = _draftText(
+      draft,
+      'change_signals',
+      fallback: '现实与事前预测相反',
+    );
+    return <Map<String, Object?>>[
       <String, Object?>{
-        'name': '可逆试探',
-        'type': 'scout',
-        'benefits': <String>['低成本取得现实反馈'],
-        'costs': <String>['结论仍是暂时的'],
-        'opportunity_cost': '占用一次短周期验证时间',
+        'name': '先验证“$need”的关键未知',
+        'type': 'case_discriminating_scout',
+        'preferred': true,
+        'target_gap': gap,
+        'mechanism_for_this_case': '$action；$mechanism。',
+        'key_assumption': '能够取得至少一个与当前问题直接相关的现实样本',
+        'benefits': const <String>['直接减少关键未知', '保留退出空间'],
+        'costs': const <String>['终局结论仍需更多现实'],
+        'opportunity_cost': '占用一个短复核周期。',
         'reversibility': 'high',
-        'assumptions': <String>['存在可接触的现实样本或信息源'],
-        'stop_conditions': <String>['连续两轮没有新增信息'],
+        'assumptions': const <String>['现实样本能够区分候选原因'],
+        'why_preferred': '当前缺的是事实，不是更多抽象解释。',
+        'why_not_other_options': '直接加码会放大未经验证前提的代价。',
+        'switch_trigger': '获得稳定支持后转为限额推进；被反驳时回溯。',
+        'stop_conditions': <String>[signal],
+        'user_summary': '先用现实区分原因，再决定是否投入更多。',
       },
       <String, Object?>{
-        'name': '限额集中推进',
-        'type': 'bounded_commitment',
-        'benefits': <String>['更快验证结果链'],
-        'costs': <String>['消耗更多资源'],
-        'opportunity_cost': '暂时减少其他路线的注意力',
+        'name': '围绕“$need”限额推进一个周期',
+        'type': 'case_bounded_commitment',
+        'preferred': false,
+        'target_gap': gap,
+        'mechanism_for_this_case': '在资源上限内重复已获支持的机制并观察领先指标。',
+        'key_assumption': '当前机制已有现实支持且退出条件可执行',
+        'benefits': const <String>['更快检验机制稳定性'],
+        'costs': const <String>['占用更多资源'],
+        'opportunity_cost': '减少其他路线的注意力。',
         'reversibility': 'medium',
-        'assumptions': <String>['资源上限与成功判据已经明确'],
-        'stop_conditions': <String>['触及资源上限仍无领先指标'],
+        'assumptions': const <String>['成功判据与资源上限已明确'],
+        'why_preferred': '',
+        'why_not_other_options': '当前证据尚不足，因此暂不作为首选。',
+        'switch_trigger': '预测落空或触及资源上限时转回侦察或退出。',
+        'stop_conditions': <String>[signal, '触及资源上限仍无领先指标'],
+        'user_summary': '只投入一个可复核周期，以结果决定去留。',
       },
     ];
   }
@@ -949,6 +1050,12 @@ class XiangjiAgentService {
           '你是 A11 监督：依据跨周期结构化数据识别脱节和五色战况，少打扰。',
         XiangjiAgentId.knowledgeRouter =>
           '你是 A12 知识路由器：解释为何检索/排除资料，绝不把相似度或检索命中当作事实。',
+        XiangjiAgentId.problemStateManager =>
+          '你是 A13 持久问题状态管理：先判断输入是在更新当前问题还是开启真问题；反馈、体验和纠正默认更新稳定 problem_id，并产出当前焦点、已解决、未知、实验和下一验证。',
+        XiangjiAgentId.cognitiveExperienceGenerator =>
+          '你是 A14 认知体验生成：把已经运行的SCK机制转译成普通人能理解的双层体验；第一层只回答现在怎么办，第二层按需提供原因、证据和方法，禁止暴露内部对象名或JSON。',
+        XiangjiAgentId.methodLearningAdapter =>
+          '你是 A15 方法学习适配：只在当前真实问题中提供短小的即时方法解释与可选迁移练习，不建设哲学课程墙，也不阻塞行动。',
       };
 
   static Map<String, Object?> _outputContract(XiangjiAgentId agent) =>
@@ -1064,6 +1171,32 @@ class XiangjiAgentService {
             'ai_errors': <Object?>[],
             'candidate_knowledge': <Object?>[],
           },
+        XiangjiAgentId.problemStateManager => const <String, Object?>{
+            'input_type': 'NEED|NEW_FACT|EXPERIENCE|CORRECTION|ACTION_FEEDBACK|NEW_PROBLEM',
+            'problem_identity': '',
+            'update_existing_problem': true,
+            'resolved_items': <Object?>[],
+            'current_focus': '',
+            'key_unknowns': <Object?>[],
+            'current_experiment': '',
+            'next_verification': '',
+          },
+        XiangjiAgentId.cognitiveExperienceGenerator =>
+          const <String, Object?>{
+            'primary_answer': '',
+            'experience_interpretation_split': true,
+            'model_is_revisable': true,
+            'competing_causes': <Object?>[],
+            'case_differences': <Object?>[],
+            'grounding_summary': '',
+            'action_mechanism': '',
+            'developer_language_hidden': true,
+          },
+        XiangjiAgentId.methodLearningAdapter => const <String, Object?>{
+            'just_in_time_method': '',
+            'transfer_prompt': '',
+            'training_optional': true,
+          },
         _ => const <String, Object?>{
             'current_facts': <Object?>[],
             'system_judgments': <Object?>[],
@@ -1076,15 +1209,15 @@ class XiangjiAgentService {
       };
 
   static const String _systemConstitution = '''
-你是“向己·未来军师 V6.1 Final Rev.3”的 AI-First 结构化 Agent。只输出一个 JSON 对象，不输出 Markdown。
+你是“向己·未来军师 V6.1 Rev.4”的 AI-First 持久问题求解 Agent。只输出一个 JSON 对象，不输出 Markdown。
 
 AI-First 委托：
-- 用户主要提供 Need、现实事实、真实感觉/经历、最终决断、行动与反馈。
+- 用户主要提供 Need、现实事实、真实感觉/经历、最终决断、行动与反馈。每条输入先分类；反馈、体验和纠正默认继续更新稳定问题身份。
 - 你必须主动完成 Observe -> Model -> Judge -> Frame -> Solve -> Strategize -> RedTeam -> Plan -> Verify -> Learn，不能把内部分析字段变成用户作业。
 - 解题纸、F/U/H/C、认识根据、因果树、AND/OR、战略矩阵、红队与兵棋都由 AI 预填；用户只需采用、修改、反对、追问为什么或暂缓。
 - 向用户提问前执行 AskUserGuard。只有 MissingInformation AND HighDecisionImpact AND CannotInferFromExistingContext 同时成立，且低成本可逆侦察不能解决时，才可单轮问一个 EVSI 最高问题。
 - 守卫结果只允许 CONTINUE_AUTONOMOUS、ASK_ONE、SCOUT_IN_REALITY、USER_DECISION；永远不得输出 ASK_FORM。
-- A02 判断力必须先于高影响 A06/A07；重大战略自动经过 A08 红队；A00 给明确推荐和后手。
+- A02 判断力必须先于高影响 A06/A07；A13在求解前维护持久问题状态；重大战略自动经过 A08 红队；A00 给明确推荐和后手；A14/A15把方法变成用户体验。
 - 已有信息足以支持可逆一步时停止分析转行动；不得回复“请你自己列优缺点/填写结构化步骤”。
 
 不可绕过的 SCK 运行宪法：
@@ -1106,6 +1239,14 @@ SCK-015 每个 Operator 说明机制、所减 Gap、高层意义与根据。
 SCK-016 先审 Goal/价值；理性规划不替用户选择价值。
 SCK-017 信息足以支持可逆一步时停止反思转行动。
 SCK-018 RealityResult 反驳 Prediction 时保留旧版本、标 STALE、回溯并修正，禁止事后改写预测。
+
+Rev.4 用户体验与持久求解约束：
+- 同一道核心问题跨对话保持稳定 problem_id；每轮只追加 ProblemStateVersion、HypothesisTest 与 SolutionAttempt，不覆盖历史。
+- 现实反馈必须更新事实、假设、差距和算子优先级；完成行动不等于问题已经解决。
+- 当用户回答“我不知道”，不得重复追问；改用安全假设、低成本现实侦察或保守默认。
+- 每个高影响方法同时生成用户可理解的 CognitiveExperience。普通界面严禁出现 raw_context、causal_map、judgment_map、grounding_chain、problem_tree、strategy_matrix、red_team、war_game 或原始 JSON。
+- 第一层直接给“现在怎么办”；原因、证据、反例、最弱前提、未知和即时方法放在按需展开的第二层。
+- 每条战略必须针对当前案例说明目标差距、作用机制、关键假设、首选原因、不选其他路线的原因、切换触发和停止条件；不得用固定模板冒充个案战略。
 
 过去投入不能单独证明应继续投入。用户拥有最终决策权；建议不是命令。AI 输出本身同样接受根据、反例、验算和版本修订。
 

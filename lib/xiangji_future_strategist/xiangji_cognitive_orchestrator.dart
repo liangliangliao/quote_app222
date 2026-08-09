@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'xiangji_agent_service.dart';
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
+import 'xiangji_persistent_solver.dart';
 import 'xiangji_rev3_models.dart';
+import 'xiangji_rev4_models.dart';
 import 'xiangji_sck_runtime.dart';
 import 'xiangji_state_machine.dart';
 
@@ -12,7 +14,7 @@ typedef XiangjiOrchestrationProgress = void Function(
   XiangjiOrchestrationState state,
 );
 
-/// Executes the Rev.3 AI-first route end-to-end. A deterministic local kernel
+/// Executes the Rev.4 AI-first route end-to-end. A deterministic local kernel
 /// always produces a complete draft; configured model agents may improve that
 /// draft, but provider failure never turns the experience back into a form.
 class XiangjiCognitiveOrchestrator {
@@ -41,11 +43,22 @@ class XiangjiCognitiveOrchestrator {
     String retrievableContext = '',
     bool forceStrategic = false,
     bool clarificationAnswer = false,
+    XiangjiInputClassification? classification,
+    bool userDoesNotKnow = false,
+    bool realityContradicted = false,
+    bool methodTrainingEnabled = false,
     XiangjiOrchestrationProgress? onProgress,
   }) async {
     await _dao.ensureSchema();
     final problem = await _dao.problem(problemId);
     if (problem == null) throw StateError('问题不存在或已删除。');
+    final effectiveClassification = classification ??
+        XiangjiInputClassification(
+          type: XiangjiInputType.need,
+          updateExistingProblem: true,
+          targetProblemId: problemId,
+          reason: '直接调用持久求解器，继续更新当前问题。',
+        );
     var rawEventId = await _dao.problemRawEventId(problemId);
     if (utterance.trim() != problem.rawQuestion.trim()) {
       rawEventId = _idFactory('xf_event');
@@ -67,6 +80,12 @@ class XiangjiCognitiveOrchestrator {
         answerRef: 'raw_event:$rawEventId',
       );
     }
+    await _dao.saveInputClassification(
+      id: _idFactory('xf_input_classification'),
+      rawEventId: rawEventId,
+      inputText: utterance.trim(),
+      classification: effectiveClassification,
+    );
 
     final historyRows = await _dao.experiencesForProblem(problemId);
     final historyContext = historyRows
@@ -81,7 +100,7 @@ class XiangjiCognitiveOrchestrator {
     final previousModelContext = previousSituation != null &&
             (previousSituation['state'] ?? '').toString() !=
                 XiangjiSituationModelState.stale.wire
-        ? (previousSituation['model_json'] ?? '').toString().trim()
+        ? _naturalPreviousModelContext(previousSituation['model_json'])
         : '';
     final existingContext = <String>[
       attachmentText.trim(),
@@ -97,7 +116,10 @@ class XiangjiCognitiveOrchestrator {
       attachmentText: existingContext,
       forceStrategic: forceStrategic,
     );
-    final firstGuard = _sck.evaluateAskUserGuard(draft.informationNeeds);
+    final firstGuard = _guardForUnknownAnswer(
+      _sck.evaluateAskUserGuard(draft.informationNeeds),
+      userDoesNotKnow: userDoesNotKnow,
+    );
     final situationId = _idFactory('xf_situation');
     final version = await _dao.nextSituationModelVersion(
       objectType: 'problem',
@@ -164,6 +186,8 @@ class XiangjiCognitiveOrchestrator {
             'source_refs': sourceRefs,
             'prior_agent_outputs': outputs,
             'ask_user_guard': firstGuard.outcome.wire,
+            'input_classification': effectiveClassification.toMap(),
+            'user_does_not_know': userDoesNotKnow,
             'sck_rule_ids': XiangjiSckRuntime.rules.keys.toList(),
           },
         ));
@@ -205,7 +229,10 @@ class XiangjiCognitiveOrchestrator {
     }
 
     draft = draft.mergeAgentOutputs(outputs);
-    final guard = _sck.evaluateAskUserGuard(draft.informationNeeds);
+    final guard = _guardForUnknownAnswer(
+      _sck.evaluateAskUserGuard(draft.informationNeeds),
+      userDoesNotKnow: userDoesNotKnow,
+    );
     final clarification = guard.outcome == XiangjiAskUserOutcome.askOne
         ? guard.selectedNeed?.question ?? ''
         : '';
@@ -335,12 +362,29 @@ class XiangjiCognitiveOrchestrator {
         await _dao.linkScoutingInformationNeeds(problemId, actionId);
       }
     }
+    final cognitiveExperiences = await _persistRev4Runtime(
+      problemId: problemId,
+      situationId: situationId,
+      actionId: actionId,
+      utterance: utterance,
+      draft: draft,
+      classification: effectiveClassification,
+      sourceRefs: sourceRefs,
+      generatedBy: agentRunRecordIds['A13'] ??
+          agentRunRecordIds['A00'] ??
+          'A13_LOCAL_GUARD',
+      awaitingClarification: clarification.isNotEmpty,
+      userDoesNotKnow: userDoesNotKnow,
+      realityContradicted: realityContradicted,
+      methodTrainingEnabled: methodTrainingEnabled,
+    );
+    final problemProgress = await _dao.problemProgress(problemId);
     if (executionFrozen) {
       await _dao.saveAlert(
         id: _idFactory('xf_alert'),
         state: XiangjiAlertState.red,
         alertType: 'sck_high_risk_freeze',
-        reason: '当前为不可逆高风险且认识债务高；Rev.3 已冻结推进型行动。',
+        reason: '当前为不可逆高风险且认识债务高；Rev.4 已冻结推进型行动。',
         defaultAction: '先补证、降低不可逆性，并在需要时寻求专业复核。',
         problemId: problemId,
       );
@@ -402,7 +446,226 @@ class XiangjiCognitiveOrchestrator {
       agentRunIds: runRecordIds,
       warnings: warnings,
       executionFrozen: executionFrozen,
+      cognitiveExperiences: cognitiveExperiences,
+      inputClassification: effectiveClassification,
+      problemProgress: problemProgress,
     );
+  }
+
+  XiangjiAskUserDecision _guardForUnknownAnswer(
+    XiangjiAskUserDecision guard, {
+    required bool userDoesNotKnow,
+  }) {
+    if (!userDoesNotKnow || guard.outcome != XiangjiAskUserOutcome.askOne) {
+      return guard;
+    }
+    final need = guard.selectedNeed;
+    return XiangjiAskUserDecision(
+      outcome: XiangjiAskUserOutcome.scoutInReality,
+      scoutingNeeds:
+          need == null ? const <XiangjiInformationNeed>[] : <XiangjiInformationNeed>[need],
+      reason: '用户当前不知道答案；不重复追问，改用保守假设与低成本现实侦察继续求解。',
+    );
+  }
+
+  Future<List<XiangjiCognitiveExperienceDraft>> _persistRev4Runtime({
+    required String problemId,
+    required String situationId,
+    required String actionId,
+    required String utterance,
+    required XiangjiSituationDraft draft,
+    required XiangjiInputClassification classification,
+    required List<String> sourceRefs,
+    required String generatedBy,
+    required bool awaitingClarification,
+    required bool userDoesNotKnow,
+    required bool realityContradicted,
+    required bool methodTrainingEnabled,
+  }) async {
+    const manager = XiangjiProblemStateManager();
+    const generator = XiangjiCognitiveExperienceGenerator();
+    final previousState = await _dao.latestProblemStateVersion(problemId);
+    final version = await _dao.nextProblemStateVersion(problemId);
+    final lifecycle = manager.lifecycleFor(
+      classification: classification,
+      draft: draft,
+      awaitingClarification: awaitingClarification,
+      userDoesNotKnow: userDoesNotKnow,
+      realityContradicted: realityContradicted,
+    );
+    final stateVersionId = _idFactory('xf_problem_state');
+    await _dao.saveProblemStateVersion(<String, Object?>{
+      'id': stateVersionId,
+      ...manager.buildVersion(
+        problemId: problemId,
+        version: version,
+        state: lifecycle,
+        draft: draft,
+        previousState: previousState,
+        generatedBy: generatedBy,
+        sourceRefs: sourceRefs,
+      ),
+    });
+
+    final hypothesisIds = <String>[];
+    for (final hypothesisText in draft.causalHypotheses.take(6)) {
+      final parts = hypothesisText
+          .split('|')
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+      if (parts.isEmpty) continue;
+      final id = _idFactory('xf_hypothesis');
+      hypothesisIds.add(id);
+      await _dao.saveHypothesis(<String, Object?>{
+        'id': id,
+        'problem_id': problemId,
+        'effect_ref': 'problem_state:$stateVersionId',
+        'statement': parts.first,
+        'mechanism': parts.length > 1 ? parts.sublist(1).join('；') : '',
+        'support_refs_json': jsonEncode(draft.observedFacts),
+        'counter_refs_json': jsonEncode(draft.counterexamples),
+        'status': XiangjiHypothesisStatus.proposed.wire,
+        'scope': draft.need,
+      });
+    }
+
+    var hypothesisTestId = '';
+    if (hypothesisIds.length >= 2 || draft.unknowns.isNotEmpty) {
+      hypothesisTestId = _idFactory('xf_hypothesis_test');
+      await _dao.saveHypothesisTest(<String, Object?>{
+        'id': hypothesisTestId,
+        'problem_id': problemId,
+        'hypothesis_ids_json': jsonEncode(hypothesisIds),
+        'discriminating_action_id': actionId.isEmpty
+            ? 'planned:$stateVersionId'
+            : actionId,
+        'expected_patterns_json': jsonEncode(<String>[
+          draft.prediction,
+          '候选原因应当对同一现实实验给出可以区分的结果模式。',
+        ]),
+        'result_ref': '',
+        'conclusion': '',
+        'status': XiangjiHypothesisStatus.testDesigned.wire,
+      });
+    }
+
+    if (draft.relevantSimilarities.isNotEmpty ||
+        draft.relevantDifferences.isNotEmpty) {
+      final comparisonId = _idFactory('xf_case_comparison');
+      await _dao.saveCaseComparison(<String, Object?>{
+        'id': comparisonId,
+        'problem_id': problemId,
+        'situation_model_id': situationId,
+        'purpose': '判断旧案例或旧标签能否迁移到当前目标',
+        'current_case_refs_json': jsonEncode(sourceRefs),
+        'historical_case_refs_json': jsonEncode(
+          previousState == null
+              ? const <String>[]
+              : <String>['problem_state:${previousState['id']}'],
+        ),
+        'similarities_json': jsonEncode(draft.relevantSimilarities),
+        'differences_json': jsonEncode(draft.relevantDifferences),
+        'decisive_differences_json':
+            jsonEncode(draft.relevantDifferences.take(3).toList()),
+        'conclusion': draft.relevantDifferences.isEmpty
+            ? '尚不足以按旧案例迁移结论。'
+            : '只有在这些关键差异不改变作用机制时，旧案例才可有限迁移。',
+      });
+      for (final difference in draft.relevantDifferences.take(5)) {
+        await _dao.saveRelevantDifference(<String, Object?>{
+          'id': _idFactory('xf_relevant_difference'),
+          'comparison_id': comparisonId,
+          'feature': difference,
+          'why_it_matters': '该差异可能改变目标、因果机制或路线选择。',
+          'evidence_refs_json': jsonEncode(sourceRefs),
+          'impact_on_decision': draft.judgment,
+        });
+      }
+    }
+
+    final experiences = generator.generate(
+      draft: draft,
+      utterance: utterance,
+      idFactory: _idFactory,
+      hasPriorState: previousState != null,
+      realityConflict: realityContradicted,
+      userCorrection: classification.type == XiangjiInputType.correction,
+      oldModel: previousState == null
+          ? ''
+          : (previousState['current_focus'] ??
+                  previousState['next_verification'] ??
+                  '')
+              .toString(),
+      newReality: realityContradicted ||
+              classification.type == XiangjiInputType.correction
+          ? utterance
+          : '',
+      methodTrainingEnabled: methodTrainingEnabled,
+    );
+    for (final experience in experiences) {
+      await _dao.saveCognitiveExperience(
+        problemId: problemId,
+        situationModelId: situationId,
+        experience: experience,
+      );
+      if (experience.methodText.trim().isNotEmpty) {
+        await _dao.saveMethodExperience(<String, Object?>{
+          'id': _idFactory('xf_method_experience'),
+          'problem_id': problemId,
+          'cognitive_experience_id': experience.id,
+          'method_id': experience.presentation.wire,
+          'context': experience.trigger,
+          'explanation': experience.methodText,
+          'user_viewed': 0,
+          'user_response': '',
+          'transfer_prompt': experience.transferPrompt,
+        });
+      }
+    }
+
+    if (classification.type == XiangjiInputType.correction &&
+        previousState != null) {
+      await _dao.saveLearningMoment(<String, Object?>{
+        'id': _idFactory('xf_learning_moment'),
+        'problem_id': problemId,
+        'old_model': (previousState['current_focus'] ?? '').toString(),
+        'new_reality': utterance,
+        'revised_model': draft.judgment,
+        'method_learned': '用户纠正优先于旧推断；保留旧版本并按新现实重算。',
+        'evidence_refs_json': jsonEncode(sourceRefs),
+      });
+    }
+
+    await _dao.saveExplanationCard(<String, Object?>{
+      'id': _idFactory('xf_explanation_card'),
+      'problem_id': problemId,
+      'situation_model_id': situationId,
+      'target_ref': actionId.isEmpty
+          ? 'decision:$stateVersionId'
+          : 'action:$actionId',
+      ...generator.explanationCard(draft),
+    });
+
+    if (actionId.isNotEmpty) {
+      await _dao.saveSolutionAttempt(<String, Object?>{
+        'id': _idFactory('xf_solution_attempt'),
+        'problem_id': problemId,
+        'state_version_id': stateVersionId,
+        'action_id': actionId,
+        'operator_id': 'action:$actionId',
+        'rationale':
+            '${draft.operatorMechanism}；目标差距：${draft.targetGap}',
+        'prediction_id': hypothesisTestId,
+        'started_at_ms': 0,
+        'ended_at_ms': 0,
+        'outcome_ref': '',
+        'result_class': 'PENDING',
+        'failure_layer': '',
+        'status': 'PLANNED',
+      });
+    }
+    return experiences;
   }
 
   Future<void> _persistInformationNeeds({
@@ -500,16 +763,24 @@ class XiangjiCognitiveOrchestrator {
     }
 
     for (final experience in draft.bodyExperiences) {
+      final unconceptualized = const <String>[
+        '说不清',
+        '不对劲',
+        '难以描述',
+        '不知道怎么形容',
+      ].any(experience.contains);
       await _dao.addExperience(
         id: _idFactory('xf_experience'),
         rawEventId: rawEventId,
         problemId: problemId,
-        type: 'ai_extracted_experience',
+        type: unconceptualized
+            ? 'unconceptualized_experience'
+            : 'user_reported_experience',
         content: experience,
-        isUserWording: false,
+        isUserWording: true,
         observationConditions: <String, Object?>{
           'source_ref': 'raw_event:$rawEventId',
-          'extraction': 'ai_candidate',
+          'preserve_without_forced_label': unconceptualized,
         },
       );
     }
@@ -588,7 +859,13 @@ class XiangjiCognitiveOrchestrator {
       ],
       supportRefs: sourceRefs,
       counterexampleRefs: draft.counterexamples,
-      changeReason: 'Rev.3 AI 预填；等待用户采用、修改或反对',
+      applicabilityBoundary:
+          '仅适用于“${draft.trueProblem}”与当前约束；出现反例或现实冲突时必须修订。',
+      unexplainedDetails: <String>{
+        ...draft.unknowns,
+        ...draft.counterexamples,
+      }.toList(),
+      changeReason: 'Rev.4 AI 预填；等待用户采用、修改或反对',
       origin: 'ai_inference',
     );
   }
@@ -821,9 +1098,24 @@ class XiangjiCognitiveOrchestrator {
             (option['opportunity_cost'] ?? '').toString(),
         'reversibility': (option['reversibility'] ?? 'unknown').toString(),
         'key_assumptions_json':
-            jsonEncode(option['assumptions'] ?? const <Object?>[]),
+            jsonEncode(option['assumptions'] ?? <Object?>[
+              option['key_assumption'] ?? '',
+            ]),
         'stop_conditions_json':
             jsonEncode(option['stop_conditions'] ?? const <Object?>[]),
+        'target_gap': (option['target_gap'] ?? draft.targetGap).toString(),
+        'mechanism_for_this_case':
+            (option['mechanism_for_this_case'] ??
+                    draft.operatorMechanism)
+                .toString(),
+        'key_assumption': (option['key_assumption'] ?? '').toString(),
+        'why_preferred': (option['why_preferred'] ?? '').toString(),
+        'why_not_other_options':
+            (option['why_not_other_options'] ?? '').toString(),
+        'switch_trigger':
+            (option['switch_trigger'] ?? draft.changeSignals).toString(),
+        'user_summary': (option['user_summary'] ?? '').toString(),
+        'preferred': option['preferred'] == true ? 1 : 0,
         'evidence_level': 'hypothesis',
         'selected': 0,
         'version_no': nextVersion,
@@ -892,7 +1184,7 @@ class XiangjiCognitiveOrchestrator {
       });
     }
     await _dao.saveIndicator(<String, Object?>{
-      'id': '$campaignId-rev3-leading',
+      'id': '$campaignId-rev4-leading',
       'campaign_id': campaignId,
       'indicator_type': 'leading',
       'metric': '能区分战略路线的独立现实证据数',
@@ -904,7 +1196,7 @@ class XiangjiCognitiveOrchestrator {
       'created_at_ms': now,
     });
     await _dao.saveIndicator(<String, Object?>{
-      'id': '$campaignId-rev3-lagging',
+      'id': '$campaignId-rev4-lagging',
       'campaign_id': campaignId,
       'indicator_type': 'lagging',
       'metric': draft.successCriteria,
@@ -1010,8 +1302,6 @@ class XiangjiCognitiveOrchestrator {
         'key_gap': draft.targetGap,
         'operator_mechanism': draft.operatorMechanism,
         'epistemic_grounding': draft.groundingReason,
-        'situation_model_id': situationId,
-        'generated_by_ai': true,
       },
     );
     final problem = await _dao.problem(problemId);
@@ -1046,14 +1336,18 @@ class XiangjiCognitiveOrchestrator {
         XiangjiAgentId.judgmentEngine ||
         XiangjiAgentId.groundingAuditor =>
           XiangjiOrchestrationState.cognitiveModeling,
-        XiangjiAgentId.problemFramer || XiangjiAgentId.solver =>
+        XiangjiAgentId.problemFramer ||
+        XiangjiAgentId.problemStateManager ||
+        XiangjiAgentId.solver =>
           XiangjiOrchestrationState.problemSolving,
         XiangjiAgentId.strategist || XiangjiAgentId.redTeam =>
           XiangjiOrchestrationState.strategicCouncil,
         XiangjiAgentId.chiefStrategist => majorDecision
             ? XiangjiOrchestrationState.strategicCouncil
             : XiangjiOrchestrationState.problemSolving,
-        XiangjiAgentId.actionOfficer =>
+        XiangjiAgentId.actionOfficer ||
+        XiangjiAgentId.cognitiveExperienceGenerator ||
+        XiangjiAgentId.methodLearningAdapter =>
           XiangjiOrchestrationState.actionCompression,
         XiangjiAgentId.reviewHistorian =>
           XiangjiOrchestrationState.realityReconciliation,
@@ -1070,15 +1364,56 @@ class XiangjiCognitiveOrchestrator {
           XiangjiProblemState.epistemicReview,
         XiangjiAgentId.problemFramer => XiangjiProblemState.conceptReview,
         XiangjiAgentId.solver ||
+        XiangjiAgentId.problemStateManager ||
         XiangjiAgentId.strategist ||
         XiangjiAgentId.redTeam ||
         XiangjiAgentId.chiefStrategist =>
           XiangjiProblemState.solving,
         XiangjiAgentId.actionOfficer => XiangjiProblemState.actionReady,
+        XiangjiAgentId.cognitiveExperienceGenerator ||
+        XiangjiAgentId.methodLearningAdapter =>
+          XiangjiProblemState.actionReady,
         XiangjiAgentId.reviewHistorian => XiangjiProblemState.verifying,
         XiangjiAgentId.monitor || XiangjiAgentId.knowledgeRouter =>
           XiangjiProblemState.solving,
       };
+
+  String _naturalPreviousModelContext(Object? raw) {
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is! Map) return '';
+      final map = decoded.map(
+        (key, dynamic value) => MapEntry(key.toString(), value),
+      );
+      String text(String key) => (map[key] ?? '').toString().trim();
+      String list(String key) {
+        final value = map[key];
+        if (value is! List) return '';
+        return value
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .join('；');
+      }
+
+      return <String>[
+        if (text('need').isNotEmpty) '上一轮需要：${text('need')}',
+        if (text('true_problem').isNotEmpty)
+          '上一轮真问题：${text('true_problem')}',
+        if (text('goal').isNotEmpty) '上一轮目标：${text('goal')}',
+        if (list('observed_facts').isNotEmpty)
+          '已记录事实：${list('observed_facts')}',
+        if (list('unknowns').isNotEmpty) '仍未知：${list('unknowns')}',
+        if (text('judgment').isNotEmpty)
+          '上一轮可修订判断：${text('judgment')}',
+        if (text('current_action').isNotEmpty)
+          '上一轮行动：${text('current_action')}',
+        if (text('prediction').isNotEmpty)
+          '上一轮事前预测：${text('prediction')}',
+      ].join('\n');
+    } catch (_) {
+      return '';
+    }
+  }
 
   String _artifactRunId(String kind, Map<String, String> agentRunIds) =>
       switch (kind) {

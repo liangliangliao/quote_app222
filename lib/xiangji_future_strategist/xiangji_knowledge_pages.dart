@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -105,7 +106,7 @@ class _XiangjiKnowledgeCenterPageState
     final values = await showXiangjiFormDialog(
       context,
       title: '导入知识源',
-      note: 'K1=认识论/判断力，K2=问题求解，K3=战略与方法，K4=个人经验与战史。K0 是离线硬规则，不能通过文件导入覆盖。',
+      note: '请选择这份材料主要服务的用途。本地认识边界与安全规则受保护，外部文件不能覆盖。',
       fields: <XiangjiFormFieldSpec>[
         XiangjiFormFieldSpec(
           keyName: 'title',
@@ -115,30 +116,35 @@ class _XiangjiKnowledgeCenterPageState
         ),
         const XiangjiFormFieldSpec(
           keyName: 'layer',
-          label: '知识层',
-          initialValue: 'K3',
+          label: '主要用途',
+          hint: '判断与认识 / 问题求解 / 战略与方法 / 个人经验与战史',
+          initialValue: '战略与方法',
           required: true,
         ),
         const XiangjiFormFieldSpec(
           keyName: 'kind',
           label: '来源类型',
-          initialValue: 'book',
+          hint: '书籍 / 文档 / 笔记 / 战史',
+          initialValue: '书籍',
           required: true,
         ),
         const XiangjiFormFieldSpec(
           keyName: 'sensitivity',
           label: '敏感级别',
-          initialValue: 'normal',
+          hint: '普通 / 敏感 / 高度敏感',
+          initialValue: '普通',
           required: true,
         ),
       ],
       submitLabel: '本地保存并建立原文索引',
     );
     if (values == null) return;
-    final layer = XiangjiKnowledgeLayer.values.firstWhere(
-      (item) => item.wire == values['layer']!.toUpperCase(),
-      orElse: () => XiangjiKnowledgeLayer.k3,
-    );
+    final layer = switch (values['layer']!.trim()) {
+      '判断与认识' => XiangjiKnowledgeLayer.k1,
+      '问题求解' => XiangjiKnowledgeLayer.k2,
+      '个人经验与战史' => XiangjiKnowledgeLayer.k4,
+      _ => XiangjiKnowledgeLayer.k3,
+    };
     if (layer == XiangjiKnowledgeLayer.k0) {
       xiangjiShowMessage(context, 'K0 是受保护的离线硬规则层，不能从外部文件覆盖。');
       return;
@@ -148,8 +154,17 @@ class _XiangjiKnowledgeCenterPageState
         file: File(path),
         title: values['title']!,
         layer: layer,
-        kind: values['kind']!,
-        sensitivity: values['sensitivity']!,
+        kind: switch (values['kind']!.trim()) {
+          '文档' => 'document',
+          '笔记' => 'note',
+          '战史' => 'battle_history',
+          _ => 'book',
+        },
+        sensitivity: switch (values['sensitivity']!.trim()) {
+          '敏感' => 'sensitive',
+          '高度敏感' => 'highly_sensitive',
+          _ => 'normal',
+        },
       );
     });
   }
@@ -161,13 +176,13 @@ class _XiangjiKnowledgeCenterPageState
         .where((item) => item.mayClaimPersistentStorage)
         .toList();
     if (eligible.isEmpty) {
-      xiangjiShowMessage(context, '没有已验证且支持持久复用的 AI Provider。');
+      xiangjiShowMessage(context, '没有已验证且支持持久复用的远程 AI 服务。');
       return;
     }
     final providerId = await showDialog<String>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
-        title: const Text('选择远程知识 Provider'),
+        title: const Text('选择远程知识服务'),
         children: [
           for (final capability in eligible)
             SimpleDialogOption(
@@ -199,7 +214,7 @@ class _XiangjiKnowledgeCenterPageState
       builder: (dialogContext) => AlertDialog(
         title: const Text('删除远程副本'),
         content: Text(
-          '将从 ${file.providerId} 删除远程文件/索引。本地原始文件和引用定位不会删除。',
+          '将从所选远程 AI 服务删除文件与索引。本地原始文件和引用定位不会删除。',
         ),
         actions: [
           TextButton(
@@ -258,19 +273,21 @@ class _XiangjiKnowledgeCenterPageState
     final values = await showXiangjiFormDialog(
       context,
       title: '验证候选知识',
-      note: '“支持材料”必须是 Experience/Evidence/RealityResult 的可追溯 ID，不是模型输出或向量相似度。稳定化还需至少两个不同现实事件，或由你明确确认。',
+      note: '请写真实发生的支持材料和反例，不需要填写内部编号。模型输出或文本相似不能单独成为现实证据；稳定化还需多个事件支持或你的明确确认。',
       fields: <XiangjiFormFieldSpec>[
         XiangjiFormFieldSpec(
           keyName: 'support',
-          label: '真实支持材料 ID（每行一项）',
-          initialValue: (item['supporting_refs_json'] ?? '').toString(),
+          label: '真实支持材料（每行一项）',
+          initialValue:
+              _naturalList(item['supporting_refs_json']).replaceAll('；', '\n'),
           required: true,
           maxLines: 4,
         ),
         XiangjiFormFieldSpec(
           keyName: 'counter',
-          label: '已知反例 ID（可为空）',
-          initialValue: (item['counter_refs_json'] ?? '').toString(),
+          label: '已知反例（可为空）',
+          initialValue:
+              _naturalList(item['counter_refs_json']).replaceAll('；', '\n'),
           maxLines: 3,
         ),
         XiangjiFormFieldSpec(
@@ -296,14 +313,14 @@ class _XiangjiKnowledgeCenterPageState
         ),
         const XiangjiFormFieldSpec(
           keyName: 'counter_reviewed',
-          label: '是否已主动检查并保留反例（yes/no）',
-          initialValue: 'no',
+          label: '是否已主动检查并保留反例（是/否）',
+          initialValue: '否',
           required: true,
         ),
         const XiangjiFormFieldSpec(
           keyName: 'stable',
-          label: '目标状态（supported/stable/conflicted）',
-          initialValue: 'supported',
+          label: '希望怎样处理（继续验证/稳定保留/标记冲突）',
+          initialValue: '继续验证',
           required: true,
         ),
         const XiangjiFormFieldSpec(
@@ -314,7 +331,7 @@ class _XiangjiKnowledgeCenterPageState
       submitLabel: '执行治理校验',
     );
     if (values == null) return;
-    final target = values['stable']!.toLowerCase();
+    final target = values['stable']!.trim();
     await _run(() => _governance.validateCandidate(
           id: item['id'].toString(),
           supportingRefs: xiangjiLines(values['support']!),
@@ -327,10 +344,66 @@ class _XiangjiKnowledgeCenterPageState
           counterexamplesReviewed:
               values['counter_reviewed']!.toLowerCase() == 'yes' ||
                   values['counter_reviewed'] == '是',
-          requestStable: target == 'stable',
-          hasStrongConflict: target == 'conflicted',
+          requestStable: target == '稳定保留',
+          hasStrongConflict: target == '标记冲突',
         ));
   }
+
+  String _naturalList(Object? raw) {
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is List) {
+        final values = decoded
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+        return values.isEmpty ? '当前没有已确认材料' : values.join('；');
+      }
+    } catch (_) {}
+    final value = (raw ?? '').toString().trim();
+    return value.isEmpty ? '当前没有已确认材料' : value;
+  }
+
+  String _knowledgeState(String value) => switch (value.toUpperCase()) {
+        'DRAFT' => '草案',
+        'ACTIVE' => '当前使用中',
+        'STALE' => '现实已变化，等待复核',
+        'CANDIDATE' => '候选，等待现实验证',
+        'SUPPORTED' => '已有现实支持',
+        'STABLE' => '在明确范围内稳定保留',
+        'CONFLICTED' => '与现实或其他材料冲突',
+        'RETIRED' => '已停用',
+        _ => '当前仍可修订',
+      };
+
+  String _sourceKind(String value) => switch (value.toLowerCase()) {
+        'book' => '书籍',
+        'document' => '文档',
+        'note' => '笔记',
+        'battle_history' => '战史',
+        _ => '可追溯材料',
+      };
+
+  String _layerLabel(XiangjiKnowledgeLayer value) => switch (value) {
+        XiangjiKnowledgeLayer.k0 => '本地认识边界',
+        XiangjiKnowledgeLayer.k1 => '判断与认识',
+        XiangjiKnowledgeLayer.k2 => '问题求解',
+        XiangjiKnowledgeLayer.k3 => '战略与方法',
+        XiangjiKnowledgeLayer.k4 => '个人经验与战史',
+      };
+
+  String _processState(String value) => switch (value.toLowerCase()) {
+        'ready' || 'complete' || 'completed' => '已完成',
+        'processing' || 'pending' => '处理中',
+        'failed' => '需要重新处理',
+        _ => '已记录',
+      };
+
+  String _sensitivity(String value) => switch (value.toLowerCase()) {
+        'sensitive' => '敏感',
+        'highly_sensitive' => '高度敏感',
+        _ => '普通',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -345,7 +418,7 @@ class _XiangjiKnowledgeCenterPageState
             isScrollable: true,
             tabs: [
               Tab(text: '知识源'),
-              Tab(text: 'Provider'),
+              Tab(text: '远程服务'),
               Tab(text: '候选知识'),
               Tab(text: '冲突'),
             ],
@@ -411,8 +484,10 @@ class _XiangjiKnowledgeCenterPageState
         return XiangjiSectionCard(
           title: source.title,
           subtitle:
-              '${source.layer.label} · ${source.kind} · v${source.version}',
-          trailing: XiangjiStateBadge(label: source.status.name.toUpperCase()),
+              '${_layerLabel(source.layer)} · ${_sourceKind(source.kind)} · 第 ${source.version} 版',
+          trailing: XiangjiStateBadge(
+            label: _knowledgeState(source.status.name),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -420,9 +495,15 @@ class _XiangjiKnowledgeCenterPageState
                 spacing: 7,
                 runSpacing: 7,
                 children: [
-                  XiangjiStateBadge(label: '解析 ${source.parseStatus}'),
-                  XiangjiStateBadge(label: '索引 ${source.indexStatus}'),
-                  XiangjiStateBadge(label: '敏感度 ${source.sensitivity}'),
+                  XiangjiStateBadge(
+                    label: '读取 ${_processState(source.parseStatus)}',
+                  ),
+                  XiangjiStateBadge(
+                    label: '检索 ${_processState(source.indexStatus)}',
+                  ),
+                  XiangjiStateBadge(
+                    label: '敏感度 ${_sensitivity(source.sensitivity)}',
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -440,7 +521,7 @@ class _XiangjiKnowledgeCenterPageState
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     leading: const Icon(Icons.cloud_outlined),
-                    title: Text(file.providerId),
+                    title: const Text('远程 AI 知识副本'),
                     subtitle: Text(
                       '${file.state.label} · ${file.retentionInfo}${file.lastError.isEmpty ? '' : '\n${file.lastError}'}',
                     ),
@@ -490,7 +571,7 @@ class _XiangjiKnowledgeCenterPageState
         final item = _capabilities[index];
         return XiangjiSectionCard(
           title: item.label,
-          subtitle: item.providerId,
+          subtitle: '远程 AI 服务能力与数据留存边界',
           trailing: XiangjiStateBadge(
             label: item.verified ? '已验证' : '未验证',
             color: item.verified
@@ -505,7 +586,7 @@ class _XiangjiKnowledgeCenterPageState
                 runSpacing: 7,
                 children: [
                   _capability('持久文件', item.supportsPersistentFile),
-                  _capability('知识库/Store', item.supportsStore),
+                  _capability('知识库', item.supportsStore),
                   _capability('可删除', item.supportsDelete),
                   _capability('可复用', item.supportsReuse),
                   _capability('引用', item.supportsCitations),
@@ -553,8 +634,8 @@ class _XiangjiKnowledgeCenterPageState
         final status = (item['status'] ?? 'CANDIDATE').toString();
         return XiangjiSectionCard(
           title: (item['statement'] ?? '').toString(),
-          subtitle: '来自模型运行 ${item['origin_run_id'] ?? ''}',
-          trailing: XiangjiStateBadge(label: status),
+          subtitle: '由军师发现，必须经过现实材料与反例验证',
+          trailing: XiangjiStateBadge(label: _knowledgeState(status)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -568,11 +649,11 @@ class _XiangjiKnowledgeCenterPageState
               ),
               XiangjiLabeledValue(
                 label: '支持材料',
-                value: (item['supporting_refs_json'] ?? '').toString(),
+                value: _naturalList(item['supporting_refs_json']),
               ),
               XiangjiLabeledValue(
                 label: '反例',
-                value: (item['counter_refs_json'] ?? '').toString(),
+                value: _naturalList(item['counter_refs_json']),
               ),
               Wrap(
                 spacing: 8,
@@ -623,9 +704,7 @@ class _XiangjiKnowledgeCenterPageState
         return ListTile(
           tileColor: Colors.white,
           title: Text((row['impact'] ?? '知识冲突').toString()),
-          subtitle: Text(
-            '${row['left_ref']} ↔ ${row['right_ref']} · ${row['conflict_type']}\n状态：${row['resolution_status']}',
-          ),
+          subtitle: const Text('两组材料或解释给出了不一致结论；双方都会保留，等待按现实复核。'),
         );
       },
     );
@@ -668,6 +747,33 @@ class _XiangjiRetrievalTracePageState
     }
   }
 
+  String _traceState(String value) => switch (value.toUpperCase()) {
+        'COMPLETE' => '已形成可追溯判断',
+        'PARTIAL' => '部分来源可用',
+        'BLOCKED' => '关键来源不可用',
+        _ => '已记录本次来源选择',
+      };
+
+  String _sourceSummary(List<String> values) {
+    if (values.isEmpty) return '本次没有采用额外来源';
+    final labels = <String>{};
+    for (final value in values) {
+      final lower = value.toLowerCase();
+      if (lower.contains('k0') || lower.contains('rule')) {
+        labels.add('本地认识边界与安全规则');
+      } else if (lower.contains('todo')) {
+        labels.add('你的待办与行动记录');
+      } else if (lower.contains('experience') || lower.contains('reality')) {
+        labels.add('你的现实经验与行动结果');
+      } else if (lower.contains('knowledge') || lower.contains('passage')) {
+        labels.add('已导入的可追溯原文');
+      } else {
+        labels.add('当前问题中的可追溯材料');
+      }
+    }
+    return labels.join('；');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -691,31 +797,35 @@ class _XiangjiRetrievalTracePageState
                   itemBuilder: (context, index) {
                     final trace = _traces[index];
                     return XiangjiSectionCard(
-                      title: trace.requestId,
+                      title: '一次军师判断',
                       subtitle:
-                          '${trace.state.wire} · ${xiangjiDateTime(trace.createdAtMs)}',
+                          '${_traceState(trace.state.wire)} · ${xiangjiDateTime(trace.createdAtMs)}',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           XiangjiLabeledValue(
-                            label: '路由顺序',
-                            value: trace.routePlan.join(' → '),
+                            label: '怎样选择材料',
+                            value: '先使用本地硬边界，再查当前现实与已导入原文；远程来源只有在授权且必要时才参与。',
                           ),
                           XiangjiLabeledValue(
                             label: '采用来源',
-                            value: trace.sourcesUsed.join('\n'),
+                            value: _sourceSummary(trace.sourcesUsed),
                           ),
                           XiangjiLabeledValue(
                             label: '拒绝来源',
-                            value: trace.rejectedSources.join('\n'),
+                            value: trace.rejectedSources.isEmpty
+                                ? '没有需要拒绝的来源'
+                                : '有 ${trace.rejectedSources.length} 项材料因授权、可追溯性或现实根据不足而未采用',
                           ),
                           XiangjiLabeledValue(
-                            label: '触发硬规则',
-                            value: trace.ruleIds.join('、'),
+                            label: '认识边界',
+                            value: '有 ${trace.ruleIds.length} 条约束参与，防止把模型输出、相似文本或复杂推理冒充现实事实',
                           ),
                           XiangjiLabeledValue(
                             label: '冲突',
-                            value: trace.conflicts.join('\n'),
+                            value: trace.conflicts.isEmpty
+                                ? '当前采用材料之间没有已发现冲突'
+                                : '发现 ${trace.conflicts.length} 处冲突；双方均保留，等待现实复核',
                           ),
                         ],
                       ),

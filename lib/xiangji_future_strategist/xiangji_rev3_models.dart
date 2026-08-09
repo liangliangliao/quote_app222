@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'xiangji_rev4_models.dart';
+
 /// Rev.3 keeps the user's raw material immutable and stores the AI's current
 /// understanding as a separate, versioned model that can become stale.
 enum XiangjiSituationModelState {
@@ -517,6 +519,9 @@ class XiangjiCouncilResult {
     this.agentRunIds = const <String>[],
     this.warnings = const <String>[],
     this.executionFrozen = false,
+    this.cognitiveExperiences = const <XiangjiCognitiveExperienceDraft>[],
+    this.inputClassification,
+    this.problemProgress,
   });
 
   final String problemId;
@@ -530,6 +535,9 @@ class XiangjiCouncilResult {
   final List<String> agentRunIds;
   final List<String> warnings;
   final bool executionFrozen;
+  final List<XiangjiCognitiveExperienceDraft> cognitiveExperiences;
+  final XiangjiInputClassification? inputClassification;
+  final XiangjiProblemProgress? problemProgress;
 }
 
 String _nonEmpty(Object? value, String fallback) {

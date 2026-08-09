@@ -7,11 +7,12 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../ai_assistant/ai_assistant_file_text_extractor.dart';
 import '../data/kv_dao.dart';
+import '../pages/settings_page.dart';
 import 'xiangji_campaign_action_pages.dart';
 import 'xiangji_database.dart';
 import 'xiangji_repository.dart';
 import 'xiangji_rev3_models.dart';
-import 'xiangji_sck_runtime.dart';
+import 'xiangji_rev4_models.dart';
 import 'xiangji_ui_support.dart';
 
 class XiangjiStrategistConversationPanel extends StatefulWidget {
@@ -46,6 +47,9 @@ class _XiangjiStrategistConversationPanelState
   bool _awaitingClarification = false;
   bool _working = false;
   bool _listening = false;
+  bool _forceNewOnNextSubmit = false;
+  String _failedInput = '';
+  String _failureMessage = '';
 
   @override
   void initState() {
@@ -72,8 +76,10 @@ class _XiangjiStrategistConversationPanelState
     }
   }
 
-  Future<void> _submit() async {
-    final text = _controller.text.trim();
+  Future<void> _submit({bool userDoesNotKnow = false}) async {
+    final text = userDoesNotKnow
+        ? '我不知道这个答案，请用保守假设或低成本现实侦察继续。'
+        : _controller.text.trim();
     if (text.isEmpty) {
       xiangjiShowMessage(context, '请告诉军师你想要什么、发生了什么，或卡在哪里。');
       return;
@@ -95,11 +101,13 @@ class _XiangjiStrategistConversationPanelState
           .toList();
       final result = await widget.repository.consultStrategist(
         utterance: text,
-        problemId: _awaitingClarification ? _pendingProblemId : '',
+        problemId: _pendingProblemId,
         authorizedSensitiveContext: authorized,
         attachmentRefs: refs,
         attachmentText: attachmentText,
         clarificationAnswer: _awaitingClarification,
+        forceNewProblem: _forceNewOnNextSubmit,
+        userDoesNotKnow: userDoesNotKnow,
         onProgress: (state) {
           if (mounted) setState(() => _progress = state);
         },
@@ -112,11 +120,19 @@ class _XiangjiStrategistConversationPanelState
             result.outcome == XiangjiAskUserOutcome.askOne;
         _controller.clear();
         _attachments = const <PlatformFile>[];
+        _forceNewOnNextSubmit = false;
+        _failedInput = '';
+        _failureMessage = '';
       });
       await _loadHistory();
       await widget.onDataChanged?.call();
     } catch (error) {
-      if (mounted) xiangjiShowMessage(context, error);
+      if (mounted) {
+        setState(() {
+          _failedInput = text;
+          _failureMessage = error.toString();
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -228,7 +244,16 @@ class _XiangjiStrategistConversationPanelState
       _awaitingClarification = false;
       _controller.clear();
       _attachments = const <PlatformFile>[];
+      _forceNewOnNextSubmit = true;
+      _failedInput = '';
+      _failureMessage = '';
     });
+  }
+
+  Future<void> _retryFailed() async {
+    if (_failedInput.isEmpty || _working) return;
+    _controller.text = _failedInput;
+    await _submit();
   }
 
   Future<void> _respond(XiangjiDecisionDraftStatus status) async {
@@ -433,16 +458,77 @@ class _XiangjiStrategistConversationPanelState
     }
   }
 
+  Future<void> _submitMethodExercise(
+    XiangjiCognitiveExperienceDraft experience,
+  ) async {
+    final result = _result;
+    if (result == null) return;
+    final values = await showXiangjiFormDialog(
+      context,
+      title: '把练习结果交给军师',
+      note: experience.transferPrompt,
+      fields: const <XiangjiFormFieldSpec>[
+        XiangjiFormFieldSpec(
+          keyName: 'response',
+          label: '你实际观察到了什么',
+          hint: '写具体场景、变化或反例；不需要使用方法术语。',
+          required: true,
+          maxLines: 5,
+        ),
+      ],
+      submitLabel: '让军师反馈并更新问题',
+    );
+    if (values == null) return;
+    setState(() {
+      _working = true;
+      _progress = XiangjiOrchestrationState.cognitiveModeling;
+    });
+    try {
+      final authorized =
+          await KeyValueDao().getString(
+                    'xiangji_sensitive_cloud_authorized_v1',
+                  ) ==
+              '1';
+      final next = await widget.repository.submitMethodExercise(
+        problemId: result.problemId,
+        cognitiveExperienceId: experience.id,
+        response: values['response']!,
+        authorizedSensitiveContext: authorized,
+      );
+      if (!mounted) return;
+      setState(() {
+        _result = next;
+        _pendingProblemId = next.problemId;
+        _awaitingClarification =
+            next.outcome == XiangjiAskUserOutcome.askOne;
+      });
+      await _loadHistory();
+      await widget.onDataChanged?.call();
+    } catch (error) {
+      if (mounted) xiangjiShowMessage(context, error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _working = false;
+          _progress = null;
+        });
+      }
+    }
+  }
+
   Future<void> _showWhy() async {
     final result = _result;
     if (result == null) return;
-    final values = await Future.wait<Object?>(<Future<Object?>>[
-      widget.dao.reasoningArtifacts(problemId: result.problemId),
-      widget.dao.agentRuns(result.problemId),
-    ]);
+    final explanation = await widget.dao.latestExplanationCard(
+      result.problemId,
+    );
+    final experiences = result.cognitiveExperiences.isNotEmpty
+        ? result.cognitiveExperiences
+        : await widget.dao.cognitiveExperiences(
+            problemId: result.problemId,
+            limit: 12,
+          );
     if (!mounted) return;
-    final artifacts = values[0] as List<Map<String, Object?>>;
-    final runs = values[1] as List<Map<String, Object?>>;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -453,52 +539,85 @@ class _XiangjiStrategistConversationPanelState
             padding: const EdgeInsets.all(20),
             children: [
               const Text(
-                '为什么这样判断',
+                '为什么军师这么判断？',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '这是基于当前材料形成的理解，不是关于你的最终事实；新现实可以修订它。',
+                style: TextStyle(color: XiangjiPalette.muted, height: 1.45),
               ),
               const SizedBox(height: 12),
               XiangjiLabeledValue(
-                label: '当前认识根据',
-                value: result.draft.groundingReason,
+                label: '已确认的事实 / 体验',
+                value: _naturalList(explanation?['facts_json']),
               ),
               XiangjiLabeledValue(
-                label: '最脆弱前提 / 反方',
-                value: result.draft.redTeam.join('\n'),
+                label: '军师怎样理解',
+                value: (explanation?['interpretation'] ??
+                        result.draft.judgment)
+                    .toString(),
               ),
               XiangjiLabeledValue(
-                label: '会改变建议的现实信号',
-                value: result.draft.changeSignals,
+                label: '反例 / 不支持当前判断的材料',
+                value: _naturalList(explanation?['counterevidence_json']),
+              ),
+              XiangjiLabeledValue(
+                label: '最弱前提',
+                value: (explanation?['weakest_premise'] ?? '').toString(),
+              ),
+              XiangjiLabeledValue(
+                label: '现在仍不知道',
+                value: (explanation?['uncertainty'] ?? '').toString(),
+              ),
+              XiangjiLabeledValue(
+                label: '什么现实会改变判断',
+                value: (explanation?['what_changes_it'] ??
+                        result.draft.changeSignals)
+                    .toString(),
               ),
               const Divider(height: 28),
-              const Text(
-                '可追溯 AI 工作台',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-              for (final artifact in artifacts)
+              const Text('当前问题里用到的方法',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+              for (final experience in experiences)
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
-                  title: Text(_artifactLabel((artifact['kind'] ?? '').toString())),
-                  subtitle: Text('来源态势：${artifact['situation_model_id']}'),
+                  title: Text(experience.headline),
+                  subtitle: Text(experience.userMessage),
                   children: [
-                    SelectableText(
-                      _prettyJson((artifact['json_payload'] ?? '{}').toString()),
-                    ),
+                    for (final detail in experience.details.entries)
+                      XiangjiLabeledValue(
+                        label: detail.key,
+                        value: detail.value,
+                      ),
+                    if (experience.methodText.trim().isNotEmpty)
+                      XiangjiLabeledValue(
+                        label: '这次使用了什么方法',
+                        value: experience.methodText,
+                      ),
+                    if (experience.transferPrompt.trim().isNotEmpty)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          XiangjiLabeledValue(
+                            label: '可选的小练习',
+                            value: experience.transferPrompt,
+                          ),
+                          TextButton.icon(
+                            onPressed: () async {
+                              Navigator.of(sheetContext).pop();
+                              await Future<void>.delayed(Duration.zero);
+                              if (mounted) {
+                                await _submitMethodExercise(experience);
+                              }
+                            },
+                            icon: const Icon(Icons.reply_outlined),
+                            label: const Text('完成后让军师给反馈'),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
-              const Divider(height: 28),
-              Text(
-                'Agent 顺序：${runs.map((row) => row['agent_role']).join(' → ')}',
-                style: const TextStyle(color: XiangjiPalette.muted),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'SCK：${XiangjiSckRuntime.rules.keys.join(' · ')}',
-                style: const TextStyle(
-                  color: XiangjiPalette.muted,
-                  fontSize: 12,
-                  height: 1.45,
-                ),
-              ),
             ],
           ),
         ),
@@ -548,11 +667,15 @@ class _XiangjiStrategistConversationPanelState
           ),
           const SizedBox(height: 14),
           _composer(),
+          if (_failureMessage.isNotEmpty && !_working) ...[
+            const SizedBox(height: 14),
+            _analysisFailureCard(),
+          ],
           if (_working) ...[
             const SizedBox(height: 14),
             XiangjiSectionCard(
               title: _progress?.label ?? '军师正在工作',
-              subtitle: 'SCK 正在自动建模、判断、求解；若是重大问题还会自动进入战略与红队。',
+              subtitle: '正在自动整理现实、比较原因并形成可修订的下一步；重大问题还会比较多条路线与失败条件。',
               child: const LinearProgressIndicator(),
             ),
           ],
@@ -654,21 +777,88 @@ class _XiangjiStrategistConversationPanelState
     );
   }
 
+  Widget _analysisFailureCard() => XiangjiSectionCard(
+        title: '原始记录已保存，分析未完成',
+        subtitle: '你的输入没有丢失。可以重试，或检查并切换当前 AI 服务。',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _friendlyFailureMessage(),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: XiangjiPalette.muted,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: _retryFailed,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('重试分析'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsPage()),
+                  ),
+                  icon: const Icon(Icons.tune),
+                  label: const Text('切换 AI 服务'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  String _friendlyFailureMessage() {
+    final lower = _failureMessage.toLowerCase();
+    if (lower.contains('network') ||
+        lower.contains('socket') ||
+        lower.contains('timeout')) {
+      return '当前网络或远程 AI 服务没有及时响应。本地原始记录仍然完整。';
+    }
+    if (lower.contains('key') ||
+        lower.contains('auth') ||
+        lower.contains('401') ||
+        lower.contains('403')) {
+      return '当前 AI 服务授权不可用。请检查全局 AI 服务设置后重试。';
+    }
+    return '军师没有完成这一轮分析，但你的原始输入已保存；重试不会重复创建问题。';
+  }
+
   Widget _resultCard(XiangjiCouncilResult result) {
     if (result.outcome == XiangjiAskUserOutcome.askOne) {
       return XiangjiSectionCard(
-        title: '我还缺一个会改变战略的信息',
-        subtitle: 'AskUserGuard 已确认：现有历史不可推断，且无法由低成本侦察替代。本轮只问这一项。',
-        child: Text(
-          result.clarificationQuestion,
-          style: const TextStyle(fontSize: 18, height: 1.55),
+        title: '有一个信息可能改变下一步',
+        subtitle: '如果你知道，直接回答；不知道也没关系，军师会改用保守假设或现实侦察。',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              result.clarificationQuestion,
+              style: const TextStyle(fontSize: 18, height: 1.55),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _working
+                  ? null
+                  : () => _submit(userDoesNotKnow: true),
+              icon: const Icon(Icons.explore_outlined),
+              label: const Text('我不知道，先帮我侦察'),
+            ),
+          ],
         ),
       );
     }
     final draft = result.draft;
+    final progress = result.problemProgress;
     return XiangjiSectionCard(
-      title: '军师回复',
-      subtitle: '这是可修订建议，不是客观事实；认识状态：${draft.epistemicStatus}',
+      title: '现在怎么办',
+      subtitle: '这是当前可修订的理解，不是关于你的最终事实。',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -677,22 +867,36 @@ class _XiangjiStrategistConversationPanelState
               label: '我理解的真正问题',
               value: draft.trueProblem,
             ),
-          XiangjiLabeledValue(label: '军师判断', value: draft.judgment),
           XiangjiLabeledValue(
-            label: '我建议',
+            label: '军师首选',
             value: result.executionFrozen
                 ? '先冻结不可逆承诺，补证、降风险，并在需要时寻求专业复核。'
                 : draft.recommendation,
           ),
-          XiangjiLabeledValue(label: '为什么', value: draft.why),
           XiangjiLabeledValue(
             label: '当前一步',
             value: result.executionFrozen ? '' : draft.currentAction,
           ),
-          XiangjiLabeledValue(
-            label: '会改变建议的信号',
-            value: draft.changeSignals,
-          ),
+          if (progress != null) ...[
+            const Divider(height: 24),
+            Text(
+              progress.state.label,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            if (progress.currentFocus.isNotEmpty)
+              Text(
+                '当前在解：${progress.currentFocus}',
+                style: const TextStyle(height: 1.45),
+              ),
+            if (progress.keyUnknowns.isNotEmpty)
+              Text(
+                '还缺：${progress.keyUnknowns.take(2).join('；')}',
+                style: const TextStyle(
+                  color: XiangjiPalette.muted,
+                  height: 1.45,
+                ),
+              ),
+          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -707,8 +911,8 @@ class _XiangjiStrategistConversationPanelState
               OutlinedButton(onPressed: _oppose, child: const Text('不认同')),
               TextButton.icon(
                 onPressed: _showWhy,
-                icon: const Icon(Icons.account_tree_outlined),
-                label: const Text('为什么？'),
+                icon: const Icon(Icons.lightbulb_outline),
+                label: const Text('为什么 / 证据 / 方法'),
               ),
               TextButton(
                 onPressed: () => _respond(XiangjiDecisionDraftStatus.deferred),
@@ -718,11 +922,16 @@ class _XiangjiStrategistConversationPanelState
           ),
           if (result.warnings.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(
-              '部分云端角色未完成，已使用本地 SCK 草案保持闭环。',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: XiangjiPalette.muted,
-                  ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: XiangjiPalette.sand.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                '原始记录已保存；部分云端分析未完成，当前回复由本地规则保持连续。你可以继续使用，也可以稍后重试或切换 AI 服务。',
+                style: TextStyle(height: 1.45),
+              ),
             ),
           ],
         ],
@@ -744,15 +953,11 @@ class _XiangjiStrategistConversationPanelState
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
-            '${draft.epistemicStatus} · ${draft.status.wire}',
+            '${_epistemicLabel(draft.epistemicStatus)} · ${_decisionStatusLabel(draft.status)}',
           ),
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () async {
-          final problemId = draft.problemId;
-          final artifacts = await widget.dao.reasoningArtifacts(
-            problemId: problemId,
-          );
           if (!mounted) return;
           await showDialog<void>(
             context: context,
@@ -776,7 +981,10 @@ class _XiangjiStrategistConversationPanelState
                         label: '当前一步',
                         value: draft.currentAction,
                       ),
-                      Text('可追溯工件：${artifacts.length} 项'),
+                      XiangjiLabeledValue(
+                        label: '为什么',
+                        value: draft.why,
+                      ),
                     ],
                   ),
                 ),
@@ -794,22 +1002,38 @@ class _XiangjiStrategistConversationPanelState
     );
   }
 
-  String _artifactLabel(String kind) => switch (kind) {
-        'causal_map' => '竞争因果图',
-        'judgment_map' => '判断力同异/边界',
-        'grounding_chain' => '认识根据链',
-        'problem_tree' => 'Problem / AND-OR / Operators',
-        'strategy_matrix' => '战略矩阵',
-        'red_team' => '红队清单',
-        'war_game' => '兵棋场景',
-        _ => kind,
+  String _naturalList(Object? raw) {
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is List) {
+        final values = decoded
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+        return values.isEmpty ? '当前没有已确认材料' : values.join('；');
+      }
+    } catch (_) {
+      // Fall through to the user-facing empty state.
+    }
+    final value = (raw ?? '').toString().trim();
+    return value.isEmpty ? '当前没有已确认材料' : value;
+  }
+
+  String _epistemicLabel(String value) => switch (value.toUpperCase()) {
+        'SUPPORTED' => '当前有较强现实支持',
+        'PROVISIONAL' => '当前材料暂时支持',
+        'EPISTEMIC_DEBT' => '仍有会改变判断的关键未知',
+        'UNRESOLVED' => '现实根据仍不足',
+        _ => '当前理解仍可修订',
       };
 
-  String _prettyJson(String raw) {
-    try {
-      return const JsonEncoder.withIndent('  ').convert(jsonDecode(raw));
-    } catch (_) {
-      return raw;
-    }
-  }
+  String _decisionStatusLabel(XiangjiDecisionDraftStatus value) =>
+      switch (value) {
+        XiangjiDecisionDraftStatus.proposed => '待你决定',
+        XiangjiDecisionDraftStatus.adopted => '已采用',
+        XiangjiDecisionDraftStatus.modified => '已按你修改',
+        XiangjiDecisionDraftStatus.opposed => '你已反对',
+        XiangjiDecisionDraftStatus.deferred => '已暂缓',
+        XiangjiDecisionDraftStatus.stale => '已被新现实替代',
+      };
 }
