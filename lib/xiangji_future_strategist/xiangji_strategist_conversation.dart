@@ -10,6 +10,9 @@ import '../data/kv_dao.dart';
 import '../pages/settings_page.dart';
 import 'xiangji_campaign_action_pages.dart';
 import 'xiangji_database.dart';
+import 'xiangji_experience_widgets.dart';
+import 'xiangji_models.dart';
+import 'xiangji_problem_pages.dart';
 import 'xiangji_repository.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
@@ -42,6 +45,8 @@ class _XiangjiStrategistConversationPanelState
   List<XiangjiDecisionDraftRecord> _history =
       const <XiangjiDecisionDraftRecord>[];
   XiangjiCouncilResult? _result;
+  XiangjiSolverSnapshot? _solver;
+  List<XiangjiMethodEvent> _methodEvents = const <XiangjiMethodEvent>[];
   XiangjiOrchestrationState? _progress;
   String _pendingProblemId = '';
   bool _awaitingClarification = false;
@@ -73,6 +78,27 @@ class _XiangjiStrategistConversationPanelState
       setState(() => _history = values);
     } catch (_) {
       // The primary composer remains usable even when history cannot load.
+    }
+  }
+
+  Future<void> _refreshProblemContext(String problemId) async {
+    if (problemId.isEmpty) return;
+    try {
+      final values = await Future.wait<Object?>(<Future<Object?>>[
+        widget.dao.solverSnapshot(problemId),
+        widget.dao.latestMethodTurnEvents(
+          problemId: problemId,
+          userVisibleOnly: true,
+          limit: 3,
+        ),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _solver = values[0] as XiangjiSolverSnapshot?;
+        _methodEvents = values[1] as List<XiangjiMethodEvent>;
+      });
+    } catch (_) {
+      // The decision remains usable even if optional solver details fail.
     }
   }
 
@@ -124,6 +150,7 @@ class _XiangjiStrategistConversationPanelState
         _failedInput = '';
         _failureMessage = '';
       });
+      await _refreshProblemContext(result.problemId);
       await _loadHistory();
       await widget.onDataChanged?.call();
     } catch (error) {
@@ -240,6 +267,8 @@ class _XiangjiStrategistConversationPanelState
   void _newTopic() {
     setState(() {
       _result = null;
+      _solver = null;
+      _methodEvents = const <XiangjiMethodEvent>[];
       _pendingProblemId = '';
       _awaitingClarification = false;
       _controller.clear();
@@ -371,6 +400,7 @@ class _XiangjiStrategistConversationPanelState
         _awaitingClarification =
             next.outcome == XiangjiAskUserOutcome.askOne;
       });
+      await _refreshProblemContext(next.problemId);
       await _loadHistory();
       await widget.onDataChanged?.call();
       if (mounted) xiangjiShowMessage(context, '已保留原草案并按你的修改重算。');
@@ -444,6 +474,7 @@ class _XiangjiStrategistConversationPanelState
         _awaitingClarification =
             next.outcome == XiangjiAskUserOutcome.askOne;
       });
+      await _refreshProblemContext(next.problemId);
       await _loadHistory();
       await widget.onDataChanged?.call();
     } catch (error) {
@@ -502,6 +533,7 @@ class _XiangjiStrategistConversationPanelState
         _awaitingClarification =
             next.outcome == XiangjiAskUserOutcome.askOne;
       });
+      await _refreshProblemContext(next.problemId);
       await _loadHistory();
       await widget.onDataChanged?.call();
     } catch (error) {
@@ -682,6 +714,19 @@ class _XiangjiStrategistConversationPanelState
           if (_result != null && !_working) ...[
             const SizedBox(height: 14),
             _resultCard(_result!),
+            if (_methodEvents.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              XiangjiSectionCard(
+                title: '本轮为什么改了判断或办法',
+                subtitle: '只显示当前最影响决定的 0–3 项变化。',
+                child: Column(
+                  children: [
+                    for (final event in _methodEvents)
+                      XiangjiMethodEffectCard(event: event),
+                  ],
+                ),
+              ),
+            ],
           ] else if (!_working && _history.isNotEmpty) ...[
             const SizedBox(height: 18),
             const Text(
@@ -856,47 +901,77 @@ class _XiangjiStrategistConversationPanelState
     }
     final draft = result.draft;
     final progress = result.problemProgress;
-    return XiangjiSectionCard(
-      title: '现在怎么办',
-      subtitle: '这是当前可修订的理解，不是关于你的最终事实。',
-      child: Column(
+    final solver = _solver;
+    final hypotheses = (solver?.hypotheses ?? const <Map<String, Object?>>[])
+        .map(
+          (item) => (item['statement'] ?? item['claim'] ?? item['label'] ?? '')
+              .toString()
+              .trim(),
+        )
+        .where((item) => item.isNotEmpty)
+        .take(3)
+        .join('；');
+    final currentState = solver?.currentStateSummary.isNotEmpty == true
+        ? solver!.currentStateSummary
+        : draft.summary;
+    final goal = solver?.goalSummary.isNotEmpty == true
+        ? solver!.goalSummary
+        : draft.goal;
+    final keyGap = solver?.keyGapSummary.isNotEmpty == true
+        ? solver!.keyGapSummary
+        : draft.targetGap;
+    final subgoal = solver?.activeSubgoalSummary.isNotEmpty == true
+        ? solver!.activeSubgoalSummary
+        : (draft.subGoals.isEmpty ? '' : draft.subGoals.first);
+    final action = result.executionFrozen
+        ? ''
+        : solver?.activeOperatorSummary.isNotEmpty == true
+            ? solver!.activeOperatorSummary
+            : draft.currentAction;
+    final mechanism = (solver?.activeOperator['mechanism'] ?? '')
+            .toString()
+            .trim()
+            .isNotEmpty
+        ? (solver!.activeOperator['mechanism'] ?? '').toString()
+        : draft.operatorMechanism;
+    final prediction = solver?.predictionSummary.isNotEmpty == true
+        ? solver!.predictionSummary
+        : draft.prediction;
+
+    return XiangjiSolverCockpitView(
+      problem: draft.trueProblem,
+      currentState: currentState,
+      goal: goal,
+      keyGap: keyGap,
+      activeHypothesis: hypotheses,
+      subgoal: subgoal,
+      currentAction: action,
+      mechanism: result.executionFrozen ? '' : mechanism,
+      prediction: result.executionFrozen ? '' : prediction,
+      originalNeed: draft.need,
+      realityFacts: <String>[
+        ...draft.observedFacts,
+        ...draft.bodyExperiences,
+      ].take(5).toList(),
+      epistemicStatus: _epistemicLabel(draft.epistemicStatus),
+      keyGapReason:
+          (solver?.keyGap['selected_reason'] ?? '').toString(),
+      actionBoundary: result.executionFrozen
+          ? '当前已冻结不可逆承诺，补证并降低风险后再决定'
+          : '预计 ${draft.expectedMinutes} 分钟；${draft.changeSignals}',
+      progressLabel: progress?.state.label ?? '',
+      currentFocus: progress?.currentFocus ?? '',
+      footer: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (draft.trueProblem.trim().isNotEmpty)
-            XiangjiLabeledValue(
-              label: '我理解的真正问题',
-              value: draft.trueProblem,
-            ),
+          const Divider(height: 24),
+          XiangjiLabeledValue(label: '军师一句判断', value: draft.judgment),
           XiangjiLabeledValue(
             label: '军师首选',
             value: result.executionFrozen
                 ? '先冻结不可逆承诺，补证、降风险，并在需要时寻求专业复核。'
                 : draft.recommendation,
           ),
-          XiangjiLabeledValue(
-            label: '当前一步',
-            value: result.executionFrozen ? '' : draft.currentAction,
-          ),
-          if (progress != null) ...[
-            const Divider(height: 24),
-            Text(
-              progress.state.label,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            if (progress.currentFocus.isNotEmpty)
-              Text(
-                '当前在解：${progress.currentFocus}',
-                style: const TextStyle(height: 1.45),
-              ),
-            if (progress.keyUnknowns.isNotEmpty)
-              Text(
-                '还缺：${progress.keyUnknowns.take(2).join('；')}',
-                style: const TextStyle(
-                  color: XiangjiPalette.muted,
-                  height: 1.45,
-                ),
-              ),
-          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -917,6 +992,23 @@ class _XiangjiStrategistConversationPanelState
               TextButton(
                 onPressed: () => _respond(XiangjiDecisionDraftStatus.deferred),
                 child: const Text('暂缓'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => XiangjiProblemWorkspacePage(
+                        problemId: result.problemId,
+                        repository: widget.repository,
+                        dao: widget.dao,
+                      ),
+                    ),
+                  );
+                  await _refreshProblemContext(result.problemId);
+                  await widget.onDataChanged?.call();
+                },
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('打开完整解题台'),
               ),
             ],
           ),

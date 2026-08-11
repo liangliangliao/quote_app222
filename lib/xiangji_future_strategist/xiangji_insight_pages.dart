@@ -8,7 +8,9 @@ import 'package:path_provider/path_provider.dart';
 import '../data/kv_dao.dart';
 import '../pages/settings_page.dart';
 import 'xiangji_database.dart';
+import 'xiangji_experience_widgets.dart';
 import 'xiangji_models.dart';
+import 'xiangji_problem_pages.dart';
 import 'xiangji_repository.dart';
 import 'xiangji_rev4_models.dart';
 import 'xiangji_state_machine.dart';
@@ -16,9 +18,14 @@ import 'xiangji_strategist_monitor_service.dart';
 import 'xiangji_ui_support.dart';
 
 class XiangjiEpistemicWorldPage extends StatefulWidget {
-  const XiangjiEpistemicWorldPage({super.key, required this.dao});
+  const XiangjiEpistemicWorldPage({
+    super.key,
+    required this.dao,
+    required this.repository,
+  });
 
   final XiangjiDao dao;
+  final XiangjiRepository repository;
 
   @override
   State<XiangjiEpistemicWorldPage> createState() =>
@@ -37,6 +44,7 @@ class _XiangjiEpistemicWorldPageState
   List<Map<String, Object?>> _conflicts = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _learningMoments =
       const <Map<String, Object?>>[];
+  List<XiangjiMethodEvent> _methodEvents = const <XiangjiMethodEvent>[];
 
   @override
   void initState() {
@@ -45,7 +53,9 @@ class _XiangjiEpistemicWorldPageState
   }
 
   Widget _cognitiveChangeRows() {
-    if (_cognitiveChanges.isEmpty && _learningMoments.isEmpty) {
+    if (_methodEvents.isEmpty &&
+        _cognitiveChanges.isEmpty &&
+        _learningMoments.isEmpty) {
       return const XiangjiEmptyState(
         title: '认识还没有发生可见变化',
         message: '当军师区分体验与解释、比较案例或被新现实修订时，这里会记录“怎样变了”。',
@@ -55,6 +65,26 @@ class _XiangjiEpistemicWorldPageState
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        for (final event in _methodEvents)
+          XiangjiMethodEffectCard(
+            event: event,
+            footer: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => XiangjiProblemWorkspacePage(
+                      problemId: event.problemId,
+                      repository: widget.repository,
+                      dao: widget.dao,
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('打开对应军师解题台'),
+              ),
+            ),
+          ),
         for (final change in _cognitiveChanges)
           Card(
             elevation: 0,
@@ -277,6 +307,7 @@ class _XiangjiEpistemicWorldPageState
         widget.dao.cognitiveExperiences(limit: 300),
         widget.dao.conceptRealityConflicts(limit: 300),
         widget.dao.learningMoments(limit: 300),
+        widget.dao.methodEvents(userVisibleOnly: true, limit: 100),
       ]);
       if (!mounted) return;
       setState(() {
@@ -288,6 +319,7 @@ class _XiangjiEpistemicWorldPageState
             values[4] as List<XiangjiCognitiveExperienceDraft>;
         _conflicts = values[5] as List<Map<String, Object?>>;
         _learningMoments = values[6] as List<Map<String, Object?>>;
+        _methodEvents = values[7] as List<XiangjiMethodEvent>;
         _loading = false;
       });
     } catch (error) {

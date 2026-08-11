@@ -416,6 +416,20 @@ void main() {
       expect(initial.actionId, isNotEmpty);
       expect(initial.draft.operatorMechanism, isNotEmpty);
       expect(initial.draft.prediction, isNotEmpty);
+      final commandCenter = await dao.dashboard();
+      expect(commandCenter.currentProblem?.id, initial.problemId);
+      expect(commandCenter.keyGap, isNotEmpty);
+      final actionBrief = await dao.action(initial.actionId);
+      expect(actionBrief?.whyChain['action_purpose'], isNotEmpty);
+      expect(actionBrief?.whyChain['stop_condition'], isNotEmpty);
+      expect(
+        actionBrief?.whyChain['reporting_facts'],
+        isA<List<Object?>>().having(
+          (value) => value.length,
+          'one to three reality facts',
+          inInclusiveRange(1, 3),
+        ),
+      );
       await repository.respondToDecisionDraft(
         decisionDraftId: initial.decisionDraftId,
         status: XiangjiDecisionDraftStatus.adopted,

@@ -922,7 +922,7 @@ class XiangjiAgentService {
           ),
           'expected_minutes': _draftInt(draft, 'expected_minutes', 15),
           'reasoning_summary': _draftText(draft, 'why'),
-          'backtrack_point': '若现实与预测相反，先回溯算子/差距/问题，不归因于用户意志。',
+          'backtrack_point': '若现实与预测相反，先回溯当前办法、差距和真问题，不归因于用户意志。',
           'problem_frame': <String, Object?>{
             'statement': _draftText(draft, 'true_problem', fallback: request.task),
             'value_link': _draftText(draft, 'value_link'),
@@ -1041,7 +1041,7 @@ class XiangjiAgentService {
             'attention': '一次只推进一个关键差距',
           },
           'constraints': _draftStrings(draft, 'constraints'),
-          'front_concentration': '只把资源集中到当前 KeyGap。',
+          'front_concentration': '只把资源集中到当前最大差距。',
           'opportunity_cost': _draftStrings(draft, 'constraints'),
         },
       XiangjiAgentId.strategist => <String, Object?>{
@@ -1050,7 +1050,7 @@ class XiangjiAgentService {
           'resources': const <String, Object?>{
             'time': '先限额投入',
             'money': '不触碰不可承受预算',
-            'attention': '一次只推进一个关键算子',
+            'attention': '一次只推进一个关键办法',
           },
           'options': caseOptions,
           'recommended_option': caseOptions
@@ -1081,7 +1081,7 @@ class XiangjiAgentService {
           'if_then_branches': <Map<String, Object?>>[
             <String, Object?>{
               'if': '现实与预测相反',
-              'then': '停止沿原算子加码并回溯最早错误层',
+              'then': '停止沿原办法加码并回溯最早错误层',
             },
           ],
           'contingencies': <String>[
@@ -1094,7 +1094,7 @@ class XiangjiAgentService {
           'stop_loss': <String>[
             _draftText(draft, 'exit_criteria', fallback: '达到不可承受成本前停止'),
           ],
-          'retreat_route': '保留当前版本和已验证事实，退回 KeyGap 重算。',
+          'retreat_route': '保留当前版本和已验证事实，退回当前最大差距重算。',
         },
       XiangjiAgentId.chiefStrategist => <String, Object?>{
           'current_need': _draftText(draft, 'need', fallback: request.task),

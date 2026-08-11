@@ -2,12 +2,25 @@
 
 本次升级在现有 `agent/xiangji-v6-1-rev2` 最新产品分支上继续迭代；保留“未来军师”与“向己·智能目标导师”两个独立入口，不改主导航，不覆盖用户原始材料。
 
+## Master PRD 体验级纠偏
+
+`01_Xiangji_V6.1_Rev5.2_Master_PRD.pdf` 是唯一产品验收母版。不再把“数据表存在”、“方法事件已记录”或“单元测试通过”单独视为产品完成。本轮以用户在真实问题中是否能看见、操作并理解状态变化为门禁。
+
+| 母版硬要求 | 纠偏后的产品行为 | 验收 |
+|---|---|---|
+| 首页是“今日指挥部” | 默认首屏改为北极星、主战役、五色战况、关键差距、军师判断、今日战斗、换路条件与下次验算；对话是第二入口 | DOC-01 §28.1 / DOC-08 §1 |
+| 军师解题台首屏可见 | 对话结果与问题工作页共用同一解题台，默认显示真问题、现状、目标、唯一关键差距、当前原因、小步、唯一行动、机制和事前预测 | G3 / DOC-08 §2 |
+| 不在默认页泄露内部术语 | 默认解题链全部使用用户语言；原始对象、完整分层和债务收进“高级：完整解题纸” | DOC-08 §§3/12/14 |
+| 出征模式只保留行动所需信息 | 明确当前战斗、目的、唯一行动、时间边界、停止条件和回来后需报告的 1–3 项现实 | DOC-01 §22 / DOC-08 §10 |
+| 不允许模板化“先侦察” | 本地保底也会按求职、关系、市场/创业与一般问题分别计算差距、行动机制和预测；同为求职也区分“获得面试”与“面试转化” | G8 / T-SCK-02 |
+| 认识世界是变化档案，不是数据浏览器 | 每条用户可见方法变化显示对问题/办法的实际影响和现实验证，可直达对应军师解题台 | DOC-08 §8 |
+
 ## Rev.5.2 差异落地
 
 - 新增持久化 `XiangjiSolverSnapshot`，显式保存 ProblemFrame、CurrentState、Goal、GapVector、KeyGap、AND/OR SubGoal、Operator、Prediction/Reality 与 BacktrackHistory。
 - 新增 `XiangjiMethodEvent` 与数据库 Method Effect Gate。每项事件必须包含 Trigger、可审计操作摘要、数据变更、决策影响、用户摘要与现实检验；说明文字不能替代状态效果。
 - 新增 contextual `XiangjiSignatureCapabilityRouter`。MEC-001..014 作用于同一条持续求解链；每轮最多显示 3 项，Action Mode 全部隐藏。
-- “问题解题纸”升级为“军师解题台”，主屏直接呈现 S0、Goal、KeyGap、SubGoal、Operator 和事前预测，并提供三步内可展开的“为什么这一步”。
+- “问题解题纸”升级为“军师解题台”，主屏使用自然产品语言直接呈现现状、目标、关键差距、当前小步、唯一行动、机制和事前预测，内部术语只留在高级诊断。
 - 关键状态改变后显示轻量“军师改判”；现实反驳会更新 Hypothesis/Gap、失效旧 Operator，并按 Execution→Operator→Precondition→SubGoal→KeyGap→Goal→ProblemFrame→Concept→Judgment→Fact 回溯。
 - Agent 编排由旧角色集恢复为 A00–A19；提示词版本升级为 `xiangji-v6.1-rev5.2-p0-p9`，22 份基线提示词与能力注册表随应用打包。
 - Operator 合约补齐 preconditions、expected_effect、cost、risk、reversibility、information_value；缺失前提自动递归成为 PreconditionSubGoal。
@@ -48,3 +61,5 @@
 3. 正常界面单轮 0–3 项方法；Action Mode 0 项。
 4. A00–A19 代码注册连续，Prompt/ModelRun 记录 Rev.5.2 版本。
 5. 既有未来军师、智能目标导师、知行树回归测试与 Android release 构建继续通过。
+6. 对话结果和完整工作页的解题台使用同一可复用 UI 契约，并在 200% 字号下无溢出。
+7. 出征行动持久化 `action_purpose`、`stop_condition` 和 1–3 项 `reporting_facts`，任务打勾不能绕过现实验算。

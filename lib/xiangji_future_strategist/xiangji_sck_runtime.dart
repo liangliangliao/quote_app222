@@ -225,6 +225,15 @@ class XiangjiSckRuntime {
       notWorthFighting: notWorthFighting,
     );
     final opportunityReady = opportunityWindow && readyForBoundedCommitment;
+    final caseGap = _caseGap(directText, need);
+    final caseAction = _caseAction(
+      directText,
+      need,
+      major: major,
+    );
+    final caseMechanism = _caseMechanism(directText, need);
+    final casePrediction = _casePrediction(directText, need);
+    final caseGoal = _caseGoal(directText, need);
     late final String targetGap;
     if (urgentIrreversible && !commitmentBoundaryReady) {
       targetGap = '缺少决定期限、不可逆成本与可退出边界';
@@ -233,13 +242,11 @@ class XiangjiSckRuntime {
     } else if (readyForBoundedCommitment) {
       targetGap = '检验已获支持的机制能否稳定推进成功判据';
     } else if (major) {
-      targetGap = '缺少能区分多条战略路线的现实证据';
+      targetGap = '$caseGap；同时缺少能区分多条战略路线的现实证据';
     } else {
-      targetGap = '缺少一个能验证当前理解的可观察结果';
+      targetGap = caseGap;
     }
-    final scout = major
-        ? '在不做长期承诺的前提下，完成一次 25 分钟现实侦察：核实最可能改变路线选择的关键假设'
-        : '用 15 分钟完成一个最小可逆实验，并记录实际发生了什么';
+    final scout = caseAction;
     late final String currentAction;
     if (urgentIrreversible && !commitmentBoundaryReady) {
       currentAction = '先暂停不可逆承诺，补齐决定期限与退出成本';
@@ -415,14 +422,14 @@ class XiangjiSckRuntime {
       recommendation = '优先采用可逆试探，暂不把资源一次押在单一路线。';
     } else {
       judgment = '目前最有价值的不是继续抽象分析，而是用低成本行动取得能改变判断的现实证据。';
-      recommendation = '先做最小可逆实验，以现实结果替代继续猜测。';
+      recommendation = '先执行当前针对性小实验，以现实结果替代继续猜测。';
     }
 
     return XiangjiSituationDraft(
       need: need,
       summary: '用户正在处理“$need”。当前模型保留原话，并把观察、体验、解释和预测分开；这只是可修订的 AI 模型。',
       trueProblem: trueProblem,
-      goal: major ? '形成一项有胜利、止损与复核边界的现实决策' : '用现实反馈缩小关键差距',
+      goal: major ? '$caseGoal，并明确胜利、止损与复核边界' : caseGoal,
       valueLink: '在重要结果、可承受风险与个人自主之间保持一致',
       successCriteria: major
           ? '获得至少一条能区分路线的现实证据，并能明确采用、调整、等待或退出'
@@ -435,12 +442,12 @@ class XiangjiSckRuntime {
           : '当前根据主要来自用户原话${attachmentRefs.isEmpty ? '' : '和所附材料'}，认识状态仍是暂时支持；可逆侦察能以较低成本清偿最关键未知。',
       currentAction: currentAction,
       targetGap: targetGap,
-      operatorMechanism: '把关键假设放进现实，通过可观察结果区分竞争解释，而不是要求用户先填完内部分析表。',
+      operatorMechanism: caseMechanism,
       strategicMeaning: major ? '保留兵力和后手，同时提高下一轮决断质量。' : '尽快进入“行动—现实—修正”闭环。',
       groundingReason: facts.isEmpty
           ? '目前仅有用户原话与直接体验，外部事实尚未独立核实。'
           : '根据来自用户报告的可观察事件；外部原因仍保留为候选解释。',
-      prediction: '完成当前一步后，应至少得到一条可观察事实，足以支持继续、调整、等待或停止中的一个选择。',
+      prediction: casePrediction,
       changeSignals: changeSignals,
       observedFacts: facts,
       bodyExperiences: emotions,
@@ -534,6 +541,99 @@ class XiangjiSckRuntime {
       interpretations: interpretations,
     );
   }
+
+  String _caseGap(String sourceText, String need) {
+    if (_isWorkCase(sourceText)) {
+      if (_matches(sourceText, const <String>['有面试', '面试了', '面试通知']) &&
+          _matches(sourceText, const <String>['没有offer', '无offer', '没拿到', '被拒'])) {
+        return '已能获得面试，但尚未找到面试转化为录用的决定性差距';
+      }
+      if (_matches(sourceText, const <String>['投了', '投递', '简历']) &&
+          _matches(sourceText, const <String>['没有回复', '没回复', '没有面试', '无面试'])) {
+        return '投递已发生，但尚未找到获得有效回复的瓶颈';
+      }
+      return '尚未区分是方向不匹配、反馈回路不足，还是行动前阻力在主导结果';
+    }
+    if (_isRelationshipCase(sourceText)) {
+      return '尚未区分是目标与边界没有说清，还是互动方式反复触发防御';
+    }
+    if (_isMarketCase(sourceText)) {
+      return '尚缺一个能区分真实需求、渠道效率与资源约束的市场行为样本';
+    }
+    return '关于“$need”的当前解释还缺一个能改变下一步的可观察结果';
+  }
+
+  String _caseAction(
+    String sourceText,
+    String need, {
+    required bool major,
+  }) {
+    final minutes = major ? 25 : 15;
+    if (_isWorkCase(sourceText)) {
+      if (_matches(sourceText, const <String>['有面试', '面试了', '面试通知'])) {
+        return '用 $minutes 分钟复盘最近一次面试，只对照职位判据、对方追问与自己的具体回答，选出一个可在下次测试的转化瓶颈';
+      }
+      return '用 $minutes 分钟选一个真实职位，对照三项硬条件修改并发出一份定向材料，记录发送前后的阻力与回应';
+    }
+    if (_isRelationshipCase(sourceText)) {
+      return '选一个低冲突时段，只说一项可观察事实和一个具体请求，记录对方的实际回应而不先推测动机';
+    }
+    if (_isMarketCase(sourceText)) {
+      return '用 $minutes 分钟完成一次最小市场验证：向一个真实对象提出可拒绝的付费、预约或试用请求，保留明确接受或拒绝';
+    }
+    return '用 $minutes 分钟对“$need”做一次只改变一个条件的可逆小实验，记录行动前后的可观察变化';
+  }
+
+  String _caseMechanism(String sourceText, String need) {
+    if (_isWorkCase(sourceText)) {
+      return '把求职或工作瓶颈落到一个真实职位、反馈或行动样本，用结果区分方向、转化能力与行动阻力。';
+    }
+    if (_isRelationshipCase(sourceText)) {
+      return '把对动机的推测改成一次可观察的事实—请求—回应链，区分内容问题与互动机制。';
+    }
+    if (_isMarketCase(sourceText)) {
+      return '用真实对象的承诺或拒绝替代对市场需求的想象，使需求、渠道与资源约束产生可区分结果。';
+    }
+    return '把关于“$need”的关键假设放进一次只改变一个条件的现实行动，用结果区分竞争解释。';
+  }
+
+  String _casePrediction(String sourceText, String need) {
+    if (_isWorkCase(sourceText)) {
+      return '如果当前选中的求职或工作瓶颈是主因，这次定向行动应产生一条比原有模式更明确的回应、差异或下一个可测瓶颈。';
+    }
+    if (_isRelationshipCase(sourceText)) {
+      return '如果主要瓶颈是表达与互动机制，将动机推测换成事实和具体请求后，对方回应应出现可观察差异。';
+    }
+    if (_isMarketCase(sourceText)) {
+      return '如果需求或价值主张成立，真实对象应给出付费、预约、试用或明确拒绝中的一种可记录行为。';
+    }
+    return '如果当前办法真能缩小“$need”的关键差距，行动后应出现至少一条足以支持继续、调整或停止的可观察变化。';
+  }
+
+  String _caseGoal(String sourceText, String need) {
+    if (_isWorkCase(sourceText)) {
+      return '用可观察的求职或工作反馈，判断下一段最值得投入的方向与条件';
+    }
+    if (_isRelationshipCase(sourceText)) {
+      return '让关系中的需要、边界与回应变得可表达、可观察、可决定';
+    }
+    if (_isMarketCase(sourceText)) {
+      return '用真实市场行为判断“$need”是否值得继续投入';
+    }
+    return '让“$need”产生一个可观察、可停止、可由现实修订的结果';
+  }
+
+  bool _isWorkCase(String value) => _matches(value, const <String>[
+        '工作', '离职', '辞职', '职业', '上班', '求职', '简历', '投递', '面试', 'offer',
+      ]);
+
+  bool _isRelationshipCase(String value) => _matches(value, const <String>[
+        '关系', '伴侣', '朋友', '同事', '争论', '吵架', '沟通', '对方',
+      ]);
+
+  bool _isMarketCase(String value) => _matches(value, const <String>[
+        '创业', '投资', '合同', '机会', '市场', '客户', '收入', '付费', '成交',
+      ]);
 
   String _inferNeed(String raw) {
     var value = raw

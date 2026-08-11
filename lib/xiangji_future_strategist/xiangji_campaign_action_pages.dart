@@ -1658,6 +1658,39 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
     }
   }
 
+  String _actionPurpose(XiangjiActionRecord action) {
+    final purpose = (action.whyChain['action_purpose'] ??
+            action.whyChain['strategic_meaning'] ??
+            action.whyChain['key_gap'] ??
+            '')
+        .toString()
+        .trim();
+    return purpose.isEmpty ? '用一次现实行动缩小当前关键差距' : purpose;
+  }
+
+  String _stopCondition(XiangjiActionRecord action) {
+    final value = (action.whyChain['stop_condition'] ?? '').toString().trim();
+    if (value.isNotEmpty) return value;
+    return '达到 ${action.expectedMinutes} 分钟仍未出现关键信号，或出现安全、资源越界时，停止加码并回来验算。';
+  }
+
+  List<String> _reportingFacts(XiangjiActionRecord action) {
+    final raw = action.whyChain['reporting_facts'];
+    if (raw is List) {
+      final values = raw
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .take(3)
+          .toList();
+      if (values.isNotEmpty) return values;
+    }
+    return <String>[
+      '是否出现：${action.prediction}',
+      '实际做了什么，用了多少时间',
+      '有什么明显意外或身体、情绪体验',
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final action = _action;
@@ -1706,19 +1739,49 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            '预计 ${action.expectedMinutes} 分钟',
+                            '目的：${_actionPurpose(action)}',
+                            style: const TextStyle(
+                              color: Color(0xFFEAF4EF),
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '时间边界：预计 ${action.expectedMinutes} 分钟',
                             style: const TextStyle(color: Color(0xFFDDECE6)),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const XiangjiSectionCard(
-                      title: '完成后只需告诉军师',
-                      subtitle: '不用写完整复盘；3—5 个现实事实就够了。',
+                    XiangjiSectionCard(
+                      title: '行动边界',
+                      subtitle: '当前办法明确后，不再继续堆叠分析。',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          XiangjiLabeledValue(
+                            label: '这次行动服务于什么',
+                            value: _actionPurpose(action),
+                          ),
+                          XiangjiLabeledValue(
+                            label: '什么情况立即停止并回来',
+                            value: _stopCondition(action),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    XiangjiSectionCard(
+                      title: '回来后只需告诉军师 1–3 项现实',
+                      subtitle: '不需要选验算结论，也不需要填复盘表。',
                       child: Text(
-                        '• 实际做了什么\n• 实际耗时\n• 观察到的结果\n• 与事前预测是否一致\n• 有什么意外',
-                        style: TextStyle(height: 1.55),
+                        _reportingFacts(action)
+                            .asMap()
+                            .entries
+                            .map((entry) => '${entry.key + 1}. ${entry.value}')
+                            .join('\n'),
+                        style: const TextStyle(height: 1.55),
                       ),
                     ),
                     const SizedBox(height: 12),

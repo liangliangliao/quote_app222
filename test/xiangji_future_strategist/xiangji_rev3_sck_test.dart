@@ -139,6 +139,39 @@ void main() {
       expect(guard.outcome, XiangjiAskUserOutcome.scoutInReality);
     });
 
+    test('G8 local fallback changes Gap, mechanism and prediction by case', () {
+      final work = sck.buildLocalDraft('我投了 20 份简历但没有回复');
+      final relationship = sck.buildLocalDraft('我和伴侣沟通时总是吵架');
+      final market = sck.buildLocalDraft('我想验证新产品是否有客户付费');
+
+      expect(work.targetGap, contains('有效回复'));
+      expect(work.currentAction, contains('真实职位'));
+      expect(relationship.targetGap, contains('互动方式'));
+      expect(relationship.currentAction, contains('具体请求'));
+      expect(market.targetGap, contains('市场行为样本'));
+      expect(market.currentAction, contains('付费'));
+      expect(<String>{
+        work.operatorMechanism,
+        relationship.operatorMechanism,
+        market.operatorMechanism,
+      }, hasLength(3));
+      expect(<String>{
+        work.prediction,
+        relationship.prediction,
+        market.prediction,
+      }, hasLength(3));
+    });
+
+    test('T-SCK-02 same work label but different state changes bottleneck', () {
+      final acquisition = sck.buildLocalDraft('我投了 20 份简历但没有面试');
+      final conversion = sck.buildLocalDraft('我有面试但总是没拿到 offer');
+
+      expect(acquisition.targetGap, contains('有效回复'));
+      expect(conversion.targetGap, contains('面试转化'));
+      expect(acquisition.targetGap, isNot(conversion.targetGap));
+      expect(acquisition.currentAction, isNot(conversion.currentAction));
+    });
+
     test('irreversible urgent decision with no boundary asks one question', () {
       final draft = sck.buildLocalDraft('我现在必须签这个不可逆合同');
       final guard = sck.evaluateAskUserGuard(draft.informationNeeds);

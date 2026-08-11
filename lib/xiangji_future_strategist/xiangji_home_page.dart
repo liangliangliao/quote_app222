@@ -83,8 +83,8 @@ class _XiangjiFutureStrategistHomePageState
       appBar: AppBar(
         title: Text(
           _section == 0
-              ? _word('与军师对话', '与决策助手对话')
-              : _word('今日指挥部', '今日概览'),
+              ? _word('今日指挥部', '今日概览')
+              : _word('与军师对话', '与决策助手对话'),
         ),
         backgroundColor: XiangjiPalette.mist,
         actions: [
@@ -102,14 +102,14 @@ class _XiangjiFutureStrategistHomePageState
               onDestinationSelected: (value) => setState(() => _section = value),
               destinations: const <NavigationDestination>[
                 NavigationDestination(
-                  icon: Icon(Icons.auto_awesome_outlined),
-                  selectedIcon: Icon(Icons.auto_awesome),
-                  label: '与军师对话',
-                ),
-                NavigationDestination(
                   icon: Icon(Icons.dashboard_outlined),
                   selectedIcon: Icon(Icons.dashboard),
                   label: '今日指挥部',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.auto_awesome_outlined),
+                  selectedIcon: Icon(Icons.auto_awesome),
+                  label: '与军师对话',
                 ),
               ],
             )
@@ -127,12 +127,7 @@ class _XiangjiFutureStrategistHomePageState
                   ),
                 )
               : _section == 0
-                  ? XiangjiStrategistConversationPanel(
-                      repository: _repository,
-                      dao: _dao,
-                      onDataChanged: _load,
-                    )
-                  : RefreshIndicator(
+                  ? RefreshIndicator(
                       onRefresh: _load,
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
@@ -154,7 +149,7 @@ class _XiangjiFutureStrategistHomePageState
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 child: FilledButton.icon(
-                                  onPressed: () => setState(() => _section = 0),
+                                  onPressed: () => setState(() => _section = 1),
                                   icon: const Icon(Icons.chat_outlined),
                                   label: const Text('与军师对话'),
                                 ),
@@ -165,6 +160,11 @@ class _XiangjiFutureStrategistHomePageState
                           _navigation(),
                         ],
                       ),
+                    )
+                  : XiangjiStrategistConversationPanel(
+                      repository: _repository,
+                      dao: _dao,
+                      onDataChanged: _load,
                     ),
     );
   }
@@ -260,31 +260,57 @@ class _XiangjiFutureStrategistHomePageState
           else
             const XiangjiLabeledValue(
               label: '当前主战役',
-              value: '',
+              value: '尚未建立需要长期投入的主战役',
             ),
-          if (_dashboard.keyGap.isNotEmpty)
-            XiangjiLabeledValue(
-              label: '关键缺口',
-              value: _dashboard.keyGap,
-            ),
-          if (_dashboard.strategistJudgment.isNotEmpty)
-            XiangjiLabeledValue(
-              label:
-                  '军师判断（${_dashboard.strategistEpistemicStatus.isEmpty ? '可修订' : _dashboard.strategistEpistemicStatus}）',
-              value: _dashboard.strategistJudgment,
-              maxLines: 3,
-            ),
-          if (_dashboard.contingency.isNotEmpty)
-            XiangjiLabeledValue(
-              label: '预案触发条件',
-              value: _dashboard.contingency,
-            ),
-          if (_dashboard.nextReviewAtMs > 0)
-            XiangjiLabeledValue(
-              label: '下次复核',
-              value: xiangjiDateTime(_dashboard.nextReviewAtMs),
+          XiangjiLabeledValue(
+            label: '目前最关键的差距',
+            value: _dashboard.keyGap,
+            empty: '尚未从当前问题中选出唯一关键差距',
+          ),
+          XiangjiLabeledValue(
+            label:
+                '军师一句判断（${_dashboard.strategistEpistemicStatus.isEmpty ? '可修订' : _dashboard.strategistEpistemicStatus}）',
+            value: _dashboard.strategistJudgment,
+            empty: '等你带来一个真实问题后形成',
+            maxLines: 3,
+          ),
+          XiangjiLabeledValue(
+            label: '出现什么就换路 / 停止 / 加码',
+            value: _dashboard.contingency,
+            empty: '尚未形成条件式后手',
+          ),
+          XiangjiLabeledValue(
+            label: '下一次验算 / 军议',
+            value: _dashboard.nextReviewAtMs > 0
+                ? xiangjiDateTime(_dashboard.nextReviewAtMs)
+                : '',
+            empty: '形成当前行动后自动设定',
+          ),
+          if (_dashboard.currentProblem != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => _open(
+                  XiangjiProblemWorkspacePage(
+                    problemId: _dashboard.currentProblem!.id,
+                    repository: _repository,
+                    dao: _dao,
+                  ),
+                ),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('打开当前军师解题台'),
+              ),
             ),
           const Divider(height: 24),
+          const Text(
+            '今日战斗',
+            style: TextStyle(
+              color: XiangjiPalette.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
           if (action == null)
             const Text(
               '当前没有已选定行动。直接告诉军师真实处境，系统会自动形成可确认的下一步。',
@@ -351,7 +377,7 @@ class _XiangjiFutureStrategistHomePageState
       _XiangjiNavEntry(
         icon: Icons.account_tree_outlined,
         title: _word('人生问题解题纸', '问题工作页'),
-        subtitle: '认识审查、真问题、算子与现实验算',
+        subtitle: '认识审查、真问题、当前办法与现实验算',
         open: () => _open(XiangjiProblemListPage(
           repository: _repository,
           dao: _dao,
@@ -361,7 +387,10 @@ class _XiangjiFutureStrategistHomePageState
         icon: Icons.hub_outlined,
         title: '我的认识世界',
         subtitle: '直接经验、候选判断、认识债务、概念版本',
-        open: () => _open(XiangjiEpistemicWorldPage(dao: _dao)),
+        open: () => _open(XiangjiEpistemicWorldPage(
+          dao: _dao,
+          repository: _repository,
+        )),
       ),
       _XiangjiNavEntry(
         icon: Icons.play_circle_outline,

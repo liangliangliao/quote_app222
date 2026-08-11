@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../data/kv_dao.dart';
 import 'xiangji_campaign_action_pages.dart';
 import 'xiangji_database.dart';
+import 'xiangji_experience_widgets.dart';
 import 'xiangji_models.dart';
 import 'xiangji_repository.dart';
 import 'xiangji_rev3_models.dart';
@@ -895,34 +896,101 @@ class _XiangjiProblemWorkspacePageState
   Widget _solverCockpit(XiangjiProblemRecord problem) {
     final solver = _solver;
     final activeAction = _actions.isEmpty ? null : _actions.first;
+    String firstItem(Set<String> kinds) {
+      for (final row in _items) {
+        if (!kinds.contains((row['kind'] ?? '').toString())) continue;
+        final text = (row['text'] ?? '').toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      return '';
+    }
+
     final currentState = solver?.currentStateSummary.isNotEmpty == true
         ? solver!.currentStateSummary
         : problem.rawQuestion;
     final goal = solver?.goalSummary.isNotEmpty == true
         ? solver!.goalSummary
         : problem.goalText;
-    final keyGap = solver?.keyGapSummary ?? '';
-    final subgoal = solver?.activeSubgoalSummary ?? '';
+    final keyGap = solver?.keyGapSummary.isNotEmpty == true
+        ? solver!.keyGapSummary
+        : firstItem(const <String>{'gap'});
+    final subgoal = solver?.activeSubgoalSummary.isNotEmpty == true
+        ? solver!.activeSubgoalSummary
+        : firstItem(const <String>{'precondition_subgoal', 'sub_goal'});
     final operator = solver?.activeOperatorSummary.isNotEmpty == true
         ? solver!.activeOperatorSummary
-        : (activeAction?.title ?? '');
+        : (activeAction?.title ?? _decisionDraft?.currentAction ?? '');
     final prediction = solver?.predictionSummary.isNotEmpty == true
         ? solver!.predictionSummary
         : (activeAction?.prediction ?? '');
+    final solverHypotheses = (solver?.hypotheses ??
+            const <Map<String, Object?>>[])
+        .map(
+          (item) => (item['statement'] ?? item['claim'] ?? item['label'] ?? '')
+              .toString()
+              .trim(),
+        )
+        .where((item) => item.isNotEmpty)
+        .take(3)
+        .toList();
+    final activeHypothesis = solverHypotheses.isNotEmpty
+        ? solverHypotheses.join('；')
+        : _items
+            .where((row) => row['kind'] == 'causal_hypothesis')
+            .map((row) => (row['text'] ?? '').toString().trim())
+            .where((item) => item.isNotEmpty)
+            .take(3)
+            .join('；');
+    final mechanism = (solver?.activeOperator['mechanism'] ??
+            activeAction?.whyChain['operator_mechanism'] ??
+            '')
+        .toString();
+    final realityFacts = _items
+        .where(
+          (row) =>
+              <String>{'known', 'body_experience'}.contains(row['kind']),
+        )
+        .map((row) => (row['text'] ?? '').toString().trim())
+        .where((item) => item.isNotEmpty)
+        .take(5)
+        .toList();
+    final epistemicStatus =
+        (solver?.epistemicProfile['epistemic_status'] ?? '').toString();
+    final keyGapReason =
+        (solver?.keyGap['selected_reason'] ?? '').toString();
+    final actionBoundary = activeAction == null
+        ? ''
+        : '预计 ${activeAction.expectedMinutes} 分钟；${(activeAction.whyChain['stop_condition'] ?? '').toString()}';
+    final framedProblem = (solver?.problemFrame['statement'] ??
+            (problem.reframedQuestion.isEmpty
+                ? problem.rawQuestion
+                : problem.reframedQuestion))
+        .toString();
 
-    return XiangjiSectionCard(
-      title: '军师解题台',
-      subtitle: '一条持续求解链：S0 → Goal → KeyGap → SubGoal → Operator → Reality',
-      child: Column(
+    return XiangjiSolverCockpitView(
+      problem: framedProblem,
+      currentState: currentState,
+      goal: goal,
+      keyGap: keyGap,
+      activeHypothesis: activeHypothesis,
+      subgoal: subgoal,
+      currentAction: operator,
+      mechanism: mechanism,
+      prediction: prediction,
+      originalNeed: problem.rawQuestion,
+      realityFacts: realityFacts,
+      epistemicStatus:
+          epistemicStatus.isEmpty ? '' : _epistemicLabel(epistemicStatus),
+      keyGapReason: keyGapReason,
+      actionBoundary: actionBoundary,
+      progressLabel: _progress?.state.label ?? problem.state.label,
+      currentFocus: _progress?.currentFocus ?? '',
+      footer: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          XiangjiLabeledValue(label: '现在在哪里（S0）', value: currentState),
-          XiangjiLabeledValue(label: '要去哪里（Goal）', value: goal),
-          XiangjiLabeledValue(label: '最大差距（KeyGap）', value: keyGap),
-          XiangjiLabeledValue(label: '当前子目标', value: subgoal),
-          XiangjiLabeledValue(label: '当前办法（Operator）', value: operator),
-          XiangjiLabeledValue(label: '事前预测', value: prediction),
           if (operator.isNotEmpty) _whyThisStep(solver),
+          const SizedBox(height: 6),
+          _nextStep(problem),
         ],
       ),
     );
@@ -980,51 +1048,6 @@ class _XiangjiProblemWorkspacePageState
     );
   }
 
-  Widget _methodEventCard(XiangjiMethodEvent event) {
-    const judgmentMethods = <String>{
-      'MEC-004',
-      'MEC-009',
-      'MEC-010',
-      'MEC-011',
-      'MEC-012',
-      'MEC-013',
-      'MEC-014',
-    };
-    final changedDecision =
-        event.changedState && judgmentMethods.contains(event.methodId);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: changedDecision
-          ? const Color(0xFFFFF3DD)
-          : const Color(0xFFEAF4EF),
-      child: ExpansionTile(
-        leading: Icon(
-          changedDecision ? Icons.change_circle_outlined : Icons.auto_fix_high,
-          color: changedDecision
-              ? const Color(0xFFC8641B)
-              : XiangjiPalette.pine,
-        ),
-        title: Text(
-          '${changedDecision ? '军师改判' : '当前方法'} · ${event.methodLabel}',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        subtitle: Text(event.userVisibleSummary),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-        children: [
-          XiangjiLabeledValue(label: '为什么触发', value: event.trigger),
-          XiangjiLabeledValue(label: '怎样改变解法', value: event.decisionEffect),
-          XiangjiLabeledValue(label: '现实怎样验算', value: event.realityTest),
-          XiangjiLabeledValue(
-            label: '可审计操作摘要',
-            value: event.operationSummary,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _nextStep(XiangjiProblemRecord problem) {
     final button = switch (problem.state) {
       XiangjiProblemState.captured ||
@@ -1072,13 +1095,149 @@ class _XiangjiProblemWorkspacePageState
     return button;
   }
 
+  Widget _advancedWorksheet(XiangjiProblemRecord problem) {
+    const itemKinds = <String>[
+      'known',
+      'body_experience',
+      'user_interpretation',
+      'prediction',
+      'unknown',
+      'assumption',
+      'constraint',
+      'causal_hypothesis',
+      'information_action',
+      'precondition_subgoal',
+      'gap',
+      'sub_goal',
+      'operator_candidate',
+      'operator',
+    ];
+    return XiangjiSectionCard(
+      title: '高级：完整解题纸',
+      subtitle: '默认不要求你填写分析表；只在需要校正或追溯时展开。',
+      child: Column(
+        children: [
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('原题、真问题与目标版本'),
+            children: [
+              XiangjiLabeledValue(label: '你的原话', value: problem.rawQuestion),
+              if (problem.parentProblemId.isNotEmpty)
+                const XiangjiLabeledValue(
+                  label: '问题关系',
+                  value: '这是从主问题拆出的独立求解分支。',
+                ),
+              XiangjiLabeledValue(
+                label: '当前真问题',
+                value: problem.reframedQuestion,
+              ),
+              XiangjiLabeledValue(label: '现实目标', value: problem.goalText),
+              XiangjiLabeledValue(label: '成功判据', value: problem.successCriteria),
+              XiangjiLabeledValue(label: '停止 / 退出判据', value: problem.exitCriteria),
+            ],
+          ),
+          if (_progress != null)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('解题进度与待验证项'),
+              subtitle: Text(_progress!.state.label),
+              children: [
+                XiangjiLabeledValue(
+                  label: '已经解决 / 澄清',
+                  value: _progress!.resolvedItems.isEmpty
+                      ? '当前还在建立第一组可由现实检验的认识'
+                      : _progress!.resolvedItems.join('；'),
+                ),
+                XiangjiLabeledValue(
+                  label: '还缺什么',
+                  value: _progress!.keyUnknowns.join('；'),
+                  empty: '当前没有新增的关键未知',
+                ),
+                XiangjiLabeledValue(
+                  label: '当前实验 / 行动',
+                  value: _progress!.currentExperiment,
+                ),
+                XiangjiLabeledValue(
+                  label: '下一步怎样验算',
+                  value: _progress!.nextVerification,
+                ),
+              ],
+            ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('事实、体验、解释与未知'),
+            subtitle: const Text('由军师预填，原话与推断分开保存'),
+            children: [
+              if (_items.isEmpty) const Text('尚未进入分层阶段。'),
+              for (final kind in itemKinds)
+                if (_items.any((row) => row['kind'] == kind))
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(_kindLabel(kind)),
+                    children: [
+                      for (final row in _items.where(
+                        (item) => item['kind'] == kind,
+                      ))
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            kind == 'known' || kind == 'body_experience'
+                                ? Icons.visibility_outlined
+                                : Icons.psychology_alt_outlined,
+                            size: 18,
+                          ),
+                          title: Text((row['text'] ?? '').toString()),
+                        ),
+                    ],
+                  ),
+            ],
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('候选判断、根据与认识债务'),
+            subtitle: const Text('结构完整不代表更真，最弱前提始终可追溯'),
+            children: [
+              if (_claims.isEmpty && _debts.isEmpty)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('尚无候选判断或认识债务。'),
+                ),
+              for (final claim in _claims)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.chat_bubble_outline),
+                  title: Text((claim['text'] ?? '').toString()),
+                  subtitle: Text(
+                    '${_epistemicLabel((claim['epistemic_status'] ?? '').toString())} · ${_systematicityLabel((claim['systematicity'] ?? '').toString())}',
+                  ),
+                ),
+              for (final debt in _debts)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.report_problem_outlined,
+                    color: Color(0xFFC8641B),
+                  ),
+                  title: Text((debt['description'] ?? '').toString()),
+                  subtitle: Text(
+                    '${_impactLabel((debt['decision_impact'] ?? '').toString())} · 需要补清：${debt['grounding_gap']}',
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final problem = _problem;
     return Scaffold(
       backgroundColor: XiangjiPalette.mist,
       appBar: AppBar(
-        title: const Text('问题解题纸'),
+        title: const Text('军师解题台'),
         backgroundColor: XiangjiPalette.mist,
         actions: [
           PopupMenuButton<String>(
@@ -1151,87 +1310,7 @@ class _XiangjiProblemWorkspacePageState
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    if (_progress != null) ...[
-                      XiangjiSectionCard(
-                        title: '这道题解到哪里了',
-                        subtitle: _progress!.state.label,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            XiangjiLabeledValue(
-                              label: '已经解决 / 澄清',
-                              value: _progress!.resolvedItems.isEmpty
-                                  ? '当前还在建立第一组可由现实检验的认识'
-                                  : _progress!.resolvedItems.join('；'),
-                            ),
-                            XiangjiLabeledValue(
-                              label: '当前在解',
-                              value: _progress!.currentFocus.trim().isEmpty
-                                  ? '正在确认下一项会改变行动的关键差距'
-                                  : _progress!.currentFocus,
-                            ),
-                            XiangjiLabeledValue(
-                              label: '还缺什么',
-                              value: _progress!.keyUnknowns.isEmpty
-                                  ? '当前没有新增的关键未知'
-                                  : _progress!.keyUnknowns.join('；'),
-                            ),
-                            XiangjiLabeledValue(
-                              label: '当前实验 / 行动',
-                              value: _progress!.currentExperiment.trim().isEmpty
-                                  ? '尚未启动新的现实实验'
-                                  : _progress!.currentExperiment,
-                            ),
-                            XiangjiLabeledValue(
-                              label: '下一步怎样验算',
-                              value: _progress!.nextVerification.trim().isEmpty
-                                  ? '等待当前行动形成可观察结果'
-                                  : _progress!.nextVerification,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    XiangjiSectionCard(
-                      title: '当前问题',
-                      subtitle: '原话与重构版本并存；系统不会覆盖原始材料。',
-                      trailing: XiangjiStateBadge(
-                        label: _progress?.state.label ?? problem.state.label,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          XiangjiLabeledValue(
-                            label: '用户原话',
-                            value: problem.rawQuestion,
-                          ),
-                          if (problem.parentProblemId.isNotEmpty)
-                            const XiangjiLabeledValue(
-                              label: '问题关系',
-                              value: '这是从主问题拆出的独立求解分支；普通反馈仍只更新各自的问题身份。',
-                            ),
-                          XiangjiLabeledValue(
-                            label: '确认后的真问题',
-                            value: problem.reframedQuestion,
-                          ),
-                          XiangjiLabeledValue(
-                            label: '现实目标',
-                            value: problem.goalText,
-                          ),
-                          XiangjiLabeledValue(
-                            label: '成功判据',
-                            value: problem.successCriteria,
-                          ),
-                          XiangjiLabeledValue(
-                            label: '停止/退出判据',
-                            value: problem.exitCriteria,
-                          ),
-                          const SizedBox(height: 4),
-                          _nextStep(problem),
-                        ],
-                      ),
-                    ),
+                    _solverCockpit(problem),
                     if (_decisionDraft != null) ...[
                       const SizedBox(height: 12),
                       XiangjiSectionCard(
@@ -1298,8 +1377,6 @@ class _XiangjiProblemWorkspacePageState
                         ),
                       ),
                     ],
-                    const SizedBox(height: 12),
-                    _solverCockpit(problem),
                     if (_methodEvents.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       XiangjiSectionCard(
@@ -1308,99 +1385,13 @@ class _XiangjiProblemWorkspacePageState
                         child: Column(
                           children: [
                             for (final event in _methodEvents)
-                              _methodEventCard(event),
+                              XiangjiMethodEffectCard(event: event),
                           ],
                         ),
                       ),
                     ],
                     const SizedBox(height: 12),
-                    XiangjiSectionCard(
-                      title: '认识分层',
-                      subtitle: '由 AI 自动预填；点“高级校正”才需要手动修改。事实不与解释混写。',
-                      child: _items.isEmpty
-                          ? const Text('尚未进入分层阶段。')
-                          : Column(
-                              children: [
-                                for (final kind in const <String>[
-                                  'known',
-                                  'body_experience',
-                                  'user_interpretation',
-                                  'prediction',
-                                  'unknown',
-                                  'assumption',
-                                  'constraint',
-                                  'causal_hypothesis',
-                                  'information_action',
-                                  'precondition_subgoal',
-                                  'gap',
-                                  'sub_goal',
-                                  'operator_candidate',
-                                  'operator',
-                                ])
-                                  if (_items.any((row) => row['kind'] == kind))
-                                    ExpansionTile(
-                                      tilePadding: EdgeInsets.zero,
-                                      title: Text(_kindLabel(kind)),
-                                      children: [
-                                        for (final row in _items.where(
-                                          (item) => item['kind'] == kind,
-                                        ))
-                                          ListTile(
-                                            dense: true,
-                                            contentPadding: EdgeInsets.zero,
-                                            leading: Icon(
-                                              kind == 'known' ||
-                                                      kind == 'body_experience'
-                                                  ? Icons.visibility_outlined
-                                                  : Icons.psychology_alt_outlined,
-                                              size: 18,
-                                            ),
-                                            title: Text(
-                                              (row['text'] ?? '').toString(),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                              ],
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    XiangjiSectionCard(
-                      title: '候选判断与认识债务',
-                      subtitle: '系统性与确定性分开显示；债务不会被流畅措辞掩盖。',
-                      child: Column(
-                        children: [
-                          if (_claims.isEmpty && _debts.isEmpty)
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text('尚无候选判断或认识债务。'),
-                            ),
-                          for (final claim in _claims)
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.chat_bubble_outline),
-                              title: Text((claim['text'] ?? '').toString()),
-                              subtitle: Text(
-                                '${_epistemicLabel((claim['epistemic_status'] ?? '').toString())} · ${_systematicityLabel((claim['systematicity'] ?? '').toString())}',
-                              ),
-                            ),
-                          for (final debt in _debts)
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                Icons.report_problem_outlined,
-                                color: Color(0xFFC8641B),
-                              ),
-                              title: Text(
-                                (debt['description'] ?? '').toString(),
-                              ),
-                              subtitle: Text(
-                                '${_impactLabel((debt['decision_impact'] ?? '').toString())} · 需要补清：${debt['grounding_gap']}',
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+                    _advancedWorksheet(problem),
                     if (_working) ...[
                       const SizedBox(height: 12),
                       const LinearProgressIndicator(),

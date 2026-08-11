@@ -288,7 +288,7 @@ class XiangjiProblemStateMachine {
       return XiangjiTransitionDecision<XiangjiProblemState>.reject(
         from,
         to,
-        '目标现实判据、差距和当前算子尚未完成。',
+        '目标现实判据、差距和当前办法尚未完成。',
       );
     }
     if (to == XiangjiProblemState.executing &&
@@ -298,7 +298,7 @@ class XiangjiProblemStateMachine {
       return XiangjiTransitionDecision<XiangjiProblemState>.reject(
         from,
         to,
-        '进入行动前必须选定算子、事前保存预测，并由用户明确确认。',
+        '进入行动前必须选定当前办法、事前保存预测，并由用户明确确认。',
       );
     }
     if (to == XiangjiProblemState.verifying &&

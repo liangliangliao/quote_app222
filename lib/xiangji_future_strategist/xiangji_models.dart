@@ -594,6 +594,7 @@ class XiangjiDashboardSnapshot {
   const XiangjiDashboardSnapshot({
     this.northStar = '',
     this.primaryCampaign,
+    this.currentProblem,
     this.currentAction,
     this.alertState = XiangjiAlertState.green,
     this.alertReason = '',
@@ -608,6 +609,7 @@ class XiangjiDashboardSnapshot {
 
   final String northStar;
   final XiangjiCampaignRecord? primaryCampaign;
+  final XiangjiProblemRecord? currentProblem;
   final XiangjiActionRecord? currentAction;
   final XiangjiAlertState alertState;
   final String alertReason;

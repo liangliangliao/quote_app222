@@ -331,7 +331,7 @@ class XiangjiSignatureCapabilityRouter {
           'field': 'interpretations_may_drive_goal',
         },
       ],
-      decisionEffect: '未获现实根据的解释不能直接决定 Goal、Operator 或 Strategy。',
+      decisionEffect: '未获现实根据的解释不能直接决定目标、当前办法或战略路线。',
       userVisibleSummary: '体验和发生过的事被保留；“这意味着什么”暂时作为待验证解释。',
       realityTest: '补充可观察记录或独立来源，检查解释是否仍成立。',
       learningLink: '辨认“发生了什么”与“我如何解释它”。',
@@ -437,7 +437,7 @@ class XiangjiSignatureCapabilityRouter {
           'type': 'information',
         },
       ],
-      decisionEffect: '原因未区分前，KeyGap 候选转为信息缺口，优先高信息价值的小实验。',
+      decisionEffect: '原因未区分前，当前最大差距转为信息缺口，优先高信息价值的小实验。',
       userVisibleSummary: '军师没有把结果归咎于唯一原因，而是在比较 ${hypotheses.length} 个可区分机制。',
       realityTest: (hypotheses.first['discriminating_observation'] ?? '').toString(),
     );
@@ -489,7 +489,7 @@ class XiangjiSignatureCapabilityRouter {
           'operation': 'invalidate_if_reused',
         },
       ],
-      decisionEffect: '旧 Problem/Gap/Operator 不再自动迁移，瓶颈按本次关键条件重算。',
+      decisionEffect: '旧真问题、差距与办法不再自动迁移，瓶颈按本次关键条件重算。',
       userVisibleSummary: '表面名称相似，但“$difference”会改变当前瓶颈和办法。',
       realityTest: '执行新路线后，观察该决定性差异是否确实解释了结果变化。',
       learningLink: '下次类比前先问：哪一个不同点会改变行动？',
@@ -524,7 +524,7 @@ class XiangjiSignatureCapabilityRouter {
           'operation': 'prevent_forced_label',
         },
       ],
-      decisionEffect: '该信号可进入观察计划，但不会以未经验证的标签改变 Goal/Strategy。',
+      decisionEffect: '该信号可进入观察计划，但不会以未经验证的标签改变目标或战略路线。',
       userVisibleSummary: '先不急着给它命名；这份“不对劲”已按原样保留，等待跨场景比较。',
       realityTest: '在下一次出现时记录场景、身体信号和前后事件，寻找稳定同异。',
     );
@@ -722,7 +722,7 @@ class XiangjiSignatureCapabilityRouter {
           'operation': 'invalidate',
         },
       ],
-      decisionEffect: '旧 Operator 停止自动推进；Problem/Concept/Gap 至少一项进入重算。',
+      decisionEffect: '旧办法停止自动推进；真问题、当前概念或差距至少一项进入重算。',
       userVisibleSummary: '现实正在挑战旧解释；军师已停止沿旧办法加码，并把“模型与现实不一致”设为新缺口。',
       realityTest: '用修订后的概念产生一项新预测，再与下一次现实结果对账。',
     );
@@ -752,7 +752,7 @@ class XiangjiSignatureCapabilityRouter {
     };
     return _MethodMutation(
       state: state.copyWith(goalState: goal, problemFrame: frame),
-      trigger: 'Goal 即将进入优化，或目标可能只是路径、证明冲动/沉没成本的延续。',
+      trigger: '目标即将进入优化，或它可能只是路径、证明冲动或沉没成本的延续。',
       operationSummary: '区分终极目标、手段和路径，并检查价值、羞耻逃避、报复、证明冲动与沉没成本。',
       dataMutations: const <Map<String, Object?>>[
         <String, Object?>{
@@ -766,7 +766,7 @@ class XiangjiSignatureCapabilityRouter {
       ],
       decisionEffect: requiresConfirmation
           ? '在用户确认真正目标前暂停算子优化，避免高效地走错方向。'
-          : '目标已通过路径/手段审查，可以进入 Gap 求解。',
+          : '目标已通过路径与手段审查，可以进入差距求解。',
       userVisibleSummary: requiresConfirmation
           ? '“$priorStatement”可能更像一条路径；军师会先请你确认真正想实现的结果。'
           : '目标与路径已分开，接下来只优化能服务该目标的差距。',
@@ -804,7 +804,7 @@ class XiangjiSignatureCapabilityRouter {
     };
     return _MethodMutation(
       state: state.copyWith(gaps: candidates, keyGap: keyGap),
-      trigger: 'CurrentState S0 与 Goal G 已足够明确，可以计算差距向量。',
+      trigger: '当前现实状态与现实目标已足够明确，可以比较差距。',
       operationSummary: '按信息、概念、能力、资源、环境、行动和风险维度比较差距并选出 KeyGap。',
       dataMutations: const <Map<String, Object?>>[
         <String, Object?>{
@@ -816,7 +816,7 @@ class XiangjiSignatureCapabilityRouter {
           'operation': 'select',
         },
       ],
-      decisionEffect: '主行动只能服务当前 KeyGap；同一 Goal 在不同 S0 下会选择不同 Operator。',
+      decisionEffect: '主行动只能服务当前最大差距；同一目标在不同现实状态下会选择不同办法。',
       userVisibleSummary: '离目标最大的可改变差距是“${keyGap['label']}”。',
       realityTest: '行动后重新测量该差距是否缩小；未缩小则更换假设或算子。',
     );
@@ -868,7 +868,7 @@ class XiangjiSignatureCapabilityRouter {
     final title = missing.isNotEmpty
         ? '补齐前提：${missing.first}'
         : (context.operatorTitle.trim().isEmpty
-            ? '执行一次能缩小 KeyGap 的可逆行动'
+            ? '执行一次能缩小当前关键差距的可逆行动'
             : context.operatorTitle.trim());
     final operator = <String, Object?>{
       'id': 'operator-${state.stateVersion + 1}',
@@ -905,7 +905,7 @@ class XiangjiSignatureCapabilityRouter {
         candidateOperators: <Map<String, Object?>>[operator],
         activeOperator: operator,
       ),
-      trigger: 'KeyGap 已选定，需要生成 SubGoal、Operator 并检查前提。',
+      trigger: '当前最大差距已选定，需要生成当前小步、办法并检查生效前提。',
       operationSummary: '建立 AND/OR 子目标图；逐项检查算子前提，缺失前提递归转为 PreconditionSubGoal。',
       dataMutations: <Map<String, Object?>>[
         const <String, Object?>{
@@ -923,7 +923,7 @@ class XiangjiSignatureCapabilityRouter {
         },
       ],
       decisionEffect: missing.isEmpty
-          ? '选定能直接作用于 KeyGap 的当前算子。'
+          ? '选定能直接作用于当前最大差距的办法。'
           : '原算子暂不执行，先把缺失前提作为当前子目标求解。',
       userVisibleSummary: '当前先做“$title”；因为它通过“${operator['mechanism']}”服务最大差距。',
       realityTest: (operator['expected_effect'] ?? '').toString(),
@@ -993,9 +993,9 @@ class XiangjiSignatureCapabilityRouter {
           },
       ],
       decisionEffect: hasReality && context.realityConflict
-          ? '原假设被现实挑战，Gap 进入重估，不再沿原算子自动推进。'
+          ? '原候选原因被现实挑战，差距进入重估，不再沿原办法自动推进。'
           : hasReality
-              ? '现实结果进入下一轮 Solver，决定继续、调整或回溯。'
+              ? '现实结果进入下一轮求解，决定继续、调整或回溯。'
               : '后续验算将以这条未改写预测为基线。',
       userVisibleSummary: hasReality
           ? '原来预测“$prediction”；现实已回账${context.realityConflict ? '且方向相反，军师正在重算' : ''}。'
@@ -1023,6 +1023,7 @@ class XiangjiSignatureCapabilityRouter {
     final earliest = context.earliestFailedLayer.trim().isEmpty
         ? (context.missingPreconditions.isNotEmpty ? 'Precondition' : 'Operator')
         : context.earliestFailedLayer.trim();
+    final earliestLabel = _layerLabel(earliest);
     final entry = <String, Object?>{
       'id': 'backtrack-${state.stateVersion + 1}',
       'inspection_order': order,
@@ -1030,7 +1031,7 @@ class XiangjiSignatureCapabilityRouter {
       'reality': context.reality,
       'reroute': earliest == 'Execution'
           ? '修正执行条件后重试'
-          : '回到 $earliest 重算，再生成新 Operator',
+          : '回到 $earliestLabel 重算，再生成新办法',
     };
     final history = _copyMaps(state.backtrackHistory)..add(entry);
     final operator = <String, Object?>{
@@ -1040,7 +1041,7 @@ class XiangjiSignatureCapabilityRouter {
     final subgoal = <String, Object?>{
       'id': 'subgoal-backtrack-${state.stateVersion + 1}',
       'kind': 'backtrack_repair',
-      'label': '回到 $earliest 重算并验证新路线',
+      'label': '回到 $earliestLabel 重算并验证新路线',
     };
     return _MethodMutation(
       state: state.copyWith(
@@ -1064,8 +1065,8 @@ class XiangjiSignatureCapabilityRouter {
           'operation': 'reroute',
         },
       ],
-      decisionEffect: '最早需重算层定位为 $earliest；旧路线停止，当前子目标改为修复该层。',
-      userVisibleSummary: '不是笼统说“失败了”：目前最早需要重算的是 $earliest，接下来会从这里换路。',
+      decisionEffect: '最早需重算层定位为“$earliestLabel”；旧路线停止，当前小步改为修复该层。',
+      userVisibleSummary: '不是笼统说“失败了”：目前最早需要重算的是“$earliestLabel”，接下来会从这里换路。',
       realityTest: '执行重算后的新路线，检查同一失败信号是否消失。',
       learningLink: '复盘时记录最早错误层，而不是只评价最终结果。',
     );
@@ -1078,11 +1079,28 @@ class XiangjiSignatureCapabilityRouter {
           ..remove('prompt_version'),
       );
 
+  String _layerLabel(String value) => switch (value) {
+        'Execution' => '实际执行',
+        'Operator' => '当前办法',
+        'Precondition' => '办法的生效前提',
+        'SubGoal' => '当前小步',
+        'KeyGap' => '当前最大差距',
+        'Goal' => '现实目标',
+        'ProblemFrame' => '真问题定义',
+        'Concept' => '理解现实所用的概念',
+        'Judgment' => '当前判断',
+        'Fact' => '事实与观察',
+        _ => value,
+      };
+
   Map<String, Object?> _stateRefs(XiangjiSolverSnapshot state) =>
       <String, Object?>{
         'problem_id': state.problemId,
         'state_version': state.stateVersion,
         'problem_frame': state.problemFrame,
+        'current_state': state.currentState,
+        'goal_state': state.goalState,
+        'hypotheses': state.hypotheses,
         'key_gap': state.keyGap,
         'active_subgoal': state.activeSubgoal,
         'active_operator': state.activeOperator,

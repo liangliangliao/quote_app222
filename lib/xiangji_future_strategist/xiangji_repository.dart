@@ -938,7 +938,7 @@ class XiangjiRepository {
   }) async {
     final problem = await _requireProblem(problemId);
     if (problem.state != XiangjiProblemState.solving) {
-      throw StateError('只有在 SOLVING 阶段才能选定当前算子。');
+      throw StateError('只有在持续求解阶段才能选定当前办法。');
     }
     if (<String>[title, targetGap, mechanism, strategicMeaning, groundingReason, prediction]
         .any((value) => value.trim().isEmpty)) {
@@ -1033,6 +1033,15 @@ class XiangjiRepository {
         'key_gap': targetGap.trim(),
         'operator_mechanism': activeMechanism,
         'epistemic_grounding': groundingReason.trim(),
+        'action_purpose': strategicMeaning.trim(),
+        'time_boundary_minutes': expectedMinutes,
+        'stop_condition':
+            '达到 $expectedMinutes 分钟仍未出现事前预测中的关键信号时，停止加码并回来验算。',
+        'reporting_facts': <String>[
+          '是否出现：$activePrediction',
+          '实际做了什么，用了多少时间',
+          '有什么明显意外或身体、情绪体验',
+        ],
         if (normalizedPreconditions.isNotEmpty)
           'blocked_operator': title.trim(),
       },

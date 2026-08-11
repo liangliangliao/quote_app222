@@ -531,7 +531,7 @@ class XiangjiCognitiveExperienceGenerator {
         '事前预测': draft.prediction,
         '停止 / 切换信号': draft.changeSignals,
       },
-      method: '行动只有在能减少当前差距、并产生可观察结果时才算求解算子。做完后要对照事前预测，而不是只记录“我努力了”。',
+      method: '行动只有在能减少当前差距、并产生可观察结果时才算有效办法。做完后要对照事前预测，而不是只记录“我努力了”。',
       transfer: '在行动前先补完一句：“如果这一步有效，我应该观察到……”。',
     ));
 
@@ -544,7 +544,7 @@ class XiangjiCognitiveExperienceGenerator {
         details: <String, String>{
           '旧解释 / 预测': oldModel,
           '新现实': newReality,
-          '准备怎样修订': '先检查算子、前提和关键差距，再决定继续、回溯或重构。',
+          '准备怎样修订': '先检查当前办法、生效前提和关键差距，再决定继续、回溯或重构。',
         },
         method: '概念和策略必须服从现实。预测落空时先修模型，并保留旧版本，才能真正从错误中学习。',
         transfer: '先区分：是行动没有执行，还是行动执行了但机制没有产生预期结果？',

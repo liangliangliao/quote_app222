@@ -5157,14 +5157,27 @@ class XiangjiDao {
         : XiangjiActionRecord.fromMap(actionRows.first);
     final problemRows = await db.query(
       'xf_problem',
-      where:
-          "state != 'ARCHIVED' AND problem_status NOT IN ('ARCHIVED','MERGED')",
+      where: primary == null
+          ? "state != 'ARCHIVED' AND problem_status NOT IN ('ARCHIVED','MERGED')"
+          : "state != 'ARCHIVED' AND problem_status NOT IN ('ARCHIVED','MERGED') AND campaign_id = ?",
+      whereArgs: primary == null ? null : <Object?>[primary.id],
       orderBy: 'updated_at_ms DESC',
       limit: 1,
     );
     final latestProblem = problemRows.isEmpty
         ? null
         : XiangjiProblemRecord.fromMap(problemRows.first);
+    final solverRows = latestProblem == null
+        ? const <Map<String, Object?>>[]
+        : await db.query(
+            'xf_solver_snapshot',
+            where: 'problem_id = ?',
+            whereArgs: <Object?>[latestProblem.id],
+            limit: 1,
+          );
+    final latestSolver = solverRows.isEmpty
+        ? null
+        : XiangjiSolverSnapshot.fromMap(solverRows.first);
     final decisionRows = await db.query(
       'xf_decision_draft',
       where: "user_status != 'STALE'",
@@ -5190,14 +5203,22 @@ class XiangjiDao {
             limit: 1,
           );
     return XiangjiDashboardSnapshot(
-      northStar: primary?.northStar ?? latestProblem?.goalText ?? '',
+      northStar: primary?.northStar ??
+          latestSolver?.goalSummary ??
+          latestProblem?.goalText ??
+          '',
       primaryCampaign: primary,
+      currentProblem: latestProblem,
       currentAction: currentAction,
       alertState:
           alert == null ? XiangjiAlertState.green : parseAlertState(alert['state']),
       alertReason: (alert?['reason'] ?? '').toString(),
       alertDefaultAction: (alert?['default_action'] ?? '').toString(),
-      keyGap: gapRows.isEmpty ? '' : (gapRows.first['text'] ?? '').toString(),
+      keyGap: latestSolver?.keyGapSummary.isNotEmpty == true
+          ? latestSolver!.keyGapSummary
+          : gapRows.isEmpty
+              ? ''
+              : (gapRows.first['text'] ?? '').toString(),
       strategistJudgment: decisionRows.isEmpty
           ? ''
           : (decisionRows.first['judgment'] ?? '').toString(),

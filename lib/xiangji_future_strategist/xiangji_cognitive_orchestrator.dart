@@ -1451,6 +1451,16 @@ class XiangjiCognitiveOrchestrator {
         'key_gap': targetGap,
         'operator_mechanism': activeMechanism,
         'epistemic_grounding': draft.groundingReason,
+        'action_purpose': draft.strategicMeaning,
+        'time_boundary_minutes': draft.expectedMinutes,
+        'stop_condition': draft.changeSignals.trim().isEmpty
+            ? '达到 ${draft.expectedMinutes} 分钟仍未出现事前预测中的关键信号时，停止加码并回来验算。'
+            : draft.changeSignals,
+        'reporting_facts': <String>[
+          '是否出现：$activePrediction',
+          '实际做了什么，用了多少时间',
+          '有什么明显意外或身体、情绪体验',
+        ],
         if (missingPreconditions.isNotEmpty)
           'blocked_operator': blockedTitle,
       },
