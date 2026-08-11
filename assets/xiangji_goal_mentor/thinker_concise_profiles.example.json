@@ -1,0 +1,207 @@
+[
+  {
+    "thinker_id": "adler",
+    "name_zh": "阿尔弗雷德·阿德勒",
+    "core_question": "这个目标正在补偿什么不足感，并指向怎样的生活风格？",
+    "concise_summary": "显性目标常服务于隐藏的未来完成图景；自卑可以推动成长，也可能形成证明、支配、退缩和保护性策略，健康方向是勇气、合作与社会兴趣。",
+    "one_sentence_summary": "目标可能是成长的方向，也可能是保护脆弱自我的隐蔽策略，关键看它最终使人更能合作和贡献，还是更需要证明和支配。",
+    "difference_focus": "主要揭示隐藏目标和补偿动力，以合作、共同体感和现实生活任务校准；不能把所有努力都还原成自卑。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "目的论与虚构终极目标",
+      "自卑与补偿",
+      "追求优越",
+      "生活风格与私人逻辑",
+      "保护性策略",
+      "社会兴趣",
+      "三项生活任务"
+    ]
+  },
+  {
+    "thinker_id": "aristotle",
+    "name_zh": "亚里士多德",
+    "core_question": "这个目标最终服务于怎样的人生？",
+    "concise_summary": "目标必须进入有层级的善之中；好目标既关乎完成什么，也关乎在长期活动中形成怎样的德性、判断力与完整生活。",
+    "one_sentence_summary": "好目标不是让你占有更多结果，而是让你在完整人生中逐渐成为一个更完善的行动者。",
+    "difference_focus": "主要负责判断目标“值不值得”，以完善生活、德性和共同善为标准；不直接提供现代绩效目标的技术细节。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "目的层级与最终善",
+      "幸福是完善活动而非终点奖品",
+      "德性、习惯与人格形成",
+      "实践智慧与情境判断",
+      "友谊、共同体与整体生活"
+    ]
+  },
+  {
+    "thinker_id": "carver_scheier",
+    "name_zh": "卡弗与沙伊尔",
+    "core_question": "目标追求怎样通过反馈、情绪和预期持续运行？",
+    "concise_summary": "人将当前状态与目标参照比较，并依据差距、进展速度和可行预期调整投入；成熟系统既能坚持，也能修改路径、脱离旧目标并重新投入。",
+    "one_sentence_summary": "目标生活是一套持续比较、反馈、调整、坚持、退出和重新投入的自我调节过程。",
+    "difference_focus": "主要说明目标启动后的动态运行；比目标设定理论更关注情绪、进度、目标层级和退出再投入。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "反馈控制循环",
+      "目标层级",
+      "差距缩小与扩大",
+      "进展速度与情绪",
+      "信心与持续投入",
+      "多目标竞争",
+      "目标脱离与再投入"
+    ]
+  },
+  {
+    "thinker_id": "dewey",
+    "name_zh": "约翰·杜威",
+    "core_question": "这个目标怎样从现实处境生长，并在行动中被修正？",
+    "concise_summary": "目标是从现实问题中形成的行动假设，用于组织当前手段；行动产生经验，经验再修正方法和目标，手段与目的彼此塑造。",
+    "one_sentence_summary": "目标不是提前写好的命令，而是人面对现实、采取行动、获得经验并不断修正方向的工具。",
+    "difference_focus": "主要回答“怎样在经验中发现和修正”；比明确目标理论更强调目标的暂定性、环境和实践检验。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "视域中的目的",
+      "手段—目的连续性",
+      "习惯与环境结构",
+      "反思性调查",
+      "实验与后果比较",
+      "成长与可塑性"
+    ]
+  },
+  {
+    "thinker_id": "epictetus",
+    "name_zh": "爱比克泰德",
+    "core_question": "目标中哪些真正取决于我？",
+    "concise_summary": "可以争取外部结果，但真正能够承诺的是自己的判断、选择、欲望训练、角色责任与行动品质，不能把自我价值抵押给世界的保证。",
+    "one_sentence_summary": "可以追求外在结果，但必须把人格价值和真正承诺安放在自己的选择与行动上。",
+    "difference_focus": "主要划定责任边界和内在承诺；不等于消极放弃外部行动，也不提供完整的反馈调节模型。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "控制二分",
+      "判断与同意",
+      "欲望和厌恶训练",
+      "角色与职责",
+      "保留条件",
+      "内在自由"
+    ]
+  },
+  {
+    "thinker_id": "frankl",
+    "name_zh": "维克多·弗兰克尔",
+    "core_question": "此刻的生命要求我为什么负责？",
+    "concise_summary": "目标的力量来自具体意义与自我超越：人通过创造、爱与体验，或对不可避免处境采取负责态度，回答生命提出的问题。",
+    "one_sentence_summary": "目标之所以值得坚持，不是因为它证明了我，而是因为它是我此刻愿意对生命作出的负责回应。",
+    "difference_focus": "主要回答“为什么承担”，以具体意义和责任为中心；不同于追求兴趣、快乐或单纯能力增长。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "意义意志",
+      "意义的具体性与独特性",
+      "自我超越",
+      "自由与责任",
+      "创造、体验与态度三条道路",
+      "悲剧乐观"
+    ]
+  },
+  {
+    "thinker_id": "girard",
+    "name_zh": "勒内·吉拉尔",
+    "core_question": "是谁教会我欲望这个目标？",
+    "concise_summary": "欲望常由模型中介：对象的实际价值、模型赋予的光环、地位竞争和存在性救赎可能混在一起；自主来自看见影响并转化模仿。",
+    "one_sentence_summary": "目标自主不是完全不受他人影响，而是看见谁在塑造自己的欲望，并把地位竞争转化为真实能力与实践。",
+    "difference_focus": "主要揭示借来欲望和竞争结构；不宣称所有目标都只有模仿来源，也不独立提供最终价值标准。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "欲望三角",
+      "外在与内在中介",
+      "形而上欲望",
+      "浪漫的自发性幻觉",
+      "模仿性竞争",
+      "模型—对手转化",
+      "小说式真相与欲望转化"
+    ]
+  },
+  {
+    "thinker_id": "locke_latham",
+    "name_zh": "洛克与莱瑟姆",
+    "core_question": "一个目标怎样设置，才能有效改善表现？",
+    "concise_summary": "目标通过明确标准、适度挑战、真实承诺、反馈、能力和策略匹配来组织注意、努力、坚持与策略；复杂任务应先使用学习目标。",
+    "one_sentence_summary": "目标只有在明确、具有挑战、得到承诺并配有反馈和策略时，才会真正组织注意、努力和坚持。",
+    "difference_focus": "主要回答“怎样更有效实现”，而不单独判断目标是否值得、是否真实或是否有意义。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "明确性与挑战性",
+      "目标承诺",
+      "反馈",
+      "目标作用机制",
+      "任务复杂性",
+      "学习目标与绩效目标",
+      "近端子目标"
+    ]
+  },
+  {
+    "thinker_id": "nietzsche",
+    "name_zh": "弗里德里希·尼采",
+    "core_question": "这个目标背后的价值是谁创造的，它是否增强生命？",
+    "concise_summary": "在追求之前先审问价值尺度的来源和生命效果；目标可以组织力量、自我克服并创造价值，也可能由怨恨、羞耻、坏良心和禁欲式自惩罚驱动。",
+    "one_sentence_summary": "真正属于你的目标，是你在看清其价值来源后仍愿意创造、承担并肯定其整个过程的目标。",
+    "difference_focus": "主要审问评价尺度并推动价值创造；以生命增强和创造校准，不等同于支配他人或浪漫化痛苦。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "价值谱系与重估",
+      "为什么与力量组织",
+      "自我克服",
+      "精神三变",
+      "怨恨、坏良心与禁欲目标",
+      "生命肯定、命运之爱与永恒轮回",
+      "成为自己"
+    ]
+  },
+  {
+    "thinker_id": "positive_psychology",
+    "name_zh": "积极心理学／塔尔·本-沙哈尔",
+    "core_question": "怎样让目标既提供未来方向，又改善当下幸福与可持续行动？",
+    "concise_summary": "目标应与个人认同和兴趣相协调，聚焦资源而非承诺终点幸福；改变必须进入行动、习惯和仪式，同时兼顾当下收益、未来收益、关系、身体和失败学习。",
+    "one_sentence_summary": "好目标既让未来值得期待，也使今天的行动具有意义、成长和可持续的幸福。",
+    "difference_focus": "主要关注目标与幸福、习惯和可持续生活的结合；属于研究和教学综合，需要区分讲者观点、引用研究与产品应用。",
+    "display_mode": "auxiliary_collapsed",
+    "default_hidden": 1,
+    "content_role": "kb_auxiliary_summary",
+    "version": "1.3.0",
+    "key_features": [
+      "自我和谐目标",
+      "幸福的当下—未来结构",
+      "从信息到转化",
+      "仪式化改变与行为先行",
+      "许可自己为人",
+      "完美主义与最优主义",
+      "独立自尊与可持续生活"
+    ]
+  }
+]

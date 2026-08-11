@@ -40,7 +40,9 @@ import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
 import '../zhixing_tree/zhixing_tree_home_page.dart';
-import '../xiangji_goal_mentor/xiangji_discover_card.dart';
+import '../xiangji_future_strategist/xiangji_home_page.dart';
+import '../xiangji_goal_mentor/xiangji_discover_entries.dart';
+import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2537,8 +2539,6 @@ Widget _buildEmotionPieChart() {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   children: [
-                    const XiangjiDiscoverCard(),
-                    const SizedBox(height: 12),
                     _buildDiscoverEntry(
                       icon: Icons.insights_outlined,
                       title: '当下心情与情绪分析',
@@ -2553,6 +2553,24 @@ Widget _buildEmotionPieChart() {
                       icon: Icons.edit_note_outlined,
                       title: '写日记',
                       onTap: _openDiaryFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    XiangjiDiscoverEntries(
+                      onGoalMentorTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const XiangjiGoalMentorPage(),
+                          ),
+                        );
+                      },
+                      onFutureStrategistTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) =>
+                                const XiangjiFutureStrategistHomePage(),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     Material(

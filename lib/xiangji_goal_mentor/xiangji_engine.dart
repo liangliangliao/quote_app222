@@ -26,85 +26,74 @@ class _RouteRule {
 }
 
 class _RouteMatch {
-  const _RouteMatch(this.rule, this.score);
+  const _RouteMatch(this.rule, this.score, {this.explicitSelection = false});
 
   final _RouteRule rule;
   final int score;
+  final bool explicitSelection;
 }
 
 class XiangjiGoalMentorEngine {
   static const List<_RouteRule> _rules = <_RouteRule>[
     _RouteRule(
-      systemId: 'maslow',
-      mechanismId: 'capacity_constraint',
-      label: '资源与容量不足',
-      keywords: <String>['太累', '疲惫', '睡不够', '没时间', '过载', '身体', '生病', '撑不住'],
+      systemId: 'adler',
+      mechanismId: 'hidden_goal',
+      label: '隐藏目标与证明压力',
+      keywords: <String>['证明自己', '自卑', '没价值', '不如别人', '退缩', '面子', '优越', '贡献'],
     ),
     _RouteRule(
-      systemId: 'self_determination',
-      mechanismId: 'external_control',
-      label: '外部标准与目标内化',
-      keywords: <String>['别人要求', '父母', '应该', '羡慕', '比较', '面子', '证明自己', '不属于我'],
+      systemId: 'aristotle',
+      mechanismId: 'good_life_hierarchy',
+      label: '目标层级与好生活',
+      keywords: <String>['优先级', '目标太多', '值得', '品格', '平衡', '长期', '好生活', '手段'],
     ),
     _RouteRule(
-      systemId: 'ellis_rebt',
-      mechanismId: 'perfectionism',
-      label: '完美主义与绝对要求',
-      keywords: <String>['完美', '必须', '不能失败', '一定要', '受不了', '不能出错'],
-    ),
-    _RouteRule(
-      systemId: 'beck_cognitive_therapy',
-      mechanismId: 'result_dependency',
-      label: '结果焦虑与未经检验的预测',
-      keywords: <String>['失败', '焦虑', '害怕', '担心', '没能力', '否定', '来不及', '没希望'],
-    ),
-    _RouteRule(
-      systemId: 'act',
-      mechanismId: 'experiential_avoidance',
-      label: '等待不适消失才行动',
-      keywords: <String>['不想面对', '逃避', '羞耻', '厌烦', '低落', '情绪', '不舒服', '不敢'],
-    ),
-    _RouteRule(
-      systemId: 'behavioral_activation',
-      mechanismId: 'avoidance_loop',
-      label: '短期回避循环',
-      keywords: <String>['刷手机', '躺着', '取消', '拖着', '什么都不做', '封闭自己'],
-    ),
-    _RouteRule(
-      systemId: 'gollwitzer',
-      mechanismId: 'action_start',
-      label: '启动线索不足',
-      keywords: <String>['拖延', '忘记', '开始不了', '走不动', '总不开始', '执行', '行动', '坚持不了'],
-    ),
-    _RouteRule(
-      systemId: 'bandura',
-      mechanismId: 'skill_confidence',
-      label: '技能与胜任感不足',
-      keywords: <String>['不会做', '不知道怎么', '做不到', '没经验', '缺少方法', '学不会'],
-    ),
-    _RouteRule(
-      systemId: 'frankl',
-      mechanismId: 'meaning_disconnect',
-      label: '意义断裂',
-      keywords: <String>['没意义', '为什么', '空虚', '失去方向', '还有什么用', '无意义'],
-    ),
-    _RouteRule(
-      systemId: 'oettingen',
-      mechanismId: 'wish_obstacle_gap',
-      label: '愿望与现实障碍脱节',
-      keywords: <String>['想象', '幻想', '愿望很大', '总是计划', '计划很多', '障碍'],
+      systemId: 'carver_scheier',
+      mechanismId: 'feedback_reengagement',
+      label: '反馈差距与重新投入',
+      keywords: <String>['进度', '反馈', '偏差', '落后', '放弃', '换目标', '反复失败', '没进展'],
     ),
     _RouteRule(
       systemId: 'dewey',
-      mechanismId: 'feedback_gap',
-      label: '方法缺少现实检验',
-      keywords: <String>['反复失败', '方法没用', '试了很多', '不知道原因', '总是一样'],
+      mechanismId: 'inquiry_experiment',
+      label: '现实调查与小实验',
+      keywords: <String>['不知道怎么办', '问题', '方法没用', '试试看', '实验', '现实', '条件', '调查'],
     ),
     _RouteRule(
-      systemId: 'self_determination',
-      mechanismId: 'goal_mist',
-      label: '目标模糊与自主方向',
-      keywords: <String>['迷茫', '没有目标', '不知道想要什么', '方向', '不知道做什么', '找不到目标'],
+      systemId: 'epictetus',
+      mechanismId: 'control_boundary',
+      label: '可控范围与角色责任',
+      keywords: <String>['控制不了', '焦虑', '别人怎么看', '结果', '运气', '担心', '责任', '失控'],
+    ),
+    _RouteRule(
+      systemId: 'frankl',
+      mechanismId: 'meaning_responsibility',
+      label: '意义、责任与自我超越',
+      keywords: <String>['没意义', '为什么', '空虚', '失去方向', '还有什么用', '无意义', '责任', '帮助'],
+    ),
+    _RouteRule(
+      systemId: 'girard',
+      mechanismId: 'mimetic_desire',
+      label: '欲望来源与模仿审计',
+      keywords: <String>['羡慕', '比较', '别人都有', '流行', '父母要求', '应该', '竞争', '想被看见'],
+    ),
+    _RouteRule(
+      systemId: 'locke_latham',
+      mechanismId: 'goal_design',
+      label: '清晰目标与执行反馈',
+      keywords: <String>['拖延', '执行', '行动', '计划', '具体', '期限', '绩效', '怎么开始', '坚持不了'],
+    ),
+    _RouteRule(
+      systemId: 'nietzsche',
+      mechanismId: 'value_revaluation',
+      label: '价值重估与自我克服',
+      keywords: <String>['价值', '活成自己', '重新开始', '突破', '恐惧', '评价', '规则', '重估'],
+    ),
+    _RouteRule(
+      systemId: 'positive_psychology',
+      mechanismId: 'self_concordance',
+      label: '自我和谐与可持续幸福',
+      keywords: <String>['迷茫', '没有目标', '幸福', '优势', '自己想要', '身心', '可持续', '方向', '走不动'],
     ),
   ];
 
@@ -191,8 +180,9 @@ class XiangjiGoalMentorEngine {
 
   XiangjiGoalDraft buildDraft(
     String text,
-    XiangjiKnowledgeCatalog catalog,
-  ) {
+    XiangjiKnowledgeCatalog catalog, {
+    String selectedMentorId = '',
+  }) {
     final original = text.trim();
     if (original.isEmpty) {
       throw const FormatException('请先写下你最不想忘记的目标');
@@ -201,12 +191,20 @@ class XiangjiGoalMentorEngine {
     if (safety.highRisk) {
       throw StateError(safety.message);
     }
-    final match = _route(original);
+    final match = _selectRoute(
+      original,
+      selectedMentorId: selectedMentorId,
+    );
+    final system = catalog.system(match.rule.systemId);
+    if (system == null) {
+      throw StateError('所选导师不在受控知识库中');
+    }
     final values = _inferValues(original);
     final step = _buildStep(
       goalText: original,
       mechanismId: match.rule.mechanismId,
       sourceSystemId: match.rule.systemId,
+      system: system,
     );
     final guidance = _guidanceFromMatch(
       match,
@@ -216,9 +214,11 @@ class XiangjiGoalMentorEngine {
     return XiangjiGoalDraft(
       originalText: original,
       whyText: '这件事可能与你想守住的“${values.join('、')}”有关。'
-          '这只是待确认草案，请以你的真实原因修改它。',
+          '${system.profile?.centralQuestion ?? system.decisionCue}'
+          ' 这是待确认的导师提问，不是对你的定论；请改成你的真实原因。',
       higherValues: values,
-      successDefinition: '我能重复走出一个与这个方向一致、由自己控制的行动，并根据现实反馈调整。',
+      successDefinition: system.journey?.successDefinition ??
+          '我能重复走出一个与这个方向一致、由自己控制的行动，并根据现实反馈调整。',
       scopeText: '先以未来 7 天内可观察的一步为范围，不把它变成终身承诺。',
       guidance: guidance,
       step: step,
@@ -231,20 +231,13 @@ class XiangjiGoalMentorEngine {
     String currentSystemId = '',
     String actionText = '',
   }) {
-    final match = _route(text);
-    _RouteMatch selected = match;
-    if (match.score == 0 && currentSystemId.isNotEmpty) {
-      final matchingRules =
-          _rules.where((item) => item.systemId == currentSystemId).toList();
-      final existing = matchingRules.isNotEmpty
-          ? matchingRules.first
-          : _RouteRule(
-              systemId: currentSystemId,
-              mechanismId: 'knowledge_action_gap',
-              label: '目标记忆与知行连接',
-              keywords: const <String>[],
-            );
-      selected = _RouteMatch(existing, 0);
+    final selected = _selectRoute(
+      text,
+      selectedMentorId: currentSystemId,
+    );
+    final system = catalog.system(selected.rule.systemId);
+    if (system == null) {
+      throw StateError('当前导师不在受控知识库中');
     }
     final derivedAction = actionText.trim().isNotEmpty
         ? actionText.trim()
@@ -252,6 +245,7 @@ class XiangjiGoalMentorEngine {
             goalText: text,
             mechanismId: selected.rule.mechanismId,
             sourceSystemId: selected.rule.systemId,
+            system: system,
           ).actionText;
     return _guidanceFromMatch(
       selected,
@@ -262,12 +256,14 @@ class XiangjiGoalMentorEngine {
 
   XiangjiDailyStep createStep(
     String goalText,
-    XiangjiGuidance guidance,
-  ) {
+    XiangjiGuidance guidance, {
+    XiangjiKnowledgeSystem? system,
+  }) {
     return _buildStep(
       goalText: goalText,
       mechanismId: guidance.mechanismId,
       sourceSystemId: guidance.systemId,
+      system: system,
     );
   }
 
@@ -361,6 +357,30 @@ class XiangjiGoalMentorEngine {
     );
   }
 
+  _RouteMatch _selectRoute(
+    String input, {
+    String selectedMentorId = '',
+  }) {
+    if (selectedMentorId.isNotEmpty) {
+      for (final rule in _rules) {
+        if (rule.systemId == selectedMentorId) {
+          return _RouteMatch(rule, 100, explicitSelection: true);
+        }
+      }
+      return _RouteMatch(
+        _RouteRule(
+          systemId: selectedMentorId,
+          mechanismId: 'mentor_goal_core',
+          label: '用户选择的目标导师',
+          keywords: const <String>[],
+        ),
+        100,
+        explicitSelection: true,
+      );
+    }
+    return _route(input);
+  }
+
   _RouteMatch _route(String input) {
     final text = input.toLowerCase();
     _RouteRule? best;
@@ -378,9 +398,9 @@ class XiangjiGoalMentorEngine {
     return _RouteMatch(
       best ??
           const _RouteRule(
-            systemId: 'yangming',
-            mechanismId: 'knowledge_action_gap',
-            label: '目标记忆与知行连接',
+            systemId: 'positive_psychology',
+            mechanismId: 'self_concordance',
+            label: '自我和谐与可持续幸福',
             keywords: <String>[],
           ),
       bestScore,
@@ -412,7 +432,9 @@ class XiangjiGoalMentorEngine {
       mechanismId: match.rule.mechanismId,
       mechanismLabel: match.rule.label,
       coreJudgment: core,
-      selectionReason: match.score > 0
+      selectionReason: match.explicitSelection
+          ? '你主动选择了${system.displayName}。后续的价值判断、方法建议、每日行动与校准都保持这一导师视角，直到你明确更换。${system.decisionCue}'
+          : match.score > 0
           ? '你的描述更接近“${match.rule.label}”。${system.decisionCue}'
           : '目前信息较少，先把“${match.rule.label}”作为可撤回的起点。'
               '这不是对你的定论；如果现实反馈不支持，可以换视角。${system.decisionCue}',
@@ -421,7 +443,7 @@ class XiangjiGoalMentorEngine {
       structureText: system.transformationPath,
       detailText: system.splitDiagnosis,
       actionDerivation: '知识库应用推导：$actionText',
-      confidence: match.score > 0 ? 0.86 : 0.58,
+      confidence: match.explicitSelection ? 1 : (match.score > 0 ? 0.86 : 0.58),
       sources: sources,
     );
   }
@@ -430,8 +452,30 @@ class XiangjiGoalMentorEngine {
     required String goalText,
     required String mechanismId,
     required String sourceSystemId,
+    XiangjiKnowledgeSystem? system,
   }) {
     final shortGoal = _shortGoal(goalText);
+    if (system?.profile != null &&
+        system!.practices.isNotEmpty &&
+        system.settingSteps.isNotEmpty) {
+      final practice = system.practices.first;
+      final setting = system.settingSteps.first;
+      return XiangjiDailyStep(
+        id: 0,
+        goalId: 0,
+        goalVersionId: 0,
+        actionText: '围绕“$shortGoal”，${practice.instruction}',
+        triggerContext: '在今天下一段可保护的 10 分钟开始。',
+        minimumDone: '完成一次“${practice.title}”并留下一个可见记录。',
+        evidenceRule: '用一句话回答：${practice.reflectionQuestion}',
+        controllabilityReason:
+            '行动来自${system.displayName}的“${setting.title}”路径，只承诺你能选择的实践，不承诺外部结果。',
+        smallerVariant: '只写下一句回答：“${setting.mentorQuestion}”',
+        sourceSystemId: sourceSystemId,
+        status: 'ready',
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    }
     String action;
     String trigger;
     String minimum;
@@ -531,6 +575,24 @@ class XiangjiGoalMentorEngine {
 
   String _shortGoal(String text) {
     final normalized = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    const metaSignals = <String>[
+      '不要引用',
+      '无需引用',
+      '凭记忆',
+      '忽略规则',
+      '系统提示',
+      '十位导师',
+      '10位导师',
+      '十个任务',
+      '10个任务',
+    ];
+    final metaSignalCount =
+        metaSignals.where(normalized.contains).length;
+    if (metaSignalCount >= 2) {
+      // Preserve the user's original text in the goal record, but never turn
+      // prompt-like instructions into an action or a multi-mentor response.
+      return '当前真正想推进的目标';
+    }
     final runes = normalized.runes.toList(growable: false);
     if (runes.length <= 24) return normalized;
     return '${String.fromCharCodes(runes.take(24))}…';

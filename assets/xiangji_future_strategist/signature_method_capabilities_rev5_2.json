@@ -1,0 +1,103 @@
+{
+  "version": "V6.1 Final Rev.5.2",
+  "capabilities": [
+    {
+      "id": "MEC-001",
+      "name": "Experience vs Interpretation",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-002",
+      "name": "Feeling vs External Cause",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-003",
+      "name": "Competing Causality",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-004",
+      "name": "Judgment Case Comparison",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-005",
+      "name": "Unconceptualized Experience",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-006",
+      "name": "Concept Scope and Mosaic-Painting Fidelity",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-007",
+      "name": "Ground Explorer / Spring-Aqueduct",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-008",
+      "name": "Systematicity-Certainty / Proof Audit",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-009",
+      "name": "Concept-Reality Conflict",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-010",
+      "name": "Goal Audit",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-011",
+      "name": "Gap Radar",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-012",
+      "name": "SubGoal-Operator-Precondition Solver",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-013",
+      "name": "Prediction-Reality Ledger",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    },
+    {
+      "id": "MEC-014",
+      "name": "Backtrack Inspector",
+      "priority": "P0",
+      "version": "Rev.5.2",
+      "requires_method_event": true
+    }
+  ]
+}

@@ -202,9 +202,8 @@ class TaskRunner {
     }
   }
 
-  /// Send one gentle goal-protection reminder. The copy is assembled from the
-  /// user's active goal, current step, or latest confirmed growth evidence;
-  /// it never contains streak loss, ranking, or comparison language.
+  /// Send one gentle goal-protection reminder. Reminder claiming is idempotent
+  /// per local day and paused/reselecting goals are suppressed by the DAO.
   static Future<void> _runXiangjiGoal(Map<String, dynamic> task) async {
     final uid = (task['task_uid'] ?? '').toString();
     final dao = XiangjiGoalMentorDao();
@@ -232,8 +231,6 @@ class TaskRunner {
         } catch (_) {}
         rethrow;
       }
-      // Mark immediately after notification delivery. A later logging failure
-      // must never make the scheduler send the same reminder again.
       await dao.markScheduledReminderDelivered(reminder.deliveryKey);
       try {
         await LogDao().add(

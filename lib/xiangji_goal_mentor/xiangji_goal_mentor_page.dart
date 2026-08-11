@@ -6,12 +6,17 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../xiangji_future_strategist/xiangji_home_page.dart';
 import 'xiangji_book_service.dart';
 import 'xiangji_dao.dart';
 import 'xiangji_engine.dart';
 import 'xiangji_grounded_ai_service.dart';
 import 'xiangji_knowledge_repository.dart';
+import 'xiangji_mentor_knowledge_page.dart';
+import 'xiangji_mentor_upgrade_card.dart';
+import 'xiangji_mentor_setting_page.dart';
 import 'xiangji_models.dart';
+import 'xiangji_operations_page.dart';
 import 'xiangji_provider_mirror_service.dart';
 import 'xiangji_reminder_service.dart';
 import 'xiangji_unified_ai_adapter.dart';
@@ -22,7 +27,16 @@ const Color _sand = Color(0xFFF5F0E6);
 const Color _sage = Color(0xFFE6EFE9);
 
 class XiangjiGoalMentorPage extends StatefulWidget {
-  const XiangjiGoalMentorPage({super.key});
+  const XiangjiGoalMentorPage({
+    super.key,
+    this.dao,
+    this.knowledgeRepository,
+    this.engine,
+  });
+
+  final XiangjiGoalMentorDao? dao;
+  final XiangjiKnowledgeRepository? knowledgeRepository;
+  final XiangjiGoalMentorEngine? engine;
 
   @override
   State<XiangjiGoalMentorPage> createState() =>
@@ -30,26 +44,14 @@ class XiangjiGoalMentorPage extends StatefulWidget {
 }
 
 class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
-  final XiangjiGoalMentorDao _dao = XiangjiGoalMentorDao();
-  final XiangjiKnowledgeRepository _knowledge = XiangjiKnowledgeRepository();
-  final XiangjiGoalMentorEngine _engine = XiangjiGoalMentorEngine();
-  late final XiangjiReminderService _reminders =
-      XiangjiReminderService(dao: _dao);
-  late final XiangjiUnifiedAiAdapter _aiAdapter = XiangjiUnifiedAiAdapter();
-  late final XiangjiProviderMirrorService _providerMirror =
-      XiangjiProviderMirrorService(
-    dao: _dao,
-    configResolver: _aiAdapter.resolveOpenAiConfig,
-  );
-  late final XiangjiBookService _books = XiangjiBookService(
-    dao: _dao,
-    mirrorService: _providerMirror,
-  );
-  late final XiangjiGroundedAiService _grounded = XiangjiGroundedAiService(
-    dao: _dao,
-    mirrorService: _providerMirror,
-    generator: _aiAdapter.generate,
-  );
+  late final XiangjiGoalMentorDao _dao;
+  late final XiangjiKnowledgeRepository _knowledge;
+  late final XiangjiGoalMentorEngine _engine;
+  late final XiangjiReminderService _reminders;
+  late final XiangjiUnifiedAiAdapter _aiAdapter;
+  late final XiangjiProviderMirrorService _providerMirror;
+  late final XiangjiBookService _books;
+  late final XiangjiGroundedAiService _grounded;
   final TextEditingController _goalController = TextEditingController();
   final FocusNode _goalFocus = FocusNode();
 
@@ -71,10 +73,33 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   XiangjiReminderSettings _reminderSettings =
       XiangjiReminderSettings.defaults();
   XiangjiZoomMode _zoomMode = XiangjiZoomMode.panorama;
+  String _selectedMentorId = '';
+  XiangjiMentorKnowledgeMigration? _mentorMigration;
+
+  bool get _requiresMentorReselection =>
+      _mentorMigration?.requiresReselection ?? false;
 
   @override
   void initState() {
     super.initState();
+    _dao = widget.dao ?? XiangjiGoalMentorDao();
+    _knowledge = widget.knowledgeRepository ?? XiangjiKnowledgeRepository();
+    _engine = widget.engine ?? XiangjiGoalMentorEngine();
+    _reminders = XiangjiReminderService(dao: _dao);
+    _aiAdapter = XiangjiUnifiedAiAdapter();
+    _providerMirror = XiangjiProviderMirrorService(
+      dao: _dao,
+      configResolver: _aiAdapter.resolveOpenAiConfig,
+    );
+    _books = XiangjiBookService(
+      dao: _dao,
+      mirrorService: _providerMirror,
+    );
+    _grounded = XiangjiGroundedAiService(
+      dao: _dao,
+      mirrorService: _providerMirror,
+      generator: _aiAdapter.generate,
+    );
     _reload();
   }
 
@@ -99,6 +124,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       final catalog = await _knowledge.load();
       final goal = await _dao.activeGoal();
       if (goal != null) await _dao.markGoalSeen(goal.id);
+      final mentorMigration = goal == null
+          ? null
+          : await _dao.ensureMentorKnowledgeCompatibility(
+              goal: goal,
+              validMentorIds:
+                  catalog.systems.map((item) => item.id).toSet(),
+              targetKnowledgeVersion: catalog.version,
+            );
       final step = goal == null ? null : await _dao.currentStep(goal.id);
       final evidence =
           goal == null ? const <XiangjiGrowthEvidence>[] : await _dao.evidenceForGoal(goal.id);
@@ -114,7 +147,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       final pendingRemoteDeletions =
           (await _dao.pendingProviderDeletions()).length;
       XiangjiGuidance? guidance;
-      if (goal != null) {
+      if (goal != null && mentorMigration == null) {
         guidance = _engine.guidanceFor(
           '${goal.originalText} ${step?.status ?? ''}',
           catalog,
@@ -135,6 +168,12 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         _importedBooks = imported;
         _pendingRemoteDeletions = pendingRemoteDeletions;
         _guidance = guidance;
+        _mentorMigration = mentorMigration;
+        _selectedMentorId = goal == null
+            ? (catalog.system(_selectedMentorId)?.id ?? '')
+            : mentorMigration == null
+                ? goal.primaryThinkerId
+                : '';
         _loading = false;
       });
     } catch (error) {
@@ -152,6 +191,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       _showMessage('先写下此刻最不想忘记的目标，哪怕它还很模糊。');
       return;
     }
+    if (_selectedMentorId.isEmpty) {
+      _showMessage('先选择一位目标导师；选择会改变判断标准和行动路径。');
+      await _openMentorKnowledge();
+      return;
+    }
     final safety = _engine.assessSafety(text);
     if (safety.highRisk) {
       await _showSafetyDialog(safety.message);
@@ -159,7 +203,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     }
     setState(() => _working = true);
     try {
-      final draft = _engine.buildDraft(text, _catalog!);
+      final draft = _engine.buildDraft(
+        text,
+        _catalog!,
+        selectedMentorId: _selectedMentorId,
+      );
       if (!mounted) return;
       setState(() => _draft = draft);
     } catch (error) {
@@ -167,6 +215,148 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  Future<void> _openMentorKnowledge() async {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    final enabled = await _dao.featureEnabled('goal_first_v21');
+    if (!mounted) return;
+    if (!enabled && !_requiresMentorReselection) {
+      _showMessage('目标优先导师层当前未进入本机灰度范围。');
+      return;
+    }
+    await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => XiangjiMentorKnowledgePage(
+          catalog: catalog,
+          selectedMentorId: _selectedMentorId,
+          onEvent: (eventName, properties) => _dao.recordAnalyticsEvent(
+            eventName,
+            goalId: _goal?.id,
+            properties: properties,
+          ),
+          onSelect: (thinkerId) async {
+            final mentor = catalog.system(thinkerId);
+            if (mentor == null) throw StateError('导师知识资产不存在');
+            final goal = _goal;
+            if (goal == null) {
+              if (!mounted) return;
+              setState(() {
+                _selectedMentorId = thinkerId;
+                _draft = null;
+              });
+              return;
+            }
+            setState(() => _working = true);
+            try {
+              final resolvingKnowledgeUpgrade = _requiresMentorReselection;
+              final guidance = _engine.guidanceFor(
+                goal.originalText,
+                catalog,
+                currentSystemId: thinkerId,
+              );
+              final updated = await _dao.changeMentor(
+                goal: goal,
+                guidance: guidance,
+                reason: resolvingKnowledgeUpgrade
+                    ? '知识库升级后由用户重新选择导师'
+                    : '用户主动更换导师',
+                reasonCode: resolvingKnowledgeUpgrade
+                    ? 'knowledge_upgrade_reselected'
+                    : 'user_changed',
+                kbVersion: catalog.version,
+              );
+              final next = _engine.createStep(
+                updated.originalText,
+                guidance,
+                system: mentor,
+              );
+              if (updated.state == XiangjiGoalState.active ||
+                  updated.state == XiangjiGoalState.feedback ||
+                  updated.state == XiangjiGoalState.calibrating ||
+                  updated.state == XiangjiGoalState.paused) {
+                await _dao.replaceCurrentStep(
+                  updated,
+                  next,
+                  trigger: 'mentor_changed',
+                );
+              }
+              await _reload();
+            } finally {
+              if (mounted) setState(() => _working = false);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMentorSetting() async {
+    if (!await _ensureCurrentMentorCompatible()) return;
+    final goal = _goal;
+    final catalog = _catalog;
+    if (goal == null || catalog == null) return;
+    final mentor = catalog.system(goal.primaryThinkerId);
+    if (mentor == null || mentor.settingSteps.length != 8) {
+      _showMessage('当前导师的 8 步目标设定资产不完整。');
+      return;
+    }
+    final progress = await _dao.mentorSettingProgress(goal.id);
+    final rawAnswers = progress['answers'];
+    final answers = <String, String>{};
+    if (rawAnswers is Map) {
+      for (final entry in rawAnswers.entries) {
+        answers[entry.key.toString()] = entry.value.toString();
+      }
+    }
+    if (!mounted) return;
+    final result = await Navigator.of(context).push<Map<String, String>>(
+      MaterialPageRoute(
+        builder: (_) => XiangjiMentorSettingPage(
+          mentor: mentor,
+          initialAnswers: answers,
+          onProgress: (stepIndex, values, completed) =>
+              _dao.saveMentorSettingProgress(
+            goalId: goal.id,
+            thinkerId: mentor.id,
+            stepIndex: stepIndex,
+            answers: values,
+            completed: completed,
+          ),
+        ),
+      ),
+    );
+    if (result != null) {
+      _showMessage('8 步目标设定已完成并仅保存在本机。');
+    }
+  }
+
+  Future<void> _openFutureStrategist() async {
+    final enabled = await _dao.featureEnabled('future_strategist_bridge');
+    if (!mounted) return;
+    if (!enabled) {
+      _showMessage('深度战略空间当前未进入本机灰度范围。');
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => const XiangjiFutureStrategistHomePage(),
+      ),
+    );
+  }
+
+  Future<void> _openOperations() async {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => XiangjiOperationsPage(
+          dao: _dao,
+          catalog: catalog,
+        ),
+      ),
+    );
   }
 
   Future<void> _editDraft() async {
@@ -263,7 +453,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       await _showSafetyDialog(safety.message);
       return;
     }
-    final regenerated = _engine.buildDraft(result.first, _catalog!);
+    final regenerated = _engine.buildDraft(
+      result.first,
+      _catalog!,
+      selectedMentorId: current.guidance.systemId,
+    );
     final parsedValues = result[2]
         .split(RegExp('[、,，]'))
         .map((item) => item.trim())
@@ -521,13 +715,18 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     if (goal == null || guidance == null) return;
     await _dao.replaceCurrentStep(
       goal,
-      _engine.createStep(goal.originalText, guidance),
+      _engine.createStep(
+        goal.originalText,
+        guidance,
+        system: _catalog?.system(goal.primaryThinkerId),
+      ),
       trigger: 'next_step_generated',
     );
     await _reload();
   }
 
   Future<void> _openLostMode() async {
+    if (!await _ensureCurrentMentorCompatible()) return;
     final goal = _goal;
     final catalog = _catalog;
     if (goal == null || catalog == null) return;
@@ -666,6 +865,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   }
 
   Future<void> _openCalibration() async {
+    if (!await _ensureCurrentMentorCompatible()) return;
     final goal = _goal;
     if (goal == null) return;
     final decision = await Navigator.of(context).push<XiangjiCalibrationDecision>(
@@ -712,6 +912,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
                   _catalog!,
                   currentSystemId: stepGoal.primaryThinkerId,
                 ),
+            system: _catalog!.system(stepGoal.primaryThinkerId),
           );
         }
         await _dao.replaceCurrentStep(
@@ -726,6 +927,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   }
 
   Future<void> _editActiveGoal() async {
+    if (!await _ensureCurrentMentorCompatible()) return;
     final goal = _goal;
     if (goal == null) return;
     final original = TextEditingController(text: goal.originalText);
@@ -832,7 +1034,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       );
       await _dao.replaceCurrentStep(
         updated,
-        _engine.createStep(updated.originalText, guidance),
+        _engine.createStep(
+          updated.originalText,
+          guidance,
+          system: catalog.system(updated.primaryThinkerId),
+        ),
         trigger: 'goal_version_changed',
       );
     }
@@ -1129,6 +1335,13 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   }
 
   Future<void> _syncPrivateBook(XiangjiBookInfo book) async {
+    final providerMirrorEnabled =
+        await _dao.featureEnabled('provider_mirror');
+    if (!mounted) return;
+    if (!providerMirrorEnabled) {
+      _showMessage('远端书库镜像当前未进入本机灰度范围，可继续使用纯本地索引。');
+      return;
+    }
     if (!book.isLocallySearchable) {
       _showMessage('这本书尚未完成可检索解析。');
       return;
@@ -1410,8 +1623,15 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     }
   }
 
-  Future<void> _showSafetyDialog(String message) {
-    return showDialog<void>(
+  Future<void> _showSafetyDialog(String message) async {
+    try {
+      await _dao.recordAnalyticsEvent(
+        'safety_escalated',
+        goalId: _goal?.id,
+        properties: const <String, Object?>{'risk_category': 'crisis_gate'},
+      );
+    } catch (_) {}
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
@@ -1430,6 +1650,13 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<bool> _ensureCurrentMentorCompatible() async {
+    if (!_requiresMentorReselection) return true;
+    _showMessage('目标和历史已保留；请先为 V2.1 知识库重新选择一位导师。');
+    await _openMentorKnowledge();
+    return false;
   }
 
   String _cleanError(Object error) {
@@ -1516,6 +1743,19 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
 
   Widget _buildToday() {
     if (_goal == null) return _buildOnboarding();
+    if (_requiresMentorReselection) {
+      return RefreshIndicator(
+        onRefresh: _reload,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: <Widget>[
+            _buildGoalSeedCard(),
+            const SizedBox(height: 14),
+            _buildMentorKnowledgeUpgradeCard(),
+          ],
+        ),
+      );
+    }
     return RefreshIndicator(
       onRefresh: _reload,
       child: ListView(
@@ -1567,6 +1807,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         break;
       }
     }
+    final selectedMentor = _catalog?.system(_selectedMentorId);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       children: <Widget>[
@@ -1617,6 +1858,47 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
             ),
           ),
         ],
+        const SizedBox(height: 16),
+        _SectionCard(
+          color: _sage,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                '先选择一位目标导师',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                '选择会持续影响价值判断、目标设定、每日行动和校准；不会把你贴成永久人格标签。',
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFD9E9E1),
+                  child: Icon(Icons.person_pin_outlined, color: _moss),
+                ),
+                title: Text(selectedMentor?.displayName ?? '尚未选择'),
+                subtitle: Text(
+                  selectedMentor?.profile?.mentorTitle ??
+                      '查看 10 位导师的核心问题与现实路径后再选择',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _openMentorKnowledge,
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openMentorKnowledge,
+                  icon: const Icon(Icons.account_tree_outlined),
+                  label: Text(selectedMentor == null ? '查看并选择导师' : '更换或深入了解'),
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 20),
         TextField(
           controller: _goalController,
@@ -1667,6 +1949,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         const SizedBox(height: 20),
         const _BoundaryNote(),
       ],
+    );
+  }
+
+  Widget _buildMentorKnowledgeUpgradeCard() {
+    final migration = _mentorMigration!;
+    return XiangjiMentorUpgradeCard(
+      fromThinkerId: migration.fromThinkerId,
+      onReselect: _openMentorKnowledge,
     );
   }
 
@@ -1928,6 +2218,23 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           Text(guidance.selectionReason, style: const TextStyle(height: 1.45)),
           const SizedBox(height: 8),
           Text('理论边界：${guidance.boundaryNote}', style: const TextStyle(fontSize: 12, color: Colors.black54, height: 1.45)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              OutlinedButton.icon(
+                onPressed: _openMentorSetting,
+                icon: const Icon(Icons.route_outlined),
+                label: const Text('8 步目标设定'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _openMentorKnowledge,
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('导师知识与更换'),
+              ),
+            ],
+          ),
           const Divider(height: 26),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -2009,6 +2316,10 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               message: '回到“今天”，用一句话形成新的目标火种。历史目标仍保留在下方。',
             )
           else ...<Widget>[
+            if (_requiresMentorReselection) ...<Widget>[
+              _buildMentorKnowledgeUpgradeCard(),
+              const SizedBox(height: 14),
+            ],
             _SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2181,6 +2492,41 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          _SectionCard(
+            color: _sage,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  '目标优先导师层（默认）',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${catalog.systems.length} 位导师 · '
+                  '${catalog.primaryThemeCount} 个 L1 核心主题 · '
+                  '${catalog.secondaryThemeCount} 个 L2 补充主题 · '
+                  '${catalog.evidenceCount} 条可回定位依据',
+                  style: const TextStyle(height: 1.45),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '默认只展开目标核心；深层模块和原典依据按需进入，辅助短画像默认隐藏。',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _openMentorKnowledge,
+                    icon: const Icon(Icons.account_tree_outlined),
+                    label: const Text('查看导师知识路径'),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
           Row(
             children: <Widget>[
@@ -2298,7 +2644,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     );
   }
 
-  Future<void> _showBookDetails(XiangjiBookInfo book) {
+  Future<void> _showBookDetails(XiangjiBookInfo book) async {
     final status = book.sourceStatus == 'primary_source_opened'
         ? '原始来源已打开并完成定位审计'
         : book.sourceStatus == 'secondary_teaching_source'
@@ -2306,7 +2652,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
             : book.sourceStatus == 'public_substitute_verified'
                 ? '已验证的公共替代来源'
                 : book.sourceStatus;
-    return showModalBottomSheet<void>(
+    try {
+      await _dao.recordAnalyticsEvent(
+        'source_opened',
+        goalId: _goal?.id,
+        properties: <String, Object?>{'source_id': book.id},
+      );
+    } catch (_) {}
+    await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -2408,6 +2761,33 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         ),
         const SizedBox(height: 14),
         _SectionCard(
+          color: _sand,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                '需要处理复杂问题或战略决断？',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '保留现有“未来军师”的真问题、战役、行动验算、Provider 生命周期与个人战史能力。',
+                style: TextStyle(height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openFutureStrategist,
+                  icon: const Icon(Icons.explore_outlined),
+                  label: const Text('进入深度问题与战略空间'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _SectionCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -2415,6 +2795,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               const SizedBox(height: 8),
               const Text('目标原话、行动和证据默认只保存在本机应用数据库；分析事件不记录完整原话。', style: TextStyle(height: 1.45)),
               const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.monitor_heart_outlined),
+                title: const Text('本机发布诊断'),
+                subtitle: const Text('查看知识门槛、灰度开关、聚合事件与删除重试；不显示用户原话'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _openOperations,
+              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.download_outlined),
@@ -2751,7 +3139,10 @@ class _XiangjiCalibrationPageState extends State<XiangjiCalibrationPage> {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.child, this.color = Colors.white});
+  const _SectionCard({
+    required this.child,
+    this.color = Colors.white,
+  });
 
   final Widget child;
   final Color color;

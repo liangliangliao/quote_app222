@@ -4,6 +4,7 @@ import 'package:quote_app/xiangji_goal_mentor/xiangji_knowledge_repository.dart'
 import 'package:quote_app/xiangji_goal_mentor/xiangji_models.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final engine = XiangjiGoalMentorEngine();
 
   group('safety gate', () {
@@ -28,20 +29,27 @@ void main() {
       final draft = engine.buildDraft(
         '父母觉得我应该考证，但我想先弄清这是不是自己的目标',
         _catalog(),
+        selectedMentorId: 'self_determination',
       );
 
       expect(draft.guidance.systemId, 'self_determination');
-      expect(draft.guidance.mechanismId, 'external_control');
+      expect(draft.guidance.mechanismId, 'mentor_goal_core');
       expect(draft.guidance.sources, hasLength(1));
       expect(draft.guidance.sources.single.locator, 'BOOK-1-P10');
-      expect(draft.step.actionText, contains('如果没有任何人评价'));
+      expect(draft.step.actionText, contains('最小可见版本'));
       expect(draft.step.minimumDone, isNotEmpty);
       expect(draft.step.evidenceRule, isNotEmpty);
-      expect(draft.step.controllabilityReason, contains('不要求'));
+      expect(draft.step.controllabilityReason, contains('外在结果'));
     });
 
     test('shrinking lowers burden while keeping the same goal direction', () {
-      final step = engine.buildDraft('我想开始写作', _catalog()).step;
+      final step = engine
+          .buildDraft(
+            '我想开始写作',
+            _catalog(),
+            selectedMentorId: 'yangming',
+          )
+          .step;
       final smaller = engine.shrinkStep(step);
 
       expect(smaller.actionText, step.smallerVariant);
@@ -66,6 +74,28 @@ void main() {
         throwsStateError,
       );
     });
+  });
+
+  test('selected V2.1 mentors produce distinct judgments and actions',
+      () async {
+    final catalog = await XiangjiKnowledgeRepository().load();
+    final adler = engine.buildDraft(
+      '我想重新确定未来一年的工作方向',
+      catalog,
+      selectedMentorId: 'adler',
+    );
+    final frankl = engine.buildDraft(
+      '我想重新确定未来一年的工作方向',
+      catalog,
+      selectedMentorId: 'frankl',
+    );
+
+    expect(adler.guidance.systemId, 'adler');
+    expect(frankl.guidance.systemId, 'frankl');
+    expect(adler.guidance.coreJudgment, isNot(frankl.guidance.coreJudgment));
+    expect(adler.step.actionText, isNot(frankl.step.actionText));
+    expect(adler.guidance.selectionReason, contains('主动选择'));
+    expect(frankl.guidance.selectionReason, contains('主动选择'));
   });
 
   test('four-layer calibration can produce all five specified outcomes', () {

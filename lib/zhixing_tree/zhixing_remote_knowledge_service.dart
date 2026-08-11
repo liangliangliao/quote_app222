@@ -366,6 +366,19 @@ class ZxRemoteKnowledgeService {
     return results;
   }
 
+  /// Reuses the provider adapters for another local knowledge domain without
+  /// writing the external source into the 知行树 tables. The caller remains the
+  /// owner of the local source identity and provider lifecycle record.
+  Future<ZxRemoteKnowledgeItem> syncExternalBook(
+    ZxAiBook book, {
+    ZxRemoteKnowledgeProvider? provider,
+    ZxRemoteKnowledgeItem? existing,
+  }) async {
+    final config = await _settings.resolve(provider: provider);
+    _ensureConfigured(config);
+    return _syncBook(book, config, existing: existing);
+  }
+
   Future<ZxRemoteKnowledgeAnswer> askBooks({
     required List<int> bookIds,
     required ZxRemoteKnowledgeProvider provider,
@@ -450,6 +463,31 @@ class ZxRemoteKnowledgeService {
     }
     final config = await _settings.resolve(provider: item.provider);
     _ensureConfigured(config);
+    await _deleteProviderResource(item, config);
+    return _dao.saveRemoteKnowledgeItem(
+      item.copyWith(
+        status: ZxRemoteKnowledgeStatus.deleted,
+        lastError: '',
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  /// Deletes a provider resource owned by another local module. No 知行树 DAO
+  /// row is created or mutated; the caller must persist the confirmed result.
+  Future<void> deleteExternalCopy(ZxRemoteKnowledgeItem item) async {
+    if (item.provider == ZxRemoteKnowledgeProvider.edenAi) {
+      throw StateError('Eden AI 未提供即时删除接口；只能停止本地使用并等待远端到期。');
+    }
+    final config = await _settings.resolve(provider: item.provider);
+    _ensureConfigured(config);
+    await _deleteProviderResource(item, config);
+  }
+
+  Future<void> _deleteProviderResource(
+    ZxRemoteKnowledgeItem item,
+    ZxRemoteKnowledgeConfig config,
+  ) async {
     switch (item.provider) {
       case ZxRemoteKnowledgeProvider.openai:
       case ZxRemoteKnowledgeProvider.azureOpenAi:
@@ -509,13 +547,6 @@ class ZxRemoteKnowledgeService {
         // Handled before configuration because there is no delete request.
         break;
     }
-    return _dao.saveRemoteKnowledgeItem(
-      item.copyWith(
-        status: ZxRemoteKnowledgeStatus.deleted,
-        lastError: '',
-        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
   }
 
   Future<ZxRemoteKnowledgeItem> _syncBook(

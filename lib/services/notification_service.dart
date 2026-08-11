@@ -14,6 +14,10 @@ import '../health_diet/daily_share/daily_diet_review_page.dart';
 import '../health_diet/habit/diet_long_term_report_page.dart';
 import '../health_diet/expert/health_diet_expert_dashboard_page.dart';
 import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
+import '../xiangji_future_strategist/xiangji_home_page.dart';
+import '../xiangji_future_strategist/xiangji_database.dart';
+import '../xiangji_future_strategist/xiangji_problem_pages.dart';
+import '../xiangji_future_strategist/xiangji_repository.dart';
 import 'package:flutter/material.dart';
 
 @pragma('vm:entry-point')
@@ -62,12 +66,51 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateXiangjiFutureStrategist(payload)) return;
     if (await _tryNavigateXiangjiGoal(payload)) return;
     if (await _tryNavigateZhixingTree(payload)) return;
     if (await _tryNavigateRealisticOptimismTraining(payload)) return;
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateXiangjiFutureStrategist(
+    String? payload,
+  ) async {
+    final value = (payload ?? '').trim();
+    if (!value.startsWith('xiangji_future_strategist')) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = value;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await NotificationService.handlePendingNotificationNavigation();
+        } catch (_) {}
+      });
+      return true;
+    }
+    _pendingPayload = null;
+    _launchFromNotif = false;
+    final separator = value.indexOf(':');
+    final problemId = separator < 0 ? '' : value.substring(separator + 1);
+    final dao = XiangjiDao();
+    final repository = XiangjiRepository(dao: dao);
+    final destination = problemId.trim().isEmpty
+        ? const XiangjiFutureStrategistHomePage()
+        : XiangjiProblemWorkspacePage(
+            problemId: problemId.trim(),
+            repository: repository,
+            dao: dao,
+          );
+    nav.popUntil((route) => route.isFirst);
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => destination,
+      ),
+    );
+    return true;
   }
 
   static Future<bool> _tryNavigateXiangjiGoal(String? payload) async {
@@ -255,6 +298,8 @@ class NotificationService {
           // Fallback to home if something fails
           SimpleBus.navHome();
           SimpleBus.pokeHome();
+        } else if (await NotificationService._tryNavigateXiangjiFutureStrategist(p)) {
+          return;
         } else if (await NotificationService._tryNavigateXiangjiGoal(p)) {
           return;
         } else if (await NotificationService._tryNavigateZhixingTree(p)) {

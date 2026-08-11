@@ -719,6 +719,46 @@ class XiangjiProviderMirror {
       );
 }
 
+class XiangjiMentorKnowledgeMigration {
+  const XiangjiMentorKnowledgeMigration({
+    required this.id,
+    required this.goalId,
+    required this.fromThinkerId,
+    required this.targetKnowledgeVersion,
+    required this.status,
+    required this.resolvedThinkerId,
+    required this.detectedAtMs,
+    required this.resolvedAtMs,
+  });
+
+  final int id;
+  final int goalId;
+  final String fromThinkerId;
+  final String targetKnowledgeVersion;
+  final String status;
+  final String resolvedThinkerId;
+  final int detectedAtMs;
+  final int resolvedAtMs;
+
+  bool get requiresReselection => status == 'reselection_required';
+
+  factory XiangjiMentorKnowledgeMigration.fromRow(
+    Map<String, Object?> row,
+  ) {
+    return XiangjiMentorKnowledgeMigration(
+      id: _asInt(row['id']),
+      goalId: _asInt(row['goal_id']),
+      fromThinkerId: (row['from_thinker_id'] ?? '').toString(),
+      targetKnowledgeVersion:
+          (row['target_kb_version'] ?? '').toString(),
+      status: (row['status'] ?? '').toString(),
+      resolvedThinkerId: (row['resolved_thinker_id'] ?? '').toString(),
+      detectedAtMs: _asInt(row['detected_at_ms']),
+      resolvedAtMs: _asInt(row['resolved_at_ms']),
+    );
+  }
+}
+
 class XiangjiGroundedCitation {
   const XiangjiGroundedCitation({
     required this.sourceId,

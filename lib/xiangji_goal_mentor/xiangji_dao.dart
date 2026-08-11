@@ -9,6 +9,41 @@ import 'xiangji_policies.dart';
 class XiangjiGoalMentorDao {
   XiangjiGoalMentorDao({Database? database}) : _providedDatabase = database;
 
+  static const Set<String> _v21MentorIds = <String>{
+    'adler',
+    'aristotle',
+    'carver_scheier',
+    'dewey',
+    'epictetus',
+    'frankl',
+    'girard',
+    'locke_latham',
+    'nietzsche',
+    'positive_psychology',
+  };
+
+  static const Set<String> _analyticsEventNames = <String>{
+    'goal_spark_created',
+    'goal_confirmed',
+    'guidance_requested',
+    'zoom_opened',
+    'step_accepted',
+    'step_shrunk',
+    'checkin_submitted',
+    'evidence_confirmed',
+    'calibration_confirmed',
+    'goal_paused',
+    'goal_reselected',
+    'source_opened',
+    'reminder_disabled',
+    'safety_escalated',
+    'mentor_selected',
+    'mentor_setting_step_completed',
+    'mentor_setting_completed',
+    'thinker_concise_opened',
+    'thinker_concise_closed',
+  };
+
   static Future<void>? _schemaFuture;
   final Database? _providedDatabase;
   Future<void>? _providedSchemaFuture;
@@ -148,6 +183,47 @@ class XiangjiGoalMentorDao {
       )
     ''');
     batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_mentor_selections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id INTEGER NOT NULL,
+        thinker_id TEXT NOT NULL,
+        previous_thinker_id TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL DEFAULT '',
+        selected_by TEXT NOT NULL DEFAULT 'user',
+        created_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
+      CREATE INDEX IF NOT EXISTS idx_xiangji_mentor_selections_goal
+      ON xiangji_mentor_selections(goal_id, created_at_ms DESC)
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_mentor_kb_migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id INTEGER NOT NULL,
+        from_thinker_id TEXT NOT NULL DEFAULT '',
+        target_kb_version TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'reselection_required',
+        resolved_thinker_id TEXT NOT NULL DEFAULT '',
+        detected_at_ms INTEGER NOT NULL,
+        resolved_at_ms INTEGER,
+        UNIQUE(goal_id, target_kb_version),
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_mentor_setting_progress (
+        goal_id INTEGER PRIMARY KEY,
+        thinker_id TEXT NOT NULL,
+        step_index INTEGER NOT NULL DEFAULT 0,
+        answers_json TEXT NOT NULL DEFAULT '{}',
+        completed_at_ms INTEGER,
+        updated_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
       CREATE TABLE IF NOT EXISTS xiangji_calibrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         goal_id INTEGER NOT NULL,
@@ -275,7 +351,69 @@ class XiangjiGoalMentorDao {
         FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE SET NULL
       )
     ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_analytics_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_name TEXT NOT NULL,
+        goal_id INTEGER,
+        properties_json TEXT NOT NULL DEFAULT '{}',
+        created_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE SET NULL
+      )
+    ''');
+    batch.execute('''
+      CREATE INDEX IF NOT EXISTS idx_xiangji_analytics_event_name
+      ON xiangji_analytics_events(event_name, created_at_ms DESC)
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_feature_flags (
+        flag_key TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        rollout_percent INTEGER NOT NULL DEFAULT 100,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_local_identity (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        owner_scope TEXT NOT NULL,
+        account_mode TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''');
     await batch.commit(noResult: true);
+    final baselineNow = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xiangji_local_identity',
+      <String, Object?>{
+        'id': 1,
+        'owner_scope': 'device_owner',
+        'account_mode': 'personal_local',
+        'created_at_ms': baselineNow,
+        'updated_at_ms': baselineNow,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    for (final flag in const <String>[
+      'goal_first_v21',
+      'deep_mentor_v2',
+      'concise_profiles',
+      'provider_mirror',
+      'future_strategist_bridge',
+    ]) {
+      await db.insert(
+        'xiangji_feature_flags',
+        <String, Object?>{
+          'flag_key': flag,
+          'enabled': 1,
+          'rollout_percent': 100,
+          'updated_at_ms': baselineNow,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+    await _seedV21MentorMigrationIfNeeded(db);
     final goalColumns = await db.rawQuery('PRAGMA table_info(xiangji_goals)');
     if (!goalColumns.any(
       (column) => column['name']?.toString() == 'last_interaction_at_ms',
@@ -395,7 +533,7 @@ class XiangjiGoalMentorDao {
 
   Future<XiangjiGoal> createAndActivateGoal(
     XiangjiGoalDraft draft, {
-    String kbVersion = '2.0.0',
+    String kbVersion = '2.1.0',
   }) async {
     final db = await _database();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -488,6 +626,43 @@ class XiangjiGoalMentorDao {
         kbVersion: kbVersion,
         now: now,
       );
+      await txn.insert('xiangji_mentor_selections', <String, Object?>{
+        'goal_id': id,
+        'thinker_id': draft.guidance.systemId,
+        'previous_thinker_id': '',
+        'reason': '创建目标时由用户确认',
+        'selected_by': 'user',
+        'created_at_ms': now,
+      });
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: 'goal_spark_created',
+        goalId: id,
+        properties: <String, Object?>{'state': 'spark'},
+      );
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: 'goal_confirmed',
+        goalId: id,
+        properties: <String, Object?>{'state': 'active'},
+      );
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: 'step_accepted',
+        goalId: id,
+        properties: <String, Object?>{
+          'mentor_id': draft.guidance.systemId,
+        },
+      );
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: 'mentor_selected',
+        goalId: id,
+        properties: <String, Object?>{
+          'mentor_id': draft.guidance.systemId,
+          'reason_code': 'goal_created',
+        },
+      );
       return id;
     });
     final created = await goalById(goalId);
@@ -533,6 +708,311 @@ class XiangjiGoalMentorDao {
     final updated = await goalById(goal.id);
     if (updated == null) throw StateError('目标更新后读取失败');
     return updated;
+  }
+
+  Future<XiangjiGoal> changeMentor({
+    required XiangjiGoal goal,
+    required XiangjiGuidance guidance,
+    String reason = '用户主动更换导师',
+    String reasonCode = 'user_changed',
+    String kbVersion = '2.1.0',
+  }) async {
+    if (guidance.systemId.isEmpty) {
+      throw const FormatException('导师标识不能为空');
+    }
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction<void>((txn) async {
+      await txn.update(
+        'xiangji_goals',
+        <String, Object?>{
+          'primary_thinker_id': guidance.systemId,
+          'current_node_id': guidance.mechanismId,
+          'last_interaction_at_ms': now,
+          'updated_at_ms': now,
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>[goal.id],
+      );
+      await txn.insert('xiangji_mentor_selections', <String, Object?>{
+        'goal_id': goal.id,
+        'thinker_id': guidance.systemId,
+        'previous_thinker_id': goal.primaryThinkerId,
+        'reason': reason.trim(),
+        'selected_by': 'user',
+        'created_at_ms': now,
+      });
+      await txn.update(
+        'xiangji_mentor_kb_migrations',
+        <String, Object?>{
+          'status': 'resolved',
+          'resolved_thinker_id': guidance.systemId,
+          'resolved_at_ms': now,
+        },
+        where: "goal_id = ? AND status = 'reselection_required'",
+        whereArgs: <Object?>[goal.id],
+      );
+      await _insertMentorSession(
+        txn,
+        goalId: goal.id,
+        userInput: goal.originalText,
+        guidance: guidance,
+        zoomMode: XiangjiZoomMode.panorama,
+        kbVersion: kbVersion,
+        now: now,
+      );
+      await txn.delete(
+        'xiangji_mentor_setting_progress',
+        where: 'goal_id = ?',
+        whereArgs: <Object?>[goal.id],
+      );
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: 'mentor_selected',
+        goalId: goal.id,
+        properties: <String, Object?>{
+          'mentor_id': guidance.systemId,
+          'previous_mentor_id': goal.primaryThinkerId,
+          'reason_code': reasonCode,
+        },
+      );
+    });
+    final updated = await goalById(goal.id);
+    if (updated == null) throw StateError('导师更换后读取目标失败');
+    return updated;
+  }
+
+  /// Detects a goal created against an older mentor catalog without changing
+  /// the user's goal, history, or action. The user explicitly chooses the new
+  /// V2.1 mentor; [changeMentor] then resolves this migration atomically.
+  Future<XiangjiMentorKnowledgeMigration?>
+      ensureMentorKnowledgeCompatibility({
+    required XiangjiGoal goal,
+    required Set<String> validMentorIds,
+    required String targetKnowledgeVersion,
+  }) async {
+    final currentId = goal.primaryThinkerId.trim();
+    if (currentId.isNotEmpty && validMentorIds.contains(currentId)) {
+      return null;
+    }
+    final version = targetKnowledgeVersion.trim();
+    if (version.isEmpty) {
+      throw const FormatException('目标知识库版本不能为空');
+    }
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xiangji_mentor_kb_migrations',
+      <String, Object?>{
+        'goal_id': goal.id,
+        'from_thinker_id': currentId,
+        'target_kb_version': version,
+        'status': 'reselection_required',
+        'resolved_thinker_id': '',
+        'detected_at_ms': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    await db.update(
+      'xiangji_mentor_kb_migrations',
+      <String, Object?>{
+        'from_thinker_id': currentId,
+        'status': 'reselection_required',
+        'resolved_thinker_id': '',
+        'resolved_at_ms': null,
+      },
+      where: 'goal_id = ? AND target_kb_version = ? AND status != ?',
+      whereArgs: <Object?>[
+        goal.id,
+        version,
+        'reselection_required',
+      ],
+    );
+    final rows = await db.query(
+      'xiangji_mentor_kb_migrations',
+      where: 'goal_id = ? AND target_kb_version = ?',
+      whereArgs: <Object?>[goal.id, version],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw StateError('导师知识库升级记录创建失败');
+    }
+    final migration = XiangjiMentorKnowledgeMigration.fromRow(rows.first);
+    return migration.requiresReselection ? migration : null;
+  }
+
+  Future<List<XiangjiMentorKnowledgeMigration>> mentorKnowledgeMigrations({
+    int? goalId,
+  }) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_mentor_kb_migrations',
+      where: goalId == null ? null : 'goal_id = ?',
+      whereArgs: goalId == null ? null : <Object?>[goalId],
+      orderBy: 'detected_at_ms DESC, id DESC',
+    );
+    return rows
+        .map(XiangjiMentorKnowledgeMigration.fromRow)
+        .toList(growable: false);
+  }
+
+  Future<bool> hasPendingMentorKnowledgeMigration(int goalId) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_mentor_kb_migrations',
+      columns: const <String>['id'],
+      where: "goal_id = ? AND status = 'reselection_required'",
+      whereArgs: <Object?>[goalId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<List<Map<String, Object?>>> mentorSelectionHistory(int goalId) async {
+    final db = await _database();
+    return db.query(
+      'xiangji_mentor_selections',
+      where: 'goal_id = ?',
+      whereArgs: <Object?>[goalId],
+      orderBy: 'created_at_ms DESC, id DESC',
+    );
+  }
+
+  Future<void> saveMentorSettingProgress({
+    required int goalId,
+    required String thinkerId,
+    required int stepIndex,
+    required Map<String, String> answers,
+    required bool completed,
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'xiangji_mentor_setting_progress',
+      <String, Object?>{
+        'goal_id': goalId,
+        'thinker_id': thinkerId,
+        'step_index': stepIndex,
+        'answers_json': jsonEncode(answers),
+        'completed_at_ms': completed ? now : null,
+        'updated_at_ms': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await _insertAnalyticsEvent(
+      db,
+      eventName:
+          completed ? 'mentor_setting_completed' : 'mentor_setting_step_completed',
+      goalId: goalId,
+      properties: <String, Object?>{
+        'mentor_id': thinkerId,
+        'step_index': stepIndex,
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> mentorSettingProgress(int goalId) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_mentor_setting_progress',
+      where: 'goal_id = ?',
+      whereArgs: <Object?>[goalId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return <String, Object?>{};
+    final row = Map<String, Object?>.of(rows.first);
+    try {
+      final decoded = jsonDecode((row['answers_json'] ?? '{}').toString());
+      row['answers'] = decoded is Map
+          ? decoded.map((key, value) => MapEntry(key.toString(), value.toString()))
+          : <String, String>{};
+    } catch (_) {
+      row['answers'] = <String, String>{};
+    }
+    return row;
+  }
+
+  Future<void> recordAnalyticsEvent(
+    String eventName, {
+    int? goalId,
+    Map<String, Object?> properties = const <String, Object?>{},
+  }) async {
+    final db = await _database();
+    await _insertAnalyticsEvent(
+      db,
+      eventName: eventName,
+      goalId: goalId,
+      properties: properties,
+    );
+  }
+
+  Future<Map<String, int>> analyticsSnapshot() async {
+    final db = await _database();
+    final rows = await db.rawQuery('''
+      SELECT event_name, COUNT(*) AS event_count
+      FROM xiangji_analytics_events
+      GROUP BY event_name
+      ORDER BY event_name
+    ''');
+    return <String, int>{
+      for (final row in rows)
+        (row['event_name'] ?? '').toString(): _int(row['event_count']),
+    };
+  }
+
+  Future<List<Map<String, Object?>>> featureFlags() async {
+    final db = await _database();
+    return db.query(
+      'xiangji_feature_flags',
+      orderBy: 'flag_key',
+    );
+  }
+
+  Future<bool> featureEnabled(String flagKey) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_feature_flags',
+      columns: const <String>['enabled', 'rollout_percent'],
+      where: 'flag_key = ?',
+      whereArgs: <Object?>[flagKey],
+      limit: 1,
+    );
+    if (rows.isEmpty) return false;
+    return _int(rows.first['enabled']) == 1 &&
+        _int(rows.first['rollout_percent']) > 0;
+  }
+
+  Future<void> setFeatureFlagForOperations(
+    String flagKey, {
+    required bool enabled,
+    required int rolloutPercent,
+  }) async {
+    if (rolloutPercent < 0 || rolloutPercent > 100) {
+      throw RangeError.range(rolloutPercent, 0, 100, 'rolloutPercent');
+    }
+    final db = await _database();
+    await db.insert(
+      'xiangji_feature_flags',
+      <String, Object?>{
+        'flag_key': flagKey,
+        'enabled': enabled ? 1 : 0,
+        'rollout_percent': rolloutPercent,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, Object?>> localIdentity() async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_local_identity',
+      where: 'id = 1',
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? <String, Object?>{}
+        : Map<String, Object?>.of(rows.first);
   }
 
   Future<XiangjiDailyStep?> currentStep(int goalId) async {
@@ -606,6 +1086,18 @@ class XiangjiGoalMentorDao {
           whereArgs: <Object?>[goal.id],
         );
       }
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: trigger.contains('shrink') ||
+                trigger == XiangjiCalibrationResult.reduceScope.value
+            ? 'step_shrunk'
+            : 'step_accepted',
+        goalId: goal.id,
+        properties: <String, Object?>{
+          'trigger_code': trigger,
+          'mentor_id': step.sourceSystemId,
+        },
+      );
       return id;
     });
     final rows = await db.query(
@@ -700,12 +1192,28 @@ class XiangjiGoalMentorDao {
           whereArgs: <Object?>[goal.id],
         );
       }
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: 'checkin_submitted',
+        goalId: goal.id,
+        properties: <String, Object?>{
+          'result_type': resultType,
+          'evidence_type': evidenceType,
+        },
+      );
       return evidenceId;
     });
   }
 
   Future<void> confirmEvidence(int evidenceId) async {
     final db = await _database();
+    final rows = await db.query(
+      'xiangji_growth_evidence',
+      columns: const <String>['goal_id', 'evidence_type'],
+      where: 'id = ?',
+      whereArgs: <Object?>[evidenceId],
+      limit: 1,
+    );
     await db.update(
       'xiangji_growth_evidence',
       <String, Object?>{
@@ -714,6 +1222,16 @@ class XiangjiGoalMentorDao {
       where: 'id = ?',
       whereArgs: <Object?>[evidenceId],
     );
+    if (rows.isNotEmpty) {
+      await _insertAnalyticsEvent(
+        db,
+        eventName: 'evidence_confirmed',
+        goalId: _int(rows.first['goal_id']),
+        properties: <String, Object?>{
+          'evidence_type': rows.first['evidence_type'],
+        },
+      );
+    }
   }
 
   Future<void> discardEvidenceDraft(int evidenceId) async {
@@ -764,6 +1282,19 @@ class XiangjiGoalMentorDao {
         zoomMode: zoomMode,
         kbVersion: kbVersion,
         now: now,
+      );
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: zoomMode == XiangjiZoomMode.panorama
+            ? 'guidance_requested'
+            : 'zoom_opened',
+        goalId: goal.id,
+        properties: <String, Object?>{
+          'mentor_id': guidance.systemId,
+          'zoom_mode': zoomMode.name,
+          'validation_status':
+              guidance.sources.isEmpty ? 'coverage_insufficient' : 'validated',
+        },
       );
     });
   }
@@ -834,6 +1365,23 @@ class XiangjiGoalMentorDao {
         where: 'id = ?',
         whereArgs: <Object?>[goal.id],
       );
+      await _insertAnalyticsEvent(
+        txn,
+        eventName: 'calibration_confirmed',
+        goalId: goal.id,
+        properties: <String, Object?>{
+          'result': decision.result.value,
+          'target_state': target.value,
+        },
+      );
+      if (decision.result == XiangjiCalibrationResult.reselect) {
+        await _insertAnalyticsEvent(
+          txn,
+          eventName: 'goal_reselected',
+          goalId: goal.id,
+          properties: <String, Object?>{'target_state': target.value},
+        );
+      }
     });
   }
 
@@ -869,6 +1417,14 @@ class XiangjiGoalMentorDao {
         where: 'id = ?',
         whereArgs: <Object?>[goal.id],
       );
+      if (target == XiangjiGoalState.paused) {
+        await _insertAnalyticsEvent(
+          txn,
+          eventName: 'goal_paused',
+          goalId: goal.id,
+          properties: <String, Object?>{'trigger_code': trigger},
+        );
+      }
     });
   }
 
@@ -902,6 +1458,12 @@ class XiangjiGoalMentorDao {
 
   Future<void> saveReminderSettings(XiangjiReminderSettings settings) async {
     final db = await _database();
+    final previous = await db.query(
+      'xiangji_reminder_settings',
+      columns: const <String>['enabled'],
+      where: 'id = 1',
+      limit: 1,
+    );
     await db.insert(
       'xiangji_reminder_settings',
       <String, Object?>{
@@ -915,11 +1477,21 @@ class XiangjiGoalMentorDao {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    final wasEnabled =
+        previous.isNotEmpty && _int(previous.first['enabled']) == 1;
+    if (wasEnabled && !settings.enabled) {
+      await _insertAnalyticsEvent(
+        db,
+        eventName: 'reminder_disabled',
+        properties: const <String, Object?>{'reason_code': 'user_or_state'},
+      );
+    }
   }
 
   Future<String?> reminderContent() async {
     final goal = await activeGoal();
     if (goal == null || goal.state == XiangjiGoalState.archived) return null;
+    if (await hasPendingMentorKnowledgeMigration(goal.id)) return null;
     return (await _reminderForGoal(goal)).body;
   }
 
@@ -1026,6 +1598,7 @@ class XiangjiGoalMentorDao {
     if (!settings.enabled) return null;
     final goal = await activeGoal();
     if (goal == null || goal.state == XiangjiGoalState.archived) return null;
+    if (await hasPendingMentorKnowledgeMigration(goal.id)) return null;
     final localNow = now ?? DateTime.now();
     final lastInteraction = await _lastInteractionAtMs(goal.id);
     final silenceDays = localNow
@@ -1493,6 +2066,9 @@ class XiangjiGoalMentorDao {
       'xiangji_checkins',
       'xiangji_growth_evidence',
       'xiangji_mentor_sessions',
+      'xiangji_mentor_selections',
+      'xiangji_mentor_kb_migrations',
+      'xiangji_mentor_setting_progress',
       'xiangji_calibrations',
       'xiangji_reminder_settings',
       'xiangji_reminder_deliveries',
@@ -1500,10 +2076,14 @@ class XiangjiGoalMentorDao {
       'xiangji_provider_mirrors',
       'xiangji_provider_events',
       'xiangji_generation_audits',
+      'xiangji_analytics_events',
+      'xiangji_feature_flags',
+      'xiangji_local_identity',
     ];
     final payload = <String, Object?>{
       'product': '向己智能目标导师',
-      'schema_version': '1.1.0',
+      'schema_version': '1.4.0',
+      'knowledge_version': '2.1.0',
       'exported_at': DateTime.now().toUtc().toIso8601String(),
     };
     for (final table in tables) {
@@ -1516,6 +2096,7 @@ class XiangjiGoalMentorDao {
     final db = await _database();
     const tables = <String>[
       'xiangji_generation_audits',
+      'xiangji_analytics_events',
       'xiangji_provider_events',
       'xiangji_provider_mirrors',
       'xiangji_book_chunks',
@@ -1523,6 +2104,9 @@ class XiangjiGoalMentorDao {
       'xiangji_checkins',
       'xiangji_daily_steps',
       'xiangji_mentor_sessions',
+      'xiangji_mentor_selections',
+      'xiangji_mentor_kb_migrations',
+      'xiangji_mentor_setting_progress',
       'xiangji_calibrations',
       'xiangji_goal_state_events',
       'xiangji_reminder_deliveries',
@@ -1548,6 +2132,90 @@ class XiangjiGoalMentorDao {
           await db.execute('PRAGMA secure_delete = OFF');
         } catch (_) {}
       }
+    }
+  }
+
+  static Future<void> _insertAnalyticsEvent(
+    DatabaseExecutor db, {
+    required String eventName,
+    int? goalId,
+    Map<String, Object?> properties = const <String, Object?>{},
+  }) async {
+    if (!_analyticsEventNames.contains(eventName)) {
+      throw ArgumentError.value(eventName, 'eventName', '未登记的分析事件');
+    }
+    final safe = <String, Object?>{};
+    for (final entry in properties.entries) {
+      final key = entry.key.trim();
+      final lowered = key.toLowerCase();
+      if (key.isEmpty ||
+          lowered.contains('text') ||
+          lowered.contains('input') ||
+          lowered.contains('prompt') ||
+          lowered.contains('content') ||
+          lowered.contains('excerpt') ||
+          lowered.contains('answer')) {
+        continue;
+      }
+      final value = entry.value;
+      if (value is num || value is bool) {
+        safe[key] = value;
+      } else if (value != null) {
+        final normalized = value.toString().trim();
+        safe[key] = normalized.length <= 80
+            ? normalized
+            : normalized.substring(0, 80);
+      }
+    }
+    await db.insert('xiangji_analytics_events', <String, Object?>{
+      'event_name': eventName,
+      'goal_id': goalId,
+      'properties_json': jsonEncode(safe),
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  static Future<void> _seedV21MentorMigrationIfNeeded(Database db) async {
+    final goals = await db.query(
+      'xiangji_goals',
+      columns: const <String>['id', 'primary_thinker_id'],
+      where: 'is_active = 1',
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final row in goals) {
+      final goalId = _int(row['id']);
+      final thinkerId = (row['primary_thinker_id'] ?? '').toString().trim();
+      if (goalId <= 0 ||
+          (thinkerId.isNotEmpty && _v21MentorIds.contains(thinkerId))) {
+        continue;
+      }
+      await db.insert(
+        'xiangji_mentor_kb_migrations',
+        <String, Object?>{
+          'goal_id': goalId,
+          'from_thinker_id': thinkerId,
+          'target_kb_version': '2.1.0',
+          'status': 'reselection_required',
+          'resolved_thinker_id': '',
+          'detected_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      await db.update(
+        'xiangji_mentor_kb_migrations',
+        <String, Object?>{
+          'from_thinker_id': thinkerId,
+          'status': 'reselection_required',
+          'resolved_thinker_id': '',
+          'resolved_at_ms': null,
+        },
+        where: 'goal_id = ? AND target_kb_version = ? AND status != ?',
+        whereArgs: <Object?>[
+          goalId,
+          '2.1.0',
+          'reselection_required',
+        ],
+      );
     }
   }
 
