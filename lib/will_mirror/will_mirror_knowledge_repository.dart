@@ -90,7 +90,7 @@ class WillMirrorKnowledgeRepository {
   DatabaseFactory get _factory => _factoryOverride ?? databaseFactory;
 
   Future<String> _loadAsset(String key) {
-    return _assetLoader == null ? rootBundle.loadString(key) : _assetLoader!(key);
+    return _assetLoader == null ? rootBundle.loadString(key) : _assetLoader(key);
   }
 
   Future<void> initialize() async {
@@ -191,7 +191,7 @@ class WillMirrorKnowledgeRepository {
     if (_databasePath != null) return _databasePath!;
     final directory = _baseDirectoryProvider == null
         ? (await getApplicationDocumentsDirectory()).path
-        : await _baseDirectoryProvider!();
+        : await _baseDirectoryProvider();
     _databasePath = p.join(directory, databaseName);
     return _databasePath!;
   }

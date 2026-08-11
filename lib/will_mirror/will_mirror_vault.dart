@@ -61,7 +61,7 @@ class WillMirrorVault {
     if (_path != null) return _path!;
     final directory = _baseDirectoryProvider == null
         ? (await getApplicationDocumentsDirectory()).path
-        : await _baseDirectoryProvider!();
+        : await _baseDirectoryProvider();
     _path = p.join(directory, fileName);
     return _path!;
   }
@@ -879,7 +879,7 @@ class WillMirrorVault {
   Future<String> exportToFile() async {
     final directory = _baseDirectoryProvider == null
         ? (await getApplicationDocumentsDirectory()).path
-        : await _baseDirectoryProvider!();
+        : await _baseDirectoryProvider();
     final exportDirectory = Directory(p.join(directory, 'will_mirror_exports'));
     await exportDirectory.create(recursive: true);
     final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');

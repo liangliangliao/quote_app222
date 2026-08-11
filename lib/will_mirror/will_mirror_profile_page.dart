@@ -201,8 +201,6 @@ class _WillMirrorHypothesisDetailPageState
   List<WillMirrorLifeEvidence> _evidence = const <WillMirrorLifeEvidence>[];
   List<WillMirrorHypothesisEvidence> _links =
       const <WillMirrorHypothesisEvidence>[];
-  List<WillMirrorProbe> _probes = const <WillMirrorProbe>[];
-  List<WillMirrorObservation> _observations = const <WillMirrorObservation>[];
   WillMirrorRetrievalBundle? _retrieval;
   WillMirrorEvidenceMatrix? _matrix;
   WillMirrorGroundedInference? _inference;
@@ -246,8 +244,6 @@ class _WillMirrorHypothesisDetailPageState
       setState(() {
         _evidence = evidence;
         _links = links;
-        _probes = probes;
-        _observations = observations;
         _retrieval = retrieval;
         _matrix = matrix;
         _inference = _engine.localInference(
