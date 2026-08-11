@@ -1,16 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/will_mirror/will_mirror_discover_entry.dart';
 import 'package:quote_app/will_mirror/will_mirror_home_page.dart';
-import 'package:quote_app/will_mirror/will_mirror_knowledge_repository.dart';
+import 'package:quote_app/will_mirror/will_mirror_models.dart';
 import 'package:quote_app/will_mirror/will_mirror_vault.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
 
   testWidgets('Discover entry has stable key and opens Will Mirror',
       (tester) async {
@@ -32,27 +28,15 @@ void main() {
   });
 
   testWidgets('home exposes the five long-term V4 entries', (tester) async {
-    final directory = await Directory.systemTemp.createTemp('will_mirror_ui_');
-    final vault = WillMirrorVault(
-      factory: databaseFactoryFfi,
-      baseDirectoryProvider: () async => directory.path,
-    );
-    final knowledge = WillMirrorKnowledgeRepository(
-      factory: databaseFactoryFfi,
-      baseDirectoryProvider: () async => directory.path,
-    );
-    addTearDown(() async {
-      await vault.close();
-      await knowledge.close();
-      if (await directory.exists()) await directory.delete(recursive: true);
-    });
+    final vault = _EmptyWillMirrorVault();
+    addTearDown(vault.close);
 
     await tester.pumpWidget(
       MaterialApp(
-        home: WillMirrorHomePage(vault: vault, knowledge: knowledge),
+        home: WillMirrorHomePage(vault: vault),
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpUntilVisible(tester, find.text('当前欲望'));
 
     expect(find.text('当前欲望'), findsOneWidget);
     expect(find.text('Why Tree'), findsOneWidget);
@@ -81,4 +65,20 @@ void main() {
     );
     expect(find.textContaining('不是精神疾病诊断'), findsOneWidget);
   });
+}
+
+Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    if (finder.evaluate().isNotEmpty) return;
+  }
+  fail('目标组件未在 20 帧内出现：$finder');
+}
+
+class _EmptyWillMirrorVault extends WillMirrorVault {
+  @override
+  Future<WillMirrorGoal?> activeGoal() async => null;
+
+  @override
+  Future<WillMirrorExperiment?> activeExperiment() async => null;
 }
