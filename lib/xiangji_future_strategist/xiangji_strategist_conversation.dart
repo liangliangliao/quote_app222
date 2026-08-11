@@ -169,7 +169,7 @@ class _XiangjiStrategistConversationPanelState
     }
     setState(() => _listening = true);
     await speech.listen(
-      localeId: 'zh_CN',
+      listenOptions: SpeechListenOptions(localeId: 'zh_CN'),
       onResult: (result) {
         if (!mounted) return;
         _controller.value = TextEditingValue(

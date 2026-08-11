@@ -333,43 +333,6 @@ class _XiangjiEpistemicWorldPageState
     );
   }
 
-  Widget _rows(
-    List<Map<String, Object?>> rows, {
-    required String emptyTitle,
-    required String emptyMessage,
-    required String Function(Map<String, Object?> row) title,
-    required String Function(Map<String, Object?> row) subtitle,
-    required IconData icon,
-  }) {
-    if (rows.isEmpty) {
-      return XiangjiEmptyState(
-        title: emptyTitle,
-        message: emptyMessage,
-        icon: icon,
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: rows.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final row = rows[index];
-        return ListTile(
-          tileColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          leading: Icon(icon, color: XiangjiPalette.pine),
-          title: Text(title(row)),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: Text(subtitle(row)),
-          ),
-        );
-      },
-    );
-  }
-
   String _naturalList(Object? raw) {
     try {
       final decoded = raw is String ? jsonDecode(raw) : raw;

@@ -1004,7 +1004,7 @@ class _XiangjiProblemWorkspacePageState
           changedDecision ? Icons.change_circle_outlined : Icons.auto_fix_high,
           color: changedDecision
               ? const Color(0xFFC8641B)
-              : XiangjiPalette.forest,
+              : XiangjiPalette.pine,
         ),
         title: Text(
           '${changedDecision ? '军师改判' : '当前方法'} · ${event.methodLabel}',
