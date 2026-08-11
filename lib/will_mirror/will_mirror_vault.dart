@@ -76,7 +76,10 @@ class WillMirrorVault {
         version: schemaVersion,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
-          await db.execute('PRAGMA secure_delete = ON');
+          // Android sqflite classifies secure_delete as a query because the
+          // PRAGMA returns its effective value. Using execute() throws even
+          // though SQLite reports SQLITE_OK.
+          await db.rawQuery('PRAGMA secure_delete = ON');
         },
         onCreate: _create,
       ),
@@ -900,7 +903,7 @@ class WillMirrorVault {
   Future<void> deleteAll() async {
     final path = await _resolvePath();
     final db = await _database();
-    await db.execute('PRAGMA secure_delete = ON');
+    await db.rawQuery('PRAGMA secure_delete = ON');
     await close();
     await _factory.deleteDatabase(path);
     await _cipher.destroyKey();
