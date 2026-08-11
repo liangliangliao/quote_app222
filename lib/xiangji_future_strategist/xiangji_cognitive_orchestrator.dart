@@ -114,6 +114,11 @@ class XiangjiCognitiveOrchestrator {
       utterance,
       attachmentRefs: attachmentRefs,
       attachmentText: existingContext,
+      userSignalText: <String>[
+        utterance.trim(),
+        attachmentText.trim(),
+        historyContext,
+      ].where((text) => text.isNotEmpty).join('\n'),
       forceStrategic: forceStrategic,
     );
     final firstGuard = _guardForUnknownAnswer(

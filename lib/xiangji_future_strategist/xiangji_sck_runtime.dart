@@ -145,6 +145,7 @@ class XiangjiSckRuntime {
     String utterance, {
     List<String> attachmentRefs = const <String>[],
     String attachmentText = '',
+    String userSignalText = '',
     bool forceStrategic = false,
   }) {
     final raw = utterance.trim();
@@ -152,12 +153,18 @@ class XiangjiSckRuntime {
     final sourceText = <String>[raw, attachmentText.trim()]
         .where((item) => item.isNotEmpty)
         .join('\n');
-    final sentences = _sentences(sourceText);
-    final major = forceStrategic || _matches(sourceText, _majorDecisionTerms);
-    final highRisk = _matches(sourceText, _highRiskTerms);
-    final irreversible = _matches(sourceText, _irreversibleTerms);
-    final notWorthFighting = _matches(sourceText, _lowValueConflictTerms);
-    final opportunityWindow = _matches(sourceText, _opportunityTerms);
+    // Only user-sourced material may raise decision/risk gates or become an
+    // observation. Previous AI models and retrieval remain useful context,
+    // but must never promote their own wording into a user fact or new burden.
+    final directText = userSignalText.trim().isEmpty
+        ? sourceText
+        : userSignalText.trim();
+    final sentences = _sentences(directText);
+    final major = forceStrategic || _matches(directText, _majorDecisionTerms);
+    final highRisk = _matches(directText, _highRiskTerms);
+    final irreversible = _matches(directText, _irreversibleTerms);
+    final notWorthFighting = _matches(directText, _lowValueConflictTerms);
+    final opportunityWindow = _matches(directText, _opportunityTerms);
     final emotions = sentences.where((text) => _matches(text, _experienceTerms)).toList();
     final interpretations = sentences
         .where((text) => _matches(text, _interpretationTerms))
@@ -169,20 +176,20 @@ class XiangjiSckRuntime {
     final need = _inferNeed(raw);
     final assumptions = _hiddenAssumptions(raw, major: major);
     final constraints = _constraintsFor(
-      sourceText,
+      directText,
       highRisk: highRisk,
       irreversible: irreversible,
     );
     final urgentIrreversible =
-        irreversible && _matches(sourceText, _urgentTerms);
+        irreversible && _matches(directText, _urgentTerms);
     final hasBoundaryData = RegExp(
       r'(?:截止|最迟|期限|预算|损失|违约|撤回|退出成本|上限)[^\n。！？]{0,24}(?:\d|今天|明天|本周|下周|随时|没有|不能|可以|无)',
-    ).hasMatch(sourceText);
+    ).hasMatch(directText);
     final decisiveEvidencePresent =
-        _matches(sourceText, _decisiveEvidenceTerms);
-    final resourcesReady = _matches(sourceText, _resourceReadyTerms);
+        _matches(directText, _decisiveEvidenceTerms);
+    final resourcesReady = _matches(directText, _resourceReadyTerms);
     final commitmentBoundaryReady = hasBoundaryData ||
-        _matches(sourceText, _commitmentBoundaryReadyTerms);
+        _matches(directText, _commitmentBoundaryReadyTerms);
     final readyForBoundedCommitment = decisiveEvidencePresent &&
         resourcesReady &&
         commitmentBoundaryReady;

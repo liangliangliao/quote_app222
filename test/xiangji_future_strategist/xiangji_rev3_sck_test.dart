@@ -189,6 +189,18 @@ void main() {
       );
     });
 
+    test('AI context cannot promote itself into a major user decision', () {
+      final draft = sck.buildLocalDraft(
+        '今天完成了15分钟写作',
+        attachmentText: '上一版 AI 模型：这是长期战略，需要战略复核。',
+        userSignalText: '今天完成了15分钟写作',
+      );
+
+      expect(draft.majorDecision, isFalse);
+      expect(draft.informationNeeds, isEmpty);
+      expect(draft.observedFacts, contains('今天完成了15分钟写作'));
+    });
+
     test('TC-AI-010 extracts reality facts, experience and interpretation', () {
       final extraction = sck.extractRealityFeedback(
         '我发了3封邮件，但两天后仍没人回复。我胸口很紧。我觉得对方故意无视我。',
