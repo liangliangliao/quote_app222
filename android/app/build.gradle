@@ -16,16 +16,25 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "com.example.quote_app"
-    // Keep aligned with android/gradle.properties (android.compileSdkVersion).
-    compileSdk = flutter.compileSdkVersion
+    // V2.5 local-first acceptance baseline.
+    compileSdk = 36
 
     defaultConfig {
         applicationId "com.example.quote_app"
+        // Never commit the Baidu Android AK to AndroidManifest.xml. Release
+        // environments can inject it with -PBAIDU_MAPS_API_KEY=... or the
+        // BAIDU_MAPS_API_KEY environment variable.
+        manifestPlaceholders = [
+            BAIDU_MAPS_API_KEY: (
+                project.findProperty("BAIDU_MAPS_API_KEY")
+                    ?: System.getenv("BAIDU_MAPS_API_KEY")
+                    ?: ""
+            )
+        ]
         // Health Connect connect-client:1.1.0 requires API 26+.
         // Keeping it below 26 causes manifest merge failure during release builds.
         minSdk = 26
-        // Keep aligned with CI-installed Android SDK platforms.
-        targetSdk = 33
+        targetSdk = 36
         versionCode 13
         versionName "1.0"
         multiDexEnabled true

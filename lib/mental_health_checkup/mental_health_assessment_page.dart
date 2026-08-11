@@ -1,0 +1,694 @@
+import 'package:flutter/material.dart';
+
+import 'mental_health_checkup_catalog.dart';
+import 'mental_health_checkup_engine.dart';
+import 'mental_health_checkup_models.dart';
+import 'mental_health_checkup_repository.dart';
+
+class MentalHealthAssessmentPage extends StatefulWidget {
+  final MentalHealthCheckupCatalog catalog;
+  final CheckupModeSpec mode;
+  final MentalHealthCheckupRepository repository;
+  final String? focusDomainId;
+  final Map<String, dynamic>? draft;
+  final CheckupAssessmentPlan assessmentPlan;
+  final List<CheckupSession> history;
+
+  const MentalHealthAssessmentPage({
+    super.key,
+    required this.catalog,
+    required this.mode,
+    required this.repository,
+    required this.assessmentPlan,
+    this.history = const <CheckupSession>[],
+    this.focusDomainId,
+    this.draft,
+  });
+
+  @override
+  State<MentalHealthAssessmentPage> createState() =>
+      _MentalHealthAssessmentPageState();
+}
+
+class _MentalHealthAssessmentPageState
+    extends State<MentalHealthAssessmentPage> {
+  late final MentalHealthCheckupEngine _engine;
+  late List<CheckupQuestion> _questions;
+  late final String _sessionId;
+  late final int _startedAtMs;
+  int _questionShownAtMs = 0;
+  final Map<String, CheckupAnswer> _answers = <String, CheckupAnswer>{};
+  int _index = 0;
+  bool _finishing = false;
+  bool _savingDraft = false;
+  bool _allowPop = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _engine = MentalHealthCheckupEngine(widget.catalog);
+    final draft = widget.draft;
+    _sessionId = (draft?['session_id'] ?? '').toString().trim().isNotEmpty
+        ? draft!['session_id'].toString()
+        : 'session_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+    _startedAtMs = (draft?['started_at_ms'] as num?)?.toInt() ??
+        DateTime.now().millisecondsSinceEpoch;
+    _questions = widget.catalog.questionsForMode(
+      widget.mode.id,
+      focusDomainId: widget.focusDomainId,
+      now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+      assessmentPlan: widget.assessmentPlan,
+      history: widget.history,
+    );
+    if (draft != null && draft['answers'] is List) {
+      for (final value in (draft['answers'] as List).whereType<Map>()) {
+        final answer = CheckupAnswer.fromJson(Map<String, dynamic>.from(value));
+        _answers[answer.questionId] = answer;
+      }
+      _restoreAdaptiveQuestions();
+      final storedQuestionIds =
+          (draft['question_ids'] as List? ?? const <Object?>[])
+              .map((value) => value.toString())
+              .toList(growable: false);
+      _questions = widget.catalog.restoreQuestionOrder(
+        _questions,
+        sessionId: _sessionId,
+        storedQuestionIds: storedQuestionIds,
+        preservePriorityOrder:
+            widget.assessmentPlan.useLongitudinalPrioritization &&
+                widget.history.isNotEmpty,
+      );
+      _index = ((draft['current_index'] as num?)?.toInt() ?? 0)
+          .clamp(0, _questions.isEmpty ? 0 : _questions.length - 1)
+          .toInt();
+    } else {
+      _questions = widget.catalog.restoreQuestionOrder(
+        _questions,
+        sessionId: _sessionId,
+        preservePriorityOrder:
+            widget.assessmentPlan.useLongitudinalPrioritization &&
+                widget.history.isNotEmpty,
+      );
+    }
+    _questionShownAtMs = DateTime.now().millisecondsSinceEpoch;
+  }
+
+  CheckupQuestion get _question => _questions[_index];
+  CheckupAnswer? get _answer => _answers[_question.id];
+
+  Future<void> _persistDraft() async {
+    if (_savingDraft || _finishing) return;
+    _savingDraft = true;
+    try {
+      await widget.repository.saveDraft(
+        sessionId: _sessionId,
+        modeId: widget.mode.id,
+        modeName: widget.mode.name,
+        focusDomainId: widget.focusDomainId,
+        startedAtMs: _startedAtMs,
+        currentIndex: _index,
+        answers: _answers.values.toList(growable: false),
+        questionIds:
+            _questions.map((question) => question.id).toList(growable: false),
+        assessmentPlan: widget.assessmentPlan,
+      );
+    } finally {
+      _savingDraft = false;
+    }
+  }
+
+  Future<void> _popAfterSaving(CheckupSession? result) async {
+    if (!mounted) return;
+    setState(() => _allowPop = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    Navigator.of(context).pop(result);
+  }
+
+  Future<void> _onPopInvoked(bool didPop, CheckupSession? result) async {
+    if (didPop || _allowPop || _finishing) return;
+    await _persistDraft();
+    await _popAfterSaving(result);
+  }
+
+  Future<void> _select(CheckupAnswerChoice choice) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final answer = CheckupAnswer(
+      questionId: _question.id,
+      label: choice.label,
+      value: choice.value,
+      answeredAtMs: now,
+      responseDurationMs:
+          (now - _questionShownAtMs).clamp(0, 600000).toInt(),
+    );
+    final additions = widget.catalog.adaptiveQuestions(
+      modeId: widget.mode.id,
+      question: _question,
+      answer: answer,
+      existingQuestionIds: _questions.map((item) => item.id).toSet(),
+      now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+      assessmentPlan: widget.assessmentPlan,
+      history: widget.history,
+    );
+    final remaining = (widget.assessmentPlan.questionLimit - _questions.length)
+        .clamp(0, 120)
+        .toInt();
+    setState(() {
+      _answers[_question.id] = answer;
+      _questions.addAll(additions.take(remaining));
+    });
+    await _persistDraft();
+    if (!mounted || !_question.isSafety) return;
+    final alert = _question.id == 'B20-S3'
+        ? choice.value >= 2
+        : choice.value >= 2;
+    final uncertain = choice.value >= 1;
+    if (alert || uncertain) await _showSafetyInterruption(alert: alert);
+  }
+
+  Future<void> _showSafetyInterruption({required bool alert}) async {
+    if (!mounted) return;
+    final stop = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: Icon(
+          alert ? Icons.health_and_safety : Icons.shield_outlined,
+          color: alert ? const Color(0xFFC62828) : const Color(0xFFE65100),
+          size: 36,
+        ),
+        title: Text(alert ? '先处理现实安全' : '先把安全情况说清楚'),
+        content: Text(
+          alert
+              ? '你的回答触发了安全分流。本轮将停止普通课程评分和课程行动处方。请不要独自承担：联系可信任的人、当地专业支持；如有立即危险，请联系当地紧急服务。'
+              : '你的回答存在不确定或轻度异常。本轮不会继续生成普通课程处方。请先查看安全路线，并在需要时寻求人工支持。',
+        ),
+        actions: <Widget>[
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('保存并查看安全路线'),
+          ),
+        ],
+      ),
+    );
+    if (stop == true && mounted) await _finish(allowIncomplete: true);
+  }
+
+  Future<void> _next() async {
+    if (_answer == null && _question.required) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('这一题属于固定门题，请先选择最符合的答案。')),
+      );
+      return;
+    }
+    if (_index >= _questions.length - 1) {
+      await _finish();
+      return;
+    }
+    setState(() {
+      _index++;
+      _questionShownAtMs = DateTime.now().millisecondsSinceEpoch;
+    });
+    await _persistDraft();
+  }
+
+  Future<void> _previous() async {
+    if (_index == 0) return;
+    setState(() {
+      _index--;
+      _questionShownAtMs = DateTime.now().millisecondsSinceEpoch;
+    });
+    await _persistDraft();
+  }
+
+  Future<void> _finish({bool allowIncomplete = false}) async {
+    if (_finishing) return;
+    if (!allowIncomplete) {
+      final missingRequired = _questions.any(
+        (question) => question.required && !_answers.containsKey(question.id),
+      );
+      if (missingRequired) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('还有固定门题没有完成，请返回补充。')),
+        );
+        return;
+      }
+    }
+    setState(() => _finishing = true);
+    final answers = _answers.values.toList(growable: false);
+    final report = _engine.buildReport(
+      sessionId: _sessionId,
+      modeId: widget.mode.id,
+      questions: _questions,
+      answers: answers,
+      assessmentPlan: widget.assessmentPlan,
+    );
+    final session = CheckupSession(
+      id: _sessionId,
+      modeId: widget.mode.id,
+      modeName: widget.mode.name,
+      startedAtMs: _startedAtMs,
+      completedAtMs: DateTime.now().millisecondsSinceEpoch,
+      answers: answers,
+      report: report,
+      assessmentPlan: widget.assessmentPlan,
+    );
+    try {
+      await widget.repository.saveCompletedSession(session);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _finishing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('本地保存失败，草稿仍保留。请检查存储空间后重试。'),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    await _popAfterSaving(session);
+  }
+
+  void _restoreAdaptiveQuestions() {
+    final knownIds = _questions.map((item) => item.id).toSet();
+    for (final answer in _answers.values) {
+      CheckupQuestion? question;
+      for (final candidate in _questions) {
+        if (candidate.id == answer.questionId) {
+          question = candidate;
+          break;
+        }
+      }
+      if (question == null) continue;
+      final additions = widget.catalog.adaptiveQuestions(
+        modeId: widget.mode.id,
+        question: question,
+        answer: answer,
+        existingQuestionIds: knownIds,
+        now: DateTime.fromMillisecondsSinceEpoch(_startedAtMs),
+        assessmentPlan: widget.assessmentPlan,
+        history: widget.history,
+      );
+      final remaining = (widget.assessmentPlan.questionLimit - _questions.length)
+          .clamp(0, 120)
+          .toInt();
+      final accepted = additions.take(remaining).toList(growable: false);
+      _questions.addAll(accepted);
+      knownIds.addAll(accepted.map((item) => item.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_questions.isEmpty) {
+      return const Scaffold(
+        body: Center(child: Text('当前模式没有可用题目。')),
+      );
+    }
+    final progress = (_index + 1) / _questions.length;
+    return PopScope<CheckupSession>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: _onPopInvoked,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F7FB),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF5F7FB),
+          title: Text(widget.mode.name),
+          actions: <Widget>[
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Text(
+                  '${_index + 1}/${_questions.length}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: <Widget>[
+              LinearProgressIndicator(
+                value: progress,
+                minHeight: 5,
+                backgroundColor: const Color(0xFFE1E7F0),
+                color: const Color(0xFF5664D2),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 120),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: <Widget>[
+                          _Tag(
+                            icon: _question.isSafety
+                                ? Icons.shield_outlined
+                                : Icons.category_outlined,
+                            label: _question.group,
+                            color: _question.isSafety
+                                ? const Color(0xFFC62828)
+                                : const Color(0xFF4554C5),
+                          ),
+                          _Tag(
+                            icon: Icons.verified_outlined,
+                            label: _shortSourceLevel(_question.sourceLevel),
+                            color: const Color(0xFF39715D),
+                          ),
+                          if (_question.contentCandidateId != null)
+                            _Tag(
+                              icon: _question.retiredSnapshot
+                                  ? Icons.history
+                                  : Icons.approval_outlined,
+                              label: _question.retiredSnapshot
+                                  ? '原草稿签发快照 v${_question.contentVersion}'
+                                  : '人工签发 v${_question.contentVersion}',
+                              color: _question.retiredSnapshot
+                                  ? const Color(0xFFB54708)
+                                  : const Color(0xFF19705A),
+                            ),
+                          if (!_question.required)
+                            const _Tag(
+                              icon: Icons.tune,
+                              label: '自适应追问',
+                              color: Color(0xFF6A4C93),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          _question.prompt,
+                          style: const TextStyle(
+                            fontSize: 23,
+                            height: 1.45,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF1C2434),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _question.scaleLabel,
+                        style: const TextStyle(
+                          color: Color(0xFF667085),
+                          height: 1.45,
+                        ),
+                      ),
+                      if (_question.scoringRole ==
+                          CheckupQuestionScoringRole.contextOnly) ...[
+                        const SizedBox(height: 12),
+                        const _ScoringBoundaryNote(),
+                      ],
+                      const SizedBox(height: 22),
+                      ..._question.choices.map(
+                        (choice) => _AnswerTile(
+                          choice: choice,
+                          selected: _answer?.value == choice.value,
+                          onTap: _finishing ? null : () => _select(choice),
+                        ),
+                      ),
+                      if (_question.isOpenCheck) ...<Widget>[
+                        const SizedBox(height: 14),
+                        const _PrivacyNote(),
+                      ],
+                      const SizedBox(height: 22),
+                      _EvidenceHint(question: _question),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        bottomSheet: SafeArea(
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            child: Row(
+              children: <Widget>[
+                OutlinedButton.icon(
+                  onPressed: _index == 0 || _finishing ? null : _previous,
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('上一题'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _finishing ? null : _next,
+                    icon: _finishing
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(_index == _questions.length - 1
+                            ? Icons.auto_graph
+                            : Icons.arrow_forward),
+                    label: Text(
+                      _finishing
+                          ? '正在生成本地报告…'
+                          : _index == _questions.length - 1
+                              ? '完成并生成报告'
+                              : _answer == null && !_question.required
+                                  ? '跳过此题'
+                                  : '下一题',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _shortSourceLevel(String value) {
+    if (value.contains('D2')) return 'D2 安全层';
+    if (value.contains('D1')) return 'D1 产品参数';
+    if (value.contains('C1')) return 'C1 课程直接';
+    if (value.contains('C2')) return 'C2 机制推导';
+    return value.isEmpty ? '来源待核对' : value;
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _Tag({required this.icon, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ScoringBoundaryNote extends StatelessWidget {
+  const _ScoringBoundaryNote();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7E8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF2D49B)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(
+              Icons.balance_outlined,
+              size: 18,
+              color: Color(0xFF9A6700),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '这是理解信心/校准证据，不进入K分或健康分，也不会单独触发异常结论。',
+                style: TextStyle(
+                  color: Color(0xFF6D4C00),
+                  height: 1.4,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _AnswerTile extends StatelessWidget {
+  final CheckupAnswerChoice choice;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _AnswerTile({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Semantics(
+          selected: selected,
+          button: true,
+          label: choice.label,
+          child: Material(
+            color: selected ? const Color(0xFFE9ECFF) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: selected
+                        ? const Color(0xFF5664D2)
+                        : const Color(0xFFD9DFE8),
+                    width: selected ? 1.8 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 25,
+                      height: 25,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: selected
+                            ? const Color(0xFF5664D2)
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: selected
+                              ? const Color(0xFF5664D2)
+                              : const Color(0xFF98A2B3),
+                        ),
+                      ),
+                      child: selected
+                          ? const Icon(Icons.check, size: 17, color: Colors.white)
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        choice.label,
+                        style: TextStyle(
+                          fontSize: 16,
+                          height: 1.35,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          color: const Color(0xFF263043),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class _PrivacyNote extends StatelessWidget {
+  const _PrivacyNote();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F7F4),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(Icons.lock_outline, color: Color(0xFF39715D), size: 20),
+            SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                '为减少敏感文本暴露，本版本只保存“存在未覆盖问题”这一结构化信号，不保存开放题原文。你可以在之后与可信任的人或专业人员补充说明。',
+                style: TextStyle(
+                  color: Color(0xFF315C4E),
+                  height: 1.45,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _EvidenceHint extends StatelessWidget {
+  final CheckupQuestion question;
+
+  const _EvidenceHint({required this.question});
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <String>[
+      if (question.indicatorId != null) '指标 ${question.indicatorId}',
+      if (question.lecture != null) 'Lecture ${question.lecture}',
+      if (question.evidenceLocation?.isNotEmpty == true)
+        question.evidenceLocation!,
+    ];
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Icon(Icons.menu_book_outlined, size: 18, color: Color(0xFF667085)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '课程定位：${parts.join(' · ')}',
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: Color(0xFF667085),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

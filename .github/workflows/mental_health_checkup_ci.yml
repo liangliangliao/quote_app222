@@ -1,0 +1,117 @@
+name: Mental Health Checkup CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mental_health_checkup_ci.yml"
+      - "android/app/build.gradle"
+      - "android/app/src/main/AndroidManifest.xml"
+      - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
+      - "android/app/src/main/kotlin/com/example/quote_app/MentalHealthCheckup*.kt"
+      - "android/app/src/main/res/xml/backup_rules.xml"
+      - "android/app/src/main/res/xml/data_extraction_rules.xml"
+      - "android/gradle.properties"
+      - "lib/mental_health_checkup/**"
+      - "lib/pages/discover_page.dart"
+      - "lib/services/native_guard.dart"
+      - "assets/mental_health_checkup/**"
+      - "test/mental_health_checkup/**"
+      - "pubspec.yaml"
+
+jobs:
+  checkup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Install Android SDK 36
+        run: >-
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "platforms;android-36"
+
+      - name: Run mental health checkup tests
+        run: flutter test test/mental_health_checkup/mental_health_checkup_engine_test.dart
+
+      - name: Analyze mental health checkup strictly
+        run: >-
+          flutter analyze --fatal-infos --fatal-warnings
+          lib/mental_health_checkup
+          test/mental_health_checkup
+
+      - name: Analyze discovery integration
+        run: >-
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          lib/pages/discover_page.dart
+          lib/services/native_guard.dart
+
+      - name: Build Android release APK
+        run: flutter build apk --release -t lib/main.dart
+
+      - name: Scan APK for embedded developer AI secrets
+        run: |
+          python3 - <<'PY'
+          import re
+          import sys
+          import zipfile
+
+          apk = "build/app/outputs/flutter-apk/app-release.apk"
+          token = re.compile(rb"(?:sk|xai)-(?:proj-)?[A-Za-z0-9_-]{24,}")
+          findings = []
+          with zipfile.ZipFile(apk) as archive:
+              for name in archive.namelist():
+                  with archive.open(name) as source:
+                      overlap = b""
+                      while True:
+                          chunk = source.read(1024 * 1024)
+                          if not chunk:
+                              break
+                          sample = overlap + chunk
+                          if token.search(sample):
+                              findings.append(name)
+                              break
+                          overlap = sample[-128:]
+          if findings:
+              print("Potential developer AI secret found in:", findings)
+              sys.exit(1)
+          print("No developer AI token pattern found in APK.")
+          PY
+
+      - name: Create APK checksum
+        run: |
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          sha256sum "$apk" > "$apk.sha256"
+          {
+            echo "apk_bytes=$(stat -c%s "$apk")"
+            echo "artifact_compression_level=6"
+            echo "target_sdk=36"
+            echo "signing=CI install-test signing; not a store release attestation"
+          } > build/app/outputs/flutter-apk/mental-health-checkup-build-info.txt
+
+      - name: Upload Android release APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: quote-app-mental-health-checkup-release
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
+            build/app/outputs/flutter-apk/mental-health-checkup-build-info.txt
+          if-no-files-found: error
+          retention-days: 14
+          # APK files still contain compressible native payloads. The previous
+          # level 0 setting made the downloadable Artifact look almost twice as
+          # large even though the APK itself only grew about 1.1%.
+          compression-level: 6

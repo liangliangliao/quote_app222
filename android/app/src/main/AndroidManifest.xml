@@ -106,13 +106,21 @@
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
     </queries>
-<application android:name=".App" android:roundIcon="@mipmap/ic_launcher_round" android:label="名人名言" android:icon="@mipmap/ic_launcher" android:usesCleartextTraffic="true">
+<application
+    android:name=".App"
+    android:roundIcon="@mipmap/ic_launcher_round"
+    android:label="名人名言"
+    android:icon="@mipmap/ic_launcher"
+    android:usesCleartextTraffic="true"
+    android:allowBackup="false"
+    android:fullBackupContent="@xml/backup_rules"
+    android:dataExtractionRules="@xml/data_extraction_rules">
         <!-- 强制 Geolocator 在 Android 使用原生 LocationManager（规避GMS/Fused依赖） -->
 <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />
         <!-- Baidu Location SDK AK (建议配置；也可通过 LocationClient.setKey 设置) -->
         <meta-data
             android:name="com.baidu.lbsapi.API_KEY"
-            android:value="oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh" />
+            android:value="${BAIDU_MAPS_API_KEY}" />
 
         <!-- Baidu Location SDK required remote service -->
         <service
@@ -249,6 +257,20 @@
       <action android:name="com.example.quote_app.ALARM" />
     </intent-filter>
   </receiver>
+    <receiver
+        android:name=".MentalHealthCheckupTimeChangeReceiver"
+        android:enabled="true"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.TIME_SET" />
+            <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        </intent-filter>
+    </receiver>
+    <receiver
+        android:name=".MentalHealthCheckupReminderActionReceiver"
+        android:enabled="true"
+        android:exported="false" />
     <receiver android:name=".AlarmReceiver" android:exported="true">
         <intent-filter>
             <action android:name="ALARM_FIRE" />

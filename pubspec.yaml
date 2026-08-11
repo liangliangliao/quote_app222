@@ -67,6 +67,7 @@ dependency_overrides:
 flutter:
   uses-material-design: true
   assets:
+    - assets/mental_health_checkup/
     - assets/html/poster-wall-only-frame-v23-1.html
     - assets/fallback/camus_fallback.json
     # 新增背景图片用于海报页面背景
