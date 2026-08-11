@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:quote_app/will_mirror/will_mirror_models.dart';
 import 'package:quote_app/will_mirror/will_mirror_vault.dart';
 import 'package:quote_app/will_mirror/will_mirror_vault_cipher.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
