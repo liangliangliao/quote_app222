@@ -249,8 +249,14 @@ class XiangjiRepository {
     } catch (_) {
       // Todo is helpful retrieval context, never a prerequisite for counsel.
     }
-    final methodTrainingEnabled =
-        (await _kv.getString(methodTrainingKey)) == '1';
+    var methodTrainingEnabled = false;
+    try {
+      methodTrainingEnabled =
+          (await _kv.getString(methodTrainingKey)) == '1';
+    } catch (_) {
+      // A device preference must never prevent the deterministic counsel path
+      // from working (for example before platform channels are available).
+    }
     final result = await orchestrator.consult(
       problemId: targetProblemId,
       utterance: text,

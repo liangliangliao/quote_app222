@@ -183,7 +183,8 @@ void main() {
       expect(draft.judgment, contains('不值得'));
       expect(draft.recommendation, contains('停止'));
       expect(
-        draft.strategyOptions.any((option) => option['type'] == 'retreat'),
+        draft.strategyOptions
+            .any((option) => option['type'] == 'case_retreat'),
         isTrue,
       );
     });

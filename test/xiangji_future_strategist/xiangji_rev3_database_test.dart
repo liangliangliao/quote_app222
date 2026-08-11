@@ -381,7 +381,7 @@ void main() {
     final repository = XiangjiRepository(dao: dao);
     final first = await repository.refreshAutomaticWatch();
     final second = await repository.refreshAutomaticWatch();
-    final runs = await dao.agentRuns('');
+    final runs = await dao.agentRuns('problem-r3');
     final alert = await dao.latestOpenAlert();
     final monitorRun = runs.singleWhere((row) => row['agent_role'] == 'A14');
     final chiefRun = runs.singleWhere((row) => row['agent_role'] == 'A00');
@@ -498,11 +498,11 @@ void main() {
     }
   });
 
-  test('module export advertises Rev3 without losing Rev2 tables', () async {
+  test('module export advertises Rev5.2 without losing legacy tables', () async {
     final snapshot = await dao.exportSnapshot();
     final tables = snapshot['tables'] as Map<String, Object?>;
 
-    expect(snapshot['format'], 'xiangji-future-strategist-v6.1-rev3');
+    expect(snapshot['format'], 'xiangji-future-strategist-v6.1-rev5.2');
     expect(tables, contains('xf_problem'));
     expect(tables, contains('xf_decision_draft'));
   });
