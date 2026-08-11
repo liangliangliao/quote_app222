@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_agent_service.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_persistent_solver.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_sck_runtime.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_state_machine.dart';
@@ -89,6 +90,21 @@ void main() {
   });
 
   group('TC-AI / automatic delegation', () {
+    test('an explicit new need outranks facts embedded in the same sentence', () {
+      const classifier = XiangjiInputClassifier();
+      final classification = classifier.classify(
+        input: '我想恢复晨间写作，本周已经写了两次',
+        activeProblem: const XiangjiProblemRecord(
+          id: 'old-problem',
+          rawQuestion: '我想辞职但害怕',
+          state: XiangjiProblemState.solving,
+        ),
+      );
+
+      expect(classification.type, XiangjiInputType.newProblem);
+      expect(classification.updateExistingProblem, isFalse);
+    });
+
     test('A03 judgment precedes Solver and major routes include red team', () {
       final plan = sck.orchestrationPlan(majorDecision: true);
 

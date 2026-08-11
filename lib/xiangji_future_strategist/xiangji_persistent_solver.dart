@@ -88,11 +88,14 @@ class XiangjiInputClassifier {
     )) {
       return XiangjiInputType.actionFeedback;
     }
+    // A stated goal remains a Need even when the same sentence also includes
+    // background facts such as "已经" or "连续". Its semantic overlap with the
+    // active problem then decides whether to continue or create a new problem.
+    if (_matches(text, _needSignals)) return XiangjiInputType.need;
     if (_matches(text, _experienceSignals)) {
       return XiangjiInputType.experience;
     }
     if (_matches(text, _factSignals)) return XiangjiInputType.newFact;
-    if (_matches(text, _needSignals)) return XiangjiInputType.need;
     return hasActiveAction
         ? XiangjiInputType.actionFeedback
         : XiangjiInputType.need;
