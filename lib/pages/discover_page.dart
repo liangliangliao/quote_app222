@@ -40,6 +40,7 @@ import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
 import '../zhixing_tree/zhixing_tree_home_page.dart';
+import '../xiangji_goal_mentor/xiangji_discover_card.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2536,6 +2537,8 @@ Widget _buildEmotionPieChart() {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   children: [
+                    const XiangjiDiscoverCard(),
+                    const SizedBox(height: 12),
                     _buildDiscoverEntry(
                       icon: Icons.insights_outlined,
                       title: '当下心情与情绪分析',
