@@ -59,11 +59,11 @@ void main() {
     );
     expect(find.text('当前实验'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.textContaining('不是精神疾病诊断'),
+      find.textContaining('不诊断、不治疗'),
       240,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.textContaining('不是精神疾病诊断'), findsOneWidget);
+    expect(find.textContaining('不诊断、不治疗'), findsOneWidget);
   });
 }
 
