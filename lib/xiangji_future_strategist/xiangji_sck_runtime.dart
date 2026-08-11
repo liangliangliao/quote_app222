@@ -76,8 +76,8 @@ class XiangjiSckRuntime {
     );
   }
 
-  /// A02 always precedes A05/A06. Strategic work always includes an automatic
-  /// A08 red team and ends in A00 synthesis; users never select these roles.
+  /// A03 always precedes A05/A06. Strategic work always includes automatic
+  /// A07-A11 gates and ends in A00/A12 synthesis; users never select roles.
   List<XiangjiAgentId> orchestrationPlan({
     required bool majorDecision,
     bool realityFeedback = false,
@@ -88,13 +88,19 @@ class XiangjiSckRuntime {
         XiangjiAgentId.reviewHistorian,
         XiangjiAgentId.judgmentEngine,
         XiangjiAgentId.problemFramer,
-        XiangjiAgentId.problemStateManager,
         XiangjiAgentId.solver,
-        if (majorDecision) XiangjiAgentId.strategist,
-        if (majorDecision) XiangjiAgentId.redTeam,
+        if (majorDecision) ...const <XiangjiAgentId>[
+          XiangjiAgentId.campaignSelector,
+          XiangjiAgentId.resourcePlanner,
+          XiangjiAgentId.strategist,
+          XiangjiAgentId.redTeam,
+          XiangjiAgentId.wargameContingency,
+        ],
         XiangjiAgentId.chiefStrategist,
-        XiangjiAgentId.cognitiveExperienceGenerator,
-        XiangjiAgentId.methodLearningAdapter,
+        XiangjiAgentId.methodTranslator,
+        XiangjiAgentId.personalScienceLearner,
+        XiangjiAgentId.methodEffectValidator,
+        XiangjiAgentId.antiTemplateValidator,
       ];
     }
     if (backgroundWatch) {
@@ -109,14 +115,19 @@ class XiangjiSckRuntime {
       XiangjiAgentId.judgmentEngine,
       XiangjiAgentId.groundingAuditor,
       XiangjiAgentId.problemFramer,
-      XiangjiAgentId.problemStateManager,
       XiangjiAgentId.solver,
-      if (majorDecision) XiangjiAgentId.strategist,
-      if (majorDecision) XiangjiAgentId.redTeam,
+      if (majorDecision) ...const <XiangjiAgentId>[
+        XiangjiAgentId.campaignSelector,
+        XiangjiAgentId.resourcePlanner,
+        XiangjiAgentId.strategist,
+        XiangjiAgentId.redTeam,
+        XiangjiAgentId.wargameContingency,
+      ],
       XiangjiAgentId.chiefStrategist,
       XiangjiAgentId.actionOfficer,
-      XiangjiAgentId.cognitiveExperienceGenerator,
-      XiangjiAgentId.methodLearningAdapter,
+      XiangjiAgentId.methodTranslator,
+      XiangjiAgentId.methodEffectValidator,
+      XiangjiAgentId.antiTemplateValidator,
     ];
   }
 

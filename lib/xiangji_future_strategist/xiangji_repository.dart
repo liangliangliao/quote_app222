@@ -10,6 +10,7 @@ import 'xiangji_persistent_solver.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
 import 'xiangji_sck_runtime.dart';
+import 'xiangji_signature_method_engine.dart';
 import 'xiangji_state_machine.dart';
 
 class XiangjiRepository {
@@ -17,13 +18,17 @@ class XiangjiRepository {
     XiangjiDao? dao,
     TodoDao? todoDao,
     XiangjiAgentService? agentService,
+    XiangjiSignatureCapabilityRouter? signatureRouter,
   })  : _dao = dao ?? XiangjiDao(),
         _todoDao = todoDao ?? TodoDao(),
-        _agentService = agentService ?? XiangjiAgentService(dao: dao);
+        _agentService = agentService ?? XiangjiAgentService(dao: dao),
+        _signatureRouter =
+            signatureRouter ?? const XiangjiSignatureCapabilityRouter();
 
   final XiangjiDao _dao;
   final TodoDao _todoDao;
   final XiangjiAgentService _agentService;
+  final XiangjiSignatureCapabilityRouter _signatureRouter;
   final KeyValueDao _kv = KeyValueDao();
   final XiangjiInputClassifier _inputClassifier =
       const XiangjiInputClassifier();
@@ -69,6 +74,20 @@ class XiangjiRepository {
 
   Future<XiangjiProblemProgress?> problemProgress(String problemId) =>
       _dao.problemProgress(problemId);
+
+  Future<XiangjiSolverSnapshot?> solverSnapshot(String problemId) =>
+      _dao.solverSnapshot(problemId);
+
+  Future<List<XiangjiMethodEvent>> methodEvents(
+    String problemId, {
+    int limit = 20,
+    bool userVisibleOnly = false,
+  }) =>
+      _dao.methodEvents(
+        problemId: problemId,
+        limit: limit,
+        userVisibleOnly: userVisibleOnly,
+      );
 
   Future<List<XiangjiCognitiveExperienceDraft>> cognitiveExperiences({
     String problemId = '',
@@ -232,7 +251,7 @@ class XiangjiRepository {
     }
     final methodTrainingEnabled =
         (await _kv.getString(methodTrainingKey)) == '1';
-    return orchestrator.consult(
+    final result = await orchestrator.consult(
       problemId: targetProblemId,
       utterance: text,
       authorizedSensitiveContext: authorizedSensitiveContext,
@@ -248,6 +267,17 @@ class XiangjiRepository {
       methodTrainingEnabled: methodTrainingEnabled,
       onProgress: onProgress,
     );
+    await _applySignatureMethodsFromCouncil(
+      result: result,
+      utterance: text,
+      sourceRefs: <String>[
+        'input:${result.inputClassification?.type.wire ?? classification.type.wire}',
+        ...attachmentRefs,
+        ...retrievableSourceRefs,
+      ],
+      realityContradicted: realityContradicted,
+    );
+    return result;
   }
 
   Future<XiangjiCouncilResult> planCampaignWithStrategist({
@@ -539,6 +569,19 @@ class XiangjiRepository {
           ? parent!.rootGoalId
           : parentProblemId,
     );
+    await _dao.saveSolverSnapshot(XiangjiSolverSnapshot(
+      problemId: problemId,
+      need: question,
+      problemFrame: <String, Object?>{
+        'original_question': question,
+        'status': 'captured',
+      },
+      currentState: <String, Object?>{
+        'summary': rawContext.trim().isEmpty ? question : rawContext.trim(),
+      },
+      promptVersion: 'rev5.2',
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    ));
     return problemId;
   }
 
@@ -654,6 +697,40 @@ class XiangjiRepository {
       problemId,
       XiangjiProblemState.epistemicReview,
     );
+    final formalizationText = <String>[
+      ...observedFacts,
+      ...bodyExperiences,
+      ...userInterpretations,
+    ].join('；');
+    await _applySignatureMethods(
+      problemId: problemId,
+      context: XiangjiSignatureMethodContext(
+        problemId: problemId,
+        problemState: XiangjiProblemState.formalizing,
+        rawText: formalizationText,
+        requestedMethodIds: <String>[
+          if ((observedFacts.isNotEmpty || bodyExperiences.isNotEmpty) &&
+              userInterpretations.isNotEmpty)
+            'MEC-001',
+          if (RegExp(r'害怕|恐惧|抗拒|焦虑|不想|感觉').hasMatch(formalizationText) &&
+              RegExp(r'所以|说明|一定|肯定|证明').hasMatch(formalizationText))
+            'MEC-002',
+          if (causalHypotheses.isNotEmpty) 'MEC-003',
+          if (RegExp(r'说不清|不对劲|怪怪的|难以描述').hasMatch(formalizationText))
+            'MEC-005',
+        ],
+        sourceRefs: <String>['problem:$problemId'],
+        facts: observedFacts,
+        experiences: bodyExperiences,
+        interpretations: userInterpretations,
+        causalCandidates: causalHypotheses,
+        vagueExperience: bodyExperiences.firstWhere(
+          (item) => RegExp(r'说不清|不对劲|怪怪的|难以描述').hasMatch(item),
+          orElse: () => '',
+        ),
+        eventIdPrefix: newId('xf_method_formalize'),
+      ),
+    );
   }
 
   Future<void> completeEpistemicReview({
@@ -701,6 +778,26 @@ class XiangjiRepository {
     await _dao.updateProblemState(
       problemId,
       XiangjiProblemState.conceptReview,
+    );
+    await _applySignatureMethods(
+      problemId: problemId,
+      context: XiangjiSignatureMethodContext(
+        problemId: problemId,
+        problemState: XiangjiProblemState.epistemicReview,
+        requestedMethodIds: <String>[
+          'MEC-007',
+          if (unknowns.isNotEmpty) 'MEC-008',
+        ],
+        highImpactClaim: problem.reframedQuestion.isEmpty
+            ? problem.rawQuestion
+            : problem.reframedQuestion,
+        weakestPremise:
+            unknowns.isEmpty ? '' : (unknowns.first['text'] ?? '').toString(),
+        complexModel: unknowns.isNotEmpty,
+        groundWeak: !groundingReviewed || unknowns.isNotEmpty,
+        sourceRefs: <String>['problem:$problemId'],
+        eventIdPrefix: newId('xf_method_ground'),
+      ),
     );
   }
 
@@ -770,6 +867,50 @@ class XiangjiRepository {
     );
     decision.requireAllowed();
     await _dao.updateProblemState(problemId, XiangjiProblemState.solving);
+    await _applySignatureMethods(
+      problemId: problemId,
+      context: XiangjiSignatureMethodContext(
+        problemId: problemId,
+        problemState: XiangjiProblemState.conceptReview,
+        requestedMethodIds: <String>[
+          if (conceptDefinitions.isNotEmpty) 'MEC-004',
+          if (conceptDefinitions.isNotEmpty) 'MEC-006',
+          'MEC-010',
+          'MEC-011',
+        ],
+        decisiveDifference: conceptDefinitions.isEmpty
+            ? ''
+            : '本轮按当前目标和现实判据重新界定概念边界。',
+        abstractLabel: conceptDefinitions.isEmpty
+            ? ''
+            : conceptDefinitions.first.split('=').first.trim(),
+        // This form is itself the user's confirmation gate. Re-open it only
+        // when the framed problem and goal are still the same path statement.
+        goalNeedsAudit: false,
+        pathAsGoal: reframedQuestion.trim() == goalText.trim(),
+        candidateGaps: <Map<String, Object?>>[
+          <String, Object?>{
+            'type': 'action',
+            'label': reframedQuestion.trim(),
+            'priority': 1,
+          },
+        ],
+        sourceRefs: <String>['problem:$problemId'],
+        eventIdPrefix: newId('xf_method_frame'),
+      ),
+      seed: (snapshot) => snapshot.copyWith(
+        problemFrame: <String, Object?>{
+          ...snapshot.problemFrame,
+          'statement': reframedQuestion.trim(),
+          'value_link': valueLink.trim(),
+        },
+        goalState: <String, Object?>{
+          'statement': goalText.trim(),
+          'success_criteria': successCriteria.trim(),
+          'exit_criteria': exitCriteria.trim(),
+        },
+      ),
+    );
   }
 
   Future<String> selectOperator({
@@ -782,6 +923,12 @@ class XiangjiRepository {
     required String prediction,
     required int expectedMinutes,
     String campaignId = '',
+    List<String> missingPreconditions = const <String>[],
+    String expectedEffect = '',
+    String cost = '',
+    String risk = 'low',
+    String reversibility = 'high',
+    String informationValue = 'medium',
   }) async {
     final problem = await _requireProblem(problemId);
     if (problem.state != XiangjiProblemState.solving) {
@@ -791,6 +938,25 @@ class XiangjiRepository {
         .any((value) => value.trim().isEmpty)) {
       throw ArgumentError('行动、四层为什么和事前预测必须完整。');
     }
+    final normalizedPreconditions = missingPreconditions
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    final normalizedExpectedEffect = expectedEffect.trim().isEmpty
+        ? prediction.trim()
+        : expectedEffect.trim();
+    final normalizedCost = cost.trim().isEmpty
+        ? '$expectedMinutes 分钟'
+        : cost.trim();
+    final activeTitle = normalizedPreconditions.isEmpty
+        ? title.trim()
+        : '补齐前提：${normalizedPreconditions.first}';
+    final activeMechanism = normalizedPreconditions.isEmpty
+        ? mechanism.trim()
+        : '先取得前提“${normalizedPreconditions.first}”成立或不成立的现实证据，解除原办法阻塞';
+    final activePrediction = normalizedPreconditions.isEmpty
+        ? prediction.trim()
+        : '完成后应能确认前提“${normalizedPreconditions.first}”是否成立';
     await _dao.addProblemItem(
       id: newId('xf_item'),
       problemId: problemId,
@@ -810,11 +976,35 @@ class XiangjiRepository {
         'mechanism': mechanism.trim(),
         'strategic_meaning': strategicMeaning.trim(),
         'grounding_reason': groundingReason.trim(),
-        'cost': '$expectedMinutes 分钟',
-        'reversibility': 'high',
-        'information_value': '执行后以现实结果更新当前判断',
+        'preconditions': normalizedPreconditions,
+        'status': normalizedPreconditions.isEmpty
+            ? 'selected'
+            : 'blocked_by_precondition',
+        'expected_effect': normalizedExpectedEffect,
+        'cost': normalizedCost,
+        'risk': risk.trim().isEmpty ? 'low' : risk.trim(),
+        'reversibility':
+            reversibility.trim().isEmpty ? 'high' : reversibility.trim(),
+        'information_value': informationValue.trim().isEmpty
+            ? '执行后以现实结果更新当前判断'
+            : informationValue.trim(),
       },
     );
+    for (var index = 0; index < normalizedPreconditions.length; index++) {
+      final precondition = normalizedPreconditions[index];
+      await _dao.addProblemItem(
+        id: newId('xf_item'),
+        problemId: problemId,
+        kind: 'precondition_subgoal',
+        text: precondition,
+        critical: true,
+        sortOrder: index,
+        data: const <String, Object?>{
+          'relation': 'AND',
+          'status': 'missing',
+        },
+      );
+    }
     final decision = _problemMachine.evaluate(
       problem.state,
       XiangjiProblemState.actionReady,
@@ -827,16 +1017,18 @@ class XiangjiRepository {
     final actionId = newId('xf_action');
     await _dao.createAction(
       id: actionId,
-      title: title.trim(),
+      title: activeTitle,
       problemId: problemId,
       campaignId: campaignId,
-      prediction: prediction.trim(),
+      prediction: activePrediction,
       expectedMinutes: expectedMinutes,
       whyChain: <String, Object?>{
         'strategic_meaning': strategicMeaning.trim(),
         'key_gap': targetGap.trim(),
-        'operator_mechanism': mechanism.trim(),
+        'operator_mechanism': activeMechanism,
         'epistemic_grounding': groundingReason.trim(),
+        if (normalizedPreconditions.isNotEmpty)
+          'blocked_operator': title.trim(),
       },
     );
     final stateVersion = await _dao.latestProblemStateVersion(problemId);
@@ -847,7 +1039,7 @@ class XiangjiRepository {
           (stateVersion?['id'] ?? 'legacy_problem:$problemId').toString(),
       'action_id': actionId,
       'operator_id': 'manual_operator:$actionId',
-      'rationale': '$mechanism；目标差距：$targetGap',
+      'rationale': '$activeMechanism；目标差距：$targetGap',
       'prediction_id': '',
       'started_at_ms': 0,
       'ended_at_ms': 0,
@@ -859,6 +1051,50 @@ class XiangjiRepository {
     await _dao.updateProblemState(
       problemId,
       XiangjiProblemState.actionReady,
+    );
+    await _applySignatureMethods(
+      problemId: problemId,
+      context: XiangjiSignatureMethodContext(
+        problemId: problemId,
+        problemState: XiangjiProblemState.solving,
+        requestedMethodIds: const <String>['MEC-011', 'MEC-012', 'MEC-013'],
+        candidateGaps: <Map<String, Object?>>[
+          <String, Object?>{
+            'type': 'action',
+            'label': targetGap.trim(),
+            'priority': 1,
+          },
+          for (final precondition in normalizedPreconditions)
+            if (precondition.trim().isNotEmpty)
+              <String, Object?>{
+                'type': 'capability',
+                'label': precondition.trim(),
+                'priority': 2,
+              },
+        ],
+        missingPreconditions: normalizedPreconditions,
+        operatorTitle: title.trim(),
+        operatorMechanism: mechanism.trim(),
+        operatorExpectedEffect: normalizedExpectedEffect,
+        operatorCost: normalizedCost,
+        operatorRisk: risk.trim().isEmpty ? 'low' : risk.trim(),
+        operatorReversibility:
+            reversibility.trim().isEmpty ? 'high' : reversibility.trim(),
+        operatorInformationValue: informationValue.trim().isEmpty
+            ? '执行后以现实结果更新当前判断'
+            : informationValue.trim(),
+        prediction: activePrediction,
+        sourceRefs: <String>['action:$actionId'],
+        eventIdPrefix: newId('xf_method_operator'),
+      ),
+      seed: (snapshot) => snapshot.copyWith(
+        goalState: snapshot.goalState.isEmpty
+            ? <String, Object?>{
+                'statement': problem.goalText,
+                'success_criteria': problem.successCriteria,
+              }
+            : snapshot.goalState,
+      ),
     );
     return actionId;
   }
@@ -938,6 +1174,20 @@ class XiangjiRepository {
         currentExperiment: action.title,
         nextVerification: action.prediction,
         sourceRef: 'action:$actionId',
+      );
+      await _applySignatureMethods(
+        problemId: action.problemId,
+        context: XiangjiSignatureMethodContext(
+          problemId: action.problemId,
+          problemState: XiangjiProblemState.executing,
+          requestedMethodIds: const <String>['MEC-013'],
+          prediction: action.prediction,
+          operatorTitle: action.title,
+          actionMode: true,
+          visibleLimit: 0,
+          sourceRefs: <String>['action:$actionId'],
+          eventIdPrefix: newId('xf_method_action'),
+        ),
       );
     }
   }
@@ -1308,6 +1558,29 @@ class XiangjiRepository {
         'corrected_at_ms': now,
       });
     }
+    await _applySignatureMethods(
+      problemId: action.problemId,
+      context: XiangjiSignatureMethodContext(
+        problemId: action.problemId,
+        problemState: verdict == 'refutes'
+            ? XiangjiProblemState.backtracking
+            : XiangjiProblemState.verifying,
+        requestedMethodIds: <String>[
+          'MEC-013',
+          if (verdict == 'refutes') 'MEC-009',
+          if (verdict == 'refutes') 'MEC-014',
+        ],
+        prediction: action.prediction,
+        reality: reality,
+        realityVerdict: verdict,
+        realityConflict: verdict == 'refutes',
+        earliestFailedLayer:
+            verdict == 'refutes' ? 'operator_or_premise' : '',
+        operatorTitle: action.title,
+        sourceRefs: <String>['reality:${reality['id']}'],
+        eventIdPrefix: newId('xf_method_reality'),
+      ),
+    );
   }
 
   Future<String> createCampaign({
@@ -1831,6 +2104,515 @@ class XiangjiRepository {
       problem.id,
       XiangjiProblemState.resolved,
       actor: 'resolution_guard',
+    );
+  }
+
+  Future<void> _applySignatureMethodsFromCouncil({
+    required XiangjiCouncilResult result,
+    required String utterance,
+    required List<String> sourceRefs,
+    bool realityContradicted = false,
+  }) async {
+    final draft = result.draft;
+    final problem = await _requireProblem(result.problemId);
+    final text = <String>[
+      utterance,
+      ...draft.bodyExperiences,
+      ...draft.userInterpretations,
+    ].join('；');
+    final requested = <String>[];
+    void add(String methodId, bool condition) {
+      if (condition && !requested.contains(methodId)) requested.add(methodId);
+    }
+
+    if (realityContradicted) {
+      requested.addAll(const <String>['MEC-013', 'MEC-009', 'MEC-014']);
+    } else {
+      add(
+        'MEC-005',
+        RegExp(r'说不清|不对劲|怪怪的|难以描述').hasMatch(text),
+      );
+      add(
+        'MEC-001',
+        draft.userInterpretations.isNotEmpty &&
+            (draft.observedFacts.isNotEmpty ||
+                draft.bodyExperiences.isNotEmpty),
+      );
+      add(
+        'MEC-002',
+        RegExp(r'害怕|恐惧|抗拒|焦虑|胸口|心慌|不想|感觉').hasMatch(text) &&
+            RegExp(r'所以|说明|一定|肯定|就是因为|证明').hasMatch(text),
+      );
+      add('MEC-003', draft.causalHypotheses.isNotEmpty);
+      add('MEC-004', draft.relevantDifferences.isNotEmpty);
+      add(
+        'MEC-006',
+        RegExp(r'本质|天生|性格|能力|适合|失败者|拖延|人格').hasMatch(text),
+      );
+      add(
+        'MEC-007',
+        draft.groundingReason.isNotEmpty &&
+            (draft.unknowns.isNotEmpty ||
+                draft.epistemicStatus == 'EPISTEMIC_DEBT'),
+      );
+      add(
+        'MEC-008',
+        draft.unknowns.isNotEmpty &&
+            (draft.assumptions.isNotEmpty || draft.operators.isNotEmpty),
+      );
+      add('MEC-010', draft.goal.isNotEmpty);
+      add(
+        'MEC-011',
+        draft.targetGap.isNotEmpty ||
+            draft.operators.any(
+              (item) =>
+                  (item['target_gap'] ?? '').toString().trim().isNotEmpty,
+            ),
+      );
+      add(
+        'MEC-012',
+        (draft.currentAction.isNotEmpty &&
+                draft.operatorMechanism.isNotEmpty) ||
+            draft.operators.any(
+              (item) =>
+                  (item['mechanism'] ?? item['mechanism_for_this_case'] ?? '')
+                      .toString()
+                      .trim()
+                      .isNotEmpty,
+            ),
+      );
+      add(
+        'MEC-013',
+        draft.prediction.isNotEmpty ||
+            draft.operators.any(
+              (item) =>
+                  (item['prediction'] ?? '').toString().trim().isNotEmpty,
+            ),
+      );
+    }
+    final canAdvanceOperator = result.actionId.isNotEmpty &&
+        !result.executionFrozen &&
+        result.clarificationQuestion.isEmpty;
+    if (!realityContradicted && !canAdvanceOperator) {
+      requested
+        ..remove('MEC-012')
+        ..remove('MEC-013');
+    }
+
+    final operator = draft.operators.isEmpty
+        ? const <String, Object?>{}
+        : draft.operators.first;
+    String operatorText(List<String> keys, String fallback) {
+      for (final key in keys) {
+        final value = (operator[key] ?? '').toString().trim();
+        if (value.isNotEmpty) return value;
+      }
+      return fallback;
+    }
+
+    List<String> operatorStrings(String key) {
+      final value = operator[key];
+      if (value is! List) return const <String>[];
+      return value
+          .map((item) {
+            if (item is Map) {
+              final status = (item['status'] ?? '').toString().toLowerCase();
+              final satisfied = item['satisfied'] == true ||
+                  <String>{'satisfied', 'complete', 'completed', 'met'}
+                      .contains(status);
+              if (satisfied) return '';
+              return (item['label'] ??
+                      item['text'] ??
+                      item['condition'] ??
+                      item['name'] ??
+                      '')
+                  .toString()
+                  .trim();
+            }
+            return item.toString().trim();
+          })
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+
+    final missingPreconditions = operatorStrings('preconditions');
+    final resolvedOperatorTitle = operatorText(
+      const <String>['title', 'name'],
+      draft.currentAction,
+    );
+    final resolvedTargetGap = operatorText(
+      const <String>['target_gap'],
+      draft.targetGap,
+    );
+    final resolvedMechanism = operatorText(
+      const <String>['mechanism', 'mechanism_for_this_case'],
+      draft.operatorMechanism,
+    );
+    final resolvedPrediction = operatorText(
+      const <String>['prediction'],
+      draft.prediction,
+    );
+    final activePrediction = missingPreconditions.isEmpty
+        ? resolvedPrediction
+        : '完成后应能确认前提“${missingPreconditions.first}”是否成立';
+    final environmentConstraints = draft.constraints
+        .where(
+          (item) => RegExp(r'环境|外部|政策|市场|地点|他人|关系|窗口|时机')
+              .hasMatch(item),
+        )
+        .toList();
+    final gapVector = <Map<String, Object?>>[
+      <String, Object?>{
+        'id': 'gap-information-${result.problemId}',
+        'type': 'information',
+        'label': draft.unknowns.isEmpty
+            ? '当前没有会改变下一步的关键信息缺口'
+            : draft.unknowns.first,
+        'items': draft.unknowns,
+        'priority': draft.unknowns.isEmpty ? 0 : 90,
+        'impact': draft.unknowns.isEmpty ? 0 : 4,
+        'controllability': 4,
+        'dependency_weight': 4,
+        'information_value': draft.unknowns.isEmpty ? 0 : 5,
+      },
+      <String, Object?>{
+        'id': 'gap-concept-${result.problemId}',
+        'type': 'concept',
+        'label': draft.counterexamples.isEmpty
+            ? '当前概念边界尚未形成主要阻塞'
+            : '当前概念仍有反例或边界未解释',
+        'items': draft.counterexamples,
+        'priority': draft.counterexamples.isEmpty ? 0 : 80,
+        'impact': draft.counterexamples.isEmpty ? 0 : 4,
+        'controllability': 3,
+        'dependency_weight': 4,
+        'information_value': draft.counterexamples.isEmpty ? 0 : 4,
+      },
+      <String, Object?>{
+        'id': 'gap-capability-${result.problemId}',
+        'type': 'capability',
+        'label': missingPreconditions.isNotEmpty
+            ? missingPreconditions.first
+            : draft.subGoals.isNotEmpty
+                ? draft.subGoals.first
+                : '当前未发现需要先补齐的能力或前提',
+        'items': <String>{...missingPreconditions, ...draft.subGoals}.toList(),
+        'priority': missingPreconditions.isNotEmpty
+            ? 105
+            : draft.subGoals.isNotEmpty
+                ? 75
+                : 0,
+        'impact': missingPreconditions.isNotEmpty ? 5 : 3,
+        'controllability': 4,
+        'dependency_weight': missingPreconditions.isNotEmpty ? 5 : 2,
+        'information_value': 3,
+      },
+      <String, Object?>{
+        'id': 'gap-resource-${result.problemId}',
+        'type': 'resource',
+        'label': draft.constraints.isEmpty
+            ? '当前资源预算未形成主要阻塞'
+            : draft.constraints.first,
+        'items': draft.constraints,
+        'priority': draft.constraints.isEmpty ? 0 : 70,
+        'impact': draft.constraints.isEmpty ? 0 : 4,
+        'controllability': 3,
+        'dependency_weight': 3,
+        'information_value': 2,
+      },
+      <String, Object?>{
+        'id': 'gap-environment-${result.problemId}',
+        'type': 'environment',
+        'label': environmentConstraints.isEmpty
+            ? '当前环境条件未形成主要阻塞'
+            : environmentConstraints.first,
+        'items': environmentConstraints,
+        'priority': environmentConstraints.isEmpty ? 0 : 65,
+        'impact': environmentConstraints.isEmpty ? 0 : 4,
+        'controllability': 2,
+        'dependency_weight': 3,
+        'information_value': 3,
+      },
+      <String, Object?>{
+        'id': 'gap-action-${result.problemId}',
+        'type': 'action',
+        'label': resolvedTargetGap.trim().isEmpty
+            ? '当前没有已确认的行动差距'
+            : resolvedTargetGap.trim(),
+        'priority': resolvedTargetGap.trim().isEmpty ? 0 : 100,
+        'impact': resolvedTargetGap.trim().isEmpty ? 0 : 5,
+        'controllability': 5,
+        'dependency_weight': 3,
+        'information_value': 4,
+      },
+      <String, Object?>{
+        'id': 'gap-risk-${result.problemId}',
+        'type': 'risk',
+        'label': draft.highRisk
+            ? '需要先降低不可逆风险'
+            : '当前未发现需要优先处理的不可逆风险',
+        'priority': draft.highRisk ? 110 : 0,
+        'impact': draft.highRisk ? 5 : 0,
+        'controllability': 3,
+        'dependency_weight': draft.highRisk ? 5 : 0,
+        'information_value': draft.highRisk ? 4 : 0,
+      },
+    ];
+    final weakestPremise = draft.redTeam.isNotEmpty
+        ? draft.redTeam.first
+        : draft.assumptions.isNotEmpty
+            ? draft.assumptions.first
+            : draft.unknowns.isNotEmpty
+                ? draft.unknowns.first
+                : '';
+    final reality = result.inputClassification?.type ==
+                XiangjiInputType.actionFeedback ||
+            realityContradicted
+        ? <String, Object?>{
+            'summary': utterance,
+            'source': 'user_reality_feedback',
+          }
+        : const <String, Object?>{};
+    final pathAsGoal = draft.goal.trim().isNotEmpty &&
+        draft.goal.trim() == draft.currentAction.trim();
+    final goalNeedsAudit = pathAsGoal ||
+        RegExp(r'证明|报复|让.*后悔|必须赢|不能输|坚持到底|已经投入').hasMatch(
+          draft.goal,
+        );
+    if (!realityContradicted) {
+      final focusOrder = canAdvanceOperator
+          ? <String>[
+              if (goalNeedsAudit) 'MEC-010',
+              'MEC-011',
+              'MEC-012',
+              if (!goalNeedsAudit) 'MEC-010',
+              'MEC-013',
+              'MEC-007',
+              'MEC-008',
+              'MEC-001',
+              'MEC-002',
+              'MEC-003',
+              'MEC-004',
+              'MEC-005',
+              'MEC-006',
+            ]
+          : const <String>[
+              'MEC-001',
+              'MEC-002',
+              'MEC-003',
+              'MEC-004',
+              'MEC-005',
+              'MEC-006',
+              'MEC-007',
+              'MEC-008',
+              'MEC-010',
+              'MEC-011',
+            ];
+      requested.sort((left, right) {
+        final leftIndex = focusOrder.indexOf(left);
+        final rightIndex = focusOrder.indexOf(right);
+        return (leftIndex < 0 ? focusOrder.length : leftIndex).compareTo(
+          rightIndex < 0 ? focusOrder.length : rightIndex,
+        );
+      });
+    }
+
+    await _applySignatureMethods(
+      problemId: result.problemId,
+      context: XiangjiSignatureMethodContext(
+        problemId: result.problemId,
+        problemState: realityContradicted
+            ? XiangjiProblemState.backtracking
+            : problem.state,
+        rawText: utterance,
+        requestedMethodIds: requested,
+        sourceRefs: sourceRefs,
+        facts: draft.observedFacts,
+        experiences: draft.bodyExperiences,
+        interpretations: draft.userInterpretations,
+        causalCandidates: draft.causalHypotheses,
+        counterevidence: draft.counterexamples,
+        candidateGaps: gapVector,
+        missingPreconditions: missingPreconditions,
+        decisiveDifference: draft.relevantDifferences.isEmpty
+            ? ''
+            : draft.relevantDifferences.first,
+        vagueExperience: RegExp(r'说不清|不对劲|怪怪的|难以描述').hasMatch(text)
+            ? utterance
+            : '',
+        abstractLabel: RegExp(r'本质|天生|性格|能力|适合|失败者|拖延|人格')
+                .hasMatch(text)
+            ? draft.trueProblem
+            : '',
+        highImpactClaim: draft.judgment,
+        weakestPremise: weakestPremise,
+        complexModel: draft.operators.isNotEmpty ||
+            draft.strategyOptions.isNotEmpty ||
+            draft.assumptions.isNotEmpty,
+        groundWeak: draft.epistemicStatus == 'EPISTEMIC_DEBT' ||
+            draft.unknowns.isNotEmpty,
+        realityConflict: realityContradicted,
+        goalNeedsAudit: goalNeedsAudit,
+        pathAsGoal: pathAsGoal,
+        prediction: activePrediction,
+        reality: reality,
+        realityVerdict: realityContradicted ? 'refutes' : '',
+        earliestFailedLayer:
+            realityContradicted ? 'operator_or_premise' : '',
+        operatorTitle: resolvedOperatorTitle,
+        operatorMechanism: resolvedMechanism,
+        operatorExpectedEffect: operatorText(
+          const <String>['expected_effect', 'prediction'],
+          activePrediction,
+        ),
+        operatorCost: operatorText(
+          const <String>['cost'],
+          '${draft.expectedMinutes} 分钟',
+        ),
+        operatorRisk: operatorText(
+          const <String>['risk'],
+          draft.highRisk ? 'high' : 'low',
+        ),
+        operatorReversibility: operatorText(
+          const <String>['reversibility'],
+          draft.irreversible ? 'low' : 'high',
+        ),
+        operatorInformationValue: operatorText(
+          const <String>['information_value'],
+          '用现实结果缩小当前关键未知',
+        ),
+        visibleLimit: 3,
+        eventIdPrefix: newId('xf_method_turn'),
+      ),
+      seed: (snapshot) {
+        final activeOperator = canAdvanceOperator || realityContradicted
+            ? <String, Object?>{
+                ...snapshot.activeOperator,
+                ...operator,
+                if (resolvedOperatorTitle.isNotEmpty)
+                  'title': resolvedOperatorTitle,
+                if (resolvedTargetGap.isNotEmpty)
+                  'target_gap': resolvedTargetGap,
+                if (resolvedMechanism.isNotEmpty)
+                  'mechanism': resolvedMechanism,
+                'preconditions': missingPreconditions,
+                'expected_effect': operatorText(
+                  const <String>['expected_effect', 'prediction'],
+                  activePrediction,
+                ),
+                'cost': operatorText(
+                  const <String>['cost'],
+                  '${draft.expectedMinutes} 分钟',
+                ),
+                'risk': operatorText(
+                  const <String>['risk'],
+                  draft.highRisk ? 'high' : 'low',
+                ),
+                'reversibility': operatorText(
+                  const <String>['reversibility'],
+                  draft.irreversible ? 'low' : 'high',
+                ),
+                'information_value': operatorText(
+                  const <String>['information_value'],
+                  '用现实结果缩小当前关键未知',
+                ),
+                if (activePrediction.isNotEmpty)
+                  'prediction': activePrediction,
+              }
+            : <String, Object?>{
+                'status': result.executionFrozen
+                    ? 'frozen_by_runtime_gate'
+                    : 'awaiting_clarification',
+              };
+        return snapshot.copyWith(
+          need: draft.need.isEmpty ? snapshot.need : draft.need,
+          problemFrame: <String, Object?>{
+            ...snapshot.problemFrame,
+            if (draft.trueProblem.isNotEmpty) 'statement': draft.trueProblem,
+            if (draft.valueLink.isNotEmpty) 'value_link': draft.valueLink,
+            'recommendation': draft.recommendation,
+            'change_signals': draft.changeSignals,
+          },
+          currentState: <String, Object?>{
+            ...snapshot.currentState,
+            'summary': draft.summary,
+            'facts': draft.observedFacts,
+            'experiences': draft.bodyExperiences,
+            'interpretations': draft.userInterpretations,
+          },
+          goalState: <String, Object?>{
+            ...snapshot.goalState,
+            'statement': draft.goal,
+            'success_criteria': draft.successCriteria,
+            'exit_criteria': draft.exitCriteria,
+          },
+          hypotheses: <Map<String, Object?>>[
+            for (final hypothesis in draft.causalHypotheses)
+              <String, Object?>{
+                'claim': hypothesis,
+                'status': 'candidate',
+              },
+          ],
+          constraints: <Map<String, Object?>>[
+            for (final constraint in draft.constraints)
+              <String, Object?>{
+                'label': constraint,
+                'status': 'active',
+              },
+          ],
+          candidateOperators:
+              draft.operators.isEmpty ? <Map<String, Object?>>[activeOperator] : draft.operators,
+          activeOperator: activeOperator,
+          epistemicProfile: <String, Object?>{
+            'status': draft.epistemicStatus,
+            'weakest_premise': weakestPremise,
+            'unknowns': draft.unknowns,
+          },
+          predictionLedger: <String, Object?>{
+            ...snapshot.predictionLedger,
+            if ((canAdvanceOperator || realityContradicted) &&
+                activePrediction.isNotEmpty)
+              'prediction': activePrediction,
+          },
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+        );
+      },
+    );
+  }
+
+  Future<void> _applySignatureMethods({
+    required String problemId,
+    required XiangjiSignatureMethodContext context,
+    XiangjiSolverSnapshot Function(XiangjiSolverSnapshot snapshot)? seed,
+  }) async {
+    final problem = await _requireProblem(problemId);
+    final current = await _dao.solverSnapshot(problemId) ??
+        XiangjiSolverSnapshot(
+          problemId: problemId,
+          stateVersion: await _dao.problemVersion(problemId),
+          need: problem.need.isEmpty ? problem.rawQuestion : problem.need,
+          problemFrame: <String, Object?>{
+            'statement': problem.reframedQuestion.isEmpty
+                ? problem.rawQuestion
+                : problem.reframedQuestion,
+          },
+          goalState: <String, Object?>{
+            'statement': problem.goalText,
+            'success_criteria': problem.successCriteria,
+            'exit_criteria': problem.exitCriteria,
+          },
+          promptVersion: 'rev5.2',
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+        );
+    final prepared = seed == null ? current : seed(current);
+    final routed = _signatureRouter.route(state: prepared, context: context);
+    if (routed.events.isEmpty) {
+      await _dao.saveSolverSnapshot(routed.after);
+      return;
+    }
+    await _dao.saveSolverStateAndMethodEvents(
+      snapshot: routed.after,
+      events: routed.events,
     );
   }
 

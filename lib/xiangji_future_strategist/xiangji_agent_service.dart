@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 
 import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
@@ -12,59 +13,71 @@ import 'xiangji_state_machine.dart';
 enum XiangjiAgentId {
   chiefStrategist,
   epistemicAuditor,
+  causalAnalyst,
   judgmentEngine,
   groundingAuditor,
-  causalAnalyst,
   problemFramer,
   solver,
+  campaignSelector,
+  resourcePlanner,
   strategist,
   redTeam,
+  wargameContingency,
   actionOfficer,
   reviewHistorian,
   monitor,
   knowledgeRouter,
-  problemStateManager,
-  cognitiveExperienceGenerator,
-  methodLearningAdapter,
+  methodTranslator,
+  personalScienceLearner,
+  methodEffectValidator,
+  antiTemplateValidator,
 }
 
 extension XiangjiAgentIdX on XiangjiAgentId {
   String get code => switch (this) {
         XiangjiAgentId.chiefStrategist => 'A00',
         XiangjiAgentId.epistemicAuditor => 'A01',
-        XiangjiAgentId.judgmentEngine => 'A02',
-        XiangjiAgentId.groundingAuditor => 'A03',
-        XiangjiAgentId.causalAnalyst => 'A04',
+        XiangjiAgentId.causalAnalyst => 'A02',
+        XiangjiAgentId.judgmentEngine => 'A03',
+        XiangjiAgentId.groundingAuditor => 'A04',
         XiangjiAgentId.problemFramer => 'A05',
         XiangjiAgentId.solver => 'A06',
-        XiangjiAgentId.strategist => 'A07',
-        XiangjiAgentId.redTeam => 'A08',
-        XiangjiAgentId.actionOfficer => 'A09',
-        XiangjiAgentId.reviewHistorian => 'A10',
-        XiangjiAgentId.monitor => 'A11',
-        XiangjiAgentId.knowledgeRouter => 'A12',
-        XiangjiAgentId.problemStateManager => 'A13',
-        XiangjiAgentId.cognitiveExperienceGenerator => 'A14',
-        XiangjiAgentId.methodLearningAdapter => 'A15',
+        XiangjiAgentId.campaignSelector => 'A07',
+        XiangjiAgentId.resourcePlanner => 'A08',
+        XiangjiAgentId.strategist => 'A09',
+        XiangjiAgentId.redTeam => 'A10',
+        XiangjiAgentId.wargameContingency => 'A11',
+        XiangjiAgentId.actionOfficer => 'A12',
+        XiangjiAgentId.reviewHistorian => 'A13',
+        XiangjiAgentId.monitor => 'A14',
+        XiangjiAgentId.knowledgeRouter => 'A15',
+        XiangjiAgentId.methodTranslator => 'A16',
+        XiangjiAgentId.personalScienceLearner => 'A17',
+        XiangjiAgentId.methodEffectValidator => 'A18',
+        XiangjiAgentId.antiTemplateValidator => 'A19',
       };
 
   String get label => switch (this) {
         XiangjiAgentId.chiefStrategist => '总军师',
-        XiangjiAgentId.epistemicAuditor => '认识审计',
+        XiangjiAgentId.epistemicAuditor => '经验分层',
+        XiangjiAgentId.causalAnalyst => '竞争因果',
         XiangjiAgentId.judgmentEngine => '判断力仲裁',
         XiangjiAgentId.groundingAuditor => '认识根据审计',
-        XiangjiAgentId.causalAnalyst => '因果分析',
-        XiangjiAgentId.problemFramer => '真问题重构',
-        XiangjiAgentId.solver => '问题求解',
+        XiangjiAgentId.problemFramer => '目标审查 / 真问题重构',
+        XiangjiAgentId.solver => '持续问题求解',
+        XiangjiAgentId.campaignSelector => '选战',
+        XiangjiAgentId.resourcePlanner => '兵力规划',
         XiangjiAgentId.strategist => '战略军师',
         XiangjiAgentId.redTeam => '红队',
+        XiangjiAgentId.wargameContingency => '兵棋与锦囊',
         XiangjiAgentId.actionOfficer => '行动参谋',
-        XiangjiAgentId.reviewHistorian => '战史官',
-        XiangjiAgentId.monitor => '主动监督',
+        XiangjiAgentId.reviewHistorian => '对账 / 战史官',
+        XiangjiAgentId.monitor => '监督 / 战机探测',
         XiangjiAgentId.knowledgeRouter => '知识路由器',
-        XiangjiAgentId.problemStateManager => '持久问题状态管理',
-        XiangjiAgentId.cognitiveExperienceGenerator => '认知体验生成',
-        XiangjiAgentId.methodLearningAdapter => '方法学习适配',
+        XiangjiAgentId.methodTranslator => '即时方法翻译',
+        XiangjiAgentId.personalScienceLearner => '个人科学学习',
+        XiangjiAgentId.methodEffectValidator => '方法效果校验',
+        XiangjiAgentId.antiTemplateValidator => '反模板校验',
       };
 }
 
@@ -135,7 +148,7 @@ class XiangjiAgentService {
         _ai = ai ?? UnifiedAiService(),
         _settings = settings ?? GlobalAiSettings();
 
-  static const String promptVersion = 'xiangji-v6.1-rev4-cel-persistent-solver';
+  static const String promptVersion = 'xiangji-v6.1-rev5.2-p0-p9';
 
   final XiangjiDao _dao;
   final XiangjiKnowledgeRouter _router;
@@ -186,6 +199,19 @@ class XiangjiAgentService {
     ));
     final now = DateTime.now().millisecondsSinceEpoch;
     final runId = '${request.requestId}-${agent.code}-$now';
+    final solverState = request.problemId.isEmpty
+        ? null
+        : await _dao.solverSnapshot(request.problemId);
+    final activeMethodEvents = request.problemId.isEmpty
+        ? const <XiangjiMethodEvent>[]
+        : await _dao.latestMethodTurnEvents(
+            problemId: request.problemId,
+            userVisibleOnly: true,
+            limit: 3,
+          );
+    final methodEffects = activeMethodEvents
+        .map((event) => event.toPromptMap())
+        .toList(growable: false);
 
     if (knowledge.preflight.executionFrozen) {
       final output = <String, Object?>{
@@ -196,6 +222,7 @@ class XiangjiAgentService {
             .map((hit) => hit.action)
             .toList(),
         'message': '当前为不可逆高风险且认识债务高；先补证、降低不可逆性，并在需要时寻求专业复核。',
+        'method_effects': methodEffects,
         'user_decision_required': true,
       };
       await _saveRun(
@@ -230,7 +257,11 @@ class XiangjiAgentService {
     final privacyLocalOnly =
         hasPersonalObject && !request.authorizedSensitiveContext;
     if (state['available'] != '1' || privacyLocalOnly) {
-      final output = _localFallback(agent, knowledge, request);
+      final output = <String, Object?>{
+        ..._localFallback(agent, knowledge, request),
+        'method_effects': methodEffects,
+        if (solverState != null) 'solver_state': solverState.toPromptMap(),
+      };
       await _saveRun(
         id: runId,
         agent: agent,
@@ -262,6 +293,7 @@ class XiangjiAgentService {
 
     final started = DateTime.now().millisecondsSinceEpoch;
     try {
+      final promptLayers = await _assemblePromptLayers(agent);
       final raw = await _ai.generateChatMessages(
         purpose: 'xiangji_future_strategist.${agent.code.toLowerCase()}',
         maxTokens: agent == XiangjiAgentId.actionOfficer ? 1200 : 3600,
@@ -273,7 +305,7 @@ class XiangjiAgentService {
           ),
           UnifiedAiChatMessage(
             role: 'system',
-            content: _rolePrompt(agent),
+            content: promptLayers,
           ),
           UnifiedAiChatMessage(
             role: 'user',
@@ -281,6 +313,8 @@ class XiangjiAgentService {
               'task': request.task,
               'agent': '${agent.code} ${agent.label}',
               'knowledge_context': knowledge.toPromptMap(),
+              if (solverState != null) 'solver_state': solverState.toPromptMap(),
+              'active_method_events': methodEffects,
               'additional_context': request.additionalContext,
               'output_contract': _outputContract(agent),
             }),
@@ -289,7 +323,12 @@ class XiangjiAgentService {
       );
       final parsed = _parseObject(raw);
       if (parsed == null) throw const FormatException('AI 没有返回 JSON 对象。');
+      parsed['method_effects'] ??= methodEffects;
       final validated = _validateAndDiscipline(agent, parsed, knowledge);
+      validated['active_method_events'] = methodEffects;
+      if (solverState != null) {
+        validated['solver_state_version'] = solverState.stateVersion;
+      }
       final provider = (state['provider'] ?? 'configured').toString();
       final model = (state['model'] ?? state['model_label'] ?? '').toString();
       await _saveRun(
@@ -403,6 +442,8 @@ class XiangjiAgentService {
       input['confidence_removed_reason'] =
           '认识状态使用多维画像，不用单一伪精确分数。';
     }
+    input['method_effects'] ??= const <Object?>[];
+    _validateMethodEffects(input['method_effects']);
     if (agent == XiangjiAgentId.epistemicAuditor) {
       _requireLists(input, const <String>[
         'raw_facts',
@@ -467,12 +508,75 @@ class XiangjiAgentService {
           throw FormatException('求解器输出缺少字段：$key');
         }
       }
+      _requireLists(input, const <String>[
+        'gap_vector',
+        'candidate_operators',
+        'termination',
+      ]);
+      if (input['subgoal_graph'] is! Map) {
+        throw const FormatException('Persistent Solver 缺少 AND/OR subgoal_graph。');
+      }
+      final gapTypes = (input['gap_vector'] as List)
+          .whereType<Map>()
+          .map((gap) => (gap['type'] ?? '').toString())
+          .toSet();
+      const requiredGapTypes = <String>{
+        'information',
+        'capability',
+        'resource',
+        'environment',
+        'action',
+        'risk',
+      };
+      if (!gapTypes.containsAll(requiredGapTypes)) {
+        throw const FormatException('GapVector 必须覆盖信息、能力、资源、环境、行动与风险维度。');
+      }
+      final active = input['active_operator'];
+      if (active is! Map) {
+        throw const FormatException('Persistent Solver 缺少 active_operator。');
+      }
+      for (final key in const <String>[
+        'target_gap',
+        'mechanism',
+        'preconditions',
+        'expected_effect',
+        'cost',
+        'risk',
+        'reversibility',
+        'information_value',
+      ]) {
+        if (!active.containsKey(key)) {
+          throw FormatException('active_operator 缺少 $key。');
+        }
+      }
+      if (active['preconditions'] is! List) {
+        throw const FormatException('active_operator.preconditions 必须是数组。');
+      }
+      active['success_signals'] ??= <String>[
+        (active['expected_effect'] ?? '').toString(),
+      ];
+      active['failure_signals'] ??= <String>[
+        (input['change_signals'] ?? '事前预测没有出现').toString(),
+      ];
     }
     if (agent == XiangjiAgentId.strategist) {
       _requireLists(input, const <String>['key_unknowns', 'options']);
       final options = input['options'] as List;
-      if (options.length < 2) {
-        throw const FormatException('重大战役必须返回至少两个真正不同的战略选项。');
+      if (options.length < 2 || options.length > 3) {
+        throw const FormatException('重大战役必须返回 2-3 个真正不同的战略选项。');
+      }
+      final mechanisms = options
+          .whereType<Map>()
+          .map(
+            (option) =>
+                (option['mechanism_for_this_case'] ?? option['mechanism'] ?? '')
+                    .toString()
+                    .trim(),
+          )
+          .where((value) => value.isNotEmpty)
+          .toSet();
+      if (mechanisms.length < 2) {
+        throw const FormatException('战略选项必须包含至少两个不同且非空的作用机制。');
       }
       var preferredCount = 0;
       for (final option in options) {
@@ -518,10 +622,29 @@ class XiangjiAgentService {
       input['evidence_level'] =
           (input['evidence_level'] ?? 'hypothesis').toString();
     }
+    if (agent == XiangjiAgentId.wargameContingency) {
+      _requireLists(input, const <String>[
+        'scenarios',
+        'if_then_branches',
+        'contingencies',
+        'stop_loss',
+      ]);
+    }
     if (agent == XiangjiAgentId.actionOfficer) {
       final action = (input['current_action'] ?? '').toString().trim();
       if (action.isEmpty) throw const FormatException('行动参谋必须返回唯一当前行动。');
       input['analysis_hidden_by_default'] = true;
+      input['method_explanations_suppressed'] = true;
+    }
+    if (agent == XiangjiAgentId.methodEffectValidator) {
+      _requireLists(input, const <String>['checked_methods', 'failures']);
+      input['release_gate_passed'] = (input['failures'] as List).isEmpty;
+    }
+    if (agent == XiangjiAgentId.antiTemplateValidator) {
+      _requireLists(input, const <String>[
+        'template_signals',
+        'invalid_operators',
+      ]);
     }
     if (agent == XiangjiAgentId.chiefStrategist) {
       for (final key in const <String>[
@@ -552,7 +675,40 @@ class XiangjiAgentService {
     input['epistemic_status'] = epistemicState.wire;
     input['systematicity_is_not_certainty'] = true;
     input['user_decision_required'] = true;
+    input['validation_outcome'] = 'passed_rev5_2_gates';
     return input;
+  }
+
+  void _validateMethodEffects(Object? value) {
+    if (value is! List) {
+      throw const FormatException('AI 输出 method_effects 必须是数组。');
+    }
+    for (final raw in value) {
+      if (raw is! Map) {
+        throw const FormatException('method_effects 每项必须是对象。');
+      }
+      final methodId = (raw['method_id'] ?? '').toString();
+      final number = int.tryParse(methodId.replaceFirst('MEC-', '')) ?? 0;
+      if (number < 1 || number > 14) {
+        throw FormatException('未知 method_id：$methodId');
+      }
+      for (final key in const <String>[
+        'trigger',
+        'before_state',
+        'after_state',
+        'decision_effect',
+        'reality_test',
+      ]) {
+        final item = raw[key];
+        if (item == null || (item is String && item.trim().isEmpty)) {
+          throw FormatException('MethodEffect $methodId 缺少 $key。');
+        }
+      }
+      final mutations = raw['data_mutations'];
+      if (mutations is! List || mutations.isEmpty) {
+        throw FormatException('MethodEffect $methodId 没有真实数据变更。');
+      }
+    }
   }
 
   void _requireLists(Map<String, Object?> value, List<String> keys) {
@@ -616,6 +772,17 @@ class XiangjiAgentService {
           .map((item) => (item['text'] ?? item['content'] ?? item).toString())
           .toList(),
     );
+    final constraints = _draftStrings(draft, 'constraints');
+    final subGoals = _draftStrings(draft, 'sub_goals');
+    final operatorDrafts = _draftMaps(draft, 'operators');
+    final topLevelPreconditions = _draftStrings(draft, 'preconditions');
+    final preconditions = topLevelPreconditions.isNotEmpty
+        ? topLevelPreconditions
+        : operatorDrafts.isEmpty
+            ? const <String>[]
+            : _draftStrings(operatorDrafts.first, 'preconditions');
+    final counterexamples = _draftStrings(draft, 'counterexamples');
+    final highRisk = draft['high_risk'] == true;
     final caseOptions = _ensureCaseOptions(draft);
     return switch (agent) {
       XiangjiAgentId.actionOfficer => <String, Object?>{
@@ -724,14 +891,14 @@ class XiangjiAgentService {
           'known': facts,
           'unknown': unknowns,
           'hypotheses': _draftStrings(draft, 'causal_hypotheses'),
-          'constraints': _draftStrings(draft, 'constraints'),
+          'constraints': constraints,
           'key_gap': _draftText(
             draft,
             'target_gap',
             fallback: '缺少一个能验证当前理解的现实结果',
           ),
-          'sub_goals': _draftStrings(draft, 'sub_goals'),
-          'operators': _draftMaps(draft, 'operators'),
+          'sub_goals': subGoals,
+          'operators': operatorDrafts,
           'current_action': currentAction,
           'operator_mechanism': _draftText(
             draft,
@@ -756,6 +923,126 @@ class XiangjiAgentService {
           'expected_minutes': _draftInt(draft, 'expected_minutes', 15),
           'reasoning_summary': _draftText(draft, 'why'),
           'backtrack_point': '若现实与预测相反，先回溯算子/差距/问题，不归因于用户意志。',
+          'problem_frame': <String, Object?>{
+            'statement': _draftText(draft, 'true_problem', fallback: request.task),
+            'value_link': _draftText(draft, 'value_link'),
+          },
+          'current_state': <String, Object?>{
+            'facts': facts,
+            'unknowns': unknowns,
+          },
+          'goal_state': <String, Object?>{
+            'statement': _draftText(draft, 'goal'),
+            'success_criteria': _draftText(draft, 'success_criteria'),
+            'exit_criteria': _draftText(draft, 'exit_criteria'),
+          },
+          'gap_vector': <Map<String, Object?>>[
+            <String, Object?>{
+              'type': 'information',
+              'label': unknowns.isEmpty ? '当前无关键未知阻塞' : unknowns.first,
+              'items': unknowns,
+              'priority': unknowns.isEmpty ? 0 : 90,
+            },
+            <String, Object?>{
+              'type': 'concept',
+              'label': counterexamples.isEmpty
+                  ? '当前概念边界未形成主要阻塞'
+                  : '当前概念仍有反例未解释',
+              'items': counterexamples,
+              'priority': counterexamples.isEmpty ? 0 : 80,
+            },
+            <String, Object?>{
+              'type': 'capability',
+              'label': preconditions.isNotEmpty
+                  ? preconditions.first
+                  : subGoals.isNotEmpty
+                      ? subGoals.first
+                      : '当前无待补齐能力或前提',
+              'items': <String>{...preconditions, ...subGoals}.toList(),
+              'priority': preconditions.isNotEmpty
+                  ? 105
+                  : subGoals.isNotEmpty
+                      ? 75
+                      : 0,
+            },
+            <String, Object?>{
+              'type': 'resource',
+              'label': constraints.isEmpty ? '当前资源未形成主要阻塞' : constraints.first,
+              'items': constraints,
+              'priority': constraints.isEmpty ? 0 : 70,
+            },
+            const <String, Object?>{
+              'type': 'environment',
+              'label': '环境条件随现实反馈继续更新',
+              'priority': 0,
+            },
+            <String, Object?>{
+              'type': 'action',
+              'label': _draftText(
+                draft,
+                'target_gap',
+                fallback: '缺少一个能验证当前理解的现实结果',
+              ),
+              'priority': 100,
+            },
+            <String, Object?>{
+              'type': 'risk',
+              'label': highRisk ? '需要先降低不可逆风险' : '当前无优先风险缺口',
+              'priority': highRisk ? 110 : 0,
+            },
+          ],
+          'subgoal_graph': <String, Object?>{
+            'logic': preconditions.isEmpty ? 'OR' : 'AND',
+            'sub_goals': subGoals,
+            'precondition_sub_goals': preconditions,
+          },
+          'candidate_operators': operatorDrafts,
+          'active_operator': <String, Object?>{
+            'title': currentAction,
+            'target_gap': _draftText(draft, 'target_gap'),
+            'mechanism': _draftText(
+              draft,
+              'operator_mechanism',
+              fallback: '用可观察结果区分竞争解释。',
+            ),
+            'preconditions': preconditions,
+            'expected_effect': _draftText(draft, 'prediction'),
+            'cost': '${_draftInt(draft, 'expected_minutes', 15)} 分钟',
+            'risk': 'low',
+            'reversibility': 'high',
+            'information_value': '现实结果将改变下一轮判断',
+            'success_signals': <String>[
+              _draftText(draft, 'prediction'),
+            ],
+            'failure_signals': <String>[
+              _draftText(draft, 'change_signals'),
+            ],
+          },
+          'termination': const <String>[
+            '成功判据被现实满足',
+            '止损条件触发',
+            '关键前提被现实否定后回溯',
+          ],
+        },
+      XiangjiAgentId.campaignSelector => <String, Object?>{
+          'war_worthiness': unknowns.isEmpty ? 'worth' : 'scout_first',
+          'strategic_value': _draftText(draft, 'value_link'),
+          'victory_criteria': <String>[
+            _draftText(draft, 'success_criteria'),
+          ].where((item) => item.isNotEmpty).toList(),
+          'exit_criteria': <String>[
+            _draftText(draft, 'exit_criteria'),
+          ].where((item) => item.isNotEmpty).toList(),
+          'opportunity_cost': _draftStrings(draft, 'constraints'),
+        },
+      XiangjiAgentId.resourcePlanner => <String, Object?>{
+          'resources': const <String, Object?>{
+            'time': '先限额投入',
+            'attention': '一次只推进一个关键差距',
+          },
+          'constraints': _draftStrings(draft, 'constraints'),
+          'front_concentration': '只把资源集中到当前 KeyGap。',
+          'opportunity_cost': _draftStrings(draft, 'constraints'),
         },
       XiangjiAgentId.strategist => <String, Object?>{
           'war_worthiness': unknowns.isEmpty ? 'worth' : 'scout_first',
@@ -788,6 +1075,26 @@ class XiangjiAgentService {
           'disagreements': const <String>['若退出成本被低估，应反对立即承诺。'],
           'evidence_needed': unknowns,
           'evidence_level': 'hypothesis',
+        },
+      XiangjiAgentId.wargameContingency => <String, Object?>{
+          'scenarios': <String>['按预测发展', '低于预测', '出现反向结果'],
+          'if_then_branches': <Map<String, Object?>>[
+            <String, Object?>{
+              'if': '现实与预测相反',
+              'then': '停止沿原算子加码并回溯最早错误层',
+            },
+          ],
+          'contingencies': <String>[
+            _draftText(
+              draft,
+              'change_signals',
+              fallback: '关键前提变化时重新军议',
+            ),
+          ],
+          'stop_loss': <String>[
+            _draftText(draft, 'exit_criteria', fallback: '达到不可承受成本前停止'),
+          ],
+          'retreat_route': '保留当前版本和已验证事实，退回 KeyGap 重算。',
         },
       XiangjiAgentId.chiefStrategist => <String, Object?>{
           'current_need': _draftText(draft, 'need', fallback: request.task),
@@ -840,18 +1147,7 @@ class XiangjiAgentService {
           'rule_ids': knowledge.preflight.ruleIds,
           'message': '检索命中只提供上下文，不自动升级为事实。',
         },
-      XiangjiAgentId.problemStateManager => <String, Object?>{
-          'input_type':
-              request.additionalContext['input_classification'] ?? 'NEED',
-          'problem_identity': request.problemId,
-          'update_existing_problem': true,
-          'current_focus': _draftText(draft, 'target_gap'),
-          'current_experiment': currentAction,
-          'next_verification': _draftText(draft, 'prediction'),
-          'message': '这条输入继续更新同一道题，并生成不可覆盖的新状态版本。',
-        },
-      XiangjiAgentId.cognitiveExperienceGenerator =>
-        <String, Object?>{
+      XiangjiAgentId.methodTranslator => <String, Object?>{
           'primary_answer': currentAction,
           'experience_interpretation_split': true,
           'model_is_revisable': true,
@@ -862,12 +1158,27 @@ class XiangjiAgentService {
           'action_mechanism': _draftText(draft, 'operator_mechanism'),
           'developer_language_hidden': true,
         },
-      XiangjiAgentId.methodLearningAdapter => <String, Object?>{
+      XiangjiAgentId.personalScienceLearner => <String, Object?>{
           'just_in_time_method':
               '把当前体验与解释分开，再用能区分候选原因的现实结果继续判断。',
           'transfer_prompt':
               '下次遇到类似情境，先各写一句“实际发生了什么”和“我怎样解释它”。',
+          'candidate_rules': const <Object?>[],
+          'counterexamples': _draftStrings(draft, 'counterexamples'),
+          'validation_plan': _draftText(draft, 'prediction'),
           'training_optional': true,
+        },
+      XiangjiAgentId.methodEffectValidator => <String, Object?>{
+          'checked_methods': request.additionalContext['method_effects'] is List
+              ? request.additionalContext['method_effects'] as List
+              : const <Object?>[],
+          'failures': const <Object?>[],
+          'release_gate_passed': true,
+        },
+      XiangjiAgentId.antiTemplateValidator => <String, Object?>{
+          'template_signals': const <Object?>[],
+          'invalid_operators': const <Object?>[],
+          'recommended_fixes': const <Object?>[],
         },
     };
   }
@@ -1023,39 +1334,113 @@ class XiangjiAgentService {
     return text.length <= 600 ? text : text.substring(0, 600);
   }
 
+  Future<String> _assemblePromptLayers(XiangjiAgentId agent) async {
+    final paths = <String>[
+      'assets/xiangji_future_strategist/prompts/00_P0_Constitution.md',
+      _promptAssetForAgent(agent),
+      'assets/xiangji_future_strategist/prompts/16_Output_Contracts.md',
+      'assets/xiangji_future_strategist/prompts/17_Orchestration_Policy.md',
+      'assets/xiangji_future_strategist/prompts/19_System_State_Schema.md',
+      'assets/xiangji_future_strategist/prompts/20_Method_Experience_Contract.md',
+      'assets/xiangji_future_strategist/prompts/21_Signature_Capability_Router.md',
+    ].toSet().toList();
+    final loaded = await Future.wait(paths.map((path) async {
+      try {
+        return await rootBundle.loadString(path);
+      } catch (_) {
+        return '';
+      }
+    }));
+    final available = loaded.where((item) => item.trim().isNotEmpty).toList();
+    if (available.isEmpty) return _rolePrompt(agent);
+    return <String>[
+      ...available,
+      'Runtime role fallback/identity: ${_rolePrompt(agent)}',
+    ].join('\n\n---\n\n');
+  }
+
+  static String _promptAssetForAgent(XiangjiAgentId agent) => switch (agent) {
+        XiangjiAgentId.chiefStrategist =>
+          'assets/xiangji_future_strategist/prompts/01_Chief_Strategist.md',
+        XiangjiAgentId.epistemicAuditor =>
+          'assets/xiangji_future_strategist/prompts/02_Experience_Parser.md',
+        XiangjiAgentId.causalAnalyst =>
+          'assets/xiangji_future_strategist/prompts/03_Causal_Analyst.md',
+        XiangjiAgentId.judgmentEngine =>
+          'assets/xiangji_future_strategist/prompts/04_Judgment_Engine.md',
+        XiangjiAgentId.groundingAuditor =>
+          'assets/xiangji_future_strategist/prompts/05_Grounding_Auditor.md',
+        XiangjiAgentId.problemFramer =>
+          'assets/xiangji_future_strategist/prompts/06_Goal_Auditor_Problem_Framer.md',
+        XiangjiAgentId.solver =>
+          'assets/xiangji_future_strategist/prompts/07_Persistent_Solver.md',
+        XiangjiAgentId.campaignSelector ||
+        XiangjiAgentId.resourcePlanner ||
+        XiangjiAgentId.strategist =>
+          'assets/xiangji_future_strategist/prompts/08_Strategist.md',
+        XiangjiAgentId.redTeam =>
+          'assets/xiangji_future_strategist/prompts/09_Red_Team.md',
+        XiangjiAgentId.wargameContingency =>
+          'assets/xiangji_future_strategist/prompts/10_Wargame_Contingency.md',
+        XiangjiAgentId.actionOfficer =>
+          'assets/xiangji_future_strategist/prompts/11_Action_Officer.md',
+        XiangjiAgentId.reviewHistorian =>
+          'assets/xiangji_future_strategist/prompts/12_Reconciler_Historian.md',
+        XiangjiAgentId.monitor =>
+          'assets/xiangji_future_strategist/prompts/13_Monitor_Opportunity.md',
+        XiangjiAgentId.methodTranslator =>
+          'assets/xiangji_future_strategist/prompts/14_Method_Translator.md',
+        XiangjiAgentId.knowledgeRouter =>
+          'assets/xiangji_future_strategist/prompts/15_Knowledge_Router.md',
+        XiangjiAgentId.personalScienceLearner =>
+          'assets/xiangji_future_strategist/prompts/12_Reconciler_Historian.md',
+        XiangjiAgentId.methodEffectValidator =>
+          'assets/xiangji_future_strategist/prompts/20_Method_Experience_Contract.md',
+        XiangjiAgentId.antiTemplateValidator =>
+          'assets/xiangji_future_strategist/prompts/18_Anti_Template_Validator.md',
+      };
+
   static String _rolePrompt(XiangjiAgentId agent) => switch (agent) {
         XiangjiAgentId.chiefStrategist =>
           '你是 A00 总军师：主动理解战局、编排 Agent、合并但不掩盖分歧，给明确首选、后手、改变信号和唯一当前一步；谋由你完成，最终价值与现实承诺由用户决断。',
         XiangjiAgentId.epistemicAuditor =>
-          '你是 A01 认识审计：分离原始事实、身体/体验、用户解释、因果、判断和预测。raw_facts 每项必须是含 text、source_ref、origin 的对象；没有用户原话或可追溯来源的内容只能是假设，不得伪装成事实。',
-        XiangjiAgentId.judgmentEngine =>
-          '你是 A02 判断力引擎：在任何高影响求解前，按当前目的比较案例，指出真正相关的相同、差异、边界与反例。',
-        XiangjiAgentId.groundingAuditor =>
-          '你是 A03 根据审计：追溯泉水/水渠，检测概念闭环和认识债务，系统化程度不等于认识状态。',
+          '你是 A01 经验分层：分离原始事实、身体/体验、用户解释、因果、判断和预测。raw_facts 每项必须是含 text、source_ref、origin 的对象；没有用户原话或可追溯来源的内容只能是假设，不得伪装成事实。',
         XiangjiAgentId.causalAnalyst =>
-          '你是 A04 因果分析：提出多个竞争原因，并给能区分原因的信息行动。',
+          '你是 A02 因果分析：提出多个竞争原因，并给能区分原因的信息行动。',
+        XiangjiAgentId.judgmentEngine =>
+          '你是 A03 判断力引擎：在任何高影响求解前，按当前目的比较案例，指出真正相关的相同、差异、边界与反例。',
+        XiangjiAgentId.groundingAuditor =>
+          '你是 A04 根据审计：追溯泉水/水渠，检测概念闭环和认识债务，系统化程度不等于认识状态。',
         XiangjiAgentId.problemFramer =>
           '你是 A05 真问题：审查隐藏前提、路径-目标混淆；保留原题并让用户确认重定义。',
         XiangjiAgentId.solver =>
           '你是 A06 求解器：替用户把自然语言自动转成 S0/G/F/U/H/C、Gap、AND/OR 子目标、2-5 个候选算子、机制、唯一当前行动、事前预测和回溯点；不得要求用户自己列结构。',
+        XiangjiAgentId.campaignSelector =>
+          '你是 A07 选战官：先审查是否值得一战、与大战略的关系、胜利和退出条件。',
+        XiangjiAgentId.resourcePlanner =>
+          '你是 A08 兵力规划：核算时间、精力、金钱、关系与机会成本，避免战线分散。',
         XiangjiAgentId.strategist =>
-          '你是 A07 战略军师：先判断是否值得一战、兵力和战争迷雾，再自动提供至少两个真正不同的战略、首选、机会成本、止损与锦囊。',
+          '你是 A09 战略军师：提供 2-3 条机制真正不同的路线、首选、切换条件和止损。',
         XiangjiAgentId.redTeam =>
-          '你是 A08 红队：每项反对标注证据/假设/可能性，寻找最脆弱前提但不为反对而反对。',
+          '你是 A10 红队：每项反对标注证据/假设/可能性，寻找最脆弱前提但不为反对而反对。',
+        XiangjiAgentId.wargameContingency =>
+          '你是 A11 兵棋与锦囊：用 IF/THEN 推演情景，给触发条件、后手、止损和撤退路线。',
         XiangjiAgentId.actionOfficer =>
-          '你是 A09 行动参谋：只输出唯一当前行动、一行理由、预计时间和 3-5 项现实记录，不塞长篇理论。',
+          '你是 A12 行动参谋：只输出唯一当前行动、一行理由、预计时间和 3-5 项现实记录，不塞长篇理论。',
         XiangjiAgentId.reviewHistorian =>
-          '你是 A10 战史官：比较事前预测与 RealityResult，定位最早错误层；现实证伪 AI 时生成 AIError。',
+          '你是 A13 对账/战史官：比较事前预测与 RealityResult，定位最早错误层；现实证伪 AI 时生成 AIError。',
         XiangjiAgentId.monitor =>
-          '你是 A11 监督：依据跨周期结构化数据识别脱节和五色战况，少打扰。',
+          '你是 A14 监督/战机探测：依据跨周期结构化数据识别八类脱节、五色战况和机会窗口，少打扰。',
         XiangjiAgentId.knowledgeRouter =>
-          '你是 A12 知识路由器：解释为何检索/排除资料，绝不把相似度或检索命中当作事实。',
-        XiangjiAgentId.problemStateManager =>
-          '你是 A13 持久问题状态管理：先判断输入是在更新当前问题还是开启真问题；反馈、体验和纠正默认更新稳定 problem_id，并产出当前焦点、已解决、未知、实验和下一验证。',
-        XiangjiAgentId.cognitiveExperienceGenerator =>
-          '你是 A14 认知体验生成：把已经运行的SCK机制转译成普通人能理解的双层体验；第一层只回答现在怎么办，第二层按需提供原因、证据和方法，禁止暴露内部对象名或JSON。',
-        XiangjiAgentId.methodLearningAdapter =>
-          '你是 A15 方法学习适配：只在当前真实问题中提供短小的即时方法解释与可选迁移练习，不建设哲学课程墙，也不阻塞行动。',
+          '你是 A15 知识路由器：解释为何检索/排除资料，绝不把相似度或检索命中当作事实。',
+        XiangjiAgentId.methodTranslator =>
+          '你是 A16 方法翻译：只把本轮已发生的方法效果翻成简洁人话，不新增判断或改变内部状态。',
+        XiangjiAgentId.personalScienceLearner =>
+          '你是 A17 个人科学学习：从多次现实事件生成候选规律，保留范围、反例与验证计划，不把单次经验升格为规则。',
+        XiangjiAgentId.methodEffectValidator =>
+          '你是 A18 方法效果校验：检查每个 MEC 是否有 trigger、operation、data mutation、decision effect 与 reality test。',
+        XiangjiAgentId.antiTemplateValidator =>
+          '你是 A19 反模板校验：检测固定侦察/推进/等待套话、机制为空和不同问题复用同一算子。',
       };
 
   static Map<String, Object?> _outputContract(XiangjiAgentId agent) =>
@@ -1126,6 +1511,50 @@ class XiangjiAgentService {
             'expected_minutes': 0,
             'reasoning_summary': '',
             'backtrack_point': '',
+            'problem_frame': <String, Object?>{},
+            'current_state': <String, Object?>{},
+            'goal_state': <String, Object?>{},
+            'gap_vector': <Object?>[
+              <String, Object?>{'type': 'information'},
+              <String, Object?>{'type': 'concept'},
+              <String, Object?>{'type': 'capability'},
+              <String, Object?>{'type': 'resource'},
+              <String, Object?>{'type': 'environment'},
+              <String, Object?>{'type': 'action'},
+              <String, Object?>{'type': 'risk'},
+            ],
+            'subgoal_graph': <String, Object?>{
+              'logic': 'AND|OR',
+              'nodes': <Object?>[],
+              'edges': <Object?>[],
+            },
+            'candidate_operators': <Object?>[],
+            'active_operator': <String, Object?>{
+              'target_gap': '',
+              'mechanism': '',
+              'preconditions': <Object?>[],
+              'expected_effect': '',
+              'cost': '',
+              'risk': '',
+              'reversibility': '',
+              'information_value': '',
+              'success_signals': <Object?>[],
+              'failure_signals': <Object?>[],
+            },
+            'termination': <Object?>[],
+          },
+        XiangjiAgentId.campaignSelector => const <String, Object?>{
+            'war_worthiness': 'must|worth|scout_first|defer|do_not_fight',
+            'strategic_value': '',
+            'victory_criteria': <Object?>[],
+            'exit_criteria': <Object?>[],
+            'opportunity_cost': <Object?>[],
+          },
+        XiangjiAgentId.resourcePlanner => const <String, Object?>{
+            'resources': <String, Object?>{},
+            'constraints': <Object?>[],
+            'front_concentration': '',
+            'opportunity_cost': <Object?>[],
           },
         XiangjiAgentId.strategist => const <String, Object?>{
             'war_worthiness': 'must|worth|scout_first|defer|do_not_fight',
@@ -1143,6 +1572,13 @@ class XiangjiAgentService {
             'disagreements': <Object?>[],
             'evidence_needed': <Object?>[],
             'evidence_level': 'hypothesis|supported|conflicted',
+          },
+        XiangjiAgentId.wargameContingency => const <String, Object?>{
+            'scenarios': <Object?>[],
+            'if_then_branches': <Object?>[],
+            'contingencies': <Object?>[],
+            'stop_loss': <Object?>[],
+            'retreat_route': '',
           },
         XiangjiAgentId.actionOfficer => const <String, Object?>{
             'current_action': '',
@@ -1171,18 +1607,7 @@ class XiangjiAgentService {
             'ai_errors': <Object?>[],
             'candidate_knowledge': <Object?>[],
           },
-        XiangjiAgentId.problemStateManager => const <String, Object?>{
-            'input_type': 'NEED|NEW_FACT|EXPERIENCE|CORRECTION|ACTION_FEEDBACK|NEW_PROBLEM',
-            'problem_identity': '',
-            'update_existing_problem': true,
-            'resolved_items': <Object?>[],
-            'current_focus': '',
-            'key_unknowns': <Object?>[],
-            'current_experiment': '',
-            'next_verification': '',
-          },
-        XiangjiAgentId.cognitiveExperienceGenerator =>
-          const <String, Object?>{
+        XiangjiAgentId.methodTranslator => const <String, Object?>{
             'primary_answer': '',
             'experience_interpretation_split': true,
             'model_is_revisable': true,
@@ -1192,10 +1617,23 @@ class XiangjiAgentService {
             'action_mechanism': '',
             'developer_language_hidden': true,
           },
-        XiangjiAgentId.methodLearningAdapter => const <String, Object?>{
+        XiangjiAgentId.personalScienceLearner => const <String, Object?>{
             'just_in_time_method': '',
             'transfer_prompt': '',
+            'candidate_rules': <Object?>[],
+            'counterexamples': <Object?>[],
+            'validation_plan': '',
             'training_optional': true,
+          },
+        XiangjiAgentId.methodEffectValidator => const <String, Object?>{
+            'checked_methods': <Object?>[],
+            'failures': <Object?>[],
+            'release_gate_passed': false,
+          },
+        XiangjiAgentId.antiTemplateValidator => const <String, Object?>{
+            'template_signals': <Object?>[],
+            'invalid_operators': <Object?>[],
+            'recommended_fixes': <Object?>[],
           },
         _ => const <String, Object?>{
             'current_facts': <Object?>[],
@@ -1209,7 +1647,7 @@ class XiangjiAgentService {
       };
 
   static const String _systemConstitution = '''
-你是“向己·未来军师 V6.1 Rev.4”的 AI-First 持久问题求解 Agent。只输出一个 JSON 对象，不输出 Markdown。
+你是“向己·未来军师 V6.1 Final Rev.5.2”的 AI-First 持久问题求解 Agent。只输出一个 JSON 对象，不输出 Markdown。
 
 AI-First 委托：
 - 用户主要提供 Need、现实事实、真实感觉/经历、最终决断、行动与反馈。每条输入先分类；反馈、体验和纠正默认继续更新稳定问题身份。
@@ -1217,7 +1655,7 @@ AI-First 委托：
 - 解题纸、F/U/H/C、认识根据、因果树、AND/OR、战略矩阵、红队与兵棋都由 AI 预填；用户只需采用、修改、反对、追问为什么或暂缓。
 - 向用户提问前执行 AskUserGuard。只有 MissingInformation AND HighDecisionImpact AND CannotInferFromExistingContext 同时成立，且低成本可逆侦察不能解决时，才可单轮问一个 EVSI 最高问题。
 - 守卫结果只允许 CONTINUE_AUTONOMOUS、ASK_ONE、SCOUT_IN_REALITY、USER_DECISION；永远不得输出 ASK_FORM。
-- A02 判断力必须先于高影响 A06/A07；A13在求解前维护持久问题状态；重大战略自动经过 A08 红队；A00 给明确推荐和后手；A14/A15把方法变成用户体验。
+- A03 判断力必须先于高影响 A06/A09；A06维护持久问题状态；重大战略自动经过 A10 红队与 A11 兵棋；A00 给明确推荐和后手；A16/A17只转译已发生的方法与学习事件。
 - 已有信息足以支持可逆一步时停止分析转行动；不得回复“请你自己列优缺点/填写结构化步骤”。
 
 不可绕过的 SCK 运行宪法：
@@ -1247,6 +1685,13 @@ Rev.4 用户体验与持久求解约束：
 - 每个高影响方法同时生成用户可理解的 CognitiveExperience。普通界面严禁出现 raw_context、causal_map、judgment_map、grounding_chain、problem_tree、strategy_matrix、red_team、war_game 或原始 JSON。
 - 第一层直接给“现在怎么办”；原因、证据、反例、最弱前提、未知和即时方法放在按需展开的第二层。
 - 每条战略必须针对当前案例说明目标差距、作用机制、关键假设、首选原因、不选其他路线的原因、切换触发和停止条件；不得用固定模板冒充个案战略。
+
+Rev.5.2 Signature Method Effect 约束：
+- Signature Capability Router 只选择当前决策相关的 MEC-001..MEC-014；默认每轮只让用户看到 0-3 项。
+- 每个已触发方法必须形成 MethodEvent：trigger、before/after state、data_mutations、decision_effect、reality_test，不保存私密思维链。
+- 方法只增加解释文字却不改变 ProblemFrame、Gap、Hypothesis、Operator 或 Strategy，且未说明维持理由，判定失败。
+- 所有方法作用于同一个 PersistentProblem / SolverState，不创建 14 个平行页面或断裂会话。
+- Action Mode 隐藏方法与长分析；Reality 返回后再显示必要的对账、改判和回溯。
 
 过去投入不能单独证明应继续投入。用户拥有最终决策权；建议不是命令。AI 输出本身同样接受根据、反例、验算和版本修订。
 

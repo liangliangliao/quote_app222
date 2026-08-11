@@ -753,7 +753,7 @@ class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
     final directory = Directory(p.join(root.path, 'xiangji', 'exports'));
     await directory.create(recursive: true);
     final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
-    final file = File(p.join(directory.path, 'xiangji_v6_1_rev4_$stamp.json'));
+    final file = File(p.join(directory.path, 'xiangji_v6_1_rev5_2_$stamp.json'));
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(snapshot));
     if (mounted) setState(() => _lastExportPath = file.path);
     return file.path;

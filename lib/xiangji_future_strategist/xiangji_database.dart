@@ -46,6 +46,7 @@ class XiangjiDao {
     await _seedCoreKnowledge(db);
     await _ensureRev3SckRules(db);
     await _ensureRev4Rules(db);
+    await _ensureRev52Metadata(db);
     await _seedProviderCapabilities(db);
     _ensured = true;
   }
@@ -374,6 +375,52 @@ class XiangjiDao {
         sort_order INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'active',
         data_json TEXT NOT NULL DEFAULT '{}',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_solver_snapshot (
+        problem_id TEXT PRIMARY KEY,
+        state_version INTEGER NOT NULL DEFAULT 1,
+        need_text TEXT NOT NULL DEFAULT '',
+        problem_frame_json TEXT NOT NULL DEFAULT '{}',
+        current_state_json TEXT NOT NULL DEFAULT '{}',
+        goal_state_json TEXT NOT NULL DEFAULT '{}',
+        hypotheses_json TEXT NOT NULL DEFAULT '[]',
+        constraints_json TEXT NOT NULL DEFAULT '[]',
+        gaps_json TEXT NOT NULL DEFAULT '[]',
+        key_gap_json TEXT NOT NULL DEFAULT '{}',
+        subgoal_graph_json TEXT NOT NULL DEFAULT '{}',
+        active_subgoal_json TEXT NOT NULL DEFAULT '{}',
+        candidate_operators_json TEXT NOT NULL DEFAULT '[]',
+        active_operator_json TEXT NOT NULL DEFAULT '{}',
+        epistemic_profile_json TEXT NOT NULL DEFAULT '{}',
+        prediction_ledger_json TEXT NOT NULL DEFAULT '{}',
+        last_reality_result_json TEXT NOT NULL DEFAULT '{}',
+        backtrack_history_json TEXT NOT NULL DEFAULT '[]',
+        prompt_version TEXT NOT NULL DEFAULT 'rev5.2',
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_method_event (
+        id TEXT PRIMARY KEY,
+        method_id TEXT NOT NULL,
+        problem_id TEXT NOT NULL,
+        state_version INTEGER NOT NULL,
+        trigger_text TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL DEFAULT '[]',
+        before_state_refs_json TEXT NOT NULL DEFAULT '{}',
+        operation_summary TEXT NOT NULL,
+        data_mutations_json TEXT NOT NULL DEFAULT '[]',
+        after_state_refs_json TEXT NOT NULL DEFAULT '{}',
+        decision_effect TEXT NOT NULL,
+        user_visible_summary TEXT NOT NULL,
+        reality_test TEXT NOT NULL,
+        learning_link TEXT NOT NULL DEFAULT '',
+        changed_state INTEGER NOT NULL DEFAULT 1,
+        retained_state_reason TEXT NOT NULL DEFAULT '',
+        user_visible INTEGER NOT NULL DEFAULT 1,
         created_at_ms INTEGER NOT NULL
       )
     ''',
@@ -1218,6 +1265,8 @@ class XiangjiDao {
     'CREATE INDEX IF NOT EXISTS idx_xf_learning_problem ON xf_learning_moment(problem_id, created_at_ms DESC)',
     'CREATE INDEX IF NOT EXISTS idx_xf_backtrack_problem ON xf_backtrack_event(problem_id, created_at_ms DESC)',
     'CREATE INDEX IF NOT EXISTS idx_xf_explanation_problem ON xf_explanation_card(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_method_problem ON xf_method_event(problem_id, created_at_ms DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_xf_method_capability ON xf_method_event(method_id, created_at_ms DESC)',
   ];
 
   Future<void> _seedCoreKnowledge(Database db) async {
@@ -1448,6 +1497,41 @@ class XiangjiDao {
         );
       }
     });
+  }
+
+  /// Rev.5.2 keeps the protected Rev3/Rev4 rule set and advances its package
+  /// identity only after those migrations have completed. This is idempotent
+  /// for both fresh installs and databases upgraded in place.
+  Future<void> _ensureRev52Metadata(Database db) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      'xf_knowledge_source',
+      <String, Object?>{
+        'version': 'V6.1-Rev5.2',
+        'content_hash': 'bundled-k0-v6.1-rev5.2',
+        'updated_at_ms': now,
+      },
+      where: 'id = ?',
+      whereArgs: const <Object?>['XF-K0-SCHOPENHAUER'],
+    );
+    await db.update(
+      'xf_knowledge_document',
+      <String, Object?>{
+        'checksum': 'bundled-k0-v6.1-rev5.2',
+        'updated_at_ms': now,
+      },
+      where: 'id = ?',
+      whereArgs: const <Object?>['XF-K0-DOC-WWR-I'],
+    );
+    await db.update(
+      'xf_knowledge_rule',
+      <String, Object?>{
+        'version': 'V6.1-Rev5.2',
+        'updated_at_ms': now,
+      },
+      where: 'source_id = ?',
+      whereArgs: const <Object?>['XF-K0-SCHOPENHAUER'],
+    );
   }
 
   static const List<Map<String, String>> _rev4RuleSeeds =
@@ -2847,6 +2931,150 @@ class XiangjiDao {
           : <Object?>[problemId, kind, 'active'],
       orderBy: 'sort_order ASC, created_at_ms ASC',
     );
+  }
+
+  Future<int> problemVersion(String problemId) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_problem',
+      columns: const <String>['version_no'],
+      where: 'id = ?',
+      whereArgs: <Object?>[problemId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return 0;
+    final raw = rows.first['version_no'];
+    return raw is num ? raw.toInt() : int.tryParse(raw.toString()) ?? 0;
+  }
+
+  Future<XiangjiSolverSnapshot?> solverSnapshot(String problemId) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_solver_snapshot',
+      where: 'problem_id = ?',
+      whereArgs: <Object?>[problemId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : XiangjiSolverSnapshot.fromMap(rows.first);
+  }
+
+  Future<void> saveSolverSnapshot(XiangjiSolverSnapshot snapshot) async {
+    final db = await _database();
+    await db.insert(
+      'xf_solver_snapshot',
+      snapshot.toDatabaseMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Commits the transformed solver state and its audit events atomically.
+  Future<void> saveSolverStateAndMethodEvents({
+    required XiangjiSolverSnapshot snapshot,
+    required List<XiangjiMethodEvent> events,
+  }) async {
+    final db = await _database();
+    for (final event in events) {
+      _validateMethodEvent(event, snapshot.problemId);
+    }
+    await db.transaction((txn) async {
+      await txn.insert(
+        'xf_solver_snapshot',
+        snapshot.toDatabaseMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final event in events) {
+        await txn.insert(
+          'xf_method_event',
+          event.toDatabaseMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  Future<void> saveMethodEvent(XiangjiMethodEvent event) async {
+    _validateMethodEvent(event, event.problemId);
+    final db = await _database();
+    await db.insert(
+      'xf_method_event',
+      event.toDatabaseMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<XiangjiMethodEvent>> methodEvents({
+    String problemId = '',
+    String methodId = '',
+    bool userVisibleOnly = false,
+    int limit = 0,
+  }) async {
+    final db = await _database();
+    final where = <String>[];
+    final args = <Object?>[];
+    if (problemId.isNotEmpty) {
+      where.add('problem_id = ?');
+      args.add(problemId);
+    }
+    if (methodId.isNotEmpty) {
+      where.add('method_id = ?');
+      args.add(methodId);
+    }
+    if (userVisibleOnly) where.add('user_visible = 1');
+    final rows = await db.query(
+      'xf_method_event',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'created_at_ms DESC',
+      limit: limit > 0 ? limit : null,
+    );
+    return rows.map(XiangjiMethodEvent.fromMap).toList();
+  }
+
+  /// Returns only the newest router turn, so a turn that intentionally
+  /// exposes zero methods never leaks cards from an older turn into the UI.
+  Future<List<XiangjiMethodEvent>> latestMethodTurnEvents({
+    required String problemId,
+    bool userVisibleOnly = true,
+    int limit = 3,
+  }) async {
+    final recent = await methodEvents(problemId: problemId, limit: 100);
+    if (recent.isEmpty) return const <XiangjiMethodEvent>[];
+    String turnPrefix(String id) => id.replaceFirst(
+          RegExp(r'-mec-\d{3}-\d+$'),
+          '',
+        );
+
+    final prefix = turnPrefix(recent.first.id);
+    return recent
+        .where(
+          (event) =>
+              turnPrefix(event.id) == prefix &&
+              (!userVisibleOnly || event.userVisible),
+        )
+        .take(limit.clamp(0, 3).toInt())
+        .toList();
+  }
+
+  void _validateMethodEvent(XiangjiMethodEvent event, String problemId) {
+    final number = int.tryParse(event.methodId.replaceFirst('MEC-', '')) ?? 0;
+    if (number < 1 || number > 14) {
+      throw ArgumentError('MethodEvent.method_id 必须是 MEC-001..MEC-014。');
+    }
+    if (event.problemId.isEmpty || event.problemId != problemId) {
+      throw ArgumentError('MethodEvent 必须绑定当前 Problem。');
+    }
+    if (event.trigger.trim().isEmpty ||
+        event.operationSummary.trim().isEmpty ||
+        event.decisionEffect.trim().isEmpty ||
+        event.realityTest.trim().isEmpty) {
+      throw ArgumentError('MethodEvent 缺少 Trigger/Operation/Effect/RealityTest。');
+    }
+    if (event.dataMutations.isEmpty) {
+      throw ArgumentError('MethodEvent 必须记录具体数据变更。');
+    }
+    if (!event.changedState && event.retainedStateReason.trim().isEmpty) {
+      throw ArgumentError('维持原状态的 MethodEvent 必须记录维持理由。');
+    }
   }
 
   Future<int> nextSituationModelVersion({
@@ -4862,7 +5090,7 @@ class XiangjiDao {
       }
     }
     return <String, Object?>{
-      'format': 'xiangji-future-strategist-v6.1-rev4',
+      'format': 'xiangji-future-strategist-v6.1-rev5.2',
       'exported_at': DateTime.now().toUtc().toIso8601String(),
       'tables': tables,
     };
@@ -4893,6 +5121,7 @@ class XiangjiDao {
     await _seedCoreKnowledge(db);
     await _ensureRev3SckRules(db);
     await _ensureRev4Rules(db);
+    await _ensureRev52Metadata(db);
     await _seedProviderCapabilities(db);
     await rebuildPassageIndex(db);
   }

@@ -14,7 +14,7 @@ typedef XiangjiOrchestrationProgress = void Function(
   XiangjiOrchestrationState state,
 );
 
-/// Executes the Rev.4 AI-first route end-to-end. A deterministic local kernel
+/// Executes the Rev.5.2 AI-first route end-to-end. A deterministic local kernel
 /// always produces a complete draft; configured model agents may improve that
 /// draft, but provider failure never turns the experience back into a form.
 class XiangjiCognitiveOrchestrator {
@@ -158,6 +158,7 @@ class XiangjiCognitiveOrchestrator {
     final agentRunRecordIds = <String, String>{};
     final warnings = <String>[];
     var executionFrozen = false;
+    var freezeReason = '';
     XiangjiOrchestrationState? lastProgress;
 
     for (final agent in effectivePlan) {
@@ -193,6 +194,9 @@ class XiangjiCognitiveOrchestrator {
         ));
         outputs[agent.code] = result.output;
         executionFrozen = executionFrozen || result.executionFrozen;
+        if (result.executionFrozen && freezeReason.isEmpty) {
+          freezeReason = '当前为不可逆高风险且认识债务高；先补证并降低不可逆性。';
+        }
         await _dao.saveAgentRun(<String, Object?>{
           'id': runRecordId,
           'problem_id': problemId,
@@ -226,6 +230,23 @@ class XiangjiCognitiveOrchestrator {
       }
       runRecordIds.add(runRecordId);
       agentRunRecordIds[agent.code] = runRecordId;
+    }
+
+    final methodGate = outputs[XiangjiAgentId.methodEffectValidator.code];
+    final methodFailures = methodGate?['failures'];
+    if (methodGate != null &&
+        (methodGate['release_gate_passed'] != true ||
+            (methodFailures is List && methodFailures.isNotEmpty))) {
+      executionFrozen = true;
+      freezeReason = '方法效果校验未通过：本轮分析尚未产生可审计的状态或决策变化。';
+      warnings.add('${XiangjiAgentId.methodEffectValidator.code} $freezeReason');
+    }
+    final antiTemplateGate = outputs[XiangjiAgentId.antiTemplateValidator.code];
+    final invalidOperators = antiTemplateGate?['invalid_operators'];
+    if (invalidOperators is List && invalidOperators.isNotEmpty) {
+      executionFrozen = true;
+      freezeReason = '反模板校验发现当前办法没有针对本案例的有效机制，已停止自动推进。';
+      warnings.add('${XiangjiAgentId.antiTemplateValidator.code} $freezeReason');
     }
 
     draft = draft.mergeAgentOutputs(outputs);
@@ -331,7 +352,7 @@ class XiangjiCognitiveOrchestrator {
       draft: draft,
       stopForClarification: clarification.isNotEmpty,
       agentRunId:
-          agentRunRecordIds['A00'] ?? agentRunRecordIds['A02'] ?? '',
+          agentRunRecordIds['A00'] ?? agentRunRecordIds['A03'] ?? '',
       sourceRefs: sourceRefs,
     );
     await _persistReasoning(
@@ -362,6 +383,10 @@ class XiangjiCognitiveOrchestrator {
         await _dao.linkScoutingInformationNeeds(problemId, actionId);
       }
     }
+    final persistedAction =
+        actionId.isEmpty ? null : await _dao.action(actionId);
+    final visibleCurrentAction =
+        persistedAction?.title ?? draft.currentAction;
     final cognitiveExperiences = await _persistRev4Runtime(
       problemId: problemId,
       situationId: situationId,
@@ -370,9 +395,9 @@ class XiangjiCognitiveOrchestrator {
       draft: draft,
       classification: effectiveClassification,
       sourceRefs: sourceRefs,
-      generatedBy: agentRunRecordIds['A13'] ??
+      generatedBy: agentRunRecordIds['A06'] ??
           agentRunRecordIds['A00'] ??
-          'A13_LOCAL_GUARD',
+          'A06_LOCAL_GUARD',
       awaitingClarification: clarification.isNotEmpty,
       userDoesNotKnow: userDoesNotKnow,
       realityContradicted: realityContradicted,
@@ -380,17 +405,28 @@ class XiangjiCognitiveOrchestrator {
     );
     final problemProgress = await _dao.problemProgress(problemId);
     if (executionFrozen) {
+      final releaseGateFreeze = freezeReason.contains('校验');
       await _dao.saveAlert(
         id: _idFactory('xf_alert'),
         state: XiangjiAlertState.red,
-        alertType: 'sck_high_risk_freeze',
-        reason: '当前为不可逆高风险且认识债务高；Rev.4 已冻结推进型行动。',
-        defaultAction: '先补证、降低不可逆性，并在需要时寻求专业复核。',
+        alertType: releaseGateFreeze
+            ? 'runtime_release_gate_freeze'
+            : 'sck_high_risk_freeze',
+        reason: freezeReason.isEmpty
+            ? '当前推进条件未通过运行时门控。'
+            : freezeReason,
+        defaultAction: releaseGateFreeze
+            ? '保留当前事实，回退到本地确定性求解并重新生成针对本案例的办法。'
+            : '先补证、降低不可逆性，并在需要时寻求专业复核。',
         problemId: problemId,
       );
     } else {
       await _dao.resolveOpenAlertsOfType(
         'sck_high_risk_freeze',
+        problemId: problemId,
+      );
+      await _dao.resolveOpenAlertsOfType(
+        'runtime_release_gate_freeze',
         problemId: problemId,
       );
     }
@@ -405,14 +441,16 @@ class XiangjiCognitiveOrchestrator {
       'situation_model_id': situationId,
       'true_problem': draft.trueProblem,
       'recommendation': executionFrozen
-          ? '先冻结不可逆承诺，补证、降风险，并在需要时寻求专业复核。'
+          ? (freezeReason.isEmpty
+              ? '当前推进条件未通过，先保留事实并重新生成可审计的下一步。'
+              : freezeReason)
           : clarification.isEmpty
               ? draft.recommendation
               : '先补充这一项决定性信息，军师会自动继续。',
       'judgment': draft.judgment,
       'why_text': draft.why,
       'current_action': clarification.isEmpty && !executionFrozen
-          ? draft.currentAction
+          ? visibleCurrentAction
           : '',
       'change_signals': draft.changeSignals,
       'epistemic_status': draft.epistemicStatus,
@@ -648,14 +686,20 @@ class XiangjiCognitiveOrchestrator {
     });
 
     if (actionId.isNotEmpty) {
+      final persistedAction = await _dao.action(actionId);
+      final persistedMechanism =
+          (persistedAction?.whyChain['operator_mechanism'] ??
+                  draft.operatorMechanism)
+              .toString();
+      final persistedGap =
+          (persistedAction?.whyChain['key_gap'] ?? draft.targetGap).toString();
       await _dao.saveSolutionAttempt(<String, Object?>{
         'id': _idFactory('xf_solution_attempt'),
         'problem_id': problemId,
         'state_version_id': stateVersionId,
         'action_id': actionId,
         'operator_id': 'action:$actionId',
-        'rationale':
-            '${draft.operatorMechanism}；目标差距：${draft.targetGap}',
+        'rationale': '$persistedMechanism；目标差距：$persistedGap',
         'prediction_id': hypothesisTestId,
         'started_at_ms': 0,
         'ended_at_ms': 0,
@@ -865,7 +909,7 @@ class XiangjiCognitiveOrchestrator {
         ...draft.unknowns,
         ...draft.counterexamples,
       }.toList(),
-      changeReason: 'Rev.4 AI 预填；等待用户采用、修改或反对',
+      changeReason: 'Rev.5.2 AI 预填；等待用户采用、修改或反对',
       origin: 'ai_inference',
     );
   }
@@ -1018,7 +1062,7 @@ class XiangjiCognitiveOrchestrator {
       'relevant_differences_json': jsonEncode(draft.relevantDifferences),
       'counterexamples_json': jsonEncode(draft.counterexamples),
       'conclusion': draft.judgment,
-      'agent_run_id': agentRunIds['A02'] ?? '',
+      'agent_run_id': agentRunIds['A03'] ?? '',
       'state': XiangjiJudgmentState.draft.wire,
       'created_at_ms': now,
       'updated_at_ms': now,
@@ -1264,12 +1308,76 @@ class XiangjiCognitiveOrchestrator {
     required XiangjiSituationDraft draft,
   }) async {
     if (!_sck.operatorHasMechanism(draft)) return '';
+    final contract = draft.operators.isEmpty
+        ? const <String, Object?>{}
+        : draft.operators.first;
+    String contractText(List<String> keys, String fallback) {
+      for (final key in keys) {
+        final value = (contract[key] ?? '').toString().trim();
+        if (value.isNotEmpty) return value;
+      }
+      return fallback;
+    }
+
+    final rawPreconditions = contract['preconditions'];
+    final missingPreconditions = rawPreconditions is List
+        ? rawPreconditions
+            .map((item) {
+              if (item is Map) {
+                final status =
+                    (item['status'] ?? '').toString().toLowerCase();
+                final satisfied = item['satisfied'] == true ||
+                    <String>{'satisfied', 'complete', 'completed', 'met'}
+                        .contains(status);
+                if (satisfied) return '';
+                return (item['label'] ??
+                        item['text'] ??
+                        item['condition'] ??
+                        item['name'] ??
+                        '')
+                    .toString()
+                    .trim();
+              }
+              return item.toString().trim();
+            })
+            .where((item) => item.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final blockedTitle = contractText(
+      const <String>['title', 'name'],
+      draft.currentAction,
+    );
+    final targetGap = contractText(
+      const <String>['target_gap'],
+      draft.targetGap,
+    );
+    final activeTitle = missingPreconditions.isEmpty
+        ? blockedTitle
+        : '补齐前提：${missingPreconditions.first}';
+    final activeMechanism = missingPreconditions.isEmpty
+        ? contractText(
+            const <String>['mechanism', 'mechanism_for_this_case'],
+            draft.operatorMechanism,
+          )
+        : '先取得前提“${missingPreconditions.first}”成立或不成立的现实证据，解除原办法阻塞';
+    final activePrediction = missingPreconditions.isEmpty
+        ? contractText(
+            const <String>['prediction', 'expected_effect'],
+            draft.prediction,
+          )
+        : '完成后应能确认前提“${missingPreconditions.first}”是否成立';
+    final expectedEffect = missingPreconditions.isEmpty
+        ? contractText(
+            const <String>['expected_effect'],
+            draft.prediction,
+          )
+        : '前提“${missingPreconditions.first}”形成可观察满足证据，或被现实证伪后改换路线';
     await _dao.invalidateReadyActions(problemId);
     await _dao.addProblemItem(
       id: _idFactory('xf_item'),
       problemId: problemId,
       kind: 'gap',
-      text: draft.targetGap,
+      text: targetGap,
       sourceRef: 'situation:$situationId',
       critical: true,
       data: <String, Object?>{'origin': 'ai_prefill'},
@@ -1278,30 +1386,68 @@ class XiangjiCognitiveOrchestrator {
       id: _idFactory('xf_item'),
       problemId: problemId,
       kind: 'operator',
-      text: draft.currentAction,
+      text: activeTitle,
       sourceRef: 'situation:$situationId',
       critical: true,
       data: <String, Object?>{
-        'target_gap': draft.targetGap,
-        'mechanism': draft.operatorMechanism,
+        'target_gap': targetGap,
+        'mechanism': activeMechanism,
+        'preconditions': missingPreconditions,
+        'expected_effect': expectedEffect,
+        'cost': contractText(
+          const <String>['cost'],
+          '${draft.expectedMinutes} 分钟',
+        ),
+        'risk': contractText(const <String>['risk'], 'low'),
+        'reversibility': contractText(
+          const <String>['reversibility'],
+          draft.irreversible ? 'low' : 'high',
+        ),
+        'information_value': contractText(
+          const <String>['information_value'],
+          '现实结果会改变下一轮判断',
+        ),
         'strategic_meaning': draft.strategicMeaning,
         'grounding_reason': draft.groundingReason,
+        'status': missingPreconditions.isEmpty
+            ? 'selected'
+            : 'precondition_subgoal_selected',
+        if (missingPreconditions.isNotEmpty)
+          'blocked_operator_title': blockedTitle,
         'origin': 'ai_prefill',
       },
     );
+    for (var index = 0; index < missingPreconditions.length; index++) {
+      await _dao.addProblemItem(
+        id: _idFactory('xf_item'),
+        problemId: problemId,
+        kind: 'precondition_subgoal',
+        text: missingPreconditions[index],
+        sourceRef: 'situation:$situationId',
+        critical: true,
+        sortOrder: index,
+        data: const <String, Object?>{
+          'relation': 'AND',
+          'status': 'missing',
+          'origin': 'ai_prefill',
+        },
+      );
+    }
     final actionId = _idFactory('xf_action');
     await _dao.createAction(
       id: actionId,
-      title: draft.currentAction,
+      title: activeTitle,
       problemId: problemId,
       campaignId: campaignId,
-      prediction: draft.prediction,
+      prediction: activePrediction,
       expectedMinutes: draft.expectedMinutes,
       whyChain: <String, Object?>{
         'strategic_meaning': draft.strategicMeaning,
-        'key_gap': draft.targetGap,
-        'operator_mechanism': draft.operatorMechanism,
+        'key_gap': targetGap,
+        'operator_mechanism': activeMechanism,
         'epistemic_grounding': draft.groundingReason,
+        if (missingPreconditions.isNotEmpty)
+          'blocked_operator': blockedTitle,
       },
     );
     final problem = await _dao.problem(problemId);
@@ -1336,20 +1482,24 @@ class XiangjiCognitiveOrchestrator {
         XiangjiAgentId.judgmentEngine ||
         XiangjiAgentId.groundingAuditor =>
           XiangjiOrchestrationState.cognitiveModeling,
-        XiangjiAgentId.problemFramer ||
-        XiangjiAgentId.problemStateManager ||
-        XiangjiAgentId.solver =>
+        XiangjiAgentId.problemFramer || XiangjiAgentId.solver =>
           XiangjiOrchestrationState.problemSolving,
-        XiangjiAgentId.strategist || XiangjiAgentId.redTeam =>
+        XiangjiAgentId.campaignSelector ||
+        XiangjiAgentId.resourcePlanner ||
+        XiangjiAgentId.strategist ||
+        XiangjiAgentId.redTeam ||
+        XiangjiAgentId.wargameContingency =>
           XiangjiOrchestrationState.strategicCouncil,
         XiangjiAgentId.chiefStrategist => majorDecision
             ? XiangjiOrchestrationState.strategicCouncil
             : XiangjiOrchestrationState.problemSolving,
         XiangjiAgentId.actionOfficer ||
-        XiangjiAgentId.cognitiveExperienceGenerator ||
-        XiangjiAgentId.methodLearningAdapter =>
+        XiangjiAgentId.methodTranslator ||
+        XiangjiAgentId.methodEffectValidator ||
+        XiangjiAgentId.antiTemplateValidator =>
           XiangjiOrchestrationState.actionCompression,
-        XiangjiAgentId.reviewHistorian =>
+        XiangjiAgentId.reviewHistorian ||
+        XiangjiAgentId.personalScienceLearner =>
           XiangjiOrchestrationState.realityReconciliation,
         XiangjiAgentId.monitor || XiangjiAgentId.knowledgeRouter =>
           XiangjiOrchestrationState.backgroundWatch,
@@ -1364,16 +1514,21 @@ class XiangjiCognitiveOrchestrator {
           XiangjiProblemState.epistemicReview,
         XiangjiAgentId.problemFramer => XiangjiProblemState.conceptReview,
         XiangjiAgentId.solver ||
-        XiangjiAgentId.problemStateManager ||
+        XiangjiAgentId.campaignSelector ||
+        XiangjiAgentId.resourcePlanner ||
         XiangjiAgentId.strategist ||
         XiangjiAgentId.redTeam ||
+        XiangjiAgentId.wargameContingency ||
         XiangjiAgentId.chiefStrategist =>
           XiangjiProblemState.solving,
         XiangjiAgentId.actionOfficer => XiangjiProblemState.actionReady,
-        XiangjiAgentId.cognitiveExperienceGenerator ||
-        XiangjiAgentId.methodLearningAdapter =>
+        XiangjiAgentId.methodTranslator ||
+        XiangjiAgentId.methodEffectValidator ||
+        XiangjiAgentId.antiTemplateValidator =>
           XiangjiProblemState.actionReady,
-        XiangjiAgentId.reviewHistorian => XiangjiProblemState.verifying,
+        XiangjiAgentId.reviewHistorian ||
+        XiangjiAgentId.personalScienceLearner =>
+          XiangjiProblemState.verifying,
         XiangjiAgentId.monitor || XiangjiAgentId.knowledgeRouter =>
           XiangjiProblemState.solving,
       };
@@ -1417,12 +1572,13 @@ class XiangjiCognitiveOrchestrator {
 
   String _artifactRunId(String kind, Map<String, String> agentRunIds) =>
       switch (kind) {
-        'causal_map' => agentRunIds['A04'] ?? '',
-        'judgment_map' => agentRunIds['A02'] ?? '',
-        'grounding_chain' => agentRunIds['A03'] ?? '',
+        'causal_map' => agentRunIds['A02'] ?? '',
+        'judgment_map' => agentRunIds['A03'] ?? '',
+        'grounding_chain' => agentRunIds['A04'] ?? '',
         'problem_tree' => agentRunIds['A06'] ?? '',
-        'strategy_matrix' => agentRunIds['A07'] ?? '',
-        'red_team' || 'war_game' => agentRunIds['A08'] ?? '',
+        'strategy_matrix' => agentRunIds['A09'] ?? '',
+        'red_team' => agentRunIds['A10'] ?? '',
+        'war_game' => agentRunIds['A11'] ?? '',
         _ => '',
       };
 

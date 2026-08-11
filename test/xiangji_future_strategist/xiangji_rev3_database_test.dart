@@ -344,7 +344,7 @@ void main() {
     );
   });
 
-  test('TC-AI-011 two failed cycles create one auditable A11 to A00 council',
+  test('TC-AI-011 two failed cycles create one auditable A14 to A00 council',
       () async {
     for (final entry in const <(String, int, int)>[
       ('old', 10, 1000),
@@ -383,12 +383,12 @@ void main() {
     final second = await repository.refreshAutomaticWatch();
     final runs = await dao.agentRuns('');
     final alert = await dao.latestOpenAlert();
-    final monitorRun = runs.singleWhere((row) => row['agent_role'] == 'A11');
+    final monitorRun = runs.singleWhere((row) => row['agent_role'] == 'A14');
     final chiefRun = runs.singleWhere((row) => row['agent_role'] == 'A00');
 
     expect(first.state, XiangjiAlertState.orange);
     expect(second.state, XiangjiAlertState.orange);
-    expect(runs.map((row) => row['agent_role']).toSet(), <Object?>{'A11', 'A00'});
+    expect(runs.map((row) => row['agent_role']).toSet(), <Object?>{'A14', 'A00'});
     expect(
       chiefRun['input_refs_json'].toString(),
       contains(monitorRun['id'].toString()),

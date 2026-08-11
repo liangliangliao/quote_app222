@@ -1,8 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_agent_service.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_state_machine.dart';
 
 void main() {
+  test('Rev5.2 restores the complete A00-A19 agent registry', () {
+    expect(XiangjiAgentId.values, hasLength(20));
+    expect(
+      XiangjiAgentId.values.map((agent) => agent.code).toList(),
+      <String>[
+        for (var index = 0; index < 20; index++)
+          'A${index.toString().padLeft(2, '0')}',
+      ],
+    );
+  });
+
   group('TC-EP: epistemic invariants', () {
     test('TC-EP-014/015 complexity never raises certainty', () {
       const engine = XiangjiEpistemicEngine();

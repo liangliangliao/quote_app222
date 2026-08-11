@@ -343,12 +343,20 @@ class XiangjiSituationDraft {
     final a04 = outputs['A04'] ?? const <String, Object?>{};
     final a05 = outputs['A05'] ?? const <String, Object?>{};
     final a06 = outputs['A06'] ?? const <String, Object?>{};
-    final a07 = outputs['A07'] ?? const <String, Object?>{};
-    final a08 = outputs['A08'] ?? const <String, Object?>{};
     final a09 = outputs['A09'] ?? const <String, Object?>{};
+    final a10 = outputs['A10'] ?? const <String, Object?>{};
+    final a12 = outputs['A12'] ?? const <String, Object?>{};
     final a00 = outputs['A00'] ?? const <String, Object?>{};
-    final aiOptions = _mapList(a07['options']);
-    final aiOperators = _mapList(a06['operators']);
+    final aiOptions = _mapList(a09['options']);
+    final activeOperator = _mapObject(a06['active_operator']);
+    final candidateOperators = _mapList(a06['candidate_operators']);
+    final legacyOperators = _mapList(a06['operators']);
+    final aiOperators = <Map<String, Object?>>[
+      if (activeOperator.isNotEmpty) activeOperator,
+      ...(candidateOperators.isNotEmpty
+          ? candidateOperators
+          : legacyOperators),
+    ];
     return XiangjiSituationDraft(
       need: _nonEmpty(a00['current_need'], need),
       summary: _nonEmpty(a00['situation_summary'], summary),
@@ -363,12 +371,12 @@ class XiangjiSituationDraft {
       exitCriteria: _nonEmpty(a06['exit_criteria'], exitCriteria),
       judgment: _nonEmpty(
         a00['strategist_judgment'],
-        _nonEmpty(a02['conclusion'], judgment),
+        _nonEmpty(a03['conclusion'], judgment),
       ),
       recommendation: _nonEmpty(a00['recommendation'], recommendation),
       why: _nonEmpty(a00['why'], _nonEmpty(a06['reasoning_summary'], why)),
       currentAction: _nonEmpty(
-        a09['current_action'],
+        a12['current_action'],
         _nonEmpty(
           a00['current_action'],
           _nonEmpty(a06['current_action'], currentAction),
@@ -380,7 +388,7 @@ class XiangjiSituationDraft {
       strategicMeaning:
           _nonEmpty(a06['strategic_meaning'], strategicMeaning),
       groundingReason: _nonEmpty(
-        a03['grounding_summary'],
+        a04['grounding_summary'],
         _nonEmpty(a06['grounding_reason'], groundingReason),
       ),
       prediction: _nonEmpty(a06['prediction'], prediction),
@@ -398,33 +406,33 @@ class XiangjiSituationDraft {
       ),
       constraints: _preferStrings(a06['constraints'], constraints),
       unknowns: _preferStrings(
-        a03['critical_unknowns'],
+        a04['critical_unknowns'],
         _preferStrings(a01['critical_unknowns'], unknowns),
       ),
       causalHypotheses: _preferStrings(
-        a04['causal_hypotheses'],
+        a02['causal_hypotheses'],
         _preferStrings(a01['causal_hypotheses'], causalHypotheses),
       ),
       relevantSimilarities:
-          _preferStrings(a02['relevant_similarities'], relevantSimilarities),
+          _preferStrings(a03['relevant_similarities'], relevantSimilarities),
       relevantDifferences:
-          _preferStrings(a02['relevant_differences'], relevantDifferences),
+          _preferStrings(a03['relevant_differences'], relevantDifferences),
       counterexamples:
-          _preferStrings(a02['counterexamples'], counterexamples),
+          _preferStrings(a03['counterexamples'], counterexamples),
       subGoals: _preferStrings(a06['sub_goals'], subGoals),
       operators: aiOperators.isEmpty ? operators : aiOperators,
       strategyOptions: aiOptions.isEmpty ? strategyOptions : aiOptions,
       redTeam: _mergeStrings(
         <Object?>[
-          a08['vulnerable_premises'],
-          a08['failure_paths'],
-          a08['disagreements'],
+          a10['vulnerable_premises'],
+          a10['failure_paths'],
+          a10['disagreements'],
         ],
         redTeam,
       ),
       informationNeeds: informationNeeds,
       expectedMinutes: _positiveInt(
-        a09['expected_minutes'],
+        a12['expected_minutes'],
         _positiveInt(a06['expected_minutes'], expectedMinutes),
       ),
       majorDecision: majorDecision,
@@ -593,6 +601,13 @@ List<Map<String, Object?>> _mapList(Object? value) {
             (key, dynamic value) => MapEntry(key.toString(), value as Object?),
           ))
       .toList();
+}
+
+Map<String, Object?> _mapObject(Object? value) {
+  if (value is! Map) return const <String, Object?>{};
+  return value.map(
+    (key, dynamic item) => MapEntry(key.toString(), item as Object?),
+  );
 }
 
 List<Map<String, Object?>> _decodeMapList(Object? raw) {

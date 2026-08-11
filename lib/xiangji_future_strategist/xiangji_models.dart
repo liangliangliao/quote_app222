@@ -620,6 +620,318 @@ class XiangjiDashboardSnapshot {
   final int unresolvedDebtCount;
 }
 
+/// The durable, single-chain solver state introduced by V6.1 Rev.5.2.
+///
+/// The existing normalized tables remain the source of truth for facts,
+/// claims, actions and reality results. This snapshot makes the current
+/// means-ends chain explicit so the UI and MethodEvent audit trail can point
+/// to the same versioned state instead of reconstructing it from prose.
+class XiangjiSolverSnapshot {
+  const XiangjiSolverSnapshot({
+    required this.problemId,
+    this.stateVersion = 1,
+    this.need = '',
+    this.problemFrame = const <String, Object?>{},
+    this.currentState = const <String, Object?>{},
+    this.goalState = const <String, Object?>{},
+    this.hypotheses = const <Map<String, Object?>>[],
+    this.constraints = const <Map<String, Object?>>[],
+    this.gaps = const <Map<String, Object?>>[],
+    this.keyGap = const <String, Object?>{},
+    this.subgoalGraph = const <String, Object?>{},
+    this.activeSubgoal = const <String, Object?>{},
+    this.candidateOperators = const <Map<String, Object?>>[],
+    this.activeOperator = const <String, Object?>{},
+    this.epistemicProfile = const <String, Object?>{},
+    this.predictionLedger = const <String, Object?>{},
+    this.lastRealityResult = const <String, Object?>{},
+    this.backtrackHistory = const <Map<String, Object?>>[],
+    this.promptVersion = 'rev5.2',
+    this.updatedAtMs = 0,
+  });
+
+  final String problemId;
+  final int stateVersion;
+  final String need;
+  final Map<String, Object?> problemFrame;
+  final Map<String, Object?> currentState;
+  final Map<String, Object?> goalState;
+  final List<Map<String, Object?>> hypotheses;
+  final List<Map<String, Object?>> constraints;
+  final List<Map<String, Object?>> gaps;
+  final Map<String, Object?> keyGap;
+  final Map<String, Object?> subgoalGraph;
+  final Map<String, Object?> activeSubgoal;
+  final List<Map<String, Object?>> candidateOperators;
+  final Map<String, Object?> activeOperator;
+  final Map<String, Object?> epistemicProfile;
+  final Map<String, Object?> predictionLedger;
+  final Map<String, Object?> lastRealityResult;
+  final List<Map<String, Object?>> backtrackHistory;
+  final String promptVersion;
+  final int updatedAtMs;
+
+  String get currentStateSummary {
+    final summary = (currentState['summary'] ?? '').toString().trim();
+    if (summary.isNotEmpty) return summary;
+    final facts = currentState['facts'];
+    if (facts is List && facts.isNotEmpty) return facts.first.toString();
+    return need;
+  }
+
+  String get goalSummary =>
+      (goalState['statement'] ?? goalState['goal'] ?? '').toString();
+
+  String get keyGapSummary =>
+      (keyGap['label'] ?? keyGap['description'] ?? '').toString();
+
+  String get activeSubgoalSummary =>
+      (activeSubgoal['label'] ?? activeSubgoal['description'] ?? '').toString();
+
+  String get activeOperatorSummary =>
+      (activeOperator['title'] ?? activeOperator['name'] ?? '').toString();
+
+  String get predictionSummary =>
+      (predictionLedger['prediction'] ?? '').toString();
+
+  XiangjiSolverSnapshot copyWith({
+    int? stateVersion,
+    String? need,
+    Map<String, Object?>? problemFrame,
+    Map<String, Object?>? currentState,
+    Map<String, Object?>? goalState,
+    List<Map<String, Object?>>? hypotheses,
+    List<Map<String, Object?>>? constraints,
+    List<Map<String, Object?>>? gaps,
+    Map<String, Object?>? keyGap,
+    Map<String, Object?>? subgoalGraph,
+    Map<String, Object?>? activeSubgoal,
+    List<Map<String, Object?>>? candidateOperators,
+    Map<String, Object?>? activeOperator,
+    Map<String, Object?>? epistemicProfile,
+    Map<String, Object?>? predictionLedger,
+    Map<String, Object?>? lastRealityResult,
+    List<Map<String, Object?>>? backtrackHistory,
+    String? promptVersion,
+    int? updatedAtMs,
+  }) =>
+      XiangjiSolverSnapshot(
+        problemId: problemId,
+        stateVersion: stateVersion ?? this.stateVersion,
+        need: need ?? this.need,
+        problemFrame: problemFrame ?? this.problemFrame,
+        currentState: currentState ?? this.currentState,
+        goalState: goalState ?? this.goalState,
+        hypotheses: hypotheses ?? this.hypotheses,
+        constraints: constraints ?? this.constraints,
+        gaps: gaps ?? this.gaps,
+        keyGap: keyGap ?? this.keyGap,
+        subgoalGraph: subgoalGraph ?? this.subgoalGraph,
+        activeSubgoal: activeSubgoal ?? this.activeSubgoal,
+        candidateOperators: candidateOperators ?? this.candidateOperators,
+        activeOperator: activeOperator ?? this.activeOperator,
+        epistemicProfile: epistemicProfile ?? this.epistemicProfile,
+        predictionLedger: predictionLedger ?? this.predictionLedger,
+        lastRealityResult: lastRealityResult ?? this.lastRealityResult,
+        backtrackHistory: backtrackHistory ?? this.backtrackHistory,
+        promptVersion: promptVersion ?? this.promptVersion,
+        updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      );
+
+  Map<String, Object?> toDatabaseMap() => <String, Object?>{
+        'problem_id': problemId,
+        'state_version': stateVersion,
+        'need_text': need,
+        'problem_frame_json': jsonEncode(problemFrame),
+        'current_state_json': jsonEncode(currentState),
+        'goal_state_json': jsonEncode(goalState),
+        'hypotheses_json': jsonEncode(hypotheses),
+        'constraints_json': jsonEncode(constraints),
+        'gaps_json': jsonEncode(gaps),
+        'key_gap_json': jsonEncode(keyGap),
+        'subgoal_graph_json': jsonEncode(subgoalGraph),
+        'active_subgoal_json': jsonEncode(activeSubgoal),
+        'candidate_operators_json': jsonEncode(candidateOperators),
+        'active_operator_json': jsonEncode(activeOperator),
+        'epistemic_profile_json': jsonEncode(epistemicProfile),
+        'prediction_ledger_json': jsonEncode(predictionLedger),
+        'last_reality_result_json': jsonEncode(lastRealityResult),
+        'backtrack_history_json': jsonEncode(backtrackHistory),
+        'prompt_version': promptVersion,
+        'updated_at_ms': updatedAtMs,
+      };
+
+  Map<String, Object?> toPromptMap() => <String, Object?>{
+        'problem_id': problemId,
+        'state_version': stateVersion,
+        'need': need,
+        'problem_frame': problemFrame,
+        'current_state': currentState,
+        'goal_state': goalState,
+        'hypotheses': hypotheses,
+        'constraints': constraints,
+        'gaps': gaps,
+        'key_gap': keyGap,
+        'subgoal_graph': subgoalGraph,
+        'active_subgoal': activeSubgoal,
+        'candidate_operators': candidateOperators,
+        'active_operator': activeOperator,
+        'epistemic_profile': epistemicProfile,
+        'prediction_ledger': predictionLedger,
+        'last_reality_result': lastRealityResult,
+        'backtrack_history': backtrackHistory,
+        'prompt_version': promptVersion,
+      };
+
+  factory XiangjiSolverSnapshot.fromMap(Map<String, Object?> row) =>
+      XiangjiSolverSnapshot(
+        problemId: (row['problem_id'] ?? '').toString(),
+        stateVersion: _asInt(row['state_version']) <= 0
+            ? 1
+            : _asInt(row['state_version']),
+        need: (row['need_text'] ?? '').toString(),
+        problemFrame: _jsonMap(row['problem_frame_json']),
+        currentState: _jsonMap(row['current_state_json']),
+        goalState: _jsonMap(row['goal_state_json']),
+        hypotheses: _jsonMaps(row['hypotheses_json']),
+        constraints: _jsonMaps(row['constraints_json']),
+        gaps: _jsonMaps(row['gaps_json']),
+        keyGap: _jsonMap(row['key_gap_json']),
+        subgoalGraph: _jsonMap(row['subgoal_graph_json']),
+        activeSubgoal: _jsonMap(row['active_subgoal_json']),
+        candidateOperators: _jsonMaps(row['candidate_operators_json']),
+        activeOperator: _jsonMap(row['active_operator_json']),
+        epistemicProfile: _jsonMap(row['epistemic_profile_json']),
+        predictionLedger: _jsonMap(row['prediction_ledger_json']),
+        lastRealityResult: _jsonMap(row['last_reality_result_json']),
+        backtrackHistory: _jsonMaps(row['backtrack_history_json']),
+        promptVersion: (row['prompt_version'] ?? 'rev5.2').toString(),
+        updatedAtMs: _asInt(row['updated_at_ms']),
+      );
+}
+
+/// A concise, auditable record of a signature method changing (or explicitly
+/// retaining) the solver state. It intentionally stores no private reasoning.
+class XiangjiMethodEvent {
+  const XiangjiMethodEvent({
+    required this.id,
+    required this.methodId,
+    required this.problemId,
+    required this.stateVersion,
+    required this.trigger,
+    required this.operationSummary,
+    required this.dataMutations,
+    required this.decisionEffect,
+    required this.userVisibleSummary,
+    required this.realityTest,
+    this.sourceRefs = const <String>[],
+    this.beforeStateRefs = const <String, Object?>{},
+    this.afterStateRefs = const <String, Object?>{},
+    this.learningLink = '',
+    this.changedState = true,
+    this.retainedStateReason = '',
+    this.userVisible = true,
+    this.createdAtMs = 0,
+  });
+
+  final String id;
+  final String methodId;
+  final String problemId;
+  final int stateVersion;
+  final String trigger;
+  final List<String> sourceRefs;
+  final Map<String, Object?> beforeStateRefs;
+  final String operationSummary;
+  final List<Map<String, Object?>> dataMutations;
+  final Map<String, Object?> afterStateRefs;
+  final String decisionEffect;
+  final String userVisibleSummary;
+  final String realityTest;
+  final String learningLink;
+  final bool changedState;
+  final String retainedStateReason;
+  final bool userVisible;
+  final int createdAtMs;
+
+  String get methodLabel => switch (methodId) {
+        'MEC-001' => '发生了什么 / 这意味着什么',
+        'MEC-002' => '感觉是真的，外部原因仍需验证',
+        'MEC-003' => '竞争原因与最小区分实验',
+        'MEC-004' => '这次与过去的决定性差异',
+        'MEC-005' => '先保留尚未命名的体验',
+        'MEC-006' => '概念解释了什么、遗漏了什么',
+        'MEC-007' => '判断的泉水与水渠',
+        'MEC-008' => '完整不等于可靠',
+        'MEC-009' => '现实正在挑战旧解释',
+        'MEC-010' => '你真正要实现的是什么',
+        'MEC-011' => '当前最大差距',
+        'MEC-012' => '先解决哪一步、为什么有效',
+        'MEC-013' => '预测与现实对账',
+        'MEC-014' => '定位哪一步需要重新算',
+        _ => methodId,
+      };
+
+  Map<String, Object?> toDatabaseMap() => <String, Object?>{
+        'id': id,
+        'method_id': methodId,
+        'problem_id': problemId,
+        'state_version': stateVersion,
+        'trigger_text': trigger,
+        'source_refs_json': jsonEncode(sourceRefs),
+        'before_state_refs_json': jsonEncode(beforeStateRefs),
+        'operation_summary': operationSummary,
+        'data_mutations_json': jsonEncode(dataMutations),
+        'after_state_refs_json': jsonEncode(afterStateRefs),
+        'decision_effect': decisionEffect,
+        'user_visible_summary': userVisibleSummary,
+        'reality_test': realityTest,
+        'learning_link': learningLink,
+        'changed_state': changedState ? 1 : 0,
+        'retained_state_reason': retainedStateReason,
+        'user_visible': userVisible ? 1 : 0,
+        'created_at_ms': createdAtMs,
+      };
+
+  Map<String, Object?> toPromptMap() => <String, Object?>{
+        'method_event_id': id,
+        'method_id': methodId,
+        'problem_id': problemId,
+        'state_version': stateVersion,
+        'trigger': trigger,
+        'source_refs': sourceRefs,
+        'before_state': beforeStateRefs,
+        'cognitive_operation_summary': operationSummary,
+        'data_mutations': dataMutations,
+        'after_state': afterStateRefs,
+        'decision_effect': decisionEffect,
+        'user_visible_summary': userVisibleSummary,
+        'reality_test': realityTest,
+        if (learningLink.isNotEmpty) 'learning_link': learningLink,
+      };
+
+  factory XiangjiMethodEvent.fromMap(Map<String, Object?> row) =>
+      XiangjiMethodEvent(
+        id: (row['id'] ?? '').toString(),
+        methodId: (row['method_id'] ?? '').toString(),
+        problemId: (row['problem_id'] ?? '').toString(),
+        stateVersion: _asInt(row['state_version']),
+        trigger: (row['trigger_text'] ?? '').toString(),
+        sourceRefs: _jsonStrings(row['source_refs_json']),
+        beforeStateRefs: _jsonMap(row['before_state_refs_json']),
+        operationSummary: (row['operation_summary'] ?? '').toString(),
+        dataMutations: _jsonMaps(row['data_mutations_json']),
+        afterStateRefs: _jsonMap(row['after_state_refs_json']),
+        decisionEffect: (row['decision_effect'] ?? '').toString(),
+        userVisibleSummary: (row['user_visible_summary'] ?? '').toString(),
+        realityTest: (row['reality_test'] ?? '').toString(),
+        learningLink: (row['learning_link'] ?? '').toString(),
+        changedState: _asBool(row['changed_state']),
+        retainedStateReason: (row['retained_state_reason'] ?? '').toString(),
+        userVisible: _asBool(row['user_visible']),
+        createdAtMs: _asInt(row['created_at_ms']),
+      );
+}
+
 class XiangjiKnowledgeSourceRecord {
   const XiangjiKnowledgeSourceRecord({
     required this.id,
@@ -896,4 +1208,24 @@ List<String> _jsonStrings(Object? value) {
     }
   } catch (_) {}
   return const <String>[];
+}
+
+List<Map<String, Object?>> _jsonMaps(Object? value) {
+  Object? decoded = value;
+  if (value is! List) {
+    try {
+      decoded = jsonDecode(value?.toString() ?? '');
+    } catch (_) {
+      return const <Map<String, Object?>>[];
+    }
+  }
+  if (decoded is! List) return const <Map<String, Object?>>[];
+  return decoded
+      .whereType<Map>()
+      .map(
+        (item) => item.map(
+          (key, entry) => MapEntry(key.toString(), entry),
+        ),
+      )
+      .toList();
 }

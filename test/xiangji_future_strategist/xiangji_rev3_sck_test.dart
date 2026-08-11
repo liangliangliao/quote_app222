@@ -89,7 +89,7 @@ void main() {
   });
 
   group('TC-AI / automatic delegation', () {
-    test('A02 judgment precedes Solver and major routes include red team', () {
+    test('A03 judgment precedes Solver and major routes include red team', () {
       final plan = sck.orchestrationPlan(majorDecision: true);
 
       expect(
@@ -102,7 +102,8 @@ void main() {
         plan.indexOf(XiangjiAgentId.redTeam),
         lessThan(plan.indexOf(XiangjiAgentId.chiefStrategist)),
       );
-      expect(plan.last, XiangjiAgentId.actionOfficer);
+      expect(plan, contains(XiangjiAgentId.actionOfficer));
+      expect(plan.last, XiangjiAgentId.antiTemplateValidator);
     });
 
     test('TC-AI-001/002 natural language yields a full prefilled draft', () {
@@ -198,13 +199,13 @@ void main() {
       expect(extraction.interpretations.single, contains('故意无视'));
     });
 
-    test('A04 causal work and A09 action compression survive merge', () {
+    test('A02 causal work and A12 action compression survive merge', () {
       final merged = sck.buildLocalDraft('我不知道怎么办').mergeAgentOutputs(
         <String, Map<String, Object?>>{
-          'A04': <String, Object?>{
+          'A02': <String, Object?>{
             'causal_hypotheses': <String>['因果候选 A | 区分证据 A'],
           },
-          'A09': <String, Object?>{
+          'A12': <String, Object?>{
             'current_action': '执行唯一当前一步',
             'expected_minutes': 12,
           },
@@ -216,7 +217,7 @@ void main() {
       expect(merged.expectedMinutes, 12);
     });
 
-    test('TC-AI-011 high-value background route is A11 then A00', () {
+    test('TC-AI-011 high-value background route is A14 then A00', () {
       expect(
         sck.orchestrationPlan(
           majorDecision: true,

@@ -202,6 +202,8 @@ class _XiangjiProblemWorkspacePageState
   List<XiangjiCognitiveExperienceDraft> _cognitiveExperiences =
       const <XiangjiCognitiveExperienceDraft>[];
   Map<String, Object?>? _explanation;
+  XiangjiSolverSnapshot? _solver;
+  List<XiangjiMethodEvent> _methodEvents = const <XiangjiMethodEvent>[];
 
   @override
   void initState() {
@@ -224,6 +226,12 @@ class _XiangjiProblemWorkspacePageState
           limit: 16,
         ),
         widget.dao.latestExplanationCard(widget.problemId),
+        widget.dao.solverSnapshot(widget.problemId),
+        widget.dao.latestMethodTurnEvents(
+          problemId: widget.problemId,
+          userVisibleOnly: true,
+          limit: 3,
+        ),
       ]);
       if (!mounted) return;
       setState(() {
@@ -237,6 +245,8 @@ class _XiangjiProblemWorkspacePageState
         _cognitiveExperiences =
             values[7] as List<XiangjiCognitiveExperienceDraft>;
         _explanation = values[8] as Map<String, Object?>?;
+        _solver = values[9] as XiangjiSolverSnapshot?;
+        _methodEvents = values[10] as List<XiangjiMethodEvent>;
         _loading = false;
       });
     } catch (error) {
@@ -462,6 +472,18 @@ class _XiangjiProblemWorkspacePageState
           maxLines: 2,
         ),
         XiangjiFormFieldSpec(
+          keyName: 'preconditions',
+          label: '开始前仍缺的前提（可留空）',
+          hint: '每行一项；缺失前提会成为当前子目标，不会硬推原办法',
+          maxLines: 3,
+        ),
+        XiangjiFormFieldSpec(
+          keyName: 'effect',
+          label: '预期怎样缩小这个差距',
+          required: true,
+          maxLines: 2,
+        ),
+        XiangjiFormFieldSpec(
           keyName: 'meaning',
           label: '战略意义',
           required: true,
@@ -502,6 +524,8 @@ class _XiangjiProblemWorkspacePageState
         groundingReason: values['grounding']!,
         prediction: values['prediction']!,
         expectedMinutes: int.tryParse(values['minutes']!) ?? 25,
+        missingPreconditions: xiangjiLines(values['preconditions']!),
+        expectedEffect: values['effect']!,
       );
     });
     if (!mounted || actionId == null) return;
@@ -868,6 +892,139 @@ class _XiangjiProblemWorkspacePageState
     );
   }
 
+  Widget _solverCockpit(XiangjiProblemRecord problem) {
+    final solver = _solver;
+    final activeAction = _actions.isEmpty ? null : _actions.first;
+    final currentState = solver?.currentStateSummary.isNotEmpty == true
+        ? solver!.currentStateSummary
+        : problem.rawQuestion;
+    final goal = solver?.goalSummary.isNotEmpty == true
+        ? solver!.goalSummary
+        : problem.goalText;
+    final keyGap = solver?.keyGapSummary ?? '';
+    final subgoal = solver?.activeSubgoalSummary ?? '';
+    final operator = solver?.activeOperatorSummary.isNotEmpty == true
+        ? solver!.activeOperatorSummary
+        : (activeAction?.title ?? '');
+    final prediction = solver?.predictionSummary.isNotEmpty == true
+        ? solver!.predictionSummary
+        : (activeAction?.prediction ?? '');
+
+    return XiangjiSectionCard(
+      title: '军师解题台',
+      subtitle: '一条持续求解链：S0 → Goal → KeyGap → SubGoal → Operator → Reality',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          XiangjiLabeledValue(label: '现在在哪里（S0）', value: currentState),
+          XiangjiLabeledValue(label: '要去哪里（Goal）', value: goal),
+          XiangjiLabeledValue(label: '最大差距（KeyGap）', value: keyGap),
+          XiangjiLabeledValue(label: '当前子目标', value: subgoal),
+          XiangjiLabeledValue(label: '当前办法（Operator）', value: operator),
+          XiangjiLabeledValue(label: '事前预测', value: prediction),
+          if (operator.isNotEmpty) _whyThisStep(solver),
+        ],
+      ),
+    );
+  }
+
+  Widget _whyThisStep(XiangjiSolverSnapshot? solver) {
+    final directFacts = _items
+        .where(
+          (row) =>
+              <String>{'known', 'body_experience'}.contains(row['kind']),
+        )
+        .map((row) => (row['text'] ?? '').toString())
+        .where((item) => item.isNotEmpty)
+        .take(3)
+        .toList();
+    final profile = solver?.epistemicProfile ?? const <String, Object?>{};
+    final rawChain = profile['ground_chain'];
+    final chain = rawChain is Map
+        ? rawChain.map((key, value) => MapEntry(key.toString(), value))
+        : const <String, Object?>{};
+    final counterevidence = chain['counterevidence'];
+    final weakest = (chain['weakest_premise'] ??
+            profile['weakest_premise'] ??
+            (_debts.isEmpty ? '' : _debts.first['description']))
+        .toString();
+    final status = (profile['epistemic_status'] ??
+            (_debts.isEmpty ? 'PROVISIONAL' : 'EPISTEMIC_DEBT'))
+        .toString();
+    final commitment =
+        (profile['commitment'] ?? '按现实结果继续校准').toString();
+
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      leading: const Icon(Icons.water_drop_outlined, size: 20),
+      title: const Text('为什么这一步？'),
+      subtitle: const Text('查看直接事实、反证、最弱前提与行动承诺'),
+      children: [
+        XiangjiLabeledValue(
+          label: '直接根据（泉水）',
+          value: directFacts.isEmpty ? '尚缺直接记录' : directFacts.join('；'),
+        ),
+        XiangjiLabeledValue(
+          label: '反证 / 未知',
+          value: counterevidence is List && counterevidence.isNotEmpty
+              ? counterevidence.join('；')
+              : (_debts.isEmpty
+                  ? '尚未记录反证'
+                  : (_debts.first['grounding_gap'] ?? '').toString()),
+        ),
+        XiangjiLabeledValue(label: '最弱前提', value: weakest),
+        XiangjiLabeledValue(label: '认识状态', value: status),
+        XiangjiLabeledValue(label: '对行动的影响', value: commitment),
+      ],
+    );
+  }
+
+  Widget _methodEventCard(XiangjiMethodEvent event) {
+    const judgmentMethods = <String>{
+      'MEC-004',
+      'MEC-009',
+      'MEC-010',
+      'MEC-011',
+      'MEC-012',
+      'MEC-013',
+      'MEC-014',
+    };
+    final changedDecision =
+        event.changedState && judgmentMethods.contains(event.methodId);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      color: changedDecision
+          ? const Color(0xFFFFF3DD)
+          : const Color(0xFFEAF4EF),
+      child: ExpansionTile(
+        leading: Icon(
+          changedDecision ? Icons.change_circle_outlined : Icons.auto_fix_high,
+          color: changedDecision
+              ? const Color(0xFFC8641B)
+              : XiangjiPalette.forest,
+        ),
+        title: Text(
+          '${changedDecision ? '军师改判' : '当前方法'} · ${event.methodLabel}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(event.userVisibleSummary),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        children: [
+          XiangjiLabeledValue(label: '为什么触发', value: event.trigger),
+          XiangjiLabeledValue(label: '怎样改变解法', value: event.decisionEffect),
+          XiangjiLabeledValue(label: '现实怎样验算', value: event.realityTest),
+          XiangjiLabeledValue(
+            label: '可审计操作摘要',
+            value: event.operationSummary,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _nextStep(XiangjiProblemRecord problem) {
     final button = switch (problem.state) {
       XiangjiProblemState.captured ||
@@ -1142,6 +1299,21 @@ class _XiangjiProblemWorkspacePageState
                       ),
                     ],
                     const SizedBox(height: 12),
+                    _solverCockpit(problem),
+                    if (_methodEvents.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      XiangjiSectionCard(
+                        title: '本轮方法与改判',
+                        subtitle: '只显示当前最相关的 0–3 项；展开可看依据、状态影响与现实检验。',
+                        child: Column(
+                          children: [
+                            for (final event in _methodEvents)
+                              _methodEventCard(event),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
                     XiangjiSectionCard(
                       title: '认识分层',
                       subtitle: '由 AI 自动预填；点“高级校正”才需要手动修改。事实不与解释混写。',
@@ -1159,6 +1331,7 @@ class _XiangjiProblemWorkspacePageState
                                   'constraint',
                                   'causal_hypothesis',
                                   'information_action',
+                                  'precondition_subgoal',
                                   'gap',
                                   'sub_goal',
                                   'operator_candidate',
@@ -1284,6 +1457,7 @@ class _XiangjiProblemWorkspacePageState
         'constraint' => '不可绕过的现实约束',
         'causal_hypothesis' => '竞争性原因假设',
         'information_action' => '信息行动',
+        'precondition_subgoal' => '缺失前提子目标',
         'gap' => '关键缺口',
         'sub_goal' => '需要同时满足或可替代的阶段条件',
         'operator_candidate' => '候选办法',

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_signature_method_engine.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -194,5 +195,83 @@ void main() {
     expect(await dao.problems(), isEmpty);
     expect(await dao.enabledRules(), isNotEmpty);
     expect(await dao.providerCapabilities(), isNotEmpty);
+  });
+
+  test('T-MEC-DB atomically persists SolverSnapshot and MethodEvent', () async {
+    await dao.createProblem(
+      id: 'problem-method',
+      rawEventId: 'event-method',
+      rawQuestion: '我不想去，所以我一定不适合工作吗？',
+      contextText: '我不想去，所以我一定不适合工作。',
+    );
+    const router = XiangjiSignatureCapabilityRouter();
+    final result = router.route(
+      state: const XiangjiSolverSnapshot(
+        problemId: 'problem-method',
+        need: '判断是否不适合工作',
+      ),
+      context: const XiangjiSignatureMethodContext(
+        problemId: 'problem-method',
+        problemState: XiangjiProblemState.formalizing,
+        requestedMethodIds: <String>['MEC-001'],
+        experiences: <String>['我不想去'],
+        interpretations: <String>['我一定不适合工作'],
+        createdAtMs: 100,
+        eventIdPrefix: 'db-method',
+      ),
+    );
+
+    await dao.saveSolverStateAndMethodEvents(
+      snapshot: result.after,
+      events: result.events,
+    );
+
+    final snapshot = await dao.solverSnapshot('problem-method');
+    final events = await dao.methodEvents(problemId: 'problem-method');
+    expect(snapshot?.currentState['interpretations_may_drive_goal'], isFalse);
+    expect(events.single.methodId, 'MEC-001');
+    expect(events.single.dataMutations, isNotEmpty);
+    expect(events.single.stateVersion, snapshot?.stateVersion);
+
+    final actionTurn = router.route(
+      state: result.after,
+      context: const XiangjiSignatureMethodContext(
+        problemId: 'problem-method',
+        problemState: XiangjiProblemState.executing,
+        requestedMethodIds: <String>['MEC-013'],
+        prediction: '完成后得到一条可观察事实',
+        actionMode: true,
+        visibleLimit: 0,
+        createdAtMs: 200,
+        eventIdPrefix: 'db-action-turn',
+      ),
+    );
+    await dao.saveSolverStateAndMethodEvents(
+      snapshot: actionTurn.after,
+      events: actionTurn.events,
+    );
+
+    expect(
+      await dao.latestMethodTurnEvents(problemId: 'problem-method'),
+      isEmpty,
+      reason: 'Action Mode 的零提示轮次不能回显上一轮方法卡',
+    );
+  });
+
+  test('Method Effect gate rejects explanation-only MethodEvent', () async {
+    const event = XiangjiMethodEvent(
+      id: 'bad-method',
+      methodId: 'MEC-011',
+      problemId: 'problem-x',
+      stateVersion: 1,
+      trigger: 'S0/G known',
+      operationSummary: '只解释，没有变更',
+      dataMutations: <Map<String, Object?>>[],
+      decisionEffect: '没有效果',
+      userVisibleSummary: '说明卡',
+      realityTest: '无',
+    );
+
+    expect(() => dao.saveMethodEvent(event), throwsArgumentError);
   });
 }
