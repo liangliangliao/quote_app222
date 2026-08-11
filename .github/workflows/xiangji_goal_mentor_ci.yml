@@ -1,0 +1,52 @@
+name: Xiangji Goal Mentor CI
+
+on:
+  pull_request:
+    paths:
+      - "lib/xiangji_goal_mentor/**"
+      - "lib/xiangji_future_strategist/**"
+      - "lib/pages/discover_page.dart"
+      - "lib/services/task_runner.dart"
+      - "test/xiangji_goal_mentor/**"
+      - "assets/zhixing_tree/knowledge_systems_v2_0.json"
+      - "assets/xiangji_goal_mentor/**"
+      - "pubspec.yaml"
+      - ".github/workflows/xiangji_goal_mentor_ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xiangji-goal-mentor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze Xiangji module
+        run: dart analyze lib/xiangji_goal_mentor
+
+      - name: Analyze reminder integration
+        run: dart analyze lib/services/task_runner.dart
+
+      - name: Analyze Xiangji tests
+        run: dart analyze test/xiangji_goal_mentor
+
+      - name: Run Xiangji tests
+        run: flutter test test/xiangji_goal_mentor

@@ -1,0 +1,74 @@
+name: Will Mirror V4 CI
+
+on:
+  push:
+    paths:
+      - "lib/will_mirror/**"
+      - "lib/pages/discover_page.dart"
+      - "test/will_mirror/**"
+      - "assets/will_mirror/**"
+      - "android/app/src/main/kotlin/com/example/quote_app/WillMirrorVaultChannel.kt"
+      - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
+      - "pubspec.yaml"
+      - ".github/workflows/will_mirror_v4_ci.yml"
+  pull_request:
+    paths:
+      - "lib/will_mirror/**"
+      - "lib/pages/discover_page.dart"
+      - "test/will_mirror/**"
+      - "assets/will_mirror/**"
+      - "android/app/src/main/kotlin/com/example/quote_app/WillMirrorVaultChannel.kt"
+      - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
+      - "pubspec.yaml"
+      - ".github/workflows/will_mirror_v4_ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: will-mirror-v4-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Verify KB manifest hash and record count
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("assets/will_mirror")
+          raw = (root / "kb_records_v4.jsonl").read_bytes()
+          manifest = json.loads((root / "manifest_v4.json").read_text(encoding="utf-8"))
+          rows = [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
+          assert hashlib.sha256(raw).hexdigest() == manifest["records_sha256"]
+          assert len(rows) == manifest["record_count"] == 22
+          PY
+
+      - name: Analyze Will Mirror module
+        run: dart analyze lib/will_mirror
+
+      - name: Analyze Will Mirror tests
+        run: dart analyze test/will_mirror
+
+      - name: Run Will Mirror tests
+        run: flutter test test/will_mirror

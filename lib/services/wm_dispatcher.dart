@@ -7,6 +7,7 @@ import '../utils/debug_logger.dart';
 import '../services/notification_service.dart';
 import '../services/scheduler_service.dart';
 import '../health_diet/services/health_diet_daily_scheduler_service.dart';
+import '../xiangji_future_strategist/xiangji_strategist_monitor_service.dart';
 
 @pragma('vm:entry-point')
 void workmanagerCallbackDispatcher() {
@@ -64,6 +65,8 @@ void workmanagerCallbackDispatcher() {
         );
       }
       return Future.value(true);
+    } else if (job == XiangjiStrategistMonitorService.job) {
+      return XiangjiStrategistMonitorService.runScheduled();
     } else if (job == 'wm_run' && uid.isNotEmpty) {
       await SchedulerService.wmRunTask(uid, runKey.isEmpty ? null : runKey, chan: chan.isEmpty ? null : chan, attempt: attempt);
       return Future.value(true);

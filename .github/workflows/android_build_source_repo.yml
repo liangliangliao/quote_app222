@@ -10,6 +10,31 @@ on:
       - "ios/**"
       - "assets/**"
       - "test/**"
+      - "tools/zhixing_tree/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "gradle/**"
+      - "gradlew"
+      - "settings.gradle"
+      - "settings.gradle.kts"
+      - "build.gradle"
+      - "build.gradle.kts"
+      - "**/*.dart"
+      - "**/*.gradle"
+      - "**/*.gradle.kts"
+      - "**/*.xml"
+      - "**/*.kt"
+      - "**/*.java"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "lib/**"
+      - "android/**"
+      - "ios/**"
+      - "assets/**"
+      - "test/**"
+      - "tools/zhixing_tree/**"
       - "pubspec.yaml"
       - "pubspec.lock"
       - "analysis_options.yaml"
@@ -96,6 +121,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Verify Zhixing V2 generated knowledge is synchronized
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: |
+          python3 tools/zhixing_tree/generate_knowledge_v2.py
+          git diff --exit-code -- \
+            assets/zhixing_tree/knowledge_manifest_v2_0.json \
+            assets/zhixing_tree/knowledge_v2_0.md \
+            lib/zhixing_tree/zhixing_thinker_catalog.g.dart
+
       - name: Set up Flutter
         if: steps.detect.outputs.project_type == 'flutter'
         uses: subosito/flutter-action@v2
@@ -108,6 +143,10 @@ jobs:
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter pub get
+
+      # APK delivery is intentionally compile-only. Module test suites run in
+      # their own workflows and must not prevent a build artifact from being
+      # produced when the application source itself compiles successfully.
 
       - name: Preload Gradle wrapper with retries
         if: steps.detect.outputs.project_type == 'flutter'

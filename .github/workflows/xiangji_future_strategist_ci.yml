@@ -1,0 +1,45 @@
+name: Xiangji Future Strategist CI
+
+on:
+  pull_request:
+    paths:
+      - "lib/xiangji_future_strategist/**"
+      - "test/xiangji_future_strategist/**"
+      - "assets/xiangji_future_strategist/**"
+      - "pubspec.yaml"
+      - ".github/workflows/xiangji_future_strategist_ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xiangji-future-strategist-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze Future Strategist module
+        run: dart analyze lib/xiangji_future_strategist
+
+      - name: Analyze Future Strategist tests
+        run: dart analyze test/xiangji_future_strategist
+
+      - name: Run Future Strategist tests
+        run: flutter test test/xiangji_future_strategist

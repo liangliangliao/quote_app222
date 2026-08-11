@@ -1,0 +1,43 @@
+name: Clear all artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  clear-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete all artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "正在获取全部 Artifacts..."
+
+          artifact_ids=$(gh api \
+            --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[].id')
+
+          if [ -z "$artifact_ids" ]; then
+            echo "当前仓库没有 Artifact。"
+            exit 0
+          fi
+
+          count=0
+
+          for artifact_id in $artifact_ids; do
+            echo "删除 Artifact ID: $artifact_id"
+
+            gh api \
+              --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+
+            count=$((count + 1))
+          done
+
+          echo "清理完成，共删除 ${count} 个 Artifacts。"

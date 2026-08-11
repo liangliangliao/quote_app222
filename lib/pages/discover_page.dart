@@ -39,6 +39,12 @@ import '../diary/notebook_list_page.dart';
 import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
+import '../zhixing_tree/zhixing_tree_home_page.dart';
+import '../xiangji_future_strategist/xiangji_home_page.dart';
+import '../xiangji_goal_mentor/xiangji_discover_entries.dart';
+import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
+import '../will_mirror/will_mirror_discover_entry.dart';
+import '../will_mirror/will_mirror_home_page.dart';
 import '../mental_health_checkup/mental_health_checkup_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
@@ -2550,6 +2556,95 @@ Widget _buildEmotionPieChart() {
                       icon: Icons.edit_note_outlined,
                       title: '写日记',
                       onTap: _openDiaryFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    XiangjiDiscoverEntries(
+                      onGoalMentorTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const XiangjiGoalMentorPage(),
+                          ),
+                        );
+                      },
+                      onFutureStrategistTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) =>
+                                const XiangjiFutureStrategistHomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    WillMirrorDiscoverEntry(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const WillMirrorHomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Material(
+                      color: const Color(0xFFF1F6EE),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (context) =>
+                                  const ZhixingTreeHomePage(),
+                            ),
+                          );
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 13,
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Color(0xFFDCEBD6),
+                                child: Icon(
+                                  Icons.park_outlined,
+                                  size: 21,
+                                  color: Color(0xFF2F7550),
+                                ),
+                              ),
+                              SizedBox(width: 11),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '知行树 · 智能行动成长',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      '王阳明主线 · 17套思想/22部作品 · 行动、复盘与融合',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF557064),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.chevron_right),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     // 改变 · 心理自助入口

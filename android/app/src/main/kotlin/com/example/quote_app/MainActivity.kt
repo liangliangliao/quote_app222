@@ -86,6 +86,7 @@ class MainActivity : FlutterActivity() {
 		try { HealthDietHealthConnectChannel.register(this, flutterEngine) } catch (_: Throwable) {}
 		try { BehaviorTrackingNativeChannel.register(this, flutterEngine) } catch (_: Throwable) {}
 		try { VoiceAlarmChannel.register(flutterEngine, applicationContext) } catch (_: Throwable) {}
+		try { WillMirrorVaultChannel.register(flutterEngine, applicationContext) } catch (_: Throwable) {}
 		try { MentalHealthCheckupPlatform.register(this, flutterEngine) } catch (_: Throwable) {}
 			// 发现之旅/触摸：动态艺术壁纸（Mystify 亲密艺术）原生通道。
 			try { IntimacyWallpaperChannel.register(this, flutterEngine) } catch (_: Throwable) {}
