@@ -440,7 +440,25 @@ void main() {
       expect(completedAction?.state, XiangjiActionState.done);
       expect(updated.situationModelId, isNot(initial.situationModelId));
       expect((latestSituation?['version_no'] as num?)?.toInt(), 2);
-      expect(updated.actionId, isNotEmpty);
+      final operatorComplete = updated.draft.currentAction.isNotEmpty &&
+          updated.draft.targetGap.isNotEmpty &&
+          updated.draft.operatorMechanism.isNotEmpty &&
+          updated.draft.strategicMeaning.isNotEmpty &&
+          updated.draft.groundingReason.isNotEmpty &&
+          updated.draft.prediction.isNotEmpty;
+      expect(
+        updated.actionId,
+        isNotEmpty,
+        reason: <String>[
+          'case=${entry.$1}',
+          'frozen=${updated.executionFrozen}',
+          'clarification=${updated.clarificationQuestion}',
+          'major=${updated.draft.majorDecision}',
+          'information_needs=${updated.draft.informationNeeds.map((item) => item.id).join(',')}',
+          'operator_complete=$operatorComplete',
+          'warnings=${updated.warnings.join(' | ')}',
+        ].join('; '),
+      );
     }
   });
 
