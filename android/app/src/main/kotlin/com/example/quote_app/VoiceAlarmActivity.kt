@@ -3577,10 +3577,17 @@ class VoiceAlarmActivity : Activity() {
       put(JSONObject().put("role", "system").put("content", "你是语音识别转文字纠错器。只根据输入文本纠正明显的错别字、同音字、断句和标点；不要改写含义，不要添加信息，不要解释。必须保留原文全部信息，长文本也完整输出，不能摘要、不能截断、不能只输出前半段。只输出纠正后的完整文本。"))
       put(JSONObject().put("role", "user").put("content", text))
     }
+    val maxTokensField = cfg.optString("maxTokensField", "max_tokens").ifBlank { "max_tokens" }
+    val allowSamplingParams = cfg.optBoolean("allowSamplingParams", true)
     val body = if (provider == "openai" && endpoint.contains("/responses")) {
       JSONObject().put("model", model).put("input", messages).put("max_output_tokens", correctionTokenBudget).put("temperature", 0.0)
     } else {
-      JSONObject().put("model", model).put("messages", messages).put("max_tokens", correctionTokenBudget).put("temperature", 0.0).put("stream", false)
+      JSONObject()
+        .put("model", model)
+        .put("messages", messages)
+        .put(maxTokensField, correctionTokenBudget)
+        .apply { if (allowSamplingParams) put("temperature", 0.0) }
+        .put("stream", false)
     }
     val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
       requestMethod = "POST"
@@ -3588,7 +3595,7 @@ class VoiceAlarmActivity : Activity() {
       readTimeout = 30000
       doOutput = true
       setRequestProperty("Content-Type", "application/json")
-      setRequestProperty("Authorization", "Bearer $apiKey")
+      applyAiAuthHeaders(cfg = cfg, conn = this, apiKey = apiKey)
       if (provider == "openrouter") setRequestProperty("X-OpenRouter-Title", "Quote App Voice Alarm STT Correction")
       if (provider == "edenai") setRequestProperty("Accept", "application/json")
     }
@@ -5411,6 +5418,23 @@ class VoiceAlarmActivity : Activity() {
     return "你是一个正在全屏闹钟界面中陪伴用户的中文语音 AI。回答要简短、自然、适合朗读，通常不超过80字。用户可以说关闭闹钟或延迟五分钟。"
   }
 
+  /// Dart 侧会把该服务商实际需要的鉴权头一起下发（Azure 用 api-key，其余用
+  /// Authorization: Bearer）。这里只按下发内容设置，不再在原生侧重复一套规则；
+  /// 老版本 payload 没有这个字段时回退到 Bearer，保证兼容。
+  private fun applyAiAuthHeaders(conn: HttpURLConnection, cfg: JSONObject, apiKey: String) {
+    val headers = cfg.optJSONObject("authHeaders")
+    if (headers != null && headers.length() > 0) {
+      val keys = headers.keys()
+      while (keys.hasNext()) {
+        val name = keys.next()
+        val value = headers.optString(name, "")
+        if (name.isNotBlank() && value.isNotBlank()) conn.setRequestProperty(name, value)
+      }
+      return
+    }
+    conn.setRequestProperty("Authorization", "Bearer $apiKey")
+  }
+
   private fun callAi(cfg: JSONObject, userText: String): String {
     val provider = cfg.optString("provider", "deepseek")
     val endpoint = cfg.optString("endpoint", "")
@@ -5440,11 +5464,15 @@ class VoiceAlarmActivity : Activity() {
           .put("max_output_tokens", maxTokens)
           .put("temperature", 0.7)
       } else {
+        // Azure OpenAI 的 gpt-5 / o 系列只接受 max_completion_tokens，
+        // 并且不允许自定义 temperature；由 Dart 侧按所选部署下发这两个开关。
+        val maxTokensField = cfg.optString("maxTokensField", "max_tokens").ifBlank { "max_tokens" }
+        val allowSamplingParams = cfg.optBoolean("allowSamplingParams", true)
         JSONObject()
           .put("model", model)
           .put("messages", messages)
-          .put("max_tokens", maxTokens)
-          .put("temperature", 0.7)
+          .put(maxTokensField, maxTokens)
+          .apply { if (allowSamplingParams) put("temperature", 0.7) }
           .put("stream", false)
       }
       val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
@@ -5453,7 +5481,7 @@ class VoiceAlarmActivity : Activity() {
         readTimeout = 45000
         doOutput = true
         setRequestProperty("Content-Type", "application/json")
-        setRequestProperty("Authorization", "Bearer $apiKey")
+        applyAiAuthHeaders(this, cfg, apiKey)
         if (provider == "openrouter") setRequestProperty("X-OpenRouter-Title", "Quote App Voice Alarm")
         if (provider == "edenai") setRequestProperty("Accept", "application/json")
       }

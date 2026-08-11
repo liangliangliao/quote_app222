@@ -1,0 +1,137 @@
+{
+  "source_workbook": "哈佛幸福课23讲_心理健康体检V2.3_AI课程诊断处方与恢复闭环.xlsx",
+  "source_sha256": "0b857f8a7e7969f656f39585c8a6b25e0765194abe76908b5f2810928c913098",
+  "legacy_source_document": "哈佛幸福课23讲_心理健康体检程序设计说明书_V2.3.docx",
+  "legacy_source_sha256": "b99d06d459da350134cf15f3298fb61a95891892db552a8cd539d7926334d4fd",
+  "version": "2.4",
+  "exports": [
+    {
+      "sheet": "指标证据总表",
+      "range": "A1:M346",
+      "file": "indicators.json",
+      "format": "json",
+      "rows": 345,
+      "sha256": "9db9b075a7eddd287c14ca282f7f828ac887446e2ae28129ff005632528d4fbf"
+    },
+    {
+      "sheet": "逐指标证据图谱",
+      "range": "A1:S1381",
+      "file": "indicator_evidence_graph.jsonl",
+      "format": "jsonl",
+      "rows": 1380,
+      "sha256": "ba9fe916d543d736488735ba9b6b7ab9a5b344585d1cda2e2480a3f9013b1237"
+    },
+    {
+      "sheet": "课程定位索引",
+      "range": "A1:L2254",
+      "file": "course_location_index.jsonl",
+      "format": "jsonl",
+      "rows": 2253,
+      "sha256": "13dbd90218d870b8cb6e273330997044150493351e6f60420f627fd23cdc74f5"
+    },
+    {
+      "sheet": "B20快速基准",
+      "range": "A1:J21",
+      "file": "b20_items.json",
+      "format": "json",
+      "rows": 20,
+      "sha256": "f254a6fa189f717d8a015cded87ea06d5aa014fe07dc782dfb07e3cb8a880d3b"
+    },
+    {
+      "sheet": "评估模式配置",
+      "range": "A1:H8",
+      "file": "assessment_modes.json",
+      "format": "json",
+      "rows": 7,
+      "sha256": "08ff7e8095afe1fbe6f7deef0ad273ce1bcb1b7ea3cb4ffc9ab854b0e4f7bdb2"
+    },
+    {
+      "sheet": "纵向覆盖规则",
+      "range": "A1:G8",
+      "file": "longitudinal_coverage_rules.json",
+      "format": "json",
+      "rows": 7,
+      "sha256": "783ca6b9b6c16f3e2fcbd42284602481d9739d812d8f11d18bfe5292f5293375"
+    },
+    {
+      "sheet": "分支与报警规则",
+      "range": "A1:D8",
+      "file": "branch_alert_rules.json",
+      "format": "json",
+      "rows": 7,
+      "sha256": "29fe68cef6c70a786968a3d2267a9f9b847417ac08e0118bd7e5a0525e437ecf"
+    },
+    {
+      "sheet": "来源与边界",
+      "range": "A1:C7",
+      "file": "source_boundaries.json",
+      "format": "json",
+      "rows": 6,
+      "sha256": "4d83da2faaf47dc7ebcfbf56586e114fe23d3117d853677595b13bc1afbe1179"
+    },
+    {
+      "sheet": "课程诊疗术语",
+      "range": "A1:D11",
+      "file": "course_clinical_terms.json",
+      "format": "json",
+      "rows": 10,
+      "sha256": "b6fe1c177afe2390d263f44c475485fa5a9ebd2e0a55166a343decb476fb3cb7"
+    },
+    {
+      "sheet": "根源机制诊断库",
+      "range": "A1:J15",
+      "file": "diagnosis_patterns.json",
+      "format": "json",
+      "rows": 14,
+      "sha256": "0436ee98a455431b1ed0058ba0b9cd8caa684b40eb340228473d2df4c7c23217"
+    },
+    {
+      "sheet": "课程行动处方药典",
+      "range": "A1:Q24",
+      "file": "course_prescriptions.json",
+      "format": "json",
+      "rows": 23,
+      "sha256": "a3b92de8b665d42cab88672ab415ab6635a6346512d335bdc4fcabc51297eeb3"
+    },
+    {
+      "sheet": "处方剂量与疗程",
+      "range": "A1:G7",
+      "file": "dose_and_course_rules.json",
+      "format": "json",
+      "rows": 6,
+      "sha256": "67170b816dfb837e609fbc8bb7cb801b0ca2ab1f59c37fb168bbf3809533d1f0"
+    },
+    {
+      "sheet": "处方调整引擎",
+      "range": "A1:E9",
+      "file": "prescription_adjustment_rules.json",
+      "format": "json",
+      "rows": 8,
+      "sha256": "985d4a3130272ca2b417f3acdaf11ab598c84a7e048d7c27652331209b775460"
+    },
+    {
+      "sheet": "恢复维持与防复发",
+      "range": "A1:D9",
+      "file": "recovery_maintenance_rules.json",
+      "format": "json",
+      "rows": 8,
+      "sha256": "a857d816c6a3625a3df5ab0453326261081274384d49a4e499959165c1f2ebad"
+    },
+    {
+      "sheet": "AI课程诊疗报告接口",
+      "range": "A1:C18",
+      "file": "ai_report_fields.json",
+      "format": "json",
+      "rows": 17,
+      "sha256": "8f8778cbaec96a94766aabf3076966ded25e9f21c1e7053e09af4a2c417e1079"
+    },
+    {
+      "sheet": "V1历史题目与行为任务（说明书表8-99）",
+      "range": "23讲×4题+23讲×2任务",
+      "file": "legacy_content_candidates.json",
+      "format": "json",
+      "rows": 138,
+      "sha256": "83ded1a458f7972514422910f2ab5e1f39b3d87085f71f91a965bff8094aea53"
+    }
+  ]
+}

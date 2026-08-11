@@ -72,6 +72,7 @@ class MainActivity : FlutterActivity() {
 
     @Deprecated("Deprecated in Android framework; kept for Health Connect permission contract bridge.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (MentalHealthCheckupPlatform.handleActivityResult(requestCode, resultCode, data)) return
         if (HealthDietHealthConnectChannel.handleActivityResult(requestCode, resultCode, data)) return
         super.onActivityResult(requestCode, resultCode, data)
     }
@@ -85,6 +86,8 @@ class MainActivity : FlutterActivity() {
 		try { HealthDietHealthConnectChannel.register(this, flutterEngine) } catch (_: Throwable) {}
 		try { BehaviorTrackingNativeChannel.register(this, flutterEngine) } catch (_: Throwable) {}
 		try { VoiceAlarmChannel.register(flutterEngine, applicationContext) } catch (_: Throwable) {}
+		try { WillMirrorVaultChannel.register(flutterEngine, applicationContext) } catch (_: Throwable) {}
+		try { MentalHealthCheckupPlatform.register(this, flutterEngine) } catch (_: Throwable) {}
 			// 发现之旅/触摸：动态艺术壁纸（Mystify 亲密艺术）原生通道。
 			try { IntimacyWallpaperChannel.register(this, flutterEngine) } catch (_: Throwable) {}
 			// 触摸页原生 OpenGL 预览：复用动态壁纸同一套 renderer，避免 Flutter 预览与真实壁纸效果不一致。

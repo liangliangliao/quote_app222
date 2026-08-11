@@ -39,7 +39,13 @@ import '../diary/notebook_list_page.dart';
 import '../diary/diary_dao.dart';
 import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
-import '../zhixing_tree/zhixing_home_page.dart';
+import '../zhixing_tree/zhixing_tree_home_page.dart';
+import '../xiangji_future_strategist/xiangji_home_page.dart';
+import '../xiangji_goal_mentor/xiangji_discover_entries.dart';
+import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
+import '../will_mirror/will_mirror_discover_entry.dart';
+import '../will_mirror/will_mirror_home_page.dart';
+import '../mental_health_checkup/mental_health_checkup_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2552,16 +2558,93 @@ Widget _buildEmotionPieChart() {
                       onTap: _openDiaryFromDiscover,
                     ),
                     const SizedBox(height: 12),
-                    _buildDiscoverEntry(
-                      icon: Icons.park_outlined,
-                      title: '知行树 · 智能行动成长',
-                      onTap: () {
+                    XiangjiDiscoverEntries(
+                      onGoalMentorTap: () {
                         Navigator.of(context).push(
-                          CupertinoPageRoute(
-                            builder: (_) => const ZhixingTreeHomePage(),
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const XiangjiGoalMentorPage(),
                           ),
                         );
                       },
+                      onFutureStrategistTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) =>
+                                const XiangjiFutureStrategistHomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    WillMirrorDiscoverEntry(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const WillMirrorHomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Material(
+                      color: const Color(0xFFF1F6EE),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (context) =>
+                                  const ZhixingTreeHomePage(),
+                            ),
+                          );
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 13,
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Color(0xFFDCEBD6),
+                                child: Icon(
+                                  Icons.park_outlined,
+                                  size: 21,
+                                  color: Color(0xFF2F7550),
+                                ),
+                              ),
+                              SizedBox(width: 11),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '知行树 · 智能行动成长',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      '王阳明主线 · 17套思想/22部作品 · 行动、复盘与融合',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF557064),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.chevron_right),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     // 改变 · 心理自助入口
@@ -2599,6 +2682,152 @@ Widget _buildEmotionPieChart() {
                             },
                           ),
                         ],
+                      ),
+                    ),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (context) =>
+                                  const MentalHealthCheckupPage(),
+                            ),
+                          );
+                        },
+                        child: Ink(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: <Color>[
+                                Color(0xFFE9ECFF),
+                                Color(0xFFF5EDFF),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: const Color(0xFFC8CEFF),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Container(
+                                    width: 46,
+                                    height: 46,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF5664D2),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: const Icon(
+                                      Icons.health_and_safety_outlined,
+                                      color: Colors.white,
+                                      size: 27,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        Text(
+                                          '心理健康体检 · 幸福课23讲',
+                                          style: TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w800,
+                                            color: Color(0xFF252E52),
+                                          ),
+                                        ),
+                                        SizedBox(height: 3),
+                                        Text(
+                                          '安全分流 → 八域评估 → 课程行动 → 7天复验',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF596273),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    color: Color(0xFF5664D2),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              const Wrap(
+                                spacing: 14,
+                                runSpacing: 7,
+                                children: <Widget>[
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.offline_bolt_outlined,
+                                        size: 16,
+                                        color: Color(0xFF39715D),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '本地优先',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF315C4E),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.person_off_outlined,
+                                        size: 16,
+                                        color: Color(0xFF4554C5),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '无注册登录',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF3948A7),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.verified_user_outlined,
+                                        size: 16,
+                                        color: Color(0xFF7A4E9D),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '种子完整性校验',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF694187),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),

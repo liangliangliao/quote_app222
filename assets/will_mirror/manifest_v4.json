@@ -1,0 +1,17 @@
+{
+  "kb_version": "4.0.0-kb.1",
+  "schema_version": "4.0",
+  "translation_revision": "2026.08.11-r1",
+  "embedding_model": null,
+  "retrieval_mode": "offline_lexical_tag_authority_v1",
+  "minimum_app_version": "0.1.0",
+  "record_count": 22,
+  "records_sha256": "bdb4451be6730f3a3064c597865b5fe18a26146133251057c5d565da9771467f",
+  "rights_review_version": "research-2026-08-r1",
+  "created_at": "2026-08-11T00:00:00Z",
+  "release_boundaries": [
+    "Tal Lecture 13/22 passages remain A-candidate until timestamp and rights parity review.",
+    "Public-domain status of an original work does not imply modern translations are public domain.",
+    "Product C-level rules must never be displayed as author quotations."
+  ]
+}

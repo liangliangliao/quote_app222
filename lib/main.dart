@@ -23,6 +23,7 @@ import 'services/notification_service.dart';
 import 'services/scheduler_service.dart';
 import 'services/wm_dispatcher.dart';
 import 'health_diet/services/health_diet_daily_scheduler_service.dart';
+import 'xiangji_future_strategist/xiangji_strategist_monitor_service.dart';
 import 'background_tasks.dart';
 import 'pages/home_page.dart';
 import 'pages/history_page.dart';
@@ -164,6 +165,7 @@ try {
     // 预加载日记背景配置到内存，避免日记页面首次进入时出现背景闪烁
     try { await DiaryTheme.reloadFromDatabase(); } catch (_) {}
     try { await Workmanager().initialize(workmanagerCallbackDispatcher, isInDebugMode: false); } catch (_) {}
+    try { await XiangjiStrategistMonitorService.syncSchedule(); } catch (_) {}
     try { await HealthDietDailySchedulerService().tick(); } catch (_) {}
     try { SimpleBus.init(); } catch (_) {}
     try { _registerHomeRefreshPort(); } catch (_) {}

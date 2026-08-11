@@ -97,6 +97,20 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
             try {
                 JSONObject obj = new JSONObject(payload == null ? "{}" : payload);
                 String module = obj.optString("module", "");
+                if ("zhixing_tree".equals(module)) {
+                    String title = obj.optString("title", "知行树行动导师");
+                    String body = obj.optString("body", "点击查看当前目标、行动与复盘建议");
+                    NotifyHelper.send(
+                        context.getApplicationContext(),
+                        id,
+                        title,
+                        body,
+                        null,
+                        "zhixing_tree",
+                        payload == null ? "{}" : payload
+                    );
+                    return;
+                }
                 if ("behavior_tracking".equals(module)) {
                     String type = obj.optString("type", "");
                     if ("behavior_auto_sync".equals(type)) {
