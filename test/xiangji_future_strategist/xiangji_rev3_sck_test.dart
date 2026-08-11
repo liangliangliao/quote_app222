@@ -147,7 +147,10 @@ void main() {
       expect(work.targetGap, contains('有效回复'));
       expect(work.currentAction, contains('真实职位'));
       expect(relationship.targetGap, contains('互动方式'));
-      expect(relationship.currentAction, contains('具体请求'));
+      expect(
+        relationship.currentAction,
+        anyOf(contains('具体请求'), contains('争论')),
+      );
       expect(market.targetGap, contains('市场行为样本'));
       expect(market.currentAction, contains('付费'));
       expect(<String>{

@@ -570,7 +570,10 @@ class XiangjiSckRuntime {
   }) {
     final minutes = major ? 25 : 15;
     if (_isWorkCase(sourceText)) {
-      if (_matches(sourceText, const <String>['有面试', '面试了', '面试通知'])) {
+      final hasInterviewEvidence =
+          _matches(sourceText, const <String>['有面试', '面试了', '面试通知', '进入面试']) &&
+              !_matches(sourceText, const <String>['没有面试', '无面试', '没面试']);
+      if (hasInterviewEvidence) {
         return '用 $minutes 分钟复盘最近一次面试，只对照职位判据、对方追问与自己的具体回答，选出一个可在下次测试的转化瓶颈';
       }
       return '用 $minutes 分钟选一个真实职位，对照三项硬条件修改并发出一份定向材料，记录发送前后的阻力与回应';
