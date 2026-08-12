@@ -2430,6 +2430,25 @@ class XiangjiRepository {
           rightIndex < 0 ? focusOrder.length : rightIndex,
         );
       });
+      // Keep the means-ends chain primary, but reserve one contextual slot for
+      // an actually triggered Schopenhauer cognitive method. Previously such
+      // methods were generated and then hidden behind Goal/Gap/Operator.
+      const epistemicMethods = <String>{
+        'MEC-001',
+        'MEC-002',
+        'MEC-003',
+        'MEC-004',
+        'MEC-005',
+        'MEC-006',
+        'MEC-007',
+        'MEC-008',
+        'MEC-009',
+      };
+      final epistemicIndex = requested.indexWhere(epistemicMethods.contains);
+      if (epistemicIndex >= 3) {
+        final method = requested.removeAt(epistemicIndex);
+        requested.insert(canAdvanceOperator ? 1 : 0, method);
+      }
     }
 
     await _applySignatureMethods(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'xiangji_models.dart';
+import 'xiangji_rev3_models.dart';
 import 'xiangji_ui_support.dart';
 
 /// The single user-facing means-ends chain required by the Rev.5.2 Master PRD.
@@ -104,6 +105,129 @@ class XiangjiSolverCockpitView extends StatelessWidget {
   }
 }
 
+/// Makes model participation visible without exposing hidden chain-of-thought.
+class XiangjiAiContributionCard extends StatelessWidget {
+  const XiangjiAiContributionCard({
+    super.key,
+    required this.summary,
+    this.onConfigureAi,
+    this.onReviewSensitiveConsent,
+  });
+
+  final XiangjiAiExecutionSummary summary;
+  final VoidCallback? onConfigureAi;
+  final VoidCallback? onReviewSensitiveConsent;
+
+  @override
+  Widget build(BuildContext context) {
+    final cloudUsed = summary.cloudAiUsed;
+    final sensitiveBlocked = summary.sensitiveConsentRequired;
+    final title = cloudUsed
+        ? 'AI 军师已参与本轮推演'
+        : sensitiveBlocked
+            ? '敏感内容未发送给云端 AI'
+            : summary.aiConfigured
+                ? '本轮由本地安全内核完成'
+                : 'AI 未配置，本轮由本地求解内核完成';
+    final subtitle = cloudUsed
+        ? '${_providerLabel(summary.provider)} · ${summary.model} · '
+            '${summary.cloudAgentCount}/${summary.plannedAgentCount} 个认知角色使用云端模型'
+        : sensitiveBlocked
+            ? '检测到${summary.sensitiveCategories.join('、')}；未获授权前保持本地处理。'
+            : summary.aiConfigured
+                ? '安全门或服务降级阻止了本轮云端调用，结果仍由确定性求解器保持连续。'
+                : '配置任一全局 AI 服务后，普通问题会自动进入多角色模型推演。';
+
+    return XiangjiSectionCard(
+      title: title,
+      subtitle: subtitle,
+      icon: cloudUsed
+          ? Icons.auto_awesome_outlined
+          : sensitiveBlocked
+              ? Icons.privacy_tip_outlined
+              : Icons.memory_outlined,
+      trailing: XiangjiStateBadge(
+        label: cloudUsed ? '云端 AI' : '本地模式',
+        color: cloudUsed ? const Color(0xFF3468C0) : XiangjiPalette.muted,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (cloudUsed) ...[
+            XiangjiLabeledValue(
+              label: 'AI 实际形成或更新了什么',
+              value: summary.changedArtifacts.join('；'),
+            ),
+            XiangjiLabeledValue(
+              label: '本轮参与的认知角色',
+              value: summary.cloudAgentLabels.take(10).join('、'),
+            ),
+            XiangjiLabeledValue(
+              label: '可核对的运行凭证',
+              value: <String>[
+                '云端完成 ${summary.cloudAgentCount} 项',
+                if (summary.localAgentCount > 0)
+                  '本地完成 ${summary.localAgentCount} 项',
+                if (summary.failedAgentCount > 0)
+                  '云端失败并降级 ${summary.failedAgentCount} 项',
+                if (summary.totalLatencyMs > 0)
+                  '累计模型耗时 ${_duration(summary.totalLatencyMs)}',
+                if (summary.redactedFieldCount > 0)
+                  '外发前隐藏 ${summary.redactedFieldCount} 个直接标识',
+              ].join(' · '),
+            ),
+            const Text(
+              '这些是可修订的 AI 推断，不是关于你的最终事实；你修改或提供新现实时，派生结果会重新计算。',
+              style: TextStyle(
+                color: XiangjiPalette.muted,
+                height: 1.45,
+              ),
+            ),
+          ] else ...[
+            Text(
+              sensitiveBlocked
+                  ? '本地原始记录和求解结果已经保存。你可以继续使用本地模式，或明确授权这些敏感类别后让下一轮调用已配置 AI；手机号、邮箱、证件号等直接标识仍会自动隐藏。'
+                  : summary.aiConfigured
+                      ? '本地 SCK 规则和持续求解器已完成基础草案，但本轮没有把结果伪装成 AI 输出。你可以继续使用，或检查 AI 服务后重新对话。'
+                      : '当前结果来自本地 SCK 认识规则与持续求解器，不会伪装成云端 AI。请在全局设置中配置 API Key 与模型，随后普通问题会直接使用 AI。',
+              style: const TextStyle(height: 1.5),
+            ),
+            const SizedBox(height: 10),
+            if (sensitiveBlocked && onReviewSensitiveConsent != null)
+              FilledButton.tonalIcon(
+                onPressed: onReviewSensitiveConsent,
+                icon: const Icon(Icons.privacy_tip_outlined),
+                label: const Text('查看敏感数据授权'),
+              )
+            else if (onConfigureAi != null)
+              FilledButton.tonalIcon(
+                onPressed: onConfigureAi,
+                icon: const Icon(Icons.settings_suggest_outlined),
+                label: const Text('配置或检查 AI 服务'),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _providerLabel(String provider) => switch (provider.toLowerCase()) {
+        'openai' => 'OpenAI',
+        'deepseek' => 'DeepSeek',
+        'openrouter' => 'OpenRouter',
+        'gemini' => 'Gemini',
+        'azure' => 'Azure',
+        'xgrok' => 'xGrok',
+        'edenai' => 'Eden AI',
+        _ => provider.isEmpty ? '已配置 AI' : provider,
+      };
+
+  String _duration(int milliseconds) {
+    if (milliseconds < 1000) return '$milliseconds ms';
+    return '${(milliseconds / 1000).toStringAsFixed(1)} 秒';
+  }
+}
+
 /// Contextual method feedback from the Rev.5.2 experience contract.
 ///
 /// It exposes the trigger and the user-relevant before/after change, while
@@ -132,13 +256,36 @@ class XiangjiMethodEffectCard extends StatelessWidget {
           changed ? Icons.change_circle_outlined : Icons.fact_check_outlined,
           color: changed ? const Color(0xFFC8641B) : XiangjiPalette.pine,
         ),
-        title: Text(
-          '${changed ? '军师改判' : '本轮已检查'} · ${event.methodLabel}',
-          style: const TextStyle(fontWeight: FontWeight.w700),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${event.methodTradition} · ${event.schopenhauerConcept}',
+              style: const TextStyle(
+                color: XiangjiPalette.pine,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '${changed ? '军师改判' : '本轮已检查'} · ${event.methodLabel}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
         subtitle: Text(_userLanguage(event.userVisibleSummary)),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         children: [
+          XiangjiLabeledValue(
+            label: '这里用了什么方法？',
+            value:
+                '${event.schopenhauerConcept}。${event.philosophyPrinciple}',
+          ),
+          XiangjiLabeledValue(
+            label: '军师在这道题里怎样使用',
+            value: _userLanguage(event.operationSummary),
+          ),
           XiangjiLabeledValue(
             label: '什么现实或线索触发了它',
             value: _userLanguage(event.trigger),
@@ -164,6 +311,36 @@ class XiangjiMethodEffectCard extends StatelessWidget {
           XiangjiLabeledValue(
             label: '下一步由什么现实验算',
             value: _userLanguage(event.realityTest),
+          ),
+          XiangjiLabeledValue(
+            label: '下次可以迁移的问题',
+            value: event.transferQuestion,
+          ),
+          Theme(
+            data: Theme.of(context).copyWith(
+              dividerColor: Colors.transparent,
+            ),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text(
+                '思想来源（按需展开）',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    event.philosophySource,
+                    style: const TextStyle(
+                      color: XiangjiPalette.muted,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           if (footer != null) footer!,
         ],

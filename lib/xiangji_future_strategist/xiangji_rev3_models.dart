@@ -530,6 +530,7 @@ class XiangjiCouncilResult {
     this.cognitiveExperiences = const <XiangjiCognitiveExperienceDraft>[],
     this.inputClassification,
     this.problemProgress,
+    this.aiExecution = const XiangjiAiExecutionSummary(),
   });
 
   final String problemId;
@@ -546,6 +547,45 @@ class XiangjiCouncilResult {
   final List<XiangjiCognitiveExperienceDraft> cognitiveExperiences;
   final XiangjiInputClassification? inputClassification;
   final XiangjiProblemProgress? problemProgress;
+  final XiangjiAiExecutionSummary aiExecution;
+}
+
+/// Auditable evidence of model participation without private chain-of-thought.
+class XiangjiAiExecutionSummary {
+  const XiangjiAiExecutionSummary({
+    this.aiConfigured = false,
+    this.provider = '',
+    this.model = '',
+    this.plannedAgentCount = 0,
+    this.cloudAgentCount = 0,
+    this.localAgentCount = 0,
+    this.failedAgentCount = 0,
+    this.privacyBlockedAgentCount = 0,
+    this.totalLatencyMs = 0,
+    this.redactedFieldCount = 0,
+    this.cloudAgentLabels = const <String>[],
+    this.localAgentLabels = const <String>[],
+    this.changedArtifacts = const <String>[],
+    this.sensitiveCategories = const <String>[],
+  });
+
+  final bool aiConfigured;
+  final String provider;
+  final String model;
+  final int plannedAgentCount;
+  final int cloudAgentCount;
+  final int localAgentCount;
+  final int failedAgentCount;
+  final int privacyBlockedAgentCount;
+  final int totalLatencyMs;
+  final int redactedFieldCount;
+  final List<String> cloudAgentLabels;
+  final List<String> localAgentLabels;
+  final List<String> changedArtifacts;
+  final List<String> sensitiveCategories;
+
+  bool get cloudAiUsed => cloudAgentCount > 0;
+  bool get sensitiveConsentRequired => privacyBlockedAgentCount > 0;
 }
 
 String _nonEmpty(Object? value, String fallback) {
