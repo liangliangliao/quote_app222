@@ -15,6 +15,18 @@ class BeliefMentorReminderService {
   Future<List<BeliefMentorReminder>> scheduleExperimentPlan(
     BeliefMentorExperiment experiment,
   ) async {
+    final safety = BeliefMentorSafetyPolicy.assess(
+      '${experiment.action} ${experiment.minimumVersion} '
+      '${experiment.fallbackAction}',
+    );
+    if (safety.blocksNormalFlow) {
+      await _dao.recordSafetyEvent(
+        category: safety.category,
+        action: 'blocked_reminder_plan',
+        source: 'experiment',
+      );
+      return const <BeliefMentorReminder>[];
+    }
     final actionAt = DateTime.fromMillisecondsSinceEpoch(
       experiment.scheduledAtMs,
     );
@@ -68,13 +80,21 @@ class BeliefMentorReminderService {
 
   Future<BeliefMentorReminder> scheduleMorningPrime({
     required BeliefMentorBelief belief,
+    DateTime? day,
   }) async {
     final profile = await _dao.profile();
+    final composed = _compose(
+      type: type,
+      title: title,
+      body: body,
+      tone: profile.tone,
+    );
     final parts = profile.morningTime.split(':');
     final hour = int.tryParse(parts.first) ?? 8;
     final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 30 : 30;
     final now = DateTime.now();
-    var at = DateTime(now.year, now.month, now.day, hour, minute);
+    final target = day ?? now;
+    var at = DateTime(target.year, target.month, target.day, hour, minute);
     if (!at.isAfter(now)) at = at.add(const Duration(days: 1));
     return _create(
       type: BeliefMentorReminderType.morningPrime,
@@ -83,6 +103,24 @@ class BeliefMentorReminderService {
       title: '今天只验证一小步',
       body: '当前工作假设：“${belief.statement}”。选择一件可记录结果的小行动。',
     );
+  }
+
+  /// Keeps a rolling seven-day morning plan without creating duplicates.
+  Future<List<BeliefMentorReminder>> ensureMorningPrimeSeries({
+    required BeliefMentorBelief belief,
+    int days = 7,
+  }) async {
+    final created = <BeliefMentorReminder>[];
+    final now = DateTime.now();
+    for (var offset = 0; offset < days; offset++) {
+      created.add(
+        await scheduleMorningPrime(
+          belief: belief,
+          day: DateTime(now.year, now.month, now.day + offset),
+        ),
+      );
+    }
+    return created;
   }
 
   Future<List<BeliefMentorReminder>> scheduleRecoveryPlan(
@@ -161,12 +199,18 @@ class BeliefMentorReminderService {
   }) async {
     final current = await _dao.reminder(reminderId);
     if (current == null) return;
-    final at = DateTime.now().add(duration);
+    final profile = await _dao.profile();
+    final requestedAt = DateTime.now().add(duration);
+    final at = BeliefMentorReminderPolicy.moveOutsideQuietHours(
+      requestedAt,
+      quietStart: profile.quietStart,
+      quietEnd: profile.quietEnd,
+    );
     await NativeScheduler.cancel(current.alarmId);
     final ok = await NativeScheduler.scheduleExactAt(
       id: current.alarmId,
       epochMs: at.millisecondsSinceEpoch,
-      payload: _payload(current, scheduledAt: at),
+      payload: _payload(current, profile: profile, scheduledAt: at),
     );
     await _dao.updateReminderState(
       current.id,
@@ -175,6 +219,73 @@ class BeliefMentorReminderService {
           : BeliefMentorReminderState.suppressed,
       suppressReason: ok ? '' : '系统未接受延期闹钟',
       scheduledAtMs: at.millisecondsSinceEpoch,
+    );
+    await _dao.track(
+      'reminder_snoozed',
+      beliefId: current.beliefId,
+      experimentId: current.experimentId,
+      properties: <String, Object?>{
+        'type': current.type.name,
+        'minutes': at.difference(DateTime.now()).inMinutes,
+        'moved_for_quiet_hours': at != requestedAt,
+      },
+    );
+  }
+
+  Future<void> cancelReminder(
+    String reminderId, {
+    String reason = '用户取消',
+  }) async {
+    final current = await _dao.reminder(reminderId);
+    if (current == null) return;
+    if (current.alarmId > 0) await NativeScheduler.cancel(current.alarmId);
+    await _dao.updateReminderState(
+      current.id,
+      BeliefMentorReminderState.closed,
+      suppressReason: reason,
+    );
+    await _dao.track(
+      'reminder_cancelled',
+      beliefId: current.beliefId,
+      experimentId: current.experimentId,
+      properties: <String, Object?>{'type': current.type.name},
+    );
+  }
+
+  Future<void> rescheduleReminder(
+    String reminderId,
+    DateTime requestedAt,
+  ) async {
+    final current = await _dao.reminder(reminderId);
+    if (current == null) return;
+    final profile = await _dao.profile();
+    final at = BeliefMentorReminderPolicy.moveOutsideQuietHours(
+      requestedAt,
+      quietStart: profile.quietStart,
+      quietEnd: profile.quietEnd,
+    );
+    if (current.alarmId > 0) await NativeScheduler.cancel(current.alarmId);
+    final ok = await NativeScheduler.scheduleExactAt(
+      id: current.alarmId,
+      epochMs: at.millisecondsSinceEpoch,
+      payload: _payload(current, profile: profile, scheduledAt: at),
+    );
+    await _dao.updateReminderState(
+      current.id,
+      ok
+          ? BeliefMentorReminderState.rescheduled
+          : BeliefMentorReminderState.suppressed,
+      suppressReason: ok ? '' : '系统未接受重新安排的闹钟',
+      scheduledAtMs: at.millisecondsSinceEpoch,
+    );
+    await _dao.track(
+      'reminder_rescheduled',
+      beliefId: current.beliefId,
+      experimentId: current.experimentId,
+      properties: <String, Object?>{
+        'type': current.type.name,
+        'moved_for_quiet_hours': at != requestedAt,
+      },
     );
   }
 
@@ -186,6 +297,28 @@ class BeliefMentorReminderService {
         BeliefMentorReminderState.closed,
         suppressReason: '用户关闭了 Belief Mentor 提醒',
       );
+    }
+  }
+
+  Future<void> cancelAlarmIds(Iterable<int> alarmIds) async {
+    for (final id in alarmIds.where((value) => value > 0).toSet()) {
+      await NativeScheduler.cancel(id);
+    }
+  }
+
+  Future<void> cancelExperimentReminders(
+    String experimentId, {
+    String reason = '实验已调整',
+  }) async {
+    for (final reminder in await _dao.reminders(experimentId: experimentId)) {
+      if (reminder.alarmId > 0) await NativeScheduler.cancel(reminder.alarmId);
+      if (_active(reminder.state)) {
+        await _dao.updateReminderState(
+          reminder.id,
+          BeliefMentorReminderState.closed,
+          suppressReason: reason,
+        );
+      }
     }
   }
 
@@ -210,20 +343,9 @@ class BeliefMentorReminderService {
         .toList(growable: false);
     for (final reminder in active) {
       if (reminder.alarmId > 0) await NativeScheduler.cancel(reminder.alarmId);
-      await _dao.updateReminderState(
+      await rescheduleReminder(
         reminder.id,
-        BeliefMentorReminderState.closed,
-        suppressReason: '提醒偏好已更新',
-      );
-    }
-    for (final reminder in active) {
-      await _create(
-        type: reminder.type,
-        at: DateTime.fromMillisecondsSinceEpoch(reminder.scheduledAtMs),
-        beliefId: reminder.beliefId,
-        experimentId: reminder.experimentId,
-        title: reminder.title,
-        body: reminder.body,
+        DateTime.fromMillisecondsSinceEpoch(reminder.scheduledAtMs),
       );
     }
   }
@@ -237,8 +359,10 @@ class BeliefMentorReminderService {
     required String body,
   }) async {
     final profile = await _dao.profile();
+    final now = DateTime.now();
+    final futureAt = at.isAfter(now) ? at : now.add(const Duration(minutes: 1));
     final adjusted = BeliefMentorReminderPolicy.moveOutsideQuietHours(
-      at,
+      futureAt,
       quietStart: profile.quietStart,
       quietEnd: profile.quietEnd,
     );
@@ -263,6 +387,8 @@ class BeliefMentorReminderService {
         });
     final deliveryKey =
         '$experimentId:${type.name}:${adjusted.millisecondsSinceEpoch}';
+    final duplicate = await _dao.reminderForDeliveryKey(deliveryKey);
+    if (duplicate != null) return duplicate;
     final eligibility = BeliefMentorReminderPolicy.evaluate(
       type: type,
       scheduledAt: adjusted,
@@ -293,8 +419,8 @@ class BeliefMentorReminderService {
       state: eligibility.allowed
           ? BeliefMentorReminderState.created
           : BeliefMentorReminderState.suppressed,
-      title: title,
-      body: body,
+      title: composed.title,
+      body: composed.body,
       alarmId: alarmId,
       deliveryKey: deliveryKey,
       suppressReason: eligibility.allowed ? '' : eligibility.reason,
@@ -302,14 +428,21 @@ class BeliefMentorReminderService {
       updatedAtMs: nowMs,
     );
     await _dao.saveReminder(reminder);
-    if (!eligibility.allowed) return reminder;
+    if (!eligibility.allowed) {
+      await _saveReminderAgentRun(
+        reminder: reminder,
+        tone: profile.tone,
+        suppressReason: eligibility.reason,
+      );
+      return reminder;
+    }
 
     var scheduled = false;
     try {
       scheduled = await NativeScheduler.scheduleExactAt(
         id: alarmId,
         epochMs: adjusted.millisecondsSinceEpoch,
-        payload: _payload(reminder),
+        payload: _payload(reminder, profile: profile),
       );
     } catch (_) {
       scheduled = false;
@@ -334,23 +467,62 @@ class BeliefMentorReminderService {
       createdAtMs: reminder.createdAtMs,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
+    await _saveReminderAgentRun(
+      reminder: reminder,
+      tone: profile.tone,
+      suppressReason: reason,
+    );
     return reminder;
   }
 
+  Future<void> _saveReminderAgentRun({
+    required BeliefMentorReminder reminder,
+    required String tone,
+    required String suppressReason,
+  }) => _dao.saveAgentRun(
+    agent: 'ReminderAgent',
+    output: <String, Object?>{
+      'type': reminder.type.name,
+      'schedule': reminder.scheduledAtMs,
+      'tone': tone,
+      'suppress_reason': suppressReason,
+    },
+    provider: 'local',
+    model: 'reminder-policy-v1',
+    runStatus: suppressReason.isEmpty ? 'scheduled' : 'suppressed',
+    redactedCount: 0,
+  );
+
+  static ({String title, String body}) _compose({
+    required BeliefMentorReminderType type,
+    required String title,
+    required String body,
+    required String tone,
+  }) => switch (tone) {
+    'gentle' => (title: title, body: '不用一次做完。$body'),
+    'challenger' || 'direct' => (title: title, body: '先停止等待完美条件。$body'),
+    'minimal' => (title: type.label, body: body),
+    _ => (title: title, body: body),
+  };
+
   Map<String, dynamic> _payload(
     BeliefMentorReminder reminder, {
+    required BeliefMentorProfile profile,
     DateTime? scheduledAt,
-  }) => <String, dynamic>{
-    'module': 'belief_mentor',
-    'type': reminder.type.name,
-    'title': reminder.title,
-    'body': reminder.body,
-    'reminderId': reminder.id,
-    'beliefId': reminder.beliefId,
-    'experimentId': reminder.experimentId,
-    'scheduledAtMs':
-        (scheduledAt?.millisecondsSinceEpoch ?? reminder.scheduledAtMs),
-  };
+  }) {
+    final sensitive = profile.showSensitiveNotificationContent;
+    return <String, dynamic>{
+      'module': 'belief_mentor',
+      'type': reminder.type.name,
+      'title': sensitive ? reminder.title : 'Belief Mentor',
+      'body': sensitive ? reminder.body : '你有一项已安排的信念实验步骤，点击后在应用内查看。',
+      'reminderId': reminder.id,
+      'beliefId': reminder.beliefId,
+      'experimentId': reminder.experimentId,
+      'scheduledAtMs':
+          (scheduledAt?.millisecondsSinceEpoch ?? reminder.scheduledAtMs),
+    };
+  }
 
   static bool _active(BeliefMentorReminderState state) =>
       state == BeliefMentorReminderState.created ||

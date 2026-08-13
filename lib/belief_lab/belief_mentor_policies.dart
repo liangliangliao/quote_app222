@@ -136,6 +136,150 @@ class BeliefMentorExperimentPolicy {
       completionProbability < 50;
 }
 
+class BeliefMentorExperimentTransitionPolicy {
+  const BeliefMentorExperimentTransitionPolicy._();
+
+  static const Map<
+    BeliefMentorExperimentState,
+    Set<BeliefMentorExperimentState>
+  >
+  allowed = <BeliefMentorExperimentState, Set<BeliefMentorExperimentState>>{
+    BeliefMentorExperimentState.draft: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.scheduled,
+      BeliefMentorExperimentState.resized,
+      BeliefMentorExperimentState.rescheduled,
+      BeliefMentorExperimentState.abandoned,
+    },
+    BeliefMentorExperimentState.scheduled: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.started,
+      BeliefMentorExperimentState.resized,
+      BeliefMentorExperimentState.rescheduled,
+      BeliefMentorExperimentState.abandoned,
+    },
+    BeliefMentorExperimentState.resized: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.started,
+      BeliefMentorExperimentState.rescheduled,
+      BeliefMentorExperimentState.abandoned,
+    },
+    BeliefMentorExperimentState.rescheduled: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.started,
+      BeliefMentorExperimentState.resized,
+      BeliefMentorExperimentState.abandoned,
+    },
+    BeliefMentorExperimentState.started: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.completed,
+      BeliefMentorExperimentState.resized,
+      BeliefMentorExperimentState.rescheduled,
+      BeliefMentorExperimentState.abandoned,
+    },
+    BeliefMentorExperimentState.completed: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.reflection,
+      BeliefMentorExperimentState.evidenceCreated,
+    },
+    BeliefMentorExperimentState.reflection: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.evidenceCreated,
+    },
+    BeliefMentorExperimentState.abandoned: <BeliefMentorExperimentState>{
+      BeliefMentorExperimentState.resized,
+      BeliefMentorExperimentState.rescheduled,
+    },
+    BeliefMentorExperimentState.evidenceCreated:
+        <BeliefMentorExperimentState>{},
+  };
+
+  static bool canTransition(
+    BeliefMentorExperimentState from,
+    BeliefMentorExperimentState to,
+  ) => allowed[from]?.contains(to) ?? false;
+}
+
+/// Deterministic evidence de-duplication used by state transitions.
+///
+/// Very similar evidence still contributes a small amount, but repeated copies
+/// cannot rapidly advance a belief through the state machine.
+class BeliefMentorEvidencePolicy {
+  const BeliefMentorEvidencePolicy._();
+
+  static int effectiveCount(List<BeliefMentorEvidence> evidence) {
+    final accepted = <String>[];
+    var weight = 0.0;
+    for (final item in evidence.reversed) {
+      final fingerprint = _normalize(
+        '${item.action} ${item.outcome} ${item.statement}',
+      );
+      if (fingerprint.isEmpty) continue;
+      final similarity = accepted.isEmpty
+          ? 0.0
+          : accepted
+                .map((value) => textSimilarity(value, fingerprint))
+                .reduce((a, b) => a > b ? a : b);
+      weight += similarity >= 0.72 ? 0.25 : 1;
+      accepted.add(fingerprint);
+    }
+    return weight.floor();
+  }
+
+  static double textSimilarity(String left, String right) {
+    final a = _grams(_normalize(left));
+    final b = _grams(_normalize(right));
+    if (a.isEmpty || b.isEmpty) return 0;
+    final intersection = a.intersection(b).length;
+    final union = a.union(b).length;
+    return union == 0 ? 0 : intersection / union;
+  }
+
+  static Set<String> _grams(String value) {
+    if (value.length <= 2) return value.isEmpty ? <String>{} : <String>{value};
+    return <String>{
+      for (var index = 0; index < value.length - 1; index++)
+        value.substring(index, index + 2),
+    };
+  }
+
+  static String _normalize(String value) => value.toLowerCase().replaceAll(
+    RegExp(r'[^\p{L}\p{N}]+', unicode: true),
+    '',
+  );
+}
+
+class BeliefMentorCognitivePatternPolicy {
+  const BeliefMentorCognitivePatternPolicy._();
+
+  static final Map<BeliefMentorCognitivePattern, RegExp> _signals =
+      <BeliefMentorCognitivePattern, RegExp>{
+        BeliefMentorCognitivePattern.magnification: RegExp(
+          r'一定会|肯定会|彻底|完蛋|灾难|毁掉|永远不会|毫无希望|最糟',
+          caseSensitive: false,
+        ),
+        BeliefMentorCognitivePattern.minimization: RegExp(
+          r'不算什么|没什么了不起|只是运气|谁都能|这不重要|微不足道',
+          caseSensitive: false,
+        ),
+        BeliefMentorCognitivePattern.unsupportedInference: RegExp(
+          r'他们都|别人一定|肯定觉得|一定认为|没人会|所有人都|他就是想',
+          caseSensitive: false,
+        ),
+        BeliefMentorCognitivePattern.allOrNothing: RegExp(
+          r'要么.*要么|不是.*就是|必须完美|只要失败|一次都不能',
+          caseSensitive: false,
+        ),
+        BeliefMentorCognitivePattern.identityOvergeneralization: RegExp(
+          r'我就是.*的人|说明我不行|我永远是|我天生|我根本没有',
+          caseSensitive: false,
+        ),
+        BeliefMentorCognitivePattern.emotionalReasoning: RegExp(
+          r'我感觉.*所以|既然我害怕|因为我焦虑|感觉不对.*一定',
+          caseSensitive: false,
+        ),
+      };
+
+  static List<BeliefMentorCognitivePattern> detect(String text) => _signals
+      .entries
+      .where((entry) => entry.value.hasMatch(text))
+      .map((entry) => entry.key)
+      .toList(growable: false);
+}
+
 class BeliefMentorReminderEligibility {
   const BeliefMentorReminderEligibility({
     required this.allowed,
@@ -284,26 +428,32 @@ class BeliefMentorSafetyDecision {
     required this.riskLevel,
     required this.blocksNormalFlow,
     required this.message,
+    this.category = 'none',
   });
 
   final String riskLevel;
   final bool blocksNormalFlow;
   final String message;
+  final String category;
 }
 
 class BeliefMentorSafetyPolicy {
   const BeliefMentorSafetyPolicy._();
 
   static final RegExp _selfHarm = RegExp(
-    r'自杀|不想活|结束生命|伤害自己|自残|kill myself|suicide',
+    r'自杀|轻生|不想活|活不下去|结束生命|伤害自己|伤害我自己|自残|割腕|跳楼|吞药|kill myself|end my life|suicid',
     caseSensitive: false,
   );
   static final RegExp _dangerous = RegExp(
-    r'杀人|报复.*伤害|制造炸弹|纵火|抢劫|违法行动',
+    r'杀人|杀了他|杀了她|报复.*伤害|制造.*炸弹|做炸弹|纵火|抢劫|绑架|投毒|违法行动',
     caseSensitive: false,
   );
   static final RegExp _psychosis = RegExp(
-    r'有人控制我的思想|植入.*芯片|全世界都在监视我|神命令我|我无所不能',
+    r'有人控制我的思想|读取我的思想|植入.*芯片|全世界都在监视我|有人跟踪我.*证据|神命令我|声音命令我|我无所不能',
+    caseSensitive: false,
+  );
+  static final RegExp _acuteMania = RegExp(
+    r'几天不睡.*不累|不需要睡觉|我是神|无所不能.*不用睡|倾家荡产.*投资',
     caseSensitive: false,
   );
 
@@ -313,6 +463,7 @@ class BeliefMentorSafetyPolicy {
         riskLevel: 'high',
         blocksNormalFlow: true,
         message: '你现在的安全比任何信念训练更重要。请立即联系当地紧急服务、危机热线，或一位能陪在你身边的可信任的人。',
+        category: 'self_harm',
       );
     }
     if (_dangerous.hasMatch(text)) {
@@ -320,6 +471,7 @@ class BeliefMentorSafetyPolicy {
         riskLevel: 'high',
         blocksNormalFlow: true,
         message: '我不能帮助设计危险或违法行动。我们可以先把目标改写为保护安全、远离冲突并寻求合适支持。',
+        category: 'violence_or_illegal',
       );
     }
     if (_psychosis.hasMatch(text)) {
@@ -327,6 +479,15 @@ class BeliefMentorSafetyPolicy {
         riskLevel: 'high',
         blocksNormalFlow: true,
         message: '我不会把这个判断确认成事实。先回到当下可核验的信息，并考虑联系心理健康专业人员或可信任的人一起评估。',
+        category: 'reality_testing',
+      );
+    }
+    if (_acuteMania.hasMatch(text)) {
+      return const BeliefMentorSafetyDecision(
+        riskLevel: 'high',
+        blocksNormalFlow: true,
+        message: '先暂停重大决定并优先休息与安全。请尽快联系可信任的人和心理健康专业人员，一起评估当前状态。',
+        category: 'acute_mania',
       );
     }
     return const BeliefMentorSafetyDecision(

@@ -137,4 +137,59 @@ class BeliefMentorStoryCatalog {
     if (matching.isNotEmpty) return matching.first;
     return all.first;
   }
+
+  /// Matches on belief type, trigger/context, cognitive pattern and novelty.
+  /// The catalog remains reviewed static content; this matcher only ranks it.
+  static BeliefMentorStory forBelief(
+    BeliefMentorBelief belief, {
+    Set<String> seen = const <String>{},
+  }) {
+    final context =
+        ('${belief.statement} ${belief.trigger} ${belief.alternativeStatement}')
+            .toLowerCase();
+    const keywords = <String, List<String>>{
+      'ST-001': <String>['不可能', '没有背景', '现实', '反例', '做不到'],
+      'ST-002': <String>['别人', '期待', '反馈', '评价', '关系'],
+      'ST-003': <String>['能力', '不会', '学习', '练习', '教'],
+      'ST-004': <String>['拒绝', '关系', '控制', '对方', '回应'],
+      'ST-005': <String>['困难', '失败', '现实', '希望', '很难'],
+      'ST-006': <String>['表达', '害羞', '身份', '我就是', '社交'],
+      'ST-007': <String>['聪明', '策略', '能力', '努力', '成长'],
+      'ST-008': <String>['完美', '拖延', '失败', '搞砸', '不够好'],
+    };
+    final ranked =
+        all
+            .map((story) {
+              var score = story.targetType == belief.type ? 8 : 0;
+              if (!seen.contains(story.id)) score += 3;
+              for (final keyword in keywords[story.id] ?? const <String>[]) {
+                if (context.contains(keyword)) score += 2;
+              }
+              if (belief.patterns.contains(
+                    BeliefMentorCognitivePattern.identityOvergeneralization,
+                  ) &&
+                  (story.id == 'ST-006' || story.id == 'ST-008')) {
+                score += 4;
+              }
+              if (belief.patterns.contains(
+                    BeliefMentorCognitivePattern.magnification,
+                  ) &&
+                  (story.id == 'ST-001' || story.id == 'ST-005')) {
+                score += 4;
+              }
+              if (belief.patterns.contains(
+                    BeliefMentorCognitivePattern.unsupportedInference,
+                  ) &&
+                  (story.id == 'ST-002' || story.id == 'ST-004')) {
+                score += 4;
+              }
+              return (story: story, score: score);
+            })
+            .toList(growable: false)
+          ..sort((left, right) {
+            final score = right.score.compareTo(left.score);
+            return score != 0 ? score : left.story.id.compareTo(right.story.id);
+          });
+    return ranked.first.story;
+  }
 }

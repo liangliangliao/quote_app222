@@ -128,6 +128,8 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
                         obj.optString("reminderId", ""),
                         obj.optString("beliefId", ""),
                         obj.optString("experimentId", ""),
+                        obj.optString("type", ""),
+                        obj.optLong("scheduledAtMs", 0L),
                         id
                     );
                     return;
@@ -258,6 +260,8 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
         String reminderId,
         String beliefId,
         String experimentId,
+        String reminderType,
+        long scheduledAtMs,
         int alarmId
     ) {
         if (TextUtils.isEmpty(reminderId)) return;
@@ -267,13 +271,22 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
             if (cc == null || TextUtils.isEmpty(cc.dbPath)) return;
             db = SQLiteDatabase.openDatabase(cc.dbPath, null, SQLiteDatabase.OPEN_READWRITE);
             long now = System.currentTimeMillis();
-            db.execSQL(
-                "UPDATE belief_mentor_reminders SET state='sent', updated_at_ms=? WHERE id=? AND state IN ('created','scheduled','snoozed','rescheduled')",
-                new Object[]{now, reminderId}
+            android.database.sqlite.SQLiteStatement update = db.compileStatement(
+                "UPDATE belief_mentor_reminders SET state='sent', updated_at_ms=? WHERE id=? AND state IN ('created','scheduled','snoozed','rescheduled')"
             );
+            update.bindLong(1, now);
+            update.bindString(2, reminderId);
+            int changed = update.executeUpdateDelete();
+            update.close();
+            if (changed == 0) return;
+            JSONObject properties = new JSONObject();
+            try {
+                properties.put("type", reminderType == null ? "" : reminderType);
+                properties.put("scheduled_delta_seconds", scheduledAtMs <= 0L ? 0L : Math.max(0L, (now - scheduledAtMs) / 1000L));
+            } catch (Throwable ignore) {}
             db.execSQL(
                 "INSERT OR IGNORE INTO belief_mentor_events(id,event_name,belief_id,experiment_id,properties_json,created_at_ms) VALUES(?,?,?,?,?,?)",
-                new Object[]{"event_native_" + now + "_" + alarmId, "reminder_sent", beliefId, experimentId, "{}", now}
+                new Object[]{"event_native_" + reminderId, "reminder_sent", beliefId, experimentId, properties.toString(), now}
             );
         } catch (Throwable ignore) {
         } finally {

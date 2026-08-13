@@ -12,6 +12,9 @@ class BeliefMentorMentorReply {
     required this.inference,
     required this.nextAction,
     required this.boundary,
+    this.activeBeliefId = '',
+    this.safetyLevel = 'normal',
+    this.nextAgent = '',
   });
 
   final String route;
@@ -19,6 +22,9 @@ class BeliefMentorMentorReply {
   final String inference;
   final String nextAction;
   final String boundary;
+  final String activeBeliefId;
+  final String safetyLevel;
+  final String nextAgent;
 
   String get displayText => <String>[
     observation,
@@ -33,6 +39,9 @@ class BeliefMentorMentorReply {
     'inference': inference,
     'next_action': nextAction,
     'boundary': boundary,
+    'active_belief_id': activeBeliefId,
+    'safety_level': safetyLevel,
+    'next_agent': nextAgent.isEmpty ? route : nextAgent,
   };
 }
 
@@ -70,6 +79,11 @@ class BeliefMentorAiService {
       safety: safety,
     );
     if (safety.blocksNormalFlow) {
+      await _dao.recordSafetyEvent(
+        category: safety.category,
+        action: 'blocked_diagnosis',
+        source: 'user_input',
+      );
       await _saveRun(
         agent: 'SafetyAgent',
         output: _diagnosisJson(fallback),
@@ -122,6 +136,9 @@ class BeliefMentorAiService {
             'trigger': 'string',
             'alternative': 'string',
             'confidence': 'number 0..1',
+            'patterns': <String>[
+              'magnification|minimization|unsupportedInference|allOrNothing|identityOvergeneralization|emotionalReasoning',
+            ],
           },
         ],
         'risk_level': 'low|medium|high',
@@ -139,12 +156,42 @@ class BeliefMentorAiService {
       );
       final decoded = _decodeObject(raw);
       final cloud = decoded == null ? null : _diagnosisFromJson(decoded);
+      final outputSafety = cloud == null
+          ? const BeliefMentorSafetyDecision(
+              riskLevel: 'normal',
+              blocksNormalFlow: false,
+              message: '',
+            )
+          : _assessDiagnosisOutput(cloud);
       final valid =
           cloud != null &&
           cloud.candidates.length >= 3 &&
-          cloud.candidates.length <= 5;
-      final value = valid ? cloud : fallback;
-      final status = valid ? 'success' : 'cloud_invalid_local_fallback';
+          cloud.candidates.length <= 5 &&
+          !outputSafety.blocksNormalFlow;
+      final value = cloud?.blocksNormalFlow == true
+          ? _blockedDiagnosis(
+              category: 'model_detected_risk',
+              message: cloud!.safetyMessage,
+            )
+          : valid
+          ? cloud
+          : fallback;
+      final status = cloud?.blocksNormalFlow == true
+          ? 'blocked_by_model_safety'
+          : outputSafety.blocksNormalFlow
+          ? 'cloud_output_blocked_local_fallback'
+          : valid
+          ? 'success'
+          : 'cloud_invalid_local_fallback';
+      if (cloud?.blocksNormalFlow == true || outputSafety.blocksNormalFlow) {
+        await _dao.recordSafetyEvent(
+          category: cloud?.blocksNormalFlow == true
+              ? 'model_detected_risk'
+              : outputSafety.category,
+          action: status,
+          source: 'diagnosis_output',
+        );
+      }
       await _saveRun(
         agent: 'DiagnosisAgent',
         output: _diagnosisJson(value),
@@ -154,9 +201,13 @@ class BeliefMentorAiService {
       );
       return BeliefMentorAiResult<BeliefMentorDiagnosis>(
         value: value,
-        usedCloudAi: valid,
-        provider: valid ? config.provider : 'local',
-        model: valid ? config.label : 'rule-engine-v1',
+        usedCloudAi: valid || cloud?.blocksNormalFlow == true,
+        provider: valid || cloud?.blocksNormalFlow == true
+            ? config.provider
+            : 'local',
+        model: valid || cloud?.blocksNormalFlow == true
+            ? config.label
+            : 'rule-engine-v1',
         runStatus: status,
         redactedCount: sanitized.redactedCount,
       );
@@ -190,6 +241,11 @@ class BeliefMentorAiService {
     );
     final fallback = _localExperiment(belief, context);
     if (safety.blocksNormalFlow) {
+      await _dao.recordSafetyEvent(
+        category: safety.category,
+        action: 'blocked_experiment_generation',
+        source: 'user_input',
+      );
       return BeliefMentorAiResult<BeliefMentorExperimentDraft>(
         value: fallback,
         usedCloudAi: false,
@@ -242,8 +298,26 @@ class BeliefMentorAiService {
       );
       final decoded = _decodeObject(raw);
       final draft = decoded == null ? null : _experimentFromJson(decoded);
+      final outputSafety = draft == null
+          ? const BeliefMentorSafetyDecision(
+              riskLevel: 'normal',
+              blocksNormalFlow: false,
+              message: '',
+            )
+          : BeliefMentorSafetyPolicy.assess(
+              '${draft.action} ${draft.minimumVersion} ${draft.fallbackAction}',
+            );
       final valid =
-          draft != null && BeliefMentorExperimentPolicy.validate(draft).isEmpty;
+          draft != null &&
+          BeliefMentorExperimentPolicy.validate(draft).isEmpty &&
+          !outputSafety.blocksNormalFlow;
+      if (outputSafety.blocksNormalFlow) {
+        await _dao.recordSafetyEvent(
+          category: outputSafety.category,
+          action: 'cloud_output_blocked_local_fallback',
+          source: 'experiment_output',
+        );
+      }
       var value = valid ? draft : fallback;
       if (BeliefMentorExperimentPolicy.shouldShrink(
         value.completionProbability,
@@ -260,7 +334,11 @@ class BeliefMentorAiService {
           rationale: '${value.rationale} 已按完成概率缩小为更安全的版本。',
         );
       }
-      final status = valid ? 'success' : 'cloud_invalid_local_fallback';
+      final status = outputSafety.blocksNormalFlow
+          ? 'cloud_output_blocked_local_fallback'
+          : valid
+          ? 'success'
+          : 'cloud_invalid_local_fallback';
       await _saveRun(
         agent: 'ActionAgent',
         output: _experimentJson(value),
@@ -301,9 +379,15 @@ class BeliefMentorAiService {
     required String message,
     BeliefMentorBelief? belief,
   }) async {
+    final profile = await _dao.profile();
     final safety = BeliefMentorSafetyPolicy.assess(message);
-    final fallback = _localReply(message, belief, safety);
+    final fallback = _localReply(message, belief, safety, profile.tone);
     if (safety.blocksNormalFlow) {
+      await _dao.recordSafetyEvent(
+        category: safety.category,
+        action: 'blocked_mentor_reply',
+        source: 'user_input',
+      );
       await _saveRun(
         agent: 'SafetyAgent',
         output: fallback.toJson(),
@@ -325,12 +409,16 @@ class BeliefMentorAiService {
       final raw = await _ai.generateText(
         prompt: jsonEncode(<String, Object?>{
           'input': sanitized.value,
+          'tone': _normalizedTone(profile.tone),
           'required_output_schema': <String, Object?>{
             'route': 'diagnosis|story|action|recovery|reflection',
             'observation': 'string',
             'inference': 'string',
             'next_action': 'string',
             'boundary': 'string',
+            'active_belief_id': 'string',
+            'safety_level': 'normal|high',
+            'next_agent': 'diagnosis|story|action|reminder|evidence|recovery|reflection|safety',
           },
         }),
         purpose: 'belief_mentor.orchestrator',
@@ -341,11 +429,29 @@ class BeliefMentorAiService {
       );
       final decoded = _decodeObject(raw);
       final reply = decoded == null ? null : _replyFromJson(decoded);
+      final outputSafety = reply == null
+          ? const BeliefMentorSafetyDecision(
+              riskLevel: 'normal',
+              blocksNormalFlow: false,
+              message: '',
+            )
+          : BeliefMentorSafetyPolicy.assess(reply.displayText);
       final valid =
           reply != null &&
           reply.observation.isNotEmpty &&
-          reply.nextAction.isNotEmpty;
+          reply.nextAction.isNotEmpty &&
+          reply.safetyLevel != 'high' &&
+          !outputSafety.blocksNormalFlow;
       final value = valid ? reply : fallback;
+      if (reply?.safetyLevel == 'high' || outputSafety.blocksNormalFlow) {
+        await _dao.recordSafetyEvent(
+          category: reply?.safetyLevel == 'high'
+              ? 'model_detected_risk'
+              : outputSafety.category,
+          action: 'cloud_output_blocked_local_fallback',
+          source: 'mentor_output',
+        );
+      }
       await _saveRun(
         agent: 'OrchestratorAgent',
         output: value.toJson(),
@@ -417,6 +523,7 @@ class BeliefMentorAiService {
         trigger: trigger,
         alternative: '我不需要先证明自己一定成功，可以用一个小行动收集现实证据。',
         confidence: 0.62,
+        patterns: BeliefMentorCognitivePatternPolicy.detect(interpretation),
       ),
       BeliefMentorCandidateBelief(
         statement: '只有准备得足够好，行动才是安全的。',
@@ -424,6 +531,9 @@ class BeliefMentorAiService {
         trigger: trigger,
         alternative: '准备与行动可以交替进行，最小版本也能提供信息。',
         confidence: 0.48,
+        patterns: const <BeliefMentorCognitivePattern>[
+          BeliefMentorCognitivePattern.magnification,
+        ],
       ),
       BeliefMentorCandidateBelief(
         statement: '一次不理想的结果会说明我的能力或价值。',
@@ -431,6 +541,9 @@ class BeliefMentorAiService {
         trigger: trigger,
         alternative: '一次结果只说明这次方法与情境，不足以定义能力或身份。',
         confidence: 0.41,
+        patterns: const <BeliefMentorCognitivePattern>[
+          BeliefMentorCognitivePattern.identityOvergeneralization,
+        ],
       ),
     ];
     return BeliefMentorDiagnosis(
@@ -465,6 +578,7 @@ class BeliefMentorAiService {
     String message,
     BeliefMentorBelief? belief,
     BeliefMentorSafetyDecision safety,
+    String tone,
   ) {
     if (safety.blocksNormalFlow) {
       return BeliefMentorMentorReply(
@@ -473,6 +587,8 @@ class BeliefMentorAiService {
         inference: '',
         nextAction: '先暂停当前计划，联系当地紧急服务、危机热线或一位可信任的人，并尽量不要独处。',
         boundary: 'Belief Mentor 不能替代紧急援助或专业医疗支持。',
+        safetyLevel: 'high',
+        nextAgent: 'safety',
       );
     }
     final route = message.contains('失败') || message.contains('没做到')
@@ -480,9 +596,16 @@ class BeliefMentorAiService {
         : message.contains('为什么')
         ? 'diagnosis'
         : 'action';
+    final normalizedTone = _normalizedTone(tone);
+    final observation = switch (normalizedTone) {
+      'gentle' => '这确实可能让人不舒服。先不急着评价自己，我们只把这个具体时刻看清楚。',
+      'challenger' => '先停下自动结论：把发生的事实，与脑中补上的解释明确分开。',
+      'minimal' => '先分开：发生的事实，以及你对它的解释。',
+      _ => '你描述的是一个值得认真对待的具体时刻；先把发生了什么与对它的解释分开。',
+    };
     return BeliefMentorMentorReply(
       route: route,
-      observation: '你描述的是一个值得认真对待的具体时刻；先把发生了什么与对它的解释分开。',
+      observation: observation,
       inference: belief == null
           ? '这里可能有一个关于行动、能力或失败的限制性信念，但需要你确认。'
           : '“${belief.statement}”可能正在影响这次选择，但它仍只是待检验的工作假设。',
@@ -490,6 +613,8 @@ class BeliefMentorAiService {
           ? '写下一个不带评价的事实，再把下一步缩小到两分钟以内。'
           : '选择一个 24 小时内、低风险、可记录结果的最小动作。',
       boundary: '一次结果不能定义你的能力、身份或未来。',
+      activeBeliefId: belief?.id ?? '',
+      nextAgent: route,
     );
   }
 
@@ -511,6 +636,10 @@ class BeliefMentorAiService {
           trigger: (item['trigger'] ?? '').toString().trim(),
           alternative: alternative,
           confidence: confidence,
+          patterns: _strings(item['patterns'])
+              .map(BeliefMentorCognitivePatternLabel.tryParse)
+              .whereType<BeliefMentorCognitivePattern>()
+              .toList(growable: false),
         ),
       );
     }
@@ -550,6 +679,9 @@ class BeliefMentorAiService {
       inference: (json['inference'] ?? '').toString().trim(),
       nextAction: nextAction,
       boundary: (json['boundary'] ?? '这是待检验的暂定模型。').toString().trim(),
+      activeBeliefId: (json['active_belief_id'] ?? '').toString().trim(),
+      safetyLevel: (json['safety_level'] ?? 'normal').toString().trim(),
+      nextAgent: (json['next_agent'] ?? '').toString().trim(),
     );
   }
 
@@ -567,6 +699,9 @@ class BeliefMentorAiService {
                 'trigger': item.trigger,
                 'alternative': item.alternative,
                 'confidence': item.confidence,
+                'patterns': item.patterns
+                    .map((pattern) => pattern.name)
+                    .toList(growable: false),
               },
             )
             .toList(growable: false),
@@ -645,6 +780,41 @@ class BeliefMentorAiService {
 
   static double _double(Object? value) =>
       value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
+
+  static String _normalizedTone(String value) => switch (value) {
+    'direct' => 'challenger',
+    'gentle' || 'coach' || 'challenger' || 'minimal' => value,
+    _ => 'coach',
+  };
+
+  static BeliefMentorSafetyDecision _assessDiagnosisOutput(
+    BeliefMentorDiagnosis value,
+  ) => BeliefMentorSafetyPolicy.assess(
+    <String>[
+      ...value.facts,
+      ...value.interpretations,
+      ...value.emotions,
+      ...value.behaviorTendencies,
+      ...value.candidates.expand(
+        (candidate) => <String>[candidate.statement, candidate.alternative],
+      ),
+    ].join('\n'),
+  );
+
+  static BeliefMentorDiagnosis _blockedDiagnosis({
+    required String category,
+    required String message,
+  }) => BeliefMentorDiagnosis(
+    facts: const <String>[],
+    interpretations: const <String>[],
+    emotions: const <String>[],
+    behaviorTendencies: const <String>[],
+    candidates: const <BeliefMentorCandidateBelief>[],
+    riskLevel: 'high',
+    safetyMessage: message.trim().isEmpty
+        ? '先暂停普通信念训练，优先联系当地紧急服务、可信任的人或合适的专业支持。'
+        : message.trim(),
+  );
 }
 
 class BeliefMentorRedactionResult {

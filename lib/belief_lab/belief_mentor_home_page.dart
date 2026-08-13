@@ -7,19 +7,31 @@ import 'belief_mentor_ai_service.dart';
 import 'belief_mentor_dao.dart';
 import 'belief_mentor_models.dart';
 import 'belief_mentor_onboarding_page.dart';
+import 'belief_mentor_policies.dart';
 import 'belief_mentor_reminder_service.dart';
 
 class BeliefMentorHomePage extends StatefulWidget {
-  const BeliefMentorHomePage({super.key, this.initialTab = 0});
+  const BeliefMentorHomePage({
+    super.key,
+    this.initialTab = 0,
+    this.initialBeliefId = '',
+    this.initialExperimentId = '',
+    this.initialReminderType = '',
+    this.dao,
+  });
 
   final int initialTab;
+  final String initialBeliefId;
+  final String initialExperimentId;
+  final String initialReminderType;
+  final BeliefMentorDao? dao;
 
   @override
   State<BeliefMentorHomePage> createState() => _BeliefMentorHomePageState();
 }
 
 class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
-  final BeliefMentorDao _dao = BeliefMentorDao();
+  late final BeliefMentorDao _dao = widget.dao ?? BeliefMentorDao();
   late final BeliefMentorAiService _ai = BeliefMentorAiService(dao: _dao);
   late final BeliefMentorReminderService _reminders =
       BeliefMentorReminderService(dao: _dao);
@@ -35,10 +47,13 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
   BeliefMentorProfile? _profile;
   Future<BeliefMentorTodaySnapshot>? _todayFuture;
   Future<List<BeliefMentorBelief>>? _beliefsFuture;
+  Future<List<BeliefMentorBelief>>? _allBeliefsFuture;
   Future<List<BeliefMentorEvidence>>? _evidenceFuture;
   Future<BeliefMentorWeeklyReport>? _reportFuture;
   bool _loading = true;
   bool _mentorBusy = false;
+  bool _showArchived = false;
+  bool _initialContextHandled = false;
   late int _tab = widget.initialTab.clamp(0, 4);
 
   @override
@@ -54,26 +69,73 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
   }
 
   Future<void> _load() async {
-    final profile = await _dao.profile();
+    var profile = await _dao.profile();
+    if (widget.initialBeliefId.isNotEmpty &&
+        profile.activeBeliefId != widget.initialBeliefId) {
+      try {
+        await _dao.setActiveBelief(widget.initialBeliefId);
+        profile = await _dao.profile();
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
       _profile = profile;
       _loading = false;
       _todayFuture = _dao.today();
-      _beliefsFuture = _dao.beliefs();
+      _beliefsFuture = _dao.beliefs(includeArchived: _showArchived);
+      _allBeliefsFuture = _dao.beliefs(includeArchived: true);
       _evidenceFuture = _dao.evidence();
       _reportFuture = _dao.weeklyReport();
     });
+    await _dao.track(
+      'screen_viewed',
+      beliefId: profile.activeBeliefId,
+      experimentId: widget.initialExperimentId,
+      properties: <String, Object?>{
+        'screen': _tabName(_tab),
+        'source': widget.initialReminderType.isEmpty
+            ? 'navigation'
+            : 'reminder',
+      },
+    );
+    if (profile.onboardingCompleted &&
+        profile.remindersEnabled &&
+        !profile.notificationsPaused) {
+      final today = await _dao.today();
+      if (today.belief != null) {
+        await _reminders.ensureMorningPrimeSeries(belief: today.belief!);
+      }
+    }
+    if (!_initialContextHandled && widget.initialExperimentId.isNotEmpty) {
+      _initialContextHandled = true;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _openInitialContext(),
+      );
+    }
   }
 
   void _refreshData() {
     if (!mounted) return;
     setState(() {
       _todayFuture = _dao.today();
-      _beliefsFuture = _dao.beliefs();
+      _beliefsFuture = _dao.beliefs(includeArchived: _showArchived);
+      _allBeliefsFuture = _dao.beliefs(includeArchived: true);
       _evidenceFuture = _dao.evidence();
       _reportFuture = _dao.weeklyReport();
     });
+  }
+
+  Future<void> _openInitialContext() async {
+    if (!mounted || widget.initialExperimentId.isEmpty) return;
+    final experiment = await _dao.experiment(widget.initialExperimentId);
+    if (!mounted || experiment == null) return;
+    if (widget.initialReminderType ==
+        BeliefMentorReminderType.evidenceCapture.name) {
+      await _captureEvidence(experiment);
+    } else if (widget.initialReminderType ==
+        BeliefMentorReminderType.antiAvoidance.name) {
+      await _antiAvoidanceActions(experiment);
+    }
   }
 
   @override
@@ -118,7 +180,7 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (value) => setState(() => _tab = value),
+        onDestinationSelected: _selectTab,
         destinations: const <NavigationDestination>[
           NavigationDestination(
             icon: Icon(Icons.today_outlined),
@@ -147,6 +209,15 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _selectTab(int value) async {
+    setState(() => _tab = value);
+    await _dao.track(
+      'screen_viewed',
+      beliefId: _profile?.activeBeliefId ?? '',
+      properties: <String, Object?>{'screen': _tabName(value)},
     );
   }
 
@@ -264,11 +335,30 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
             '替代信念：${belief.alternativeStatement}',
             style: const TextStyle(height: 1.45),
           ),
+          if (belief.patterns.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: belief.patterns
+                  .map(
+                    (pattern) => Chip(
+                      label: Text(pattern.label),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
               Text('${belief.type.label} · 强度 ${belief.strength}/100'),
               const Spacer(),
+              TextButton(
+                onPressed: () => _editBelief(belief),
+                child: const Text('编辑'),
+              ),
               TextButton(
                 onPressed: () => _rescoreBelief(belief),
                 child: const Text('重新评分'),
@@ -362,13 +452,20 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
               Icons.speed_outlined,
               '难度 ${experiment.difficulty}/10 · 预计完成 ${experiment.completionProbability}%',
             ),
+            if (experiment.revisionReason.isNotEmpty)
+              _detailLine(
+                Icons.history_outlined,
+                '调整原因：${experiment.revisionReason}',
+              ),
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 if (experiment.state == BeliefMentorExperimentState.scheduled ||
-                    experiment.state == BeliefMentorExperimentState.draft)
+                    experiment.state == BeliefMentorExperimentState.draft ||
+                    experiment.state == BeliefMentorExperimentState.resized ||
+                    experiment.state == BeliefMentorExperimentState.rescheduled)
                   FilledButton(
                     onPressed: () => _startExperiment(experiment),
                     child: const Text('现在开始'),
@@ -378,11 +475,28 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
                     onPressed: () => _completeExperiment(experiment),
                     child: const Text('完成行动'),
                   ),
-                if (experiment.state == BeliefMentorExperimentState.completed)
+                if (experiment.state == BeliefMentorExperimentState.completed ||
+                    experiment.state == BeliefMentorExperimentState.reflection)
                   FilledButton.icon(
                     onPressed: () => _captureEvidence(experiment),
                     icon: const Icon(Icons.add_task),
                     label: const Text('记录证据'),
+                  ),
+                if (experiment.state !=
+                    BeliefMentorExperimentState.evidenceCreated)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _adjustExperiment(experiment, resize: true),
+                    icon: const Icon(Icons.compress_outlined),
+                    label: const Text('缩小'),
+                  ),
+                if (experiment.state !=
+                    BeliefMentorExperimentState.evidenceCreated)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _adjustExperiment(experiment, resize: false),
+                    icon: const Icon(Icons.edit_calendar_outlined),
+                    label: const Text('改期'),
                   ),
                 if (experiment.state !=
                     BeliefMentorExperimentState.evidenceCreated)
@@ -402,20 +516,50 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     final time = DateTime.fromMillisecondsSinceEpoch(reminder.scheduledAtMs);
     return Card(
       color: const Color(0xFFFFF5DA),
-      child: ListTile(
-        leading: const CircleAvatar(
-          backgroundColor: Color(0xFFFFE5A7),
-          child: Icon(Icons.notifications_active_outlined),
-        ),
-        title: Text('${reminder.type.label} · ${_hm(time)}'),
-        subtitle: Text(
-          reminder.body,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: TextButton(
-          onPressed: () => _snoozeReminder(reminder),
-          child: const Text('延后10分'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+        child: Column(
+          children: [
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFFFFE5A7),
+                child: Icon(Icons.notifications_active_outlined),
+              ),
+              title: Text('${reminder.type.label} · ${_hm(time)}'),
+              subtitle: Text(
+                '${reminder.body}\n为何提醒：${_reminderReason(reminder.type)}',
+              ),
+              trailing: PopupMenuButton<String>(
+                tooltip: '提醒操作',
+                onSelected: (value) => switch (value) {
+                  'snooze' => _snoozeReminder(reminder),
+                  'reschedule' => _rescheduleReminder(reminder),
+                  'cancel' => _cancelReminder(reminder),
+                  _ => null,
+                },
+                itemBuilder: (context) => const <PopupMenuEntry<String>>[
+                  PopupMenuItem(value: 'snooze', child: Text('延后 10 分钟')),
+                  PopupMenuItem(value: 'reschedule', child: Text('修改时间')),
+                  PopupMenuItem(value: 'cancel', child: Text('取消这条提醒')),
+                ],
+              ),
+            ),
+            if (reminder.type == BeliefMentorReminderType.antiAvoidance)
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonal(
+                  onPressed: () async {
+                    final experiment = await _dao.experiment(
+                      reminder.experimentId,
+                    );
+                    if (experiment != null && mounted) {
+                      await _antiAvoidanceActions(experiment);
+                    }
+                  },
+                  child: const Text('选择：已开始 / 缩小 / 改期 / 需要空间'),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -446,12 +590,32 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
             const SizedBox(height: 5),
             Text('旧解释：${failure.interpretation}'),
           ],
+          if (failure.emotion.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text('情绪与身体感受：${failure.emotion}'),
+          ],
+          if (failure.learning.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text('当前学习：${failure.learning}'),
+          ],
+          const SizedBox(height: 8),
+          Text(_recoveryStagePrompt(failure.stage)),
           const SizedBox(height: 8),
           Text('最小恢复动作：${failure.nextStep}'),
           const SizedBox(height: 12),
-          FilledButton.tonal(
-            onPressed: () => _closeRecovery(failure),
-            child: const Text('我已重新行动'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton(
+                onPressed: () => _editRecovery(failure),
+                child: const Text('补充事实 / 学习'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => _closeRecovery(failure),
+                child: const Text('我已重新行动'),
+              ),
+            ],
           ),
         ],
       ),
@@ -645,6 +809,19 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
               ),
             ],
           ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilterChip(
+              label: const Text('显示已归档'),
+              selected: _showArchived,
+              onSelected: (value) {
+                setState(() {
+                  _showArchived = value;
+                  _beliefsFuture = _dao.beliefs(includeArchived: value);
+                });
+              },
+            ),
+          ),
           const SizedBox(height: 14),
           if (beliefs.isEmpty)
             const Card(
@@ -696,8 +873,50 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
                 label: Text(belief.state.label),
                 visualDensity: VisualDensity.compact,
               ),
+              PopupMenuButton<String>(
+                tooltip: '信念操作',
+                onSelected: (value) => switch (value) {
+                  'active' => _setActiveBelief(belief),
+                  'edit' => _editBelief(belief),
+                  'reality' => _toggleRealityCheck(belief),
+                  'archive' => _archiveBelief(belief),
+                  'delete' => _deleteBelief(belief),
+                  _ => null,
+                },
+                itemBuilder: (context) => <PopupMenuEntry<String>>[
+                  if (belief.state != BeliefMentorBeliefState.archived &&
+                      _profile?.activeBeliefId != belief.id)
+                    const PopupMenuItem(
+                      value: 'active',
+                      child: Text('设为当前训练信念'),
+                    ),
+                  const PopupMenuItem(value: 'edit', child: Text('编辑')),
+                  if (belief.state != BeliefMentorBeliefState.archived)
+                    PopupMenuItem(
+                      value: 'reality',
+                      child: Text(
+                        belief.state ==
+                                BeliefMentorBeliefState.needsRealityCheck
+                            ? '完成现实校准'
+                            : '标记需要现实校准',
+                      ),
+                    ),
+                  if (belief.state != BeliefMentorBeliefState.archived)
+                    const PopupMenuItem(value: 'archive', child: Text('归档')),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'delete', child: Text('永久删除')),
+                ],
+              ),
             ],
           ),
+          if (_profile?.activeBeliefId == belief.id) ...[
+            const SizedBox(height: 6),
+            const Chip(
+              avatar: Icon(Icons.my_location, size: 16),
+              label: Text('当前主训练信念'),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             '${belief.type.label} · 触发：${belief.trigger.isEmpty ? '尚未补充' : belief.trigger}',
@@ -724,31 +943,46 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
             title: const Text(
-              '3M 与替代信念',
+              '3M 思维雷达与替代信念',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             children: [
-              ListTile(
-                dense: true,
-                leading: const Text('Meaning'),
-                title: Text(belief.statement),
-              ),
-              ListTile(
-                dense: true,
-                leading: const Text('Mindset'),
-                title: Text(
-                  '强度从 ${belief.initialStrength} 到 ${belief.strength}',
+              if (belief.patterns.isEmpty)
+                const ListTile(
+                  dense: true,
+                  leading: Icon(Icons.radar_outlined),
+                  title: Text('尚未确认思维模式；可通过“编辑”补充'),
                 ),
-              ),
-              const ListTile(
-                dense: true,
-                leading: Text('Motion'),
-                title: Text('以实验启动、完成和证据记录为准，不以聊天次数为准'),
+              ...belief.patterns.map(
+                (pattern) => ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.radar_outlined),
+                  title: Text(pattern.label),
+                  subtitle: Text(pattern.description),
+                ),
               ),
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.swap_horiz),
                 title: Text(belief.alternativeStatement),
+              ),
+              FutureBuilder<List<Map<String, Object?>>>(
+                future: _dao.beliefScoreHistory(belief.id),
+                builder: (context, snapshot) {
+                  final scores =
+                      snapshot.data ?? const <Map<String, Object?>>[];
+                  if (scores.isEmpty) return const SizedBox.shrink();
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.show_chart),
+                    title: Text(
+                      '评分历史：${scores.map((row) => row['score']).join(' → ')}',
+                    ),
+                    subtitle: Text(
+                      '初始 ${belief.initialStrength} · 当前 ${belief.strength}',
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -763,42 +997,94 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
       if (!snapshot.hasData)
         return const Center(child: CircularProgressIndicator());
       final items = snapshot.data!;
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-        children: [
-          _weeklyReportCard(),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '证据银行',
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w800),
+      return FutureBuilder<List<BeliefMentorBelief>>(
+        future: _allBeliefsFuture,
+        builder: (context, beliefSnapshot) => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          children: [
+            _weeklyReportCard(),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '证据银行',
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _captureManualEvidence,
+                  icon: const Icon(Icons.add),
+                  label: const Text('补记'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text('按信念聚合预测—行动—结果—学习。单次证据只适用于这次情境，不自动推广到身份或未来。'),
+            const SizedBox(height: 14),
+            if (items.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text('行动之后，把结果留下。第一条证据不需要“成功”，只需要真实。'),
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: _captureManualEvidence,
-                icon: const Icon(Icons.add),
-                label: const Text('补记'),
+            if (items.isNotEmpty)
+              ..._evidenceGroups(
+                items,
+                beliefSnapshot.data ?? const <BeliefMentorBelief>[],
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text('记录预测—行动—结果—学习。单次证据只适用于这次情境，不自动推广到身份或未来。'),
-          const SizedBox(height: 14),
-          if (items.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('行动之后，把结果留下。第一条证据不需要“成功”，只需要真实。'),
-              ),
-            ),
-          ...items.map(_evidenceCard),
-        ],
+          ],
+        ),
       );
     },
   );
+
+  List<Widget> _evidenceGroups(
+    List<BeliefMentorEvidence> items,
+    List<BeliefMentorBelief> beliefs,
+  ) {
+    final beliefById = <String, BeliefMentorBelief>{
+      for (final belief in beliefs) belief.id: belief,
+    };
+    final ids = items.map((item) => item.beliefId).toSet();
+    return ids
+        .expand((id) {
+          final group = items.where((item) => item.beliefId == id).toList()
+            ..sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+          final belief = beliefById[id];
+          final latest = DateTime.fromMillisecondsSinceEpoch(
+            group.first.createdAtMs,
+          );
+          return <Widget>[
+            Card(
+              color: const Color(0xFFE4EFE8),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      belief?.statement ?? '已删除或未知信念',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '${group.length} 条证据 · 最近 ${latest.month}月${latest.day}日',
+                    ),
+                    const SizedBox(height: 5),
+                    Text('代表性事件：${group.first.statement}'),
+                  ],
+                ),
+              ),
+            ),
+            ...group.map(_evidenceCard),
+            const SizedBox(height: 10),
+          ];
+        })
+        .toList(growable: false);
+  }
 
   Widget _weeklyReportCard() => FutureBuilder<BeliefMentorWeeklyReport>(
     future: _reportFuture,
@@ -845,6 +1131,40 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
                 '自主启动 ${report.autonomousStarts} 次 · 恢复行动 ${report.recoveryActions} 次 · 每次启动平均提醒 ${report.averageReminderCount.toStringAsFixed(1)} 次',
                 style: const TextStyle(color: Colors.white70),
               ),
+              const SizedBox(height: 12),
+              const Divider(color: Colors.white24),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  _reportDetail(
+                    '信念强度下降',
+                    report.beliefScoreChange.toStringAsFixed(1),
+                  ),
+                  _reportDetail(
+                    '恢复半衰期',
+                    '${report.recoveryHalfLifeHours.toStringAsFixed(1)}h',
+                  ),
+                  _reportDetail(
+                    '预测校准误差',
+                    '${(report.predictionCalibrationError * 100).round()}%',
+                  ),
+                  _reportDetail(
+                    '提醒疲劳',
+                    '${(report.reminderFatigueRate * 100).round()}%',
+                  ),
+                  _reportDetail(
+                    '承诺兑现',
+                    '${(report.promiseReliability * 100).round()}%',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '这些是行为趋势，不是临床结论，也不用于证明单一因果。',
+                style: TextStyle(color: Colors.white60, fontSize: 11),
+              ),
             ],
           ),
         ),
@@ -873,6 +1193,11 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     ),
   );
 
+  Widget _reportDetail(String label, String value) => Text(
+    '$label $value',
+    style: const TextStyle(color: Colors.white70, fontSize: 12),
+  );
+
   Widget _evidenceCard(BeliefMentorEvidence item) {
     final date = DateTime.fromMillisecondsSinceEpoch(item.createdAtMs);
     return Card(
@@ -888,13 +1213,18 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          '${date.month}月${date.day}日 · 情绪 ${item.emotionBefore} → ${item.emotionAfter}',
+          '${date.month}月${date.day}日 · 情绪 ${item.emotionBefore} → ${item.emotionAfter} '
+          '· 失败预测 ${item.predictedFailureProbability}%',
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
           _evidenceLine('预测', item.prediction),
           _evidenceLine('行动', item.action),
           _evidenceLine('结果', item.outcome),
+          _evidenceLine(
+            '校准',
+            item.predictionOccurred ? '原预测的失败在这次发生了' : '原预测的失败在这次没有发生',
+          ),
           _evidenceLine('学习', item.learning),
           const SizedBox(height: 6),
           const Text(
@@ -937,6 +1267,20 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
               onTap: _editQuietHours,
             ),
             ListTile(
+              leading: const Icon(Icons.record_voice_over_outlined),
+              title: const Text('导师与提醒语气'),
+              subtitle: Text(_toneLabel(_profile!.tone)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _editTone,
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_outlined),
+              title: const Text('管理已安排提醒'),
+              subtitle: const Text('逐条延期、改时间或取消'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _manageReminders,
+            ),
+            ListTile(
               leading: const Icon(Icons.self_improvement_outlined),
               title: const Text('我现在需要空间'),
               subtitle: Text(
@@ -948,6 +1292,26 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
                   ? const Icon(Icons.check_circle, color: Color(0xFF315B4A))
                   : const Icon(Icons.chevron_right),
               onTap: _requestSpace,
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: Column(
+          children: [
+            SwitchListTile.adaptive(
+              title: const Text('锁屏显示敏感内容'),
+              subtitle: const Text('默认关闭；关闭时通知仅显示通用提示，详情进入应用后查看'),
+              value: _profile!.showSensitiveNotificationContent,
+              onChanged: _setSensitiveNotificationContent,
+            ),
+            const Divider(height: 1),
+            SwitchListTile.adaptive(
+              title: const Text('允许匿名质量改进'),
+              subtitle: const Text('默认关闭；不影响正常 AI 推理。当前版本不会上传训练样本。'),
+              value: _profile!.modelImprovementOptIn,
+              onChanged: _setModelImprovementOptIn,
             ),
           ],
         ),
@@ -1196,8 +1560,193 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     }
   }
 
+  Future<void> _adjustExperiment(
+    BeliefMentorExperiment experiment, {
+    required bool resize,
+  }) async {
+    final action = TextEditingController(
+      text: resize ? experiment.minimumVersion : experiment.action,
+    );
+    final minimum = TextEditingController(
+      text: resize ? experiment.fallbackAction : experiment.minimumVersion,
+    );
+    final fallback = TextEditingController(
+      text: resize ? '只打开所需材料两分钟，并写下下一次具体时间' : experiment.fallbackAction,
+    );
+    final reason = TextEditingController();
+    var scheduledAt = resize
+        ? DateTime.now().add(const Duration(minutes: 30))
+        : DateTime.fromMillisecondsSinceEpoch(experiment.scheduledAtMs);
+    if (!scheduledAt.isAfter(DateTime.now())) {
+      scheduledAt = DateTime.now().add(const Duration(hours: 2));
+    }
+    var difficulty = resize
+        ? (experiment.difficulty - 2).clamp(1, 10).toDouble()
+        : experiment.difficulty.toDouble();
+    var probability = resize
+        ? (experiment.completionProbability + 20).clamp(50, 95).toDouble()
+        : experiment.completionProbability.toDouble();
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            18,
+            18,
+            18,
+            MediaQuery.viewInsetsOf(context).bottom + 18,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  resize ? '把实验缩小' : '重新安排实验',
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reason,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: '为什么要调整？',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: action,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '调整后的行动'),
+                ),
+                TextField(
+                  controller: minimum,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '最小版本'),
+                ),
+                TextField(
+                  controller: fallback,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '备用动作'),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.schedule_outlined),
+                  title: const Text('新时间'),
+                  subtitle: Text(
+                    '${scheduledAt.month}月${scheduledAt.day}日 ${_hm(scheduledAt)}',
+                  ),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: scheduledAt,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                    );
+                    if (date == null || !context.mounted) return;
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(scheduledAt),
+                    );
+                    if (time == null) return;
+                    setSheetState(
+                      () => scheduledAt = DateTime(
+                        date.year,
+                        date.month,
+                        date.day,
+                        time.hour,
+                        time.minute,
+                      ),
+                    );
+                  },
+                ),
+                Text('难度 ${difficulty.round()}/10'),
+                Slider(
+                  value: difficulty,
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  onChanged: (value) => setSheetState(() => difficulty = value),
+                ),
+                Text(
+                  '预计完成概率 ${probability.round()}%'
+                  '${probability < 50 ? ' · 建议继续缩小' : ''}',
+                ),
+                Slider(
+                  value: probability,
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  onChanged: (value) =>
+                      setSheetState(() => probability = value),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      if (reason.text.trim().isEmpty ||
+                          action.text.trim().isEmpty ||
+                          minimum.text.trim().isEmpty ||
+                          fallback.text.trim().isEmpty) {
+                        return;
+                      }
+                      Navigator.pop(context, true);
+                    },
+                    child: Text(resize ? '保存更小实验' : '确认新时间'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final draft = BeliefMentorExperimentDraft(
+      action: action.text,
+      minimumVersion: minimum.text,
+      fallbackAction: fallback.text,
+      difficulty: difficulty.round(),
+      completionProbability: probability.round(),
+      rationale: reason.text,
+    );
+    final reasonText = reason.text;
+    action.dispose();
+    minimum.dispose();
+    fallback.dispose();
+    reason.dispose();
+    if (confirmed != true) return;
+    try {
+      final revised = await _dao.reviseExperiment(
+        experimentId: experiment.id,
+        draft: draft,
+        scheduledAt: scheduledAt,
+        resize: resize,
+        reason: reasonText,
+      );
+      await _reminders.cancelExperimentReminders(
+        experiment.id,
+        reason: resize ? '实验已缩小' : '实验已改期',
+      );
+      await _reminders.scheduleExperimentPlan(revised);
+      _refreshData();
+      _show(resize ? '已创建更小版本。' : '实验已改期。');
+    } catch (error) {
+      _show('实验未调整：$error');
+    }
+  }
+
   Future<void> _startExperiment(BeliefMentorExperiment experiment) async {
-    await _dao.startExperiment(experiment.id, source: 'self');
+    final fromReminder =
+        widget.initialExperimentId == experiment.id &&
+        widget.initialReminderType.isNotEmpty;
+    await _dao.startExperiment(
+      experiment.id,
+      source: fromReminder ? 'reminder' : 'self',
+    );
     _refreshData();
   }
 
@@ -1207,13 +1756,17 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     if (mounted) await _captureEvidence(experiment);
   }
 
-  Future<void> _captureEvidence(BeliefMentorExperiment experiment) =>
-      _evidenceDialog(
-        beliefId: experiment.beliefId,
-        experimentId: experiment.id,
-        prediction: '如果我执行这个动作，我原本预期会发生什么？',
-        action: experiment.action,
-      );
+  Future<void> _captureEvidence(BeliefMentorExperiment experiment) async {
+    if (experiment.state == BeliefMentorExperimentState.completed) {
+      await _dao.startExperimentReflection(experiment.id);
+    }
+    await _evidenceDialog(
+      beliefId: experiment.beliefId,
+      experimentId: experiment.id,
+      prediction: '',
+      action: experiment.action,
+    );
+  }
 
   Future<void> _captureManualEvidence() async {
     final beliefs = await _dao.beliefs();
@@ -1222,8 +1775,25 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
       _show('请先确认一个信念');
       return;
     }
+    final selectedId = confirmed.length == 1
+        ? confirmed.first.id
+        : await showDialog<String>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: const Text('这条证据属于哪条信念？'),
+              children: confirmed
+                  .map(
+                    (belief) => SimpleDialogOption(
+                      onPressed: () => Navigator.pop(context, belief.id),
+                      child: Text(belief.statement),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          );
+    if (selectedId == null) return;
     await _evidenceDialog(
-      beliefId: confirmed.first.id,
+      beliefId: selectedId,
       experimentId: '',
       prediction: '',
       action: '',
@@ -1243,6 +1813,8 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     final statement = TextEditingController();
     var before = 6.0;
     var after = 4.0;
+    var failureProbability = 70.0;
+    var predictionOccurred = false;
     var strength = BeliefMentorEvidenceStrength.medium;
     final saved = await showDialog<bool>(
       context: context,
@@ -1260,6 +1832,16 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
                     maxLines: 2,
                     decoration: const InputDecoration(labelText: '行动前预测'),
                   ),
+                  const SizedBox(height: 10),
+                  Text('你当时预计失败发生的概率：${failureProbability.round()}%'),
+                  Slider(
+                    value: failureProbability,
+                    min: 0,
+                    max: 100,
+                    divisions: 20,
+                    onChanged: (value) =>
+                        setDialogState(() => failureProbability = value),
+                  ),
                   TextField(
                     controller: actionController,
                     maxLines: 2,
@@ -1269,6 +1851,14 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
                     controller: outcome,
                     maxLines: 3,
                     decoration: const InputDecoration(labelText: '可观察结果'),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('原预测中的失败实际发生了吗？'),
+                    subtitle: const Text('只回答本次情境，不推断长期因果'),
+                    value: predictionOccurred,
+                    onChanged: (value) =>
+                        setDialogState(() => predictionOccurred = value),
                   ),
                   TextField(
                     controller: learning,
@@ -1358,24 +1948,52 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     );
     if (saved == true) {
       final now = DateTime.now().millisecondsSinceEpoch;
-      await _dao.saveEvidence(
-        BeliefMentorEvidence(
-          id: 'evidence_${DateTime.now().microsecondsSinceEpoch}',
-          beliefId: beliefId,
-          experimentId: experimentId,
-          prediction: predictionController.text.trim(),
-          action: actionController.text.trim(),
-          outcome: outcome.text.trim(),
-          emotionBefore: before.round(),
-          emotionAfter: after.round(),
-          learning: learning.text.trim(),
-          statement: statement.text.trim(),
-          strength: strength,
-          createdAtMs: now,
-        ),
-      );
-      _refreshData();
-      _show('证据已保存。它不会被自动概括成身份结论。');
+      try {
+        if (experimentId.isNotEmpty) {
+          var current = await _dao.experiment(experimentId);
+          if (current != null &&
+              (current.state == BeliefMentorExperimentState.scheduled ||
+                  current.state == BeliefMentorExperimentState.resized ||
+                  current.state == BeliefMentorExperimentState.rescheduled)) {
+            await _dao.startExperiment(
+              experimentId,
+              source: widget.initialExperimentId == experimentId
+                  ? 'reminder'
+                  : 'evidence_capture',
+            );
+            current = await _dao.experiment(experimentId);
+          }
+          if (current?.state == BeliefMentorExperimentState.started) {
+            await _reminders.completeExperiment(experimentId);
+            current = await _dao.experiment(experimentId);
+          }
+          if (current?.state == BeliefMentorExperimentState.completed) {
+            await _dao.startExperimentReflection(experimentId);
+          }
+        }
+        await _dao.saveEvidence(
+          BeliefMentorEvidence(
+            id: 'evidence_${DateTime.now().microsecondsSinceEpoch}',
+            beliefId: beliefId,
+            experimentId: experimentId,
+            prediction: predictionController.text.trim(),
+            predictedFailureProbability: failureProbability.round(),
+            predictionOccurred: predictionOccurred,
+            action: actionController.text.trim(),
+            outcome: outcome.text.trim(),
+            emotionBefore: before.round(),
+            emotionAfter: after.round(),
+            learning: learning.text.trim(),
+            statement: statement.text.trim(),
+            strength: strength,
+            createdAtMs: now,
+          ),
+        );
+        _refreshData();
+        _show('证据已保存。它不会被自动概括成身份结论。');
+      } catch (error) {
+        _show('证据未保存：$error');
+      }
     }
     predictionController.dispose();
     actionController.dispose();
@@ -1388,6 +2006,7 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     final facts = TextEditingController();
     final interpretation = TextEditingController();
     final emotion = TextEditingController();
+    final learning = TextEditingController();
     final next = TextEditingController(text: experiment.fallbackAction);
     final saved = await showDialog<bool>(
       context: context,
@@ -1416,6 +2035,13 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
                   decoration: const InputDecoration(labelText: '情绪与身体感受'),
                 ),
                 TextField(
+                  controller: learning,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: '这次暴露了哪些方法、条件或支持需求？',
+                  ),
+                ),
+                TextField(
                   controller: next,
                   maxLines: 2,
                   decoration: const InputDecoration(labelText: '最小恢复动作'),
@@ -1430,35 +2056,234 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () {
+              if (facts.text.trim().isEmpty || next.text.trim().isEmpty) return;
+              Navigator.pop(context, true);
+            },
             child: const Text('开始恢复'),
           ),
         ],
       ),
     );
     if (saved == true) {
-      await _dao.abandonExperiment(experiment.id);
-      final failure = await _dao.createFailure(
-        beliefId: experiment.beliefId,
-        experimentId: experiment.id,
-        facts: facts.text,
-        interpretation: interpretation.text,
-        emotion: emotion.text,
-        nextStep: next.text,
-      );
-      await _reminders.scheduleRecoveryPlan(failure);
-      _refreshData();
-      _show('已进入恢复协议；同一次失败只会有一条恢复链。');
+      try {
+        final failure = await _dao.createFailure(
+          beliefId: experiment.beliefId,
+          experimentId: experiment.id,
+          facts: facts.text,
+          interpretation: interpretation.text,
+          emotion: emotion.text,
+          learning: learning.text,
+          nextStep: next.text,
+        );
+        await _dao.abandonExperiment(experiment.id);
+        await _reminders.scheduleRecoveryPlan(failure);
+        _refreshData();
+        _show('已进入恢复协议；同一次失败只会有一条恢复链。');
+      } catch (error) {
+        _show('无法创建恢复协议：$error');
+      }
     }
     facts.dispose();
     interpretation.dispose();
     emotion.dispose();
+    learning.dispose();
     next.dispose();
   }
 
   Future<void> _snoozeReminder(BeliefMentorReminder reminder) async {
     await _reminders.snooze(reminder.id);
     _refreshData();
+  }
+
+  Future<void> _rescheduleReminder(BeliefMentorReminder reminder) async {
+    final current = DateTime.fromMillisecondsSinceEpoch(reminder.scheduledAtMs);
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current.isAfter(DateTime.now()) ? current : DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (time == null) return;
+    await _reminders.rescheduleReminder(
+      reminder.id,
+      DateTime(date.year, date.month, date.day, time.hour, time.minute),
+    );
+    _refreshData();
+  }
+
+  Future<void> _cancelReminder(BeliefMentorReminder reminder) async {
+    final confirmed = await _confirm(
+      title: '取消这条提醒？',
+      message: '只取消当前提醒，不会关闭全部 Belief Mentor 提醒。',
+      action: '取消提醒',
+    );
+    if (!confirmed) return;
+    await _reminders.cancelReminder(reminder.id);
+    _refreshData();
+  }
+
+  Future<void> _antiAvoidanceActions(BeliefMentorExperiment experiment) async {
+    final antiReminders = (await _dao.reminders(experimentId: experiment.id))
+        .where(
+          (item) =>
+              item.type == BeliefMentorReminderType.antiAvoidance &&
+              item.state != BeliefMentorReminderState.closed,
+        )
+        .toList(growable: false);
+    for (final reminder in antiReminders) {
+      await _dao.updateReminderState(
+        reminder.id,
+        BeliefMentorReminderState.followUp,
+      );
+    }
+    if (!mounted) return;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('现在更接近哪种情况？'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'started'),
+            child: const ListTile(
+              leading: Icon(Icons.play_arrow_rounded),
+              title: Text('我已经开始了'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'avoidance'),
+            child: const ListTile(
+              leading: Icon(Icons.compress_outlined),
+              title: Text('我在回避，需要缩小'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'changed'),
+            child: const ListTile(
+              leading: Icon(Icons.edit_calendar_outlined),
+              title: Text('计划或条件改变了'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'space'),
+            child: const ListTile(
+              leading: Icon(Icons.self_improvement_outlined),
+              title: Text('我现在需要空间'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (choice == null) return;
+    await _dao.track(
+      'anti_avoidance_response',
+      beliefId: experiment.beliefId,
+      experimentId: experiment.id,
+      properties: <String, Object?>{'choice': choice},
+    );
+    switch (choice) {
+      case 'started':
+        await _dao.startExperiment(experiment.id, source: 'reminder');
+        _refreshData();
+        break;
+      case 'avoidance':
+        await _adjustExperiment(experiment, resize: true);
+        break;
+      case 'changed':
+        await _adjustExperiment(experiment, resize: false);
+        break;
+      case 'space':
+        await _requestSpace();
+        break;
+    }
+  }
+
+  Future<void> _editRecovery(BeliefMentorFailure failure) async {
+    final facts = TextEditingController(text: failure.facts);
+    final interpretation = TextEditingController(text: failure.interpretation);
+    final emotion = TextEditingController(text: failure.emotion);
+    final learning = TextEditingController(text: failure.learning);
+    final next = TextEditingController(text: failure.nextStep);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('恢复协议 · ${failure.stage}'),
+        content: SizedBox(
+          width: 540,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_recoveryStagePrompt(failure.stage)),
+                TextField(
+                  controller: facts,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '事实'),
+                ),
+                TextField(
+                  controller: interpretation,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '解释'),
+                ),
+                TextField(
+                  controller: emotion,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '情绪与身体感受'),
+                ),
+                TextField(
+                  controller: learning,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '学习 / 条件'),
+                ),
+                TextField(
+                  controller: next,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '最小下一步'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (facts.text.trim().isEmpty || next.text.trim().isEmpty) return;
+              Navigator.pop(context, true);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (saved == true) {
+      try {
+        await _dao.updateFailureReflection(
+          id: failure.id,
+          facts: facts.text,
+          interpretation: interpretation.text,
+          emotion: emotion.text,
+          learning: learning.text,
+          nextStep: next.text,
+        );
+        _refreshData();
+      } catch (error) {
+        _show('恢复记录未更新：$error');
+      }
+    }
+    facts.dispose();
+    interpretation.dispose();
+    emotion.dispose();
+    learning.dispose();
+    next.dispose();
   }
 
   Future<void> _closeRecovery(BeliefMentorFailure failure) async {
@@ -1573,6 +2398,11 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     }
     var selected = 0;
     var strength = 70.0;
+    final candidates = result.value.candidates.toList(growable: true);
+    final facts = TextEditingController(text: result.value.facts.join('\n'));
+    final interpretations = TextEditingController(
+      text: result.value.interpretations.join('\n'),
+    );
     final candidate = await showDialog<BeliefMentorCandidateBelief>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -1584,17 +2414,63 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ...List<Widget>.generate(result.value.candidates.length, (
-                    index,
-                  ) {
-                    final item = result.value.candidates[index];
-                    return RadioListTile<int>(
-                      value: index,
-                      groupValue: selected,
-                      onChanged: (value) =>
-                          setDialogState(() => selected = value ?? 0),
-                      title: Text(item.statement),
-                      subtitle: Text('替代：${item.alternative}'),
+                  TextField(
+                    controller: facts,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: '可观察事实（每行一条，可纠正）',
+                    ),
+                  ),
+                  TextField(
+                    controller: interpretations,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: '解释 / 自动想法（每行一条，可纠正）',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ...List<Widget>.generate(candidates.length, (index) {
+                    final item = candidates[index];
+                    return Card(
+                      child: RadioListTile<int>(
+                        value: index,
+                        groupValue: selected,
+                        onChanged: (value) =>
+                            setDialogState(() => selected = value ?? 0),
+                        title: Text(item.statement),
+                        subtitle: Text('替代：${item.alternative}'),
+                        secondary: Wrap(
+                          spacing: 0,
+                          children: [
+                            IconButton(
+                              tooltip: '编辑候选',
+                              onPressed: () async {
+                                final updated = await _editCandidateForHome(
+                                  item,
+                                );
+                                if (updated != null) {
+                                  setDialogState(
+                                    () => candidates[index] = updated,
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                            if (candidates.length > 1)
+                              IconButton(
+                                tooltip: '删除候选',
+                                onPressed: () => setDialogState(() {
+                                  candidates.removeAt(index);
+                                  selected = selected.clamp(
+                                    0,
+                                    candidates.length - 1,
+                                  );
+                                }),
+                                icon: const Icon(Icons.close),
+                              ),
+                          ],
+                        ),
+                      ),
                     );
                   }),
                   Text('当前强度 ${strength.round()}/100'),
@@ -1616,30 +2492,264 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(context, result.value.candidates[selected]),
+              onPressed: candidates.isEmpty
+                  ? null
+                  : () => Navigator.pop(context, candidates[selected]),
               child: const Text('确认'),
             ),
           ],
         ),
       ),
     );
+    final correctedFacts = facts.text
+        .split('\n')
+        .where((item) => item.trim().isNotEmpty)
+        .length;
+    final correctedInterpretations = interpretations.text
+        .split('\n')
+        .where((item) => item.trim().isNotEmpty)
+        .length;
+    facts.dispose();
+    interpretations.dispose();
     if (candidate == null) return;
+    await _dao.track(
+      'diagnosis_confirmed',
+      properties: <String, Object?>{
+        'facts_count': correctedFacts,
+        'interpretations_count': correctedInterpretations,
+        'candidate_count': candidates.length,
+        'source': result.usedCloudAi ? 'cloud' : 'local',
+      },
+    );
     final now = DateTime.now();
-    await _dao.saveBelief(
-      BeliefMentorBelief(
-        id: 'belief_${now.microsecondsSinceEpoch}',
+    final belief = BeliefMentorBelief(
+      id: 'belief_${now.microsecondsSinceEpoch}',
+      statement: candidate.statement,
+      type: candidate.type,
+      strength: strength.round(),
+      initialStrength: strength.round(),
+      trigger: candidate.trigger,
+      alternativeStatement: candidate.alternative,
+      state: BeliefMentorBeliefState.alternativeFormed,
+      userConfirmed: true,
+      createdAtMs: now.millisecondsSinceEpoch,
+      updatedAtMs: now.millisecondsSinceEpoch,
+      patterns: candidate.patterns.isEmpty
+          ? BeliefMentorCognitivePatternPolicy.detect(candidate.statement)
+          : candidate.patterns,
+    );
+    try {
+      await _dao.saveBelief(belief);
+      if ((_profile?.activeBeliefId ?? '').isEmpty) {
+        await _dao.setActiveBelief(belief.id);
+        _profile = await _dao.profile();
+      }
+      _refreshData();
+    } catch (error) {
+      _show('信念未保存：$error');
+    }
+  }
+
+  Future<BeliefMentorCandidateBelief?> _editCandidateForHome(
+    BeliefMentorCandidateBelief item,
+  ) async {
+    final statement = TextEditingController(text: item.statement);
+    final trigger = TextEditingController(text: item.trigger);
+    final alternative = TextEditingController(text: item.alternative);
+    var type = item.type;
+    final patterns = <BeliefMentorCognitivePattern>{
+      ...item.patterns,
+      ...BeliefMentorCognitivePatternPolicy.detect(item.statement),
+    };
+    final result = await showDialog<BeliefMentorCandidateBelief>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('编辑候选信念'),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: statement,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: '信念陈述'),
+                  ),
+                  DropdownButtonFormField<BeliefMentorBeliefType>(
+                    value: type,
+                    decoration: const InputDecoration(labelText: '类型'),
+                    items: BeliefMentorBeliefType.values
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value.label),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) =>
+                        setDialogState(() => type = value ?? type),
+                  ),
+                  TextField(
+                    controller: trigger,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: '触发情境'),
+                  ),
+                  TextField(
+                    controller: alternative,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: '可检验替代信念'),
+                  ),
+                  const SizedBox(height: 10),
+                  ...BeliefMentorCognitivePattern.values.map(
+                    (pattern) => CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(pattern.label),
+                      value: patterns.contains(pattern),
+                      onChanged: (selected) => setDialogState(
+                        () => selected == true
+                            ? patterns.add(pattern)
+                            : patterns.remove(pattern),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (statement.text.trim().isEmpty ||
+                    alternative.text.trim().isEmpty) {
+                  return;
+                }
+                Navigator.pop(
+                  context,
+                  BeliefMentorCandidateBelief(
+                    statement: statement.text.trim(),
+                    type: type,
+                    trigger: trigger.text.trim(),
+                    alternative: alternative.text.trim(),
+                    confidence: item.confidence,
+                    patterns: patterns.toList(growable: false),
+                  ),
+                );
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    statement.dispose();
+    trigger.dispose();
+    alternative.dispose();
+    return result;
+  }
+
+  Future<void> _editBelief(BeliefMentorBelief belief) async {
+    final candidate = await _editCandidateForHome(
+      BeliefMentorCandidateBelief(
+        statement: belief.statement,
+        type: belief.type,
+        trigger: belief.trigger,
+        alternative: belief.alternativeStatement,
+        confidence: 1,
+        patterns: belief.patterns,
+      ),
+    );
+    if (candidate == null) return;
+    try {
+      await _dao.updateBelief(
+        id: belief.id,
         statement: candidate.statement,
         type: candidate.type,
-        strength: strength.round(),
-        initialStrength: strength.round(),
+        strength: belief.strength,
         trigger: candidate.trigger,
-        alternativeStatement: candidate.alternative,
-        state: BeliefMentorBeliefState.alternativeFormed,
-        userConfirmed: true,
-        createdAtMs: now.millisecondsSinceEpoch,
-        updatedAtMs: now.millisecondsSinceEpoch,
+        alternative: candidate.alternative,
+        patterns: candidate.patterns,
+      );
+      _refreshData();
+    } catch (error) {
+      _show('信念未更新：$error');
+    }
+  }
+
+  Future<void> _setActiveBelief(BeliefMentorBelief belief) async {
+    try {
+      await _dao.setActiveBelief(belief.id);
+      _profile = await _dao.profile();
+      _refreshData();
+      if (mounted) setState(() {});
+    } catch (error) {
+      _show('$error');
+    }
+  }
+
+  Future<void> _archiveBelief(BeliefMentorBelief belief) async {
+    final confirmed = await _confirm(
+      title: '归档这条信念？',
+      message: '会关闭相关主动提醒，历史实验和证据仍保留。',
+      action: '归档',
+    );
+    if (!confirmed) return;
+    final alarmIds = await _dao.archiveBelief(belief.id);
+    await _reminders.cancelAlarmIds(alarmIds);
+    _profile = await _dao.profile();
+    _refreshData();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _deleteBelief(BeliefMentorBelief belief) async {
+    final confirmed = await _confirm(
+      title: '永久删除这条信念？',
+      message: '它关联的实验、证据、提醒、恢复记录和评分历史都会删除，不能在应用内撤销。',
+      action: '永久删除',
+      destructive: true,
+    );
+    if (!confirmed) return;
+    final alarmIds = await _dao.deleteBelief(belief.id);
+    await _reminders.cancelAlarmIds(alarmIds);
+    _profile = await _dao.profile();
+    _refreshData();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleRealityCheck(BeliefMentorBelief belief) async {
+    if (belief.state != BeliefMentorBeliefState.needsRealityCheck) {
+      await _dao.markBeliefNeedsRealityCheck(belief.id);
+      _refreshData();
+      _show('已暂停自动推进，请核对事实、条件和不可控因素。');
+      return;
+    }
+    final continueTesting = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('现实校准后如何继续？'),
+        content: const Text('只有在事实与风险边界足够清楚时，才继续微实验。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('回到限制性信念'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('继续现实检验'),
+          ),
+        ],
       ),
+    );
+    if (continueTesting == null) return;
+    await _dao.restoreBeliefFromRealityCheck(
+      belief.id,
+      continueTesting: continueTesting,
     );
     _refreshData();
   }
@@ -1769,6 +2879,10 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
   Future<void> _setNotificationsPaused(bool value) async {
     if (value) await _reminders.cancelAll();
     await _saveProfile(_profile!.copyWith(notificationsPaused: value));
+    await _dao.track(
+      value ? 'notification_paused' : 'notification_resumed',
+      properties: <String, Object?>{'reason': 'user_setting'},
+    );
     if (!value && _profile!.remindersEnabled) await _resumeReminderPlan();
   }
 
@@ -1781,13 +2895,17 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
             .millisecondsSinceEpoch,
       ),
     );
+    await _dao.track(
+      'notification_paused',
+      properties: <String, Object?>{'reason': 'needs_space', 'hours': 24},
+    );
     _refreshData();
   }
 
   Future<void> _resumeReminderPlan() async {
     final today = await _dao.today();
     if (today.belief != null) {
-      await _reminders.scheduleMorningPrime(belief: today.belief!);
+      await _reminders.ensureMorningPrimeSeries(belief: today.belief!);
     }
     if (today.experiment != null) {
       await _reminders.scheduleExperimentPlan(today.experiment!);
@@ -1826,6 +2944,138 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
       await _reminders.rescheduleActiveForCurrentProfile();
       _refreshData();
     }
+  }
+
+  Future<void> _editTone() async {
+    final current = _profile!.tone == 'direct' ? 'challenger' : _profile!.tone;
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('选择固定语气'),
+        children:
+            <({String value, String title, String subtitle})>[
+                  (
+                    value: 'gentle',
+                    title: 'Gentle · 温和',
+                    subtitle: '先承接感受，再邀请最小行动',
+                  ),
+                  (
+                    value: 'coach',
+                    title: 'Coach · 教练',
+                    subtitle: '事实、问题与行动保持平衡',
+                  ),
+                  (
+                    value: 'challenger',
+                    title: 'Challenger · 挑战',
+                    subtitle: '更直接指出回避和无证据结论',
+                  ),
+                  (
+                    value: 'minimal',
+                    title: 'Minimal · 极简',
+                    subtitle: '尽量少说，只保留下一步',
+                  ),
+                ]
+                .map(
+                  (item) => RadioListTile<String>(
+                    value: item.value,
+                    groupValue: current,
+                    title: Text(item.title),
+                    subtitle: Text(item.subtitle),
+                    onChanged: (value) => Navigator.pop(context, value),
+                  ),
+                )
+                .toList(growable: false),
+      ),
+    );
+    if (selected == null) return;
+    await _saveProfile(_profile!.copyWith(tone: selected));
+    await _dao.track(
+      'tone_changed',
+      properties: <String, Object?>{'tone': selected},
+    );
+  }
+
+  Future<void> _setSensitiveNotificationContent(bool value) async {
+    await _saveProfile(
+      _profile!.copyWith(showSensitiveNotificationContent: value),
+    );
+    await _reminders.rescheduleActiveForCurrentProfile();
+    _refreshData();
+  }
+
+  Future<void> _setModelImprovementOptIn(bool value) async {
+    await _saveProfile(_profile!.copyWith(modelImprovementOptIn: value));
+    await _dao.track(
+      'model_improvement_preference_changed',
+      properties: <String, Object?>{'opt_in': value},
+    );
+  }
+
+  Future<void> _manageReminders() async {
+    final reminders = await _dao.reminders();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        minChildSize: 0.45,
+        builder: (context, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.all(18),
+          children: [
+            Text(
+              '已安排提醒',
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text('每条提醒都可以单独延期、改时间或取消。'),
+            const SizedBox(height: 12),
+            if (reminders.isEmpty) const Text('当前没有提醒。'),
+            ...reminders.map((reminder) {
+              final time = DateTime.fromMillisecondsSinceEpoch(
+                reminder.scheduledAtMs,
+              );
+              return Card(
+                child: ListTile(
+                  title: Text(
+                    '${reminder.type.label} · ${reminder.state.label}',
+                  ),
+                  subtitle: Text(
+                    '${time.month}月${time.day}日 ${_hm(time)}'
+                    '${reminder.suppressReason.isEmpty ? '' : '\n${reminder.suppressReason}'}',
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      Navigator.pop(context);
+                      switch (value) {
+                        case 'snooze':
+                          await _snoozeReminder(reminder);
+                          break;
+                        case 'reschedule':
+                          await _rescheduleReminder(reminder);
+                          break;
+                        case 'cancel':
+                          await _cancelReminder(reminder);
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => const <PopupMenuEntry<String>>[
+                      PopupMenuItem(value: 'snooze', child: Text('延后 10 分钟')),
+                      PopupMenuItem(value: 'reschedule', child: Text('修改时间')),
+                      PopupMenuItem(value: 'cancel', child: Text('取消')),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _saveProfile(BeliefMentorProfile value) async {
@@ -1936,6 +3186,66 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
       ],
     ),
   );
+
+  Future<bool> _confirm({
+    required String title,
+    required String message,
+    required String action,
+    bool destructive = false,
+  }) async =>
+      (await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('返回'),
+            ),
+            FilledButton(
+              style: destructive
+                  ? FilledButton.styleFrom(backgroundColor: Colors.red.shade700)
+                  : null,
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(action),
+            ),
+          ],
+        ),
+      )) ??
+      false;
+
+  static String _reminderReason(BeliefMentorReminderType type) =>
+      switch (type) {
+        BeliefMentorReminderType.morningPrime => '在你设定的晨间时段激活主训练信念',
+        BeliefMentorReminderType.preAction => '距离已确认实验开始约 10 分钟',
+        BeliefMentorReminderType.antiAvoidance => '实验时间已过，尚未记录启动',
+        BeliefMentorReminderType.evidenceCapture => '行动后及时保留预测与现实结果',
+        BeliefMentorReminderType.failureRecovery => '按同一次失败的恢复时间协议跟进',
+      };
+
+  static String _recoveryStagePrompt(String stage) => switch (stage) {
+    'T+0' => '先允许失望存在，只记录事实，不做身份判决。',
+    'T+6' => '把事实与解释再次分开，检查是否出现“永远、彻底、我就是”的扩大结论。',
+    'T+24' => '选择一个约原计划 20% 难度的恢复动作，不做补偿性冲刺。',
+    'T+72' => '回看哪些条件、支持或策略真正有帮助，并把它留给下一次。',
+    _ => '保留事实、学习与一个可执行的下一步。',
+  };
+
+  static String _toneLabel(String value) => switch (value) {
+    'gentle' => 'Gentle · 温和',
+    'challenger' || 'direct' => 'Challenger · 挑战',
+    'minimal' => 'Minimal · 极简',
+    _ => 'Coach · 教练',
+  };
+
+  static String _tabName(int index) => switch (index) {
+    0 => 'today',
+    1 => 'mentor',
+    2 => 'beliefs',
+    3 => 'evidence',
+    _ => 'settings',
+  };
 
   void _showBusy(String text) {
     showDialog<void>(

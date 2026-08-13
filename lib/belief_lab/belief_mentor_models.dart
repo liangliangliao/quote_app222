@@ -9,6 +9,50 @@ enum BeliefMentorBeliefType {
   identity,
 }
 
+/// Observable thinking patterns used by the specification's 3M radar.
+///
+/// These are coaching prompts, not clinical labels. They remain editable and
+/// never drive a belief-state transition by themselves.
+enum BeliefMentorCognitivePattern {
+  magnification,
+  minimization,
+  unsupportedInference,
+  allOrNothing,
+  identityOvergeneralization,
+  emotionalReasoning,
+}
+
+extension BeliefMentorCognitivePatternLabel on BeliefMentorCognitivePattern {
+  String get label => switch (this) {
+    BeliefMentorCognitivePattern.magnification => '放大风险',
+    BeliefMentorCognitivePattern.minimization => '缩小资源/进展',
+    BeliefMentorCognitivePattern.unsupportedInference => '无证据推断',
+    BeliefMentorCognitivePattern.allOrNothing => '非黑即白',
+    BeliefMentorCognitivePattern.identityOvergeneralization => '一次结果推广为身份',
+    BeliefMentorCognitivePattern.emotionalReasoning => '把感受当作结论',
+  };
+
+  String get description => switch (this) {
+    BeliefMentorCognitivePattern.magnification => '把一种可能风险写成必然或灾难性结果。',
+    BeliefMentorCognitivePattern.minimization => '忽略已有能力、帮助、进展或可调整条件。',
+    BeliefMentorCognitivePattern.unsupportedInference =>
+      '在缺少可观察证据时推断他人想法或未来结果。',
+    BeliefMentorCognitivePattern.allOrNothing => '只允许完美成功或彻底失败两种结果。',
+    BeliefMentorCognitivePattern.identityOvergeneralization =>
+      '用一次、少数几次结果定义整体能力或身份。',
+    BeliefMentorCognitivePattern.emotionalReasoning =>
+      '因为感到害怕、羞耻或无力，就推断事情一定如此。',
+  };
+
+  static BeliefMentorCognitivePattern? tryParse(Object? value) {
+    final raw = (value ?? '').toString();
+    for (final item in BeliefMentorCognitivePattern.values) {
+      if (item.name == raw) return item;
+    }
+    return null;
+  }
+}
+
 extension BeliefMentorBeliefTypeLabel on BeliefMentorBeliefType {
   String get code => name;
 
@@ -71,6 +115,8 @@ extension BeliefMentorBeliefStateLabel on BeliefMentorBeliefState {
 enum BeliefMentorExperimentState {
   draft,
   scheduled,
+  resized,
+  rescheduled,
   started,
   completed,
   abandoned,
@@ -82,6 +128,8 @@ extension BeliefMentorExperimentStateLabel on BeliefMentorExperimentState {
   String get label => switch (this) {
     BeliefMentorExperimentState.draft => '草稿',
     BeliefMentorExperimentState.scheduled => '已安排',
+    BeliefMentorExperimentState.resized => '已缩小',
+    BeliefMentorExperimentState.rescheduled => '已改期',
     BeliefMentorExperimentState.started => '进行中',
     BeliefMentorExperimentState.completed => '待复盘',
     BeliefMentorExperimentState.abandoned => '需要调整',
@@ -196,6 +244,9 @@ class BeliefMentorProfile {
     this.notificationsPaused = false,
     this.needsSpaceUntilMs = 0,
     this.timezone = '',
+    this.activeBeliefId = '',
+    this.showSensitiveNotificationContent = false,
+    this.modelImprovementOptIn = false,
     this.updatedAtMs = 0,
   });
 
@@ -209,6 +260,9 @@ class BeliefMentorProfile {
   final bool notificationsPaused;
   final int needsSpaceUntilMs;
   final String timezone;
+  final String activeBeliefId;
+  final bool showSensitiveNotificationContent;
+  final bool modelImprovementOptIn;
   final int updatedAtMs;
 
   bool needsSpaceAt(DateTime now) =>
@@ -225,6 +279,9 @@ class BeliefMentorProfile {
     bool? notificationsPaused,
     int? needsSpaceUntilMs,
     String? timezone,
+    String? activeBeliefId,
+    bool? showSensitiveNotificationContent,
+    bool? modelImprovementOptIn,
     int? updatedAtMs,
   }) => BeliefMentorProfile(
     onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
@@ -237,6 +294,11 @@ class BeliefMentorProfile {
     notificationsPaused: notificationsPaused ?? this.notificationsPaused,
     needsSpaceUntilMs: needsSpaceUntilMs ?? this.needsSpaceUntilMs,
     timezone: timezone ?? this.timezone,
+    activeBeliefId: activeBeliefId ?? this.activeBeliefId,
+    showSensitiveNotificationContent:
+        showSensitiveNotificationContent ??
+        this.showSensitiveNotificationContent,
+    modelImprovementOptIn: modelImprovementOptIn ?? this.modelImprovementOptIn,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
   );
 
@@ -252,6 +314,11 @@ class BeliefMentorProfile {
     'notifications_paused': notificationsPaused ? 1 : 0,
     'needs_space_until_ms': needsSpaceUntilMs,
     'timezone': timezone,
+    'active_belief_id': activeBeliefId,
+    'show_sensitive_notification_content': showSensitiveNotificationContent
+        ? 1
+        : 0,
+    'model_improvement_opt_in': modelImprovementOptIn ? 1 : 0,
     'updated_at_ms': updatedAtMs,
   };
 
@@ -267,6 +334,11 @@ class BeliefMentorProfile {
         notificationsPaused: _asBool(row['notifications_paused']),
         needsSpaceUntilMs: _asInt(row['needs_space_until_ms']),
         timezone: (row['timezone'] ?? '').toString(),
+        activeBeliefId: (row['active_belief_id'] ?? '').toString(),
+        showSensitiveNotificationContent: _asBool(
+          row['show_sensitive_notification_content'],
+        ),
+        modelImprovementOptIn: _asBool(row['model_improvement_opt_in']),
         updatedAtMs: _asInt(row['updated_at_ms']),
       );
 }
@@ -285,6 +357,7 @@ class BeliefMentorBelief {
     required this.updatedAtMs,
     this.testingStartedAtMs = 0,
     this.initialStrength = 0,
+    this.patterns = const <BeliefMentorCognitivePattern>[],
   });
 
   final String id;
@@ -299,6 +372,7 @@ class BeliefMentorBelief {
   final int createdAtMs;
   final int updatedAtMs;
   final int testingStartedAtMs;
+  final List<BeliefMentorCognitivePattern> patterns;
 
   Map<String, Object?> toRow() => <String, Object?>{
     'id': id,
@@ -313,6 +387,7 @@ class BeliefMentorBelief {
     'created_at_ms': createdAtMs,
     'updated_at_ms': updatedAtMs,
     'testing_started_at_ms': testingStartedAtMs,
+    'patterns_json': jsonEncode(patterns.map((item) => item.name).toList()),
   };
 
   factory BeliefMentorBelief.fromRow(Map<String, Object?> row) =>
@@ -329,6 +404,7 @@ class BeliefMentorBelief {
         createdAtMs: _asInt(row['created_at_ms']),
         updatedAtMs: _asInt(row['updated_at_ms']),
         testingStartedAtMs: _asInt(row['testing_started_at_ms']),
+        patterns: _patternList(row['patterns_json']),
       );
 }
 
@@ -348,6 +424,8 @@ class BeliefMentorExperiment {
     required this.updatedAtMs,
     this.startedAtMs = 0,
     this.completedAtMs = 0,
+    this.revisionOfId = '',
+    this.revisionReason = '',
   });
 
   final String id;
@@ -364,6 +442,8 @@ class BeliefMentorExperiment {
   final int updatedAtMs;
   final int startedAtMs;
   final int completedAtMs;
+  final String revisionOfId;
+  final String revisionReason;
 
   Map<String, Object?> toRow() => <String, Object?>{
     'id': id,
@@ -380,6 +460,8 @@ class BeliefMentorExperiment {
     'updated_at_ms': updatedAtMs,
     'started_at_ms': startedAtMs,
     'completed_at_ms': completedAtMs,
+    'revision_of_id': revisionOfId,
+    'revision_reason': revisionReason,
   };
 
   factory BeliefMentorExperiment.fromRow(Map<String, Object?> row) =>
@@ -399,6 +481,8 @@ class BeliefMentorExperiment {
         updatedAtMs: _asInt(row['updated_at_ms']),
         startedAtMs: _asInt(row['started_at_ms']),
         completedAtMs: _asInt(row['completed_at_ms']),
+        revisionOfId: (row['revision_of_id'] ?? '').toString(),
+        revisionReason: (row['revision_reason'] ?? '').toString(),
       );
 }
 
@@ -416,6 +500,8 @@ class BeliefMentorEvidence {
     required this.statement,
     required this.strength,
     required this.createdAtMs,
+    this.predictedFailureProbability = 50,
+    this.predictionOccurred = false,
   });
 
   final String id;
@@ -430,12 +516,16 @@ class BeliefMentorEvidence {
   final String statement;
   final BeliefMentorEvidenceStrength strength;
   final int createdAtMs;
+  final int predictedFailureProbability;
+  final bool predictionOccurred;
 
   Map<String, Object?> toRow() => <String, Object?>{
     'id': id,
     'belief_id': beliefId,
     'experiment_id': experimentId,
     'prediction_text': prediction,
+    'predicted_failure_probability': predictedFailureProbability.clamp(0, 100),
+    'prediction_occurred': predictionOccurred ? 1 : 0,
     'action_text': action,
     'outcome_text': outcome,
     'emotion_before': emotionBefore.clamp(0, 10),
@@ -452,6 +542,10 @@ class BeliefMentorEvidence {
         beliefId: (row['belief_id'] ?? '').toString(),
         experimentId: (row['experiment_id'] ?? '').toString(),
         prediction: (row['prediction_text'] ?? '').toString(),
+        predictedFailureProbability: _asInt(
+          row['predicted_failure_probability'],
+        ).clamp(0, 100),
+        predictionOccurred: _asBool(row['prediction_occurred']),
         action: (row['action_text'] ?? '').toString(),
         outcome: (row['outcome_text'] ?? '').toString(),
         emotionBefore: _asInt(row['emotion_before']).clamp(0, 10),
@@ -606,6 +700,7 @@ class BeliefMentorFailure {
     required this.createdAtMs,
     required this.updatedAtMs,
     this.closedAtMs = 0,
+    this.learning = '',
   });
 
   final String id;
@@ -614,6 +709,7 @@ class BeliefMentorFailure {
   final String facts;
   final String interpretation;
   final String emotion;
+  final String learning;
   final String nextStep;
   final String stage;
   final int createdAtMs;
@@ -627,6 +723,7 @@ class BeliefMentorFailure {
     'facts': facts,
     'interpretation_text': interpretation,
     'emotion_text': emotion,
+    'learning_text': learning,
     'next_step': nextStep,
     'stage': stage,
     'created_at_ms': createdAtMs,
@@ -664,6 +761,11 @@ class BeliefMentorWeeklyReport {
     required this.remindersSent,
     required this.autonomousStarts,
     required this.averageReminderCount,
+    required this.beliefScoreChange,
+    required this.recoveryHalfLifeHours,
+    required this.predictionCalibrationError,
+    required this.reminderFatigueRate,
+    required this.promiseReliability,
   });
 
   final int experimentsCreated;
@@ -675,6 +777,11 @@ class BeliefMentorWeeklyReport {
   final int remindersSent;
   final int autonomousStarts;
   final double averageReminderCount;
+  final double beliefScoreChange;
+  final double recoveryHalfLifeHours;
+  final double predictionCalibrationError;
+  final double reminderFatigueRate;
+  final double promiseReliability;
 
   double get actionInitiationRate =>
       experimentsCreated == 0 ? 0 : experimentsStarted / experimentsCreated;
@@ -693,6 +800,7 @@ class BeliefMentorCandidateBelief {
     required this.trigger,
     required this.alternative,
     required this.confidence,
+    this.patterns = const <BeliefMentorCognitivePattern>[],
   });
 
   final String statement;
@@ -700,6 +808,7 @@ class BeliefMentorCandidateBelief {
   final String trigger;
   final String alternative;
   final double confidence;
+  final List<BeliefMentorCognitivePattern> patterns;
 }
 
 class BeliefMentorDiagnosis {
@@ -778,3 +887,9 @@ List<String> _stringList(Object? value) {
   } catch (_) {}
   return const <String>[];
 }
+
+List<BeliefMentorCognitivePattern> _patternList(Object? value) =>
+    _stringList(value)
+        .map(BeliefMentorCognitivePatternLabel.tryParse)
+        .whereType<BeliefMentorCognitivePattern>()
+        .toList(growable: false);
