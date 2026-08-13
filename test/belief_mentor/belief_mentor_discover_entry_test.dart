@@ -24,7 +24,18 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    // Avoid an unbounded settle around the loading indicator: if database
+    // initialization fails, the test should fail quickly instead of waiting
+    // for Flutter's long pumpAndSettle timeout.
+    for (var i = 0; i < 30; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find
+          .byKey(BeliefMentorDiscoverEntry.entryKey)
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+    }
 
     expect(find.byKey(BeliefMentorDiscoverEntry.entryKey), findsOneWidget);
     expect(find.text('Belief Mentor'), findsOneWidget);
