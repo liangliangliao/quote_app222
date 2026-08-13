@@ -261,6 +261,13 @@ class XiangjiCognitiveOrchestrator {
         });
       } catch (error) {
         failedAgentCount++;
+        // An unexpected provider/service exception still leaves the
+        // deterministic local draft as the effective output for this role.
+        // Record both facts: the attempted agent failed, and the user-facing
+        // result was completed locally. Otherwise the persisted AI receipt
+        // misleadingly reports zero local participation.
+        localAgentCount++;
+        localAgentLabels.add(agent.label);
         warnings.add('${agent.code} ${agent.label}：${_safeError(error)}');
         await _dao.saveAgentRun(<String, Object?>{
           'id': runRecordId,
