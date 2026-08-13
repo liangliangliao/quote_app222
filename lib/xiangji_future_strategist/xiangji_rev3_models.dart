@@ -586,6 +586,42 @@ class XiangjiAiExecutionSummary {
 
   bool get cloudAiUsed => cloudAgentCount > 0;
   bool get sensitiveConsentRequired => privacyBlockedAgentCount > 0;
+
+  Map<String, Object?> toMap() => <String, Object?>{
+        'ai_configured': aiConfigured,
+        'provider': provider,
+        'model': model,
+        'planned_agent_count': plannedAgentCount,
+        'cloud_agent_count': cloudAgentCount,
+        'local_agent_count': localAgentCount,
+        'failed_agent_count': failedAgentCount,
+        'privacy_blocked_agent_count': privacyBlockedAgentCount,
+        'total_latency_ms': totalLatencyMs,
+        'redacted_field_count': redactedFieldCount,
+        'cloud_agent_labels': cloudAgentLabels,
+        'local_agent_labels': localAgentLabels,
+        'changed_artifacts': changedArtifacts,
+        'sensitive_categories': sensitiveCategories,
+      };
+
+  factory XiangjiAiExecutionSummary.fromMap(Map<String, Object?> value) =>
+      XiangjiAiExecutionSummary(
+        aiConfigured: value['ai_configured'] == true,
+        provider: (value['provider'] ?? '').toString(),
+        model: (value['model'] ?? '').toString(),
+        plannedAgentCount: _asInt(value['planned_agent_count']),
+        cloudAgentCount: _asInt(value['cloud_agent_count']),
+        localAgentCount: _asInt(value['local_agent_count']),
+        failedAgentCount: _asInt(value['failed_agent_count']),
+        privacyBlockedAgentCount:
+            _asInt(value['privacy_blocked_agent_count']),
+        totalLatencyMs: _asInt(value['total_latency_ms']),
+        redactedFieldCount: _asInt(value['redacted_field_count']),
+        cloudAgentLabels: _stringList(value['cloud_agent_labels']),
+        localAgentLabels: _stringList(value['local_agent_labels']),
+        changedArtifacts: _stringList(value['changed_artifacts']),
+        sensitiveCategories: _stringList(value['sensitive_categories']),
+      );
 }
 
 String _nonEmpty(Object? value, String fallback) {

@@ -302,6 +302,22 @@ class XiangjiCognitiveOrchestrator {
     final changedArtifacts = cloudAgentCount == 0
         ? const <String>[]
         : _cloudChangedArtifacts(localBaselineDraft, draft);
+    final aiExecution = XiangjiAiExecutionSummary(
+      aiConfigured: aiConfigured,
+      provider: provider,
+      model: model,
+      plannedAgentCount: effectivePlan.length,
+      cloudAgentCount: cloudAgentCount,
+      localAgentCount: localAgentCount,
+      failedAgentCount: failedAgentCount,
+      privacyBlockedAgentCount: privacyBlockedAgentCount,
+      totalLatencyMs: totalLatencyMs,
+      redactedFieldCount: redactedFieldCount,
+      cloudAgentLabels: cloudAgentLabels,
+      localAgentLabels: localAgentLabels,
+      changedArtifacts: changedArtifacts,
+      sensitiveCategories: sensitiveCategories.toList(),
+    );
     final guard = _guardForUnknownAnswer(
       _sck.evaluateAskUserGuard(draft.informationNeeds),
       userDoesNotKnow: userDoesNotKnow,
@@ -371,6 +387,10 @@ class XiangjiCognitiveOrchestrator {
         'state_history':
             stateHistory.map((state) => state.wire).toList(),
         'sck_rules': XiangjiSckRuntime.rules.keys.toList(),
+        // Persist the public execution receipt with the versioned situation
+        // model. The user can still see whether AI actually participated after
+        // leaving the conversation, without exposing private chain-of-thought.
+        'ai_execution': aiExecution.toMap(),
       },
       sourceRefs: sourceRefs,
     );
@@ -539,22 +559,7 @@ class XiangjiCognitiveOrchestrator {
       cognitiveExperiences: cognitiveExperiences,
       inputClassification: effectiveClassification,
       problemProgress: problemProgress,
-      aiExecution: XiangjiAiExecutionSummary(
-        aiConfigured: aiConfigured,
-        provider: provider,
-        model: model,
-        plannedAgentCount: effectivePlan.length,
-        cloudAgentCount: cloudAgentCount,
-        localAgentCount: localAgentCount,
-        failedAgentCount: failedAgentCount,
-        privacyBlockedAgentCount: privacyBlockedAgentCount,
-        totalLatencyMs: totalLatencyMs,
-        redactedFieldCount: redactedFieldCount,
-        cloudAgentLabels: cloudAgentLabels,
-        localAgentLabels: localAgentLabels,
-        changedArtifacts: changedArtifacts,
-        sensitiveCategories: sensitiveCategories.toList(),
-      ),
+      aiExecution: aiExecution,
     );
   }
 

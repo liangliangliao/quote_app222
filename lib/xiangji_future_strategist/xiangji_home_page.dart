@@ -229,6 +229,7 @@ class _XiangjiFutureStrategistHomePageState
   Widget _commandCenter() {
     final campaign = _dashboard.primaryCampaign;
     final action = _dashboard.currentAction;
+    final awaitingReality = action?.state == XiangjiActionState.done;
     return XiangjiSectionCard(
       title: _word('当前战略与唯一行动', '当前重点与下一步'),
       subtitle: '这里只显示最需要注意的内容；完整分析默认收起在对应工作页。',
@@ -303,7 +304,7 @@ class _XiangjiFutureStrategistHomePageState
             ),
           const Divider(height: 24),
           const Text(
-            '今日战斗',
+            '今日战斗 / 现实回报',
             style: TextStyle(
               color: XiangjiPalette.muted,
               fontSize: 12,
@@ -320,13 +321,21 @@ class _XiangjiFutureStrategistHomePageState
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: XiangjiPalette.mist,
+                color: awaitingReality
+                    ? const Color(0xFFFFF1D6)
+                    : XiangjiPalette.mist,
                 borderRadius: BorderRadius.circular(13),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.play_circle_outline,
-                      color: XiangjiPalette.pine),
+                  Icon(
+                    awaitingReality
+                        ? Icons.fact_check_outlined
+                        : Icons.play_circle_outline,
+                    color: awaitingReality
+                        ? const Color(0xFFC8641B)
+                        : XiangjiPalette.pine,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -338,7 +347,9 @@ class _XiangjiFutureStrategistHomePageState
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          '${action.state.label} · 预计 ${action.expectedMinutes} 分钟',
+                          awaitingReality
+                              ? '行动已完成，但还缺现实结果；回填后军师才能验算和改判'
+                              : '${action.state.label} · 预计 ${action.expectedMinutes} 分钟',
                           style: const TextStyle(
                             color: XiangjiPalette.muted,
                             fontSize: 12,
@@ -353,7 +364,11 @@ class _XiangjiFutureStrategistHomePageState
                       repository: _repository,
                       dao: _dao,
                     )),
-                    child: Text(_word('出征', '打开')),
+                    child: Text(
+                      awaitingReality
+                          ? '回填现实'
+                          : _word('出征', '打开'),
+                    ),
                   ),
                 ],
               ),

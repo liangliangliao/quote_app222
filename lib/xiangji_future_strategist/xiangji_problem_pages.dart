@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../data/kv_dao.dart';
+import '../pages/settings_page.dart';
 import 'xiangji_campaign_action_pages.dart';
 import 'xiangji_database.dart';
 import 'xiangji_experience_widgets.dart';
@@ -205,6 +206,7 @@ class _XiangjiProblemWorkspacePageState
   Map<String, Object?>? _explanation;
   XiangjiSolverSnapshot? _solver;
   List<XiangjiMethodEvent> _methodEvents = const <XiangjiMethodEvent>[];
+  XiangjiAiExecutionSummary? _aiExecution;
 
   @override
   void initState() {
@@ -233,6 +235,10 @@ class _XiangjiProblemWorkspacePageState
           userVisibleOnly: true,
           limit: 3,
         ),
+        widget.dao.latestSituationModel(
+          objectType: 'problem',
+          objectId: widget.problemId,
+        ),
       ]);
       if (!mounted) return;
       setState(() {
@@ -248,12 +254,35 @@ class _XiangjiProblemWorkspacePageState
         _explanation = values[8] as Map<String, Object?>?;
         _solver = values[9] as XiangjiSolverSnapshot?;
         _methodEvents = values[10] as List<XiangjiMethodEvent>;
+        _aiExecution = _executionSummary(
+          values[11] as Map<String, Object?>?,
+        );
         _loading = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
       xiangjiShowMessage(context, error);
+    }
+  }
+
+  XiangjiAiExecutionSummary? _executionSummary(
+    Map<String, Object?>? situation,
+  ) {
+    if (situation == null) return null;
+    try {
+      final model = jsonDecode((situation['model_json'] ?? '{}').toString());
+      if (model is! Map || model['ai_execution'] is! Map) return null;
+      return XiangjiAiExecutionSummary.fromMap(
+        (model['ai_execution'] as Map).map(
+          (key, dynamic value) =>
+              MapEntry(key.toString(), value as Object?),
+        ),
+      );
+    } catch (_) {
+      // Older situation-model versions remain readable; they simply do not
+      // have a persisted AI execution receipt.
+      return null;
     }
   }
 
@@ -1311,6 +1340,17 @@ class _XiangjiProblemWorkspacePageState
                   padding: const EdgeInsets.all(16),
                   children: [
                     _solverCockpit(problem),
+                    if (_aiExecution != null) ...[
+                      const SizedBox(height: 12),
+                      XiangjiAiContributionCard(
+                        summary: _aiExecution!,
+                        onConfigureAi: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsPage(),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (_decisionDraft != null) ...[
                       const SizedBox(height: 12),
                       XiangjiSectionCard(
