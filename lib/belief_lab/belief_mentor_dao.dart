@@ -240,6 +240,40 @@ class BeliefMentorDao {
         created_at_ms INTEGER NOT NULL
       )
     ''',
+    '''
+      CREATE TABLE IF NOT EXISTS belief_mentor_calendar_events (
+        id TEXT PRIMARY KEY,
+        belief_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        context_text TEXT NOT NULL DEFAULT '',
+        event_at_ms INTEGER NOT NULL,
+        timezone TEXT NOT NULL DEFAULT '',
+        state TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE INDEX IF NOT EXISTS belief_mentor_calendar_events_time_idx
+      ON belief_mentor_calendar_events(event_at_ms)
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS belief_mentor_past_me_messages (
+        id TEXT PRIMARY KEY,
+        belief_id TEXT NOT NULL,
+        message_text TEXT NOT NULL DEFAULT '',
+        audio_path TEXT NOT NULL DEFAULT '',
+        deliver_at_ms INTEGER NOT NULL,
+        state TEXT NOT NULL,
+        is_private INTEGER NOT NULL DEFAULT 1,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE INDEX IF NOT EXISTS belief_mentor_past_me_messages_time_idx
+      ON belief_mentor_past_me_messages(deliver_at_ms)
+    ''',
   ];
 
   Future<void> _ensureSchemaColumns(Database db) async {
@@ -340,6 +374,11 @@ class BeliefMentorDao {
           'next_step',
         ],
         'belief_mentor_agent_runs': <String>['output_json', 'failure_message'],
+        'belief_mentor_calendar_events': <String>['title', 'context_text'],
+        'belief_mentor_past_me_messages': <String>[
+          'message_text',
+          'audio_path',
+        ],
       };
 
   Future<void> _migrateSensitiveText(Database db) async {
@@ -715,6 +754,8 @@ class BeliefMentorDao {
         'belief_mentor_failures',
         'belief_mentor_experiments',
         'belief_mentor_story_views',
+        'belief_mentor_calendar_events',
+        'belief_mentor_past_me_messages',
         'belief_mentor_belief_scores',
         'belief_mentor_events',
       ]) {
@@ -1294,6 +1335,171 @@ class BeliefMentorDao {
     return decrypted.map(BeliefMentorEvidence.fromRow).toList(growable: false);
   }
 
+  Future<void> saveCalendarEvent(BeliefMentorCalendarEvent value) async {
+    if (value.beliefId.trim().isEmpty ||
+        value.title.trim().isEmpty ||
+        value.context.trim().isEmpty) {
+      throw ArgumentError('重要事件需要关联信念、标题和具体情境。');
+    }
+    final db = await _db();
+    await db.insert(
+      'belief_mentor_calendar_events',
+      await _encryptRow('belief_mentor_calendar_events', value.toRow()),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await track(
+      'belief_calendar_event_saved',
+      beliefId: value.beliefId,
+      properties: <String, Object?>{
+        'event_id': value.id,
+        'event_at_ms': value.eventAtMs,
+      },
+    );
+  }
+
+  Future<BeliefMentorCalendarEvent?> calendarEvent(String id) async {
+    final db = await _db();
+    final rows = await db.query(
+      'belief_mentor_calendar_events',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? null
+        : BeliefMentorCalendarEvent.fromRow(
+            await _decryptRow('belief_mentor_calendar_events', rows.first),
+          );
+  }
+
+  Future<List<BeliefMentorCalendarEvent>> calendarEvents({
+    bool includeClosed = false,
+  }) async {
+    final db = await _db();
+    final rows = await db.query(
+      'belief_mentor_calendar_events',
+      where: includeClosed ? null : 'state = ?',
+      whereArgs: includeClosed
+          ? null
+          : <Object?>[BeliefMentorCalendarEventState.scheduled.name],
+      orderBy: 'event_at_ms ASC',
+    );
+    final decrypted = await _decryptRows('belief_mentor_calendar_events', rows);
+    return decrypted
+        .map(BeliefMentorCalendarEvent.fromRow)
+        .toList(growable: false);
+  }
+
+  Future<void> setCalendarEventState(
+    String id,
+    BeliefMentorCalendarEventState state,
+  ) async {
+    final db = await _db();
+    await db.update(
+      'belief_mentor_calendar_events',
+      <String, Object?>{
+        'state': state.name,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
+  Future<void> deleteCalendarEvent(String id) async {
+    final db = await _db();
+    await db.transaction((txn) async {
+      await txn.delete(
+        'belief_mentor_calendar_events',
+        where: 'id = ?',
+        whereArgs: <Object?>[id],
+      );
+      await txn.insert('belief_mentor_privacy_audit', <String, Object?>{
+        'id': _id('privacy_audit'),
+        'event_name': 'belief_calendar_event_deleted',
+        'details_json': jsonEncode(<String, Object?>{
+          'event_id_hash': id.hashCode.toUnsigned(32).toRadixString(16),
+        }),
+        'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      });
+    });
+  }
+
+  Future<void> savePastMeMessage(BeliefMentorPastMeMessage value) async {
+    if (value.beliefId.trim().isEmpty ||
+        (value.text.trim().isEmpty && value.audioPath.trim().isEmpty)) {
+      throw ArgumentError('来自过去的我需要关联信念，并包含文字或音频。');
+    }
+    final db = await _db();
+    await db.insert(
+      'belief_mentor_past_me_messages',
+      await _encryptRow('belief_mentor_past_me_messages', value.toRow()),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await track(
+      'past_me_message_saved',
+      beliefId: value.beliefId,
+      properties: <String, Object?>{
+        'message_id': value.id,
+        'has_audio': value.audioPath.isNotEmpty,
+        'deliver_at_ms': value.deliverAtMs,
+      },
+    );
+  }
+
+  Future<List<BeliefMentorPastMeMessage>> pastMeMessages({
+    bool includeClosed = true,
+  }) async {
+    final db = await _db();
+    final rows = await db.query(
+      'belief_mentor_past_me_messages',
+      where: includeClosed ? null : 'state = ?',
+      whereArgs: includeClosed
+          ? null
+          : <Object?>[BeliefMentorPastMeMessageState.scheduled.name],
+      orderBy: 'deliver_at_ms DESC',
+    );
+    final decrypted = await _decryptRows(
+      'belief_mentor_past_me_messages',
+      rows,
+    );
+    return decrypted
+        .map(BeliefMentorPastMeMessage.fromRow)
+        .toList(growable: false);
+  }
+
+  Future<void> markPastMeMessageDelivered(String id) async {
+    final db = await _db();
+    await db.update(
+      'belief_mentor_past_me_messages',
+      <String, Object?>{
+        'state': BeliefMentorPastMeMessageState.delivered.name,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
+  Future<void> deletePastMeMessage(String id) async {
+    final db = await _db();
+    await db.transaction((txn) async {
+      await txn.delete(
+        'belief_mentor_past_me_messages',
+        where: 'id = ?',
+        whereArgs: <Object?>[id],
+      );
+      await txn.insert('belief_mentor_privacy_audit', <String, Object?>{
+        'id': _id('privacy_audit'),
+        'event_name': 'past_me_message_deleted',
+        'details_json': jsonEncode(<String, Object?>{
+          'message_id_hash': id.hashCode.toUnsigned(32).toRadixString(16),
+        }),
+        'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      });
+    });
+  }
+
   Future<void> saveReminder(BeliefMentorReminder value) async {
     final db = await _db();
     await db.insert(
@@ -1406,7 +1612,7 @@ class BeliefMentorDao {
       day.month,
       day.day + 1,
     ).millisecondsSinceEpoch;
-    final comparison = critical ? '= ?' : '<> ?';
+    final comparison = critical ? 'IN (?, ?, ?)' : 'NOT IN (?, ?, ?)';
     return Sqflite.firstIntValue(
           await db.rawQuery(
             '''SELECT COUNT(1) FROM belief_mentor_reminders
@@ -1419,6 +1625,8 @@ class BeliefMentorDao {
               start,
               end,
               BeliefMentorReminderType.preAction.name,
+              BeliefMentorReminderType.calendarT1.name,
+              BeliefMentorReminderType.pastMeMessage.name,
             ],
           ),
         ) ??
@@ -2034,6 +2242,8 @@ class BeliefMentorDao {
     'belief_mentor_experiments',
     'belief_mentor_evidence',
     'belief_mentor_reminders',
+    'belief_mentor_calendar_events',
+    'belief_mentor_past_me_messages',
     'belief_mentor_story_views',
     'belief_mentor_failures',
     'belief_mentor_agent_runs',

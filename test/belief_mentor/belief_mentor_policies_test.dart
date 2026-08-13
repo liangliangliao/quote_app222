@@ -127,4 +127,67 @@ void main() {
     expect(decision.blocksNormalFlow, isTrue);
     expect(decision.message, contains('紧急'));
   });
+
+  test(
+    '3M radar detects magnification, minimization and unsupported inference',
+    () {
+      final patterns = BeliefMentorCognitivePatternPolicy.detect(
+        '这次汇报一定会彻底失败；之前的进展不算什么，他们都肯定觉得我不行。',
+      );
+      expect(
+        patterns,
+        containsAll(<BeliefMentorCognitivePattern>[
+          BeliefMentorCognitivePattern.magnification,
+          BeliefMentorCognitivePattern.minimization,
+          BeliefMentorCognitivePattern.unsupportedInference,
+        ]),
+      );
+    },
+  );
+
+  test('duplicate evidence has diminishing state-transition weight', () {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    BeliefMentorEvidence evidence(String id, String outcome) =>
+        BeliefMentorEvidence(
+          id: id,
+          beliefId: 'belief-1',
+          experimentId: '',
+          prediction: '会失败',
+          action: '提交最小草稿',
+          outcome: outcome,
+          emotionBefore: 7,
+          emotionAfter: 4,
+          learning: '行动能换来信息',
+          statement: '不完美仍能获得反馈',
+          strength: BeliefMentorEvidenceStrength.medium,
+          createdAtMs: now,
+        );
+
+    expect(
+      BeliefMentorEvidencePolicy.effectiveCount(<BeliefMentorEvidence>[
+        evidence('1', '得到一个修改建议'),
+        evidence('2', '得到一个修改建议'),
+        evidence('3', '得到一个修改建议'),
+        evidence('4', '得到了完全不同的合作邀请'),
+      ]),
+      1,
+    );
+  });
+
+  test('experiment transitions reject impossible shortcuts', () {
+    expect(
+      BeliefMentorExperimentTransitionPolicy.canTransition(
+        BeliefMentorExperimentState.scheduled,
+        BeliefMentorExperimentState.evidenceCreated,
+      ),
+      isFalse,
+    );
+    expect(
+      BeliefMentorExperimentTransitionPolicy.canTransition(
+        BeliefMentorExperimentState.completed,
+        BeliefMentorExperimentState.reflection,
+      ),
+      isTrue,
+    );
+  });
 }

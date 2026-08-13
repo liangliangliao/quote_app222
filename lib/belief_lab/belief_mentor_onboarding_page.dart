@@ -104,8 +104,8 @@ class _BeliefMentorOnboardingPageState
           0,
           diagnosis.candidates.length - 1,
         )];
-    if (_domains.isEmpty || _domains.length > 3) {
-      _show('请选择 1–3 个优先领域');
+    if (_domains.isEmpty || _domains.length > 2) {
+      _show('请选择 1–2 个优先领域');
       return;
     }
     final draft = BeliefMentorExperimentDraft(
@@ -469,8 +469,8 @@ class _BeliefMentorOnboardingPageState
                 label: Text(item),
                 selected: _domains.contains(item),
                 onSelected: (selected) {
-                  if (selected && _domains.length >= 3) {
-                    _show('最多选择 3 个优先领域');
+                  if (selected && _domains.length >= 2) {
+                    _show('最多选择 2 个优先领域');
                     return;
                   }
                   setState(
@@ -763,7 +763,8 @@ class _BeliefMentorOnboardingPageState
         segments: const <ButtonSegment<String>>[
           ButtonSegment(value: 'gentle', label: Text('温和')),
           ButtonSegment(value: 'coach', label: Text('教练')),
-          ButtonSegment(value: 'direct', label: Text('直接')),
+          ButtonSegment(value: 'challenger', label: Text('挑战者')),
+          ButtonSegment(value: 'minimal', label: Text('极简')),
         ],
         selected: <String>{_tone},
         onSelectionChanged: (value) => setState(() => _tone = value.first),

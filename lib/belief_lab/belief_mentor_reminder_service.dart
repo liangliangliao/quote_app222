@@ -54,7 +54,7 @@ class BeliefMentorReminderService {
           ),
           (
             type: BeliefMentorReminderType.evidenceCapture,
-            at: actionAt.add(const Duration(minutes: 60)),
+            at: actionAt.add(const Duration(minutes: 90)),
             title: '把结果变成证据',
             body: '记录预测、实际行动与结果；一次结果不代表全部。',
           ),
@@ -83,12 +83,6 @@ class BeliefMentorReminderService {
     DateTime? day,
   }) async {
     final profile = await _dao.profile();
-    final composed = _compose(
-      type: type,
-      title: title,
-      body: body,
-      tone: profile.tone,
-    );
     final parts = profile.morningTime.split(':');
     final hour = int.tryParse(parts.first) ?? 8;
     final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 30 : 30;
@@ -112,11 +106,16 @@ class BeliefMentorReminderService {
   }) async {
     final created = <BeliefMentorReminder>[];
     final now = DateTime.now();
-    for (var offset = 0; offset < days; offset++) {
+    final parts = (await _dao.profile()).morningTime.split(':');
+    final hour = int.tryParse(parts.first) ?? 8;
+    final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 30 : 30;
+    final todayAt = DateTime(now.year, now.month, now.day, hour, minute);
+    final firstOffset = todayAt.isAfter(now) ? 0 : 1;
+    for (var index = 0; index < days; index++) {
       created.add(
         await scheduleMorningPrime(
           belief: belief,
-          day: DateTime(now.year, now.month, now.day + offset),
+          day: DateTime(now.year, now.month, now.day + firstOffset + index),
         ),
       );
     }
@@ -128,6 +127,11 @@ class BeliefMentorReminderService {
   ) async {
     final origin = DateTime.fromMillisecondsSinceEpoch(failure.createdAtMs);
     final stages = <({Duration delay, String stage, String body})>[
+      (
+        delay: const Duration(minutes: 1),
+        stage: 'T+0',
+        body: '先命名情绪，再把事实和解释分开；此刻不需要证明任何身份结论。',
+      ),
       (
         delay: const Duration(hours: 6),
         stage: 'T+6',
@@ -158,6 +162,83 @@ class BeliefMentorReminderService {
       );
     }
     return created;
+  }
+
+  /// Schedules the P1 manual Belief Calendar protocol. Past preparation stages
+  /// are skipped instead of being delivered immediately.
+  Future<List<BeliefMentorReminder>> scheduleCalendarEvent(
+    BeliefMentorCalendarEvent event,
+  ) async {
+    final safety = BeliefMentorSafetyPolicy.assess(
+      '${event.title} ${event.context}',
+    );
+    if (safety.blocksNormalFlow) {
+      await _dao.recordSafetyEvent(
+        category: safety.category,
+        action: 'blocked_calendar_protocol',
+        source: 'belief_calendar',
+      );
+      throw StateError(safety.message);
+    }
+    final eventAt = DateTime.fromMillisecondsSinceEpoch(event.eventAtMs);
+    final now = DateTime.now();
+    final plan = <({BeliefMentorReminderType type, DateTime at, String body})>[
+      (
+        type: BeliefMentorReminderType.calendarT7,
+        at: eventAt.subtract(const Duration(days: 7)),
+        body: '为“${event.title}”选择一个最小准备动作，并写下可验证的失败预测。',
+      ),
+      (
+        type: BeliefMentorReminderType.calendarT1,
+        at: eventAt.subtract(const Duration(days: 1)),
+        body: '明天是“${event.title}”。只复核边界、备用动作与已有个人证据。',
+      ),
+      (
+        type: BeliefMentorReminderType.calendarFollowUp,
+        at: eventAt.add(const Duration(minutes: 30)),
+        body: '事件结束 30 分钟：记录预测与实际结果，避免只凭情绪下结论。',
+      ),
+    ];
+    final created = <BeliefMentorReminder>[];
+    for (final item in plan) {
+      if (!item.at.isAfter(now)) continue;
+      created.add(
+        await _create(
+          type: item.type,
+          at: item.at,
+          beliefId: event.beliefId,
+          experimentId: event.id,
+          title: '信念日历 · ${item.type.label}',
+          body: item.body,
+        ),
+      );
+    }
+    return created;
+  }
+
+  Future<BeliefMentorReminder> schedulePastMeMessage(
+    BeliefMentorPastMeMessage message,
+  ) async {
+    final safety = BeliefMentorSafetyPolicy.assess(message.text);
+    if (safety.blocksNormalFlow) {
+      await _dao.recordSafetyEvent(
+        category: safety.category,
+        action: 'blocked_past_me_delivery',
+        source: 'past_me_message',
+      );
+      throw StateError(safety.message);
+    }
+    final summary = message.text.trim().isNotEmpty
+        ? message.text.trim()
+        : '你为现在的自己留了一段私人音频。';
+    return _create(
+      type: BeliefMentorReminderType.pastMeMessage,
+      at: DateTime.fromMillisecondsSinceEpoch(message.deliverAtMs),
+      beliefId: message.beliefId,
+      experimentId: message.id,
+      title: '来自过去的我',
+      body: summary,
+    );
   }
 
   Future<void> completeExperiment(String experimentId) async {
@@ -359,6 +440,12 @@ class BeliefMentorReminderService {
     required String body,
   }) async {
     final profile = await _dao.profile();
+    final composed = _compose(
+      type: type,
+      title: title,
+      body: body,
+      tone: profile.tone,
+    );
     final now = DateTime.now();
     final futureAt = at.isAfter(now) ? at : now.add(const Duration(minutes: 1));
     final adjusted = BeliefMentorReminderPolicy.moveOutsideQuietHours(

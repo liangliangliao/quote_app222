@@ -152,6 +152,10 @@ enum BeliefMentorReminderType {
   antiAvoidance,
   evidenceCapture,
   failureRecovery,
+  calendarT7,
+  calendarT1,
+  calendarFollowUp,
+  pastMeMessage,
 }
 
 extension BeliefMentorReminderTypeLabel on BeliefMentorReminderType {
@@ -161,9 +165,16 @@ extension BeliefMentorReminderTypeLabel on BeliefMentorReminderType {
     BeliefMentorReminderType.antiAvoidance => '反回避',
     BeliefMentorReminderType.evidenceCapture => '证据捕捉',
     BeliefMentorReminderType.failureRecovery => '失败恢复',
+    BeliefMentorReminderType.calendarT7 => '重要事件 · T-7 天',
+    BeliefMentorReminderType.calendarT1 => '重要事件 · T-1 天',
+    BeliefMentorReminderType.calendarFollowUp => '重要事件 · T+30 分钟',
+    BeliefMentorReminderType.pastMeMessage => '来自过去的我',
   };
 
-  bool get isCritical => this == BeliefMentorReminderType.preAction;
+  bool get isCritical =>
+      this == BeliefMentorReminderType.preAction ||
+      this == BeliefMentorReminderType.calendarT1 ||
+      this == BeliefMentorReminderType.pastMeMessage;
 
   static BeliefMentorReminderType parse(Object? value) {
     final raw = (value ?? '').toString();
@@ -621,6 +632,145 @@ class BeliefMentorReminder {
         deliveryKey: (row['delivery_key'] ?? '').toString(),
         suppressReason: (row['suppress_reason'] ?? '').toString(),
         ignoredCount: _asInt(row['ignored_count']),
+        createdAtMs: _asInt(row['created_at_ms']),
+        updatedAtMs: _asInt(row['updated_at_ms']),
+      );
+}
+
+enum BeliefMentorCalendarEventState { scheduled, completed, cancelled }
+
+extension BeliefMentorCalendarEventStateLabel
+    on BeliefMentorCalendarEventState {
+  String get label => switch (this) {
+    BeliefMentorCalendarEventState.scheduled => '已安排',
+    BeliefMentorCalendarEventState.completed => '已完成',
+    BeliefMentorCalendarEventState.cancelled => '已取消',
+  };
+
+  static BeliefMentorCalendarEventState parse(Object? value) {
+    final raw = (value ?? '').toString();
+    return BeliefMentorCalendarEventState.values.firstWhere(
+      (item) => item.name == raw,
+      orElse: () => BeliefMentorCalendarEventState.scheduled,
+    );
+  }
+}
+
+/// A manually entered high-stakes event. External calendar sync is P2; this
+/// record powers the P1 T-7/T-1/T+30m preparation protocol locally.
+class BeliefMentorCalendarEvent {
+  const BeliefMentorCalendarEvent({
+    required this.id,
+    required this.beliefId,
+    required this.title,
+    required this.context,
+    required this.eventAtMs,
+    required this.timezone,
+    required this.state,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  final String id;
+  final String beliefId;
+  final String title;
+  final String context;
+  final int eventAtMs;
+  final String timezone;
+  final BeliefMentorCalendarEventState state;
+  final int createdAtMs;
+  final int updatedAtMs;
+
+  Map<String, Object?> toRow() => <String, Object?>{
+    'id': id,
+    'belief_id': beliefId,
+    'title': title,
+    'context_text': context,
+    'event_at_ms': eventAtMs,
+    'timezone': timezone,
+    'state': state.name,
+    'created_at_ms': createdAtMs,
+    'updated_at_ms': updatedAtMs,
+  };
+
+  factory BeliefMentorCalendarEvent.fromRow(Map<String, Object?> row) =>
+      BeliefMentorCalendarEvent(
+        id: (row['id'] ?? '').toString(),
+        beliefId: (row['belief_id'] ?? '').toString(),
+        title: (row['title'] ?? '').toString(),
+        context: (row['context_text'] ?? '').toString(),
+        eventAtMs: _asInt(row['event_at_ms']),
+        timezone: (row['timezone'] ?? '').toString(),
+        state: BeliefMentorCalendarEventStateLabel.parse(row['state']),
+        createdAtMs: _asInt(row['created_at_ms']),
+        updatedAtMs: _asInt(row['updated_at_ms']),
+      );
+}
+
+enum BeliefMentorPastMeMessageState { scheduled, delivered, cancelled }
+
+extension BeliefMentorPastMeMessageStateLabel
+    on BeliefMentorPastMeMessageState {
+  String get label => switch (this) {
+    BeliefMentorPastMeMessageState.scheduled => '等待送达',
+    BeliefMentorPastMeMessageState.delivered => '已送达',
+    BeliefMentorPastMeMessageState.cancelled => '已取消',
+  };
+
+  static BeliefMentorPastMeMessageState parse(Object? value) {
+    final raw = (value ?? '').toString();
+    return BeliefMentorPastMeMessageState.values.firstWhere(
+      (item) => item.name == raw,
+      orElse: () => BeliefMentorPastMeMessageState.scheduled,
+    );
+  }
+}
+
+/// A private text or audio note written now and delivered at a future moment.
+class BeliefMentorPastMeMessage {
+  const BeliefMentorPastMeMessage({
+    required this.id,
+    required this.beliefId,
+    required this.text,
+    required this.audioPath,
+    required this.deliverAtMs,
+    required this.state,
+    required this.isPrivate,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  final String id;
+  final String beliefId;
+  final String text;
+  final String audioPath;
+  final int deliverAtMs;
+  final BeliefMentorPastMeMessageState state;
+  final bool isPrivate;
+  final int createdAtMs;
+  final int updatedAtMs;
+
+  Map<String, Object?> toRow() => <String, Object?>{
+    'id': id,
+    'belief_id': beliefId,
+    'message_text': text,
+    'audio_path': audioPath,
+    'deliver_at_ms': deliverAtMs,
+    'state': state.name,
+    'is_private': isPrivate ? 1 : 0,
+    'created_at_ms': createdAtMs,
+    'updated_at_ms': updatedAtMs,
+  };
+
+  factory BeliefMentorPastMeMessage.fromRow(Map<String, Object?> row) =>
+      BeliefMentorPastMeMessage(
+        id: (row['id'] ?? '').toString(),
+        beliefId: (row['belief_id'] ?? '').toString(),
+        text: (row['message_text'] ?? '').toString(),
+        audioPath: (row['audio_path'] ?? '').toString(),
+        deliverAtMs: _asInt(row['deliver_at_ms']),
+        state: BeliefMentorPastMeMessageStateLabel.parse(row['state']),
+        isPrivate: _asBool(row['is_private']),
         createdAtMs: _asInt(row['created_at_ms']),
         updatedAtMs: _asInt(row['updated_at_ms']),
       );

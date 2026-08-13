@@ -67,6 +67,8 @@ void main() {
           learning: '先提交最小版本能换来信息',
           statement: '在这次低风险提交里，不完美没有阻止我获得反馈',
           strength: BeliefMentorEvidenceStrength.strong,
+          predictedFailureProbability: 80,
+          predictionOccurred: false,
           createdAtMs: now.add(const Duration(hours: 3)).millisecondsSinceEpoch,
         ),
       );
@@ -76,6 +78,12 @@ void main() {
         BeliefMentorExperimentState.evidenceCreated,
       );
       expect(await dao.evidence(beliefId: belief.id), hasLength(1));
+      expect(
+        (await dao.evidence(beliefId: belief.id))
+            .single
+            .predictedFailureProbability,
+        80,
+      );
       expect(
         (await dao.belief(belief.id))!.state,
         BeliefMentorBeliefState.evidenceAccumulating,
@@ -108,6 +116,60 @@ void main() {
 
     expect(duplicate.id, first.id);
     expect(await dao.failures(openOnly: true), hasLength(1));
+  });
+
+  test('P1 calendar and Past Me records are encrypted and deletable', () async {
+    final now = DateTime.now();
+    final event = BeliefMentorCalendarEvent(
+      id: 'calendar-1',
+      beliefId: 'belief-1',
+      title: '重要汇报',
+      context: '向团队解释方案并接受提问',
+      eventAtMs: now.add(const Duration(days: 8)).millisecondsSinceEpoch,
+      timezone: now.timeZoneName,
+      state: BeliefMentorCalendarEventState.scheduled,
+      createdAtMs: now.millisecondsSinceEpoch,
+      updatedAtMs: now.millisecondsSinceEpoch,
+    );
+    final message = BeliefMentorPastMeMessage(
+      id: 'past-me-1',
+      beliefId: 'belief-1',
+      text: '你已经用最小行动得到过真实反馈。',
+      audioPath: '/private/message.m4a',
+      deliverAtMs: now.add(const Duration(days: 1)).millisecondsSinceEpoch,
+      state: BeliefMentorPastMeMessageState.scheduled,
+      isPrivate: true,
+      createdAtMs: now.millisecondsSinceEpoch,
+      updatedAtMs: now.millisecondsSinceEpoch,
+    );
+
+    await dao.saveCalendarEvent(event);
+    await dao.savePastMeMessage(message);
+
+    final rawEvent = (await database.query('belief_mentor_calendar_events'))
+        .single;
+    final rawMessage = (await database.query('belief_mentor_past_me_messages'))
+        .single;
+    expect(rawEvent['title'], startsWith('development:'));
+    expect(rawEvent['context_text'], startsWith('development:'));
+    expect(rawMessage['message_text'], startsWith('development:'));
+    expect(rawMessage['audio_path'], startsWith('development:'));
+    expect((await dao.calendarEvents()).single.title, event.title);
+    expect((await dao.pastMeMessages()).single.text, message.text);
+
+    await dao.deleteCalendarEvent(event.id);
+    await dao.deletePastMeMessage(message.id);
+
+    expect(await dao.calendarEvents(includeClosed: true), isEmpty);
+    expect(await dao.pastMeMessages(), isEmpty);
+    final audit = await database.query('belief_mentor_privacy_audit');
+    expect(
+      audit.map((row) => row['event_name']),
+      containsAll(<String>[
+        'belief_calendar_event_deleted',
+        'past_me_message_deleted',
+      ]),
+    );
   });
 
   test(

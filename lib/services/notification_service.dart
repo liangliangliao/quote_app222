@@ -158,6 +158,8 @@ class NotificationService {
         builder: (_) => BeliefMentorHomePage(
           initialTab: type == BeliefMentorReminderType.evidenceCapture.name
               ? 3
+              : _beliefMentorRitualReminder(type)
+              ? 4
               : 0,
           initialBeliefId: beliefId,
           initialExperimentId: experimentId,
@@ -167,6 +169,12 @@ class NotificationService {
     );
     return true;
   }
+
+  static bool _beliefMentorRitualReminder(String type) =>
+      type == BeliefMentorReminderType.calendarT7.name ||
+      type == BeliefMentorReminderType.calendarT1.name ||
+      type == BeliefMentorReminderType.calendarFollowUp.name ||
+      type == BeliefMentorReminderType.pastMeMessage.name;
 
   static Future<bool> _tryNavigateXiangjiFutureStrategist(
     String? payload,

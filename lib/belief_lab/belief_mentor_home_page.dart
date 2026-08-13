@@ -9,6 +9,7 @@ import 'belief_mentor_models.dart';
 import 'belief_mentor_onboarding_page.dart';
 import 'belief_mentor_policies.dart';
 import 'belief_mentor_reminder_service.dart';
+import 'belief_mentor_rituals_page.dart';
 
 class BeliefMentorHomePage extends StatefulWidget {
   const BeliefMentorHomePage({
@@ -126,7 +127,34 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
   }
 
   Future<void> _openInitialContext() async {
-    if (!mounted || widget.initialExperimentId.isEmpty) return;
+    if (!mounted) return;
+    final reminderType = widget.initialReminderType;
+    final opensRituals =
+        reminderType == BeliefMentorReminderType.calendarT7.name ||
+        reminderType == BeliefMentorReminderType.calendarT1.name ||
+        reminderType == BeliefMentorReminderType.calendarFollowUp.name ||
+        reminderType == BeliefMentorReminderType.pastMeMessage.name;
+    if (opensRituals) {
+      if (reminderType == BeliefMentorReminderType.pastMeMessage.name &&
+          widget.initialExperimentId.isNotEmpty) {
+        await _dao.markPastMeMessageDelivered(widget.initialExperimentId);
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BeliefMentorRitualsPage(
+            dao: _dao,
+            reminders: _reminders,
+            initialSection:
+                reminderType == BeliefMentorReminderType.pastMeMessage.name
+                ? 'past_me'
+                : 'calendar',
+          ),
+        ),
+      );
+      return;
+    }
+    if (widget.initialExperimentId.isEmpty) return;
     final experiment = await _dao.experiment(widget.initialExperimentId);
     if (!mounted || experiment == null) return;
     if (widget.initialReminderType ==
@@ -1281,6 +1309,13 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
               onTap: _manageReminders,
             ),
             ListTile(
+              leading: const Icon(Icons.event_available_outlined),
+              title: const Text('仪式与预测校准'),
+              subtitle: const Text('信念日历、来自过去的我、预测与实际趋势'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openRituals,
+            ),
+            ListTile(
               leading: const Icon(Icons.self_improvement_outlined),
               title: const Text('我现在需要空间'),
               subtitle: Text(
@@ -2301,7 +2336,14 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
       _mentorBusy = true;
     });
     final beliefs = await _dao.beliefs();
-    final active = beliefs.where((item) => item.userConfirmed).firstOrNull;
+    BeliefMentorBelief? active;
+    for (final belief in beliefs) {
+      if (belief.id == _profile?.activeBeliefId) {
+        active = belief;
+        break;
+      }
+    }
+    active ??= beliefs.where((item) => item.userConfirmed).firstOrNull;
     final result = await _ai.mentorReply(message: text, belief: active);
     if (!mounted) return;
     setState(() {
@@ -3090,6 +3132,16 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
     _show('数据已复制到剪贴板');
   }
 
+  Future<void> _openRituals() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            BeliefMentorRitualsPage(dao: _dao, reminders: _reminders),
+      ),
+    );
+    _refreshData();
+  }
+
   Future<void> _deleteAllData() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -3222,6 +3274,10 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
         BeliefMentorReminderType.antiAvoidance => '实验时间已过，尚未记录启动',
         BeliefMentorReminderType.evidenceCapture => '行动后及时保留预测与现实结果',
         BeliefMentorReminderType.failureRecovery => '按同一次失败的恢复时间协议跟进',
+        BeliefMentorReminderType.calendarT7 => '重要事件前 7 天开始最小准备',
+        BeliefMentorReminderType.calendarT1 => '重要事件前 1 天复核边界与备用动作',
+        BeliefMentorReminderType.calendarFollowUp => '事件后 30 分钟记录预测与实际结果',
+        BeliefMentorReminderType.pastMeMessage => '这是你此前选择在此刻送达的私人消息',
       };
 
   static String _recoveryStagePrompt(String stage) => switch (stage) {
