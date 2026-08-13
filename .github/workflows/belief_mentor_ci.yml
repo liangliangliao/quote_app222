@@ -1,0 +1,48 @@
+name: Belief Mentor CI
+
+on:
+  pull_request:
+    paths:
+      - "lib/belief_lab/belief_mentor_*.dart"
+      - "lib/pages/discover_page.dart"
+      - "lib/services/notification_service.dart"
+      - "lib/platform/native_scheduler.dart"
+      - "android/app/src/main/java/com/example/quote_app/am/AlarmReceiver.java"
+      - "test/belief_mentor/**"
+      - "pubspec.yaml"
+      - ".github/workflows/belief_mentor_ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: belief-mentor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze Belief Mentor
+        run: dart analyze lib/belief_lab/belief_mentor_*.dart
+
+      - name: Analyze Belief Mentor tests
+        run: dart analyze test/belief_mentor
+
+      - name: Run Belief Mentor tests
+        run: flutter test test/belief_mentor

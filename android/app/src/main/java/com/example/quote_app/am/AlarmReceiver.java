@@ -111,6 +111,27 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
                     );
                     return;
                 }
+                if ("belief_mentor".equals(module)) {
+                    String title = obj.optString("title", "Belief Mentor");
+                    String body = obj.optString("body", "点击继续你的信念实验");
+                    NotifyHelper.send(
+                        context.getApplicationContext(),
+                        id,
+                        title,
+                        body,
+                        null,
+                        "belief_mentor",
+                        payload == null ? "{}" : payload
+                    );
+                    markBeliefMentorReminderSent(
+                        context.getApplicationContext(),
+                        obj.optString("reminderId", ""),
+                        obj.optString("beliefId", ""),
+                        obj.optString("experimentId", ""),
+                        id
+                    );
+                    return;
+                }
                 if ("behavior_tracking".equals(module)) {
                     String type = obj.optString("type", "");
                     if ("behavior_auto_sync".equals(type)) {
@@ -229,5 +250,34 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
             try { if (db != null) db.close(); } catch (Throwable ignore) {}
         }
         return "";
+    }
+
+    /** Keep the local reminder state and weekly report truthful when the alarm fires natively. */
+    private static void markBeliefMentorReminderSent(
+        Context ctx,
+        String reminderId,
+        String beliefId,
+        String experimentId,
+        int alarmId
+    ) {
+        if (TextUtils.isEmpty(reminderId)) return;
+        SQLiteDatabase db = null;
+        try {
+            DbInspector.Contract cc = DbInspector.loadOrLightScan(ctx.getApplicationContext());
+            if (cc == null || TextUtils.isEmpty(cc.dbPath)) return;
+            db = SQLiteDatabase.openDatabase(cc.dbPath, null, SQLiteDatabase.OPEN_READWRITE);
+            long now = System.currentTimeMillis();
+            db.execSQL(
+                "UPDATE belief_mentor_reminders SET state='sent', updated_at_ms=? WHERE id=? AND state IN ('created','scheduled','snoozed','rescheduled')",
+                new Object[]{now, reminderId}
+            );
+            db.execSQL(
+                "INSERT OR IGNORE INTO belief_mentor_events(id,event_name,belief_id,experiment_id,properties_json,created_at_ms) VALUES(?,?,?,?,?,?)",
+                new Object[]{"event_native_" + now + "_" + alarmId, "reminder_sent", beliefId, experimentId, "{}", now}
+            );
+        } catch (Throwable ignore) {
+        } finally {
+            try { if (db != null) db.close(); } catch (Throwable ignore) {}
+        }
     }
 }

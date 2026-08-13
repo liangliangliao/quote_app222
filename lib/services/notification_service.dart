@@ -18,6 +18,9 @@ import '../xiangji_future_strategist/xiangji_home_page.dart';
 import '../xiangji_future_strategist/xiangji_database.dart';
 import '../xiangji_future_strategist/xiangji_problem_pages.dart';
 import '../xiangji_future_strategist/xiangji_repository.dart';
+import '../belief_lab/belief_mentor_dao.dart';
+import '../belief_lab/belief_mentor_home_page.dart';
+import '../belief_lab/belief_mentor_models.dart';
 import 'package:flutter/material.dart';
 
 @pragma('vm:entry-point')
@@ -66,6 +69,7 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateBeliefMentor(payload)) return;
     if (await _tryNavigateXiangjiFutureStrategist(payload)) return;
     if (await _tryNavigateXiangjiGoal(payload)) return;
     if (await _tryNavigateZhixingTree(payload)) return;
@@ -73,6 +77,51 @@ class NotificationService {
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateBeliefMentor(String? payload) async {
+    final value = (payload ?? '').trim();
+    if (value.isEmpty) return false;
+    var matched = value.startsWith('belief_mentor');
+    var reminderId = '';
+    var type = '';
+    if (value.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map && (decoded['module'] ?? '').toString() == 'belief_mentor') {
+          matched = true;
+          reminderId = (decoded['reminderId'] ?? '').toString();
+          type = (decoded['type'] ?? '').toString();
+        }
+      } catch (_) {}
+    }
+    if (!matched) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = value;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try { await NotificationService.handlePendingNotificationNavigation(); } catch (_) {}
+      });
+      return true;
+    }
+    if (reminderId.isNotEmpty) {
+      try {
+        await BeliefMentorDao().updateReminderState(
+          reminderId,
+          BeliefMentorReminderState.opened,
+        );
+      } catch (_) {}
+    }
+    _pendingPayload = null;
+    _launchFromNotif = false;
+    nav.popUntil((route) => route.isFirst);
+    nav.push(MaterialPageRoute(
+      builder: (_) => BeliefMentorHomePage(
+        initialTab: type == BeliefMentorReminderType.evidenceCapture.name ? 3 : 0,
+      ),
+    ));
+    return true;
   }
 
   static Future<bool> _tryNavigateXiangjiFutureStrategist(
@@ -298,6 +347,8 @@ class NotificationService {
           // Fallback to home if something fails
           SimpleBus.navHome();
           SimpleBus.pokeHome();
+        } else if (await NotificationService._tryNavigateBeliefMentor(p)) {
+          return;
         } else if (await NotificationService._tryNavigateXiangjiFutureStrategist(p)) {
           return;
         } else if (await NotificationService._tryNavigateXiangjiGoal(p)) {

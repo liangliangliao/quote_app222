@@ -46,6 +46,8 @@ import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
 import '../will_mirror/will_mirror_discover_entry.dart';
 import '../will_mirror/will_mirror_home_page.dart';
 import '../mental_health_checkup/mental_health_checkup_page.dart';
+import '../belief_lab/belief_mentor_discover_entry.dart';
+import '../belief_lab/belief_mentor_home_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2556,6 +2558,16 @@ Widget _buildEmotionPieChart() {
                       icon: Icons.edit_note_outlined,
                       title: '写日记',
                       onTap: _openDiaryFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    BeliefMentorDiscoverEntry(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const BeliefMentorHomePage(),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     XiangjiDiscoverEntries(
