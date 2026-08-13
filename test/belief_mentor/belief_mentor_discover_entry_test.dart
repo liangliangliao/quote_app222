@@ -2,25 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/belief_lab/belief_mentor_dao.dart';
 import 'package:quote_app/belief_lab/belief_mentor_discover_entry.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:quote_app/belief_lab/belief_mentor_models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
 
   testWidgets('发现之旅入口说明完整闭环并可打开产品', (tester) async {
-    final database = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-    );
-    addTearDown(database.close);
-    final dao = BeliefMentorDao(database: database);
-    await dao.ensureSchema(database);
     var opened = false;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: BeliefMentorDiscoverEntry(dao: dao, onTap: () => opened = true),
+          body: BeliefMentorDiscoverEntry(
+            dao: _DiscoverFakeDao(),
+            onTap: () => opened = true,
+          ),
         ),
       ),
     );
@@ -44,4 +40,18 @@ void main() {
     await tester.tap(find.byKey(BeliefMentorDiscoverEntry.entryKey));
     expect(opened, isTrue);
   });
+}
+
+class _DiscoverFakeDao extends BeliefMentorDao {
+  @override
+  Future<BeliefMentorProfile> profile() async =>
+      const BeliefMentorProfile(onboardingCompleted: false);
+
+  @override
+  Future<BeliefMentorTodaySnapshot> today() async =>
+      const BeliefMentorTodaySnapshot();
+
+  @override
+  Future<List<BeliefMentorEvidence>> evidence({String? beliefId}) async =>
+      const <BeliefMentorEvidence>[];
 }
