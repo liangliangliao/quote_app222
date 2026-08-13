@@ -44,5 +44,14 @@ jobs:
       - name: Analyze Belief Mentor tests
         run: dart analyze test/belief_mentor
 
-      - name: Run Belief Mentor tests
-        run: flutter test test/belief_mentor
+      - name: Run policy tests
+        timeout-minutes: 4
+        run: flutter test test/belief_mentor/belief_mentor_policies_test.dart
+
+      - name: Run database tests
+        timeout-minutes: 4
+        run: flutter test test/belief_mentor/belief_mentor_dao_test.dart
+
+      - name: Run discovery entry test
+        timeout-minutes: 4
+        run: flutter test test/belief_mentor/belief_mentor_discover_entry_test.dart
