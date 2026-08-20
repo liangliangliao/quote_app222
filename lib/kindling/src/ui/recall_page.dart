@@ -44,6 +44,21 @@ class _KindlingRecallPageState extends State<KindlingRecallPage> {
     super.dispose();
   }
 
+  /// 候选出自哪一问，就落哪一类。
+  ///
+  /// 用原话反查而不是让切分器带出来，是为了不动方案 §7 定死的
+  /// extractCandidates 接口——换成 AI 追问器时同样适用；认不出来的
+  /// （比如 AI 重写过措辞）落回 recall。
+  String _kindOf(String candidate) {
+    final Map<String, String> answers = _answers;
+    for (final String key in KRecallQuestion.ordered) {
+      if ((answers[key] ?? '').contains(candidate)) {
+        return kindOfRecallQuestion(key);
+      }
+    }
+    return KKind.recall;
+  }
+
   Map<String, String> get _answers {
     final Map<String, String> map = <String, String>{};
     for (int i = 0; i < KRecallQuestion.ordered.length; i++) {
@@ -88,9 +103,13 @@ class _KindlingRecallPageState extends State<KindlingRecallPage> {
     final List<String> picked = _candidates
         .where((String c) => _checked.contains(c))
         .toList(growable: false);
+    final List<KCandidate> candidates = picked
+        .map((String title) => (title: title, kind: _kindOf(title)))
+        .toList(growable: false);
     final List<KindlingCreatedItem> created = <KindlingCreatedItem>[];
-    if (picked.isNotEmpty) {
-      final List<int> ids = await widget.controller.addItemsFromRecall(picked);
+    if (candidates.isNotEmpty) {
+      final List<int> ids =
+          await widget.controller.addItemsFromRecall(candidates);
       for (int i = 0; i < ids.length && i < picked.length; i++) {
         created.add((id: ids[i], title: picked[i]));
       }

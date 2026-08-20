@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'domain/controller.dart';
 import 'kindling_oracle.dart';
+import 'kindling_reminder.dart';
 import 'ui/list_page.dart';
 
 /// 模块入口。宿主只需要这一个 Widget 与一个路由常量。
@@ -13,6 +14,7 @@ class KindlingEntry extends StatefulWidget {
     super.key,
     required this.db,
     this.oracle = const LocalOracle(),
+    this.reminder = const NoopKindlingReminder(),
   });
 
   /// 路由名。宿主可在 routes 里注册，也可以直接 push [build] 出来的 Widget。
@@ -21,12 +23,16 @@ class KindlingEntry extends StatefulWidget {
   final Database db;
   final KindlingOracle oracle;
 
+  /// 复问提醒。默认不接通知，即方案 §5.3 的「默认关」。
+  final KindlingReminder reminder;
+
   /// 集成契约里的构造入口。
   static Widget build({
     required Database db,
     KindlingOracle oracle = const LocalOracle(),
+    KindlingReminder reminder = const NoopKindlingReminder(),
   }) {
-    return KindlingEntry(db: db, oracle: oracle);
+    return KindlingEntry(db: db, oracle: oracle, reminder: reminder);
   }
 
   @override
@@ -37,6 +43,7 @@ class _KindlingEntryState extends State<KindlingEntry> {
   late final KindlingController _controller = KindlingController(
     db: widget.db,
     oracle: widget.oracle,
+    reminder: widget.reminder,
   );
 
   @override

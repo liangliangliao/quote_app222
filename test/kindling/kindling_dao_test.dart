@@ -55,6 +55,65 @@ void main() {
     expect(await dao.releasedCount(), 2);
   });
 
+  test('an aborted run never drags the want ratio down', () async {
+    final int id = await dao.insertItem(title: 'x');
+    final DateTime now = DateTime.now();
+
+    final int answered =
+        await dao.insertBurn(itemId: id, startedAt: now, seconds: 900);
+    await dao.answerWantMore(answered, true);
+    // 中途退出：没作答，不该被算成一次「不想」。
+    await dao.insertBurn(
+      itemId: id,
+      startedAt: now.add(const Duration(hours: 1)),
+      seconds: 41,
+      aborted: true,
+    );
+
+    final KItemView view = (await dao.liveItemViews()).single;
+    expect(view.burnTotal, 1, reason: '未作答的不进分母');
+    expect(view.wantMoreCount, 1);
+    expect(view.lastBurnAt, isNotNull, reason: '碰过就是碰过，衰减照算');
+  });
+
+  test('recall candidates keep the kind of the question they came from',
+      () async {
+    await dao.insertItems(<KCandidate>[
+      (title: '译完第九节', kind: kindOfRecallQuestion(KRecallQuestion.itch)),
+      (title: '别人做完了', kind: kindOfRecallQuestion(KRecallQuestion.envy)),
+      (title: '改渲染管线', kind: kindOfRecallQuestion(KRecallQuestion.lostTrack)),
+    ]);
+
+    final Map<String, String> byTitle = <String, String>{
+      for (final KItem item in await dao.liveItems()) item.title: item.kind,
+    };
+    expect(byTitle['译完第九节'], KKind.itch);
+    expect(byTitle['别人做完了'], KKind.defiance);
+    expect(byTitle['改渲染管线'], KKind.recall);
+  });
+
+  test('a fully blank recall is not counted as a session', () async {
+    await dao.saveRecallAnswers(<String, String>{
+      KRecallQuestion.lostTrack: '   ',
+      KRecallQuestion.itch: '',
+      KRecallQuestion.envy: '\n',
+    });
+    expect(await dao.recallHistory(), isEmpty);
+    expect(await dao.readCounter(KindlingDao.metaRecallSessions), 0);
+  });
+
+  test('换个说法 can also leave a note behind', () async {
+    final int id = await dao.insertItem(title: '旧说法');
+    await dao.renameItem(id, '新说法', note: '为什么想做这件事');
+    KItem? item = await dao.findItem(id);
+    expect(item!.title, '新说法');
+    expect(item.note, '为什么想做这件事');
+
+    await dao.renameItem(id, '新说法', note: '   ');
+    item = await dao.findItem(id);
+    expect(item!.note, isNull, reason: '空备注就是没有备注');
+  });
+
   test('recall answers are stored verbatim and bump the session counter',
       () async {
     await dao.saveRecallAnswers(<String, String>{

@@ -49,6 +49,7 @@ import '../mental_health_checkup/mental_health_checkup_page.dart';
 import '../belief_lab/belief_mentor_discover_entry.dart';
 import '../belief_lab/belief_mentor_home_page.dart';
 import '../kindling/kindling.dart';
+import '../kindling_host/kindling_host_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2496,17 +2497,11 @@ Widget _buildEmotionPieChart() {
     );
   }
 
-  /// 打开「火种」。模块不自己开库，这里把宿主已打开的 Database 传进去。
+  /// 打开「火种」。装配（等库、接追问器与提醒）都在 KindlingHostPage 里。
   Future<void> _openKindlingFromDiscover() async {
-    final db = await AppDatabase.instance();
-    if (!mounted) return;
     await Navigator.of(context).push(
       CupertinoPageRoute<void>(
-        builder: (_) => KindlingEntry.build(
-          db: db,
-          // 默认离线：不联网时全部功能可用。
-          oracle: const LocalOracle(),
-        ),
+        builder: (_) => const KindlingHostPage(),
       ),
     );
   }

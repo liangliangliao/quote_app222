@@ -40,6 +40,8 @@ import '../movie_role_lab/movie_role_lab_settings_page.dart';
 import '../voice_lab/voice_lab_home_page.dart';
 import '../semantic_consistency/semantic_consistency_settings_page.dart';
 import '../health_diet/pages/health_diet_settings_page.dart';
+import '../kindling_host/kindling_host_reminder.dart';
+import '../services/notification_service.dart';
 // removed duplicate import of native_guard (already imported above)
 
 class SettingsPage extends StatefulWidget {
@@ -162,6 +164,8 @@ class _SettingsPageState extends State<SettingsPage> {
   int _esteemScale = 100;
 
   bool _moodCardPopupEnabled = true;
+  // 火种：「说不准」7 天后的复问通知，方案规定默认关。
+  bool _kindlingReaskNotifyEnabled = false;
   bool _drawerHeaderAiEnabled = false;
 
   // ====== 运动设置 ======
@@ -1797,6 +1801,13 @@ Future<void> _clearSportMusicPlaylist() async {
       _drawerHeaderAiEnabled = false;
     }
 
+    // 读取火种复问通知开关（缺省即关）
+    try {
+      _kindlingReaskNotifyEnabled = await KindlingHostReminder.isEnabled();
+    } catch (_) {
+      _kindlingReaskNotifyEnabled = false;
+    }
+
     // 读取发现之旅“此时此刻心情卡片”设置
     try {
       _moodCardPopupEnabled = await _configDao.getMoodCardPopupEnabled();
@@ -3393,6 +3404,25 @@ const Text('头像（用于通知图标）'),
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 火种：复问通知开关
+            Card(
+              child: SwitchListTile(
+                key: const ValueKey<String>('settings_kindling_reask_notify'),
+                title: const Text('火种：「说不准」7 天后提醒一次'),
+                subtitle: const Text('默认关闭。关闭时不发通知，下次打开火种仍会问一次'),
+                value: _kindlingReaskNotifyEnabled,
+                onChanged: (bool value) async {
+                  setState(() {
+                    _kindlingReaskNotifyEnabled = value;
+                  });
+                  await KindlingHostReminder.setEnabled(value);
+                  if (value) {
+                    await NotificationService.request();
+                  }
+                },
               ),
             ),
             const SizedBox(height: 16),

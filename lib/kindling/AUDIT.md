@@ -16,8 +16,8 @@
 | 方案 | 本次实现 |
 | --- | --- |
 | 抽屉 `ListTile` → `pushNamed(KindlingEntry.route)` | 发现之旅列表里的 `KindlingDiscoverEntry` 卡片 → `push(KindlingEntry.build(...))` |
-| `routes: { KindlingEntry.route: ... }` | 未注册全局路由。宿主的 `Database` 是异步打开的（`AppDatabase.instance()`），路由表拿不到实例；`KindlingEntry.route` 常量保留，宿主日后想注册可直接用 |
-| 导出 3 个符号 | 导出 4 个：多一个 `KindlingDiscoverEntry`（发现页入口卡片），因为集成点在发现页 |
+| `routes: { KindlingEntry.route: ... }` | 已注册。宿主的 `Database` 是异步打开的（`AppDatabase.instance()`），所以路由指向 `KindlingHostPage`，由它等库、接追问器与提醒，再建 `KindlingEntry` |
+| 导出 3 个符号 | 导出 6 个：多 `KindlingDiscoverEntry`（发现页入口卡片）与 `KindlingReminder` / `NoopKindlingReminder`（复问提醒的挂载点，不接即默认关） |
 
 数据库迁移按方案接：`lib/data/db.dart` 的 `_create`、`_upgrade` 与每次
 `openDatabase` 之后各调一次 `KindlingSchema.createAll` / `migrate`，三处都幂等。
@@ -39,19 +39,41 @@
 - §8 的三个埋点写入 `k_meta`，界面不读取：`recall_sessions`、`released_count`、
   `burn_want_more_rate`。
 
+## 宿主侧装配层（`lib/kindling_host/`，不属于模块）
+
+模块内不得依赖 flutter/sqflite 之外的任何东西，所以凡是要用宿主能力的都放在这一层，
+删掉它模块照常工作（退回离线追问器 + 不发通知）：
+
+| 文件 | 作用 |
+| --- | --- |
+| `kindling_host_page.dart` | 等库、装配追问器与提醒，发现页入口与全局路由都走它 |
+| `kindling_ai_oracle.dart` | 方案 §7 的 AI 追问器。system prompt 逐字照抄 §7；问句超 25 字、含禁用词、不是问句、模型不可用或抛错，一律静默退回 `LocalOracle` |
+| `kindling_host_reminder.dart` | §5.3 的复问通知。用宿主已有的 Workmanager 一次性任务排 7 天，到点弹一条判别式问句；重新作答/放掉/已在应用内复问都会撤掉排期 |
+
+通知开关在「设置」里，键 `kindling.reask_notify_enabled`，**缺省即关**，与方案一致。
+关掉时只是不发通知，应用内的复问照常发生。
+
 ## 实现细节说明（方案未写死、由实现决定的部分）
 
+0. **痒度自评的采集口**：方案 §3 把它称作「唯一的主观信号」、§4 拿它排序，但 §5 的
+   五个页面里没有一屏说在哪问。本次放在长按菜单第一条「现在还痒吗」，弹出五档措辞
+   （不做就难受 / 常想起 / 说不上 / 淡了 / 没感觉了），对应 4..0。界面上没有数字、
+   星级或程度条，答完不给任何反馈，用户无从知道自己"打了几分"。这是长按菜单相对
+   §5.1 多出的一条，其余四条与方案一致。
 1. **十五分钟的圆**：按 §5.4「界面只有一个圆和剩余时间」取字面实现——一个静态
    圆环 + 中间倒计时，没有随时间收缩的进度弧，避免读成进度条。
 2. **「说不准」7 天后复问**：进入模块时查一次 `itemsDueForReask`，每次会话至多
-   弹一条。方案里「本地通知可选，默认关」的通知未实现——模块要求零外部依赖，
-   通知需要宿主的 `flutter_local_notifications`，故不引入。
-3. **连续 3 次「不想」**：`consecutiveNoCount` 只看已作答的记录，未作答（中途退出）
+   弹一条。本地通知按方案定为可选、默认关：模块只出 `KindlingReminder` 接口
+   （默认实现什么都不做），通知本身由宿主侧的 `KindlingHostReminder` 提供。
+3. **中途退出不进比例的分母**：`heat()` 的 `burnTotal` 只算已作答的十五分钟。若把
+   未作答的也计入，中途退出一次就等于往「不想」那边记了一笔，与 §5.4「不记为失败」
+   相悖。最近一次触碰仍包含中途退出——碰过就是碰过，时间衰减照算。
+4. **连续 3 次「不想」**：`consecutiveNoCount` 只看已作答的记录，未作答（中途退出）
    不打断连续性。达到 3 次时长按菜单把「放掉」置顶，不弹窗、不劝退。
-4. **`released_count`** 记的是「放掉」这个动作发生的累计次数；「拿回来」不回退这个
+5. **`released_count`** 记的是「放掉」这个动作发生的累计次数；「拿回来」不回退这个
    计数（它衡量的是判别式起没起作用）。当前在册数量另有 `releasedCount()`。
-5. **手动放掉的原因**记为「手动放掉」，判别式放掉记为「判别式：不做」。
-6. **底部「十五分钟」**：清单只有一条时直接进入，多于一条时先选一个；清单为空时
+6. **手动放掉的原因**记为「手动放掉」，判别式放掉记为「判别式：不做」。
+7. **底部「十五分钟」**：清单只有一条时直接进入，多于一条时先选一个；清单为空时
    按钮不可用，且不给任何提示。
 7. **候选切分**：按换行 / 。/ ；切分，去掉列表前缀（`-`、`•`、`1.`），保留 2–40 字，
    去重。
@@ -79,12 +101,20 @@
 - `.github/workflows/kindling_ci.yml` —— 除分析与测试外，还有一步静态检查：模块
   不得依赖 flutter/sqflite 以外的包，也不得自己开库或引用宿主的 `AppDatabase`。
 
+## 交付物（§11）
+
+`tools/pack_kindling.sh` 产出 `build/kindling/kindling_v1.zip`，根目录名 `kindling_v1`，
+内含模块本体、`AUDIT.md`、宿主侧装配层（`host_integration/`）与全部测试。CI 每次跑完
+会把这个 zip 作为构建产物传上去；zip 是构建产物，不入库。
+
 ## 卸载方式
 
-1. 删掉 `lib/kindling/`；
-2. 删掉 `lib/data/db.dart` 里的 `import '../kindling/kindling.dart';` 与三处
-   `KindlingSchema.*` 调用；
+1. 删掉 `lib/kindling/` 与 `lib/kindling_host/`；
+2. 删掉 `lib/data/db.dart` 里的 import 与三处 `KindlingSchema.*` 调用；
 3. 删掉 `lib/pages/discover_page.dart` 里的 import、`KindlingDiscoverEntry`
-   卡片与 `_openKindlingFromDiscover`。
+   卡片与 `_openKindlingFromDiscover`；
+4. 删掉 `lib/main.dart` 的 `routes` 中那一条、`lib/services/wm_dispatcher.dart` 的
+   `KindlingHostReminder` 分支、`lib/services/notification_service.dart` 的
+   `_tryNavigateKindling`、以及 `lib/pages/settings_page.dart` 里的复问通知开关。
 
 宿主库里遗留的 `k_` 表不影响任何宿主逻辑，可留可删。

@@ -5,6 +5,7 @@ import '../data/models.dart';
 import '../domain/controller.dart';
 import 'burn_page.dart';
 import 'recall_page.dart';
+import 'probe_sheet.dart';
 import 'released_page.dart';
 import 'resistance_page.dart';
 import 'verdict_sheet.dart';
@@ -22,6 +23,7 @@ class KindlingListPage extends StatefulWidget {
   static const Key recallKey = ValueKey<String>('kindling_list_recall');
   static const Key burnKey = ValueKey<String>('kindling_list_burn');
   static const Key releasedKey = ValueKey<String>('kindling_list_released');
+  static const Key noteKey = ValueKey<String>('kindling_list_note');
 
   final KindlingController controller;
 
@@ -164,17 +166,21 @@ class _KindlingListPageState extends State<KindlingListPage> {
   }
 
   Future<void> _rename(KItemView view) async {
-    final String? next = await _promptText(initial: view.title);
-    if (next == null || next.trim().isEmpty) return;
-    await _c.rename(view.id, next);
+    final ({String title, String note})? next = await _promptText(
+      initial: view.title,
+      initialNote: view.item.note,
+      withNote: true,
+    );
+    if (next == null || next.title.trim().isEmpty) return;
+    await _c.rename(view.id, next.title, note: next.note);
   }
 
   /// 清单为空时的入口：写完立刻弹判别式。
   Future<void> _writeDirect() async {
-    final String? text = await _promptText(
+    final ({String title, String note})? text = await _promptText(
       fieldKey: KindlingListPage.directKey,
     );
-    final String title = (text ?? '').trim();
+    final String title = (text?.title ?? '').trim();
     if (title.isEmpty || !mounted) return;
     final int id = await _c.addItem(title);
     if (!mounted) return;
@@ -186,13 +192,21 @@ class _KindlingListPageState extends State<KindlingListPage> {
     );
   }
 
-  /// 一行输入。对话框自己持有 TextEditingController，随路由一起销毁。
-  Future<String?> _promptText({String? initial, Key? fieldKey}) {
-    return showDialog<String>(
+  /// 一行输入（换个说法时多一行可选备注）。
+  /// 对话框自己持有 TextEditingController，随路由一起销毁。
+  Future<({String title, String note})?> _promptText({
+    String? initial,
+    String? initialNote,
+    Key? fieldKey,
+    bool withNote = false,
+  }) {
+    return showDialog<({String title, String note})>(
       context: context,
       builder: (BuildContext dialogContext) => _TextPromptDialog(
         initial: initial,
+        initialNote: initialNote,
         fieldKey: fieldKey,
+        withNote: withNote,
       ),
     );
   }
@@ -224,6 +238,15 @@ class _KindlingListPageState extends State<KindlingListPage> {
           () => _c.release(view.id),
         );
         final List<Widget> rest = <Widget>[
+          tile(
+            KCopy.menuProbe,
+            () => KindlingProbeSheet.show(
+              context,
+              controller: _c,
+              itemId: view.id,
+              title: view.title,
+            ),
+          ),
           tile(KCopy.menuRename, () => _rename(view)),
           tile(
             KCopy.menuVerdict,
@@ -409,10 +432,17 @@ class _KindlingListPageState extends State<KindlingListPage> {
 
 /// 只做一件事：拿一行文字。放在这里是为了让 controller 的生命周期跟着对话框走。
 class _TextPromptDialog extends StatefulWidget {
-  const _TextPromptDialog({this.initial, this.fieldKey});
+  const _TextPromptDialog({
+    this.initial,
+    this.initialNote,
+    this.fieldKey,
+    this.withNote = false,
+  });
 
   final String? initial;
+  final String? initialNote;
   final Key? fieldKey;
+  final bool withNote;
 
   @override
   State<_TextPromptDialog> createState() => _TextPromptDialogState();
@@ -421,10 +451,13 @@ class _TextPromptDialog extends StatefulWidget {
 class _TextPromptDialogState extends State<_TextPromptDialog> {
   late final TextEditingController _input =
       TextEditingController(text: widget.initial);
+  late final TextEditingController _note =
+      TextEditingController(text: widget.initialNote);
 
   @override
   void dispose() {
     _input.dispose();
+    _note.dispose();
     super.dispose();
   }
 
@@ -432,16 +465,32 @@ class _TextPromptDialogState extends State<_TextPromptDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: Colors.white,
-      content: TextField(
-        key: widget.fieldKey,
-        controller: _input,
-        autofocus: true,
-        maxLines: null,
-        style: const TextStyle(fontSize: 16),
-        decoration: const InputDecoration(
-          hintText: KCopy.titleHint,
-          hintStyle: TextStyle(color: Color(0xFFBBBBBB)),
-        ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          TextField(
+            key: widget.fieldKey,
+            controller: _input,
+            autofocus: true,
+            maxLines: null,
+            style: const TextStyle(fontSize: 16),
+            decoration: const InputDecoration(
+              hintText: KCopy.titleHint,
+              hintStyle: TextStyle(color: Color(0xFFBBBBBB)),
+            ),
+          ),
+          if (widget.withNote)
+            TextField(
+              key: KindlingListPage.noteKey,
+              controller: _note,
+              maxLines: null,
+              style: const TextStyle(fontSize: 15),
+              decoration: const InputDecoration(
+                hintText: KCopy.noteHint,
+                hintStyle: TextStyle(color: Color(0xFFBBBBBB)),
+              ),
+            ),
+        ],
       ),
       actions: <Widget>[
         TextButton(
@@ -449,7 +498,9 @@ class _TextPromptDialogState extends State<_TextPromptDialog> {
           child: const Text(KCopy.cancel),
         ),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(_input.text),
+          onPressed: () => Navigator.of(context).pop(
+            (title: _input.text, note: _note.text),
+          ),
           child: const Text(KCopy.save),
         ),
       ],

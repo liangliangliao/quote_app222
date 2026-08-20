@@ -5,6 +5,7 @@ import '../copy.dart';
 import '../data/kindling_dao.dart';
 import '../data/models.dart';
 import '../kindling_oracle.dart';
+import '../kindling_reminder.dart';
 import 'heat.dart';
 
 /// 模块唯一的状态容器。不引入 provider/riverpod/get。
@@ -12,10 +13,12 @@ class KindlingController extends ChangeNotifier {
   KindlingController({
     required Database db,
     this.oracle = const LocalOracle(),
+    this.reminder = const NoopKindlingReminder(),
   }) : dao = KindlingDao(db);
 
   final KindlingDao dao;
   final KindlingOracle oracle;
+  final KindlingReminder reminder;
 
   bool _loading = true;
   bool _disposed = false;
@@ -53,6 +56,8 @@ class KindlingController extends ChangeNotifier {
     final List<KItem> due = await dao.itemsDueForReask();
     if (due.isEmpty) return null;
     _reaskConsumed = true;
+    // 已经在应用内复问了，就不必再留一条系统通知。
+    await reminder.onReaskResolved(itemId: due.first.id);
     return due.first;
   }
 
@@ -72,14 +77,20 @@ class KindlingController extends ChangeNotifier {
     return id;
   }
 
-  Future<List<int>> addItemsFromRecall(List<String> titles) async {
-    final List<int> ids = await dao.insertItems(titles, kind: KKind.recall);
+  Future<List<int>> addItemsFromRecall(List<KCandidate> candidates) async {
+    final List<int> ids = await dao.insertItems(candidates);
     await load();
     return ids;
   }
 
-  Future<void> rename(int itemId, String title) async {
-    await dao.renameItem(itemId, title);
+  Future<void> rename(int itemId, String title, {String? note}) async {
+    await dao.renameItem(itemId, title, note: note);
+    await load();
+  }
+
+  /// 痒度自评。分值只喂给排序，界面上永远只呈现措辞。
+  Future<void> recordProbe(int itemId, int score) async {
+    await dao.recordProbe(itemId, score);
     await load();
   }
 
@@ -88,6 +99,7 @@ class KindlingController extends ChangeNotifier {
       itemId,
       reason: reason ?? KCopy.releaseReasonManual,
     );
+    await reminder.onReaskResolved(itemId: itemId);
     await load();
   }
 
@@ -98,11 +110,23 @@ class KindlingController extends ChangeNotifier {
 
   /// 判别式回答。答「不做」时不删除，移入「放掉的」。
   Future<void> recordVerdict(int itemId, String answer) async {
+    final DateTime now = DateTime.now();
     await dao.recordVerdict(
       itemId,
       answer,
       releaseReason: KCopy.releaseReasonVerdict,
+      at: now,
     );
+    if (answer == KVerdictAnswer.unsure) {
+      final KItem? item = await dao.findItem(itemId);
+      await reminder.onUnsureRecorded(
+        itemId: itemId,
+        title: item?.title ?? '',
+        askAgainAt: now.add(KindlingDao.unsureReaskAfter),
+      );
+    } else {
+      await reminder.onReaskResolved(itemId: itemId);
+    }
     await load();
   }
 

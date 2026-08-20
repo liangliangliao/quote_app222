@@ -4,17 +4,27 @@ on:
   push:
     paths:
       - "lib/kindling/**"
+      - "lib/kindling_host/**"
       - "lib/pages/discover_page.dart"
       - "lib/data/db.dart"
+      - "lib/main.dart"
+      - "lib/services/wm_dispatcher.dart"
+      - "lib/services/notification_service.dart"
       - "test/kindling/**"
+      - "tools/pack_kindling.sh"
       - "pubspec.yaml"
       - ".github/workflows/kindling_ci.yml"
   pull_request:
     paths:
       - "lib/kindling/**"
+      - "lib/kindling_host/**"
       - "lib/pages/discover_page.dart"
       - "lib/data/db.dart"
+      - "lib/main.dart"
+      - "lib/services/wm_dispatcher.dart"
+      - "lib/services/notification_service.dart"
       - "test/kindling/**"
+      - "tools/pack_kindling.sh"
       - "pubspec.yaml"
       - ".github/workflows/kindling_ci.yml"
   workflow_dispatch:
@@ -92,8 +102,21 @@ jobs:
       - name: Analyze Kindling module
         run: dart analyze lib/kindling
 
+      - name: Analyze Kindling host integration
+        run: dart analyze lib/kindling_host
+
       - name: Analyze Kindling tests
         run: dart analyze test/kindling
 
       - name: Run Kindling tests
         run: flutter test test/kindling
+
+      - name: Pack the delivery zip
+        run: tools/pack_kindling.sh
+
+      - name: Upload kindling_v1.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: kindling_v1
+          path: build/kindling/kindling_v1.zip
+          if-no-files-found: error
