@@ -1,0 +1,99 @@
+name: Kindling CI
+
+on:
+  push:
+    paths:
+      - "lib/kindling/**"
+      - "lib/pages/discover_page.dart"
+      - "lib/data/db.dart"
+      - "test/kindling/**"
+      - "pubspec.yaml"
+      - ".github/workflows/kindling_ci.yml"
+  pull_request:
+    paths:
+      - "lib/kindling/**"
+      - "lib/pages/discover_page.dart"
+      - "lib/data/db.dart"
+      - "test/kindling/**"
+      - "pubspec.yaml"
+      - ".github/workflows/kindling_ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kindling-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Verify the module stays self-contained
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          from pathlib import Path
+
+          def strip_comments(source: str) -> str:
+              kept, in_block = [], False
+              for line in source.split("\n"):
+                  if in_block:
+                      end = line.find("*/")
+                      if end < 0:
+                          continue
+                      line, in_block = line[end + 2:], False
+                  block = line.find("/*")
+                  if block >= 0:
+                      in_block, line = True, line[:block]
+                  slash = line.find("//")
+                  if slash >= 0:
+                      line = line[:slash]
+                  kept.append(line)
+              return "\n".join(kept)
+
+          allowed = {"flutter", "sqflite"}
+          package_import = re.compile(r"import\s+'package:([a-z0-9_]+)/")
+          failures = []
+
+          for path in sorted(Path("lib/kindling").rglob("*.dart")):
+              source = path.read_text(encoding="utf-8")
+              code = strip_comments(source)
+              for name in package_import.findall(source):
+                  if name not in allowed:
+                      failures.append(f"{path}: depends on package:{name}")
+              # 模块不自己开库，也不碰宿主的表。
+              for banned in ("openDatabase(", "AppDatabase"):
+                  if banned in code:
+                      failures.append(f"{path}: uses {banned}")
+
+          if failures:
+              print("\n".join(failures))
+              sys.exit(1)
+          print("kindling stays self-contained")
+          PY
+
+      - name: Analyze Kindling module
+        run: dart analyze lib/kindling
+
+      - name: Analyze Kindling tests
+        run: dart analyze test/kindling
+
+      - name: Run Kindling tests
+        run: flutter test test/kindling
