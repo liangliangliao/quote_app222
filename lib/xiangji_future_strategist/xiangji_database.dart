@@ -4154,13 +4154,24 @@ class XiangjiDao {
       args.add(campaignId);
     }
     if (currentOnly) {
-      where.add("state IN ('READY','IN_PROGRESS','BLOCKED')");
+      where.add('''(
+        state IN ('READY','IN_PROGRESS','BLOCKED')
+        OR (
+          state = 'DONE'
+          AND NOT EXISTS (
+            SELECT 1 FROM xf_reality_result rr
+            WHERE rr.action_id = xf_action.id
+          )
+        )
+      )''');
     }
     final rows = await db.query(
       'xf_action',
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: args.isEmpty ? null : args,
-      orderBy: "CASE state WHEN 'IN_PROGRESS' THEN 0 WHEN 'READY' THEN 1 ELSE 2 END, updated_at_ms DESC",
+      orderBy: currentOnly
+          ? "CASE state WHEN 'DONE' THEN 0 WHEN 'IN_PROGRESS' THEN 1 WHEN 'READY' THEN 2 ELSE 3 END, updated_at_ms DESC"
+          : "CASE state WHEN 'IN_PROGRESS' THEN 0 WHEN 'READY' THEN 1 ELSE 2 END, updated_at_ms DESC",
     );
     return rows.map(XiangjiActionRecord.fromMap).toList();
   }
@@ -5134,12 +5145,24 @@ class XiangjiDao {
       orderBy: 'updated_at_ms DESC',
       limit: 1,
     );
-    final actionRows = await db.query(
-      'xf_action',
-      where: "state IN ('IN_PROGRESS','READY','BLOCKED')",
-      orderBy: "CASE state WHEN 'IN_PROGRESS' THEN 0 WHEN 'READY' THEN 1 ELSE 2 END, updated_at_ms DESC",
-      limit: 1,
-    );
+    final actionRows = await db.rawQuery('''
+      SELECT a.*
+      FROM xf_action a
+      WHERE a.state IN ('IN_PROGRESS','READY','BLOCKED')
+         OR (
+           a.state = 'DONE'
+           AND NOT EXISTS (
+             SELECT 1 FROM xf_reality_result rr WHERE rr.action_id = a.id
+           )
+         )
+      ORDER BY CASE a.state
+        WHEN 'DONE' THEN 0
+        WHEN 'IN_PROGRESS' THEN 1
+        WHEN 'READY' THEN 2
+        ELSE 3
+      END, a.updated_at_ms DESC
+      LIMIT 1
+    ''');
     final alert = await latestOpenAlert();
     final debtCount = Sqflite.firstIntValue(await db.rawQuery('''
           SELECT

@@ -138,6 +138,27 @@ void main() {
       (await dao.problem('problem-2'))?.state,
       XiangjiProblemState.actionReady,
     );
+    expect(
+      (await dao.actions(currentOnly: true)).single.id,
+      'action-1',
+      reason:
+          'Todo/Action 打勾后仍必须留在当前闭环，直到用户回填现实结果。',
+    );
+    expect(
+      (await dao.dashboard()).currentAction?.id,
+      'action-1',
+      reason: '首页必须把“完成但未回填现实”作为最高优先级待办。',
+    );
+
+    await dao.recordRealityResult(
+      id: 'reality-1',
+      actionId: 'action-1',
+      facts: const <String>['获得一个可观察结果'],
+      unexpected: const <String>[],
+      sourceRefs: const <String>['user:reality-1'],
+      userInterpretation: '',
+    );
+    expect(await dao.actions(currentOnly: true), isEmpty);
   });
 
   test('TC-KB-013 one local source can map to multiple providers', () async {

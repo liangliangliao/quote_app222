@@ -152,6 +152,7 @@ class XiangjiCognitiveOrchestrator {
       sourceRefs: sourceRefs,
     );
 
+    final localBaselineDraft = draft;
     final plan = _sck.orchestrationPlan(majorDecision: draft.majorDecision);
     final effectivePlan = firstGuard.outcome == XiangjiAskUserOutcome.askOne
         ? plan
@@ -162,6 +163,18 @@ class XiangjiCognitiveOrchestrator {
     final runRecordIds = <String>[];
     final agentRunRecordIds = <String, String>{};
     final warnings = <String>[];
+    final cloudAgentLabels = <String>[];
+    final localAgentLabels = <String>[];
+    final sensitiveCategories = <String>{};
+    var aiConfigured = false;
+    var cloudAgentCount = 0;
+    var localAgentCount = 0;
+    var failedAgentCount = 0;
+    var privacyBlockedAgentCount = 0;
+    var totalLatencyMs = 0;
+    var redactedFieldCount = 0;
+    var provider = '';
+    var model = '';
     var executionFrozen = false;
     var freezeReason = '';
     XiangjiOrchestrationState? lastProgress;
@@ -197,6 +210,30 @@ class XiangjiCognitiveOrchestrator {
             'sck_rule_ids': XiangjiSckRuntime.rules.keys.toList(),
           },
         ));
+        aiConfigured = aiConfigured || result.aiConfigured;
+        if (result.provider.trim().isNotEmpty) provider = result.provider;
+        if (result.model.trim().isNotEmpty) model = result.model;
+        totalLatencyMs += result.latencyMs;
+        if (result.redactedFieldCount > redactedFieldCount) {
+          redactedFieldCount = result.redactedFieldCount;
+        }
+        sensitiveCategories.addAll(result.sensitiveCategories);
+        if (result.localOnly) {
+          localAgentCount++;
+          localAgentLabels.add(agent.label);
+          if (result.runStatus == 'sensitive_consent_required') {
+            privacyBlockedAgentCount++;
+          }
+          if (result.runStatus == 'cloud_failed_local_fallback') {
+            failedAgentCount++;
+            warnings.add(
+              '${agent.code} ${agent.label}：云端模型未完成，已使用本地求解结果保持连续。',
+            );
+          }
+        } else {
+          cloudAgentCount++;
+          cloudAgentLabels.add(agent.label);
+        }
         outputs[agent.code] = result.output;
         executionFrozen = executionFrozen || result.executionFrozen;
         if (result.executionFrozen && freezeReason.isEmpty) {
@@ -212,11 +249,25 @@ class XiangjiCognitiveOrchestrator {
           'input_refs_json': jsonEncode(sourceRefs),
           'output_refs_json': jsonEncode(<String>[result.traceId]),
           'output_json': jsonEncode(result.output),
-          'status': result.localOnly ? 'LOCAL_COMPLETE' : 'COMPLETE',
+          'status': result.runStatus == 'cloud_failed_local_fallback'
+              ? 'CLOUD_FAILED_LOCAL_COMPLETE'
+              : result.runStatus == 'sensitive_consent_required'
+                  ? 'PRIVACY_LOCAL_COMPLETE'
+                  : result.localOnly
+                      ? 'LOCAL_COMPLETE'
+                      : 'COMPLETE',
           'started_at_ms': started,
           'ended_at_ms': DateTime.now().millisecondsSinceEpoch,
         });
       } catch (error) {
+        failedAgentCount++;
+        // An unexpected provider/service exception still leaves the
+        // deterministic local draft as the effective output for this role.
+        // Record both facts: the attempted agent failed, and the user-facing
+        // result was completed locally. Otherwise the persisted AI receipt
+        // misleadingly reports zero local participation.
+        localAgentCount++;
+        localAgentLabels.add(agent.label);
         warnings.add('${agent.code} ${agent.label}：${_safeError(error)}');
         await _dao.saveAgentRun(<String, Object?>{
           'id': runRecordId,
@@ -255,6 +306,25 @@ class XiangjiCognitiveOrchestrator {
     }
 
     draft = draft.mergeAgentOutputs(outputs);
+    final changedArtifacts = cloudAgentCount == 0
+        ? const <String>[]
+        : _cloudChangedArtifacts(localBaselineDraft, draft);
+    final aiExecution = XiangjiAiExecutionSummary(
+      aiConfigured: aiConfigured,
+      provider: provider,
+      model: model,
+      plannedAgentCount: effectivePlan.length,
+      cloudAgentCount: cloudAgentCount,
+      localAgentCount: localAgentCount,
+      failedAgentCount: failedAgentCount,
+      privacyBlockedAgentCount: privacyBlockedAgentCount,
+      totalLatencyMs: totalLatencyMs,
+      redactedFieldCount: redactedFieldCount,
+      cloudAgentLabels: cloudAgentLabels,
+      localAgentLabels: localAgentLabels,
+      changedArtifacts: changedArtifacts,
+      sensitiveCategories: sensitiveCategories.toList(),
+    );
     final guard = _guardForUnknownAnswer(
       _sck.evaluateAskUserGuard(draft.informationNeeds),
       userDoesNotKnow: userDoesNotKnow,
@@ -324,6 +394,10 @@ class XiangjiCognitiveOrchestrator {
         'state_history':
             stateHistory.map((state) => state.wire).toList(),
         'sck_rules': XiangjiSckRuntime.rules.keys.toList(),
+        // Persist the public execution receipt with the versioned situation
+        // model. The user can still see whether AI actually participated after
+        // leaving the conversation, without exposing private chain-of-thought.
+        'ai_execution': aiExecution.toMap(),
       },
       sourceRefs: sourceRefs,
     );
@@ -492,7 +566,41 @@ class XiangjiCognitiveOrchestrator {
       cognitiveExperiences: cognitiveExperiences,
       inputClassification: effectiveClassification,
       problemProgress: problemProgress,
+      aiExecution: aiExecution,
     );
+  }
+
+  List<String> _cloudChangedArtifacts(
+    XiangjiSituationDraft before,
+    XiangjiSituationDraft after,
+  ) {
+    final values = <String>[];
+    if (before.trueProblem.trim() != after.trueProblem.trim()) {
+      values.add('重构了真问题');
+    }
+    if (before.causalHypotheses.join('\n') !=
+        after.causalHypotheses.join('\n')) {
+      values.add('补充并比较了竞争原因');
+    }
+    if (before.targetGap.trim() != after.targetGap.trim()) {
+      values.add('重新选择了当前关键差距');
+    }
+    if (before.currentAction.trim() != after.currentAction.trim()) {
+      values.add('调整了当前唯一行动');
+    }
+    if (before.operatorMechanism.trim() != after.operatorMechanism.trim()) {
+      values.add('补全了办法的作用机制');
+    }
+    if (before.prediction.trim() != after.prediction.trim()) {
+      values.add('生成了可被现实反驳的事前预测');
+    }
+    if (before.redTeam.join('\n') != after.redTeam.join('\n')) {
+      values.add('加入了反方与失败条件');
+    }
+    if (values.isEmpty) {
+      values.add('审查了本地草案，并保留当前解法');
+    }
+    return values;
   }
 
   XiangjiAskUserDecision _guardForUnknownAnswer(

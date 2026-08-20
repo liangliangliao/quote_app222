@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_experience_widgets.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
 
 void main() {
   testWidgets('G3/DOC-08 solver cockpit is first-class and uses user language',
@@ -130,6 +131,11 @@ void main() {
     await tester.tap(find.textContaining('军师改判'));
     await tester.pumpAndSettle();
 
+    expect(find.textContaining('叔本华认识纪律'), findsOneWidget);
+    expect(find.textContaining('从现实表象到目的的差距比较'), findsWidgets);
+    expect(find.text('这里用了什么方法？'), findsOneWidget);
+    expect(find.text('军师在这道题里怎样使用'), findsOneWidget);
+    expect(find.text('下次可以迁移的问题'), findsOneWidget);
     expect(find.text('什么现实或线索触发了它'), findsOneWidget);
     expect(find.text('此前怎样理解'), findsOneWidget);
     expect(find.textContaining('获得有效回复'), findsOneWidget);
@@ -139,6 +145,72 @@ void main() {
     expect(find.textContaining('S0'), findsNothing);
     expect(find.textContaining('KeyGap'), findsNothing);
     expect(find.textContaining('Operator'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('AI participation is visible as auditable product work',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: XiangjiAiContributionCard(
+              summary: XiangjiAiExecutionSummary(
+                aiConfigured: true,
+                provider: 'deepseek',
+                model: 'deepseek-v4-pro',
+                plannedAgentCount: 8,
+                cloudAgentCount: 7,
+                localAgentCount: 1,
+                totalLatencyMs: 2300,
+                redactedFieldCount: 2,
+                cloudAgentLabels: <String>[
+                  '经验分层',
+                  '竞争因果',
+                  '判断力仲裁',
+                  '持续问题求解',
+                ],
+                changedArtifacts: <String>[
+                  '重构了真问题',
+                  '重新选择了当前关键差距',
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('AI 军师已参与本轮推演'), findsOneWidget);
+    expect(find.textContaining('DeepSeek'), findsOneWidget);
+    expect(find.text('AI 实际形成或更新了什么'), findsOneWidget);
+    expect(find.textContaining('重构了真问题'), findsOneWidget);
+    expect(find.text('本轮参与的认知角色'), findsOneWidget);
+    expect(find.textContaining('经验分层'), findsOneWidget);
+    expect(find.textContaining('隐藏 2 个直接标识'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('local fallback is never presented as cloud AI',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: XiangjiAiContributionCard(
+              summary: XiangjiAiExecutionSummary(
+                plannedAgentCount: 6,
+                localAgentCount: 6,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('AI 未配置，本轮由本地求解内核完成'), findsOneWidget);
+    expect(find.textContaining('不会伪装成云端 AI'), findsOneWidget);
+    expect(find.text('AI 军师已参与本轮推演'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

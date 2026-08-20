@@ -454,6 +454,18 @@ void main() {
       expect(completedAction?.state, XiangjiActionState.done);
       expect(updated.situationModelId, isNot(initial.situationModelId));
       expect((latestSituation?['version_no'] as num?)?.toInt(), 2);
+      final latestModel = jsonDecode(
+        (latestSituation?['model_json'] ?? '{}').toString(),
+      ) as Map<String, dynamic>;
+      final persistedExecution = XiangjiAiExecutionSummary.fromMap(
+        (latestModel['ai_execution'] as Map).map(
+          (key, dynamic value) =>
+              MapEntry(key.toString(), value as Object?),
+        ),
+      );
+      expect(persistedExecution.plannedAgentCount, greaterThan(0));
+      expect(persistedExecution.cloudAgentCount, 0);
+      expect(persistedExecution.localAgentCount, greaterThan(0));
       final operatorComplete = updated.draft.currentAction.isNotEmpty &&
           updated.draft.targetGap.isNotEmpty &&
           updated.draft.operatorMechanism.isNotEmpty &&

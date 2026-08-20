@@ -8,9 +8,11 @@ import 'package:speech_to_text/speech_to_text.dart';
 import '../ai_assistant/ai_assistant_file_text_extractor.dart';
 import '../data/kv_dao.dart';
 import '../pages/settings_page.dart';
+import '../services/global_ai_settings.dart';
 import 'xiangji_campaign_action_pages.dart';
 import 'xiangji_database.dart';
 import 'xiangji_experience_widgets.dart';
+import 'xiangji_insight_pages.dart';
 import 'xiangji_models.dart';
 import 'xiangji_problem_pages.dart';
 import 'xiangji_repository.dart';
@@ -55,12 +57,16 @@ class _XiangjiStrategistConversationPanelState
   bool _forceNewOnNextSubmit = false;
   String _failedInput = '';
   String _failureMessage = '';
+  Map<String, String> _aiState = const <String, String>{};
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadHistory();
+      if (mounted) {
+        _loadHistory();
+        _loadAiReadiness();
+      }
     });
   }
 
@@ -79,6 +85,34 @@ class _XiangjiStrategistConversationPanelState
     } catch (_) {
       // The primary composer remains usable even when history cannot load.
     }
+  }
+
+  Future<void> _loadAiReadiness() async {
+    try {
+      final state = await GlobalAiSettings().getState();
+      if (mounted) setState(() => _aiState = state);
+    } catch (_) {
+      // Readiness is advisory; the primary local composer stays available.
+    }
+  }
+
+  Future<void> _openGlobalAiSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SettingsPage()),
+    );
+    await _loadAiReadiness();
+  }
+
+  Future<void> _reviewSensitiveConsent() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => XiangjiSettingsPage(
+          dao: widget.dao,
+          repository: widget.repository,
+        ),
+      ),
+    );
+    await _loadAiReadiness();
   }
 
   Future<void> _refreshProblemContext(String problemId) async {
@@ -560,6 +594,13 @@ class _XiangjiStrategistConversationPanelState
             problemId: result.problemId,
             limit: 12,
           );
+    final methodEvents = _methodEvents.isNotEmpty
+        ? _methodEvents
+        : await widget.dao.latestMethodTurnEvents(
+            problemId: result.problemId,
+            userVisibleOnly: true,
+            limit: 3,
+          );
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -609,8 +650,26 @@ class _XiangjiStrategistConversationPanelState
                     .toString(),
               ),
               const Divider(height: 28),
-              const Text('当前问题里用到的方法',
+              const Text('这里用了什么叔本华方法？',
                   style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              const Text(
+                '只解释本轮真正改变或检查了解法的方法；不是独立课程，也不是哲学装饰。',
+                style: TextStyle(
+                  color: XiangjiPalette.muted,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final event in methodEvents)
+                XiangjiMethodEffectCard(event: event),
+              if (experiences.isNotEmpty) ...[
+                const Divider(height: 28),
+                const Text(
+                  '基于当前问题的可选练习',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ],
               for (final experience in experiences)
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -650,6 +709,71 @@ class _XiangjiStrategistConversationPanelState
                       ),
                   ],
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _aiReadinessBanner() {
+    final available = _aiState['available'] == '1';
+    final label = (_aiState['label'] ?? '').trim();
+    return Semantics(
+      button: true,
+      label: available ? 'AI 已就绪，$label' : 'AI 未配置，当前使用本地模式',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _openGlobalAiSettings,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+          decoration: BoxDecoration(
+            color: available
+                ? const Color(0xFFE9F1FF)
+                : const Color(0xFFF3F1ED),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: available
+                  ? const Color(0xFFB9CFF2)
+                  : XiangjiPalette.line,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                available
+                    ? Icons.auto_awesome_outlined
+                    : Icons.memory_outlined,
+                color: available
+                    ? const Color(0xFF3468C0)
+                    : XiangjiPalette.muted,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      available
+                          ? 'AI 已就绪 · ${label.isEmpty ? '已配置模型' : label}'
+                          : 'AI 未配置 · 当前使用本地求解内核',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      available
+                          ? '普通问题会直接使用 AI；外发前自动隐藏手机号、邮箱等直接标识。'
+                          : '点此配置 API Key 与模型；本地模式不会伪装成 AI 输出。',
+                      style: const TextStyle(
+                        color: XiangjiPalette.muted,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: XiangjiPalette.muted),
             ],
           ),
         ),
@@ -698,6 +822,8 @@ class _XiangjiStrategistConversationPanelState
             ],
           ),
           const SizedBox(height: 14),
+          _aiReadinessBanner(),
+          const SizedBox(height: 10),
           _composer(),
           if (_failureMessage.isNotEmpty && !_working) ...[
             const SizedBox(height: 14),
@@ -714,11 +840,17 @@ class _XiangjiStrategistConversationPanelState
           if (_result != null && !_working) ...[
             const SizedBox(height: 14),
             _resultCard(_result!),
+            const SizedBox(height: 14),
+            XiangjiAiContributionCard(
+              summary: _result!.aiExecution,
+              onConfigureAi: _openGlobalAiSettings,
+              onReviewSensitiveConsent: _reviewSensitiveConsent,
+            ),
             if (_methodEvents.isNotEmpty) ...[
               const SizedBox(height: 14),
               XiangjiSectionCard(
-                title: '本轮为什么改了判断或办法',
-                subtitle: '只显示当前最影响决定的 0–3 项变化。',
+                title: '本轮叔本华方法如何改变解法',
+                subtitle: '只显示当前最影响决定的 0–3 项；展开可看概念、案例用法和迁移问题。',
                 child: Column(
                   children: [
                     for (final event in _methodEvents)

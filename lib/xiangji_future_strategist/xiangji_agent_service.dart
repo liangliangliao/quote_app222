@@ -8,6 +8,7 @@ import '../services/unified_ai_service.dart';
 import 'xiangji_database.dart';
 import 'xiangji_knowledge_router.dart';
 import 'xiangji_models.dart';
+import 'xiangji_privacy_guard.dart';
 import 'xiangji_state_machine.dart';
 
 enum XiangjiAgentId {
@@ -127,6 +128,15 @@ class XiangjiAgentResult {
     required this.traceId,
     required this.localOnly,
     required this.executionFrozen,
+    this.aiConfigured = false,
+    this.provider = '',
+    this.model = '',
+    this.runStatus = '',
+    this.privacyMode = 'minimum_necessary',
+    this.sensitiveCategories = const <String>[],
+    this.redactedFieldCount = 0,
+    this.latencyMs = 0,
+    this.failureMessage = '',
   });
 
   final XiangjiAgentId agent;
@@ -135,6 +145,15 @@ class XiangjiAgentResult {
   final String traceId;
   final bool localOnly;
   final bool executionFrozen;
+  final bool aiConfigured;
+  final String provider;
+  final String model;
+  final String runStatus;
+  final String privacyMode;
+  final List<String> sensitiveCategories;
+  final int redactedFieldCount;
+  final int latencyMs;
+  final String failureMessage;
 }
 
 class XiangjiAgentService {
@@ -143,10 +162,12 @@ class XiangjiAgentService {
     XiangjiKnowledgeRouter? router,
     UnifiedAiService? ai,
     GlobalAiSettings? settings,
+    XiangjiCloudPrivacyGuard privacyGuard = const XiangjiCloudPrivacyGuard(),
   })  : _dao = dao ?? XiangjiDao(),
         _router = router ?? XiangjiKnowledgeRouter(dao: dao),
         _ai = ai ?? UnifiedAiService(),
-        _settings = settings ?? GlobalAiSettings();
+        _settings = settings ?? GlobalAiSettings(),
+        _privacyGuard = privacyGuard;
 
   static const String promptVersion = 'xiangji-v6.1-rev5.2-p0-p9';
 
@@ -154,6 +175,7 @@ class XiangjiAgentService {
   final XiangjiKnowledgeRouter _router;
   final UnifiedAiService _ai;
   final GlobalAiSettings _settings;
+  final XiangjiCloudPrivacyGuard _privacyGuard;
   final XiangjiCertaintyLanguage _certainty =
       const XiangjiCertaintyLanguage();
 
@@ -212,6 +234,20 @@ class XiangjiAgentService {
     final methodEffects = activeMethodEvents
         .map((event) => event.toPromptMap())
         .toList(growable: false);
+    final state = await _settings.getState();
+    final aiConfigured = state['available'] == '1';
+    final configuredProvider = (state['provider'] ?? '').toString();
+    final configuredModel =
+        (state['model'] ?? state['display_model'] ?? '').toString();
+    final privacy = _privacyGuard.assess(
+      task: request.task,
+      additionalContext: <String, Object?>{
+        'request_context': request.additionalContext,
+        'knowledge_context': knowledge.toPromptMap(),
+        if (solverState != null) 'solver_state': solverState.toPromptMap(),
+        'method_events': methodEffects,
+      },
+    );
 
     if (knowledge.preflight.executionFrozen) {
       final output = <String, Object?>{
@@ -224,6 +260,14 @@ class XiangjiAgentService {
         'message': '当前为不可逆高风险且认识债务高；先补证、降低不可逆性，并在需要时寻求专业复核。',
         'method_effects': methodEffects,
         'user_decision_required': true,
+        'ai_runtime': <String, Object?>{
+          'execution_mode': 'local_safety_kernel',
+          'status': 'blocked_by_safety_rule',
+          'ai_configured': aiConfigured,
+          'provider': configuredProvider,
+          'model': configuredModel,
+          'privacy_mode': 'local_only',
+        },
       };
       await _saveRun(
         id: runId,
@@ -248,19 +292,38 @@ class XiangjiAgentService {
         traceId: knowledge.trace.id,
         localOnly: true,
         executionFrozen: true,
+        aiConfigured: aiConfigured,
+        provider: configuredProvider,
+        model: configuredModel,
+        runStatus: 'blocked_by_safety_rule',
+        privacyMode: 'local_only',
       );
     }
 
-    final state = await _settings.getState();
-    final hasPersonalObject =
-        request.problemId.isNotEmpty || request.campaignId.isNotEmpty;
-    final privacyLocalOnly =
-        hasPersonalObject && !request.authorizedSensitiveContext;
-    if (state['available'] != '1' || privacyLocalOnly) {
+    final privacyLocalOnly = privacy.containsSensitiveCategory &&
+        !request.authorizedSensitiveContext;
+    if (!aiConfigured || privacyLocalOnly) {
+      final fallbackStatus = privacyLocalOnly
+          ? 'sensitive_consent_required'
+          : 'ai_not_configured';
       final output = <String, Object?>{
         ..._localFallback(agent, knowledge, request),
         'method_effects': methodEffects,
         if (solverState != null) 'solver_state': solverState.toPromptMap(),
+        'ai_runtime': <String, Object?>{
+          'execution_mode': privacyLocalOnly
+              ? 'local_privacy_guard'
+              : 'local_solver_kernel',
+          'status': fallbackStatus,
+          'ai_configured': aiConfigured,
+          'provider': configuredProvider,
+          'model': configuredModel,
+          'privacy_mode': privacyLocalOnly
+              ? 'sensitive_consent_required'
+              : 'local_only',
+          'sensitive_categories': privacy.sensitiveCategories,
+          'direct_identifiers_detected': privacy.directIdentifierCount,
+        },
       };
       await _saveRun(
         id: runId,
@@ -272,7 +335,7 @@ class XiangjiAgentService {
             : 'structured-fallback',
         inputRefs: knowledge.trace.sourcesUsed,
         output: output,
-        status: 'local_fallback',
+        status: fallbackStatus,
         createdAtMs: now,
       );
       await _saveKnowledgeUse(
@@ -288,11 +351,37 @@ class XiangjiAgentService {
         traceId: knowledge.trace.id,
         localOnly: true,
         executionFrozen: false,
+        aiConfigured: aiConfigured,
+        provider: configuredProvider,
+        model: configuredModel,
+        runStatus: fallbackStatus,
+        privacyMode: privacyLocalOnly
+            ? 'sensitive_consent_required'
+            : 'local_only',
+        sensitiveCategories: privacy.sensitiveCategories,
       );
     }
 
     final started = DateTime.now().millisecondsSinceEpoch;
     try {
+      final sanitizedTask = _privacyGuard.sanitizeText(request.task);
+      final sanitizedKnowledge =
+          _privacyGuard.sanitize(knowledge.toPromptMap());
+      final sanitizedAdditional =
+          _privacyGuard.sanitize(request.additionalContext);
+      final sanitizedSolver =
+          _privacyGuard.sanitize(solverState?.toPromptMap());
+      final sanitizedMethodEffects = _privacyGuard.sanitize(methodEffects);
+      final redactedFieldCount = sanitizedTask.redactedCount +
+          sanitizedKnowledge.redactedCount +
+          sanitizedAdditional.redactedCount +
+          sanitizedSolver.redactedCount +
+          sanitizedMethodEffects.redactedCount;
+      final privacyMode = privacy.containsSensitiveCategory
+          ? 'explicit_sensitive_consent_with_redaction'
+          : redactedFieldCount > 0
+              ? 'redacted_minimum_necessary'
+              : 'minimum_necessary';
       final promptLayers = await _assemblePromptLayers(agent);
       final raw = await _ai.generateChatMessages(
         purpose: 'xiangji_future_strategist.${agent.code.toLowerCase()}',
@@ -310,12 +399,12 @@ class XiangjiAgentService {
           UnifiedAiChatMessage(
             role: 'user',
             content: jsonEncode(<String, Object?>{
-              'task': request.task,
+              'task': sanitizedTask.value,
               'agent': '${agent.code} ${agent.label}',
-              'knowledge_context': knowledge.toPromptMap(),
-              if (solverState != null) 'solver_state': solverState.toPromptMap(),
-              'active_method_events': methodEffects,
-              'additional_context': request.additionalContext,
+              'knowledge_context': sanitizedKnowledge.value,
+              if (solverState != null) 'solver_state': sanitizedSolver.value,
+              'active_method_events': sanitizedMethodEffects.value,
+              'additional_context': sanitizedAdditional.value,
               'output_contract': _outputContract(agent),
             }),
           ),
@@ -331,6 +420,19 @@ class XiangjiAgentService {
       }
       final provider = (state['provider'] ?? 'configured').toString();
       final model = (state['model'] ?? state['model_label'] ?? '').toString();
+      final latencyMs = DateTime.now().millisecondsSinceEpoch - started;
+      validated['ai_runtime'] = <String, Object?>{
+        'execution_mode': 'cloud_ai',
+        'status': 'success',
+        'ai_configured': true,
+        'provider': provider,
+        'model': model,
+        'agent': '${agent.code} ${agent.label}',
+        'privacy_mode': privacyMode,
+        'sensitive_categories': privacy.sensitiveCategories,
+        'redacted_field_count': redactedFieldCount,
+        'latency_ms': latencyMs,
+      };
       await _saveRun(
         id: runId,
         agent: agent,
@@ -340,7 +442,7 @@ class XiangjiAgentService {
         output: validated,
         status: 'success',
         createdAtMs: now,
-        latencyMs: DateTime.now().millisecondsSinceEpoch - started,
+        latencyMs: latencyMs,
       );
       await _saveKnowledgeUse(
         request: request,
@@ -356,8 +458,20 @@ class XiangjiAgentService {
         traceId: knowledge.trace.id,
         localOnly: false,
         executionFrozen: false,
+        aiConfigured: true,
+        provider: provider,
+        model: model,
+        runStatus: 'success',
+        privacyMode: privacyMode,
+        sensitiveCategories: privacy.sensitiveCategories,
+        redactedFieldCount: redactedFieldCount,
+        latencyMs: latencyMs,
       );
     } catch (error) {
+      final latencyMs = DateTime.now().millisecondsSinceEpoch - started;
+      final failureMessage = _safeError(error);
+      final provider = (state['provider'] ?? 'configured').toString();
+      final model = (state['model'] ?? state['model_label'] ?? '').toString();
       await _dao.saveModelRun(<String, Object?>{
         'id': runId,
         'agent_id': agent.code,
@@ -368,11 +482,48 @@ class XiangjiAgentService {
         'output_hash': '',
         'output_json': '',
         'status': 'failed',
-        'error': _safeError(error),
-        'latency_ms': DateTime.now().millisecondsSinceEpoch - started,
+        'error': failureMessage,
+        'latency_ms': latencyMs,
         'created_at_ms': now,
       });
-      rethrow;
+      final output = <String, Object?>{
+        ..._localFallback(agent, knowledge, request),
+        'method_effects': methodEffects,
+        if (solverState != null) 'solver_state': solverState.toPromptMap(),
+        'ai_runtime': <String, Object?>{
+          'execution_mode': 'cloud_failed_local_fallback',
+          'status': 'cloud_failed_local_fallback',
+          'ai_configured': true,
+          'provider': provider,
+          'model': model,
+          'privacy_mode': 'minimum_necessary_with_redaction',
+          'redacted_field_count': privacy.directIdentifierCount,
+          'latency_ms': latencyMs,
+        },
+      };
+      await _saveKnowledgeUse(
+        request: request,
+        knowledge: knowledge,
+        runId: runId,
+        now: now,
+      );
+      return XiangjiAgentResult(
+        agent: agent,
+        output: output,
+        modelRunId: runId,
+        traceId: knowledge.trace.id,
+        localOnly: true,
+        executionFrozen: false,
+        aiConfigured: true,
+        provider: provider,
+        model: model,
+        runStatus: 'cloud_failed_local_fallback',
+        privacyMode: 'minimum_necessary_with_redaction',
+        sensitiveCategories: privacy.sensitiveCategories,
+        redactedFieldCount: privacy.directIdentifierCount,
+        latencyMs: latencyMs,
+        failureMessage: failureMessage,
+      );
     }
   }
 

@@ -5,6 +5,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/services.dart';
 
+// 火种模块：宿主只接触其公开导出的 KindlingSchema。
+import '../kindling/kindling.dart';
+
 class AppDatabase {
   static Database? _db;
   static Future<Database>? _opening;
@@ -196,6 +199,9 @@ class AppDatabase {
       await ensureAiAssistantTables(db);
       await ensureSemanticConsistencyTables(db);
 
+      // 火种模块自管 schema，幂等；重复调用不报错。
+      await KindlingSchema.createAll(db);
+
       // Lightweight telemetry logs for self-help module (PPG / Fitbit / model debugging).
       await db.execute('''
         CREATE TABLE IF NOT EXISTS self_help_logs (
@@ -338,6 +344,9 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
 
     await _ensureVoiceLabTables(db);
     await ensureAiAssistantTables(db);
+
+    // 火种模块建表（幂等）。
+    await KindlingSchema.createAll(db);
 
     // Self-help measurement records (Change module)
     await db.execute('''
@@ -1270,6 +1279,9 @@ static Future<void> _upgrade(Database db, int oldV, int newV) async {
 await _ensureVoiceLabTables(db);
 await ensureAiAssistantTables(db);
 await ensureSemanticConsistencyTables(db);
+
+// 火种模块按自己的 schemaVersion 自管迁移（幂等）。
+await KindlingSchema.migrate(db, oldV, newV);
 
 // Add missing columns safely (no duplicate-column logs).
 await _addColumnIfMissing(db, 'quotes', 'task_type', 'TEXT');

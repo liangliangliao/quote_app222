@@ -58,7 +58,7 @@ class _XiangjiEpistemicWorldPageState
         _learningMoments.isEmpty) {
       return const XiangjiEmptyState(
         title: '认识还没有发生可见变化',
-        message: '当军师区分体验与解释、比较案例或被新现实修订时，这里会记录“怎样变了”。',
+        message: '当军师用叔本华方法区分体验与解释、比较案例或被新现实修订时，这里会记录“怎样变了”。',
         icon: Icons.auto_awesome_outlined,
       );
     }
@@ -928,8 +928,10 @@ class _XiangjiSettingsPageState extends State<XiangjiSettingsPage> {
                             setState(() => _sensitiveCloudAuthorized = value);
                           }
                         },
-                        title: const Text('允许把敏感上下文发送给已配置 AI'),
-                        subtitle: const Text('默认关闭。关闭时知识路由只使用离线 K0 与本地材料。'),
+                        title: const Text('允许敏感类别上下文使用已配置 AI'),
+                        subtitle: const Text(
+                          '默认关闭。普通问题仍可使用 AI，并自动隐藏手机号、邮箱、证件号等直接标识；只有检测到医疗、法律、财务账户等敏感类别时才会留在本地。',
+                        ),
                       ),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
