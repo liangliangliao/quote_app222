@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:quote_app/kindling/src/data/kindling_dao.dart';
 import 'package:quote_app/kindling/src/ui/list_page.dart';
 import 'package:quote_app/kindling/src/ui/probe_sheet.dart';
 import 'package:quote_app/kindling/src/ui/recall_page.dart';
+import 'package:quote_app/kindling/src/ui/resistance_page.dart';
 import 'package:quote_app/kindling/src/ui/verdict_sheet.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -61,9 +63,17 @@ void main() {
   }
 
   /// [ready] 是这个用例进场后要碰的第一个东西——等它出现，才算首屏加载完成。
-  Future<void> pumpEntry(WidgetTester tester, {Finder? ready}) async {
+  Future<void> pumpEntry(
+    WidgetTester tester, {
+    Finder? ready,
+    KindlingOracle? oracle,
+  }) async {
     await tester.pumpWidget(
-      MaterialApp(home: KindlingEntry.build(db: db)),
+      MaterialApp(
+        home: oracle == null
+            ? KindlingEntry.build(db: db)
+            : KindlingEntry.build(db: db, oracle: oracle),
+      ),
     );
     await settle(tester, until: ready ?? find.text(KCopy.emptyDirect));
   }
@@ -249,6 +259,27 @@ void main() {
     expect(find.byType(ListView), findsNothing);
   });
 
+  testWidgets('卡住了 进场立刻有第一问，不等追问器', (WidgetTester tester) async {
+    await tester.runAsync(
+      () => KindlingDao(db).insertItem(title: '修 XX 的渲染 bug'),
+    );
+    // 一个永远不返回的追问器：真机上就是那次卡住的云端请求。
+    await pumpEntry(
+      tester,
+      ready: find.text('修 XX 的渲染 bug'),
+      oracle: const _StalledOracle(),
+    );
+
+    await tester.longPress(find.text('修 XX 的渲染 bug'));
+    await settle(tester, until: find.text(KCopy.menuResistance));
+    await tester.tap(find.text(KCopy.menuResistance));
+    await tester.pumpAndSettle();
+
+    // 没有等待，也没有白屏：第一问当场就在。
+    expect(find.text(KCopy.resistance1), findsOneWidget);
+    expect(find.byKey(KindlingResistancePage.inputKey), findsOneWidget);
+  });
+
   testWidgets('回溯 turns raw answers into candidates the user may keep',
       (WidgetTester tester) async {
     await pumpEntry(tester);
@@ -308,4 +339,19 @@ void main() {
     await settle(tester);
     expect(taps, 1);
   });
+}
+
+/// 永远不返回的追问器：用来证明界面不靠它也能立刻出内容。
+class _StalledOracle implements KindlingOracle {
+  const _StalledOracle();
+
+  @override
+  Future<List<String>> extractCandidates(Map<String, String> answers) =>
+      Completer<List<String>>().future;
+
+  @override
+  Future<String?> nextResistanceQuestion(
+    List<({String q, String? a})> history,
+  ) =>
+      Completer<String?>().future;
 }

@@ -5,6 +5,11 @@ import 'package:quote_app/kindling_host/kindling_ai_oracle.dart';
 import 'package:quote_app/kindling_host/kindling_host_reminder.dart';
 
 /// 宿主侧装配层的测试：AI 追问器必须在任何异常下退回本地实现。
+/// 答过第一问之后的 history。空 history 会短路成本地问题梯，验不到模型校验。
+const List<({String q, String? a})> _afterFirstAnswer = <({String q, String? a})>[
+  (q: KCopy.resistance1, a: '怕做砸了被看见'),
+];
+
 void main() {
   KindlingAiOracle oracle({
     required bool available,
@@ -63,17 +68,68 @@ void main() {
   });
 
   group('阻抗追问', () {
-    test('AI 不可用时走本地问题梯', () async {
-      final String? q = await oracle(available: false)
-          .nextResistanceQuestion(<({String q, String? a})>[]);
+    test('第一问不碰网络，进场就有内容', () async {
+      bool called = false;
+      final KindlingAiOracle ai = KindlingAiOracle(
+        isAvailable: () async {
+          called = true;
+          return true;
+        },
+        call: ({
+          required String prompt,
+          required String systemPrompt,
+          required String purpose,
+        }) async {
+          called = true;
+          return '模型的问句？';
+        },
+      );
+
+      final String? q =
+          await ai.nextResistanceQuestion(<({String q, String? a})>[]);
+
       expect(q, KCopy.resistance1);
+      expect(called, isFalse, reason: '空 history 时模型没有上下文，不该等它');
+    });
+
+    test('模型太慢就用本地问题梯，不干等', () async {
+      final KindlingAiOracle ai = KindlingAiOracle(
+        isAvailable: () async => true,
+        call: ({
+          required String prompt,
+          required String systemPrompt,
+          required String purpose,
+        }) => Future<String>.delayed(
+          KindlingAiOracle.questionTimeout * 4,
+          () => '来晚了的问句？',
+        ),
+      );
+
+      final Stopwatch watch = Stopwatch()..start();
+      final String? q = await ai.nextResistanceQuestion(
+        <({String q, String? a})>[(q: KCopy.resistance1, a: '怕做砸')],
+      );
+      watch.stop();
+
+      expect(q, KCopy.resistance2);
+      expect(
+        watch.elapsed,
+        lessThan(KindlingAiOracle.questionTimeout * 3),
+        reason: '超过时限就该落回本地，不该等满',
+      );
+    });
+
+    test('AI 不可用时走本地问题梯', () async {
+      final String? q =
+          await oracle(available: false).nextResistanceQuestion(_afterFirstAnswer);
+      expect(q, KCopy.resistance2);
     });
 
     test('问句超过 25 字就不采用', () async {
       final String tooLong = '${'那' * 30}？';
       final String? q = await oracle(available: true, reply: () async => tooLong)
-          .nextResistanceQuestion(<({String q, String? a})>[]);
-      expect(q, KCopy.resistance1);
+          .nextResistanceQuestion(_afterFirstAnswer);
+      expect(q, KCopy.resistance2);
     });
 
     test('出现禁用词就不采用', () async {
@@ -81,22 +137,22 @@ void main() {
         final String? q = await oracle(
           available: true,
           reply: () async => '$banned，接着说说？',
-        ).nextResistanceQuestion(<({String q, String? a})>[]);
-        expect(q, KCopy.resistance1, reason: '「$banned」不该出现在追问里');
+        ).nextResistanceQuestion(_afterFirstAnswer);
+        expect(q, KCopy.resistance2, reason: '「$banned」不该出现在追问里');
       }
     });
 
     test('不是问句就不采用', () async {
       final String? q =
           await oracle(available: true, reply: () async => '你在防着谁。')
-              .nextResistanceQuestion(<({String q, String? a})>[]);
-      expect(q, KCopy.resistance1);
+              .nextResistanceQuestion(_afterFirstAnswer);
+      expect(q, KCopy.resistance2);
     });
 
     test('合规的问句照用', () async {
       final String? q =
           await oracle(available: true, reply: () async => '那件事里谁在看着你？')
-              .nextResistanceQuestion(<({String q, String? a})>[]);
+              .nextResistanceQuestion(_afterFirstAnswer);
       expect(q, '那件事里谁在看着你？');
     });
 

@@ -40,6 +40,13 @@ class KindlingAiOracle implements KindlingOracle {
   /// 单问句上限，超过就当模型没守规矩。
   static const int maxQuestionLength = 25;
 
+  /// 等模型的上限。宿主默认给 90 秒，那是给长文本用的；这里是用户点一下就要
+  /// 看到下一问的地方，超过这点时间就直接用本地问题梯。
+  static const Duration questionTimeout = Duration(seconds: 3);
+
+  /// 切候选可以稍微多等一会，但也不能让「完成」之后干等着。
+  static const Duration extractTimeout = Duration(seconds: 8);
+
   /// 出现任何一个词就判定不合规，落回本地问题梯。
   static const List<String> bannedWords = <String>[
     '加油',
@@ -87,7 +94,7 @@ class KindlingAiOracle implements KindlingOracle {
         prompt: source,
         systemPrompt: candidateSystemPrompt,
         purpose: 'kindling.extract_candidates',
-      );
+      ).timeout(extractTimeout);
       final List<String> parsed = LocalOracle.splitCandidates(<String>[raw]);
       return parsed.isEmpty ? local : parsed;
     } catch (_) {
@@ -101,6 +108,10 @@ class KindlingAiOracle implements KindlingOracle {
   ) async {
     if (history.length >= maxResistanceSteps) return null;
     final String? local = await _fallback.nextResistanceQuestion(history);
+
+    // 第一问不问模型：这时还没有任何回答，模型没有上下文可用，等它只是让
+    // 用户对着白屏干等。后面几问才有得追。
+    if (history.isEmpty) return local;
     if (!await _isAvailable()) return local;
 
     try {
@@ -108,7 +119,7 @@ class KindlingAiOracle implements KindlingOracle {
         prompt: _historyPrompt(history),
         systemPrompt: systemPrompt,
         purpose: 'kindling.next_resistance_question',
-      );
+      ).timeout(questionTimeout);
       final String question = _tidy(raw);
       return _isUsable(question) ? question : local;
     } catch (_) {

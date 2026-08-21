@@ -51,7 +51,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | `kindling_host_page.dart` | 等库、装配追问器与提醒，发现页入口与全局路由都走它 |
-| `kindling_ai_oracle.dart` | 方案 §7 的 AI 追问器。system prompt 逐字照抄 §7；问句超 25 字、含禁用词、不是问句、模型不可用或抛错，一律静默退回 `LocalOracle` |
+| `kindling_ai_oracle.dart` | 方案 §7 的 AI 追问器。system prompt 逐字照抄 §7；问句超 25 字、含禁用词、不是问句、模型不可用、超时或抛错，一律静默退回 `LocalOracle`。**第一问不问模型**（那时没有任何回答，模型没有上下文），追问超时 3 秒、切候选超时 8 秒——宿主默认的 90 秒是给长文本用的，不能拿来挡在用户和下一问之间 |
 | `kindling_host_reminder.dart` | §5.3 的复问通知。用宿主已有的 Workmanager 一次性任务排 7 天，到点弹一条判别式问句；重新作答/放掉/已在应用内复问都会撤掉排期 |
 
 通知开关在「设置」里，键 `kindling.reask_notify_enabled`，**缺省即关**，与方案一致。

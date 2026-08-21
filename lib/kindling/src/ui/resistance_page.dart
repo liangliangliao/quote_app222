@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../copy.dart';
 import '../domain/controller.dart';
+import '../kindling_oracle.dart';
 
 /// 阻抗追问。只追问，不给建议，不打气。
 ///
@@ -32,15 +33,10 @@ class _KindlingResistancePageState extends State<KindlingResistancePage> {
   final TextEditingController _input = TextEditingController();
   final List<({String q, String? a})> _history = <({String q, String? a})>[];
 
-  String? _question;
-  bool _loading = true;
+  /// 首问不等任何人：本地问题梯同步可得，进场就有内容，不留白屏。
+  String? _question = LocalOracle.questionAt(0);
+  bool _busy = false;
   bool _ended = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _advance();
-  }
 
   @override
   void dispose() {
@@ -48,22 +44,26 @@ class _KindlingResistancePageState extends State<KindlingResistancePage> {
     super.dispose();
   }
 
+  /// 取下一问。
+  ///
+  /// 等待期间**不清空当前这一问**——留在原地比闪一段白屏好；追问器那边也有
+  /// 时限兜底，等不到就用本地问题梯。
   Future<void> _advance() async {
-    setState(() => _loading = true);
+    setState(() => _busy = true);
     final String? next =
         await widget.controller.oracle.nextResistanceQuestion(_history);
     if (!mounted) return;
     setState(() {
       _question = next;
       _ended = next == null;
-      _loading = false;
+      _busy = false;
       _input.clear();
     });
   }
 
   Future<void> _submit({required bool skipped}) async {
     final String? question = _question;
-    if (question == null) return;
+    if (question == null || _busy) return;
     final String text = _input.text.trim();
     final String? answer = skipped || text.isEmpty ? null : text;
 
@@ -94,9 +94,7 @@ class _KindlingResistancePageState extends State<KindlingResistancePage> {
         ),
       ),
       body: SafeArea(
-        child: _loading
-            ? const SizedBox.shrink()
-            : (_ended ? _buildEnd() : _buildQuestion()),
+        child: _ended ? _buildEnd() : _buildQuestion(),
       ),
     );
   }
@@ -140,7 +138,7 @@ class _KindlingResistancePageState extends State<KindlingResistancePage> {
             children: <Widget>[
               TextButton(
                 key: KindlingResistancePage.skipKey,
-                onPressed: () => _submit(skipped: true),
+                onPressed: _busy ? null : () => _submit(skipped: true),
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFF8A8A8A),
                 ),
@@ -149,7 +147,7 @@ class _KindlingResistancePageState extends State<KindlingResistancePage> {
               const Spacer(),
               OutlinedButton(
                 key: KindlingResistancePage.nextKey,
-                onPressed: () => _submit(skipped: false),
+                onPressed: _busy ? null : () => _submit(skipped: false),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF2B2B2B),
                   side: const BorderSide(color: Color(0xFFDDDDDD)),
