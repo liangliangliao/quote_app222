@@ -103,7 +103,9 @@ class NotificationService {
     }
     final NavigatorState? nav = SimpleBus.navigatorKey.currentState;
     if (nav == null) return false;
-    await nav.pushNamed(KindlingEntry.route);
+    // 不能 await：pushNamed 要等这个页面被关掉才返回，而调用方在启动路径上，
+    // 一 await 就把启动挂住了。文件里其它 _tryNavigate* 也都是不等的。
+    nav.pushNamed(KindlingEntry.route);
     return true;
   }
 

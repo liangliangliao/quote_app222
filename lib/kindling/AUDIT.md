@@ -19,8 +19,12 @@
 | `routes: { KindlingEntry.route: ... }` | 已注册。宿主的 `Database` 是异步打开的（`AppDatabase.instance()`），所以路由指向 `KindlingHostPage`，由它等库、接追问器与提醒，再建 `KindlingEntry` |
 | 导出 3 个符号 | 导出 6 个：多 `KindlingDiscoverEntry`（发现页入口卡片）与 `KindlingReminder` / `NoopKindlingReminder`（复问提醒的挂载点，不接即默认关） |
 
-数据库迁移按方案接：`lib/data/db.dart` 的 `_create`、`_upgrade` 与每次
-`openDatabase` 之后各调一次 `KindlingSchema.createAll` / `migrate`，三处都幂等。
+数据库迁移按方案接：`lib/data/db.dart` 的 `_create` 调 `createAll`、`_upgrade` 调
+`migrate`，都幂等。
+
+**不在每次开库时建表**：宿主的 `AppDatabase.instance()` 在 `runApp` 之前被 await，
+放在那里的任何一步一旦不返回，应用就停在闪屏。模块自己在进场时会调
+`dao.ensureSchema()`，所以宿主没有必要在开库路径上替它建表。
 
 ## 与方案一致的部分
 
@@ -87,7 +91,8 @@
 | 中途退出十五分钟，无任何提示或负面反馈 | 通过 | `burn_page.dart` 在 `dispose` 里静默落库；`kindling_dao_test.dart` |
 | 「不做」的火种被保留而非删除，可拿回 | 通过 | `kindling_dao_test.dart` + `kindling_flow_widget_test.dart` |
 | 卸载模块后宿主正常编译 | 通过 | 集成点只有三处：`lib/data/db.dart` 三行、`discover_page.dart` 的入口卡片与 `_openKindlingFromDiscover`、以及本目录 |
-| `KindlingSchema.createAll` 重复调用不报错 | 通过 | `kindling_schema_test.dart` 连调三次 |
+| `KindlingSchema.createAll` 重复调用不报错 | 通过 | `kindling_schema_test.dart` 连调三次；版本已对上时直接返回，不重复写库 |
+| 宿主开库不会卡住启动 | 通过 | `host_db_open_smoke_test.dart` 给开库上 30 秒时限 |
 | 无一处文案含感叹号或激励词 | 通过 | `kindling_red_lines_test.dart` |
 | 数据库无任何跨模块外键指向宿主表 | 通过 | `kindling_schema_test.dart` 遍历 `PRAGMA foreign_key_list` |
 
