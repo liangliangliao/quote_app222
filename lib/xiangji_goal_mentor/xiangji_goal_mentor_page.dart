@@ -2387,10 +2387,26 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               title: Text('${application.mentorName} · ${application.concept}', style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: const Text('展开看：概念怎样推出这项行动'),
               children: <Widget>[
-                _InfoRow(label: '知识来源', value: application.locator),
-                _InfoRow(label: '用于你的情况', value: application.caseApplication),
-                _InfoRow(label: '推导理由', value: application.whyThisAction),
-                _InfoRow(label: '理论边界', value: application.boundary),
+                _InfoRow(
+                  icon: Icons.menu_book_outlined,
+                  label: '知识来源',
+                  text: application.locator,
+                ),
+                _InfoRow(
+                  icon: Icons.person_outline,
+                  label: '你的情况',
+                  text: application.caseApplication,
+                ),
+                _InfoRow(
+                  icon: Icons.account_tree_outlined,
+                  label: '推导理由',
+                  text: application.whyThisAction,
+                ),
+                _InfoRow(
+                  icon: Icons.shield_outlined,
+                  label: '理论边界',
+                  text: application.boundary,
+                ),
               ],
             )),
           ],
