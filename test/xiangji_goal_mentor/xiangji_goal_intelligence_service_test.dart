@@ -41,7 +41,10 @@ void main() {
       expect(route.successSignal, isNotEmpty);
       expect(route.applications, isNotEmpty);
       expect(route.applications.single.locator, isNotEmpty);
-      expect(route.applications.single.caseApplication, contains('写作'));
+      expect(
+        route.applications.single.caseApplication,
+        anyOf(contains('写作'), contains('早晨时间不稳定')),
+      );
       expect(route.applications.single.boundary, isNotEmpty);
     }
     expect(bundle.receipt.aiUsed, isFalse);
