@@ -81,6 +81,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('选今天最适合你的方式'), findsOneWidget);
 
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(WillMirrorPracticePage.nextButtonKey));
     await tester.pumpAndSettle();
     expect(find.text('三个都能产出，选最想试的'), findsOneWidget);

@@ -119,7 +119,10 @@ class WillMirrorPracticeIntelligenceService
           };
         }).toList(growable: false),
         'local_safe_candidates': fallbackRoutes
-            .map((item) => item.toJson())
+            .map(
+              (item) =>
+                  _redactJsonValue(item.toJson()) as Map<String, dynamic>,
+            )
             .toList(growable: false),
         'required_schema': <String, dynamic>{
           'situation_summary': 'string',
@@ -333,6 +336,19 @@ class WillMirrorPracticeIntelligenceService
         )
         .replaceAll(RegExp(r'\b1[3-9]\d{9}\b'), '[手机号已隐藏]')
         .replaceAll(RegExp(r'\b\d{17}[0-9Xx]\b'), '[证件号已隐藏]');
+  }
+
+  static dynamic _redactJsonValue(dynamic value) {
+    if (value is String) return _redact(value);
+    if (value is List) {
+      return value.map(_redactJsonValue).toList(growable: false);
+    }
+    if (value is Map) {
+      return value.map<String, dynamic>(
+        (key, item) => MapEntry(key.toString(), _redactJsonValue(item)),
+      );
+    }
+    return value;
   }
 
   static const String _systemPrompt = '''

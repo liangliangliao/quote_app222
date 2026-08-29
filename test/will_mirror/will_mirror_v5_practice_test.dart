@@ -84,7 +84,7 @@ void main() {
       );
       final draft = await service.generate(
         needType: WillMirrorNeedType.problem,
-        need: '作品集拖了三个月没有开始',
+        need: '作品集拖了三个月没有开始，联系邮箱 user@example.com',
         desiredOutcome: '七天后有两页草稿',
         obstacle: '怕做不好',
         profile: profile,
