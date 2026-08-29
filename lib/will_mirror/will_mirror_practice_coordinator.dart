@@ -49,7 +49,6 @@ class WillMirrorPracticeCoordinator {
       status: 'active',
       createdAt: nowMs,
       updatedAt: nowMs,
-      intelligenceReceipt: intelligenceReceipt,
     );
     await _vault.saveGoal(goal);
 
@@ -125,6 +124,7 @@ class WillMirrorPracticeCoordinator {
       obstacle: obstacleText,
       profile: profile,
       route: route,
+      intelligenceReceipt: intelligenceReceipt,
       status: 'active',
       checkInCount: 0,
       completedCount: 0,
