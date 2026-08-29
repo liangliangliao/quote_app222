@@ -10,6 +10,8 @@ import '../xiangji_future_strategist/xiangji_home_page.dart';
 import 'xiangji_book_service.dart';
 import 'xiangji_dao.dart';
 import 'xiangji_engine.dart';
+import 'xiangji_goal_examples.dart';
+import 'xiangji_goal_intelligence_service.dart';
 import 'xiangji_grounded_ai_service.dart';
 import 'xiangji_knowledge_repository.dart';
 import 'xiangji_mentor_knowledge_page.dart';
@@ -52,7 +54,10 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   late final XiangjiProviderMirrorService _providerMirror;
   late final XiangjiBookService _books;
   late final XiangjiGroundedAiService _grounded;
+  late final XiangjiGoalIntelligenceService _intelligence;
   final TextEditingController _goalController = TextEditingController();
+  final TextEditingController _outcomeController = TextEditingController();
+  final TextEditingController _obstacleController = TextEditingController();
   final FocusNode _goalFocus = FocusNode();
 
   bool _loading = true;
@@ -64,6 +69,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   XiangjiDailyStep? _step;
   XiangjiGuidance? _guidance;
   XiangjiGoalDraft? _draft;
+  XiangjiGoalPlanBundle? _planBundle;
+  XiangjiGoalPlanRoute? _selectedPlanRoute;
+  XiangjiGoalIntelligenceReceipt? _intelligenceReceipt;
   List<XiangjiGrowthEvidence> _evidence = const <XiangjiGrowthEvidence>[];
   List<XiangjiGoal> _allGoals = const <XiangjiGoal>[];
   List<Map<String, Object?>> _versions = const <Map<String, Object?>>[];
@@ -74,6 +82,10 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       XiangjiReminderSettings.defaults();
   XiangjiZoomMode _zoomMode = XiangjiZoomMode.panorama;
   String _selectedMentorId = '';
+  XiangjiGoalInterest _interest = XiangjiGoalInterest.create;
+  XiangjiSupportTone _supportTone = XiangjiSupportTone.gentle;
+  int _availableMinutes = 5;
+  bool _allowPlanningAi = true;
   XiangjiMentorKnowledgeMigration? _mentorMigration;
 
   bool get _requiresMentorReselection =>
@@ -100,12 +112,18 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       mirrorService: _providerMirror,
       generator: _aiAdapter.generate,
     );
+    _intelligence = XiangjiGoalIntelligenceService(
+      engine: _engine,
+      generator: _aiAdapter.generate,
+    );
     _reload();
   }
 
   @override
   void dispose() {
     _goalController.dispose();
+    _outcomeController.dispose();
+    _obstacleController.dispose();
     _goalFocus.dispose();
     super.dispose();
   }
@@ -144,6 +162,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           : await _dao.stateEvents(goal.id);
       final settings = await _dao.reminderSettings();
       final imported = await _dao.importedBooks();
+      final receiptJson = goal == null
+          ? null
+          : await _dao.latestGoalIntelligenceReceipt(goal.id);
       final pendingRemoteDeletions =
           (await _dao.pendingProviderDeletions()).length;
       XiangjiGuidance? guidance;
@@ -168,6 +189,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         _importedBooks = imported;
         _pendingRemoteDeletions = pendingRemoteDeletions;
         _guidance = guidance;
+        _intelligenceReceipt = receiptJson == null
+            ? null
+            : XiangjiGoalIntelligenceReceipt.fromJson(receiptJson);
         _mentorMigration = mentorMigration;
         _selectedMentorId = goal == null
             ? (catalog.system(_selectedMentorId)?.id ?? '')
@@ -188,12 +212,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   Future<void> _createDraft() async {
     final text = _goalController.text.trim();
     if (text.isEmpty || _catalog == null) {
-      _showMessage('先写下此刻最不想忘记的目标，哪怕它还很模糊。');
-      return;
-    }
-    if (_selectedMentorId.isEmpty) {
-      _showMessage('先选择一位目标导师；选择会改变判断标准和行动路径。');
-      await _openMentorKnowledge();
+      _showMessage('先写一句你想解决的问题、想实现的目标，或想改变的现状。');
       return;
     }
     final safety = _engine.assessSafety(text);
@@ -203,18 +222,212 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     }
     setState(() => _working = true);
     try {
-      final draft = _engine.buildDraft(
-        text,
-        _catalog!,
-        selectedMentorId: _selectedMentorId,
+      final bundle = await _intelligence.generate(
+        need: text,
+        desiredOutcome: _outcomeController.text,
+        obstacle: _obstacleController.text,
+        profile: XiangjiGoalSupportProfile(
+          interest: _interest,
+          tone: _supportTone,
+          minutes: _availableMinutes,
+        ),
+        catalog: _catalog!,
+        allowAi: _allowPlanningAi,
+        preferredMentorId: _selectedMentorId,
       );
+      final selected = bundle.routes.first;
       if (!mounted) return;
-      setState(() => _draft = draft);
+      setState(() {
+        _planBundle = bundle;
+        _selectedPlanRoute = selected;
+        _draft = selected.draft;
+        _selectedMentorId = selected.mentorId;
+        _intelligenceReceipt = bundle.receipt;
+      });
     } catch (error) {
       _showMessage(_cleanError(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  void _selectPlanRoute(XiangjiGoalPlanRoute route) {
+    setState(() {
+      _selectedPlanRoute = route;
+      _draft = route.draft;
+      _selectedMentorId = route.mentorId;
+    });
+  }
+
+  Future<void> _chooseExample() async {
+    final example = await showModalBottomSheet<XiangjiGoalExample>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          children: <Widget>[
+            const ListTile(
+              title: Text('用一个跑通的案例开始', style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('会填入真实目标、期望结果、阻碍和轻量偏好；你可以随时修改。'),
+            ),
+            ...xiangjiGoalExamples.map(
+              (item) => Card(
+                child: ExpansionTile(
+                  title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text('案例产出：${item.expectedOutput}'),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  children: <Widget>[
+                    Align(alignment: Alignment.centerLeft, child: Text('输入：${item.need}')),
+                    const SizedBox(height: 8),
+                    ...item.sevenDayTrace.map((trace) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Align(alignment: Alignment.centerLeft, child: Text(trace, style: const TextStyle(fontSize: 12))),
+                    )),
+                    const SizedBox(height: 4),
+                    Align(alignment: Alignment.centerLeft, child: Text('复盘：${item.review}', style: const TextStyle(fontWeight: FontWeight.w600))),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(context, item),
+                        child: const Text('用这个案例填写'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (example == null || !mounted) return;
+    setState(() {
+      _goalController.text = example.need;
+      _outcomeController.text = example.desiredOutcome;
+      _obstacleController.text = example.obstacle;
+      _interest = example.interest;
+      _supportTone = example.tone;
+      _availableMinutes = example.minutes;
+      _draft = null;
+      _planBundle = null;
+      _selectedPlanRoute = null;
+    });
+    _goalFocus.requestFocus();
+  }
+
+  Future<void> _openGoalAssistant() async {
+    final controller = TextEditingController();
+    XiangjiGoalAssistantAnswer? answer;
+    var asking = false;
+    var allowAi = true;
+    final catalog = _catalog;
+    if (catalog == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          Future<void> ask([String? shortcut]) async {
+            if (shortcut != null) controller.text = shortcut;
+            if (asking) return;
+            setSheetState(() => asking = true);
+            final result = await _intelligence.answer(
+              question: controller.text,
+              catalog: catalog,
+              goal: _goal,
+              step: _step ?? _draft?.step,
+              guidance: _guidance ?? _draft?.guidance,
+              allowAi: allowAi,
+            );
+            if (!context.mounted) return;
+            setSheetState(() {
+              answer = result;
+              asking = false;
+            });
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              18,
+              4,
+              18,
+              MediaQuery.viewInsetsOf(context).bottom + 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Text('目标导师助手', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 5),
+                  const Text('问怎么填、怎么选、为什么这样做，或卡住后怎么继续。', style: TextStyle(color: Colors.black54)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <String>[
+                      '我现在该做什么？',
+                      '我卡住了怎么办？',
+                      '为什么这样设计？',
+                      '思想依据在哪里？',
+                    ].map((text) => ActionChip(label: Text(text), onPressed: () => ask(text))).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    minLines: 2,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: '直接提问',
+                      hintText: '例如：这个成功标准应该怎么填？',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: allowAi,
+                    onChanged: (value) => setSheetState(() => allowAi = value),
+                    title: const Text('本次允许 AI 补充回答'),
+                    subtitle: const Text('未配置或回答不合格时，本地操作助手自动接管。'),
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: asking ? null : ask,
+                      icon: const Icon(Icons.send_outlined),
+                      label: Text(asking ? '正在回答…' : '回答这个问题'),
+                    ),
+                  ),
+                  if (answer != null) ...<Widget>[
+                    const SizedBox(height: 16),
+                    _SectionCard(
+                      color: _sage,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(answer!.modeLabel, style: const TextStyle(color: _moss, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 8),
+                          Text(answer!.text, style: const TextStyle(height: 1.55)),
+                          if (answer!.sourceLabels.isNotEmpty) ...<Widget>[
+                            const SizedBox(height: 10),
+                            Text('依据：${answer!.sourceLabels.join('；')}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    controller.dispose();
   }
 
   Future<void> _openMentorKnowledge() async {
@@ -465,13 +678,31 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         .take(5)
         .toList();
     if (!mounted) return;
+    final updatedDraft = regenerated.copyWith(
+      whyText: result[1].isEmpty ? regenerated.whyText : result[1],
+      higherValues: parsedValues.isEmpty ? regenerated.higherValues : parsedValues,
+      successDefinition: result[3].isEmpty ? regenerated.successDefinition : result[3],
+      scopeText: result[4].isEmpty ? regenerated.scopeText : result[4],
+    );
+    final currentRoute = _selectedPlanRoute;
     setState(() {
-      _draft = regenerated.copyWith(
-        whyText: result[1].isEmpty ? regenerated.whyText : result[1],
-        higherValues: parsedValues.isEmpty ? regenerated.higherValues : parsedValues,
-        successDefinition: result[3].isEmpty ? regenerated.successDefinition : result[3],
-        scopeText: result[4].isEmpty ? regenerated.scopeText : result[4],
-      );
+      _draft = updatedDraft;
+      if (currentRoute != null) {
+        _selectedPlanRoute = XiangjiGoalPlanRoute(
+          id: currentRoute.id,
+          title: currentRoute.title,
+          promise: currentRoute.promise,
+          mentorId: updatedDraft.guidance.systemId,
+          mentorName: updatedDraft.guidance.mentorName,
+          understanding: updatedDraft.whyText,
+          blindSpot: currentRoute.blindSpot,
+          output: currentRoute.output,
+          whyItWorks: currentRoute.whyItWorks,
+          successSignal: updatedDraft.successDefinition,
+          draft: updatedDraft,
+          applications: currentRoute.applications,
+        );
+      }
       _goalController.text = result.first;
     });
   }
@@ -484,9 +715,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       await _dao.createAndActivateGoal(
         draft,
         kbVersion: _catalog!.version,
+        intelligenceReceipt: _planBundle?.receipt.toJson(),
       );
       if (!mounted) return;
-      setState(() => _draft = null);
+      setState(() {
+        _draft = null;
+        _planBundle = null;
+        _selectedPlanRoute = null;
+      });
       await _reload();
       if (!mounted) return;
       final enable = await showDialog<bool>(
@@ -1696,6 +1932,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           ),
           actions: <Widget>[
             IconButton(
+              tooltip: '目标导师助手',
+              onPressed: _working ? null : _openGoalAssistant,
+              icon: const Icon(Icons.support_agent_outlined),
+            ),
+            IconButton(
               tooltip: '刷新',
               onPressed: _working ? null : _reload,
               icon: const Icon(Icons.refresh),
@@ -1763,6 +2004,10 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         children: <Widget>[
           _buildGoalSeedCard(),
           const SizedBox(height: 14),
+          if (_intelligenceReceipt != null) ...<Widget>[
+            _buildIntelligenceReceipt(_intelligenceReceipt!),
+            const SizedBox(height: 14),
+          ],
           _buildTodayStepCard(),
           const SizedBox(height: 14),
           if (_guidance != null) _buildMentorCard(_guidance!),
@@ -1859,47 +2104,16 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           ),
         ],
         const SizedBox(height: 16),
-        _SectionCard(
-          color: _sage,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text(
-                '先选择一位目标导师',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                '选择会持续影响价值判断、目标设定、每日行动和校准；不会把你贴成永久人格标签。',
-                style: TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFD9E9E1),
-                  child: Icon(Icons.person_pin_outlined, color: _moss),
-                ),
-                title: Text(selectedMentor?.displayName ?? '尚未选择'),
-                subtitle: Text(
-                  selectedMentor?.profile?.mentorTitle ??
-                      '查看 10 位导师的核心问题与现实路径后再选择',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _openMentorKnowledge,
-              ),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _openMentorKnowledge,
-                  icon: const Icon(Icons.account_tree_outlined),
-                  label: Text(selectedMentor == null ? '查看并选择导师' : '更换或深入了解'),
-                ),
-              ),
-            ],
-          ),
+        OutlinedButton.icon(
+          onPressed: _chooseExample,
+          icon: const Icon(Icons.play_circle_outline),
+          label: const Text('不知道怎么填？先用一个完整案例'),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+        const Text('1. 你现在想解决什么？', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        const Text('只要一句真实的话；可以是目标、问题、困难或想要的改变。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+        const SizedBox(height: 10),
         TextField(
           controller: _goalController,
           focusNode: _goalFocus,
@@ -1907,7 +2121,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           maxLines: 6,
           textInputAction: TextInputAction.newline,
           decoration: InputDecoration(
-            hintText: '例如：我不想再忘记自己真正想完成的那件事……',
+            hintText: '例如：我想恢复写作，但总担心写不好。',
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
@@ -1933,17 +2147,113 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               )
               .toList(),
         ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _outcomeController,
+          minLines: 1,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: '希望得到什么结果？（可不填）',
+            hintText: '例如：七天内留下三次真实写作痕迹',
+            helperText: '用看得见的结果描述；不知道时由导师帮你形成。',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _obstacleController,
+          minLines: 1,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: '现在最可能卡在哪里？（可不填）',
+            hintText: '例如：早晨时间不稳定，而且担心写得差',
+            helperText: '只写事实；不会把阻碍解释成性格缺陷。',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text('2. 选一种你愿意开始的方式', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        const Text('这不是人格测验，只决定本轮例子、语气和行动大小。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: XiangjiGoalInterest.values.map((value) => ChoiceChip(
+            label: Text(value.label),
+            selected: _interest == value,
+            onSelected: (_) => setState(() => _interest = value),
+          )).toList(),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: XiangjiSupportTone.values.map((value) => ChoiceChip(
+            label: Text(value.label),
+            selected: _supportTone == value,
+            onSelected: (_) => setState(() => _supportTone = value),
+          )).toList(),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: <int>[2, 5, 10, 15, 20].map((value) => ChoiceChip(
+            label: Text('$value 分钟'),
+            selected: _availableMinutes == value,
+            onSelected: (_) => setState(() => _availableMinutes = value),
+          )).toList(),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          color: _sage,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('导师可选，不选也能开始', style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 5),
+              Text(
+                selectedMentor == null
+                    ? '系统会从知识库选择三条不同思想路径，先给你比较，再由你确认。'
+                    : '你偏好 ${selectedMentor.displayName}；系统仍会提供另外两条可比较路径。',
+                style: const TextStyle(fontSize: 12, height: 1.45),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _openMentorKnowledge,
+                  icon: const Icon(Icons.account_tree_outlined),
+                  label: Text(selectedMentor == null ? '我想先选思想家' : '查看或更换思想家'),
+                ),
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: _allowPlanningAi,
+                onChanged: (value) => setState(() => _allowPlanningAi = value),
+                title: const Text('本次允许 AI 结合情境形成方案'),
+                subtitle: const Text('自动隐藏邮箱、手机号和证件号；AI 不可用时，本地知识规则立即接管并说明原因。'),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 18),
         FilledButton.icon(
           onPressed: _working ? null : _createDraft,
           icon: const Icon(Icons.auto_awesome_outlined),
           label: const Padding(
             padding: EdgeInsets.symmetric(vertical: 13),
-            child: Text('帮我形成目标火种'),
+            child: Text('生成三条现实路径'),
           ),
         ),
+        if (_planBundle != null) ...<Widget>[
+          const SizedBox(height: 20),
+          _buildIntelligenceReceipt(_planBundle!.receipt),
+          const SizedBox(height: 14),
+          _buildPlanRoutePicker(_planBundle!),
+        ],
         if (_draft != null) ...<Widget>[
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
           _buildDraftCard(_draft!),
         ],
         const SizedBox(height: 20),
@@ -1960,7 +2270,79 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     );
   }
 
+  Widget _buildIntelligenceReceipt(XiangjiGoalIntelligenceReceipt receipt) {
+    final mode = receipt.aiUsed
+        ? 'AI 已参与 · ${receipt.model}'
+        : receipt.aiRequested
+            ? 'AI 未完成 · 本地知识规则已接管'
+            : '本地知识规则';
+    return _SectionCard(
+      color: receipt.aiUsed ? const Color(0xFFE8EEF8) : _sage,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(receipt.aiUsed ? Icons.auto_awesome : Icons.offline_bolt_outlined, color: _moss),
+              const SizedBox(width: 8),
+              Expanded(child: Text(mode, style: const TextStyle(fontWeight: FontWeight.w800))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('它做了什么：${receipt.situationSummary}', style: const TextStyle(height: 1.45)),
+          if (receipt.blindSpotQuestion.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 6),
+            Text('它提醒你核对：${receipt.blindSpotQuestion}', style: const TextStyle(height: 1.45)),
+          ],
+          if (receipt.fallbackReason.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 7),
+            Text(receipt.fallbackReason, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+          ],
+          const SizedBox(height: 7),
+          Text(
+            '处理模式：${receipt.provider} · 已约束 ${receipt.knowledgeIds.length} 条知识依据',
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanRoutePicker(XiangjiGoalPlanBundle bundle) {
+    return _SectionCard(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('3. 选一条今天愿意走的路径', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          const Text('三条都来自现有知识库，但解决角度、产出和投入不同。没有“正确人格”答案。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 10),
+          ...bundle.routes.map((route) => Card(
+            margin: const EdgeInsets.only(bottom: 9),
+            color: _selectedPlanRoute?.id == route.id ? _sage : Colors.white,
+            child: ListTile(
+              onTap: () => _selectPlanRoute(route),
+              leading: Icon(
+                _selectedPlanRoute?.id == route.id
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                color: _moss,
+              ),
+              title: Text(route.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text('${route.promise}\n导师：${route.mentorName}\n本轮产出：${route.output}'),
+              ),
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDraftCard(XiangjiGoalDraft draft) {
+    final route = _selectedPlanRoute;
     return _SectionCard(
       color: _sand,
       child: Column(
@@ -1970,13 +2352,13 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
             children: <Widget>[
               Icon(Icons.local_fire_department_outlined, color: Color(0xFFA25D32)),
               SizedBox(width: 8),
-              Text('目标火种卡草案', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+              Text('你的现实行动方案', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
             ],
           ),
           const SizedBox(height: 14),
           Text(draft.originalText, style: const TextStyle(fontSize: 20, height: 1.45, fontWeight: FontWeight.w700, color: _ink)),
           const SizedBox(height: 12),
-          Text(draft.whyText, style: const TextStyle(height: 1.5)),
+          Text(route?.understanding ?? draft.whyText, style: const TextStyle(height: 1.5)),
           const SizedBox(height: 10),
           Wrap(
             spacing: 6,
@@ -1984,9 +2366,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
             children: draft.higherValues.map((value) => _Pill(text: value)).toList(),
           ),
           const SizedBox(height: 10),
-          Text('成功定义：${draft.successDefinition}', style: const TextStyle(fontSize: 13, height: 1.4)),
+          Text('做到哪里算完成：${route?.successSignal ?? draft.successDefinition}', style: const TextStyle(fontSize: 13, height: 1.4)),
           const SizedBox(height: 4),
-          Text('当前范围：${draft.scopeText}', style: const TextStyle(fontSize: 13, height: 1.4)),
+          Text('你会留下：${route?.output ?? draft.step.evidenceRule}', style: const TextStyle(fontSize: 13, height: 1.4)),
           const Divider(height: 28),
           Text('当前主要导师 · ${draft.guidance.mentorName}', style: const TextStyle(color: _moss, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
@@ -1994,7 +2376,24 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           const SizedBox(height: 6),
           Text(draft.guidance.coreJudgment, style: const TextStyle(height: 1.45)),
           const SizedBox(height: 12),
-          Text('探索行动：${draft.step.actionText}', style: const TextStyle(fontWeight: FontWeight.w600, height: 1.45)),
+          Text('今天只做：${draft.step.actionText}', style: const TextStyle(fontWeight: FontWeight.w700, height: 1.45)),
+          const SizedBox(height: 6),
+          Text('为什么是这一步：${route?.whyItWorks ?? draft.guidance.actionDerivation}', style: const TextStyle(height: 1.45)),
+          if (route != null && route.applications.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            ...route.applications.map((application) => ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 10),
+              title: Text('${application.mentorName} · ${application.concept}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('展开看：概念怎样推出这项行动'),
+              children: <Widget>[
+                _InfoRow(label: '知识来源', value: application.locator),
+                _InfoRow(label: '用于你的情况', value: application.caseApplication),
+                _InfoRow(label: '推导理由', value: application.whyThisAction),
+                _InfoRow(label: '理论边界', value: application.boundary),
+              ],
+            )),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -2006,7 +2405,11 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               TextButton(onPressed: _editDraft, child: const Text('不太准确')),
               TextButton(
                 onPressed: () {
-                  setState(() => _draft = null);
+                  setState(() {
+                    _draft = null;
+                    _planBundle = null;
+                    _selectedPlanRoute = null;
+                  });
                   _goalFocus.requestFocus();
                 },
                 child: const Text('我想继续说'),

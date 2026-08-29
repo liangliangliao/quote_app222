@@ -75,6 +75,31 @@ void main() {
     expect(await database.query('xiangji_reminder_deliveries'), isEmpty);
   });
 
+  test('persists and restores the intelligence receipt with the goal',
+      () async {
+    final goal = await dao.createAndActivateGoal(
+      _draft(),
+      intelligenceReceipt: const <String, Object?>{
+        'ai_requested': true,
+        'ai_used': true,
+        'provider': 'openai',
+        'model': 'test-model',
+        'status': 'ai_grounded',
+        'fallback_reason': '',
+        'knowledge_ids': <String>['EV-1'],
+        'generated_at_ms': 123,
+        'situation_summary': '把模糊愿望转成可验证行动。',
+        'blind_spot_question': '今天最小的现实产出是什么？',
+      },
+    );
+
+    final receipt = await dao.latestGoalIntelligenceReceipt(goal.id);
+    expect(receipt, isNotNull);
+    expect(receipt!['ai_used'], isTrue);
+    expect(receipt['model'], 'test-model');
+    expect(receipt['knowledge_ids'], <String>['EV-1']);
+  });
+
   test('persists mentor selection history and 8-step progress', () async {
     final goal = await dao.createAndActivateGoal(_draft());
     expect(await dao.mentorSelectionHistory(goal.id), hasLength(1));

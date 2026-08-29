@@ -534,6 +534,7 @@ class XiangjiGoalMentorDao {
   Future<XiangjiGoal> createAndActivateGoal(
     XiangjiGoalDraft draft, {
     String kbVersion = '2.1.0',
+    Map<String, Object?>? intelligenceReceipt,
   }) async {
     final db = await _database();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -625,6 +626,7 @@ class XiangjiGoalMentorDao {
         zoomMode: XiangjiZoomMode.panorama,
         kbVersion: kbVersion,
         now: now,
+        intelligenceReceipt: intelligenceReceipt,
       );
       await txn.insert('xiangji_mentor_selections', <String, Object?>{
         'goal_id': id,
@@ -668,6 +670,35 @@ class XiangjiGoalMentorDao {
     final created = await goalById(goalId);
     if (created == null) throw StateError('目标创建后读取失败');
     return created;
+  }
+
+  Future<Map<String, Object?>?> latestGoalIntelligenceReceipt(
+    int goalId,
+  ) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_mentor_sessions',
+      columns: const <String>['structured_output_json'],
+      where: 'goal_id = ?',
+      whereArgs: <Object?>[goalId],
+      orderBy: 'created_at_ms DESC, id DESC',
+    );
+    for (final row in rows) {
+      final raw = row['structured_output_json']?.toString() ?? '';
+      if (raw.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) continue;
+        final receipt = decoded['intelligence_receipt'];
+        if (receipt is! Map) continue;
+        return receipt.map<String, Object?>(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
   }
 
   Future<XiangjiGoal> updateGoalVersion({
@@ -2250,6 +2281,7 @@ class XiangjiGoalMentorDao {
     required XiangjiZoomMode zoomMode,
     required String kbVersion,
     required int now,
+    Map<String, Object?>? intelligenceReceipt,
   }) async {
     final structured = <String, Object?>{
       'mentor': guidance.mentorName,
@@ -2260,6 +2292,8 @@ class XiangjiGoalMentorDao {
       'source_ids': guidance.sources.map((item) => item.sourceId).toList(),
       'evidence_ids': guidance.sources.map((item) => item.evidenceId).toList(),
       'content_type': 'kb_application',
+      if (intelligenceReceipt != null)
+        'intelligence_receipt': intelligenceReceipt,
     };
     await db.insert('xiangji_mentor_sessions', <String, Object?>{
       'goal_id': goalId,
