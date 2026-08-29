@@ -50,22 +50,21 @@ class KindlingDao {
     });
   }
 
-  /// 批量新增（回溯勾选后使用），返回新 id 列表。
+  /// 批量新增（回溯勾选后使用），逐条带自己的类别，返回新 id 列表。
   Future<List<int>> insertItems(
-    List<String> titles, {
-    String kind = KKind.recall,
+    List<KCandidate> candidates, {
     DateTime? at,
   }) async {
     final List<int> ids = <int>[];
     final DateTime now = at ?? DateTime.now();
     await db.transaction((Transaction txn) async {
-      for (final String title in titles) {
-        final String trimmed = title.trim();
+      for (final KCandidate candidate in candidates) {
+        final String trimmed = candidate.title.trim();
         if (trimmed.isEmpty) continue;
         final int ms = _ms(now);
         ids.add(await txn.insert('k_item', <String, Object?>{
           'title': trimmed,
-          'kind': KKind.normalize(kind),
+          'kind': KKind.normalize(candidate.kind),
           'created_at': ms,
           'updated_at': ms,
         }));
@@ -74,14 +73,21 @@ class KindlingDao {
     return ids;
   }
 
-  /// 换个说法：只改标题，不改任何历史记录。
-  Future<void> renameItem(int itemId, String title, {DateTime? at}) async {
+  /// 换个说法：改标题，顺带可以留一句备注。不改任何历史记录。
+  Future<void> renameItem(
+    int itemId,
+    String title, {
+    String? note,
+    DateTime? at,
+  }) async {
     final String trimmed = title.trim();
     if (trimmed.isEmpty) return;
+    final String? trimmedNote = note?.trim();
     await db.update(
       'k_item',
       <String, Object?>{
         'title': trimmed,
+        'note': (trimmedNote == null || trimmedNote.isEmpty) ? null : trimmedNote,
         'updated_at': _ms(at ?? DateTime.now()),
       },
       where: 'id = ?',
@@ -201,9 +207,13 @@ class KindlingDao {
     int wantMoreCount = 0;
     DateTime? lastBurnAt;
     for (final KBurn burn in burns) {
+      // 最近一次触碰包含中途退出：碰过就是碰过，用于时间衰减。
+      lastBurnAt ??= burn.startedAt;
+      // 但没作答的（中途退出）不进比例的分母。否则退出一次就等于往
+      // 「不想」那边记了一笔，与「中途退出不记为失败」相悖。
+      if (burn.wantMore == null) continue;
       burnTotal += 1;
       if (burn.wantMore == true) wantMoreCount += 1;
-      lastBurnAt ??= burn.startedAt;
     }
 
     int consecutiveNo = 0;
@@ -352,6 +362,7 @@ class KindlingDao {
     DateTime? at,
   }) async {
     final int now = _ms(at ?? DateTime.now());
+    int written = 0;
     await db.transaction((Transaction txn) async {
       for (final String key in KRecallQuestion.ordered) {
         final String raw = (answers[key] ?? '').trim();
@@ -361,8 +372,11 @@ class KindlingDao {
           'raw_text': raw,
           'created_at': now,
         });
+        written += 1;
       }
     });
+    // 三问全部留空不算做过一次回溯，否则这个数会虚高到没法自查。
+    if (written == 0) return;
     await _bumpCounter(metaRecallSessions);
   }
 

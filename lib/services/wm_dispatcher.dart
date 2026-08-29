@@ -8,6 +8,7 @@ import '../services/notification_service.dart';
 import '../services/scheduler_service.dart';
 import '../health_diet/services/health_diet_daily_scheduler_service.dart';
 import '../xiangji_future_strategist/xiangji_strategist_monitor_service.dart';
+import '../kindling_host/kindling_host_reminder.dart';
 
 @pragma('vm:entry-point')
 void workmanagerCallbackDispatcher() {
@@ -64,6 +65,10 @@ void workmanagerCallbackDispatcher() {
           userId: userId.isEmpty ? 'default_user' : userId,
         );
       }
+      return Future.value(true);
+    } else if (job == KindlingHostReminder.workJob) {
+      // 火种：「说不准」7 天后的复问提醒（默认关，开关在设置里）。
+      await KindlingHostReminder.handleWork(inputData);
       return Future.value(true);
     } else if (job == XiangjiStrategistMonitorService.job) {
       return XiangjiStrategistMonitorService.runScheduled();

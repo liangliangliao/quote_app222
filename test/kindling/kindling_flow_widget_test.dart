@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,9 @@ import 'package:quote_app/kindling/kindling.dart';
 import 'package:quote_app/kindling/src/copy.dart';
 import 'package:quote_app/kindling/src/data/kindling_dao.dart';
 import 'package:quote_app/kindling/src/ui/list_page.dart';
+import 'package:quote_app/kindling/src/ui/probe_sheet.dart';
 import 'package:quote_app/kindling/src/ui/recall_page.dart';
+import 'package:quote_app/kindling/src/ui/resistance_page.dart';
 import 'package:quote_app/kindling/src/ui/verdict_sheet.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -60,9 +63,17 @@ void main() {
   }
 
   /// [ready] 是这个用例进场后要碰的第一个东西——等它出现，才算首屏加载完成。
-  Future<void> pumpEntry(WidgetTester tester, {Finder? ready}) async {
+  Future<void> pumpEntry(
+    WidgetTester tester, {
+    Finder? ready,
+    KindlingOracle? oracle,
+  }) async {
     await tester.pumpWidget(
-      MaterialApp(home: KindlingEntry.build(db: db)),
+      MaterialApp(
+        home: oracle == null
+            ? KindlingEntry.build(db: db)
+            : KindlingEntry.build(db: db, oracle: oracle),
+      ),
     );
     await settle(tester, until: ready ?? find.text(KCopy.emptyDirect));
   }
@@ -161,10 +172,65 @@ void main() {
     await tester.longPress(find.text('修 XX 的渲染 bug'));
     await settle(tester, until: find.text(KCopy.menuRename));
 
+    expect(find.text(KCopy.menuProbe), findsOneWidget);
     expect(find.text(KCopy.menuRename), findsOneWidget);
     expect(find.text(KCopy.menuVerdict), findsOneWidget);
     expect(find.text(KCopy.menuResistance), findsOneWidget);
     expect(find.text(KCopy.menuRelease), findsOneWidget);
+  });
+
+  testWidgets('痒度自评只给措辞，不给任何数字', (WidgetTester tester) async {
+    await tester.runAsync(
+      () => KindlingDao(db).insertItem(title: '修 XX 的渲染 bug'),
+    );
+    await pumpEntry(tester, ready: find.text('修 XX 的渲染 bug'));
+
+    await tester.longPress(find.text('修 XX 的渲染 bug'));
+    await settle(tester, until: find.text(KCopy.menuProbe));
+    await tester.tap(find.text(KCopy.menuProbe));
+    await settle(tester, until: find.byKey(KindlingProbeSheet.sheetKey));
+
+    for (final String rung in KCopy.probeLadder) {
+      expect(find.text(rung), findsOneWidget);
+    }
+    // 五档措辞里不出现数字、百分号或星级。
+    for (final String rung in KCopy.probeLadder) {
+      expect(RegExp(r'[0-9%★☆]').hasMatch(rung), isFalse);
+    }
+
+    await tester.tap(find.text(KCopy.probe4));
+    await settle(tester);
+
+    final List<Map<String, Object?>> rows = await tester.runAsync(
+          () => db.query('k_probe'),
+        ) ??
+        <Map<String, Object?>>[];
+    expect(rows.single['score'], 4, reason: '最上面一档是最痒');
+    // 答完不给任何反馈。
+    expect(find.byKey(KindlingProbeSheet.sheetKey), findsNothing);
+  });
+
+  testWidgets('换个说法可以顺手留一句备注', (WidgetTester tester) async {
+    await tester.runAsync(
+      () => KindlingDao(db).insertItem(title: '修 XX 的渲染 bug'),
+    );
+    await pumpEntry(tester, ready: find.text('修 XX 的渲染 bug'));
+
+    await tester.longPress(find.text('修 XX 的渲染 bug'));
+    await settle(tester, until: find.text(KCopy.menuRename));
+    await tester.tap(find.text(KCopy.menuRename));
+    await settle(tester, until: find.byKey(KindlingListPage.noteKey));
+
+    await tester.enterText(find.byKey(KindlingListPage.noteKey), '拖了三个月了');
+    await tester.tap(find.text(KCopy.save));
+    await settle(tester);
+
+    final List<Map<String, Object?>> rows =
+        await tester.runAsync(() => db.query('k_item')) ??
+            <Map<String, Object?>>[];
+    expect(rows.single['note'], '拖了三个月了');
+    // 备注只是留给自己看的，不出现在清单上。
+    expect(find.text('拖了三个月了'), findsNothing);
   });
 
   testWidgets('卡住了 only asks and ends with the fixed closing line',
@@ -191,6 +257,27 @@ void main() {
     expect(find.text(KCopy.resistanceEnd), findsOneWidget);
     // 无总结、无建议列表、无「推荐行动」。
     expect(find.byType(ListView), findsNothing);
+  });
+
+  testWidgets('卡住了 进场立刻有第一问，不等追问器', (WidgetTester tester) async {
+    await tester.runAsync(
+      () => KindlingDao(db).insertItem(title: '修 XX 的渲染 bug'),
+    );
+    // 一个永远不返回的追问器：真机上就是那次卡住的云端请求。
+    await pumpEntry(
+      tester,
+      ready: find.text('修 XX 的渲染 bug'),
+      oracle: const _StalledOracle(),
+    );
+
+    await tester.longPress(find.text('修 XX 的渲染 bug'));
+    await settle(tester, until: find.text(KCopy.menuResistance));
+    await tester.tap(find.text(KCopy.menuResistance));
+    await tester.pumpAndSettle();
+
+    // 没有等待，也没有白屏：第一问当场就在。
+    expect(find.text(KCopy.resistance1), findsOneWidget);
+    expect(find.byKey(KindlingResistancePage.inputKey), findsOneWidget);
   });
 
   testWidgets('回溯 turns raw answers into candidates the user may keep',
@@ -252,4 +339,19 @@ void main() {
     await settle(tester);
     expect(taps, 1);
   });
+}
+
+/// 永远不返回的追问器：用来证明界面不靠它也能立刻出内容。
+class _StalledOracle implements KindlingOracle {
+  const _StalledOracle();
+
+  @override
+  Future<List<String>> extractCandidates(Map<String, String> answers) =>
+      Completer<List<String>>().future;
+
+  @override
+  Future<String?> nextResistanceQuestion(
+    List<({String q, String? a})> history,
+  ) =>
+      Completer<String?>().future;
 }

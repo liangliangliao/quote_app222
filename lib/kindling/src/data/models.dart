@@ -82,6 +82,24 @@ DateTime? _timeOrNull(Object? v) {
   return DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
 }
 
+/// 回溯勾选出来的一条候选：标题 + 它来自哪一问决定的类别。
+typedef KCandidate = ({String title, String kind});
+
+/// 把回溯的问题 key 映射成火种类别。
+String kindOfRecallQuestion(String questionKey) {
+  switch (questionKey) {
+    case KRecallQuestion.lostTrack:
+      return KKind.recall;
+    case KRecallQuestion.itch:
+      return KKind.itch;
+    case KRecallQuestion.envy:
+      // 羡慕或不服，落在「不服」这一类。
+      return KKind.defiance;
+    default:
+      return KKind.other;
+  }
+}
+
 /// 一条火种。
 class KItem {
   const KItem({

@@ -10,5 +10,8 @@ export 'src/kindling_entry.dart' show KindlingEntry;
 export 'src/data/kindling_schema.dart' show KindlingSchema;
 export 'src/kindling_oracle.dart' show KindlingOracle, LocalOracle;
 
+/// 复问提醒的挂载点。宿主不接就是默认关（方案 §5.3）。
+export 'src/kindling_reminder.dart' show KindlingReminder, NoopKindlingReminder;
+
 /// 「发现之旅」页面的入口卡片。集成点在发现页而非抽屉，故一并导出。
 export 'src/ui/kindling_discover_entry.dart' show KindlingDiscoverEntry;

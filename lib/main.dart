@@ -71,6 +71,8 @@ import 'self_evidence/self_evidence_home_page.dart';
 import 'boundary_practice/boundary_practice_home_page.dart';
 import 'boundary_action_coach/boundary_action_coach_home_page.dart';
 import 'self_determination_growth/self_determination_growth_home_page.dart';
+import 'kindling/kindling.dart';
+import 'kindling_host/kindling_host_page.dart';
 
 Future<void> _navToHomeIfLaunchedFromNotification() async {
   final plugin = FlutterLocalNotificationsPlugin();
@@ -198,6 +200,10 @@ class MyApp extends StatelessWidget {
 				navigatorKey: SimpleBus.navigatorKey,
 				scrollBehavior: NoOverscrollBehavior(),
 				title: '',
+				routes: <String, WidgetBuilder>{
+					// 火种：模块只认这个路由名，装配交给 KindlingHostPage。
+					KindlingEntry.route: (_) => const KindlingHostPage(),
+				},
 				theme: ThemeData(
 					scaffoldBackgroundColor: Colors.white,
 					useMaterial3: true,

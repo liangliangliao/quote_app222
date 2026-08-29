@@ -6,6 +6,9 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../kindling/kindling.dart';
+import '../kindling_host/kindling_host_reminder.dart';
+
 import 'native_guard.dart';
 import '../data/dao.dart';
 import '../pages/discover_page.dart';
@@ -82,6 +85,7 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateKindling(payload)) return;
     if (await _tryNavigateBeliefMentor(payload)) return;
     if (await _tryNavigateXiangjiFutureStrategist(payload)) return;
     if (await _tryNavigateXiangjiGoal(payload)) return;
@@ -90,6 +94,19 @@ class NotificationService {
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  /// 火种的复问通知：直接开模块首页，不带任何参数。
+  static Future<bool> _tryNavigateKindling(String? payload) async {
+    if ((payload ?? '').trim() != KindlingHostReminder.notificationPayload) {
+      return false;
+    }
+    final NavigatorState? nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) return false;
+    // 不能 await：pushNamed 要等这个页面被关掉才返回，而调用方在启动路径上，
+    // 一 await 就把启动挂住了。文件里其它 _tryNavigate* 也都是不等的。
+    nav.pushNamed(KindlingEntry.route);
+    return true;
   }
 
   static Future<bool> _tryNavigateBeliefMentor(String? payload) async {

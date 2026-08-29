@@ -199,9 +199,6 @@ class AppDatabase {
       await ensureAiAssistantTables(db);
       await ensureSemanticConsistencyTables(db);
 
-      // 火种模块自管 schema，幂等；重复调用不报错。
-      await KindlingSchema.createAll(db);
-
       // Lightweight telemetry logs for self-help module (PPG / Fitbit / model debugging).
       await db.execute('''
         CREATE TABLE IF NOT EXISTS self_help_logs (

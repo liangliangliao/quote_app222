@@ -35,10 +35,29 @@ class KCopy {
 
   static const String releasedTip = '放掉不是失败。这里的每一条都省下了一份力气。';
 
+  // —— 痒度自评。五档措辞，不出现数字、星级或程度条 ——
+  static const String probe4 = '不做就难受';
+  static const String probe3 = '常想起';
+  static const String probe2 = '说不上';
+  static const String probe1 = '淡了';
+  static const String probe0 = '没感觉了';
+
+  /// 从最痒到最不痒。下标即分值的反序，界面上只呈现措辞。
+  static const List<String> probeLadder = <String>[
+    probe4,
+    probe3,
+    probe2,
+    probe1,
+    probe0,
+  ];
+
+  static const String noteHint = '想补一句就补，不补也行';
+
   /// 发现之旅入口卡片的无障碍标签。
   static const String discoverSemantics = '火种，回溯、判别式、十五分钟与放掉的';
 
   // —— 长按菜单 ——
+  static const String menuProbe = '现在还痒吗';
   static const String menuRename = '换个说法';
   static const String menuVerdict = '问一句';
   static const String menuResistance = '卡住了';

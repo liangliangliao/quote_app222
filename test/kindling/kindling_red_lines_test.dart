@@ -145,6 +145,20 @@ void main() {
     }
   });
 
+  test('the probe ladder shows wording only, never a score', () {
+    expect(KCopy.probeLadder.length, 5, reason: '对应 0..4 五档');
+    for (final String rung in KCopy.probeLadder) {
+      expect(
+        RegExp(r'[0-9%★☆]').hasMatch(rung),
+        isFalse,
+        reason: '「$rung」里不该有数字、百分号或星级',
+      );
+    }
+    // 最痒在最前，界面按这个顺序自上而下排。
+    expect(KCopy.probeLadder.first, KCopy.probe4);
+    expect(KCopy.probeLadder.last, KCopy.probe0);
+  });
+
   test('the recall questions keep their fixed wording and order', () {
     expect(KCopy.recallQuestions, <String>[
       KCopy.qLostTrack,

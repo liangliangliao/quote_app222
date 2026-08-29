@@ -52,9 +52,11 @@ class LocalOracle implements KindlingOracle {
   @override
   Future<String?> nextResistanceQuestion(
     List<({String q, String? a})> history,
-  ) async {
-    final int step = history.length;
-    if (step >= KCopy.resistanceLadder.length) return null;
+  ) async => questionAt(history.length);
+
+  /// 第 [step] 步的固定问题；问完就返回 null。同步可得，永不等待。
+  static String? questionAt(int step) {
+    if (step < 0 || step >= KCopy.resistanceLadder.length) return null;
     return KCopy.resistanceLadder[step];
   }
 }

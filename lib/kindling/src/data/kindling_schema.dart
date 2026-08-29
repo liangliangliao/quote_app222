@@ -95,7 +95,12 @@ class KindlingSchema {
   ];
 
   /// 建全部表与索引。幂等：重复调用不报错。
+  ///
+  /// 版本已经对得上时直接返回，不再写库——这个方法可能被反复调用，不该每次都
+  /// 落一次写操作。
   static Future<void> createAll(DatabaseExecutor db) async {
+    if (await _isCurrent(db)) return;
+
     for (final String statement in _ddl) {
       await db.execute(statement);
     }
@@ -130,6 +135,18 @@ class KindlingSchema {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// 表齐了而且版本对得上，才算不用再建。
+  ///
+  /// 这里先查 sqlite_master 而不是直接查 k_meta：onCreate 是在事务里跑的，
+  /// 让一条语句报「no such table」再去接住它，不如干脆别报。
+  static Future<bool> _isCurrent(DatabaseExecutor db) async {
+    final List<Map<String, Object?>> rows = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='k_meta'",
+    );
+    if (rows.isEmpty) return false;
+    return await readSchemaVersion(db) == schemaVersion;
   }
 
   /// 已安装的模块 schema 版本；未安装返回 0。
