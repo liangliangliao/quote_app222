@@ -1733,9 +1733,6 @@ class BeliefMentorDao {
     String learning = '',
     required String nextStep,
   }) async {
-    if (facts.trim().isEmpty || nextStep.trim().isEmpty) {
-      throw StateError('恢复协议必须保留事实和一个最小下一步。');
-    }
     final safety = BeliefMentorSafetyPolicy.assess(
       '$facts $interpretation $emotion $learning $nextStep',
     );
@@ -1758,6 +1755,9 @@ class BeliefMentorDao {
       return _failureFromRow(
         await _decryptRow('belief_mentor_failures', existing.first),
       );
+    }
+    if (facts.trim().isEmpty || nextStep.trim().isEmpty) {
+      throw StateError('恢复协议必须保留事实和一个最小下一步。');
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     final value = BeliefMentorFailure(

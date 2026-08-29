@@ -61,6 +61,11 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   sqflite_common_ffi: ^2.3.3
 dependency_overrides:
+  # flutter_html 3.0.0 imports html/src/query_selector.dart and still calls
+  # the top-level matches() helper. html 0.15.7 removed that internal helper,
+  # so an unlocked resolve fails the release build. Keep the last compatible
+  # version until flutter_html stops depending on the internal API.
+  html: 0.15.6
   workmanager_android: 0.9.2
   workmanager_apple: 0.9.4
   workmanager_platform_interface: 0.9.3
