@@ -598,7 +598,7 @@ class XiangjiGoalIntelligenceService {
             ? '把“$need”先变成一个今天可观察的产出，而不是继续停留在愿望层。'
             : index == 1
                 ? '把“${obstacle.isEmpty ? '当前最不确定的地方' : obstacle}”作为待检验条件，只澄清会改变下一步的一层。'
-                : '把目标放入七天的多次选择中，用做成、受阻和继续意愿共同校准。',
+                : '把“$need”放入七天的多次选择中，用做成、受阻和继续意愿共同校准。',
         whyThisAction: index == 0
             ? '现实产出能提供新证据，并减少抽象自我评价。'
             : index == 1
