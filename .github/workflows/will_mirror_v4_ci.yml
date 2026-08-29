@@ -1,4 +1,4 @@
-name: Will Mirror V4 CI
+name: Will Mirror V5 CI
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - "lib/pages/discover_page.dart"
       - "test/will_mirror/**"
       - "assets/will_mirror/**"
+      - "docs/will_mirror_v5_*.md"
       - "android/app/src/main/kotlin/com/example/quote_app/WillMirrorVaultChannel.kt"
       - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
       - "pubspec.yaml"
@@ -17,6 +18,7 @@ on:
       - "lib/pages/discover_page.dart"
       - "test/will_mirror/**"
       - "assets/will_mirror/**"
+      - "docs/will_mirror_v5_*.md"
       - "android/app/src/main/kotlin/com/example/quote_app/WillMirrorVaultChannel.kt"
       - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
       - "pubspec.yaml"
@@ -27,7 +29,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: will-mirror-v4-${{ github.event.pull_request.number || github.ref }}
+  group: will-mirror-v5-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,6 +64,32 @@ jobs:
           rows = [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
           assert hashlib.sha256(raw).hexdigest() == manifest["records_sha256"]
           assert len(rows) == manifest["record_count"] == 22
+          PY
+
+      - name: Verify V5 end-to-end example traces
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("assets/will_mirror")
+          kb_ids = {
+              json.loads(line)["record_id"]
+              for line in (root / "kb_records_v4.jsonl").read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          }
+          payload = json.loads((root / "example_cases_v5.json").read_text(encoding="utf-8"))
+          cases = payload["cases"]
+          assert payload["schema_version"] == "5.0.0"
+          assert len(cases) >= 3
+          for case in cases:
+              assert case["need"] and case["desired_outcome"]
+              assert case["generated_action"] and case["success_signal"]
+              assert len(case["days"]) == 7
+              assert any(not day["did_act"] for day in case["days"])
+              assert case["result"] and case["next_revision"]
+              assert set(case["theory_ids"]) <= kb_ids
           PY
 
       - name: Analyze Will Mirror module

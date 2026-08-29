@@ -534,7 +534,11 @@ class _WillMirrorGoalWorkspacePageState
                 children: <Widget>[
                   const WillMirrorBadge(label: '表象目标'),
                   const Spacer(),
-                  Text('${goal.baselineDesire}/100'),
+                  Text(
+                    goal.baselineDesire > 0
+                        ? '${goal.baselineDesire}/100'
+                        : '未主动量化',
+                  ),
                 ],
               ),
               const SizedBox(height: 10),

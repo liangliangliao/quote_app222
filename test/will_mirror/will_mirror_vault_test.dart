@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:quote_app/will_mirror/will_mirror_models.dart';
+import 'package:quote_app/will_mirror/will_mirror_practice_coordinator.dart';
+import 'package:quote_app/will_mirror/will_mirror_practice_engine.dart';
+import 'package:quote_app/will_mirror/will_mirror_practice_models.dart';
 import 'package:quote_app/will_mirror/will_mirror_vault.dart';
 import 'package:quote_app/will_mirror/will_mirror_vault_cipher.dart';
 import 'package:sqflite/sqflite.dart';
@@ -126,6 +129,40 @@ void main() {
       note: '没有奖励也愿意继续',
       observedAt: now,
     ));
+    const profile = WillMirrorPracticeProfile(
+      style: WillMirrorSupportStyle.gentle,
+      interest: WillMirrorInterest.create,
+      energyMinutes: 5,
+    );
+    const route = WillMirrorActionRoute(
+      type: WillMirrorRouteType.actNow,
+      title: '现在做出一个痕迹',
+      promise: '五分钟可见产出',
+      action: '$secret · 写三行',
+      successSignal: '留下三行文字',
+      whyItWorks: '用行动检验候选',
+      output: '草稿',
+      minutes: 5,
+      theoryIds: <String>['SCH-B4-055-ACTION-CHARACTER'],
+    );
+    await vault.savePracticeProfile(profile);
+    await vault.saveActionPlan(const WillMirrorActionPlan(
+      id: 'plan-1',
+      goalId: 'goal-1',
+      hypothesisId: 'hypothesis-1',
+      experimentId: 'experiment-1',
+      needType: WillMirrorNeedType.goal,
+      need: secret,
+      desiredOutcome: '留下一个草稿',
+      obstacle: '怕做不好',
+      profile: profile,
+      route: route,
+      status: 'active',
+      checkInCount: 0,
+      completedCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    ));
 
     const updatedSecret = '$secret · 已更新';
     await vault.saveGoal(goal.copyWith(
@@ -153,6 +190,7 @@ void main() {
       reason: '更新候选不能级联删除证据关联',
     );
     expect((await vault.experiments()).single.title, '七日自主节奏实验');
+    expect((await vault.activeActionPlan())?.route.action, contains(secret));
     expect(
       (await vault.observations('experiment-1')).single.note,
       '没有奖励也愿意继续',
@@ -170,6 +208,7 @@ void main() {
     expect(rawDatabase, isNot(contains(secret)));
     expect(rawDatabase, isNot(contains(updatedSecret)));
     expect(rawDatabase, isNot(contains('主动争取自主项目')));
+    expect(rawDatabase, isNot(contains('写三行')));
 
     final raw = await databaseFactoryFfi.openDatabase(databasePath);
     final outboxCount = Sqflite.firstIntValue(
@@ -196,6 +235,91 @@ void main() {
 
     expect(await File(databasePath).exists(), isFalse);
     expect(cipher.destroyed, isTrue);
+  });
+
+  test('V5 start-to-check-in loop produces real records and keeps failures',
+      () async {
+    const engine = WillMirrorPracticeEngine();
+    const profile = WillMirrorPracticeProfile(
+      style: WillMirrorSupportStyle.gentle,
+      interest: WillMirrorInterest.learn,
+      energyMinutes: 2,
+    );
+    final route = engine.buildRoutes(
+      needType: WillMirrorNeedType.problem,
+      need: '总是不知道如何开始学习',
+      desiredOutcome: '七天后能解释一个关键概念',
+      obstacle: '一想到任务很大就逃开',
+      profile: profile,
+    ).first;
+    final coordinator = WillMirrorPracticeCoordinator(
+      vault: vault,
+      engine: engine,
+    );
+    final plan = await coordinator.start(
+      needType: WillMirrorNeedType.problem,
+      need: '总是不知道如何开始学习',
+      desiredOutcome: '七天后能解释一个关键概念',
+      obstacle: '一想到任务很大就逃开',
+      profile: profile,
+      route: route,
+    );
+
+    expect((await vault.activeGoal())?.text, contains('开始学习'));
+    expect(await vault.whyNodes(plan.goalId), hasLength(2));
+    expect(await vault.hypotheses(plan.goalId), hasLength(1));
+    expect(await vault.experiments(hypothesisId: plan.hypothesisId), hasLength(1));
+
+    final missed = await coordinator.checkIn(
+      plan: plan,
+      didAct: false,
+      energy: 3,
+      realMe: 5,
+      persistence: 3,
+      satisfaction: 3,
+      note: '临时照顾家人，没有可用时间',
+      nowOverride: DateTime(2026, 8, 1, 20),
+    );
+    expect(missed.plan.checkInCount, 1);
+    expect(missed.plan.completedCount, 0);
+    expect(await vault.evidenceForGoal(plan.goalId), isEmpty,
+        reason: '没做成不能被伪造成行动证据');
+    expect(await vault.observations(plan.experimentId), hasLength(1),
+        reason: '没做成的现实限制仍要保留');
+    expect(missed.plan.route.minutes, 2);
+    expect(missed.plan.revisionNote, contains('照顾家人'));
+    await expectLater(
+      coordinator.checkIn(
+        plan: missed.plan,
+        didAct: true,
+        energy: 7,
+        realMe: 7,
+        persistence: 7,
+        satisfaction: 7,
+        note: '同一天重复记录',
+        nowOverride: DateTime(2026, 8, 1, 22),
+      ),
+      throwsStateError,
+      reason: '七日实验不能通过同一天反复点击来伪造进度',
+    );
+
+    final acted = await coordinator.checkIn(
+      plan: missed.plan,
+      didAct: true,
+      energy: 7,
+      realMe: 7,
+      persistence: 7,
+      satisfaction: 7,
+      note: '用自己的话写了一句解释',
+      nowOverride: DateTime(2026, 8, 2, 20),
+    );
+    expect(acted.plan.checkInCount, 2);
+    expect(acted.plan.completedCount, 1);
+    expect(await vault.evidenceForGoal(plan.goalId), hasLength(1));
+    expect(await vault.observations(plan.experimentId), hasLength(2));
+    final observations = await vault.observations(plan.experimentId);
+    expect(observations.last.persistence, 7);
+    expect(observations.last.satisfaction, 7);
   });
 }
 
