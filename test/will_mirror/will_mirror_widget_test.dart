@@ -81,6 +81,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('选今天最适合你的方式'), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byType(Switch),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(WillMirrorPracticePage.nextButtonKey));
