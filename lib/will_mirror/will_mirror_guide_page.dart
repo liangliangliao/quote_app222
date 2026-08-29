@@ -72,10 +72,11 @@ class _FlowMap extends StatelessWidget {
       <(String, String, String)>[
     ('1', '说出目标或问题', '输入一句真实需要，不要求写得完整'),
     ('2', '选择适合今天的方式', '按兴趣、引导风格和 2/5/15 分钟精力生成方案'),
-    ('3', '得到三个现实方案', '每个方案都写清动作、完成信号、产出和思想依据'),
-    ('4', '只做今天的一小步', '不靠意志硬撑，到点就停'),
-    ('5', '把结果变成证据', '做成和没做成都记录，区分欲望与现实限制'),
-    ('6', '七天后修正', '保留有效路径，寻找反例，生成下一轮行动'),
+    ('3', 'AI + 知识库生成', '单次授权；显示模型、知识记录或本地接管原因'),
+    ('4', '得到三个现实方案', '每个方案都写清动作、完成信号、产出和思想怎样落地'),
+    ('5', '只做今天的一小步', '不靠意志硬撑，到点就停'),
+    ('6', '把结果变成证据', '做成和没做成都记录，区分欲望与现实限制'),
+    ('7', '七天后修正', '输出支持、反证/限制，并保留、缩小、换路或停止'),
   ];
 
   @override
@@ -190,6 +191,23 @@ class _CapabilityCard extends StatelessWidget {
               }).toList(growable: false),
             ),
           ),
+          const SizedBox(height: 8),
+          for (final id in capability.theoryIds)
+            if (WillMirrorTheoryCatalog.find(id) != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${WillMirrorTheoryCatalog.find(id)!.shortLabel}：${WillMirrorTheoryCatalog.find(id)!.plainMeaning}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: WillMirrorPalette.muted,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ),
         ],
       ),
     );
@@ -316,6 +334,13 @@ class _ExampleCard extends StatelessWidget {
           _LabelBody(label: '当前障碍', body: item.obstacle),
           _LabelBody(label: '生成行动', body: item.generatedAction),
           _LabelBody(label: '完成信号', body: item.successSignal),
+          _LabelBody(label: '为什么这样做', body: item.whyItWorks),
+          _LabelBody(label: '生成凭证', body: item.generationReceipt),
+          for (final application in item.theoryApplications)
+            _LabelBody(
+              label: application.concept,
+              body: '${application.application}\n为什么：${application.reason}',
+            ),
           const SizedBox(height: 10),
           for (final day in item.days)
             Padding(

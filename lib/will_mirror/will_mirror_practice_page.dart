@@ -4,6 +4,7 @@ import 'will_mirror_capability_catalog.dart';
 import 'will_mirror_guide_page.dart';
 import 'will_mirror_practice_coordinator.dart';
 import 'will_mirror_practice_engine.dart';
+import 'will_mirror_practice_intelligence_service.dart';
 import 'will_mirror_practice_models.dart';
 import 'will_mirror_vault.dart';
 import 'will_mirror_widgets.dart';
@@ -15,6 +16,7 @@ class WillMirrorPracticePage extends StatefulWidget {
     this.initialText = '',
     this.initialType = WillMirrorNeedType.goal,
     this.engine = const WillMirrorPracticeEngine(),
+    this.generator,
   });
 
   static const Key needFieldKey = ValueKey<String>('wm_v5_need_field');
@@ -27,12 +29,15 @@ class WillMirrorPracticePage extends StatefulWidget {
   final String initialText;
   final WillMirrorNeedType initialType;
   final WillMirrorPracticeEngine engine;
+  final WillMirrorPracticeGenerator? generator;
 
   @override
   State<WillMirrorPracticePage> createState() => _WillMirrorPracticePageState();
 }
 
 class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
+  late final WillMirrorPracticeGenerator _generator = widget.generator ??
+      WillMirrorPracticeIntelligenceService(engine: widget.engine);
   late final TextEditingController _need =
       TextEditingController(text: widget.initialText);
   final TextEditingController _outcome = TextEditingController();
@@ -44,6 +49,9 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
   int _step = 0;
   List<WillMirrorActionRoute> _routes = const <WillMirrorActionRoute>[];
   WillMirrorActionRoute? _selected;
+  WillMirrorIntelligenceReceipt? _receipt;
+  bool _allowAi = true;
+  bool _generating = false;
   bool _saving = false;
 
   @override
@@ -76,32 +84,40 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
         energyMinutes: _minutes,
       );
 
-  void _next() {
+  Future<void> _next() async {
     if (_step == 0) {
       if (_need.text.trim().isEmpty) {
         _show('先用一句话写下你想实现或解决的事');
-        return;
-      }
-      if (_outcome.text.trim().isEmpty) {
-        _show('请写下七天后能看见的一个小变化');
         return;
       }
       setState(() => _step = 1);
       return;
     }
     if (_step == 1) {
-      final routes = widget.engine.buildRoutes(
-        needType: _needType,
-        need: _need.text,
-        desiredOutcome: _outcome.text,
-        obstacle: _obstacle.text,
-        profile: _profile,
-      );
-      setState(() {
-        _routes = routes;
-        _selected = routes.first;
-        _step = 2;
-      });
+      if (_generating) return;
+      setState(() => _generating = true);
+      try {
+        final draft = await _generator.generate(
+          needType: _needType,
+          need: _need.text,
+          desiredOutcome: _outcome.text,
+          obstacle: _obstacle.text,
+          profile: _profile,
+          allowAi: _allowAi,
+        );
+        if (!mounted) return;
+        setState(() {
+          _routes = draft.routes;
+          _receipt = draft.receipt;
+          _selected = draft.routes.first;
+          _step = 2;
+          _generating = false;
+        });
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _generating = false);
+        _show('方案生成失败：$error');
+      }
     }
   }
 
@@ -121,6 +137,7 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
         obstacle: _obstacle.text,
         profile: _profile,
         route: selected,
+        intelligenceReceipt: _receipt,
       );
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -165,6 +182,12 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
       _selected = routes.firstWhere(
         (item) => item.type == example.selectedRoute,
         orElse: () => routes.first,
+      );
+      _receipt = WillMirrorIntelligenceReceipt.local(
+        knowledgeIds: example.theoryIds,
+        generatedAt: DateTime.now().millisecondsSinceEpoch,
+        situationSummary: '这是一个已经完整跑完七天的参考案例；采用后仍要用你自己的现实反馈重新验证。',
+        blindSpotQuestion: '案例中的阻碍与我的真实阻碍相同吗？',
       );
       _step = 2;
     });
@@ -222,13 +245,19 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
           key: _step == 2
               ? WillMirrorPracticePage.saveButtonKey
               : WillMirrorPracticePage.nextButtonKey,
-          onPressed: _step == 2 ? (_saving ? null : _save) : _next,
+          onPressed: _step == 2
+              ? (_saving ? null : _save)
+              : (_generating ? null : _next),
           icon: Icon(_step == 2 ? Icons.play_arrow_rounded : Icons.arrow_forward),
           label: Text(
             _step == 0
                 ? '下一步：选适合我的方式'
                 : _step == 1
-                    ? '生成三个现实方案'
+                    ? _generating
+                        ? '正在把知识转成行动…'
+                        : _allowAi
+                            ? '仅本次授权 AI + 知识库生成'
+                            : '完全在本地生成三个方案'
                     : _saving
                         ? '正在安全保存…'
                         : '采用这个方案，开始今天第一步',
@@ -287,9 +316,9 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
           minLines: 2,
           maxLines: 3,
           decoration: const InputDecoration(
-            labelText: '七天后，好一点是什么样？',
+            labelText: '七天后，好一点是什么样？（可不填）',
             hintText: '例如：有两页能给朋友看的草稿',
-            helperText: '为什么填：把抽象愿望变成可观察的变化',
+            helperText: '不确定可以留空，系统会先生成一个可观察候选供你修改',
             border: OutlineInputBorder(),
           ),
         ),
@@ -408,6 +437,46 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
           }).toList(growable: false),
         ),
         const SizedBox(height: 16),
+        WillMirrorSectionCard(
+          color: _allowAi ? WillMirrorPalette.sage : Colors.white,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                _allowAi ? Icons.auto_awesome : Icons.phone_android,
+                color: WillMirrorPalette.forest,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      _allowAi ? '本次让 AI 结合知识库生成' : '本次完全留在本地',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _allowAi
+                          ? '点击下一步即仅授权本次发送：目标/问题、可选补充、偏好和匹配的知识摘要；不发送整个 Vault。'
+                          : '使用本地情境规则和同一知识约束；若 AI 未配置或失败，也会自动进入此模式。',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: WillMirrorPalette.muted,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _allowAi,
+                onChanged: (value) => setState(() => _allowAi = value),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         _TheoryNote(
           title: '为什么按兴趣和精力生成？',
           body: '兴趣、优势和“最像自己”的体验只用来生成候选；真正是否适合，仍由七天行动、能量和持续性验证。',
@@ -435,6 +504,10 @@ class _WillMirrorPracticePageState extends State<WillMirrorPracticePage> {
           style: TextStyle(color: WillMirrorPalette.muted, height: 1.45),
         ),
         const SizedBox(height: 14),
+        if (_receipt != null) ...<Widget>[
+          _IntelligenceReceiptCard(receipt: _receipt!),
+          const SizedBox(height: 12),
+        ],
         for (final route in _routes) ...<Widget>[
           _RouteCard(
             route: route,
@@ -512,9 +585,84 @@ class _RouteCard extends StatelessWidget {
                   );
                 }).toList(growable: false),
               ),
+              if (route.theoryApplications.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: const Text(
+                    '这些思想怎样变成这一步？',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  ),
+                  children: route.theoryApplications.map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _RouteLine(
+                        label: item.concept,
+                        body: '${item.application}\n为什么：${item.reason}',
+                      ),
+                    );
+                  }).toList(growable: false),
+                ),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _IntelligenceReceiptCard extends StatelessWidget {
+  const _IntelligenceReceiptCard({required this.receipt});
+
+  final WillMirrorIntelligenceReceipt receipt;
+
+  @override
+  Widget build(BuildContext context) {
+    return WillMirrorSectionCard(
+      color: receipt.aiUsed ? WillMirrorPalette.sage : WillMirrorPalette.cream,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                receipt.aiUsed ? Icons.auto_awesome : Icons.phone_android,
+                color: WillMirrorPalette.forest,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  receipt.aiUsed
+                      ? 'AI 已参与 · ${receipt.model}'
+                      : '本地知识规则已生成',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          if (receipt.fallbackReason.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(receipt.fallbackReason),
+          ],
+          if (receipt.situationSummary.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Text('暂定理解：${receipt.situationSummary}'),
+          ],
+          if (receipt.blindSpotQuestion.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              '值得留意：${receipt.blindSpotQuestion}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+          const SizedBox(height: 7),
+          Text(
+            '依据 ${receipt.knowledgeIds.length} 条知识记录；执行方式与依据会随方案一起保存。',
+            style: const TextStyle(fontSize: 11, color: WillMirrorPalette.muted),
+          ),
+        ],
       ),
     );
   }

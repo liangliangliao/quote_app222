@@ -51,7 +51,10 @@ class WillMirrorExampleRepository {
       if (item.need.isEmpty ||
           item.desiredOutcome.isEmpty ||
           item.generatedAction.isEmpty ||
-          item.successSignal.isEmpty) {
+          item.successSignal.isEmpty ||
+          item.whyItWorks.isEmpty ||
+          item.theoryApplications.isEmpty ||
+          item.generationReceipt.isEmpty) {
         issues.add('${item.id} 缺少输入、产出或完成信号');
       }
       if (item.days.length != 7) issues.add('${item.id} 必须保留七天测试数据');
@@ -64,6 +67,13 @@ class WillMirrorExampleRepository {
       for (final theoryId in item.theoryIds) {
         if (!WillMirrorTheoryCatalog.byId.containsKey(theoryId)) {
           issues.add('${item.id} 引用了未知理论：$theoryId');
+        }
+      }
+      for (final application in item.theoryApplications) {
+        if (!item.theoryIds.contains(application.theoryId) ||
+            application.application.isEmpty ||
+            application.reason.isEmpty) {
+          issues.add('${item.id} 的理论应用说明不完整');
         }
       }
     }

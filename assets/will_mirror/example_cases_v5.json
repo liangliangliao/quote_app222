@@ -16,9 +16,25 @@
       "selected_route": "act_now",
       "generated_action": "打开作品集文件，用 5 分钟只写第一页标题和三行要点，到点就停。",
       "success_signal": "文件中出现标题和三行可再次编辑的文字。",
+      "why_it_works": "先留下不公开的粗糙痕迹，把“我想做”和“现实中能否开始”分开检验；七天重复用于观察比较压力出现时行动怎样变化。",
+      "generation_receipt": "参考案例 · 本地 KB 规则生成 · 已核对 2 条理论记录",
       "theory_ids": [
         "SCH-B4-055-ACTION-CHARACTER",
         "TAL-L13-SEVEN-DAY-STRENGTH"
+      ],
+      "theory_applications": [
+        {
+          "theory_id": "SCH-B4-055-ACTION-CHARACTER",
+          "concept": "叔本华 §55 · 行动镜",
+          "application": "不凭口头意愿判断是否喜欢创作，先让作品集出现标题和三条可见内容。",
+          "reason": "真实选择和产出能提供新证据，同时仍保留加班、比较和精力等外部限制。"
+        },
+        {
+          "theory_id": "TAL-L13-SEVEN-DAY-STRENGTH",
+          "concept": "Tal L13 · 七日优势实践",
+          "application": "把同一创作方向放入七个不同日期，比较能量和继续意愿。",
+          "reason": "多次低压力实践比一次问卷更能暴露兴趣是否跨情境重复。"
+        }
       ],
       "days": [
         {"day": 1, "did_act": true, "evidence": "写出标题和三行，做完能量略升。", "adjustment": "明天仍只做 5 分钟。"},
@@ -47,10 +63,32 @@
       "selected_route": "understand_then_act",
       "generated_action": "写下“如果领导明天完全支持我离开，我还最想改变什么”，再用 15 分钟查清一种替代工作方式。",
       "success_signal": "得到一个不依赖反对者的需要，以及一个真实职业选项。",
+      "why_it_works": "先把辞职从唯一答案还原成手段，再用“反对消失”和现实职业信息分离自主需要、反抗动机与可行路径。",
+      "generation_receipt": "参考案例 · 本地 KB 规则生成 · 已核对 3 条理论记录",
       "theory_ids": [
         "SCH-B2-029-MOTIVE",
         "SCH-B2-029-MOTIVE-BOUNDARY",
         "TAL-L22-OPPOSITION-REMOVAL"
+      ],
+      "theory_applications": [
+        {
+          "theory_id": "SCH-B2-029-MOTIVE",
+          "concept": "叔本华 §29 · 具体动机",
+          "application": "围绕“辞职”这一具体行动追问它要改变的现实条件。",
+          "reason": "具体动机能把抽象冲动转换成可比较的职业条件。"
+        },
+        {
+          "theory_id": "SCH-B2-029-MOTIVE-BOUNDARY",
+          "concept": "叔本华 §29 · Why 的边界",
+          "application": "得到“时间自主”候选后停止无限追问，改用转岗和外部访谈验证。",
+          "reason": "继续抽象追问容易循环，现实信息才能让候选可修订。"
+        },
+        {
+          "theory_id": "TAL-L22-OPPOSITION-REMOVAL",
+          "concept": "Tal L22 · 反对与反对消失",
+          "application": "想象领导完全支持离开，观察辞职冲动和自主需要分别怎样变化。",
+          "reason": "成对比较能识别反控制动机，但不能把受社会影响自动判成虚假。"
+        }
       ],
       "days": [
         {"day": 1, "did_act": true, "evidence": "反对消失后，离职冲动下降，但对自主安排时间的需要仍在。", "adjustment": "把候选从“必须辞职”改成“需要更多时间自主”。"},
@@ -79,10 +117,32 @@
       "selected_route": "seven_day_experiment",
       "generated_action": "每天用 2 分钟写一句“我感到……，我希望……”，先不发送；准备好时只选择一条低风险内容表达。",
       "success_signal": "至少写下三句具体表达，并完成一次尊重同意和现实边界的沟通。",
+      "why_it_works": "先在不发送的条件下降低评价压力，再用一次可被拒绝的真实表达检验需要、边界和行动后的能量。",
+      "generation_receipt": "参考案例 · 本地 KB 规则生成 · 已核对 3 条理论记录",
       "theory_ids": [
         "TAL-L13-SEVEN-DAY-STRENGTH",
         "SHELDON-ELLIOT-1999-SELF-CONCORDANCE",
         "SCH-B4-053-DESCRIPTION-NORM"
+      ],
+      "theory_applications": [
+        {
+          "theory_id": "TAL-L13-SEVEN-DAY-STRENGTH",
+          "concept": "Tal L13 · 七日优势实践",
+          "application": "先写后发，把表达训练拆成七天低风险练习。",
+          "reason": "逐步实践减少一次冲突对结论的干扰，也允许在高情绪日暂停。"
+        },
+        {
+          "theory_id": "SHELDON-ELLIOT-1999-SELF-CONCORDANCE",
+          "concept": "Sheldon & Elliot · 自我一致性",
+          "application": "同时记录表达后的能量、继续意愿和是否更接近想要的关系。",
+          "reason": "目标认领程度需要由努力和需要满足共同检验，而不是由一次勇敢行为认证。"
+        },
+        {
+          "theory_id": "SCH-B4-053-DESCRIPTION-NORM",
+          "concept": "叔本华 §53 · 事实不等于应当",
+          "application": "承认想表达的事实，同时保留对方可以不同意和双方现实边界。",
+          "reason": "欲望真实不等于他人必须满足，行动仍需通过同意、责任和安全审查。"
+        }
       ],
       "days": [
         {"day": 1, "did_act": true, "evidence": "写下希望周末有半小时单独交流，但没有发送。", "adjustment": "保持只写不发，先降低压力。"},

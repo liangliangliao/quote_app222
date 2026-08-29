@@ -11,6 +11,7 @@ import 'will_mirror_guide_page.dart';
 import 'will_mirror_knowledge_repository.dart';
 import 'will_mirror_models.dart';
 import 'will_mirror_practice_coordinator.dart';
+import 'will_mirror_practice_intelligence_service.dart';
 import 'will_mirror_practice_models.dart';
 import 'will_mirror_practice_page.dart';
 import 'will_mirror_profile_page.dart';
@@ -127,6 +128,9 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
         vault: _vault,
         initialText: initial,
         initialType: type ?? _quickType,
+        generator: WillMirrorPracticeIntelligenceService(
+          knowledge: _knowledge,
+        ),
       ),
     );
     if (created == true) _quickInput.clear();
@@ -367,6 +371,10 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
           ),
           const SizedBox(height: 6),
           Text(plan.need, style: const TextStyle(color: WillMirrorPalette.muted)),
+          if (plan.intelligenceReceipt != null) ...<Widget>[
+            const SizedBox(height: 8),
+            _PlanIntelligenceStrip(receipt: plan.intelligenceReceipt!),
+          ],
           if (plan.revisionNote.isNotEmpty) ...<Widget>[
             const SizedBox(height: 8),
             Container(
@@ -406,6 +414,26 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
               );
             }).toList(growable: false),
           ),
+          if (plan.route.theoryApplications.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 4),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text(
+                '这套思想在当前行动中怎样落地？',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+              ),
+              children: plan.route.theoryApplications.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    '${item.concept}\n${item.application}\n为什么：${item.reason}',
+                    style: const TextStyle(height: 1.45),
+                  ),
+                );
+              }).toList(growable: false),
+            ),
+          ],
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
@@ -441,16 +469,45 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
   }
 
   Widget _completedCard(WillMirrorActionPlan plan) {
+    final averageEnergy = _average(_observations.map((item) => item.energy));
+    final averagePersistence =
+        _average(_observations.map((item) => item.persistence));
+    final averageSatisfaction =
+        _average(_observations.map((item) => item.satisfaction));
+    final missed = plan.checkInCount - plan.completedCount;
+    final next = plan.completedCount >= 3 &&
+            averagePersistence >= 6 &&
+            averageSatisfaction >= 5
+        ? '保留方向：下一轮只把时间增加一个档位，继续主动寻找一次反例。'
+        : plan.completedCount == 0 || averageSatisfaction < 4.5
+            ? '换路或停止：先检查目标是否仍重要，以及行动是否选错了形式。'
+            : '缩小后再试：保留目标，但只处理最常出现的现实阻碍。';
     return WillMirrorSectionCard(
       color: WillMirrorPalette.cream,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text('这一轮已经有结果', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text('第七天复盘：现实怎样回答？',
+              style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           Text(
-            '记录 ${plan.checkInCount} 次，其中 ${plan.completedCount} 次采取了行动。数字不用于给你打分，只用于回看现实发生了什么。',
+            '记录 ${plan.checkInCount} 次，其中 ${plan.completedCount} 次采取行动、$missed 次暴露阻碍。数字不用于给你打分。',
           ),
+          const SizedBox(height: 10),
+          Text('支持：${plan.completedCount == 0 ? '还没有行动证据。' : '已经产生 ${plan.completedCount} 条行动证据，平均行动后能量 ${averageEnergy.toStringAsFixed(1)}。'}'),
+          const SizedBox(height: 5),
+          Text('反证/限制：${missed == 0 ? '本轮尚未出现未完成日，下一轮仍需主动寻找不适用情境。' : '有 $missed 次未完成，必须保留时间、责任、能力、资源或环境解释。'}'),
+          const SizedBox(height: 5),
+          Text('继续意愿：${averagePersistence.toStringAsFixed(1)} / 10 · 变化感：${averageSatisfaction.toStringAsFixed(1)} / 10'),
+          if (_observations.any((item) => item.note.trim().isNotEmpty)) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              '现实原话：${_observations.reversed.firstWhere((item) => item.note.trim().isNotEmpty).note}',
+              style: const TextStyle(color: WillMirrorPalette.muted),
+            ),
+          ],
+          const SizedBox(height: 9),
+          Text('下一轮判断：$next', style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           FilledButton(
             onPressed: () => _startPractice(text: plan.need, type: plan.needType),
@@ -459,6 +516,12 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
         ],
       ),
     );
+  }
+
+  static double _average(Iterable<int> values) {
+    final items = values.toList(growable: false);
+    if (items.isEmpty) return 0;
+    return items.reduce((left, right) => left + right) / items.length;
   }
 
   Widget _helpRow() {
@@ -572,6 +635,60 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
             subtitle: '查看每条功能依据、证据等级、原始定位与不能怎样解释',
             onTap: () => _open<void>(WillMirrorKnowledgePage(knowledge: _knowledge)),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanIntelligenceStrip extends StatelessWidget {
+  const _PlanIntelligenceStrip({required this.receipt});
+
+  final WillMirrorIntelligenceReceipt receipt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                receipt.aiUsed ? Icons.auto_awesome : Icons.phone_android,
+                size: 17,
+                color: WillMirrorPalette.forest,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  receipt.aiUsed
+                      ? 'AI + 知识库已参与 · ${receipt.model}'
+                      : '本地知识规则生成',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          if (receipt.situationSummary.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 5),
+            Text(
+              receipt.situationSummary,
+              style: const TextStyle(fontSize: 12, height: 1.4),
+            ),
+          ],
+          if (receipt.fallbackReason.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 4),
+            Text(
+              receipt.fallbackReason,
+              style: const TextStyle(fontSize: 11, color: WillMirrorPalette.muted),
+            ),
+          ],
         ],
       ),
     );
@@ -742,9 +859,18 @@ class _CheckInSheet extends StatefulWidget {
 class _CheckInSheetState extends State<_CheckInSheet> {
   final TextEditingController _note = TextEditingController();
   int _energy = 5;
-  int _realMe = 5;
   int _persistence = 5;
   int _satisfaction = 5;
+  String _barrier = '时间或精力不足';
+
+  static const List<String> _barriers = <String>[
+    '时间或精力不足',
+    '不知道第一步',
+    '害怕失败或不完美',
+    '责任或他人需要优先',
+    '缺少工具或资源',
+    '目标现在不重要了',
+  ];
 
   @override
   void dispose() {
@@ -778,33 +904,55 @@ class _CheckInSheetState extends State<_CheckInSheet> {
               style: const TextStyle(color: WillMirrorPalette.muted),
             ),
             const SizedBox(height: 16),
-            _ThreeChoice(
-              title: '这次之后的能量',
-              values: const <(String, int)>[('更低', 3), ('差不多', 5), ('更高', 7)],
-              selected: _energy,
-              onChanged: (value) => setState(() => _energy = value),
-            ),
-            const SizedBox(height: 12),
-            _ThreeChoice(
-              title: '做这件事时有多像自己',
-              values: const <(String, int)>[('不太像', 3), ('说不准', 5), ('很像', 7)],
-              selected: _realMe,
-              onChanged: (value) => setState(() => _realMe = value),
-            ),
-            const SizedBox(height: 12),
-            _ThreeChoice(
-              title: '如果条件合适，还愿意自然继续吗',
-              values: const <(String, int)>[('不太愿意', 3), ('说不准', 5), ('愿意', 7)],
-              selected: _persistence,
-              onChanged: (value) => setState(() => _persistence = value),
-            ),
-            const SizedBox(height: 12),
-            _ThreeChoice(
-              title: '这一步有没有带来想要的变化',
-              values: const <(String, int)>[('没有', 3), ('说不准', 5), ('有一些', 7)],
-              selected: _satisfaction,
-              onChanged: (value) => setState(() => _satisfaction = value),
-            ),
+            if (widget.didAct) ...<Widget>[
+              _ThreeChoice(
+                title: '做完后的能量',
+                values: const <(String, int)>[
+                  ('更低', 3),
+                  ('差不多', 5),
+                  ('更高', 7),
+                ],
+                selected: _energy,
+                onChanged: (value) => setState(() => _energy = value),
+              ),
+              const SizedBox(height: 12),
+              _ThreeChoice(
+                title: '条件合适时，还愿意继续吗',
+                values: const <(String, int)>[
+                  ('不太愿意', 3),
+                  ('说不准', 5),
+                  ('愿意', 7),
+                ],
+                selected: _persistence,
+                onChanged: (value) => setState(() => _persistence = value),
+              ),
+              const SizedBox(height: 12),
+              _ThreeChoice(
+                title: '有没有带来想要的变化',
+                values: const <(String, int)>[
+                  ('没有', 3),
+                  ('说不准', 5),
+                  ('有一些', 7),
+                ],
+                selected: _satisfaction,
+                onChanged: (value) => setState(() => _satisfaction = value),
+              ),
+            ] else ...<Widget>[
+              const Text('最接近哪一种现实阻碍？',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: _barriers.map((barrier) {
+                  return ChoiceChip(
+                    label: Text(barrier),
+                    selected: _barrier == barrier,
+                    onSelected: (_) => setState(() => _barrier = barrier),
+                  );
+                }).toList(growable: false),
+              ),
+            ],
             const SizedBox(height: 14),
             TextField(
               controller: _note,
@@ -823,10 +971,12 @@ class _CheckInSheetState extends State<_CheckInSheet> {
                   context,
                   _CheckInDraft(
                     energy: _energy,
-                    realMe: _realMe,
+                    realMe: widget.didAct ? _persistence : 5,
                     persistence: _persistence,
                     satisfaction: _satisfaction,
-                    note: _note.text,
+                    note: widget.didAct
+                        ? _note.text
+                        : '$_barrier${_note.text.trim().isEmpty ? '' : '：${_note.text.trim()}'}',
                   ),
                 ),
                 child: const Text('保存为现实证据'),

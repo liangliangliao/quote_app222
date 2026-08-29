@@ -329,12 +329,47 @@ class _MessageBubble extends StatelessWidget {
                 }).toList(growable: false),
               ),
             ],
-            if (!isUser && message.provider != 'local') ...<Widget>[
+            if (!isUser) ...<Widget>[
               const SizedBox(height: 7),
-              Text(
-                '回答来源：${message.provider}',
-                style: const TextStyle(fontSize: 10, color: WillMirrorPalette.muted),
+              Row(
+                children: <Widget>[
+                  Icon(
+                    message.provider == 'local'
+                        ? Icons.phone_android
+                        : message.provider == 'local-safety'
+                            ? Icons.health_and_safety_outlined
+                            : Icons.auto_awesome,
+                    size: 14,
+                    color: WillMirrorPalette.muted,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      message.provider == 'local'
+                          ? message.aiRequested
+                              ? 'AI 未完成 · 本地知识库已接管'
+                              : '本地知识库回答'
+                          : message.provider == 'local-safety'
+                              ? '本地安全规则'
+                              : 'AI 已参与 · ${message.provider}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: WillMirrorPalette.muted,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              if (message.fallbackReason.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 3),
+                Text(
+                  message.fallbackReason,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: WillMirrorPalette.muted,
+                  ),
+                ),
+              ],
             ],
           ],
         ),

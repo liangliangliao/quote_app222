@@ -131,6 +131,115 @@ class WillMirrorPracticeProfile {
   }
 }
 
+class WillMirrorTheoryApplication {
+  const WillMirrorTheoryApplication({
+    required this.theoryId,
+    required this.concept,
+    required this.application,
+    required this.reason,
+  });
+
+  final String theoryId;
+  final String concept;
+  final String application;
+  final String reason;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'theory_id': theoryId,
+        'concept': concept,
+        'application': application,
+        'reason': reason,
+      };
+
+  factory WillMirrorTheoryApplication.fromJson(Map<String, dynamic> json) {
+    return WillMirrorTheoryApplication(
+      theoryId: (json['theory_id'] ?? '').toString(),
+      concept: (json['concept'] ?? '').toString(),
+      application: (json['application'] ?? '').toString(),
+      reason: (json['reason'] ?? '').toString(),
+    );
+  }
+}
+
+class WillMirrorIntelligenceReceipt {
+  const WillMirrorIntelligenceReceipt({
+    required this.aiRequested,
+    required this.aiUsed,
+    required this.provider,
+    required this.model,
+    required this.status,
+    required this.knowledgeIds,
+    required this.generatedAt,
+    this.situationSummary = '',
+    this.blindSpotQuestion = '',
+    this.fallbackReason = '',
+  });
+
+  const WillMirrorIntelligenceReceipt.local({
+    required this.knowledgeIds,
+    required this.generatedAt,
+    this.aiRequested = false,
+    this.situationSummary = '',
+    this.blindSpotQuestion = '',
+    this.fallbackReason = '',
+  })  : aiUsed = false,
+        provider = 'local',
+        model = '本地知识规则',
+        status = 'local_grounded';
+
+  final bool aiRequested;
+  final bool aiUsed;
+  final String provider;
+  final String model;
+  final String status;
+  final List<String> knowledgeIds;
+  final int generatedAt;
+  final String situationSummary;
+  final String blindSpotQuestion;
+  final String fallbackReason;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ai_requested': aiRequested,
+        'ai_used': aiUsed,
+        'provider': provider,
+        'model': model,
+        'status': status,
+        'knowledge_ids': knowledgeIds,
+        'generated_at': generatedAt,
+        'situation_summary': situationSummary,
+        'blind_spot_question': blindSpotQuestion,
+        'fallback_reason': fallbackReason,
+      };
+
+  factory WillMirrorIntelligenceReceipt.fromJson(Map<String, dynamic> json) {
+    final rawIds = json['knowledge_ids'];
+    return WillMirrorIntelligenceReceipt(
+      aiRequested: json['ai_requested'] == true,
+      aiUsed: json['ai_used'] == true,
+      provider: (json['provider'] ?? 'local').toString(),
+      model: (json['model'] ?? '本地知识规则').toString(),
+      status: (json['status'] ?? 'local_grounded').toString(),
+      knowledgeIds: rawIds is List
+          ? rawIds.map((item) => item.toString()).toList(growable: false)
+          : const <String>[],
+      generatedAt: int.tryParse((json['generated_at'] ?? 0).toString()) ?? 0,
+      situationSummary: (json['situation_summary'] ?? '').toString(),
+      blindSpotQuestion: (json['blind_spot_question'] ?? '').toString(),
+      fallbackReason: (json['fallback_reason'] ?? '').toString(),
+    );
+  }
+}
+
+class WillMirrorPracticeDraft {
+  const WillMirrorPracticeDraft({
+    required this.routes,
+    required this.receipt,
+  });
+
+  final List<WillMirrorActionRoute> routes;
+  final WillMirrorIntelligenceReceipt receipt;
+}
+
 class WillMirrorActionRoute {
   const WillMirrorActionRoute({
     required this.type,
@@ -142,6 +251,7 @@ class WillMirrorActionRoute {
     required this.output,
     required this.minutes,
     required this.theoryIds,
+    this.theoryApplications = const <WillMirrorTheoryApplication>[],
   });
 
   final WillMirrorRouteType type;
@@ -153,6 +263,7 @@ class WillMirrorActionRoute {
   final String output;
   final int minutes;
   final List<String> theoryIds;
+  final List<WillMirrorTheoryApplication> theoryApplications;
 
   WillMirrorActionRoute copyWith({
     String? title,
@@ -163,6 +274,7 @@ class WillMirrorActionRoute {
     String? output,
     int? minutes,
     List<String>? theoryIds,
+    List<WillMirrorTheoryApplication>? theoryApplications,
   }) {
     return WillMirrorActionRoute(
       type: type,
@@ -174,6 +286,7 @@ class WillMirrorActionRoute {
       output: output ?? this.output,
       minutes: minutes ?? this.minutes,
       theoryIds: theoryIds ?? this.theoryIds,
+      theoryApplications: theoryApplications ?? this.theoryApplications,
     );
   }
 
@@ -187,10 +300,14 @@ class WillMirrorActionRoute {
         'output': output,
         'minutes': minutes,
         'theory_ids': theoryIds,
+        'theory_applications': theoryApplications
+            .map((item) => item.toJson())
+            .toList(growable: false),
       };
 
   factory WillMirrorActionRoute.fromJson(Map<String, dynamic> json) {
     final rawTheory = json['theory_ids'];
+    final rawApplications = json['theory_applications'];
     return WillMirrorActionRoute(
       type: parseWillMirrorRouteType(json['type']),
       title: (json['title'] ?? '').toString(),
@@ -203,6 +320,16 @@ class WillMirrorActionRoute {
       theoryIds: rawTheory is List
           ? rawTheory.map((item) => item.toString()).toList(growable: false)
           : const <String>[],
+      theoryApplications: rawApplications is List
+          ? rawApplications
+              .whereType<Map>()
+              .map(
+                (item) => WillMirrorTheoryApplication.fromJson(
+                  item.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList(growable: false)
+          : const <WillMirrorTheoryApplication>[],
     );
   }
 }
@@ -226,6 +353,7 @@ class WillMirrorActionPlan {
     required this.updatedAt,
     this.lastCheckInAt,
     this.revisionNote = '',
+    this.intelligenceReceipt,
   });
 
   final String id;
@@ -245,6 +373,7 @@ class WillMirrorActionPlan {
   final int updatedAt;
   final int? lastCheckInAt;
   final String revisionNote;
+  final WillMirrorIntelligenceReceipt? intelligenceReceipt;
 
   WillMirrorActionPlan copyWith({
     String? status,
@@ -254,6 +383,7 @@ class WillMirrorActionPlan {
     int? lastCheckInAt,
     WillMirrorActionRoute? route,
     String? revisionNote,
+    WillMirrorIntelligenceReceipt? intelligenceReceipt,
   }) {
     return WillMirrorActionPlan(
       id: id,
@@ -273,6 +403,7 @@ class WillMirrorActionPlan {
       updatedAt: updatedAt ?? this.updatedAt,
       lastCheckInAt: lastCheckInAt ?? this.lastCheckInAt,
       revisionNote: revisionNote ?? this.revisionNote,
+      intelligenceReceipt: intelligenceReceipt ?? this.intelligenceReceipt,
     );
   }
 
@@ -294,6 +425,7 @@ class WillMirrorActionPlan {
         'updated_at': updatedAt,
         'last_check_in_at': lastCheckInAt,
         'revision_note': revisionNote,
+        'intelligence_receipt': intelligenceReceipt?.toJson(),
       };
 
   String encode() => jsonEncode(toJson());
@@ -301,6 +433,7 @@ class WillMirrorActionPlan {
   factory WillMirrorActionPlan.fromJson(Map<String, dynamic> json) {
     final profileJson = json['profile'];
     final routeJson = json['route'];
+    final receiptJson = json['intelligence_receipt'];
     return WillMirrorActionPlan(
       id: (json['id'] ?? '').toString(),
       goalId: (json['goal_id'] ?? '').toString(),
@@ -331,6 +464,13 @@ class WillMirrorActionPlan {
           ? null
           : int.tryParse(json['last_check_in_at'].toString()),
       revisionNote: (json['revision_note'] ?? '').toString(),
+      intelligenceReceipt: receiptJson is Map
+          ? WillMirrorIntelligenceReceipt.fromJson(
+              receiptJson.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
+            )
+          : null,
     );
   }
 
@@ -382,6 +522,9 @@ class WillMirrorExampleCase {
     required this.days,
     required this.result,
     required this.nextRevision,
+    this.whyItWorks = '',
+    this.theoryApplications = const <WillMirrorTheoryApplication>[],
+    this.generationReceipt = '',
   });
 
   final String id;
@@ -398,11 +541,15 @@ class WillMirrorExampleCase {
   final List<WillMirrorExampleDay> days;
   final String result;
   final String nextRevision;
+  final String whyItWorks;
+  final List<WillMirrorTheoryApplication> theoryApplications;
+  final String generationReceipt;
 
   factory WillMirrorExampleCase.fromJson(Map<String, dynamic> json) {
     final rawProfile = json['profile'];
     final rawTheory = json['theory_ids'];
     final rawDays = json['days'];
+    final rawApplications = json['theory_applications'];
     return WillMirrorExampleCase(
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
@@ -433,6 +580,18 @@ class WillMirrorExampleCase {
           : const <WillMirrorExampleDay>[],
       result: (json['result'] ?? '').toString(),
       nextRevision: (json['next_revision'] ?? '').toString(),
+      whyItWorks: (json['why_it_works'] ?? '').toString(),
+      theoryApplications: rawApplications is List
+          ? rawApplications
+              .whereType<Map>()
+              .map(
+                (item) => WillMirrorTheoryApplication.fromJson(
+                  item.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList(growable: false)
+          : const <WillMirrorTheoryApplication>[],
+      generationReceipt: (json['generation_receipt'] ?? '').toString(),
     );
   }
 }

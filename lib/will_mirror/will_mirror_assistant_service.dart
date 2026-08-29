@@ -14,6 +14,8 @@ class WillMirrorAssistantMessage {
     this.theoryIds = const <String>[],
     this.caution = '',
     this.provider = 'local',
+    this.aiRequested = false,
+    this.fallbackReason = '',
   });
 
   final String role;
@@ -23,6 +25,8 @@ class WillMirrorAssistantMessage {
   final List<String> theoryIds;
   final String caution;
   final String provider;
+  final bool aiRequested;
+  final String fallbackReason;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'role': role,
@@ -32,6 +36,8 @@ class WillMirrorAssistantMessage {
         'theory_ids': theoryIds,
         'caution': caution,
         'provider': provider,
+        'ai_requested': aiRequested,
+        'fallback_reason': fallbackReason,
       };
 
   factory WillMirrorAssistantMessage.fromJson(Map<String, dynamic> json) {
@@ -46,6 +52,8 @@ class WillMirrorAssistantMessage {
       theoryIds: strings(json['theory_ids']),
       caution: (json['caution'] ?? '').toString(),
       provider: (json['provider'] ?? 'local').toString(),
+      aiRequested: json['ai_requested'] == true,
+      fallbackReason: (json['fallback_reason'] ?? '').toString(),
     );
   }
 }
@@ -58,6 +66,8 @@ class WillMirrorAssistantAnswer {
     required this.caution,
     required this.capabilityId,
     required this.provider,
+    this.aiRequested = false,
+    this.fallbackReason = '',
   });
 
   final String answer;
@@ -66,6 +76,8 @@ class WillMirrorAssistantAnswer {
   final String caution;
   final String capabilityId;
   final String provider;
+  final bool aiRequested;
+  final String fallbackReason;
 
   WillMirrorAssistantMessage toMessage() => WillMirrorAssistantMessage(
         role: 'assistant',
@@ -75,7 +87,25 @@ class WillMirrorAssistantAnswer {
         theoryIds: theoryIds,
         caution: caution,
         provider: provider,
+        aiRequested: aiRequested,
+        fallbackReason: fallbackReason,
       );
+
+  WillMirrorAssistantAnswer withExecution({
+    required bool aiRequested,
+    required String fallbackReason,
+  }) {
+    return WillMirrorAssistantAnswer(
+      answer: answer,
+      steps: steps,
+      theoryIds: theoryIds,
+      caution: caution,
+      capabilityId: capabilityId,
+      provider: provider,
+      aiRequested: aiRequested,
+      fallbackReason: fallbackReason,
+    );
+  }
 }
 
 class WillMirrorAssistantService {
@@ -97,7 +127,12 @@ class WillMirrorAssistantService {
     if (!allowAi) return local;
     try {
       final config = await _ai.resolveGlobalConfig();
-      if (!config.available) return local;
+      if (!config.available) {
+        return local.withExecution(
+          aiRequested: true,
+          fallbackReason: '未检测到可用 AI 配置，本地知识库已接管。',
+        );
+      }
       final passages = await _knowledge.search(question, limit: 7);
       final capabilities = WillMirrorCapabilityCatalog.search(question);
       final allowedTheoryIds = <String>{
@@ -105,15 +140,15 @@ class WillMirrorAssistantService {
         ...capabilities.expand((item) => item.theoryIds),
       };
       final payload = <String, dynamic>{
-        'question': question,
+        'question': _redact(question),
         'current_step': plan == null
             ? null
             : <String, dynamic>{
                 'need_type': plan.needType.value,
-                'need': plan.need,
-                'desired_outcome': plan.desiredOutcome,
-                'obstacle': plan.obstacle,
-                'today_action': plan.route.action,
+                'need': _redact(plan.need),
+                'desired_outcome': _redact(plan.desiredOutcome),
+                'obstacle': _redact(plan.obstacle),
+                'today_action': _redact(plan.route.action),
                 'check_in_count': plan.checkInCount,
               },
         'capabilities': capabilities
@@ -159,7 +194,12 @@ class WillMirrorAssistantService {
         temperature: 0.15,
       );
       final decoded = _decodeObject(raw);
-      if (decoded == null) return local;
+      if (decoded == null) {
+        return local.withExecution(
+          aiRequested: true,
+          fallbackReason: 'AI 返回格式未通过校验，本地知识库已接管。',
+        );
+      }
       final answer = (decoded['answer'] ?? '').toString().trim();
       final steps = _strings(decoded['steps']).take(4).toList(growable: false);
       final theoryIds = _strings(decoded['theory_ids'])
@@ -170,7 +210,10 @@ class WillMirrorAssistantService {
           steps.isEmpty ||
           theoryIds.isEmpty ||
           _containsForbiddenClaim(answer)) {
-        return local;
+        return local.withExecution(
+          aiRequested: true,
+          fallbackReason: 'AI 回答缺少可操作步骤或有效依据，本地知识库已接管。',
+        );
       }
       return WillMirrorAssistantAnswer(
         answer: answer,
@@ -182,9 +225,13 @@ class WillMirrorAssistantService {
                 ? local.capabilityId
                 : capabilityId,
         provider: config.label,
+        aiRequested: true,
       );
-    } catch (_) {
-      return local;
+    } catch (error) {
+      return local.withExecution(
+        aiRequested: true,
+        fallbackReason: 'AI 调用失败，本地知识库已接管：${_safeError(error)}',
+      );
     }
   }
 
@@ -323,4 +370,20 @@ class WillMirrorAssistantService {
         value,
         <String>['你的本质是', '真正的你就是', '唯一真实需要', '童年根因是', '诊断为'],
       );
+
+  static String _safeError(Object error) {
+    final text = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (text.isEmpty) return '未知错误';
+    return text.length <= 60 ? text : '${text.substring(0, 60)}…';
+  }
+
+  static String _redact(String value) {
+    return value
+        .replaceAll(
+          RegExp(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', caseSensitive: false),
+          '[邮箱已隐藏]',
+        )
+        .replaceAll(RegExp(r'\b1[3-9]\d{9}\b'), '[手机号已隐藏]')
+        .replaceAll(RegExp(r'\b\d{17}[0-9Xx]\b'), '[证件号已隐藏]');
+  }
 }

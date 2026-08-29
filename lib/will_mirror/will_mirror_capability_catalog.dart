@@ -328,6 +328,28 @@ class WillMirrorCapabilityCatalog {
       keywords: <String>['案例', '示例', '参考', '照着填'],
     ),
     WillMirrorCapability(
+      id: 'grounded_ai_planner',
+      title: 'AI 思想转译器',
+      whatItIs: '在用户单次授权后，让已配置 AI 只依据匹配知识和当前需求生成三套现实行动，并留下可核验凭证。',
+      problemSolved: '固定模板只重复概念，不能理解当前情境，也看不出 AI 是否真正参与。',
+      input: '本次目标/问题、可选结果和障碍、兴趣、引导方式、时间预算，以及匹配的 KB 摘要。',
+      howTo: <String>[
+        '在第二步保持“本次让 AI 结合知识库生成”',
+        '点击仅本次授权按钮',
+        '查看 AI 模型、暂定理解和知识记录数',
+        '展开每个方案核对概念怎样推出当前动作',
+      ],
+      output: '三个情境化行动、完成信号、现实产出、概念应用说明和永久保存的 AI/降级凭证。',
+      why: 'AI 负责情境推理，知识白名单和结构校验负责约束；校验失败时明确显示本地接管，绝不把模板伪装成 AI。',
+      theoryIds: <String>[
+        'SCH-B2-022-METAPHYSICAL-BOUNDARY',
+        'SCH-B2-029-MOTIVE',
+        'SCH-B4-055-ACTION-CHARACTER',
+        'WM-V4-COUNTER-GATE',
+      ],
+      keywords: <String>['ai', '智能', '模型', '生成', '凭证', '转译', '降级'],
+    ),
+    WillMirrorCapability(
       id: 'assistant',
       title: '随身助手',
       whatItIs: '理解全部模块、流程、字段和理论依据的操作向导。',

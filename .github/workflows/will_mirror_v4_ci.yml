@@ -86,10 +86,15 @@ jobs:
           for case in cases:
               assert case["need"] and case["desired_outcome"]
               assert case["generated_action"] and case["success_signal"]
+              assert case["why_it_works"] and case["generation_receipt"]
+              assert case["theory_applications"]
               assert len(case["days"]) == 7
               assert any(not day["did_act"] for day in case["days"])
               assert case["result"] and case["next_revision"]
               assert set(case["theory_ids"]) <= kb_ids
+              assert {
+                  item["theory_id"] for item in case["theory_applications"]
+              } <= set(case["theory_ids"])
           PY
 
       - name: Analyze Will Mirror module

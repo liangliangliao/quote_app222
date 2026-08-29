@@ -48,6 +48,16 @@ void main() {
       status: 'active',
       createdAt: now,
       updatedAt: now,
+      intelligenceReceipt: WillMirrorIntelligenceReceipt(
+        aiRequested: true,
+        aiUsed: true,
+        provider: 'test',
+        model: 'grounded-test-model',
+        status: 'ai_grounded',
+        knowledgeIds: <String>['SCH-B4-055-ACTION-CHARACTER'],
+        generatedAt: now,
+        situationSummary: '测试暂定理解',
+      ),
     );
     await vault.saveGoal(goal);
     await vault.saveWhyNode(const WillMirrorWhyNode(
@@ -192,6 +202,10 @@ void main() {
     expect((await vault.experiments()).single.title, '七日自主节奏实验');
     expect((await vault.activeActionPlan())?.route.action, contains(secret));
     expect(
+      (await vault.activeActionPlan())?.intelligenceReceipt?.aiUsed,
+      isTrue,
+    );
+    expect(
       (await vault.observations('experiment-1')).single.note,
       '没有奖励也愿意继续',
       reason: '更新实验状态不能级联删除观察记录',
@@ -209,6 +223,7 @@ void main() {
     expect(rawDatabase, isNot(contains(updatedSecret)));
     expect(rawDatabase, isNot(contains('主动争取自主项目')));
     expect(rawDatabase, isNot(contains('写三行')));
+    expect(rawDatabase, isNot(contains('grounded-test-model')));
 
     final raw = await databaseFactoryFfi.openDatabase(databasePath);
     final outboxCount = Sqflite.firstIntValue(
