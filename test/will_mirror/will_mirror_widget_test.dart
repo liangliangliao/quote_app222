@@ -46,6 +46,11 @@ void main() {
     expect(find.byKey(WillMirrorHomePage.assistantKey), findsOneWidget);
     expect(find.text('看完整案例'), findsOneWidget);
     expect(find.text('怎么用'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('进阶工具'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('进阶工具'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.textContaining('不诊断、不治疗'),

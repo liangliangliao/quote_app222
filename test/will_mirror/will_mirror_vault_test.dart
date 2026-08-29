@@ -318,8 +318,8 @@ void main() {
     expect(await vault.evidenceForGoal(plan.goalId), hasLength(1));
     expect(await vault.observations(plan.experimentId), hasLength(2));
     final observations = await vault.observations(plan.experimentId);
-    expect(observations.last.persistence, 7);
-    expect(observations.last.satisfaction, 7);
+    expect(observations.first.persistence, 7);
+    expect(observations.first.satisfaction, 7);
   });
 }
 
