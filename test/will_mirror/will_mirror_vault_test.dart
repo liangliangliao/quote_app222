@@ -48,16 +48,6 @@ void main() {
       status: 'active',
       createdAt: now,
       updatedAt: now,
-      intelligenceReceipt: WillMirrorIntelligenceReceipt(
-        aiRequested: true,
-        aiUsed: true,
-        provider: 'test',
-        model: 'grounded-test-model',
-        status: 'ai_grounded',
-        knowledgeIds: <String>['SCH-B4-055-ACTION-CHARACTER'],
-        generatedAt: now,
-        situationSummary: '测试暂定理解',
-      ),
     );
     await vault.saveGoal(goal);
     await vault.saveWhyNode(const WillMirrorWhyNode(
@@ -167,6 +157,16 @@ void main() {
       obstacle: '怕做不好',
       profile: profile,
       route: route,
+      intelligenceReceipt: WillMirrorIntelligenceReceipt(
+        aiRequested: true,
+        aiUsed: true,
+        provider: 'test',
+        model: 'grounded-test-model',
+        status: 'ai_grounded',
+        knowledgeIds: <String>['SCH-B4-055-ACTION-CHARACTER'],
+        generatedAt: now,
+        situationSummary: '测试暂定理解',
+      ),
       status: 'active',
       checkInCount: 0,
       completedCount: 0,
