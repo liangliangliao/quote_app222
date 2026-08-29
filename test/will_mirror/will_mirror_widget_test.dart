@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/will_mirror/will_mirror_discover_entry.dart';
 import 'package:quote_app/will_mirror/will_mirror_home_page.dart';
 import 'package:quote_app/will_mirror/will_mirror_models.dart';
+import 'package:quote_app/will_mirror/will_mirror_practice_engine.dart';
+import 'package:quote_app/will_mirror/will_mirror_practice_intelligence_service.dart';
 import 'package:quote_app/will_mirror/will_mirror_practice_models.dart';
 import 'package:quote_app/will_mirror/will_mirror_practice_page.dart';
 import 'package:quote_app/will_mirror/will_mirror_vault.dart';
@@ -69,6 +71,7 @@ void main() {
         home: WillMirrorPracticePage(
           vault: vault,
           initialText: '完成作品集初稿',
+          generator: const _LocalPracticeGenerator(),
         ),
       ),
     );
@@ -81,13 +84,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('选今天最适合你的方式'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.byType(Switch),
-      240,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(WillMirrorPracticePage.nextButtonKey));
     await tester.pumpAndSettle();
     expect(find.text('三个都能产出，选最想试的'), findsOneWidget);
@@ -102,6 +98,37 @@ void main() {
     );
     expect(find.textContaining('做到哪算完成'), findsWidgets);
   });
+}
+
+class _LocalPracticeGenerator implements WillMirrorPracticeGenerator {
+  const _LocalPracticeGenerator();
+
+  @override
+  Future<WillMirrorPracticeDraft> generate({
+    required WillMirrorNeedType needType,
+    required String need,
+    required String desiredOutcome,
+    required String obstacle,
+    required WillMirrorPracticeProfile profile,
+    required bool allowAi,
+  }) async {
+    const engine = WillMirrorPracticeEngine();
+    final routes = engine.buildRoutes(
+      needType: needType,
+      need: need,
+      desiredOutcome: desiredOutcome,
+      obstacle: obstacle,
+      profile: profile,
+    );
+    return WillMirrorPracticeDraft(
+      routes: routes,
+      receipt: WillMirrorIntelligenceReceipt.local(
+        knowledgeIds: routes.expand((item) => item.theoryIds).toSet().toList(),
+        generatedAt: 1,
+        situationSummary: '测试：由本地知识规则生成。',
+      ),
+    );
+  }
 }
 
 Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
