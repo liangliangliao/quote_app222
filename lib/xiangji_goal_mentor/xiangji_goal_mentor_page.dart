@@ -72,6 +72,9 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   XiangjiGoalPlanBundle? _planBundle;
   XiangjiGoalPlanRoute? _selectedPlanRoute;
   XiangjiGoalIntelligenceReceipt? _intelligenceReceipt;
+  XiangjiGoalRoundReview? _latestRoundReview;
+  int _roundReviewCount = 0;
+  bool _supportProfileSaved = false;
   List<XiangjiGrowthEvidence> _evidence = const <XiangjiGrowthEvidence>[];
   List<XiangjiGoal> _allGoals = const <XiangjiGoal>[];
   List<Map<String, Object?>> _versions = const <Map<String, Object?>>[];
@@ -90,6 +93,13 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
 
   bool get _requiresMentorReselection =>
       _mentorMigration?.requiresReselection ?? false;
+
+  XiangjiGoalSupportProfile get _supportProfile =>
+      XiangjiGoalSupportProfile(
+        interest: _interest,
+        tone: _supportTone,
+        minutes: _availableMinutes,
+      );
 
   @override
   void initState() {
@@ -165,6 +175,12 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       final receiptJson = goal == null
           ? null
           : await _dao.latestGoalIntelligenceReceipt(goal.id);
+      final supportProfileJson =
+          goal == null ? null : await _dao.goalSupportProfile(goal.id);
+      final roundReviewJson =
+          goal == null ? null : await _dao.latestGoalRoundReview(goal.id);
+      final roundReviewCount =
+          goal == null ? 0 : await _dao.goalRoundReviewCount(goal.id);
       final pendingRemoteDeletions =
           (await _dao.pendingProviderDeletions()).length;
       XiangjiGuidance? guidance;
@@ -192,6 +208,20 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         _intelligenceReceipt = receiptJson == null
             ? null
             : XiangjiGoalIntelligenceReceipt.fromJson(receiptJson);
+        _latestRoundReview = roundReviewJson == null
+            ? null
+            : XiangjiGoalRoundReview.fromJson(roundReviewJson);
+        _roundReviewCount = roundReviewCount;
+        _supportProfileSaved = supportProfileJson != null;
+        if (supportProfileJson != null) {
+          final profile = XiangjiGoalSupportProfile.fromJson(
+            supportProfileJson,
+          );
+          _interest = profile.interest;
+          _supportTone = profile.tone;
+          _availableMinutes = profile.minutes;
+          _allowPlanningAi = supportProfileJson['allow_ai'] != false;
+        }
         _mentorMigration = mentorMigration;
         _selectedMentorId = goal == null
             ? (catalog.system(_selectedMentorId)?.id ?? '')
@@ -318,11 +348,175 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     _goalFocus.requestFocus();
   }
 
+  Future<void> _editSupportProfile() async {
+    final goal = _goal;
+    if (goal == null) return;
+    var interest = _interest;
+    var tone = _supportTone;
+    var minutes = _availableMinutes;
+    var allowAi = _allowPlanningAi;
+    final save = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Text(
+                  '让每天的一步更适合你',
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  '只决定例子、语气和行动大小，不是人格诊断；随时可以改。',
+                  style: TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 18),
+                const Text('我更愿意从哪里开始', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: XiangjiGoalInterest.values
+                      .map((value) => ChoiceChip(
+                            label: Text(value.label),
+                            selected: interest == value,
+                            onSelected: (_) =>
+                                setSheetState(() => interest = value),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 16),
+                const Text('希望导师怎样带我', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: XiangjiSupportTone.values
+                      .map((value) => ChoiceChip(
+                            label: Text(value.label),
+                            selected: tone == value,
+                            onSelected: (_) => setSheetState(() => tone = value),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 16),
+                const Text('一次真实可用多久', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 7,
+                  children: <int>[2, 5, 10, 15, 20]
+                      .map((value) => ChoiceChip(
+                            label: Text('$value 分钟'),
+                            selected: minutes == value,
+                            onSelected: (_) =>
+                                setSheetState(() => minutes = value),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  value: allowAi,
+                  onChanged: (value) => setSheetState(() => allowAi = value),
+                  title: const Text('允许 AI 参与现实复盘'),
+                  subtitle: const Text('AI 只能使用当前事实和已核对知识；不可用时明确由本地规则接管。'),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('保存并用于下一轮'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (save != true) return;
+    await _dao.saveGoalSupportProfile(
+      goalId: goal.id,
+      interest: interest.name,
+      supportTone: tone.name,
+      availableMinutes: minutes,
+      allowAi: allowAi,
+    );
+    if (!mounted) return;
+    setState(() {
+      _interest = interest;
+      _supportTone = tone;
+      _availableMinutes = minutes;
+      _allowPlanningAi = allowAi;
+      _supportProfileSaved = true;
+    });
+    _showMessage('已保存。下一轮行动和复盘会按这组偏好调整。');
+  }
+
+  Future<void> _showExampleGuide() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.86,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+            children: <Widget>[
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('看一个完整闭环', style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('重点不是照抄行动，而是看“事实怎样改变下一步”。'),
+              ),
+              ...xiangjiGoalExamples.map(
+                (item) => Card(
+                  child: ExpansionTile(
+                    title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text('产出：${item.expectedOutput}'),
+                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    children: <Widget>[
+                      Align(alignment: Alignment.centerLeft, child: Text('真实需要：${item.need}')),
+                      const SizedBox(height: 8),
+                      Align(alignment: Alignment.centerLeft, child: Text('选择路径：${item.selectedRoute}')),
+                      const SizedBox(height: 10),
+                      ...item.sevenDayTrace.map(
+                        (trace) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(trace, style: const TextStyle(fontSize: 12, height: 1.4)),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 20),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('最后学到：${item.review}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openGoalAssistant() async {
     final controller = TextEditingController();
     XiangjiGoalAssistantAnswer? answer;
     var asking = false;
-    var allowAi = true;
+    var allowAi = _allowPlanningAi;
     final catalog = _catalog;
     if (catalog == null) return;
     await showModalBottomSheet<void>(
@@ -712,10 +906,17 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     if (draft == null || _catalog == null) return;
     setState(() => _working = true);
     try {
-      await _dao.createAndActivateGoal(
+      final createdGoal = await _dao.createAndActivateGoal(
         draft,
         kbVersion: _catalog!.version,
         intelligenceReceipt: _planBundle?.receipt.toJson(),
+      );
+      await _dao.saveGoalSupportProfile(
+        goalId: createdGoal.id,
+        interest: _interest.name,
+        supportTone: _supportTone.name,
+        availableMinutes: _availableMinutes,
+        allowAi: _allowPlanningAi,
       );
       if (!mounted) return;
       setState(() {
@@ -809,23 +1010,38 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
   Future<void> _submitCheckin(XiangjiCheckinResult result) async {
     final goal = _goal;
     final step = _step;
-    if (goal == null || step == null) return;
+    final guidance = _guidance;
+    if (goal == null || step == null || guidance == null) return;
     final controller = TextEditingController();
     final note = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(result.prompt),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          decoration: InputDecoration(
-            hintText: result == XiangjiCheckinResult.blocked
-                ? '例如：精力不足、缺少信息、时间窗口消失……'
-                : result == XiangjiCheckinResult.noLongerRelevant
-                    ? '例如：目标改变、路径不再匹配，或现实条件已经变化……'
-                    : '完成了什么、学到了什么，或调整了什么？',
-            border: const OutlineInputBorder(),
-          ),
+        title: Text('${result.label} · 只写事实'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text(
+              '写 1—3 条实际发生的事，不用解释性格，也不用先想解决办法。',
+              style: TextStyle(color: Colors.black54, height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              maxLines: 5,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: result == XiangjiCheckinResult.blocked
+                    ? '例如：计划早上做，但临时会议占用了时间；材料也不在手机上。'
+                    : result == XiangjiCheckinResult.notStarted
+                        ? '例如：到了时间但没想起；晚上精力只够休息。'
+                        : result == XiangjiCheckinResult.noLongerRelevant
+                            ? '例如：现实条件改变，这一步已不能推进目标。'
+                            : '例如：写了 82 字；5 分钟到点后愿意继续，但按约定停下。',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: <Widget>[
           TextButton(
@@ -834,7 +1050,7 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('继续'),
+            child: const Text('让导师复盘'),
           ),
         ],
       ),
@@ -846,101 +1062,111 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       await _showSafetyDialog(safety.message);
       return;
     }
-    final evidenceType = await _chooseEvidenceType(result.defaultEvidenceType);
-    if (evidenceType == null) return;
-    final summary = _engine.evidenceSummary(
-      step: step,
-      resultType: result.value,
-      userText: note,
-    );
-    final evidenceId = await _dao.addCheckinAndEvidenceDraft(
-      goal: goal,
-      step: step,
-      resultType: result.value,
-      userText: note,
-      evidenceType: evidenceType.value,
-      evidenceSummary: summary,
-    );
-    if (!mounted) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('确认成长证据'),
-        content: Text(summary),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('不保存'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认保存'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await _dao.confirmEvidence(evidenceId);
-    } else {
-      await _dao.discardEvidenceDraft(evidenceId);
+    if (note.trim().length < 2) {
+      _showMessage('请至少写一条真实发生的事实。');
+      return;
     }
-    await _reload();
-    if ((result == XiangjiCheckinResult.blocked ||
-            result == XiangjiCheckinResult.noLongerRelevant) &&
-        mounted) {
-      final calibrate = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('不把受阻解释成失败'),
-          content: const Text('要不要用四个很短的判断，看看应继续、改法、缩小、暂停还是重选？'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('暂时不用'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('开始校准'),
-            ),
-          ],
-        ),
+    setState(() => _working = true);
+    try {
+      final review = await _intelligence.reviewRound(
+        goal: goal,
+        step: step,
+        result: result,
+        realityFacts: note,
+        profile: _supportProfile,
+        guidance: guidance,
+        allowAi: _allowPlanningAi,
       );
-      if (calibrate == true) await _openCalibration();
+      if (!mounted) return;
+      final confirm = await _confirmRoundReview(review);
+      if (confirm != true) return;
+      final evidenceId = await _dao.addCheckinAndEvidenceDraft(
+        goal: goal,
+        step: step,
+        resultType: result.value,
+        userText: note,
+        evidenceType: result.defaultEvidenceType.value,
+        evidenceSummary: review.learning,
+      );
+      await _dao.confirmEvidence(evidenceId);
+      await _dao.saveGoalRoundReview(
+        goalId: goal.id,
+        stepId: step.id,
+        review: review.toJson(),
+      );
+      final feedbackGoal = await _dao.goalById(goal.id);
+      if (feedbackGoal == null) throw StateError('现实反馈保存后无法读取目标');
+      await _dao.replaceCurrentStep(
+        feedbackGoal,
+        review.nextStep,
+        trigger: 'round_review_${review.decision.value}',
+      );
+      await _reload();
+      _showMessage('已保存现实经验，并自动生成下一步。');
+    } catch (error) {
+      _showMessage(_cleanError(error));
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
-  Future<XiangjiEvidenceType?> _chooseEvidenceType(
-    XiangjiEvidenceType suggested,
-  ) {
-    return showDialog<XiangjiEvidenceType>(
+  Future<bool?> _confirmRoundReview(XiangjiGoalRoundReview review) {
+    final receiptLabel = review.receipt.aiUsed
+        ? 'AI 已参与 · ${review.receipt.model}'
+        : review.receipt.aiRequested
+            ? 'AI 未完成 · 本地知识规则已接管'
+            : '本地知识规则';
+    return showDialog<bool>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('这更像哪一种成长证据？'),
-        children: XiangjiEvidenceType.values
-            .map(
-              (type) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, type),
-                child: Row(
-                  children: <Widget>[
-                    Icon(
-                      type == suggested
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_off,
-                      color: type == suggested ? _moss : Colors.black38,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(type.label)),
-                    if (type == suggested)
-                      const Text(
-                        '建议',
-                        style: TextStyle(color: _moss, fontSize: 12),
-                      ),
-                  ],
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('现实已经改变了下一步'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                _ReviewLine(title: '现实对照', text: review.realityComparison),
+                _ReviewLine(title: '本轮学到', text: review.learning),
+                _ReviewLine(
+                  title: '导师决定 · ${review.decision.label}',
+                  text: review.decisionReason,
                 ),
-              ),
-            )
-            .toList(growable: false),
+                _ReviewLine(title: '下一步', text: review.nextStep.actionText),
+                _ReviewLine(
+                  title: '${review.theory.mentorName} · ${review.theory.concept}',
+                  text: '${review.theory.caseApplication}\n${review.theory.whyThisAction}',
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  receiptLabel,
+                  style: const TextStyle(
+                    color: _moss,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (review.receipt.fallbackReason.isNotEmpty)
+                  Text(
+                    review.receipt.fallbackReason,
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('返回修改事实'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('保存经验并进入下一步'),
+          ),
+        ],
       ),
     );
   }
@@ -2002,32 +2228,290 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: <Widget>[
-          _buildGoalSeedCard(),
-          const SizedBox(height: 14),
-          if (_intelligenceReceipt != null) ...<Widget>[
+          _buildCoachConsoleHeader(),
+          const SizedBox(height: 12),
+          _buildSupportProfileStrip(),
+          const SizedBox(height: 12),
+          if (_latestRoundReview == null && _intelligenceReceipt != null) ...<Widget>[
             _buildIntelligenceReceipt(_intelligenceReceipt!),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
           ],
           _buildTodayStepCard(),
+          if (_latestRoundReview != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _buildRoundReviewCard(_latestRoundReview!),
+          ],
+          if (_guidance != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _buildPracticeCard(_guidance!),
+          ],
+          const SizedBox(height: 12),
+          _buildHelpAndExampleCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCoachConsoleHeader() {
+    final goal = _goal!;
+    final receipt = _latestRoundReview?.receipt ?? _intelligenceReceipt;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: <Color>[Color(0xFF294F43), Color(0xFF527360)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Icon(Icons.radar_outlined, color: Color(0xFFFFD4A6)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '今日教练台',
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              ),
+              _Pill(
+                text: '$_roundReviewCount 轮现实验证',
+                background: Colors.white.withValues(alpha: 0.16),
+                foreground: Colors.white,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            goal.originalText,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.4, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 14),
-          if (_guidance != null) _buildMentorCard(_guidance!),
+          const Row(
+            children: <Widget>[
+              _ConsoleStage(index: '1', label: '做一步'),
+              _ConsoleArrow(),
+              _ConsoleStage(index: '2', label: '写事实'),
+              _ConsoleArrow(),
+              _ConsoleStage(index: '3', label: '复盘'),
+              _ConsoleArrow(),
+              _ConsoleStage(index: '4', label: '换下一步'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white54),
+                  ),
+                  onPressed: _openGoalAssistant,
+                  icon: const Icon(Icons.support_agent_outlined),
+                  label: const Text('问导师助手'),
+                ),
+              ),
+              if (receipt != null) ...<Widget>[
+                const SizedBox(width: 10),
+                Tooltip(
+                  message: receipt.aiUsed
+                      ? 'AI 已参与：${receipt.model}'
+                      : receipt.aiRequested
+                          ? 'AI 未完成，本地规则已接管'
+                          : '本地知识规则',
+                  child: _Pill(
+                    text: receipt.aiUsed ? 'AI 已参与' : '本地接管',
+                    background: receipt.aiUsed
+                        ? const Color(0xFFCAE9D8)
+                        : Colors.white.withValues(alpha: 0.16),
+                    foreground: receipt.aiUsed ? _ink : Colors.white,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupportProfileStrip() {
+    return _SectionCard(
+      color: _supportProfileSaved ? _sage : const Color(0xFFFFF4DB),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            _supportProfileSaved ? Icons.tune : Icons.person_search_outlined,
+            color: _moss,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  _supportProfileSaved ? '已按你的方式带领' : '先用 20 秒让行动适合你',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _supportProfileSaved
+                      ? '${_interest.label} · ${_supportTone.label} · $_availableMinutes 分钟 · ${_allowPlanningAi ? 'AI 复盘开启' : '仅本地'}'
+                      : '选择兴趣、引导方式和真实可用时间；这不是人格测验。',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _editSupportProfile,
+            child: Text(_supportProfileSaved ? '修改' : '设置'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoundReviewCard(XiangjiGoalRoundReview review) {
+    final mode = review.receipt.aiUsed
+        ? 'AI 已参与 · ${review.receipt.model}'
+        : review.receipt.aiRequested
+            ? 'AI 未完成 · 本地知识规则接管'
+            : '本地知识规则';
+    return _SectionCard(
+      color: const Color(0xFFF0F6F2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Icon(Icons.compare_arrows_outlined, color: _moss),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('上一轮：现实怎样改变了办法', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              ),
+              _Pill(text: review.decision.label),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ReviewLine(title: '你报告的事实', text: review.realityFacts),
+          _ReviewLine(title: '事实与预期对照', text: review.realityComparison),
+          _ReviewLine(title: '真正留下的经验', text: review.learning),
+          _ReviewLine(title: '为什么这样改', text: review.decisionReason),
+          const Divider(height: 22),
+          Text(mode, style: const TextStyle(color: _moss, fontSize: 12, fontWeight: FontWeight.w700)),
+          if (review.receipt.fallbackReason.isNotEmpty)
+            Text(review.receipt.fallbackReason, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPracticeCard(XiangjiGuidance guidance) {
+    final source = guidance.sources.isEmpty ? null : guidance.sources.first;
+    return _SectionCard(
+      color: _sand,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('这套思想正在怎样被你用起来', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(
+            '已在现实中练习 $_roundReviewCount 次；次数只记录已保存的反馈，不制造断签压力。',
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+          const SizedBox(height: 12),
+          _InfoRow(
+            icon: Icons.person_outline,
+            label: '思想家与概念',
+            text: '${guidance.mentorName} · ${guidance.mechanismLabel}',
+          ),
+          _InfoRow(
+            icon: Icons.account_tree_outlined,
+            label: '怎样改变当前行动',
+            text: _latestRoundReview?.theory.caseApplication ?? guidance.actionDerivation,
+          ),
+          _InfoRow(
+            icon: Icons.menu_book_outlined,
+            label: '可核对来源',
+            text: source == null ? '当前知识依据不足，未作确定性归因。' : '${source.bookTitle} · ${source.locator}',
+          ),
+          _InfoRow(
+            icon: Icons.shield_outlined,
+            label: '理论边界',
+            text: source?.boundary ?? guidance.boundaryNote,
+          ),
+          const SizedBox(height: 6),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('深入理解或更换思想路径', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            children: <Widget>[
+              Text(guidance.coreJudgment, style: const TextStyle(height: 1.5)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: <Widget>[
+                  TextButton(onPressed: _openMentorKnowledge, child: const Text('查看知识与来源')),
+                  TextButton(onPressed: _openMentorSetting, child: const Text('可选：8 步深入')),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHelpAndExampleCard() {
+    return _SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('不知道怎么用，直接选一个', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openGoalAssistant,
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  label: const Text('问怎么做'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showExampleGuide,
+                  icon: const Icon(Icons.play_circle_outline),
+                  label: const Text('看完整案例'),
+                ),
+              ),
+            ],
+          ),
           if (_goal!.state != XiangjiGoalState.completed) ...<Widget>[
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             Row(
               children: <Widget>[
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: TextButton.icon(
                     onPressed: _openLostMode,
                     icon: const Icon(Icons.explore_outlined),
-                    label: const Text('我现在卡住了'),
+                    label: const Text('我不知道该往哪走'),
                   ),
                 ),
-                const SizedBox(width: 10),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: TextButton.icon(
                     onPressed: _openCalibration,
                     icon: const Icon(Icons.tune),
-                    label: const Text('重新想想目标'),
+                    label: const Text('目标本身变了'),
                   ),
                 ),
               ],
@@ -2575,42 +3059,112 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         children: <Widget>[
           Row(
             children: <Widget>[
-              const Icon(Icons.directions_walk_outlined, color: _moss),
+              const Icon(Icons.my_location_outlined, color: _moss),
               const SizedBox(width: 8),
               const Expanded(
-                child: Text('今天的一步', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                child: Text('今天唯一行动', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               ),
-              _Pill(text: step.status == 'in_progress' ? '已开始' : '待开始'),
+              _Pill(text: '$_availableMinutes 分钟'),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(step.actionText, style: const TextStyle(fontSize: 20, height: 1.4, fontWeight: FontWeight.w700, color: _ink)),
-          const SizedBox(height: 14),
-          _InfoRow(icon: Icons.bolt_outlined, label: '触发点', text: step.triggerContext),
-          _InfoRow(icon: Icons.check_circle_outline, label: '最低完成', text: step.minimumDone),
-          _InfoRow(icon: Icons.visibility_outlined, label: '完成证据', text: step.evidenceRule),
-          _InfoRow(icon: Icons.shield_outlined, label: '为什么可控', text: step.controllabilityReason),
+          const SizedBox(height: 12),
+          Text(step.actionText, style: const TextStyle(fontSize: 20, height: 1.45, fontWeight: FontWeight.w800, color: _ink)),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _sage,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('做到这里就停：${step.minimumDone}', style: const TextStyle(fontWeight: FontWeight.w700, height: 1.45)),
+                const SizedBox(height: 4),
+                Text('留下：${step.evidenceRule}', style: const TextStyle(fontSize: 12, color: Colors.black54, height: 1.4)),
+              ],
+            ),
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('为什么这样做？还需要准备什么？', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            children: <Widget>[
+              _InfoRow(icon: Icons.bolt_outlined, label: '什么时候做', text: step.triggerContext),
+              _InfoRow(icon: Icons.shield_outlined, label: '为什么可控', text: step.controllabilityReason),
+            ],
+          ),
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: step.status == 'in_progress' ? null : _markStarted,
               icon: const Icon(Icons.play_arrow),
-              label: Text(step.status == 'in_progress' ? '已经开始' : '现在开始'),
+              label: Text(step.status == 'in_progress' ? '正在行动 · 完成后选结果' : '现在开始这一步'),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
+          const SizedBox(height: 14),
+          const Text('现实结果是什么？', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          const Text('选完只需写一条事实；导师会直接复盘并生成下一步。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 10),
+          Row(
             children: <Widget>[
-              TextButton.icon(onPressed: _shrinkStep, icon: const Icon(Icons.compress), label: const Text('再缩小一点')),
-              TextButton.icon(onPressed: _replaceStep, icon: const Icon(Icons.swap_horiz), label: const Text('换一种方式')),
-              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.notStarted), icon: const Icon(Icons.schedule_outlined), label: const Text('尚未开始')),
-              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.blocked), icon: const Icon(Icons.event_busy_outlined), label: const Text('今天条件不允许')),
-              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.partiallyCompleted), icon: const Icon(Icons.timelapse), label: const Text('部分完成')),
-              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.completed), icon: const Icon(Icons.done_all), label: const Text('已经完成')),
-              TextButton.icon(onPressed: () => _submitCheckin(XiangjiCheckinResult.noLongerRelevant), icon: const Icon(Icons.alt_route_outlined), label: const Text('这一步已不再适用')),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _submitCheckin(XiangjiCheckinResult.completed),
+                  icon: const Icon(Icons.done_all),
+                  label: const Text('做到了'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _submitCheckin(XiangjiCheckinResult.partiallyCompleted),
+                  icon: const Icon(Icons.timelapse),
+                  label: const Text('做了一部分'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _submitCheckin(XiangjiCheckinResult.notStarted),
+                  icon: const Icon(Icons.schedule_outlined),
+                  label: const Text('还没开始'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _submitCheckin(XiangjiCheckinResult.blocked),
+                  icon: const Icon(Icons.event_busy_outlined),
+                  label: const Text('被条件卡住'),
+                ),
+              ),
+            ],
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('开始前就觉得不合适？', style: TextStyle(fontSize: 13)),
+            children: <Widget>[
+              Wrap(
+                spacing: 6,
+                children: <Widget>[
+                  TextButton.icon(onPressed: _shrinkStep, icon: const Icon(Icons.compress), label: const Text('缩成 2 分钟')),
+                  TextButton.icon(onPressed: _replaceStep, icon: const Icon(Icons.swap_horiz), label: const Text('换一种办法')),
+                  TextButton.icon(
+                    onPressed: () => _submitCheckin(XiangjiCheckinResult.noLongerRelevant),
+                    icon: const Icon(Icons.alt_route_outlined),
+                    label: const Text('这一步已不适用'),
+                  ),
+                ],
+              ),
             ],
           ),
         ],
@@ -3553,6 +4107,67 @@ class _XiangjiCalibrationPageState extends State<XiangjiCalibrationPage> {
           child: const Text('重新判断'),
         ),
       ],
+    );
+  }
+}
+
+class _ConsoleStage extends StatelessWidget {
+  const _ConsoleStage({required this.index, required this.label});
+
+  final String index;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: <Widget>[
+          Container(
+            width: 23,
+            height: 23,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Text(index, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsoleArrow extends StatelessWidget {
+  const _ConsoleArrow();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+        padding: EdgeInsets.only(bottom: 16),
+        child: Icon(Icons.chevron_right, size: 15, color: Colors.white38),
+      );
+}
+
+class _ReviewLine extends StatelessWidget {
+  const _ReviewLine({required this.title, required this.text});
+
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(title, style: const TextStyle(color: _moss, fontSize: 12, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          Text(text, style: const TextStyle(height: 1.45)),
+        ],
+      ),
     );
   }
 }

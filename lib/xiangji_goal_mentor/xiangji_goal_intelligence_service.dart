@@ -51,6 +51,29 @@ class XiangjiGoalSupportProfile {
   final XiangjiGoalInterest interest;
   final XiangjiSupportTone tone;
   final int minutes;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'interest': interest.name,
+        'support_tone': tone.name,
+        'minutes': minutes,
+      };
+
+  factory XiangjiGoalSupportProfile.fromJson(Map<String, Object?> json) {
+    final interestName = (json['interest'] ?? '').toString();
+    final toneName = (json['support_tone'] ?? '').toString();
+    final minutes = int.tryParse('${json['minutes'] ?? 5}') ?? 5;
+    return XiangjiGoalSupportProfile(
+      interest: XiangjiGoalInterest.values.firstWhere(
+        (item) => item.name == interestName,
+        orElse: () => XiangjiGoalInterest.create,
+      ),
+      tone: XiangjiSupportTone.values.firstWhere(
+        (item) => item.name == toneName,
+        orElse: () => XiangjiSupportTone.gentle,
+      ),
+      minutes: <int>[2, 5, 10, 15, 20].contains(minutes) ? minutes : 5,
+    );
+  }
 }
 
 class XiangjiTheoryApplication {
@@ -71,6 +94,27 @@ class XiangjiTheoryApplication {
   final String caseApplication;
   final String whyThisAction;
   final String boundary;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'evidence_id': evidenceId,
+        'mentor_name': mentorName,
+        'concept': concept,
+        'locator': locator,
+        'case_application': caseApplication,
+        'why_this_action': whyThisAction,
+        'boundary': boundary,
+      };
+
+  factory XiangjiTheoryApplication.fromJson(Map<String, Object?> json) =>
+      XiangjiTheoryApplication(
+        evidenceId: (json['evidence_id'] ?? '').toString(),
+        mentorName: (json['mentor_name'] ?? '').toString(),
+        concept: (json['concept'] ?? '').toString(),
+        locator: (json['locator'] ?? '').toString(),
+        caseApplication: (json['case_application'] ?? '').toString(),
+        whyThisAction: (json['why_this_action'] ?? '').toString(),
+        boundary: (json['boundary'] ?? '').toString(),
+      );
 }
 
 class XiangjiGoalIntelligenceReceipt {
@@ -172,6 +216,112 @@ class XiangjiGoalPlanBundle {
 
   final List<XiangjiGoalPlanRoute> routes;
   final XiangjiGoalIntelligenceReceipt receipt;
+}
+
+/// One complete, inspectable learning round: action -> reality -> judgment ->
+/// next action. This is deliberately persisted separately from a generic
+/// check-in so the user can see what changed and which knowledge caused it.
+class XiangjiGoalRoundReview {
+  const XiangjiGoalRoundReview({
+    required this.goalId,
+    required this.stepId,
+    required this.result,
+    required this.realityFacts,
+    required this.realityComparison,
+    required this.learning,
+    required this.decision,
+    required this.decisionReason,
+    required this.nextStep,
+    required this.theory,
+    required this.receipt,
+    required this.createdAtMs,
+  });
+
+  final int goalId;
+  final int stepId;
+  final XiangjiCheckinResult result;
+  final String realityFacts;
+  final String realityComparison;
+  final String learning;
+  final XiangjiCalibrationResult decision;
+  final String decisionReason;
+  final XiangjiDailyStep nextStep;
+  final XiangjiTheoryApplication theory;
+  final XiangjiGoalIntelligenceReceipt receipt;
+  final int createdAtMs;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'goal_id': goalId,
+        'step_id': stepId,
+        'result': result.value,
+        'reality_facts': realityFacts,
+        'reality_comparison': realityComparison,
+        'learning': learning,
+        'decision': decision.value,
+        'decision_reason': decisionReason,
+        'next_step': <String, Object?>{
+          'action_text': nextStep.actionText,
+          'trigger_context': nextStep.triggerContext,
+          'minimum_done': nextStep.minimumDone,
+          'evidence_rule': nextStep.evidenceRule,
+          'controllability_reason': nextStep.controllabilityReason,
+          'smaller_variant': nextStep.smallerVariant,
+          'source_system_id': nextStep.sourceSystemId,
+          'status': nextStep.status,
+          'created_at_ms': nextStep.createdAtMs,
+        },
+        'theory': theory.toJson(),
+        'receipt': receipt.toJson(),
+        'created_at_ms': createdAtMs,
+      };
+
+  factory XiangjiGoalRoundReview.fromJson(Map<String, Object?> json) {
+    final next = _objectMap(json['next_step']);
+    final parsedResult = tryParseXiangjiCheckinResult(json['result']);
+    final decisionValue = (json['decision'] ?? '').toString();
+    return XiangjiGoalRoundReview(
+      goalId: int.tryParse('${json['goal_id'] ?? 0}') ?? 0,
+      stepId: int.tryParse('${json['step_id'] ?? 0}') ?? 0,
+      result: parsedResult ?? XiangjiCheckinResult.blocked,
+      realityFacts: (json['reality_facts'] ?? '').toString(),
+      realityComparison: (json['reality_comparison'] ?? '').toString(),
+      learning: (json['learning'] ?? '').toString(),
+      decision: XiangjiCalibrationResult.values.firstWhere(
+        (item) => item.value == decisionValue,
+        orElse: () => XiangjiCalibrationResult.changeMethod,
+      ),
+      decisionReason: (json['decision_reason'] ?? '').toString(),
+      nextStep: XiangjiDailyStep(
+        id: 0,
+        goalId: int.tryParse('${json['goal_id'] ?? 0}') ?? 0,
+        goalVersionId: 0,
+        actionText: (next['action_text'] ?? '').toString(),
+        triggerContext: (next['trigger_context'] ?? '').toString(),
+        minimumDone: (next['minimum_done'] ?? '').toString(),
+        evidenceRule: (next['evidence_rule'] ?? '').toString(),
+        controllabilityReason:
+            (next['controllability_reason'] ?? '').toString(),
+        smallerVariant: (next['smaller_variant'] ?? '').toString(),
+        sourceSystemId: (next['source_system_id'] ?? '').toString(),
+        status: (next['status'] ?? 'ready').toString(),
+        createdAtMs: int.tryParse('${next['created_at_ms'] ?? 0}') ?? 0,
+      ),
+      theory: XiangjiTheoryApplication.fromJson(
+        _objectMap(json['theory']),
+      ),
+      receipt: XiangjiGoalIntelligenceReceipt.fromJson(
+        _objectMap(json['receipt']),
+      ),
+      createdAtMs: int.tryParse('${json['created_at_ms'] ?? 0}') ?? 0,
+    );
+  }
+}
+
+Map<String, Object?> _objectMap(Object? value) {
+  if (value is! Map) return <String, Object?>{};
+  return value.map<String, Object?>(
+    (key, item) => MapEntry(key.toString(), item),
+  );
 }
 
 class XiangjiGoalCapability {
@@ -449,6 +599,152 @@ class XiangjiGoalIntelligenceService {
     }
   }
 
+  Future<XiangjiGoalRoundReview> reviewRound({
+    required XiangjiGoal goal,
+    required XiangjiDailyStep step,
+    required XiangjiCheckinResult result,
+    required String realityFacts,
+    required XiangjiGoalSupportProfile profile,
+    required XiangjiGuidance guidance,
+    required bool allowAi,
+  }) async {
+    final facts = realityFacts.trim();
+    if (facts.length < 2) {
+      throw const FormatException('请写一条真实发生的事实，不需要评价自己。');
+    }
+    final safety = _engine.assessSafety(facts);
+    if (safety.highRisk) throw StateError(safety.message);
+    if (guidance.sources.isEmpty) {
+      throw StateError('当前知识依据不足，已停止生成下一步。');
+    }
+    final local = _localRoundReview(
+      goal: goal,
+      step: step,
+      result: result,
+      realityFacts: facts,
+      profile: profile,
+      guidance: guidance,
+      aiRequested: allowAi,
+    );
+    if (!allowAi) return local;
+    final payload = _redactJson(<String, Object?>{
+      'goal': goal.originalText,
+      'previous_action': step.actionText,
+      'minimum_done': step.minimumDone,
+      'result': result.value,
+      'reality_facts': facts,
+      'preference': profile.toJson(),
+      'local_review': <String, Object?>{
+        'reality_comparison': local.realityComparison,
+        'learning': local.learning,
+        'decision': local.decision.value,
+        'decision_reason': local.decisionReason,
+        'next_action': local.nextStep.actionText,
+        'next_minimum_done': local.nextStep.minimumDone,
+        'next_evidence_rule': local.nextStep.evidenceRule,
+      },
+      'allowed_theory': <String, Object?>{
+        'evidence_id': local.theory.evidenceId,
+        'mentor_name': local.theory.mentorName,
+        'concept': local.theory.concept,
+        'locator': local.theory.locator,
+        'boundary': local.theory.boundary,
+      },
+    }) as Map<String, Object?>;
+    try {
+      final generated = await _generator(
+        systemPrompt: _roundReviewSystemPrompt,
+        prompt: jsonEncode(payload),
+      );
+      if (generated.text.trim().isEmpty) {
+        return _roundReviewWithReceipt(
+          local,
+          reason: '未检测到可用 AI 配置，本轮由本地知识规则完成。',
+        );
+      }
+      final decoded = _jsonObject(generated.text);
+      final evidenceId = _text(decoded['evidence_id']);
+      final comparison = _text(decoded['reality_comparison']);
+      final learning = _text(decoded['learning']);
+      final decisionReason = _text(decoded['decision_reason']);
+      final nextAction = _text(decoded['next_action']);
+      final minimumDone = _text(decoded['next_minimum_done']);
+      final evidenceRule = _text(decoded['next_evidence_rule']);
+      final caseApplication = _text(decoded['case_application']);
+      final whyThisAction = _text(decoded['why_this_action']);
+      final required = <String>[
+        comparison,
+        learning,
+        decisionReason,
+        nextAction,
+        minimumDone,
+        evidenceRule,
+        caseApplication,
+        whyThisAction,
+      ];
+      if (evidenceId != local.theory.evidenceId ||
+          required.any((value) => value.length < 4 || _forbidden(value)) ||
+          !RegExp(r'\d').hasMatch(nextAction)) {
+        return _roundReviewWithReceipt(
+          local,
+          reason: 'AI 复盘缺少现实事实、可执行下一步或有效知识依据，本地规则已接管。',
+        );
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      return XiangjiGoalRoundReview(
+        goalId: goal.id,
+        stepId: step.id,
+        result: result,
+        realityFacts: facts,
+        realityComparison: comparison,
+        learning: learning,
+        decision: local.decision,
+        decisionReason: decisionReason,
+        nextStep: XiangjiDailyStep(
+          id: 0,
+          goalId: goal.id,
+          goalVersionId: goal.versionId,
+          actionText: nextAction,
+          triggerContext: '选择一个真实可用的 ${profile.minutes} 分钟窗口；到点就停。',
+          minimumDone: minimumDone,
+          evidenceRule: evidenceRule,
+          controllabilityReason: local.nextStep.controllabilityReason,
+          smallerVariant: local.nextStep.smallerVariant,
+          sourceSystemId: guidance.systemId,
+          status: 'ready',
+          createdAtMs: now,
+        ),
+        theory: XiangjiTheoryApplication(
+          evidenceId: local.theory.evidenceId,
+          mentorName: local.theory.mentorName,
+          concept: local.theory.concept,
+          locator: local.theory.locator,
+          caseApplication: caseApplication,
+          whyThisAction: whyThisAction,
+          boundary: local.theory.boundary,
+        ),
+        receipt: XiangjiGoalIntelligenceReceipt(
+          aiRequested: true,
+          aiUsed: true,
+          provider: generated.provider,
+          model: generated.modelLabel,
+          status: 'ai_round_review',
+          fallbackReason: '',
+          knowledgeIds: <String>[local.theory.evidenceId],
+          generatedAtMs: now,
+          situationSummary: comparison,
+          blindSpotQuestion: decisionReason,
+        ),
+        createdAtMs: now,
+      );
+    } catch (error) {
+      return _roundReviewWithReceipt(
+        local,
+        reason: 'AI 暂时不可用，本轮由本地知识规则完成：${_safeError(error)}',
+      );
+    }
+  }
+
   Future<XiangjiGoalAssistantAnswer> answer({
     required String question,
     required XiangjiKnowledgeCatalog catalog,
@@ -537,6 +833,193 @@ class XiangjiGoalIntelligenceService {
       );
     }
   }
+
+  XiangjiGoalRoundReview _localRoundReview({
+    required XiangjiGoal goal,
+    required XiangjiDailyStep step,
+    required XiangjiCheckinResult result,
+    required String realityFacts,
+    required XiangjiGoalSupportProfile profile,
+    required XiangjiGuidance guidance,
+    required bool aiRequested,
+  }) {
+    final decision = switch (result) {
+      XiangjiCheckinResult.completed => XiangjiCalibrationResult.continueGoal,
+      XiangjiCheckinResult.partiallyCompleted =>
+        XiangjiCalibrationResult.reduceScope,
+      XiangjiCheckinResult.notStarted => XiangjiCalibrationResult.reduceScope,
+      XiangjiCheckinResult.blocked => XiangjiCalibrationResult.changeMethod,
+      XiangjiCheckinResult.noLongerRelevant =>
+        XiangjiCalibrationResult.changeMethod,
+    };
+    final comparison = switch (result) {
+      XiangjiCheckinResult.completed =>
+        '现实已经出现了最低完成信号。现在要保留有效条件，不把一次完成夸大成永久能力。',
+      XiangjiCheckinResult.partiallyCompleted =>
+        '行动已经产生部分现实痕迹，但尚未达到最低完成；有效部分和剩余负担需要分开。',
+      XiangjiCheckinResult.notStarted =>
+        '本轮没有进入行动，说明触发条件或行动大小与现实容量不匹配，不能据此评价人格。',
+      XiangjiCheckinResult.blocked =>
+        '行动被现实条件阻断；需要先改变条件或方法，而不是重复同一要求。',
+      XiangjiCheckinResult.noLongerRelevant =>
+        '现实已经使当前步骤失去作用；保留目标判断权，停止重复无效动作。',
+    };
+    final learning = switch (result) {
+      XiangjiCheckinResult.completed => '本轮可确认的经验：小而可停止的行动能够产生真实反馈。',
+      XiangjiCheckinResult.partiallyCompleted => '本轮可确认的经验：方向仍有响应，但步骤需要缩到现实能承受的范围。',
+      XiangjiCheckinResult.notStarted => '本轮可确认的经验：先修正启动条件，动力不能替代清楚的触发点。',
+      XiangjiCheckinResult.blocked => '本轮可确认的经验：阻碍是一条待处理的条件信息，不是失败证明。',
+      XiangjiCheckinResult.noLongerRelevant => '本轮可确认的经验：方法是可替换假设，不必为沉没成本继续。',
+    };
+    final decisionReason = switch (decision) {
+      XiangjiCalibrationResult.continueGoal => '方向与方法已经得到一次现实支持，继续但只增加一个难度层级。',
+      XiangjiCalibrationResult.reduceScope => '方向暂不否定，先降低步骤与启动成本，再观察下一轮事实。',
+      XiangjiCalibrationResult.changeMethod => '目标暂时保留，现实事实要求更换条件或推进方法。',
+      XiangjiCalibrationResult.pause => '现实容量暂不支持继续推进，暂停比强迫更符合当前事实。',
+      XiangjiCalibrationResult.reselect => '具体目标已经不再服务原有价值，需要重新选择。',
+    };
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final source = guidance.sources.first;
+    final nextStep = XiangjiDailyStep(
+      id: 0,
+      goalId: goal.id,
+      goalVersionId: goal.versionId,
+      actionText: _reviewNextAction(
+        goal: goal,
+        step: step,
+        result: result,
+        profile: profile,
+        realityFacts: realityFacts,
+      ),
+      triggerContext: '选择一个真实可用的 ${profile.minutes} 分钟窗口；到点就停。',
+      minimumDone: _reviewMinimumDone(result, profile.interest),
+      evidenceRule: _reviewEvidenceRule(profile.interest),
+      controllabilityReason: '下一步只要求由你控制的动作与现实痕迹；外部回应只作为新事实，不作为人格评分。',
+      smallerVariant: '如果仍难开始，只用 2 分钟准备材料、写第一句或消除一个启动条件。',
+      sourceSystemId: guidance.systemId,
+      status: 'ready',
+      createdAtMs: now,
+    );
+    final theory = XiangjiTheoryApplication(
+      evidenceId: source.evidenceId,
+      mentorName: guidance.mentorName,
+      concept: guidance.mechanismLabel,
+      locator: '${source.bookTitle} · ${source.locator}',
+      caseApplication: '用“${_short(realityFacts)}”修正对“${_short(goal.originalText)}”的判断；事实优先于抽象自我评价。',
+      whyThisAction: '$decisionReason 因此下一轮只执行一项可停止、可留下证据的行动。',
+      boundary: source.boundary,
+    );
+    return XiangjiGoalRoundReview(
+      goalId: goal.id,
+      stepId: step.id,
+      result: result,
+      realityFacts: realityFacts,
+      realityComparison: comparison,
+      learning: learning,
+      decision: decision,
+      decisionReason: decisionReason,
+      nextStep: nextStep,
+      theory: theory,
+      receipt: XiangjiGoalIntelligenceReceipt(
+        aiRequested: aiRequested,
+        aiUsed: false,
+        provider: 'local',
+        model: '本地知识规则',
+        status: aiRequested ? 'local_fallback' : 'local_round_review',
+        fallbackReason: '',
+        knowledgeIds: <String>[source.evidenceId],
+        generatedAtMs: now,
+        situationSummary: comparison,
+        blindSpotQuestion: decisionReason,
+      ),
+      createdAtMs: now,
+    );
+  }
+
+  XiangjiGoalRoundReview _roundReviewWithReceipt(
+    XiangjiGoalRoundReview local, {
+    required String reason,
+  }) =>
+      XiangjiGoalRoundReview(
+        goalId: local.goalId,
+        stepId: local.stepId,
+        result: local.result,
+        realityFacts: local.realityFacts,
+        realityComparison: local.realityComparison,
+        learning: local.learning,
+        decision: local.decision,
+        decisionReason: local.decisionReason,
+        nextStep: local.nextStep,
+        theory: local.theory,
+        receipt: XiangjiGoalIntelligenceReceipt(
+          aiRequested: true,
+          aiUsed: false,
+          provider: 'local',
+          model: '本地知识规则',
+          status: 'local_fallback',
+          fallbackReason: reason,
+          knowledgeIds: local.receipt.knowledgeIds,
+          generatedAtMs: DateTime.now().millisecondsSinceEpoch,
+          situationSummary: local.realityComparison,
+          blindSpotQuestion: local.decisionReason,
+        ),
+        createdAtMs: local.createdAtMs,
+      );
+
+  static String _reviewNextAction({
+    required XiangjiGoal goal,
+    required XiangjiDailyStep step,
+    required XiangjiCheckinResult result,
+    required XiangjiGoalSupportProfile profile,
+    required String realityFacts,
+  }) {
+    if (result == XiangjiCheckinResult.notStarted) {
+      return '只用 2 分钟执行更小版本：${step.smallerVariant}';
+    }
+    if (result == XiangjiCheckinResult.blocked ||
+        result == XiangjiCheckinResult.noLongerRelevant) {
+      return '用 ${profile.minutes} 分钟处理“${_short(realityFacts, 20)}”暴露出的一个条件，再为“${_short(goal.originalText)}”完成一个可见动作。';
+    }
+    if (result == XiangjiCheckinResult.partiallyCompleted) {
+      return '用 ${profile.minutes} 分钟保留本轮有效部分，只完成“${_short(step.minimumDone, 22)}”中尚未完成的一小段。';
+    }
+    switch (profile.interest) {
+      case XiangjiGoalInterest.create:
+        return '用 ${profile.minutes} 分钟把现有成果扩展一层：补一个段落、例子或待回答问题；到点就停。';
+      case XiangjiGoalInterest.learn:
+        return '用 ${profile.minutes} 分钟用自己的话解释一个仍模糊的点，并写下一个可验证问题。';
+      case XiangjiGoalInterest.career:
+        return '用 ${profile.minutes} 分钟把现有成果交给一个真实对象，或发出一个只含一个问题的具体询问。';
+      case XiangjiGoalInterest.connect:
+        return '用 ${profile.minutes} 分钟根据本轮回应修改一条具体、可拒绝且有边界的请求。';
+      case XiangjiGoalInterest.wellbeing:
+        return '用 ${profile.minutes} 分钟重复本轮有效的恢复动作，并记录前后一个可观察变化。';
+      case XiangjiGoalInterest.explore:
+        return '用 ${profile.minutes} 分钟补充一个真实选项、一条支持事实和一条限制事实。';
+    }
+  }
+
+  static String _reviewMinimumDone(
+    XiangjiCheckinResult result,
+    XiangjiGoalInterest interest,
+  ) {
+    if (result == XiangjiCheckinResult.notStarted) return '完成 2 分钟更小版本，并留下第一条痕迹。';
+    if (result == XiangjiCheckinResult.blocked ||
+        result == XiangjiCheckinResult.noLongerRelevant) {
+      return '处理一个现实条件，并留下一个新的可执行入口。';
+    }
+    return switch (interest) {
+      XiangjiGoalInterest.create => '新增一个可继续修改的内容单元。',
+      XiangjiGoalInterest.learn => '留下三句解释和一个问题。',
+      XiangjiGoalInterest.career => '形成一个可发送成果或发出一个具体询问。',
+      XiangjiGoalInterest.connect => '形成一句可讨论、可拒绝的具体请求。',
+      XiangjiGoalInterest.wellbeing => '完成一次恢复动作并记录前后变化。',
+      XiangjiGoalInterest.explore => '新增一个选项、一条支持和一条限制。',
+    };
+  }
+
+  static String _reviewEvidenceRule(XiangjiGoalInterest interest) =>
+      '保留${_output(interest, 0)}，或写下一条阻止它发生的现实条件。';
 
   List<XiangjiGoalPlanRoute> _localRoutes({
     required String need,
@@ -1013,6 +1496,17 @@ theory_applications 只能使用该路径 allowed_evidence 的 evidence_id，并
 不得用羞耻、威胁、敌人刺激、损失恐惧、打卡惩罚或制造依赖来促进行动。
 输出结构：
 {"situation_summary":"","blind_spot_question":"","routes":[{"id":"","mentor_id":"","title":"","understanding":"","blind_spot":"","action":"","success_signal":"","output":"","why_it_works":"","theory_applications":[{"evidence_id":"","case_application":"","why_this_action":""}]}]}
+''';
+
+  static const String _roundReviewSystemPrompt = '''
+你是“向己·智能目标导师”的现实复盘器。只输出 JSON。
+只能使用输入中的现实事实、local_review 与 allowed_theory；不得发明用户经历、思想家、概念、引文或来源。
+decision 必须沿用 local_review 的决定；你的任务是把事实与上轮预期对照，提炼一条可验证经验，并把下一步改写得更贴近情境。
+next_action 必须包含明确分钟数、只做一件事、可停止；next_minimum_done 与 next_evidence_rule 必须可观察。
+evidence_id 必须等于 allowed_theory.evidence_id，并解释该概念怎样改变本案例判断、为什么推出下一步。
+不得诊断、羞辱、威胁、利用恐惧或创伤、制造依赖，也不得把未行动解释为意志薄弱。
+输出结构：
+{"evidence_id":"","reality_comparison":"","learning":"","decision_reason":"","next_action":"","next_minimum_done":"","next_evidence_rule":"","case_application":"","why_this_action":""}
 ''';
 
   static const String _assistantSystemPrompt = '''

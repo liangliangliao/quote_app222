@@ -5,6 +5,7 @@ import 'package:quote_app/xiangji_goal_mentor/xiangji_goal_examples.dart';
 import 'package:quote_app/xiangji_goal_mentor/xiangji_goal_intelligence_service.dart';
 import 'package:quote_app/xiangji_goal_mentor/xiangji_grounded_ai_service.dart';
 import 'package:quote_app/xiangji_goal_mentor/xiangji_knowledge_repository.dart';
+import 'package:quote_app/xiangji_goal_mentor/xiangji_models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -220,6 +221,145 @@ void main() {
     expect(now.text, contains(route.draft.step.minimumDone));
     expect(blocked.text, contains('不要评价自己'));
     expect(blocked.text, contains(route.draft.step.smallerVariant));
+  });
+
+  test('reality review converts a blocked fact into a grounded next step',
+      () async {
+    final service = XiangjiGoalIntelligenceService();
+    final bundle = await service.generate(
+      need: '我想恢复写作。',
+      desiredOutcome: '留下三次草稿。',
+      obstacle: '早晨总被工作消息打断。',
+      profile: const XiangjiGoalSupportProfile(
+        interest: XiangjiGoalInterest.create,
+        tone: XiangjiSupportTone.gentle,
+        minutes: 5,
+      ),
+      catalog: catalog,
+      allowAi: false,
+    );
+    final route = bundle.routes.first;
+    final goal = XiangjiGoal(
+      id: 9,
+      versionId: 3,
+      state: XiangjiGoalState.active,
+      isActive: true,
+      originalText: route.draft.originalText,
+      whyText: route.draft.whyText,
+      higherValues: route.draft.higherValues,
+      successDefinition: route.draft.successDefinition,
+      scopeText: route.draft.scopeText,
+      primaryThinkerId: route.mentorId,
+      currentNodeId: route.draft.guidance.mechanismId,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    );
+    final review = await service.reviewRound(
+      goal: goal,
+      step: route.draft.step,
+      result: XiangjiCheckinResult.blocked,
+      realityFacts: '早上临时会议占用了时间，文件也没有同步到手机。',
+      profile: const XiangjiGoalSupportProfile(
+        interest: XiangjiGoalInterest.create,
+        tone: XiangjiSupportTone.gentle,
+        minutes: 5,
+      ),
+      guidance: route.draft.guidance,
+      allowAi: false,
+    );
+
+    expect(review.decision, XiangjiCalibrationResult.changeMethod);
+    expect(review.realityComparison, contains('现实条件'));
+    expect(review.learning, isNot(contains('意志')));
+    expect(review.nextStep.actionText, contains('5 分钟'));
+    expect(review.theory.evidenceId, isNotEmpty);
+    expect(review.theory.locator, isNotEmpty);
+    expect(review.receipt.status, 'local_round_review');
+    expect(
+      XiangjiGoalRoundReview.fromJson(review.toJson()).realityFacts,
+      review.realityFacts,
+    );
+  });
+
+  test('round review uses valid AI but keeps the knowledge id and decision',
+      () async {
+    final planning = XiangjiGoalIntelligenceService();
+    final bundle = await planning.generate(
+      need: '我想完成一个求职作品。',
+      desiredOutcome: '',
+      obstacle: '',
+      profile: const XiangjiGoalSupportProfile(
+        interest: XiangjiGoalInterest.career,
+        tone: XiangjiSupportTone.practical,
+        minutes: 10,
+      ),
+      catalog: catalog,
+      allowAi: false,
+    );
+    final route = bundle.routes.first;
+    var captured = '';
+    final service = XiangjiGoalIntelligenceService(
+      generator: ({
+        required String systemPrompt,
+        required String prompt,
+        String? forcedProvider,
+      }) async {
+        captured = prompt;
+        final input = jsonDecode(prompt) as Map<String, dynamic>;
+        final allowed = input['allowed_theory'] as Map<String, dynamic>;
+        return XiangjiGeneratedText(
+          text: jsonEncode(<String, Object?>{
+            'evidence_id': allowed['evidence_id'],
+            'reality_comparison': '已经产出草稿，但真实反馈表明案例说明仍不清楚。',
+            'learning': '先让真实读者指出一个不清楚处，比继续独自润色更能产生新事实。',
+            'decision_reason': '方向得到支持，下一轮只增加一次真实反馈。',
+            'next_action': '用 10 分钟把草稿发给一位真实读者，只问一个最不清楚的问题。',
+            'next_minimum_done': '发出一条只含一个问题的具体请求。',
+            'next_evidence_rule': '保留发送记录或一条真实回复。',
+            'case_application': '把作品完善从独自想象改成一次真实读者检验。',
+            'why_this_action': '真实反馈能修正下一轮内容，而不是增加抽象自我评价。',
+          }),
+          provider: 'openai',
+          modelLabel: '测试复盘模型',
+        );
+      },
+    );
+    final goal = XiangjiGoal(
+      id: 4,
+      versionId: 2,
+      state: XiangjiGoalState.active,
+      isActive: true,
+      originalText: route.draft.originalText,
+      whyText: route.draft.whyText,
+      higherValues: route.draft.higherValues,
+      successDefinition: route.draft.successDefinition,
+      scopeText: route.draft.scopeText,
+      primaryThinkerId: route.mentorId,
+      currentNodeId: route.draft.guidance.mechanismId,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    );
+    final review = await service.reviewRound(
+      goal: goal,
+      step: route.draft.step,
+      result: XiangjiCheckinResult.completed,
+      realityFacts: '完成了草稿，请勿发送给 me@example.com。',
+      profile: const XiangjiGoalSupportProfile(
+        interest: XiangjiGoalInterest.career,
+        tone: XiangjiSupportTone.practical,
+        minutes: 10,
+      ),
+      guidance: route.draft.guidance,
+      allowAi: true,
+    );
+
+    expect(captured, isNot(contains('me@example.com')));
+    expect(captured, contains('[邮箱已隐藏]'));
+    expect(review.receipt.aiUsed, isTrue);
+    expect(review.receipt.model, '测试复盘模型');
+    expect(review.decision, XiangjiCalibrationResult.continueGoal);
+    expect(review.theory.evidenceId, route.applications.first.evidenceId);
+    expect(review.nextStep.actionText, contains('10 分钟'));
   });
 
   test('built-in examples preserve seven-day reality and revision traces', () {
