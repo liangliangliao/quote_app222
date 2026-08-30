@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'xiangji_method_catalog.dart';
+
 /// Domain language is stored as stable English keys. The military wording is
 /// a presentation choice only, so it can be replaced by ordinary-language UI
 /// without migrating persisted records.
@@ -855,108 +857,25 @@ class XiangjiMethodEvent {
   final bool userVisible;
   final int createdAtMs;
 
-  String get methodLabel => switch (methodId) {
-        'MEC-001' => '发生了什么 / 这意味着什么',
-        'MEC-002' => '感觉是真的，外部原因仍需验证',
-        'MEC-003' => '竞争原因与最小区分实验',
-        'MEC-004' => '这次与过去的决定性差异',
-        'MEC-005' => '先保留尚未命名的体验',
-        'MEC-006' => '概念解释了什么、遗漏了什么',
-        'MEC-007' => '判断的泉水与水渠',
-        'MEC-008' => '完整不等于可靠',
-        'MEC-009' => '现实正在挑战旧解释',
-        'MEC-010' => '你真正要实现的是什么',
-        'MEC-011' => '当前最大差距',
-        'MEC-012' => '先解决哪一步、为什么有效',
-        'MEC-013' => '预测与现实对账',
-        'MEC-014' => '定位哪一步需要重新算',
-        _ => methodId,
-      };
+  XiangjiMethodKnowledge get knowledge => XiangjiMethodCatalog.forId(methodId);
 
-  String get methodTradition => switch (methodId) {
-        'MEC-001' ||
-        'MEC-002' ||
-        'MEC-003' ||
-        'MEC-004' ||
-        'MEC-005' ||
-        'MEC-006' ||
-        'MEC-007' ||
-        'MEC-008' ||
-        'MEC-009' ||
-        'MEC-010' => '叔本华认识方法',
-        _ => '叔本华认识纪律 × 持续求解',
-      };
+  /// Exact Rev.5.2 capability name. This is intentionally distinct from the
+  /// original concept and from the user-facing effect of this specific turn.
+  String get capabilityName => knowledge.displayName;
 
-  String get schopenhauerConcept => switch (methodId) {
-        'MEC-001' => '直观经验先于抽象解释',
-        'MEC-002' => '感觉与外部因果不可混同',
-        'MEC-003' => '知性按因果律追问原因',
-        'MEC-004' => '判断力比较具体情形的同与异',
-        'MEC-005' => '直观内容不必被概念强行吞没',
-        'MEC-006' => '概念如镶嵌画，直观如连续绘画',
-        'MEC-007' => '认识根据的“泉水—水渠”',
-        'MEC-008' => '系统性不等于确定性，证明不等于根据',
-        'MEC-009' => '抽象概念必须接受直观现实纠错',
-        'MEC-010' => '理性负责抽象计划，不替人决定终极价值',
-        'MEC-011' => '从现实表象到目的的差距比较',
-        'MEC-012' => '理性的目的—手段链必须回到现实条件',
-        'MEC-013' => '让直观现实验算抽象预测',
-        'MEC-014' => '错误发生后回溯概念、判断与根据',
-        _ => '现实优先的可修订认识',
-      };
+  String get methodLabel => knowledge.displayName;
+  String get methodTradition => knowledge.domain;
 
-  String get philosophyPrinciple => switch (methodId) {
-        'MEC-001' =>
-          '先保留亲历的事实与感受，再把“它意味着什么”作为可修订解释。抽象解释不能越过现实材料直接支配决定。',
-        'MEC-002' =>
-          '感觉本身是内在经验的事实，但它所指向的外部原因仍需独立根据。军师因此把外部解释降为候选原因。',
-        'MEC-003' =>
-          '知性会从结果追问原因，但第一个顺手的解释不等于真实原因。军师必须提出机制不同、能被现实区分的竞争原因。',
-        'MEC-004' =>
-          '判断力不是机械套用旧标签，而是比较具体案例的相同点、差异和哪项差异真正影响目的。决定性差异会阻止旧办法直接复用。',
-        'MEC-005' =>
-          '直观经验比概念更丰富；暂时说不清的体验也可以先被完整保留。军师不会为了整齐而过早贴标签。',
-        'MEC-006' =>
-          '抽象概念像镶嵌画，会压缩连续而细密的现实。军师检查概念解释了什么、遗漏了什么，并用反例收缩它的边界。',
-        'MEC-007' =>
-          '间接判断像水渠，最终必须能回到直接事实、体验或可靠记录这眼“泉水”。根据弱时，行动承诺必须降低。',
-        'MEC-008' =>
-          '模型越完整、推理越长，并不会自动增加真实性。逻辑结构和前提是否有现实根据必须分别审查。',
-        'MEC-009' =>
-          '当预测与现实冲突时，应先修订抽象概念和旧解释，而不是责怪现实。受影响的差距与办法也要一并重算。',
-        'MEC-010' =>
-          '理性能安排目的与手段，但“什么值得追求”仍属于用户的人生主权。军师审查把路径、证明冲动或沉没成本误当目标的情况。',
-        'MEC-011' =>
-          '抽象目标只有与当前可观察现实比较，才会形成可求解的差距。军师优先选择最影响目标且当前可改变的那一项。',
-        'MEC-012' =>
-          '计划必须说明手段通过什么机制缩小哪项差距，并检查生效前提。前提不成立时，先把前提变成新的小目标。',
-        'MEC-013' =>
-          '行动前先写下可被反驳的预测，行动后让现实作最终验算。结果出现后不能倒改原预测来维护旧解释。',
-        'MEC-014' =>
-          '现实反驳不是笼统的“失败”，而是定位哪一层最早失效。军师从执行、办法、前提一路回溯到概念与事实。',
-        _ => '当前判断只是一份可修订模型，现实结果拥有最终纠正权。',
-      };
-
-  String get transferQuestion => switch (methodId) {
-        'MEC-001' => '下次可问：我直接经历或观察到什么？哪些只是我对它的解释？',
-        'MEC-002' => '下次可问：这个感觉本身告诉了我什么，关于外部原因还缺什么根据？',
-        'MEC-003' => '下次可问：还有哪种机制也会造成同一结果？什么观察能区分它们？',
-        'MEC-004' => '下次可问：这次与过去最关键的差异是什么，它会改变哪一步？',
-        'MEC-005' => '下次可问：如果先不命名，我还能具体描述哪些身体、情境和变化？',
-        'MEC-006' => '下次可问：这个标签解释了哪些例子，又遗漏或解释不了哪些反例？',
-        'MEC-007' => '下次可问：这个判断最后能沿哪条链回到直接现实根据？',
-        'MEC-008' => '下次可问：结构完整之外，最弱前提凭什么是真的？',
-        'MEC-009' => '下次可问：如果现实不符合旧解释，我应先修订哪个概念或假设？',
-        'MEC-010' => '下次可问：这是我真正珍视的结果，还是一条路径、证明或沉没成本？',
-        'MEC-011' => '下次可问：目标与当前现实之间，哪项差距最影响结果且最值得先解？',
-        'MEC-012' => '下次可问：这个办法靠什么机制起效，前提真的具备吗？',
-        'MEC-013' => '下次可问：行动前我愿意预先写下什么可观察结果来检验它？',
-        'MEC-014' => '下次可问：最早出错的是执行、办法、前提、目标，还是更前面的判断？',
-        _ => '下次可问：什么现实会支持或推翻当前理解？',
-      };
-
-  String get philosophySource =>
-      '《作为意志和表象的世界》第一篇 §§1–16 的认识论内核；本产品只在当前案例中按需解释。';
+  /// Backwards-compatible getter retained for persisted Rev.5.2 events. Some
+  /// capabilities are product solver concepts rather than Schopenhauer terms,
+  /// so callers should present this as `sourceConcept`, not as a philosopher
+  /// attribution.
+  String get schopenhauerConcept => knowledge.sourceConcept;
+  String get sourceConcept => knowledge.sourceConcept;
+  String get philosophyPrinciple => knowledge.principle;
+  String get transferQuestion => knowledge.transferQuestion;
+  String get philosophySource => knowledge.sourceLocator;
+  List<String> get relatedRuleIds => knowledge.relatedRuleIds;
 
   Map<String, Object?> toDatabaseMap() => <String, Object?>{
         'id': id,

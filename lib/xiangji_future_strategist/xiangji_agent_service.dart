@@ -7,6 +7,7 @@ import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
 import 'xiangji_database.dart';
 import 'xiangji_knowledge_router.dart';
+import 'xiangji_method_catalog.dart';
 import 'xiangji_models.dart';
 import 'xiangji_privacy_guard.dart';
 import 'xiangji_state_machine.dart';
@@ -839,8 +840,7 @@ class XiangjiAgentService {
         throw const FormatException('method_effects 每项必须是对象。');
       }
       final methodId = (raw['method_id'] ?? '').toString();
-      final number = int.tryParse(methodId.replaceFirst('MEC-', '')) ?? 0;
-      if (number < 1 || number > 14) {
+      if (!XiangjiMethodCatalog.ids.contains(methodId)) {
         throw FormatException('未知 method_id：$methodId');
       }
       for (final key in const <String>[

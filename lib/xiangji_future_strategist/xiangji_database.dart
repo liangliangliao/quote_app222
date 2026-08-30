@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
+import 'xiangji_method_catalog.dart';
 import 'xiangji_models.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
@@ -1532,6 +1533,73 @@ class XiangjiDao {
       where: 'source_id = ?',
       whereArgs: const <Object?>['XF-K0-SCHOPENHAUER'],
     );
+    await db.transaction((txn) async {
+      await txn.insert(
+        'xf_knowledge_source',
+        <String, Object?>{
+          'id': XiangjiMethodCatalog.sourceId,
+          'layer': 'K1',
+          'kind': 'product_method_catalog',
+          'title': '未来军师 Rev5.2 认识与求解方法目录',
+          'version': XiangjiMethodCatalog.version,
+          'status': 'active',
+          'content_hash': 'bundled-method-catalog-v6.1-rev5.2',
+          'sensitivity': 'normal',
+          'created_at_ms': now,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await txn.insert(
+        'xf_knowledge_document',
+        <String, Object?>{
+          'id': XiangjiMethodCatalog.documentId,
+          'source_id': XiangjiMethodCatalog.sourceId,
+          'local_uri':
+              'asset://assets/xiangji_future_strategist/signature_method_capabilities_rev5_2.json',
+          'mime': 'application/json',
+          'parse_status': 'READY',
+          'index_status': 'READY',
+          'checksum': 'bundled-method-catalog-v6.1-rev5.2',
+          'byte_size': 0,
+          'last_error': '',
+          'created_at_ms': now,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final method in XiangjiMethodCatalog.entries) {
+        await txn.insert(
+          'xf_knowledge_node',
+          <String, Object?>{
+            'id': method.id,
+            'source_id': XiangjiMethodCatalog.sourceId,
+            'layer': method.layer,
+            'node_type': method.nodeType,
+            'name': method.displayName,
+            'definition': method.principle,
+            'status': 'ACTIVE',
+            'provenance_json': jsonEncode(<String, Object?>{
+              'version': XiangjiMethodCatalog.version,
+              'english_name': method.englishName,
+              'domain': method.domain,
+              'source_concept': method.sourceConcept,
+              'source_locator': method.sourceLocator,
+              'passage_ids': method.passageIds,
+              'related_rule_ids': method.relatedRuleIds,
+              'trigger_summary': method.triggerSummary,
+              'state_effect': method.stateEffect,
+              'reality_test': method.realityTest,
+              'transfer_question': method.transferQuestion,
+              'product_contract': XiangjiMethodCatalog.productContract,
+            }),
+            'created_at_ms': now,
+            'updated_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
 
   static const List<Map<String, String>> _rev4RuleSeeds =
@@ -3056,8 +3124,7 @@ class XiangjiDao {
   }
 
   void _validateMethodEvent(XiangjiMethodEvent event, String problemId) {
-    final number = int.tryParse(event.methodId.replaceFirst('MEC-', '')) ?? 0;
-    if (number < 1 || number > 14) {
+    if (!XiangjiMethodCatalog.ids.contains(event.methodId)) {
       throw ArgumentError('MethodEvent.method_id 必须是 MEC-001..MEC-014。');
     }
     if (event.problemId.isEmpty || event.problemId != problemId) {
@@ -4642,23 +4709,46 @@ class XiangjiDao {
 
   Future<List<Map<String, Object?>>> knowledgeNodes({
     List<XiangjiKnowledgeLayer> layers = const <XiangjiKnowledgeLayer>[],
+    String sourceId = '',
     int limit = 100,
   }) async {
     final db = await _database();
-    if (layers.isEmpty) {
-      return db.query(
-        'xf_knowledge_node',
-        where: "status = 'ACTIVE'",
-        orderBy: 'layer ASC, name ASC',
-        limit: limit,
-      );
+    final clauses = <String>["status = 'ACTIVE'"];
+    final args = <Object?>[];
+    if (sourceId.trim().isNotEmpty) {
+      clauses.add('source_id = ?');
+      args.add(sourceId.trim());
     }
-    final placeholders = List<String>.filled(layers.length, '?').join(',');
+    if (layers.isNotEmpty) {
+      final placeholders = List<String>.filled(layers.length, '?').join(',');
+      clauses.add('layer IN ($placeholders)');
+      args.addAll(layers.map((layer) => layer.wire));
+    }
     return db.rawQuery('''
       SELECT * FROM xf_knowledge_node
-      WHERE status = 'ACTIVE' AND layer IN ($placeholders)
+      WHERE ${clauses.join(' AND ')}
       ORDER BY layer ASC, name ASC LIMIT ?
-    ''', <Object?>[...layers.map((layer) => layer.wire), limit]);
+    ''', <Object?>[...args, limit]);
+  }
+
+  Future<List<Map<String, Object?>>> knowledgeRules({
+    String sourceId = '',
+    bool enabledOnly = true,
+  }) async {
+    final db = await _database();
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (sourceId.trim().isNotEmpty) {
+      clauses.add('source_id = ?');
+      args.add(sourceId.trim());
+    }
+    if (enabledOnly) clauses.add('enabled = 1');
+    return db.query(
+      'xf_knowledge_rule',
+      where: clauses.isEmpty ? null : clauses.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'rule_code ASC',
+    );
   }
 
   Future<List<Map<String, Object?>>> personalRules({int limit = 30}) async {

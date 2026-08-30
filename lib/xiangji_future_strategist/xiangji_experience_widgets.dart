@@ -260,7 +260,7 @@ class XiangjiMethodEffectCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${event.methodTradition} · ${event.schopenhauerConcept}',
+              '${event.methodTradition} · ${event.capabilityName}',
               style: const TextStyle(
                 color: XiangjiPalette.pine,
                 fontSize: 12,
@@ -278,9 +278,16 @@ class XiangjiMethodEffectCard extends StatelessWidget {
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         children: [
           XiangjiLabeledValue(
-            label: '这里用了什么方法？',
-            value:
-                '${event.schopenhauerConcept}。${event.philosophyPrinciple}',
+            label: '产品方案中的方法',
+            value: event.capabilityName,
+          ),
+          XiangjiLabeledValue(
+            label: '对应的原概念 / 求解概念',
+            value: event.sourceConcept,
+          ),
+          XiangjiLabeledValue(
+            label: '这个概念在产品中意味着什么',
+            value: event.philosophyPrinciple,
           ),
           XiangjiLabeledValue(
             label: '军师在这道题里怎样使用',
@@ -325,18 +332,34 @@ class XiangjiMethodEffectCard extends StatelessWidget {
               childrenPadding: EdgeInsets.zero,
               dense: true,
               title: const Text(
-                '思想来源（按需展开）',
+                '知识来源与规范映射（按需展开）',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               children: [
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    event.philosophySource,
-                    style: const TextStyle(
-                      color: XiangjiPalette.muted,
-                      height: 1.45,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        event.philosophySource,
+                        style: const TextStyle(
+                          color: XiangjiPalette.muted,
+                          height: 1.45,
+                        ),
+                      ),
+                      if (event.relatedRuleIds.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          '关联内置规则：${event.relatedRuleIds.join(' · ')}',
+                          style: const TextStyle(
+                            color: XiangjiPalette.muted,
+                            fontSize: 12,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],

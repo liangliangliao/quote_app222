@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_method_catalog.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_signature_method_engine.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -29,6 +30,55 @@ void main() {
     expect(
       passages.every((row) => (row['locator'] ?? '').toString().isNotEmpty),
       isTrue,
+    );
+  });
+
+  test('TC-KB-REV52 seeds the complete method and rule inventory', () async {
+    final nodes = await dao.knowledgeNodes(
+      sourceId: XiangjiMethodCatalog.sourceId,
+      limit: 100,
+    );
+    final rules = await dao.knowledgeRules(sourceId: 'XF-K0-SCHOPENHAUER');
+
+    expect(nodes, hasLength(14));
+    expect(
+      nodes.map((row) => row['id']),
+      containsAll(XiangjiMethodCatalog.ids),
+    );
+    expect(
+      nodes.every(
+        (row) => (row['provenance_json'] ?? '')
+            .toString()
+            .contains('source_concept'),
+      ),
+      isTrue,
+    );
+    expect(
+      rules.where(
+        (row) => (row['rule_code'] ?? '').toString().startsWith('SCK-'),
+      ),
+      hasLength(18),
+    );
+    expect(
+      rules.where(
+        (row) => (row['rule_code'] ?? '').toString().startsWith('CEL-'),
+      ),
+      hasLength(18),
+    );
+    expect(
+      rules.where(
+        (row) => (row['rule_code'] ?? '').toString().startsWith('PS-'),
+      ),
+      hasLength(10),
+    );
+    expect(
+      rules.where((row) {
+        final code = (row['rule_code'] ?? '').toString();
+        return !code.startsWith('SCK-') &&
+            !code.startsWith('CEL-') &&
+            !code.startsWith('PS-');
+      }),
+      hasLength(17),
     );
   });
 

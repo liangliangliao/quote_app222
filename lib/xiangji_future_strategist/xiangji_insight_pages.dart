@@ -58,7 +58,7 @@ class _XiangjiEpistemicWorldPageState
         _learningMoments.isEmpty) {
       return const XiangjiEmptyState(
         title: '认识还没有发生可见变化',
-        message: '当军师用叔本华方法区分体验与解释、比较案例或被新现实修订时，这里会记录“怎样变了”。',
+        message: '当军师用内置认识与求解方法区分体验、比较案例或被新现实修订时，这里会记录“怎样变了”。',
         icon: Icons.auto_awesome_outlined,
       );
     }

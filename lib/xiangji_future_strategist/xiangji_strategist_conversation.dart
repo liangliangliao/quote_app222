@@ -650,7 +650,7 @@ class _XiangjiStrategistConversationPanelState
                     .toString(),
               ),
               const Divider(height: 28),
-              const Text('这里用了什么叔本华方法？',
+              const Text('这里用了什么认识与求解方法？',
                   style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               const Text(
@@ -849,8 +849,8 @@ class _XiangjiStrategistConversationPanelState
             if (_methodEvents.isNotEmpty) ...[
               const SizedBox(height: 14),
               XiangjiSectionCard(
-                title: '本轮叔本华方法如何改变解法',
-                subtitle: '只显示当前最影响决定的 0–3 项；展开可看概念、案例用法和迁移问题。',
+                title: '本轮认识与求解方法如何改变解法',
+                subtitle: '只显示当前最影响决定的 0–3 项；完整 14 项方法及其原概念可在“我的知识库”查看。',
                 child: Column(
                   children: [
                     for (final event in _methodEvents)

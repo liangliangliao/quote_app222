@@ -1420,8 +1420,8 @@ class _XiangjiProblemWorkspacePageState
                     if (_methodEvents.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       XiangjiSectionCard(
-                        title: '本轮叔本华方法与改判',
-                        subtitle: '只显示当前最相关的 0–3 项；展开可看对应概念、案例用法、状态影响与现实检验。',
+                        title: '本轮认识与求解方法及改判',
+                        subtitle: '只显示当前最相关的 0–3 项；完整 14 项方法、原概念和规则映射在“我的知识库”中保留。',
                         child: Column(
                           children: [
                             for (final event in _methodEvents)

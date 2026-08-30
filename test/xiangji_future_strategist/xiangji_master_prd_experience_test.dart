@@ -131,9 +131,11 @@ void main() {
     await tester.tap(find.textContaining('军师改判'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('叔本华认识纪律'), findsOneWidget);
-    expect(find.textContaining('从现实表象到目的的差距比较'), findsWidgets);
-    expect(find.text('这里用了什么方法？'), findsOneWidget);
+    expect(find.textContaining('持续问题求解'), findsOneWidget);
+    expect(find.textContaining('七维差距雷达'), findsWidgets);
+    expect(find.text('产品方案中的方法'), findsOneWidget);
+    expect(find.text('对应的原概念 / 求解概念'), findsOneWidget);
+    expect(find.text('这个概念在产品中意味着什么'), findsOneWidget);
     expect(find.text('军师在这道题里怎样使用'), findsOneWidget);
     expect(find.text('下次可以迁移的问题'), findsOneWidget);
     expect(find.text('什么现实或线索触发了它'), findsOneWidget);
@@ -145,6 +147,7 @@ void main() {
     expect(find.textContaining('S0'), findsNothing);
     expect(find.textContaining('KeyGap'), findsNothing);
     expect(find.textContaining('Operator'), findsNothing);
+    expect(find.textContaining('叔本华认识纪律'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
