@@ -2454,7 +2454,36 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
             childrenPadding: EdgeInsets.zero,
             title: const Text('深入理解或更换思想路径', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
             children: <Widget>[
-              Text(guidance.coreJudgment, style: const TextStyle(height: 1.5)),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: XiangjiZoomMode.values
+                      .map(
+                        (mode) => Padding(
+                          padding: const EdgeInsets.only(right: 7),
+                          child: ChoiceChip(
+                            selected: mode == _zoomMode,
+                            onSelected: (_) => _changeZoom(mode),
+                            label: Text(mode.label),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ),
+              const SizedBox(height: 10),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Text(
+                  guidance.textFor(_zoomMode),
+                  key: ValueKey<XiangjiZoomMode>(_zoomMode),
+                  style: const TextStyle(height: 1.5),
+                ),
+              ),
+              if (_zoomMode == XiangjiZoomMode.evidence) ...<Widget>[
+                const SizedBox(height: 10),
+                ...guidance.sources.map(_buildSourceTile),
+              ],
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -3167,82 +3196,6 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMentorCard(XiangjiGuidance guidance) {
-    return _SectionCard(
-      color: _sage,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('当前主要导师 · 一次只显示一位', style: TextStyle(color: _moss, fontSize: 12, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 5),
-          Text(guidance.mentorName, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: _ink)),
-          const SizedBox(height: 4),
-          const Text('这是当前最匹配的一个视角，不代表唯一正确答案。', style: TextStyle(fontSize: 12, color: Colors.black54)),
-          const SizedBox(height: 12),
-          const _ContentTypeLabel(text: '根据本地知识库转述'),
-          const SizedBox(height: 7),
-          Text(guidance.coreJudgment, style: const TextStyle(fontSize: 16, height: 1.5, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 12),
-          Text(guidance.selectionReason, style: const TextStyle(height: 1.45)),
-          const SizedBox(height: 8),
-          Text('理论边界：${guidance.boundaryNote}', style: const TextStyle(fontSize: 12, color: Colors.black54, height: 1.45)),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              OutlinedButton.icon(
-                onPressed: _openMentorSetting,
-                icon: const Icon(Icons.route_outlined),
-                label: const Text('8 步目标设定'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _openMentorKnowledge,
-                icon: const Icon(Icons.account_tree_outlined),
-                label: const Text('导师知识与更换'),
-              ),
-            ],
-          ),
-          const Divider(height: 26),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: XiangjiZoomMode.values
-                  .map(
-                    (mode) => Padding(
-                      padding: const EdgeInsets.only(right: 7),
-                      child: ChoiceChip(
-                        selected: mode == _zoomMode,
-                        onSelected: (_) => _changeZoom(mode),
-                        label: Text(mode.label),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          const SizedBox(height: 14),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: Text(
-              guidance.textFor(_zoomMode),
-              key: ValueKey<XiangjiZoomMode>(_zoomMode),
-              style: const TextStyle(height: 1.55),
-            ),
-          ),
-          if (_zoomMode == XiangjiZoomMode.action) ...<Widget>[
-            const SizedBox(height: 8),
-            const _ContentTypeLabel(text: '知识库应用推导'),
-          ],
-          if (_zoomMode == XiangjiZoomMode.evidence) ...<Widget>[
-            const SizedBox(height: 12),
-            ...guidance.sources.map(_buildSourceTile),
-          ],
         ],
       ),
     );
