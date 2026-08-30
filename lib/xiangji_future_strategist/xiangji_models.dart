@@ -876,6 +876,8 @@ class XiangjiMethodEvent {
   String get transferQuestion => knowledge.transferQuestion;
   String get philosophySource => knowledge.sourceLocator;
   List<String> get relatedRuleIds => knowledge.relatedRuleIds;
+  List<String> get coreConceptIds => knowledge.coreConceptIds;
+  List<String> get coreConceptNames => knowledge.coreConceptNames;
 
   Map<String, Object?> toDatabaseMap() => <String, Object?>{
         'id': id,
@@ -901,6 +903,8 @@ class XiangjiMethodEvent {
   Map<String, Object?> toPromptMap() => <String, Object?>{
         'method_event_id': id,
         'method_id': methodId,
+        'l0_core_concept_ids': coreConceptIds,
+        'l0_core_concept_names': coreConceptNames,
         'problem_id': problemId,
         'state_version': stateVersion,
         'trigger': trigger,

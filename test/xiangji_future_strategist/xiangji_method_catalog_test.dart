@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_method_catalog.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_schopenhauer_core_catalog.dart';
 
 void main() {
   test('Rev5.2 catalog preserves all 14 distinct product concepts', () {
@@ -21,6 +22,12 @@ void main() {
       expect(entry.realityTest, isNotEmpty, reason: entry.id);
       expect(entry.sourceLocator, isNotEmpty, reason: entry.id);
       expect(entry.relatedRuleIds, isNotEmpty, reason: entry.id);
+      expect(entry.coreConceptIds, isNotEmpty, reason: entry.id);
+      expect(
+        entry.coreConceptIds,
+        everyElement(isIn(XiangjiSchopenhauerCoreCatalog.ids)),
+        reason: entry.id,
+      );
     }
   });
 
@@ -60,6 +67,7 @@ void main() {
       expect(item['source_concept'], entry.sourceConcept, reason: entry.id);
       expect(item['source_locator'], entry.sourceLocator, reason: entry.id);
       expect(item['related_rules'], entry.relatedRuleIds, reason: entry.id);
+      expect(item['core_concepts'], entry.coreConceptIds, reason: entry.id);
     }
   });
 }

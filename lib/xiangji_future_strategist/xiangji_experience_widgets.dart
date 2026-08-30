@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'xiangji_models.dart';
 import 'xiangji_rev3_models.dart';
+import 'xiangji_schopenhauer_core_catalog.dart';
 import 'xiangji_ui_support.dart';
 
 /// The single user-facing means-ends chain required by the Rev.5.2 Master PRD.
@@ -228,6 +229,53 @@ class XiangjiAiContributionCard extends StatelessWidget {
   }
 }
 
+/// The frozen epistemic architecture from the V5 product proposal.
+///
+/// Keeping this as a shared widget ensures the knowledge center and the user's
+/// own epistemic world present the same concepts instead of two parallel
+/// vocabularies.
+class XiangjiEpistemicArchitectureCard extends StatelessWidget {
+  const XiangjiEpistemicArchitectureCard({
+    super.key,
+    this.showLayerMap = true,
+  });
+
+  final bool showLayerMap;
+
+  @override
+  Widget build(BuildContext context) {
+    return XiangjiSectionCard(
+      title: '叔本华 L0：军师怎样认识与修正',
+      subtitle: showLayerMap
+          ? '这是所有 AI、求解器和行动方法都必须遵守的认识论内核，不是可有可无的哲学说明。'
+          : '所有判断先回到现实根据，行动后再由现实修订。',
+      icon: Icons.account_balance_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            XiangjiSchopenhauerCoreCatalog.frozenArchitecture,
+            style: TextStyle(fontWeight: FontWeight.w700, height: 1.5),
+          ),
+          if (showLayerMap) ...[
+            const SizedBox(height: 8),
+            const Text(
+              '经验世界保存实际发生；抽象世界保存概念、判断与计划；认识根据决定两者能否合法相连；行动后的新现实拥有最终修订权。',
+              style: TextStyle(color: XiangjiPalette.muted, height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            for (final layer in XiangjiSchopenhauerCoreCatalog.layerArchitecture)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text('• $layer', style: const TextStyle(height: 1.4)),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Contextual method feedback from the Rev.5.2 experience contract.
 ///
 /// It exposes the trigger and the user-relevant before/after change, while
@@ -284,6 +332,10 @@ class XiangjiMethodEffectCard extends StatelessWidget {
           XiangjiLabeledValue(
             label: '对应的原概念 / 求解概念',
             value: event.sourceConcept,
+          ),
+          XiangjiLabeledValue(
+            label: '本轮受哪些叔本华 L0 原则约束',
+            value: event.coreConceptNames.join('；'),
           ),
           XiangjiLabeledValue(
             label: '这个概念在产品中意味着什么',

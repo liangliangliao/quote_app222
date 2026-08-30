@@ -45,6 +45,8 @@ class _XiangjiEpistemicWorldPageState
   List<Map<String, Object?>> _learningMoments =
       const <Map<String, Object?>>[];
   List<XiangjiMethodEvent> _methodEvents = const <XiangjiMethodEvent>[];
+  List<XiangjiSolverSnapshot> _solverSnapshots =
+      const <XiangjiSolverSnapshot>[];
 
   @override
   void initState() {
@@ -125,17 +127,17 @@ class _XiangjiEpistemicWorldPageState
   }
 
   Widget _experienceInterpretationRows() {
-    if (_experiences.isEmpty && _claims.isEmpty && _debts.isEmpty) {
+    if (_experiences.isEmpty) {
       return const XiangjiEmptyState(
-        title: '暂无经验与解释',
-        message: '用户原话、真实体验与当前解释会分层出现，解释不会伪装成外部事实。',
+        title: '经验世界 I 还没有记录',
+        message: '实际事件、用户原话、身体体验与现实结果会保留在这里，不与解释和判断混写。',
         icon: Icons.visibility_outlined,
       );
     }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('实际发生 / 真实体验',
+        const Text('经验世界 I：实际发生 / 真实体验',
             style: TextStyle(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         for (final row in _experiences)
@@ -146,21 +148,44 @@ class _XiangjiEpistemicWorldPageState
                 ? '按你的原话保留'
                 : '从原话中提取，仍可由你纠正',
           ),
-        const SizedBox(height: 12),
-        const Text('用户解释 / 军师当前判断',
-            style: TextStyle(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        for (final row in _claims)
-          _plainTile(
-            icon: Icons.psychology_alt_outlined,
-            title: (row['text'] ?? '').toString(),
-            subtitle:
-                '${_claimKind((row['claim_type'] ?? '').toString())} · ${_epistemicLabel((row['epistemic_status'] ?? '').toString())}',
+      ],
+    );
+  }
+
+  Widget _conceptBoundaryRows() {
+    if (_concepts.isEmpty &&
+        _claims.isEmpty &&
+        _debts.isEmpty &&
+        _solverSnapshots.isEmpty) {
+      return const XiangjiEmptyState(
+        title: '抽象反思世界 C 还没有内容',
+        message: '解释、判断、假设、概念、目标和计划会在这里标明身份，并沿认识根据回到经验世界 I。',
+        icon: Icons.category_outlined,
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (_claims.isNotEmpty) ...[
+          const Text(
+            '抽象世界 C：解释 / 判断 / 假设',
+            style: TextStyle(fontWeight: FontWeight.w800),
           ),
+          const SizedBox(height: 8),
+          for (final row in _claims)
+            _plainTile(
+              icon: Icons.psychology_alt_outlined,
+              title: (row['text'] ?? '').toString(),
+              subtitle:
+                  '${_claimKind((row['claim_type'] ?? '').toString())} · ${_epistemicLabel((row['epistemic_status'] ?? '').toString())}',
+            ),
+        ],
         if (_debts.isNotEmpty) ...[
           const SizedBox(height: 12),
-          const Text('仍会改变判断的未知',
-              style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text(
+            '认识债务：仍会改变判断的未知',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           for (final row in _debts)
             _plainTile(
@@ -170,21 +195,14 @@ class _XiangjiEpistemicWorldPageState
                   '${_impactLabel((row['decision_impact'] ?? '').toString())}；需要补清：${row['grounding_gap'] ?? ''}',
             ),
         ],
-      ],
-    );
-  }
-
-  Widget _conceptBoundaryRows() {
-    if (_concepts.isEmpty) {
-      return const XiangjiEmptyState(
-        title: '暂无需要审查的个人概念',
-        message: '概念会连回具体实例、反例、适用边界与仍未解释的细节，不会成为关于你的永久标签。',
-        icon: Icons.category_outlined,
-      );
-    }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+        if (_concepts.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text(
+            '个人概念：实例、反例与适用边界',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+        ],
         for (final row in _concepts)
           Card(
             elevation: 0,
@@ -224,9 +242,75 @@ class _XiangjiEpistemicWorldPageState
               ],
             ),
           ),
+        if (_solverSnapshots.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text(
+            '目标、差距、行动与预测：用于求解的抽象模型',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '它们属于世界 C，会随新的经验世界 I′ 更新，不是已经发生的现实。',
+            style: TextStyle(color: XiangjiPalette.muted, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          for (final snapshot in _solverSnapshots)
+            _solverAbstractionCard(snapshot),
+        ],
       ],
     );
   }
+
+  Widget _solverAbstractionCard(XiangjiSolverSnapshot snapshot) => Card(
+        elevation: 0,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ExpansionTile(
+          leading: const Icon(Icons.account_tree_outlined),
+          title: Text(
+            snapshot.need.trim().isEmpty ? '持续问题' : snapshot.need,
+          ),
+          subtitle: Text('可修订求解模型 · 第 ${snapshot.stateVersion} 版'),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            XiangjiLabeledValue(
+              label: '目标与可观察判据',
+              value: snapshot.goalSummary,
+            ),
+            XiangjiLabeledValue(
+              label: '当前关键差距',
+              value: snapshot.keyGapSummary,
+            ),
+            XiangjiLabeledValue(
+              label: '当前小步',
+              value: snapshot.activeSubgoalSummary,
+            ),
+            XiangjiLabeledValue(
+              label: '计划行动',
+              value: snapshot.activeOperatorSummary,
+            ),
+            XiangjiLabeledValue(
+              label: '等待现实验算的预测',
+              value: snapshot.predictionSummary,
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => XiangjiProblemWorkspacePage(
+                      problemId: snapshot.problemId,
+                      repository: widget.repository,
+                      dao: widget.dao,
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('打开对应军师解题台'),
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _realityConflictRows() {
     if (_conflicts.isEmpty && _learningMoments.isEmpty) {
@@ -308,6 +392,7 @@ class _XiangjiEpistemicWorldPageState
         widget.dao.conceptRealityConflicts(limit: 300),
         widget.dao.learningMoments(limit: 300),
         widget.dao.methodEvents(userVisibleOnly: true, limit: 100),
+        widget.dao.solverSnapshots(limit: 100),
       ]);
       if (!mounted) return;
       setState(() {
@@ -320,6 +405,7 @@ class _XiangjiEpistemicWorldPageState
         _conflicts = values[5] as List<Map<String, Object?>>;
         _learningMoments = values[6] as List<Map<String, Object?>>;
         _methodEvents = values[7] as List<XiangjiMethodEvent>;
+        _solverSnapshots = values[8] as List<XiangjiSolverSnapshot>;
         _loading = false;
       });
     } catch (error) {
@@ -342,9 +428,9 @@ class _XiangjiEpistemicWorldPageState
             isScrollable: true,
             tabs: [
               Tab(text: '认识变化'),
-              Tab(text: '经验与解释'),
-              Tab(text: '概念边界'),
-              Tab(text: '现实冲突'),
+              Tab(text: '经验世界 I'),
+              Tab(text: '概念世界 C'),
+              Tab(text: '现实验算'),
             ],
           ),
           actions: [
@@ -353,12 +439,24 @@ class _XiangjiEpistemicWorldPageState
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
+            : Column(
                 children: [
-                  _cognitiveChangeRows(),
-                  _experienceInterpretationRows(),
-                  _conceptBoundaryRows(),
-                  _realityConflictRows(),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+                    child: XiangjiEpistemicArchitectureCard(
+                      showLayerMap: false,
+                    ),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _cognitiveChangeRows(),
+                        _experienceInterpretationRows(),
+                        _conceptBoundaryRows(),
+                        _realityConflictRows(),
+                      ],
+                    ),
+                  ),
                 ],
               ),
       ),

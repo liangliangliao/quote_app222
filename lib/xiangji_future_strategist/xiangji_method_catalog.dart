@@ -1,3 +1,5 @@
+import 'xiangji_schopenhauer_core_catalog.dart';
+
 /// Canonical Rev.5.2 method knowledge used by runtime routing, persistence and
 /// every user-facing concept label.
 ///
@@ -22,6 +24,7 @@ class XiangjiMethodKnowledge {
     required this.sourceLocator,
     required this.passageIds,
     required this.relatedRuleIds,
+    required this.coreConceptIds,
   });
 
   final String id;
@@ -38,6 +41,7 @@ class XiangjiMethodKnowledge {
   final String sourceLocator;
   final List<String> passageIds;
   final List<String> relatedRuleIds;
+  final List<String> coreConceptIds;
 
   String get nodeType => layer == 'K1'
       ? 'signature_epistemic_method'
@@ -45,8 +49,13 @@ class XiangjiMethodKnowledge {
 
   List<String> get sourceRefs => <String>[
         'product:$id',
+        ...coreConceptIds.map((id) => 'core:$id'),
         ...passageIds,
       ];
+
+  List<String> get coreConceptNames => XiangjiSchopenhauerCoreCatalog.forIds(
+        coreConceptIds,
+      ).map((concept) => concept.displayName).toList(growable: false);
 }
 
 class XiangjiMethodCatalog {
@@ -81,6 +90,13 @@ class XiangjiMethodCatalog {
         'CEL-002',
         'CEL-003',
       ],
+      coreConceptIds: <String>[
+        'SC-K0-001',
+        'SC-K0-002',
+        'SC-K0-003',
+        'SC-K0-004',
+        'SC-K0-017',
+      ],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-002',
@@ -102,6 +118,7 @@ class XiangjiMethodCatalog {
         'SCK-012',
         'CEL-002',
       ],
+      coreConceptIds: <String>['SC-K0-014', 'SC-K0-015'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-003',
@@ -119,6 +136,7 @@ class XiangjiMethodCatalog {
       sourceLocator: '《作为意志和表象的世界》第一篇知性与判断力相关论述；Master PRD MEC-003',
       passageIds: <String>['XF-K0-PASSAGE-JUDGMENT'],
       relatedRuleIds: <String>['SCK-004', 'CEL-004', 'PS-018'],
+      coreConceptIds: <String>['SC-K0-015', 'SC-K0-016'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-004',
@@ -141,6 +159,7 @@ class XiangjiMethodCatalog {
         'CEL-005',
         'PS-019',
       ],
+      coreConceptIds: <String>['SC-K0-011', 'SC-K0-012'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-005',
@@ -158,6 +177,7 @@ class XiangjiMethodCatalog {
       sourceLocator: '《作为意志和表象的世界》第一篇 §9；Master PRD MEC-005',
       passageIds: <String>['XF-K0-PASSAGE-09'],
       relatedRuleIds: <String>['SCK-012', 'CEL-008'],
+      coreConceptIds: <String>['SC-K0-004', 'SC-K0-013'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-006',
@@ -180,6 +200,11 @@ class XiangjiMethodCatalog {
         'SCK-013',
         'CEL-007',
       ],
+      coreConceptIds: <String>[
+        'SC-K0-003',
+        'SC-K0-010',
+        'SC-K0-012',
+      ],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-007',
@@ -201,6 +226,13 @@ class XiangjiMethodCatalog {
         'K0-RULE-006',
         'SCK-007',
         'CEL-006',
+      ],
+      coreConceptIds: <String>[
+        'SC-K0-005',
+        'SC-K0-006',
+        'SC-K0-007',
+        'SC-K0-008',
+        'SC-K0-009',
       ],
     ),
     XiangjiMethodKnowledge(
@@ -228,6 +260,7 @@ class XiangjiMethodCatalog {
         'CEL-010',
         'CEL-011',
       ],
+      coreConceptIds: <String>['SC-K0-018', 'SC-K0-019'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-009',
@@ -251,6 +284,7 @@ class XiangjiMethodCatalog {
         'CEL-009',
         'PS-021',
       ],
+      coreConceptIds: <String>['SC-K0-005', 'SC-K0-012', 'SC-K0-024'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-010',
@@ -272,6 +306,7 @@ class XiangjiMethodCatalog {
         'K0-RULE-USER',
         'SCK-016',
       ],
+      coreConceptIds: <String>['SC-K0-017', 'SC-K0-020', 'SC-K0-024'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-011',
@@ -289,6 +324,7 @@ class XiangjiMethodCatalog {
       sourceLocator: 'Master PRD MEC-011 / GapVector—KeyGap 合约',
       passageIds: <String>['XF-K0-PASSAGE-JUDGMENT'],
       relatedRuleIds: <String>['SCK-015', 'CEL-012', 'PS-020', 'PS-025'],
+      coreConceptIds: <String>['SC-K0-001', 'SC-K0-005', 'SC-K0-020'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-012',
@@ -306,6 +342,11 @@ class XiangjiMethodCatalog {
       sourceLocator: 'Master PRD MEC-012 / SubGoal—Operator—Precondition 合约',
       passageIds: <String>['XF-K0-PASSAGE-15'],
       relatedRuleIds: <String>['SCK-015', 'CEL-012', 'PS-018', 'PS-023'],
+      coreConceptIds: <String>[
+        'SC-K0-005',
+        'SC-K0-020',
+        'SC-K0-022',
+      ],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-013',
@@ -329,6 +370,7 @@ class XiangjiMethodCatalog {
         'PS-023',
         'PS-025',
       ],
+      coreConceptIds: <String>['SC-K0-021', 'SC-K0-023', 'SC-K0-024'],
     ),
     XiangjiMethodKnowledge(
       id: 'MEC-014',
@@ -346,6 +388,7 @@ class XiangjiMethodCatalog {
       sourceLocator: 'Master PRD MEC-014 / BacktrackHistory 合约',
       passageIds: <String>['XF-K0-PASSAGE-15', 'XF-K0-PASSAGE-JUDGMENT'],
       relatedRuleIds: <String>['SCK-018', 'CEL-009', 'CEL-014', 'PS-021', 'PS-025'],
+      coreConceptIds: <String>['SC-K0-005', 'SC-K0-019', 'SC-K0-023', 'SC-K0-024'],
     ),
   ];
 
@@ -371,6 +414,7 @@ class XiangjiMethodCatalog {
       sourceLocator: productContract,
       passageIds: const <String>[],
       relatedRuleIds: const <String>[],
+      coreConceptIds: const <String>['SC-K0-005', 'SC-K0-024'],
     );
   }
 }

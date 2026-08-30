@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_method_catalog.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_schopenhauer_core_catalog.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_signature_method_engine.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -34,11 +35,34 @@ void main() {
   });
 
   test('TC-KB-REV52 seeds the complete method and rule inventory', () async {
+    final coreNodes = await dao.knowledgeNodes(
+      sourceId: XiangjiSchopenhauerCoreCatalog.sourceId,
+      limit: 100,
+    );
     final nodes = await dao.knowledgeNodes(
       sourceId: XiangjiMethodCatalog.sourceId,
       limit: 100,
     );
     final rules = await dao.knowledgeRules(sourceId: 'XF-K0-SCHOPENHAUER');
+    final methodCoreEdges = await database.query(
+      'xf_knowledge_edge',
+      where: 'relation_type = ?',
+      whereArgs: const <Object?>['L0_CONSTRAINS_METHOD'],
+    );
+
+    expect(coreNodes, hasLength(24));
+    expect(
+      coreNodes.map((row) => row['id']),
+      containsAll(XiangjiSchopenhauerCoreCatalog.ids),
+    );
+    expect(
+      coreNodes.every(
+        (row) => (row['provenance_json'] ?? '')
+            .toString()
+            .contains('feature_bindings'),
+      ),
+      isTrue,
+    );
 
     expect(nodes, hasLength(14));
     expect(
@@ -52,6 +76,11 @@ void main() {
             .contains('source_concept'),
       ),
       isTrue,
+    );
+    expect(methodCoreEdges, isNotEmpty);
+    expect(
+      methodCoreEdges.map((row) => row['from_id']).toSet(),
+      containsAll(XiangjiSchopenhauerCoreCatalog.ids),
     );
     expect(
       rules.where(
@@ -298,8 +327,10 @@ void main() {
     );
 
     final snapshot = await dao.solverSnapshot('problem-method');
+    final snapshots = await dao.solverSnapshots();
     final events = await dao.methodEvents(problemId: 'problem-method');
     expect(snapshot?.currentState['interpretations_may_drive_goal'], isFalse);
+    expect(snapshots.single.problemId, 'problem-method');
     expect(events.single.methodId, 'MEC-001');
     expect(events.single.dataMutations, isNotEmpty);
     expect(events.single.stateVersion, snapshot?.stateVersion);

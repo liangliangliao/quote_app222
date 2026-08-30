@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
+import 'xiangji_schopenhauer_core_catalog.dart';
 import 'xiangji_state_machine.dart';
 
 class XiangjiKnowledgeRequest {
@@ -51,6 +54,7 @@ class XiangjiKnowledgeContext {
     required this.preflight,
     required this.currentReality,
     required this.objectClaims,
+    required this.coreConceptNodes,
     required this.personalHistory,
     required this.methodNodes,
     required this.passages,
@@ -62,6 +66,7 @@ class XiangjiKnowledgeContext {
   final XiangjiRulePreflightResult preflight;
   final List<Map<String, Object?>> currentReality;
   final List<Map<String, Object?>> objectClaims;
+  final List<Map<String, Object?>> coreConceptNodes;
   final List<Map<String, Object?>> personalHistory;
   final List<Map<String, Object?>> methodNodes;
   final List<Map<String, Object?>> passages;
@@ -80,6 +85,9 @@ class XiangjiKnowledgeContext {
             .toList(),
         'current_reality': currentReality,
         'current_object_claims': objectClaims,
+        'l0_schopenhauer_core': coreConceptNodes
+            .map(_coreConceptPromptMap)
+            .toList(growable: false),
         'k4_personal_history': personalHistory,
         'k1_k2_k3_method_nodes': methodNodes,
         'original_passages': passages,
@@ -96,6 +104,26 @@ class XiangjiKnowledgeContext {
         'retrieval_trace_id': trace.id,
         'warning': '检索结果是候选上下文，不自动成为事实或认识根据。',
       };
+
+  static Map<String, Object?> _coreConceptPromptMap(
+    Map<String, Object?> row,
+  ) {
+    Map<String, Object?> provenance = const <String, Object?>{};
+    try {
+      final decoded = jsonDecode((row['provenance_json'] ?? '{}').toString());
+      if (decoded is Map) {
+        provenance = decoded.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return <String, Object?>{
+      'id': row['id'],
+      'name': row['name'],
+      'definition': row['definition'],
+      ...provenance,
+    };
+  }
 }
 
 /// A12 Knowledge Router. Its job is context selection and traceability, not a
@@ -169,6 +197,10 @@ class XiangjiKnowledgeRouter {
       ...await _dao.personalRules(limit: 12),
       ...await _dao.candidateKnowledge(),
     ];
+    final coreConceptNodes = await _dao.knowledgeNodes(
+      sourceId: XiangjiSchopenhauerCoreCatalog.sourceId,
+      limit: XiangjiSchopenhauerCoreCatalog.entries.length,
+    );
     final methodNodes = await _dao.knowledgeNodes(
       layers: const <XiangjiKnowledgeLayer>[
         XiangjiKnowledgeLayer.k1,
@@ -209,15 +241,17 @@ class XiangjiKnowledgeRouter {
       '2.k0_rule_preflight',
       if (request.problemId.isNotEmpty || request.campaignId.isNotEmpty)
         '3.current_problem_campaign_graph',
-      '4.k4_personal_history',
-      '5.k1_k2_method_knowledge',
-      if (methodNodes.isNotEmpty) '6.k3_thinker_knowledge_if_relevant',
-      if (request.askingForOriginalSource) '7.original_source_retriever',
-      if (request.needsLargeRemoteFile) '8.provider_knowledge_client',
+      '4.l0_schopenhauer_core',
+      '5.k4_personal_history',
+      '6.k1_k2_method_knowledge',
+      if (methodNodes.isNotEmpty) '7.k3_thinker_knowledge_if_relevant',
+      if (request.askingForOriginalSource) '8.original_source_retriever',
+      if (request.needsLargeRemoteFile) '9.provider_knowledge_client',
     ];
     final sourcesUsed = <String>[
       ...reality.map((row) => (row['id'] ?? '').toString()),
       ...claims.map((row) => (row['id'] ?? '').toString()),
+      ...coreConceptNodes.map((row) => (row['id'] ?? '').toString()),
       ...personalHistory.map((row) => (row['id'] ?? '').toString()),
       ...methodNodes.map((row) => (row['id'] ?? '').toString()),
       ...passages.map((row) => (row['id'] ?? '').toString()),
@@ -249,6 +283,7 @@ class XiangjiKnowledgeRouter {
       preflight: preflight,
       currentReality: reality,
       objectClaims: claims,
+      coreConceptNodes: coreConceptNodes,
       personalHistory: personalHistory,
       methodNodes: methodNodes,
       passages: passages,
@@ -270,4 +305,3 @@ class XiangjiSourceRetriever {
   Future<List<Map<String, Object?>>> bySource(String sourceId) =>
       _dao.sourcePassages(sourceId);
 }
-

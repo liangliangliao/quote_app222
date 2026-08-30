@@ -401,7 +401,7 @@ class _XiangjiFutureStrategistHomePageState
       _XiangjiNavEntry(
         icon: Icons.hub_outlined,
         title: '我的认识世界',
-        subtitle: '直接经验、候选判断、认识债务、概念版本',
+        subtitle: '经验世界 I、抽象世界 C、认识根据与现实修订',
         open: () => _open(XiangjiEpistemicWorldPage(
           dao: _dao,
           repository: _repository,
@@ -425,7 +425,7 @@ class _XiangjiFutureStrategistHomePageState
       _XiangjiNavEntry(
         icon: Icons.library_books_outlined,
         title: '我的知识库',
-        subtitle: '原文、规则、来源、Provider 与检索追踪',
+        subtitle: '叔本华 L0 核心、求解方法、来源与个人经验科学',
         open: () => _open(XiangjiKnowledgeCenterPage(dao: _dao)),
       ),
       _XiangjiNavEntry(

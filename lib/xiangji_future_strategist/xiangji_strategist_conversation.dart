@@ -650,11 +650,11 @@ class _XiangjiStrategistConversationPanelState
                     .toString(),
               ),
               const Divider(height: 28),
-              const Text('这里用了什么认识与求解方法？',
+              const Text('叔本华 L0 内核与求解方法怎样影响了这轮？',
                   style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               const Text(
-                '只解释本轮真正改变或检查了解法的方法；不是独立课程，也不是哲学装饰。',
+                '只解释本轮真正改变或检查了解法的 0–3 项能力，并明确它们受哪些 L0 认识原则约束；理论不是装饰，也不会代替现实。',
                 style: TextStyle(
                   color: XiangjiPalette.muted,
                   height: 1.45,
@@ -849,8 +849,8 @@ class _XiangjiStrategistConversationPanelState
             if (_methodEvents.isNotEmpty) ...[
               const SizedBox(height: 14),
               XiangjiSectionCard(
-                title: '本轮认识与求解方法如何改变解法',
-                subtitle: '只显示当前最影响决定的 0–3 项；完整 14 项方法及其原概念可在“我的知识库”查看。',
+                title: '本轮 L0 认识原则与求解方法如何改变解法',
+                subtitle: '只显示当前最影响决定的 0–3 项；完整 24 项叔本华核心概念与 14 项运行能力可在“我的知识库”查看。',
                 child: Column(
                   children: [
                     for (final event in _methodEvents)
