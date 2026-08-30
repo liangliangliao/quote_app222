@@ -31,6 +31,7 @@ class XiangjiGoalMentorDao {
     'step_shrunk',
     'checkin_submitted',
     'evidence_confirmed',
+    'goal_round_reviewed',
     'calibration_confirmed',
     'goal_paused',
     'goal_reselected',
