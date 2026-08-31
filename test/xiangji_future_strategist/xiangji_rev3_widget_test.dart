@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_practical_product.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_practical_widgets.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_repository.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_strategist_conversation.dart';
@@ -39,11 +41,69 @@ void main() {
     );
     expect(
       input.decoration?.hintText,
-      '告诉我你想要什么、发生了什么，或者你现在卡在哪里。',
+      '只写一句也可以：我想要…… / 我卡在…… / 实际发生了……',
     );
     expect(find.byTooltip('语音输入'), findsOneWidget);
     expect(find.byTooltip('添加附件'), findsOneWidget);
-    expect(find.text('请军师分析'), findsOneWidget);
+    expect(find.byTooltip('不会用？问使用助手'), findsOneWidget);
+    expect(find.text('给我一个现实下一步'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('TC-UX-V62 practical result defaults to choice and one action',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() async => tester.binding.setSurfaceSize(null));
+    var selected = 'steady_step';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(390, 844),
+            textScaler: TextScaler.linear(2),
+          ),
+          child: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  XiangjiPracticalDecisionCard(
+                    problem: '每天浏览岗位却没有发出申请',
+                    goal: '一周内获得可比较的真实反馈',
+                    keyGap: '缺少真实投递样本',
+                    judgment: '先用一次真实投递区分方向、材料和渠道问题。',
+                    choices: const XiangjiPersonalizedActionChoiceEngine().build(
+                      baseAction: '发出一份定向申请',
+                      mechanism: '用真实投递获得外部反馈',
+                      prediction: '会得到回复或一个可修改差异',
+                      expectedMinutes: 15,
+                      profile: XiangjiUserPreferenceProfile(),
+                    ),
+                    selectedChoiceId: selected,
+                    onChoiceSelected: (value) =>
+                        setState(() => selected = value),
+                    onStart: () {},
+                    onModify: () {},
+                    onOppose: () {},
+                    onShowDetails: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('现在只需要决定一件事'), findsOneWidget);
+    expect(find.text('轻松起步'), findsOneWidget);
+    expect(find.text('稳步推进'), findsOneWidget);
+    expect(find.text('现实挑战'), findsOneWidget);
+    expect(find.text('选择这条并开始'), findsOneWidget);
+    expect(find.text('SituationModel'), findsNothing);
+    expect(find.text('AgentRun'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
@@ -56,4 +116,8 @@ class _EmptyHistoryRepository extends XiangjiRepository {
     int limit = 20,
   }) async =>
       const <XiangjiDecisionDraftRecord>[];
+
+  @override
+  Future<XiangjiUserPreferenceProfile> userPreferenceProfile() async =>
+      const XiangjiUserPreferenceProfile();
 }

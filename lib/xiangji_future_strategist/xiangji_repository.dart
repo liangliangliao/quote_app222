@@ -7,6 +7,7 @@ import 'xiangji_cognitive_orchestrator.dart';
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
 import 'xiangji_persistent_solver.dart';
+import 'xiangji_practical_product.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
 import 'xiangji_sck_runtime.dart';
@@ -48,6 +49,19 @@ class XiangjiRepository {
   }
 
   Future<void> initialize() => _dao.ensureSchema();
+
+  Future<XiangjiUserPreferenceProfile> userPreferenceProfile() =>
+      _dao.userPreferenceProfile();
+
+  Future<void> saveUserPreferenceProfile(
+    XiangjiUserPreferenceProfile profile,
+  ) =>
+      _dao.saveUserPreferenceProfile(profile);
+
+  Future<List<XiangjiGuidedCase>> guidedCases() => _dao.guidedCases();
+
+  Future<int> completedRealityRoundCount() =>
+      _dao.completedRealityRoundCount();
 
   Future<XiangjiDashboardSnapshot> dashboard() async {
     await refreshTodoBindings();
@@ -271,6 +285,7 @@ class XiangjiRepository {
       userDoesNotKnow: userDoesNotKnow,
       realityContradicted: realityContradicted,
       methodTrainingEnabled: methodTrainingEnabled,
+      userPreferenceProfile: await _dao.userPreferenceProfile(),
       onProgress: onProgress,
     );
     await _applySignatureMethodsFromCouncil(
@@ -342,6 +357,55 @@ class XiangjiRepository {
     }
     if (status == XiangjiDecisionDraftStatus.adopted &&
         draft.campaignId.isNotEmpty) {
+      await _dao.selectPreferredStrategy(draft.campaignId);
+      final campaign = await _dao.campaign(draft.campaignId);
+      if (campaign?.state == XiangjiCampaignState.decision) {
+        await transitionCampaign(
+          campaignId: draft.campaignId,
+          target: XiangjiCampaignState.prepare,
+          userConfirmed: true,
+        );
+      }
+    }
+  }
+
+  Future<void> adoptPracticalChoice({
+    required String decisionDraftId,
+    required String actionId,
+    required XiangjiActionChoice choice,
+  }) async {
+    final draft = await _dao.decisionDraft(decisionDraftId);
+    if (draft == null) throw StateError('军师草案不存在。');
+    final action = await _dao.action(actionId);
+    if (action == null || action.id != draft.actionId) {
+      throw StateError('当前行动与军师草案不一致，请重新生成。');
+    }
+    await _dao.updateAction(
+      actionId,
+      <String, Object?>{
+        'title': choice.action,
+        'expected_minutes': choice.minutes,
+        'prediction': choice.prediction,
+        'why_chain_json': jsonEncode(<String, Object?>{
+          ...action.whyChain,
+          'selected_experience_mode': choice.id,
+          'selected_experience_label': choice.label,
+          'fit_reason': choice.fitReason,
+          'mechanism': choice.mechanism,
+          'stop_condition': choice.stopCondition,
+          'core_concept_ids': choice.coreConceptIds,
+          'user_selected': true,
+        }),
+      },
+      eventType: 'user_selected_practical_choice',
+    );
+    await _dao.updateDecisionDraftStatus(
+      decisionDraftId,
+      XiangjiDecisionDraftStatus.adopted,
+      currentAction: choice.action,
+    );
+    await _dao.acceptSituationModel(draft.situationModelId);
+    if (draft.campaignId.isNotEmpty) {
       await _dao.selectPreferredStrategy(draft.campaignId);
       final campaign = await _dao.campaign(draft.campaignId);
       if (campaign?.state == XiangjiCampaignState.decision) {

@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import '../data/db.dart';
 import 'xiangji_method_catalog.dart';
 import 'xiangji_models.dart';
+import 'xiangji_practical_product.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
 import 'xiangji_schopenhauer_core_catalog.dart';
@@ -46,11 +47,71 @@ class XiangjiDao {
       // available and the UI exposes the index state truthfully.
     }
     await _seedCoreKnowledge(db);
+    await _seedPracticalProductData(db);
     await _ensureRev3SckRules(db);
     await _ensureRev4Rules(db);
     await _ensureRev52Metadata(db);
     await _seedProviderCapabilities(db);
     _ensured = true;
+  }
+
+  Future<XiangjiUserPreferenceProfile> userPreferenceProfile() async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_user_preference',
+      where: 'id = ?',
+      whereArgs: const <Object?>['default'],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      return XiangjiUserPreferenceProfile.fromMap(rows.first);
+    }
+    const profile = XiangjiUserPreferenceProfile();
+    await db.insert(
+      'xf_user_preference',
+      profile.toDatabaseMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return profile;
+  }
+
+  Future<void> saveUserPreferenceProfile(
+    XiangjiUserPreferenceProfile profile,
+  ) async {
+    final db = await _database();
+    await db.insert(
+      'xf_user_preference',
+      profile.toDatabaseMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<XiangjiGuidedCase>> guidedCases() async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_guided_case',
+      orderBy: 'sort_order ASC, title ASC',
+    );
+    return rows.map(XiangjiGuidedCase.fromMap).toList(growable: false);
+  }
+
+  Future<XiangjiGuidedCase?> guidedCase(String id) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_guided_case',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : XiangjiGuidedCase.fromMap(rows.first);
+  }
+
+  Future<int> completedRealityRoundCount() async {
+    final db = await _database();
+    return Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM xf_reality_result'),
+        ) ??
+        0;
   }
 
   Future<void> _ensureRev3Columns(Database db) async {
@@ -191,6 +252,30 @@ class XiangjiDao {
   }
 
   static const List<String> _schemaStatements = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS xf_user_preference (
+        id TEXT PRIMARY KEY,
+        interest_tags_json TEXT NOT NULL DEFAULT '[]',
+        value_tags_json TEXT NOT NULL DEFAULT '[]',
+        strength_tags_json TEXT NOT NULL DEFAULT '[]',
+        energy_level TEXT NOT NULL DEFAULT 'medium',
+        support_style TEXT NOT NULL DEFAULT 'direct',
+        preferred_minutes INTEGER NOT NULL DEFAULT 10,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_guided_case (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        category TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        source_label TEXT NOT NULL,
+        case_json TEXT NOT NULL DEFAULT '{}',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
     '''
       CREATE TABLE IF NOT EXISTS xf_raw_event (
         id TEXT PRIMARY KEY,
@@ -1270,6 +1355,103 @@ class XiangjiDao {
     'CREATE INDEX IF NOT EXISTS idx_xf_method_problem ON xf_method_event(problem_id, created_at_ms DESC)',
     'CREATE INDEX IF NOT EXISTS idx_xf_method_capability ON xf_method_event(method_id, created_at_ms DESC)',
   ];
+
+  Future<void> _seedPracticalProductData(Database db) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const sourceId = XiangjiPracticalProductContract.knowledgeSourceId;
+    await db.insert(
+      'xf_knowledge_source',
+      <String, Object?>{
+        'id': sourceId,
+        'layer': 'K1',
+        'kind': 'product_operating_guide',
+        'title': '向己·未来军师 V6.2 现实产出流程与使用说明',
+        'version': XiangjiPracticalProductContract.version,
+        'status': 'active',
+        'content_hash': 'bundled-practical-contract-v6.2',
+        'sensitivity': 'normal',
+        'created_at_ms': 1,
+        'updated_at_ms': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    for (final guide in XiangjiPracticalProductContract.featureGuides) {
+      final nodeId = 'XF-GUIDE-${guide.id}';
+      await db.insert(
+        'xf_knowledge_node',
+        <String, Object?>{
+          'id': nodeId,
+          'source_id': sourceId,
+          'layer': 'K1',
+          'node_type': 'product_feature_guide',
+          'name': guide.title,
+          'definition': '${guide.what}\n${guide.output}',
+          'status': 'active',
+          'provenance_json': jsonEncode(guide.toPromptMap()),
+          'created_at_ms': 1,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final conceptId in guide.coreConceptIds) {
+        await db.insert(
+          'xf_knowledge_edge',
+          <String, Object?>{
+            'id': '$conceptId-GUIDES-${guide.id}',
+            'from_id': conceptId,
+            'to_id': nodeId,
+            'relation_type': 'L0_GROUNDS_FEATURE',
+            'provenance_json': jsonEncode(<String, Object?>{
+              'product_contract': XiangjiPracticalProductContract.version,
+              'knowledge_source': guide.knowledgeSource,
+            }),
+            'created_at_ms': 1,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+    for (final example in XiangjiPracticalProductContract.guidedCases) {
+      await db.insert(
+        'xf_guided_case',
+        example.toDatabaseMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      final caseNodeId = 'XF-CASE-${example.id}';
+      await db.insert(
+        'xf_knowledge_node',
+        <String, Object?>{
+          'id': caseNodeId,
+          'source_id': sourceId,
+          'layer': 'K4',
+          'node_type': 'guided_complete_case',
+          'name': example.title,
+          'definition': '${example.summary}\n${example.revision}',
+          'status': 'active',
+          'provenance_json': jsonEncode(example.toDatabaseMap()),
+          'created_at_ms': 1,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final conceptId in example.coreConceptIds) {
+        await db.insert(
+          'xf_knowledge_edge',
+          <String, Object?>{
+            'id': '$conceptId-EXPLAINS-${example.id}',
+            'from_id': conceptId,
+            'to_id': caseNodeId,
+            'relation_type': 'L0_EXPLAINS_CASE',
+            'provenance_json': jsonEncode(<String, Object?>{
+              'source_label': example.sourceLabel,
+            }),
+            'created_at_ms': 1,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+  }
 
   Future<void> _seedCoreKnowledge(Database db) async {
     final existing = await db.query(
@@ -5340,6 +5522,7 @@ class XiangjiDao {
       }
     });
     await _seedCoreKnowledge(db);
+    await _seedPracticalProductData(db);
     await _ensureRev3SckRules(db);
     await _ensureRev4Rules(db);
     await _ensureRev52Metadata(db);

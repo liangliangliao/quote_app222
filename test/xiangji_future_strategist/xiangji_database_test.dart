@@ -2,6 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_method_catalog.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_practical_product.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_repository.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_schopenhauer_core_catalog.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_signature_method_engine.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -109,6 +112,146 @@ void main() {
       }),
       hasLength(17),
     );
+  });
+
+  test('TC-V62-GUIDE seeds cases, feature grounding and user preferences',
+      () async {
+    final cases = await dao.guidedCases();
+    final guideNodes = await database.query(
+      'xf_knowledge_node',
+      where: 'source_id = ? AND node_type = ?',
+      whereArgs: const <Object?>[
+        'XF-PRODUCT-GUIDE-V6.2',
+        'product_feature_guide',
+      ],
+    );
+    final caseNodes = await database.query(
+      'xf_knowledge_node',
+      where: 'source_id = ? AND node_type = ?',
+      whereArgs: const <Object?>[
+        'XF-PRODUCT-GUIDE-V6.2',
+        'guided_complete_case',
+      ],
+    );
+    final featureEdges = await database.query(
+      'xf_knowledge_edge',
+      where: 'relation_type = ?',
+      whereArgs: const <Object?>['L0_GROUNDS_FEATURE'],
+    );
+
+    expect(cases, hasLength(XiangjiPracticalProductContract.guidedCases.length));
+    expect(
+      guideNodes,
+      hasLength(XiangjiPracticalProductContract.featureGuides.length),
+    );
+    expect(
+      caseNodes,
+      hasLength(XiangjiPracticalProductContract.guidedCases.length),
+    );
+    expect(
+      featureEdges.map((row) => row['from_id']).toSet(),
+      containsAll(XiangjiSchopenhauerCoreCatalog.ids),
+    );
+
+    const profile = XiangjiUserPreferenceProfile(
+      interestTags: <String>['探索挑战'],
+      valueTags: <String>['自由'],
+      strengthTags: <String>['好奇'],
+      energyLevel: 'high',
+      supportStyle: 'challenge',
+      preferredMinutes: 20,
+      updatedAtMs: 123,
+    );
+    await dao.saveUserPreferenceProfile(profile);
+    final restored = await dao.userPreferenceProfile();
+    expect(restored.interestTags, profile.interestTags);
+    expect(restored.valueTags, profile.valueTags);
+    expect(restored.strengthTags, profile.strengthTags);
+    expect(restored.energyLevel, 'high');
+    expect(restored.supportStyle, 'challenge');
+    expect(restored.preferredMinutes, 20);
+  });
+
+  test('TC-V62-ACTION user-selected burden becomes the authoritative action',
+      () async {
+    await dao.createProblem(
+      id: 'problem-practical',
+      rawEventId: 'event-practical',
+      rawQuestion: '我想求职但一直只浏览',
+      contextText: '今天浏览了岗位但没有投递。',
+    );
+    await dao.saveSituationModel(
+      id: 'situation-practical',
+      objectType: 'problem',
+      objectId: 'problem-practical',
+      version: 1,
+      state: XiangjiSituationModelState.framed,
+      summary: '需要用真实投递取得反馈',
+      currentNeed: '找到工作',
+      model: const <String, Object?>{},
+      sourceRefs: const <String>['user:event-practical'],
+    );
+    await dao.createAction(
+      id: 'action-practical',
+      title: '发出一份定向申请',
+      whyChain: const <String, Object?>{'key_gap': '缺少真实投递样本'},
+      prediction: '会获得一个可比较结果',
+      problemId: 'problem-practical',
+      expectedMinutes: 15,
+    );
+    await dao.saveDecisionDraft(<String, Object?>{
+      'id': 'draft-practical',
+      'problem_id': 'problem-practical',
+      'campaign_id': '',
+      'action_id': 'action-practical',
+      'situation_model_id': 'situation-practical',
+      'true_problem': '浏览替代了现实投递',
+      'recommendation': '获得一个现实样本',
+      'judgment': '先投递再判断',
+      'why_text': '缺少现实反馈',
+      'current_action': '发出一份定向申请',
+      'change_signals': '收到回复或发现材料差异',
+      'epistemic_status': 'PROVISIONAL',
+      'clarification_question': '',
+      'options_json': '[]',
+      'uncertainty_json': '{}',
+      'weakest_premise': '尚不清楚材料是否匹配',
+      'unresolved_items_json': '[]',
+      'agent_run_id': '',
+      'user_status': XiangjiDecisionDraftStatus.proposed.wire,
+      'created_at_ms': 1,
+      'updated_at_ms': 1,
+    });
+    const choice = XiangjiActionChoice(
+      id: 'tiny_start',
+      label: '轻松起步',
+      action: '只用 3 分钟打开目标岗位并写出第一条匹配点',
+      minutes: 3,
+      stopCondition: '写出第一条匹配点或达到 3 分钟就停止',
+      fitReason: '当前能量低，先启动',
+      mechanism: '降低启动负担并取得第一个现实材料',
+      prediction: '3 分钟后应至少得到一条岗位匹配信息',
+      coreConceptIds: <String>['SC-K0-004', 'SC-K0-022'],
+      preferred: true,
+    );
+    final repository = XiangjiRepository(dao: dao);
+
+    await repository.adoptPracticalChoice(
+      decisionDraftId: 'draft-practical',
+      actionId: 'action-practical',
+      choice: choice,
+    );
+
+    final action = await dao.action('action-practical');
+    final draft = await dao.decisionDraft('draft-practical');
+    expect(action?.title, choice.action);
+    expect(action?.expectedMinutes, 3);
+    expect(action?.prediction, choice.prediction);
+    expect(action?.whyChain['stop_condition'], choice.stopCondition);
+    expect(action?.whyChain['selected_experience_mode'], 'tiny_start');
+    expect(action?.whyChain['user_selected'], isTrue);
+    expect(draft?.status, XiangjiDecisionDraftStatus.adopted);
+    expect(draft?.currentAction, choice.action);
   });
 
   test('TC-PS-001 preserves user raw material and derived layers separately',
@@ -295,6 +438,11 @@ void main() {
     expect(await dao.problems(), isEmpty);
     expect(await dao.enabledRules(), isNotEmpty);
     expect(await dao.providerCapabilities(), isNotEmpty);
+    expect(
+      await dao.guidedCases(),
+      hasLength(XiangjiPracticalProductContract.guidedCases.length),
+      reason: '操作示例属于受保护产品说明，重置个人数据后仍应可用。',
+    );
   });
 
   test('T-MEC-DB atomically persists SolverSnapshot and MethodEvent', () async {

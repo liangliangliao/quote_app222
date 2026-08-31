@@ -9,6 +9,7 @@ import 'xiangji_experience_widgets.dart';
 import 'xiangji_knowledge_router.dart';
 import 'xiangji_method_catalog.dart';
 import 'xiangji_models.dart';
+import 'xiangji_practical_product.dart';
 import 'xiangji_schopenhauer_core_catalog.dart';
 import 'xiangji_ui_support.dart';
 
@@ -41,6 +42,8 @@ class _XiangjiKnowledgeCenterPageState
   List<Map<String, Object?>> _coreConceptNodes =
       const <Map<String, Object?>>[];
   List<Map<String, Object?>> _methodNodes = const <Map<String, Object?>>[];
+  List<Map<String, Object?>> _featureGuideNodes =
+      const <Map<String, Object?>>[];
   List<Map<String, Object?>> _knowledgeRules = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _candidates = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _conflicts = const <Map<String, Object?>>[];
@@ -68,6 +71,10 @@ class _XiangjiKnowledgeCenterPageState
           sourceId: XiangjiMethodCatalog.sourceId,
           limit: 100,
         ),
+        widget.dao.knowledgeNodes(
+          sourceId: XiangjiPracticalProductContract.knowledgeSourceId,
+          limit: 100,
+        ),
         widget.dao.knowledgeRules(sourceId: 'XF-K0-SCHOPENHAUER'),
         widget.dao.candidateKnowledge(),
         widget.dao.knowledgeConflicts(),
@@ -89,9 +96,16 @@ class _XiangjiKnowledgeCenterPageState
             return leftIndex.compareTo(rightIndex);
           });
         _methodNodes = values[4] as List<Map<String, Object?>>;
-        _knowledgeRules = values[5] as List<Map<String, Object?>>;
-        _candidates = values[6] as List<Map<String, Object?>>;
-        _conflicts = values[7] as List<Map<String, Object?>>;
+        _featureGuideNodes = (values[5] as List<Map<String, Object?>>)
+            .where(
+              (row) =>
+                  (row['node_type'] ?? '').toString() ==
+                  'product_feature_guide',
+            )
+            .toList(growable: false);
+        _knowledgeRules = values[6] as List<Map<String, Object?>>;
+        _candidates = values[7] as List<Map<String, Object?>>;
+        _conflicts = values[8] as List<Map<String, Object?>>;
         _loading = false;
       });
     } catch (error) {
@@ -421,6 +435,19 @@ class _XiangjiKnowledgeCenterPageState
     return value.isEmpty ? '当前没有已确认材料' : value;
   }
 
+  List<String> _stringList(Object? raw) {
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is List) {
+        return decoded
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false);
+      }
+    } catch (_) {}
+    return const <String>[];
+  }
+
   String _knowledgeState(String value) => switch (value.toUpperCase()) {
         'DRAFT' => '草案',
         'ACTIVE' => '当前使用中',
@@ -552,6 +579,7 @@ class _XiangjiKnowledgeCenterPageState
                 children: [
                   XiangjiStateBadge(label: '${_coreConceptNodes.length} 项 L0 核心概念'),
                   XiangjiStateBadge(label: '${_methodNodes.length} 项方法能力'),
+                  XiangjiStateBadge(label: '${_featureGuideNodes.length} 项可操作功能'),
                   XiangjiStateBadge(label: '${sckRules.length} 条 SCK 原则'),
                   XiangjiStateBadge(label: '${celRules.length} 条体验原则'),
                   XiangjiStateBadge(label: '${solverRules.length} 条求解原则'),
@@ -587,6 +615,28 @@ class _XiangjiKnowledgeCenterPageState
           )
         else
           ..._coreConceptInventory(),
+        const SizedBox(height: 14),
+        const Text(
+          '思想怎样落到可操作功能',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          '每项功能都说明要解决什么问题、怎样操作、产出什么，以及受哪些 L0 概念约束。',
+          style: TextStyle(color: XiangjiPalette.muted, height: 1.4),
+        ),
+        const SizedBox(height: 8),
+        if (_featureGuideNodes.isEmpty)
+          const XiangjiEmptyState(
+            title: '功能—知识映射未加载',
+            message: '请重新初始化未来军师；原始知识节点不会因此丢失。',
+            icon: Icons.warning_amber_outlined,
+          )
+        else
+          for (final node in _featureGuideNodes) ...[
+            _featureGuideNodeCard(node),
+            const SizedBox(height: 8),
+          ],
         const SizedBox(height: 14),
         const Text(
           'L0 约束下的 14 项认识与持续求解能力',
@@ -771,6 +821,66 @@ class _XiangjiKnowledgeCenterPageState
           XiangjiLabeledValue(
             label: '关联运行原则（高级映射）',
             value: _naturalList(provenance['related_rule_ids']),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _featureGuideNodeCard(Map<String, Object?> node) {
+    final provenance = _jsonObject(node['provenance_json']);
+    final conceptIds = _stringList(provenance['l0_core_concept_ids']);
+    final conceptNames = conceptIds.map((id) {
+      try {
+        return XiangjiSchopenhauerCoreCatalog.forId(id).displayName;
+      } catch (_) {
+        return id;
+      }
+    }).join('；');
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      child: ExpansionTile(
+        leading: const Icon(Icons.touch_app_outlined,
+            color: XiangjiPalette.pine),
+        title: Text(
+          (node['name'] ?? '可操作功能').toString(),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text((provenance['problem_solved'] ?? '').toString()),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          XiangjiLabeledValue(
+            label: '这是什么',
+            value: (provenance['what'] ?? '').toString(),
+          ),
+          XiangjiLabeledValue(
+            label: '什么时候使用',
+            value: (provenance['when_to_use'] ?? '').toString(),
+          ),
+          XiangjiLabeledValue(
+            label: '用户需要提供什么',
+            value: (provenance['what_to_provide'] ?? '').toString(),
+          ),
+          XiangjiLabeledValue(
+            label: '怎样操作',
+            value: _naturalList(provenance['steps']),
+          ),
+          XiangjiLabeledValue(
+            label: '现实产出',
+            value: (provenance['output'] ?? '').toString(),
+          ),
+          XiangjiLabeledValue(
+            label: '为什么这样做',
+            value: (provenance['why'] ?? '').toString(),
+          ),
+          XiangjiLabeledValue(
+            label: '对应的叔本华 L0 概念',
+            value: conceptNames,
+          ),
+          XiangjiLabeledValue(
+            label: '知识来源',
+            value: (provenance['knowledge_source'] ?? '').toString(),
           ),
         ],
       ),

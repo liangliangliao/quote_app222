@@ -12,8 +12,12 @@ import '../services/global_ai_settings.dart';
 import 'xiangji_campaign_action_pages.dart';
 import 'xiangji_database.dart';
 import 'xiangji_experience_widgets.dart';
+import 'xiangji_guidance_pages.dart';
 import 'xiangji_insight_pages.dart';
+import 'xiangji_knowledge_pages.dart';
 import 'xiangji_models.dart';
+import 'xiangji_practical_product.dart';
+import 'xiangji_practical_widgets.dart';
 import 'xiangji_problem_pages.dart';
 import 'xiangji_repository.dart';
 import 'xiangji_rev3_models.dart';
@@ -26,11 +30,13 @@ class XiangjiStrategistConversationPanel extends StatefulWidget {
     required this.repository,
     required this.dao,
     this.onDataChanged,
+    this.initialText = '',
   });
 
   final XiangjiRepository repository;
   final XiangjiDao dao;
   final Future<void> Function()? onDataChanged;
+  final String initialText;
 
   @override
   State<XiangjiStrategistConversationPanel> createState() =>
@@ -58,14 +64,20 @@ class _XiangjiStrategistConversationPanelState
   String _failedInput = '';
   String _failureMessage = '';
   Map<String, String> _aiState = const <String, String>{};
+  XiangjiUserPreferenceProfile _profile =
+      const XiangjiUserPreferenceProfile();
+  String _selectedChoiceId = '';
+  bool _showFullAnalysis = false;
 
   @override
   void initState() {
     super.initState();
+    _controller.text = widget.initialText;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadHistory();
         _loadAiReadiness();
+        _loadProfile();
       }
     });
   }
@@ -93,6 +105,15 @@ class _XiangjiStrategistConversationPanelState
       if (mounted) setState(() => _aiState = state);
     } catch (_) {
       // Readiness is advisory; the primary local composer stays available.
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final profile = await widget.repository.userPreferenceProfile();
+      if (mounted) setState(() => _profile = profile);
+    } catch (_) {
+      // Personalization is optional; the practical default remains usable.
     }
   }
 
@@ -173,6 +194,13 @@ class _XiangjiStrategistConversationPanelState
         },
       );
       if (!mounted) return;
+      final choices = _choicesFor(result);
+      final preferred = choices.isEmpty
+          ? null
+          : choices.firstWhere(
+              (choice) => choice.preferred,
+              orElse: () => choices.first,
+            );
       setState(() {
         _result = result;
         _pendingProblemId = result.problemId;
@@ -183,6 +211,8 @@ class _XiangjiStrategistConversationPanelState
         _forceNewOnNextSubmit = false;
         _failedInput = '';
         _failureMessage = '';
+        _selectedChoiceId = preferred?.id ?? '';
+        _showFullAnalysis = false;
       });
       await _refreshProblemContext(result.problemId);
       await _loadHistory();
@@ -310,6 +340,8 @@ class _XiangjiStrategistConversationPanelState
       _forceNewOnNextSubmit = true;
       _failedInput = '';
       _failureMessage = '';
+      _selectedChoiceId = '';
+      _showFullAnalysis = false;
     });
   }
 
@@ -317,6 +349,163 @@ class _XiangjiStrategistConversationPanelState
     if (_failedInput.isEmpty || _working) return;
     _controller.text = _failedInput;
     await _submit();
+  }
+
+  List<XiangjiActionChoice> _choicesFor(XiangjiCouncilResult result) =>
+      const XiangjiPersonalizedActionChoiceEngine().build(
+        baseAction: result.executionFrozen ? '' : result.draft.currentAction,
+        mechanism: result.draft.operatorMechanism,
+        prediction: result.draft.prediction,
+        expectedMinutes: result.draft.expectedMinutes,
+        profile: _profile,
+      );
+
+  Future<void> _openUsageAssistant() async {
+    final answer = await Navigator.of(context).push<XiangjiUsageAssistantAnswer>(
+      MaterialPageRoute(builder: (_) => const XiangjiUsageAssistantPage()),
+    );
+    if (!mounted || answer == null) return;
+    switch (answer.destination) {
+      case 'conversation':
+        _prefill(answer.startPrompt);
+        return;
+      case 'examples':
+        final cases = await widget.repository.guidedCases();
+        if (!mounted) return;
+        final starter = await Navigator.of(context).push<String>(
+          MaterialPageRoute(
+            builder: (_) => XiangjiGuidedCasesPage(cases: cases),
+          ),
+        );
+        if (mounted && starter != null) _prefill(starter);
+        return;
+      case 'preferences':
+        final profile = await Navigator.of(context)
+            .push<XiangjiUserPreferenceProfile>(
+          MaterialPageRoute(
+            builder: (_) => XiangjiPreferenceSetupPage(
+              repository: widget.repository,
+              initialProfile: _profile,
+            ),
+          ),
+        );
+        if (mounted && profile != null) {
+          setState(() {
+            _profile = profile;
+            final result = _result;
+            if (result != null) {
+              final choices = _choicesFor(result);
+              _selectedChoiceId = choices.isEmpty
+                  ? ''
+                  : choices
+                      .firstWhere(
+                        (choice) => choice.preferred,
+                        orElse: () => choices.first,
+                      )
+                      .id;
+            }
+          });
+        }
+        return;
+      case 'current_action':
+        final actionId = _result?.actionId ?? '';
+        if (actionId.isNotEmpty) {
+          await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => XiangjiActionModePage(
+              actionId: actionId,
+              repository: widget.repository,
+              dao: widget.dao,
+            ),
+          ));
+        } else {
+          _prefill('我知道自己想做什么，但还没有形成一个可以开始的行动：');
+        }
+        return;
+      case 'problem_workspace':
+        if (_pendingProblemId.isNotEmpty) {
+          await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => XiangjiProblemWorkspacePage(
+              problemId: _pendingProblemId,
+              repository: widget.repository,
+              dao: widget.dao,
+            ),
+          ));
+        } else {
+          _prefill(answer.startPrompt);
+        }
+        return;
+      case 'epistemic_world':
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => XiangjiEpistemicWorldPage(
+            dao: widget.dao,
+            repository: widget.repository,
+          ),
+        ));
+        return;
+      case 'history':
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => XiangjiHistoryPage(dao: widget.dao),
+        ));
+        return;
+      case 'knowledge':
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => XiangjiKnowledgeCenterPage(dao: widget.dao),
+        ));
+        return;
+      case 'settings':
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => XiangjiSettingsPage(
+            dao: widget.dao,
+            repository: widget.repository,
+          ),
+        ));
+        return;
+    }
+  }
+
+  void _prefill(String prompt) {
+    final value = prompt.trim().isEmpty ? '我现在想解决的是：' : prompt;
+    setState(() {
+      _controller.text = value;
+      _controller.selection = TextSelection.collapsed(offset: value.length);
+    });
+  }
+
+  Future<void> _adoptSelectedChoice() async {
+    final result = _result;
+    if (result == null || result.actionId.isEmpty) return;
+    final choices = _choicesFor(result);
+    if (choices.isEmpty) return;
+    final choice = choices.firstWhere(
+      (item) => item.id == _selectedChoiceId,
+      orElse: () => choices.firstWhere(
+        (item) => item.preferred,
+        orElse: () => choices.first,
+      ),
+    );
+    setState(() => _working = true);
+    try {
+      await widget.repository.adoptPracticalChoice(
+        decisionDraftId: result.decisionDraftId,
+        actionId: result.actionId,
+        choice: choice,
+      );
+      await _loadHistory();
+      await widget.onDataChanged?.call();
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => XiangjiActionModePage(
+          actionId: result.actionId,
+          repository: widget.repository,
+          dao: widget.dao,
+        ),
+      ));
+      await widget.onDataChanged?.call();
+    } catch (error) {
+      if (mounted) xiangjiShowMessage(context, error);
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
   }
 
   Future<void> _respond(XiangjiDecisionDraftStatus status) async {
@@ -805,7 +994,7 @@ class _XiangjiStrategistConversationPanelState
                     Text(
                       _awaitingClarification
                           ? '军师只需要你补充一个会改变路线的信息。'
-                          : '你负责讲真实处境；认识分层、求解、战略与红队由军师完成。',
+                          : '只说一句真实处境；军师负责分析，你只选择、行动和反馈。',
                       style: const TextStyle(
                         color: XiangjiPalette.muted,
                         height: 1.4,
@@ -814,17 +1003,27 @@ class _XiangjiStrategistConversationPanelState
                   ],
                 ),
               ),
-              TextButton.icon(
+              IconButton(
+                tooltip: '不会用？问使用助手',
+                onPressed: _working ? null : _openUsageAssistant,
+                icon: const Icon(Icons.help_outline),
+              ),
+              IconButton(
+                tooltip: '开始新的问题或目标',
                 onPressed: _working ? null : _newTopic,
                 icon: const Icon(Icons.add_comment_outlined),
-                label: const Text('新议题'),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          _aiReadinessBanner(),
-          const SizedBox(height: 10),
           _composer(),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('AI 与隐私状态（可选）'),
+            subtitle: const Text('不影响你直接说出问题；未配置时仍可使用本地求解。'),
+            childrenPadding: const EdgeInsets.only(bottom: 8),
+            children: [_aiReadinessBanner()],
+          ),
           if (_failureMessage.isNotEmpty && !_working) ...[
             const SizedBox(height: 14),
             _analysisFailureCard(),
@@ -840,24 +1039,26 @@ class _XiangjiStrategistConversationPanelState
           if (_result != null && !_working) ...[
             const SizedBox(height: 14),
             _resultCard(_result!),
-            const SizedBox(height: 14),
-            XiangjiAiContributionCard(
-              summary: _result!.aiExecution,
-              onConfigureAi: _openGlobalAiSettings,
-              onReviewSensitiveConsent: _reviewSensitiveConsent,
-            ),
-            if (_methodEvents.isNotEmpty) ...[
+            if (_showFullAnalysis) ...[
               const SizedBox(height: 14),
-              XiangjiSectionCard(
-                title: '本轮 L0 认识原则与求解方法如何改变解法',
-                subtitle: '只显示当前最影响决定的 0–3 项；完整 24 项叔本华核心概念与 14 项运行能力可在“我的知识库”查看。',
-                child: Column(
-                  children: [
-                    for (final event in _methodEvents)
-                      XiangjiMethodEffectCard(event: event),
-                  ],
-                ),
+              XiangjiAiContributionCard(
+                summary: _result!.aiExecution,
+                onConfigureAi: _openGlobalAiSettings,
+                onReviewSensitiveConsent: _reviewSensitiveConsent,
               ),
+              if (_methodEvents.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                XiangjiSectionCard(
+                  title: '本轮知识怎样真正改变了解法',
+                  subtitle: '只显示当前真正影响决定的 0–3 项；不是独立课程或概念墙。',
+                  child: Column(
+                    children: [
+                      for (final event in _methodEvents)
+                        XiangjiMethodEffectCard(event: event),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ] else if (!_working && _history.isNotEmpty) ...[
             const SizedBox(height: 18),
@@ -892,13 +1093,42 @@ class _XiangjiStrategistConversationPanelState
               minLines: 3,
               maxLines: 8,
               enabled: !_working,
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: _awaitingClarification
                     ? _result?.clarificationQuestion
-                    : '告诉我你想要什么、发生了什么，或者你现在卡在哪里。',
+                    : '只写一句也可以：我想要…… / 我卡在…… / 实际发生了……',
                 border: InputBorder.none,
               ),
             ),
+            if (!_awaitingClarification && _controller.text.trim().isEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final starter in const <String>[
+                      '我想实现一个目标：',
+                      '我遇到一个问题：',
+                      '我知道该做但就是没行动：',
+                      '我回来反馈上一步：',
+                    ])
+                      ActionChip(
+                        label: Text(starter.replaceAll('：', '')),
+                        onPressed: _working
+                            ? null
+                            : () => setState(() {
+                                  _controller.text = starter;
+                                  _controller.selection =
+                                      TextSelection.collapsed(
+                                    offset: starter.length,
+                                  );
+                                }),
+                      ),
+                  ],
+                ),
+              ),
             if (_attachments.isNotEmpty)
               Align(
                 alignment: Alignment.centerLeft,
@@ -944,7 +1174,9 @@ class _XiangjiStrategistConversationPanelState
                 FilledButton.icon(
                   onPressed: _working ? null : _submit,
                   icon: const Icon(Icons.auto_awesome_outlined),
-                  label: Text(_awaitingClarification ? '回答并继续' : '请军师分析'),
+                  label: Text(
+                    _awaitingClarification ? '回答并继续' : '给我一个现实下一步',
+                  ),
                 ),
               ],
             ),
@@ -1070,7 +1302,26 @@ class _XiangjiStrategistConversationPanelState
         ? solver!.predictionSummary
         : draft.prediction;
 
-    return XiangjiSolverCockpitView(
+    final choices = _choicesFor(result);
+    final practical = XiangjiPracticalDecisionCard(
+      problem: draft.trueProblem,
+      goal: goal,
+      keyGap: keyGap,
+      judgment: draft.judgment,
+      choices: choices,
+      selectedChoiceId: _selectedChoiceId,
+      onChoiceSelected: (value) =>
+          setState(() => _selectedChoiceId = value),
+      onStart: result.executionFrozen ? null : _adoptSelectedChoice,
+      onModify: _modify,
+      onOppose: _oppose,
+      onShowDetails: () =>
+          setState(() => _showFullAnalysis = !_showFullAnalysis),
+      detailsExpanded: _showFullAnalysis,
+    );
+    if (!_showFullAnalysis) return practical;
+
+    final detailed = XiangjiSolverCockpitView(
       problem: draft.trueProblem,
       currentState: currentState,
       goal: goal,
@@ -1111,7 +1362,7 @@ class _XiangjiStrategistConversationPanelState
             children: [
               if (!result.executionFrozen)
                 FilledButton(
-                  onPressed: () => _respond(XiangjiDecisionDraftStatus.adopted),
+                  onPressed: _adoptSelectedChoice,
                   child: const Text('采用'),
                 ),
               OutlinedButton(onPressed: _modify, child: const Text('修改')),
@@ -1160,6 +1411,13 @@ class _XiangjiStrategistConversationPanelState
           ],
         ],
       ),
+    );
+    return Column(
+      children: [
+        practical,
+        const SizedBox(height: 12),
+        detailed,
+      ],
     );
   }
 

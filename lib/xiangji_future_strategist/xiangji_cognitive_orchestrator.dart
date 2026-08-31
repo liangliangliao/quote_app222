@@ -4,6 +4,7 @@ import 'xiangji_agent_service.dart';
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
 import 'xiangji_persistent_solver.dart';
+import 'xiangji_practical_product.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
 import 'xiangji_sck_runtime.dart';
@@ -47,6 +48,8 @@ class XiangjiCognitiveOrchestrator {
     bool userDoesNotKnow = false,
     bool realityContradicted = false,
     bool methodTrainingEnabled = false,
+    XiangjiUserPreferenceProfile userPreferenceProfile =
+        const XiangjiUserPreferenceProfile(),
     XiangjiOrchestrationProgress? onProgress,
   }) async {
     await _dao.ensureSchema();
@@ -148,7 +151,10 @@ class XiangjiCognitiveOrchestrator {
       state: XiangjiSituationModelState.raw,
       summary: '正在建立可修订态势模型',
       currentNeed: draft.need,
-      model: draft.toMap(),
+      model: <String, Object?>{
+        ...draft.toMap(),
+        'user_preference_profile': userPreferenceProfile.toPromptMap(),
+      },
       sourceRefs: sourceRefs,
     );
 
@@ -207,6 +213,8 @@ class XiangjiCognitiveOrchestrator {
             'ask_user_guard': firstGuard.outcome.wire,
             'input_classification': effectiveClassification.toMap(),
             'user_does_not_know': userDoesNotKnow,
+            'user_preference_profile':
+                userPreferenceProfile.toPromptMap(),
             'sck_rule_ids': XiangjiSckRuntime.rules.keys.toList(),
           },
         ));
@@ -389,6 +397,7 @@ class XiangjiCognitiveOrchestrator {
       currentNeed: draft.need,
       model: <String, Object?>{
         ...draft.toMap(),
+        'user_preference_profile': userPreferenceProfile.toPromptMap(),
         'ask_user_guard': guard.outcome.wire,
         'orchestration_plan': effectivePlan.map((agent) => agent.code).toList(),
         'state_history':
