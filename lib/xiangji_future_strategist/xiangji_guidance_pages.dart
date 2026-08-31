@@ -530,6 +530,12 @@ class _XiangjiGuidedCasePracticePageState
     ];
     return Scaffold(
       appBar: AppBar(title: const Text('四步案例演练')),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: _navigationControls(),
+        ),
+      ),
       body: ListView(
         key: ValueKey<String>('xiangji_case_practice_step_$_step'),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
@@ -568,35 +574,36 @@ class _XiangjiGuidedCasePracticePageState
             ),
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              if (_step > 0)
-                TextButton.icon(
-                  onPressed: () => setState(() => _step -= 1),
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('上一步'),
-                ),
-              const Spacer(),
-              if (_step < 3)
-                FilledButton.icon(
-                  key: const ValueKey<String>('xiangji_case_practice_next'),
-                  onPressed: () => setState(() => _step += 1),
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text('下一步'),
-                )
-              else
-                FilledButton.icon(
-                  key: const ValueKey<String>('xiangji_case_practice_finish'),
-                  onPressed: () => Navigator.of(context).pop(example.need),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('用我的处境开始'),
-                ),
-            ],
-          ),
         ],
       ),
     );
   }
+
+  Widget _navigationControls() => Row(
+        children: [
+          if (_step > 0)
+            TextButton.icon(
+              onPressed: () => setState(() => _step -= 1),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('上一步'),
+            ),
+          const Spacer(),
+          if (_step < 3)
+            FilledButton.icon(
+              key: const ValueKey<String>('xiangji_case_practice_next'),
+              onPressed: () => setState(() => _step += 1),
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('下一步'),
+            )
+          else
+            FilledButton.icon(
+              key: const ValueKey<String>('xiangji_case_practice_finish'),
+              onPressed: () => Navigator.of(context).pop(example.need),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('用我的处境开始'),
+            ),
+        ],
+      );
 
   Widget _stepCard() => switch (_step) {
         0 => XiangjiSectionCard(

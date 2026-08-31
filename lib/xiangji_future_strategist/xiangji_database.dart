@@ -1359,16 +1359,25 @@ class XiangjiDao {
   Future<void> _seedPracticalProductData(Database db) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     const sourceId = XiangjiPracticalProductContract.knowledgeSourceId;
+    await db.update(
+      'xf_knowledge_source',
+      <String, Object?>{
+        'status': 'retired',
+        'updated_at_ms': now,
+      },
+      where: 'kind = ? AND id != ?',
+      whereArgs: <Object?>['product_operating_guide', sourceId],
+    );
     await db.insert(
       'xf_knowledge_source',
       <String, Object?>{
         'id': sourceId,
         'layer': 'K1',
         'kind': 'product_operating_guide',
-        'title': '向己·未来军师 V6.2 现实产出流程与使用说明',
+        'title': '向己·未来军师 V6.3 叔本华知识到现实成果',
         'version': XiangjiPracticalProductContract.version,
         'status': 'active',
-        'content_hash': 'bundled-practical-contract-v6.2',
+        'content_hash': 'bundled-practical-contract-v6.3',
         'sensitivity': 'normal',
         'created_at_ms': 1,
         'updated_at_ms': now,

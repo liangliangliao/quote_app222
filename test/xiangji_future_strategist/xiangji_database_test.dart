@@ -114,22 +114,22 @@ void main() {
     );
   });
 
-  test('TC-V62-GUIDE seeds cases, feature grounding and user preferences',
+  test('TC-V63-GUIDE seeds cases, feature grounding and user preferences',
       () async {
     final cases = await dao.guidedCases();
     final guideNodes = await database.query(
       'xf_knowledge_node',
       where: 'source_id = ? AND node_type = ?',
-      whereArgs: const <Object?>[
-        'XF-PRODUCT-GUIDE-V6.2',
+      whereArgs: <Object?>[
+        XiangjiPracticalProductContract.knowledgeSourceId,
         'product_feature_guide',
       ],
     );
     final caseNodes = await database.query(
       'xf_knowledge_node',
       where: 'source_id = ? AND node_type = ?',
-      whereArgs: const <Object?>[
-        'XF-PRODUCT-GUIDE-V6.2',
+      whereArgs: <Object?>[
+        XiangjiPracticalProductContract.knowledgeSourceId,
         'guided_complete_case',
       ],
     );
