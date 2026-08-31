@@ -27,8 +27,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Limit synchronize runs to the latest pushed range
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$EVENT_ACTION" != "synchronize" ]; then
+            echo "run_goal_mentor=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed_files="$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")"
+          if printf '%s\n' "$changed_files" | grep -Eq '^(lib/xiangji_goal_mentor/|lib/pages/discover_page\.dart$|lib/services/task_runner\.dart$|test/xiangji_goal_mentor/|assets/xiangji_goal_mentor/|assets/zhixing_tree/knowledge_systems_v2_0\.json$|pubspec\.yaml$)'; then
+            echo "run_goal_mentor=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_goal_mentor=false" >> "$GITHUB_OUTPUT"
+            echo "Latest pushed range does not change Goal Mentor; unrelated analysis and tests are skipped."
+          fi
 
       - name: Set up Flutter
+        if: steps.scope.outputs.run_goal_mentor == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.35.3"
@@ -36,16 +60,21 @@ jobs:
           cache: true
 
       - name: Resolve dependencies
+        if: steps.scope.outputs.run_goal_mentor == 'true'
         run: flutter pub get
 
       - name: Analyze Xiangji module
+        if: steps.scope.outputs.run_goal_mentor == 'true'
         run: dart analyze lib/xiangji_goal_mentor
 
       - name: Analyze reminder integration
+        if: steps.scope.outputs.run_goal_mentor == 'true'
         run: dart analyze lib/services/task_runner.dart
 
       - name: Analyze Xiangji tests
+        if: steps.scope.outputs.run_goal_mentor == 'true'
         run: dart analyze test/xiangji_goal_mentor
 
       - name: Run Xiangji tests
+        if: steps.scope.outputs.run_goal_mentor == 'true'
         run: flutter test test/xiangji_goal_mentor
