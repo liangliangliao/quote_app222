@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/health_diet_settings_service.dart';
+import '../services/health_diet_daily_scheduler_service.dart';
 import '../widgets/health_diet_data_source_banner.dart';
 
 class HealthDietSettingsPage extends StatefulWidget {
@@ -158,10 +159,16 @@ class _HealthDietSettingsPageState extends State<HealthDietSettingsPage> {
       HealthDietSettingsService.agentDailyScheduleEnabled: _agentDailyScheduleEnabled ? '1' : '0',
       HealthDietSettingsService.agentScheduleNotifyEnabled: _agentScheduleNotifyEnabled ? '1' : '0',
     });
+    String? scheduleError;
+    try {
+      await HealthDietDailySchedulerService().syncSchedules();
+    } catch (e) {
+      scheduleError = e.toString();
+    }
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('健康饮食配置已保存')),
+      SnackBar(content: Text(scheduleError == null ? '健康饮食配置已保存，定时计划已同步' : '配置已保存，但定时计划同步失败：$scheduleError')),
     );
   }
 

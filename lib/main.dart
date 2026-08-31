@@ -3,8 +3,8 @@ import './services/native_guard.dart';
 import 'services/native_sport_fg.dart';
 import 'services/global_ai_settings.dart';
 import 'services/unified_ai_service.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path/path.dart' as p;
+import 'dart:async';
 import 'dart:isolate';
 import 'dart:io';
 import 'dart:convert';
@@ -32,7 +32,6 @@ import 'pages/settings_page.dart';
 import 'pages/discover_page.dart';
 import 'services/native_guard.dart';
 import 'utils/debug_logger.dart';
-import 'platform/perm_helper.dart';
 import 'platform/native_scheduler.dart';
 import 'belief_lab/belief_lab_home_page.dart';
 import 'failure_module/failure_module_home_page.dart';
@@ -74,66 +73,83 @@ import 'self_determination_growth/self_determination_growth_home_page.dart';
 import 'kindling/kindling.dart';
 import 'kindling_host/kindling_host_page.dart';
 
-Future<void> _navToHomeIfLaunchedFromNotification() async {
-  final plugin = FlutterLocalNotificationsPlugin();
-  final details = await plugin.getNotificationAppLaunchDetails();
-  if (details?.didNotificationLaunchApp ?? false) {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try { NativeGuard.ensureRuntimeReceiversRegistered(); } catch (_) {}
-      final handled = await NotificationService.handlePendingNotificationNavigation();
-      if (!handled) {
-        SimpleBus.navHome();
-        SimpleBus.pokeHome();
-      }
-    });
-  }
-}
-
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   NativeGuard.ensureNotificationTapHandler();
+  // 只保留首帧真正需要的同步设置。MethodChannel、数据库、后台任务和
+  // 通知插件初始化全部放到首帧之后，避免 Android 12+ 启动画面长时间停留。
+  unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+  ));
+  runApp(const MyApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_bootstrapAfterFirstFrame());
+  });
+}
 
-  await NotificationService.captureInitialLaunchFromNotification();
-try {
-    const MethodChannel _sys = MethodChannel('com.example.quote_app/sys');
-    await _sys.invokeMethod('createNoMediaGuards');
-  try { await NativeGuard.ensureRuntimeReceiversRegistered(); } catch (_) {}
-  } catch (_) {}
+Future<void> _bootstrapAfterFirstFrame() async {
+  final startedAt = DateTime.now();
+  try { SimpleBus.init(); } catch (_) {}
+  try { _registerHomeRefreshPort(); } catch (_) {}
 
-	// Enable edge-to-edge. We still keep default system bar colors white.
-	// Diary pages may set bars to transparent to let background images cover them.
-	await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-	SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-	  statusBarColor: Colors.transparent,
-	  statusBarIconBrightness: Brightness.dark,
-	  statusBarBrightness: Brightness.light,
-	  systemNavigationBarColor: Colors.transparent,
-	  systemNavigationBarDividerColor: Colors.transparent,
-	));
-  ui.DartPluginRegistrant.ensureInitialized();
-  /* moved to post-frame */ AppDatabase.instance(); // warm-up (non-blocking)
-
-  // Sport safety net:
-  // - If a sport is still in progress, ensure Android native foreground tracking keeps running.
-  //   (iOS cannot keep tracking after user force-quits from app switcher.)
+  // 冷启动通知必须先采集，但不能阻塞首帧。
+  try { await NotificationService.captureInitialLaunchFromNotification(); } catch (_) {}
+  try { await NotificationService.init(); } catch (_) {}
   try {
-    final rec = await SportDao().getLatestUnfinishedRecord();
-    if (rec != null && (rec['status'] ?? '').toString() == 'in_progress' && (Platform.isAndroid || Platform.isIOS)) {
-      final rid = (rec['id'] is num) ? (rec['id'] as num).toInt() : int.tryParse(rec['id']?.toString() ?? '');
-      if (rid != null) {
-        await NativeSportFg.ensureStarted(
-            recordId: rid,
-            title: (rec['title'] ?? '运动进行中').toString(),
-            targetType: rec['target_type']?.toString(),
-            targetValue: (rec['target_value'] is num) ? (rec['target_value'] as num).toDouble() : double.tryParse(rec['target_value']?.toString() ?? ''),
-            targetUnit: rec['target_unit']?.toString(),
-          );
-      }
-    }
+    const sys = MethodChannel('com.example.quote_app/sys');
+    await sys.invokeMethod('createNoMediaGuards');
+  } catch (_) {}
+  try { await NativeGuard.ensureRuntimeReceiversRegistered(); } catch (_) {}
+  try {
+    final handled = await NotificationService.handlePendingNotificationNavigation();
+    if (handled) await DLog.i('NotifTap', 'post-frame bootstrap handled notification payload');
   } catch (_) {}
 
-  // Schedule a daily midnight renewal alarm (native side will renew plans even if process is killed).
-  // This is best-effort; if exact alarm permission is missing, native side may fall back to WM.
+  // Workmanager 必须先完成初始化，再同步各模块的后台计划。
+  try { await Workmanager().initialize(workmanagerCallbackDispatcher, isInDebugMode: false); } catch (_) {}
+  try { await SchedulerService.init(); } catch (_) {}
+
+  // 其余初始化互不依赖，并行执行，避免把首页交互串行卡住。
+  await Future.wait<void>([
+    _warmDatabaseAndRestoreSport(),
+    _scheduleSportMidnightRenewal(),
+    _runBestEffort(() => ensureExtraTaskColumns()),
+    _runBestEffort(() => DiaryTheme.reloadFromDatabase()),
+    _runBestEffort(() => XiangjiStrategistMonitorService.syncSchedule()),
+    _runBestEffort(() => HealthDietDailySchedulerService().tick()),
+  ]);
+  try {
+    await DLog.i('Startup', 'post-frame bootstrap completed in ${DateTime.now().difference(startedAt).inMilliseconds}ms');
+  } catch (_) {}
+}
+
+Future<void> _runBestEffort(Future<void> Function() action) async {
+  try { await action(); } catch (_) {}
+}
+
+Future<void> _warmDatabaseAndRestoreSport() async {
+  try {
+    AppDatabase.instance();
+    final rec = await SportDao().getLatestUnfinishedRecord();
+    if (rec == null || (rec['status'] ?? '').toString() != 'in_progress' || (!Platform.isAndroid && !Platform.isIOS)) return;
+    final rid = (rec['id'] is num) ? (rec['id'] as num).toInt() : int.tryParse(rec['id']?.toString() ?? '');
+    if (rid == null) return;
+    await NativeSportFg.ensureStarted(
+      recordId: rid,
+      title: (rec['title'] ?? '运动进行中').toString(),
+      targetType: rec['target_type']?.toString(),
+      targetValue: (rec['target_value'] is num) ? (rec['target_value'] as num).toDouble() : double.tryParse(rec['target_value']?.toString() ?? ''),
+      targetUnit: rec['target_unit']?.toString(),
+    );
+  } catch (_) {}
+}
+
+Future<void> _scheduleSportMidnightRenewal() async {
   try {
     final now = DateTime.now();
     final nextMidnight = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
@@ -143,36 +159,6 @@ try {
       payload: const {'type': 'sport_midnight_renew'},
     );
   } catch (_) {}
-
-  // Ensure auxiliary columns exist (scheduled_run_key, next_time).  This should
-  // be called once after opening the database to migrate older installations.
-  
-  // CHECK_NOTIF_AND_NAV_HOME: post-frame ensure notification launch always goes to Home
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    final handledNotif = await NotificationService.handlePendingNotificationNavigation();
-    if (handledNotif) {
-      try {
-        await DLog.i('NotifTap', 'main() postFrame: handled notification payload');
-      } catch (_) {}
-    }
-  });
-  runApp(const MyApp());
-  _navToHomeIfLaunchedFromNotification();
-
-  // Do heavy initializations after first frame to avoid splash卡住
-  Future.microtask(() async {
-    try { await ensureExtraTaskColumns(); } catch (_) {}
-    try { await NotificationService.init(); } catch (_) {}
-    try { await SchedulerService.init(); } catch (_) {}
-    // 预加载日记背景配置到内存，避免日记页面首次进入时出现背景闪烁
-    try { await DiaryTheme.reloadFromDatabase(); } catch (_) {}
-    try { await Workmanager().initialize(workmanagerCallbackDispatcher, isInDebugMode: false); } catch (_) {}
-    try { await XiangjiStrategistMonitorService.syncSchedule(); } catch (_) {}
-    try { await HealthDietDailySchedulerService().tick(); } catch (_) {}
-    try { SimpleBus.init(); } catch (_) {}
-    try { _registerHomeRefreshPort(); } catch (_) {}
-  });
-
 }
 
 
@@ -236,114 +222,11 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class GateKeeper extends StatefulWidget {
+class GateKeeper extends StatelessWidget {
   const GateKeeper({super.key});
-  @override
-  State<GateKeeper> createState() => _GateKeeperState();
-}
-
-class _GateKeeperState extends State<GateKeeper> {
-  bool _ready = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkPerms();
-  }
-
-  Future<void> _checkPerms() async {
-    // 第一道门卡：系统通知权限
-    final hasNoti = await _areNotificationsEnabled();
-    if (!hasNoti) {
-      // 直接触发系统通知授权弹框，无自定义弹框
-      try {
-        // /* EARLY-BLOCKED */ // REMOVED: early notification request (only request after Home visible)
-/* END */  // removed: request only after Home is visible // 非阻塞，避免按Home后恢复黑屏/卡顿
-      } catch (_) {}
-      // 再次检查，如果仍未授权，则尝试打开系统设置界面
-      final stillNo = !(await _areNotificationsEnabled());
-      if (stillNo) {
-        try { await _openNotificationSettings(); } catch (_) {}
-      }
-    }
-
-      /* DEFER_EXACT_TO_HOME_START */
-if (false) {
-// 第二道门卡：精确闹钟权限（仅 Android，仅首次打开弹框）
-  final _first = await _isFirstOpenAndMark();
-  if (_first) {
-// 第二道门卡：精确闹钟权限（仅 Android）
-    final hasExact = await PermHelper.hasExactAlarmPermission();
-    if (!hasExact && mounted) {
-      final allow = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx)=> AlertDialog(
-          title: const Text('闹钟提醒权限授权'),
-          content: const Text('为确保定点提醒，请授予“闹钟与提醒(精确闹钟)”权限。'),
-          actions: [
-            TextButton(onPressed: ()=> Navigator.of(ctx).pop(false), child: const Text('不允许')),
-            FilledButton(onPressed: ()=> Navigator.of(ctx).pop(true), child: const Text('允许')),
-          ],
-        ),
-      );
-      if (allow == true) {
-        await PermHelper.requestExactAlarmPermission();
-        // 返回键回到此处后直接进入首页
-  } // 非首次：跳过弹框
-      } else {
-        // 小确认框：是 / 否
-        final go = await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx)=> AlertDialog(
-            content: const Text('你将不启用精准闹钟提醒功能！'),
-            actions: [
-              TextButton(onPressed: ()=> Navigator.of(ctx).pop(false), child: const Text('否')),
-              FilledButton(onPressed: ()=> Navigator.of(ctx).pop(true), child: const Text('是')),
-            ],
-          ),
-        );
-        if (go != true) {
-          // 停留在当前闹钟提醒框层面（重新弹出第二道门卡）
-          _checkPerms();
-          return;
-        }
-      }
-    }
-
-    
-}
-/* DEFER_EXACT_TO_HOME_END */
-setState(()=> _ready = true);
-  }
-
-  Future<bool> _areNotificationsEnabled() async {
-    try {
-      const ch = MethodChannel('com.example.quote_app/sys');
-      final ok = await ch.invokeMethod<bool>('areNotificationsEnabled');
-      return ok ?? true;
-    } catch (_) {
-      // 如果原生未实现，默认通过（实际发送时也会失败不崩溃）
-      return true;
-    }
-  }
-
-  Future<void> _openNotificationSettings() async {
-    try {
-      const ch = MethodChannel('com.example.quote_app/sys');
-      await ch.invokeMethod('openNotificationSettings');
-    } catch (_) {}
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {
-      // 加载页面（权限检查）阶段恢复为默认白色背景
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
     return const RootShell();
   }
 }

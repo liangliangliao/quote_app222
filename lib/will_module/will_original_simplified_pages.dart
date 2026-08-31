@@ -1,8 +1,12 @@
 
+import 'dart:async';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/read_aloud_service.dart';
 import 'will_models.dart';
 import 'will_unit_index_seed.dart';
 import 'will_original_precise_segments.dart';
@@ -25,6 +29,14 @@ class _WillOriginalSimplifiedReaderPageState extends State<WillOriginalSimplifie
   late Future<String> _future;
   late String _selectedModuleCode;
   final TextEditingController _searchController = TextEditingController();
+  final ReadAloudService _readAloudService = ReadAloudService();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  StreamSubscription<void>? _playerCompleteSubscription;
+  List<String> _audioQueue = const [];
+  int _audioQueueIndex = 0;
+  int _readRequestId = 0;
+  String? _activeReadSectionCode;
+  bool _preparingAudio = false;
   String _search = '';
   bool _onlyPrecise = false;
 
@@ -52,12 +64,90 @@ class _WillOriginalSimplifiedReaderPageState extends State<WillOriginalSimplifie
         setState(() => _search = _searchController.text.trim());
       }
     });
+    _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((_) {
+      _playNextAudioChunk();
+    });
   }
 
   @override
   void dispose() {
+    _readRequestId++;
+    _playerCompleteSubscription?.cancel();
+    _audioPlayer.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _readSection(String fullText, _ReaderSection section) async {
+    if (_activeReadSectionCode == section.code) {
+      await _stopReading();
+      return;
+    }
+    final requestId = ++_readRequestId;
+    await _audioPlayer.stop();
+    if (!mounted) return;
+    setState(() {
+      _activeReadSectionCode = section.code;
+      _preparingAudio = true;
+      _audioQueue = const [];
+      _audioQueueIndex = 0;
+    });
+    try {
+      final availability = await _readAloudService.availability();
+      if (!availability.available) throw StateError(availability.reason);
+      final files = await _readAloudService.synthesize(
+        text: _excerptForModule(fullText, section.code),
+        moduleName: 'will_original_${section.code.toLowerCase()}',
+      );
+      if (!mounted || requestId != _readRequestId) return;
+      setState(() {
+        _preparingAudio = false;
+        _audioQueue = files;
+        _audioQueueIndex = 0;
+      });
+      if (files.isNotEmpty) await _audioPlayer.play(DeviceFileSource(files.first));
+    } catch (e) {
+      if (!mounted || requestId != _readRequestId) return;
+      setState(() {
+        _preparingAudio = false;
+        _activeReadSectionCode = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_friendlyReadError(e))),
+      );
+    }
+  }
+
+  Future<void> _playNextAudioChunk() async {
+    if (!mounted || _activeReadSectionCode == null) return;
+    final next = _audioQueueIndex + 1;
+    if (next >= _audioQueue.length) {
+      setState(() {
+        _activeReadSectionCode = null;
+        _audioQueue = const [];
+        _audioQueueIndex = 0;
+      });
+      return;
+    }
+    setState(() => _audioQueueIndex = next);
+    await _audioPlayer.play(DeviceFileSource(_audioQueue[next]));
+  }
+
+  Future<void> _stopReading() async {
+    _readRequestId++;
+    await _audioPlayer.stop();
+    if (!mounted) return;
+    setState(() {
+      _activeReadSectionCode = null;
+      _preparingAudio = false;
+      _audioQueue = const [];
+      _audioQueueIndex = 0;
+    });
+  }
+
+  String _friendlyReadError(Object error) {
+    final value = error.toString();
+    return value.startsWith('Bad state: ') ? value.substring('Bad state: '.length) : '朗读失败：$value';
   }
 
   WillUnitIndex? _unitById(String? id) {
@@ -164,6 +254,12 @@ class _WillOriginalSimplifiedReaderPageState extends State<WillOriginalSimplifie
       appBar: AppBar(
         title: const Text('原文简化版全文'),
         actions: [
+          if (_activeReadSectionCode != null)
+            IconButton(
+              tooltip: _preparingAudio ? '正在生成语音，点击取消' : '停止朗读',
+              onPressed: _stopReading,
+              icon: Icon(_preparingAudio ? Icons.hourglass_top_rounded : Icons.stop_circle_outlined),
+            ),
           FutureBuilder<String>(
             future: _future,
             builder: (context, snapshot) {
@@ -320,7 +416,23 @@ class _WillOriginalSimplifiedReaderPageState extends State<WillOriginalSimplifie
                                     return ListTile(
                                       title: Text('${s.code} · ${s.title}'),
                                       subtitle: Text('相关单元：${_moduleUnits(s.code).length}'),
-                                      trailing: selected ? const Icon(Icons.check_circle, color: Color(0xFF2563EB)) : null,
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (selected) const Icon(Icons.check_circle, color: Color(0xFF2563EB)),
+                                          IconButton(
+                                            tooltip: _activeReadSectionCode == s.code ? '停止朗读' : '朗读“${s.title}”',
+                                            onPressed: () {
+                                              Navigator.pop(context);
+                                              _readSection(text, s);
+                                            },
+                                            icon: Icon(
+                                              _activeReadSectionCode == s.code ? Icons.stop_circle_outlined : Icons.volume_up_outlined,
+                                              color: _activeReadSectionCode == s.code ? const Color(0xFFDC2626) : null,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                       onTap: () {
                                         Navigator.pop(context);
                                         setState(() => _selectedModuleCode = s.code);
@@ -392,6 +504,13 @@ class _WillOriginalSimplifiedReaderPageState extends State<WillOriginalSimplifie
                       children: [
                         Expanded(
                           child: Text('当前模块正文节选 · ${section.title}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _readSection(text, section),
+                          icon: _preparingAudio && _activeReadSectionCode == section.code
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : Icon(_activeReadSectionCode == section.code ? Icons.stop_circle_outlined : Icons.volume_up_outlined),
+                          label: Text(_activeReadSectionCode == section.code ? '停止' : '朗读'),
                         ),
                         TextButton.icon(
                           onPressed: () => _copyExcerpt(excerpt),
