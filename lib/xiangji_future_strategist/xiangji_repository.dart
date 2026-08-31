@@ -7,6 +7,7 @@ import 'xiangji_cognitive_orchestrator.dart';
 import 'xiangji_database.dart';
 import 'xiangji_models.dart';
 import 'xiangji_persistent_solver.dart';
+import 'xiangji_practical_product.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
 import 'xiangji_sck_runtime.dart';
@@ -48,6 +49,106 @@ class XiangjiRepository {
   }
 
   Future<void> initialize() => _dao.ensureSchema();
+
+  Future<XiangjiUserPreferenceProfile> userPreferenceProfile() =>
+      _dao.userPreferenceProfile();
+
+  Future<void> saveUserPreferenceProfile(
+    XiangjiUserPreferenceProfile profile,
+  ) =>
+      _dao.saveUserPreferenceProfile(profile);
+
+  Future<List<XiangjiGuidedCase>> guidedCases() => _dao.guidedCases();
+
+  Future<int> completedRealityRoundCount() =>
+      _dao.completedRealityRoundCount();
+
+  /// A read-only snapshot for the usage assistant. Unlike [dashboard], this
+  /// does not refresh Todo bindings or run background monitoring; asking for
+  /// help must never mutate the user's problem state.
+  Future<XiangjiUsageAssistantContext> usageAssistantContext() async {
+    final dashboard = await _dao.dashboard();
+    final problem = dashboard.currentProblem;
+    final action = dashboard.currentAction;
+    final problemId = problem?.id ?? action?.problemId ?? '';
+    final methodEvents = problemId.isEmpty
+        ? const <XiangjiMethodEvent>[]
+        : await _dao.latestMethodTurnEvents(
+            problemId: problemId,
+            userVisibleOnly: true,
+            limit: 5,
+          );
+    final completedRounds = await _dao.completedRealityRoundCount();
+
+    List<String> strings(Object? raw) {
+      if (raw is List) {
+        return raw
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+      }
+      if (raw is String && raw.trim().startsWith('[')) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) return strings(decoded);
+        } catch (_) {
+          // Keep the context optional when old records use a different shape.
+        }
+      }
+      return const <String>[];
+    }
+
+    final conceptIds = <String>[
+      ...strings(action?.whyChain['core_concept_ids']),
+      for (final event in methodEvents) ...event.coreConceptIds,
+    ].fold<List<String>>(<String>[], (values, item) {
+      if (item.isNotEmpty && !values.contains(item)) values.add(item);
+      return values;
+    });
+    final methodLabels = methodEvents
+        .map((event) => event.capabilityName.trim())
+        .where((item) => item.isNotEmpty)
+        .fold<List<String>>(<String>[], (values, item) {
+      if (!values.contains(item)) values.add(item);
+      return values;
+    });
+    final eventSources = methodEvents
+        .map((event) => event.philosophySource.trim())
+        .where((item) => item.isNotEmpty)
+        .fold<List<String>>(<String>[], (values, item) {
+      if (!values.contains(item)) values.add(item);
+      return values;
+    });
+    final why = action?.whyChain ?? const <String, Object?>{};
+    return XiangjiUsageAssistantContext(
+      problemId: problemId,
+      problem: (problem?.need.isNotEmpty == true
+              ? problem!.need
+              : problem?.reframedQuestion.isNotEmpty == true
+                  ? problem!.reframedQuestion
+                  : problem?.rawQuestion ?? '')
+          .trim(),
+      goal: dashboard.northStar,
+      keyGap: dashboard.keyGap,
+      judgment: dashboard.strategistJudgment,
+      currentActionId: action?.id ?? '',
+      currentAction: action?.title ?? '',
+      actionState: action?.state.wire ?? '',
+      actionStateLabel: action?.state.label ?? '',
+      prediction: action?.prediction ?? '',
+      stopCondition: (why['stop_condition'] ?? '').toString().trim(),
+      recoveryAction: (why['recovery_action'] ?? '').toString().trim(),
+      principlePractice:
+          (why['principle_practice'] ?? '').toString().trim(),
+      transferQuestion: (why['transfer_question'] ?? '').toString().trim(),
+      knowledgeSource: (why['knowledge_source'] ?? '').toString().trim().isNotEmpty
+          ? (why['knowledge_source'] ?? '').toString().trim()
+          : eventSources.join('；'),
+      coreConceptIds: conceptIds,
+      activeMethodLabels: methodLabels,
+      completedRealityRounds: completedRounds,
+    );
+  }
 
   Future<XiangjiDashboardSnapshot> dashboard() async {
     await refreshTodoBindings();
@@ -271,6 +372,7 @@ class XiangjiRepository {
       userDoesNotKnow: userDoesNotKnow,
       realityContradicted: realityContradicted,
       methodTrainingEnabled: methodTrainingEnabled,
+      userPreferenceProfile: await _dao.userPreferenceProfile(),
       onProgress: onProgress,
     );
     await _applySignatureMethodsFromCouncil(
@@ -342,6 +444,64 @@ class XiangjiRepository {
     }
     if (status == XiangjiDecisionDraftStatus.adopted &&
         draft.campaignId.isNotEmpty) {
+      await _dao.selectPreferredStrategy(draft.campaignId);
+      final campaign = await _dao.campaign(draft.campaignId);
+      if (campaign?.state == XiangjiCampaignState.decision) {
+        await transitionCampaign(
+          campaignId: draft.campaignId,
+          target: XiangjiCampaignState.prepare,
+          userConfirmed: true,
+        );
+      }
+    }
+  }
+
+  Future<void> adoptPracticalChoice({
+    required String decisionDraftId,
+    required String actionId,
+    required XiangjiActionChoice choice,
+  }) async {
+    final draft = await _dao.decisionDraft(decisionDraftId);
+    if (draft == null) throw StateError('军师草案不存在。');
+    final action = await _dao.action(actionId);
+    if (action == null || action.id != draft.actionId) {
+      throw StateError('当前行动与军师草案不一致，请重新生成。');
+    }
+    await _dao.updateAction(
+      actionId,
+      <String, Object?>{
+        'title': choice.action,
+        'expected_minutes': choice.minutes,
+        'prediction': choice.prediction,
+        'why_chain_json': jsonEncode(<String, Object?>{
+          ...action.whyChain,
+          'selected_experience_mode': choice.id,
+          'selected_experience_label': choice.label,
+          'fit_reason': choice.fitReason,
+          'mechanism': choice.mechanism,
+          'stop_condition': choice.stopCondition,
+          'visible_output': choice.visibleOutput,
+          'completion_signal': choice.completionSignal,
+          'recovery_action': choice.recoveryAction,
+          'principle_practice': choice.principlePractice,
+          'transfer_question': choice.transferQuestion,
+          'motivation_cue': choice.motivationCue,
+          'knowledge_source': choice.knowledgeSource,
+          'active_method_labels': choice.activeMethodLabels,
+          'thinker_names': choice.thinkerNames,
+          'core_concept_ids': choice.coreConceptIds,
+          'user_selected': true,
+        }),
+      },
+      eventType: 'user_selected_practical_choice',
+    );
+    await _dao.updateDecisionDraftStatus(
+      decisionDraftId,
+      XiangjiDecisionDraftStatus.adopted,
+      currentAction: choice.action,
+    );
+    await _dao.acceptSituationModel(draft.situationModelId);
+    if (draft.campaignId.isNotEmpty) {
       await _dao.selectPreferredStrategy(draft.campaignId);
       final campaign = await _dao.campaign(draft.campaignId);
       if (campaign?.state == XiangjiCampaignState.decision) {

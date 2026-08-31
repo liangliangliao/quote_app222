@@ -75,6 +75,79 @@ void main() {
     expect(await database.query('xiangji_reminder_deliveries'), isEmpty);
   });
 
+  test('persists and restores the intelligence receipt with the goal',
+      () async {
+    final goal = await dao.createAndActivateGoal(
+      _draft(),
+      intelligenceReceipt: const <String, Object?>{
+        'ai_requested': true,
+        'ai_used': true,
+        'provider': 'openai',
+        'model': 'test-model',
+        'status': 'ai_grounded',
+        'fallback_reason': '',
+        'knowledge_ids': <String>['EV-1'],
+        'generated_at_ms': 123,
+        'situation_summary': '把模糊愿望转成可验证行动。',
+        'blind_spot_question': '今天最小的现实产出是什么？',
+      },
+    );
+
+    final receipt = await dao.latestGoalIntelligenceReceipt(goal.id);
+    expect(receipt, isNotNull);
+    expect(receipt!['ai_used'], isTrue);
+    expect(receipt['model'], 'test-model');
+    expect(receipt['knowledge_ids'], <String>['EV-1']);
+  });
+
+  test('persists personalization and complete reality-review rounds',
+      () async {
+    final goal = await dao.createAndActivateGoal(_draft());
+    final step = await dao.currentStep(goal.id);
+    expect(step, isNotNull);
+
+    await dao.saveGoalSupportProfile(
+      goalId: goal.id,
+      interest: 'create',
+      supportTone: 'gentle',
+      availableMinutes: 5,
+      allowAi: true,
+    );
+    final profile = await dao.goalSupportProfile(goal.id);
+    expect(profile, isNotNull);
+    expect(profile!['interest'], 'create');
+    expect(profile['support_tone'], 'gentle');
+    expect(profile['minutes'], 5);
+    expect(profile['allow_ai'], isTrue);
+
+    await dao.saveGoalRoundReview(
+      goalId: goal.id,
+      stepId: step!.id,
+      review: <String, Object?>{
+        'goal_id': goal.id,
+        'step_id': step.id,
+        'result': 'blocked',
+        'reality_facts': '文件没有同步到手机。',
+        'reality_comparison': '现实条件阻断了行动。',
+        'learning': '先处理条件，不评价人格。',
+        'decision': 'change_method',
+        'receipt': const <String, Object?>{'ai_used': false},
+      },
+    );
+    expect(await dao.goalRoundReviewCount(goal.id), 1);
+    final review = await dao.latestGoalRoundReview(goal.id);
+    expect(review, isNotNull);
+    expect(review!['reality_facts'], '文件没有同步到手机。');
+
+    final exported = jsonDecode(await dao.exportJson()) as Map<String, dynamic>;
+    expect(exported['xiangji_goal_preferences'], hasLength(1));
+    expect(exported['xiangji_goal_round_reviews'], hasLength(1));
+
+    await dao.deleteAllData();
+    expect(await database.query('xiangji_goal_preferences'), isEmpty);
+    expect(await database.query('xiangji_goal_round_reviews'), isEmpty);
+  });
+
   test('persists mentor selection history and 8-step progress', () async {
     final goal = await dao.createAndActivateGoal(_draft());
     expect(await dao.mentorSelectionHistory(goal.id), hasLength(1));

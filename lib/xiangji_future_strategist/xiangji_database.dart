@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
+import 'xiangji_method_catalog.dart';
 import 'xiangji_models.dart';
+import 'xiangji_practical_product.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
+import 'xiangji_schopenhauer_core_catalog.dart';
 
 /// SQLite is the authoritative local store for the strategist. Every table is
 /// prefixed so the module can coexist with the app's existing goal/Todo data.
@@ -15,6 +18,12 @@ class XiangjiDao {
 
   final Database? _injectedDatabase;
   bool _ensured = false;
+  static int _auditSequence = 0;
+
+  String _nextAuditId(String prefix) {
+    _auditSequence = (_auditSequence + 1) & 0x7fffffff;
+    return '$prefix-${DateTime.now().microsecondsSinceEpoch}-$_auditSequence';
+  }
 
   Future<Database> _database() async {
     final db = _injectedDatabase ?? await AppDatabase.instance();
@@ -44,11 +53,71 @@ class XiangjiDao {
       // available and the UI exposes the index state truthfully.
     }
     await _seedCoreKnowledge(db);
+    await _seedPracticalProductData(db);
     await _ensureRev3SckRules(db);
     await _ensureRev4Rules(db);
     await _ensureRev52Metadata(db);
     await _seedProviderCapabilities(db);
     _ensured = true;
+  }
+
+  Future<XiangjiUserPreferenceProfile> userPreferenceProfile() async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_user_preference',
+      where: 'id = ?',
+      whereArgs: const <Object?>['default'],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      return XiangjiUserPreferenceProfile.fromMap(rows.first);
+    }
+    const profile = XiangjiUserPreferenceProfile();
+    await db.insert(
+      'xf_user_preference',
+      profile.toDatabaseMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return profile;
+  }
+
+  Future<void> saveUserPreferenceProfile(
+    XiangjiUserPreferenceProfile profile,
+  ) async {
+    final db = await _database();
+    await db.insert(
+      'xf_user_preference',
+      profile.toDatabaseMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<XiangjiGuidedCase>> guidedCases() async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_guided_case',
+      orderBy: 'sort_order ASC, title ASC',
+    );
+    return rows.map(XiangjiGuidedCase.fromMap).toList(growable: false);
+  }
+
+  Future<XiangjiGuidedCase?> guidedCase(String id) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_guided_case',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : XiangjiGuidedCase.fromMap(rows.first);
+  }
+
+  Future<int> completedRealityRoundCount() async {
+    final db = await _database();
+    return Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM xf_reality_result'),
+        ) ??
+        0;
   }
 
   Future<void> _ensureRev3Columns(Database db) async {
@@ -119,6 +188,11 @@ class XiangjiDao {
     }
 
     await add('xf_problem', 'need', "TEXT NOT NULL DEFAULT ''");
+    await add(
+      'xf_user_preference',
+      'obstacle_tags_json',
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
     await add('xf_problem', 'root_goal_id', "TEXT NOT NULL DEFAULT ''");
     await add('xf_problem', 'parent_problem_id', "TEXT NOT NULL DEFAULT ''");
     await add(
@@ -189,6 +263,31 @@ class XiangjiDao {
   }
 
   static const List<String> _schemaStatements = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS xf_user_preference (
+        id TEXT PRIMARY KEY,
+        interest_tags_json TEXT NOT NULL DEFAULT '[]',
+        value_tags_json TEXT NOT NULL DEFAULT '[]',
+        strength_tags_json TEXT NOT NULL DEFAULT '[]',
+        obstacle_tags_json TEXT NOT NULL DEFAULT '[]',
+        energy_level TEXT NOT NULL DEFAULT 'medium',
+        support_style TEXT NOT NULL DEFAULT 'direct',
+        preferred_minutes INTEGER NOT NULL DEFAULT 10,
+        updated_at_ms INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS xf_guided_case (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        category TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        source_label TEXT NOT NULL,
+        case_json TEXT NOT NULL DEFAULT '{}',
+        created_at_ms INTEGER NOT NULL
+      )
+    ''',
     '''
       CREATE TABLE IF NOT EXISTS xf_raw_event (
         id TEXT PRIMARY KEY,
@@ -1269,6 +1368,112 @@ class XiangjiDao {
     'CREATE INDEX IF NOT EXISTS idx_xf_method_capability ON xf_method_event(method_id, created_at_ms DESC)',
   ];
 
+  Future<void> _seedPracticalProductData(Database db) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const sourceId = XiangjiPracticalProductContract.knowledgeSourceId;
+    await db.update(
+      'xf_knowledge_source',
+      <String, Object?>{
+        'status': 'retired',
+        'updated_at_ms': now,
+      },
+      where: 'kind = ? AND id != ?',
+      whereArgs: <Object?>['product_operating_guide', sourceId],
+    );
+    await db.insert(
+      'xf_knowledge_source',
+      <String, Object?>{
+        'id': sourceId,
+        'layer': 'K1',
+        'kind': 'product_operating_guide',
+        'title': '向己·未来军师 V6.3 叔本华知识到现实成果',
+        'version': XiangjiPracticalProductContract.version,
+        'status': 'active',
+        'content_hash': 'bundled-practical-contract-v6.3',
+        'sensitivity': 'normal',
+        'created_at_ms': 1,
+        'updated_at_ms': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    for (final guide in XiangjiPracticalProductContract.featureGuides) {
+      final nodeId = 'XF-GUIDE-${guide.id}';
+      await db.insert(
+        'xf_knowledge_node',
+        <String, Object?>{
+          'id': nodeId,
+          'source_id': sourceId,
+          'layer': 'K1',
+          'node_type': 'product_feature_guide',
+          'name': guide.title,
+          'definition': '${guide.what}\n${guide.output}',
+          'status': 'active',
+          'provenance_json': jsonEncode(guide.toPromptMap()),
+          'created_at_ms': 1,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final conceptId in guide.coreConceptIds) {
+        await db.insert(
+          'xf_knowledge_edge',
+          <String, Object?>{
+            'id': '$conceptId-GUIDES-${guide.id}',
+            'from_id': conceptId,
+            'to_id': nodeId,
+            'relation_type': 'L0_GROUNDS_FEATURE',
+            'provenance_json': jsonEncode(<String, Object?>{
+              'product_contract': XiangjiPracticalProductContract.version,
+              'knowledge_source': guide.knowledgeSource,
+            }),
+            'created_at_ms': 1,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+    for (final example in XiangjiPracticalProductContract.guidedCases) {
+      await db.insert(
+        'xf_guided_case',
+        example.toDatabaseMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      final caseNodeId = 'XF-CASE-${example.id}';
+      await db.insert(
+        'xf_knowledge_node',
+        <String, Object?>{
+          'id': caseNodeId,
+          'source_id': sourceId,
+          'layer': 'K4',
+          'node_type': 'guided_complete_case',
+          'name': example.title,
+          'definition': '${example.summary}\n${example.revision}',
+          'status': 'active',
+          'provenance_json': jsonEncode(example.toDatabaseMap()),
+          'created_at_ms': 1,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final conceptId in example.coreConceptIds) {
+        await db.insert(
+          'xf_knowledge_edge',
+          <String, Object?>{
+            'id': '$conceptId-EXPLAINS-${example.id}',
+            'from_id': conceptId,
+            'to_id': caseNodeId,
+            'relation_type': 'L0_EXPLAINS_CASE',
+            'provenance_json': jsonEncode(<String, Object?>{
+              'source_label': example.sourceLabel,
+            }),
+            'created_at_ms': 1,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+  }
+
   Future<void> _seedCoreKnowledge(Database db) async {
     final existing = await db.query(
       'xf_knowledge_source',
@@ -1507,8 +1712,9 @@ class XiangjiDao {
     await db.update(
       'xf_knowledge_source',
       <String, Object?>{
-        'version': 'V6.1-Rev5.2',
-        'content_hash': 'bundled-k0-v6.1-rev5.2',
+        'title': '叔本华 L0 认识论操作系统 - V5.0 核心合同',
+        'version': XiangjiSchopenhauerCoreCatalog.version,
+        'content_hash': 'bundled-k0-v6.1-rev5.2-schopenhauer-v5-core',
         'updated_at_ms': now,
       },
       where: 'id = ?',
@@ -1517,7 +1723,7 @@ class XiangjiDao {
     await db.update(
       'xf_knowledge_document',
       <String, Object?>{
-        'checksum': 'bundled-k0-v6.1-rev5.2',
+        'checksum': 'bundled-k0-v6.1-rev5.2-schopenhauer-v5-core',
         'updated_at_ms': now,
       },
       where: 'id = ?',
@@ -1526,12 +1732,187 @@ class XiangjiDao {
     await db.update(
       'xf_knowledge_rule',
       <String, Object?>{
-        'version': 'V6.1-Rev5.2',
+        'version': XiangjiSchopenhauerCoreCatalog.version,
         'updated_at_ms': now,
       },
       where: 'source_id = ?',
       whereArgs: const <Object?>['XF-K0-SCHOPENHAUER'],
     );
+    await db.transaction((txn) async {
+      for (final concept in XiangjiSchopenhauerCoreCatalog.entries) {
+        await txn.insert(
+          'xf_knowledge_node',
+          <String, Object?>{
+            'id': concept.id,
+            'source_id': XiangjiSchopenhauerCoreCatalog.sourceId,
+            'layer': 'K0',
+            'node_type': concept.nodeType,
+            'name': concept.displayName,
+            'definition': concept.definition,
+            'status': 'ACTIVE',
+            'provenance_json': jsonEncode(<String, Object?>{
+              'version': XiangjiSchopenhauerCoreCatalog.version,
+              'product_contract':
+                  XiangjiSchopenhauerCoreCatalog.productContract,
+              'category': concept.category,
+              'concept_kind': concept.conceptKind,
+              'original_term': concept.originalTerm,
+              'operational_rule': concept.operationalRule,
+              'feature_bindings': concept.featureBindings,
+              'related_rule_ids': concept.relatedRuleIds,
+              'source_locator': concept.sourceLocator,
+              'passage_ids': concept.passageIds,
+            }),
+            'created_at_ms': now,
+            'updated_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await txn.insert(
+        'xf_knowledge_source',
+        <String, Object?>{
+          'id': XiangjiMethodCatalog.sourceId,
+          'layer': 'K1',
+          'kind': 'product_method_catalog',
+          'title': '未来军师 Rev5.2 运行能力目录（受叔本华 L0 约束）',
+          'version': XiangjiMethodCatalog.version,
+          'status': 'active',
+          'content_hash': 'bundled-method-catalog-v6.1-rev5.2-l0-v5',
+          'sensitivity': 'normal',
+          'created_at_ms': now,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await txn.insert(
+        'xf_knowledge_document',
+        <String, Object?>{
+          'id': XiangjiMethodCatalog.documentId,
+          'source_id': XiangjiMethodCatalog.sourceId,
+          'local_uri':
+              'asset://assets/xiangji_future_strategist/signature_method_capabilities_rev5_2.json',
+          'mime': 'application/json',
+          'parse_status': 'READY',
+          'index_status': 'READY',
+          'checksum': 'bundled-method-catalog-v6.1-rev5.2-l0-v5',
+          'byte_size': 0,
+          'last_error': '',
+          'created_at_ms': now,
+          'updated_at_ms': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final method in XiangjiMethodCatalog.entries) {
+        await txn.insert(
+          'xf_knowledge_node',
+          <String, Object?>{
+            'id': method.id,
+            'source_id': XiangjiMethodCatalog.sourceId,
+            'layer': method.layer,
+            'node_type': method.nodeType,
+            'name': method.displayName,
+            'definition': method.principle,
+            'status': 'ACTIVE',
+            'provenance_json': jsonEncode(<String, Object?>{
+              'version': XiangjiMethodCatalog.version,
+              'english_name': method.englishName,
+              'domain': method.domain,
+              'source_concept': method.sourceConcept,
+              'source_locator': method.sourceLocator,
+              'passage_ids': method.passageIds,
+              'related_rule_ids': method.relatedRuleIds,
+              'core_concept_ids': method.coreConceptIds,
+              'core_concept_names': method.coreConceptNames,
+              'trigger_summary': method.triggerSummary,
+              'state_effect': method.stateEffect,
+              'reality_test': method.realityTest,
+              'transfer_question': method.transferQuestion,
+              'product_contract': XiangjiMethodCatalog.productContract,
+            }),
+            'created_at_ms': now,
+            'updated_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        for (final coreConceptId in method.coreConceptIds) {
+          await txn.insert(
+            'xf_knowledge_edge',
+            <String, Object?>{
+              'id': '$coreConceptId-constrains-${method.id}',
+              'from_id': coreConceptId,
+              'to_id': method.id,
+              'relation_type': 'L0_CONSTRAINS_METHOD',
+              'provenance_json': jsonEncode(<String, Object?>{
+                'product_contract':
+                    XiangjiSchopenhauerCoreCatalog.productContract,
+                'meaning': '该运行能力必须遵守这一叔本华 L0 认识边界',
+              }),
+              'created_at_ms': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+      final architectureEdges = <Map<String, String>>[
+        <String, String>{
+          'from': 'SC-K0-001',
+          'to': 'SC-K0-005',
+          'relation': 'REALITY_REQUIRES_GROUNDING',
+        },
+        <String, String>{
+          'from': 'SC-K0-005',
+          'to': 'SC-K0-002',
+          'relation': 'GROUNDING_AUTHORISES_ABSTRACTION',
+        },
+        <String, String>{
+          'from': 'SC-K0-002',
+          'to': 'MEC-011',
+          'relation': 'ABSTRACTION_FRAMES_SOLVABLE_GAP',
+        },
+        <String, String>{
+          'from': 'MEC-011',
+          'to': 'MEC-012',
+          'relation': 'GAP_DECOMPOSES_TO_ACTION',
+        },
+        <String, String>{
+          'from': 'MEC-012',
+          'to': 'MEC-013',
+          'relation': 'ACTION_REQUIRES_PREDICTION',
+        },
+        <String, String>{
+          'from': 'MEC-013',
+          'to': 'SC-K0-024',
+          'relation': 'REALITY_TESTS_ABSTRACTION',
+        },
+        <String, String>{
+          'from': 'SC-K0-024',
+          'to': 'SC-K0-001',
+          'relation': 'REVISION_RETURNS_TO_EXPERIENCE',
+        },
+      ];
+      for (final edge in architectureEdges) {
+        final from = edge['from']!;
+        final to = edge['to']!;
+        final relation = edge['relation']!;
+        await txn.insert(
+          'xf_knowledge_edge',
+          <String, Object?>{
+            'id': 'v5-architecture-$from-$to',
+            'from_id': from,
+            'to_id': to,
+            'relation_type': relation,
+            'provenance_json': jsonEncode(<String, Object?>{
+              'product_contract':
+                  XiangjiSchopenhauerCoreCatalog.productContract,
+              'architecture': XiangjiSchopenhauerCoreCatalog.frozenArchitecture,
+            }),
+            'created_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
 
   static const List<Map<String, String>> _rev4RuleSeeds =
@@ -2844,7 +3225,7 @@ class XiangjiDao {
       );
       await _insertAudit(
         txn,
-        id: '$id-state-$now',
+        id: _nextAuditId('$id-state-${state.wire.toLowerCase()}'),
         objectType: 'problem',
         objectId: id,
         eventType: 'state_changed',
@@ -2958,6 +3339,16 @@ class XiangjiDao {
     return rows.isEmpty ? null : XiangjiSolverSnapshot.fromMap(rows.first);
   }
 
+  Future<List<XiangjiSolverSnapshot>> solverSnapshots({int limit = 100}) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xf_solver_snapshot',
+      orderBy: 'updated_at_ms DESC',
+      limit: limit,
+    );
+    return rows.map(XiangjiSolverSnapshot.fromMap).toList(growable: false);
+  }
+
   Future<void> saveSolverSnapshot(XiangjiSolverSnapshot snapshot) async {
     final db = await _database();
     await db.insert(
@@ -3056,8 +3447,7 @@ class XiangjiDao {
   }
 
   void _validateMethodEvent(XiangjiMethodEvent event, String problemId) {
-    final number = int.tryParse(event.methodId.replaceFirst('MEC-', '')) ?? 0;
-    if (number < 1 || number > 14) {
+    if (!XiangjiMethodCatalog.ids.contains(event.methodId)) {
       throw ArgumentError('MethodEvent.method_id 必须是 MEC-001..MEC-014。');
     }
     if (event.problemId.isEmpty || event.problemId != problemId) {
@@ -4642,23 +5032,46 @@ class XiangjiDao {
 
   Future<List<Map<String, Object?>>> knowledgeNodes({
     List<XiangjiKnowledgeLayer> layers = const <XiangjiKnowledgeLayer>[],
+    String sourceId = '',
     int limit = 100,
   }) async {
     final db = await _database();
-    if (layers.isEmpty) {
-      return db.query(
-        'xf_knowledge_node',
-        where: "status = 'ACTIVE'",
-        orderBy: 'layer ASC, name ASC',
-        limit: limit,
-      );
+    final clauses = <String>["status = 'ACTIVE'"];
+    final args = <Object?>[];
+    if (sourceId.trim().isNotEmpty) {
+      clauses.add('source_id = ?');
+      args.add(sourceId.trim());
     }
-    final placeholders = List<String>.filled(layers.length, '?').join(',');
+    if (layers.isNotEmpty) {
+      final placeholders = List<String>.filled(layers.length, '?').join(',');
+      clauses.add('layer IN ($placeholders)');
+      args.addAll(layers.map((layer) => layer.wire));
+    }
     return db.rawQuery('''
       SELECT * FROM xf_knowledge_node
-      WHERE status = 'ACTIVE' AND layer IN ($placeholders)
+      WHERE ${clauses.join(' AND ')}
       ORDER BY layer ASC, name ASC LIMIT ?
-    ''', <Object?>[...layers.map((layer) => layer.wire), limit]);
+    ''', <Object?>[...args, limit]);
+  }
+
+  Future<List<Map<String, Object?>>> knowledgeRules({
+    String sourceId = '',
+    bool enabledOnly = true,
+  }) async {
+    final db = await _database();
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (sourceId.trim().isNotEmpty) {
+      clauses.add('source_id = ?');
+      args.add(sourceId.trim());
+    }
+    if (enabledOnly) clauses.add('enabled = 1');
+    return db.query(
+      'xf_knowledge_rule',
+      where: clauses.isEmpty ? null : clauses.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'rule_code ASC',
+    );
   }
 
   Future<List<Map<String, Object?>>> personalRules({int limit = 30}) async {
@@ -5014,7 +5427,7 @@ class XiangjiDao {
       }
       await _insertAudit(
         txn,
-        id: '$id-validation-$now',
+        id: _nextAuditId('$id-validation-${state.wire.toLowerCase()}'),
         objectType: 'candidate_knowledge',
         objectId: id,
         eventType: 'validated_${state.wire.toLowerCase()}',
@@ -5130,6 +5543,7 @@ class XiangjiDao {
       }
     });
     await _seedCoreKnowledge(db);
+    await _seedPracticalProductData(db);
     await _ensureRev3SckRules(db);
     await _ensureRev4Rules(db);
     await _ensureRev52Metadata(db);

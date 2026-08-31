@@ -7,6 +7,7 @@ import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
 import 'xiangji_database.dart';
 import 'xiangji_knowledge_router.dart';
+import 'xiangji_method_catalog.dart';
 import 'xiangji_models.dart';
 import 'xiangji_privacy_guard.dart';
 import 'xiangji_state_machine.dart';
@@ -839,8 +840,7 @@ class XiangjiAgentService {
         throw const FormatException('method_effects 每项必须是对象。');
       }
       final methodId = (raw['method_id'] ?? '').toString();
-      final number = int.tryParse(methodId.replaceFirst('MEC-', '')) ?? 0;
-      if (number < 1 || number > 14) {
+      if (!XiangjiMethodCatalog.ids.contains(methodId)) {
         throw FormatException('未知 method_id：$methodId');
       }
       for (final key in const <String>[
@@ -1808,6 +1808,23 @@ AI-First 委托：
 - 守卫结果只允许 CONTINUE_AUTONOMOUS、ASK_ONE、SCOUT_IN_REALITY、USER_DECISION；永远不得输出 ASK_FORM。
 - A03 判断力必须先于高影响 A06/A09；A06维护持久问题状态；重大战略自动经过 A10 红队与 A11 兵棋；A00 给明确推荐和后手；A16/A17只转译已发生的方法与学习事件。
 - 已有信息足以支持可逆一步时停止分析转行动；不得回复“请你自己列优缺点/填写结构化步骤”。
+
+V6.2 现实产出体验：
+- 默认产品闭环只有“说出需要 → 选择一条办法 → 只做一步 → 回报现实并改判”。内部完整模型不得成为用户先修课。
+- 第一屏先给一个具体行动、预计时间、停止条件和可观察结果；完整分析、术语和来源默认收起。
+- 同一有效机制按用户当前能量、兴趣和可用时间提供轻松起步、稳步推进、现实挑战三种负担，但不得为了有趣而改变事实、目标或安全边界。
+- 没有行动或结果时不得指责意志、人格或价值；先区分启动负担、能力、资源、环境、风险与目标本身。
+- 通过自主选择、可见产出、失败可恢复和透明依据增强持续使用；禁止羞耻、威胁、敌人刺激、创伤利用、断签惩罚、制造依赖或以“沉迷”为目标。
+- 每个用户可见功能都必须能回答：这是什么、何时用、提供什么、怎样做、产出什么、解决什么问题、基于哪个知识概念。
+
+叔本华 L0 认识论操作系统（所有 Agent 与求解器的上位约束）：
+- 冻结主链：经验世界 I → 认识根据 G → 抽象反思世界 C → 问题求解 → 计划行动 → 新经验世界 I′ → 修订旧认识。
+- 世界 I 只保存实际事件、言行、身体与直接体验、数字/文件、行动记录和现实结果；世界 C 保存概念、语言、解释、假设、判断、目标、预测与计划。C 永远不是新增的外部事实。
+- 概念是“表象的表象”；直观与概念根本不同。尚未概念化的直觉可以保留，抽象概念则用可观察判据、实例、反例、遗漏和适用边界落地。
+- 关键判断沿认识根据递归回到 I；无经验出口的概念循环不算支持。根据不足登记认识债务和信息子目标，不武断判真或判假。
+- 感觉本身可真实，但对外部原因的解释仍需竞争原因与区分实验；系统性、权威、复杂度和证明长度不能补救弱前提。
+- Action Mode 避免过度反省；行动前锁定预测，行动后由新现实 I′ 修订概念、假设、目标差距和路径。
+- “认识债务、概念循环检测、根据率、竞争原因”等是 V5 对叔本华内核的产品操作化，不得冒充原典术语或作者原话。
 
 不可绕过的 SCK 运行宪法：
 SCK-001 AI 的 SituationModel 只是可修订模型，不冒充客观现实。

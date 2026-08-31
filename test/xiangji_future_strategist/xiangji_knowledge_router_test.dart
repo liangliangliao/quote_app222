@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_knowledge_route_core.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_schopenhauer_core_catalog.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -50,6 +51,21 @@ void main() {
     expect(context.trace.ruleIds, contains('K0-RULE-007'));
     expect(context.trace.debtIds, contains('debt-route'));
     expect(context.currentReality.single['content'], '先保留我的真实处境。');
+    expect(context.coreConceptNodes, hasLength(24));
+    expect(
+      context.trace.routePlan,
+      contains('4.l0_schopenhauer_core'),
+    );
+    expect(
+      context.trace.sourcesUsed,
+      containsAll(XiangjiSchopenhauerCoreCatalog.ids),
+    );
+    final promptCore = context.toPromptMap()['l0_schopenhauer_core'] as List;
+    expect(promptCore, hasLength(24));
+    expect(
+      (promptCore.first as Map)['operational_rule'],
+      isNotEmpty,
+    );
     expect(await dao.retrievalTraces(), hasLength(1));
   });
 
@@ -68,7 +84,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(context.trace.routePlan, contains('7.original_source_retriever'));
+    expect(context.trace.routePlan, contains('8.original_source_retriever'));
   });
 
   test('TC-KB-016 expired provider file is rejected, never silently reused',

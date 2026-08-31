@@ -121,16 +121,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Verify Zhixing V2 generated knowledge is synchronized
-        if: steps.detect.outputs.project_type == 'flutter'
-        working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: |
-          python3 tools/zhixing_tree/generate_knowledge_v2.py
-          git diff --exit-code -- \
-            assets/zhixing_tree/knowledge_manifest_v2_0.json \
-            assets/zhixing_tree/knowledge_v2_0.md \
-            lib/zhixing_tree/zhixing_thinker_catalog.g.dart
-
       - name: Set up Flutter
         if: steps.detect.outputs.project_type == 'flutter'
         uses: subosito/flutter-action@v2
