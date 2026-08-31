@@ -193,28 +193,57 @@ class XiangjiPracticalDecisionCard extends StatelessWidget {
         elevation: 0,
         color: selected ? const Color(0xFFFFF3DD) : XiangjiPalette.mist,
         margin: const EdgeInsets.only(bottom: 7),
-        child: RadioListTile<String>(
-          value: choice.id,
-          groupValue: selectedChoiceId.isEmpty && choice.preferred
-              ? choice.id
-              : selectedChoiceId,
-          onChanged: (value) {
-            if (value != null) onChoiceSelected(value);
-          },
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(choice.label,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-              ),
-              Text('${choice.minutes} 分钟',
-                  style: const TextStyle(
-                    color: XiangjiPalette.muted,
-                    fontSize: 12,
-                  )),
-            ],
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => onChoiceSelected(choice.id),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: selected
+                      ? XiangjiPalette.pine
+                      : XiangjiPalette.muted,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              choice.label,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${choice.minutes} 分钟',
+                            style: const TextStyle(
+                              color: XiangjiPalette.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        choice.fitReason,
+                        style: const TextStyle(height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          subtitle: Text(choice.fitReason),
         ),
       ),
     );
