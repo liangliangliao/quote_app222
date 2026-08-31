@@ -182,6 +182,11 @@ class XiangjiDao {
     }
 
     await add('xf_problem', 'need', "TEXT NOT NULL DEFAULT ''");
+    await add(
+      'xf_user_preference',
+      'obstacle_tags_json',
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
     await add('xf_problem', 'root_goal_id', "TEXT NOT NULL DEFAULT ''");
     await add('xf_problem', 'parent_problem_id', "TEXT NOT NULL DEFAULT ''");
     await add(
@@ -258,6 +263,7 @@ class XiangjiDao {
         interest_tags_json TEXT NOT NULL DEFAULT '[]',
         value_tags_json TEXT NOT NULL DEFAULT '[]',
         strength_tags_json TEXT NOT NULL DEFAULT '[]',
+        obstacle_tags_json TEXT NOT NULL DEFAULT '[]',
         energy_level TEXT NOT NULL DEFAULT 'medium',
         support_style TEXT NOT NULL DEFAULT 'direct',
         preferred_minutes INTEGER NOT NULL DEFAULT 10,

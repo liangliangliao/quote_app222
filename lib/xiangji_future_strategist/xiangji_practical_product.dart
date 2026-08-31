@@ -82,6 +82,7 @@ class XiangjiUserPreferenceProfile {
     this.interestTags = const <String>['清晰步骤', '看见进展'],
     this.valueTags = const <String>['成长'],
     this.strengthTags = const <String>[],
+    this.obstacleTags = const <String>[],
     this.energyLevel = 'medium',
     this.supportStyle = 'direct',
     this.preferredMinutes = 10,
@@ -91,6 +92,7 @@ class XiangjiUserPreferenceProfile {
   final List<String> interestTags;
   final List<String> valueTags;
   final List<String> strengthTags;
+  final List<String> obstacleTags;
   final String energyLevel;
   final String supportStyle;
   final int preferredMinutes;
@@ -113,6 +115,7 @@ class XiangjiUserPreferenceProfile {
         'interest_tags_json': jsonEncode(interestTags),
         'value_tags_json': jsonEncode(valueTags),
         'strength_tags_json': jsonEncode(strengthTags),
+        'obstacle_tags_json': jsonEncode(obstacleTags),
         'energy_level': energyLevel,
         'support_style': supportStyle,
         'preferred_minutes': preferredMinutes,
@@ -125,6 +128,7 @@ class XiangjiUserPreferenceProfile {
         'interests': interestTags,
         'values': valueTags,
         'strengths': strengthTags,
+        'current_obstacles': obstacleTags,
         'current_energy': energyLevel,
         'support_style': supportStyle,
         'preferred_minutes': preferredMinutes,
@@ -138,6 +142,7 @@ class XiangjiUserPreferenceProfile {
         valueTags: _jsonStrings(row['value_tags_json'],
             fallback: const <String>['成长']),
         strengthTags: _jsonStrings(row['strength_tags_json']),
+        obstacleTags: _jsonStrings(row['obstacle_tags_json']),
         energyLevel: (row['energy_level'] ?? 'medium').toString(),
         supportStyle: (row['support_style'] ?? 'direct').toString(),
         preferredMinutes: _supportedPreferredMinutes(
@@ -261,6 +266,9 @@ class XiangjiPersonalizedActionChoiceEngine {
     final recovery = _recoveryFor(
       energyLevel: profile.energyLevel,
       strength: strength,
+      obstacle: profile.obstacleTags.isEmpty
+          ? ''
+          : profile.obstacleTags.first,
       baseAction: action,
     );
     return <XiangjiActionChoice>[
@@ -345,8 +353,27 @@ class XiangjiPersonalizedActionChoiceEngine {
   String _recoveryFor({
     required String energyLevel,
     required String strength,
+    required String obstacle,
     required String baseAction,
   }) {
+    final tailored = switch (obstacle) {
+      '担心被评价' =>
+        '先做一份只给自己看的最小草稿，不提前要求公开或完美',
+      '环境总打断' =>
+        '先只处理一个环境条件：关掉一个打断源，或把所需材料移到手边',
+      '缺少工具或资源' =>
+        '不强行执行主任务；只找到、借到或列出一项必需资源',
+      '目标还不够清楚' =>
+        '把主动作改成一次低成本侦察：只取得一条能帮你选方向的真实信息',
+      '任务看起来太大' =>
+        '保留动词，把对象、数量或时长减半，直到 3 分钟内可开始',
+      '开始前压力很大' =>
+        '只准备一样东西并完成第一个身体动作，不在开始前评价整个任务',
+      _ => '',
+    };
+    if (tailored.isNotEmpty) {
+      return '如果卡住，针对你选择的“$obstacle”：$tailored；做完就可停止并回报现实。';
+    }
     if (energyLevel == 'low') {
       return '如果还是动不了，只准备“$baseAction”所需的一样东西，记下当时能量后停止；这是现实样本，不是失败。';
     }
@@ -647,9 +674,9 @@ class XiangjiPracticalProductContract {
       id: 'personalize_experience',
       title: '选择适合我的使用方式',
       aliases: <String>['偏好', '量表', '测评', '兴趣', '优势', '个性化', '能量', '语气'],
-      what: '用不到 60 秒选择兴趣、价值、优势、当前能量、表达语气和可投入时间；它不是人格诊断。',
+      what: '用不到 60 秒选择兴趣、价值、优势、当前障碍、能量、表达语气和可投入时间；它不是人格或心理诊断。',
       whenToUse: '建议太重、太轻、太无聊，或你希望军师更直接、更温和、更有挑战时。',
-      whatToProvide: '只选择愿意透露的项目；可以全部跳过，也可以随时修改。',
+      whatToProvide: '只选择愿意透露的项目；当前障碍只用于设计恢复动作，可全部跳过或随时修改。',
       steps: <String>['选择容易开始的方式', '选择当前能量和时间', '保存后重新生成三种行动负担'],
       output: '更符合当前状态的轻松起步、稳步推进和现实挑战；事实判断不会因偏好而改变。',
       why: '判断力必须尊重具体情形的决定性差异；个性信息只能调整呈现与负担，不能冒充现实根据。',

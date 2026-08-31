@@ -157,6 +157,7 @@ void main() {
       interestTags: <String>['探索挑战'],
       valueTags: <String>['自由'],
       strengthTags: <String>['好奇'],
+      obstacleTags: <String>['环境总打断'],
       energyLevel: 'high',
       supportStyle: 'challenge',
       preferredMinutes: 20,
@@ -167,6 +168,7 @@ void main() {
     expect(restored.interestTags, profile.interestTags);
     expect(restored.valueTags, profile.valueTags);
     expect(restored.strengthTags, profile.strengthTags);
+    expect(restored.obstacleTags, profile.obstacleTags);
     expect(restored.energyLevel, 'high');
     expect(restored.supportStyle, 'challenge');
     expect(restored.preferredMinutes, 20);

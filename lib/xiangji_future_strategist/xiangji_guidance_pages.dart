@@ -703,6 +703,7 @@ class _XiangjiPreferenceSetupPageState
   late Set<String> _interests;
   late Set<String> _values;
   late Set<String> _strengths;
+  late Set<String> _obstacles;
   late String _energy;
   late String _style;
   late int _minutes;
@@ -714,6 +715,7 @@ class _XiangjiPreferenceSetupPageState
     _interests = widget.initialProfile.interestTags.toSet();
     _values = widget.initialProfile.valueTags.toSet();
     _strengths = widget.initialProfile.strengthTags.toSet();
+    _obstacles = widget.initialProfile.obstacleTags.toSet();
     _energy = widget.initialProfile.energyLevel;
     _style = widget.initialProfile.supportStyle;
     _minutes = widget.initialProfile.preferredMinutes;
@@ -725,6 +727,7 @@ class _XiangjiPreferenceSetupPageState
       interestTags: _interests.toList(),
       valueTags: _values.toList(),
       strengthTags: _strengths.toList(),
+      obstacleTags: _obstacles.toList(),
       energyLevel: _energy,
       supportStyle: _style,
       preferredMinutes: _minutes,
@@ -772,6 +775,18 @@ class _XiangjiPreferenceSetupPageState
             const <String>['好奇', '细致', '坚持', '创造', '勇气', '沟通'],
             _strengths,
           ),
+          _multiSection(
+            '我现在最容易卡在哪里？（可不选，不是诊断）',
+            const <String>[
+              '开始前压力很大',
+              '任务看起来太大',
+              '担心被评价',
+              '环境总打断',
+              '缺少工具或资源',
+              '目标还不够清楚',
+            ],
+            _obstacles,
+          ),
           _singleSection(
             '现在通常有多少能量？',
             const <String, String>{
@@ -810,7 +825,7 @@ class _XiangjiPreferenceSetupPageState
             title: '这些选择会如何真正改变方案',
             subtitle: '不改写现实事实，只改变你怎样更容易做出成果。',
             child: Text(
-              '军师会把你选择的领域变成具体任务情境，用“${_strengths.isEmpty ? '你已有的优势' : _strengths.first}”设计卡住时的降级动作，并把产出与“${_values.isEmpty ? '真正想要的结果' : _values.first}”连接。当前优先用 $_minutes 分钟形成一个可观察成果。',
+              '军师会把你选择的领域变成具体任务情境，用“${_strengths.isEmpty ? '你已有的优势' : _strengths.first}”设计执行方式；如果卡住，会针对“${_obstacles.isEmpty ? '当时实际阻碍' : _obstacles.first}”给出降级动作，并把产出与“${_values.isEmpty ? '真正想要的结果' : _values.first}”连接。当前优先用 $_minutes 分钟形成一个可观察成果。',
               style: const TextStyle(height: 1.5),
             ),
           ),

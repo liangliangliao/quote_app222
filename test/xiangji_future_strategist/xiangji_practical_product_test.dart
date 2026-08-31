@@ -86,6 +86,7 @@ void main() {
         interestTags: <String>['创作', '轻松开始'],
         valueTags: <String>['自由'],
         strengthTags: <String>['创造'],
+        obstacleTags: <String>['担心被评价'],
         energyLevel: 'low',
         preferredMinutes: 3,
       ),
@@ -135,6 +136,8 @@ void main() {
       low.first.fitReason,
       allOf(contains('创造'), contains('小作品')),
     );
+    expect(low.first.recoveryAction, contains('只给自己看'));
+    expect(low.first.recoveryAction, isNot(contains('人格')));
     expect(challenge.last.fitReason, allOf(contains('探索'), contains('好奇')));
   });
 
