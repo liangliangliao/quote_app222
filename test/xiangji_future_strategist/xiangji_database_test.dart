@@ -308,6 +308,42 @@ void main() {
     expect(claims.single['text'], isNot(equals(experiences.single['content'])));
   });
 
+  test('rapid problem transitions keep every audit event without id collision',
+      () async {
+    await dao.createProblem(
+      id: 'problem-fast-audit',
+      rawEventId: 'event-fast-audit',
+      rawQuestion: '快速闭环也必须保留完整审计',
+      contextText: '同一毫秒内可能连续改变状态。',
+    );
+
+    await dao.updateProblemState(
+      'problem-fast-audit',
+      XiangjiProblemState.formalizing,
+      actor: 'test',
+    );
+    await dao.updateProblemState(
+      'problem-fast-audit',
+      XiangjiProblemState.conceptReview,
+      actor: 'test',
+    );
+    await dao.updateProblemState(
+      'problem-fast-audit',
+      XiangjiProblemState.solving,
+      actor: 'test',
+    );
+
+    final rows = await database.query(
+      'xf_audit_log',
+      where: 'object_id = ? AND event_type = ?',
+      whereArgs: const <Object?>['problem-fast-audit', 'state_changed'],
+      orderBy: 'created_at_ms ASC',
+    );
+    expect(rows, hasLength(3));
+    expect(rows.map((row) => row['id']).toSet(), hasLength(3));
+    expect(rows.last['after_json'].toString(), contains('SOLVING'));
+  });
+
   test('TC-EP-008 deleting sole evidence downgrades high impact claim',
       () async {
     await dao.addClaim(

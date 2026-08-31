@@ -18,6 +18,12 @@ class XiangjiDao {
 
   final Database? _injectedDatabase;
   bool _ensured = false;
+  static int _auditSequence = 0;
+
+  String _nextAuditId(String prefix) {
+    _auditSequence = (_auditSequence + 1) & 0x7fffffff;
+    return '$prefix-${DateTime.now().microsecondsSinceEpoch}-$_auditSequence';
+  }
 
   Future<Database> _database() async {
     final db = _injectedDatabase ?? await AppDatabase.instance();
@@ -3219,7 +3225,7 @@ class XiangjiDao {
       );
       await _insertAudit(
         txn,
-        id: '$id-state-$now',
+        id: _nextAuditId('$id-state-${state.wire.toLowerCase()}'),
         objectType: 'problem',
         objectId: id,
         eventType: 'state_changed',
@@ -5421,7 +5427,7 @@ class XiangjiDao {
       }
       await _insertAudit(
         txn,
-        id: '$id-validation-$now',
+        id: _nextAuditId('$id-validation-${state.wire.toLowerCase()}'),
         objectType: 'candidate_knowledge',
         objectId: id,
         eventType: 'validated_${state.wire.toLowerCase()}',
