@@ -4,6 +4,7 @@ import 'package:workmanager/workmanager.dart';
 import '../../data/kv_dao.dart';
 import '../../utils/debug_logger.dart';
 import '../../services/notification_service.dart';
+import '../../platform/native_scheduler.dart';
 import '../repositories/health_diet_agent_repository.dart';
 import '../repositories/health_profile_repository.dart';
 import 'health_diet_autopilot_service.dart';
@@ -95,6 +96,7 @@ class HealthDietDailySchedulerService {
 
   static const workJob = 'health_diet_agent';
   static const workTaskName = 'health_diet_agent_task';
+  static const _nativeNotificationBaseId = 940000;
 
   static const List<HealthDietScheduleSlot> defaultSlots = [
     HealthDietScheduleSlot(
@@ -168,6 +170,7 @@ class HealthDietDailySchedulerService {
     final settings = await _settings.load();
     final enabled = _settings.isEnabledValue(settings[HealthDietSettingsService.agentDailyScheduleEnabled]);
     if (!enabled) {
+      await _cancelAllSchedules(cancelWorker: true);
       await DLog.i('health_diet.scheduler', '每日定时膳食 Agent 未开启，跳过 tick。');
       return HealthDietScheduleTickReport(enabled: false, checkedAt: checkedAt, results: const [], scheduledCount: 0);
     }
@@ -197,7 +200,10 @@ class HealthDietDailySchedulerService {
   Future<int> ensureScheduled({String userId = HealthProfileRepository.defaultUserId}) async {
     final settings = await _settings.load();
     final enabled = _settings.isEnabledValue(settings[HealthDietSettingsService.agentDailyScheduleEnabled]);
-    if (!enabled) return 0;
+    if (!enabled) {
+      await _cancelAllSchedules(cancelWorker: true);
+      return 0;
+    }
     var count = 0;
     for (final slot in defaultSlots) {
       try {
@@ -208,6 +214,20 @@ class HealthDietDailySchedulerService {
       }
     }
     return count;
+  }
+
+  /// 设置页保存后立即同步任务，避免“开关已保存但要等下次启动才生效”。
+  Future<int> syncSchedules({String userId = HealthProfileRepository.defaultUserId}) async {
+    final settings = await _settings.load();
+    final scheduleEnabled = _settings.isEnabledValue(settings[HealthDietSettingsService.agentDailyScheduleEnabled]);
+    if (!scheduleEnabled) {
+      await _cancelAllSchedules(cancelWorker: true);
+      return 0;
+    }
+    if (!_settings.isEnabledValue(settings[HealthDietSettingsService.agentScheduleNotifyEnabled])) {
+      await _cancelNativeReminders();
+    }
+    return ensureScheduled(userId: userId);
   }
 
   Future<HealthDietScheduleRunResult> runScheduledSlot(
@@ -316,6 +336,37 @@ class HealthDietDailySchedulerService {
     } catch (e, st) {
       await DLog.e('health_diet.scheduler.schedule', 'Workmanager 注册失败 slot=${slot.id}: $e\n$st');
     }
+
+    // WorkManager 在部分定制 ROM 上可能被推迟或不执行。通知开关打开时，再注册一个
+    // 不依赖 Flutter 进程的原生 AlarmManager 提醒；完整 AI 巡检仍由 WorkManager 执行。
+    final settings = await _settings.load();
+    final notifyEnabled = _settings.isEnabledValue(settings[HealthDietSettingsService.agentScheduleNotifyEnabled]);
+    final nativeId = _nativeIdFor(slot);
+    if (!notifyEnabled) {
+      try { await NativeScheduler.cancel(nativeId); } catch (_) {}
+      return;
+    }
+    try {
+      await NativeScheduler.scheduleExactAt(
+        id: nativeId,
+        epochMs: next.millisecondsSinceEpoch,
+        payload: {
+          'module': 'health_diet',
+          'type': 'health_diet_agent',
+          'slot': slot.id,
+          'target': _targetForSlot(slot),
+          'title': '健康饮食 Agent：${slot.label}',
+          'body': '到时间了，点击查看本次饮食安排或完成记录。',
+          'hour': slot.hour,
+          'minute': slot.minute,
+          if (slot.weekday != null) 'weekday': slot.weekday,
+          'user_id': userId,
+          'scheduled_for': next.toIso8601String(),
+        },
+      );
+    } catch (e) {
+      await DLog.w('health_diet.scheduler.native', '原生提醒注册失败 slot=${slot.id}: $e');
+    }
   }
 
   Future<void> _notifyIfNeeded(HealthDietScheduleSlot slot, HealthDietAutopilotResult result, Map<String, String> settings) async {
@@ -325,7 +376,7 @@ class HealthDietDailySchedulerService {
       final title = '健康饮食 Agent：${slot.label}';
       final body = _notificationBody(slot, result);
       final index = defaultSlots.indexWhere((e) => e.id == slot.id);
-      final id = 940000 + (index < 0 ? 0 : index);
+      final id = _nativeNotificationBaseId + (index < 0 ? 0 : index);
       await NotificationService.show(
         id: id,
         title: title,
@@ -339,27 +390,7 @@ class HealthDietDailySchedulerService {
 
 
   String _notificationPayload(HealthDietScheduleSlot slot, HealthDietAutopilotResult result) {
-    String target;
-    switch (slot.id) {
-      case 'breakfast_check':
-        target = 'share';
-        break;
-      case 'evening_review':
-        target = 'review';
-        break;
-      case 'weekly_report':
-        target = 'weekly';
-        break;
-      case 'morning_plan':
-      case 'lunch_plan':
-      case 'snack_check':
-      case 'dinner_plan':
-        target = 'today_plan';
-        break;
-      default:
-        target = 'expert';
-        break;
-    }
+    final target = _targetForSlot(slot);
     return jsonEncode({
       'type': 'health_diet_agent',
       'slot': slot.id,
@@ -368,6 +399,42 @@ class HealthDietDailySchedulerService {
       'generated_at': DateTime.now().toIso8601String(),
       'focus': result.plan.focusTitle,
     });
+  }
+
+  String _targetForSlot(HealthDietScheduleSlot slot) {
+    switch (slot.id) {
+      case 'breakfast_check':
+        return 'share';
+      case 'evening_review':
+        return 'review';
+      case 'weekly_report':
+        return 'weekly';
+      case 'morning_plan':
+      case 'lunch_plan':
+      case 'snack_check':
+      case 'dinner_plan':
+        return 'today_plan';
+      default:
+        return 'expert';
+    }
+  }
+
+  int _nativeIdFor(HealthDietScheduleSlot slot) {
+    final index = defaultSlots.indexWhere((e) => e.id == slot.id);
+    return _nativeNotificationBaseId + (index < 0 ? 0 : index);
+  }
+
+  Future<void> _cancelNativeReminders() async {
+    for (final slot in defaultSlots) {
+      try { await NativeScheduler.cancel(_nativeIdFor(slot)); } catch (_) {}
+    }
+  }
+
+  Future<void> _cancelAllSchedules({required bool cancelWorker}) async {
+    if (cancelWorker) {
+      try { await Workmanager().cancelByTag('health_diet_agent'); } catch (_) {}
+    }
+    await _cancelNativeReminders();
   }
 
   String _notificationBody(HealthDietScheduleSlot slot, HealthDietAutopilotResult result) {

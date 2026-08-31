@@ -42,6 +42,7 @@ import '../semantic_consistency/semantic_consistency_settings_page.dart';
 import '../health_diet/pages/health_diet_settings_page.dart';
 import '../kindling_host/kindling_host_reminder.dart';
 import '../services/notification_service.dart';
+import '../services/read_aloud_service.dart';
 // removed duplicate import of native_guard (already imported above)
 
 class SettingsPage extends StatefulWidget {
@@ -3291,9 +3292,10 @@ const Text('头像（用于通知图标）'),
               await _load();
             },
           ),
+          const _ReadAloudProviderTile(),
           ListTile(
             title: const Text('语音与美好的祝福配置'),
-            subtitle: const Text('ElevenLabs API Key、声音克隆、TTS 文件库、美好的祝福声音绑定'),
+            subtitle: const Text('ElevenLabs、Microsoft Azure Speech、讯飞等 API 数据与声音配置，可共享给朗读功能'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const VoiceLabHomePage()));
@@ -3630,6 +3632,85 @@ const Text('头像（用于通知图标）'),
         ),
       ),
 
+    );
+  }
+}
+
+class _ReadAloudProviderTile extends StatefulWidget {
+  const _ReadAloudProviderTile();
+
+  @override
+  State<_ReadAloudProviderTile> createState() => _ReadAloudProviderTileState();
+}
+
+class _ReadAloudProviderTileState extends State<_ReadAloudProviderTile> {
+  final ReadAloudService _service = ReadAloudService();
+  String _provider = ReadAloudSettings.defaultProvider;
+  ReadAloudAvailability? _availability;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final provider = await _service.getProvider();
+    final availability = await _service.availability(provider);
+    if (!mounted) return;
+    setState(() {
+      _provider = provider;
+      _availability = availability;
+      _loading = false;
+    });
+  }
+
+  Future<void> _selectProvider(String? value) async {
+    if (value == null || value == _provider) return;
+    setState(() {
+      _provider = value;
+      _loading = true;
+    });
+    await _service.setProvider(value);
+    await _load();
+    if (!mounted) return;
+    final state = _availability;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(state?.available == true ? '朗读服务商已切换为 ${state!.providerLabel}' : state?.reason ?? '朗读服务商已切换')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(
+        _availability?.available == true ? Icons.record_voice_over_outlined : Icons.voice_over_off_outlined,
+        color: _availability?.available == true ? Theme.of(context).colorScheme.primary : null,
+      ),
+      title: const Text('朗读功能服务商'),
+      subtitle: Text(
+        _loading
+            ? '正在检查配置…'
+            : '${_availability?.reason ?? ''}\nAzure、讯飞、ElevenLabs 复用“语音与美好的祝福配置”；xAI 复用全局 xAI API Key。',
+      ),
+      isThreeLine: true,
+      trailing: SizedBox(
+        width: 152,
+        child: DropdownButtonFormField<String>(
+          value: _provider,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '提供商',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          items: ReadAloudSettings.providers.entries
+              .map((entry) => DropdownMenuItem<String>(value: entry.key, child: Text(entry.value, overflow: TextOverflow.ellipsis)))
+              .toList(),
+          onChanged: _loading ? null : _selectProvider,
+        ),
+      ),
     );
   }
 }

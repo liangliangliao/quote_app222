@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.text.TextUtils;
+import java.util.Calendar;
 
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -97,6 +98,21 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
             try {
                 JSONObject obj = new JSONObject(payload == null ? "{}" : payload);
                 String module = obj.optString("module", "");
+                if ("health_diet".equals(module)) {
+                    String title = obj.optString("title", "健康饮食 Agent");
+                    String body = obj.optString("body", "到时间了，点击查看本次饮食安排或完成记录。");
+                    NotifyHelper.send(
+                        context.getApplicationContext(),
+                        id,
+                        title,
+                        body,
+                        null,
+                        "health_diet_agent",
+                        payload == null ? "{}" : payload
+                    );
+                    scheduleNextHealthDietReminder(context.getApplicationContext(), id, obj, payload);
+                    return;
+                }
                 if ("zhixing_tree".equals(module)) {
                     String title = obj.optString("title", "知行树行动导师");
                     String body = obj.optString("body", "点击查看当前目标、行动与复盘建议");
@@ -231,6 +247,33 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
         } finally {
             try { DbRepository.runGuardEnd(context.getApplicationContext(), uid, runKey, "am"); } catch (Throwable ignore) {}
         }
+    }
+
+    /** Keep the lightweight native reminder alive without requiring the Flutter process. */
+    private static void scheduleNextHealthDietReminder(Context context, int id, JSONObject payloadObject, String payload) {
+        try {
+            int hour = payloadObject.optInt("hour", -1);
+            int minute = payloadObject.optInt("minute", -1);
+            if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return;
+
+            Calendar now = Calendar.getInstance();
+            Calendar next = Calendar.getInstance();
+            next.set(Calendar.HOUR_OF_DAY, hour);
+            next.set(Calendar.MINUTE, minute);
+            next.set(Calendar.SECOND, 0);
+            next.set(Calendar.MILLISECOND, 0);
+
+            int dartWeekday = payloadObject.optInt("weekday", 0);
+            if (dartWeekday >= 1 && dartWeekday <= 7) {
+                int calendarWeekday = dartWeekday == 7 ? Calendar.SUNDAY : dartWeekday + 1;
+                int days = (calendarWeekday - next.get(Calendar.DAY_OF_WEEK) + 7) % 7;
+                if (days == 0 && next.getTimeInMillis() <= now.getTimeInMillis() + 60000L) days = 7;
+                next.add(Calendar.DAY_OF_YEAR, days);
+            } else if (next.getTimeInMillis() <= now.getTimeInMillis() + 60000L) {
+                next.add(Calendar.DAY_OF_YEAR, 1);
+            }
+            NativeSchedulerK.scheduleExactAt(context, id, next.getTimeInMillis(), payload == null ? "{}" : payload);
+        } catch (Throwable ignore) {}
     }
 
     /** Query current plan_time for sport plan to avoid showing stale notifications from legacy alarms. */
