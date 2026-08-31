@@ -119,6 +119,31 @@ class XiangjiPracticalDecisionCard extends StatelessWidget {
                           color: XiangjiPalette.muted,
                           height: 1.4,
                         )),
+                    const SizedBox(height: 7),
+                    Text('你会得到：${selected.visibleOutput}',
+                        style: const TextStyle(
+                          color: XiangjiPalette.pine,
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
+                        )),
+                    const SizedBox(height: 5),
+                    Text('完成信号：${selected.completionSignal}',
+                        style: const TextStyle(
+                          color: XiangjiPalette.muted,
+                          height: 1.4,
+                        )),
+                    const SizedBox(height: 5),
+                    Text('如果卡住：${selected.recoveryAction}',
+                        style: const TextStyle(
+                          color: XiangjiPalette.muted,
+                          height: 1.4,
+                        )),
+                    const SizedBox(height: 7),
+                    Text(selected.motivationCue,
+                        style: const TextStyle(
+                          color: XiangjiPalette.pine,
+                          height: 1.4,
+                        )),
                   ],
                 ),
               ),
@@ -145,7 +170,28 @@ class XiangjiPracticalDecisionCard extends StatelessWidget {
                     value: selected.stopCondition,
                   ),
                   XiangjiLabeledValue(
-                    label: '知识依据',
+                    label: '这一步在练会什么',
+                    value: selected.principlePractice,
+                  ),
+                  XiangjiLabeledValue(
+                    label: '下次怎样迁移到新情境',
+                    value: selected.transferQuestion,
+                  ),
+                  XiangjiLabeledValue(
+                    label: '核心思想家',
+                    value: selected.thinkerNames.join('、'),
+                  ),
+                  if (selected.activeMethodLabels.isNotEmpty)
+                    XiangjiLabeledValue(
+                      label: '本轮实际调用的方法',
+                      value: selected.activeMethodLabels.join('、'),
+                    ),
+                  XiangjiLabeledValue(
+                    label: '本轮知识来源',
+                    value: selected.knowledgeSource,
+                  ),
+                  XiangjiLabeledValue(
+                    label: '本轮实际使用的叔本华 L0 概念',
                     value: _conceptNames(selected.coreConceptIds),
                   ),
                 ],

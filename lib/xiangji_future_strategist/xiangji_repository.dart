@@ -63,6 +63,93 @@ class XiangjiRepository {
   Future<int> completedRealityRoundCount() =>
       _dao.completedRealityRoundCount();
 
+  /// A read-only snapshot for the usage assistant. Unlike [dashboard], this
+  /// does not refresh Todo bindings or run background monitoring; asking for
+  /// help must never mutate the user's problem state.
+  Future<XiangjiUsageAssistantContext> usageAssistantContext() async {
+    final dashboard = await _dao.dashboard();
+    final problem = dashboard.currentProblem;
+    final action = dashboard.currentAction;
+    final problemId = problem?.id ?? action?.problemId ?? '';
+    final methodEvents = problemId.isEmpty
+        ? const <XiangjiMethodEvent>[]
+        : await _dao.latestMethodTurnEvents(
+            problemId: problemId,
+            userVisibleOnly: true,
+            limit: 5,
+          );
+    final completedRounds = await _dao.completedRealityRoundCount();
+
+    List<String> strings(Object? raw) {
+      if (raw is List) {
+        return raw
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+      }
+      if (raw is String && raw.trim().startsWith('[')) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) return strings(decoded);
+        } catch (_) {
+          // Keep the context optional when old records use a different shape.
+        }
+      }
+      return const <String>[];
+    }
+
+    final conceptIds = <String>[
+      ...strings(action?.whyChain['core_concept_ids']),
+      for (final event in methodEvents) ...event.coreConceptIds,
+    ].fold<List<String>>(<String>[], (values, item) {
+      if (item.isNotEmpty && !values.contains(item)) values.add(item);
+      return values;
+    });
+    final methodLabels = methodEvents
+        .map((event) => event.capabilityName.trim())
+        .where((item) => item.isNotEmpty)
+        .fold<List<String>>(<String>[], (values, item) {
+      if (!values.contains(item)) values.add(item);
+      return values;
+    });
+    final eventSources = methodEvents
+        .map((event) => event.philosophySource.trim())
+        .where((item) => item.isNotEmpty)
+        .fold<List<String>>(<String>[], (values, item) {
+      if (!values.contains(item)) values.add(item);
+      return values;
+    });
+    final why = action?.whyChain ?? const <String, Object?>{};
+    return XiangjiUsageAssistantContext(
+      problemId: problemId,
+      problem: (problem?.need.isNotEmpty == true
+              ? problem!.need
+              : problem?.reframedQuestion.isNotEmpty == true
+                  ? problem!.reframedQuestion
+                  : problem?.rawQuestion ?? '')
+          .trim(),
+      goal: dashboard.northStar,
+      keyGap: dashboard.keyGap,
+      judgment: dashboard.strategistJudgment,
+      currentActionId: action?.id ?? '',
+      currentAction: action?.title ?? '',
+      actionState: action?.state.wire ?? '',
+      actionStateLabel: action?.state.label ?? '',
+      prediction: action?.prediction ?? '',
+      stopCondition: (why['stop_condition'] ?? '').toString().trim(),
+      recoveryAction: (why['recovery_action'] ?? '').toString().trim(),
+      principlePractice:
+          (why['principle_practice'] ?? '').toString().trim(),
+      transferQuestion: (why['transfer_question'] ?? '').toString().trim(),
+      knowledgeSource: (why['knowledge_source'] ?? '').toString().trim().isNotEmpty
+          ? (why['knowledge_source'] ?? '').toString().trim()
+          : eventSources.join('；'),
+      coreConceptIds: conceptIds,
+      activeMethodLabels: methodLabels,
+      completedRealityRounds: completedRounds,
+    );
+  }
+
   Future<XiangjiDashboardSnapshot> dashboard() async {
     await refreshTodoBindings();
     if ((await _kv.getString(monitorEnabledKey)) != '0') {
@@ -393,6 +480,15 @@ class XiangjiRepository {
           'fit_reason': choice.fitReason,
           'mechanism': choice.mechanism,
           'stop_condition': choice.stopCondition,
+          'visible_output': choice.visibleOutput,
+          'completion_signal': choice.completionSignal,
+          'recovery_action': choice.recoveryAction,
+          'principle_practice': choice.principlePractice,
+          'transfer_question': choice.transferQuestion,
+          'motivation_cue': choice.motivationCue,
+          'knowledge_source': choice.knowledgeSource,
+          'active_method_labels': choice.activeMethodLabels,
+          'thinker_names': choice.thinkerNames,
           'core_concept_ids': choice.coreConceptIds,
           'user_selected': true,
         }),

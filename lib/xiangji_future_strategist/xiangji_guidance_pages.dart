@@ -10,9 +10,11 @@ class XiangjiUsageAssistantPage extends StatefulWidget {
   const XiangjiUsageAssistantPage({
     super.key,
     this.service,
+    this.repository,
   });
 
   final XiangjiUsageAssistantService? service;
+  final XiangjiRepository? repository;
 
   @override
   State<XiangjiUsageAssistantPage> createState() =>
@@ -24,12 +26,29 @@ class _XiangjiUsageAssistantPageState
   final TextEditingController _controller = TextEditingController();
   late final XiangjiUsageAssistantService _service;
   XiangjiUsageAssistantAnswer? _answer;
+  XiangjiUsageAssistantContext? _usageContext;
+  bool _loadingContext = false;
   bool _working = false;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? XiangjiUsageAssistantService();
+    _loadUsageContext();
+  }
+
+  Future<void> _loadUsageContext() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    setState(() => _loadingContext = true);
+    try {
+      final value = await repository.usageAssistantContext();
+      if (mounted) setState(() => _usageContext = value);
+    } catch (_) {
+      // The full feature guide remains available when there is no live state.
+    } finally {
+      if (mounted) setState(() => _loadingContext = false);
+    }
   }
 
   @override
@@ -42,7 +61,10 @@ class _XiangjiUsageAssistantPageState
     final question = (suggested ?? _controller.text).trim();
     if (question.isEmpty) return;
     setState(() => _working = true);
-    final answer = await _service.answer(question);
+    final answer = await _service.answer(
+      question,
+      context: _usageContext,
+    );
     if (!mounted) return;
     setState(() {
       _answer = answer;
@@ -77,6 +99,26 @@ class _XiangjiUsageAssistantPageState
               style: TextStyle(height: 1.5),
             ),
           ),
+          if (widget.repository != null) ...[
+            const SizedBox(height: 10),
+            XiangjiSectionCard(
+              title: _loadingContext
+                  ? '正在读取你的当前进度'
+                  : _usageContext?.hasCurrentAction == true
+                      ? '我知道你此刻在做哪一步'
+                      : _usageContext?.hasProblem == true
+                          ? '我知道你正在解哪道题'
+                          : '目前还没有进行中的问题',
+              subtitle: _usageContext?.hasCurrentAction == true
+                  ? '${_usageContext!.actionStateLabel}·${_usageContext!.currentAction}'
+                  : _usageContext?.problem ?? '你可以直接问如何开始。',
+              icon: Icons.my_location_outlined,
+              child: const Text(
+                '问“我现在该做什么”、“我卡住了”或“为什么是这一步”，助手会根据当前状态回答，不会只背说明书。',
+                style: TextStyle(height: 1.5),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           TextField(
             key: const ValueKey<String>('xiangji_usage_assistant_input'),
@@ -155,6 +197,10 @@ class _XiangjiUsageAssistantPageState
               title: const Text('为什么这样设计 / 知识依据'),
               childrenPadding: EdgeInsets.zero,
               children: [
+                XiangjiLabeledValue(
+                  label: '核心思想家',
+                  value: answer.thinkerNames.join('、'),
+                ),
                 XiangjiLabeledValue(
                   label: '依据',
                   value: answer.knowledgeSource,
@@ -267,6 +313,10 @@ class XiangjiUserGuidePage extends StatelessWidget {
           XiangjiLabeledValue(label: '怎样做', value: guide.steps.join(' → ')),
           XiangjiLabeledValue(label: '最终产出', value: guide.output),
           XiangjiLabeledValue(label: '为什么这样做', value: guide.why),
+          XiangjiLabeledValue(
+            label: '核心思想家',
+            value: guide.thinkerNames.join('、'),
+          ),
           XiangjiLabeledValue(label: '知识依据', value: guide.knowledgeSource),
           XiangjiLabeledValue(
             label: '对应 L0 概念',
@@ -422,6 +472,24 @@ class XiangjiGuidedCaseDetailPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
+          OutlinedButton.icon(
+            key: const ValueKey<String>('xiangji_rehearse_guided_case'),
+            onPressed: () async {
+              final starter = await Navigator.of(context).push<String>(
+                MaterialPageRoute(
+                  builder: (_) => XiangjiGuidedCasePracticePage(
+                    example: example,
+                  ),
+                ),
+              );
+              if (context.mounted && starter != null) {
+                Navigator.of(context).pop(starter);
+              }
+            },
+            icon: const Icon(Icons.play_circle_outline),
+            label: const Text('用 2 分钟按四步演练这个案例'),
+          ),
+          const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(example.need),
             icon: const Icon(Icons.edit_outlined),
@@ -431,6 +499,181 @@ class XiangjiGuidedCaseDetailPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class XiangjiGuidedCasePracticePage extends StatefulWidget {
+  const XiangjiGuidedCasePracticePage({
+    super.key,
+    required this.example,
+  });
+
+  final XiangjiGuidedCase example;
+
+  @override
+  State<XiangjiGuidedCasePracticePage> createState() =>
+      _XiangjiGuidedCasePracticePageState();
+}
+
+class _XiangjiGuidedCasePracticePageState
+    extends State<XiangjiGuidedCasePracticePage> {
+  int _step = 0;
+
+  XiangjiGuidedCase get example => widget.example;
+
+  @override
+  Widget build(BuildContext context) {
+    final titles = <String>[
+      '1. 从真实需要开始',
+      '2. 把事实与解释分开',
+      '3. 选一个能产生现实的办法',
+      '4. 让现实改判并带走方法',
+    ];
+    return Scaffold(
+      appBar: AppBar(title: const Text('四步案例演练')),
+      body: ListView(
+        key: ValueKey<String>('xiangji_case_practice_step_$_step'),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+        children: [
+          LinearProgressIndicator(value: (_step + 1) / 4),
+          const SizedBox(height: 14),
+          Text(
+            titles[_step],
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '你正在演练，不会写入个人数据。每一步都要看到“填什么—为什么—产出什么”。',
+            style: const TextStyle(color: XiangjiPalette.muted, height: 1.45),
+          ),
+          const SizedBox(height: 14),
+          _stepCard(),
+          const SizedBox(height: 12),
+          XiangjiSectionCard(
+            title: '这一步的思想与概念依据',
+            subtitle: example.sourceLabel,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const XiangjiLabeledValue(
+                  label: '核心思想家',
+                  value: '叔本华',
+                ),
+                XiangjiLabeledValue(
+                  label: '本案例实际使用的 L0 概念',
+                  value: _conceptNames(example.coreConceptIds),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              if (_step > 0)
+                TextButton.icon(
+                  onPressed: () => setState(() => _step -= 1),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('上一步'),
+                ),
+              const Spacer(),
+              if (_step < 3)
+                FilledButton.icon(
+                  key: const ValueKey<String>('xiangji_case_practice_next'),
+                  onPressed: () => setState(() => _step += 1),
+                  icon: const Icon(Icons.arrow_forward),
+                  label: const Text('下一步'),
+                )
+              else
+                FilledButton.icon(
+                  key: const ValueKey<String>('xiangji_case_practice_finish'),
+                  onPressed: () => Navigator.of(context).pop(example.need),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('用我的处境开始'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepCard() => switch (_step) {
+        0 => XiangjiSectionCard(
+            title: '你填什么',
+            subtitle: '只用一句原话，不需要理论词汇。',
+            child: Column(
+              children: [
+                XiangjiLabeledValue(label: '案例输入', value: example.need),
+                const XiangjiLabeledValue(
+                  label: '为什么',
+                  value: '经验世界必须保留原话，不先被一个概念改写。',
+                ),
+                const XiangjiLabeledValue(
+                  label: '产出',
+                  value: '一个稳定的真实问题身份，后续行动和现实都回到同一道题。',
+                ),
+              ],
+            ),
+          ),
+        1 => XiangjiSectionCard(
+            title: '军师怎样处理',
+            subtitle: '体验是真的，外部原因仍是待验候选。',
+            child: Column(
+              children: [
+                XiangjiLabeledValue(
+                  label: '可观察事实',
+                  value: example.realityFacts.join('；'),
+                ),
+                XiangjiLabeledValue(
+                  label: '用户解释',
+                  value: example.userInterpretations.join('；'),
+                ),
+                XiangjiLabeledValue(
+                  label: '竞争原因',
+                  value: example.competingCauses.join('；'),
+                ),
+                XiangjiLabeledValue(label: '当前产出', value: example.keyGap),
+              ],
+            ),
+          ),
+        2 => XiangjiSectionCard(
+            title: '不阅读概念，直接选一种现实负担',
+            subtitle: '三个办法都服务同一目标，但用户有最终选择权。',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final route in example.routeChoices)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 7),
+                    child: Text('• $route', style: const TextStyle(height: 1.45)),
+                  ),
+                const Divider(height: 22),
+                XiangjiLabeledValue(label: '案例选择', value: example.selectedAction),
+                XiangjiLabeledValue(label: '事前预测', value: example.prediction),
+                const XiangjiLabeledValue(
+                  label: '产出',
+                  value: '现实行为或外部结果，而不是新的计划文字。',
+                ),
+              ],
+            ),
+          ),
+        _ => XiangjiSectionCard(
+            title: '现实有最终修订权',
+            subtitle: '失败也要产出新知识，不得只归因为意志薄弱。',
+            child: Column(
+              children: [
+                XiangjiLabeledValue(label: '实际结果', value: example.realityResult),
+                XiangjiLabeledValue(label: '改判', value: example.revision),
+                XiangjiLabeledValue(label: '新的一步', value: example.nextStep),
+                XiangjiLabeledValue(
+                  label: '可迁移练习',
+                  value: '下次遇到相似情境时，你要如何更早地区分事实、解释与候选原因？',
+                ),
+              ],
+            ),
+          ),
+      };
 }
 
 class XiangjiPreferenceSetupPage extends StatefulWidget {
@@ -503,7 +746,12 @@ class _XiangjiPreferenceSetupPageState
           ),
           const SizedBox(height: 16),
           _multiSection(
-            '什么更容易让我愿意开始？',
+            '哪些生活领域会让我更愿意投入？',
+            const <String>['创作', '学习', '事业', '关系', '身心', '探索'],
+            _interests,
+          ),
+          _multiSection(
+            '什么样的体验更容易让我开始？',
             const <String>['轻松开始', '清晰步骤', '看见进展', '探索挑战', '有人陪伴'],
             _interests,
           ),
@@ -549,6 +797,15 @@ class _XiangjiPreferenceSetupPageState
             selected: <int>{_minutes},
             onSelectionChanged: (values) =>
                 setState(() => _minutes = values.first),
+          ),
+          const SizedBox(height: 18),
+          XiangjiSectionCard(
+            title: '这些选择会如何真正改变方案',
+            subtitle: '不改写现实事实，只改变你怎样更容易做出成果。',
+            child: Text(
+              '军师会把你选择的领域变成具体任务情境，用“${_strengths.isEmpty ? '你已有的优势' : _strengths.first}”设计卡住时的降级动作，并把产出与“${_values.isEmpty ? '真正想要的结果' : _values.first}”连接。当前优先用 $_minutes 分钟形成一个可观察成果。',
+              style: const TextStyle(height: 1.5),
+            ),
           ),
           const SizedBox(height: 22),
           FilledButton(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_guidance_pages.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_practical_product.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_practical_widgets.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_repository.dart';
@@ -104,6 +105,44 @@ void main() {
     expect(find.text('选择这条并开始'), findsOneWidget);
     expect(find.text('SituationModel'), findsNothing);
     expect(find.text('AgentRun'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('TC-UX-V63 guided case rehearses the complete useful loop',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() async => tester.binding.setSurfaceSize(null));
+    final example = XiangjiPracticalProductContract.guidedCases.first;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: XiangjiGuidedCasePracticePage(example: example),
+      ),
+    );
+
+    expect(find.text('1. 从真实需要开始'), findsOneWidget);
+    expect(find.text('核心思想家'), findsOneWidget);
+    expect(find.text('叔本华'), findsOneWidget);
+
+    for (final expectedTitle in <String>[
+      '2. 把事实与解释分开',
+      '3. 选一个能产生现实的办法',
+      '4. 让现实改判并带走方法',
+    ]) {
+      final next = find.byKey(
+        const ValueKey<String>('xiangji_case_practice_next'),
+      );
+      await tester.ensureVisible(next);
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+      expect(find.text(expectedTitle), findsOneWidget);
+    }
+
+    expect(find.text(example.revision), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('xiangji_case_practice_finish')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 }

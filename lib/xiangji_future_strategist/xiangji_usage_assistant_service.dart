@@ -24,8 +24,12 @@ class XiangjiUsageAssistantService {
   Future<XiangjiUsageAssistantAnswer> answer(
     String question, {
     bool authorizedSensitiveContext = false,
+    XiangjiUsageAssistantContext? context,
   }) async {
-    final local = XiangjiPracticalProductContract.answerLocally(question);
+    final local = XiangjiPracticalProductContract.answerLocally(
+      question,
+      context: context,
+    );
     final value = question.trim();
     if (value.isEmpty) return local;
     try {
@@ -33,14 +37,20 @@ class XiangjiUsageAssistantService {
       if (state['available'] != '1') return local;
       final privacy = _privacyGuard.assess(
         task: value,
-        additionalContext: const <String, Object?>{
+        additionalContext: <String, Object?>{
           'scope': 'future_strategist_product_usage_only',
+          if (context != null) 'current_user_state': context.toPromptMap(),
         },
       );
       if (privacy.containsSensitiveCategory && !authorizedSensitiveContext) {
         return local;
       }
       final safeQuestion = _privacyGuard.sanitizeText(value).value;
+      final safeContext = context == null
+          ? ''
+          : _privacyGuard
+              .sanitizeText(jsonEncode(context.toPromptMap()))
+              .value;
       final raw = await _ai.generateChatMessages(
         purpose: 'xiangji_future_strategist.usage_assistant',
         maxTokens: 900,
@@ -57,6 +67,7 @@ class XiangjiUsageAssistantService {
 3. 先给直接答案，再给不超过 4 个短步骤；不要要求用户理解内部模型。
 4. 不诊断人格、疾病或创伤，不羞辱、不威胁、不制造依赖。
 5. 只输出 JSON：{"answer":"...","steps":["..."],"guide_id":"已存在的 guide id"}。
+6. 若提供“当前用户状态”，必须直接回答此刻的问题、行动、受阻恢复或现实回填；不得退回通用说明。
 
 产品合同：
 ${XiangjiPracticalProductContract.assistantKnowledgeJson()}
@@ -67,6 +78,7 @@ ${XiangjiPracticalProductContract.assistantKnowledgeJson()}
             content: jsonEncode(<String, Object?>{
               'question': safeQuestion,
               'local_route': local.guideId,
+              if (safeContext.isNotEmpty) 'current_user_state': safeContext,
             }),
           ),
         ],
@@ -78,6 +90,10 @@ ${XiangjiPracticalProductContract.assistantKnowledgeJson()}
           .any((guide) => guide.id == guideId)) {
         return local;
       }
+      if (context != null && local.destination.isNotEmpty &&
+          guideId != local.guideId) {
+        return local;
+      }
       final guide = XiangjiPracticalProductContract.guideForId(guideId);
       final answer = (parsed['answer'] ?? '').toString().trim();
       final steps = _strings(parsed['steps']).take(4).toList();
@@ -87,8 +103,13 @@ ${XiangjiPracticalProductContract.assistantKnowledgeJson()}
         answer: answer,
         steps: steps,
         guideId: guide.id,
-        coreConceptIds: guide.coreConceptIds,
-        knowledgeSource: guide.knowledgeSource,
+        coreConceptIds: context?.coreConceptIds.isNotEmpty == true
+            ? context!.coreConceptIds
+            : guide.coreConceptIds,
+        knowledgeSource: context?.knowledgeSource.isNotEmpty == true
+            ? context!.knowledgeSource
+            : guide.knowledgeSource,
+        thinkerNames: guide.thinkerNames,
         startPrompt: guide.startPrompt,
         destination: guide.destination,
         aiEnhanced: true,

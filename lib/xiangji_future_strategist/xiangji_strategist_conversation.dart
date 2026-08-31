@@ -194,13 +194,6 @@ class _XiangjiStrategistConversationPanelState
         },
       );
       if (!mounted) return;
-      final choices = _choicesFor(result);
-      final preferred = choices.isEmpty
-          ? null
-          : choices.firstWhere(
-              (choice) => choice.preferred,
-              orElse: () => choices.first,
-            );
       setState(() {
         _result = result;
         _pendingProblemId = result.problemId;
@@ -211,10 +204,19 @@ class _XiangjiStrategistConversationPanelState
         _forceNewOnNextSubmit = false;
         _failedInput = '';
         _failureMessage = '';
-        _selectedChoiceId = preferred?.id ?? '';
+        _selectedChoiceId = '';
         _showFullAnalysis = false;
       });
       await _refreshProblemContext(result.problemId);
+      if (!mounted) return;
+      final choices = _choicesFor(result);
+      final preferred = choices.isEmpty
+          ? null
+          : choices.firstWhere(
+              (choice) => choice.preferred,
+              orElse: () => choices.first,
+            );
+      setState(() => _selectedChoiceId = preferred?.id ?? '');
       await _loadHistory();
       await widget.onDataChanged?.call();
     } catch (error) {
@@ -351,18 +353,50 @@ class _XiangjiStrategistConversationPanelState
     await _submit();
   }
 
-  List<XiangjiActionChoice> _choicesFor(XiangjiCouncilResult result) =>
-      const XiangjiPersonalizedActionChoiceEngine().build(
+  List<XiangjiActionChoice> _choicesFor(XiangjiCouncilResult result) {
+    final conceptIds = <String>[
+      for (final event in _methodEvents) ...event.coreConceptIds,
+    ].fold<List<String>>(<String>[], (values, item) {
+      if (item.isNotEmpty && !values.contains(item)) values.add(item);
+      return values;
+    });
+    final methodLabels = _methodEvents
+        .map((event) => event.capabilityName.trim())
+        .where((item) => item.isNotEmpty)
+        .fold<List<String>>(<String>[], (values, item) {
+      if (!values.contains(item)) values.add(item);
+      return values;
+    });
+    final knowledgeSources = _methodEvents
+        .map((event) => event.philosophySource.trim())
+        .where((item) => item.isNotEmpty)
+        .fold<List<String>>(<String>[], (values, item) {
+      if (!values.contains(item)) values.add(item);
+      return values;
+    });
+    return const XiangjiPersonalizedActionChoiceEngine().build(
         baseAction: result.executionFrozen ? '' : result.draft.currentAction,
         mechanism: result.draft.operatorMechanism,
         prediction: result.draft.prediction,
         expectedMinutes: result.draft.expectedMinutes,
         profile: _profile,
+        goal: result.draft.goal,
+        keyGap: result.draft.targetGap,
+        valueLink: result.draft.valueLink,
+        groundingReason: result.draft.groundingReason,
+        activeCoreConceptIds: conceptIds,
+        activeMethodLabels: methodLabels,
+        activeKnowledgeSources: knowledgeSources,
       );
+  }
 
   Future<void> _openUsageAssistant() async {
     final answer = await Navigator.of(context).push<XiangjiUsageAssistantAnswer>(
-      MaterialPageRoute(builder: (_) => const XiangjiUsageAssistantPage()),
+      MaterialPageRoute(
+        builder: (_) => XiangjiUsageAssistantPage(
+          repository: widget.repository,
+        ),
+      ),
     );
     if (!mounted || answer == null) return;
     switch (answer.destination) {
@@ -408,15 +442,27 @@ class _XiangjiStrategistConversationPanelState
         }
         return;
       case 'current_action':
-        final actionId = _result?.actionId ?? '';
+        var actionId = _result?.actionId ?? '';
+        if (actionId.isEmpty) {
+          try {
+            actionId =
+                (await widget.repository.usageAssistantContext()).currentActionId;
+          } catch (_) {
+            // The fallback below starts a new conversation when no action can
+            // be resolved without guessing.
+          }
+        }
         if (actionId.isNotEmpty) {
-          await Navigator.of(context).push(MaterialPageRoute(
+          final next = await Navigator.of(context).push<XiangjiCouncilResult>(
+            MaterialPageRoute(
             builder: (_) => XiangjiActionModePage(
               actionId: actionId,
               repository: widget.repository,
               dao: widget.dao,
             ),
-          ));
+            ),
+          );
+          if (next != null) await _applyReturnedCouncilResult(next);
         } else {
           _prefill('我知道自己想做什么，但还没有形成一个可以开始的行动：');
         }
@@ -471,6 +517,33 @@ class _XiangjiStrategistConversationPanelState
     });
   }
 
+  Future<void> _applyReturnedCouncilResult(
+    XiangjiCouncilResult next,
+  ) async {
+    if (!mounted) return;
+    setState(() {
+      _result = next;
+      _pendingProblemId = next.problemId;
+      _awaitingClarification = next.outcome == XiangjiAskUserOutcome.askOne;
+      _selectedChoiceId = '';
+      _showFullAnalysis = false;
+      _failedInput = '';
+      _failureMessage = '';
+    });
+    await _refreshProblemContext(next.problemId);
+    if (!mounted) return;
+    final choices = _choicesFor(next);
+    final preferred = choices.isEmpty
+        ? null
+        : choices.firstWhere(
+            (choice) => choice.preferred,
+            orElse: () => choices.first,
+          );
+    setState(() => _selectedChoiceId = preferred?.id ?? '');
+    await _loadHistory();
+    await widget.onDataChanged?.call();
+  }
+
   Future<void> _adoptSelectedChoice() async {
     final result = _result;
     if (result == null || result.actionId.isEmpty) return;
@@ -493,13 +566,16 @@ class _XiangjiStrategistConversationPanelState
       await _loadHistory();
       await widget.onDataChanged?.call();
       if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => XiangjiActionModePage(
-          actionId: result.actionId,
-          repository: widget.repository,
-          dao: widget.dao,
+      final next = await Navigator.of(context).push<XiangjiCouncilResult>(
+        MaterialPageRoute(
+          builder: (_) => XiangjiActionModePage(
+            actionId: result.actionId,
+            repository: widget.repository,
+            dao: widget.dao,
+          ),
         ),
-      ));
+      );
+      if (next != null) await _applyReturnedCouncilResult(next);
       await widget.onDataChanged?.call();
     } catch (error) {
       if (mounted) xiangjiShowMessage(context, error);
@@ -521,13 +597,16 @@ class _XiangjiStrategistConversationPanelState
       if (!mounted) return;
       if (status == XiangjiDecisionDraftStatus.adopted &&
           result.actionId.isNotEmpty) {
-        await Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => XiangjiActionModePage(
-            actionId: result.actionId,
-            repository: widget.repository,
-            dao: widget.dao,
+        final next = await Navigator.of(context).push<XiangjiCouncilResult>(
+          MaterialPageRoute(
+            builder: (_) => XiangjiActionModePage(
+              actionId: result.actionId,
+              repository: widget.repository,
+              dao: widget.dao,
+            ),
           ),
-        ));
+        );
+        if (next != null) await _applyReturnedCouncilResult(next);
         await widget.onDataChanged?.call();
       } else {
         xiangjiShowMessage(

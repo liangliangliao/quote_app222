@@ -232,6 +232,14 @@ void main() {
       mechanism: '降低启动负担并取得第一个现实材料',
       prediction: '3 分钟后应至少得到一条岗位匹配信息',
       coreConceptIds: <String>['SC-K0-004', 'SC-K0-022'],
+      visibleOutput: '一条岗位匹配记录',
+      completionSignal: '写出第一条匹配点',
+      recoveryAction: '只打开职位页并标记一个要求',
+      principlePractice: '用经验检验抽象判断',
+      transferQuestion: '下次哪个启动动作可复用？',
+      motivationCue: '为成长得到一条现实进展',
+      knowledgeSource: '叔本华 L0：经验世界与熟练行动',
+      activeMethodLabels: <String>['持续问题求解'],
       preferred: true,
     );
     final repository = XiangjiRepository(dao: dao);
@@ -249,9 +257,25 @@ void main() {
     expect(action?.prediction, choice.prediction);
     expect(action?.whyChain['stop_condition'], choice.stopCondition);
     expect(action?.whyChain['selected_experience_mode'], 'tiny_start');
+    expect(action?.whyChain['visible_output'], choice.visibleOutput);
+    expect(action?.whyChain['completion_signal'], choice.completionSignal);
+    expect(action?.whyChain['recovery_action'], choice.recoveryAction);
+    expect(action?.whyChain['principle_practice'], choice.principlePractice);
+    expect(action?.whyChain['transfer_question'], choice.transferQuestion);
+    expect(action?.whyChain['knowledge_source'], choice.knowledgeSource);
+    expect(action?.whyChain['active_method_labels'], choice.activeMethodLabels);
     expect(action?.whyChain['user_selected'], isTrue);
     expect(draft?.status, XiangjiDecisionDraftStatus.adopted);
     expect(draft?.currentAction, choice.action);
+
+    final assistantContext = await repository.usageAssistantContext();
+    expect(assistantContext.problemId, 'problem-practical');
+    expect(assistantContext.currentAction, choice.action);
+    expect(assistantContext.actionState, 'READY');
+    expect(assistantContext.recoveryAction, choice.recoveryAction);
+    expect(assistantContext.principlePractice, choice.principlePractice);
+    expect(assistantContext.knowledgeSource, choice.knowledgeSource);
+    expect(assistantContext.coreConceptIds, contains('SC-K0-004'));
   });
 
   test('TC-PS-001 preserves user raw material and derived layers separately',

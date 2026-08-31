@@ -37,6 +37,7 @@ class XiangjiFeatureGuide {
     required this.problemSolved,
     required this.coreConceptIds,
     required this.knowledgeSource,
+    this.thinkerNames = const <String>['叔本华'],
     this.startPrompt = '',
     this.destination = '',
   });
@@ -53,6 +54,7 @@ class XiangjiFeatureGuide {
   final String problemSolved;
   final List<String> coreConceptIds;
   final String knowledgeSource;
+  final List<String> thinkerNames;
   final String startPrompt;
   final String destination;
 
@@ -69,6 +71,7 @@ class XiangjiFeatureGuide {
         'problem_solved': problemSolved,
         'l0_core_concept_ids': coreConceptIds,
         'knowledge_source': knowledgeSource,
+        'thinker_names': thinkerNames,
         'start_prompt': startPrompt,
         'destination': destination,
       };
@@ -155,6 +158,15 @@ class XiangjiActionChoice {
     required this.mechanism,
     required this.prediction,
     required this.coreConceptIds,
+    required this.visibleOutput,
+    required this.completionSignal,
+    required this.recoveryAction,
+    required this.principlePractice,
+    required this.transferQuestion,
+    required this.motivationCue,
+    required this.knowledgeSource,
+    this.activeMethodLabels = const <String>[],
+    this.thinkerNames = const <String>['叔本华'],
     this.preferred = false,
   });
 
@@ -167,6 +179,15 @@ class XiangjiActionChoice {
   final String mechanism;
   final String prediction;
   final List<String> coreConceptIds;
+  final String visibleOutput;
+  final String completionSignal;
+  final String recoveryAction;
+  final String principlePractice;
+  final String transferQuestion;
+  final String motivationCue;
+  final String knowledgeSource;
+  final List<String> activeMethodLabels;
+  final List<String> thinkerNames;
   final bool preferred;
 }
 
@@ -179,6 +200,13 @@ class XiangjiPersonalizedActionChoiceEngine {
     required String prediction,
     required int expectedMinutes,
     required XiangjiUserPreferenceProfile profile,
+    String goal = '',
+    String keyGap = '',
+    String valueLink = '',
+    String groundingReason = '',
+    List<String> activeCoreConceptIds = const <String>[],
+    List<String> activeMethodLabels = const <String>[],
+    List<String> activeKnowledgeSources = const <String>[],
   }) {
     final action = baseAction.trim();
     if (action.isEmpty) return const <XiangjiActionChoice>[];
@@ -201,7 +229,40 @@ class XiangjiPersonalizedActionChoiceEngine {
     final prefersTiny = profile.energyLevel == 'low' ||
         profile.preferredMinutes <= 5 ||
         profile.interestTags.contains('轻松开始');
-    final value = profile.valueTags.isEmpty ? '真正想要的结果' : profile.valueTags.first;
+    final value = profile.valueTags.isEmpty
+        ? (valueLink.trim().isEmpty ? '真正想要的结果' : valueLink.trim())
+        : profile.valueTags.first;
+    const lifeDomains = <String>['创作', '学习', '事业', '关系', '身心', '探索'];
+    final interest = profile.interestTags.firstWhere(
+      lifeDomains.contains,
+      orElse: () => profile.interestTags.isEmpty
+          ? '清晰步骤'
+          : profile.interestTags.first,
+    );
+    final strength = profile.strengthTags.isEmpty
+        ? '已经愿意面对这道题'
+        : profile.strengthTags.first;
+    final effectiveGoal = goal.trim().isEmpty ? '让现实向目标前进' : goal.trim();
+    final effectiveGap = keyGap.trim().isEmpty ? '当前最关键的未知' : keyGap.trim();
+    final methods = _uniqueStrings(activeMethodLabels).take(3).toList();
+    final sources = _uniqueStrings(activeKnowledgeSources).take(3).toList();
+    final sourceText = sources.isNotEmpty
+        ? '叔本华 L0 认识论内核；本轮方法来源：${sources.join('；')}'
+        : groundingReason.trim().isNotEmpty
+            ? '叔本华 L0 与本轮现实根据：${groundingReason.trim()}'
+            : '叔本华 L0：抽象判断必须回到经验世界验证。';
+    final practicedMethod = methods.isEmpty
+        ? '把抽象判断送回经验世界检验'
+        : methods.join('、');
+    final sharedCore = _uniqueStrings(activeCoreConceptIds);
+    List<String> concepts(List<String> fallback) =>
+        _uniqueStrings(<String>[...sharedCore, ...fallback]);
+    final interestCue = _interestCue(interest);
+    final recovery = _recoveryFor(
+      energyLevel: profile.energyLevel,
+      strength: strength,
+      baseAction: action,
+    );
     return <XiangjiActionChoice>[
       XiangjiActionChoice(
         id: 'tiny_start',
@@ -209,10 +270,20 @@ class XiangjiPersonalizedActionChoiceEngine {
         action: '先只做 3 分钟启动：准备这一步需要的东西并开始第一小段；3 分钟后可以停，也可以继续“$action”。',
         minutes: 3,
         stopCondition: '完成第一个启动动作或达到 3 分钟就可以停止；是否继续由用户当下决定。',
-        fitReason: '适合现在能量不高或容易卡在开始时；先获得“已经启动”的现实结果。',
+        fitReason: '用你的“$strength”把启动负担降到最低；$interestCue',
         mechanism: '降低启动所需能量，不要求一次完成整件事；开始后的真实体验会决定下一步。',
         prediction: '如果主要障碍是启动负担，开始 3 分钟后阻力应出现可观察变化。',
-        coreConceptIds: const <String>['SC-K0-004', 'SC-K0-014', 'SC-K0-022'],
+        coreConceptIds: concepts(
+          const <String>['SC-K0-004', 'SC-K0-014', 'SC-K0-022'],
+        ),
+        visibleOutput: '一条“我已开始”的可观察记录，以及启动前后阻力有无变化。',
+        completionSignal: '第一个启动动作完成，并记下“继续 / 停止 / 仍受阻”之一。',
+        recoveryAction: recovery,
+        principlePractice: '你正在练习“$practicedMethod”：先看实际启动体验，不用“我没有毅力”提前定性。',
+        transferQuestion: '下次再遇到类似阻力时，哪个 3 分钟启动动作最容易复用？',
+        motivationCue: '这一步不是证明意志力，而是为你重视的“$value”取得第一条现实进展。',
+        knowledgeSource: sourceText,
+        activeMethodLabels: methods,
         preferred: prefersTiny,
       ),
       XiangjiActionChoice(
@@ -221,10 +292,20 @@ class XiangjiPersonalizedActionChoiceEngine {
         action: action,
         minutes: steadyMinutes,
         stopCondition: '完成这一轮可观察动作，或达到 $steadyMinutes 分钟仍无关键信号时停止并回来反馈。',
-        fitReason: '按当前最关键差距推进一个完整但可停止的周期，兼顾$value与现实负担。',
+        fitReason: '直接缩小“$effectiveGap”，并借力你的“$strength”做出一份看得见的成果。',
         mechanism: effectiveMechanism,
         prediction: effectivePrediction,
-        coreConceptIds: const <String>['SC-K0-005', 'SC-K0-020', 'SC-K0-024'],
+        coreConceptIds: concepts(
+          const <String>['SC-K0-005', 'SC-K0-020', 'SC-K0-024'],
+        ),
+        visibleOutput: '一份可保存、发送、展示或比较的小成果，外加本轮耗时和实际结果。',
+        completionSignal: '成果已经离开“想法”状态，成为可被自己或外部世界检查的对象。',
+        recoveryAction: recovery,
+        principlePractice: '你正在练习“$practicedMethod”：不停在概念里，用可观察产出检查手段是否真的推进目标。',
+        transferQuestion: '这次哪个手段真正推动了“$effectiveGoal”，哪一部分只是看起来很忙？',
+        motivationCue: '今天的意义是为“$value”产出一份真实成果，不是完成一个抽象打卡。',
+        knowledgeSource: sourceText,
+        activeMethodLabels: methods,
         preferred: !prefersTiny && !prefersChallenge,
       ),
       XiangjiActionChoice(
@@ -233,14 +314,108 @@ class XiangjiPersonalizedActionChoiceEngine {
         action: '把这一步做成一次现实挑战：$action；结束前必须拿到并记录一条外部可观察结果。',
         minutes: challengeMinutes,
         stopCondition: '拿到一条外部可观察结果即停止；若触及安全、资源或时间上限，立即停止而不要求硬撑。',
-        fitReason: '适合喜欢探索和可见成果、且当前有较多能量时；重点不是硬撑，而是获得现实反馈。',
+        fitReason: '把“$interest”变成一次现实侦察，用你的“$strength”去区分竞争原因，不是硬撑。',
         mechanism: '把抽象计划变成外部世界中的一次可验证尝试，并保留停止条件。',
         prediction: effectivePrediction,
-        coreConceptIds: const <String>['SC-K0-001', 'SC-K0-016', 'SC-K0-024'],
+        coreConceptIds: concepts(
+          const <String>['SC-K0-001', 'SC-K0-016', 'SC-K0-024'],
+        ),
+        visibleOutput: '一条能支持、反驳或区分当前候选原因的外部证据。',
+        completionSignal: '已获得一条可复核的外部回应，或在约定时间内明确记录“无信号”。',
+        recoveryAction: recovery,
+        principlePractice: '你正在练习“$practicedMethod”：让不同原因对现实结果作出不同预测。',
+        transferQuestion: '本轮证据排除了哪个原因？还有哪个关键未知需要下一次区分？',
+        motivationCue: '把这当成一次为“$value”寻找线索的现实任务；任何结果都是情报，不是对你的评价。',
+        knowledgeSource: sourceText,
+        activeMethodLabels: methods,
         preferred: prefersChallenge,
       ),
     ];
   }
+
+  String _interestCue(String interest) => switch (interest) {
+        '创作' => '把第一步做成一份小作品，而不是抽象任务。',
+        '学习' => '把第一步当作一次短练习，结束后说出一个新发现。',
+        '关系' => '优先形成一次真实而低压的互动。',
+        '身心' => '优先观察身体与能量的真实变化。',
+        '探索' || '探索挑战' => '把第一步当作寻找线索的小挑战。',
+        _ => '只要形成一条可观察进展，就算完成。',
+      };
+
+  String _recoveryFor({
+    required String energyLevel,
+    required String strength,
+    required String baseAction,
+  }) {
+    if (energyLevel == 'low') {
+      return '如果还是动不了，只准备“$baseAction”所需的一样东西，记下当时能量后停止；这是现实样本，不是失败。';
+    }
+    return '如果卡住，使用你的“$strength”只缩小一次：保留动词，把对象或数量减半，然后再做 3 分钟。';
+  }
+}
+
+class XiangjiUsageAssistantContext {
+  const XiangjiUsageAssistantContext({
+    this.problemId = '',
+    this.problem = '',
+    this.goal = '',
+    this.keyGap = '',
+    this.judgment = '',
+    this.currentActionId = '',
+    this.currentAction = '',
+    this.actionState = '',
+    this.actionStateLabel = '',
+    this.prediction = '',
+    this.stopCondition = '',
+    this.recoveryAction = '',
+    this.principlePractice = '',
+    this.transferQuestion = '',
+    this.knowledgeSource = '',
+    this.coreConceptIds = const <String>[],
+    this.activeMethodLabels = const <String>[],
+    this.completedRealityRounds = 0,
+  });
+
+  final String problemId;
+  final String problem;
+  final String goal;
+  final String keyGap;
+  final String judgment;
+  final String currentActionId;
+  final String currentAction;
+  final String actionState;
+  final String actionStateLabel;
+  final String prediction;
+  final String stopCondition;
+  final String recoveryAction;
+  final String principlePractice;
+  final String transferQuestion;
+  final String knowledgeSource;
+  final List<String> coreConceptIds;
+  final List<String> activeMethodLabels;
+  final int completedRealityRounds;
+
+  bool get hasProblem => problemId.isNotEmpty || problem.isNotEmpty;
+  bool get hasCurrentAction =>
+      currentActionId.isNotEmpty || currentAction.isNotEmpty;
+
+  Map<String, Object?> toPromptMap() => <String, Object?>{
+        'problem': problem,
+        'goal': goal,
+        'key_gap': keyGap,
+        'current_judgment': judgment,
+        'current_action': currentAction,
+        'action_state': actionStateLabel,
+        'prediction': prediction,
+        'stop_condition': stopCondition,
+        'recovery_action': recoveryAction,
+        'principle_practice': principlePractice,
+        'transfer_question': transferQuestion,
+        'knowledge_source': knowledgeSource,
+        'l0_core_concept_ids': coreConceptIds,
+        'active_methods': activeMethodLabels,
+        'completed_reality_rounds': completedRealityRounds,
+      };
 }
 
 class XiangjiGuidedCase {
@@ -352,6 +527,7 @@ class XiangjiUsageAssistantAnswer {
     required this.guideId,
     required this.coreConceptIds,
     required this.knowledgeSource,
+    this.thinkerNames = const <String>['叔本华'],
     this.startPrompt = '',
     this.destination = '',
     this.aiEnhanced = false,
@@ -363,6 +539,7 @@ class XiangjiUsageAssistantAnswer {
   final String guideId;
   final List<String> coreConceptIds;
   final String knowledgeSource;
+  final List<String> thinkerNames;
   final String startPrompt;
   final String destination;
   final bool aiEnhanced;
@@ -380,6 +557,7 @@ class XiangjiUsageAssistantAnswer {
         guideId: guideId,
         coreConceptIds: coreConceptIds,
         knowledgeSource: knowledgeSource,
+        thinkerNames: thinkerNames,
         startPrompt: startPrompt,
         destination: destination,
         aiEnhanced: aiEnhanced ?? this.aiEnhanced,
@@ -389,8 +567,8 @@ class XiangjiUsageAssistantAnswer {
 class XiangjiPracticalProductContract {
   const XiangjiPracticalProductContract._();
 
-  static const String version = 'V6.2-Practical-Outcome';
-  static const String knowledgeSourceId = 'XF-PRODUCT-GUIDE-V6.2';
+  static const String version = 'V6.3-Knowledge-to-Outcome';
+  static const String knowledgeSourceId = 'XF-PRODUCT-GUIDE-V6.3';
   static const String mission =
       '把一个真实问题或目标，转换成今天能做的一步，并用行动后的现实继续修正。';
   static const String ethicalBoundary =
@@ -760,9 +938,14 @@ class XiangjiPracticalProductContract {
         orElse: () => featureGuides.first,
       );
 
-  static XiangjiUsageAssistantAnswer answerLocally(String question) {
+  static XiangjiUsageAssistantAnswer answerLocally(
+    String question, {
+    XiangjiUsageAssistantContext? context,
+  }) {
     final query = question.trim().toLowerCase();
     if (query.isEmpty) return _answerFor(featureGuides.first);
+    final contextual = _contextualAnswer(query, context);
+    if (contextual != null) return contextual;
     XiangjiFeatureGuide best = featureGuides.first;
     var bestScore = -1;
     for (final guide in featureGuides) {
@@ -787,9 +970,121 @@ class XiangjiPracticalProductContract {
         guideId: guide.id,
         coreConceptIds: guide.coreConceptIds,
         knowledgeSource: guide.knowledgeSource,
+        thinkerNames: guide.thinkerNames,
         startPrompt: guide.startPrompt,
         destination: guide.destination,
       );
+
+  static XiangjiUsageAssistantAnswer? _contextualAnswer(
+    String query,
+    XiangjiUsageAssistantContext? context,
+  ) {
+    if (context == null) return null;
+    final asksCurrent = <String>[
+      '现在', '此刻', '下一步', '该做什么', '怎么开始', '卡住', '做不了', '没完成',
+    ].any(query.contains);
+    final asksWhy = <String>[
+      '为什么这一步', '为什么这样做', '什么依据', '哪个思想', '哪个概念',
+    ].any(query.contains);
+    if (asksWhy && context.hasCurrentAction) {
+      final guide = guideForId('action_mode');
+      final methods = context.activeMethodLabels.isEmpty
+          ? '本轮的经验—抽象—现实修订方法'
+          : context.activeMethodLabels.join('、');
+      return XiangjiUsageAssistantAnswer(
+        title: '这一步为什么值得做',
+        answer: '当前要缩小的差距是：${_orFallback(context.keyGap, '还缺一条能改变下一步的现实信息')}。\n\n'
+            '所以不是让你再阅读一个概念，而是做：${context.currentAction}。\n\n'
+            '本轮实际调用的方法：$methods。${context.principlePractice.isEmpty ? '' : '\n${context.principlePractice}'}',
+        steps: <String>[
+          '核对当前动作是否真的缩小关键差距',
+          '按停止条件只做这一步',
+          '将现实结果与事前预测对照',
+        ],
+        guideId: guide.id,
+        coreConceptIds: context.coreConceptIds.isEmpty
+            ? guide.coreConceptIds
+            : context.coreConceptIds,
+        knowledgeSource: context.knowledgeSource.isEmpty
+            ? guide.knowledgeSource
+            : context.knowledgeSource,
+        thinkerNames: guide.thinkerNames,
+        destination: 'current_action',
+      );
+    }
+    if (!asksCurrent) return null;
+    if (!context.hasProblem) {
+      final guide = guideForId('bring_need');
+      return _answerFor(guide).copyWith(
+        title: '从一句真实需要开始',
+        answer: '你还没有正在求解的问题。不用先学概念，只说“我想要什么 / 实际发生了什么 / 我卡在哪里”。',
+      );
+    }
+    if (!context.hasCurrentAction) {
+      final guide = guideForId('bring_need');
+      return XiangjiUsageAssistantAnswer(
+        title: '继续当前问题',
+        answer: '你正在解决：${context.problem}。\n当前还需要形成一条可执行动作；关键差距是：${_orFallback(context.keyGap, '尚未确定')}。',
+        steps: const <String>[
+          '回到当前对话',
+          '核对对问题的理解',
+          '回答唯一关键未知，或选择“我不知道”',
+        ],
+        guideId: guide.id,
+        coreConceptIds: context.coreConceptIds.isEmpty
+            ? guide.coreConceptIds
+            : context.coreConceptIds,
+        knowledgeSource: context.knowledgeSource.isEmpty
+            ? guide.knowledgeSource
+            : context.knowledgeSource,
+        thinkerNames: guide.thinkerNames,
+        destination: 'conversation',
+      );
+    }
+    final guide = guideForId(
+      context.actionState == 'DONE' ? 'reality_feedback' : 'action_mode',
+    );
+    late final String directAnswer;
+    late final List<String> steps;
+    if (context.actionState == 'BLOCKED' || query.contains('卡住')) {
+      directAnswer = '你不需要重新规划整个问题。当前动作是：${context.currentAction}\n\n'
+          '受阻时的降级动作：${_orFallback(context.recoveryAction, '把对象或数量减半，只做 3 分钟；仍受阻就记录现实后停止')}。';
+      steps = <String>[
+        '先执行降级动作',
+        '达到停止条件就停',
+        '如实记录是否启动、阻碍在哪里',
+      ];
+    } else if (context.actionState == 'DONE') {
+      directAnswer = '当前行动已完成，但问题还不能因此宣布解决。现在只需回报实际发生了什么，让现实检查事前预测：${context.prediction}';
+      steps = const <String>[
+        '打开当前行动',
+        '写 1–3 条可观察事实和意外',
+        '查看改判、练会的方法和新的一步',
+      ];
+    } else {
+      directAnswer = '你现在只做这一件事：${context.currentAction}\n\n'
+          '做到这里就停：${_orFallback(context.stopCondition, '达到时间边界或取得一条现实结果')}。';
+      steps = const <String>[
+        '打开当前行动并确认开始',
+        '只做屏幕上的当前一步',
+        '停止后回报现实，不评价自己',
+      ];
+    }
+    return XiangjiUsageAssistantAnswer(
+      title: '你现在该做的一步',
+      answer: directAnswer,
+      steps: steps,
+      guideId: guide.id,
+      coreConceptIds: context.coreConceptIds.isEmpty
+          ? guide.coreConceptIds
+          : context.coreConceptIds,
+      knowledgeSource: context.knowledgeSource.isEmpty
+          ? guide.knowledgeSource
+          : context.knowledgeSource,
+      thinkerNames: guide.thinkerNames,
+      destination: 'current_action',
+    );
+  }
 
   static String assistantKnowledgeJson() => jsonEncode(<String, Object?>{
         'mission': mission,
@@ -807,6 +1102,17 @@ class XiangjiPracticalProductContract {
             featureGuides.map((guide) => guide.toPromptMap()).toList(),
       });
 }
+
+String _orFallback(String value, String fallback) =>
+    value.trim().isEmpty ? fallback : value.trim();
+
+List<String> _uniqueStrings(Iterable<String> values) => values
+    .map((value) => value.trim())
+    .where((value) => value.isNotEmpty)
+    .fold<List<String>>(<String>[], (result, value) {
+      if (!result.contains(value)) result.add(value);
+      return result;
+    });
 
 List<String> _jsonStrings(
   Object? raw, {

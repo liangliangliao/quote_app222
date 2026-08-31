@@ -83,9 +83,17 @@ void main() {
       prediction: '会获得一个外部可观察结果',
       expectedMinutes: 15,
       profile: const XiangjiUserPreferenceProfile(
+        interestTags: <String>['创作', '轻松开始'],
+        valueTags: <String>['自由'],
+        strengthTags: <String>['创造'],
         energyLevel: 'low',
         preferredMinutes: 3,
       ),
+      goal: '一周内取得可比较的求职反馈',
+      keyGap: '缺少真实投递样本',
+      activeCoreConceptIds: const <String>['SC-K0-011'],
+      activeMethodLabels: const <String>['竞争原因与区分实验'],
+      activeKnowledgeSources: const <String>['叔本华《充足根据律的四重根》'],
     );
     final challenge = engine.build(
       baseAction: baseAction,
@@ -93,10 +101,17 @@ void main() {
       prediction: '会获得一个外部可观察结果',
       expectedMinutes: 15,
       profile: const XiangjiUserPreferenceProfile(
-        interestTags: <String>['探索挑战'],
+        interestTags: <String>['探索', '探索挑战'],
+        valueTags: <String>['成就'],
+        strengthTags: <String>['好奇'],
         energyLevel: 'high',
         supportStyle: 'challenge',
       ),
+      goal: '一周内取得可比较的求职反馈',
+      keyGap: '缺少真实投递样本',
+      activeCoreConceptIds: const <String>['SC-K0-011'],
+      activeMethodLabels: const <String>['竞争原因与区分实验'],
+      activeKnowledgeSources: const <String>['叔本华《充足根据律的四重根》'],
     );
 
     expect(low, hasLength(3));
@@ -105,6 +120,22 @@ void main() {
         'reality_challenge');
     expect(low.every((item) => item.action.contains('申请')), isTrue);
     expect(challenge.every((item) => item.action.contains('申请')), isTrue);
+    for (final choice in <XiangjiActionChoice>[...low, ...challenge]) {
+      expect(choice.visibleOutput, isNotEmpty, reason: choice.id);
+      expect(choice.completionSignal, isNotEmpty, reason: choice.id);
+      expect(choice.recoveryAction, isNotEmpty, reason: choice.id);
+      expect(choice.principlePractice, contains('竞争原因'), reason: choice.id);
+      expect(choice.transferQuestion, isNotEmpty, reason: choice.id);
+      expect(choice.motivationCue, isNotEmpty, reason: choice.id);
+      expect(choice.knowledgeSource, contains('叔本华'), reason: choice.id);
+      expect(choice.coreConceptIds, contains('SC-K0-011'), reason: choice.id);
+      expect(choice.activeMethodLabels, contains('竞争原因与区分实验'));
+    }
+    expect(
+      low.first.fitReason,
+      allOf(contains('创造'), contains('小作品')),
+    );
+    expect(challenge.last.fitReason, allOf(contains('探索'), contains('好奇')));
   });
 
   test('offline usage assistant routes real questions to existing functions', () {
@@ -123,6 +154,43 @@ void main() {
           .guideId,
       'settings_ai_data',
     );
+  });
+
+  test('usage assistant answers the current action instead of reciting a guide',
+      () {
+    const context = XiangjiUsageAssistantContext(
+      problemId: 'problem-1',
+      problem: '想找到一份可以接受的工作',
+      goal: '一周内取得三份真实回复',
+      keyGap: '缺少真实投递样本',
+      currentActionId: 'action-1',
+      currentAction: '向一个真实岗位发出定向申请',
+      actionState: 'BLOCKED',
+      actionStateLabel: '遇到阻碍',
+      prediction: '会得到回复或一个可修改差异',
+      stopCondition: '发出一份申请就停',
+      recoveryAction: '只打开一个岗位并写第一条匹配点',
+      principlePractice: '用现实投递区分候选原因',
+      knowledgeSource: '叔本华 L0 认识根据',
+      coreConceptIds: <String>['SC-K0-005', 'SC-K0-016'],
+      activeMethodLabels: <String>['竞争原因与区分实验'],
+    );
+
+    final blocked = XiangjiPracticalProductContract.answerLocally(
+      '我现在卡住了，该做什么？',
+      context: context,
+    );
+    final why = XiangjiPracticalProductContract.answerLocally(
+      '为什么是这一步，哪个思想和概念？',
+      context: context,
+    );
+
+    expect(blocked.destination, 'current_action');
+    expect(blocked.answer, contains('只打开一个岗位'));
+    expect(blocked.answer, contains('向一个真实岗位'));
+    expect(why.answer, contains('缺少真实投递样本'));
+    expect(why.answer, contains('竞争原因与区分实验'));
+    expect(why.knowledgeSource, contains('叔本华'));
   });
 
   test('motivation boundary supports autonomy and rejects coercive dependency',

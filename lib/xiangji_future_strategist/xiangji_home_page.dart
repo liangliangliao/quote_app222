@@ -94,7 +94,9 @@ class _XiangjiFutureStrategistHomePageState
 
   Future<void> _openUsageAssistant() async {
     final answer = await Navigator.of(context).push<XiangjiUsageAssistantAnswer>(
-      MaterialPageRoute(builder: (_) => const XiangjiUsageAssistantPage()),
+      MaterialPageRoute(
+        builder: (_) => XiangjiUsageAssistantPage(repository: _repository),
+      ),
     );
     if (!mounted || answer == null) return;
     await _handleGuideDestination(answer.destination, answer.startPrompt);
@@ -324,6 +326,8 @@ class _XiangjiFutureStrategistHomePageState
   Widget _commandCenter() {
     final action = _dashboard.currentAction;
     final awaitingReality = action?.state == XiangjiActionState.done;
+    final visibleOutput =
+        (action?.whyChain['visible_output'] ?? '').toString().trim();
     return XiangjiSectionCard(
       title: action == null ? '当前最值得做的事' : '现在只做这一件事',
       subtitle: _practiceRounds == 0
@@ -404,6 +408,17 @@ class _XiangjiFutureStrategistHomePageState
                             fontSize: 12,
                           ),
                         ),
+                        if (!awaitingReality && visibleOutput.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '这次要留下：$visibleOutput',
+                            style: const TextStyle(
+                              color: XiangjiPalette.pine,
+                              fontSize: 12,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
