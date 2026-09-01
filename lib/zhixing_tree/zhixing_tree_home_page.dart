@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show setEquals;
@@ -1475,7 +1474,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               if (_useAiKnowledge && _aiDrafts.length > 1) ...<Widget>[
                 const SizedBox(height: 10),
                 DropdownButtonFormField<int>(
-                  value: _selectedAiKnowledge?.id,
+                  initialValue: _selectedAiKnowledge?.id,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: '本轮使用的AI派生思想',
@@ -1663,7 +1662,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             child: Column(
               children: <Widget>[
                 DropdownButtonFormField<ZxGoalSource>(
-                  value: source,
+                  initialValue: source,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: '目标来源',
@@ -2054,7 +2053,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             subtitle: const Text('按需要调整，不把难度当成意志考验。'),
             children: <Widget>[
               DropdownButtonFormField<ZxDifficulty>(
-                value: allowedDifficulties.contains(_selectedDifficulty)
+                initialValue: allowedDifficulties.contains(_selectedDifficulty)
                     ? _selectedDifficulty
                     : item.difficulty,
                 decoration: const InputDecoration(
@@ -2385,7 +2384,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   const Text('只回答现实结果和难度；系统负责生成报告、调整思想与安排下一步。'),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<ZxCompletionStatus>(
-                    value: completion,
+                    initialValue: completion,
                     decoration: const InputDecoration(
                       labelText: '1 · 这一步实际怎样？',
                       border: OutlineInputBorder(),
@@ -2416,7 +2415,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: difficultyFit,
+                    initialValue: difficultyFit,
                     decoration: const InputDecoration(
                       labelText: '2 · 难度感觉如何？',
                       border: OutlineInputBorder(),
@@ -2474,7 +2473,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                     subtitle: const Text('默认由复盘报告自动推荐。'),
                     children: <Widget>[
                       DropdownButtonFormField<String>(
-                        value: thoughtDecision,
+                        initialValue: thoughtDecision,
                         decoration: const InputDecoration(
                           labelText: '思想调整方式',
                           border: OutlineInputBorder(),
@@ -2508,7 +2507,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                           alternatives.isNotEmpty) ...<Widget>[
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: alternativeLensId,
+                          initialValue: alternativeLensId,
                           isExpanded: true,
                           decoration: InputDecoration(
                             labelText: thoughtDecision == 'switch'
@@ -2912,7 +2911,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _knowledgeSource,
+                initialValue: _knowledgeSource,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: '来源筛选',
@@ -3749,7 +3748,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             children: <Widget>[
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _challengeDimension,
+                  initialValue: _challengeDimension,
                   decoration: const InputDecoration(
                     labelText: '10个挑战维度',
                     border: OutlineInputBorder(),
@@ -3771,7 +3770,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButtonFormField<ZxDifficulty?>(
-                  value: _challengeDifficulty,
+                  initialValue: _challengeDifficulty,
                   decoration: const InputDecoration(
                     labelText: '难度',
                     border: OutlineInputBorder(),
@@ -4737,7 +4736,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 DropdownButtonFormField<ZxRemoteKnowledgeProvider>(
-                  value: provider,
+                  initialValue: provider,
                   decoration: const InputDecoration(
                     labelText: '服务商',
                     border: OutlineInputBorder(),
@@ -6019,8 +6018,6 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
-
-  static String _percent(double value) => '${(value * 100).round()}%';
 
   static String _plainDifficultyLabel(ZxDifficulty value) => switch (value) {
         ZxDifficulty.l0 => '先恢复或只做准备',

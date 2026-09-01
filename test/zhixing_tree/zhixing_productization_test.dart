@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/zhixing_tree/zhixing_engines.dart';
+import 'package:quote_app/zhixing_tree/zhixing_extended_models.dart';
 import 'package:quote_app/zhixing_tree/zhixing_models.dart';
 import 'package:quote_app/zhixing_tree/zhixing_productization.dart';
 import 'package:quote_app/zhixing_tree/zhixing_review_engine.dart';
