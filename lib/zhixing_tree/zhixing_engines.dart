@@ -700,14 +700,11 @@ class ZxActionGenerator {
       diagnosis.safety.maximumDifficulty,
     );
     final barrier = diagnosis.primary.barrier;
-    final fallbackAction = _actionFor(input, barrier, difficulty);
-    final action = _lensGuidedAction(
-      input: input,
-      diagnosis: diagnosis,
-      lens: match.primary,
-      difficulty: difficulty,
-      fallbackAction: fallbackAction,
-    );
+    // The user's visible action must describe a physical/observable next
+    // step, not begin with a philosopher name or an abstract template. The
+    // matched thought remains fully visible in thoughtLens, evidence and the
+    // expandable rationale below the action.
+    final action = _actionFor(input, barrier, difficulty);
     final lower = _lowerActionFor(input, barrier);
     final challenge = _challengeActionFor(input, barrier, difficulty);
     final cue = input.cue.trim().isEmpty
@@ -715,6 +712,11 @@ class ZxActionGenerator {
         : input.cue.trim();
     final support = <String>[
       ..._supportFor(input, barrier),
+      if (match.primary.actionTemplates.isNotEmpty)
+        '理论练习（不增加第二个主动作）：' +
+            match.primary.thinker +
+            ' · ' +
+            match.primary.actionTemplates.first,
       if (match.complementary != null &&
           match.complementary!.actionTemplates.isNotEmpty)
         '互补采用${match.complementary!.thinker}：'
@@ -753,7 +755,7 @@ class ZxActionGenerator {
       supportChanges: support,
       stopConditions: stop,
       proofOptions: proof,
-      completionDefinition: _completionDefinition(barrier, action),
+      completionDefinition: _completionDefinition(input, barrier),
       reviewQuestion: '事实发生了什么？“${barrier.label}”这一假设被支持还是被反驳？',
       evidenceLocators: locators,
       uncertainty: match.uncertainty,
@@ -814,29 +816,6 @@ class ZxActionGenerator {
       ZxBarrier.capacity =>
         '从睡眠、饮食、身体、秩序、关系或求助中选一项，完成一个$minutes分钟的恢复/支持动作。',
     };
-  }
-
-  static String _lensGuidedAction({
-    required ZxSituationInput input,
-    required ZxDiagnosisResult diagnosis,
-    required ZxThinkerLens lens,
-    required ZxDifficulty difficulty,
-    required String fallbackAction,
-  }) {
-    if (lens.actionTemplates.isEmpty) return fallbackAction;
-    final capacityFirst = diagnosis.primary.barrier == ZxBarrier.capacity ||
-        diagnosis.primary.barrier == ZxBarrier.physicalCapability;
-    if (capacityFirst &&
-        !lens.barriers.contains(ZxBarrier.capacity) &&
-        !lens.barriers.contains(ZxBarrier.physicalCapability)) {
-      return fallbackAction;
-    }
-    final template = lens.actionTemplates.first.trim();
-    if (template.isEmpty) return fallbackAction;
-    final target = input.targetBehavior.trim();
-    final minutes = _minutesFor(difficulty, input.availableMinutes);
-    return '采用${lens.thinker}的“${lens.name}”：$template。'
-        '把它用于“$target”，本轮只投入$minutes分钟并完成这一项。';
   }
 
   static String _lowerActionFor(
@@ -909,13 +888,30 @@ class ZxActionGenerator {
       ];
 
   static String _completionDefinition(
+    ZxSituationInput input,
     ZxBarrier barrier,
-    String action,
-  ) =>
-      barrier == ZxBarrier.valueEthics ||
-              barrier == ZxBarrier.reflectiveMotivation
-          ? '已作出继续、修改、延后或退出中的清楚选择，并写下一条理由。'
-          : '已实际进入并完成上述可观察动作；不要求获得不可控结果。';
+  ) {
+    final target = input.targetBehavior.trim();
+    final minutes = math.max(1, math.min(5, input.availableMinutes));
+    return switch (barrier) {
+      ZxBarrier.physicalCapability =>
+        '已完成一次可停止的“' + target + '”准备/最轻步骤，并记录身体反应。',
+      ZxBarrier.psychologicalCapability =>
+        '已找出并练习“' + target + '”所需的第一个子技能一次。',
+      ZxBarrier.physicalOpportunity =>
+        '“' + target + '”所需的一个时间、工具或入口已经就位。',
+      ZxBarrier.socialOpportunity =>
+        '已形成或发出一个具体、可回答的协作请求。',
+      ZxBarrier.reflectiveMotivation || ZxBarrier.valueEthics =>
+        '已作出继续、修改、延后或退出中的清楚选择，并写下一条理由。',
+      ZxBarrier.automaticMotivation =>
+        '已打开“' + target + '”的现实入口，并实际接触至少' + minutes.toString() + '分钟。',
+      ZxBarrier.selfEfficacy =>
+        '已尝试“' + target + '”的一个小单元，并记录行动前后的把握变化。',
+      ZxBarrier.capacity =>
+        '已完成一项低负荷恢复、准备或求助动作；不要求同时推进最终结果。',
+    };
+  }
 
   static String _minutesFor(ZxDifficulty difficulty, int available) {
     final suggested = switch (difficulty) {

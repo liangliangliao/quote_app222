@@ -2,7 +2,7 @@ name: quote_app
 description: "\u540D\u4EBA\u540D\u8A00\u83B7\u53D6\u5668\uFF08\u672C\u5730\u539F\u578B\
   \ + \u5B9A\u65F6 + \u5386\u53F2 + \u901A\u77E5\uFF09"
 publish_to: none
-version: 0.1.0+3
+version: 0.1.0+4
 environment:
   sdk: '>=3.2.0 <4.0.0'
 dependencies:

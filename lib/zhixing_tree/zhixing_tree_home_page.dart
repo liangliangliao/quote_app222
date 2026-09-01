@@ -17,11 +17,13 @@ import 'zhixing_extended_models.dart';
 import 'zhixing_goal_source_service.dart';
 import 'zhixing_knowledge_repository.dart';
 import 'zhixing_models.dart';
+import 'zhixing_productization.dart';
 import 'zhixing_prompt_config.dart';
 import 'zhixing_review_engine.dart';
 import 'zhixing_remote_knowledge_models.dart';
 import 'zhixing_thinker_catalog.dart';
 import 'zhixing_tree_visual.dart';
+import 'zhixing_user_guide_page.dart';
 
 class ZhixingTreeHomePage extends StatefulWidget {
   const ZhixingTreeHomePage({
@@ -40,6 +42,10 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   static const Color _ink = Color(0xFF17362A);
   static const Color _green = Color(0xFF2F7550);
   static const Color _cream = Color(0xFFF6F3E8);
+  static const int _actionTab = 0;
+  static const int _thoughtTab = 1;
+  static const int _growthTab = 2;
+  static const int _mentorTab = 3;
 
   final ZxKnowledgeRepository _knowledge = ZxKnowledgeRepository();
   final ZxDao _dao = ZxDao();
@@ -55,6 +61,10 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   final ZxTreeEngine _treeEngine = const ZxTreeEngine();
   final ZxChallengeFactory _challengeFactory = const ZxChallengeFactory();
   final ZxPromptConfig _promptConfig = ZxPromptConfig();
+  final ZxProductizationEngine _productization =
+      const ZxProductizationEngine();
+  final ZxModuleAssistantEngine _moduleAssistant =
+      const ZxModuleAssistantEngine();
 
   late final TabController _tabs;
   late final List<ZxChallenge> _challenges;
@@ -70,6 +80,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   final TextEditingController _cueController = TextEditingController();
   final TextEditingController _attemptsController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _assistantController = TextEditingController();
 
   bool _loading = true;
   bool _working = false;
@@ -99,6 +110,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Set<String> _selectedLensIds = <String>{};
   bool _personalizationEnabled = true;
   bool _safetyExpanded = false;
+  ZxActionPreference _actionPreference = const ZxActionPreference();
+  ZxExperienceMode _experienceMode = ZxExperienceMode.direct;
+  ZxStarterBlock _starterBlock = ZxStarterBlock.inertia;
 
   ZxSituationInput? _currentInput;
   ZxDiagnosisResult? _diagnosis;
@@ -107,12 +121,6 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   ZxDifficulty? _selectedDifficulty;
 
   int _availableMinutes = 5;
-  double _bodyCapacity = 0.65;
-  double _attentionCapacity = 0.6;
-  double _sleepCapacity = 0.6;
-  double _autonomy = 0.65;
-  double _importance = 0.75;
-  double _selfEfficacy = 0.5;
   bool _knowsHow = true;
   bool _hasTime = true;
   bool _hasTools = true;
@@ -136,7 +144,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 7, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     _challenges = _challengeFactory.buildAll();
     _initialize();
   }
@@ -178,6 +186,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       _cueController,
       _attemptsController,
       _searchController,
+      _assistantController,
     ]) {
       controller.dispose();
     }
@@ -215,6 +224,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       final disabled = await _dao.disabledLenses();
       final selected = await _dao.selectedLenses();
       final personalization = await _dao.personalizationEnabled();
+      final actionPreference = await _dao.actionPreference();
       final normalizedSelected =
           ZxThinkerCatalog.normalizeSelectionTokens(selected)
               .where((token) {
@@ -253,6 +263,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         _disabledLenses = disabled;
         _selectedLensIds = normalizedSelected;
         _personalizationEnabled = personalization;
+        _actionPreference = actionPreference;
+        _experienceMode = actionPreference.mode;
         _searchResults = _knowledge.search('');
         _loading = false;
       });
@@ -324,14 +336,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   int _tabForAgentScene(ZxAgentScene scene) {
     switch (scene) {
       case ZxAgentScene.chooseThought:
-        return 1;
+        return _thoughtTab;
       case ZxAgentScene.setGoal:
       case ZxAgentScene.startAction:
-        return 2;
       case ZxAgentScene.trackProgress:
       case ZxAgentScene.requestReview:
       case ZxAgentScene.continueCycle:
-        return 0;
+        return _actionTab;
     }
   }
 
@@ -357,18 +368,23 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               ),
             ],
           ),
+          actions: <Widget>[
+            IconButton(
+              tooltip: '使用说明',
+              onPressed: _openUserGuide,
+              icon: const Icon(Icons.help_outline_rounded),
+            ),
+          ],
           bottom: TabBar(
             controller: _tabs,
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: const <Tab>[
-              Tab(text: '今日'),
-              Tab(text: '思想导航'),
-              Tab(text: '立即行动'),
-              Tab(text: '挑战花园'),
-              Tab(text: '知行树'),
-              Tab(text: '证据与隐私'),
-              Tab(text: 'AI与导师'),
+              Tab(text: '现在做'),
+              Tab(text: '思想工具'),
+              Tab(text: '成长'),
+              Tab(text: '导师'),
+              Tab(text: '更多'),
             ],
           ),
         ),
@@ -381,13 +397,11 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                       TabBarView(
                         controller: _tabs,
                         children: <Widget>[
-                          _buildToday(),
+                          _buildActionCockpit(),
                           _buildKnowledgePage(),
-                          _buildPrescriptionPage(),
-                          _buildChallengeGarden(),
-                          _buildTreePage(),
-                          _buildEvidencePrivacyPage(),
+                          _buildGrowthHub(),
                           _buildAiMentorPage(),
+                          _buildEvidencePrivacyPage(),
                         ],
                       ),
                       if (_working)
@@ -397,6 +411,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                         ),
                     ],
                   ),
+        floatingActionButton: _loading || _error.isNotEmpty
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _showModuleAssistant,
+                icon: const Icon(Icons.support_agent_outlined),
+                label: const Text('问助手'),
+              ),
       ),
     );
   }
@@ -419,6 +440,862 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         ),
       );
 
+  Widget _buildActionCockpit() {
+    final active = _actions
+        .where((item) => item.status == ZxActionStatus.active)
+        .toList(growable: false);
+    return RefreshIndicator(
+      onRefresh: _refreshLocalState,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        children: <Widget>[
+          _buildAgentNextStepCard(active),
+          const SizedBox(height: 12),
+          _buildPreferenceStrip(),
+          const SizedBox(height: 12),
+          if (active.isNotEmpty)
+            ...active.take(1).map(_buildActiveCockpitCard)
+          else
+            _buildCompactStartForm(),
+          if (_diagnosis != null &&
+              !_diagnosis!.safety.actionAllowed) ...<Widget>[
+            const SizedBox(height: 12),
+            _buildSafetyBoundaryResult(),
+          ],
+          if (_prescription != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _buildPrescriptionResult(),
+          ],
+          if (_reviewReports.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            _buildLatestReportCard(),
+          ],
+          const SizedBox(height: 12),
+          _treeSummaryCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgentNextStepCard(List<ZxActionPrescription> active) {
+    final title = active.isNotEmpty
+        ? '今天只推进这一项'
+        : switch (_agentScene) {
+            ZxAgentScene.setGoal => '先给我一个真实目标或问题',
+            ZxAgentScene.chooseThought => '系统会先推荐思想，你再决定',
+            ZxAgentScene.startAction => '把目标变成现在能做的一步',
+            ZxAgentScene.trackProgress => '回到当前动作，不重新规划',
+            ZxAgentScene.requestReview => '先反馈现实结果，再安排下一步',
+            ZxAgentScene.continueCycle => '把上轮认识转成今天的一步',
+          };
+    final body = active.isNotEmpty
+        ? active.first.mainAction
+        : _productization.motivationLine(
+            _actionPreference.copyWith(mode: _experienceMode),
+          );
+    return Card(
+      color: const Color(0xFFE7F2EA),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              title,
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 21,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(body, style: const TextStyle(height: 1.5)),
+            if (active.isEmpty) ...<Widget>[
+              const SizedBox(height: 10),
+              const Text(
+                '你只提供目标和真实反馈；卡点判断、思想匹配、行动拆解与复盘由系统承担。',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreferenceStrip() {
+    final profile = _actionPreference.copyWith(mode: _experienceMode);
+    return Card(
+      child: ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.tune_rounded)),
+        title: Text(
+          _actionPreference.completed ? '导师已按你的偏好呈现' : '1分钟让导师更懂你（可跳过）',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(profile.summary),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: _editActionPreference,
+      ),
+    );
+  }
+
+  Widget _buildCompactStartForm() {
+    return _sectionCard(
+      title: '你现在想推进或解决什么？',
+      subtitle: '一个目标 + 一个卡点就够了；思想与第一步由系统先推荐。',
+      initiallyExpanded: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text(
+            '直接试跑一个完整案例',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: zxStarterCases
+                .map(
+                  (item) => ActionChip(
+                    avatar: const Icon(Icons.play_arrow_rounded, size: 17),
+                    label: Text(item.title),
+                    onPressed: () => _applyStarterCase(item),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            _goalController,
+            '我现在想推进 / 解决',
+            hint: '例如：投递第一份简历、出门走一走、开始写文章',
+            maxLines: 2,
+          ),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickGoalFromSources,
+                  icon: const Icon(Icons.move_to_inbox_outlined),
+                  label: const Text('从已有目标导入'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '可从知行树、Todo目标价值系统或 Microsoft To Do 导入',
+                onPressed: _showGoalSourceHelp,
+                icon: const Icon(Icons.info_outline_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '现在最接近哪一种卡点？',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: ZxStarterBlock.values
+                .map(
+                  (block) => ChoiceChip(
+                    label: Text(block.label),
+                    selected: _starterBlock == block,
+                    onSelected: (_) => setState(() => _starterBlock = block),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '这次用哪种方式开始？',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: ZxExperienceMode.values
+                .map(
+                  (mode) => ChoiceChip(
+                    avatar: Icon(_experienceIcon(mode), size: 17),
+                    label: Text(mode.label),
+                    selected: _experienceMode == mode,
+                    onSelected: (_) => setState(() {
+                      _experienceMode = mode;
+                      if (mode == ZxExperienceMode.gentle) {
+                        _availableMinutes = mathMin(_availableMinutes, 5);
+                      } else if (mode == ZxExperienceMode.challenge) {
+                        _availableMinutes = mathMax(_availableMinutes, 10);
+                      }
+                    }),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            _experienceMode.description,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('补充下一步、价值或安全信息（可选）'),
+            subtitle: const Text('不填也能生成；只有确实重要时再展开。'),
+            children: <Widget>[
+              _field(
+                _targetController,
+                '你已经想到的下一小步',
+                hint: '留空时由系统自动拆解',
+                maxLines: 2,
+              ),
+              _field(
+                _valueController,
+                '为什么值得做',
+                hint: '留空时使用你在偏好小测中的动力锚点',
+                maxLines: 2,
+              ),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '本轮可投入时间',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 7),
+              Wrap(
+                spacing: 7,
+                children: <int>[2, 5, 10, 15]
+                    .map(
+                      (minutes) => ChoiceChip(
+                        label: Text(minutes.toString() + '分钟'),
+                        selected: _availableMinutes == minutes,
+                        onSelected: (_) =>
+                            setState(() => _availableMinutes = minutes),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: 10),
+              ExpansionTile(
+                initiallyExpanded: _safetyExpanded,
+                tilePadding: EdgeInsets.zero,
+                title: const Text('涉及危险、专业决定或他人重大权益？'),
+                subtitle: const Text('普通工作、学习和生活小行动保持收起。'),
+                onExpansionChanged: (value) =>
+                    setState(() => _safetyExpanded = value),
+                children: <Widget>[
+                  _switch('会影响第三方重要权益', _thirdPartyImpact,
+                      (value) => setState(() => _thirdPartyImpact = value)),
+                  _switch('后果难以撤销', _irreversibleImpact,
+                      (value) => setState(() => _irreversibleImpact = value)),
+                  _switch(
+                    '涉及医疗、药物、法律或重大财务判断',
+                    _professionalDecision,
+                    (value) => setState(() => _professionalDecision = value),
+                  ),
+                  _switch('存在即时人身危险', _acuteDanger,
+                      (value) => setState(() => _acuteDanger = value)),
+                  _switch(
+                    '存在严重失控或无法维持基本功能',
+                    _severeFunctionLoss,
+                    (value) => setState(() => _severeFunctionLoss = value),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _working ? null : _generatePrescription,
+              icon: const Icon(Icons.bolt_rounded),
+              label: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 13),
+                child: Text('给我一个现在能做的动作'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Icon(
+                _useAiKnowledge
+                    ? Icons.auto_awesome_outlined
+                    : Icons.verified_outlined,
+                size: 17,
+                color: _useAiKnowledge ? Colors.deepPurple : _green,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _useAiKnowledge
+                      ? '本轮使用AI派生知识；审核本地库仍负责安全基线。'
+                      : '默认使用审核本地知识库；离线也能完成闭环。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              TextButton(
+                onPressed: () => _tabs.animateTo(_mentorTab),
+                child: const Text('切换'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveCockpitCard(ZxActionPrescription action) {
+    final lens = _knowledge.lensById(action.primaryLensId);
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(17),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.play_circle_fill_rounded, color: _green),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    action.goalTitle,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                _miniTag(action.difficulty.code),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              '现在只做',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              action.mainAction,
+              style: const TextStyle(
+                fontSize: 19,
+                height: 1.45,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _statusBanner(
+              '做到这里就算完成',
+              action.completionDefinition,
+              _green,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '本轮运用：' +
+                  (lens == null
+                      ? action.primaryLensId
+                      : _systemLabelForLens(lens)),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: _green,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _reviewAction(action),
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('反馈结果'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showLowerLoad(action),
+                    icon: const Icon(Icons.keyboard_double_arrow_down),
+                    label: const Text('太难，缩小'),
+                  ),
+                ),
+              ],
+            ),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('为什么这样做？'),
+              subtitle: const Text('理论、支持条件与证据按需展开'),
+              children: <Widget>[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(action.thoughtLens),
+                ),
+                const SizedBox(height: 8),
+                _labelValue('启动线索', action.cue),
+                ...action.supportChanges.map(_bullet),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: action.evidenceLocators
+                      .map(
+                        (locator) => ActionChip(
+                          label: Text(locator),
+                          avatar: const Icon(
+                            Icons.fact_check_outlined,
+                            size: 16,
+                          ),
+                          onPressed: () => _openEvidenceLocator(locator),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLatestReportCard() {
+    final report = _reviewReports.first;
+    return _sectionCard(
+      title: '上一次行动已经变成下一步',
+      subtitle: report.origin.label + ' · ' + report.recommendedDecision.label,
+      initiallyExpanded: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _labelValue('现实结论', report.summary),
+          _labelValue('发现的卡点', report.barrierFinding),
+          _statusBanner('下一小步', report.nextAction, _green),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('查看思想调整理由'),
+            children: <Widget>[
+              _labelValue('系统建议', report.recommendedDecision.label),
+              _labelValue('理由', report.rationale),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGrowthHub() => DefaultTabController(
+        length: 2,
+        child: Column(
+          children: <Widget>[
+            const Material(
+              color: Color(0xFFF6F3E8),
+              child: TabBar(
+                tabs: <Tab>[
+                  Tab(text: '我的成长树'),
+                  Tab(text: '自选挑战'),
+                ],
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                children: <Widget>[
+                  _buildTreePage(),
+                  _buildChallengeGarden(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _openUserGuide() => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const ZhixingUserGuidePage(),
+        ),
+      );
+
+  Future<void> _showGoalSourceHelp() => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('三路目标导入'),
+          content: const Text(
+            '可读取知行树当前目标、外部数据同步中的 Todo 目标价值系统，以及 Microsoft To Do 最近一次同步的未完成任务。选择只会复制目标和步骤，不会修改源模块。',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+
+  void _applyStarterCase(ZxStarterCase item) {
+    setState(() {
+      _goalController.text = item.goal;
+      _targetController.text = item.nextStep;
+      _valueController.text = item.valueReason;
+      _starterBlock = item.block;
+      _experienceMode = item.mode;
+      _availableMinutes = item.minutes;
+      _diagnosis = null;
+      _match = null;
+      _prescription = null;
+    });
+    _snack('案例已填入；点击“给我一个现在能做的动作”即可跑通。');
+  }
+
+  IconData _experienceIcon(ZxExperienceMode mode) => switch (mode) {
+        ZxExperienceMode.gentle => Icons.spa_outlined,
+        ZxExperienceMode.direct => Icons.arrow_forward_rounded,
+        ZxExperienceMode.challenge => Icons.flag_outlined,
+        ZxExperienceMode.experiment => Icons.science_outlined,
+      };
+
+  int mathMin(int a, int b) => a < b ? a : b;
+
+  int mathMax(int a, int b) => a > b ? a : b;
+
+  Future<void> _showLowerLoad(ZxActionPrescription action) =>
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  '这不是放弃，是校准行动负荷',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  action.lowerLoadAlternative,
+                  style: const TextStyle(fontSize: 17, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '做完后点“反馈结果”，选择“做了更安全、更小的一步”，系统会把这条现实证据写入复盘。',
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('好，现在只做这个'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _editActionPreference() async {
+    var draft = _actionPreference.copyWith(mode: _experienceMode);
+    final result = await showModalBottomSheet<ZxActionPreference>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              4,
+              20,
+              24 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  '1分钟行动偏好',
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                const Text('没有对错；以后可随时修改，也可关闭个性化。'),
+                const SizedBox(height: 18),
+                const Text('1 · 我更愿意怎样开始',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: ZxExperienceMode.values
+                      .map(
+                        (item) => ChoiceChip(
+                          label: Text(item.label),
+                          selected: draft.mode == item,
+                          onSelected: (_) => setSheetState(
+                            () => draft = draft.copyWith(mode: item),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 16),
+                const Text('2 · 什么最能拉动我',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: ZxMotivationAnchor.values
+                      .map(
+                        (item) => ChoiceChip(
+                          label: Text(item.label),
+                          selected: draft.anchor == item,
+                          onSelected: (_) => setSheetState(
+                            () => draft = draft.copyWith(anchor: item),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 16),
+                const Text('3 · 我希望导师怎样说',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: ZxMentorTone.values
+                      .map(
+                        (item) => ChoiceChip(
+                          label: Text(item.label),
+                          selected: draft.tone == item,
+                          onSelected: (_) => setSheetState(
+                            () => draft = draft.copyWith(tone: item),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 16),
+                const Text('4 · 我更愿意从哪种优势出发',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: ZxStrengthPreference.values
+                      .map(
+                        (item) => ChoiceChip(
+                          label: Text(item.label),
+                          selected: draft.strength == item,
+                          onSelected: (_) => setSheetState(
+                            () => draft = draft.copyWith(strength: item),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(
+                      sheetContext,
+                      draft.copyWith(completed: true),
+                    ),
+                    child: const Text('保存我的偏好'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (result == null) return;
+    await _dao.saveActionPreference(result);
+    if (!mounted) return;
+    setState(() {
+      _actionPreference = result;
+      _experienceMode = result.mode;
+    });
+    _snack('偏好已保存；它只改变呈现与负荷，不越过安全规则。');
+  }
+
+  Future<void> _showModuleAssistant() async {
+    final hasActive = _actions.any(
+      (item) => item.status == ZxActionStatus.active,
+    );
+    var answer = _moduleAssistant.answer(
+      _assistantController.text,
+      hasActiveAction: hasActive,
+      hasRecentReport: _reviewReports.isNotEmpty,
+      aiConfigured: _providerState['available'] == '1',
+    );
+    var visibleBody = answer.body;
+    var asking = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              18,
+              4,
+              18,
+              24 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Row(
+                  children: <Widget>[
+                    CircleAvatar(child: Icon(Icons.support_agent_outlined)),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '知行树助手',
+                        style: TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: <String>[
+                    '我该从哪里开始？',
+                    '这一步太难怎么办？',
+                    '如何更换指导思想？',
+                    'AI书库怎么用？',
+                  ]
+                      .map(
+                        (question) => ActionChip(
+                          label: Text(question),
+                          onPressed: () => setSheetState(
+                            () => _assistantController.text = question,
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _assistantController,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: '直接问功能、流程或下一步',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: asking
+                        ? null
+                        : () async {
+                            final question =
+                                _assistantController.text.trim();
+                            final local = _moduleAssistant.answer(
+                              question,
+                              hasActiveAction: hasActive,
+                              hasRecentReport: _reviewReports.isNotEmpty,
+                              aiConfigured:
+                                  _providerState['available'] == '1',
+                            );
+                            setSheetState(() {
+                              answer = local;
+                              visibleBody = local.body;
+                              asking =
+                                  _providerState['available'] == '1';
+                            });
+                            if (_providerState['available'] == '1') {
+                              final aiText = await _ai.answerModuleQuestion(
+                                question: question,
+                                localAnswer:
+                                    local.title + '\n' + local.body,
+                                featureGrounding:
+                                    _moduleAssistant.groundingText(),
+                                currentState: '导师状态：' +
+                                    _agentScene.title +
+                                    '；活动行动：' +
+                                    (hasActive ? '有' : '无') +
+                                    '；已选思想体系：' +
+                                    _selectedLensIds.length.toString() +
+                                    '；最近复盘：' +
+                                    (_reviewReports.isNotEmpty ? '有' : '无'),
+                              );
+                              if (!sheetContext.mounted) return;
+                              setSheetState(() {
+                                asking = false;
+                                if (aiText.isNotEmpty) visibleBody = aiText;
+                              });
+                            }
+                          },
+                    icon: const Icon(Icons.send_rounded),
+                    label: Text(
+                      asking
+                          ? '正在结合当前状态回答…'
+                          : _providerState['available'] == '1'
+                              ? '问助手（本地功能图 + AI）'
+                              : '问助手（本地功能图）',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Card(
+                  color: const Color(0xFFE7F2EA),
+                  child: Padding(
+                    padding: const EdgeInsets.all(15),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          answer.title,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 7),
+                        SelectableText(
+                          visibleBody,
+                          style: const TextStyle(height: 1.5),
+                        ),
+                        const SizedBox(height: 10),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _tabs.animateTo(answer.area.tabIndex);
+                          },
+                          icon: const Icon(Icons.arrow_forward_rounded),
+                          label: Text(
+                            answer.actionLabel + ' · ' + answer.area.label,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Kept as a compatibility layout while the V3 cockpit is validated.
+  // ignore: unused_element
   Widget _buildToday() {
     final active = _actions
         .where((item) => item.status == ZxActionStatus.active)
@@ -432,21 +1309,13 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             title: active.isEmpty ? '今天，从一件可求证的小事开始' : '今天只推进一个主动作',
             body: active.isEmpty
                 ? _selectedLensIds.isEmpty
-                    ? '先看懂并自主选择一种思想，再把它落实为今天的一小步。'
+                    ? '直接写下目标，由系统先推荐思想并落实为今天的一小步。'
                     : '已选思想准备就绪：现在直接生成一项可立即执行的行动。'
                 : active.first.mainAction,
             buttonLabel: active.isEmpty
-                ? _selectedLensIds.isEmpty
-                    ? '先选择思想'
-                    : '立即行动'
+                ? '立即行动'
                 : '查看当前行动',
-            onPressed: () => _tabs.animateTo(
-              active.isEmpty
-                  ? _selectedLensIds.isEmpty
-                      ? 1
-                      : 2
-                  : 0,
-            ),
+            onPressed: () => _tabs.animateTo(_actionTab),
           ),
           const SizedBox(height: 14),
           _treeSummaryCard(),
@@ -523,6 +1392,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     );
   }
 
+  // Kept as a compatibility layout while the V3 cockpit is validated.
+  // ignore: unused_element
   Widget _buildPrescriptionPage() {
     final selectedSystems = _selectedSystems;
     final selectedLenses = selectedSystems
@@ -567,7 +1438,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                     onSelected: (_) {
                       if (_selectedAiKnowledge == null) {
                         _snack('请先在“AI与导师”中上传著作并生成派生思想。');
-                        _tabs.animateTo(6);
+                        _tabs.animateTo(_mentorTab);
                         return;
                       }
                       setState(() => _useAiKnowledge = true);
@@ -634,7 +1505,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 children: <Widget>[
                   TextButton.icon(
                     onPressed: () =>
-                        _tabs.animateTo(_useAiKnowledge ? 6 : 1),
+                        _tabs.animateTo(
+                          _useAiKnowledge ? _mentorTab : _thoughtTab,
+                        ),
                     icon: Icon(
                       _useAiKnowledge
                           ? Icons.folder_copy_outlined
@@ -1022,43 +1895,63 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   ZxSituationInput _buildSituationInput() {
-    final goal = _goalController.text.trim();
-    final target = _targetController.text.trim().isEmpty
-        ? '开始“$goal”的第一个可见步骤'
-        : _targetController.text.trim();
+    final shaped = _productization.buildInput(
+      goal: _goalController.text,
+      nextStep: _targetController.text,
+      valueReason: _valueController.text,
+      availableMinutes: _availableMinutes,
+      block: _starterBlock,
+      preference: _actionPreference.copyWith(mode: _experienceMode),
+      cue: _cueController.text,
+      thirdPartyImpact: _thirdPartyImpact,
+      irreversibleImpact: _irreversibleImpact,
+      professionalDecision: _professionalDecision,
+      acuteDanger: _acuteDanger,
+      severeFunctionLoss: _severeFunctionLoss,
+    );
     return ZxSituationInput(
-        goalTitle: goal,
-        recentEvent: _eventController.text.trim().isEmpty
-            ? '我现在准备开始“$goal”'
-            : _eventController.text.trim(),
-        targetBehavior: target,
-        valueReason: _valueController.text.trim(),
-        thought: _thoughtController.text.trim(),
-        emotion: _emotionController.text.trim(),
-        urge: _urgeController.text.trim(),
-        actualAction: _actualController.text.trim(),
-        cue: _cueController.text.trim(),
-        availableMinutes: _availableMinutes,
-        bodyCapacity: _bodyCapacity,
-        attentionCapacity: _attentionCapacity,
-        sleepCapacity: _sleepCapacity,
-        autonomy: _autonomy,
-        importance: _importance,
-        selfEfficacy: _selfEfficacy,
-        knowsHow: _knowsHow,
-        hasTime: _hasTime,
-        hasTools: _hasTools,
-        hasSupport: _hasSupport,
-        waitingForMood: _waitingForMood,
-        positiveFantasy: _positiveFantasy,
-        ethicalConflict: _ethicalConflict,
-        thirdPartyImpact: _thirdPartyImpact,
-        irreversibleImpact: _irreversibleImpact,
-        professionalDecision: _professionalDecision,
-        acuteDanger: _acuteDanger,
-        severeFunctionLoss: _severeFunctionLoss,
-        previousAttempts: _attemptsController.text.trim(),
-      );
+      goalTitle: shaped.goalTitle,
+      recentEvent: _eventController.text.trim().isEmpty
+          ? shaped.recentEvent
+          : _eventController.text.trim(),
+      targetBehavior: shaped.targetBehavior,
+      valueReason: shaped.valueReason,
+      thought: _thoughtController.text.trim().isEmpty
+          ? shaped.thought
+          : _thoughtController.text.trim(),
+      emotion: _emotionController.text.trim().isEmpty
+          ? shaped.emotion
+          : _emotionController.text.trim(),
+      urge: _urgeController.text.trim().isEmpty
+          ? shaped.urge
+          : _urgeController.text.trim(),
+      actualAction: _actualController.text.trim().isEmpty
+          ? shaped.actualAction
+          : _actualController.text.trim(),
+      cue: shaped.cue,
+      availableMinutes: shaped.availableMinutes,
+      bodyCapacity: shaped.bodyCapacity,
+      attentionCapacity: shaped.attentionCapacity,
+      sleepCapacity: shaped.sleepCapacity,
+      autonomy: shaped.autonomy,
+      importance: shaped.importance,
+      selfEfficacy: shaped.selfEfficacy,
+      knowsHow: shaped.knowsHow && _knowsHow,
+      hasTime: shaped.hasTime && _hasTime,
+      hasTools: shaped.hasTools && _hasTools,
+      hasSupport: shaped.hasSupport && _hasSupport,
+      waitingForMood: shaped.waitingForMood || _waitingForMood,
+      positiveFantasy: shaped.positiveFantasy || _positiveFantasy,
+      ethicalConflict: _ethicalConflict,
+      thirdPartyImpact: shaped.thirdPartyImpact,
+      irreversibleImpact: shaped.irreversibleImpact,
+      professionalDecision: shaped.professionalDecision,
+      acuteDanger: shaped.acuteDanger,
+      severeFunctionLoss: shaped.severeFunctionLoss,
+      previousAttempts: _attemptsController.text.trim().isEmpty
+          ? shaped.previousAttempts
+          : _attemptsController.text.trim(),
+    );
   }
 
   Widget _buildSafetyBoundaryResult() {
@@ -1278,7 +2171,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 ),
               ),
               TextButton.icon(
-                onPressed: () => _tabs.animateTo(1),
+                onPressed: () => _tabs.animateTo(_thoughtTab),
                 icon: const Icon(Icons.account_tree_outlined),
                 label: const Text('换思想'),
               ),
@@ -1360,10 +2253,25 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         ),
         sessionId: sessionId,
       );
+      if (_selectedLensIds.isEmpty) {
+        final automaticallySelected = <String>{};
+        final primarySystem = _systemForLens(match.primary.id);
+        automaticallySelected.add(
+          primarySystem?.primaryLensId ?? match.primary.id,
+        );
+        if (match.complementary != null) {
+          final complementSystem = _systemForLens(match.complementary!.id);
+          automaticallySelected.add(
+            complementSystem?.primaryLensId ?? match.complementary!.id,
+          );
+        }
+        await _dao.setSelectedLenses(automaticallySelected);
+        _selectedLensIds = automaticallySelected;
+      }
       await _refreshLocalState();
       if (!mounted) return;
       setState(() => _working = false);
-      _tabs.animateTo(0);
+      _tabs.animateTo(_actionTab);
       _snack('行动已激活。完成后请记录“完成”和“学到什么”。');
     } catch (error) {
       if (!mounted) return;
@@ -1452,6 +2360,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     var completion = ZxCompletionStatus.completed;
     var difficultyFit = '合适';
     var thoughtDecision = 'auto';
+    var obstacleReason = '';
     final currentSystem = _systemForLens(action.primaryLensId);
     final alternatives = ZxThinkerCatalog.guides
         .where((guide) => guide.systemId != currentSystem?.systemId)
@@ -1473,7 +2382,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text('只回答3个关键问题；复盘用于调整下一轮，不是补做行动前调查。'),
+                  const Text('只回答现实结果和难度；系统负责生成报告、调整思想与安排下一步。'),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<ZxCompletionStatus>(
                     value: completion,
@@ -1526,67 +2435,106 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                       }
                     },
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: thoughtDecision,
-                    decoration: const InputDecoration(
-                      labelText: '3 · 思想调整方式',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem(
-                        value: 'auto',
-                        child: Text('由复盘报告自动推荐（建议）'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'continue',
-                        child: Text('继续当前思想'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'switch',
-                        child: Text('换一种思想'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'blend',
-                        child: Text('融合另一种思想'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() => thoughtDecision = value);
-                      }
-                    },
-                  ),
-                  if (thoughtDecision != 'auto' &&
-                      thoughtDecision != 'continue' &&
-                      alternatives.isNotEmpty) ...<Widget>[
+                  if (completion == ZxCompletionStatus.notCompleted) ...<Widget>[
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: alternativeLensId,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: thoughtDecision == 'switch'
-                            ? '选择替换思想'
-                            : '选择互补思想',
-                        border: const OutlineInputBorder(),
-                      ),
-                      items: alternatives
+                    const Text(
+                      '最接近哪个现实原因？（可选，但能让下一步更准）',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: const <String>[
+                        '不知道第一步/不会做',
+                        '害怕失败/追求完美',
+                        '时间/工具/环境卡住',
+                        '精力/睡眠/身体容量不足',
+                        '目标不是我真正想要的',
+                      ]
                           .map(
-                            (system) => DropdownMenuItem<String>(
-                              value: system.primaryLensId,
-                              child: Text(system.displayName),
+                            (reason) => ChoiceChip(
+                              label: Text(reason),
+                              selected: obstacleReason == reason,
+                              onSelected: (_) => setDialogState(
+                                () => obstacleReason = reason,
+                              ),
                             ),
                           )
                           .toList(growable: false),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() => alternativeLensId = value);
-                        }
-                      },
                     ),
                   ],
+                  const SizedBox(height: 4),
                   _dialogField(insight, '最关键的发现（可留空）'),
                   _dialogField(nextAction, '下一次最小动作（可留空）'),
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: EdgeInsets.zero,
+                    title: const Text('我想自己决定是否换思想（可选）'),
+                    subtitle: const Text('默认由复盘报告自动推荐。'),
+                    children: <Widget>[
+                      DropdownButtonFormField<String>(
+                        value: thoughtDecision,
+                        decoration: const InputDecoration(
+                          labelText: '思想调整方式',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const <DropdownMenuItem<String>>[
+                          DropdownMenuItem(
+                            value: 'auto',
+                            child: Text('由复盘报告自动推荐（建议）'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'continue',
+                            child: Text('继续当前思想'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'switch',
+                            child: Text('换一种思想'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'blend',
+                            child: Text('融合另一种思想'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() => thoughtDecision = value);
+                          }
+                        },
+                      ),
+                      if (thoughtDecision != 'auto' &&
+                          thoughtDecision != 'continue' &&
+                          alternatives.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: alternativeLensId,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: thoughtDecision == 'switch'
+                                ? '选择替换思想'
+                                : '选择互补思想',
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: alternatives
+                              .map(
+                                (system) => DropdownMenuItem<String>(
+                                  value: system.primaryLensId,
+                                  child: Text(system.displayName),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setDialogState(
+                                () => alternativeLensId = value,
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -1598,11 +2546,15 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             ),
             FilledButton(
               onPressed: () {
-                final hasLearning = insight.text.trim().isNotEmpty ||
+                final combinedInsight = <String>[
+                  obstacleReason,
+                  insight.text.trim(),
+                ].where((value) => value.isNotEmpty).join('；');
+                final hasLearning = combinedInsight.isNotEmpty ||
                     (thoughtDecision != 'continue' &&
                         thoughtDecision != 'auto');
                 final depth = 1 +
-                    <String>[insight.text, nextAction.text]
+                    <String>[combinedInsight, nextAction.text]
                         .where((value) => value.trim().isNotEmpty)
                         .length;
                 Navigator.pop(
@@ -1613,8 +2565,11 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                         ? ZxLearningStatus.updated
                         : ZxLearningStatus.none,
                     proofType: ZxProofType.selfReport,
-                    whatHappened: _completionReviewLabel(completion),
-                    hypothesisUpdate: insight.text.trim(),
+                    whatHappened: _completionReviewLabel(completion) +
+                        (obstacleReason.isEmpty
+                            ? ''
+                            : '；现实原因：' + obstacleReason),
+                    hypothesisUpdate: combinedInsight,
                     difficultyFit: difficultyFit,
                     consequences: '',
                     nextDecision: '$thoughtDecision|$alternativeLensId',
@@ -1796,7 +2751,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       ),
     );
     if (continueNext == true && mounted) {
-      _tabs.animateTo(2);
+      _tabs.animateTo(_actionTab);
     }
   }
 
@@ -1843,7 +2798,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 ),
               const SizedBox(height: 10),
               FilledButton.icon(
-                onPressed: selected.isEmpty ? null : () => _tabs.animateTo(2),
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => _tabs.animateTo(_actionTab),
                 icon: const Icon(Icons.play_arrow_rounded),
                 label: Text(
                   selected.length <= 1
@@ -1890,42 +2847,43 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             ],
           ),
         ),
-        const SizedBox(height: 18),
-        Row(
-          children: <Widget>[
-            const Expanded(
-              child: Text(
-                '知行合一的17次认知与行动升级',
-                style: TextStyle(
-                  color: _ink,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: '完整17套思想体系（按需阅读）',
+          subtitle: '主流程会自动匹配；只有想主动学习、比较或改选时才需要展开。',
+          initiallyExpanded: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Expanded(
+                    child: Text(
+                      '从王阳明总纲逐层补足心理、行动、意义、能力与环境。',
+                    ),
+                  ),
+                  Badge(
+                    label: Text('${_compareSystemIds.length}/2'),
+                    child: IconButton.filledTonal(
+                      tooltip: '对照两套思想',
+                      onPressed: _compareSystemIds.length == 2
+                          ? _compareSystems
+                          : null,
+                      icon: const Icon(Icons.compare_arrows),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            Badge(
-              label: Text('${_compareSystemIds.length}/2'),
-              child: IconButton.filledTonal(
-                tooltip: '对照两套思想',
-                onPressed:
-                    _compareSystemIds.length == 2 ? _compareSystems : null,
-                icon: const Icon(Icons.compare_arrows),
+              ...ZxThinkerCatalog.evolutionStageGuidance.entries.expand(
+                (entry) => <Widget>[
+                  _buildEvolutionStageHeader(entry.key, entry.value),
+                  ...ZxThinkerCatalog.guides
+                      .where((guide) => guide.evolutionStage == entry.key)
+                      .map(_buildThinkerGuideCard),
+                ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          '从王阳明总纲开始，后续体系依次补足心理机制、认知检验、柔韧行动、主体性、能力、环境、反馈和工程落地。',
-        ),
-        const SizedBox(height: 10),
-        ...ZxThinkerCatalog.evolutionStageGuidance.entries.expand(
-          (entry) => <Widget>[
-            _buildEvolutionStageHeader(entry.key, entry.value),
-            ...ZxThinkerCatalog.guides
-                .where((guide) => guide.evolutionStage == entry.key)
-                .map(_buildThinkerGuideCard),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         _sectionCard(
@@ -2957,7 +3915,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     await _dao.saveAction(action);
     await _refreshLocalState();
     if (!mounted) return;
-    _tabs.animateTo(0);
+    _tabs.animateTo(_actionTab);
     _snack('挑战已激活；不会因连续天数中断而惩罚。');
   }
 
@@ -3124,7 +4082,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               ),
               IconButton(
                 color: Colors.white,
-                onPressed: () => _tabs.animateTo(4),
+                onPressed: () => _tabs.animateTo(_growthTab),
                 icon: const Icon(Icons.chevron_right),
               ),
             ],
@@ -3392,7 +4350,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                                     _selectedAiKnowledge = draft;
                                     _useAiKnowledge = true;
                                   });
-                                  _tabs.animateTo(2);
+                                  _tabs.animateTo(_actionTab);
                                 },
                                 icon: const Icon(Icons.play_arrow_outlined),
                                 label: const Text('选用并转成行动'),
@@ -3407,7 +4365,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
         const SizedBox(height: 12),
         _sectionCard(
           title: '行动导师 Agent',
-          subtitle: '提醒目标、思想选择、执行、反馈与复盘；报告只依据用户实际反馈自动生成。',
+          subtitle: '按当前状态提醒目标、执行、反馈与下一轮；思想由系统先推荐，用户保留改选权。',
           initiallyExpanded: _agentSettings.enabled,
           leading: const CircleAvatar(
             child: Icon(Icons.notifications_active_outlined),
@@ -3455,7 +4413,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 onChanged: _working ? null : _toggleAgent,
               ),
               const Text(
-                '导师状态流：选择目标 → 选择思想 → 生成行动 → 跟踪推进 → 请求反馈 → 自动复盘/推荐 → 下一轮。AI不会在没有反馈时虚构结果。',
+                '导师状态流：目标 → 自动匹配思想并生成行动 → 跟踪推进 → 请求现实反馈 → 自动复盘/调整思想 → 下一轮。AI不会在没有反馈时虚构结果。',
                 style: TextStyle(color: Colors.black54),
               ),
             ],
@@ -4402,7 +5360,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   Future<void> _resetPersonalization() async {
     final confirmed = await _confirm(
       title: '重置个性化？',
-      body: '将清除思想方案的帮助度历史和禁用列表；目标、行动、复盘与奖励不受影响。',
+      body: '将清除思想帮助度历史、禁用列表和行动偏好小测；目标、行动、复盘与奖励不受影响。',
       confirmLabel: '重置',
     );
     if (!confirmed) return;
@@ -4411,6 +5369,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     setState(() {
       _lensHistory = const <String, double>{};
       _disabledLenses = <String>{};
+      _actionPreference = const ZxActionPreference();
+      _experienceMode = ZxExperienceMode.direct;
     });
   }
 
@@ -4574,6 +5534,9 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     final expansion = TextEditingController(
       text: await _promptConfig.expansionPrompt(),
     );
+    final assistant = TextEditingController(
+      text: await _promptConfig.assistantPrompt(),
+    );
     if (!mounted) return;
     final save = await showDialog<bool>(
       context: context,
@@ -4606,6 +5569,17 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                     alignLabelWithHint: true,
                   ),
                 ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: assistant,
+                  minLines: 8,
+                  maxLines: 14,
+                  decoration: const InputDecoration(
+                    labelText: '模块智能助手',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
               ],
             ),
           ),
@@ -4632,9 +5606,11 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
     if (save == true) {
       await _promptConfig.saveActionPrompt(action.text);
       await _promptConfig.saveExpansionPrompt(expansion.text);
+      await _promptConfig.saveAssistantPrompt(assistant.text);
     }
     action.dispose();
     expansion.dispose();
+    assistant.dispose();
   }
 
   Future<void> _exportData() async {
@@ -4707,6 +5683,8 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
       _lensHistory = const <String, double>{};
       _disabledLenses = <String>{};
       _selectedLensIds = <String>{};
+      _actionPreference = const ZxActionPreference();
+      _experienceMode = ZxExperienceMode.direct;
     });
     _snack('用户数据已删除；知识包仍可离线查询。');
   }

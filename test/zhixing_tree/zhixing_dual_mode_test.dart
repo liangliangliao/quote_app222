@@ -253,7 +253,7 @@ void main() {
       );
     });
 
-    test('asks for thought, action and review in sequence', () {
+    test('auto-matches thought, then asks for action and review', () {
       expect(
         agent.decide(
           goals: const <ZxGoal>[goal],
@@ -261,7 +261,7 @@ void main() {
           selectedThoughtCount: 0,
           hasRecentReport: false,
         ),
-        ZxAgentScene.chooseThought,
+        ZxAgentScene.startAction,
       );
       expect(
         agent.decide(

@@ -38,7 +38,9 @@ class ZxAgentService {
   }) {
     final activeGoals = goals.where((goal) => goal.status == 'active');
     if (activeGoals.isEmpty) return ZxAgentScene.setGoal;
-    if (selectedThoughtCount == 0) return ZxAgentScene.chooseThought;
+    // Thought selection is no longer a prerequisite. With no manual choice,
+    // the local matcher recommends a reviewed thought transparently and lets
+    // the user accept or change it after seeing a concrete action.
     final active = actions
         .where((action) => action.status == ZxActionStatus.active)
         .toList(growable: false);
@@ -214,7 +216,7 @@ class ZxAgentService {
       case ZxAgentScene.setGoal:
         return '从系统、Todo目标价值系统或 Microsoft To Do 选择一个最近目标。';
       case ZxAgentScene.chooseThought:
-        return '为当前目标选择一种指导思想，或融合互补思想。';
+        return '查看系统为当前目标推荐的指导思想；你可以接受、替换或融合。';
       case ZxAgentScene.startAction:
         return '把目标转成一个现在可以开始的最小步骤。';
       case ZxAgentScene.trackProgress:

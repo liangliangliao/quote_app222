@@ -263,11 +263,12 @@ void main() {
       expect(action.stopConditions, isNotEmpty);
       expect(action.proofOptions, isNotEmpty);
       expect(action.evidenceLocators, isNotEmpty);
-      expect(action.mainAction, contains('完成一个最小动作'));
+      expect(action.mainAction, contains('打开文档并写一个段落'));
+      expect(action.mainAction, isNot(contains('测试镜头')));
       expect(action.mainAction, isNot(contains('一定成功')));
     });
 
-    test('chosen primary thought shapes the action and fusion stays supportive',
+    test('thought stays in rationale while the main action remains observable',
         () {
       final input = _input();
       final diagnosis = diagnoser.diagnose(input);
@@ -289,8 +290,10 @@ void main() {
         match: match,
       )!;
 
-      expect(action.mainAction, contains('采用PRIMARY'));
-      expect(action.mainAction, contains('完成一个最小动作'));
+      expect(action.mainAction, isNot(contains('PRIMARY')));
+      expect(action.mainAction, contains('打开文档并写一个段落'));
+      expect(action.supportChanges.join(' '), contains('理论练习'));
+      expect(action.supportChanges.join(' '), contains('PRIMARY'));
       expect(action.supportChanges.join(' '), contains('互补采用COMPLEMENT'));
       expect(action.complementaryLensId, 'COMPLEMENT');
     });
