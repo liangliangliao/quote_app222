@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:quote_app/utils/debug_logger.dart';
 
@@ -18,15 +19,16 @@ class NativeScheduler {
 
   /// 是否具备精确闹钟权限；Android 12+ 若未授权，预设时间提醒可能不会触发。
   static Future<bool> canScheduleExactAlarm() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return true;
     try {
       final ok = await _ch.invokeMethod('canScheduleExact');
       return ok == true;
     } catch (_) {
-      return true;
+      return false;
     }
   }
 
-  /// 打开精确闹钟授权页。授权后需要用户返回 App 再注册提醒。
+  /// 打开精确闹钟授权页。原生授权广播会将 App 自动带回前台。
   static Future<bool> requestExactAlarmPermission() async {
     try {
       final ok = await _ch.invokeMethod('requestExactPermission');
@@ -36,12 +38,21 @@ class NativeScheduler {
     }
   }
 
+  /// Clear the marker for an in-app permission request after a denied request.
+  static Future<void> clearExactAlarmPermissionRequest() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _ch.invokeMethod('clearExactPermissionRequest');
+    } catch (_) {}
+  }
+
   /// 注册精准闹钟（原生侧实现）
   static Future<bool> scheduleExactAt({
     required int id,
     required int epochMs,
     Map<String, dynamic>? payload,
   }) async {
+    if (!await canScheduleExactAlarm()) return false;
     await DLog.i('SCH', '【Dart→原生】AM 注册请求(id='+id.toString()+', epochMs='+epochMs.toString()+')');
     final ok = await _ch.invokeMethod<bool>('scheduleExactAt', {
       'id': id,
@@ -58,6 +69,7 @@ class NativeScheduler {
     required int epochMs,
     Map<String, dynamic>? payload,
   }) async {
+    if (!await canScheduleExactAlarm()) return false;
     await DLog.i('SCH', '【Dart→原生】AlarmClock 注册请求(id=' + id.toString() + ', epochMs=' + epochMs.toString() + ')');
     final ok = await _ch.invokeMethod<bool>('scheduleAlarmClockAt', {
       'id': id,

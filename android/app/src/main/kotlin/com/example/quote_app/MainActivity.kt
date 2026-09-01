@@ -30,6 +30,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ExactAlarmHelper.attachActivity(this)
 
         // Edge-to-edge: allow Flutter to draw behind the system status/navigation bars.
         // This is required for background images/colors to be visible under 3-button navigation.
@@ -67,6 +68,16 @@ class MainActivity : FlutterActivity() {
                 )
             }
         } catch (_: Throwable) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ExactAlarmHelper.attachActivity(this)
+    }
+
+    override fun onDestroy() {
+        ExactAlarmHelper.detachActivity(this)
+        super.onDestroy()
     }
 
 

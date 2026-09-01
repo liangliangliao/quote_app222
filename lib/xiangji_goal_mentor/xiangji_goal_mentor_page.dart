@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../platform/exact_alarm_permission_coordinator.dart';
 import '../xiangji_future_strategist/xiangji_home_page.dart';
 import 'xiangji_book_service.dart';
 import 'xiangji_dao.dart';
@@ -944,6 +945,12 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
         ),
       );
       if (enable == true) {
+        final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+          context,
+          featureName: '向己目标守护提醒',
+          explanation: '每天只提醒一次，并按你选择的时间准确出现。',
+        );
+        if (!exactGranted) return;
         _reminderSettings = await _reminders.update(
           enabled: true,
           timeOfDay: '09:00',
@@ -1662,6 +1669,14 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       _showMessage('先确认一个主目标，再开启目标守护提醒。');
       return;
     }
+    if (enabled) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '向己目标守护提醒',
+        explanation: '每天只提醒一次，并按你选择的时间准确出现。',
+      );
+      if (!exactGranted) return;
+    }
     setState(() => _working = true);
     try {
       _reminderSettings = await _reminders.update(
@@ -1686,6 +1701,13 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
     );
     if (picked == null) return;
     final value = _formatTime(picked);
+    if (_reminderSettings.enabled) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '向己目标守护提醒',
+      );
+      if (!exactGranted) return;
+    }
     try {
       _reminderSettings = await _reminders.update(
         enabled: _reminderSettings.enabled,
@@ -1715,6 +1737,13 @@ class _XiangjiGoalMentorPageState extends State<XiangjiGoalMentorPage> {
       helpText: '安静时段到什么时候结束？',
     );
     if (end == null) return;
+    if (_reminderSettings.enabled) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '向己目标守护提醒',
+      );
+      if (!exactGranted) return;
+    }
     final selectedTime = _reminderSettings.timeOfDay;
     try {
       _reminderSettings = await _reminders.update(

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../platform/exact_alarm_permission_coordinator.dart';
 import 'zhixing_ai_service.dart';
 import 'zhixing_agent_service.dart';
 import 'zhixing_ai_knowledge_service.dart';
@@ -3937,9 +3938,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
                 child: SizedBox(
                   height: 260,
                   width: double.infinity,
-                  child: CustomPaint(
-                    painter: ZhixingTreePainter(_tree),
-                  ),
+                  child: ZhixingTreeVisual(state: _tree),
                 ),
               ),
               if (_tree.dormant)
@@ -4055,7 +4054,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
               SizedBox(
                 width: 95,
                 height: 95,
-                child: CustomPaint(painter: ZhixingTreePainter(_tree)),
+                child: ZhixingTreeVisual(state: _tree, animate: false),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -5080,6 +5079,14 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
   }
 
   Future<void> _toggleAgent(bool enabled) async {
+    if (enabled) {
+      final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '知行树行动导师提醒',
+        explanation: '每天的推进提醒和反馈复盘提醒采用精准闹钟；未授权时开关不会被保存为开启。',
+      );
+      if (!granted || !mounted) return;
+    }
     setState(() => _working = true);
     if (!enabled) {
       await _agent.disable();

@@ -43,6 +43,7 @@ import '../health_diet/pages/health_diet_settings_page.dart';
 import '../kindling_host/kindling_host_reminder.dart';
 import '../services/notification_service.dart';
 import '../services/read_aloud_service.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 // removed duplicate import of native_guard (already imported above)
 
 class SettingsPage extends StatefulWidget {
@@ -2340,6 +2341,15 @@ const Text('头像（用于通知图标）'),
               FilledButton(
                 onPressed: () async {
                   if (formKey.currentState?.validate() != true) return;
+
+                  if (status == 'on') {
+                    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                      ctx,
+                      featureName: '定时任务通知',
+                      explanation: '启用中的任务会在下一次计划时间准确触发。',
+                    );
+                    if (!exactGranted) return;
+                  }
 
                   String? uidToSchedule;
 

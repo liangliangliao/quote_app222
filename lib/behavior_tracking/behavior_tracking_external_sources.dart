@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
 import '../health_diet/services/health_connect_diet_context_service.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 import '../platform/native_scheduler.dart';
 import 'behavior_tracking_dao.dart';
 import 'behavior_tracking_models.dart';
@@ -1046,7 +1047,16 @@ class _BehaviorTrackingDataSourcesPageState extends State<BehaviorTrackingDataSo
     await _load();
   }
 
-  Future<bool> _ensureReminderRuntimePermissions({bool openExactSettings = true}) async {
+  Future<bool> _ensureReminderRuntimePermissions() async {
+    final canExact = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '行为观察定时提醒',
+      explanation: '行为观察提醒和每日自动读取都需要在指定时间触发。',
+    );
+    if (!canExact || !mounted) {
+      _status = '精准闹钟权限未开启，提醒配置保持未启用。';
+      return false;
+    }
     if (!_notificationPermission) {
       await BehaviorTrackingNativeBridge.requestPostNotificationsPermission();
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -1056,14 +1066,6 @@ class _BehaviorTrackingDataSourcesPageState extends State<BehaviorTrackingDataSo
       _status = '通知权限未开启：请先允许通知，否则到点提醒不会弹出。';
       return false;
     }
-    final canExact = await NativeScheduler.canScheduleExactAlarm();
-    if (!canExact) {
-      if (openExactSettings) {
-        await NativeScheduler.requestExactAlarmPermission();
-      }
-      _status = '精确闹钟权限未开启：已尝试打开系统授权页。授权后请返回本页，重新点击“注册未来7天”。';
-      return false;
-    }
     return true;
   }
 
@@ -1071,14 +1073,13 @@ class _BehaviorTrackingDataSourcesPageState extends State<BehaviorTrackingDataSo
     final time = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 22, minute: 0));
     if (time == null) return;
     final plan = BehaviorTrackingReminderPlan.defaultNight().copyWith(timeMinute: time.hour * 60 + time.minute);
-    final savedId = await _dao.saveReminder(plan);
-    final savedPlan = plan.copyWith(id: savedId);
     final okToSchedule = await _ensureReminderRuntimePermissions();
     if (!okToSchedule) {
-      _status = '已保存提醒时间，但还没有真正注册系统闹钟。${_status.isEmpty ? '' : '\n$_status'}';
       await _load();
       return;
     }
+    final savedId = await _dao.saveReminder(plan);
+    final savedPlan = plan.copyWith(id: savedId);
     final count = await _service.scheduleNextSevenDays([savedPlan]);
     _status = count > 0
         ? '已创建并注册未来7天 $count 个行为观察提醒。到点后会弹出一条行为观察提醒，点击后用下拉框选择层面并填写表单。'
@@ -1118,16 +1119,27 @@ class _BehaviorTrackingDataSourcesPageState extends State<BehaviorTrackingDataSo
   }
 
   Future<void> _toggleAutoSync(BehaviorTrackingAutoSyncPlan plan, bool enabled) async {
+    if (enabled) {
+      final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '${plan.title}定时任务',
+        explanation: '启用后会按你设置的每日时间自动读取，并发送结果提醒。',
+      );
+      if (!granted || !mounted) return;
+    }
     await _dao.saveAutoSyncPlan(plan.copyWith(enabled: enabled));
     _status = enabled ? '已启用${plan.title}。请点击“注册每日自动读取”。' : '已关闭${plan.title}。已注册的旧闹钟可能需等待过期或在系统中取消。';
     await _load();
   }
 
   Future<void> _registerAutoSync() async {
-    final canExact = await NativeScheduler.canScheduleExactAlarm();
-    if (!canExact) {
-      await NativeScheduler.requestExactAlarmPermission();
-      _status = '精确闹钟权限未开启：已尝试打开系统授权页。授权后请返回本页，重新点击“注册每日自动读取”。';
+    final canExact = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '每日行为数据自动读取',
+      explanation: '系统会为已启用的数据源登记未来30天的精准任务。',
+    );
+    if (!canExact || !mounted) {
+      _status = '精准闹钟权限未开启，未登记每日自动读取任务。';
       await _load();
       return;
     }

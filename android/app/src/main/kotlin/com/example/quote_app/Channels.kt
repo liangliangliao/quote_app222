@@ -284,6 +284,10 @@ object Channels {
                 "isNativeAM" -> result.success(true)
           "canScheduleExact" -> result.success(ExactAlarmHelper.hasExactAlarmPermission(appCtx))
           "requestExactPermission" -> result.success(ExactAlarmHelper.requestExactAlarmPermission(appCtx))
+          "clearExactPermissionRequest" -> {
+            ExactAlarmHelper.clearPendingRequest(appCtx)
+            result.success(true)
+          }
           "scheduleExactAt" -> {
             val id = call.argument<Int>("id") ?: 0
             val epochMs = call.argument<Long>("epochMs") ?: 0L

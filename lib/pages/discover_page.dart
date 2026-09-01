@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/location_service.dart';
 import '../platform/bg_guard_helper.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:math' as math;
 
@@ -4185,6 +4186,13 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
                     return;
                   }
 
+                  final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                    context,
+                    featureName: '地点规则提醒',
+                    explanation: '后台守护会用精准闹钟维持规则检查，避免系统休眠后漏掉提醒。',
+                  );
+                  if (!exactGranted) return;
+
                   // 解锁/后台触发地点规则需要后台定位权限（Android 10+：始终允许定位）。
                   final okPerm = await _ensureGeoBackgroundLocationPermission();
                   if (!okPerm) {
@@ -4300,6 +4308,12 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
     final mm = picked.minute.toString().padLeft(2, '0');
     final tStr = '$hh:$mm';
 
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: 'OneThing 每日定时提醒',
+    );
+    if (!exactGranted) return;
+
     final dao = VisionDao();
     final cfg = <String, dynamic>{
       'time': tStr,
@@ -4317,6 +4331,13 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
   }
 
   Future<void> _onToggleTimeTrigger(String id, Map<String, dynamic> oldCfg, bool enabled) async {
+    if (enabled) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: 'OneThing 每日定时提醒',
+      );
+      if (!exactGranted) return;
+    }
     final dao = VisionDao();
     final cfg = Map<String, dynamic>.from(oldCfg);
     cfg['enabled'] = enabled;
@@ -4341,6 +4362,14 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
   }
 
   Future<void> _onToggleUnlockTrigger(bool enabled) async {
+    if (enabled) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '解锁轻提醒',
+        explanation: '后台守护会用精准闹钟维持触发链路，避免系统休眠后失效。',
+      );
+      if (!exactGranted) return;
+    }
     final dao = VisionDao();
     // Always remove all existing screen_unlock triggers to avoid duplicates.
     final rows = await dao.listTriggers();

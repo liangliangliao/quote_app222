@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import '../platform/perm_helper.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
@@ -312,48 +311,11 @@ try {
         } catch (_) { enabled = false; }
         if (enabled != true) {
           try { await NotificationService.request(); } catch (_) {}
-          await _maybeAskExactAfterNotif();
         }
       } catch (_) {}
     });
   }
 
-Future<bool> _isFirstOpenAndMarkLocal() async {
-  try {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, '.first_open_done'));
-    if (await file.exists()) return false;
-    await file.writeAsString(DateTime.now().toIso8601String());
-    return true;
-  } catch (_) { return false; }
-}
-
-Future<void> _maybeAskExactAfterNotif() async {
-  bool enabled = true;
-  try { enabled = await NotificationService.areNotificationsEnabled(); } catch (_){ enabled = false; }
-  if (enabled != true) return;
-  final first = await _isFirstOpenAndMarkLocal();
-  if (!first) return;
-  try {
-    final hasExact = await PermHelper.hasExactAlarmPermission();
-    if (!hasExact && mounted) {
-      final allow = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          content: const Text('为确保定时提醒准确，请在系统设置中允许“精确闹钟”。是否前往设置？'),
-          actions: [
-            TextButton(onPressed: ()=> Navigator.of(ctx).pop(false), child: const Text('稍后')),
-            FilledButton(onPressed: ()=> Navigator.of(ctx).pop(true), child: const Text('允许')),
-          ],
-        ),
-      );
-      if (allow == true) {
-        try { await PermHelper.requestExactAlarmPermission(); } catch (_){}
-      }
-    }
-  } catch (_){}
-}
   /// Load a fallback quote from camus_fallback.json using a shuffle-bag.
 /// When multiple fallback quotes exist, selection is randomized per cycle,
 /// adjacent injections won't repeat (when count > 1), and appearances stay balanced.
@@ -1379,6 +1341,5 @@ ImageProvider _imageFrom(String? any) {
     if (enabled != true) {
       try { await NotificationService.request(); } catch (_){}
     }
-    try { await _maybeAskExactAfterNotif(); } catch (_){}
   }
 }
