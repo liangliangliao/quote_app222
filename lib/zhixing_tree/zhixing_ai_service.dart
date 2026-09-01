@@ -130,6 +130,40 @@ class ZxAiService {
     }
   }
 
+  /// Optional grounded explanation layer for the in-module assistant. The
+  /// deterministic local answer is always supplied as a safe baseline. An AI
+  /// response may clarify it, but cannot invent product capabilities or alter
+  /// the action/safety engines.
+  Future<String> answerModuleQuestion({
+    required String question,
+    required String localAnswer,
+    required String featureGrounding,
+    required String currentState,
+  }) async {
+    final provider = await providerState();
+    if (provider['available'] != '1' || question.trim().isEmpty) return '';
+    try {
+      final raw = await _ai.generateText(
+        prompt: jsonEncode(<String, String>{
+          'user_question': question.trim(),
+          'current_state': currentState,
+          'local_safe_answer': localAnswer,
+          'verified_feature_map': featureGrounding,
+        }),
+        purpose: 'zhixing_tree.module_assistant',
+        systemPrompt: await _prompts.assistantPrompt(),
+        maxTokens: 700,
+        expectJson: false,
+        temperature: 0.15,
+      );
+      final text = raw.trim();
+      if (text.isEmpty) return '';
+      return text.length > 1800 ? text.substring(0, 1800) : text;
+    } catch (_) {
+      return '';
+    }
+  }
+
   static Map<String, dynamic>? _parseObject(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return null;

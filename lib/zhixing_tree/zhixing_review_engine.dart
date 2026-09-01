@@ -83,6 +83,37 @@ class ZxLocalReviewEngine {
       );
     }
     if (review.completion == ZxCompletionStatus.notCompleted) {
+      final detail = _feedbackText(review);
+      if (RegExp(r'精力|疲惫|睡眠|身体|容量').hasMatch(detail)) {
+        return const _ReviewRoute(
+          ZxReviewDecision.blendThoughts,
+          <String>['马斯洛', '老子', 'COM-B'],
+        );
+      }
+      if (RegExp(r'时间|工具|环境|地点|打断').hasMatch(detail)) {
+        return const _ReviewRoute(
+          ZxReviewDecision.blendThoughts,
+          <String>['COM-B', 'Gollwitzer', '杜威'],
+        );
+      }
+      if (RegExp(r'不知道|不会|不清楚|第一步').hasMatch(detail)) {
+        return const _ReviewRoute(
+          ZxReviewDecision.switchThought,
+          <String>['杜威', '班杜拉'],
+        );
+      }
+      if (RegExp(r'害怕|焦虑|失败|完美|不敢').hasMatch(detail)) {
+        return const _ReviewRoute(
+          ZxReviewDecision.blendThoughts,
+          <String>['ACT', '贝克', '行为激活'],
+        );
+      }
+      if (RegExp(r'意义|不想|不是我要|价值|被迫').hasMatch(detail)) {
+        return const _ReviewRoute(
+          ZxReviewDecision.switchThought,
+          <String>['自我决定', '弗兰克尔', '王阳明'],
+        );
+      }
       if (review.difficultyFit == '过高') {
         return const _ReviewRoute(
           ZxReviewDecision.blendThoughts,
@@ -129,6 +160,22 @@ class ZxLocalReviewEngine {
       return '主要问题不再是坚持，而是目标方向、价值认领或代价需要重新判断。';
     }
     if (review.completion == ZxCompletionStatus.notCompleted) {
+      final detail = _feedbackText(review);
+      if (RegExp(r'精力|疲惫|睡眠|身体|容量').hasMatch(detail)) {
+        return '主要障碍是当下容量，不应继续用意志施压；先恢复、减负或寻求现实支持。';
+      }
+      if (RegExp(r'时间|工具|环境|地点|打断').hasMatch(detail)) {
+        return '主要障碍在机会与环境；下一轮应先准备时间、工具或现场入口。';
+      }
+      if (RegExp(r'不知道|不会|不清楚|第一步').hasMatch(detail)) {
+        return '主要障碍是步骤或技能不清楚；下一轮先找示范并只练第一个子技能。';
+      }
+      if (RegExp(r'害怕|焦虑|失败|完美|不敢').hasMatch(detail)) {
+        return '不适和失败预测正在阻断入口；下一轮改成可撤销实验，不等待恐惧消失。';
+      }
+      if (RegExp(r'意义|不想|不是我要|价值|被迫').hasMatch(detail)) {
+        return '目标的自主性或价值尚未被认领；先允许修改或退出，再决定是否行动。';
+      }
       return review.difficultyFit == '过高'
           ? '行动负荷超过当下容量，应缩小步骤、增加现场线索或环境支持。'
           : '意图尚未稳定转成现场动作，需要更明确的触发线索和第一步。';
@@ -154,6 +201,9 @@ class ZxLocalReviewEngine {
         return '基于新认识退出';
     }
   }
+
+  String _feedbackText(ZxReviewInput review) =>
+      review.whatHappened + ' ' + review.hypothesisUpdate + ' ' + review.consequences;
 }
 
 class _ReviewRoute {
