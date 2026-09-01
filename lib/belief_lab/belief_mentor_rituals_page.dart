@@ -2,6 +2,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../platform/exact_alarm_permission_coordinator.dart';
 import 'belief_mentor_dao.dart';
 import 'belief_mentor_models.dart';
 import 'belief_mentor_reminder_service.dart';
@@ -307,6 +308,12 @@ class _BeliefMentorRitualsPageState extends State<BeliefMentorRitualsPage> {
       _show('事件时间至少需要晚于现在 30 分钟。');
       return;
     }
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '信念日历提醒',
+      explanation: '准备、临近和复盘节点会按事件时间准确提醒。',
+    );
+    if (!exactGranted) return;
     try {
       if (existing != null) {
         await widget.reminders.cancelExperimentReminders(
@@ -362,6 +369,11 @@ class _BeliefMentorRitualsPageState extends State<BeliefMentorRitualsPage> {
       _show('送达时间必须晚于现在。');
       return;
     }
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '“来自过去的我”定时消息',
+    );
+    if (!exactGranted) return;
     try {
       if (existing != null) {
         await widget.reminders.cancelExperimentReminders(

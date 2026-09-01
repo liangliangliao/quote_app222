@@ -25,10 +25,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Full-screen intent for alarm-style notifications (used by Sport full-screen popup) -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-        <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <!-- Alarm-clock use case: exact wake-up alarms should work after process death/reboot without relying on the user-granted special access dialog. -->
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Android 10+ step counter permission (SportRunningPage) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 

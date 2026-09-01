@@ -81,11 +81,7 @@ class ZxAgentService {
   }) async {
     final notificationPermission =
         await NativeScheduler.requestNotificationPermissionSystem();
-    var exactPermission = await NativeScheduler.canScheduleExactAlarm();
-    if (!exactPermission) {
-      await NativeScheduler.requestExactAlarmPermission();
-      exactPermission = await NativeScheduler.canScheduleExactAlarm();
-    }
+    final exactPermission = await NativeScheduler.canScheduleExactAlarm();
     final enabled = ZxAgentSettings(
       enabled: true,
       hour: settings.hour,

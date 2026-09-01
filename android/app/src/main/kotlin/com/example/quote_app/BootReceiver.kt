@@ -19,6 +19,13 @@ import java.util.concurrent.TimeUnit
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == android.app.AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED) {
+            // This is tied to a recent, explicit user request only.  It closes the
+            // transient system settings page by bringing the existing app task to
+            // the front; all normal boot/time-change paths remain UI-free.
+            try { ExactAlarmHelper.returnToAppAfterGrantIfPending(context.applicationContext) } catch (_: Throwable) {}
+        }
+
         // VoiceAlarm uses device-protected storage and must be restored as early as
         // LOCKED_BOOT_COMPLETED.  WorkManager may touch credential-protected storage
         // before the user unlocks the phone, so restore voice alarms first and keep

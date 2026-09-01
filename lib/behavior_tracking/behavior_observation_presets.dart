@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'behavior_tracking_dao.dart';
 import 'behavior_tracking_models.dart';
 import 'behavior_preset_ai_analysis_service.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 import '../platform/native_scheduler.dart';
 import 'behavior_tracking_external_sources.dart';
 
@@ -105,6 +106,12 @@ class _BehaviorObservationPresetsPageState extends State<BehaviorObservationPres
   }
 
   Future<bool> _ensureAlarmRuntimePermissions() async {
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '行为预设闹钟提醒',
+      explanation: '预设提醒、每日复盘提醒和全屏表单都使用系统精准闹钟。',
+    );
+    if (!exactGranted || !mounted) return false;
     final alreadyGranted = await _PresetAlarmSettings.requestRuntimePermissions();
     if (!alreadyGranted) {
       if (mounted) {
@@ -281,6 +288,7 @@ class _BehaviorObservationPresetsPageState extends State<BehaviorObservationPres
       helpText: '选择每日预设行为复盘提醒时间',
     );
     if (picked == null) return;
+    if (!await _ensureAlarmRuntimePermissions() || !mounted) return;
     final next = _reviewSettings.copyWith(enabled: true, hour: picked.hour, minute: picked.minute);
     await _saveReviewSettings(next, reschedule: false);
     await _scheduleDailyReviewAlarms(next, showSnack: true);
@@ -442,6 +450,7 @@ class _BehaviorObservationPresetsPageState extends State<BehaviorObservationPres
                     subtitle: Text("默认 22:30；当前 ${_reviewSettings.enabled ? _reviewSettings.timeLabel : '已关闭'}。用于登记当天全部预设行为完成/未完成情况。"),
                     value: _reviewSettings.enabled,
                     onChanged: (v) async {
+                      if (v && (!await _ensureAlarmRuntimePermissions() || !mounted)) return;
                       final next = _reviewSettings.copyWith(enabled: v);
                       setState(() => _reviewSettings = next);
                       setSheetState(() {});
@@ -511,6 +520,7 @@ class _BehaviorObservationPresetsPageState extends State<BehaviorObservationPres
       helpText: '选择“${preset.name}”的提醒时间',
     );
     if (picked == null) return;
+    if (!await _ensureAlarmRuntimePermissions() || !mounted) return;
     final updated = preset.copyWith(
       reminderEnabled: true,
       reminderHour: picked.hour,
@@ -1280,6 +1290,12 @@ class _BehaviorPresetTomorrowStarterPageState extends State<BehaviorPresetTomorr
   }
 
   Future<void> _registerTomorrowAlarms() async {
+    final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '明日预设行为闹钟',
+      explanation: '已开启提醒的预设会登记为系统闹钟，并按相同时间合并。',
+    );
+    if (!granted || !mounted) return;
     final count = await _rescheduleAllPresetAlarmsFromDao();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(count > 0 ? '已为明天及后续预设行为注册 $count 个闹钟提醒。' : '当前没有可注册的预设闹钟提醒。')));
@@ -1848,7 +1864,17 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
             title: const Text('到点响铃并弹出预设提醒表单', style: TextStyle(fontWeight: FontWeight.w900)),
             subtitle: const Text('使用系统闹钟铃声响铃，不再发送通知提醒；到点用于提醒你查看/确认预设，不代表现在必须完成行为。'),
             value: _reminderEnabled,
-            onChanged: (v) => setState(() => _reminderEnabled = v),
+            onChanged: (v) async {
+              if (v) {
+                final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                  context,
+                  featureName: '行为预设闹钟提醒',
+                  explanation: '开启后会在指定时间响铃并弹出预设确认表单。',
+                );
+                if (!granted || !mounted) return;
+              }
+              setState(() => _reminderEnabled = v);
+            },
           ),
           if (_reminderEnabled) ...[
             const SizedBox(height: 8),

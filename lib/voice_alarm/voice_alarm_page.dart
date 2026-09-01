@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../data/kv_dao.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 import '../voice_lab/eleven_labs_service.dart';
 import '../voice_lab/multi_provider_tts_service.dart';
 import '../voice_lab/voice_lab_dao.dart';
@@ -625,13 +626,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _toast('请至少选择一个重复日期，否则闹钟没有可触发的日期');
       return;
     }
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '语音闹钟',
+      explanation: '起床/睡觉闹钟需要在熄屏、锁屏或 App 未运行时仍按设定时刻响起。',
+    );
+    if (!exactGranted || !mounted) return;
     setState(() => _saving = true);
     try {
-      final hasPermission = await _native.invokeMethod<bool>('hasExactAlarmPermission') ?? true;
-      if (!hasPermission) {
-        await _native.invokeMethod<bool>('requestExactAlarmPermission');
-        _toast('将继续保存语音闹钟；授权“闹钟和提醒”可增强后台/熄屏准点触发能力');
-      }
       final canFullScreen = await _native.invokeMethod<bool>('canUseFullScreenIntent') ?? true;
       if (!canFullScreen) {
         await _native.invokeMethod<bool>('requestFullScreenIntentPermission');
@@ -787,6 +789,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     if (_text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
       return;
+    }
+    if (_scheduledAlarms.any((a) => (a['mode'] ?? 'morning').toString() == _mode)) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '语音闹钟',
+        explanation: '保存共享设置时会重新登记当前模式下已有闹钟。',
+      );
+      if (!exactGranted || !mounted) return;
     }
     setState(() => _saving = true);
     try {

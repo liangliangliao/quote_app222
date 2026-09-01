@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../platform/exact_alarm_permission_coordinator.dart';
 import '../services/health_diet_settings_service.dart';
 import '../services/health_diet_daily_scheduler_service.dart';
 import '../widgets/health_diet_data_source_banner.dart';
@@ -128,6 +129,14 @@ class _HealthDietSettingsPageState extends State<HealthDietSettingsPage> {
   }
 
   Future<void> _save() async {
+    if (_agentDailyScheduleEnabled && _agentScheduleNotifyEnabled) {
+      final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '健康饮食定时通知',
+        explanation: '六个每日膳食时段会用精准闹钟发送本地提醒；完整巡检仍由后台任务执行。',
+      );
+      if (!granted || !mounted) return;
+    }
     setState(() => _saving = true);
     await _service.save({
       HealthDietSettingsService.usdaApiKey: _usdaApiKeyCtrl.text,
@@ -349,14 +358,34 @@ class _HealthDietSettingsPageState extends State<HealthDietSettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _agentDailyScheduleEnabled,
-            onChanged: (v) => setState(() => _agentDailyScheduleEnabled = v),
+            onChanged: (v) async {
+              if (v && _agentScheduleNotifyEnabled) {
+                final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                  context,
+                  featureName: '健康饮食定时通知',
+                  explanation: '开启每日托管后，六个膳食时段需要准时提醒。',
+                );
+                if (!granted || !mounted) return;
+              }
+              setState(() => _agentDailyScheduleEnabled = v);
+            },
             title: const Text('开启每日定时膳食托管'),
             subtitle: const Text('按 08:00、10:30、12:00、15:30、18:00、21:30 自动巡检：安排饮食、检查记录、动态调整下一餐、生成晚间复盘。'),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _agentScheduleNotifyEnabled,
-            onChanged: (v) => setState(() => _agentScheduleNotifyEnabled = v),
+            onChanged: (v) async {
+              if (v && _agentDailyScheduleEnabled) {
+                final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                  context,
+                  featureName: '健康饮食定时通知',
+                  explanation: '到点通知采用精准闹钟，系统限制后台运行时仍能直接提醒。',
+                );
+                if (!granted || !mounted) return;
+              }
+              setState(() => _agentScheduleNotifyEnabled = v);
+            },
             title: const Text('定时托管完成后发送通知'),
             subtitle: const Text('后台任务可用时发送本地通知；如果系统限制后台运行，打开健康饮食模块时会自动补跑到点任务。'),
           ),

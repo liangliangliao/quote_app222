@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../platform/exact_alarm_permission_coordinator.dart';
 import 'belief_mentor_ai_service.dart';
 import 'belief_mentor_dao.dart';
 import 'belief_mentor_models.dart';
@@ -160,6 +161,13 @@ class _BeliefMentorOnboardingPageState
     await _dao.saveBelief(belief, scoreSource: 'onboarding_confirmation');
     var remindersEnabled = _remindersEnabled;
     if (remindersEnabled) {
+      remindersEnabled = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '信念导师情境提醒',
+        explanation: '晨间启动、行动前提醒和证据复盘都依赖精准闹钟。',
+      );
+    }
+    if (remindersEnabled) {
       remindersEnabled = await _reminders.requestPermission();
     }
     final current = await _dao.profile();
@@ -199,6 +207,18 @@ class _BeliefMentorOnboardingPageState
     if (!mounted) return;
     setState(() => _busy = false);
     widget.onCompleted();
+  }
+
+  Future<void> _setRemindersEnabled(bool value) async {
+    if (value) {
+      final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '信念导师情境提醒',
+        explanation: '晨间启动、行动前提醒和证据复盘都依赖精准闹钟。',
+      );
+      if (!granted || !mounted) return;
+    }
+    if (mounted) setState(() => _remindersEnabled = value);
   }
 
   Future<void> _editCandidate(int index) async {
@@ -738,7 +758,7 @@ class _BeliefMentorOnboardingPageState
         title: const Text('开启情境提醒'),
         subtitle: const Text('晨间启动、行动前、反回避、证据捕捉与失败恢复'),
         value: _remindersEnabled,
-        onChanged: (value) => setState(() => _remindersEnabled = value),
+        onChanged: _setRemindersEnabled,
       ),
       const Divider(),
       ListTile(

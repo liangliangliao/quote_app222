@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../platform/perm_helper.dart';
 import '../utils/debug_logger.dart';
 
 /// Background stability helper.
@@ -75,8 +74,6 @@ class BgGuardHelper {
     final st = await getStatus();
     final bool ignoreBattOpt = st['ignoreBattOpt'] == true;
     final String bucket = (st['bucket']?.toString() ?? '');
-    final bool canExact = st['canExactAlarm'] == true;
-
     // If we are not whitelisted OR bucket is restricted, background alarms may be delayed for minutes.
     final bool risky = (!ignoreBattOpt) || bucket.contains('RESTRICTED');
     if (!risky) return;
@@ -84,13 +81,6 @@ class BgGuardHelper {
     // Avoid spamming: only show once per app run.
     if (_shownThisRun) return;
     _shownThisRun = true;
-
-    // Best-effort: request exact alarm permission when needed.
-    if (!canExact) {
-      try {
-        await PermHelper.requestExactAlarmPermission();
-      } catch (_) {}
-    }
 
     // UI guide.
     if (!context.mounted) return;

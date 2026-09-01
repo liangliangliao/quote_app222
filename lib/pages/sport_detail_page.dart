@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/sport_dao.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 import '../platform/native_scheduler.dart';
 import 'sport_history_list_page.dart';
 import 'sport_history_summary_page.dart';
@@ -1376,6 +1377,13 @@ class _SportPlanDialogState extends State<_SportPlanDialog> {
       return;
     }
 
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '运动计划到点提醒',
+      explanation: '保存计划后会登记计划开始前的全屏精准闹钟；开启通知时还会登记提前提醒。',
+    );
+    if (!exactGranted || !mounted) return;
+
     final detail = <String, dynamic>{'time': _timeStr()};
     if (_repeatType == 'weekly') {
       detail['weekdays'] = _weekdays.toList()..sort();
@@ -1548,7 +1556,15 @@ class _SportPlanDialogState extends State<_SportPlanDialog> {
                   const Expanded(child: Text('通知提醒')),
                   Switch(
                     value: _notifyEnabled,
-                    onChanged: (v) {
+                    onChanged: (v) async {
+                      if (v) {
+                        final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                          context,
+                          featureName: '运动计划通知',
+                          explanation: '提前通知与计划开始提醒需要在设定时间准确触发。',
+                        );
+                        if (!granted || !mounted) return;
+                      }
                       setState(() => _notifyEnabled = v);
                     },
                   ),
