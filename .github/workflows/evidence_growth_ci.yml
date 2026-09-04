@@ -29,12 +29,12 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Analyze module and integration
+      - name: Analyze module and tests strictly
+        run: flutter analyze --no-pub --fatal-infos --fatal-warnings lib/evidence_growth test/evidence_growth
+      - name: Analyze existing integration files
         run: >-
-          flutter analyze --no-pub
-          lib/evidence_growth
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
           lib/pages/discover_page.dart
           lib/services/notification_service.dart
-          test/evidence_growth
       - name: Run evidence growth tests
         run: flutter test --no-pub test/evidence_growth

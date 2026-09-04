@@ -137,7 +137,7 @@ class EvidenceGrowthRouter {
   }
 
   double _score(EvidenceKNode node, String text, GrowthModule primary, List<GrowthModule> secondary) {
-    var score = node.module == primary ? 4.0 : (secondary.contains(node.module) ? 1.5 : 0);
+    var score = node.module == primary ? 4.0 : (secondary.contains(node.module) ? 1.5 : 0.0);
     for (final trigger in node.triggers) {
       for (final word in trigger.split(RegExp(r'[，、 /]'))) {
         if (word.length >= 2 && text.contains(word)) score += word.length >= 4 ? 3 : 2;

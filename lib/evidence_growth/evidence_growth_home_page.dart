@@ -159,7 +159,7 @@ class _PracticeState extends State<_Practice> {
     if (!await _speech.initialize()) return;
     setState(() => _listening = true);
     await _speech.listen(
-      localeId: 'zh_CN',
+      listenOptions: SpeechListenOptions(localeId: 'zh_CN'),
       onResult: (result) {
         _input.text = result.recognizedWords;
         _input.selection = TextSelection.collapsed(offset: _input.text.length);
