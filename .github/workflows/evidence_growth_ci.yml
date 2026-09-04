@@ -1,0 +1,40 @@
+name: Evidence Growth CI
+
+on:
+  pull_request:
+    paths:
+      - "lib/evidence_growth/**"
+      - "lib/pages/discover_page.dart"
+      - "lib/services/notification_service.dart"
+      - "test/evidence_growth/**"
+      - ".github/workflows/evidence_growth_ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-growth-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze module and integration
+        run: >-
+          flutter analyze --no-pub
+          lib/evidence_growth
+          lib/pages/discover_page.dart
+          lib/services/notification_service.dart
+          test/evidence_growth
+      - name: Run evidence growth tests
+        run: flutter test --no-pub test/evidence_growth
