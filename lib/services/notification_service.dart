@@ -13,6 +13,7 @@ import 'native_guard.dart';
 import '../data/dao.dart';
 import '../pages/discover_page.dart';
 import '../realistic_optimism_training/realistic_optimism_training_home_page.dart';
+import '../evidence_growth/evidence_growth_home_page.dart';
 import '../zhixing_tree/zhixing_tree_home_page.dart';
 import '../health_diet/pages/today_meal_plan_page.dart';
 import '../health_diet/daily_share/daily_diet_share_page.dart';
@@ -91,6 +92,7 @@ class NotificationService {
     if (await _tryNavigateXiangjiGoal(payload)) return;
     if (await _tryNavigateZhixingTree(payload)) return;
     if (await _tryNavigateRealisticOptimismTraining(payload)) return;
+    if (await _tryNavigateEvidenceGrowth(payload)) return;
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
@@ -318,6 +320,39 @@ class NotificationService {
     return true;
   }
 
+  static Future<bool> _tryNavigateEvidenceGrowth(String? payload) async {
+    final p = (payload ?? '').trim();
+    if (p.isEmpty) return false;
+    var matched = p.startsWith('evidence_growth');
+    var trialId = '';
+    if (p.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(p);
+        if (decoded is Map && (decoded['module'] ?? '').toString() == 'evidence_growth') {
+          matched = true;
+          trialId = (decoded['trial_id'] ?? '').toString();
+        }
+      } catch (_) {}
+    } else if (p.contains(':')) {
+      trialId = p.substring(p.indexOf(':') + 1).trim();
+    }
+    if (!matched) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = p;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await handlePendingNotificationNavigation();
+        } catch (_) {}
+      });
+      return true;
+    }
+    nav.popUntil((route) => route.isFirst);
+    nav.push(MaterialPageRoute(builder: (_) => EvidenceGrowthHomePage(initialTrialId: trialId)));
+    return true;
+  }
+
   static Future<bool> _tryNavigateHealthDiet(String? payload) async {
     final p = (payload ?? '').trim();
     if (p.isEmpty) return false;
@@ -440,6 +475,8 @@ class NotificationService {
         } else if (await NotificationService._tryNavigateRealisticOptimismTraining(
           p,
         )) {
+          return;
+        } else if (await NotificationService._tryNavigateEvidenceGrowth(p)) {
           return;
         } else if (await NotificationService._tryNavigateHealthDiet(p)) {
           return;

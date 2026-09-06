@@ -1,0 +1,48 @@
+name: Evidence Growth CI
+
+on:
+  pull_request:
+    paths:
+      - "lib/evidence_growth/**"
+      - "lib/pages/discover_page.dart"
+      - "lib/services/notification_service.dart"
+      - "test/evidence_growth/**"
+      - "server/evidence_growth/**"
+      - "tool/build_evidence_growth_kb.mjs"
+      - ".github/workflows/evidence_growth_ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-growth-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze module and tests strictly
+        run: flutter analyze --no-pub --fatal-infos --fatal-warnings lib/evidence_growth test/evidence_growth
+      - name: Analyze existing integration files
+        run: >-
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+          lib/pages/discover_page.dart
+          lib/services/notification_service.dart
+      - name: Run evidence growth tests
+        run: flutter test --no-pub test/evidence_growth
+      - name: Resolve standalone API dependencies
+        working-directory: server/evidence_growth
+        run: dart pub get
+      - name: Analyze standalone API entry point
+        working-directory: server/evidence_growth
+        run: dart analyze --fatal-infos --fatal-warnings bin
