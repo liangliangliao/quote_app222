@@ -6,17 +6,21 @@ import 'evidence_growth_source_cards.dart';
 /// historical Trials retain their original evidence snapshots in SQLite.
 class EvidenceGrowthKnowledge {
   EvidenceGrowthKnowledge._();
-  static const String kbVersion = '3.5-r2';
+  static const String bundledVersion = '3.5-r3';
+  static String get kbVersion => _activeVersion;
+  static String _activeVersion = bundledVersion;
   static const String promptVersion = 'eg-p1.1';
   static const sources = <String, String>{
     'KB35': '哈佛幸福课_六大模块成长闭环知识库_v3.5_Tal主线_专家延伸II正式整合版',
     'TAL23': 'Lecture 01–23；讲次按 KB35 保留，未另行加载课程原稿',
     'ENG': '正式产品方案 v1.0 的软件设计推导，非 Tal 原话',
   };
-  static final List<EvidenceKNode> nodes = List.unmodifiable(
+  static final List<EvidenceKNode> bundledNodes = List.unmodifiable(
     evidenceGrowthSourceCards.map(_fromSource),
   );
-  static final Map<String, EvidenceKNode> _index = {
+  static List<EvidenceKNode> _activeNodes = bundledNodes;
+  static List<EvidenceKNode> get nodes => _activeNodes;
+  static Map<String, EvidenceKNode> _index = {
     for (final node in nodes) node.id: node,
   };
   static List<EvidenceKNode> get talNodes =>
@@ -27,6 +31,11 @@ class EvidenceGrowthKnowledge {
       nodes.where((node) => node.module == module).toList(growable: false);
   static EvidenceKNode? byId(String id) => _index[id];
   static EvidenceKNode source(String originalId) => _index['KB35-$originalId']!;
+  static void activate(String version, List<EvidenceKNode> verifiedNodes) {
+    _activeVersion = version;
+    _activeNodes = List.unmodifiable(verifiedNodes);
+    _index = {for (final node in _activeNodes) node.id:node};
+  }
 
   static const List<String> defaultCases = <String>[
     '我知道要投简历，但就是没开始，一直在等待动力。',
@@ -75,6 +84,7 @@ class EvidenceGrowthKnowledge {
     'A-AUDIT-10': 'RECOVER_REENTER', 'A-AUDIT-14': 'RISK_DOWNSCALE',
     'A-AUDIT-16': 'SAFE_EXPOSURE', 'A-AUDIT-17': 'RECOVER',
     'F01': 'SAFE_EXPOSURE', 'F02': 'OPTIMALIST_CHECK',
+    'F-CASE-BENNETT': 'SAFE_IMPERFECTION',
     'F03': 'FAILURE_REFRAME', 'F04': 'EXPOSURE_LADDER',
     'F05': 'OPTIMALIST_CHECK', 'F06': 'SAFE_IMPERFECTION',
     'F-AUDIT-01': 'FAILURE_REFRAME', 'F-AUDIT-03': 'FAILURE_CLASSIFY',
@@ -122,7 +132,7 @@ class EvidenceGrowthKnowledge {
       GrowthModule.review: 'C04', GrowthModule.change: 'B05',
     };
     return EvidenceKNode(
-      id: 'KB35-$original', version: 2, module: module,
+      id: 'KB35-$original', version: 3, module: module,
       sourceClass: str('sourceClass'), title: str('title'),
       claim: str('claim'), mechanism: str('mechanism'),
       teachingContext: str('context'), storyOrStudy: str('story'),
@@ -138,9 +148,21 @@ class EvidenceGrowthKnowledge {
       evidenceStrength: str('sourceClass') == 'K_TAL' ? 'COURSE_SOURCE' : 'KB_EXTERNAL_SOURCE',
       displayExcerpt: str('claim'),
       locator: EvidenceSourceLocator(document: 'KB35',
-        pages: card['pages'] as List<int>, originalNodeIds: [original],
+        pages: card['pages'] as List<int>,
+        lectures: _lectures(str('locator')),
+        originalNodeIds: [str('sourceOriginalId').isEmpty ? original : str('sourceOriginalId')],
         sourceType: str('sourceClass') == 'K_TAL' ? 'COURSE_SOURCE' : 'EXPERT_EXTENSION',
         note: str('locator')),
     );
+  }
+
+  static List<int> _lectures(String locator) {
+    final values = <int>{};
+    for (final match in RegExp(r'Lecture\s*(\d{1,2})(?:\s*[–—-]\s*(\d{1,2}))?').allMatches(locator)) {
+      final first = int.parse(match[1]!);
+      final last = int.tryParse(match[2] ?? '') ?? first;
+      for (var n = first; n <= last && n <= 23; n++) { if (n > 0) values.add(n); }
+    }
+    return values.toList()..sort();
   }
 }

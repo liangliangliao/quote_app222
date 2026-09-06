@@ -142,6 +142,24 @@ class EvidenceKNode {
         'misuse_boundary': misuseBoundary,
         'source_locator': locator.toJson(),
       };
+
+  factory EvidenceKNode.fromJson(Map<String, dynamic> data) {
+    List<String> strings(String key) => (data[key] as List? ?? []).map((e) => e.toString()).toList();
+    final source = Map<String, dynamic>.from(data['source_locator'] as Map? ?? {});
+    return EvidenceKNode(id:data['node_id'] as String, version:(data['version'] as num).toInt(),
+      module:GrowthModuleX.parse(data['module']), sourceClass:data['source_class'] as String,
+      title:data['title'] as String, claim:data['claim'] as String, mechanism:data['mechanism'] as String? ?? '',
+      teachingContext:data['teaching_context'] as String? ?? '', storyOrStudy:data['story_or_study'] as String? ?? '',
+      howTo:strings('how_to'), misuseBoundary:strings('misuse_boundary'), triggers:strings('triggers'),
+      contraSignals:strings('contra_signals'), prerequisites:strings('prerequisites'), operators:strings('operators'),
+      boundaries:strings('risk_boundary'), nextNodes:strings('next_nodes'),
+      evidenceStrength:data['evidence_strength'] as String, displayExcerpt:data['display_excerpt'] as String? ?? '',
+      locator:EvidenceSourceLocator(document:source['document'] as String,
+        pages:(source['physical_pages'] as List).map((e)=>(e as num).toInt()).toList(),
+        lectures:(source['lectures'] as List? ?? []).map((e)=>(e as num).toInt()).toList(),
+        originalNodeIds:(source['original_node_ids'] as List? ?? []).map((e)=>e.toString()).toList(),
+        sourceType:source['source_type'] as String? ?? 'COURSE_SOURCE', note:source['note'] as String? ?? ''));
+  }
 }
 
 class RoutedNode {
@@ -179,6 +197,7 @@ class EvidenceRouteResult {
     this.worstCase = '',
     this.reversible = true,
     this.nextRoundPreserved = true,
+    this.personalEvidence = const <Map<String, Object?>>[],
   });
   final String rawInput;
   final List<String> facts;
@@ -206,6 +225,7 @@ class EvidenceRouteResult {
   final String worstCase;
   final bool reversible;
   final bool nextRoundPreserved;
+  final List<Map<String, Object?>> personalEvidence;
 
   bool get canAct => status == 'READY_FOR_ACTION' && riskGate == 'PASS';
 
@@ -229,6 +249,7 @@ class EvidenceRouteResult {
     String? worstCase,
     bool? reversible,
     bool? nextRoundPreserved,
+    List<Map<String, Object?>>? personalEvidence,
   }) =>
       EvidenceRouteResult(
         rawInput: rawInput,
@@ -257,6 +278,7 @@ class EvidenceRouteResult {
         worstCase: worstCase ?? this.worstCase,
         reversible: reversible ?? this.reversible,
         nextRoundPreserved: nextRoundPreserved ?? this.nextRoundPreserved,
+        personalEvidence: personalEvidence ?? this.personalEvidence,
       );
 }
 
@@ -580,6 +602,9 @@ class TrialReviewResult {
   final String decision;
   final String nextChangeOneVariable;
   final List<String> knowledgeNodeIds;
+  Map<String,Object?> toJson() => {'prediction_original':predictionOriginal,'actual_facts':actualFacts,
+    'prediction_error':predictionError,'failure_class':failureClass,'learning':learning,'rule_update':ruleUpdate,
+    'decision':decision,'next_change_one_variable':nextChangeOneVariable,'knowledge_nodes_used':knowledgeNodeIds};
 }
 
 class EvidenceSummary {

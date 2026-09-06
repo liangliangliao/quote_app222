@@ -29,6 +29,8 @@ class EvidenceGrowthRouter {
     (['羞耻','自责','辱骂自己'], 'F-AUDIT-05'),
     (['重要项目','最可能失败','事前复盘'], 'G05'),
     (['压抑','不该难过','难受'], 'F-AUDIT-13'),
+    (['Bennett','Brauer','带着不完美上场'], 'F-CASE-BENNETT'),
+    (['Five-Minute','five-minute','五分钟启动'], 'A02'),
   ];
 
   EvidenceRouteResult route(String rawInput, {Map<String, double> personalFit = const {}}) {
@@ -97,6 +99,9 @@ class EvidenceGrowthRouter {
       else if (_has(text, ['概率','事后改写','置信度'])) gap = 'B-EXT2-01';
       else if (_has(text, ['失败分类','复杂失败','聪明失败'])) gap = 'F-EXT-01';
       else if (_has(text, ['嘴上相信','实际规则'])) gap = 'C-EXT-02';
+      for (final node in EvidenceGrowthKnowledge.extensionNodes) {
+        if (text.contains('学习应用：${node.title}')) gap = node.id.replaceFirst('KB35-', '');
+      }
     }
     if (gap != null) {
       final node = EvidenceGrowthKnowledge.source(gap);
@@ -135,6 +140,31 @@ class EvidenceGrowthRouter {
         'RECOVERY_CHECK': exhausted ? 'RECOVER_FIRST' : 'CONFIRM_BEFORE_START',
         'STRETCH_ZONE_CHECK':'CONFIRM_BEFORE_START'},
     );
+  }
+
+  EvidenceRouteResult nextTrial(RealityTrial previous) {
+    if (!previous.isClosed || !const {'ACT','ADJUST'}.contains(previous.decision)) {
+      return _insufficient('上一轮尚未完成继续或调整决定。');
+    }
+    final input='${previous.rawInput}\n下一轮：${previous.nextAction}';
+    final checked=route(input);
+    if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(checked.status)) return checked;
+    final nodes=previous.nodeIds.map(EvidenceGrowthKnowledge.byId).whereType<EvidenceKNode>().toList();
+    if(nodes.isEmpty || !nodes.first.isTal || !nodes.any((n)=>n.operators.contains(previous.operator))) return _insufficient(input);
+    final spec=EvidenceGrowthOperatorRegistry.byId(previous.operator);
+    return EvidenceRouteResult(rawInput:input,facts:[...previous.facts,'上一轮实际：${previous.actualOutcome}',
+        '已确认下一步：${previous.nextAction}'],primaryModule:previous.primaryModule,secondaryModules:previous.secondaryModules,
+      candidates:nodes.map((n)=>RoutedNode(node:n,score:1,reason:'沿用上一轮已引用机制；本轮重新检查安全条件')).toList(),
+      selectedNodes:nodes,requiredChecks:nodes.expand((n)=>n.prerequisites).toSet().toList(),status:'READY_FOR_ACTION',
+      riskGate:'PASS',inference:'依据上一轮的现实结果，${previous.decision == 'ACT' ? '保持条件再次取样' : '只改变已确认的一个变量'}。',
+      confidence:.6,operator:previous.operator,
+      actionInstruction:previous.decision=='ACT' ? previous.actionInstruction
+          : '${previous.actionInstruction}\n本轮仅调整：${previous.nextAction}',
+      completionDefinition:previous.completionDefinition,reviewTrigger:spec.reviewTrigger,evidenceLevel:'E2',
+      alternatives:spec.alternatives,contextTags:previous.contextTags,goalState:previous.goalState,
+      currentState:previous.actualOutcome,topGap:previous.topGap,
+      personalEvidence:[{'trial_id':previous.id,'actual_outcome':previous.actualOutcome,
+        'result_status':previous.resultStatus,'decision':previous.decision,'rule_update':previous.ruleUpdate}]);
   }
 
   EvidenceRouteResult _insufficient(String text) => _stop(text,

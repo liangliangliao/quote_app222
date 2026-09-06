@@ -1,0 +1,9 @@
+name: evidence_growth_server
+description: Authenticated API using the Android app's evidence growth domain.
+publish_to: none
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+dependencies:
+  crypto: ^3.0.3
+  sqflite_common: ^2.5.4
+  sqflite_common_ffi: ^2.3.3

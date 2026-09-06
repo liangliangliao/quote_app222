@@ -1,15 +1,15 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
-import '../data/db.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_operator_registry.dart';
 
 class EvidenceGrowthDao {
-  EvidenceGrowthDao({Future<Database> Function()? database})
-      : _databaseProvider = database ?? AppDatabase.instance;
+  EvidenceGrowthDao({required Future<Database> Function() database})
+      : _databaseProvider = database;
   final Future<Database> Function() _databaseProvider;
   Future<void>? _ready;
   Future<Database> _database() => _databaseProvider();
@@ -92,6 +92,14 @@ class EvidenceGrowthDao {
         event_type TEXT NOT NULL, payload_json TEXT NOT NULL, created_at_ms INTEGER NOT NULL)''');
       await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_learned_nodes (
         node_id TEXT PRIMARY KEY, learned_at_ms INTEGER NOT NULL)''');
+      await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_feedback (
+        feedback_id INTEGER PRIMARY KEY AUTOINCREMENT, trial_id TEXT NOT NULL,
+        node_id TEXT NOT NULL, category TEXT NOT NULL, detail TEXT NOT NULL,
+        kb_version TEXT NOT NULL, created_at_ms INTEGER NOT NULL, synced INTEGER NOT NULL DEFAULT 0)''');
+      await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_api_receipts (
+        request_key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, response TEXT NOT NULL)''');
+      await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_sync_state (
+        trial_id TEXT PRIMARY KEY, remote_digest TEXT NOT NULL, local_digest TEXT NOT NULL)''');
       await txn.execute('''CREATE TRIGGER IF NOT EXISTS eg_prediction_immutable
         BEFORE UPDATE ON evidence_growth_predictions BEGIN
         SELECT RAISE(ABORT, 'Original prediction is immutable'); END''');
@@ -109,7 +117,7 @@ class EvidenceGrowthDao {
       bool riskConfirmed = false, String goalState = '', String currentState = '',
       String topGap = '', Map<String, String> operatorInputs = const {},
       String commitmentLevel = '', String stretchLevel = 'STRETCH',
-      String worstCase = '', String stableContext = '', String previousTrialId = ''}) async {
+      String worstCase = '', String stableContext = '', String previousTrialId = '', String requestKey = ''}) async {
     if (!route.canAct || route.evidenceLevel == 'E0' || !riskConfirmed ||
         !route.reversible || !route.nextRoundPreserved || stretchLevel == 'PANIC') {
       throw StateError('行动前必须通过证据、前提、Panic、可逆性和下一轮资格检查。');
@@ -126,7 +134,18 @@ class EvidenceGrowthDao {
     await ensureTables();
     final db = await _database();
     final now = DateTime.now().millisecondsSinceEpoch;
-    final id = 'eg_${now}_${DateTime.now().microsecond}';
+    final id = requestKey.isEmpty ? 'eg_${now}_${DateTime.now().microsecond}'
+        : 'eg_request_${sha256.convert(utf8.encode(requestKey))}';
+    if (requestKey.isNotEmpty) {
+      final existing = await byId(id);
+      if (existing != null) {
+        if (existing.prediction != prediction.trim() || existing.probability != probability ||
+            existing.reviewAtMs != reviewAt.millisecondsSinceEpoch || existing.operator != route.operator) {
+          throw StateError('创建请求与已保存的试验冲突。');
+        }
+        return existing;
+      }
+    }
     final keepRaw = await getSetting('keep_raw_input', fallback: 'true') == 'true';
     final facts = keepRaw
         ? route.facts
@@ -177,6 +196,8 @@ class EvidenceGrowthDao {
       });
       for (var i = 0; i < route.selectedNodes.length; i++) {
         final node = route.selectedNodes[i];
+        await txn.insert('evidence_growth_learned_nodes', {'node_id': node.id, 'learned_at_ms': now},
+            conflictAlgorithm: ConflictAlgorithm.ignore);
         var reason = '';
         for (final item in route.candidates) {
           if (item.node.id == node.id) reason = item.reason;
@@ -227,8 +248,8 @@ class EvidenceGrowthDao {
       if (current.status != 'READY') throw StateError('只有待开始试验可以启动。');
       final updated = current.copyWith(status: 'IN_PROGRESS', startedAtMs: now, updatedAtMs: now);
       await txn.update('evidence_growth_trials', updated.toRow(), where: 'trial_id = ?', whereArgs: [trial.id]);
-      for (final node in trial.nodeIds) {
-        await _incrementNode(txn, node, used: 1, now: now);
+      for (final node in current.nodeIds) {
+        await _refreshNodeStats(txn, node, now);
       }
       await _event(txn, trial.id, 'STARTED', {}, now);
       return updated;
@@ -246,6 +267,24 @@ class EvidenceGrowthDao {
     if (!const {'DONE','PARTIAL','NOT_DONE','ABORTED','OBSERVING'}.contains(result) || actualOutcome.trim().isEmpty) {
       throw ArgumentError('结果状态或事实不能为空。');
     }
+    const allowedMeasurements = {'prediction_occurred', 'outcome_helpful', 'failure_class',
+      'recovery_hours', 'actual_anxiety'};
+    if (resultMeasurements.keys.any((key) => !allowedMeasurements.contains(key))) {
+      throw ArgumentError('结果记录不能改写行动前的条件。');
+    }
+    for (final key in ['prediction_occurred', 'outcome_helpful']) {
+      if (resultMeasurements.containsKey(key) &&
+          !const {'true', 'false', 'unknown'}.contains(resultMeasurements[key])) {
+        throw ArgumentError('结果判断必须是发生、未发生或未知。');
+      }
+    }
+    for (final key in ['actual_anxiety', 'recovery_hours']) {
+      if (!resultMeasurements.containsKey(key)) continue;
+      final value = double.tryParse(resultMeasurements[key]!);
+      if (value == null || !value.isFinite || value < 0 || (key == 'actual_anxiety' && value > 10)) {
+        throw ArgumentError('焦虑应为 0–10，恢复时长应为非负小时。');
+      }
+    }
     return db.transaction((txn) async {
     final current = await _current(txn, trial.id);
     if (!const {'IN_PROGRESS','OBSERVING'}.contains(current.status)) throw StateError('本轮结果已经保存或尚未开始。');
@@ -256,21 +295,20 @@ class EvidenceGrowthDao {
       unexpected: unexpected.trim(),
       updatedAtMs: now,
       resultStatus: result, resultAtMs: now,
-      operatorInputs: {...current.operatorInputs, ...resultMeasurements},
+      operatorInputs: {...current.operatorInputs, ...resultMeasurements,
+        'action_completed': '${result == 'DONE' || current.operatorInputs['action_completed'] == 'true'}'},
       shameSignal: shameSignal, imageExposureSignal: imageExposureSignal,
     );
       await txn.update('evidence_growth_trials', updated.toRow(), where: 'trial_id = ?', whereArgs: [trial.id]);
       await txn.insert('evidence_growth_results', {
         'trial_id': trial.id,
-        'did_action': didAction ? 1 : 0,
+        'did_action': updated.didAction == true ? 1 : 0,
         'actual_outcome': actualOutcome.trim(),
         'unexpected': unexpected.trim(),
         'captured_at_ms': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
-      if (result == 'DONE' && current.resultStatus != 'DONE') {
-        for (final node in trial.nodeIds) {
-          await _incrementNode(txn, node, completed: 1, now: now);
-        }
+      for (final node in current.nodeIds) {
+        await _refreshNodeStats(txn, node, now);
       }
       await _event(txn, trial.id, 'RESULT_CAPTURED', {'result_status': result,
         'actual_outcome': actualOutcome.trim(), 'measurements': resultMeasurements}, now);
@@ -285,7 +323,7 @@ class EvidenceGrowthDao {
     return db.transaction((txn) async {
     final current = await _current(txn, trial.id);
     if (current.status != 'RESULT_CAPTURED') throw StateError('先保存现实结果再复盘。');
-    if (review.predictionOriginal != current.prediction ||
+    if (review.knowledgeNodeIds.isEmpty || review.predictionOriginal != current.prediction ||
         review.knowledgeNodeIds.any((id) => !current.nodeIds.contains(id))) {
       throw StateError('复盘不得改写原预测或引入未引用知识。');
     }
@@ -340,11 +378,8 @@ class EvidenceGrowthDao {
         'next_action': nextAction.trim(),
         'created_at_ms': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
-      for (final node in trial.nodeIds) {
-        await _incrementNode(txn, node,
-            positive: current.operatorInputs['prediction_occurred'] == 'true' ? 1 : 0,
-            strategyChanges: normalized == 'ADJUST' ? 1 : 0,
-            now: now);
+      for (final node in current.nodeIds) {
+        await _refreshNodeStats(txn, node, now);
       }
       await _event(txn, trial.id, 'DECIDED', {'decision': normalized, 'reason': reason.trim()}, now);
       return updated;
@@ -373,6 +408,27 @@ class EvidenceGrowthDao {
       'latency_ms': latencyMs,
       'created_at_ms': DateTime.now().millisecondsSinceEpoch,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<Map<String,Object?>?> apiReceipt(String key) async {
+    await ensureTables();
+    final rows=await (await _database()).query('evidence_growth_api_receipts',where:'request_key = ?',whereArgs:[key],limit:1);
+    return rows.isEmpty ? null : rows.first;
+  }
+  Future<void> saveApiReceipt(String key,String fingerprint,String response) async {
+    await ensureTables();
+    await (await _database()).insert('evidence_growth_api_receipts',{'request_key':key,'fingerprint':fingerprint,'response':response},
+      conflictAlgorithm:ConflictAlgorithm.ignore);
+  }
+  Future<void> recordRoute(EvidenceRouteResult route) async {
+    await ensureTables();
+    await (await _database()).insert('evidence_growth_router_logs',{
+      'request_id':'route_${DateTime.now().microsecondsSinceEpoch}',
+      'raw_input_hash':sha256.convert(utf8.encode(route.rawInput)).toString(),
+      'candidates_json':jsonEncode(route.candidates.map((c)=>{'node_id':c.node.id,'score':c.score,'reason':c.reason}).toList()),
+      'selected_json':jsonEncode(route.selectedNodes.map((n)=>n.id).toList()),
+      'required_checks_json':jsonEncode(route.riskChecks),'status':route.status,
+      'kb_version':EvidenceGrowthKnowledge.kbVersion,'created_at_ms':DateTime.now().millisecondsSinceEpoch});
   }
 
   Future<RealityTrial?> byId(String id) async {
@@ -407,7 +463,7 @@ class EvidenceGrowthDao {
       activatedNodes: stats.where((e) => ((e['used_count'] as num?)?.toInt() ?? 0) > 0).length,
       startedTrials: trials.where((e) => e.startedAtMs > 0 || e.status != 'READY').length,
       completedActions: trials.where((e) => e.resultStatus == 'DONE' || (e.resultStatus.isEmpty && e.didAction == true)).length,
-      failureSamples: trials.where((e) => e.failureClass.isNotEmpty && e.failureClass != 'NO_FAILURE').length,
+      failureSamples: trials.where((e) => const {'BASIC','COMPLEX','INTELLIGENT'}.contains(e.failureClass)).length,
       strategyChanges: trials.where((e) => e.decision == 'ADJUST').length,
       exits: trials.where((e) => e.decision == 'EXIT').length,
       moduleCounts: counts,
@@ -443,7 +499,8 @@ class EvidenceGrowthDao {
         'evidence_growth_trial_evidence', 'evidence_growth_predictions', 'evidence_growth_results',
         'evidence_growth_reviews', 'evidence_growth_decisions', 'evidence_growth_personal_node_stats',
         'evidence_growth_router_logs', 'evidence_growth_prompt_runs', 'evidence_growth_trials',
-        'evidence_growth_events', 'evidence_growth_learned_nodes'
+        'evidence_growth_events', 'evidence_growth_learned_nodes', 'evidence_growth_feedback', 'evidence_growth_api_receipts',
+        'evidence_growth_sync_state'
       ]) {
         await txn.delete(table);
       }
@@ -466,6 +523,7 @@ class EvidenceGrowthDao {
       'personal_node_stats': await db.query('evidence_growth_personal_node_stats'),
       'events': await db.query('evidence_growth_events'),
       'learned_nodes': await db.query('evidence_growth_learned_nodes'),
+      'feedback': await db.query('evidence_growth_feedback'),
     });
   }
 
@@ -477,10 +535,139 @@ class EvidenceGrowthDao {
       conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  Future<Map<String, double>> nodeFitScores() async {
+  static const _bundleTables = ['trial_evidence','predictions','results','reviews','decisions','events'];
+  static String bundleDigest(Map<String,dynamic> bundle) {
+    Object? sorted(Object? value) {
+      if(value is Map) {
+        final keys=value.keys.map((e)=>e.toString()).toList()..sort();
+        return {for(final key in keys) key:sorted(value[key])};
+      }
+      if(value is List) return value.map(sorted).toList();
+      return value;
+    }
+    return sha256.convert(utf8.encode(jsonEncode(sorted(bundle)))).toString();
+  }
+
+  Future<Map<String,dynamic>> trialBundle(String trialId) async {
+    final trial=await byId(trialId);
+    if(trial==null) throw StateError('Trial 不存在');
+    final db=await _database();
+    final bundle=<String,dynamic>{'schema':1,'trial':trial.toRow()};
+    for(final name in _bundleTables) {
+      final rows=await db.query('evidence_growth_$name',where:'trial_id = ?',whereArgs:[trialId],
+        orderBy:name=='events'?'event_id ASC':name=='trial_evidence'?'rank_no ASC':null);
+      bundle[name]=rows.map((row)=>Map<String,Object?>.from(row)..remove('id')..remove('event_id')).toList();
+    }
+    return bundle;
+  }
+
+  Future<Map<String,Map<String,String>>> syncState() async {
     await ensureTables();
+    final rows=await (await _database()).query('evidence_growth_sync_state');
+    return {for(final row in rows) row['trial_id'] as String:{'remote_digest':row['remote_digest'] as String,'local_digest':row['local_digest'] as String}};
+  }
+  Future<void> acknowledgeSync(String id,String remoteDigest,String localDigest) async {
+    await ensureTables();
+    await (await _database()).insert('evidence_growth_sync_state',{'trial_id':id,'remote_digest':remoteDigest,'local_digest':localDigest},
+      conflictAlgorithm:ConflictAlgorithm.replace);
+  }
+
+  /// Compare-and-swap on the complete evidence bundle; concurrent devices never
+  /// silently replace one another's observations. Conflicts stay local.
+  Future<String> importTrialBundle(Map<String,dynamic> bundle,{required String baseDigest}) async {
+    await ensureTables();
+    if(bundle['schema']!=1 || bundle['trial'] is! Map) throw const FormatException('无效同步格式');
+    final trial=RealityTrial.fromRow(Map<String,Object?>.from(bundle['trial'] as Map));
+    final digest=bundleDigest(bundle);
+    final existing=await byId(trial.id);
+    if(existing!=null) {
+      final currentDigest=bundleDigest(await trialBundle(trial.id));
+      if(currentDigest==digest) return digest;
+      if(currentDigest!=baseDigest) throw StateError('SYNC_CONFLICT');
+      if(existing.prediction!=trial.prediction || existing.probability!=trial.probability ||
+          existing.reviewAtMs!=trial.reviewAtMs || jsonEncode(existing.nodeIds)!=jsonEncode(trial.nodeIds)) {
+        throw StateError('同步不能改写预测与原证据');
+      }
+    } else if(baseDigest.isNotEmpty) { throw StateError('SYNC_MISSING_BASE'); }
+    if(trial.id.isEmpty || !RegExp(r'^[a-zA-Z0-9_-]{1,120}$').hasMatch(trial.id) || trial.prediction.isEmpty ||
+        !trial.probability.isFinite || trial.probability<0 || trial.probability>1 ||
+        !const {'READY','IN_PROGRESS','RESULT_CAPTURED','REVIEWED','OBSERVING','DECIDED'}.contains(trial.status) ||
+        trial.riskGate!='PASS' || !trial.reversible || !trial.nextRoundPreserved || trial.stretchLevel=='PANIC') {
+      throw const FormatException('同步 Trial 未通过状态与安全合同');
+    }
+    final predictions=bundle['predictions'] as List;
+    final evidence=bundle['trial_evidence'] as List;
+    if(predictions.length!=1 || predictions.single['statement']!=trial.prediction ||
+        predictions.single['probability']!=trial.probability || predictions.single['window_end_ms']!=trial.reviewAtMs ||
+        evidence.length!=trial.nodeIds.length || evidence.isEmpty || evidence.first['source_class']!='K_TAL' ||
+        !evidence.every((e)=>trial.nodeIds.contains(e['node_id']))) throw const FormatException('同步证据链不完整');
+    for(final name in _bundleTables) {
+      if(bundle[name] is! List || (bundle[name] as List).any((r)=>r is! Map || r['trial_id']!=trial.id)) {
+        throw const FormatException('同步记录归属不一致');
+      }
+    }
+    final events=bundle['events'] as List;
+    if(events.isNotEmpty) {
+      String? state;
+      for(final event in events) {
+        final type=event['event_type'];
+        final payload=jsonDecode(event['payload_json'] as String) as Map;
+        if(type=='CREATED' && state==null) { state='READY'; }
+        else if(type=='STARTED' && state=='READY') { state='IN_PROGRESS'; }
+        else if(type=='RESULT_CAPTURED' && const {'IN_PROGRESS','OBSERVING'}.contains(state)) { state='RESULT_CAPTURED'; }
+        else if(type=='REVIEWED' && state=='RESULT_CAPTURED') { state='REVIEWED'; }
+        else if(type=='DECIDED' && state=='REVIEWED') { state=payload['decision']=='OBSERVE'?'OBSERVING':'DECIDED'; }
+        else if(type=='NEXT_TRIAL_LINKED' && state=='DECIDED') { /* state retained */ }
+        else { throw const FormatException('同步事件不能重放为合法闭环'); }
+      }
+      if(state!=trial.status) throw const FormatException('同步状态与事件不一致');
+    }
+    final db=await _database();
+    await db.transaction((txn) async {
+      if(existing!=null && jsonEncode((await _current(txn,trial.id)).toRow())!=jsonEncode(existing.toRow())) {
+        throw StateError('SYNC_CONFLICT');
+      }
+      if(existing==null) { await txn.insert('evidence_growth_trials',trial.toRow()); }
+      else { await txn.update('evidence_growth_trials',trial.toRow(),where:'trial_id = ?',whereArgs:[trial.id]); }
+      for(final name in _bundleTables) {
+        if(name=='predictions' && existing!=null) continue;
+        await txn.delete('evidence_growth_$name',where:'trial_id = ?',whereArgs:[trial.id]);
+        for(final row in bundle[name] as List) {
+          final clean=Map<String,Object?>.from(row as Map)..remove('id')..remove('event_id');
+          await txn.insert('evidence_growth_$name',clean);
+        }
+      }
+      for(final id in trial.nodeIds) {
+        await txn.insert('evidence_growth_learned_nodes',{'node_id':id,'learned_at_ms':trial.createdAtMs},conflictAlgorithm:ConflictAlgorithm.ignore);
+        await _refreshNodeStats(txn,id,DateTime.now().millisecondsSinceEpoch);
+      }
+    });
+    return bundleDigest(await trialBundle(trial.id));
+  }
+
+  Future<Map<String, double>> nodeFitScores({List<String> contextTags = const []}) async {
+    await ensureTables();
+    if (contextTags.isNotEmpty) {
+      final trials = (await recentTrials(limit: 10000)).where((t) =>
+          t.startedAtMs > 0 && t.contextTags.any(contextTags.contains)).toList();
+      final ids = trials.expand((t) => t.nodeIds).toSet();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      return {for (final id in ids) id: (_nodeStats(id,
+          trials.where((t) => t.nodeIds.contains(id)).toList(), now)['fit_score'] as num).toDouble()};
+    }
     final rows = await (await _database()).query('evidence_growth_personal_node_stats');
     return {for (final row in rows) row['node_id'] as String: (row['fit_score'] as num).toDouble()};
+  }
+
+  Future<List<Map<String,Object?>>> personalEvidenceFor(EvidenceRouteResult route) async {
+    final ids=route.selectedNodes.map((n)=>n.id).toSet();
+    return (await recentTrials(limit:10000)).where((t)=>t.resultAtMs>0 && t.nodeIds.any(ids.contains) &&
+        (route.contextTags.isEmpty || t.contextTags.any(route.contextTags.contains))).take(5).map((t)=>{
+      'trial_id':t.id,'result_status':t.resultStatus,'actual_outcome':t.actualOutcome,
+      'prediction':t.prediction,'prediction_occurred':t.operatorInputs['prediction_occurred'],
+      'outcome_helpful':t.operatorInputs['outcome_helpful'],'decision':t.decision,
+      'context_tags':t.contextTags,'rule_update':t.ruleUpdate,
+    }).toList();
   }
 
   Future<List<Map<String, Object?>>> timeline(String trialId) async {
@@ -510,30 +697,68 @@ class EvidenceGrowthDao {
     return list.isEmpty ? null : list.reduce((a,b) => a+b) / list.length;
   }
 
-  Future<void> _incrementNode(DatabaseExecutor db, String nodeId,
-      {int used = 0, int completed = 0, int positive = 0, int strategyChanges = 0, required int now}) async {
-    final rows = await db.query('evidence_growth_personal_node_stats', where: 'node_id = ?', whereArgs: [nodeId], limit: 1);
-    final current = rows.isEmpty ? <String, Object?>{} : rows.first;
-    final u = ((current['used_count'] as num?)?.toInt() ?? 0) + used;
-    final c = ((current['completed_count'] as num?)?.toInt() ?? 0) + completed;
-    final p = ((current['positive_outcome_count'] as num?)?.toInt() ?? 0) + positive;
-    final s = ((current['strategy_change_count'] as num?)?.toInt() ?? 0) + strategyChanges;
-    final last = (current['last_used_ms'] as num?)?.toInt() ?? 0;
+  Future<void> _refreshNodeStats(DatabaseExecutor db, String nodeId, int now) async {
+    final rows = await db.query('evidence_growth_trials', where: 'started_at_ms > 0');
+    final trials = rows.map(RealityTrial.fromRow).where((t) => t.nodeIds.contains(nodeId)).toList();
+    await db.insert('evidence_growth_personal_node_stats', _nodeStats(nodeId, trials, now),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Map<String, Object?> _nodeStats(String nodeId, List<RealityTrial> trials, int now) {
+    final u = trials.length;
+    final c = trials.where((t) => t.resultStatus == 'DONE' || t.operatorInputs['action_completed'] == 'true').length;
+    final p = trials.where((t) => t.isClosed && t.operatorInputs['outcome_helpful'] == 'true').length;
+    final s = trials.where((t) => t.decision == 'ADJUST').length;
+    final last = trials.fold<int>(0, (n, t) => t.updatedAtMs > n ? t.updatedAtMs : n);
     final completionRate = u == 0 ? 0.0 : c / u;
     final positiveRate = u == 0 ? 0.0 : p / u;
     final repeatability = (c / 3).clamp(0, 1).toDouble();
-    final contextFit = u <= 1 ? .5 : (1 - s / u).clamp(0, 1).toDouble();
+    final contexts = <String, int>{};
+    for (final t in trials) {
+      final key = t.stableContext.trim().isNotEmpty ? t.stableContext.trim() : (t.contextTags.toList()..sort()).join('|');
+      if (key.isNotEmpty) contexts[key] = (contexts[key] ?? 0) + 1;
+    }
+    final contextFit = u == 0 || contexts.isEmpty ? .5 : contexts.values.reduce((a,b) => a > b ? a : b) / u;
     final recency = last == 0 ? .5 : (1 - ((now - last) / 86400000) / 30).clamp(0, 1).toDouble();
     final fit = u == 0 ? .5 : (completionRate * .30 + positiveRate * .25 + repeatability * .20 + contextFit * .15 + recency * .10).clamp(0, 1);
-    await db.insert('evidence_growth_personal_node_stats', {
+    return {
       'node_id': nodeId,
       'used_count': u,
       'completed_count': c,
       'positive_outcome_count': p,
       'strategy_change_count': s,
-      'last_used_ms': now,
+      'last_used_ms': last,
       'fit_score': fit,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    };
+  }
+
+  Future<bool> repeatedAvoidance(RealityTrial trial) async {
+    final recent = (await recentTrials(limit: 10000)).where((t) =>
+        t.nodeIds.any(trial.nodeIds.contains) && t.id != trial.id && t.isClosed).take(3).toList();
+    return recent.length == 3 && recent.every((t) =>
+        t.resultStatus == 'NOT_DONE' || t.resultStatus == 'ABORTED');
+  }
+
+  Future<void> submitEvidenceFeedback({required String trialId, required String nodeId,
+      required String category, required String detail}) async {
+    await ensureTables();
+    final trial = trialId.isEmpty ? null : await byId(trialId);
+    if (EvidenceGrowthKnowledge.byId(nodeId) == null ||
+        (trialId.isNotEmpty && (trial == null || !trial.nodeIds.contains(nodeId))) ||
+        !const {'NOT_APPLICABLE','SOURCE_ERROR','MISUNDERSTOOD','OTHER'}.contains(category) || detail.trim().isEmpty) {
+      throw ArgumentError('请选择已引用节点，填写具体依据问题。');
+    }
+    await (await _database()).insert('evidence_growth_feedback', {'trial_id':trialId,
+      'node_id':nodeId, 'category':category, 'detail':detail.trim(),
+      'kb_version':trial?.kbVersion ?? EvidenceGrowthKnowledge.kbVersion,
+      'created_at_ms':DateTime.now().millisecondsSinceEpoch});
+  }
+  Future<List<Map<String,Object?>>> pendingFeedback() async {
+    await ensureTables();
+    return (await _database()).query('evidence_growth_feedback',where:'synced = 0',limit:20);
+  }
+  Future<void> acknowledgeFeedback(int id) async {
+    await (await _database()).update('evidence_growth_feedback',{'synced':1},where:'feedback_id = ?',whereArgs:[id]);
   }
 
   String _smallHash(String value) {
