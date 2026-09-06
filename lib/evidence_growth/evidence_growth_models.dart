@@ -35,17 +35,23 @@ class EvidenceSourceLocator {
     required this.document,
     required this.pages,
     this.lectures = const <int>[],
+    this.originalNodeIds = const <String>[],
+    this.sourceType = 'COURSE_SYNTHESIS',
     this.note = '',
   });
   final String document;
   final List<int> pages;
   final List<int> lectures;
+  final List<String> originalNodeIds;
+  final String sourceType;
   final String note;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'document': document,
         'physical_pages': pages,
         'lectures': lectures,
+        'original_node_ids': originalNodeIds,
+        'source_type': sourceType,
         'note': note,
       };
 
@@ -73,6 +79,10 @@ class EvidenceKNode {
     required this.evidenceStrength,
     required this.displayExcerpt,
     required this.locator,
+    required this.teachingContext,
+    required this.storyOrStudy,
+    required this.howTo,
+    required this.misuseBoundary,
     this.version = 1,
   });
   final String id;
@@ -90,6 +100,10 @@ class EvidenceKNode {
   final String evidenceStrength;
   final String displayExcerpt;
   final EvidenceSourceLocator locator;
+  final String teachingContext;
+  final String storyOrStudy;
+  final List<String> howTo;
+  final List<String> misuseBoundary;
   final int version;
 
   bool get isTal => sourceClass == 'K_TAL';
@@ -98,6 +112,10 @@ class EvidenceKNode {
         title,
         claim,
         mechanism,
+        teachingContext,
+        storyOrStudy,
+        ...howTo,
+        ...misuseBoundary,
         ...triggers,
         ...operators,
       ].join(' ');
@@ -118,6 +136,10 @@ class EvidenceKNode {
         'next_nodes': nextNodes,
         'evidence_strength': evidenceStrength,
         'display_excerpt': displayExcerpt,
+        'teaching_context': teachingContext,
+        'story_or_study': storyOrStudy,
+        'how_to': howTo,
+        'misuse_boundary': misuseBoundary,
         'source_locator': locator.toJson(),
       };
 }
@@ -149,6 +171,14 @@ class EvidenceRouteResult {
     required this.evidenceLevel,
     required this.alternatives,
     this.missingFacts = const <String>[],
+    this.contextTags = const <String>[],
+    this.goalState = '',
+    this.currentState = '',
+    this.topGap = '',
+    this.riskChecks = const <String, String>{},
+    this.worstCase = '',
+    this.reversible = true,
+    this.nextRoundPreserved = true,
   });
   final String rawInput;
   final List<String> facts;
@@ -168,6 +198,14 @@ class EvidenceRouteResult {
   final String evidenceLevel;
   final List<String> alternatives;
   final List<String> missingFacts;
+  final List<String> contextTags;
+  final String goalState;
+  final String currentState;
+  final String topGap;
+  final Map<String, String> riskChecks;
+  final String worstCase;
+  final bool reversible;
+  final bool nextRoundPreserved;
 
   bool get canAct => status == 'READY_FOR_ACTION' && riskGate == 'PASS';
 
@@ -183,6 +221,14 @@ class EvidenceRouteResult {
     String? reviewTrigger,
     String? evidenceLevel,
     List<String>? alternatives,
+    List<String>? contextTags,
+    String? goalState,
+    String? currentState,
+    String? topGap,
+    Map<String, String>? riskChecks,
+    String? worstCase,
+    bool? reversible,
+    bool? nextRoundPreserved,
   }) =>
       EvidenceRouteResult(
         rawInput: rawInput,
@@ -203,6 +249,14 @@ class EvidenceRouteResult {
         evidenceLevel: evidenceLevel ?? this.evidenceLevel,
         alternatives: alternatives ?? this.alternatives,
         missingFacts: missingFacts,
+        contextTags: contextTags ?? this.contextTags,
+        goalState: goalState ?? this.goalState,
+        currentState: currentState ?? this.currentState,
+        topGap: topGap ?? this.topGap,
+        riskChecks: riskChecks ?? this.riskChecks,
+        worstCase: worstCase ?? this.worstCase,
+        reversible: reversible ?? this.reversible,
+        nextRoundPreserved: nextRoundPreserved ?? this.nextRoundPreserved,
       );
 }
 
@@ -239,6 +293,23 @@ class RealityTrial {
     this.nextAction = '',
     this.kbVersion = '3.5',
     this.promptVersion = 'eg-p1.0',
+    this.contextTags = const <String>[],
+    this.goalState = '',
+    this.currentState = '',
+    this.topGap = '',
+    this.operatorInputs = const <String, String>{},
+    this.commitmentLevel = '',
+    this.worstCase = '',
+    this.riskChecks = const <String, String>{},
+    this.resultStatus = '',
+    this.stableContext = '',
+    this.shameSignal = false,
+    this.imageExposureSignal = false,
+    this.startedAtMs = 0,
+    this.resultAtMs = 0,
+    this.nextReviewAtMs = 0,
+    this.nextTrialId = '',
+    this.decisionReason = '',
   });
   final String id;
   final String status;
@@ -271,6 +342,23 @@ class RealityTrial {
   final String nextAction;
   final String kbVersion;
   final String promptVersion;
+  final List<String> contextTags;
+  final String goalState;
+  final String currentState;
+  final String topGap;
+  final Map<String, String> operatorInputs;
+  final String commitmentLevel;
+  final String worstCase;
+  final Map<String, String> riskChecks;
+  final String resultStatus;
+  final String stableContext;
+  final bool shameSignal;
+  final bool imageExposureSignal;
+  final int startedAtMs;
+  final int resultAtMs;
+  final int nextReviewAtMs;
+  final String nextTrialId;
+  final String decisionReason;
 
   bool get isClosed => status == 'DECIDED' || status == 'ARCHIVED';
 
@@ -285,6 +373,17 @@ class RealityTrial {
     String? decision,
     String? nextAction,
     int? updatedAtMs,
+    Map<String, String>? operatorInputs,
+    String? commitmentLevel,
+    String? resultStatus,
+    String? stableContext,
+    bool? shameSignal,
+    bool? imageExposureSignal,
+    int? startedAtMs,
+    int? resultAtMs,
+    int? nextReviewAtMs,
+    String? nextTrialId,
+    String? decisionReason,
   }) =>
       RealityTrial(
         id: id,
@@ -318,6 +417,23 @@ class RealityTrial {
         nextAction: nextAction ?? this.nextAction,
         kbVersion: kbVersion,
         promptVersion: promptVersion,
+        contextTags: contextTags,
+        goalState: goalState,
+        currentState: currentState,
+        topGap: topGap,
+        operatorInputs: operatorInputs ?? this.operatorInputs,
+        commitmentLevel: commitmentLevel ?? this.commitmentLevel,
+        worstCase: worstCase,
+        riskChecks: riskChecks,
+        resultStatus: resultStatus ?? this.resultStatus,
+        stableContext: stableContext ?? this.stableContext,
+        shameSignal: shameSignal ?? this.shameSignal,
+        imageExposureSignal: imageExposureSignal ?? this.imageExposureSignal,
+        startedAtMs: startedAtMs ?? this.startedAtMs,
+        resultAtMs: resultAtMs ?? this.resultAtMs,
+        nextReviewAtMs: nextReviewAtMs ?? this.nextReviewAtMs,
+        nextTrialId: nextTrialId ?? this.nextTrialId,
+        decisionReason: decisionReason ?? this.decisionReason,
       );
 
   Map<String, Object?> toRow() => <String, Object?>{
@@ -352,6 +468,23 @@ class RealityTrial {
         'prompt_version': promptVersion,
         'created_at_ms': createdAtMs,
         'updated_at_ms': updatedAtMs,
+        'context_tags_json': jsonEncode(contextTags),
+        'goal_state': goalState,
+        'current_state': currentState,
+        'top_gap': topGap,
+        'operator_inputs_json': jsonEncode(operatorInputs),
+        'commitment_level': commitmentLevel,
+        'worst_case': worstCase,
+        'risk_checks_json': jsonEncode(riskChecks),
+        'result_status': resultStatus,
+        'stable_context': stableContext,
+        'shame_signal': shameSignal ? 1 : 0,
+        'image_exposure_signal': imageExposureSignal ? 1 : 0,
+        'started_at_ms': startedAtMs,
+        'result_at_ms': resultAtMs,
+        'next_review_at_ms': nextReviewAtMs,
+        'next_trial_id': nextTrialId,
+        'decision_reason': decisionReason,
       };
 
   factory RealityTrial.fromRow(Map<String, Object?> row) {
@@ -361,6 +494,16 @@ class RealityTrial {
         return decoded is List ? decoded.map((e) => e.toString()).toList() : <String>[];
       } catch (_) {
         return <String>[];
+      }
+    }
+    Map<String, String> stringMap(Object? raw) {
+      try {
+        final decoded = jsonDecode((raw ?? '{}').toString());
+        return decoded is Map
+            ? decoded.map((key, value) => MapEntry(key.toString(), value.toString()))
+            : <String, String>{};
+      } catch (_) {
+        return <String, String>{};
       }
     }
     return RealityTrial(
@@ -395,6 +538,23 @@ class RealityTrial {
       nextAction: (row['next_action'] ?? '').toString(),
       kbVersion: (row['kb_version'] ?? '3.5').toString(),
       promptVersion: (row['prompt_version'] ?? 'eg-p1.0').toString(),
+      contextTags: list(row['context_tags_json']),
+      goalState: (row['goal_state'] ?? '').toString(),
+      currentState: (row['current_state'] ?? '').toString(),
+      topGap: (row['top_gap'] ?? '').toString(),
+      operatorInputs: stringMap(row['operator_inputs_json']),
+      commitmentLevel: (row['commitment_level'] ?? '').toString(),
+      worstCase: (row['worst_case'] ?? '').toString(),
+      riskChecks: stringMap(row['risk_checks_json']),
+      resultStatus: (row['result_status'] ?? '').toString(),
+      stableContext: (row['stable_context'] ?? '').toString(),
+      shameSignal: row['shame_signal'] == 1,
+      imageExposureSignal: row['image_exposure_signal'] == 1,
+      startedAtMs: (row['started_at_ms'] as num?)?.toInt() ?? 0,
+      resultAtMs: (row['result_at_ms'] as num?)?.toInt() ?? 0,
+      nextReviewAtMs: (row['next_review_at_ms'] as num?)?.toInt() ?? 0,
+      nextTrialId: (row['next_trial_id'] ?? '').toString(),
+      decisionReason: (row['decision_reason'] ?? '').toString(),
     );
   }
 }
@@ -433,6 +593,13 @@ class EvidenceSummary {
     required this.exits,
     required this.moduleCounts,
     required this.topNodeIds,
+    this.partialActions = 0,
+    this.notDoneActions = 0,
+    this.abortedActions = 0,
+    this.exposureCount = 0,
+    this.averageRecoveryHours,
+    this.calibrationError,
+    this.ruleChanges = const <String>[],
   });
   final int learnedNodes;
   final int activatedNodes;
@@ -443,6 +610,13 @@ class EvidenceSummary {
   final int exits;
   final Map<GrowthModule, int> moduleCounts;
   final List<String> topNodeIds;
+  final int partialActions;
+  final int notDoneActions;
+  final int abortedActions;
+  final int exposureCount;
+  final double? averageRecoveryHours;
+  final double? calibrationError;
+  final List<String> ruleChanges;
   double get activationRate => learnedNodes == 0 ? 0 : activatedNodes / learnedNodes;
   double get actionRate => startedTrials == 0 ? 0 : completedActions / startedTrials;
 }

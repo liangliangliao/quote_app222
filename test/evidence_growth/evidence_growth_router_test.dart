@@ -1,9 +1,30 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_knowledge.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_router.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_operator_registry.dart';
 
 void main() {
   const router = EvidenceGrowthRouter();
+  test('unsupported non-empty input and Panic do not fall through to action', () {
+    expect(router.route('巴黎现在天气怎么样').evidenceLevel, 'E0');
+    expect(router.route('我已经惊恐发作，仍然逼自己继续暴露').canAct, isFalse);
+  });
+  test('all source records have meaningful fields and registered operators', () {
+    for (final node in EvidenceGrowthKnowledge.nodes) {
+      expect(node.teachingContext, isNotEmpty, reason: node.id);
+      expect(node.storyOrStudy, isNotEmpty, reason: node.id);
+      expect(node.howTo.single, isNotEmpty, reason: node.id);
+      expect(node.misuseBoundary.single, isNotEmpty, reason: node.id);
+      expect(node.locator.originalNodeIds, isNotEmpty);
+      expect(node.mechanism, isNotEmpty, reason: node.id);
+      expect(node.nextNodes.every((id) => EvidenceGrowthKnowledge.byId(id) != null), isTrue);
+      expect(node.operators.every(EvidenceGrowthOperatorRegistry.ids.contains), isTrue);
+    }
+    expect(EvidenceGrowthKnowledge.source('G-EXT2-01').sourceClass, 'K_EXT2');
+    expect(EvidenceGrowthKnowledge.source('R-EXT2-01').locator.pages, contains(191));
+    expect(EvidenceGrowthKnowledge.source('B-AUDIT-01').locator.pages, contains(2));
+    expect(EvidenceGrowthKnowledge.nodes.any((n) => n.title.contains('Fogg')), isFalse);
+  });
   test('P0 knowledge has 60+ Tal nodes, expert layers, sources and cases', () {
     expect(EvidenceGrowthKnowledge.talNodes.length, greaterThanOrEqualTo(60));
     expect(EvidenceGrowthKnowledge.extensionNodes.length, greaterThanOrEqualTo(20));
@@ -31,7 +52,7 @@ void main() {
   test('N1 exhaustion recovers before five-minute action', () {
     final result = router.route('三天没睡好，精疲力尽但必须继续。');
     expect(result.operator, 'RECOVER');
-    expect(result.selectedNodes.first.id, 'TAL-A02');
+    expect(result.selectedNodes.first.id, 'KB35-A-AUDIT-01');
   });
   test('N2 irreversible bet is blocked by Ruin Gate', () {
     final result = router.route('辞职借债，把全部积蓄押上。');

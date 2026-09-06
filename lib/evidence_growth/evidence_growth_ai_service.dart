@@ -4,6 +4,7 @@ import '../services/unified_ai_service.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
+import 'evidence_growth_router.dart';
 
 class EvidenceGrowthAiService {
   EvidenceGrowthAiService({UnifiedAiService? ai, EvidenceGrowthDao? dao})
@@ -32,7 +33,7 @@ class EvidenceGrowthAiService {
     try {
       final raw = await _ai.generateText(
         prompt: '''USER_FACTS:${jsonEncode(route.facts)}
-LOCAL_ROUTE:${jsonEncode({'module': route.primaryModule.key, 'checks': route.requiredChecks, 'risk_gate': route.riskGate})}
+LOCAL_ROUTE:${jsonEncode({'module': route.primaryModule.key, 'operator': route.operator, 'checks': route.requiredChecks, 'risk_gate': route.riskGate})}
 ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList())}
 只返回JSON：{"selected_nodes":[{"node_id":"..."}],"inference":"...","confidence":0.0,"operator":"...","action_instruction":"...","completion_definition":"...","risk_gate":"PASS|NEED_CHECK|BLOCK","review_trigger":"...","evidence_status":"E3|E2|E1|E0","alternatives":["..."]}''',
         purpose: 'evidence_growth.route',
@@ -45,9 +46,10 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
       final allowedIds = route.selectedNodes.map((e) => e.id).toSet();
       final ids = _maps(map['selected_nodes']).map((e) => (e['node_id'] ?? '').toString()).where((e) => e.isNotEmpty).toList();
       if (ids.isEmpty || ids.any((e) => !allowedIds.contains(e))) throw const FormatException('UNROUTED_NODE');
+      if (!EvidenceGrowthKnowledge.byId(ids.first)!.isTal) throw const FormatException('TAL_FIRST_REQUIRED');
       final op = (map['operator'] ?? '').toString();
-      final allowedOps = route.selectedNodes.expand((e) => e.operators).toSet()..add(route.operator);
-      if (!allowedOps.contains(op)) throw const FormatException('UNSUPPORTED_OPERATOR');
+      final allowedOps = ids.map(EvidenceGrowthKnowledge.byId).whereType<EvidenceKNode>().expand((e) => e.operators).toSet();
+      if (!allowedOps.contains(op) || op != route.operator) throw const FormatException('UNSUPPORTED_OPERATOR');
       final gate = (map['risk_gate'] ?? '').toString().toUpperCase();
       if (!const {'PASS', 'NEED_CHECK', 'BLOCK'}.contains(gate)) throw const FormatException('INVALID_RISK_GATE');
       final evidence = (map['evidence_status'] ?? '').toString().toUpperCase();
@@ -55,11 +57,15 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
       final action = (map['action_instruction'] ?? '').toString().trim();
       final completion = (map['completion_definition'] ?? '').toString().trim();
       if (action.isEmpty || completion.isEmpty || action.length > 360) throw const FormatException('INVALID_ACTION');
+      final actionGate = const EvidenceGrowthRouter().route(action);
+      if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(actionGate.status)) {
+        throw const FormatException('UNSAFE_GENERATED_ACTION');
+      }
       valid = true;
       return route.copyWith(
         selectedNodes: ids.map((e) => EvidenceGrowthKnowledge.byId(e)!).toList(),
-        status: gate == 'BLOCK' ? 'PANIC_RISK' : route.status,
-        riskGate: gate,
+        status: evidence == 'E0' ? 'KB_EVIDENCE_INSUFFICIENT' : gate == 'BLOCK' ? 'PANIC_RISK' : route.status,
+        riskGate: evidence == 'E0' ? 'NEED_CHECK' : gate,
         inference: (map['inference'] ?? route.inference).toString(),
         confidence: _number(map['confidence'], route.confidence).clamp(0, 1).toDouble(),
         operator: op,
@@ -100,7 +106,9 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
         prompt: '''ORIGINAL_PREDICTION（禁止改写）:${jsonEncode(trial.prediction)}
 PROBABILITY:${trial.probability}
 ACTUAL_FACTS:${jsonEncode([trial.actualOutcome, if (trial.unexpected.isNotEmpty) trial.unexpected])}
-DID_ACTION:${trial.didAction}
+RESULT_STATUS:${trial.resultStatus}
+USER_MEASUREMENTS:${jsonEncode(trial.operatorInputs)}
+DID_ACTION:${trial.didAction}（行动完成不等于预测成立，也不自动代表假设有效）
 ALLOWED_K_NODES:${jsonEncode(nodes.map((e) => e.toJson()).toList())}
 只返回JSON：{"prediction_original":"逐字复制","actual_facts":["..."],"prediction_error":"...","failure_class":"NO_FAILURE|TOO_EARLY|INTELLIGENT|BASIC|COMPLEX|RUIN_RISK","learning":"...","rule_update":"...","decision":"ACT|ADJUST|EXIT|OBSERVE","next_change_one_variable":"...","knowledge_nodes_used":["..."]}''',
         purpose: 'evidence_growth.review',
@@ -122,6 +130,8 @@ ALLOWED_K_NODES:${jsonEncode(nodes.map((e) => e.toJson()).toList())}
       if (!const {'NO_FAILURE', 'TOO_EARLY', 'INTELLIGENT', 'BASIC', 'COMPLEX', 'RUIN_RISK'}.contains(failure)) {
         throw const FormatException('INVALID_FAILURE');
       }
+      if (trial.resultStatus == 'OBSERVING' && decision != 'OBSERVE') throw const FormatException('OBSERVATION_WINDOW');
+      if (trial.didAction != true && failure == 'INTELLIGENT') throw const FormatException('NO_ACTION_IS_NOT_EXPERIMENT');
       valid = true;
       return TrialReviewResult(
         predictionOriginal: trial.prediction,
@@ -153,9 +163,11 @@ ALLOWED_K_NODES:${jsonEncode(nodes.map((e) => e.toJson()).toList())}
   TrialReviewResult localReview(RealityTrial trial) {
     final did = trial.didAction == true;
     final actual = trial.actualOutcome.trim();
-    final tooEarly = actual.isEmpty || (DateTime.now().millisecondsSinceEpoch < trial.reviewAtMs && actual.length < 4);
-    final failure = tooEarly ? 'TOO_EARLY' : did ? 'NO_FAILURE' : trial.operator == 'SAFE_EXPOSURE' ? 'INTELLIGENT' : 'BASIC';
-    final decision = tooEarly ? 'OBSERVE' : did ? 'ACT' : 'ADJUST';
+    final tooEarly = actual.isEmpty || trial.resultStatus == 'OBSERVING';
+    final observed = trial.operatorInputs['prediction_occurred'];
+    final failure = tooEarly ? 'TOO_EARLY' : !did ? 'NO_ACTION'
+        : trial.operatorInputs['failure_class'] ?? 'NOT_CLASSIFIED';
+    final decision = tooEarly ? 'OBSERVE' : !did || observed == 'false' ? 'ADJUST' : 'ACT';
     return TrialReviewResult(
       predictionOriginal: trial.prediction,
       actualFacts: [if (actual.isNotEmpty) actual, if (trial.unexpected.isNotEmpty) trial.unexpected],
@@ -163,8 +175,8 @@ ALLOWED_K_NODES:${jsonEncode(nodes.map((e) => e.toJson()).toList())}
           ? '观察窗口尚未结束，不能把“还没有结果”分类成失败。'
           : '原预测是“${trial.prediction}”；实际记录是“${actual.isEmpty ? '尚无结果' : actual}”。',
       failureClass: failure,
-      learning: did ? '现实中已出现行动证据；下一轮保留有效结构。' : '未进入或中止也是事实证据；不能伪造成完成。',
-      ruleUpdate: did ? '保留帮助行动发生的一个条件。' : '下一轮只降低动作尺度或改变一个触发条件。',
+      learning: did ? '已获得行动与结果记录；是否支持假设需比较原预测，完成动作本身不证明有效。' : '未进入或中止也是事实证据；这还不是一次已完成的现实实验。',
+      ruleUpdate: decision == 'ACT' ? '暂时保留一个条件继续采样，不由一次结果宣布规律。' : '下一轮只降低动作尺度或改变一个触发条件。',
       decision: decision,
       nextChangeOneVariable: did ? '在相同条件下再取一个现实样本。' : '把动作缩小一半后再试一次。',
       knowledgeNodeIds: trial.nodeIds,
@@ -174,12 +186,17 @@ ALLOWED_K_NODES:${jsonEncode(nodes.map((e) => e.toJson()).toList())}
   Future<String> answerGuide(String question) async {
     final text = question.trim();
     if (text.isEmpty) return '请问一个关于功能、流程、知识依据或如何填写的问题。';
+    if (RegExp('怎么用|流程|如何开始|预测|退出|EXIT|提醒|如何填写|怎么填').hasMatch(text)) {
+      return '实战输入现实问题 → 确认一个动作与知识依据 → 保存预测、概率和安全条件 → 行动并记录完成/部分/未做/中止 → 比较预测与实际 → ACT、ADJUST、EXIT 或继续观察。\n'
+          '预测写“在何时看到什么”，结果只写已发生事实；EXIT 保存学习，ADJUST 只改一个变量。\n'
+          '依据：KB35 A02、R01、C02；这些页面步骤属于产品设计。';
+    }
     final nodes = EvidenceGrowthKnowledge.nodes.where((node) {
       return text.split(RegExp(r'[，。？！、\s]')).where((e) => e.length >= 2).any(node.embeddingText.contains);
     }).take(4).toList();
     if (nodes.isEmpty) return '当前没有足够的 KB35 依据，请补充具体情境。';
     final cfg = await _ai.resolveGlobalConfig();
-    if (!cfg.available) return '${nodes.first.title}：${nodes.first.claim}\n怎么做：${nodes.first.operators.first}\n边界：${nodes.first.boundaries.first}';
+    if (!cfg.available) return '${nodes.first.title}：${nodes.first.claim}\n怎么做：${nodes.first.howTo.first}\n边界：${nodes.first.boundaries.first}\n来源：${nodes.first.locator.display}';
     final raw = await _ai.generateText(
       prompt: '用户问题：${jsonEncode(text)}\n只依据：${jsonEncode(nodes.map((e) => e.toJson()).toList())}\n用“回答/依据/怎么做/边界”简短回答。',
       purpose: 'evidence_growth.guide',

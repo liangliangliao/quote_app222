@@ -22,7 +22,7 @@ void main() {
     ('我要完全像电影主角一样生活。', 'READY_FOR_ACTION', 'ROLE_MODEL_TRANSFER'),
     ('换了很多方法还是反复，是系统结构问题。', 'READY_FOR_ACTION', 'SYSTEM_SCAN'),
     ('每次戴红帽都失败，所以一定是红帽造成的。', 'READY_FOR_ACTION', 'CAUSAL_LEVEL_CHECK'),
-    ('我想借债，把全部积蓄押在未经验证的项目上。', 'RUIN_RISK', 'ACT_ADJUST_EXIT'),
+    ('我想借债，把全部积蓄押在未经验证的项目上。', 'RUIN_RISK', ''),
   ];
   for (final (input, status, operator) in checks) {
     final result = router.route(input);
