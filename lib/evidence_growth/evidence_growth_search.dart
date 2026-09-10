@@ -9,7 +9,7 @@ class EvidenceGrowthSearch {
   EvidenceGrowthSearch(List<EvidenceKNode> nodes, {this.vectors = const {}})
       : nodes = List.unmodifiable(nodes) {
     for (final node in nodes) {
-      final tokens = tokenize(node.embeddingText);
+      final tokens = tokenize(indexText(node));
       final frequency = <String, int>{};
       for (final term in tokens) { frequency[term] = (frequency[term] ?? 0) + 1; }
       _terms[node.id] = frequency;
@@ -42,6 +42,10 @@ class EvidenceGrowthSearch {
     }
     return result;
   }
+  static String indexText(EvidenceKNode node) => '${node.id} ${node.embeddingText} '
+      '${node.operators.contains('START_5_MIN') ? 'Five-Minute Take-Off Five Minute 五分钟启动' : ''} '
+      '${node.id == 'KB35-C-AUDIT-18' ? 'Monday Test 周一测试' : ''} '
+      '${node.id == 'KB35-F-EXT2-02' ? 'Ruin 破产风险' : ''}';
 
   List<RoutedNode> search(String query, {GrowthModule? module, bool talOnly = false,
       int limit = 20, List<double>? queryVector}) {

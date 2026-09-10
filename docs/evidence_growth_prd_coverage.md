@@ -1,52 +1,49 @@
-# 六模块证据驱动成长系统覆盖矩阵
+# 六模块证据驱动成长系统覆盖与验收记录
 
-基线：PR #158 head `b278e4311153bb23688357a1c0ca81a6c87fbfe1`。
+基线：PR #158 head `b278e4311153bb23688357a1c0ca81a6c87fbfe1`；实现 PR #159。
 
-依据：《基于哈佛幸福课六大模块知识库的证据驱动智能成长系统_正式产品方案_v1.0》与《哈佛幸福课_六大模块成长闭环知识库_v3.5_Tal主线_专家延伸II正式整合版》。PDF 是 Source of Truth；K-Node 只做可执行结构化，不改写母库含义。
+依据：正式产品方案 v1.0 与 KB35 v3.5 正式整合版。PDF 为来源依据；工程操作符、系统推断和个人样本不能冒充原文结论。
 
-| 产品要求 | 实现 |
-|---|---|
-| 发现之旅统一入口 | `discover_page.dart` + `evidence_growth_discover_entry.dart` |
-| 实战/复盘/学习/我的证据/设置 | `evidence_growth_home_page.dart` |
-| 六模块成长闭环 | BELIEF→GOAL→ACTION→FAILURE→REVIEW→CHANGE，共用 Reality Trial |
-| 60+ Tal 核心节点 | 73 个 K-TAL；六模块完整覆盖 |
-| 专家延伸层 | 31 个 K-EXT1/K-EXT2，默认折叠，只在显式机制缺口时补位 |
-| Tal-first / 最小充分知识 | 规则路由先选 Tal，扩展不得越级 |
-| K-Node 完整字段 | ID、版本、模块、来源层、claim、mechanism、触发、反信号、前提、operator、边界、next、物理页/Lecture |
-| E3/E2/E1/E0 | 正式路由保存证据等级；未知输入明确返回 `KB_EVIDENCE_INSUFFICIENT/E0` |
-| Reality Trial | 预测、概率、窗口、节点、动作、完成定义、风险、结果、复盘、规则更新与决策完整持久化 |
-| 单一现实动作 | 首屏只显示一个主动作；可在同一证据范围内换方案 |
-| Stretch/Panic/Ruin | 耗竭先恢复；专业边界和不可逆下注硬拦截；AI 不得降级硬门 |
-| 结果完整性 | 完成、部分、未做、中止都允许，不能伪造成完成 |
-| 预测完整性 | 复盘逐字校验事前预测；AI 改写即回退本地复盘 |
-| ACT/ADJUST/EXIT/OBSERVE | 结果后必须进入明确出口；ADJUST 只改一个变量；EXIT 保存 Hypothesis Closed 与学习 |
-| 学习母树 | Tal 默认层、折叠专家层、搜索/筛选、是什么/为什么/怎么做/边界/来源/立即应用 |
-| Personal Evidence | 激活、完成、失败样本、调整、退出、模块分布与个人节点适配度 |
-| 公共/个人隔离 | Trial 只更新个人统计表，不修改公共 K-Node |
-| AI Provider | 复用全局 `UnifiedAiService`；无配置或失败时离线路由与本地复盘仍可用 |
-| 审计 | router logs、prompt runs、Trial Evidence、KB/Node/Prompt 版本 |
-| 提醒 | 用户启用时才申请精准闹钟；稳定 alarm ID；点击直达对应 Trial；保存结果后取消 |
-| 隐私 | 可关闭原始文本留存；JSON 导出；确认删除个人证据；公共知识不受影响 |
-| 默认数据与验收 | 20 个案例；S1-S9、负向安全、预测完整性、知识隔离和 EXIT 测试 |
+**当前结论：主体代码已实现，尚未完成产品方案的全部功能与上线验收。** “有代码”不等于已部署或通过真实设备验收。下表保留未完成项，不以 APK 构建成功代替验收。
 
-## 数据表
+| 产品要求 | 当前覆盖与限制 | 主要实现 |
+|---|---|---|
+| 发现之旅统一入口与导航 | 实战、复盘、学习、我的证据、设置已接入；尚缺设备界面验收 | discover entry、home page |
+| 六模块与 Tal 主线 | 173 个来源卡：142 Tal、21 EXT1、10 EXT2；包含原文、机制、情境、练习、边界和物理页码 | source cards、knowledge |
+| 来源准确性 | 已完成固定种子 30 条原文/边界/页码抽查；发现并修正 C02 等操作符误配；不能据此宣称全部语义映射已人工核验 | source audit、KB importer |
+| Tal-first 与证据 E0–E3 | 确定性规则先 Tal，显式缺口才补位；未知输入 E0；AI 不能引入未授权节点或降低硬门 | router、AI service |
+| 搜索与多索引检索 | 中文分词、BM25、SQLite FTS、个人情境适配已实现；向量相似度仅有可选接口，尚未接入向量生成与完整多索引路由 | search、KB store、DAO |
+| Reality Trial 全流程 | 创建、开始、结果、复盘、ACT/ADJUST/EXIT/OBSERVE；事前预测不可改写，下一轮链接与状态校验已实现 | models、DAO、review engine |
+| 核心与高级操作符 | 操作符注册、动态输入、完成定义、承诺与暴露字段已实现；仍需逐操作符交互验收 | operator registry、home page |
+| 风险与结果真实性 | Panic/Ruin/专业边界硬门；完成、部分、未做、中止、观察中；预测发生与目标有益独立记录 | router、DAO、AI service |
+| 首屏与系统草案 | 本地路由先呈现，AI 异步补充受限字段草案；安全确认由用户填写 | home page、AI service |
+| 学习母树与证据说明 | Tal 默认展示、专家折叠、筛选、来源、边界、案例与应用入口已实现 | home page |
+| 个人证据与指标 | 激活、完成、失败样本、调整、退出、Brier、模块分布、节点适配已实现；恢复趋势与暴露日记的完整图表交互仍待补齐 | DAO、models、home page |
+| 反馈与历史证据 | 依据问题分类、反馈队列、Trial 来源快照及历史节点反馈已实现 | DAO、home page |
+| 知识版本维护 | Manifest/delta 校验、节点版本约束、原子安装与回滚、缓存失效回退已实现 | KB store |
+| AI 与离线回退 | 复用全局 Provider；结构化校验、有限重试、超时及本地复盘；真实模型输出成功率未测定 | AI service |
+| 五类提醒 | 开始、结果到期、缺结果、重复回避、恢复结束已接入原生调度；真实设备杀进程/锁屏/重启未验收 | notification service |
+| 审计与隐私 | 路由、提示词版本、时间线、JSON 剪贴板导出、删除及删除同步队列；文件导出与朗读设置尚待核对补齐 | DAO、settings |
+| 产品规定的 11 个 API | 路由、Trial 生命周期、why、modules、node、summary、feedback 均有本地服务实现 | API、server/evidence_growth |
+| 多设备同步 | HTTPS 客户端、加密凭据、幂等请求、离线重试及冲突保留已有代码；服务未部署，尚缺实际双设备验收与冲突解决界面 | sync service/page、API |
+| 离线恢复 | SQLite 持久化，恢复中断 Trial；新增关闭重开数据库用例，待本轮 CI 验证；不代替设备杀进程测试 | DAO、regression test |
+| 验收集 | S1–S9、负向路由、闭环、来源、版本、同步、HTTP 测试已加入；以对应提交的 CI 结果为准 | test/evidence_growth |
+| 性能与发布门槛 | P95 < 2.5 秒、结构化输出成功率 99.5%、真实设备稳定性尚未测量 | 待验收 |
 
-`evidence_growth_trials`、`trial_evidence`、`predictions`、`results`、`reviews`、`decisions`、`personal_node_stats`、`router_logs`、`prompt_runs`、`settings`。
+个人适配度采用工程初始权重：完成率 30% + 积极结果 25% + 可重复性 20% + 情境稳定性 15% + 时效性 10%。只更新个人统计，不修改公共知识。
 
-个人适配度使用产品方案的工程初始权重：完成率 30% + 积极结果 25% + 可重复性 20% + 情境稳定性 15% + 时效性 10%。该分数不修改公共知识结论。
+## 已确认的远程验证
 
-## 关键来源边界
+提交 `d72820ccbd4c52cd88a4994955546fe16a771a0b`：
 
-- 六模块闭环与 Tal-first：KB35 p.62、p.194。
-- Stretch 而非 Panic：KB35 p.94。
-- 失败分类：KB35 p.175。
-- 个人小试验不武断宣布因果：KB35 p.185-186。
-- Ruin / 下一轮资格：KB35 p.190、p.195。
-- ACT / ADJUST / EXIT：KB35 p.191。
+- [Android APK 构建成功](https://github.com/liangliangliao/quote_app222/actions/runs/34023268498)。
+- [Evidence Growth CI](https://github.com/liangliangliao/quote_app222/actions/runs/34023268490)：模块与集成静态分析通过；47 项测试中 45 项通过、2 项失败。独立服务分析因前置测试失败而未执行。
+- 本轮修复 Five-Minute 英文检索别名，以及 HTTP 测试请求的中文 UTF-8 编码，另增加数据库重开恢复测试。尚需新提交 CI 证明修复通过，不能沿用上一提交的构建结果。
 
-## 验证
+## 交付前仍需完成
 
-- `tool/evidence_growth_smoke.dart`：无 Flutter 依赖的确定性路由烟测。
-- `test/evidence_growth/evidence_growth_router_test.dart`：知识完整性、S1-S9 与负向安全案例。
-- `test/evidence_growth/evidence_growth_dao_test.dart`：SQLite 闭环、隐私、预测完整性、公共/个人隔离与 EXIT。
-- `.github/workflows/evidence_growth_ci.yml`：Flutter 3.35.3 分析与专项测试。
+1. 本轮修复提交后，使专项测试、独立服务分析及 APK 构建全部通过。
+2. 完成来源到操作符的全量语义映射核查和关键页面交互验收。
+3. 补齐完整向量检索路由、个人证据图表、同步冲突解决以及文件导出/朗读等尚未覆盖的交互。
+4. 在配置好的服务环境和两台设备上验证同步、删除、提醒与中断恢复。
+5. 测量并记录产品性能和真实 AI 输出质量门槛。

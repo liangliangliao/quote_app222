@@ -47,6 +47,25 @@ void main() {
     const EvidenceGrowthRouter().route('求职投简历，拖延没开始'),prediction:prediction,probability:.8,
     reviewAt:DateTime.now().add(const Duration(hours:1)),riskConfirmed:true));
 
+  test('a saved offline result survives database close and reopen',() async {
+    final directory=await Directory.systemTemp.createTemp('evidence-growth-restart-');
+    Database? persistent;
+    try {
+      final path='${directory.path}/trial.sqlite';
+      persistent=await databaseFactoryFfi.openDatabase(path);
+      var persistedDao=EvidenceGrowthDao(database:()async=>persistent!);
+      var trial=await persistedDao.createTrial(const EvidenceGrowthRouter().route('拖延，没开始'),
+        prediction:'会留下一个痕迹',probability:.6,reviewAt:DateTime.now().add(const Duration(hours:1)),riskConfirmed:true);
+      trial=await persistedDao.startTrial(trial);
+      trial=await persistedDao.captureResult(trial,didAction:true,actualOutcome:'已经提交一份作品',unexpected:'');
+      await persistent.close();
+      persistent=await databaseFactoryFfi.openDatabase(path);
+      persistedDao=EvidenceGrowthDao(database:()async=>persistent!);
+      final restored=(await persistedDao.byId(trial.id))!;
+      expect(restored.status,'RESULT_CAPTURED');expect(restored.actualOutcome,'已经提交一份作品');
+      expect(restored.prediction,'会留下一个痕迹');expect(await persistedDao.timeline(trial.id),hasLength(3));
+    } finally { await persistent?.close();await directory.delete(recursive:true); }
+  });
   test('a negative prediction occurring is not a positive outcome',() async {
     var trial=await start();
     trial=await dao.captureResult(trial,didAction:true,actualOutcome:'投递后被拒绝',unexpected:'',
@@ -165,7 +184,8 @@ void main() {
       Future<String> create() async {
         final request=await client.postUrl(uri);
         request.headers.set('Authorization','Bearer secret-test-token');request.headers.set('Idempotency-Key','create-one');
-        request.write(jsonEncode({'text':'拖延，没开始','prediction':'会开始','probability':.6,'review_at_ms':2000000000000,'risk_confirmed':true}));
+        request.headers.contentType=ContentType.json;
+        request.add(utf8.encode(jsonEncode({'text':'拖延，没开始','prediction':'会开始','probability':.6,'review_at_ms':2000000000000,'risk_confirmed':true})));
         final response=await request.close();expect(response.statusCode,200);return utf8.decoder.bind(response).join();
       }
       expect(await create(),await create());expect(await dao.recentTrials(),hasLength(1));

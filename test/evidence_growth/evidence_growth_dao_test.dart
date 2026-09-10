@@ -68,12 +68,12 @@ void main() {
       predictionOriginal: '继续仍无反馈。',
       actualFacts: ['成本上升，反证未变化。'],
       predictionError: '与预测一致。',
-      failureClass: 'INTELLIGENT',
+      failureClass: 'NO_ACTION',
       learning: '当前路线不再保留下一轮资格。',
       ruleUpdate: '不把坚持本身当作成功。',
       decision: 'EXIT',
       nextChangeOneVariable: 'Hypothesis Closed。',
-      knowledgeNodeIds: ['KB35-C02'],
+      knowledgeNodeIds: ['KB35-R01','KB35-R-EXT-02'],
     );
     trial = await dao.saveReview(trial, review);
     trial = await dao.decide(trial, decision: 'EXIT', reason: review.learning, nextAction: review.nextChangeOneVariable);

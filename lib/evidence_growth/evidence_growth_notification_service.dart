@@ -1,6 +1,5 @@
 import '../platform/native_scheduler.dart';
 import 'evidence_growth_models.dart';
-import 'evidence_growth_operator_registry.dart';
 
 class EvidenceGrowthReminder {
   const EvidenceGrowthReminder(this.kind, this.atMs, this.title, this.body);
@@ -19,12 +18,11 @@ class EvidenceGrowthNotificationService {
     if (trial.isClosed || const {'RESULT_CAPTURED','REVIEWED'}.contains(trial.status)) return [];
     final due = trial.nextReviewAtMs > 0 ? trial.nextReviewAtMs : trial.reviewAtMs;
     final start = int.tryParse(trial.operatorInputs['scheduled_start_ms'] ?? '') ?? 0;
-    final minutes = EvidenceGrowthOperatorRegistry.maybeById(trial.operator)?.minimumMinutes ?? 0;
     final list = <EvidenceGrowthReminder>[
       if (trial.status == 'READY' && start > now)
         EvidenceGrowthReminder('trial_start', start, '现实试验 · 开始时间到了', '你不需要完成全部，先进入现实五分钟。'),
-      if (trial.operator == 'RECOVER' && trial.startedAtMs > 0)
-        EvidenceGrowthReminder('recovery_end', trial.startedAtMs + (minutes > 0 ? minutes : 20) * 60000,
+      if (trial.operator == 'RECOVER' && trial.status == 'IN_PROGRESS')
+        EvidenceGrowthReminder('recovery_end', trial.reviewAtMs,
           '恢复窗口结束', '先检查恢复情况，再做最小下一步；仍然耗竭就继续恢复。'),
       EvidenceGrowthReminder('trial_review_due', due, '现实试验 · 观察窗口到了', '记录实际发生的事实，再比较原预测；尚无结果可以继续观察。'),
       EvidenceGrowthReminder('missing_result', due + 86400000, '这轮还缺少现实反馈', '回来记录完成、部分、未做或中止，再决定下一步。'),

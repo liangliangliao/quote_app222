@@ -6,7 +6,7 @@ import 'evidence_growth_source_cards.dart';
 /// historical Trials retain their original evidence snapshots in SQLite.
 class EvidenceGrowthKnowledge {
   EvidenceGrowthKnowledge._();
-  static const String bundledVersion = '3.5-r3';
+  static const String bundledVersion = '3.5-r4';
   static String get kbVersion => _activeVersion;
   static String _activeVersion = bundledVersion;
   static const String promptVersion = 'eg-p1.1';
@@ -64,7 +64,7 @@ class EvidenceGrowthKnowledge {
   /// own original How-to through SOURCE_PRACTICE, with no fabricated instruction.
   static const operatorBySource = <String, String>{
     'B01': 'BELIEF_TO_TESTABLE_HYPOTHESIS', 'B02': 'REALITY_CALIBRATION',
-    'B03': 'REALITY_CALIBRATION', 'B04': 'CONTEXT_REDESIGN',
+    'B03': 'REALITY_CALIBRATION', 'B04': 'SOURCE_PRACTICE',
     'B05': 'SAFE_EXPOSURE', 'B06': 'ALTERNATIVE_EVIDENCE',
     'B-AUDIT-01': 'REALITY_CALIBRATION', 'B-AUDIT-02': 'EXPOSURE_LADDER',
     'B-AUDIT-03': 'EXPOSURE_LADDER', 'B-AUDIT-05': 'CONTEXT_REDESIGN',
@@ -90,12 +90,12 @@ class EvidenceGrowthKnowledge {
     'F-AUDIT-01': 'FAILURE_REFRAME', 'F-AUDIT-03': 'FAILURE_CLASSIFY',
     'F-AUDIT-05': 'COMPASSIONATE_ACCOUNTABILITY', 'F-AUDIT-09': 'ONE_VARIABLE_CHANGE',
     'F-AUDIT-13': 'PERMISSION_TO_BE_HUMAN', 'F-AUDIT-14': 'PERMISSION_TO_BE_HUMAN',
-    'R01': 'PDSA_REVIEW', 'R02': 'FACT_INFERENCE_SPLIT',
+    'R01': 'PDSA_REVIEW', 'R02': 'SOURCE_PRACTICE',
     'R03': 'POSITIVE_REPLAY', 'R04': 'PERMISSION_TO_BE_HUMAN',
-    'R05': 'PDSA_REVIEW', 'R06': 'PDSA_REVIEW',
+    'R05': 'PDSA_REVIEW', 'R06': 'SOURCE_PRACTICE',
     'R-AUDIT-01': 'STOP_RUMINATION', 'R-AUDIT-03': 'POSITIVE_REPLAY',
     'R-AUDIT-08': 'ROLE_MODEL_TRANSFER', 'R-AUDIT-09': 'PDSA_REVIEW',
-    'C01': 'REPETITION_PLAN', 'C02': 'ACT_ADJUST_EXIT', 'C03': 'BODY_FIRST',
+    'C01': 'REPETITION_PLAN', 'C02': 'SOURCE_PRACTICE', 'C03': 'SOURCE_PRACTICE',
     'C04': 'NEXT_TRIAL', 'C05': 'CONTEXT_REDESIGN', 'C06': 'CONTEXT_REDESIGN',
     'C07': 'RECOVERY_MEASURE', 'C-AUDIT-04': 'VISIBLE_TRACE',
     'C-AUDIT-05': 'RECOVERY_MEASURE', 'C-AUDIT-18': 'NEXT_TRIAL',
@@ -132,7 +132,7 @@ class EvidenceGrowthKnowledge {
       GrowthModule.review: 'C04', GrowthModule.change: 'B05',
     };
     return EvidenceKNode(
-      id: 'KB35-$original', version: 3, module: module,
+      id: 'KB35-$original', version: 4, module: module,
       sourceClass: str('sourceClass'), title: str('title'),
       claim: str('claim'), mechanism: str('mechanism'),
       teachingContext: str('context'), storyOrStudy: str('story'),

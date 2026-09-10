@@ -30,6 +30,10 @@ class EvidenceGrowthKbStore {
       final payload = Map<String,dynamic>.from(jsonDecode(current.first['payload'] as String) as Map);
       final nodes = validate(payload);
       EvidenceGrowthKnowledge.activate(payload['version'] as String,nodes);
+      final bundled=await db.query('evidence_growth_kb_manifests',where:'version = ?',whereArgs:[EvidenceGrowthKnowledge.bundledVersion],limit:1);
+      if(bundled.isEmpty && nodes.every((n)=>n.version<=EvidenceGrowthKnowledge.bundledNodes.first.version)) {
+        await install(manifest(EvidenceGrowthKnowledge.bundledVersion,EvidenceGrowthKnowledge.bundledNodes));
+      }
     }
   }
 
@@ -126,7 +130,7 @@ class EvidenceGrowthKbStore {
     for(final node in nodes) {
       await db.insert('evidence_growth_kb_nodes',{'node_id':node.id,'version':node.version,
         'module':node.module.key,'source_class':node.sourceClass,'payload':jsonEncode(node.toJson())});
-      await db.insert('evidence_growth_kb_fts',{'node_id':node.id,'terms':EvidenceGrowthSearch.tokenize('${node.id} ${node.embeddingText}').join(' ')});
+      await db.insert('evidence_growth_kb_fts',{'node_id':node.id,'terms':EvidenceGrowthSearch.tokenize(EvidenceGrowthSearch.indexText(node)).join(' ')});
     }
   }
 

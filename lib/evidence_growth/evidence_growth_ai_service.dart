@@ -7,6 +7,7 @@ import 'evidence_growth_models.dart';
 import 'evidence_growth_router.dart';
 import 'evidence_growth_review_engine.dart';
 import 'evidence_growth_search.dart';
+import 'evidence_growth_operator_registry.dart';
 
 class EvidenceGrowthAiService {
   EvidenceGrowthAiService({UnifiedAiService? ai, required EvidenceGrowthDao dao})
@@ -39,7 +40,8 @@ class EvidenceGrowthAiService {
 LOCAL_ROUTE:${jsonEncode({'module': route.primaryModule.key, 'operator': route.operator, 'checks': route.requiredChecks, 'risk_gate': route.riskGate})}
 PERSONAL_EVIDENCE（只是同类个人样本，不是公共真理）:${jsonEncode(route.personalEvidence)}
 ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList())}
-只返回JSON：{"selected_nodes":[{"node_id":"..."}],"inference":"...","confidence":0.0,"operator":"...","action_instruction":"...","completion_definition":"...","risk_gate":"PASS|NEED_CHECK|BLOCK","review_trigger":"...","evidence_status":"E3|E2|E1|E0","alternatives":["..."]}''',
+可预填的行动字段：${jsonEncode(EvidenceGrowthOperatorRegistry.byId(route.operator).inputPrompts)}。input_drafts 只填写用户已说的事实或明确标成建议的最小行动；未知的焦虑、身体状态、事实或约束留空，不编造。不替用户确认风险。
+只返回JSON：{"selected_nodes":[{"node_id":"..."}],"inference":"...","confidence":0.0,"operator":"...","action_instruction":"...","completion_definition":"...","risk_gate":"PASS|NEED_CHECK|BLOCK","review_trigger":"...","evidence_status":"E3|E2|E1|E0","alternatives":["..."],"input_drafts":{"字段":"草案"}}''',
         purpose: 'evidence_growth.route',
         systemPrompt: _contract,
         maxTokens: 1000,
@@ -75,6 +77,13 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
         throw const FormatException('INCOMPLETE_INFERENCE');
       }
       valid = true;
+      final prompts=EvidenceGrowthOperatorRegistry.byId(op).inputPrompts;
+      final drafts=<String,String>{};
+      if(map['input_drafts'] is Map) {
+        for(final e in (map['input_drafts'] as Map).entries) {
+          if(prompts.contains(e.key) && e.value is String && (e.value as String).length<=240) drafts[e.key as String]=e.value as String;
+        }
+      }
       return route.copyWith(
         selectedNodes: ids.map((e) => EvidenceGrowthKnowledge.byId(e)!).toList(),
         status: evidence == 'E0' ? 'KB_EVIDENCE_INSUFFICIENT' : gate == 'BLOCK' ? 'PANIC_RISK' : route.status,
@@ -87,6 +96,7 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
         reviewTrigger: (map['review_trigger'] ?? route.reviewTrigger).toString(),
         evidenceLevel: evidence,
         alternatives: alternatives,
+        inputDrafts: drafts,
       );
     } catch (e) {
       error = e is FormatException ? e.message : 'AI_REQUEST_FAILED';

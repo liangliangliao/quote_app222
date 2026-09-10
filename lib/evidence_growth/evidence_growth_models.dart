@@ -198,6 +198,7 @@ class EvidenceRouteResult {
     this.reversible = true,
     this.nextRoundPreserved = true,
     this.personalEvidence = const <Map<String, Object?>>[],
+    this.inputDrafts = const <String,String>{},
   });
   final String rawInput;
   final List<String> facts;
@@ -226,6 +227,7 @@ class EvidenceRouteResult {
   final bool reversible;
   final bool nextRoundPreserved;
   final List<Map<String, Object?>> personalEvidence;
+  final Map<String,String> inputDrafts;
 
   bool get canAct => status == 'READY_FOR_ACTION' && riskGate == 'PASS';
 
@@ -250,6 +252,7 @@ class EvidenceRouteResult {
     bool? reversible,
     bool? nextRoundPreserved,
     List<Map<String, Object?>>? personalEvidence,
+    Map<String,String>? inputDrafts,
   }) =>
       EvidenceRouteResult(
         rawInput: rawInput,
@@ -279,6 +282,7 @@ class EvidenceRouteResult {
         reversible: reversible ?? this.reversible,
         nextRoundPreserved: nextRoundPreserved ?? this.nextRoundPreserved,
         personalEvidence: personalEvidence ?? this.personalEvidence,
+        inputDrafts: inputDrafts ?? this.inputDrafts,
       );
 }
 

@@ -53,7 +53,11 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
   }
 
   Future<void> _initialize() async {
-    await EvidenceGrowthKbStore(AppDatabase.instance).initialize();
+    try { await EvidenceGrowthKbStore(AppDatabase.instance).initialize(); }
+    catch (_) {
+      EvidenceGrowthKnowledge.activate(EvidenceGrowthKnowledge.bundledVersion,EvidenceGrowthKnowledge.bundledNodes);
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('知识缓存暂不可用，已使用随 App 提供的稳定版本。')));
+    }
     await _dao.ensureTables();
     await _reload();
     if (!mounted) return;
@@ -83,7 +87,12 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
   }
 
   Future<void> _reload({bool sync=true}) async {
-    final active = await _dao.activeTrials();
+    final active = await _dao.activeTrials(limit:3);
+    active.sort((a,b) {
+      int priority(RealityTrial t)=>const {'RESULT_CAPTURED','REVIEWED'}.contains(t.status)?0:t.status=='IN_PROGRESS'?1:2;
+      final order=priority(a).compareTo(priority(b));
+      return order!=0?order:a.reviewAtMs.compareTo(b.reviewAtMs);
+    });
     final recent = await _dao.recentTrials();
     final summary = await _dao.summary();
     if (!mounted) return;
@@ -138,7 +147,8 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
           : IndexedStack(
               index: _tab,
               children: [
-                _Practice(active: _active, summary: _summary!, busy: _routing, onBegin: _begin, onOpen: _openTrial),
+                _Practice(active: _active, recent:_recent, summary: _summary!, busy: _routing, onBegin: _begin,
+                  onOpen: _openTrial,onLearn:()=>setState(()=>_tab=2)),
                 _Review(recent: _recent, onOpen: _openTrial),
                 _Learning(onApply: _begin, dao: _dao),
                 _Evidence(summary: _summary!, recent: _recent),
@@ -159,12 +169,14 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
 }
 
 class _Practice extends StatefulWidget {
-  const _Practice({required this.active, required this.summary, required this.busy, required this.onBegin, required this.onOpen});
+  const _Practice({required this.active,required this.recent, required this.summary, required this.busy, required this.onBegin, required this.onOpen,required this.onLearn});
   final List<RealityTrial> active;
+  final List<RealityTrial> recent;
   final EvidenceSummary summary;
   final bool busy;
   final ValueChanged<String> onBegin;
   final ValueChanged<RealityTrial> onOpen;
+  final VoidCallback onLearn;
   @override
   State<_Practice> createState() => _PracticeState();
 }
@@ -199,6 +211,8 @@ class _PracticeState extends State<_Practice> {
 
   @override
   Widget build(BuildContext context) {
+    final now=DateTime.now();
+    final today=widget.recent.where((trial)=>trial.resultAtMs>=DateTime(now.year,now.month,now.day).millisecondsSinceEpoch).take(3).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
       children: [
@@ -240,9 +254,17 @@ class _PracticeState extends State<_Practice> {
         ),
         if (widget.active.isNotEmpty) ...[
           const SizedBox(height: 20),
-          const _Title('继续中的 Reality Trial', '从中断处继续，预测与结果不会丢失'),
-          ...widget.active.map((trial) => _TrialTile(trial: trial, onTap: () => widget.onOpen(trial))),
+          _Card(title:'当前下一步',child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(const {'RESULT_CAPTURED','REVIEWED'}.contains(widget.active.first.status)
+              ?'已有现实结果，完成复盘并选择本轮出口。':widget.active.first.actionInstruction),
+            FilledButton(onPressed:()=>widget.onOpen(widget.active.first),child:Text('继续 · ${_status(widget.active.first.status)}')),
+          ])),
+          ...widget.active.skip(1).map((trial) => _TrialTile(trial: trial, onTap: () => widget.onOpen(trial))),
         ],
+        const SizedBox(height:16),
+        _Card(title:'今日现实证据',child:today.isEmpty?const Text('今天还没有结果记录。做完当前一步后，把真实发生的事情带回来。'):
+          Column(children:today.map((t)=>ListTile(contentPadding:EdgeInsets.zero,title:Text(t.actualOutcome,maxLines:3,overflow:TextOverflow.ellipsis),
+            subtitle:Text('${t.primaryModule.label} · ${t.resultStatus}'),onTap:()=>widget.onOpen(t))).toList())),
         const SizedBox(height: 20),
         const _Title('20 个真实案例', '点击填入，再按自己的情况修改'),
         SizedBox(
@@ -267,7 +289,11 @@ class _PracticeState extends State<_Practice> {
           child: ListTile(
             leading: const CircleAvatar(backgroundColor: Color(0xFFE2F2EE), child: Icon(Icons.hub_outlined, color: _brand)),
             title: const Text('六模块不是六张孤立页面', style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text('已激活 ${widget.summary.activatedNodes}/${widget.summary.learnedNodes} 个节点 · 当前闭环：信念→目标→行动→失败→复盘→改变'),
+            subtitle: Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text('已激活 ${widget.summary.activatedNodes}/${widget.summary.learnedNodes} 个已接触节点'),
+              Wrap(spacing:5,children:GrowthModule.values.map((m)=>ActionChip(label:Text('${m.label} ${widget.summary.moduleCounts[m]??0}'),onPressed:widget.onLearn)).toList()),
+            ]),
+            onTap:widget.onLearn,
           ),
         ),
       ],
@@ -441,7 +467,7 @@ class _PredictionDialog extends StatefulWidget {
 class _PredictionDialogState extends State<_PredictionDialog> {
   final prediction = TextEditingController(text: '我预测：完成这个动作后，会获得至少一个可观察结果。');
   var probability = .6;
-  var window = 0;
+  late int window = widget.route.operator == 'CONTEXT_REDESIGN' ? 4 : widget.route.operator == 'RECOVER' ? 2 : 0;
   var remind = true;
   var safe = false;
   var stretch = 'STRETCH';
@@ -449,7 +475,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
   DateTime? scheduledStart;
   late final spec = EvidenceGrowthOperatorRegistry.byId(widget.route.operator);
   late final inputs = <String, TextEditingController>{
-    for (final prompt in spec.inputPrompts) prompt: TextEditingController(),
+    for (final prompt in spec.inputPrompts) prompt: TextEditingController(text:widget.route.inputDrafts[prompt]??''),
   };
   final worstCase = TextEditingController();
   @override
@@ -461,7 +487,8 @@ class _PredictionDialogState extends State<_PredictionDialog> {
   }
   DateTime get reviewAt {
     final now = scheduledStart ?? DateTime.now();
-    return [now.add(const Duration(minutes: 10)), now.add(const Duration(hours: 1)), now.add(const Duration(hours: 4)), DateTime(now.year, now.month, now.day + 1, 20)][window];
+    return [now.add(const Duration(minutes: 10)), now.add(const Duration(hours: 1)), now.add(const Duration(hours: 4)),
+      DateTime(now.year, now.month, now.day + 1, 20),now.add(const Duration(days:7)),now.add(const Duration(days:14))][window];
   }
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -472,7 +499,9 @@ class _PredictionDialogState extends State<_PredictionDialog> {
           TextField(controller: prediction, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '我预测会发生什么？', border: OutlineInputBorder())),
           ...inputs.entries.map((entry) => Padding(padding: const EdgeInsets.only(top: 8), child:
             TextField(controller: entry.value, onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(labelText: entry.key, border: const OutlineInputBorder())))),
+              decoration: InputDecoration(labelText: entry.key,
+                helperText:widget.route.inputDrafts.containsKey(entry.key)?'系统草案，请核对或修改':null,
+                border: const OutlineInputBorder())))),
           if (spec.needsCommitment) DropdownButtonFormField<String>(initialValue: commitment,
             decoration: const InputDecoration(labelText: '最低有效承诺'),
             items: const [DropdownMenuItem(value: 'PRIVATE', child: Text('私下记录')),
@@ -508,7 +537,8 @@ class _PredictionDialogState extends State<_PredictionDialog> {
           DropdownButtonFormField<int>(
             initialValue: window,
             decoration: const InputDecoration(labelText: '结果观察窗口', border: OutlineInputBorder()),
-            items: const [DropdownMenuItem(value: 0, child: Text('10 分钟后')), DropdownMenuItem(value: 1, child: Text('1 小时后')), DropdownMenuItem(value: 2, child: Text('4 小时后')), DropdownMenuItem(value: 3, child: Text('明天 20:00'))],
+            items: const [DropdownMenuItem(value: 0, child: Text('10 分钟后')), DropdownMenuItem(value: 1, child: Text('1 小时后')), DropdownMenuItem(value: 2, child: Text('4 小时后')), DropdownMenuItem(value: 3, child: Text('明天 20:00')),
+              DropdownMenuItem(value:4,child:Text('7 天观察')),DropdownMenuItem(value:5,child:Text('14 天观察'))],
             onChanged: (v) => setState(() => window = v ?? 0),
           ),
           SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, value: remind, onChanged: (v) => setState(() => remind = v), title: const Text('到期精准提醒'), subtitle: const Text('开启时才申请闹钟权限')),

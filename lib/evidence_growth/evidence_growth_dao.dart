@@ -743,7 +743,7 @@ class EvidenceGrowthDao {
       required String category, required String detail}) async {
     await ensureTables();
     final trial = trialId.isEmpty ? null : await byId(trialId);
-    if (EvidenceGrowthKnowledge.byId(nodeId) == null ||
+    if ((EvidenceGrowthKnowledge.byId(nodeId) == null && (trial == null || !trial.nodeIds.contains(nodeId))) ||
         (trialId.isNotEmpty && (trial == null || !trial.nodeIds.contains(nodeId))) ||
         !const {'NOT_APPLICABLE','SOURCE_ERROR','MISUNDERSTOOD','OTHER'}.contains(category) || detail.trim().isEmpty) {
       throw ArgumentError('请选择已引用节点，填写具体依据问题。');
