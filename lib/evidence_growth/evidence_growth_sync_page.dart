@@ -5,6 +5,7 @@ import '../data/db.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_kb_store.dart';
 import 'evidence_growth_sync_service.dart';
+import 'evidence_growth_notification_service.dart';
 
 class EvidenceGrowthSyncPage extends StatefulWidget {
   const EvidenceGrowthSyncPage({super.key,required this.dao});
@@ -50,6 +51,40 @@ class _EvidenceGrowthSyncPageState extends State<EvidenceGrowthSyncPage> {
       if(mounted) setState(()=>status='暂未同步成功。请检查服务地址、访问令牌与网络；本机记录已经保留。');
     } finally { client?.close();if(mounted) setState(()=>busy=false); }
   }
+  Future<void> _resolve(String id) async {
+    if(busy) return;
+    setState(()=>busy=true);
+    EvidenceGrowthSyncClient? client;
+    try {
+      client=await EvidenceGrowthSyncSettings(widget.dao).client();
+      if(client==null) throw StateError('请先启用同步。');
+      final comparison=await client.conflict(id);
+      if(!mounted) return;
+      Widget version(String label,Map bundle) {
+        final t=bundle['trial'] as Map;
+        return Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(label,style:const TextStyle(fontWeight:FontWeight.bold)),
+          Text('状态：${t['status']} · 决策：${t['decision']}'),
+          Text('原预测：${t['prediction']}'), Text('实际事实：${t['actual_outcome']}'),
+          Text('学习：${t['learning']}'), Text('下一步：${t['next_action']}'),
+        ])));
+      }
+      final choice=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+        title:const Text('比较两端记录'),content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+          version('本机',comparison['local'] as Map),version('远程',comparison['remote'] as Map),
+          const Text('两份记录会先保存到冲突档案，随 JSON 导出。只选择本轮当前版本；原预测与原知识依据仍不可改写。'),
+        ])),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('暂不处理')),
+          TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('采用远程')),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('采用本机'))]));
+      if(choice==null) return;
+      await client.resolveConflict(id,comparison,keepLocal:choice);
+      await const EvidenceGrowthNotificationService().reconcile();
+      await _load();
+      if(mounted) setState(()=>status='已处理该轮冲突，两份原记录均已保存在冲突档案。');
+    } catch(_) {
+      if(mounted) setState(()=>status='未覆盖任何未经核对的新版本。可能有新的修改或原预测不一致，请重新比较；两端记录保留。');
+    } finally { client?.close(); if(mounted) setState(()=>busy=false); }
+  }
   @override
   Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('跨设备同步')),
     body:ListView(padding:const EdgeInsets.all(20),children:[
@@ -69,8 +104,9 @@ class _EvidenceGrowthSyncPageState extends State<EvidenceGrowthSyncPage> {
       const SizedBox(height:14),Text(status),
       if(conflicts.isNotEmpty) ...[
         const SizedBox(height:18),const Text('冲突未自动覆盖',style:TextStyle(fontWeight:FontWeight.bold)),
-        const Text('这些试验在两个设备都有修改。请先导出证据并核对两端事实，确认保留哪个版本。'),
-        ...conflicts.map((id)=>ListTile(title:Text(id),subtitle:const Text('本机记录与远程记录均保留'))),
+        const Text('这些试验在两个设备都有修改。逐轮比较事实后选择当前版本，双方原记录都会保留。'),
+        ...conflicts.map((id)=>ListTile(title:Text(id),subtitle:const Text('点击比较与处理'),
+          trailing:const Icon(Icons.compare_arrows),onTap:busy?null:()=>_resolve(id))),
       ],
     ]));
 }

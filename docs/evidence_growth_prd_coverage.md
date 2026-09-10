@@ -18,15 +18,15 @@
 | 风险与结果真实性 | Panic/Ruin/专业边界硬门；完成、部分、未做、中止、观察中；预测发生与目标有益独立记录 | router、DAO、AI service |
 | 首屏与系统草案 | 本地路由先呈现，AI 异步补充受限字段草案；安全确认由用户填写 | home page、AI service |
 | 学习母树与证据说明 | Tal 默认展示、专家折叠、筛选、来源、边界、案例与应用入口已实现 | home page |
-| 个人证据与指标 | 激活、完成、失败样本、调整、退出、Brier、模块分布、节点适配已实现；恢复趋势与暴露日记的完整图表交互仍待补齐 | DAO、models、home page |
+| 个人证据与指标 | 激活、完成、失败样本、调整、退出、Brier、模块分布、节点适配；新增基于下一轮真实启动时间的恢复趋势、暴露日记和档案入口 | DAO、models、evidence history |
 | 反馈与历史证据 | 依据问题分类、反馈队列、Trial 来源快照及历史节点反馈已实现 | DAO、home page |
 | 知识版本维护 | Manifest/delta 校验、节点版本约束、原子安装与回滚、缓存失效回退已实现 | KB store |
 | AI 与离线回退 | 复用全局 Provider；结构化校验、有限重试、超时及本地复盘；真实模型输出成功率未测定 | AI service |
-| 五类提醒 | 开始、结果到期、缺结果、重复回避、恢复结束已接入原生调度；真实设备杀进程/锁屏/重启未验收 | notification service |
-| 审计与隐私 | 路由、提示词版本、时间线、JSON 剪贴板导出、删除及删除同步队列；文件导出与朗读设置尚待核对补齐 | DAO、settings |
+| 五类提醒 | 原子持久化 outbox、AlarmManager + WorkManager 兜底、重启/授权恢复、触发前状态核对、窗口去重、单轮管理、通知直达；代码及 APK 已通过，真实设备杀进程/锁屏/重启未验收 | reminder plan/page、原生 ReminderNative |
+| 审计与隐私 | 路由、提示词版本、时间线、JSON 剪贴板及文件导出、删除及删除同步队列；知识节点朗读及共享朗读配置已接入 | DAO、settings、read aloud |
 | 产品规定的 11 个 API | 路由、Trial 生命周期、why、modules、node、summary、feedback 均有本地服务实现 | API、server/evidence_growth |
-| 多设备同步 | HTTPS 客户端、加密凭据、幂等请求、离线重试及冲突保留已有代码；服务未部署，尚缺实际双设备验收与冲突解决界面 | sync service/page、API |
-| 离线恢复 | SQLite 持久化，恢复中断 Trial；新增关闭重开数据库用例，待本轮 CI 验证；不代替设备杀进程测试 | DAO、regression test |
+| 多设备同步 | HTTPS、加密凭据、幂等请求、离线重试；新增两端事实比较、版本选择、双方原记录归档与并发修改拒绝；服务未部署，实际双设备未验收 | sync service/page、API |
+| 离线恢复 | SQLite 关闭重开后恢复已保存结果测试已通过；不代替设备杀进程测试 | DAO、regression test |
 | 验收集 | S1–S9、负向路由、闭环、来源、版本、同步、HTTP 测试已加入；以对应提交的 CI 结果为准 | test/evidence_growth |
 | 性能与发布门槛 | P95 < 2.5 秒、结构化输出成功率 99.5%、真实设备稳定性尚未测量 | 待验收 |
 
@@ -34,16 +34,19 @@
 
 ## 已确认的远程验证
 
-提交 `d72820ccbd4c52cd88a4994955546fe16a771a0b`：
+提交 `9551c1ae6238a50f665e021a81a2667ea18767f8` 已修复前轮两项失败，专项 CI 与 APK 均通过。
 
-- [Android APK 构建成功](https://github.com/liangliangliao/quote_app222/actions/runs/34023268498)。
-- [Evidence Growth CI](https://github.com/liangliangliao/quote_app222/actions/runs/34023268490)：模块与集成静态分析通过；47 项测试中 45 项通过、2 项失败。独立服务分析因前置测试失败而未执行。
-- 本轮修复 Five-Minute 英文检索别名，以及 HTTP 测试请求的中文 UTF-8 编码，另增加数据库重开恢复测试。尚需新提交 CI 证明修复通过，不能沿用上一提交的构建结果。
+提醒提交 `52f254f66b2a62491b27ee5b54004180a1469871`：
+
+- [Android release APK 构建成功](https://github.com/liangliangliao/quote_app222/actions/runs/34475260554)。
+- [Evidence Growth CI 通过](https://github.com/liangliangliao/quote_app222/actions/runs/34475260539)：55 项测试通过，模块、集成及独立 API 分析通过。
+- 后续新增的朗读、图表、文件导出和冲突解决需新提交 CI 验证，不能沿用提醒提交的构建结果。
+- 提醒实现逐项记录见 `docs/evidence_growth_notifications.md`。
 
 ## 交付前仍需完成
 
-1. 本轮修复提交后，使专项测试、独立服务分析及 APK 构建全部通过。
+1. 后续交互补充提交后，使专项测试、独立服务分析及 APK 构建全部通过。
 2. 完成来源到操作符的全量语义映射核查和关键页面交互验收。
-3. 补齐完整向量检索路由、个人证据图表、同步冲突解决以及文件导出/朗读等尚未覆盖的交互。
+3. 补齐真实向量生成与多索引路由，并验证真实提供方输出；目前向量仅为可选接口，未接入可用 Embedding 配置。
 4. 在配置好的服务环境和两台设备上验证同步、删除、提醒与中断恢复。
 5. 测量并记录产品性能和真实 AI 输出质量门槛。

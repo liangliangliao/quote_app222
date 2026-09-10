@@ -101,6 +101,10 @@ class EvidenceGrowthDao {
         request_key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, response TEXT NOT NULL)''');
       await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_sync_state (
         trial_id TEXT PRIMARY KEY, remote_digest TEXT NOT NULL, local_digest TEXT NOT NULL)''');
+      await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_sync_archives (
+        archive_id INTEGER PRIMARY KEY AUTOINCREMENT, trial_id TEXT NOT NULL,
+        local_bundle TEXT NOT NULL, remote_bundle TEXT NOT NULL, choice TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL)''');
       await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_reminders (
         reminder_id INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT NOT NULL UNIQUE,
         trial_id TEXT NOT NULL, kind TEXT NOT NULL, scheduled_at_ms INTEGER NOT NULL,
@@ -524,7 +528,7 @@ class EvidenceGrowthDao {
         'evidence_growth_reviews', 'evidence_growth_decisions', 'evidence_growth_personal_node_stats',
         'evidence_growth_router_logs', 'evidence_growth_prompt_runs', 'evidence_growth_trials',
         'evidence_growth_events', 'evidence_growth_learned_nodes', 'evidence_growth_feedback', 'evidence_growth_api_receipts',
-        'evidence_growth_sync_state', 'evidence_growth_reminders'
+        'evidence_growth_sync_state', 'evidence_growth_reminders', 'evidence_growth_sync_archives'
       ]) {
         await txn.delete(table);
       }
@@ -549,6 +553,7 @@ class EvidenceGrowthDao {
       'learned_nodes': await db.query('evidence_growth_learned_nodes'),
       'feedback': await db.query('evidence_growth_feedback'),
       'reminders': await db.query('evidence_growth_reminders'),
+      'sync_conflict_archives': await db.query('evidence_growth_sync_archives'),
     });
   }
 
@@ -762,6 +767,12 @@ class EvidenceGrowthDao {
   Future<bool> repeatedAvoidance(RealityTrial trial) async {
     await ensureTables();
     return _repeatedExit(await _database(), trial);
+  }
+
+  Future<void> archiveSyncConflict(String id,Map<String,dynamic> local,Map<String,dynamic> remote,String choice) async {
+    await ensureTables();
+    await (await _database()).insert('evidence_growth_sync_archives',{'trial_id':id,'local_bundle':jsonEncode(local),
+      'remote_bundle':jsonEncode(remote),'choice':choice,'created_at_ms':DateTime.now().millisecondsSinceEpoch});
   }
 
   Future<bool> _repeatedExit(DatabaseExecutor db, RealityTrial trial) async {

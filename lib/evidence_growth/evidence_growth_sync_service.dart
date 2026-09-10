@@ -91,6 +91,36 @@ class EvidenceGrowthSyncClient {
   Future<void> updateKnowledge(EvidenceGrowthKbStore store) async {
     await store.install(await request('GET','/v1/kb/manifest'));
   }
+  Future<Map<String,dynamic>> conflict(String id) async {
+    if(!RegExp(r'^[a-zA-Z0-9_-]{1,120}$').hasMatch(id)) throw ArgumentError('无效试验编号');
+    final remote=await request('GET','/v1/trials/$id/bundle');
+    final bundle=Map<String,dynamic>.from(remote['bundle'] as Map);
+    if(EvidenceGrowthDao.bundleDigest(bundle)!=remote['digest'] || (bundle['trial'] as Map)['trial_id']!=id) {
+      throw const FormatException('远程证据摘要不一致');
+    }
+    return {'local':await dao.trialBundle(id),'remote':bundle,'remote_digest':remote['digest']};
+  }
+  Future<void> resolveConflict(String id,Map<String,dynamic> comparison,{required bool keepLocal}) async {
+    final local=Map<String,dynamic>.from(comparison['local'] as Map), remote=Map<String,dynamic>.from(comparison['remote'] as Map);
+    final localDigest=EvidenceGrowthDao.bundleDigest(local), remoteDigest=EvidenceGrowthDao.bundleDigest(remote);
+    if(EvidenceGrowthDao.bundleDigest(await dao.trialBundle(id))!=localDigest) throw StateError('本机记录已变化，请重新比较。');
+    if(comparison['remote_digest']!=remoteDigest) throw const FormatException('远程摘要不一致');
+    // Archive BOTH versions before changing either side. Export includes these archives.
+    await dao.archiveSyncConflict(id,local,remote,keepLocal?'KEEP_LOCAL':'KEEP_REMOTE');
+    if(keepLocal) {
+      final response=await request('POST','/v1/sync',body:{'known':{},'changes':[{'base_digest':remoteDigest,'bundle':local}]});
+      if((response['acknowledged'] as Map? ?? {})[id]!=localDigest) throw StateError('远程已变化或拒绝改写原预测，请重新比较。');
+      await dao.acknowledgeSync(id,localDigest,localDigest);
+    } else {
+      // Recheck remote before local import; a later server edit is picked up by normal sync.
+      final latest=await request('GET','/v1/trials/$id/bundle');
+      if(latest['digest']!=remoteDigest) throw StateError('远程已变化，请重新比较。');
+      final applied=await dao.importTrialBundle(remote,baseDigest:localDigest);
+      await dao.acknowledgeSync(id,remoteDigest,applied);
+    }
+    final conflicts=(jsonDecode(await dao.getSetting('sync_conflicts',fallback:'[]')) as List).where((e)=>e!=id).toList();
+    await dao.setSetting('sync_conflicts',jsonEncode(conflicts));
+  }
   void close()=>client.close();
 }
 

@@ -79,6 +79,13 @@ class EvidenceGrowthApi {
 
   Future<Map<String,Object?>> dispatch(EvidenceGrowthDao dao,String method,Uri uri,Map<String,dynamic> body,{String requestKey=''}) async {
     final path=uri.path;
+    if(method=='GET' && uri.pathSegments.length==4 && uri.pathSegments[0]=='v1' &&
+      uri.pathSegments[1]=='trials' && uri.pathSegments[3]=='bundle') {
+      final id=uri.pathSegments[2];
+      if(await dao.byId(id)==null) throw const EvidenceGrowthApiError(404,'TRIAL_NOT_FOUND');
+      final bundle=await dao.trialBundle(id);
+      return {'bundle':bundle,'digest':EvidenceGrowthDao.bundleDigest(bundle)};
+    }
     if(method=='GET' && path=='/v1/kb/manifest') return EvidenceGrowthKbStore.manifest(EvidenceGrowthKnowledge.kbVersion,EvidenceGrowthKnowledge.nodes);
     if(method=='GET' && path=='/v1/kb/modules') return {'kb_version':EvidenceGrowthKnowledge.kbVersion,
       'modules':GrowthModule.values.map((m)=>{'module':m.key,'label':m.label,
@@ -96,7 +103,10 @@ class EvidenceGrowthApi {
       return routeJson(route);
     }
     if(method=='POST' && path=='/v1/trials') {
-      final route=await _route(dao,_text(body,'text'));
+      final previousId=_text(body,'previous_trial_id');
+      final previous=previousId.isEmpty?null:await dao.byId(previousId);
+      if(previousId.isNotEmpty && previous==null) throw const EvidenceGrowthApiError(404,'PREVIOUS_TRIAL_NOT_FOUND');
+      final route=previous==null?await _route(dao,_text(body,'text')):const EvidenceGrowthRouter().nextTrial(previous);
       final trial=await dao.createTrial(route,prediction:_text(body,'prediction'),
         probability:(body['probability'] as num).toDouble(),reviewAt:DateTime.fromMillisecondsSinceEpoch((body['review_at_ms'] as num).toInt()),
         riskConfirmed:body['risk_confirmed']==true,operatorInputs:_strings(body['operator_inputs']),

@@ -199,7 +199,7 @@ actual_facts 只能逐字复制 ACTUAL_FACTS 中的记录；不能添加观察�
     if (RegExp('怎么用|流程|如何开始|预测|退出|EXIT|提醒|如何填写|怎么填').hasMatch(text)) {
       return '实战输入现实问题 → 确认一个动作与知识依据 → 保存预测、概率和安全条件 → 行动并记录完成/部分/未做/中止 → 比较预测与实际 → ACT、ADJUST、EXIT 或继续观察。\n'
           '预测写“在何时看到什么”，结果只写已发生事实；EXIT 保存学习，ADJUST 只改一个变量。\n'
-          '依据：KB35 A02、R01、C02；这些页面步骤属于产品设计。';
+          '依据：KB35 A02、R01、C04、R-EXT2-01；这些页面步骤属于产品设计。';
     }
     final gate = const EvidenceGrowthRouter().route(text);
     if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(gate.status)) return gate.actionInstruction;

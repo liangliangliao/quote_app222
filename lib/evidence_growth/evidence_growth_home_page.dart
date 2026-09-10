@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../platform/exact_alarm_permission_coordinator.dart';
 import '../data/db.dart';
@@ -20,6 +22,8 @@ import 'evidence_growth_search.dart';
 import 'evidence_growth_sync_service.dart';
 import 'evidence_growth_sync_page.dart';
 import 'evidence_growth_reminder_page.dart';
+import 'evidence_growth_read_aloud.dart';
+import 'evidence_growth_evidence_history.dart';
 
 const _brand = Color(0xFF24766C);
 const _ink = Color(0xFF183E3A);
@@ -157,7 +161,7 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
                   onOpen: _openTrial,onLearn:()=>setState(()=>_tab=2)),
                 _Review(recent: _recent, onOpen: _openTrial),
                 _Learning(onApply: _begin, dao: _dao),
-                _Evidence(summary: _summary!, recent: _recent),
+                _Evidence(summary: _summary!, recent: _recent,onOpen:_openTrial),
               ],
             ),
       bottomNavigationBar: NavigationBar(
@@ -918,6 +922,7 @@ class _NodeTile extends StatelessWidget {
     trailing: const Icon(Icons.chevron_right),
     onTap: () { unawaited(dao.markLearned(node.id)); showModalBottomSheet(context: context, isScrollControlled: true, useSafeArea: true, builder: (_) => ListView(padding: const EdgeInsets.all(20), children: [
       Text(node.title, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
+      EvidenceGrowthReadAloud(text:'${node.title}。${node.claim}。${node.mechanism}。${node.howTo.join('。')}。使用边界：${node.misuseBoundary.join('。')}'),
       const SizedBox(height: 12), _Label('是什么', node.claim), const Divider(),
       _Label('为什么', node.mechanism), const Divider(),
       _Label('课堂语境', node.teachingContext), const Divider(),
@@ -945,9 +950,10 @@ class _NodeTile extends StatelessWidget {
 }
 
 class _Evidence extends StatelessWidget {
-  const _Evidence({required this.summary, required this.recent});
+  const _Evidence({required this.summary, required this.recent,required this.onOpen});
   final EvidenceSummary summary;
   final List<RealityTrial> recent;
+  final ValueChanged<RealityTrial> onOpen;
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const _Title('我的证据，不是公共真理', '只更新你在具体情境中的适配度，不修改 Tal/专家节点'),
@@ -983,6 +989,7 @@ class _Evidence extends StatelessWidget {
     _Card(title: '最近的规则变化', child: Text(summary.ruleChanges.isEmpty ? '完成复盘后，在这里回看自己改变了什么。' : summary.ruleChanges.join('\n\n'))),
     const SizedBox(height: 10),
     const Text('预测误差只使用你明确标记“发生/未发生”的样本；单次得分不能代表长期校准。'),
+    EvidenceGrowthEvidenceHistory(trials:recent,onOpen:onOpen),
   ]);
 }
 
@@ -1016,6 +1023,7 @@ class _SettingsPageState extends State<_SettingsPage> {
     body: loading ? const Center(child: CircularProgressIndicator()) : ListView(padding: const EdgeInsets.all(16), children: [
       _Card(title: '运行配置', child: Column(children: [
         ListTile(contentPadding: EdgeInsets.zero, title: const Text('AI Provider'), subtitle: Text(provider)),
+        const EvidenceGrowthVoiceSettings(),
         ListTile(contentPadding: EdgeInsets.zero, title: const Text('知识库版本'), subtitle: Text('KB35 ${EvidenceGrowthKnowledge.kbVersion} · Tal-first · Prompt ${EvidenceGrowthKnowledge.promptVersion}')),
         ListTile(contentPadding: EdgeInsets.zero, title: const Text('回退到上一稳定知识库'),
           subtitle: const Text('已创建试验保留原证据版本'), onTap: () async {
@@ -1033,7 +1041,22 @@ class _SettingsPageState extends State<_SettingsPage> {
       const SizedBox(height: 10),
       _Card(title: '隐私与数据', child: Column(children: [
         SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, value: keepRaw, title: const Text('保存原始问题文本'), subtitle: const Text('关闭后只保存结构化事实、节点与结果'), onChanged: (v) async { await widget.dao.setSetting('keep_raw_input', '$v'); if (mounted) setState(() => keepRaw = v); }),
-        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.copy_all_outlined), title: const Text('导出个人证据 JSON'), onTap: () async {
+        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.download_outlined), title: const Text('保存个人证据 JSON 文件'), onTap: () async {
+          File? temporary;
+          try {
+            final data=await widget.dao.exportJson();
+            final dir=await getTemporaryDirectory();
+            final name='evidence-growth-${DateTime.now().millisecondsSinceEpoch}.json';
+            temporary=File('${dir.path}/$name');
+            await temporary.writeAsString(data,flush:true);
+            final saved=await const MethodChannel('native.scheduler').invokeMethod<String>('saveFileToDownloads',{
+              'path':temporary.path,'name':name,'mime':'application/json','subDir':'EvidenceGrowth'});
+            if(saved==null || saved.isEmpty) throw StateError('未保存');
+            if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('已保存至 $saved')));
+          } catch(_) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('文件未保存，可重试或复制 JSON。'))); }
+          finally { if(temporary!=null && await temporary.exists()) await temporary.delete(); }
+        }),
+        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.copy_all_outlined), title: const Text('复制个人证据 JSON'), onTap: () async {
           final data = await widget.dao.exportJson();
           await Clipboard.setData(ClipboardData(text: data));
           if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制结构化 JSON')));

@@ -47,6 +47,30 @@ void main() {
     const EvidenceGrowthRouter().route('求职投简历，拖延没开始'),prediction:prediction,probability:.8,
     reviewAt:DateTime.now().add(const Duration(hours:1)),riskConfirmed:true));
 
+  for(final keepLocal in [true,false]) {
+    test('conflict resolution keeps both archives and applies the selected version ($keepLocal)',() async {
+      final t=await start();
+      await remote.importTrialBundle(await dao.trialBundle(t.id),baseDigest:'');
+      await dao.captureResult(t,didAction:true,actualOutcome:'本机记录的反馈',unexpected:'');
+      await remote.captureResult((await remote.byId(t.id))!,didAction:true,actualOutcome:'另一设备记录的反馈',unexpected:'');
+      final api=EvidenceGrowthApi(daoForUser:(_)async=>remote,userForTokenDigest:{});
+      final client=EvidenceGrowthSyncClient(dao:dao,endpoint:Uri.parse('https://sync.example'),token:'test',
+        client:MockClient((request)async=>http.Response(jsonEncode(await api.dispatch(remote,request.method,request.url,
+          request.body.isEmpty?<String,dynamic>{}:Map<String,dynamic>.from(jsonDecode(request.body) as Map))),200,
+          headers:{'content-type':'application/json; charset=utf-8'})));
+      try {
+        final comparison=await client.conflict(t.id);
+        await client.resolveConflict(t.id,comparison,keepLocal:keepLocal);
+        expect((await dao.byId(t.id))!.actualOutcome,keepLocal?'本机记录的反馈':'另一设备记录的反馈');
+        expect((await remote.byId(t.id))!.actualOutcome,keepLocal?'本机记录的反馈':'另一设备记录的反馈');
+        final archives=await db.query('evidence_growth_sync_archives');
+        expect(archives,hasLength(1));expect(archives.single['local_bundle'],contains('本机记录的反馈'));
+        expect(archives.single['remote_bundle'],contains('另一设备记录的反馈'));
+        expect((await dao.byId(t.id))!.prediction,t.prediction);
+      } finally {client.close();}
+    });
+  }
+
   test('a saved offline result survives database close and reopen',() async {
     final directory=await Directory.systemTemp.createTemp('evidence-growth-restart-');
     Database? persistent;
