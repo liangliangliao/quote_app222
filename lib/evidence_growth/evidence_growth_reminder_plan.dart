@@ -31,7 +31,7 @@ class EvidenceGrowthReminderPlan {
         list.add(EvidenceGrowthReminder('trial_review_due', due, '现实试验 · 观察窗口到了',
           '回来比较预测与实际。还没开始、尚无结果也可以如实记录，不把时间到期当作已经完成。', const ['KB35-R01', 'KB35-R-EXT2-01']));
         list.add(EvidenceGrowthReminder('missing_result', due + missingHours.clamp(1, 168) * 3600000,
-          '这条路线还缺少反馈', '继续之前，先补充现实证据。点击记录完成、部分、未做、中止或继续观察。', const ['KB35-R01', 'KB35-G-EXT2-02']));
+          '这条路线还缺少反馈', '继续之前，先补充现实证据。点击记录完成、部分、未做、中止或继续观察。', const ['KB35-R01', 'KB35-G-EXT2-01']));
       }
     }
     if (repeatedAvoidance && trial.isClosed && trial.decision == 'EXIT') {

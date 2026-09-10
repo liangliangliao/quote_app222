@@ -129,7 +129,7 @@ class EvidenceGrowthRouter {
       status: 'READY_FOR_ACTION', riskGate: 'PASS',
       inference: '当前可先使用“${spec.label}”获得现实证据。该判断需由你的结果验证。',
       confidence: .7, operator: op,
-      actionInstruction: op == 'SOURCE_PRACTICE' ? selected.first.howTo.first : spec.instruction,
+      actionInstruction: op == 'SOURCE_PRACTICE' ? selected.last.howTo.first : spec.instruction,
       completionDefinition: spec.completion, reviewTrigger: spec.reviewTrigger,
       evidenceLevel: gap == null ? 'E3' : 'E2', alternatives: spec.alternatives,
       contextTags: [if(exhausted) 'RECOVERY', if(_has(text,['求职','简历','面试','工厂'])) 'WORK',

@@ -83,6 +83,14 @@ void main() {
     expect(provider.lastPrompt,contains(source.claim));
     expect(provider.lastPrompt,isNot(contains('NEW_VERSION_CLAIM_MUST_NOT_REWRITE_HISTORY')));
   });
+  test('explicit specialized practices keep WOOP and lifeline instructions from their own source',() {
+    for(final id in ['G-EXT-02','G-AUDIT-09','F-AUDIT-03']) {
+      final node=EvidenceGrowthKnowledge.source(id);
+      final route=const EvidenceGrowthRouter().route('我想为下周的目标准备行动。\n学习应用：${node.title}');
+      expect(route.selectedNodes.map((n)=>n.id),contains(node.id));
+      expect(route.actionInstruction,node.howTo.first);
+    }
+  });
 
   test('a saved offline result survives database close and reopen',() async {
     final directory=await Directory.systemTemp.createTemp('evidence-growth-restart-');
