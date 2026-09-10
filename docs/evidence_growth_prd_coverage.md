@@ -10,7 +10,7 @@
 |---|---|---|
 | 发现之旅统一入口与导航 | 实战、复盘、学习、我的证据、设置已接入；尚缺设备界面验收 | discover entry、home page |
 | 六模块与 Tal 主线 | 173 个来源卡：142 Tal、21 EXT1、10 EXT2；包含原文、机制、情境、练习、边界和物理页码 | source cards、knowledge |
-| 来源准确性 | 已完成固定种子 30 条原文/边界/页码抽查；发现并修正 C02 等操作符误配；不能据此宣称全部语义映射已人工核验 | source audit、KB importer |
+| 来源准确性 | 173 个节点的结论/练习/边界共 519 项全文定位通过，导入结果与代码一致；另有固定种子 30 条人工抽查，已修正 C02 等操作符误配；全部语义映射仍未完成独立验收 | source audit、KB importer |
 | Tal-first 与证据 E0–E3 | 确定性规则先 Tal，显式缺口才补位；未知输入 E0；AI 不能引入未授权节点或降低硬门 | router、AI service |
 | 搜索与多索引检索 | 中文分词、BM25、SQLite FTS、个人情境适配已实现；向量相似度仅有可选接口，尚未接入向量生成与完整多索引路由 | search、KB store、DAO |
 | Reality Trial 全流程 | 创建、开始、结果、复盘、ACT/ADJUST/EXIT/OBSERVE；事前预测不可改写，下一轮链接与状态校验已实现 | models、DAO、review engine |
@@ -40,12 +40,13 @@
 
 - [Android release APK 构建成功](https://github.com/liangliangliao/quote_app222/actions/runs/34475260554)。
 - [Evidence Growth CI 通过](https://github.com/liangliangliao/quote_app222/actions/runs/34475260539)：55 项测试通过，模块、集成及独立 API 分析通过。
-- 后续新增的朗读、图表、文件导出和冲突解决需新提交 CI 验证，不能沿用提醒提交的构建结果。
+- 最新代码提交 `2f2a751076b13f842f4d6062b1d3e63340ef00e1` 的 [Evidence Growth CI](https://github.com/liangliangliao/quote_app222/actions/runs/34486156155) 全部通过：60 项测试，模块、集成及独立 API 分析通过。涵盖后续朗读、图表、文件导出、冲突解决、未开始延期、历史知识快照及来源练习修正。真实提供方朗读、模型输出与设备交互尚未验证。
+- 最新代码的 [Android release 构建](https://github.com/liangliangliao/quote_app222/actions/runs/34486155943) 结果以该运行记录为准，不能用旧 APK 替代。
 - 提醒实现逐项记录见 `docs/evidence_growth_notifications.md`。
 
 ## 交付前仍需完成
 
-1. 后续交互补充提交后，使专项测试、独立服务分析及 APK 构建全部通过。
+1. 确认最新 release APK 并执行设备验收；专项测试与独立服务分析已通过。
 2. 完成来源到操作符的全量语义映射核查和关键页面交互验收。
 3. 补齐真实向量生成与多索引路由，并验证真实提供方输出；目前向量仅为可选接口，未接入可用 Embedding 配置。
 4. 在配置好的服务环境和两台设备上验证同步、删除、提醒与中断恢复。

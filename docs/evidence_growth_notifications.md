@@ -36,6 +36,7 @@ Android 会在重启后清除 AlarmManager 注册，并要求获授权后重建�
 
 ## 验证状态
 
+- 最新代码提交 `2f2a751076b13f842f4d6062b1d3e63340ef00e1`：[60 项测试及三项分析通过](https://github.com/liangliangliao/quote_app222/actions/runs/34486156155)。新增未开始延期且原预测窗口不变的测试；修正 Carver 来源，并在原生发送前重新核对最新连续 EXIT 序列，防止后续 ACT/ADJUST 后发送过时提示。对应 [Android release 构建](https://github.com/liangliangliao/quote_app222/actions/runs/34486155943)。
 - 提醒提交 `52f254f66b2a62491b27ee5b54004180a1469871`：55 项专项测试通过，模块与独立 API 静态分析通过。
 - 同提交 [release APK 构建成功](https://github.com/liangliangliao/quote_app222/actions/runs/34475260554)。
 - 数据层测试覆盖：开始/恢复窗口、来源 ID、原子取消、未开始记录、OBSERVE 新窗口、连续三次 EXIT、权限重试的稳定 ID、单轮关闭、缺结果时长调整及删除。
