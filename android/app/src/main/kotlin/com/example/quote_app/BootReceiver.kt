@@ -75,5 +75,10 @@ class BootReceiver : BroadcastReceiver() {
         // Behavior preset alarms: after reboot/package replace, restore upcoming alarm-clock style reminders
         // from local DB so they still work when the app process is not running.
         try { BehaviorPresetAlarmScheduler.rescheduleUpcoming(context.applicationContext) } catch (_: Throwable) {}
+        val pending = goAsync()
+        EvidenceGrowthReminderNative.background {
+            try { EvidenceGrowthReminderNative.reconcile(context.applicationContext) } catch (_: Throwable) {}
+            finally { pending.finish() }
+        }
     }
 }

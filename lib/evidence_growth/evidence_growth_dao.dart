@@ -6,6 +6,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_operator_registry.dart';
+import 'evidence_growth_reminder_plan.dart';
 
 class EvidenceGrowthDao {
   EvidenceGrowthDao({required Future<Database> Function() database})
@@ -100,6 +101,14 @@ class EvidenceGrowthDao {
         request_key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, response TEXT NOT NULL)''');
       await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_sync_state (
         trial_id TEXT PRIMARY KEY, remote_digest TEXT NOT NULL, local_digest TEXT NOT NULL)''');
+      await txn.execute('''CREATE TABLE IF NOT EXISTS evidence_growth_reminders (
+        reminder_id INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT NOT NULL UNIQUE,
+        trial_id TEXT NOT NULL, kind TEXT NOT NULL, scheduled_at_ms INTEGER NOT NULL,
+        window_key TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
+        source_ids_json TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
+        delivered_at_ms INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '',
+        UNIQUE(trial_id, window_key))''');
+      await txn.execute('CREATE INDEX IF NOT EXISTS idx_eg_reminders_due ON evidence_growth_reminders(state, scheduled_at_ms)');
       await txn.execute('''CREATE TRIGGER IF NOT EXISTS eg_prediction_immutable
         BEFORE UPDATE ON evidence_growth_predictions BEGIN
         SELECT RAISE(ABORT, 'Original prediction is immutable'); END''');
@@ -107,7 +116,14 @@ class EvidenceGrowthDao {
         BEFORE UPDATE ON evidence_growth_trials
         WHEN NEW.prediction != OLD.prediction OR NEW.probability != OLD.probability
         BEGIN SELECT RAISE(ABORT, 'Original prediction is immutable'); END''');
-      await txn.insert('evidence_growth_settings', {'setting_key': 'schema_version', 'setting_value': '2'},
+      final reminderMigration = await txn.query('evidence_growth_settings', where: 'setting_key = ?', whereArgs: ['reminder_schema']);
+      if (reminderMigration.isEmpty) {
+        for (final row in await txn.query('evidence_growth_trials')) {
+          await _updateReminders(txn, RealityTrial.fromRow(row));
+        }
+        await txn.insert('evidence_growth_settings', {'setting_key':'reminder_schema','setting_value':'1'});
+      }
+      await txn.insert('evidence_growth_settings', {'setting_key': 'schema_version', 'setting_value': '3'},
           conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }
@@ -225,6 +241,7 @@ class EvidenceGrowthDao {
         'created_at_ms': now,
       });
       await _event(txn, id, 'CREATED', {'risk_checks': trial.riskChecks}, now);
+      await _updateReminders(txn, trial);
       if (previousTrialId.isNotEmpty) {
         final parent = await _current(txn, previousTrialId);
         if (!parent.isClosed || parent.nextTrialId.isNotEmpty) throw StateError('上一轮尚未决策或已连接下一轮。');
@@ -252,6 +269,7 @@ class EvidenceGrowthDao {
         await _refreshNodeStats(txn, node, now);
       }
       await _event(txn, trial.id, 'STARTED', {}, now);
+      await _updateReminders(txn, updated);
       return updated;
     });
   }
@@ -287,7 +305,10 @@ class EvidenceGrowthDao {
     }
     return db.transaction((txn) async {
     final current = await _current(txn, trial.id);
-    if (!const {'IN_PROGRESS','OBSERVING'}.contains(current.status)) throw StateError('本轮结果已经保存或尚未开始。');
+    if (!const {'IN_PROGRESS','OBSERVING'}.contains(current.status) &&
+        !(current.status == 'READY' && const {'NOT_DONE','ABORTED'}.contains(result))) {
+      throw StateError('本轮结果已经保存；尚未开始时只能记录未做或中止。');
+    }
     final updated = current.copyWith(
       status: 'RESULT_CAPTURED',
       didAction: result == 'DONE' || result == 'PARTIAL',
@@ -312,6 +333,7 @@ class EvidenceGrowthDao {
       }
       await _event(txn, trial.id, 'RESULT_CAPTURED', {'result_status': result,
         'actual_outcome': actualOutcome.trim(), 'measurements': resultMeasurements}, now);
+      await _updateReminders(txn, updated);
       return updated;
     });
   }
@@ -348,6 +370,7 @@ class EvidenceGrowthDao {
         'created_at_ms': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       await _event(txn, trial.id, 'REVIEWED', {'rule_update': review.ruleUpdate}, now);
+      await _updateReminders(txn, updated);
       return updated;
     });
   }
@@ -382,6 +405,7 @@ class EvidenceGrowthDao {
         await _refreshNodeStats(txn, node, now);
       }
       await _event(txn, trial.id, 'DECIDED', {'decision': normalized, 'reason': reason.trim()}, now);
+      await _updateReminders(txn, updated);
       return updated;
     });
   }
@@ -500,7 +524,7 @@ class EvidenceGrowthDao {
         'evidence_growth_reviews', 'evidence_growth_decisions', 'evidence_growth_personal_node_stats',
         'evidence_growth_router_logs', 'evidence_growth_prompt_runs', 'evidence_growth_trials',
         'evidence_growth_events', 'evidence_growth_learned_nodes', 'evidence_growth_feedback', 'evidence_growth_api_receipts',
-        'evidence_growth_sync_state'
+        'evidence_growth_sync_state', 'evidence_growth_reminders'
       ]) {
         await txn.delete(table);
       }
@@ -524,6 +548,7 @@ class EvidenceGrowthDao {
       'events': await db.query('evidence_growth_events'),
       'learned_nodes': await db.query('evidence_growth_learned_nodes'),
       'feedback': await db.query('evidence_growth_feedback'),
+      'reminders': await db.query('evidence_growth_reminders'),
     });
   }
 
@@ -614,7 +639,8 @@ class EvidenceGrowthDao {
         final payload=jsonDecode(event['payload_json'] as String) as Map;
         if(type=='CREATED' && state==null) { state='READY'; }
         else if(type=='STARTED' && state=='READY') { state='IN_PROGRESS'; }
-        else if(type=='RESULT_CAPTURED' && const {'IN_PROGRESS','OBSERVING'}.contains(state)) { state='RESULT_CAPTURED'; }
+        else if(type=='RESULT_CAPTURED' && (const {'IN_PROGRESS','OBSERVING'}.contains(state) ||
+          (state=='READY' && const {'NOT_DONE','ABORTED'}.contains(payload['result_status'])))) { state='RESULT_CAPTURED'; }
         else if(type=='REVIEWED' && state=='RESULT_CAPTURED') { state='REVIEWED'; }
         else if(type=='DECIDED' && state=='REVIEWED') { state=payload['decision']=='OBSERVE'?'OBSERVING':'DECIDED'; }
         else if(type=='NEXT_TRIAL_LINKED' && state=='DECIDED') { /* state retained */ }
@@ -641,6 +667,7 @@ class EvidenceGrowthDao {
         await txn.insert('evidence_growth_learned_nodes',{'node_id':id,'learned_at_ms':trial.createdAtMs},conflictAlgorithm:ConflictAlgorithm.ignore);
         await _refreshNodeStats(txn,id,DateTime.now().millisecondsSinceEpoch);
       }
+      await _updateReminders(txn, trial);
     });
     return bundleDigest(await trialBundle(trial.id));
   }
@@ -733,10 +760,66 @@ class EvidenceGrowthDao {
   }
 
   Future<bool> repeatedAvoidance(RealityTrial trial) async {
-    final recent = (await recentTrials(limit: 10000)).where((t) =>
-        t.nodeIds.any(trial.nodeIds.contains) && t.id != trial.id && t.isClosed).take(3).toList();
-    return recent.length == 3 && recent.every((t) =>
-        t.resultStatus == 'NOT_DONE' || t.resultStatus == 'ABORTED');
+    await ensureTables();
+    return _repeatedExit(await _database(), trial);
+  }
+
+  Future<bool> _repeatedExit(DatabaseExecutor db, RealityTrial trial) async {
+    if (trial.nodeIds.isEmpty || !trial.isClosed || trial.decision != 'EXIT') return false;
+    final rows = await db.query('evidence_growth_trials', where: "status = 'DECIDED'",
+      orderBy: 'updated_at_ms DESC, created_at_ms DESC, trial_id DESC');
+    final same = rows.map(RealityTrial.fromRow).where((t) =>
+      t.nodeIds.isNotEmpty && t.nodeIds.first == trial.nodeIds.first).take(3).toList();
+    return same.length == 3 && same.first.id == trial.id && same.every((t) => t.decision == 'EXIT');
+  }
+
+  Future<void> _updateReminders(DatabaseExecutor db, RealityTrial trial) async {
+    final settings = {for (final row in await db.query('evidence_growth_settings'))
+      row['setting_key'] as String: row['setting_value'] as String};
+    final enabled = settings['reminders_enabled'] != 'false' &&
+      (settings['remind_trial_${trial.id}'] ?? trial.operatorInputs['remind']) == 'true';
+    final plans = enabled ? EvidenceGrowthReminderPlan.build(trial, DateTime.now().millisecondsSinceEpoch,
+      includeOverdue: true, repeatedAvoidance: await _repeatedExit(db, trial),
+      missingHours: int.tryParse(settings['missing_result_hours'] ?? '') ?? 24) : <EvidenceGrowthReminder>[];
+    // Retain delivered records for idempotency; cancel obsolete schedules atomically with the Trial.
+    await db.update('evidence_growth_reminders', {'state':'cancelled'},
+      where: "trial_id = ? AND state IN ('pending','scheduled','blocked')", whereArgs:[trial.id]);
+    for (final plan in plans) {
+      final window = '${plan.atMs ~/ 60000}';
+      final old = await db.query('evidence_growth_reminders', where:'trial_id = ? AND window_key = ?', whereArgs:[trial.id, window]);
+      if (old.isNotEmpty && (const {'delivered','expired'}.contains(old.first['state']) ||
+          (old.first['delivered_at_ms'] as num).toInt() > 0)) continue;
+      final values = <String,Object?>{'event_key':'${trial.id}:$window', 'trial_id':trial.id,
+        'kind':plan.kind, 'scheduled_at_ms':plan.atMs, 'window_key':window, 'title':plan.title,
+        'body':plan.body, 'source_ids_json':jsonEncode(plan.sourceIds), 'state':'pending', 'last_error':''};
+      if (old.isEmpty) { await db.insert('evidence_growth_reminders', values); }
+      else { await db.update('evidence_growth_reminders', values, where:'reminder_id = ?', whereArgs:[old.first['reminder_id']]); }
+    }
+  }
+
+  Future<void> configureReminders({bool? enabled, int? missingHours, String? trialId, bool? trialEnabled}) async {
+    if (missingHours != null && (missingHours < 1 || missingHours > 168)) throw ArgumentError('缺结果提醒应为 1–168 小时。');
+    await ensureTables();
+    await (await _database()).transaction((txn) async {
+      final changes = <String,String>{
+        if (enabled != null) 'reminders_enabled':'$enabled',
+        if (missingHours != null) 'missing_result_hours':'$missingHours',
+        if (trialId != null && trialEnabled != null) 'remind_trial_$trialId':'$trialEnabled',
+      };
+      for (final e in changes.entries) {
+        await txn.insert('evidence_growth_settings', {'setting_key':e.key,'setting_value':e.value}, conflictAlgorithm:ConflictAlgorithm.replace);
+      }
+      for (final row in await txn.query('evidence_growth_trials', where:trialId == null ? null : 'trial_id = ?', whereArgs:trialId == null ? null : [trialId])) {
+        await _updateReminders(txn, RealityTrial.fromRow(row));
+      }
+    });
+  }
+
+  Future<List<Map<String,Object?>>> reminderRecords({String? trialId}) async {
+    await ensureTables();
+    return (await _database()).query('evidence_growth_reminders',
+      where:trialId == null ? null : 'trial_id = ?', whereArgs:trialId == null ? null : [trialId],
+      orderBy:'scheduled_at_ms DESC', limit:300);
   }
 
   Future<void> submitEvidenceFeedback({required String trialId, required String nodeId,

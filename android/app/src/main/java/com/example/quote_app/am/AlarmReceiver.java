@@ -98,6 +98,17 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
             try {
                 JSONObject obj = new JSONObject(payload == null ? "{}" : payload);
                 String module = obj.optString("module", "");
+                if ("evidence_growth".equals(module)) {
+                    // Old releases scheduled payload-only alarms. Never fall through to a
+                    // generic notification that loses the Trial. The durable outbox owns delivery.
+                    final PendingResult pending = goAsync();
+                    new Thread(() -> {
+                        try { com.example.quote_app.EvidenceGrowthReminderNative.reconcile(context.getApplicationContext()); }
+                        catch (Throwable ignore) {}
+                        finally { pending.finish(); }
+                    }).start();
+                    return;
+                }
                 if ("health_diet".equals(module)) {
                     String title = obj.optString("title", "健康饮食 Agent");
                     String body = obj.optString("body", "到时间了，点击查看本次饮食安排或完成记录。");

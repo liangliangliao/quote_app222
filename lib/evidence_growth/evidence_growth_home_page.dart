@@ -19,6 +19,7 @@ import 'evidence_growth_kb_store.dart';
 import 'evidence_growth_search.dart';
 import 'evidence_growth_sync_service.dart';
 import 'evidence_growth_sync_page.dart';
+import 'evidence_growth_reminder_page.dart';
 
 const _brand = Color(0xFF24766C);
 const _ink = Color(0xFF183E3A);
@@ -59,6 +60,7 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('知识缓存暂不可用，已使用随 App 提供的稳定版本。')));
     }
     await _dao.ensureTables();
+    unawaited(const EvidenceGrowthNotificationService().reconcile());
     await _reload();
     if (!mounted) return;
     if (widget.initialTrialId.isNotEmpty) {
@@ -73,7 +75,10 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
   void dispose() { WidgetsBinding.instance.removeObserver(this); super.dispose(); }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.resumed) unawaited(_sync());
+    if(state==AppLifecycleState.resumed) {
+      unawaited(const EvidenceGrowthNotificationService().reconcile());
+      unawaited(_sync());
+    }
   }
   Future<void> _sync() async {
     if(_syncing) return;
@@ -103,6 +108,7 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
       _loading = false;
     });
     if(sync) unawaited(_sync());
+    unawaited(const EvidenceGrowthNotificationService().reconcile());
   }
 
   Future<void> _begin(String input) async {
@@ -333,24 +339,29 @@ class _RoutePageState extends State<_RoutePage> {
     final setup = await showDialog<_PredictionSetup>(context: context, barrierDismissible: false, builder: (_) => _PredictionDialog(route));
     if (setup == null || !mounted) { if (mounted) setState(() => starting = false); return; }
     try {
+      var enableReminders = setup.remind;
       if (setup.remind) {
+        final notifications = await NativeScheduler.requestNotificationPermissionSystem();
+        if (!mounted) return;
         final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
           context,
           featureName: 'Reality Trial 结果复盘提醒',
           explanation: '在本轮开始、恢复结束或结果窗口到期时提醒你返回试验。',
         );
-        if (!granted || !mounted) return;
+        if (!mounted) return;
+        enableReminders = notifications && granted;
+        if (!enableReminders) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('先保存本轮试验；提醒暂未开启，可在本轮提醒中授权恢复。')));
       }
       var trial = await widget.dao.createTrial(route, prediction: setup.prediction,
         probability: setup.probability, reviewAt: setup.reviewAt, riskConfirmed: true,
         goalState: setup.inputs['目标状态'] ?? '', currentState: setup.inputs['当前状态'] ?? '',
         topGap: setup.inputs['最大差距'] ?? '', operatorInputs: {...setup.inputs,
-          'remind': '${setup.remind}', 'scheduled_start_ms': '${setup.startAt.millisecondsSinceEpoch}'},
+          'remind': '$enableReminders', 'scheduled_start_ms': '${setup.startAt.millisecondsSinceEpoch}'},
         commitmentLevel: setup.commitment, stretchLevel: setup.stretch,
         stableContext: setup.inputs['稳定情境'] ?? '', worstCase: setup.worstCase,
         previousTrialId: widget.previousTrialId);
       if (!setup.startAt.isAfter(DateTime.now())) trial = await widget.dao.startTrial(trial);
-      if (setup.remind) {
+      if (enableReminders) {
         final scheduled = await const EvidenceGrowthNotificationService().scheduleTrial(trial,
           repeatedAvoidance: await widget.dao.repeatedAvoidance(trial));
         if (!scheduled && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Trial 已保存；提醒未成功安排，请在设置检查通知权限。')));
@@ -524,13 +535,19 @@ class _PredictionDialogState extends State<_PredictionDialog> {
           if (stretch == 'PANIC') const Text('请停止当前暴露并改为恢复或更小层级。', style: TextStyle(color: Colors.red)),
           TextButton.icon(icon: const Icon(Icons.schedule), label: Text(scheduledStart == null ? '现在开始（可改时间）' : '开始于 ${_date(scheduledStart!)}'),
             onPressed: () async {
-              final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-              if (picked == null || !mounted) return;
               final now = DateTime.now();
-              var date = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
-              if (!date.isAfter(now)) date = date.add(const Duration(days: 1));
+              final day = await showDatePicker(context:context,initialDate:scheduledStart ?? now,firstDate:DateTime(now.year,now.month,now.day),lastDate:now.add(const Duration(days:365)));
+              if (day == null || !mounted) return;
+              final picked = await showTimePicker(context:context,initialTime:TimeOfDay.fromDateTime(scheduledStart ?? now));
+              if (picked == null || !mounted) return;
+              final date = DateTime(day.year,day.month,day.day,picked.hour,picked.minute);
+              if (!date.isAfter(DateTime.now())) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('请选择未来的开始时间，或选择现在开始。')));
+                return;
+              }
               setState(() => scheduledStart = date);
             }),
+          if (scheduledStart != null) TextButton(onPressed:()=>setState(()=>scheduledStart=null),child:const Text('改为现在开始')),
           const SizedBox(height: 10),
           Text('发生概率：${(probability * 100).round()}%'),
           Slider(value: probability, min: 0, max: 1, divisions: 10, onChanged: (v) => setState(() => probability = v)),
@@ -541,7 +558,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
               DropdownMenuItem(value:4,child:Text('7 天观察')),DropdownMenuItem(value:5,child:Text('14 天观察'))],
             onChanged: (v) => setState(() => window = v ?? 0),
           ),
-          SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, value: remind, onChanged: (v) => setState(() => remind = v), title: const Text('到期精准提醒'), subtitle: const Text('开启时才申请闹钟权限')),
+          SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, value: remind, onChanged: (v) => setState(() => remind = v), title: const Text('开始、反馈与恢复提醒'), subtitle: const Text('保存时引导授权；按本轮状态提醒，记录结果后取消过时提醒')),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
@@ -608,7 +625,10 @@ class _TrialPageState extends State<_TrialPage> {
   }
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text('Reality Trial · ${_status(trial.status)}')),
+        appBar: AppBar(title: Text('Reality Trial · ${_status(trial.status)}'),actions:[
+          IconButton(tooltip:'本轮提醒',icon:const Icon(Icons.notifications_active_outlined),onPressed:()=>Navigator.push(context,
+            MaterialPageRoute(builder:(_)=>EvidenceGrowthReminderPage(dao:widget.dao,trialId:trial.id)))),
+        ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           Wrap(spacing: 7, children: [_Chip(trial.primaryModule.label, _brand), _Chip(trial.stretchLevel, trial.stretchLevel == 'RECOVERY' ? Colors.blue : _brand)]),
           const SizedBox(height: 12),
@@ -625,6 +645,7 @@ class _TrialPageState extends State<_TrialPage> {
             if (mounted) setState(() => trial = started);
           }, child: const Text('现在开始行动')),
           if (trial.status == 'RESULT_CAPTURED') FilledButton(onPressed: saving ? null : _resumeReview, child: const Text('结果已保存，继续复盘')),
+          if (trial.status == 'READY') TextButton(onPressed:saving ? null : ()=>_capture('未做'),child:const Text('这轮没有开始，如实记录原因')),
           const SizedBox(height: 10),
           _Card(title: '事前预测 · 已锁定', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(trial.prediction),
@@ -791,6 +812,7 @@ class _DecisionPageState extends State<_DecisionPage> {
         if (decision == 'OBSERVE' && trial.operatorInputs['remind'] == 'true') {
           await const EvidenceGrowthNotificationService().scheduleTrial(trial);
         }
+        await const EvidenceGrowthNotificationService().reconcile();
         if (mounted) setState(() => chosen = decision);
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('未保存决定：$e')));
@@ -1001,6 +1023,9 @@ class _SettingsPageState extends State<_SettingsPage> {
             if (mounted) { setState(() {}); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(restored ? '已回退知识库版本。' : '目前没有可回退的版本。'))); }
           }),
         ListTile(contentPadding: EdgeInsets.zero, title: const Text('精准闹钟权限'), subtitle: Text(exact ? '已授权' : '未授权；仅在创建提醒时引导开启')),
+        ListTile(contentPadding:EdgeInsets.zero,title:const Text('提醒管理'),subtitle:const Text('五类提醒、授权恢复、每轮开关与发送记录'),
+          trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthReminderPage(
+            dao:widget.dao,onOpenTrial:(id)=>Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthHomePage(initialTrialId:id))))))),
         ListTile(contentPadding: EdgeInsets.zero, title: const Text('跨设备同步'),
           subtitle: const Text('默认关闭；可连接自己的服务'),trailing:const Icon(Icons.chevron_right),
           onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthSyncPage(dao:widget.dao)))),
@@ -1020,6 +1045,7 @@ class _SettingsPageState extends State<_SettingsPage> {
               await const EvidenceGrowthNotificationService().cancel(trial.id);
             }
             await widget.dao.deletePersonalEvidence();
+            await const EvidenceGrowthNotificationService().reconcile();
             if((await widget.dao.getSetting('sync_endpoint')).isNotEmpty) {
               await widget.dao.setSetting('sync_delete_pending','${DateTime.now().microsecondsSinceEpoch}');
               final client=await EvidenceGrowthSyncSettings(widget.dao).client();
