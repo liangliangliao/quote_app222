@@ -100,4 +100,13 @@ void main() {
     await dao.deletePersonalEvidence();
     expect(await dao.reminderRecords(),isEmpty);
   });
+  test('postponing a start moves its alarm while preserving the original observation window',() async {
+    final t=await create();
+    final moved=DateTime.now().add(const Duration(hours:2));
+    final changed=await dao.rescheduleStart(t,moved);
+    final rows=await pending(t.id);
+    expect(rows.singleWhere((r)=>r['kind']=='trial_start')['scheduled_at_ms'],moved.millisecondsSinceEpoch);
+    expect(changed.reviewAtMs,t.reviewAtMs); expect(changed.prediction,t.prediction);
+    await expectLater(dao.rescheduleStart(changed,DateTime.fromMillisecondsSinceEpoch(t.reviewAtMs+1)),throwsArgumentError);
+  });
 }

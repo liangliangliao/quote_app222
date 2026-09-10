@@ -119,8 +119,17 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
     UnifiedAiResolvedConfig cfg;
     try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return fallback; }
     if (!cfg.available) return fallback;
-    final nodes = trial.nodeIds.map(EvidenceGrowthKnowledge.byId).whereType<EvidenceKNode>().toList();
-    if (nodes.isEmpty) return fallback;
+    final nodes=<EvidenceKNode>[];
+    try {
+      for(final record in await _dao.evidenceSnapshots(trial.id)) {
+        final snapshot=Map<String,dynamic>.from(jsonDecode(record['snapshot_json'] as String) as Map);
+        final node=EvidenceKNode.fromJson(snapshot);
+        if(!trial.nodeIds.contains(node.id) || node.version!=record['node_version']) return fallback;
+        nodes.add(node);
+      }
+    } catch(_) { return fallback; }
+    // Old Trials must not silently cite a newer KB version during review.
+    if (nodes.length!=trial.nodeIds.length || nodes.isEmpty) return fallback;
     final id = 'eg_review_${DateTime.now().microsecondsSinceEpoch}';
     final started = DateTime.now();
     var valid = false;

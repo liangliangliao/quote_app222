@@ -649,6 +649,20 @@ class _TrialPageState extends State<_TrialPage> {
             if (mounted) setState(() => trial = started);
           }, child: const Text('现在开始行动')),
           if (trial.status == 'RESULT_CAPTURED') FilledButton(onPressed: saving ? null : _resumeReview, child: const Text('结果已保存，继续复盘')),
+          if (trial.status == 'READY') TextButton.icon(icon:const Icon(Icons.more_time),label:const Text('延后开始时间'),onPressed:saving?null:() async {
+            final now=DateTime.now();
+            final day=await showDatePicker(context:context,initialDate:now,firstDate:DateTime(now.year,now.month,now.day),lastDate:now.add(const Duration(days:365)));
+            if(day==null || !mounted) return;
+            final time=await showTimePicker(context:context,initialTime:TimeOfDay.now());
+            if(time==null || !mounted) return;
+            setState(()=>saving=true);
+            try {
+              final updated=await widget.dao.rescheduleStart(trial,DateTime(day.year,day.month,day.day,time.hour,time.minute));
+              await const EvidenceGrowthNotificationService().reconcile();
+              if(mounted) setState(()=>trial=updated);
+            } catch(_) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('请选择原观察窗口内的未来时间；窗口已过时，先记录未做再创建下一轮。'))); }
+            finally { if(mounted) setState(()=>saving=false); }
+          }),
           if (trial.status == 'READY') TextButton(onPressed:saving ? null : ()=>_capture('未做'),child:const Text('这轮没有开始，如实记录原因')),
           const SizedBox(height: 10),
           _Card(title: '事前预测 · 已锁定', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1134,6 +1148,8 @@ class _ArchivePage extends StatelessWidget {
       _Card(title: '完整时间线', child: Text((snapshot.data ?? []).map((e) => '${_date(DateTime.fromMillisecondsSinceEpoch((e['created_at_ms'] as num).toInt()))} · ${e['event_type']}').join('\n')))),
     const SizedBox(height: 10), FutureBuilder<List<Map<String, Object?>>>(future: dao.evidenceSnapshots(trial.id), builder: (_, snapshot) =>
       _Card(title: '创建时的证据版本', child: Text((snapshot.data ?? []).map((e) => '${e['node_id']} v${e['node_version']} · ${e['source_locator_json']}').join('\n')))),
+    TextButton.icon(icon:const Icon(Icons.feedback_outlined),label:const Text('记录历史依据问题'),
+      onPressed:()=>_evidenceFeedback(context,dao,trial.nodeIds,trialId:trial.id)),
   ]));
 }
 

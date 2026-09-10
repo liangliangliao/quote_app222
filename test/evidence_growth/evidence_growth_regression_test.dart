@@ -22,12 +22,13 @@ class _Provider extends UnifiedAiService {
   _Provider(this.output);
   final String Function(String purpose) output;
   int calls=0;
+  String lastPrompt='';
   @override
   Future<UnifiedAiResolvedConfig> resolveGlobalConfig({String? forcedProvider,String? forcedModel}) async =>
     const UnifiedAiResolvedConfig(provider:'fake',apiKey:'test',model:'fake',endpoint:'',label:'fake',displayModel:'fake',available:true);
   @override
   Future<String> generateText({required String prompt,required String purpose,String? systemPrompt,int maxTokens=1800,
-      bool expectJson=false,String? forcedProvider,String? forcedModel,double? temperature}) async { calls++;return output(purpose); }
+      bool expectJson=false,String? forcedProvider,String? forcedModel,double? temperature}) async { calls++;lastPrompt=prompt;return output(purpose); }
 }
 
 void main() {
@@ -70,6 +71,18 @@ void main() {
       } finally {client.close();}
     });
   }
+  test('historical review cites the saved node snapshot after a knowledge upgrade',() async {
+    var t=await start();
+    t=await dao.captureResult(t,didAction:true,actualOutcome:'获得真实反馈',unexpected:'');
+    final source=EvidenceGrowthKnowledge.byId(t.nodeIds.first)!;
+    final modified=EvidenceKNode.fromJson({...source.toJson(),'claim':'NEW_VERSION_CLAIM_MUST_NOT_REWRITE_HISTORY','version':source.version+1});
+    EvidenceGrowthKnowledge.activate('test-new-history',EvidenceGrowthKnowledge.nodes.map((n)=>n.id==source.id?modified:n).toList());
+    final provider=_Provider((_)=>'invalid structured response');
+    await EvidenceGrowthAiService(dao:dao,ai:provider).review(t);
+    expect(provider.calls,2);
+    expect(provider.lastPrompt,contains(source.claim));
+    expect(provider.lastPrompt,isNot(contains('NEW_VERSION_CLAIM_MUST_NOT_REWRITE_HISTORY')));
+  });
 
   test('a saved offline result survives database close and reopen',() async {
     final directory=await Directory.systemTemp.createTemp('evidence-growth-restart-');

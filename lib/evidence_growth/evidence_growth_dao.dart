@@ -278,6 +278,23 @@ class EvidenceGrowthDao {
     });
   }
 
+  Future<RealityTrial> rescheduleStart(RealityTrial trial,DateTime startAt) async {
+    await ensureTables();
+    final now=DateTime.now().millisecondsSinceEpoch;
+    return (await _database()).transaction((txn) async {
+      final current=await _current(txn,trial.id);
+      if(current.status!='READY') throw StateError('只有尚未开始的试验可以延后。');
+      if(startAt.millisecondsSinceEpoch<=now || startAt.millisecondsSinceEpoch>=current.reviewAtMs) {
+        throw ArgumentError('开始时间须在未来且早于原观察窗口；窗口已过请记录未做并创建下一轮。');
+      }
+      final updated=current.copyWith(operatorInputs:{...current.operatorInputs,'scheduled_start_ms':'${startAt.millisecondsSinceEpoch}'},updatedAtMs:now);
+      await txn.update('evidence_growth_trials',updated.toRow(),where:'trial_id = ?',whereArgs:[trial.id]);
+      await _event(txn,trial.id,'START_RESCHEDULED',{'scheduled_start_ms':startAt.millisecondsSinceEpoch},now);
+      await _updateReminders(txn,updated);
+      return updated;
+    });
+  }
+
   Future<RealityTrial> captureResult(RealityTrial trial,
       {required bool didAction, required String actualOutcome, required String unexpected,
       String resultStatus = '', Map<String, String> resultMeasurements = const {},
@@ -644,6 +661,7 @@ class EvidenceGrowthDao {
         final payload=jsonDecode(event['payload_json'] as String) as Map;
         if(type=='CREATED' && state==null) { state='READY'; }
         else if(type=='STARTED' && state=='READY') { state='IN_PROGRESS'; }
+        else if(type=='START_RESCHEDULED' && state=='READY') { /* Same prediction, future start moved within its window. */ }
         else if(type=='RESULT_CAPTURED' && (const {'IN_PROGRESS','OBSERVING'}.contains(state) ||
           (state=='READY' && const {'NOT_DONE','ABORTED'}.contains(payload['result_status'])))) { state='RESULT_CAPTURED'; }
         else if(type=='REVIEWED' && state=='RESULT_CAPTURED') { state='REVIEWED'; }
