@@ -78,6 +78,7 @@ void main() {
     await dao.configureReminders(enabled:true);
     expect(await pending(c.id),hasLength(1));
     await close(await create(),'ADJUST');
+    expect(await dao.repeatedAvoidance(c),isFalse);
     final d=await close(await create(),'EXIT');
     expect(await pending(d.id),isEmpty);
   });

@@ -79,13 +79,29 @@ object EvidenceGrowthReminderNative {
             if ((override ?: JSONObject(c.getString(2)).optString("remind")) != "true") return@use false
             val state = c.getString(0)
             when (kind) {
-                "repeated_avoidance" -> state == "DECIDED" && c.getString(3) == "EXIT"
+                "repeated_avoidance" -> state == "DECIDED" && c.getString(3) == "EXIT" && repeatedExit(db, trialId)
                 "trial_start" -> state == "READY"
                 "recovery_end" -> state == "IN_PROGRESS" && c.getString(1) == "RECOVER"
                 "trial_review_due", "missing_result" -> state in listOf("READY", "IN_PROGRESS", "OBSERVING")
                 else -> false
             }
         }
+    }
+
+    private fun repeatedExit(db: SQLiteDatabase, trialId: String): Boolean {
+        val node = db.rawQuery("SELECT node_ids_json FROM evidence_growth_trials WHERE trial_id=?", arrayOf(trialId))
+            .use { if (it.moveToFirst()) org.json.JSONArray(it.getString(0)).optString(0) else "" }
+        if (node.isEmpty()) return false
+        var count = 0
+        db.rawQuery("SELECT trial_id,node_ids_json,decision FROM evidence_growth_trials WHERE status='DECIDED' ORDER BY updated_at_ms DESC,created_at_ms DESC,trial_id DESC", null).use { c ->
+            while (c.moveToNext()) {
+                if (org.json.JSONArray(c.getString(1)).optString(0) != node) continue
+                if (count == 0 && c.getString(0) != trialId) return false
+                if (c.getString(2) != "EXIT") return false
+                if (++count == 3) return true
+            }
+        }
+        return false
     }
 
     /** Boot, package update, permission return and app resume all use this path. */
