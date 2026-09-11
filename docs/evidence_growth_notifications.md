@@ -10,6 +10,8 @@
 
 另修复饮食后台 AI 执行失败会跳过续排的问题：续排放入 finally，后台运行不再使用 force 越过开关；只有完成执行才写入已执行日期。原生通知不同 ID 的点击入口不再共用固定 PendingIntent，防止点击进入另一条饮食安排。新增后台开关/AI 失败续排测试以及每日、每周、夏令时原生日期计算测试。
 
+自动饮食时段通知统一由原生计划发送；Dart 后台 AI 完成后只更新数据，不再为同一时段另发一条通知，避免原生闹钟与 AI 完成通知重复振铃。手动执行仍保留其完成反馈。
+
 提醒管理页新增系统后台限制、电池优化及最近后台恢复结果，并提供应用后台设置入口。正常回到后台/进程被系统回收与设置中的“强行停止”不同；Android 15 会在 force-stop 时取消 PendingIntent。强行停止后需要用户重新打开 App，不能承诺绕过系统停止状态；厂商自启动/电池限制和重启后首次解锁前的凭据存储限制也须在真机验收。参考 [Android 闹钟](https://developer.android.com/develop/background-work/services/alarms) 与 [Android 15 停止状态](https://developer.android.com/about/versions/15/behavior-changes-all#stopped-state)。
 
 依据：正式产品方案 v1.0 §40、§54、§60。提醒属于既有 Reality Trial 的闭环，不使用随机鼓励文案，也不把定时到期当成已经行动或已经获得结果。

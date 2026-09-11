@@ -280,7 +280,9 @@ class HealthDietDailySchedulerService {
         'autopilot': autopilot.toJson(),
       },
     );
-    await _notifyIfNeeded(slot, autopilot, settings);
+    // Automatic time-slot alerts belong to the durable native plan. Posting
+    // again when AI finishes would buzz twice for the same scheduled slot.
+    if (from != 'workmanager') await _notifyIfNeeded(slot, autopilot, settings);
     await _kv.setString(runKey, now.toIso8601String());
     return HealthDietScheduleRunResult(
       slot: slot,
