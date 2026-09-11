@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 task_package=com.example.quote_app
-test_apk=$(rg --files build/app/outputs | rg 'androidTest/.*\.apk$' | head -n 1)
+test_apk=$(find build/app/outputs -path '*/androidTest/*.apk' -print -quit)
 test -n "$test_apk"
 test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
@@ -14,14 +14,14 @@ adb shell svc data disable
 seed() {
   adb shell am instrument -w -e phase "$1" "$task_package.test/com.example.quote_app.ReminderProbe" > "probe-$1.txt"
   cat "probe-$1.txt"
-  rg -q "REMINDER_PROBE_READY:$1" "probe-$1.txt"
+  grep -Eq "REMINDER_PROBE_READY:$1" "probe-$1.txt"
 }
 active() { adb shell cmd notification list | tr -d '\r'; }
 await_pair() {
   local growth_id=$1 diet_id=$2
   for ((attempt=0;attempt<60;attempt++)); do
     active > probe-active.txt
-    if rg -q "\|$task_package\|$growth_id\|evidence_growth\|" probe-active.txt && rg -q "\|$task_package\|$diet_id\|" probe-active.txt; then
+    if grep -Eq "\|$task_package\|$growth_id\|evidence_growth\|" probe-active.txt && grep -Eq "\|$task_package\|$diet_id\|" probe-active.txt; then
       cat probe-active.txt
       return 0
     fi
@@ -61,5 +61,5 @@ seed stop
 adb shell am force-stop "$task_package"
 sleep 55
 active > probe-stopped.txt
-if rg -q "\|$task_package\|(9301|19301)\|" probe-stopped.txt; then exit 1; fi
+if grep -Eq "\|$task_package\|(9301|19301)\|" probe-stopped.txt; then exit 1; fi
 printf '%s\n' 'PASS: force-stop is respected; no claim of bypassing Android stopped state'

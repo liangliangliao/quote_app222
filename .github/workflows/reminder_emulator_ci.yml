@@ -10,7 +10,7 @@ permissions:
   contents: read
 concurrency:
   group: reminder-probe-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   android-background:
     runs-on: ubuntu-latest
@@ -26,10 +26,22 @@ jobs:
           flutter-version: '3.35.3'
           cache: true
       - run: flutter pub get
+      - uses: actions/cache/restore@v4
+        id: probe-apks
+        with:
+          path: build/app/outputs
+          key: reminder-apks-${{ runner.os }}-${{ hashFiles('android/app/src/**', 'android/*.gradle', 'android/app/*.gradle', 'lib/**', 'assets/**', 'pubspec.yaml') }}
       - run: flutter build apk --debug -t lib/main.dart
+        if: steps.probe-apks.outputs.cache-hit != 'true'
       - name: Build isolated instrumentation APK
+        if: steps.probe-apks.outputs.cache-hit != 'true'
         working-directory: android
         run: ./gradlew :app:assembleDebugAndroidTest
+      - uses: actions/cache/save@v4
+        if: steps.probe-apks.outputs.cache-hit != 'true'
+        with:
+          path: build/app/outputs
+          key: ${{ steps.probe-apks.outputs.cache-primary-key }}
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
