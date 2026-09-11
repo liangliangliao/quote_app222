@@ -78,7 +78,7 @@ class _EvidenceGrowthReminderPageState extends State<EvidenceGrowthReminderPage>
       if (capability['background_restricted'] == true) const Text('系统正在限制本 App 后台运行，请在后台运行设置中检查电池限制和自启动。'),
       if (capability['battery_optimized'] == true) const Text('电池优化已启用，部分设备会延迟后台任务；请结合实际提醒测试检查系统设置。'),
       if ((capability['last_recovery_ms'] as num? ?? 0) > 0)
-        Text('最近后台恢复：${DateTime.fromMillisecondsSinceEpoch((capability['last_recovery_ms'] as num).toInt()).toLocal()}${capability['last_recovery_error'] == 'RECOVERY_RETRY' ? ' · 恢复失败，正在重试' : ''}'),
+        Text('最近调度检查：${DateTime.fromMillisecondsSinceEpoch((capability['last_recovery_ms'] as num).toInt()).toLocal()}${capability['last_recovery_error'] == 'RECOVERY_RETRY' ? ' · 未完成，正在重试' : ''}（不代表通知已送达）'),
       if (widget.trialId == null) DropdownButtonFormField<int>(initialValue:hours,
         decoration:const InputDecoration(labelText:'窗口到期后，多久未记录结果再提醒？'),
         items:const [1,6,24,48,168].map((h)=>DropdownMenuItem(value:h,child:Text('$h 小时'))).toList(),
@@ -89,16 +89,21 @@ class _EvidenceGrowthReminderPageState extends State<EvidenceGrowthReminderPage>
           finally { if (mounted) setState(()=>busy=false); }
         }),
       const SizedBox(height:12),
+      Text('缺反馈提醒时间＝本轮观察窗口结束时间＋$hours 小时。每个窗口提醒一次；不是开启后倒计时，也不是每隔 $hours 小时重复提醒。记录结果后取消待发提醒。'),
       const Text('默认 24 小时是可调整的提醒设置。连续退出提醒在同一主节点连续三轮 EXIT 后产生，不把主动退出评价为失败。'),
       const SizedBox(height:16), const Text('提醒计划与记录',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
       if (records.isEmpty) const Padding(padding:EdgeInsets.all(24),child:Text('还没有提醒。创建试验时选择开始时间和结果窗口，并开启提醒。')),
       ...records.map((row) {
         final at=DateTime.fromMillisecondsSinceEpoch((row['scheduled_at_ms'] as num).toInt());
-        final state=const {'pending':'待安排','scheduled':'已安排','delivered':'已发送','cancelled':'已取消','expired':'已合并过期提醒','blocked':'需恢复权限'}[row['state']] ?? row['state'];
+        final overdue = at.isBefore(DateTime.now()) && const {'pending','scheduled','blocked'}.contains(row['state']);
+        final state=const {'pending':'待安排','scheduled':'已登记调度','delivered':'已提交系统通知','cancelled':'已取消','expired':'已合并过期提醒','blocked':'调度受阻'}[row['state']] ?? row['state'];
         return Card(child:ExpansionTile(title:Text('${row['title']}'),
           subtitle:Text('${at.year}/${at.month}/${at.day} ${at.hour.toString().padLeft(2,'0')}:${at.minute.toString().padLeft(2,'0')} · $state'),
           children:[Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text('${row['body']}'),const SizedBox(height:8),
+            if (overdue) const Text('已到期，但尚无提交系统通知的记录。请检查权限、后台限制，并使用“授权并恢复提醒”重试。'),
+            if ((row['last_error'] ?? '').toString().isNotEmpty) Text('调度原因：${row['last_error']}'),
+            if (row['kind'] == 'missing_result') const Text('本条由观察窗口到期时间加上保存计划时的缺反馈等待时长生成；以本条计划时间为准。'),
             Text('依据：${(jsonDecode(row['source_ids_json'] as String) as List).join(' / ')}'),
             if (widget.onOpenTrial != null) TextButton(onPressed:()=>widget.onOpenTrial!(row['trial_id'] as String),child:const Text('打开对应试验')),
           ]))]));

@@ -101,6 +101,23 @@ void main() {
     await dao.deletePersonalEvidence();
     expect(await dao.reminderRecords(),isEmpty);
   });
+  test('one-hour missing reminder follows the selected fourteen-day window, not app opening',() async {
+    final start = DateTime(2026, 9, 11, 18, 58);
+    final due = start.add(const Duration(days:14));
+    final t = await dao.createTrial(const EvidenceGrowthRouter().route('拖延，没开始'),
+      prediction:'会留下现实痕迹',probability:.6,reviewAt:due,riskConfirmed:true,
+      operatorInputs:{'remind':'true','scheduled_start_ms':'${start.millisecondsSinceEpoch}'});
+    await dao.configureReminders(missingHours:1);
+    final rows = await pending(t.id);
+    expect(rows.singleWhere((r)=>r['kind']=='missing_result')['scheduled_at_ms'],
+      DateTime(2026,9,25,19,58).millisecondsSinceEpoch);
+    expect(rows.singleWhere((r)=>r['kind']=='trial_review_due')['scheduled_at_ms'],due.millisecondsSinceEpoch);
+    final missing = rows.singleWhere((r)=>r['kind']=='missing_result');
+    await db.update('evidence_growth_reminders',{'state':'delivered','delivered_at_ms':1},
+      where:'reminder_id = ?',whereArgs:[missing['reminder_id']]);
+    await dao.configureReminders(enabled:true);
+    expect((await pending(t.id)).where((r)=>r['kind']=='missing_result'),isEmpty);
+  });
   test('postponing a start moves its alarm while preserving the original observation window',() async {
     final t=await create();
     final moved=DateTime.now().add(const Duration(hours:2));

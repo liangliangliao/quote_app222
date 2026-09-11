@@ -56,7 +56,7 @@ object HealthDietReminderNative {
             var at = data.getLong("native_due_ms")
             // Expired meal slots are not replayed as a whole historical backlog.
             if (resetClock || data.optString("native_zone", TimeZone.getDefault().id) != TimeZone.getDefault().id || System.currentTimeMillis() - at > 7200000) at = next(data)
-            NativeSchedulerK.scheduleExactAt(ctx, id, at, data.toString())
+            check(NativeSchedulerK.scheduleExactAt(ctx, id, at, data.toString())) { "DIET_SCHEDULE_FAILED" }
         }
     }
     @JvmStatic @Synchronized fun fire(ctx: Context, id: Int, at: Long) {

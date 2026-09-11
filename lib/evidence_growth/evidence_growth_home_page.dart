@@ -562,6 +562,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
               DropdownMenuItem(value:4,child:Text('7 天观察')),DropdownMenuItem(value:5,child:Text('14 天观察'))],
             onChanged: (v) => setState(() => window = v ?? 0),
           ),
+          Text('观察窗口到期：${_date(reviewAt)}。缺反馈提醒从此时再加上提醒管理中设置的等待时长。'),
           SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, value: remind, onChanged: (v) => setState(() => remind = v), title: const Text('开始、反馈与恢复提醒'), subtitle: const Text('保存时引导授权；按本轮状态提醒，记录结果后取消过时提醒')),
         ])),
         actions: [
