@@ -38,6 +38,7 @@ android {
         versionCode 13
         versionName "1.0"
         multiDexEnabled true
+        testInstrumentationRunner "com.example.quote_app.ReminderProbe"
     }
 
     if (keystorePropertiesFile.exists()) {
