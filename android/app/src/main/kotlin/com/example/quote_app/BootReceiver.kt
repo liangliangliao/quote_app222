@@ -19,9 +19,18 @@ import java.util.concurrent.TimeUnit
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val resetClock = intent.action == Intent.ACTION_TIME_CHANGED || intent.action == Intent.ACTION_TIMEZONE_CHANGED
         // Persist recovery first, before unrelated boot work can fail or time out.
-        try { ReminderRecoveryWorker.enqueue(context.applicationContext,
-            intent.action == Intent.ACTION_TIME_CHANGED || intent.action == Intent.ACTION_TIMEZONE_CHANGED) } catch (_: Throwable) {}
+        try { ReminderRecoveryWorker.enqueue(context.applicationContext, resetClock) } catch (_: Throwable) {}
+        // Rebuild both modules directly during the broadcast wake window. Waiting only
+        // for JobScheduler can leave diet alarms absent while background jobs are deferred.
+        val pending = goAsync()
+        try {
+            ReminderRecoveryWorker.wakeful(context.applicationContext) {
+                try { ReminderRecoveryWorker.restoreNow(context.applicationContext, resetClock) }
+                finally { pending.finish() }
+            }
+        } catch (_: Throwable) { pending.finish() }
         if (intent.action == android.app.AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED) {
             // This is tied to a recent, explicit user request only.  It closes the
             // transient system settings page by bringing the existing app task to
@@ -78,10 +87,5 @@ class BootReceiver : BroadcastReceiver() {
         // Behavior preset alarms: after reboot/package replace, restore upcoming alarm-clock style reminders
         // from local DB so they still work when the app process is not running.
         try { BehaviorPresetAlarmScheduler.rescheduleUpcoming(context.applicationContext) } catch (_: Throwable) {}
-        val pending = goAsync()
-        EvidenceGrowthReminderNative.background {
-            try { EvidenceGrowthReminderNative.reconcile(context.applicationContext) } catch (_: Throwable) {}
-            finally { pending.finish() }
-        }
     }
 }

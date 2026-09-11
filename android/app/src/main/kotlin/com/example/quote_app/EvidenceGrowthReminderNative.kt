@@ -124,7 +124,7 @@ object EvidenceGrowthReminderNative {
             val known = prefs.getStringSet("ids", emptySet())!!.toSet()
             val retained = mutableSetOf<String>()
             val now = System.currentTimeMillis()
-            var allScheduled = ready
+            var allScheduled = true
             // Latest overdue window wins after an outage; don't emit a backlog of start/result alerts.
             db.rawQuery("SELECT reminder_id, trial_id, kind, scheduled_at_ms, state FROM $TABLE ORDER BY scheduled_at_ms DESC", null).use { c ->
                 val overdueTrials = mutableSetOf<String>()
@@ -146,6 +146,7 @@ object EvidenceGrowthReminderNative {
                         cancel(ctx, id); continue
                     }
                     if (!ready) {
+                        allScheduled = false
                         cancel(ctx, id)
                         db.execSQL("UPDATE $TABLE SET state='blocked', last_error=? WHERE reminder_id=?",
                             arrayOf(if (capabilities["notifications"] != true) "NOTIFICATION_PERMISSION" else "EXACT_ALARM_PERMISSION", id))

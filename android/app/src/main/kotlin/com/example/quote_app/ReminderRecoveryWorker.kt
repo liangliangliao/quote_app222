@@ -11,14 +11,18 @@ import java.util.concurrent.TimeUnit
 class ReminderRecoveryWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
     override fun doWork(): Result {
         if (Build.VERSION.SDK_INT >= 24 && !(applicationContext.getSystemService(Context.USER_SERVICE) as UserManager).isUserUnlocked) return Result.retry()
-        var failed = false
-        try { if (!EvidenceGrowthReminderNative.reconcile(applicationContext)) failed = true } catch (_: Throwable) { failed = true }
-        try { HealthDietReminderNative.restore(applicationContext, inputData.getBoolean("reset_clock", false)) } catch (_: Throwable) { failed = true }
-        applicationContext.getSharedPreferences("reminder_recovery_status", Context.MODE_PRIVATE).edit()
-            .putLong("at", System.currentTimeMillis()).putString("error", if (failed) "RECOVERY_RETRY" else "").apply()
-        return if (failed) Result.retry() else Result.success()
+        return if (restoreNow(applicationContext, inputData.getBoolean("reset_clock", false))) Result.success() else Result.retry()
     }
     companion object {
+        fun restoreNow(ctx: Context, resetClock: Boolean = false): Boolean {
+            if (Build.VERSION.SDK_INT >= 24 && !(ctx.getSystemService(Context.USER_SERVICE) as UserManager).isUserUnlocked) return false
+            var failed = false
+            try { if (!EvidenceGrowthReminderNative.reconcile(ctx)) failed = true } catch (_: Throwable) { failed = true }
+            try { HealthDietReminderNative.restore(ctx, resetClock) } catch (_: Throwable) { failed = true }
+            ctx.getSharedPreferences("reminder_recovery_status", Context.MODE_PRIVATE).edit()
+                .putLong("at", System.currentTimeMillis()).putString("error", if (failed) "RECOVERY_RETRY" else "").apply()
+            return !failed
+        }
         fun enqueue(ctx: Context, resetClock: Boolean = false) {
             if (Build.VERSION.SDK_INT >= 24 && !(ctx.getSystemService(Context.USER_SERVICE) as UserManager).isUserUnlocked) return
             WorkManager.getInstance(ctx).enqueueUniqueWork("module_reminder_recovery", if (resetClock) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,

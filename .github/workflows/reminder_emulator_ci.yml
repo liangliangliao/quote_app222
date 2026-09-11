@@ -10,7 +10,7 @@ permissions:
   contents: read
 concurrency:
   group: reminder-probe-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   android-background:
     runs-on: ubuntu-latest
