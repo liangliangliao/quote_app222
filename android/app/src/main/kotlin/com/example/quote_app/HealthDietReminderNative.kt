@@ -19,6 +19,7 @@ object HealthDietReminderNative {
         val old = prefs(ctx).getString("$id", null)?.let { JSONObject(it).optLong("native_due_ms") }
         if (old != null && old != at) WorkManager.getInstance(ctx).cancelUniqueWork("diet_${id}_$old")
         data.put("native_due_ms", at)
+        data.put("native_zone", TimeZone.getDefault().id)
         check(prefs(ctx).edit().putString("$id", data.toString()).commit())
         val fallback = OneTimeWorkRequestBuilder<HealthDietReminderWorker>()
             .setInputData(Data.Builder().putInt("id", id).putLong("at", at).build())
@@ -44,7 +45,7 @@ object HealthDietReminderNative {
     }
     private fun next(data: JSONObject): Long = ReminderCalendar.next(System.currentTimeMillis(),
         data.getInt("hour"), data.getInt("minute"), data.optInt("weekday", 0), TimeZone.getDefault())
-    @JvmStatic @Synchronized fun restore(ctx: Context) {
+    @JvmStatic @Synchronized fun restore(ctx: Context, resetClock: Boolean = false) {
         val plans = prefs(ctx).all.filterKeys { it.toIntOrNull() != null }
         if (plans.isEmpty()) return
         val on = enabled(ctx)
@@ -54,7 +55,7 @@ object HealthDietReminderNative {
             val data = JSONObject(raw as String)
             var at = data.getLong("native_due_ms")
             // Expired meal slots are not replayed as a whole historical backlog.
-            if (System.currentTimeMillis() - at > 7200000) at = next(data)
+            if (resetClock || data.optString("native_zone", TimeZone.getDefault().id) != TimeZone.getDefault().id || System.currentTimeMillis() - at > 7200000) at = next(data)
             NativeSchedulerK.scheduleExactAt(ctx, id, at, data.toString())
         }
     }

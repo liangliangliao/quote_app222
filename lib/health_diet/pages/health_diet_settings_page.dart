@@ -380,15 +380,18 @@ class _HealthDietSettingsPageState extends State<HealthDietSettingsPage> {
                 final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
                   context,
                   featureName: '健康饮食定时通知',
-                  explanation: '到点通知采用精准闹钟，系统限制后台运行时仍能直接提醒。',
+                  explanation: '到点通知采用原生精准闹钟；请同时允许通知，并检查手机的后台运行限制。',
                 );
                 if (!granted || !mounted) return;
               }
               setState(() => _agentScheduleNotifyEnabled = v);
             },
-            title: const Text('定时托管完成后发送通知'),
-            subtitle: const Text('后台任务可用时发送本地通知；如果系统限制后台运行，打开健康饮食模块时会自动补跑到点任务。'),
+            title: const Text('开启定时饮食提醒'),
+            subtitle: const Text('每日／每周原生提醒不等待 AI 完成；重启后解锁会恢复。强行停止后需重新打开 App，厂商后台限制也可能影响送达。'),
           ),
+          OutlinedButton(onPressed: () async {
+            await const MethodChannel('native.scheduler').invokeMethod('eg_background_settings');
+          }, child: const Text('检查系统后台运行与电池设置')),
           const SizedBox(height: 10),
           const Text(
             '提示：当前是手机 App 内置自动托管模式，不需要服务器地址。API Key 和模型选择仍保存在手机端；Agent 会在模块打开或每日定时任务到点时自动调用外部 AI / USDA / Open Food Facts / Spoonacular / Edamam 等能力。',

@@ -310,10 +310,10 @@ class HealthDietDailySchedulerService {
     var next = DateTime(now.year, now.month, now.day, slot.hour, slot.minute);
     if (slot.weekday != null) {
       while (next.weekday != slot.weekday || !next.isAfter(now)) {
-        next = next.add(const Duration(days: 1));
+        next = DateTime(next.year, next.month, next.day + 1, slot.hour, slot.minute);
       }
     } else if (!next.isAfter(now)) {
-      next = next.add(const Duration(days: 1));
+      next = DateTime(next.year, next.month, next.day + 1, slot.hour, slot.minute);
     }
     final delay = next.difference(now);
     final unique = 'health_diet_agent_${slot.id}_$userId';

@@ -20,7 +20,8 @@ import java.util.concurrent.TimeUnit
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // Persist recovery first, before unrelated boot work can fail or time out.
-        try { ReminderRecoveryWorker.enqueue(context.applicationContext) } catch (_: Throwable) {}
+        try { ReminderRecoveryWorker.enqueue(context.applicationContext,
+            intent.action == Intent.ACTION_TIME_CHANGED || intent.action == Intent.ACTION_TIMEZONE_CHANGED) } catch (_: Throwable) {}
         if (intent.action == android.app.AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED) {
             // This is tied to a recent, explicit user request only.  It closes the
             // transient system settings page by bringing the existing app task to
