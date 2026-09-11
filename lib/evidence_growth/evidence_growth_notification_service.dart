@@ -26,6 +26,9 @@ class EvidenceGrowthNotificationService {
   Future<void> openSystemSettings() async {
     await _channel.invokeMethod('eg_notification_settings');
   }
+  Future<void> openBackgroundSettings() async {
+    await _channel.invokeMethod('eg_background_settings');
+  }
 
   /// User-initiated only. Use the same app/channel check as the status display.
   Future<bool> ensureNotificationsEnabled() async {

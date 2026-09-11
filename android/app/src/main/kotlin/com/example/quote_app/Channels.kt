@@ -294,6 +294,11 @@ object Channels {
             EvidenceGrowthReminderNative.openSettings(appCtx)
             result.success(true)
           }
+          "eg_background_settings" -> {
+            appCtx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:${appCtx.packageName}")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            result.success(true)
+          }
           "requestExactPermission" -> result.success(ExactAlarmHelper.requestExactAlarmPermission(appCtx))
           "clearExactPermissionRequest" -> {
             ExactAlarmHelper.clearPendingRequest(appCtx)

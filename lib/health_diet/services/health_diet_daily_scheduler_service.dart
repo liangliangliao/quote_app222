@@ -234,14 +234,14 @@ class HealthDietDailySchedulerService {
     String slotId, {
     String userId = HealthProfileRepository.defaultUserId,
   }) async {
-    final result = await runSlot(slotId, userId: userId, force: true, from: 'workmanager');
     final slot = _slotById(slotId);
-    if (slot != null) {
-      try {
-        await _scheduleNext(slot, userId: userId, after: DateTime.now().add(const Duration(minutes: 1)));
-      } catch (_) {}
+    try {
+      return await runSlot(slotId, userId: userId, from: 'workmanager');
+    } finally {
+      if (slot != null) {
+        try { await syncSchedules(userId: userId); } catch (_) {}
+      }
     }
-    return result;
   }
 
   Future<HealthDietScheduleRunResult> runSlot(
@@ -263,7 +263,6 @@ class HealthDietDailySchedulerService {
       return HealthDietScheduleRunResult(slot: slot, ran: false, message: '${slot.label} 今日已执行。');
     }
 
-    await _kv.setString(runKey, now.toIso8601String());
     await DLog.i('health_diet.scheduler.run', 'slot=${slot.id} from=$from reason=${slot.reason}');
 
     final autopilot = await _autopilot.run(userId: userId, force: true);
@@ -282,6 +281,7 @@ class HealthDietDailySchedulerService {
       },
     );
     await _notifyIfNeeded(slot, autopilot, settings);
+    await _kv.setString(runKey, now.toIso8601String());
     return HealthDietScheduleRunResult(
       slot: slot,
       ran: true,
@@ -309,10 +309,10 @@ class HealthDietDailySchedulerService {
     final now = after ?? DateTime.now();
     var next = DateTime(now.year, now.month, now.day, slot.hour, slot.minute);
     if (slot.weekday != null) {
-      while (next.weekday != slot.weekday || !next.isAfter(now.add(const Duration(minutes: 1)))) {
+      while (next.weekday != slot.weekday || !next.isAfter(now)) {
         next = next.add(const Duration(days: 1));
       }
-    } else if (!next.isAfter(now.add(const Duration(minutes: 1)))) {
+    } else if (!next.isAfter(now)) {
       next = next.add(const Duration(days: 1));
     }
     final delay = next.difference(now);

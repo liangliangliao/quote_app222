@@ -71,9 +71,14 @@ class _EvidenceGrowthReminderPageState extends State<EvidenceGrowthReminderPage>
       ListTile(contentPadding:EdgeInsets.zero, title:const Text('系统权限'),
         subtitle:Text('通知${capability['notifications'] == true ? '已开启' : '未开启'} · 精准闹钟${capability['exact'] == true ? '已开启' : '未开启'}')),
       Wrap(spacing:8, children:[
+        OutlinedButton(onPressed:busy ? null : service.openBackgroundSettings,child:const Text('后台运行设置')),
         OutlinedButton(onPressed:busy ? null : () async { await service.openSystemSettings(); },child:const Text('系统通知设置')),
         OutlinedButton(onPressed:busy ? null : () => _change(true),child:const Text('授权并恢复提醒')),
       ]),
+      if (capability['background_restricted'] == true) const Text('系统正在限制本 App 后台运行，请在后台运行设置中检查电池限制和自启动。'),
+      if (capability['battery_optimized'] == true) const Text('电池优化已启用，部分设备会延迟后台任务；请结合实际提醒测试检查系统设置。'),
+      if ((capability['last_recovery_ms'] as num? ?? 0) > 0)
+        Text('最近后台恢复：${DateTime.fromMillisecondsSinceEpoch((capability['last_recovery_ms'] as num).toInt()).toLocal()}${capability['last_recovery_error'] == 'RECOVERY_RETRY' ? ' · 恢复失败，正在重试' : ''}'),
       if (widget.trialId == null) DropdownButtonFormField<int>(initialValue:hours,
         decoration:const InputDecoration(labelText:'窗口到期后，多久未记录结果再提醒？'),
         items:const [1,6,24,48,168].map((h)=>DropdownMenuItem(value:h,child:Text('$h 小时'))).toList(),

@@ -75,7 +75,8 @@ object NativeSchedulerK {
   @JvmStatic fun scheduleExactAt(ctx: Context, id: Int, epochMs: Long, payload: String?): Boolean {
     return try {
       val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-      val pi = buildPi(ctx, id, payload)
+      val durablePayload = HealthDietReminderNative.remember(ctx, id, epochMs, payload)
+      val pi = buildPi(ctx, id, durablePayload)
       if (Build.VERSION.SDK_INT >= 23) {
         try {
           am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, epochMs, pi)
@@ -148,6 +149,7 @@ object NativeSchedulerK {
 
   @JvmStatic fun cancel(ctx: Context, id: Int): Boolean {
     return try {
+      HealthDietReminderNative.forget(ctx, id)
       val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
       val pi = buildPi(ctx, id, null)
       am.cancel(pi)

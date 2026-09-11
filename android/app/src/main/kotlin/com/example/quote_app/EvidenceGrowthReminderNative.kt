@@ -30,8 +30,9 @@ object EvidenceGrowthReminderNative {
     fun background(task: () -> Unit) { executor.execute(task) }
 
     private fun database(ctx: Context): SQLiteDatabase? {
-        val path = DbInspector.loadOrLightScan(ctx)?.dbPath ?: return null
-        if (path.isBlank()) return null
+        val primary = java.io.File(ctx.applicationInfo.dataDir, "app_flutter/quotes.db")
+        val path = if (primary.exists()) primary.absolutePath else DbInspector.loadOrLightScan(ctx)?.dbPath
+        if (path.isNullOrBlank()) throw IllegalStateException("DATABASE_UNAVAILABLE")
         val db = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READWRITE)
         val exists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name=?", arrayOf(TABLE)).use { it.moveToFirst() }
         if (!exists) { db.close(); return null }
@@ -52,7 +53,13 @@ object EvidenceGrowthReminderNative {
         channel(ctx)
         val notifications = NotificationManagerCompat.from(ctx).areNotificationsEnabled() &&
             (Build.VERSION.SDK_INT < 26 || manager(ctx).getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE)
-        return mapOf("available" to true, "notifications" to notifications, "exact" to ExactAlarmHelper.hasExactAlarmPermission(ctx))
+        val power = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val activity = ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val recovery = ctx.getSharedPreferences("reminder_recovery_status", Context.MODE_PRIVATE)
+        return mapOf("available" to true, "notifications" to notifications, "exact" to ExactAlarmHelper.hasExactAlarmPermission(ctx),
+            "battery_optimized" to (Build.VERSION.SDK_INT >= 23 && !power.isIgnoringBatteryOptimizations(ctx.packageName)),
+            "background_restricted" to (Build.VERSION.SDK_INT >= 28 && activity.isBackgroundRestricted),
+            "last_recovery_ms" to recovery.getLong("at", 0), "last_recovery_error" to (recovery.getString("error", "") ?: ""))
     }
     fun openSettings(ctx: Context) {
         val intent = if (Build.VERSION.SDK_INT >= 26) Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
@@ -213,7 +220,7 @@ object EvidenceGrowthReminderNative {
 class EvidenceGrowthReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
-        EvidenceGrowthReminderNative.background {
+        ReminderRecoveryWorker.wakeful(context.applicationContext) {
             try { EvidenceGrowthReminderNative.fire(context.applicationContext, intent.getIntExtra("reminder_id", 0)) }
             catch (_: Throwable) { /* The persisted WorkManager fallback retries this event. */ }
             finally { pending.finish() }

@@ -42,8 +42,14 @@ jobs:
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
           lib/pages/discover_page.dart
           lib/services/notification_service.dart
+          lib/health_diet/services/health_diet_daily_scheduler_service.dart
       - name: Run evidence growth tests
         run: flutter test --no-pub test/evidence_growth
+      - name: Verify native daily weekly and DST recurrence
+        run: |
+          mkdir -p /tmp/reminder-calendar-test
+          javac -d /tmp/reminder-calendar-test android/app/src/main/java/com/example/quote_app/schedule/ReminderCalendar.java tool/ReminderCalendarTest.java
+          java -cp /tmp/reminder-calendar-test ReminderCalendarTest
       - name: Resolve standalone API dependencies
         working-directory: server/evidence_growth
         run: dart pub get
