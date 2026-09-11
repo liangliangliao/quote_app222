@@ -27,6 +27,13 @@ class EvidenceGrowthNotificationService {
     await _channel.invokeMethod('eg_notification_settings');
   }
 
+  /// User-initiated only. Use the same app/channel check as the status display.
+  Future<bool> ensureNotificationsEnabled() async {
+    if ((await status())['notifications'] == true) return true;
+    await NativeScheduler.requestNotificationPermissionSystem();
+    return (await status())['notifications'] == true;
+  }
+
   // DAO mutations commit reminder intents in the same transaction as the Trial.
   // These methods only reconcile the OS, never prompt from background work.
   Future<bool> scheduleTrial(RealityTrial trial, {bool repeatedAvoidance = false}) async {

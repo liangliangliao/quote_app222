@@ -1,16 +1,20 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:quote_app/utils/debug_logger.dart';
 
 class NativeScheduler {
   static const MethodChannel _ch = MethodChannel('native.scheduler');
 
-  /// 打开系统通知权限弹框（原生侧实现），返回是否已授权
+  /// 使用已注册的通知插件申请权限；已开启时不重复请求。
   static Future<bool> requestNotificationPermissionSystem() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
     try {
-      final r = await _ch.invokeMethod('request_notification_permission');
-      return r == true;
+      final android = AndroidFlutterLocalNotificationsPlugin();
+      if (await android.areNotificationsEnabled() == true) return true;
+      await android.requestNotificationsPermission();
+      return await android.areNotificationsEnabled() == true;
     } catch (_) {
       return false;
     }

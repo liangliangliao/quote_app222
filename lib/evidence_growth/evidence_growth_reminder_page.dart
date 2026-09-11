@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../platform/exact_alarm_permission_coordinator.dart';
-import '../platform/native_scheduler.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_notification_service.dart';
 
@@ -47,8 +46,10 @@ class _EvidenceGrowthReminderPageState extends State<EvidenceGrowthReminderPage>
     setState(() => busy = true);
     try {
       if (value) {
-        if (!await NativeScheduler.requestNotificationPermissionSystem()) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('通知未获授权；可点“系统通知设置”开启后重试。')));
+        if (!await service.ensureNotificationsEnabled()) {
+          await _load();
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(
+            capability['available'] != true ? '暂时无法读取系统通知状态，请重试。' : '本模块通知尚未开启；请在“系统通知设置”检查应用通知及“现实试验与成长提醒”渠道。')));
           return;
         }
         if (!mounted || !await ExactAlarmPermissionCoordinator.ensureGranted(context,

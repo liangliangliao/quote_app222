@@ -345,7 +345,7 @@ class _RoutePageState extends State<_RoutePage> {
     try {
       var enableReminders = setup.remind;
       if (setup.remind) {
-        final notifications = await NativeScheduler.requestNotificationPermissionSystem();
+        final notifications = await const EvidenceGrowthNotificationService().ensureNotificationsEnabled();
         if (!mounted) return;
         final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
           context,
