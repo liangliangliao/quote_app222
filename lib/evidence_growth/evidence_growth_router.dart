@@ -30,8 +30,8 @@ class EvidenceGrowthRouter {
       // Tokenized free-text contra fields from future manifests also filter.
       if(node.contraSignals.any((c)=>!RegExp(r'^[A-Z_]+$').hasMatch(c) && c.length>2 && text.contains(c))) continue;
       final score=.35*(semantic.isEmpty?l:(s.clamp(0,1)))+.25*(ruleMatch?1:l)+
-          .15 + .10*(personalFit[node.id]??.5).clamp(0,1)+.10*(node.isTal?1:node.isExtension1?.5:.2)+
-          .05*(graph.contains(node.id)?1:.5)+(exact.contains(node.id)?.03:0);
+          .15 + .10*(personalFit[node.id]??.5).clamp(0,1)+.10*(node.isTal?1:node.isExtension1 ? .5 : .2)+
+          .05*(graph.contains(node.id)?1:.5)+(exact.contains(node.id) ? .03 : 0);
       result.add(RoutedNode(node:node,score:score.toDouble(),reason:
         '词法=${l.toStringAsFixed(2)}；向量=${semantic.containsKey(node.id)?s.toStringAsFixed(2):"未使用"}；'
         '规则=$ruleMatch；关系=${graph.contains(node.id)}；个人=${(personalFit[node.id]??.5).toStringAsFixed(2)}'));

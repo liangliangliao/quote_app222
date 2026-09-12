@@ -58,6 +58,7 @@ class EvidenceGrowthWorkflows {
             l is! num || !l.isFinite || l<1 || l>5) throw ArgumentError('每项风险需要原因、概率和损失评分');
       }
       for(final r in risks.take(count)) {
+        if((r['reason'] as String).startsWith('暂未识别')) throw ArgumentError('请只对已经识别的风险安排措施，减少选择项数');
         if(!['prevention','signal','backup'].every((k)=>filled(r[k]))) {
           throw ArgumentError('选中风险必须分别填写预防动作、监测信号和备用方案');
         }

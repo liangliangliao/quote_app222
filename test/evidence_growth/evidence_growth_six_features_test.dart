@@ -153,7 +153,8 @@ void main(){
     await expectLater(dao.captureResult(t,didAction:true,actualOutcome:'结果',unexpected:'',resultMeasurements:{'cost_limit':'999'}),throwsArgumentError);
   });
   test('future observation remains OBSERVE unless the agreed signal is confirmed final',() async {
-    final t=(await trial()).copyWith(reviewAtMs:DateTime.now().add(const Duration(days:7)).millisecondsSinceEpoch,
+    final saved=await trial();
+    final t=RealityTrial.fromRow({...saved.toRow(),'review_at_ms':DateTime.now().add(const Duration(days:7)).millisecondsSinceEpoch}).copyWith(
       didAction:true,actualOutcome:'已提交，等待回应',operatorInputs:{'outcome_helpful':'true'});
     expect(EvidenceGrowthDecisionEngine.evaluate(t).type,'OBSERVE');
     expect(EvidenceGrowthDecisionEngine.evaluate(t.copyWith(operatorInputs:{...t.operatorInputs,'signal_final':'true'})).type,'ACT');

@@ -25,7 +25,7 @@ class _WorkflowState extends State<EvidenceGrowthWorkflowPage> {
   bool get premortem=>widget.route.operator=='PREMORTEM';
   String get key=>'workflow_draft_${sha256.convert(utf8.encode('${widget.route.operator}|${widget.route.rawInput}'))}';
   int get remaining=>(((data['analysis_deadline_ms'] as num? ?? 0)-DateTime.now().millisecondsSinceEpoch)/1000).ceil().clamp(0,420);
-  bool get finished=>(data['analysis_finished_ms'] as num? ?? 0)>0;
+  bool get finished=>(data['analysis_finished_ms'] as num? ?? 0)>0 || (!loading && remaining==0);
   @override
   void initState(){super.initState(); unawaited(load());}
   Future<void> load() async {
@@ -42,7 +42,7 @@ class _WorkflowState extends State<EvidenceGrowthWorkflowPage> {
     setState(()=>loading=false);
     if(premortem) tick=Timer.periodic(const Duration(seconds:1),(_){
       if(!mounted)return;
-      if(!finished && remaining==0){data['analysis_finished_ms']=DateTime.now().millisecondsSinceEpoch;unawaited(persist());}
+      if((data['analysis_finished_ms'] as num? ?? 0)==0 && remaining==0){data['analysis_finished_ms']=DateTime.now().millisecondsSinceEpoch;unawaited(persist());}
       setState((){});
     });
   }
@@ -133,7 +133,7 @@ class _WorkflowState extends State<EvidenceGrowthWorkflowPage> {
       if(finished && rows.any((r)=>(r['reason'] as String).trim().isEmpty))
         const Text('时间到了；空项可记为“暂未识别”，不继续扩展灾难想象。'),
       if(finished) for(final row in rows.where((r)=>(r['reason'] as String).trim().isEmpty))
-        TextButton(onPressed:()=>change(()=>row['reason']='暂未识别，不据此采取行动'),child:Text('原因 ${(row['id'] as int)+1} 标为暂未识别')),
+        TextButton(onPressed:()=>change((){row['reason']='暂未识别，不据此采取行动';row['probability']=0;row['loss']=1;}),child:Text('原因 ${(row['id'] as int)+1} 标为暂未识别')),
       DropdownButtonFormField<int>(initialValue:(data['selected_count'] as num).toInt(),
         decoration:const InputDecoration(labelText:'按概率 × 损失选择前几项'),
         items:[for(var n=1;n<=3;n++)DropdownMenuItem(value:n,child:Text('前 $n 项'))],

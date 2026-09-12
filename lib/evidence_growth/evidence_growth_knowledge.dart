@@ -9,7 +9,7 @@ class EvidenceGrowthKnowledge {
   static const String bundledVersion = '3.5-r5';
   static String get kbVersion => _activeVersion;
   static String _activeVersion = bundledVersion;
-  static const String promptVersion = 'eg-p1.2';
+  static const String promptVersion = 'eg-p2.0';
   static const sources = <String, String>{
     'KB35': '哈佛幸福课_六大模块成长闭环知识库_v3.5_Tal主线_专家延伸II正式整合版',
     'TAL23': 'Lecture 01–23；讲次按 KB35 保留，未另行加载课程原稿',

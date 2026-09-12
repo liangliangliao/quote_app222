@@ -155,6 +155,10 @@ class EvidenceGrowthDao {
     final spec = EvidenceGrowthOperatorRegistry.byId(route.operator);
     EvidenceGrowthWorkflows.validate(route.operator,operatorInputs,commitment:commitmentLevel);
     final advanced=const {'PREMORTEM','SYSTEM_SCAN'}.contains(route.operator);
+    final limit=operatorInputs['cost_limit'];
+    if(limit!=null && (double.tryParse(limit)==null || !double.parse(limit).isFinite || double.parse(limit)<=0)) {
+      throw ArgumentError('行动前预算必须为正数，且需要说明单位');
+    }
     final instruction=advanced?EvidenceGrowthWorkflows.action(route.operator,operatorInputs):route.actionInstruction;
     if(EvidenceGrowthRouter.protected(const EvidenceGrowthRouter().route(instruction))) throw ArgumentError('方案动作触发风险条件，请先缩小或调整');
     if (spec.needsCommitment && commitmentLevel.isEmpty) throw ArgumentError('请选择最低有效承诺等级。');
@@ -590,6 +594,7 @@ class EvidenceGrowthDao {
       ]) {
         await txn.delete(table);
       }
+      await txn.delete('evidence_growth_settings',where:'setting_key LIKE ?',whereArgs:['workflow_draft_%']);
     });
   }
 
