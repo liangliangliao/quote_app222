@@ -242,10 +242,12 @@
             <meta-data android:name="flutterEmbedding" android:value="2" />
 
     
+    <receiver android:name=".EvidenceGrowthReminderReceiver" android:enabled="true" android:exported="false" />
     <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true" android:directBootAware="true">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED" />
             <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            <action android:name="android.intent.action.USER_UNLOCKED" />
             <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             <action android:name="android.intent.action.TIME_SET" />
             <action android:name="android.intent.action.TIMEZONE_CHANGED" />

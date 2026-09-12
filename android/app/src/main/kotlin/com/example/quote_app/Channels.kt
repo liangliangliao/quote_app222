@@ -283,6 +283,22 @@ object Channels {
                 "isNativeWM" -> result.success(true)
                 "isNativeAM" -> result.success(true)
           "canScheduleExact" -> result.success(ExactAlarmHelper.hasExactAlarmPermission(appCtx))
+          "eg_reconcile_reminders" -> {
+            EvidenceGrowthReminderNative.background {
+              val ok = try { EvidenceGrowthReminderNative.reconcile(appCtx) } catch (_: Throwable) { false }
+              android.os.Handler(android.os.Looper.getMainLooper()).post { result.success(ok) }
+            }
+          }
+          "eg_notification_status" -> result.success(EvidenceGrowthReminderNative.status(appCtx))
+          "eg_notification_settings" -> {
+            EvidenceGrowthReminderNative.openSettings(appCtx)
+            result.success(true)
+          }
+          "eg_background_settings" -> {
+            appCtx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:${appCtx.packageName}")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            result.success(true)
+          }
           "requestExactPermission" -> result.success(ExactAlarmHelper.requestExactAlarmPermission(appCtx))
           "clearExactPermissionRequest" -> {
             ExactAlarmHelper.clearPendingRequest(appCtx)

@@ -98,19 +98,31 @@ int id = intent != null ? intent.getIntExtra("id", 0) : 0;
             try {
                 JSONObject obj = new JSONObject(payload == null ? "{}" : payload);
                 String module = obj.optString("module", "");
+                if ("evidence_growth".equals(module)) {
+                    // Old releases scheduled payload-only alarms. Never fall through to a
+                    // generic notification that loses the Trial. The durable outbox owns delivery.
+                    final PendingResult pending = goAsync();
+                    new Thread(() -> {
+                        try { com.example.quote_app.EvidenceGrowthReminderNative.reconcile(context.getApplicationContext()); }
+                        catch (Throwable ignore) {}
+                        finally { pending.finish(); }
+                    }).start();
+                    return;
+                }
                 if ("health_diet".equals(module)) {
-                    String title = obj.optString("title", "健康饮食 Agent");
-                    String body = obj.optString("body", "到时间了，点击查看本次饮食安排或完成记录。");
-                    NotifyHelper.send(
-                        context.getApplicationContext(),
-                        id,
-                        title,
-                        body,
-                        null,
-                        "health_diet_agent",
-                        payload == null ? "{}" : payload
-                    );
-                    scheduleNextHealthDietReminder(context.getApplicationContext(), id, obj, payload);
+                    final android.content.BroadcastReceiver.PendingResult pending = goAsync();
+                    final long due = obj.optLong("native_due_ms", System.currentTimeMillis());
+                    final String savedPayload = payload;
+                    final boolean legacy = !obj.has("native_due_ms");
+                    com.example.quote_app.ReminderRecoveryWorker.Companion.wakeful(context.getApplicationContext(), () -> {
+                        try {
+                            if (legacy) com.example.quote_app.HealthDietReminderNative.remember(context.getApplicationContext(), id, due, savedPayload);
+                            com.example.quote_app.HealthDietReminderNative.fire(context.getApplicationContext(), id, due);
+                        } catch (Throwable ignored) {
+                            // Persisted WorkManager fallback retries without a Flutter engine.
+                        } finally { pending.finish(); }
+                        return kotlin.Unit.INSTANCE;
+                    });
                     return;
                 }
                 if ("zhixing_tree".equals(module)) {

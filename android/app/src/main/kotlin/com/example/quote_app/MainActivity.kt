@@ -72,6 +72,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        try { ReminderRecoveryWorker.enqueue(applicationContext) } catch (_: Throwable) {}
         ExactAlarmHelper.attachActivity(this)
     }
 
