@@ -216,7 +216,9 @@ class EvidenceGrowthRouter {
       alternatives:spec.alternatives,contextTags:previous.contextTags,goalState:previous.goalState,
       currentState:previous.actualOutcome,topGap:previous.topGap,
       personalEvidence:[{'trial_id':previous.id,'actual_outcome':previous.actualOutcome,
-        'result_status':previous.resultStatus,'decision':previous.decision,'rule_update':previous.ruleUpdate}]);
+        'result_status':previous.resultStatus,'decision':previous.decision,'rule_update':previous.ruleUpdate}],
+      inputDrafts:{...previous.operatorInputs,'prediction':previous.prediction,
+        if(previous.decision=='ADJUST')'confirmed_adjustment':previous.nextAction});
   }
 
   EvidenceRouteResult _insufficient(String text) => _stop(text,

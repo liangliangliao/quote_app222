@@ -31,12 +31,16 @@ class _WorkflowState extends State<EvidenceGrowthWorkflowPage> {
   Future<void> load() async {
     final saved=await widget.dao.getSetting(key);
     try { data=EvidenceGrowthWorkflows.decode(saved); } catch(_){data={};}
+    if(data.isEmpty) data=EvidenceGrowthWorkflows.nextPlan(widget.route.inputDrafts);
     if(data.isEmpty) data=premortem?{
       'horizon_days':30,'analysis_deadline_ms':DateTime.now().add(const Duration(minutes:7)).millisecondsSinceEpoch,
       'selected_count':1,'risks':List.generate(5,(i)=>{'id':i,'reason':'','probability':50,'loss':3,
         'prevention':'','signal':'','backup':''}),
     }:{'scans':{for(final k in EvidenceGrowthWorkflows.layers.keys)k:''},'layer':'friction',
       'controllable':false,'window_days':7};
+    if(premortem && remaining==0 && (data['analysis_finished_ms'] as num? ?? 0)==0) {
+      data['analysis_finished_ms']=DateTime.now().millisecondsSinceEpoch;
+    }
     await persist();
     if(!mounted)return;
     setState(()=>loading=false);

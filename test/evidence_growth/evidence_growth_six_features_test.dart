@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -12,6 +13,7 @@ import 'package:quote_app/evidence_growth/evidence_growth_models.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_review_engine.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_router.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_workflows.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_workflow_page.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
 
 class _Ai extends UnifiedAiService {
@@ -25,6 +27,14 @@ class _Ai extends UnifiedAiService {
 }
 const config=UnifiedAiResolvedConfig(provider:'openai',apiKey:'test-only',model:'chat',
   endpoint:'https://example.test/v1/responses',label:'test',displayModel:'chat',available:true);
+class _DraftDao extends EvidenceGrowthDao {
+  _DraftDao():super(database:()=>throw UnimplementedError());
+  final settings=<String,String>{};
+  @override
+  Future<String> getSetting(String key,{String fallback=''})async=>settings[key]??fallback;
+  @override
+  Future<void> setSetting(String key,String value)async{settings[key]=value;}
+}
 Map<String,dynamic> systemPlan()=>{'scans':{for(final k in EvidenceGrowthWorkflows.layers.keys)k:'已核查该层'},
   'layer':'friction','controllable':true,'owner':'自己','baseline':'材料收在柜中',
   'change':'只把材料放桌上','metric':'每天是否进入任务','next_action':'现在把材料放桌上','window_days':7};
@@ -159,4 +169,24 @@ void main(){
     expect(EvidenceGrowthDecisionEngine.evaluate(t).type,'OBSERVE');
     expect(EvidenceGrowthDecisionEngine.evaluate(t.copyWith(operatorInputs:{...t.operatorInputs,'signal_final':'true'})).type,'ACT');
   });
+  for(final kind in ['PREMORTEM','SYSTEM_SCAN']) {
+    testWidgets('$kind page saves the inherited plan and applies the chosen next change',(tester) async {
+      final draftDao=_DraftDao();
+      final plan=kind=='PREMORTEM'?premortem():systemPlan();
+      final route=const EvidenceGrowthRouter().route(kind=='PREMORTEM'?'重要项目，事前复盘':'换很多方法还是反复，系统结构').copyWith(
+        inputDrafts:{'advanced_json':jsonEncode(plan),'confirmed_adjustment':'只把纸质材料换成电子版'});
+      Map<String,String>? result;
+      await tester.pumpWidget(MaterialApp(home:Builder(builder:(context)=>Scaffold(body:TextButton(
+        onPressed:() async {result=await Navigator.push<Map<String,String>>(context,MaterialPageRoute(builder:(_)=>
+          EvidenceGrowthWorkflowPage(route:route,dao:draftDao,ai:EvidenceGrowthAiService(dao:draftDao,ai:_Ai((_,__)=>'{}')))));},
+        child:const Text('打开方案'))))));
+      await tester.tap(find.text('打开方案'));await tester.pumpAndSettle();
+      final save=find.text('保存方案，进入现实行动');
+      await tester.scrollUntilVisible(save,500,maxScrolls:25);await tester.tap(save);await tester.pumpAndSettle();
+      expect(result,isNotNull);
+      expect(EvidenceGrowthWorkflows.action(kind,result!),contains('只把纸质材料换成电子版'));
+      expect(draftDao.settings,isNotEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 }

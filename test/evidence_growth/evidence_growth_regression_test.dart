@@ -149,7 +149,7 @@ void main() {
     final review=await EvidenceGrowthAiService(dao:dao,ai:malicious).review(trial);
     expect(review.predictionOriginal,trial.prediction);expect(malicious.calls,2);
     final logs=await db.query('evidence_growth_prompt_runs');
-    expect(logs,hasLength(4));expect(logs.every((r)=>r['valid_structure']==0),isTrue);
+    expect(logs,hasLength(5));expect(logs.every((r)=>r['valid_structure']==0),isTrue);
   });
   test('ADJUST carries the chosen variable into a linked next trial',() async {
     var trial=await start();

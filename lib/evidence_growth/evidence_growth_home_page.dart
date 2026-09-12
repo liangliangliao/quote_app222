@@ -496,7 +496,7 @@ class _PredictionDialog extends StatefulWidget {
 }
 
 class _PredictionDialogState extends State<_PredictionDialog> {
-  final prediction = TextEditingController(text: '我预测：完成这个动作后，会获得至少一个可观察结果。');
+  late final prediction = TextEditingController(text:widget.route.inputDrafts['prediction']??'我预测：完成这个动作后，会获得至少一个可观察结果。');
   var probability = .6;
   late int window = widget.route.operator == 'CONTEXT_REDESIGN' ? 4 : widget.route.operator == 'RECOVER' ? 2 : 0;
   var remind = true;
@@ -510,7 +510,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
     for (final prompt in spec.inputPrompts) prompt: TextEditingController(text:widget.route.inputDrafts[prompt]??''),
   };
   final worstCase = TextEditingController();
-  final budget = TextEditingController();
+  late final budget = TextEditingController(text:widget.route.inputDrafts['cost_limit']??'');
   @override
   void dispose() {
     prediction.dispose();
@@ -785,7 +785,7 @@ class _ResultDialogState extends State<_ResultDialog> {
             items: const [DropdownMenuItem(value:'unknown', child:Text('还不能判断')),
               DropdownMenuItem(value:'true', child:Text('有帮助')), DropdownMenuItem(value:'false', child:Text('没有帮助'))],
             onChanged:(v)=>setState(()=>helpful=v??'unknown')),
-          EvidenceGrowthDecisionFields(budget:widget.budget,onChanged:(v)=>decisionMeasurements=v),
+          EvidenceGrowthDecisionFields(budget:widget.budget,onChanged:(v)=>setState(()=>decisionMeasurements=v)),
           ExpansionTile(title: const Text('失败分类与体验（可选）'), children: [
             DropdownButtonFormField<String>(initialValue: failure, decoration: const InputDecoration(labelText: '根据事实分类'),
               items: const [DropdownMenuItem(value:'NOT_CLASSIFIED',child:Text('暂不分类')),
@@ -804,7 +804,7 @@ class _ResultDialogState extends State<_ResultDialog> {
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(onPressed: actual.text.trim().isEmpty || !_validNumber(anxiety.text, 10) || !_validNumber(recovery.text, null) ? null : () => Navigator.pop(context,
+          FilledButton(onPressed: actual.text.trim().isEmpty || !_validNumber(decisionMeasurements['cost_spent']??'',null) || !_validNumber(anxiety.text, 10) || !_validNumber(recovery.text, null) ? null : () => Navigator.pop(context,
             _Captured(widget.kind == '完成' || widget.kind == '部分完成', actual.text.trim(), unexpected.text.trim(),
               const {'完成':'DONE','部分完成':'PARTIAL','未做':'NOT_DONE','中止':'ABORTED','继续观察':'OBSERVING'}[widget.kind]!,
               {...decisionMeasurements,'prediction_occurred':occurred,'outcome_helpful':helpful,'failure_class':failure,

@@ -35,6 +35,19 @@ class EvidenceGrowthWorkflows {
   static Map<String,dynamic> decode(String? json) =>
       json == null || json.isEmpty ? {} : Map<String,dynamic>.from(jsonDecode(json) as Map);
 
+  static Map<String,dynamic> nextPlan(Map<String,String> drafts) {
+    final d=decode(drafts['advanced_json']);
+    final change=drafts['confirmed_adjustment']??'';
+    if(change.isNotEmpty && d.isNotEmpty) {
+      if(d.containsKey('scans')) {d['change']=change;d['next_action']=change;}
+      else if((d['risks'] as List? ?? []).isNotEmpty) {
+        final id=rankedRisks(d).first['id'];
+        for(final r in d['risks'] as List) {if(r['id']==id)r['prevention']=change;}
+      }
+    }
+    return d;
+  }
+
   static void validate(String operator, Map<String,String> inputs, {String commitment = ''}) {
     if(operator=='COMMITMENT_LADDER') {
       if(!commitments.containsKey(normalizeCommitment(commitment))) throw ArgumentError('请选择 L1–L7 承诺等级');
