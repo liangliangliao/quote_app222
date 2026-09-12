@@ -14,6 +14,10 @@
 
 下文 9 月 11 日内容保留为问题历史，其中“只提醒一次”的旧策略不再是当前行为。当前版本验证应包括：实际原生到期后续排、无 Flutter 的第二次通知、记录结果后取消，以及间隔调整/开关/OBSERVE/升级恢复。
 
+已验证生产代码 `f96d2f041a32d844971045914716a9e8b791feba`：[70 项专项测试与 6 项原生日历检查通过](https://github.com/liangliangliao/quote_app222/actions/runs/34673911625)。[Android 35 模拟器运行通过](https://github.com/liangliangliao/quote_app222/actions/runs/34673911619)：断网及屏幕关闭时确认进程退出后通知出现；重启解锁后两模块恢复；使用生产一小时间隔，推进模拟器系统时钟 61 分钟后第二条缺反馈通知出现；结果记录状态使下一条取消；force-stop 对照未发送。此测试没有等待真实一小时，也不等同于厂商真机长时间 Doze 验收。
+
+[连续追踪版 release APK](https://github.com/liangliangliao/quote_app222/actions/runs/34673911628/artifacts/10292066027) 构建成功。旧的 9 月 11 日 APK 不包含连续追踪。
+
 ## 2026-09-11 再次真机反馈
 
 截图中的计划为 9 月 25 日 18:58 观察窗口到期、19:58 缺反馈提醒。这符合“窗口到期＋1 小时”，不应在 9 月 11 日触发。创建页的 14 天观察选项可生成该日期，但没有该轮原始记录时不能断言用户当时选择了什么。新增回归覆盖这一时间组合、已发送事件不因重新开启而复发；[68 项 Flutter 测试及 6 项原生日历检查通过](https://github.com/liangliangliao/quote_app222/actions/runs/34614164895)。

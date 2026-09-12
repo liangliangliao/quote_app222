@@ -145,6 +145,34 @@ void main() {
     expect(EvidenceGrowthReminderPlan.nextMissingAt(1000,3600000,1000+4*3600000+500),1000+5*3600000);
     expect(EvidenceGrowthReminderPlan.nextMissingAt(10000000,3600000,500),10000000);
   });
+  test('upgrade recovers the chain after an old single reminder was delivered',() async {
+    final t = await create();
+    await dao.configureReminders(missingHours:1);
+    final row = (await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result');
+    final at = row['scheduled_at_ms'] as int;
+    await db.update('evidence_growth_reminders',{'state':'delivered','delivered_at_ms':at},where:'reminder_id = ?',whereArgs:[row['reminder_id']]);
+    await dao.setSetting('reminder_schema','1');
+    await db.delete('evidence_growth_settings',where:'setting_key = ?',whereArgs:['missing_repeat_hours']);
+    final upgraded = EvidenceGrowthDao(database:()async=>db);
+    await upgraded.ensureTables();
+    expect(await upgraded.getSetting('missing_repeat_hours'),'1');
+    final next = (await upgraded.reminderRecords(trialId:t.id)).where((r)=>r['kind']=='missing_result' && r['state']=='pending');
+    expect(next.single['scheduled_at_ms'],at+3600000);
+  });
+  test('new OBSERVE window restarts missing feedback timing and cancels old continuation',() async {
+    var t = await dao.startTrial(await create());
+    await dao.configureReminders(missingHours:1,repeatHours:1);
+    final row = (await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result');
+    await db.update('evidence_growth_reminders',{'state':'delivered','delivered_at_ms':row['scheduled_at_ms']},where:'reminder_id = ?',whereArgs:[row['reminder_id']]);
+    await dao.configureReminders(enabled:true);
+    final oldNext = (await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result')['reminder_id'];
+    t = await dao.captureResult(t,didAction:false,actualOutcome:'等待反馈',unexpected:'',resultStatus:'OBSERVING');
+    t = await dao.saveReview(t,const EvidenceGrowthReviewEngine().review(t));
+    final nextDue = DateTime.now().add(const Duration(days:2));
+    t = await dao.decide(t,decision:'OBSERVE',reason:'尚未到反馈时间',nextAction:'继续观察',nextReviewAt:nextDue);
+    expect((await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result')['scheduled_at_ms'],nextDue.millisecondsSinceEpoch+3600000);
+    expect((await dao.reminderRecords(trialId:t.id)).singleWhere((r)=>r['reminder_id']==oldNext)['state'],'cancelled');
+  });
   test('postponing a start moves its alarm while preserving the original observation window',() async {
     final t=await create();
     final moved=DateTime.now().add(const Duration(hours:2));
