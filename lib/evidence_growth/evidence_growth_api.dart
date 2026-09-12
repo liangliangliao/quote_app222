@@ -164,10 +164,10 @@ class EvidenceGrowthApi {
       final captured=await dao.captureResult(trial,didAction:body['did_action']==true,actualOutcome:_text(body,'actual_outcome'),
         unexpected:_text(body,'unexpected'),resultStatus:_text(body,'result_status'),resultMeasurements:_strings(body['measurements']),
         shameSignal:body['shame_signal']==true,imageExposureSignal:body['image_exposure_signal']==true);
-      return {'trial':captured.toRow(),'review':const EvidenceGrowthReviewEngine().review(captured).toJson()};
+      return {'trial':captured.toRow(),'review':const EvidenceGrowthReviewEngine().review(captured,history:await dao.decisionHistory(captured)).toJson()};
     }
     if(action=='review') {
-      final review=const EvidenceGrowthReviewEngine().review(trial);
+      final review=const EvidenceGrowthReviewEngine().review(trial,history:await dao.decisionHistory(trial));
       return {'trial':(await dao.saveReview(trial,review)).toRow(),'review':review.toJson()};
     }
     if(action=='decision') return {'trial':(await dao.decide(trial,decision:_text(body,'decision'),

@@ -1,10 +1,61 @@
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_operator_registry.dart';
+import 'evidence_growth_search.dart';
 
 /// Local routing is deterministic and keeps high-impact gates outside the model.
 class EvidenceGrowthRouter {
   const EvidenceGrowthRouter();
+  static bool protected(EvidenceRouteResult r)=>const {
+    'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS',
+  }.contains(r.status);
+
+  /// Recall never grants permission to act. Source sufficiency is decided
+  /// separately; vector similarity cannot promote an extension over Tal.
+  List<RoutedNode> retrieve(String text, {Map<String,double> semantic=const {},
+      Map<String,double> personalFit=const {}, List<String> exact=const []}) {
+    final rule=route(text,personalFit:personalFit);
+    if(protected(rule)) return [];
+    final lexical=EvidenceGrowthSearch.current.search(text,limit:40);
+    final lex={for(final c in lexical)c.node.id:c.score};
+    final ruleIds=rule.candidates.map((c)=>c.node.id).toSet();
+    final graph=rule.selectedNodes.expand((n)=>n.nextNodes).toSet();
+    final maxLex=lexical.isEmpty?1.0:lexical.first.score;
+    final result=<RoutedNode>[];
+    for(final node in EvidenceGrowthKnowledge.nodes) {
+      final l=(lex[node.id]??0)/maxLex;
+      final s=semantic[node.id]??0;
+      final ruleMatch=ruleIds.contains(node.id);
+      if(!ruleMatch && l<.12 && s<.55 && !exact.contains(node.id)) continue;
+      // Tokenized free-text contra fields from future manifests also filter.
+      if(node.contraSignals.any((c)=>!RegExp(r'^[A-Z_]+$').hasMatch(c) && c.length>2 && text.contains(c))) continue;
+      final score=.35*(semantic.isEmpty?l:(s.clamp(0,1)))+.25*(ruleMatch?1:l)+
+          .15 + .10*(personalFit[node.id]??.5).clamp(0,1)+.10*(node.isTal?1:node.isExtension1?.5:.2)+
+          .05*(graph.contains(node.id)?1:.5)+(exact.contains(node.id)?.03:0);
+      result.add(RoutedNode(node:node,score:score.toDouble(),reason:
+        '词法=${l.toStringAsFixed(2)}；向量=${semantic.containsKey(node.id)?s.toStringAsFixed(2):"未使用"}；'
+        '规则=$ruleMatch；关系=${graph.contains(node.id)}；个人=${(personalFit[node.id]??.5).toStringAsFixed(2)}'));
+    }
+    result.sort((a,b)=>b.score.compareTo(a.score));
+    return result;
+  }
+
+  EvidenceRouteResult fromSelection(String text,List<RoutedNode> candidates,List<EvidenceKNode> selected,
+      List<String> facts,String reason,{String gap=''}) {
+    final gate=route(text);
+    if(protected(gate)) return gate;
+    if(selected.isEmpty || !selected.first.isTal) return _insufficient(text);
+    final source=selected.last, spec=EvidenceGrowthOperatorRegistry.byId(source.operators.first);
+    return gate.copyWith(facts:facts,primaryModule:selected.first.module,
+      secondaryModules:selected.skip(1).map((n)=>n.module).where((m)=>m!=selected.first.module).toSet().take(2).toList(),
+      candidates:candidates,selectedNodes:selected,requiredChecks:selected.expand((n)=>n.prerequisites).toSet().toList(),
+      missingFacts:[],status:'READY_FOR_ACTION',riskGate:'PASS',inference:reason,confidence:.65,
+      operator:spec.id,actionInstruction:spec.id=='SOURCE_PRACTICE'?source.howTo.first:spec.instruction,
+      completionDefinition:spec.completion,reviewTrigger:spec.reviewTrigger,
+      evidenceLevel:selected.length>1?'E2':'E1',alternatives:spec.alternatives,
+      riskChecks:{...gate.riskChecks,'SOURCE_GAP':gap.isEmpty?'TAL_SUFFICIENT':gap,
+        'SELECTION':'MODEL_VERIFIED_IDS_AND_USER_QUOTES'});
+  }
   static const _patterns = <(List<String>, String)>[
     (['没开始','拖延','等待动力','没有动力','等状态','投简历','迟迟开不了头','还没动','知道但做不到','提不起劲'], 'A02'),
     (['一直改','不敢发','怕拒绝','被拒绝','完美','不够好'], 'F01'),

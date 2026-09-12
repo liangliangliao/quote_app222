@@ -142,7 +142,7 @@ void main() {
     final provider=_Provider((_)=>'invalid JSON');
     final service=EvidenceGrowthAiService(dao:dao,ai:provider);
     final route=const EvidenceGrowthRouter().route('拖延，没开始');
-    expect((await service.enrichRoute(route)).operator,route.operator);expect(provider.calls,2);
+    expect((await service.enrichRoute(route)).operator,route.operator);expect(provider.calls,3);
     var trial=await start();
     trial=await dao.captureResult(trial,didAction:true,actualOutcome:'得到一个答复',unexpected:'');
     final malicious=_Provider((_)=>jsonEncode({'prediction_original':'事后改写的预测','knowledge_nodes_used':trial.nodeIds}));
