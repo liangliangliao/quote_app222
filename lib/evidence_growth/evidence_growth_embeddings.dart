@@ -38,7 +38,7 @@ class EvidenceGrowthEmbeddings {
       'content':{'parts':[{'text':t}]},'taskType':query?'RETRIEVAL_QUERY':'RETRIEVAL_DOCUMENT'}).toList()}
       : {'model':model,'input':texts,'encoding_format':'float'};
     final headers={'Content-Type':'application/json',
-      ...config.effectiveAuthHeaders, if(gemini) 'x-goog-api-key':config.apiKey};
+      ...(gemini?{'x-goog-api-key':config.apiKey}:config.effectiveAuthHeaders)};
     final response=await client.post(endpoint,headers:headers,body:jsonEncode(body)).timeout(const Duration(seconds:25));
     if(response.statusCode!=200) throw StateError('EMBEDDING_HTTP_${response.statusCode}');
     final data=jsonDecode(response.body) as Map;

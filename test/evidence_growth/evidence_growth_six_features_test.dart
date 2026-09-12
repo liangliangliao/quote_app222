@@ -100,6 +100,17 @@ void main(){
       await expectLater(service.embed(['text']),throwsA(anything));service.close();
     }
   });
+  test('Gemini uses native embedding authentication and query task type',() async {
+    const gemini=UnifiedAiResolvedConfig(provider:'gemini',apiKey:'test-only',model:'chat',
+      endpoint:'https://example.test/v1beta/openai/chat/completions',label:'test',displayModel:'chat',available:true);
+    final service=EvidenceGrowthEmbeddings(()async=>db,gemini,model:'gemini-embedding-001',client:MockClient((r)async {
+      expect(r.url.path,'/v1beta/models/gemini-embedding-001:batchEmbedContents');
+      expect(r.headers['x-goog-api-key'],'test-only');expect(r.headers.containsKey('Authorization'),isFalse);
+      expect((jsonDecode(r.body)['requests'] as List).single['taskType'],'RETRIEVAL_QUERY');
+      return http.Response('{"embeddings":[{"values":[1,2,3]}]}',200);
+    }));
+    expect((await service.embed(['现实行动'],query:true)).single,[1,2,3]);service.close();
+  });
   test('all seven commitment levels have executable saved conditions and legacy mappings',() async {
     expect(EvidenceGrowthWorkflows.commitments.length,7);
     expect(EvidenceGrowthWorkflows.normalizeCommitment('WITNESS'),'L4');
