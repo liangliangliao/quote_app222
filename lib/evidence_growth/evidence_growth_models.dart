@@ -232,6 +232,12 @@ class EvidenceRouteResult {
   bool get canAct => status == 'READY_FOR_ACTION' && riskGate == 'PASS';
 
   EvidenceRouteResult copyWith({
+    List<String>? facts,
+    GrowthModule? primaryModule,
+    List<GrowthModule>? secondaryModules,
+    List<RoutedNode>? candidates,
+    List<String>? requiredChecks,
+    List<String>? missingFacts,
     List<EvidenceKNode>? selectedNodes,
     String? status,
     String? riskGate,
@@ -256,12 +262,12 @@ class EvidenceRouteResult {
   }) =>
       EvidenceRouteResult(
         rawInput: rawInput,
-        facts: facts,
-        primaryModule: primaryModule,
-        secondaryModules: secondaryModules,
-        candidates: candidates,
+        facts: facts ?? this.facts,
+        primaryModule: primaryModule ?? this.primaryModule,
+        secondaryModules: secondaryModules ?? this.secondaryModules,
+        candidates: candidates ?? this.candidates,
         selectedNodes: selectedNodes ?? this.selectedNodes,
-        requiredChecks: requiredChecks,
+        requiredChecks: requiredChecks ?? this.requiredChecks,
         status: status ?? this.status,
         riskGate: riskGate ?? this.riskGate,
         inference: inference ?? this.inference,
@@ -272,7 +278,7 @@ class EvidenceRouteResult {
         reviewTrigger: reviewTrigger ?? this.reviewTrigger,
         evidenceLevel: evidenceLevel ?? this.evidenceLevel,
         alternatives: alternatives ?? this.alternatives,
-        missingFacts: missingFacts,
+        missingFacts: missingFacts ?? this.missingFacts,
         contextTags: contextTags ?? this.contextTags,
         goalState: goalState ?? this.goalState,
         currentState: currentState ?? this.currentState,

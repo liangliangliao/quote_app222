@@ -142,14 +142,14 @@ void main() {
     final provider=_Provider((_)=>'invalid JSON');
     final service=EvidenceGrowthAiService(dao:dao,ai:provider);
     final route=const EvidenceGrowthRouter().route('拖延，没开始');
-    expect((await service.enrichRoute(route)).operator,route.operator);expect(provider.calls,2);
+    expect((await service.enrichRoute(route)).operator,route.operator);expect(provider.calls,3);
     var trial=await start();
     trial=await dao.captureResult(trial,didAction:true,actualOutcome:'得到一个答复',unexpected:'');
     final malicious=_Provider((_)=>jsonEncode({'prediction_original':'事后改写的预测','knowledge_nodes_used':trial.nodeIds}));
     final review=await EvidenceGrowthAiService(dao:dao,ai:malicious).review(trial);
     expect(review.predictionOriginal,trial.prediction);expect(malicious.calls,2);
     final logs=await db.query('evidence_growth_prompt_runs');
-    expect(logs,hasLength(4));expect(logs.every((r)=>r['valid_structure']==0),isTrue);
+    expect(logs,hasLength(5));expect(logs.every((r)=>r['valid_structure']==0),isTrue);
   });
   test('ADJUST carries the chosen variable into a linked next trial',() async {
     var trial=await start();
