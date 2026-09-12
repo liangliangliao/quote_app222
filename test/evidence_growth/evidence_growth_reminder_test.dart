@@ -116,7 +116,34 @@ void main() {
     await db.update('evidence_growth_reminders',{'state':'delivered','delivered_at_ms':1},
       where:'reminder_id = ?',whereArgs:[missing['reminder_id']]);
     await dao.configureReminders(enabled:true);
-    expect((await pending(t.id)).where((r)=>r['kind']=='missing_result'),isEmpty);
+    expect((await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result')['scheduled_at_ms'],
+      DateTime(2026,9,26,19,58).millisecondsSinceEpoch);
+  });
+  test('repeats survive refresh, interval changes, toggle and feedback cancellation',() async {
+    var t = await create();
+    await dao.configureReminders(missingHours:1,repeatHours:1);
+    var row = (await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result');
+    final first = row['scheduled_at_ms'] as int;
+    await db.update('evidence_growth_reminders',{'state':'delivered','delivered_at_ms':first+1000},where:'reminder_id = ?',whereArgs:[row['reminder_id']]);
+    await dao.configureReminders(enabled:true);
+    row = (await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result');
+    expect(row['scheduled_at_ms'],first+3600000);
+    final nextId = row['reminder_id'];
+    await dao.configureReminders(enabled:true);
+    expect((await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result')['reminder_id'],nextId);
+    await dao.configureReminders(repeatHours:6);
+    expect((await pending(t.id)).singleWhere((r)=>r['kind']=='missing_result')['scheduled_at_ms'],first+6*3600000);
+    await dao.configureReminders(trialId:t.id,trialEnabled:false);
+    expect(await pending(t.id),isEmpty);
+    await dao.configureReminders(trialId:t.id,trialEnabled:true);
+    expect((await pending(t.id)).where((r)=>r['kind']=='missing_result'),hasLength(1));
+    t = await dao.captureResult(t,didAction:false,actualOutcome:'这一轮没有做',unexpected:'',resultStatus:'NOT_DONE');
+    await dao.configureReminders(enabled:true);
+    expect(await pending(t.id),isEmpty);
+  });
+  test('late delivery skips missed slots and old window history does not affect OBSERVE',() {
+    expect(EvidenceGrowthReminderPlan.nextMissingAt(1000,3600000,1000+4*3600000+500),1000+5*3600000);
+    expect(EvidenceGrowthReminderPlan.nextMissingAt(10000000,3600000,500),10000000);
   });
   test('postponing a start moves its alarm while preserving the original observation window',() async {
     final t=await create();

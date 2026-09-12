@@ -111,10 +111,49 @@ object EvidenceGrowthReminderNative {
         return false
     }
 
+    /** Reconstruct exactly one next missing-feedback event per active Trial.
+     * Called in the delivery transaction as well as after reboot: no Flutter timer.
+     */
+    private fun ensureMissingPlans(db: SQLiteDatabase) {
+        fun hours(key: String, fallback: Long): Long = db.rawQuery(
+            "SELECT setting_value FROM evidence_growth_settings WHERE setting_key=?", arrayOf(key)
+        ).use { if (it.moveToFirst()) it.getString(0).toLongOrNull()?.coerceIn(1,168) ?: fallback else fallback }
+        val delay = hours("missing_result_hours",24) * 3600000
+        val interval = hours("missing_repeat_hours",delay / 3600000) * 3600000
+        db.rawQuery("SELECT trial_id,review_at_ms,next_review_at_ms FROM evidence_growth_trials WHERE status IN ('READY','IN_PROGRESS','OBSERVING')",null).use { trials ->
+            while (trials.moveToNext()) {
+                val trial = trials.getString(0)
+                if (!valid(db,trial,"missing_result")) continue
+                val due = if (trials.getLong(2) > 0) trials.getLong(2) else trials.getLong(1)
+                if (due <= 0) continue
+                val first = due + delay
+                val covered = db.rawQuery("SELECT MAX(MAX(scheduled_at_ms,delivered_at_ms)) FROM $TABLE WHERE trial_id=? AND kind='missing_result' AND scheduled_at_ms>=? AND (state IN ('delivered','expired') OR delivered_at_ms>0)",arrayOf(trial,due.toString())).use {
+                    if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else 0L
+                }
+                var at = if (covered < first) first else first + ((covered-first)/interval+1)*interval
+                // Respect a different event that already occupies this minute window.
+                while (true) {
+                    val occupied = db.rawQuery("SELECT state,kind,delivered_at_ms FROM $TABLE WHERE trial_id=? AND window_key=?",arrayOf(trial,(at/60000).toString())).use {
+                        it.moveToFirst() && (it.getString(1) != "missing_result" || it.getString(0) in listOf("delivered","expired") || it.getLong(2)>0)
+                    }
+                    if (!occupied) break
+                    at += interval
+                }
+                db.execSQL("UPDATE $TABLE SET state='cancelled' WHERE trial_id=? AND kind='missing_result' AND scheduled_at_ms<>? AND state IN ('pending','scheduled','blocked')",arrayOf(trial,at))
+                val window = (at/60000).toString()
+                db.execSQL("INSERT OR IGNORE INTO $TABLE (event_key,trial_id,kind,scheduled_at_ms,window_key,title,body,source_ids_json,state) VALUES (?,?,'missing_result',?,?,?,?,'[\"KB35-R01\",\"KB35-G-EXT2-01\"]','pending')",
+                    arrayOf("$trial:$window",trial,at,window,"这条路线还缺少反馈","继续之前，先补充现实证据。记录完成、部分、未做、中止或继续观察；未反馈会按设置间隔继续提醒。"))
+                db.execSQL("UPDATE $TABLE SET state='pending',last_error='' WHERE trial_id=? AND window_key=? AND state='cancelled' AND delivered_at_ms=0",arrayOf(trial,window))
+            }
+        }
+    }
+
     /** Boot, package update, permission return and app resume all use this path. */
     @JvmStatic fun reconcile(ctx: Context): Boolean {
         val db = database(ctx) ?: return true
         db.use {
+            db.beginTransaction()
+            try { ensureMissingPlans(db); db.setTransactionSuccessful() } finally { db.endTransaction() }
             val wm = WorkManager.getInstance(ctx)
             wm.enqueueUniquePeriodicWork("eg_reminder_repair", ExistingPeriodicWorkPolicy.KEEP,
                 PeriodicWorkRequestBuilder<EvidenceGrowthReminderWorker>(1, TimeUnit.HOURS).build())
@@ -209,12 +248,13 @@ object EvidenceGrowthReminderNative {
                     manager(ctx).notify(TAG, id, notification)
                     db.execSQL("UPDATE $TABLE SET state='delivered',delivered_at_ms=?,last_error='' WHERE reminder_id=?",
                         arrayOf(System.currentTimeMillis(), id))
+                    if (kind == "missing_result") ensureMissingPlans(db)
                 }
                 db.setTransactionSuccessful()
             } finally { db.endTransaction() }
         }
         cancel(ctx, id, false)
-        return true
+        return reconcile(ctx)
     }
 }
 

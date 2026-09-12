@@ -57,6 +57,37 @@ adb shell wm dismiss-keyguard
 await_pair 9201 19201
 printf '%s\n' 'PASS: growth and diet restored after reboot/unlock without opening Flutter'
 
+seed repeat
+adb shell am kill "$task_package"
+await_pair 9401 19401
+adb exec-out run-as "$task_package" cat app_flutter/quotes.db > probe-state.db
+next_id=$(python3 - <<'PY'
+import sqlite3
+db=sqlite3.connect('probe-state.db')
+rows=db.execute("SELECT reminder_id FROM evidence_growth_reminders WHERE trial_id='ci_repeat' AND state IN ('pending','scheduled','blocked')").fetchall()
+assert len(rows)==1, rows
+assert db.execute("SELECT count(*) FROM evidence_growth_reminders WHERE trial_id='ci_repeat' AND state='delivered'").fetchone()[0]==1
+print(rows[0][0])
+PY
+)
+# Advance the disposable emulator clock, keeping the real production one-hour
+# interval. No short-interval override or direct call to fire() is used.
+adb root
+adb wait-for-device
+adb shell settings put global auto_time 0
+adb shell date -u "$(date -u -d '+61 minutes' +%m%d%H%M%Y.%S)"
+adb shell am kill "$task_package"
+await_pair "$next_id" 19401
+seed close_repeat
+adb exec-out run-as "$task_package" cat app_flutter/quotes.db > probe-state.db
+python3 - <<'PY'
+import sqlite3
+db=sqlite3.connect('probe-state.db')
+assert db.execute("SELECT count(*) FROM evidence_growth_reminders WHERE trial_id='ci_repeat' AND state='delivered'").fetchone()[0]==2
+assert db.execute("SELECT count(*) FROM evidence_growth_reminders WHERE trial_id='ci_repeat' AND state IN ('pending','scheduled','blocked')").fetchone()[0]==0
+print('PASS: missing feedback repeated without Flutter; capturing a result cancelled the next reminder')
+PY
+
 seed stop
 adb shell am force-stop "$task_package"
 sleep 55

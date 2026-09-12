@@ -121,11 +121,14 @@ class EvidenceGrowthDao {
         WHEN NEW.prediction != OLD.prediction OR NEW.probability != OLD.probability
         BEGIN SELECT RAISE(ABORT, 'Original prediction is immutable'); END''');
       final reminderMigration = await txn.query('evidence_growth_settings', where: 'setting_key = ?', whereArgs: ['reminder_schema']);
-      if (reminderMigration.isEmpty) {
+      if (reminderMigration.isEmpty || reminderMigration.first['setting_value'] != '2') {
+        final delay = await txn.query('evidence_growth_settings',where:'setting_key = ?',whereArgs:['missing_result_hours']);
+        await txn.insert('evidence_growth_settings',{'setting_key':'missing_repeat_hours',
+          'setting_value':delay.isEmpty ? '24' : delay.first['setting_value']},conflictAlgorithm:ConflictAlgorithm.ignore);
         for (final row in await txn.query('evidence_growth_trials')) {
           await _updateReminders(txn, RealityTrial.fromRow(row));
         }
-        await txn.insert('evidence_growth_settings', {'setting_key':'reminder_schema','setting_value':'1'});
+        await txn.insert('evidence_growth_settings', {'setting_key':'reminder_schema','setting_value':'2'},conflictAlgorithm:ConflictAlgorithm.replace);
       }
       await txn.insert('evidence_growth_settings', {'setting_key': 'schema_version', 'setting_value': '3'},
           conflictAlgorithm: ConflictAlgorithm.replace);
@@ -807,9 +810,23 @@ class EvidenceGrowthDao {
       row['setting_key'] as String: row['setting_value'] as String};
     final enabled = settings['reminders_enabled'] != 'false' &&
       (settings['remind_trial_${trial.id}'] ?? trial.operatorInputs['remind']) == 'true';
+    final delay = (int.tryParse(settings['missing_result_hours'] ?? '') ?? 24).clamp(1,168);
+    final repeat = (int.tryParse(settings['missing_repeat_hours'] ?? '') ?? delay).clamp(1,168);
+    final due = trial.nextReviewAtMs > 0 ? trial.nextReviewAtMs : trial.reviewAtMs;
+    final first = due + delay * 3600000;
+    final history = await db.query('evidence_growth_reminders',
+      where:"trial_id = ? AND kind = 'missing_result' AND scheduled_at_ms >= ? AND (state IN ('delivered','expired') OR delivered_at_ms > 0)",
+      whereArgs:[trial.id,due]);
+    var covered = 0;
+    for (final row in history) {
+      for (final key in ['scheduled_at_ms','delivered_at_ms']) {
+        final value = (row[key] as num).toInt();
+        if (value > covered) covered = value;
+      }
+    }
     final plans = enabled ? EvidenceGrowthReminderPlan.build(trial, DateTime.now().millisecondsSinceEpoch,
       includeOverdue: true, repeatedAvoidance: await _repeatedExit(db, trial),
-      missingHours: int.tryParse(settings['missing_result_hours'] ?? '') ?? 24) : <EvidenceGrowthReminder>[];
+      missingHours: delay, missingAtMs:EvidenceGrowthReminderPlan.nextMissingAt(first,repeat*3600000,covered)) : <EvidenceGrowthReminder>[];
     // Retain delivered records for idempotency; cancel obsolete schedules atomically with the Trial.
     await db.update('evidence_growth_reminders', {'state':'cancelled'},
       where: "trial_id = ? AND state IN ('pending','scheduled','blocked')", whereArgs:[trial.id]);
@@ -826,13 +843,15 @@ class EvidenceGrowthDao {
     }
   }
 
-  Future<void> configureReminders({bool? enabled, int? missingHours, String? trialId, bool? trialEnabled}) async {
+  Future<void> configureReminders({bool? enabled, int? missingHours, int? repeatHours, String? trialId, bool? trialEnabled}) async {
     if (missingHours != null && (missingHours < 1 || missingHours > 168)) throw ArgumentError('缺结果提醒应为 1–168 小时。');
+    if (repeatHours != null && (repeatHours < 1 || repeatHours > 168)) throw ArgumentError('重复间隔应为 1–168 小时。');
     await ensureTables();
     await (await _database()).transaction((txn) async {
       final changes = <String,String>{
         if (enabled != null) 'reminders_enabled':'$enabled',
         if (missingHours != null) 'missing_result_hours':'$missingHours',
+        if (repeatHours != null) 'missing_repeat_hours':'$repeatHours',
         if (trialId != null && trialEnabled != null) 'remind_trial_$trialId':'$trialEnabled',
       };
       for (final e in changes.entries) {

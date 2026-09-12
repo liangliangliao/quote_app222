@@ -12,8 +12,13 @@ class EvidenceGrowthReminder {
 /// PRD §40. The grace period is an explicit engineering default, not a KB claim.
 class EvidenceGrowthReminderPlan {
   static const kinds = ['trial_start', 'trial_review_due', 'missing_result', 'repeated_avoidance', 'recovery_end'];
+  /// Fixed slots anchored to the first reminder; skip slots already covered by a
+  /// late delivery so an outage never produces a burst of catch-up notifications.
+  static int nextMissingAt(int first, int interval, int lastCovered) =>
+      lastCovered < first ? first : first + ((lastCovered - first) ~/ interval + 1) * interval;
   static List<EvidenceGrowthReminder> build(RealityTrial trial, int now, {
     bool repeatedAvoidance = false, bool includeOverdue = false, int missingHours = 24,
+    int? missingAtMs,
   }) {
     final list = <EvidenceGrowthReminder>[];
     final due = trial.nextReviewAtMs > 0 ? trial.nextReviewAtMs : trial.reviewAtMs;
@@ -30,7 +35,7 @@ class EvidenceGrowthReminderPlan {
       if (due > 0) {
         list.add(EvidenceGrowthReminder('trial_review_due', due, '现实试验 · 观察窗口到了',
           '回来比较预测与实际。还没开始、尚无结果也可以如实记录，不把时间到期当作已经完成。', const ['KB35-R01', 'KB35-R-EXT2-01']));
-        list.add(EvidenceGrowthReminder('missing_result', due + missingHours.clamp(1, 168) * 3600000,
+        list.add(EvidenceGrowthReminder('missing_result', missingAtMs ?? due + missingHours.clamp(1, 168) * 3600000,
           '这条路线还缺少反馈', '继续之前，先补充现实证据。点击记录完成、部分、未做、中止或继续观察。', const ['KB35-R01', 'KB35-G-EXT2-01']));
       }
     }
