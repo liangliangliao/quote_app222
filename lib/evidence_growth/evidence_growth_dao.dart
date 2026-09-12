@@ -159,7 +159,8 @@ class EvidenceGrowthDao {
     if(limit!=null && (double.tryParse(limit)==null || !double.parse(limit).isFinite || double.parse(limit)<=0)) {
       throw ArgumentError('行动前预算必须为正数，且需要说明单位');
     }
-    final instruction=advanced?EvidenceGrowthWorkflows.action(route.operator,operatorInputs):route.actionInstruction;
+    final instruction=advanced || route.operator=='COMMITMENT_LADDER'?
+      EvidenceGrowthWorkflows.action(route.operator,operatorInputs,commitment:commitmentLevel):route.actionInstruction;
     if(EvidenceGrowthRouter.protected(const EvidenceGrowthRouter().route(instruction))) throw ArgumentError('方案动作触发风险条件，请先缩小或调整');
     if (spec.needsCommitment && commitmentLevel.isEmpty) throw ArgumentError('请选择最低有效承诺等级。');
     if (route.selectedNodes.isEmpty || !route.selectedNodes.first.isTal ||

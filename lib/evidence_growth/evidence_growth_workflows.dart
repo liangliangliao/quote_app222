@@ -86,7 +86,9 @@ class EvidenceGrowthWorkflows {
     }
   }
 
-  static String action(String operator, Map<String,String> inputs) {
+  static String action(String operator, Map<String,String> inputs,{String commitment=''}) {
+    if(operator=='COMMITMENT_LADDER') return '执行 ${normalizeCommitment(commitment)} 承诺：${inputs['承诺内容与日期']}。\n'
+      '退出方式：${inputs['退出方式']}；损失上限：${inputs['损失上限']}。';
     final d=decode(inputs['advanced_json']);
     if(operator=='SYSTEM_SCAN') return '${d['next_action']}\n只改变：${d['change']}；'
         '观察 ${d['window_days']} 天：${d['metric']}。';

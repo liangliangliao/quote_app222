@@ -108,6 +108,7 @@ void main(){
         prediction:'产生现实交付',probability:.5,reviewAt:DateTime.now(),riskConfirmed:true,commitmentLevel:level,
         operatorInputs:{'承诺内容与日期':'明天交一份草稿','退出方式':'可取消','损失上限':'一小时','目标已基本验证':'true'});
       expect(t.commitmentLevel,level);expect(t.operatorInputs['退出方式'],'可取消');
+      expect(t.actionInstruction,contains('明天交一份草稿'));
     }
     await expectLater(dao.createTrial(const EvidenceGrowthRouter().route('承诺'),prediction:'交付',probability:.5,
       reviewAt:DateTime.now(),riskConfirmed:true,commitmentLevel:'L7'),throwsArgumentError);
