@@ -183,7 +183,8 @@ void main(){
         child:const Text('打开方案'))))));
       await tester.tap(find.text('打开方案'));await tester.pumpAndSettle();
       final save=find.text('保存方案，进入现实行动');
-      await tester.scrollUntilVisible(save,500,maxScrolls:25);await tester.tap(save);await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(save,500,scrollable:find.byType(Scrollable).first,maxScrolls:25);
+      await tester.tap(save);await tester.pumpAndSettle();
       expect(result,isNotNull);
       expect(EvidenceGrowthWorkflows.action(kind,result!),contains('只把纸质材料换成电子版'));
       expect(draftDao.settings,isNotEmpty);
