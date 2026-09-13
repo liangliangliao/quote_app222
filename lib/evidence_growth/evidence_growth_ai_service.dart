@@ -220,6 +220,9 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
           if(local.inputDrafts.containsKey('confirmed_adjustment'))
             'confirmed_adjustment':local.inputDrafts['confirmed_adjustment']!,
         });
+      if(local.cycleContext.isNotEmpty && local.cycleContext.first['decision']=='ACT') {
+        refined=refined.copyWith(actionInstruction:local.actionInstruction,completionDefinition:local.completionDefinition);
+      }
       await _dao.recordRoute(refined); valid=true; return refined;
     } catch(e) { code=e is FormatException?e.message:'ROUTER_UNAVAILABLE'; return local.copyWith(candidates:candidates); }
     finally {

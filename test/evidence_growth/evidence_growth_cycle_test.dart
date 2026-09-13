@@ -123,6 +123,20 @@ void main(){
     expect(result.decision,'ACT');
     final saved=await dao.saveReview(t,result);expect(EvidenceGrowthCycle.confirmed(saved),isEmpty);
   });
+  test('ACT retains confirmed action even when the model tries to change conditions',() async {
+    var t=await first();
+    t=await dao.captureResult(t,didAction:true,actualOutcome:'五分钟开始后获得一条具体建议',unexpected:'',resultStatus:'DONE',
+      resultMeasurements:{'outcome_helpful':'true'});
+    t=await dao.saveReview(t,const EvidenceGrowthReviewEngine().review(t));
+    t=await dao.decide(t,decision:'ACT',reason:'保持有效条件再取样',nextAction:t.actionInstruction,
+      cycleUpdate:EvidenceGrowthCycle.update(t));
+    final ai=_Ai((purpose,_)=>purpose=='evidence_growth.evidence_router'?jsonEncode({
+      'facts':['获得一条具体建议'],'supported':true,'tal_node':'KB35-A02','tal_sufficient':true,'extension_node':'','reason':'启动已产生反馈'}):
+      jsonEncode({'selected_nodes':[{'node_id':'KB35-A02'}],'inference':'随意变更','confidence':.5,'operator':'START_5_MIN',
+        'action_instruction':'改为连续写一个小时','completion_definition':'写完','risk_gate':'PASS','evidence_status':'E1'}));
+    final fresh=await EvidenceGrowthAiService(dao:dao,ai:ai).continueCycle(t);
+    expect(fresh.actionInstruction,t.actionInstruction);expect(fresh.operator,t.operator);
+  });
   test('fabricated decision quote cannot promote uncertain feedback into ACT',() async {
     var t=await first();t=await dao.captureResult(t,didAction:true,actualOutcome:'只打开了聊天窗口',unexpected:'',resultStatus:'DONE');
     final ai=_Ai((_,__)=>jsonEncode({'prediction_original':t.prediction,'actual_facts':[t.actualOutcome],
