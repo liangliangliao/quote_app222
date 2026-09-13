@@ -30,6 +30,12 @@ class EvidenceGrowthDecisionEngine {
       return EvidenceDecision('EXIT','已有明确替代路线及比较依据：$reason',
         '保存比较结果，结束当前路线；把替代路线变成下一次低风险试验。');
     }
+    // Explicitly ending an unstarted/aborted attempt is already feedback about
+    // initiation; it does not require waiting for an outcome that was never tested.
+    if(t.didAction!=true && const {'NOT_DONE','ABORTED'}.contains(t.resultStatus) && t.actualOutcome.trim().isNotEmpty) {
+      return const EvidenceDecision('ADJUST','本轮未做／中止提供了启动障碍信息，没有检验原预测。',
+        '根据实际原因只调整一个启动条件；如需要先恢复，恢复后再评估行动。');
+    }
     final due=t.nextReviewAtMs>0?t.nextReviewAtMs:t.reviewAtMs;
     if(t.resultStatus=='OBSERVING' || t.actualOutcome.trim().isEmpty ||
         (time<due && m['signal_final']!='true')) {

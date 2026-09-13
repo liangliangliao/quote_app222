@@ -153,11 +153,12 @@ void main() {
   });
   test('ADJUST carries the chosen variable into a linked next trial',() async {
     var trial=await start();
-    trial=await dao.captureResult(trial,didAction:false,actualOutcome:'任务尺度太大',unexpected:'');
+    trial=await dao.captureResult(trial,didAction:false,actualOutcome:'任务太大，需要缩小第一步',unexpected:'');
     trial=await dao.saveReview(trial,const EvidenceGrowthReviewEngine().review(trial));
     trial=await dao.decide(trial,decision:'ADJUST',reason:'缩小尺度',nextAction:'只把投递数量改为一份');
     final next=const EvidenceGrowthRouter().nextTrial(trial);
-    expect(next.actionInstruction,contains('投递数量改为一份'));expect(next.operator,trial.operator);
+    expect(next.actionInstruction,contains('投递数量改为一份'));expect(next.operator,isNot(trial.operator));
+    expect(next.cycleContext.single['actual_outcome'],'任务太大，需要缩小第一步');
     final created=await dao.createTrial(next,prediction:'完成一份',probability:.7,reviewAt:DateTime.now().add(const Duration(hours:1)),
       riskConfirmed:true,previousTrialId:trial.id);
     expect((await dao.byId(trial.id))!.nextTrialId,created.id);

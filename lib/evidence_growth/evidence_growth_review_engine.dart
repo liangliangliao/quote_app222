@@ -1,4 +1,5 @@
 import 'evidence_growth_models.dart';
+import 'evidence_growth_cycle.dart';
 import 'evidence_growth_decision_engine.dart';
 
 /// Shared offline/server fallback. Outcome usefulness and prediction accuracy
@@ -25,6 +26,7 @@ class EvidenceGrowthReviewEngine {
       decision: decision,
       nextChangeOneVariable: next,
       knowledgeNodeIds: trial.nodeIds,
+      cycleUpdate:EvidenceGrowthCycle.fallbackUpdate(trial,decision,recommendation.reason,next),
     );
   }
 }

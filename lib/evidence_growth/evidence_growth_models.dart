@@ -199,6 +199,8 @@ class EvidenceRouteResult {
     this.nextRoundPreserved = true,
     this.personalEvidence = const <Map<String, Object?>>[],
     this.inputDrafts = const <String,String>{},
+    this.cyclePlan = const <String,String>{},
+    this.cycleContext = const <Map<String,Object?>>[],
   });
   final String rawInput;
   final List<String> facts;
@@ -228,6 +230,8 @@ class EvidenceRouteResult {
   final bool nextRoundPreserved;
   final List<Map<String, Object?>> personalEvidence;
   final Map<String,String> inputDrafts;
+  final Map<String,String> cyclePlan;
+  final List<Map<String,Object?>> cycleContext;
 
   bool get canAct => status == 'READY_FOR_ACTION' && riskGate == 'PASS';
 
@@ -259,6 +263,8 @@ class EvidenceRouteResult {
     bool? nextRoundPreserved,
     List<Map<String, Object?>>? personalEvidence,
     Map<String,String>? inputDrafts,
+    Map<String,String>? cyclePlan,
+    List<Map<String,Object?>>? cycleContext,
   }) =>
       EvidenceRouteResult(
         rawInput: rawInput,
@@ -289,6 +295,8 @@ class EvidenceRouteResult {
         nextRoundPreserved: nextRoundPreserved ?? this.nextRoundPreserved,
         personalEvidence: personalEvidence ?? this.personalEvidence,
         inputDrafts: inputDrafts ?? this.inputDrafts,
+        cyclePlan: cyclePlan ?? this.cyclePlan,
+        cycleContext: cycleContext ?? this.cycleContext,
       );
 }
 
@@ -602,6 +610,7 @@ class TrialReviewResult {
     required this.decision,
     required this.nextChangeOneVariable,
     required this.knowledgeNodeIds,
+    this.cycleUpdate = const <String,String>{},
   });
   final String predictionOriginal;
   final List<String> actualFacts;
@@ -612,9 +621,10 @@ class TrialReviewResult {
   final String decision;
   final String nextChangeOneVariable;
   final List<String> knowledgeNodeIds;
+  final Map<String,String> cycleUpdate;
   Map<String,Object?> toJson() => {'prediction_original':predictionOriginal,'actual_facts':actualFacts,
     'prediction_error':predictionError,'failure_class':failureClass,'learning':learning,'rule_update':ruleUpdate,
-    'decision':decision,'next_change_one_variable':nextChangeOneVariable,'knowledge_nodes_used':knowledgeNodeIds};
+    'decision':decision,'next_change_one_variable':nextChangeOneVariable,'knowledge_nodes_used':knowledgeNodeIds,'cycle_update':cycleUpdate};
 }
 
 class EvidenceSummary {
