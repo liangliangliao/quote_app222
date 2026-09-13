@@ -60,10 +60,11 @@ learning_applied 必须说明上轮反馈实际改变了本轮什么；首轮留
 PERSONAL_EVIDENCE（只是同类个人样本，不是公共真理）:${jsonEncode(route.personalEvidence)}
 ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList())}
 可预填的行动字段：${jsonEncode(EvidenceGrowthOperatorRegistry.byId(route.operator).inputPrompts)}。input_drafts 只填写用户已说的事实或明确标成建议的最小行动；未知的焦虑、身体状态、事实或约束留空，不编造。不替用户确认风险。
+解释和 cycle_plan 每项用一句话、尽量不超过 50 个汉字；行动不超过 100 字；仍要返回完整 JSON。
 只返回JSON：{"selected_nodes":[{"node_id":"..."}],"inference":"...","confidence":0.0,"operator":"...","action_instruction":"...","completion_definition":"...","risk_gate":"PASS|NEED_CHECK|BLOCK","review_trigger":"...","evidence_status":"E3|E2|E1|E0","alternatives":["..."],"input_drafts":{"字段":"草案"},"cycle_plan":{"goal":"","current":"","gap":"","belief":"","belief_basis":"","expected_signal":"","why_action":"","learning_applied":""}}''',
         purpose: 'evidence_growth.route',
         systemPrompt: _contract,
-        maxTokens: 1000,
+        maxTokens: 1800,
         expectJson: true,
         temperature: .12,
       ).timeout(const Duration(seconds:20));
@@ -276,10 +277,11 @@ change_reason 必须说明为何改这一处，carry_forward 说明下一轮保�
 不是行动失败就否定方向，也不是完成就验证信念；未开始时分析恢复、启动条件或完美主义，禁止视为能力反证。
 DECISION_RULE 的保护退出、明确反证退出和观察窗口必须服从；若只因缺少手动标签建议 OBSERVE，
 可基于实际事实提出 ACT 或 ADJUST 候选，但 decision_fact_quote 必须逐字截取实际事实并在 learning 中解释；最终由用户确认。
+learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 50 个汉字；原预测和实际事实逐字保留。
 只返回JSON：{"prediction_original":"逐字复制","actual_facts":["..."],"prediction_error":"...","failure_class":"NO_FAILURE|NO_ACTION|NOT_CLASSIFIED|TOO_EARLY|INTELLIGENT|BASIC|COMPLEX|RUIN_RISK","learning":"...","rule_update":"...","decision":"ACT|ADJUST|EXIT|OBSERVE","next_change_one_variable":"...","knowledge_nodes_used":["..."],"decision_fact_quote":"实际事实片段","cycle_update":{"belief_after":"","belief_reason":"","goal_progress":"","next_goal":"","next_gap":"","change_target":"","change_reason":"","carry_forward":""}}''',
         purpose: 'evidence_growth.review',
         systemPrompt: _contract,
-        maxTokens: 1100,
+        maxTokens: 2000,
         expectJson: true,
         temperature: .1,
       ).timeout(const Duration(seconds:20));
