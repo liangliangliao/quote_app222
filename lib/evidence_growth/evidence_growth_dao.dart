@@ -5,8 +5,12 @@ import 'package:sqflite_common/sqlite_api.dart';
 
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
+import 'evidence_growth_cycle.dart';
 import 'evidence_growth_operator_registry.dart';
 import 'evidence_growth_reminder_plan.dart';
+import 'evidence_growth_workflows.dart';
+import 'evidence_growth_decision_engine.dart';
+import 'evidence_growth_router.dart';
 
 class EvidenceGrowthDao {
   EvidenceGrowthDao({required Future<Database> Function() database})
@@ -14,6 +18,7 @@ class EvidenceGrowthDao {
   final Future<Database> Function() _databaseProvider;
   Future<void>? _ready;
   Future<Database> _database() => _databaseProvider();
+  Future<Database> knowledgeDatabase() => _databaseProvider();
   Future<void> ensureTables() => _ready ??= _createTables();
 
   Future<void> _createTables() async {
@@ -149,6 +154,15 @@ class EvidenceGrowthDao {
       throw ArgumentError('请填写有效预测和 0–100% 概率。');
     }
     final spec = EvidenceGrowthOperatorRegistry.byId(route.operator);
+    EvidenceGrowthWorkflows.validate(route.operator,operatorInputs,commitment:commitmentLevel);
+    final advanced=const {'PREMORTEM','SYSTEM_SCAN'}.contains(route.operator);
+    final limit=operatorInputs['cost_limit'];
+    if(limit!=null && (double.tryParse(limit)==null || !double.parse(limit).isFinite || double.parse(limit)<=0)) {
+      throw ArgumentError('行动前预算必须为正数，且需要说明单位');
+    }
+    final instruction=advanced || route.operator=='COMMITMENT_LADDER'?
+      EvidenceGrowthWorkflows.action(route.operator,operatorInputs,commitment:commitmentLevel):route.actionInstruction;
+    if(EvidenceGrowthRouter.protected(const EvidenceGrowthRouter().route(instruction))) throw ArgumentError('方案动作触发风险条件，请先缩小或调整');
     if (spec.needsCommitment && commitmentLevel.isEmpty) throw ArgumentError('请选择最低有效承诺等级。');
     if (route.selectedNodes.isEmpty || !route.selectedNodes.first.isTal ||
         !route.selectedNodes.any((n) => n.operators.contains(route.operator))) {
@@ -170,6 +184,23 @@ class EvidenceGrowthDao {
       }
     }
     final keepRaw = await getSetting('keep_raw_input', fallback: 'true') == 'true';
+    final parent=previousTrialId.isEmpty?null:await byId(previousTrialId);
+    if(previousTrialId.isNotEmpty && (parent==null || !parent.isClosed ||
+      !const {'ACT','ADJUST'}.contains(parent.decision))) {
+      throw StateError('只有完成继续或调整决定的上一轮才能承接；已退出路线需另立目标。');
+    }
+    final cycle=route.cyclePlan.isEmpty ? <String,String>{} : {...route.cyclePlan,
+      'expected_signal':prediction.trim(),
+      if((route.cyclePlan['why_action']??'').isEmpty)'why_action':route.inference};
+    final confirmedGoal=goalState.isEmpty ? (cycle['goal']??route.goalState) : goalState;
+    final confirmedCurrent=currentState.isEmpty ? (cycle['current']??route.currentState) : currentState;
+    final confirmedGap=topGap.isEmpty ? (cycle['gap']??route.topGap) : topGap;
+    if(cycle.isNotEmpty) {
+      cycle.addAll({'goal':confirmedGoal,'current':confirmedCurrent,'gap':confirmedGap});
+      EvidenceGrowthCycle.checked(cycle);
+    }
+    final changedHypothesis=parent!=null && cycle.isNotEmpty &&
+      cycle['belief']!=EvidenceGrowthCycle.plan(parent)['belief'];
     final facts = keepRaw
         ? route.facts
         : route.facts.where((fact) => !fact.startsWith('用户原话：')).toList();
@@ -184,7 +215,7 @@ class EvidenceGrowthDao {
       evidenceLevel: route.evidenceLevel,
       inference: route.inference,
       operator: route.operator,
-      actionInstruction: route.actionInstruction,
+      actionInstruction: instruction,
       completionDefinition: route.completionDefinition,
       prediction: prediction.trim(),
       probability: probability.clamp(0, 1).toDouble(),
@@ -198,11 +229,17 @@ class EvidenceGrowthDao {
       kbVersion: EvidenceGrowthKnowledge.kbVersion,
       promptVersion: EvidenceGrowthKnowledge.promptVersion,
       contextTags: route.contextTags,
-      goalState: goalState.isEmpty ? route.goalState : goalState,
-      currentState: currentState.isEmpty ? route.currentState : currentState,
-      topGap: topGap.isEmpty ? route.topGap : topGap,
-      operatorInputs: operatorInputs,
-      commitmentLevel: commitmentLevel,
+      goalState: confirmedGoal,
+      currentState: confirmedCurrent,
+      topGap: confirmedGap,
+      operatorInputs: {...operatorInputs,
+        'hypothesis_id':changedHypothesis?id:parent?.operatorInputs['hypothesis_id']??parent?.id??id,
+        'cycle_root':parent?.operatorInputs['cycle_root']??parent?.id??id,
+        'cycle_parent':parent?.id??'',
+        'cycle_round':'${parent==null?1:EvidenceGrowthCycle.round(parent)+1}',
+        if(cycle.isNotEmpty)'cycle_plan_json':jsonEncode(cycle),
+        if(parent?.operatorInputs.containsKey('cost_limit')==true)'cost_limit':parent!.operatorInputs['cost_limit']!},
+      commitmentLevel: EvidenceGrowthWorkflows.normalizeCommitment(commitmentLevel),
       worstCase: worstCase,
       stableContext: stableContext,
       riskChecks: {...route.riskChecks, 'USER_PREFLIGHT': 'CONFIRMED',
@@ -251,7 +288,7 @@ class EvidenceGrowthDao {
       await _updateReminders(txn, trial);
       if (previousTrialId.isNotEmpty) {
         final parent = await _current(txn, previousTrialId);
-        if (!parent.isClosed || parent.nextTrialId.isNotEmpty) throw StateError('上一轮尚未决策或已连接下一轮。');
+        if (!parent.isClosed || !const {'ACT','ADJUST'}.contains(parent.decision) || parent.nextTrialId.isNotEmpty) throw StateError('上一轮尚未决策或已连接下一轮。');
         await txn.update('evidence_growth_trials', {'next_trial_id': id},
             where: 'trial_id = ?', whereArgs: [previousTrialId]);
         await txn.update('evidence_growth_decisions', {'next_trial_id': id},
@@ -310,7 +347,8 @@ class EvidenceGrowthDao {
       throw ArgumentError('结果状态或事实不能为空。');
     }
     const allowedMeasurements = {'prediction_occurred', 'outcome_helpful', 'failure_class',
-      'recovery_hours', 'actual_anxiety'};
+      'recovery_hours', 'actual_anxiety','hypothesis_support','decision_evidence','method_changed',
+      'cost_spent','goal_fit','alternative_better','next_round_safe','signal_final','proposed_change'};
     if (resultMeasurements.keys.any((key) => !allowedMeasurements.contains(key))) {
       throw ArgumentError('结果记录不能改写行动前的条件。');
     }
@@ -319,6 +357,15 @@ class EvidenceGrowthDao {
           !const {'true', 'false', 'unknown'}.contains(resultMeasurements[key])) {
         throw ArgumentError('结果判断必须是发生、未发生或未知。');
       }
+    }
+    for(final key in ['method_changed','goal_fit','alternative_better','next_round_safe','signal_final']) {
+      if(resultMeasurements.containsKey(key) && !const {'true','false','unknown'}.contains(resultMeasurements[key])) throw ArgumentError('无效决策条件');
+    }
+    if(resultMeasurements.containsKey('hypothesis_support') && !const {'supports','refuted','unknown'}.contains(resultMeasurements['hypothesis_support'])) throw ArgumentError('无效假设判断');
+    for(final key in ['cost_spent','cost_limit']) {
+      if(!resultMeasurements.containsKey(key) || resultMeasurements[key]!.isEmpty)continue;
+      final value=double.tryParse(resultMeasurements[key]!);
+      if(value==null || !value.isFinite || value<0)throw ArgumentError('成本与预算必须为非负数且使用同一单位');
     }
     for (final key in ['actual_anxiety', 'recovery_hours']) {
       if (!resultMeasurements.containsKey(key)) continue;
@@ -373,11 +420,19 @@ class EvidenceGrowthDao {
         review.knowledgeNodeIds.any((id) => !current.nodeIds.contains(id))) {
       throw StateError('复盘不得改写原预测或引入未引用知识。');
     }
+    if(review.actualFacts.any((f)=>f!=current.actualOutcome && f!=current.unexpected)) {
+      throw StateError('复盘不能增加或改写现实事实。');
+    }
+    final cycleUpdate=review.cycleUpdate.isEmpty?<String,String>{}:EvidenceGrowthCycle.checked(review.cycleUpdate,update:true);
     final updated = current.copyWith(
       status: 'REVIEWED',
       failureClass: review.failureClass,
       learning: review.learning,
       ruleUpdate: review.ruleUpdate,
+      operatorInputs:{...current.operatorInputs,'recommended_decision':review.decision,
+        'prediction_error':review.predictionError,
+        'cycle_confirmed_json':'{}',
+        if(cycleUpdate.isNotEmpty)'cycle_update_json':jsonEncode(cycleUpdate)},
       nextAction: review.nextChangeOneVariable,
       updatedAtMs: now,
     );
@@ -400,7 +455,7 @@ class EvidenceGrowthDao {
   }
 
   Future<RealityTrial> decide(RealityTrial trial,
-      {required String decision, required String reason, required String nextAction, DateTime? nextReviewAt}) async {
+      {required String decision, required String reason, required String nextAction, DateTime? nextReviewAt, Map<String,String>? cycleUpdate}) async {
     final normalized = decision.toUpperCase();
     if (!const {'ACT', 'ADJUST', 'EXIT', 'OBSERVE'}.contains(normalized)) {
       throw ArgumentError.value(decision, 'decision');
@@ -412,10 +467,15 @@ class EvidenceGrowthDao {
     return db.transaction((txn) async {
       final current = await _current(txn, trial.id);
       if (current.status != 'REVIEWED') throw StateError('本轮尚未复盘或已决策。');
+      final safety=EvidenceGrowthDecisionEngine.evaluate(current);
+      if(safety.protective && normalized!='EXIT') throw StateError('成本或下一轮资格已触发保护条件，请先结束当前路线。');
+      final confirmedCycle=cycleUpdate==null ? <String,String>{} : EvidenceGrowthCycle.checked(cycleUpdate,update:true);
       final nextAt = (nextReviewAt ?? DateTime.now().add(const Duration(days: 1))).millisecondsSinceEpoch;
       if (normalized == 'OBSERVE' && nextAt <= now) throw ArgumentError('继续观察必须设置未来复盘时间。');
       final updated = current.copyWith(status: normalized == 'OBSERVE' ? 'OBSERVING' : 'DECIDED',
           decision: normalized, decisionReason: reason.trim(), nextAction: nextAction.trim(),
+          operatorInputs:{...current.operatorInputs,
+            if(confirmedCycle.isNotEmpty)'cycle_confirmed_json':jsonEncode({...confirmedCycle,'carry_forward':nextAction.trim()})},
           nextReviewAtMs: normalized == 'OBSERVE' ? nextAt : 0, updatedAtMs: now);
       await txn.update('evidence_growth_trials', updated.toRow(), where: 'trial_id = ?', whereArgs: [trial.id]);
       await txn.insert('evidence_growth_decisions', {
@@ -498,6 +558,34 @@ class EvidenceGrowthDao {
     return rows.map(RealityTrial.fromRow).toList();
   }
 
+  Future<List<RealityTrial>> decisionHistory(RealityTrial trial) async {
+    await ensureTables();
+    // Follow explicit parent links only. Same-node use is not the same hypothesis.
+    final db=await _database(); final result=<RealityTrial>[]; final seen={trial.id};
+    var child=trial.id;
+    for(var i=0;i<100;i++) {
+      final rows=await db.query('evidence_growth_trials',where:'next_trial_id = ?',whereArgs:[child],limit:1);
+      if(rows.isEmpty)break;
+      final parent=RealityTrial.fromRow(rows.single);
+      if(!seen.add(parent.id))break;
+      result.add(parent);child=parent.id;
+    }
+    return result;
+  }
+
+  Future<List<RealityTrial>> cycleHistory(RealityTrial trial) async {
+    final parents=await decisionHistory(trial);
+    final chain=[...parents.reversed,trial];
+    final seen=chain.map((t)=>t.id).toSet();
+    var next=trial.nextTrialId;
+    while(next.isNotEmpty && chain.length<200 && seen.add(next)) {
+      final item=await byId(next);
+      if(item==null) break;
+      chain.add(item);next=item.nextTrialId;
+    }
+    return chain;
+  }
+
   Future<EvidenceSummary> summary() async {
     await ensureTables();
     final trials = await recentTrials(limit: 1000);
@@ -552,6 +640,7 @@ class EvidenceGrowthDao {
       ]) {
         await txn.delete(table);
       }
+      await txn.delete('evidence_growth_settings',where:'setting_key LIKE ?',whereArgs:['workflow_draft_%']);
     });
   }
 

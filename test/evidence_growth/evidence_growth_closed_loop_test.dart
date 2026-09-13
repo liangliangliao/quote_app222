@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_workflows.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_ai_service.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_dao.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_models.dart';
@@ -26,7 +28,12 @@ void main() {
     test('S${i+1} persists complete evidence-result-review-decision loop', () async {
       final route = const EvidenceGrowthRouter().route(scenarios[i]);
       var trial = await dao.createTrial(route, prediction: '一天内获得一条现实反馈', probability: .7,
-        reviewAt: DateTime.now().add(const Duration(days: 1)), riskConfirmed: true);
+        reviewAt: DateTime.now().add(const Duration(days: 1)), riskConfirmed: true,
+        operatorInputs: route.operator=='SYSTEM_SCAN'?{'advanced_json':jsonEncode({
+          'scans':{for(final k in EvidenceGrowthWorkflows.layers.keys)k:'该层已核查：需要减少环境摩擦'},
+          'layer':'friction','controllable':true,'owner':'自己','baseline':'材料不在手边',
+          'change':'提前把材料放桌上，其他条件不变','metric':'是否按时进入任务','next_action':'把材料放桌上','window_days':7,
+        })}:{});
       trial = await dao.startTrial(trial);
       trial = await dao.captureResult(trial, didAction: true, actualOutcome: '执行了选定动作，获得一条反馈。',
         unexpected: '结果没有完全符合预期', resultMeasurements: {'prediction_occurred': 'true'});

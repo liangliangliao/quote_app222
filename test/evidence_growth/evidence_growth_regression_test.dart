@@ -142,22 +142,23 @@ void main() {
     final provider=_Provider((_)=>'invalid JSON');
     final service=EvidenceGrowthAiService(dao:dao,ai:provider);
     final route=const EvidenceGrowthRouter().route('拖延，没开始');
-    expect((await service.enrichRoute(route)).operator,route.operator);expect(provider.calls,2);
+    expect((await service.enrichRoute(route)).operator,route.operator);expect(provider.calls,3);
     var trial=await start();
     trial=await dao.captureResult(trial,didAction:true,actualOutcome:'得到一个答复',unexpected:'');
     final malicious=_Provider((_)=>jsonEncode({'prediction_original':'事后改写的预测','knowledge_nodes_used':trial.nodeIds}));
     final review=await EvidenceGrowthAiService(dao:dao,ai:malicious).review(trial);
     expect(review.predictionOriginal,trial.prediction);expect(malicious.calls,2);
     final logs=await db.query('evidence_growth_prompt_runs');
-    expect(logs,hasLength(4));expect(logs.every((r)=>r['valid_structure']==0),isTrue);
+    expect(logs,hasLength(5));expect(logs.every((r)=>r['valid_structure']==0),isTrue);
   });
   test('ADJUST carries the chosen variable into a linked next trial',() async {
     var trial=await start();
-    trial=await dao.captureResult(trial,didAction:false,actualOutcome:'任务尺度太大',unexpected:'');
+    trial=await dao.captureResult(trial,didAction:false,actualOutcome:'任务太大，需要缩小第一步',unexpected:'');
     trial=await dao.saveReview(trial,const EvidenceGrowthReviewEngine().review(trial));
     trial=await dao.decide(trial,decision:'ADJUST',reason:'缩小尺度',nextAction:'只把投递数量改为一份');
     final next=const EvidenceGrowthRouter().nextTrial(trial);
-    expect(next.actionInstruction,contains('投递数量改为一份'));expect(next.operator,trial.operator);
+    expect(next.actionInstruction,contains('投递数量改为一份'));expect(next.operator,isNot(trial.operator));
+    expect(next.cycleContext.single['actual_outcome'],'任务太大，需要缩小第一步');
     final created=await dao.createTrial(next,prediction:'完成一份',probability:.7,reviewAt:DateTime.now().add(const Duration(hours:1)),
       riskConfirmed:true,previousTrialId:trial.id);
     expect((await dao.byId(trial.id))!.nextTrialId,created.id);

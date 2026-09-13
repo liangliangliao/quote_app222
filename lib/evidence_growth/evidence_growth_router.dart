@@ -1,10 +1,62 @@
 import 'evidence_growth_knowledge.dart';
+import 'evidence_growth_cycle.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_operator_registry.dart';
+import 'evidence_growth_search.dart';
 
 /// Local routing is deterministic and keeps high-impact gates outside the model.
 class EvidenceGrowthRouter {
   const EvidenceGrowthRouter();
+  static bool protected(EvidenceRouteResult r)=>const {
+    'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS',
+  }.contains(r.status);
+
+  /// Recall never grants permission to act. Source sufficiency is decided
+  /// separately; vector similarity cannot promote an extension over Tal.
+  List<RoutedNode> retrieve(String text, {Map<String,double> semantic=const {},
+      Map<String,double> personalFit=const {}, List<String> exact=const []}) {
+    final rule=route(text,personalFit:personalFit);
+    if(protected(rule)) return [];
+    final lexical=EvidenceGrowthSearch.current.search(text,limit:40);
+    final lex={for(final c in lexical)c.node.id:c.score};
+    final ruleIds=rule.candidates.map((c)=>c.node.id).toSet();
+    final graph=rule.selectedNodes.expand((n)=>n.nextNodes).toSet();
+    final maxLex=lexical.isEmpty?1.0:lexical.first.score;
+    final result=<RoutedNode>[];
+    for(final node in EvidenceGrowthKnowledge.nodes) {
+      final l=(lex[node.id]??0)/maxLex;
+      final s=semantic[node.id]??0;
+      final ruleMatch=ruleIds.contains(node.id);
+      if(!ruleMatch && l<.12 && s<.55 && !exact.contains(node.id)) continue;
+      // Tokenized free-text contra fields from future manifests also filter.
+      if(node.contraSignals.any((c)=>!RegExp(r'^[A-Z_]+$').hasMatch(c) && c.length>2 && text.contains(c))) continue;
+      final score=.35*(semantic.isEmpty?l:(s.clamp(0,1)))+.25*(ruleMatch?1:l)+
+          .15 + .10*(personalFit[node.id]??.5).clamp(0,1)+.10*(node.isTal?1:node.isExtension1 ? .5 : .2)+
+          .05*(graph.contains(node.id)?1:.5)+(exact.contains(node.id) ? .03 : 0);
+      result.add(RoutedNode(node:node,score:score.toDouble(),reason:
+        '词法=${l.toStringAsFixed(2)}；向量=${semantic.containsKey(node.id)?s.toStringAsFixed(2):"未使用"}；'
+        '规则=$ruleMatch；关系=${graph.contains(node.id)}；个人=${(personalFit[node.id]??.5).toStringAsFixed(2)}'));
+    }
+    result.sort((a,b)=>b.score.compareTo(a.score));
+    return result;
+  }
+
+  EvidenceRouteResult fromSelection(String text,List<RoutedNode> candidates,List<EvidenceKNode> selected,
+      List<String> facts,String reason,{String gap=''}) {
+    final gate=route(text);
+    if(protected(gate)) return gate;
+    if(selected.isEmpty || !selected.first.isTal) return _insufficient(text);
+    final source=selected.last, spec=EvidenceGrowthOperatorRegistry.byId(source.operators.first);
+    return gate.copyWith(facts:facts,primaryModule:selected.first.module,
+      secondaryModules:selected.skip(1).map((n)=>n.module).where((m)=>m!=selected.first.module).toSet().take(2).toList(),
+      candidates:candidates,selectedNodes:selected,requiredChecks:selected.expand((n)=>n.prerequisites).toSet().toList(),
+      missingFacts:[],status:'READY_FOR_ACTION',riskGate:'PASS',inference:reason,confidence:.65,
+      operator:spec.id,actionInstruction:spec.id=='SOURCE_PRACTICE'?source.howTo.first:spec.instruction,
+      completionDefinition:spec.completion,reviewTrigger:spec.reviewTrigger,
+      evidenceLevel:selected.length>1?'E2':'E1',alternatives:spec.alternatives,
+      riskChecks:{...gate.riskChecks,'SOURCE_GAP':gap.isEmpty?'TAL_SUFFICIENT':gap,
+        'SELECTION':'MODEL_VERIFIED_IDS_AND_USER_QUOTES'});
+  }
   static const _patterns = <(List<String>, String)>[
     (['没开始','拖延','等待动力','没有动力','等状态','投简历','迟迟开不了头','还没动','知道但做不到','提不起劲'], 'A02'),
     (['一直改','不敢发','怕拒绝','被拒绝','完美','不够好'], 'F01'),
@@ -135,8 +187,8 @@ class EvidenceGrowthRouter {
       contextTags: [if(exhausted) 'RECOVERY', if(_has(text,['求职','简历','面试','工厂'])) 'WORK',
         if(_has(text,['自动','习惯','上床'])) 'HABIT',
         if(_has(text,['评价','不敢发','别人'])) 'EXPOSURE'],
-      currentState: '用户描述待核实；行动前确认具体对象与条件。',
-      topGap: spec.label,
+      currentState: text,
+      topGap: '待核对：${spec.label}是否是当前关键差距',
       riskChecks: {'PROFESSIONAL_BOUNDARY':'NO_EXPLICIT_SIGNAL','RUIN_GATE':'NO_EXPLICIT_SIGNAL',
         'RECOVERY_CHECK': exhausted ? 'RECOVER_FIRST' : 'CONFIRM_BEFORE_START',
         'STRETCH_ZONE_CHECK':'CONFIRM_BEFORE_START'},
@@ -147,25 +199,31 @@ class EvidenceGrowthRouter {
     if (!previous.isClosed || !const {'ACT','ADJUST'}.contains(previous.decision)) {
       return _insufficient('上一轮尚未完成继续或调整决定。');
     }
-    final input='${previous.rawInput}\n下一轮：${previous.nextAction}';
-    final checked=route(input);
-    if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(checked.status)) return checked;
-    final nodes=previous.nodeIds.map(EvidenceGrowthKnowledge.byId).whereType<EvidenceKNode>().toList();
-    if(nodes.isEmpty || !nodes.first.isTal || !nodes.any((n)=>n.operators.contains(previous.operator))) return _insufficient(input);
-    final spec=EvidenceGrowthOperatorRegistry.byId(previous.operator);
-    return EvidenceRouteResult(rawInput:input,facts:[...previous.facts,'上一轮实际：${previous.actualOutcome}',
-        '已确认下一步：${previous.nextAction}'],primaryModule:previous.primaryModule,secondaryModules:previous.secondaryModules,
-      candidates:nodes.map((n)=>RoutedNode(node:n,score:1,reason:'沿用上一轮已引用机制；本轮重新检查安全条件')).toList(),
-      selectedNodes:nodes,requiredChecks:nodes.expand((n)=>n.prerequisites).toSet().toList(),status:'READY_FOR_ACTION',
-      riskGate:'PASS',inference:'依据上一轮的现实结果，${previous.decision == 'ACT' ? '保持条件再次取样' : '只改变已确认的一个变量'}。',
-      confidence:.6,operator:previous.operator,
-      actionInstruction:previous.decision=='ACT' ? previous.actionInstruction
-          : '${previous.actionInstruction}\n本轮仅调整：${previous.nextAction}',
-      completionDefinition:previous.completionDefinition,reviewTrigger:spec.reviewTrigger,evidenceLevel:'E2',
-      alternatives:spec.alternatives,contextTags:previous.contextTags,goalState:previous.goalState,
-      currentState:previous.actualOutcome,topGap:previous.topGap,
-      personalEvidence:[{'trial_id':previous.id,'actual_outcome':previous.actualOutcome,
-        'result_status':previous.resultStatus,'decision':previous.decision,'rule_update':previous.ruleUpdate}]);
+    // Route the latest reality, not an ever-growing copy of the first problem.
+    final input='${previous.actualOutcome}\n${previous.unexpected}\n${previous.nextAction}';
+    var fresh=route(input);
+    if(protected(fresh)) return fresh;
+    // ACT retains confirmed experimental conditions. ADJUST reopens diagnosis,
+    // including the operator and knowledge nodes, using the new evidence.
+    if(previous.decision=='ACT') {
+      final nodes=previous.nodeIds.map(EvidenceGrowthKnowledge.byId).whereType<EvidenceKNode>().toList();
+      if(nodes.isNotEmpty && nodes.first.isTal) {
+        fresh=fromSelection(input,fresh.candidates,nodes,[previous.actualOutcome],
+          '上一轮有帮助；先保留有效条件，再依据新证据核对适用性。').copyWith(
+            operator:previous.operator,actionInstruction:previous.actionInstruction,
+            completionDefinition:previous.completionDefinition);
+      }
+    }
+    final plan=EvidenceGrowthCycle.nextPlan(previous);
+    return fresh.copyWith(goalState:plan['goal'],currentState:previous.actualOutcome,
+      topGap:plan['gap'],cyclePlan:EvidenceGrowthCycle.plan(previous).isEmpty?{}:plan,cycleContext:[EvidenceGrowthCycle.context(previous)],
+      personalEvidence:[EvidenceGrowthCycle.context(previous)],
+      actionInstruction:previous.decision=='ADJUST' && fresh.canAct?previous.nextAction:fresh.actionInstruction,
+      inputDrafts:{
+        if(fresh.operator==previous.operator) ...previous.operatorInputs,
+        'prediction':'',
+        if(previous.decision=='ADJUST') 'confirmed_adjustment':previous.nextAction,
+      });
   }
 
   EvidenceRouteResult _insufficient(String text) => _stop(text,

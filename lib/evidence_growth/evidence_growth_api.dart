@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_cycle.dart';
 import 'evidence_growth_kb_store.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
@@ -106,7 +107,8 @@ class EvidenceGrowthApi {
       final previousId=_text(body,'previous_trial_id');
       final previous=previousId.isEmpty?null:await dao.byId(previousId);
       if(previousId.isNotEmpty && previous==null) throw const EvidenceGrowthApiError(404,'PREVIOUS_TRIAL_NOT_FOUND');
-      final route=previous==null?await _route(dao,_text(body,'text')):const EvidenceGrowthRouter().nextTrial(previous);
+      var route=previous==null?await _route(dao,_text(body,'text')):const EvidenceGrowthRouter().nextTrial(previous);
+      if(body['cycle_plan']!=null) route=route.copyWith(cyclePlan:EvidenceGrowthCycle.checked(body['cycle_plan']));
       final trial=await dao.createTrial(route,prediction:_text(body,'prediction'),
         probability:(body['probability'] as num).toDouble(),reviewAt:DateTime.fromMillisecondsSinceEpoch((body['review_at_ms'] as num).toInt()),
         riskConfirmed:body['risk_confirmed']==true,operatorInputs:_strings(body['operator_inputs']),
@@ -164,14 +166,15 @@ class EvidenceGrowthApi {
       final captured=await dao.captureResult(trial,didAction:body['did_action']==true,actualOutcome:_text(body,'actual_outcome'),
         unexpected:_text(body,'unexpected'),resultStatus:_text(body,'result_status'),resultMeasurements:_strings(body['measurements']),
         shameSignal:body['shame_signal']==true,imageExposureSignal:body['image_exposure_signal']==true);
-      return {'trial':captured.toRow(),'review':const EvidenceGrowthReviewEngine().review(captured).toJson()};
+      return {'trial':captured.toRow(),'review':const EvidenceGrowthReviewEngine().review(captured,history:await dao.decisionHistory(captured)).toJson()};
     }
     if(action=='review') {
-      final review=const EvidenceGrowthReviewEngine().review(trial);
+      final review=const EvidenceGrowthReviewEngine().review(trial,history:await dao.decisionHistory(trial));
       return {'trial':(await dao.saveReview(trial,review)).toRow(),'review':review.toJson()};
     }
     if(action=='decision') return {'trial':(await dao.decide(trial,decision:_text(body,'decision'),
       reason:_text(body,'reason'),nextAction:_text(body,'next_action'),
+      cycleUpdate:body['cycle_update']==null?null:EvidenceGrowthCycle.checked(body['cycle_update'],update:true),
       nextReviewAt:body['next_review_at_ms'] is num ? DateTime.fromMillisecondsSinceEpoch((body['next_review_at_ms'] as num).toInt()) : null)).toRow()};
     throw const EvidenceGrowthApiError(404,'NOT_FOUND');
   }
@@ -188,7 +191,7 @@ class EvidenceGrowthApi {
   static Map<String,Object?> routeJson(EvidenceRouteResult r) => {'facts':r.facts,'primary_module':r.primaryModule.key,
     'secondary_modules':r.secondaryModules.map((m)=>m.key).toList(),'status':r.status,'risk_gate':r.riskGate,
     'candidates':r.candidates.map((c)=>{'node_id':c.node.id,'score':c.score,'reason':c.reason}).toList(),
-    'knowledge_evidence':r.selectedNodes.map((n)=>n.toJson()).toList(),'personal_evidence':r.personalEvidence,
+    'knowledge_evidence':r.selectedNodes.map((n)=>n.toJson()).toList(),'personal_evidence':r.personalEvidence,'cycle_plan':r.cyclePlan,'cycle_context':r.cycleContext,
     'required_checks':r.requiredChecks,'missing_facts':r.missingFacts,'evidence_level':r.evidenceLevel,
     'inference':r.inference,'action':{'operator':r.operator,'instruction':r.actionInstruction,
       'completion_definition':r.completionDefinition,'review_trigger':r.reviewTrigger}};
