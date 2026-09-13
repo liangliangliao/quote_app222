@@ -55,7 +55,7 @@ INHERITED_PLAN（待核对，不得把旧差距当作仍然成立）:${jsonEncod
 围绕本轮生成 cycle_plan。goal 写可观察的用户目标；current 仅用已知事实；gap 是当前关键差距的候选解释；
 belief 是这次行动能检验的候选命题，不清楚就留空；belief_basis 分清用户原话与待验证推断。
 expected_signal 是本次动作可能观察到的具体信号，不能泛写“获得一个结果”。why_action 解释它如何缩小差距。
-learning_applied 必须说明上轮反馈实际改变了本轮什么；首轮留空。不要要求用户自己做模块诊断。
+learning_applied 必须说明上轮反馈实际改变了本轮什么；首轮留空。保留已确认目标，除非用户确认过新的目标。不要要求用户自己做模块诊断。
 上一轮 ACT 时保留已确认的行动条件；ADJUST 时只落实已确认的一个改变，允许切换知识和算子。
 PERSONAL_EVIDENCE（只是同类个人样本，不是公共真理）:${jsonEncode(route.personalEvidence)}
 ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList())}
@@ -97,7 +97,15 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
       if ((map['inference'] ?? '').toString().trim().isEmpty || !_number(map['confidence'],double.nan).isFinite) {
         throw const FormatException('INCOMPLETE_INFERENCE');
       }
-      final cycle=map['cycle_plan']==null ? route.cyclePlan : EvidenceGrowthCycle.checked(map['cycle_plan']);
+      final cycle=Map<String,String>.from(map['cycle_plan']==null ? route.cyclePlan : EvidenceGrowthCycle.checked(map['cycle_plan']));
+      // A summary produced by the model is not an additional observation.
+      // Use the already verified user extracts for the current-state field.
+      if(cycle.isNotEmpty) {
+        cycle['current']=route.facts.join('\n');
+        if(route.cycleContext.isNotEmpty && (cycle['learning_applied']??'').trim().isEmpty) {
+          throw const FormatException('PREVIOUS_LEARNING_REQUIRED');
+        }
+      }
       valid = true;
       final prompts=EvidenceGrowthOperatorRegistry.byId(op).inputPrompts;
       final drafts=<String,String>{};

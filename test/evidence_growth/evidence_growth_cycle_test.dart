@@ -100,14 +100,14 @@ void main(){
       return jsonEncode({'selected_nodes':[{'node_id':'KB35-F03'}],'inference':'本轮先处理从未做到否定自己的跳跃',
         'confidence':.6,'operator':'FAILURE_REFRAME','action_instruction':'写下已经发生的事实，向可信的人询问一条建议',
         'completion_definition':'留下问题及实际回应','risk_gate':'PASS','review_trigger':'收到回复后','evidence_status':'E1',
-        'cycle_plan':{...plan(),'current':t.actualOutcome,'gap':update()['next_gap'],'belief':update()['belief_after'],
+        'cycle_plan':{...plan(),'current':'模型虚构的用户状态','gap':update()['next_gap'],'belief':update()['belief_after'],
           'learning_applied':'上次未做没有检验能力，本次先将事实与身份判断分开'}});
     });
     final fresh=await EvidenceGrowthAiService(dao:dao,ai:ai).continueCycle(t);
     expect(purposes,['evidence_growth.evidence_router','evidence_growth.route']);
     expect(fresh.operator,'FAILURE_REFRAME');expect(fresh.primaryModule,GrowthModule.failure);
     expect(fresh.cyclePlan['learning_applied'],contains('上次未做'));expect(fresh.cycleContext,hasLength(1));
-    expect(fresh.facts,['没有发送作品']);
+    expect(fresh.facts,['没有发送作品']);expect(fresh.cyclePlan['current'],'没有发送作品');
   });
   test('AI can interpret plain feedback without requiring manual outcome labels',() async {
     var t=await first();
@@ -131,7 +131,7 @@ void main(){
     expect((await EvidenceGrowthAiService(dao:dao,ai:ai).review(t)).decision,'OBSERVE');
   });
   testWidgets('cycle presents the pending reality instead of six false completion badges',(tester) async {
-    final t=await first();
+    final t=(await tester.runAsync(()=>first()))!;
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:SingleChildScrollView(child:EvidenceGrowthCycleCard(trial:t)))));
     await tester.tap(find.text('第 1 轮 · 同一个现实问题'));await tester.pumpAndSettle();
     expect(find.text('信念 · 本轮检验'),findsOneWidget);

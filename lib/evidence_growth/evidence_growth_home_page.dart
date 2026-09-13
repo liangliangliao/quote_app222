@@ -347,10 +347,14 @@ class _RoutePageState extends State<_RoutePage> {
     if (!EvidenceGrowthRouter.protected(route)) unawaited(_enrich());
   }
   Future<void> _enrich() async {
-    enriching = true;
-    final parent=widget.previousTrialId.isEmpty || clarified?null:await widget.dao.byId(widget.previousTrialId);
-    final refined = parent==null?await widget.ai.enrichRoute(route):await widget.ai.continueCycle(parent);
-    if (mounted) setState(() { if (!starting) route = refined; enriching = false; });
+    if(mounted)setState(()=>enriching=true);
+    try {
+      final parent=widget.previousTrialId.isEmpty || clarified?null:await widget.dao.byId(widget.previousTrialId);
+      final refined = parent==null?await widget.ai.enrichRoute(route):await widget.ai.continueCycle(parent);
+      if(mounted && !starting)setState(()=>route=refined);
+    } catch(_) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('智能分析暂未完成，已保留当前信息，可补充后重试。')));
+    } finally { if(mounted)setState(()=>enriching=false); }
   }
 
   Future<void> _start() async {
@@ -363,7 +367,8 @@ class _RoutePageState extends State<_RoutePage> {
       if(value==null || !mounted){if(mounted)setState(()=>starting=false);return;}
       workflow=value;
     }
-    final setup = await showDialog<_PredictionSetup>(context: context, barrierDismissible: false, builder: (_) => _PredictionDialog(route));
+    final setupRoute=workflow.isEmpty?route:route.copyWith(actionInstruction:EvidenceGrowthWorkflows.action(route.operator,workflow));
+    final setup = await showDialog<_PredictionSetup>(context: context, barrierDismissible: false, builder: (_) => _PredictionDialog(setupRoute));
     if (setup == null || !mounted) { if (mounted) setState(() => starting = false); return; }
     try {
       var enableReminders = setup.remind;
@@ -425,6 +430,7 @@ class _RoutePageState extends State<_RoutePage> {
           const SizedBox(height: 12),
           if (enriching) const LinearProgressIndicator(minHeight: 2),
           if(route.goalState.isNotEmpty) _Card(title:'这一步为哪个目标服务',child:Text('${route.goalState}\n当前差距：${route.topGap}')),
+          if((route.cyclePlan['belief']??'').isNotEmpty) _Card(title:'这一步要检验的判断（请核对）',child:Text(route.cyclePlan['belief']!)),
           _Card(title: blocked ? '还需要确认什么' : '为什么现在做这一步', child: Text(route.cyclePlan['why_action']??route.inference, style: const TextStyle(height: 1.5))),
           if((route.cyclePlan['learning_applied']??'').isNotEmpty) _Card(title:'上轮反馈如何改变本轮',child:Text(route.cyclePlan['learning_applied']!)),
           const SizedBox(height: 10),
@@ -563,7 +569,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('系统已起草，请确认是否符合你的实际情况。结果回来后，我们据此调整下一轮。'),
           TextField(controller:goal,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'我希望推进的目标')),
-          TextField(controller:action,minLines:2,maxLines:4,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'现在做的这一件事')),
+          TextField(controller:action,readOnly:const {'PREMORTEM','SYSTEM_SCAN','COMMITMENT_LADDER'}.contains(widget.route.operator),minLines:2,maxLines:4,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'现在做的这一件事')),
           ExpansionTile(title:const Text('本轮判断与差距（可纠正）'),children:[
             TextField(controller:current,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'当前已知事实')),
             TextField(controller:gap,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'这次先解决的差距')),
