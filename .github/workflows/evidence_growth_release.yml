@@ -1,0 +1,86 @@
+name: Evidence Growth APK Delivery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/growth-six-core-features]
+    paths:
+      - lib/**
+      - android/**
+      - assets/**
+      - pubspec.yaml
+      - pubspec.lock
+      - .github/workflows/evidence_growth_release.yml
+      - .github/workflows/android_build_source_repo.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-growth-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deliver:
+    if: github.repository == 'liangliangliao/quote_app222' && github.ref == 'refs/heads/codex/growth-six-core-features'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+      - name: Resolve app dependencies
+        run: flutter pub get
+      - name: Build release APK
+        run: flutter build apk --release -t lib/main.dart
+      - name: Deliver APK to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: evidence-growth-${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_path='build/app/outputs/flutter-apk/app-release.apk'
+          test -s "$apk_path"
+          mkdir -p delivery
+          cp "$apk_path" delivery/quote-app-evidence-growth.apk
+          (cd delivery && sha256sum quote-app-evidence-growth.apk > SHA256SUMS.txt)
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          sha = os.environ['GITHUB_SHA']
+          repo = os.environ['GITHUB_REPOSITORY']
+          run = os.environ['GITHUB_RUN_ID']
+          Path('delivery/notes.md').write_text(
+              '六模块完整成长循环 · 安装包草稿\n\n'
+              f'源代码提交：{sha}\n'
+              f'构建记录：https://github.com/{repo}/actions/runs/{run}\n\n'
+              'APK 与校验文件见附件。本条为草稿，不自动发布正式版本。\n'
+              '只构建安装包，业务验证结果见 PR #160。\n', encoding='utf-8')
+          PY
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > delivery/is-draft.txt 2>/dev/null; then
+            test "$(cat delivery/is-draft.txt)" = 'true'
+          else
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft \
+              --title "六模块完整成长循环 · ${GITHUB_SHA:0:8}" --notes-file delivery/notes.md
+          fi
+          gh release upload "$RELEASE_TAG" delivery/quote-app-evidence-growth.apk delivery/SHA256SUMS.txt --clobber
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > delivery/uploaded.txt
+          grep -Fx 'quote-app-evidence-growth.apk' delivery/uploaded.txt
+          grep -Fx 'SHA256SUMS.txt' delivery/uploaded.txt
+          release_url="$(gh release view "$RELEASE_TAG" --json url --jq '.url')"
+          echo "APK 已上传：[打开安装包草稿]($release_url)" >> "$GITHUB_STEP_SUMMARY"
