@@ -58,9 +58,11 @@ class _EvidenceGrowthSyncPageState extends State<EvidenceGrowthSyncPage> {
     try {
       client=await EvidenceGrowthSyncSettings(widget.dao).client();
       if(client==null) throw StateError('请先启用同步。');
-      final comparison=await client.conflict(id);
+      final isJourney=id.startsWith('journey:');
+      final comparison=isJourney?await client.journeyConflict(id):await client.conflict(id);
       if(!mounted) return;
       Widget version(String label,Map bundle) {
+        if(isJourney){final j=bundle['journey'] as Map;return Card(child:Padding(padding:const EdgeInsets.all(12),child:Text('$label\n${j['title']??'目标组合'}\n状态：${j['status']} · 第 ${j['cycle']??1} 轮\n节点：${j['node']}\n当前事实：${j['current']??''}')));}
         final t=bundle['trial'] as Map;
         return Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(label,style:const TextStyle(fontWeight:FontWeight.bold)),
@@ -77,7 +79,8 @@ class _EvidenceGrowthSyncPageState extends State<EvidenceGrowthSyncPage> {
           TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('采用远程')),
           FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('采用本机'))]));
       if(choice==null) return;
-      await client.resolveConflict(id,comparison,keepLocal:choice);
+      if(isJourney){await client.resolveJourneyConflict(id,comparison,keepLocal:choice);}
+      else {await client.resolveConflict(id,comparison,keepLocal:choice);}
       await const EvidenceGrowthNotificationService().reconcile();
       await _load();
       if(mounted) setState(()=>status='已处理该轮冲突，两份原记录均已保存在冲突档案。');
@@ -89,12 +92,12 @@ class _EvidenceGrowthSyncPageState extends State<EvidenceGrowthSyncPage> {
   Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('跨设备同步')),
     body:ListView(padding:const EdgeInsets.all(20),children:[
       const Text('连接自己的证据成长服务',style:TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
-      const SizedBox(height:8),const Text('启用后，将向这个服务发送 Trial、事前预测、结果和复盘。断网时继续在本机记录，恢复连接后重试。'),
+      const SizedBox(height:8),const Text('启用后，将向这个服务发送目标旅程、目标组合、行动、事前预测、结果与复盘。断网时继续在本机记录，恢复连接后重试。'),
       const SizedBox(height:16),TextField(controller:address,keyboardType:TextInputType.url,
         decoration:const InputDecoration(labelText:'HTTPS 服务地址',hintText:'https://growth.example.com',border:OutlineInputBorder())),
       const SizedBox(height:12),TextField(controller:token,obscureText:true,enableSuggestions:false,autocorrect:false,
         decoration:InputDecoration(labelText:configured?'新的访问令牌（更换连接时填写）':'访问令牌',border:const OutlineInputBorder())),
-      SwitchListTile(contentPadding:EdgeInsets.zero,value:enabled,title:const Text('允许同步个人 Trial'),
+      SwitchListTile(contentPadding:EdgeInsets.zero,value:enabled,title:const Text('允许同步目标与个人证据'),
         onChanged:busy?null:(v) async { setState(()=>enabled=v); if(!v) await EvidenceGrowthSyncSettings(widget.dao).disable();
           else if(configured) await widget.dao.setSetting('sync_enabled','true'); }),
       FilledButton(onPressed:busy||!enabled?null:()=>_run(connect:true),child:const Text('保存连接并同步')),

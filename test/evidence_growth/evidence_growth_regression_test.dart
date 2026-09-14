@@ -202,7 +202,7 @@ void main() {
     expect(await dao.syncState(),isEmpty);expect(await dao.byId(trial.id),isNotNull);
     final online=EvidenceGrowthSyncClient(dao:dao,endpoint:Uri.parse('https://test.invalid'),token:'test',
       client:MockClient((request) async=>http.Response(jsonEncode(await api.dispatch(remote,request.method,request.url,
-        Map<String,dynamic>.from(jsonDecode(request.body) as Map))),200)));
+        request.body.isEmpty?<String,dynamic>{}:Map<String,dynamic>.from(jsonDecode(request.body) as Map))),200)));
     final result=await online.sync();online.close();
     expect(result.uploaded,1);expect(result.conflicts,isEmpty);expect((await dao.syncState()).containsKey(trial.id),isTrue);
   });

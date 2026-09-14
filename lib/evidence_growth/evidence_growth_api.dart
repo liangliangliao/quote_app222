@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_journey_api.dart';
 import 'evidence_growth_cycle.dart';
 import 'evidence_growth_kb_store.dart';
 import 'evidence_growth_knowledge.dart';
@@ -79,6 +80,8 @@ class EvidenceGrowthApi {
   }
 
   Future<Map<String,Object?>> dispatch(EvidenceGrowthDao dao,String method,Uri uri,Map<String,dynamic> body,{String requestKey=''}) async {
+    final modern=await EvidenceGrowthJourneyApi.dispatch(dao,method,uri,body);
+    if(modern!=null)return modern;
     final path=uri.path;
     if(method=='GET' && uri.pathSegments.length==4 && uri.pathSegments[0]=='v1' &&
       uri.pathSegments[1]=='trials' && uri.pathSegments[3]=='bundle') {
@@ -166,7 +169,7 @@ class EvidenceGrowthApi {
       final captured=await dao.captureResult(trial,didAction:body['did_action']==true,actualOutcome:_text(body,'actual_outcome'),
         unexpected:_text(body,'unexpected'),resultStatus:_text(body,'result_status'),resultMeasurements:_strings(body['measurements']),
         shameSignal:body['shame_signal']==true,imageExposureSignal:body['image_exposure_signal']==true);
-      return {'trial':captured.toRow(),'review':const EvidenceGrowthReviewEngine().review(captured,history:await dao.decisionHistory(captured)).toJson()};
+      return {'trial':captured.toRow(),if(await dao.journeys.forTrial(captured.id)==null)'review':const EvidenceGrowthReviewEngine().review(captured,history:await dao.decisionHistory(captured)).toJson()};
     }
     if(action=='review') {
       final review=const EvidenceGrowthReviewEngine().review(trial,history:await dao.decisionHistory(trial));

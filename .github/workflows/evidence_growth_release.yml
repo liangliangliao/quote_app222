@@ -3,7 +3,7 @@ name: Evidence Growth APK Delivery
 on:
   workflow_dispatch:
   push:
-    branches: [codex/growth-six-core-features]
+    branches: [codex/growth-six-core-features, codex/growth-v27-journeys]
     paths:
       - lib/**
       - android/**
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   deliver:
-    if: github.repository == 'liangliangliao/quote_app222' && github.ref == 'refs/heads/codex/growth-six-core-features'
+    if: github.repository == 'liangliangliao/quote_app222' && (github.ref == 'refs/heads/codex/growth-six-core-features' || github.ref == 'refs/heads/codex/growth-v27-journeys')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -66,17 +66,17 @@ jobs:
           repo = os.environ['GITHUB_REPOSITORY']
           run = os.environ['GITHUB_RUN_ID']
           Path('delivery/notes.md').write_text(
-              '六模块完整成长循环 · 安装包草稿\n\n'
+              '六模块证据成长 v2.7 · 安装包草稿\n\n'
               f'源代码提交：{sha}\n'
               f'构建记录：https://github.com/{repo}/actions/runs/{run}\n\n'
               'APK 与校验文件见附件。本条为草稿，不自动发布正式版本。\n'
-              '只构建安装包，业务验证结果见 PR #160。\n', encoding='utf-8')
+              '只构建安装包，业务验证结果见对应升级 PR。\n', encoding='utf-8')
           PY
           if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > delivery/is-draft.txt 2>/dev/null; then
             test "$(cat delivery/is-draft.txt)" = 'true'
           else
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft \
-              --title "六模块完整成长循环 · ${GITHUB_SHA:0:8}" --notes-file delivery/notes.md
+              --title "六模块证据成长 v2.7 · ${GITHUB_SHA:0:8}" --notes-file delivery/notes.md
           fi
           gh release upload "$RELEASE_TAG" delivery/quote-app-evidence-growth.apk delivery/SHA256SUMS.txt --clobber
           gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > delivery/uploaded.txt

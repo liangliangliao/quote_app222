@@ -55,7 +55,7 @@ jobs:
   build:
     # This branch delivers once per push through evidence_growth_release.yml.
     # Keep all other branches' existing build behavior unchanged.
-    if: github.ref != 'refs/heads/codex/growth-six-core-features' && github.head_ref != 'codex/growth-six-core-features'
+    if: github.ref != 'refs/heads/codex/growth-six-core-features' && github.head_ref != 'codex/growth-six-core-features' && github.ref != 'refs/heads/codex/growth-v27-journeys' && github.head_ref != 'codex/growth-v27-journeys'
     runs-on: ubuntu-latest
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"

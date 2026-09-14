@@ -46,6 +46,7 @@ jobs:
           test/evidence_growth/evidence_growth_regression_test.dart
           test/evidence_growth/evidence_growth_six_features_test.dart
           test/evidence_growth/evidence_growth_cycle_test.dart
+          test/evidence_growth/evidence_growth_v27_test.dart
       - name: Resolve standalone API dependencies
         working-directory: server/evidence_growth
         run: dart pub get
