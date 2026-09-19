@@ -173,8 +173,9 @@ void main() {
       expect(original.prediction, '会收到一条修改建议');
       expect(original.operatorInputs['campaign_id'], campaignId);
     }
-    final reminders = await db.query('evidence_growth_reminder_events',
-        where: "trial_id=? AND status='PENDING'", whereArgs: [ids.first]);
+    final reminders = await db.query('evidence_growth_reminders',
+        where: "trial_id=? AND state IN ('pending','scheduled','blocked')",
+        whereArgs: [ids.first]);
     expect(reminders, isEmpty);
   });
 
