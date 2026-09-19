@@ -65,7 +65,9 @@ class EvidenceGrowthJourneyApi {
       }
     }
     if (p.length >= 2 && p[1] == 'dependencies' && method == 'POST') {
-      if (b['from'] != null)
+      if (b['operation'] == 'REMOVE') {
+        await store.removeDependency(b['from'], b['to'], b['type']);
+      } else if (b['from'] != null)
         await store.addDependency(b['from'], b['to'], b['type'],
             evidence: b['evidence'] ?? '');
       return {

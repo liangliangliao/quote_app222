@@ -250,6 +250,8 @@ class EvidenceGrowthJourneyStore {
       if (j == null || j.version != expected.version)
         throw StateError('记录已变化，请刷新后重试');
       if (j.status == 'DELETED') throw StateError('目标已删除');
+      if (j.terminal && operation != 'reopen')
+        throw StateError('已结束的目标保留原始证据；请先重开再补充新的现实');
       final result = await operate(tx, j, operation, body);
       final updated = result.copy({
         'version': j.version + 1,
@@ -289,7 +291,58 @@ class EvidenceGrowthJourneyStore {
         requireText(b, ['text']);
         return j.copy({
           'pending_entry': b['text'],
-          'entry_profile': GrowthProblemProfile.resolve(b['text']).data
+          'entry_profile': GrowthProblemProfile.resolve(b['text']).data,
+          'entry_received_at_ms': DateTime.now().millisecondsSinceEpoch
+        });
+      case 'entry-consume':
+        if ('${j.data['pending_entry'] ?? ''}'.isEmpty)
+          throw StateError('没有待处理的新信息');
+        requireText(b, ['use']);
+        if (b['use'] != 'CONTEXT') throw ArgumentError('请在对应步骤确认事实、学习或改变');
+        return j.copy({
+          'current':
+              '${j.data['current'] ?? ''}\n补充事实：${j.data['pending_entry']}',
+          'pending_entry': ''
+        });
+      case 'campaign':
+        if (!j.confirmed ||
+            j.node != 'ACTION' ||
+            j.trialId.isNotEmpty ||
+            growthRows(growthMap(j.data['campaign'])['samples']).isNotEmpty)
+          throw StateError('开始采样前设置学习窗口，已有样本不能改写');
+        final count = growthInt(b['sample_target'], 1);
+        final deadline = growthInt(b['deadline_ms']);
+        if (count < 1 ||
+            count > 20 ||
+            (deadline != 0 &&
+                deadline <= DateTime.now().millisecondsSinceEpoch))
+          throw ArgumentError('样本数为 1–20；截止时间应在未来');
+        return j.copy({
+          'campaign': {
+            ...campaignFor(j),
+            'sample_target': count,
+            'deadline_ms': deadline,
+            'boundary_reason': '',
+            'status': 'COLLECTING'
+          }
+        });
+      case 'campaign-close':
+        final c = campaignFor(j),
+            samples = growthRows(campaignFor(j)['samples']);
+        if (j.node != 'ACTION' || j.trialId.isNotEmpty || samples.isEmpty)
+          throw StateError('先记录当前行动的真实结果');
+        requireText(b, ['reason']);
+        await log(
+            tx, j, 'LEARNING_BOUNDARY', {'campaign': c, 'reason': b['reason']});
+        return j.copy({
+          'node': 'REVIEW',
+          'readiness': 'UNKNOWN',
+          'trial_id': samples.last['trial_id'] ?? '',
+          'campaign': {
+            ...c,
+            'status': 'READY_FOR_REVIEW',
+            'boundary_reason': b['reason']
+          }
         });
       case 'contract':
         if (j.confirmed && !j.node.endsWith('_GATE'))
@@ -331,10 +384,26 @@ class EvidenceGrowthJourneyStore {
         await nodeRun(
             tx, next, 'GOAL', {'belief': next.data['belief']}, contract);
         await log(tx, next, 'GOAL_CONTRACT', contract);
-        if (revision) next = await newCycle(tx, next);
+        if (revision) {
+          final plan = {
+            ...j.plan,
+            'plan_id': j.plan['plan_id'] ?? 'plan_${j.id}',
+            'version': growthInt(j.plan['version']) + 1,
+            'goal_version': contract['version'],
+            'campaign_id': newId('campaign')
+          };
+          await log(tx, next, 'PLAN_REVISION', {
+            'before': j.plan,
+            'after': plan,
+            'diff': {'reason': '用户修订目标合同，重新核对行动适用性'}
+          });
+          next = await newCycle(tx, next.copy({'plan': plan}));
+        }
         if (growthInt(j.plan['version']) == 0) {
           final plan = {
             'version': 1,
+            'plan_id': newId('plan'),
+            'goal_version': contract['version'],
             'strategy': b['strategy'] ?? '先完成一轮现实采样，再按结果调整',
             'status': 'ACTIVE',
             'campaign_id': newId('campaign')
@@ -343,7 +412,8 @@ class EvidenceGrowthJourneyStore {
           await log(tx, next, 'ACTION_PLAN', plan);
         }
         // Imported old action continues where reality stopped; never redo it.
-        if (j.data['legacy'] == true) next = next.copy({'node': j.node});
+        if (j.data['legacy'] == true && !revision)
+          next = next.copy({'node': j.node});
         return next;
       case 'outcome':
         if (!j.confirmed || !const ['ACTION', 'OUTCOME'].contains(j.node))
@@ -376,11 +446,50 @@ class EvidenceGrowthJourneyStore {
               {...r, if (r['id'] == j.data['active_route']) 'status': 'CLOSED'}
           ];
         }
+        final c = campaignFor(j);
+        final sample = {
+          'trial_id': j.trialId,
+          'facts': b['facts'],
+          'outcome': outcome,
+          'at_ms': DateTime.now().millisecondsSinceEpoch
+        };
+        final samples = [...growthRows(c['samples']), sample];
+        final major = b['significant_event'] == true ||
+            outcome['verb'] == 'REJECTION' ||
+            const ['ROUTE_CLOSED', 'STAGE_BLOCKED']
+                .contains(outcome['route_effect']);
+        final due = growthInt(c['deadline_ms']) > 0 &&
+            DateTime.now().millisecondsSinceEpoch >=
+                growthInt(c['deadline_ms']);
+        final boundary =
+            major || due || samples.length >= growthInt(c['sample_target'], 1);
+        final reason = major
+            ? '出现重大事件或边界变化'
+            : due
+                ? '到达学习窗口截止时间'
+                : '达到约定样本数';
+        final campaign = {
+          ...c,
+          'samples': samples,
+          'status': boundary ? 'READY_FOR_REVIEW' : 'COLLECTING',
+          'boundary_reason': boundary ? reason : ''
+        };
+        await log(tx, j, 'CAMPAIGN_SAMPLE', {
+          ...sample,
+          'campaign_id': c['id'],
+          'plan_id': c['plan_id'],
+          'plan_version': c['plan_version']
+        });
+        if (boundary)
+          await log(tx, j, 'LEARNING_BOUNDARY',
+              {'campaign': campaign, 'reason': reason});
         return j.copy({
+          'campaign': campaign,
+          'trial_id': boundary ? j.trialId : '',
           'outcome': outcome,
           'routes': routes,
           'current': b['facts'],
-          'node': 'REVIEW',
+          'node': boundary ? 'REVIEW' : 'ACTION',
           'event_phase': 'POST_EVENT',
           'pending_entry': '',
           'readiness': j.profile.data['processing_state'] == 'DEFERRED'
@@ -422,6 +531,14 @@ class EvidenceGrowthJourneyStore {
         return checkpoint(
             tx,
             j.copy({
+              if (b['target'] == 'EXIT')
+                'routes': [
+                  for (final r in growthRows(j.data['routes']))
+                    {
+                      ...r,
+                      if (r['id'] == j.data['active_route']) 'status': 'CLOSED'
+                    }
+                ],
               'change': b,
               'belief': b['belief_after'] ?? j.data['belief']
             }));
@@ -489,6 +606,10 @@ class EvidenceGrowthJourneyStore {
           'version': growthInt(j.plan['version']) + 1,
           'status': 'ACTIVE',
           'campaign_id': newId('campaign'),
+          'plan_id': j.plan['plan_id'] ?? 'plan_${j.id}',
+          'goal_version': j.contract['version'],
+          'expected_signal': b['expected_signal'],
+          'source_cycle': j.cycle,
           if (b['operation'] != 'KEEP')
             field: b['operation'] == 'REMOVE' ? '' : b['change']
         };
@@ -601,6 +722,10 @@ class EvidenceGrowthJourneyStore {
           if (value == null || !value.isFinite || value < 0)
             throw ArgumentError('资源不能是负数或无效数字');
         }
+        if (growthInt(b['energy']) > 10 ||
+            (b.containsKey('priority') &&
+                ![1, 2, 3].contains(num.tryParse('${b['priority']}'))))
+          throw ArgumentError('精力为 0–10，优先级为 1、2 或 3');
         return j.copy({'allocation': b});
       case 'mutuality':
         final state = b['value'];
@@ -698,9 +823,33 @@ class EvidenceGrowthJourneyStore {
           ]
         });
       case 'stage':
+        if (growthMap(j.data['stage']).isNotEmpty)
+          throw StateError('已有阶段，请凭现实证据推进阶段，保留旧阶段记录');
         requireText(b, ['title', 'entry_condition', 'exit_condition']);
         return j.copy({
-          'stage': {...b, 'status': 'ACTIVE'}
+          'stage': {...b, 'id': newId('stage'), 'status': 'ACTIVE'}
+        });
+      case 'stage-transition':
+        if (growthMap(j.data['stage']).isEmpty || !j.node.endsWith('_GATE'))
+          throw StateError('完成本轮学习后再核对阶段变化');
+        requireText(b, ['facts', 'title', 'entry_condition', 'exit_condition']);
+        if (b['confirmed'] != true) throw StateError('需要确认现实证据满足原阶段的退出条件');
+        final previous = growthMap(j.data['stage']);
+        await log(tx, j, 'STAGE_COMPLETED', {
+          'stage': previous,
+          'evidence': b['facts'],
+          'source': 'USER_ATTESTATION',
+          'goal_achieved': false
+        });
+        return j.copy({
+          'stage': {
+            'id': newId('stage'),
+            'title': b['title'],
+            'entry_condition': b['entry_condition'],
+            'exit_condition': b['exit_condition'],
+            'status': 'ACTIVE',
+            'previous_stage_id': previous['id']
+          }
         });
       case 'change-attempt':
         requireText(b, [
@@ -776,6 +925,17 @@ class EvidenceGrowthJourneyStore {
 
   static Future<GrowthJourney> checkpoint(
       DatabaseExecutor tx, GrowthJourney j) async {
+    final campaign = campaignFor(j);
+    await log(tx, j, 'CAMPAIGN_REVIEW', {
+      'campaign': campaign,
+      'learning': j.data['learning'],
+      'change': j.data['change'],
+      'plan': j.plan,
+      'goal_achieved': false
+    });
+    j = j.copy({
+      'campaign': {...campaign, 'status': 'REVIEWED'}
+    });
     await nodeRun(
         tx,
         j,
@@ -783,7 +943,40 @@ class EvidenceGrowthJourneyStore {
         {'current': j.data['current'], 'change': j.data['change']},
         {'belief': j.data['belief']},
         mode: 'CHECKPOINT');
+    final parentId = j.data['parent_id'];
+    if (parentId is String) {
+      final parent = await read(tx, parentId);
+      if (parent != null) {
+        final updated = parent.copy({'version': parent.version + 1});
+        await put(tx, updated);
+        await log(tx, updated, 'EPISODE_EVIDENCE', {
+          'child_journey_id': j.id,
+          'child_cycle': j.cycle,
+          'facts':
+              j.profile.sensitive ? '私密事件已完成本轮记录，可在原事件查看' : j.data['current'],
+          'child_plan_version': j.plan['version'],
+          'goal_achieved': false,
+          'requires_parent_gate': true
+        });
+      }
+    }
     return j.copy({'node': j.gate});
+  }
+
+  static GrowthData campaignFor(GrowthJourney j) {
+    final c = growthMap(j.data['campaign']);
+    if (c.isNotEmpty) return c;
+    return {
+      'id': 'campaign_${j.id}_${j.cycle}_${j.plan['version']}',
+      'plan_id': j.plan['plan_id'] ?? 'plan_${j.id}',
+      'plan_version': j.plan['version'],
+      'goal_version': j.contract['version'],
+      'cycle': j.cycle,
+      'sample_target': 1,
+      'deadline_ms': 0,
+      'status': 'COLLECTING',
+      'samples': <GrowthData>[]
+    };
   }
 
   static Future<GrowthJourney> newCycle(
@@ -791,14 +984,20 @@ class EvidenceGrowthJourneyStore {
     final next = j.copy({
       'cycle': j.cycle + 1,
       'previous_trial_id': j.trialId,
+      'previous_plan_version': j.data['active_trial_plan_version'] ??
+          growthMap(j.data['campaign'])['plan_version'] ??
+          j.plan['version'],
+      'active_trial_plan_version': null,
+      'next_change': j.data['change'],
+      'last_outcome': j.data['outcome'],
+      'campaign': {},
       'trial_id': '',
       'node': 'ACTION',
       'readiness': 'UNKNOWN',
       'event_phase': 'PRE_EVENT',
       'status': j.status == 'RECOVERY_CYCLE' ? 'RECOVERY_CYCLE' : 'ACTIVE',
       'change': {},
-      'outcome': {},
-      'pending_entry': ''
+      'outcome': {}
     });
     await log(tx, next, 'CYCLE', {'trigger': 'GATE', 'prior_cycle': j.cycle});
     await nodeRun(tx, next, 'BELIEF', {'prior_belief': j.data['belief']},
@@ -848,7 +1047,22 @@ class EvidenceGrowthJourneyStore {
         'schedule': t.operatorInputs['scheduled_start_ms'],
         'action': t.actionInstruction
       });
-      j = j.copy({'trial_id': id});
+      final campaign = campaignFor(j);
+      final provenance = {
+        ...t.operatorInputs,
+        'plan_id': '${campaign['plan_id']}',
+        'plan_version': '${campaign['plan_version']}',
+        'campaign_id': '${campaign['id']}',
+        'goal_version': '${j.contract['version']}'
+      };
+      await tx.update('evidence_growth_trials',
+          {'operator_inputs_json': jsonEncode(provenance)},
+          where: 'trial_id=?', whereArgs: [id]);
+      j = j.copy({
+        'trial_id': id,
+        'campaign': campaign,
+        'active_trial_plan_version': j.plan['version']
+      });
     } else {
       if (j.trialId != id) throw StateError('历史行动不能推进当前周期');
       if (type == 'STARTED' || type == 'START_RESCHEDULED') {
@@ -909,6 +1123,15 @@ class EvidenceGrowthJourneyStore {
         if (t.decision == 'OBSERVE')
           j = j.copy({'node': 'ACTION', 'readiness': 'UNKNOWN'});
         if (t.decision == 'EXIT') {
+          j = j.copy({
+            'routes': [
+              for (final r in growthRows(j.data['routes']))
+                {
+                  ...r,
+                  if (r['id'] == j.data['active_route']) 'status': 'CLOSED'
+                }
+            ]
+          });
           await log(tx, j, 'ROUTE_CLOSED', {
             'trial_id': id,
             'reason': t.decisionReason,
@@ -933,6 +1156,16 @@ class EvidenceGrowthJourneyStore {
       throw StateError('必须先确认当前双方意愿；可随时暂停或退出');
     if (const ['PAUSED', 'WITHDRAWN', 'ENDED'].contains(j.data['mutuality']))
       throw StateError('当前事件已经暂停或退出');
+    final campaign = campaignFor(j);
+    if (growthRows(campaign['samples']).isNotEmpty &&
+        growthInt(campaign['deadline_ms']) > 0 &&
+        DateTime.now().millisecondsSinceEpoch >=
+            growthInt(campaign['deadline_ms']))
+      throw StateError('学习窗口已截止，请先汇总已有反馈再进入下一轮');
+    final activeRoute = growthRows(j.data['routes'])
+        .where((r) => r['id'] == j.data['active_route']);
+    if (activeRoute.isNotEmpty && activeRoute.first['status'] == 'CLOSED')
+      throw StateError('当前路线已经停止，请选择新的路线再行动');
     final portfolio = await portfolioData(tx);
     final dep = await evaluateDependencies(tx, j.id, portfolio);
     if (growthStrings(dep['blocked_by']).isNotEmpty)
@@ -1041,6 +1274,13 @@ class EvidenceGrowthJourneyStore {
   Future<GrowthData> portfolio() async => portfolioData(await db);
   Future<GrowthData> savePortfolio(int expected, GrowthData patch) async =>
       (await db).transaction((tx) async {
+        if (patch.keys.any((k) => !const [
+              'budgets',
+              'protected_recovery',
+              'hard_commitments',
+              'external_conditions',
+              'condition_labels'
+            ].contains(k))) throw ArgumentError('关系与证据请通过专用操作修改，不能覆盖组合历史');
         final current = await portfolioData(tx);
         if (growthInt(current['version']) != expected)
           throw StateError('目标组合已变化，请刷新');
@@ -1097,7 +1337,9 @@ class EvidenceGrowthJourneyStore {
                 growthInt(growthMap(j.data['allocation'])['priority'], 2) == 1)
             .length >
         growthInt(budgets['attention'], 3)) conflicts.add('当前高优先目标过多，请暂存部分目标');
-    if (totals['energy']! >= 6 && growthRows(p['protected_recovery']).isEmpty)
+    if (totals['energy']! >= 6 &&
+        !growthRows(p['protected_recovery']).any(
+            (s) => growthInt(s['end']) > DateTime.now().millisecondsSinceEpoch))
       conflicts.add('高负荷安排需要保留恢复时段');
     for (final edge in growthRows(p['edges'])) {
       if (edge['type'] == 'CONFLICTS_WITH' &&
@@ -1179,6 +1421,23 @@ class EvidenceGrowthJourneyStore {
       });
       await put(tx, updated);
       await log(tx, updated, 'DEPENDENCY', candidate);
+    });
+  }
+
+  Future<void> removeDependency(String from, String to, String type) async {
+    await (await db).transaction((tx) async {
+      final p = await portfolioData(tx);
+      final edges = growthRows(p['edges']);
+      final removed = edges
+          .where((e) => e['from'] == from && e['to'] == to && e['type'] == type)
+          .toList();
+      if (removed.isEmpty) throw StateError('关系已变化，请刷新');
+      edges.removeWhere(
+          (e) => e['from'] == from && e['to'] == to && e['type'] == type);
+      final updated = GrowthJourney(
+          {...p, 'edges': edges, 'version': growthInt(p['version']) + 1});
+      await put(tx, updated);
+      await log(tx, updated, 'DEPENDENCY_REMOVED', removed.single);
     });
   }
 

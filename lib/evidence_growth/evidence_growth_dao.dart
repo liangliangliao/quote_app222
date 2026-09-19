@@ -299,7 +299,7 @@ class EvidenceGrowthDao {
         await _event(txn, previousTrialId, 'NEXT_TRIAL_LINKED', {'next_trial_id': id}, now);
       }
     });
-    return trial;
+    return (await byId(trial.id))!;
   }
 
   Future<RealityTrial> startTrial(RealityTrial trial) async {

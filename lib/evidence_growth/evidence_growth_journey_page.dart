@@ -320,6 +320,62 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
     }
   }
 
+  Future<void> nextStage() async {
+    final v = await _fields(context, '根据证据进入下一阶段', {
+      'facts': '哪些事实满足原阶段条件：${growthMap(j.data['stage'])['exit_condition']}',
+      'title': '下一阶段名称',
+      'entry_condition': '进入新阶段已满足的条件',
+      'exit_condition': '下一阶段完成时需要什么事实'
+    }, requiredKeys: [
+      'facts',
+      'title',
+      'entry_condition',
+      'exit_condition'
+    ]);
+    if (v == null || !mounted) return;
+    final confirm = await _choose(
+        context, '确认阶段变化', {'hold': '还不确定，保留当前阶段', 'yes': '上述事实已满足原阶段退出条件'});
+    if (confirm == 'yes')
+      await change('stage-transition', {...v, 'confirmed': true});
+  }
+
+  Future<void> campaign() async {
+    final c = EvidenceGrowthJourneyStore.campaignFor(j);
+    final v = await _fields(
+        context, '多久后一起复盘？', {'sample_target': '收集几次真实反馈（1–20 次）'},
+        initial: {'sample_target': '${c['sample_target']}'},
+        requiredKeys: ['sample_target']);
+    if (v == null || !mounted) return;
+    final mode = await _choose(
+        context, '学习窗口截止', {'count': '按样本数；重大事件随时提前复盘', 'date': '再设一个截止时间'});
+    if (mode == null || !mounted) return;
+    final at = mode == 'date' ? await _pickDateTime(context) : null;
+    if (mode == 'date' && at == null) return;
+    await change(
+        'campaign', {...v, 'deadline_ms': at?.millisecondsSinceEpoch ?? 0});
+  }
+
+  Future<void> useEntry() async {
+    if (j.node == 'ACTION' && j.trialId.isNotEmpty) {
+      await widget.onTrial(j.trialId);
+    } else if (j.node == 'ACTION' || j.node == 'OUTCOME') {
+      if (!mounted) return;
+      final choice = await _choose(context, '这段信息如何接回当前目标？',
+          {'outcome': '已发生的结果，核对后进入学习窗口', 'context': '补充现实条件，更新行动依据'});
+      if (choice == 'outcome') await outcome();
+      if (choice == 'context')
+        await change('entry-consume', {'use': 'CONTEXT'});
+    } else if (j.node == 'REVIEW') {
+      await change('entry-consume', {'use': 'CONTEXT'});
+    } else if (j.node == 'CHANGE') {
+      await confirmChange();
+    } else if (j.node.endsWith('_GATE')) {
+      await change('gate', {'choice': 'CONTINUE'});
+      // Keep the incoming text across the cycle boundary for explicit fact confirmation.
+      if (j.status == 'ACTIVE') await outcome();
+    }
+  }
+
   Future<void> outcome() async {
     final trial = j.trialId.isEmpty ? null : await widget.dao.byId(j.trialId);
     if (!mounted) return;
@@ -328,8 +384,10 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
         : await _fields(context, '核对实际发生了什么', {
             'facts': '只记录事实，不替对方推测想法'
           }, initial: {
-            'facts': growthMap(j.data['outcome'])['facts'] ??
-                j.data['pending_entry'] ??
+            'facts': ('${j.data['pending_entry'] ?? ''}'.isNotEmpty
+                    ? j.data['pending_entry']
+                    : null) ??
+                growthMap(j.data['outcome'])['facts'] ??
                 j.data['current'] ??
                 j.data['raw_input'] ??
                 ''
@@ -352,8 +410,21 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
           'UNKNOWN';
       explicit = object != 'UNKNOWN';
     }
-    await change('outcome',
-        {'facts': v['facts'], 'object': object, 'explicit': explicit});
+    var significant = false;
+    if (growthInt(
+                EvidenceGrowthJourneyStore.campaignFor(j)['sample_target'], 1) >
+            1 &&
+        mounted) {
+      significant = await _choose(context, '这次是否需要提前复盘？',
+              {'sample': '先积累这条反馈', 'major': '有重要变化，现在进入复盘'}) ==
+          'major';
+    }
+    await change('outcome', {
+      'facts': v['facts'],
+      'object': object,
+      'explicit': explicit,
+      'significant_event': significant
+    });
   }
 
   Future<void> readiness(String value) async {
@@ -406,7 +477,12 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
       'next_action': '接下来具体怎么做（可选）',
       'belief_after': '现在如何看待原来的判断（可选）'
     }, initial: {
-      'reason': d['reason'] ?? j.data['learning'] ?? '',
+      'reason': ('${j.data['pending_entry'] ?? ''}'.isNotEmpty
+              ? j.data['pending_entry']
+              : null) ??
+          d['reason'] ??
+          j.data['learning'] ??
+          '',
       'next_action': d['next_action'] ?? '',
       'belief_after': d['belief_after'] ?? ''
     }, requiredKeys: [
@@ -446,6 +522,8 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
       'selection_rule': '选择规则'
     });
     if (field == null || !mounted) return;
+    final draft = await widget.draft(j, 'plan');
+    if (!mounted) return;
     final v = await _fields(
         context,
         '计划 v${growthInt(j.plan['version'])} → v${growthInt(j.plan['version']) + 1}',
@@ -457,8 +535,11 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
         },
         initial: {
           'evidence': j.data['current'] ?? '',
-          'reason': j.data['learning'] ?? '',
-          'change': j.plan[field] ?? ''
+          'reason': draft['reason'] ?? j.data['learning'] ?? '',
+          'change': kind == 'KEEP'
+              ? j.plan[field] ?? ''
+              : draft['plan_change'] ?? j.plan[field] ?? '',
+          'expected_signal': draft['expected_signal'] ?? ''
         },
         requiredKeys: [
           'reason',
@@ -581,6 +662,7 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
     final choice = await _choose(context, '目标工具', {
       'allocation': '本目标的资源与优先级',
       'dependency': '添加前置或关联目标',
+      'remove-dependency': '解除已不适用的目标关系',
       'external': '更新外部条件',
       'stage': '设置当前阶段',
       'route': '增加一条路线',
@@ -644,6 +726,21 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
         'CONTRIBUTES_TO': '当前目标为它提供支持'
       });
       if (type != null) await store.addDependency(j.id, ref, type);
+    } else if (choice == 'remove-dependency') {
+      final relations = growthRows(deps['relations']);
+      final all = await store.list();
+      String title(dynamic id) =>
+          all.where((g) => g.id == id).firstOrNull?.safeTitle ?? '外部条件';
+      if (!mounted) return;
+      final selected = await _choose(context, '解除哪条关系？', {
+        for (var i = 0; i < relations.length; i++)
+          '$i':
+              '${title(relations[i]['from'])} → ${title(relations[i]['to'])} · ${relations[i]['type']}'
+      });
+      if (selected != null) {
+        final e = relations[int.parse(selected)];
+        await store.removeDependency(e['from'], e['to'], e['type']);
+      }
     } else if (choice == 'external') {
       final p = await store.portfolio();
       if (!mounted) return;
@@ -809,6 +906,16 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
     final active =
         !j.terminal && !const ['PAUSED', 'PARKED'].contains(j.status);
     final profile = j.profile;
+    final campaign = EvidenceGrowthJourneyStore.campaignFor(j);
+    final samples = growthRows(campaign['samples']);
+    final completedNodes = history
+        .where((r) => r['kind'] == 'NODE_RUN' && r['cycle'] == j.cycle)
+        .map((r) => r['node'])
+        .toSet();
+    final planReviews =
+        history.where((r) => r['kind'] == 'CAMPAIGN_REVIEW').toList();
+    final planChanges =
+        history.where((r) => r['kind'] == 'PLAN_REVISION').toList();
     final fact =
         growthMap(j.data['outcome'])['facts'] ?? j.data['current'] ?? '';
     return Scaffold(
@@ -852,7 +959,9 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                               avatar: Icon(
                                   n == j.node
                                       ? Icons.play_circle
-                                      : Icons.circle_outlined,
+                                      : completedNodes.contains(n)
+                                          ? Icons.check_circle
+                                          : Icons.circle_outlined,
                                   size: 17,
                                   color: _teal),
                               label: Text(GrowthJourney.labels[n]!)))
@@ -886,14 +995,95 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                             Text('边界：${j.contract['quality']}'),
                           Text('当前事实：$fact'),
                           Text(
-                              '计划 v${j.plan['version']}：${j.plan['strategy'] ?? ''}')
+                              '计划 v${j.plan['version']}：${j.plan['strategy'] ?? ''}'),
+                          for (final item in const {
+                            'cadence': '行动节奏',
+                            'schedule': '时间安排',
+                            'resource_limit': '资源上限',
+                            'stop_rule': '停止规则',
+                            'selection_rule': '选择规则'
+                          }.entries)
+                            if ('${j.plan[item.key] ?? ''}'.isNotEmpty)
+                              Text('${item.value}：${j.plan[item.key]}')
+                        ])),
+              if (j.confirmed)
+                _card(
+                    '本轮学习窗口 · 计划 v${campaign['plan_version']}',
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              '已收集 ${samples.length} / ${campaign['sample_target']} 条真实反馈'),
+                          if (growthInt(campaign['deadline_ms']) > 0)
+                            Text(
+                                '截止：${DateTime.fromMillisecondsSinceEpoch(growthInt(campaign['deadline_ms'])).toLocal()}'),
+                          if ('${campaign['boundary_reason'] ?? ''}'.isNotEmpty)
+                            Text('${campaign['boundary_reason']}'),
+                          for (final sample in samples)
+                            ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text('${sample['facts']}'),
+                                subtitle: const Text('已保存原始事实；不自动代表目标达成'),
+                                trailing: '${sample['trial_id'] ?? ''}'.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        tooltip: '查看本次行动',
+                                        icon: const Icon(Icons.open_in_new),
+                                        onPressed: () => run(() => widget
+                                            .onTrial(sample['trial_id'])))),
+                          if (active && j.node == 'ACTION' && j.trialId.isEmpty)
+                            Wrap(children: [
+                              if (samples.isEmpty)
+                                action('设置学习窗口', this.campaign),
+                              if (samples.isNotEmpty)
+                                action('已有足够信息，进入复盘', () async {
+                                  final v = await _fields(context, '为什么现在复盘？',
+                                      {'reason': '重大变化、窗口截止或已有足够信息'},
+                                      requiredKeys: ['reason']);
+                                  if (v != null)
+                                    await change('campaign-close', v);
+                                })
+                            ])
+                        ])),
+              if (growthMap(j.data['next_change']).isNotEmpty &&
+                  j.node == 'ACTION')
+                _card(
+                    '从上一轮带来的改变',
+                    Text(
+                        '${growthMap(j.data['next_change'])['next_action'] ?? growthMap(j.data['next_change'])['reason'] ?? ''}')),
+              if (planChanges.isNotEmpty || planReviews.isNotEmpty)
+                _card(
+                    '计划如何随现实调整',
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final r in planChanges)
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                    'v${growthMap(r['before'])['version']} → v${growthMap(r['after'])['version']}：${growthMap(r['diff'])['reason']}\n依据：${growthMap(r['diff'])['evidence'] ?? '目标合同修订'}\n调整：${growthMap(r['diff'])['change'] ?? '重新核对目标与计划'}')),
+                          for (final r in planReviews)
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                    '计划 v${growthMap(r['plan'])['version']} · 第 ${r['cycle']} 轮 · ${growthRows(growthMap(r['campaign'])['samples']).length} 条反馈\n学习：${r['learning'] ?? ''}\n下一步：${growthMap(r['change'])['next_action'] ?? growthMap(r['change'])['reason'] ?? ''}'))
                         ])),
               if (growthStrings(deps['blocked_by']).isNotEmpty)
                 _card(
                     '等待前置条件', const Text('先满足关联目标或外部条件。这段等待不会被记为行动失败，提醒也会暂停。')),
               if (j.data['pending_entry'] != null &&
                   '${j.data['pending_entry']}'.isNotEmpty)
-                _card('刚才补充的现实信息', Text('${j.data['pending_entry']}')),
+                _card(
+                    '刚才补充的现实信息',
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${j.data['pending_entry']}'),
+                          if (j.confirmed &&
+                              active &&
+                              j.status != 'MAINTAINING')
+                            action('接回当前步骤', useEntry)
+                        ])),
               if (profile.intimate)
                 _card(
                     '共同事件随时可以暂停',
@@ -1051,7 +1241,14 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                 action(
                     '我准备好了，恢复进度', () => change('status', {'value': 'ACTIVE'}),
                     primary: true),
+              for (final r
+                  in history.where((r) => r['kind'] == 'EPISODE_EVIDENCE'))
+                _card('关联事件的新证据', Text('${r['facts']}\n需在本目标核验，事件完成不代表父目标达成。')),
               ExpansionTile(title: const Text('阶段、路线与共同参与'), children: [
+                if (growthMap(j.data['stage']).isNotEmpty &&
+                    j.node.endsWith('_GATE') &&
+                    active)
+                  action('凭证据进入下一阶段', nextStage),
                 if (growthMap(j.data['stage']).isNotEmpty)
                   ListTile(
                       title:

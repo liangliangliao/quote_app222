@@ -14,6 +14,7 @@ import 'evidence_growth_ai_service.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_journey_page.dart';
+import 'evidence_growth_journey_runtime.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_cycle.dart';
@@ -49,7 +50,6 @@ class EvidenceGrowthHomePage extends StatefulWidget {
 class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with WidgetsBindingObserver {
   final _dao = EvidenceGrowthDao(database: AppDatabase.instance);
   late final _ai = EvidenceGrowthAiService(dao: _dao);
-  final _router = const EvidenceGrowthRouter();
   var _tab = 0;
   var _loading = true;
   var _routing = false;
@@ -131,7 +131,16 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
     if (input.trim().isEmpty || _routing) return;
     setState(() => _routing = true);
     try {
-      final journey=await _dao.journeys.create(input);
+      final existing=await _dao.journeys.list();
+      if (!mounted) return;
+      final active=existing.where((j)=>!j.terminal).toList();
+      final selected=active.isEmpty ? 'new' : await showDialog<String>(context:context,
+        builder:(ctx)=>SimpleDialog(title:const Text('这段输入属于哪个目标？'),children:[
+          SimpleDialogOption(onPressed:()=>Navigator.pop(ctx,'new'),child:const Text('开启新的目标或探索')),
+          for(final j in active) SimpleDialogOption(onPressed:()=>Navigator.pop(ctx,j.id),child:Text(j.safeTitle))]));
+      if(selected==null)return;
+      final journey=selected=='new' ? await _dao.journeys.create(input) :
+        await _dao.journeys.change(active.firstWhere((j)=>j.id==selected),'entry',{'text':input});
       if (!mounted) return;
       await _openJourney(journey);
       await _reload();
@@ -148,18 +157,12 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
   Future<void> _journeyAction(GrowthJourney j) async {
     final previousId=j.data['previous_trial_id'] as String? ?? '';
     final previous=previousId.isEmpty?null:await _dao.byId(previousId);
-    final canLink=previous!=null&&const ['ACT','ADJUST'].contains(previous.decision);
-    var route=canLink?_router.nextTrial(previous):_router.route('${j.title}\n当前事实：${j.data['current']}');
-    final gap=growthMap(j.data['change'])['next_action']??j.plan['strategy']??'通过一轮现实行动验证下一步';
-    route=route.copyWith(goalState:j.title,currentState:j.data['current'] as String? ?? '',topGap:'$gap',
-      cyclePlan:{...route.cyclePlan,'goal':j.title,'current':'${j.data['current']??''}','gap':'$gap',
-        'belief':'${j.data['belief']??''}','belief_basis':'用户确认的当前判断；未知部分保持空白',
-        'expected_signal':route.cyclePlan['expected_signal']??'','why_action':route.inference,'learning_applied':'${j.data['learning']??''}'},
-      cycleContext:[if(canLink)EvidenceGrowthCycle.context(previous),{'journey_context':j.data}]);
+    final canLink=EvidenceGrowthJourneyRuntime.canInherit(j, previous);
+    final route=EvidenceGrowthJourneyRuntime.compile(j, previous: previous);
     await _dao.recordRoute(route);
     if(!mounted)return;
     await Navigator.push(context,MaterialPageRoute(builder:(_)=>_RoutePage(route:route,dao:_dao,ai:_ai,
-      journey:j,previousTrialId:canLink?previous.id:'')));
+      journey:j,previousTrialId:canLink?previous!.id:'')));
   }
   Future<void> _openTrial(RealityTrial trial) async {
     final j=await _dao.journeys.forTrial(trial.id);
@@ -170,7 +173,9 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
   Future<void> _openTrialId(String id) async {
     final trial=await _dao.byId(id);if(trial==null||!mounted)return;
     final j=await _dao.journeys.forTrial(id);if(!mounted)return;
-    final Widget page = trial.status == 'REVIEWED'
+    final Widget page = j != null && j.trialId != id
+        ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
+        : trial.status == 'REVIEWED'
         ? _DecisionPage(trial: trial, dao: _dao, ai: _ai)
         : trial.isClosed ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
         : _TrialPage(trial: trial, dao: _dao, ai: _ai,initialFacts:'${j?.data['pending_entry']??''}');
@@ -1330,7 +1335,7 @@ class _ArchivePage extends StatelessWidget {
     EvidenceGrowthCycleCard(trial:trial),
     TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
       onPressed:()=>_openCycle(context,trial,dao,ai)),
-    if(const {'ACT','ADJUST'}.contains(trial.decision)) FilledButton.icon(icon:const Icon(Icons.play_arrow),
+    if(!trial.operatorInputs.containsKey('journey_id') && const {'ACT','ADJUST'}.contains(trial.decision)) FilledButton.icon(icon:const Icon(Icons.play_arrow),
       label:Text(trial.nextTrialId.isEmpty?'继续这条学习，建立下一轮':'打开下一轮'),onPressed:()async{
         final current=await dao.byId(trial.id);
         if(current==null || !context.mounted)return;
@@ -1342,7 +1347,7 @@ class _ArchivePage extends StatelessWidget {
             route:const EvidenceGrowthRouter().nextTrial(current),dao:dao,ai:ai,previousTrialId:current.id)));
         }
       }),
-    _Card(title: '${trial.decision} · ${trial.primaryModule.label}', child: Text(trial.decision == 'EXIT' ? 'Hypothesis Closed：结束路线不等于否定自己。' : '本轮验证已完成。')),
+    _Card(title: '${trial.decision} · ${trial.primaryModule.label}', child: Text(trial.decision == 'EXIT' ? 'Hypothesis Closed：结束路线不等于否定自己。' : trial.isClosed ? '本轮验证已完成。' : '本次事实已记录，等待本学习窗口统一复盘。')),
     const SizedBox(height: 10), _Card(title: '原预测', child: Text(trial.prediction)),
     const SizedBox(height: 10), _Card(title: '实际事实', child: Text(trial.actualOutcome)),
     const SizedBox(height: 10), _Card(title: '学习与规则更新', child: Text('${trial.learning}\n\n${trial.ruleUpdate}')),
