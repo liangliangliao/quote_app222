@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_guidance.dart';
+import 'evidence_growth_guidance_card.dart';
 import 'evidence_growth_knowledge_page.dart';
 import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_journey_models.dart';
@@ -13,6 +15,8 @@ typedef JourneyAction = Future<void> Function(GrowthJourney journey);
 typedef JourneyTrial = Future<void> Function(String id);
 typedef JourneyDraft = Future<GrowthData> Function(
     GrowthJourney journey, String purpose);
+typedef JourneyGuidance = Future<GrowthData> Function(GrowthJourney journey,
+    {String purpose, String question, bool refresh});
 const _teal = Color(0xff24766c);
 
 class EvidenceGrowthJourneyHome extends StatefulWidget {
@@ -226,12 +230,14 @@ class EvidenceGrowthJourneyPage extends StatefulWidget {
       required this.dao,
       required this.onAction,
       required this.onTrial,
-      required this.draft});
+      required this.draft,
+      this.guidance});
   final GrowthJourney journey;
   final EvidenceGrowthDao dao;
   final JourneyAction onAction;
   final JourneyTrial onTrial;
   final JourneyDraft draft;
+  final JourneyGuidance? guidance;
   @override
   State<EvidenceGrowthJourneyPage> createState() => _JourneyPageState();
 }
@@ -239,7 +245,18 @@ class EvidenceGrowthJourneyPage extends StatefulWidget {
 class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
   late GrowthJourney j = widget.journey;
   List<GrowthData> history = [];
-  GrowthData deps = {};
+  GrowthData deps = {}, guidance = {};
+  bool guiding = false;
+  String guidanceKey = '';
+  int guidanceRequest = 0;
+  final guidanceQuestion = TextEditingController();
+  @override
+  void dispose() {
+    guidanceRequest++;
+    guidanceQuestion.dispose();
+    super.dispose();
+  }
+
   bool busy = false;
   String feedbackState = '';
   EvidenceGrowthJourneyStore get store => widget.dao.journeys;
@@ -263,6 +280,69 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
         feedbackState = feedback;
       });
     unawaited(const EvidenceGrowthNotificationService().reconcile());
+    if (mounted && guidanceKey != '${j.id}:${j.version}:${j.node}')
+      unawaited(loadGuidance());
+  }
+
+  Future<void> loadGuidance({bool refresh = false}) async {
+    final expected = j, request = ++guidanceRequest;
+    setState(() {
+      guiding = true;
+      guidanceKey = '${j.id}:${j.version}:${j.node}';
+      guidance = {};
+    });
+    GrowthData result;
+    try {
+      result = widget.guidance == null
+          ? GrowthGuidance.local(
+              j, GrowthGuidance.stage(j, 'node'), '当前使用本地步骤指引')
+          : await widget.guidance!(expected,
+              purpose: 'node',
+              question: guidanceQuestion.text.trim(),
+              refresh: refresh);
+    } catch (_) {
+      result = GrowthGuidance.local(expected,
+          GrowthGuidance.stage(expected, 'node'), 'AI 请求未成功，保留本地步骤指引');
+    }
+    if (!mounted || request != guidanceRequest) return;
+    if (j.version != expected.version) {
+      setState(() => guiding = false);
+      return;
+    }
+    setState(() {
+      guidance = result;
+      guiding = false;
+    });
+  }
+
+  Future<void> continueGuided() async {
+    if (!j.confirmed) {
+      await contract();
+      return;
+    }
+    switch (j.node) {
+      case 'ACTION':
+        if (j.trialId.isNotEmpty) {
+          await widget.onTrial(j.trialId);
+        } else {
+          await widget.onAction(j);
+        }
+        break;
+      case 'OUTCOME':
+        await outcome();
+        break;
+      case 'REVIEW':
+        if (j.data['readiness'] == 'READY_NOW') await review();
+        break;
+      case 'CHANGE':
+        await confirmChange();
+        break;
+      case 'GOAL_GATE':
+        await criterion();
+        break;
+      default:
+        break;
+    }
   }
 
   Future<void> run(Future<void> Function() action) async {
@@ -295,14 +375,29 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
     final draft = await widget.draft(j, 'contract');
     if (!mounted) return;
     final first = !j.confirmed;
+    final beliefDraft =
+        guidance['origin'] == 'AI' && guidance['stage'] == 'BELIEF'
+            ? growthMap(guidance['node_output'])
+            : <String, dynamic>{};
+    final details = growthMap(j.data['belief_details']);
     final v = await _fields(
-        context, j.profile.mode == 'EXPLORE' ? '先定义本轮探索问题' : '核对目标与现实标准', {
-      'goal': j.profile.mode == 'EXPLORE' ? '这轮想弄清什么' : '希望现实发生什么',
-      'current': '现在已知的事实',
-      'criterion': j.profile.mode == 'EXPLORE' ? '哪些现实反馈能帮助选择' : '什么事实算达到标准',
-      'quality': '不能牺牲的边界（可选）',
-      'belief': '当前判断或担心（可选）'
-    },
+        context,
+        j.profile.mode == 'EXPLORE' ? '先定义本轮探索问题' : '核对目标与现实标准',
+        {
+          'goal': j.profile.mode == 'EXPLORE' ? '这轮想弄清什么' : '希望现实发生什么',
+          'current': '现在已知的事实',
+          'criterion':
+              j.profile.mode == 'EXPLORE' ? '哪些现实反馈能帮助选择' : '什么事实算达到标准',
+          'quality': '不能牺牲的边界（可选）',
+          'belief': '当前判断或担心（可选）',
+          'belief_basis': '这个判断依据什么（可选）',
+          'testable_belief': '什么现实反馈可以检验它（可选）',
+          'belief_update_rule': '看到什么时修正判断（可选）',
+          'measurement': '怎样观察是否接近标准（可选）',
+          'review_gate': '何时核验目标（可选）',
+          'stop_condition': '出现什么就停止（可选）',
+          'self_concordance': '这个方向为什么对你重要（可选）'
+        },
         initial: {
           'goal': j.confirmed
               ? j.title
@@ -312,13 +407,59 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
           'current': j.data['current'] ?? j.data['raw_input'] ?? '',
           'criterion': j.contract['criterion'] ?? draft['criterion'] ?? '',
           'quality': j.contract['quality'] ?? '',
-          'belief': j.data['belief'] ?? draft['belief'] ?? ''
+          'belief': '${j.data['belief'] ?? ''}'.trim().isNotEmpty
+              ? j.data['belief']
+              : beliefDraft['belief'] ?? draft['belief'] ?? '',
+          for (final key in [
+            'belief_basis',
+            'testable_belief',
+            'belief_update_rule'
+          ])
+            key: details[key] ?? beliefDraft[key] ?? '',
+          for (final key in [
+            'measurement',
+            'review_gate',
+            'stop_condition',
+            'self_concordance'
+          ])
+            key: j.contract[key] ?? draft[key] ?? ''
         },
-        requiredKeys: [
-          'goal',
-          'current',
-          'criterion'
-        ]);
+        source: GrowthGuidance.label(draft['_origin'] as String?),
+        sourceReason: '${draft['_reason'] ?? ''}',
+        fieldOrigins: {
+          'goal':
+              !j.confirmed && j.profile.mode == 'EXPLORE' ? '默认示例' : '用户原始记录',
+          'current': '用户原始记录',
+          'quality': '用户确认的边界',
+          'criterion': j.contract['criterion'] != null
+              ? '用户确认的标准'
+              : GrowthGuidance.label(draft['_origin'] as String?),
+          'belief': '${j.data['belief'] ?? ''}'.trim().isNotEmpty
+              ? '用户原始判断'
+              : beliefDraft['belief'] != null
+                  ? 'AI 生成 · 待核对'
+                  : GrowthGuidance.label(draft['_origin'] as String?),
+          for (final key in [
+            'belief_basis',
+            'testable_belief',
+            'belief_update_rule'
+          ])
+            key: details[key] != null
+                ? '用户确认的记录'
+                : beliefDraft[key] != null
+                    ? 'AI 生成 · 待核对'
+                    : '用户填写',
+          for (final key in [
+            'measurement',
+            'review_gate',
+            'stop_condition',
+            'self_concordance'
+          ])
+            key: j.contract[key] != null
+                ? '用户确认的合同'
+                : GrowthGuidance.label(draft['_origin'] as String?)
+        },
+        requiredKeys: ['goal', 'current', 'criterion']);
     if (v == null) return;
     await change('contract', v);
     if (first &&
@@ -329,6 +470,31 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
           {'record': '核对这次结果，再决定是否复盘', 'later': '先保留原话，准备下一行动'});
       if (choice == 'record') await outcome();
     }
+  }
+
+  Future<void> resolvePattern() async {
+    final v = await _fields(
+        context,
+        '先把评价还原为具体行为',
+        {
+          'observed_pattern': '最近一次具体做了什么或没有做什么？',
+          'context': '什么时候、什么情境发生？',
+          'impact': '实际造成什么影响？'
+        },
+        initial: growthMap(j.data['pattern_context'])
+            .map((k, v) => MapEntry(k, '$v')),
+        requiredKeys: ['observed_pattern', 'context', 'impact']);
+    if (v == null || !mounted) return;
+    final decision = await _choose(context, '根据事实，你希望怎样对待这个模式？', {
+      'NEED_MORE_EVIDENCE': '先收集更多事实',
+      'CHANGE': '改变具体行为',
+      'MANAGE': '管理影响',
+      'ACCEPT_OR_INTEGRATE': '接纳或整合，不把自己当缺陷',
+      'SKILL_BUILD': '学习相关技能',
+      'ENVIRONMENT_CHANGE': '调整环境条件',
+      'DOMAIN_BOUNDARY': '先寻求可靠专业支持'
+    });
+    if (decision != null) await change('pattern', {...v, 'decision': decision});
   }
 
   Future<void> nextStage() async {
@@ -463,8 +629,28 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
     final d = await widget.draft(j, 'review');
     if (!mounted) return;
     final v = await _fields(
-        context, '从事实中带走一条学习', {'learning': '实际发生与原先想法有什么差异？'},
-        initial: {'learning': d['learning'] ?? ''}, requiredKeys: ['learning']);
+        context,
+        '核对本轮复盘（未记录事前预测时，不补写预测）',
+        {
+          'learning': '从事实中学到了什么？',
+          'prediction_error': '原先判断与实际有什么差异（没有事前记录请说明）',
+          'cause_hypothesis': '1–3 个原因假设及支持／反对证据（可选）',
+          'keep': '哪些条件值得保留（可选）',
+          'change_candidate': '下一轮可改变的 1–2 点（可选）'
+        },
+        initial: {
+          for (final key in [
+            'learning',
+            'prediction_error',
+            'cause_hypothesis',
+            'keep',
+            'change_candidate'
+          ])
+            key: d[key] ?? ''
+        },
+        source: GrowthGuidance.label(d['_origin'] as String?),
+        sourceReason: '${d['_reason'] ?? ''}',
+        requiredKeys: ['learning']);
     if (v != null) await change('review', v);
   }
 
@@ -481,38 +667,77 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
       'EXIT': '停止当前尝试或路线'
     });
     if (choice == null || !mounted) return;
+    final planField = choice == 'MODIFY'
+        ? await _choose(context, '这次改变影响什么？', {
+            '': '仅本次动作／练习条件',
+            'strategy': '整体策略（需要新版计划）',
+            'schedule': '时间安排（需要新版计划）',
+            'cadence': '行动节奏（需要新版计划）',
+            'resource_limit': '资源上限（需要新版计划）',
+            'stop_rule': '停止规则（需要新版计划）',
+            'selection_rule': '选择规则（需要新版计划）'
+          })
+        : '';
+    if (planField == null || !mounted) return;
     final d = await widget.draft(j, 'change');
     if (!mounted) return;
-    final v = await _fields(context, '确认一个具体改变', {
-      'reason': '为什么这样调整',
-      'next_action': '接下来具体怎么做（可选）',
-      'belief_after': '现在如何看待原来的判断（可选）'
-    }, initial: {
-      'reason': ('${j.data['pending_entry'] ?? ''}'.isNotEmpty
-              ? j.data['pending_entry']
-              : null) ??
-          d['reason'] ??
-          j.data['learning'] ??
-          '',
-      'next_action': d['next_action'] ?? '',
-      'belief_after': d['belief_after'] ?? ''
-    }, requiredKeys: [
-      'reason'
-    ]);
-    if (v != null) await change('change', {'target': choice, ...v});
+    final v = await _fields(
+        context,
+        '确认一个具体改变',
+        {
+          'reason': '为什么这样调整',
+          'next_action': '接下来具体怎么做（可选）',
+          'belief_after': '现在如何看待原来的判断（可选）'
+        },
+        initial: {
+          'reason': ('${j.data['pending_entry'] ?? ''}'.isNotEmpty
+                  ? j.data['pending_entry']
+                  : null) ??
+              d['reason'] ??
+              j.data['learning'] ??
+              '',
+          'next_action': d['next_action'] ?? '',
+          'belief_after': d['belief_after'] ?? ''
+        },
+        source: GrowthGuidance.label(d['_origin'] as String?),
+        sourceReason: '${d['_reason'] ?? ''}',
+        fieldOrigins: {
+          'reason': '${j.data['pending_entry'] ?? ''}'.isNotEmpty ||
+                  d['reason'] == null
+              ? '用户记录／确认'
+              : GrowthGuidance.label(d['_origin'] as String?)
+        },
+        requiredKeys: ['reason']);
+    if (v != null)
+      await change('change', {'target': choice, 'plan_field': planField, ...v});
   }
 
   Future<void> criterion() async {
-    final v = await _fields(context, '补充达成依据', {'facts': '支持或不支持目标标准的现实事实'},
-        requiredKeys: ['facts']);
-    if (v == null || !mounted) return;
-    final met = await _choose(
-        context, '是否满足你定义的标准和质量边界？', {'no': '尚未全部满足', 'yes': '我确认已全部满足'});
-    if (met != null)
-      await change('criterion-evidence', {
+    final items = <GrowthData>[];
+    for (final criterion in growthRows(j.contract['criteria'])) {
+      final v = await _fields(
+          context, '核对这一条标准', {'facts': '${criterion['statement']}\n对应哪些真实事实？'},
+          requiredKeys: ['facts']);
+      if (v == null || !mounted) return;
+      final met = await _choose(
+          context, '这些事实是否满足这一条标准？', {'no': '尚未满足', 'yes': '确认已满足'});
+      if (met == null) return;
+      items.add({
+        'statement': criterion['statement'],
         'facts': v['facts'],
-        'met': met == 'yes',
-        'quality_met': met == 'yes'
+        'met': met == 'yes'
+      });
+    }
+    if (!mounted || items.isEmpty) return;
+    final quality = await _choose(
+        context,
+        '核对质量边界：${j.contract['quality'] ?? ''}',
+        {'no': '尚不确定或未满足', 'yes': '确认未牺牲约定边界'});
+    if (quality != null)
+      await change('criterion-evidence', {
+        'facts': items.map((e) => e['facts']).join('；'),
+        'items': items,
+        'quality_met': quality == 'yes'
       });
   }
 
@@ -552,12 +777,18 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
               : draft['plan_change'] ?? j.plan[field] ?? '',
           'expected_signal': draft['expected_signal'] ?? ''
         },
-        requiredKeys: [
-          'reason',
-          'evidence',
-          'change',
-          'expected_signal'
-        ]);
+        source: GrowthGuidance.label(draft['_origin'] as String?),
+        sourceReason: '${draft['_reason'] ?? ''}',
+        fieldOrigins: {
+          'evidence': '用户原始记录',
+          'reason': draft['reason'] == null
+              ? '用户确认的学习'
+              : GrowthGuidance.label(draft['_origin'] as String?),
+          'change': kind == 'KEEP' || draft['plan_change'] == null
+              ? '用户确认的现有计划'
+              : GrowthGuidance.label(draft['_origin'] as String?)
+        },
+        requiredKeys: ['reason', 'evidence', 'change', 'expected_signal']);
     if (v != null)
       await change('plan', {'operation': kind, 'field': field, ...v});
   }
@@ -875,7 +1106,8 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                     dao: widget.dao,
                     onAction: widget.onAction,
                     onTrial: widget.onTrial,
-                    draft: widget.draft)));
+                    draft: widget.draft,
+                    guidance: widget.guidance)));
     } else if (choice == 'metric') {
       final v = await _fields(context, '先决定数字的身份', {'text': '数字与含义'},
           requiredKeys: ['text']);
@@ -950,6 +1182,30 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
               Text(
                   '${GrowthJourney.labels[profile.lifecycle] ?? profile.lifecycle} · ${j.statusLabel} · 第 ${j.cycle} 轮'),
               if (busy) const LinearProgressIndicator(),
+              EvidenceGrowthGuidanceCard(
+                  value: guidance,
+                  loading: guiding,
+                  question: guidanceQuestion,
+                  onRefresh: busy ? null : () => loadGuidance(refresh: true),
+                  onContinue: busy ||
+                          !active ||
+                          guidance['needs_user_input'] == true ||
+                          GrowthGuidance.deferred(j) ||
+                          (j.node == 'REVIEW' &&
+                              j.data['readiness'] != 'READY_NOW')
+                      ? null
+                      : () => run(continueGuided)),
+              if (active && j.profile.data['self_judgment'] != null)
+                action('核对行为模式与改变方向', resolvePattern),
+              if (j.data['plan_revision_required'] == true)
+                _card(
+                    '先形成新版计划',
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('本轮改变涉及执行结构，修订计划后再进入下一轮。'),
+                          action('修订执行计划', plan)
+                        ])),
               if (feedbackState == 'NO_REALITY_FEEDBACK')
                 _card('暂未收到现实反馈',
                     const Text('已达到你设置的提醒次数，停止重复催促。随时可以回来记录已做、未做或中止。')),
@@ -1430,6 +1686,9 @@ Future<String?> _choose(
 Future<Map<String, String>?> _fields(
     BuildContext context, String title, Map<String, String> fields,
     {Map<String, String> initial = const {},
+    Map<String, String> fieldOrigins = const {},
+    String source = '用户记录／确认',
+    String sourceReason = '',
     List<String> requiredKeys = const []}) async {
   final controllers = {
     for (final key in fields.keys)
@@ -1445,6 +1704,9 @@ Future<Map<String, String>?> _fields(
                       child: SingleChildScrollView(
                           child:
                               Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text('内容来源：$source'),
+                        if (sourceReason.isNotEmpty) Text(sourceReason),
+                        const Text('已有记录优先保留；修改并保存后标为用户确认。'),
                         for (final e in fields.entries)
                           Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -1455,6 +1717,13 @@ Future<Map<String, String>?> _fields(
                                   onChanged: (_) => setState(() {}),
                                   decoration: InputDecoration(
                                       labelText: e.value,
+                                      helperText: controllers[e.key]!.text !=
+                                              (initial[e.key] ?? '')
+                                          ? '用户修改，待确认'
+                                          : fieldOrigins[e.key] ??
+                                              ((initial[e.key] ?? '').isEmpty
+                                                  ? '用户填写'
+                                                  : source),
                                       border: const OutlineInputBorder())))
                       ]))),
                   actions: [

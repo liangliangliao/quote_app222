@@ -86,6 +86,7 @@ class EvidenceGrowthJourneyStore {
         'version': 1,
         'title': raw,
         'raw_input': raw,
+        'kb_version_created': EvidenceGrowthKnowledge.kbVersion,
         'profile': p.data,
         'status': 'DRAFT',
         'node': 'BELIEF',
@@ -443,7 +444,15 @@ class EvidenceGrowthJourneyStore {
           'criterion': b['criterion'],
           'quality': b['quality'] ?? '',
           'deadline': b['deadline'] ?? '',
-          'control_boundary': b['control_boundary'] ?? '',
+          'control_boundary':
+              b['control_boundary'] ?? j.contract['control_boundary'] ?? '',
+          for (final key in [
+            'measurement',
+            'review_gate',
+            'stop_condition',
+            'self_concordance'
+          ])
+            key: b[key] ?? j.contract[key] ?? '',
           'evidence_policy': 'USER_ATTESTATION_ACCEPTED',
           'criteria': [
             for (final line in (b['criterion'] as String)
@@ -457,14 +466,32 @@ class EvidenceGrowthJourneyStore {
           'title': b['goal'],
           'current': b['current'],
           'belief': b['belief'] ?? j.data['belief'],
+          'belief_details': {
+            ...growthMap(j.data['belief_details']),
+            for (final key in [
+              'belief_basis',
+              'testable_belief',
+              'belief_update_rule'
+            ])
+              if (b[key] is String) key: b[key],
+            'source': 'USER_CONFIRMED'
+          },
           'contract': contract,
           'criteria_evidence': {},
           'status': 'ACTIVE',
           'node': 'ACTION',
           'contract_revision_required': false
         });
-        await nodeRun(tx, next, 'BELIEF', {'entry': j.profile.fragments},
-            {'belief': next.data['belief'], 'unknown_history_preserved': true},
+        await nodeRun(
+            tx,
+            next,
+            'BELIEF',
+            {'entry': j.profile.fragments},
+            {
+              'belief': next.data['belief'],
+              ...growthMap(next.data['belief_details']),
+              'unknown_history_preserved': true
+            },
             mode: 'CHECKPOINT');
         await nodeRun(
             tx, next, 'GOAL', {'belief': next.data['belief']}, contract);
@@ -603,15 +630,37 @@ class EvidenceGrowthJourneyStore {
           throw StateError('你选择现在复盘时才会进入学习与改变');
         if (j.trialId.isNotEmpty) throw StateError('请继续已绑定行动的复盘');
         requireText(b, ['learning']);
-        await nodeRun(tx, j, 'REVIEW', growthMap(j.data['outcome']),
-            {'learning': b['learning'], 'source': 'USER_CONFIRMED'});
-        return j.copy({'learning': b['learning'], 'node': 'CHANGE'});
+        final review = <String, dynamic>{
+          'learning': b['learning'],
+          for (final key in [
+            'prediction_error',
+            'cause_hypothesis',
+            'keep',
+            'change_candidate'
+          ])
+            key: b[key] is String ? b[key] : '',
+          'prediction_state': 'NOT_RECORDED_BEFORE_EVENT',
+          'source': 'USER_CONFIRMED'
+        };
+        await nodeRun(tx, j, 'REVIEW', growthMap(j.data['outcome']), review);
+        return j.copy(
+            {'learning': b['learning'], 'review': review, 'node': 'CHANGE'});
       case 'change':
         if (j.node != 'CHANGE' || j.trialId.isNotEmpty)
           throw StateError('请完成本轮复盘后确认改变');
         requireText(b, ['reason']);
         if (!const ['KEEP', 'MODIFY', 'EXIT', 'RECOVER', 'NO_ACTION_YET']
             .contains(b['target'])) throw ArgumentError('改变选项无效');
+        final planField = '${b['plan_field'] ?? ''}';
+        if (!const [
+          '',
+          'strategy',
+          'cadence',
+          'schedule',
+          'resource_limit',
+          'stop_rule',
+          'selection_rule'
+        ].contains(planField)) throw ArgumentError('计划字段无效');
         await nodeRun(tx, j, 'CHANGE', {'learning': j.data['learning']}, b);
         return checkpoint(
             tx,
@@ -625,15 +674,38 @@ class EvidenceGrowthJourneyStore {
                     }
                 ],
               'change': b,
+              'plan_revision_required': planField.isNotEmpty,
+              'pending_plan_field': planField,
               'belief': b['belief_after'] ?? j.data['belief']
             }));
       case 'criterion-evidence':
         requireText(b, ['facts']);
+        final criteria = growthRows(j.contract['criteria']);
+        var items = growthRows(b['items']);
+        if (criteria.length > 1 && items.isEmpty)
+          throw StateError('请逐项核对目标标准并填写对应事实');
+        if (items.isNotEmpty) {
+          if (items.length != criteria.length) throw StateError('标准数量已变化');
+          for (var i = 0; i < criteria.length; i++) {
+            if (items[i]['statement'] != criteria[i]['statement'] ||
+                '${items[i]['facts'] ?? ''}'.trim().isEmpty ||
+                items[i]['met'] is! bool) throw StateError('逐项证据必须与当前合同对应');
+          }
+        } else if (criteria.length == 1) {
+          items = [
+            {
+              'statement': criteria.single['statement'],
+              'facts': b['facts'],
+              'met': b['met'] == true
+            }
+          ];
+        }
         return j.copy({
           'criteria_evidence': {
             'facts': b['facts'],
             'criterion_version': j.contract['version'],
-            'met': b['met'] == true,
+            'met': items.isNotEmpty && items.every((e) => e['met'] == true),
+            'items': items,
             'quality_met': b['quality_met'] == true,
             'source': 'USER_ATTESTATION',
             'at_ms': DateTime.now().millisecondsSinceEpoch
@@ -665,6 +737,8 @@ class EvidenceGrowthJourneyStore {
           return j.copy({'status': 'ACHIEVED', 'dossier_id': dossier});
         }
         if (choice != 'CONTINUE') throw ArgumentError('请选择与生命周期一致的核验结果');
+        if (j.data['plan_revision_required'] == true)
+          throw StateError('本轮改变涉及执行结构，请先形成新计划版本再行动');
         if (j.data['contract_revision_required'] == true)
           throw StateError('先确认修订后的目标合同');
         final target = growthMap(j.data['change'])['target'];
@@ -700,7 +774,12 @@ class EvidenceGrowthJourneyStore {
         };
         await log(tx, j, 'PLAN_REVISION',
             {'before': j.plan, 'after': plan, 'diff': b});
-        return j.copy({'plan': plan});
+        return j.copy({
+          'plan': plan,
+          if (j.data['pending_plan_field'] == field ||
+              '${j.data['pending_plan_field'] ?? ''}'.isEmpty)
+            'plan_revision_required': false
+        });
       case 'status':
         if (!const ['PAUSED', 'PARKED', 'ARCHIVED', 'ACTIVE']
             .contains(b['value'])) throw ArgumentError('目标状态无效');
@@ -936,6 +1015,30 @@ class EvidenceGrowthJourneyStore {
             'previous_stage_id': previous['id']
           }
         });
+      case 'pattern':
+        requireText(b, ['observed_pattern', 'context', 'impact', 'decision']);
+        if (!const [
+          'CHANGE',
+          'MANAGE',
+          'ACCEPT_OR_INTEGRATE',
+          'SKILL_BUILD',
+          'ENVIRONMENT_CHANGE',
+          'NEED_MORE_EVIDENCE',
+          'DOMAIN_BOUNDARY'
+        ].contains(b['decision'])) throw ArgumentError('改变有效性选择无效');
+        final label =
+            '${growthMap(j.profile.data['self_judgment'])['label'] ?? ''}';
+        if ('${b['observed_pattern']}'.trim() == label.trim() ||
+            RegExp(r'^(我)?(很懒|没用|废物|无能|天生.*)$')
+                .hasMatch('${b['observed_pattern']}'.trim()))
+          throw ArgumentError('请记录具体行为，而不是重复人格标签');
+        return j.copy({
+          'pattern_context': {
+            ...b,
+            'source': 'USER_CONFIRMED',
+            'baseline_state': 'BASELINE_INSUFFICIENT'
+          }
+        });
       case 'change-attempt':
         requireText(b, [
           'observed_pattern',
@@ -946,6 +1049,15 @@ class EvidenceGrowthJourneyStore {
           'baseline',
           'signal'
         ]);
+        final label =
+            '${growthMap(j.profile.data['self_judgment'])['label'] ?? ''}';
+        if ('${b['observed_pattern']}'.trim() == label.trim() ||
+            RegExp(r'^(我)?(很懒|没用|废物|无能|天生.*)$')
+                .hasMatch('${b['observed_pattern']}'.trim()))
+          throw ArgumentError('改变尝试需要具体行为模式，不能以人格标签作为证据');
+        if (const ['NEED_MORE_EVIDENCE', 'DOMAIN_BOUNDARY']
+            .contains(growthMap(j.data['pattern_context'])['decision']))
+          throw StateError('先核对行为事实与改变有效性，再建立正式尝试');
         final attempts = growthRows(j.data['change_attempts']);
         attempts.add({
           ...b,
@@ -1207,6 +1319,9 @@ class EvidenceGrowthJourneyStore {
         await nodeRun(tx, j, 'CHANGE', {'trial_id': id}, change);
         j = j.copy({
           'change': change,
+          'plan_revision_required': confirmed['change_target'] == 'strategy',
+          'pending_plan_field':
+              confirmed['change_target'] == 'strategy' ? 'strategy' : '',
           'learning': t.decisionReason,
           'belief': confirmed['belief_after'] ?? j.data['belief'],
           'contract_revision_required':
@@ -1241,6 +1356,13 @@ class EvidenceGrowthJourneyStore {
 
   static Future<void> assertExecutable(
       DatabaseExecutor tx, GrowthJourney j, RealityTrial trial) async {
+    if (j.data['plan_revision_required'] == true) throw StateError('先完成执行计划修订');
+    if (j.profile.data['self_judgment'] != null &&
+        growthRows(j.data['change_attempts']).isEmpty &&
+        (growthMap(j.data['pattern_context']).isEmpty ||
+            const ['NEED_MORE_EVIDENCE', 'DOMAIN_BOUNDARY']
+                .contains(growthMap(j.data['pattern_context'])['decision'])))
+      throw StateError('先核对具体行为模式与改变是否必要');
     if (j.profile.blocked ||
         !const ['ACTIVE', 'ACTIVE_BUILD', 'RECOVERY_CYCLE']
             .contains(j.status) ||

@@ -13,6 +13,7 @@ import '../platform/native_scheduler.dart';
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_ai_service.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_guidance.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_journey_page.dart';
 import 'evidence_growth_journey_runtime.dart';
@@ -156,7 +157,7 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
 
   Future<void> _openJourney(GrowthJourney journey) async {
     await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthJourneyPage(
-      journey:journey,dao:_dao,onAction:_journeyAction,onTrial:_openTrialId,draft:_ai.journeyDraft)));
+      journey:journey,dao:_dao,onAction:_journeyAction,onTrial:_openTrialId,draft:_ai.journeyDraft,guidance:_ai.guideJourney)));
     await _reload();
   }
   Future<void> _journeyAction(GrowthJourney j) async {
@@ -503,6 +504,8 @@ class _RoutePageState extends State<_RoutePage> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(blocked ? route.status : '现在只做这一件事', style: TextStyle(color: blocked ? Colors.red : _brand, fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
+              Text(GrowthGuidance.label(route.riskChecks['CONTENT_ORIGIN'])),
+              if((route.riskChecks['CONTENT_REASON']??'').isNotEmpty)Text(route.riskChecks['CONTENT_REASON']!),
               Text(route.actionInstruction.isEmpty ? route.missingFacts.join('\n') : route.actionInstruction, style: const TextStyle(fontSize: 20, height: 1.4, fontWeight: FontWeight.w900, color: _ink)),
               if (route.completionDefinition.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -533,7 +536,7 @@ class _RoutePageState extends State<_RoutePage> {
                 '${e['result_status']} · ${e['actual_outcome']} · ${e['decision']}').join('\n')),
             ],
             const Divider(),
-            _Label('AI 推断', route.inference),
+            _Label('${GrowthGuidance.label(route.riskChecks['INFERENCE_ORIGIN']??route.riskChecks['CONTENT_ORIGIN'])} · 推断', route.inference),
             const Divider(),
             _Label('产品动作', route.actionInstruction),
           ]))]),
@@ -641,7 +644,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
           ExpansionTile(initiallyExpanded:inputs.values.any((v)=>v.text.trim().isEmpty),title:const Text('执行条件（核对草案）'),children:[...inputs.entries.map((entry) => Padding(padding: const EdgeInsets.only(top: 8), child:
             TextField(controller: entry.value, onChanged: (_) => setState(() {}),
               decoration: InputDecoration(labelText: entry.key,
-                helperText:widget.route.inputDrafts.containsKey(entry.key)?'系统草案，请核对或修改':null,
+                helperText:widget.route.inputDrafts.containsKey(entry.key)?'${GrowthGuidance.label(widget.route.riskChecks['CONTENT_ORIGIN'])}，请核对或修改':null,
                 border: const OutlineInputBorder()))))]),
           if (spec.needsCommitment) DropdownButtonFormField<String>(initialValue: commitment,
             decoration: const InputDecoration(labelText: '最低有效承诺'),
@@ -789,6 +792,7 @@ class _TrialPageState extends State<_TrialPage> {
           EvidenceGrowthCycleCard(trial:trial),
           TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看完整成长链路'),
             onPressed:()=>_openCycle(context,trial,widget.dao,widget.ai)),
+          Text(GrowthGuidance.label(trial.riskChecks['CONTENT_ORIGIN'])),
           _Card(title: '唯一主动作', child: Text(trial.actionInstruction, style: const TextStyle(fontSize: 21, height: 1.4, fontWeight: FontWeight.w900, color: _ink))),
           if (trial.startedAtMs > 0 && trial.operatorInputs['sensitive']!='true') _Card(title: '行动计时', child: Text(
             '已进入现实 ${((DateTime.now().millisecondsSinceEpoch - trial.startedAtMs) / 60000).floor()} 分钟 · 到点允许停')),
@@ -963,6 +967,8 @@ class _DecisionPage extends StatefulWidget {
 class _DecisionPageState extends State<_DecisionPage> {
   late RealityTrial trial = widget.trial;
   late TrialReviewResult review = widget.review ?? TrialReviewResult(
+    contentOrigin:trial.operatorInputs['review_content_origin']??'UNKNOWN',
+    contentDetail:trial.operatorInputs['review_content_detail']??'',
     predictionOriginal: trial.prediction,
     actualFacts: [trial.actualOutcome],
     predictionError: trial.operatorInputs['prediction_error']??'原预测与实际结果已分别保存。',
@@ -1043,6 +1049,7 @@ class _DecisionPageState extends State<_DecisionPage> {
       _Card(title: '预测完整性', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _Label('原预测（未改写）', review.predictionOriginal), const Divider(),
         _Label('实际事实', trial.actualOutcome), const Divider(),
+        _Label('内容来源', '${GrowthGuidance.label(review.contentOrigin)} ${review.contentDetail}'),
         _Label('Prediction Error', review.predictionError),
       ])),
       const SizedBox(height: 10),

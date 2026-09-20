@@ -600,7 +600,13 @@ class RealityTrial {
 }
 
 class TrialReviewResult {
+  final String contentOrigin, contentDetail;
+  TrialReviewResult withOrigin(String origin,String detail) => TrialReviewResult(
+    predictionOriginal:predictionOriginal,actualFacts:actualFacts,predictionError:predictionError,failureClass:failureClass,
+    learning:learning,ruleUpdate:ruleUpdate,decision:decision,nextChangeOneVariable:nextChangeOneVariable,
+    knowledgeNodeIds:knowledgeNodeIds,cycleUpdate:cycleUpdate,contentOrigin:origin,contentDetail:detail);
   const TrialReviewResult({
+    this.contentOrigin="LOCAL_RULE",this.contentDetail="",
     required this.predictionOriginal,
     required this.actualFacts,
     required this.predictionError,
@@ -622,7 +628,7 @@ class TrialReviewResult {
   final String nextChangeOneVariable;
   final List<String> knowledgeNodeIds;
   final Map<String,String> cycleUpdate;
-  Map<String,Object?> toJson() => {'prediction_original':predictionOriginal,'actual_facts':actualFacts,
+  Map<String,Object?> toJson() => {'content_origin':contentOrigin,'content_detail':contentDetail,'prediction_original':predictionOriginal,'actual_facts':actualFacts,
     'prediction_error':predictionError,'failure_class':failureClass,'learning':learning,'rule_update':ruleUpdate,
     'decision':decision,'next_change_one_variable':nextChangeOneVariable,'knowledge_nodes_used':knowledgeNodeIds,'cycle_update':cycleUpdate};
 }

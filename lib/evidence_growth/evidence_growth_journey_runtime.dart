@@ -61,7 +61,8 @@ class EvidenceGrowthJourneyRuntime {
             actionInstruction: instruction,
             riskChecks: {
               ...route.riskChecks,
-              'SELECTION': 'USER_KNOWLEDGE_APPLICATION'
+              'SELECTION': 'USER_KNOWLEDGE_APPLICATION',
+              'CONTENT_ORIGIN': 'USER'
             },
             inputDrafts: {
               ...route.inputDrafts,
@@ -72,6 +73,9 @@ class EvidenceGrowthJourneyRuntime {
       }
     }
     final constraints = [
+      for (final key in ['quality', 'control_boundary', 'stop_condition'])
+        if ('${j.contract[key] ?? ''}'.trim().isNotEmpty)
+          '$key: ${j.contract[key]}',
       for (final key in [
         'cadence',
         'schedule',
@@ -92,7 +96,12 @@ class EvidenceGrowthJourneyRuntime {
         'current': '${j.data['current'] ?? ''}',
         'gap': gap,
         'belief': '${j.data['belief'] ?? ''}',
-        'belief_basis': '用户确认的当前判断；未知部分保持空白',
+        'belief_basis':
+            '${growthMap(j.data['belief_details'])['belief_basis'] ?? ''}',
+        'belief_update_rule':
+            '${growthMap(j.data['belief_details'])['belief_update_rule'] ?? ''}',
+        'measurement': '${j.contract['measurement'] ?? ''}',
+        'review_gate': '${j.contract['review_gate'] ?? ''}',
         'expected_signal': applications.isNotEmpty
             ? '${applications.last['expected_signal']}'
             : '${j.plan['expected_signal'] ?? ''}',

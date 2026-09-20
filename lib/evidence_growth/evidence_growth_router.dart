@@ -54,7 +54,7 @@ class EvidenceGrowthRouter {
       operator:spec.id,actionInstruction:spec.id=='SOURCE_PRACTICE'?source.howTo.first:spec.instruction,
       completionDefinition:spec.completion,reviewTrigger:spec.reviewTrigger,
       evidenceLevel:selected.length>1?'E2':'E1',alternatives:spec.alternatives,
-      riskChecks:{...gate.riskChecks,'SOURCE_GAP':gap.isEmpty?'TAL_SUFFICIENT':gap,
+      riskChecks:{'CONTENT_ORIGIN':'LOCAL_RULE',...gate.riskChecks,'SOURCE_GAP':gap.isEmpty?'TAL_SUFFICIENT':gap,
         'SELECTION':'MODEL_VERIFIED_IDS_AND_USER_QUOTES'});
   }
   static const _patterns = <(List<String>, String)>[
@@ -189,7 +189,7 @@ class EvidenceGrowthRouter {
         if(_has(text,['评价','不敢发','别人'])) 'EXPOSURE'],
       currentState: text,
       topGap: '待核对：${spec.label}是否是当前关键差距',
-      riskChecks: {'PROFESSIONAL_BOUNDARY':'NO_EXPLICIT_SIGNAL','RUIN_GATE':'NO_EXPLICIT_SIGNAL',
+      riskChecks: {'CONTENT_ORIGIN':'LOCAL_RULE','PROFESSIONAL_BOUNDARY':'NO_EXPLICIT_SIGNAL','RUIN_GATE':'NO_EXPLICIT_SIGNAL',
         'RECOVERY_CHECK': exhausted ? 'RECOVER_FIRST' : 'CONFIRM_BEFORE_START',
         'STRETCH_ZONE_CHECK':'CONFIRM_BEFORE_START'},
     );
@@ -239,6 +239,6 @@ class EvidenceGrowthRouter {
       operator:'', actionInstruction:action, completionDefinition:'', reviewTrigger:'',
       evidenceLevel:'E0', alternatives:const[],
       missingFacts:const['具体行为','已有事实','当前约束'],
-      riskChecks:{'GATE':status});
+      riskChecks:{'CONTENT_ORIGIN':'LOCAL_RULE','GATE':status});
   bool _has(String text, List<String> words) => words.any(text.contains);
 }

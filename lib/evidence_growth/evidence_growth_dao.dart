@@ -440,6 +440,7 @@ class EvidenceGrowthDao {
       ruleUpdate: review.ruleUpdate,
       operatorInputs:{...current.operatorInputs,'recommended_decision':review.decision,
         'prediction_error':review.predictionError,
+        'review_content_origin':review.contentOrigin,'review_content_detail':review.contentDetail,
         'cycle_confirmed_json':'{}',
         if(cycleUpdate.isNotEmpty)'cycle_update_json':jsonEncode(cycleUpdate)},
       nextAction: review.nextChangeOneVariable,

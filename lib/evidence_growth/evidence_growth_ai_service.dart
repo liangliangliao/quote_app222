@@ -58,8 +58,8 @@ PLAN 与 GOAL 分别版本化；计划修订必须有事实与具体差异；已
     }
     if (!route.canAct || route.selectedNodes.isEmpty || route.riskChecks['SELECTION']=='USER_KNOWLEDGE_APPLICATION') return route;
     UnifiedAiResolvedConfig cfg;
-    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return route; }
-    if (!cfg.available) return route;
+    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return route.copyWith(riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'LOCAL_RULE','CONTENT_REASON':'无法读取 AI 配置'}); }
+    if (!cfg.available) return route.copyWith(riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'LOCAL_RULE','CONTENT_REASON':'未配置可用 AI'});
     final id = 'eg_route_${DateTime.now().microsecondsSinceEpoch}';
     final started = DateTime.now();
     var valid = false;
@@ -138,6 +138,7 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
         }
       }
       return route.copyWith(
+        riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'AI','INFERENCE_ORIGIN':'AI','CONTENT_MODEL':cfg.displayModel,'CONTENT_REASON':''},
         selectedNodes: ids.map((e) => EvidenceGrowthKnowledge.byId(e)!).toList(),
         status: evidence == 'E0' ? 'KB_EVIDENCE_INSUFFICIENT' : gate == 'BLOCK' ? 'PANIC_RISK' : route.status,
         riskGate: evidence == 'E0' ? 'NEED_CHECK' : gate,
@@ -155,7 +156,7 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
       );
     } catch (e) {
       error = e is FormatException ? e.message : 'AI_REQUEST_FAILED';
-      return attempt < 1 ? await enrichRoute(route,attempt:attempt+1) : route;
+      return attempt < 1 ? await enrichRoute(route,attempt:attempt+1) : route.copyWith(riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'LOCAL_RULE','CONTENT_REASON':'AI 请求或内容校验未成功，保留本地动作'});
     } finally {
       await _dao.recordPromptRun(
         requestId: id,
@@ -236,7 +237,7 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
         valid=true;return local.copyWith(candidates:candidates);
       }
       final sameOperator=refined.operator==local.operator;
-      refined=refined.copyWith(personalEvidence:await _dao.personalEvidenceFor(refined),
+      refined=refined.copyWith(riskChecks:{...refined.riskChecks,'INFERENCE_ORIGIN':'AI'},personalEvidence:await _dao.personalEvidenceFor(refined),
         cycleContext:local.cycleContext,cyclePlan:local.cyclePlan,
         goalState:local.goalState,currentState:local.currentState,topGap:local.topGap,
         inputDrafts:sameOperator?local.inputDrafts:{
@@ -262,8 +263,8 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
     final fallback = const EvidenceGrowthReviewEngine().review(trial,history:history);
     final decisionRule=EvidenceGrowthDecisionEngine.evaluate(trial,history:history);
     UnifiedAiResolvedConfig cfg;
-    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return fallback; }
-    if (!cfg.available) return fallback;
+    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return fallback.withOrigin('LOCAL_RULE','无法读取 AI 配置'); }
+    if (!cfg.available) return fallback.withOrigin('LOCAL_RULE','未配置可用 AI');
     final nodes=<EvidenceKNode>[];
     try {
       for(final record in await _dao.evidenceSnapshots(trial.id)) {
@@ -353,6 +354,7 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
       final cycleUpdate=map['cycle_update']==null ? fallback.cycleUpdate : EvidenceGrowthCycle.checked(map['cycle_update'],update:true);
       valid = true;
       return TrialReviewResult(
+        contentOrigin:'AI',contentDetail:cfg.displayModel,
         predictionOriginal: trial.prediction,
         actualFacts: actualFacts,
         predictionError: (map['prediction_error'] ?? '').toString(),
@@ -366,7 +368,7 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
       );
     } catch (e) {
       error = e is FormatException ? e.message : 'AI_REQUEST_FAILED';
-      return attempt < 1 ? await review(trial,attempt:attempt+1) : fallback;
+      return attempt < 1 ? await review(trial,attempt:attempt+1) : fallback.withOrigin('LOCAL_RULE','AI 请求或内容校验未成功，保留本地复盘');
     } finally {
       await _dao.recordPromptRun(
         requestId: id,
@@ -404,7 +406,7 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
   }
 
   Future<String> explainKnowledge(GrowthJourney j,String stage,EvidenceKNode node,String question) async {
-    final fallback='知识库原理：${node.claim}\n练习：${node.howTo.join('；')}\n请用自己的话解释原理，指出它与当前情境的联系，再核对使用前提。';
+    final fallback='【知识库内容·本地读取】\n知识库原理：${node.claim}\n练习：${node.howTo.join('；')}\n请用自己的话解释原理，指出它与当前情境的联系，再核对使用前提。';
     if(j.profile.blocked)return fallback;
     try {
       final config=await _ai.resolveGlobalConfig();if(!config.available)return fallback;
@@ -423,15 +425,15 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
     final text = question.trim();
     if (text.isEmpty) return '请问一个关于功能、流程、知识依据或如何填写的问题。';
     if (RegExp('怎么用|流程|如何开始|预测|退出|EXIT|提醒|如何填写|怎么填').hasMatch(text)) {
-      return '实战输入现实问题 → 确认一个动作与知识依据 → 保存预测、概率和安全条件 → 行动并记录完成/部分/未做/中止 → 比较预测与实际 → ACT、ADJUST、EXIT 或继续观察。\n'
+      return '【本地流程说明】\n实战输入现实问题 → 确认一个动作与知识依据 → 保存预测、概率和安全条件 → 行动并记录完成/部分/未做/中止 → 比较预测与实际 → ACT、ADJUST、EXIT 或继续观察。\n'
           '预测写“在何时看到什么”，结果只写已发生事实；EXIT 保存学习，ADJUST 只改一个变量。\n'
           '依据：KB35 A02、R01、C04、R-EXT2-01；这些页面步骤属于产品设计。';
     }
     final gate = const EvidenceGrowthRouter().route(text);
-    if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(gate.status)) return gate.actionInstruction;
+    if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(gate.status)) return '【本地边界规则】\n${gate.actionInstruction}';
     final nodes = EvidenceGrowthSearch.current.search(text,talOnly:true,limit:3).map((e)=>e.node).toList();
     if (nodes.isEmpty) return '当前没有足够的 KB35 依据，请补充具体情境。';
-    final fallback = '${nodes.first.title}：${nodes.first.claim}\n怎么做：${nodes.first.howTo.first}\n边界：${nodes.first.boundaries.first}\n来源：${nodes.first.locator.display}';
+    final fallback = '【知识库内容·本地读取】\n${nodes.first.title}：${nodes.first.claim}\n怎么做：${nodes.first.howTo.first}\n边界：${nodes.first.boundaries.first}\n来源：${nodes.first.locator.display}';
     try {
       final cfg = await _ai.resolveGlobalConfig();
       if (!cfg.available) return fallback;
