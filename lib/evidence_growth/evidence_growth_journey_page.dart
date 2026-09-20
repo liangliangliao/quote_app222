@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_knowledge_page.dart';
+import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_journey_store.dart';
 import 'evidence_growth_notification_service.dart';
@@ -278,6 +280,15 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
 
   Future<void> change(String op, [GrowthData b = const {}]) async {
     j = await store.change(j, op, b);
+  }
+
+  Future<void> knowledge([String? stage]) async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => EvidenceGrowthKnowledgePage(
+                dao: widget.dao, journey: j, stage: stage ?? j.node)));
+    await reload();
   }
 
   Future<void> contract() async {
@@ -921,6 +932,10 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
     return Scaffold(
         appBar: AppBar(title: const Text('我的目标旅程'), actions: [
           IconButton(
+              tooltip: '知识学习与应用',
+              onPressed: busy ? null : () => run(knowledge),
+              icon: const Icon(Icons.menu_book)),
+          IconButton(
               tooltip: '目标工具',
               onPressed: busy ? null : () => run(options),
               icon: const Icon(Icons.tune))
@@ -955,7 +970,9 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                         'REVIEW',
                         'CHANGE'
                       ]
-                          .map((n) => Chip(
+                          .map((n) => ActionChip(
+                              onPressed:
+                                  busy ? null : () => run(() => knowledge(n)),
                               avatar: Icon(
                                   n == j.node
                                       ? Icons.play_circle
@@ -966,6 +983,27 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                                   color: _teal),
                               label: Text(GrowthJourney.labels[n]!)))
                           .toList())),
+              _card(
+                  '此刻可怎样学习与应用',
+                  Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(EvidenceGrowthKnowledgeRuntime.lessons[
+                            EvidenceGrowthKnowledgeRuntime.stage(j.node)]![0]),
+                        Text(EvidenceGrowthKnowledgeRuntime.lessons[
+                            EvidenceGrowthKnowledgeRuntime.stage(j.node)]![1]),
+                        for (final a
+                            in EvidenceGrowthKnowledgeRuntime.applications(
+                                j, j.node))
+                          Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                  '${growthMap(a['snapshot'])['title']}\n我的用法：${a['application']}\n检验：${a['expected_signal']}')),
+                        OutlinedButton.icon(
+                            onPressed: busy ? null : () => run(knowledge),
+                            icon: const Icon(Icons.menu_book),
+                            label: const Text('匹配知识、理解原理、练习应用')),
+                      ])),
               if (profile.mode == 'EXPLORE')
                 const Text('先探索，不急着给自己定终局目标；一次体验也不代表永久适合。'),
               if (profile.data['gap'] != '' && profile.data['gap'] != null)
@@ -1209,6 +1247,27 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                             action('新的现实变化', reopen)
                           ])
                         ])),
+              _card(
+                  '此刻可怎样学习与应用',
+                  Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(EvidenceGrowthKnowledgeRuntime.lessons[
+                            EvidenceGrowthKnowledgeRuntime.stage(j.node)]![0]),
+                        Text(EvidenceGrowthKnowledgeRuntime.lessons[
+                            EvidenceGrowthKnowledgeRuntime.stage(j.node)]![1]),
+                        for (final a
+                            in EvidenceGrowthKnowledgeRuntime.applications(
+                                j, j.node))
+                          Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                  '${growthMap(a['snapshot'])['title']}\n我的用法：${a['application']}\n检验：${a['expected_signal']}')),
+                        OutlinedButton.icon(
+                            onPressed: busy ? null : () => run(knowledge),
+                            icon: const Icon(Icons.menu_book),
+                            label: const Text('匹配知识、理解原理、练习应用')),
+                      ])),
               if (profile.mode == 'EXPLORE')
                 _card(
                     '候选方向',
@@ -1450,6 +1509,10 @@ Future<GrowthData?> _timeRange(BuildContext context) async {
 String _recordLabel(GrowthData r) => r['kind'] == 'NODE_RUN'
     ? '${GrowthJourney.labels[r['node']] ?? r['node']}工序'
     : const {
+          'KNOWLEDGE_APPLICATION': '知识应用确认',
+          'KNOWLEDGE_PRACTICE': '知识练习与反馈',
+          'KNOWLEDGE_WITHDRAWAL': '撤下后续知识应用',
+          'REVIEW_KNOWLEDGE_USED': '本次复盘实际引用',
           'ACHIEVEMENT_DOSSIER': '达成档案',
           'MAINTENANCE_DOSSIER': '稳定期档案',
           'REOPEN': '重开事件',
@@ -1477,6 +1540,13 @@ Future<void> _showRecord(BuildContext context, GrowthData r) =>
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                      if (r['knowledge_status'] != null)
+                        Text(const {
+                              'KNOWLEDGE_GAP': '尚无匹配知识，保留事实',
+                              'RETRIEVED_NOT_CONFIRMED': '以下仅为检索候选，未确认应用',
+                              'USER_SELECTED_APPLICATION': '已记录用户选择的具体用法'
+                            }[r['knowledge_status']] ??
+                            '知识依据待核对'),
                       if (r['input'] != null)
                         Text('上游记录：${jsonEncode(r['input'])}'),
                       if (r['output'] != null)

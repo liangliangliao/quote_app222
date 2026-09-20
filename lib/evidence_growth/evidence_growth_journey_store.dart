@@ -4,7 +4,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_knowledge.dart';
-import 'evidence_growth_search.dart';
+import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_cycle.dart';
 import 'evidence_growth_journey_models.dart';
 
@@ -150,28 +150,18 @@ class EvidenceGrowthJourneyStore {
   }
 
   static List<EvidenceKNode> evidence(String node, String query) {
-    final module = GrowthModuleX.parse(node == 'OUTCOME'
-        ? 'FAILURE'
-        : node == 'BELIEF_CHECKPOINT'
-            ? 'BELIEF'
-            : node);
-    final found = EvidenceGrowthSearch.current
-        .search(query, module: module, talOnly: true, limit: 2)
-        .map((r) => r.node)
+    return EvidenceGrowthKnowledgeRuntime.retrieve(node, query)
+        .where((n) => n.isTal)
+        .take(2)
         .toList();
-    return found.isNotEmpty
-        ? found
-        : EvidenceGrowthKnowledge.forModule(module)
-            .where((n) => n.isTal)
-            .take(1)
-            .toList();
   }
 
   static Future<void> nodeRun(DatabaseExecutor tx, GrowthJourney j, String node,
       GrowthData input, GrowthData output,
       {String mode = 'USER_CONFIRMED'}) async {
-    final nodes = evidence(node, '${j.title} ${jsonEncode(input)}');
-    if (nodes.isEmpty) throw StateError('KB_EVIDENCE_INSUFFICIENT');
+    final nodes =
+        EvidenceGrowthKnowledgeRuntime.evidence(j, node, input: input);
+    final applications = EvidenceGrowthKnowledgeRuntime.applications(j, node);
     await log(tx, j, 'NODE_RUN', {
       'node': node,
       'mode': mode,
@@ -180,6 +170,12 @@ class EvidenceGrowthJourneyStore {
       'kb_version': EvidenceGrowthKnowledge.kbVersion,
       'prompt_version': EvidenceGrowthKnowledge.promptVersion,
       'knowledge_evidence': nodes.map((n) => n.toJson()).toList(),
+      'knowledge_status': applications.isNotEmpty
+          ? 'USER_SELECTED_APPLICATION'
+          : nodes.isEmpty
+              ? 'KNOWLEDGE_GAP'
+              : 'RETRIEVED_NOT_CONFIRMED',
+      'knowledge_applications': applications,
       'personal_evidence_source': 'USER_ATTESTATION',
       'ai_inference_is_fact': false
     });
@@ -273,6 +269,93 @@ class EvidenceGrowthJourneyStore {
   static Future<GrowthJourney> operate(
       DatabaseExecutor tx, GrowthJourney j, String op, GrowthData b) async {
     switch (op) {
+      case 'knowledge-apply':
+        final at = EvidenceGrowthKnowledgeRuntime.stage('${b['stage']}');
+        final n = EvidenceGrowthKnowledge.byId('${b['node_id']}');
+        if (n == null || n.version != b['node_version'])
+          throw StateError('知识版本已变化，请重新核对');
+        for (final field in [
+          'understanding',
+          'application',
+          'expected_signal'
+        ]) {
+          if ('${b[field] ?? ''}'.trim().isEmpty || '${b[field]}'.length > 2000)
+            throw ArgumentError('请补充自己的理解、具体用法和检验信号');
+        }
+        if ('${b['application']}'.length > 360 ||
+            '${b['expected_signal']}'.length > 240)
+          throw ArgumentError('用法请控制在360字内，检验信号240字内');
+        if (b['conditions_confirmed'] != true) throw StateError('请先核对前提和边界');
+        if ((!n.isTal ||
+                n.module != EvidenceGrowthKnowledgeRuntime.module(at)) &&
+            '${b['transfer_reason'] ?? ''}'.trim().isEmpty) {
+          throw StateError('跨模块或延伸知识需要说明适用理由');
+        }
+        final trial = j.trialId.isEmpty
+            ? null
+            : await tx.query('evidence_growth_trials',
+                where: 'trial_id=?', whereArgs: [j.trialId]);
+        final currentIndex = EvidenceGrowthKnowledgeRuntime.stages
+            .indexOf(EvidenceGrowthKnowledgeRuntime.stage(j.node));
+        final past =
+            EvidenceGrowthKnowledgeRuntime.stages.indexOf(at) < currentIndex;
+        final frozenAction =
+            at == 'ACTION' && trial != null && trial.isNotEmpty;
+        final cycle = j.cycle + ((past || frozenAction) ? 1 : 0);
+        final application = <String, dynamic>{
+          'id': newId('ka'),
+          'stage': at,
+          'effective_cycle': cycle,
+          'state': 'APPLIED',
+          'snapshot': n.toJson(),
+          'kb_version': EvidenceGrowthKnowledge.kbVersion,
+          for (final key in [
+            'understanding',
+            'application',
+            'expected_signal',
+            'transfer_reason'
+          ])
+            key: '${b[key] ?? ''}'.trim(),
+          'conditions_confirmed': true,
+        };
+        final saved = growthRows(j.data['knowledge_applications'])
+            .where((a) => !(a['stage'] == at &&
+                a['effective_cycle'] == cycle &&
+                growthMap(a['snapshot'])['node_id'] == n.id))
+            .toList();
+        if (saved
+                .where((a) => a['stage'] == at && a['effective_cycle'] == cycle)
+                .length >=
+            (at == 'ACTION' ? 1 : 3))
+          throw StateError('行动节点每轮采用一条主练习，其他节点最多三条；请先撤下不再使用的知识');
+        await log(tx, j, 'KNOWLEDGE_APPLICATION', application);
+        return j.copy({
+          'knowledge_applications': [...saved, application]
+        });
+      case 'knowledge-withdraw':
+        final saved = growthRows(j.data['knowledge_applications']);
+        if (!saved.any((a) => a['id'] == b['application_id']))
+          throw ArgumentError('未找到应用记录');
+        await log(tx, j, 'KNOWLEDGE_WITHDRAWAL',
+            {'application_id': b['application_id']});
+        return j.copy({
+          'knowledge_applications':
+              saved.where((a) => a['id'] != b['application_id']).toList()
+        });
+      case 'knowledge-practice':
+        final n = EvidenceGrowthKnowledge.byId('${b['node_id']}');
+        if (n == null || n.version != b['node_version'])
+          throw StateError('请重新打开知识');
+        final at = EvidenceGrowthKnowledgeRuntime.stage('${b['stage']}');
+        if ('${b['reflection'] ?? ''}'.trim().isEmpty)
+          throw ArgumentError('请记录练习或实际反馈');
+        await log(tx, j, 'KNOWLEDGE_PRACTICE', {
+          'stage': at,
+          'snapshot': n.toJson(),
+          'reflection': '${b['reflection']}'.trim(),
+          'mastery_verified': false,
+        });
+        return j;
       case 'profile':
         if (b.keys.any((k) => !const [
               'scope',

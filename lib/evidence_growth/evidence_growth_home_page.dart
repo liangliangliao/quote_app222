@@ -1,3 +1,4 @@
+import 'evidence_growth_knowledge_page.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -127,7 +128,7 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
     unawaited(const EvidenceGrowthNotificationService().reconcile());
   }
 
-  Future<void> _begin(String input) async {
+  Future<void> _begin(String input, {String? knowledgeNodeId}) async {
     if (input.trim().isEmpty || _routing) return;
     setState(() => _routing = true);
     try {
@@ -142,7 +143,11 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
       final journey=selected=='new' ? await _dao.journeys.create(input) :
         await _dao.journeys.change(active.firstWhere((j)=>j.id==selected),'entry',{'text':input});
       if (!mounted) return;
-      await _openJourney(journey);
+      if(knowledgeNodeId!=null) {
+        await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthKnowledgePage(dao:_dao,journey:journey,stage:journey.node,initialNodeId:knowledgeNodeId)));
+        if(!mounted)return;
+      }
+      await _openJourney((await _dao.journeys.find(journey.id))??journey);
       await _reload();
     } finally {
       if (mounted) setState(() => _routing = false);
@@ -209,7 +214,7 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
               children: [
                 EvidenceGrowthJourneyHome(dao:_dao,onOpen:_openJourney),
                 _Review(recent: _recent, onOpen: _openTrial),
-                _Learning(onApply: _begin, dao: _dao),
+                _Learning(onApply: (text,nodeId)=>_begin(text,knowledgeNodeId:nodeId), dao: _dao),
                 _Evidence(summary: _summary!, recent: _recent,onOpen:_openTrial),
               ],
             ),
@@ -466,7 +471,13 @@ class _RoutePageState extends State<_RoutePage> {
   Widget build(BuildContext context) {
     final blocked = !route.canAct;
     return Scaffold(
-      appBar: AppBar(title: const Text('现实下一步')),
+      appBar: AppBar(title: const Text('现实下一步'),actions:[
+        if(widget.journey!=null)IconButton(tooltip:'学习知识并重新准备动作',icon:const Icon(Icons.menu_book),onPressed:starting?null:()async{
+          final j=await widget.dao.journeys.find(widget.journey!.id);if(j==null||!mounted)return;
+          await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthKnowledgePage(dao:widget.dao,journey:j,stage:'ACTION')));
+          if(mounted)Navigator.pop(context);
+        }),
+      ]),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
@@ -768,6 +779,7 @@ class _TrialPageState extends State<_TrialPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text('Reality Trial · ${_status(trial.status)}'),actions:[
+          IconButton(tooltip:'知识学习与应用',icon:const Icon(Icons.menu_book),onPressed:saving?null:()=>_trialKnowledge(context,widget.dao,trial.id,trial.status=='RESULT_CAPTURED'?'REVIEW':'ACTION')),
           IconButton(tooltip:'本轮提醒',icon:const Icon(Icons.notifications_active_outlined),onPressed:()=>Navigator.push(context,
             MaterialPageRoute(builder:(_)=>EvidenceGrowthReminderPage(dao:widget.dao,trialId:trial.id)))),
         ]),
@@ -1023,7 +1035,7 @@ class _DecisionPageState extends State<_DecisionPage> {
   }
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('复盘结果 · 本轮出口')),
+    appBar: AppBar(title: const Text('复盘结果 · 本轮出口'),actions:[IconButton(tooltip:'知识学习与应用',icon:const Icon(Icons.menu_book),onPressed:()=>_trialKnowledge(context,widget.dao,trial.id,'CHANGE'))]),
     body: ListView(padding: const EdgeInsets.all(16), children: [
       EvidenceGrowthCycleCard(trial:trial),
       TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
@@ -1079,7 +1091,7 @@ class _Review extends StatelessWidget {
 
 class _Learning extends StatefulWidget {
   const _Learning({required this.onApply, required this.dao});
-  final ValueChanged<String> onApply;
+  final void Function(String text,String nodeId) onApply;
   final EvidenceGrowthDao dao;
   @override
   State<_Learning> createState() => _LearningState();
@@ -1118,14 +1130,14 @@ class _LearningState extends State<_Learning> {
 class _NodeTile extends StatelessWidget {
   const _NodeTile(this.node, this.onApply, this.dao);
   final EvidenceKNode node;
-  final ValueChanged<String> onApply;
+  final void Function(String text,String nodeId) onApply;
   final EvidenceGrowthDao dao;
   @override
   Widget build(BuildContext context) => ListTile(
     title: Text('${node.id} · ${node.title}'),
     subtitle: Text(node.claim, maxLines: 2, overflow: TextOverflow.ellipsis),
     trailing: const Icon(Icons.chevron_right),
-    onTap: () { unawaited(dao.markLearned(node.id)); showModalBottomSheet(context: context, isScrollControlled: true, useSafeArea: true, builder: (_) => ListView(padding: const EdgeInsets.all(20), children: [
+    onTap: () { showModalBottomSheet(context: context, isScrollControlled: true, useSafeArea: true, builder: (_) => ListView(padding: const EdgeInsets.all(20), children: [
       Text(node.title, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
       EvidenceGrowthReadAloud(text:'${node.title}。${node.claim}。${node.mechanism}。${node.howTo.join('。')}。使用边界：${node.misuseBoundary.join('。')}'),
       const SizedBox(height: 12), _Label('是什么', node.claim), const Divider(),
@@ -1148,8 +1160,8 @@ class _NodeTile extends StatelessWidget {
           actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
             FilledButton(onPressed: () { if (controller.text.trim().isNotEmpty) Navigator.pop(dialogContext, controller.text.trim()); }, child: const Text('匹配下一步'))]));
         controller.dispose();
-        if (input != null && context.mounted) { Navigator.pop(context); onApply('$input\n学习应用：${node.title}'); }
-      }, icon: const Icon(Icons.play_arrow), label: const Text('立即应用，创建 Trial')),
+        if (input != null && context.mounted) { Navigator.pop(context); onApply(input,node.id); }
+      }, icon: const Icon(Icons.play_arrow), label: const Text('选择目标与节点，学习应用')),
     ])); },
   );
 }
@@ -1506,4 +1518,11 @@ Future<void> _openCycle(BuildContext context,RealityTrial trial,EvidenceGrowthDa
       ])),
     ]),
   )));
+}
+
+Future<void> _trialKnowledge(BuildContext context,EvidenceGrowthDao dao,String trialId,String stage) async {
+  final j=await dao.journeys.forTrial(trialId);
+  if(!context.mounted)return;
+  if(j==null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('请从目标旅程打开知识学习，以保存对应情境和用法。')));return; }
+  await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthKnowledgePage(dao:dao,journey:j,stage:stage)));
 }

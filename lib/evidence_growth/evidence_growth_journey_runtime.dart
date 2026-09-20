@@ -1,4 +1,5 @@
 import 'evidence_growth_cycle.dart';
+import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_router.dart';
@@ -6,6 +7,7 @@ import 'evidence_growth_router.dart';
 /// Compiles the active plan, never an obsolete Trial's frozen ACT conditions.
 class EvidenceGrowthJourneyRuntime {
   static bool canInherit(GrowthJourney j, RealityTrial? previous) =>
+      EvidenceGrowthKnowledgeRuntime.applications(j, 'ACTION').isEmpty &&
       previous != null &&
       previous.isClosed &&
       previous.nextTrialId.isEmpty &&
@@ -38,6 +40,37 @@ class EvidenceGrowthJourneyRuntime {
       if (!EvidenceGrowthRouter.protected(check))
         route = route.copyWith(actionInstruction: chosen);
     }
+    final applications =
+        EvidenceGrowthKnowledgeRuntime.applications(j, 'ACTION');
+    if (applications.isNotEmpty && !EvidenceGrowthRouter.protected(route)) {
+      final nodes = EvidenceGrowthKnowledgeRuntime.appliedNodes(j, 'ACTION');
+      nodes.sort((a, b) => (a.isTal ? 0 : 1).compareTo(b.isTal ? 0 : 1));
+      final instruction = applications.map((a) => a['application']).join('；');
+      final guard =
+          router.route('${j.title}\n${j.data['current']}\n$instruction');
+      if (EvidenceGrowthRouter.protected(guard)) {
+        route = guard;
+      } else {
+        route = router.fromSelection(route.rawInput, route.candidates, nodes,
+            ['${j.data['current'] ?? ''}'], '用户核对知识前提后选择的具体练习',
+            gap: nodes.any((n) => !n.isTal)
+                ? applications.map((a) => a['transfer_reason']).join('；')
+                : '');
+        if (route.canAct)
+          route = route.copyWith(
+            actionInstruction: instruction,
+            riskChecks: {
+              ...route.riskChecks,
+              'SELECTION': 'USER_KNOWLEDGE_APPLICATION'
+            },
+            inputDrafts: {
+              ...route.inputDrafts,
+              'prediction':
+                  applications.map((a) => a['expected_signal']).join('；')
+            },
+          );
+      }
+    }
     final constraints = [
       for (final key in [
         'cadence',
@@ -60,7 +93,9 @@ class EvidenceGrowthJourneyRuntime {
         'gap': gap,
         'belief': '${j.data['belief'] ?? ''}',
         'belief_basis': '用户确认的当前判断；未知部分保持空白',
-        'expected_signal': '${j.plan['expected_signal'] ?? ''}',
+        'expected_signal': applications.isNotEmpty
+            ? '${applications.last['expected_signal']}'
+            : '${j.plan['expected_signal'] ?? ''}',
         'why_action': route.inference,
         'learning_applied': '${j.data['learning'] ?? ''}'
       },

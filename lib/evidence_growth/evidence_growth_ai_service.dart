@@ -3,7 +3,7 @@ import 'dart:convert';
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_journey_models.dart';
-import 'evidence_growth_journey_store.dart';
+import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_cycle.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
@@ -46,7 +46,10 @@ PLAN 与 GOAL 分别版本化；计划修订必须有事实与具体差异；已
 
   Future<GrowthData> journeyDraft(GrowthJourney j,String purpose) async {
     if(j.profile.blocked || (purpose!='contract' && purpose!='candidate' && j.data['readiness']!='READY_NOW'))return {};
-    final nodes=EvidenceGrowthJourneyStore.evidence(purpose=='contract'?'GOAL':purpose=='change' || purpose=='plan'?'CHANGE':'REVIEW',j.title);
+    final stage=purpose=='contract'?'GOAL':purpose=='change' || purpose=='plan'?'CHANGE':'REVIEW';
+    final nodes=<EvidenceKNode>{...EvidenceGrowthKnowledgeRuntime.evidence(j,stage),
+      if(purpose=='contract') ...EvidenceGrowthKnowledgeRuntime.appliedNodes(j,'BELIEF')}.toList();
+    if(nodes.isEmpty)return {};
     try {
       final cfg=await _ai.resolveGlobalConfig();if(!cfg.available)return {};
       final result=_decode(await _ai.generateText(systemPrompt:_contract,purpose:'evidence_growth.journey.$purpose',expectJson:true,
@@ -59,15 +62,15 @@ PLAN 与 GOAL 分别版本化；计划修订必须有事实与具体差异；已
       final ids=growthStrings(result['node_ids']);if(ids.isEmpty||ids.any((id)=>!nodes.any((n)=>n.id==id)))return {};
       final draft={for(final key in ['criterion','belief','learning','reason','next_action','belief_after','statement','plan_change','expected_signal'])
         if(result[key] is String && (result[key] as String).length<=200)key:result[key]};
-      await _dao.journeys.recordDraft(j,purpose,draft,nodes);return draft;
+      await _dao.journeys.recordDraft(j,purpose,draft,nodes.where((n)=>ids.contains(n.id)).toList());return draft;
     } catch(_){return {};}
   }
 
   Future<EvidenceRouteResult> enrichRoute(EvidenceRouteResult route, {int attempt = 0}) async {
-    if(attempt==0 && !EvidenceGrowthRouter.protected(route)) {
+    if(attempt==0 && route.riskChecks['SELECTION']!='USER_KNOWLEDGE_APPLICATION' && !EvidenceGrowthRouter.protected(route)) {
       try { route=await _routeEvidence(route); } catch(_) { /* Keep local route usable. */ }
     }
-    if (!route.canAct || route.selectedNodes.isEmpty) return route;
+    if (!route.canAct || route.selectedNodes.isEmpty || route.riskChecks['SELECTION']=='USER_KNOWLEDGE_APPLICATION') return route;
     UnifiedAiResolvedConfig cfg;
     try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return route; }
     if (!cfg.available) return route;
@@ -286,6 +289,11 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
     } catch(_) { return fallback; }
     // Old Trials must not silently cite a newer KB version during review.
     if (nodes.length!=trial.nodeIds.length || nodes.isEmpty) return fallback;
+    if(parent!=null) {
+      for(final n in EvidenceGrowthKnowledgeRuntime.appliedNodes(parent,'REVIEW')) {
+        if(!nodes.any((old)=>old.id==n.id))nodes.add(n);
+      }
+    }
     final id = 'eg_review_${DateTime.now().microsecondsSinceEpoch}';
     final started = DateTime.now();
     var valid = false;
@@ -301,6 +309,7 @@ DECISION_RULE（依据已确认条件的工程规则；不得把它冒充 Tal �
 同一假设既往现实结果：${jsonEncode(history.take(8).map((h)=>{'id':h.id,'prediction':h.prediction,'actual':h.actualOutcome,'decision_evidence':h.operatorInputs['decision_evidence'],'hypothesis_support':h.operatorInputs['hypothesis_support']}).toList())}
 CAMPAIGN_SAMPLES（同一学习窗口，逐条保留原预测；不把不同试验合并成同一假设）:${jsonEncode(parent == null ? {} : growthMap(parent.data['campaign']))}
 ACTIVE_PLAN:${jsonEncode(parent?.plan ?? {})}
+CURRENT_REVIEW_APPLICATIONS（本次采用的方法，不是旧行动的依据）:${jsonEncode(parent==null?[]:EvidenceGrowthKnowledgeRuntime.applications(parent,'REVIEW'))}
 CYCLE_PLAN:${jsonEncode(EvidenceGrowthCycle.plan(trial))}
 CYCLE_HISTORY:${jsonEncode(history.take(6).map(EvidenceGrowthCycle.context).toList())}
 USER_MEASUREMENTS:${jsonEncode(trial.operatorInputs)}
@@ -406,6 +415,22 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
       } else if(m['scans'] is! Map || (m['scans'] as Map).values.any((v)=>v is! String || v.length>400)) {return {};}
       return m;
     } catch(_){return {};}
+  }
+
+  Future<String> explainKnowledge(GrowthJourney j,String stage,EvidenceKNode node,String question) async {
+    final fallback='知识库原理：${node.claim}\n练习：${node.howTo.join('；')}\n请用自己的话解释原理，指出它与当前情境的联系，再核对使用前提。';
+    if(j.profile.blocked)return fallback;
+    try {
+      final config=await _ai.resolveGlobalConfig();if(!config.available)return fallback;
+      final result=_decode(await _ai.generateText(systemPrompt:_contract,purpose:'evidence_growth.knowledge_teaching',expectJson:true,
+        prompt:'情境：${jsonEncode(EvidenceGrowthKnowledgeRuntime.context(j,stage,question:question))}\n唯一知识来源：${jsonEncode(node.toJson())}\n'
+          '解释这个原理在当前节点可能怎样用，给一个明确标记为假设的练习例子，指出适用边界，最后提出一道自我解释题。'
+          '不把假设当成用户经历。只输出 {"node_id":"${node.id}","answer":"不超过400字","source_quote":"从display_excerpt逐字截取一个短句；没有就留空"}。',maxTokens:850,temperature:.1).timeout(const Duration(seconds:20)));
+      final answer='${result['answer']??''}',quote='${result['source_quote']??''}';
+      if(result['node_id']!=node.id||answer.isEmpty||answer.length>1600||
+        (quote.isNotEmpty&&!node.displayExcerpt.contains(quote)))return fallback;
+      return 'AI 情境讲解（待核对）：\n$answer${quote.isEmpty?'':'\n知识库摘录：$quote'}\n来源：${node.locator.display}';
+    } catch(_){return fallback;}
   }
 
   Future<String> answerGuide(String question) async {

@@ -6,6 +6,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_journey_store.dart';
+import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_cycle.dart';
 import 'evidence_growth_operator_registry.dart';
 import 'evidence_growth_reminder_plan.dart';
@@ -420,8 +421,12 @@ class EvidenceGrowthDao {
     return db.transaction((txn) async {
     final current = await _current(txn, trial.id);
     if (current.status != 'RESULT_CAPTURED') throw StateError('先保存现实结果再复盘。');
+    final links=await txn.query('evidence_growth_journey_actions',where:'trial_id=?',whereArgs:[trial.id]);
+    final parent=links.isEmpty?null:await EvidenceGrowthJourneyStore.read(txn,links.single['journey_id'] as String);
+    final reviewNodes=parent==null?<EvidenceKNode>[]:EvidenceGrowthKnowledgeRuntime.appliedNodes(parent,'REVIEW');
+    final allowed={...current.nodeIds,...reviewNodes.map((n)=>n.id)};
     if (review.knowledgeNodeIds.isEmpty || review.predictionOriginal != current.prediction ||
-        review.knowledgeNodeIds.any((id) => !current.nodeIds.contains(id))) {
+        review.knowledgeNodeIds.any((id) => !allowed.contains(id))) {
       throw StateError('复盘不得改写原预测或引入未引用知识。');
     }
     if(review.actualFacts.any((f)=>f!=current.actualOutcome && f!=current.unexpected)) {
@@ -452,6 +457,10 @@ class EvidenceGrowthDao {
         'next_change_one_variable': review.nextChangeOneVariable,
         'created_at_ms': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+      if(parent!=null) await EvidenceGrowthJourneyStore.log(txn,parent,'REVIEW_KNOWLEDGE_USED',{
+        'trial_id':trial.id,'node_ids':review.knowledgeNodeIds,
+        'additional_review_sources':reviewNodes.where((n)=>review.knowledgeNodeIds.contains(n.id)).map((n)=>n.toJson()).toList(),
+      });
       await _event(txn, trial.id, 'REVIEWED', {'rule_update': review.ruleUpdate}, now);
       await _updateReminders(txn, updated);
       return updated;
