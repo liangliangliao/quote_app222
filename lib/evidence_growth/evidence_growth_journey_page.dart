@@ -1542,6 +1542,7 @@ Future<void> _showRecord(BuildContext context, GrowthData r) =>
                         children: [
                       if (r['knowledge_status'] != null)
                         Text(const {
+                              'ACTION_SOURCE_SNAPSHOT': '本次行动确认时保存的知识原始快照',
                               'KNOWLEDGE_GAP': '尚无匹配知识，保留事实',
                               'RETRIEVED_NOT_CONFIRMED': '以下仅为检索候选，未确认应用',
                               'USER_SELECTED_APPLICATION': '已记录用户选择的具体用法'

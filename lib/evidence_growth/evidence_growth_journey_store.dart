@@ -158,8 +158,8 @@ class EvidenceGrowthJourneyStore {
 
   static Future<void> nodeRun(DatabaseExecutor tx, GrowthJourney j, String node,
       GrowthData input, GrowthData output,
-      {String mode = 'USER_CONFIRMED'}) async {
-    final nodes =
+      {String mode = 'USER_CONFIRMED', List<EvidenceKNode>? usedNodes}) async {
+    final nodes = usedNodes ??
         EvidenceGrowthKnowledgeRuntime.evidence(j, node, input: input);
     final applications = EvidenceGrowthKnowledgeRuntime.applications(j, node);
     await log(tx, j, 'NODE_RUN', {
@@ -170,11 +170,13 @@ class EvidenceGrowthJourneyStore {
       'kb_version': EvidenceGrowthKnowledge.kbVersion,
       'prompt_version': EvidenceGrowthKnowledge.promptVersion,
       'knowledge_evidence': nodes.map((n) => n.toJson()).toList(),
-      'knowledge_status': applications.isNotEmpty
-          ? 'USER_SELECTED_APPLICATION'
-          : nodes.isEmpty
-              ? 'KNOWLEDGE_GAP'
-              : 'RETRIEVED_NOT_CONFIRMED',
+      'knowledge_status': usedNodes != null
+          ? 'ACTION_SOURCE_SNAPSHOT'
+          : applications.isNotEmpty
+              ? 'USER_SELECTED_APPLICATION'
+              : nodes.isEmpty
+                  ? 'KNOWLEDGE_GAP'
+                  : 'RETRIEVED_NOT_CONFIRMED',
       'knowledge_applications': applications,
       'personal_evidence_source': 'USER_ATTESTATION',
       'ai_inference_is_fact': false
@@ -1121,15 +1123,24 @@ class EvidenceGrowthJourneyStore {
         'cycle': j.cycle,
         'plan_version': growthInt(j.plan['version'])
       });
-      await nodeRun(tx, j, 'ACTION', {
-        'contract': j.contract,
-        'plan': j.plan
-      }, {
-        'trial_id': id,
-        'prediction': t.prediction,
-        'schedule': t.operatorInputs['scheduled_start_ms'],
-        'action': t.actionInstruction
-      });
+      final sourceRows = await tx.query('evidence_growth_trial_evidence',
+          where: 'trial_id=?', whereArgs: [id], orderBy: 'rank_no');
+      final actionSources = sourceRows
+          .map((r) => EvidenceKNode.fromJson(
+              growthMap(jsonDecode(r['snapshot_json'] as String))))
+          .toList();
+      await nodeRun(
+          tx,
+          j,
+          'ACTION',
+          {'contract': j.contract, 'plan': j.plan},
+          {
+            'trial_id': id,
+            'prediction': t.prediction,
+            'schedule': t.operatorInputs['scheduled_start_ms'],
+            'action': t.actionInstruction
+          },
+          usedNodes: actionSources);
       final campaign = campaignFor(j);
       final provenance = {
         ...t.operatorInputs,

@@ -116,7 +116,10 @@ void main() {
       'node_version': n.version,
       'reflection': '试着解释原理，还需要现实检验'
     });
-    expect((await store.history(j.id)).last['mastery_verified'], isFalse);
+    expect(
+        (await store.history(j.id)).singleWhere(
+            (r) => r['kind'] == 'KNOWLEDGE_PRACTICE')['mastery_verified'],
+        isFalse);
     expect((await dao.summary()).learnedNodes, 0);
   });
   test('missing boundaries, source version and transfer reasons are rejected',
@@ -198,6 +201,12 @@ void main() {
           'journey_id': j.id,
           'journey_version': '${j.version}'
         });
+    final actionRecord = (await store.history(j.id))
+        .singleWhere((r) => r['kind'] == 'NODE_RUN' && r['node'] == 'ACTION');
+    expect(actionRecord['knowledge_status'], 'ACTION_SOURCE_SNAPSHOT');
+    expect(
+        growthRows(actionRecord['knowledge_evidence']).map((r) => r['node_id']),
+        orderedEquals(trial.nodeIds));
     trial = await dao.startTrial(trial);
     j = (await store.find(j.id))!;
     j = await store.change(j, 'knowledge-apply', application('ACTION'));
@@ -302,19 +311,22 @@ void main() {
   });
   testWidgets('learning opens all stages and browsing does not mark mastery',
       (tester) async {
-    final j = await store.create('担心作品不够完美');
-    await tester.pumpWidget(MaterialApp(
-        home: EvidenceGrowthKnowledgePage(
-            dao: dao, journey: j, stage: 'BELIEF')));
-    await tester.pumpAndSettle();
-    for (final s in EvidenceGrowthKnowledgeRuntime.stages) {
-      await tester
-          .tap(find.widgetWithText(ChoiceChip, GrowthJourney.labels[s]!));
+    await tester.runAsync(() async {
+      final j = await store.create('担心作品不够完美');
+      await tester.pumpWidget(MaterialApp(
+          home: EvidenceGrowthKnowledgePage(
+              dao: dao, journey: j, stage: 'BELIEF')));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
       await tester.pumpAndSettle();
-      expect(find.text(EvidenceGrowthKnowledgeRuntime.lessons[s]![0]),
-          findsOneWidget);
-    }
-    expect((await dao.summary()).learnedNodes, 0);
-    await tester.pumpWidget(const SizedBox());
+      for (final s in EvidenceGrowthKnowledgeRuntime.stages) {
+        await tester
+            .tap(find.widgetWithText(ChoiceChip, GrowthJourney.labels[s]!));
+        await tester.pumpAndSettle();
+        expect(find.text(EvidenceGrowthKnowledgeRuntime.lessons[s]![0]),
+            findsOneWidget);
+      }
+      expect((await dao.summary()).learnedNodes, 0);
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 }
