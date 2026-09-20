@@ -1461,8 +1461,10 @@ class EvidenceGrowthJourneyStore {
           'kind': kind,
           'scheduled_at_ms': at,
           'window_key': '$kind:$at',
-          'title': '你保存了一次检查',
-          'body': '方便时可以回来看一看，也可以继续暂缓。',
+          'title': kind == 'journey_maintenance' ? '证据成长｜保持检查节点' : '证据成长｜复盘节点',
+          'body': kind == 'journey_maintenance'
+              ? '${j.safeTitle} · 到了保持检查时间，请记录稳定或偏离。'
+              : '${j.safeTitle} · 到了约定的检查时间，可以复盘或继续暂缓。',
           'source_ids_json': '[]',
           'state': 'pending'
         },

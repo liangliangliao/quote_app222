@@ -960,8 +960,8 @@ class EvidenceGrowthDao {
       if (old.isNotEmpty && (const {'delivered','expired'}.contains(old.first['state']) ||
           (old.first['delivered_at_ms'] as num).toInt() > 0)) continue;
       final values = <String,Object?>{'event_key':'${trial.id}:$window', 'trial_id':trial.id,
-        'kind':plan.kind, 'scheduled_at_ms':plan.atMs, 'window_key':window, 'title':sensitive?'有一条待处理记录':plan.title,
-        'body':sensitive?'方便时打开应用查看。':plan.body, 'source_ids_json':jsonEncode(plan.sourceIds), 'state':'pending', 'last_error':''};
+        'kind':plan.kind, 'scheduled_at_ms':plan.atMs, 'window_key':window, 'title':plan.title,
+        'body':sensitive?'私密目标 · ${plan.kind=='trial_start'?'到达开始时间':plan.kind=='recovery_end'?'核对恢复情况':plan.kind=='repeated_avoidance'?'回看本轮退出与下一步':'补充现实反馈'}；点击进入对应记录。':plan.body, 'source_ids_json':jsonEncode(plan.sourceIds), 'state':'pending', 'last_error':''};
       if (old.isEmpty) { await db.insert('evidence_growth_reminders', values); }
       else { await db.update('evidence_growth_reminders', values, where:'reminder_id = ?', whereArgs:[old.first['reminder_id']]); }
     }

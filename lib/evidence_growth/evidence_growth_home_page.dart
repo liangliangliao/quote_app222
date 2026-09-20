@@ -13,6 +13,8 @@ import '../platform/native_scheduler.dart';
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_ai_service.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_notification_link.dart';
+import 'evidence_growth_notification_inbox.dart';
 import 'evidence_growth_guidance.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_journey_page.dart';
@@ -42,7 +44,8 @@ const _soft = Color(0xFFF2F7F6);
 const _line = Color(0xFFD6E4E1);
 
 class EvidenceGrowthHomePage extends StatefulWidget {
-  const EvidenceGrowthHomePage({super.key, this.initialTrialId = '', this.initialInput = ''});
+  const EvidenceGrowthHomePage({super.key, this.initialTrialId = '', this.initialInput = '', this.notification});
+  final GrowthNotificationLink? notification;
   final String initialTrialId;
   final String initialInput;
   @override
@@ -77,6 +80,14 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
     unawaited(const EvidenceGrowthNotificationService().reconcile());
     await _reload();
     if (!mounted) return;
+    if(widget.notification!=null) {
+      final targets=widget.notification!.targets;
+      if(targets.length>1) {
+        await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthNotificationInbox(targets:targets,onOpen:_openNotificationTarget)));
+      } else if(targets.length==1) { await _openNotificationTarget(targets.single); }
+      else { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('这条旧通知没有具体记录地址，请从当前目标选择待办。'))); }
+      return;
+    }
     if (widget.initialTrialId.isNotEmpty) {
       if(widget.initialTrialId.startsWith('journey:')) {
         final j=await _dao.journeys.find(widget.initialTrialId.substring(8));
@@ -155,9 +166,21 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
     }
   }
 
-  Future<void> _openJourney(GrowthJourney journey) async {
+  Future<void> _openNotificationTarget(GrowthNotificationTarget target) async {
+    final d=await GrowthNotificationDestination.resolve(_dao,target);if(!mounted)return;
+    if(d.page=='MISSING'){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(d.message)));return;}
+    if(d.page=='JOURNEY'){await _openJourney(d.journey!,notificationNode:d.node,notificationMessage:d.message);return;}
+    final t=d.trial!;
+    final Widget page=switch(d.page){
+      'ARCHIVE'=>_ArchivePage(trial:t,dao:_dao,ai:_ai,notificationMessage:d.message),
+      'DECISION'=>_DecisionPage(trial:t,dao:_dao,ai:_ai,fromNotification:true),
+      _=>_TrialPage(trial:t,dao:_dao,ai:_ai,notificationNode:d.node,initialFacts:'${d.journey?.data['pending_entry']??''}')
+    };
+    await Navigator.push(context,MaterialPageRoute(builder:(_)=>page));await _reload();
+  }
+  Future<void> _openJourney(GrowthJourney journey,{String notificationNode='',String notificationMessage=''}) async {
     await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthJourneyPage(
-      journey:journey,dao:_dao,onAction:_journeyAction,onTrial:_openTrialId,draft:_ai.journeyDraft,guidance:_ai.guideJourney)));
+      journey:journey,dao:_dao,onAction:_journeyAction,onTrial:_openTrialId,draft:_ai.journeyDraft,guidance:_ai.guideJourney,notificationNode:notificationNode,notificationMessage:notificationMessage)));
     await _reload();
   }
   Future<void> _journeyAction(GrowthJourney j) async {
@@ -718,7 +741,8 @@ class _PredictionDialogState extends State<_PredictionDialog> {
 }
 
 class _TrialPage extends StatefulWidget {
-  const _TrialPage({required this.trial, required this.dao, required this.ai,this.initialFacts=''});
+  const _TrialPage({required this.trial, required this.dao, required this.ai,this.initialFacts='',this.notificationNode=''});
+  final String notificationNode;
   final String initialFacts;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
@@ -738,6 +762,17 @@ class _TrialPageState extends State<_TrialPage> {
   }
   @override
   void dispose() { ticker?.cancel(); super.dispose(); }
+  Future<void> _start() async {
+            setState(()=>saving=true);
+            try {
+              final started = await widget.dao.startTrial(trial);
+              await const EvidenceGrowthNotificationService().cancel(trial.id);
+              if (started.operatorInputs['remind'] == 'true') await const EvidenceGrowthNotificationService().scheduleTrial(started);
+              if (mounted) setState(() => trial = started);
+            } catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}
+            finally{if(mounted)setState(()=>saving=false);}
+
+  }
   Future<void> _resumeReview() async {
     setState(() => saving = true);
     try {
@@ -787,6 +822,17 @@ class _TrialPageState extends State<_TrialPage> {
             MaterialPageRoute(builder:(_)=>EvidenceGrowthReminderPage(dao:widget.dao,trialId:trial.id)))),
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
+          if(widget.notificationNode.isNotEmpty) _Card(title:'通知定位 · ${GrowthJourney.labels[widget.notificationNode]??widget.notificationNode}节点',child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(trial.goalState.isEmpty?'本轮行动':trial.goalState),
+            Text(widget.notificationNode=='OUTCOME'?'原预测：${trial.prediction}':trial.actionInstruction),
+            if(widget.notificationNode=='OUTCOME'&&const {'READY','IN_PROGRESS','OBSERVING'}.contains(trial.status)) ...[
+              const Text('请记录现实情况；到期不代表已经完成。'),
+              Wrap(spacing:8,children:[for(final kind in trial.status=='READY'?['未做']:['完成','部分完成','未做','中止','继续观察'])OutlinedButton(onPressed:saving?null:()=>_capture(kind),child:Text(kind))])
+            ],
+            if(widget.notificationNode=='ACTION'&&trial.status=='READY')FilledButton(onPressed:saving?null:_start,child:const Text('现在开始行动')),
+            if(widget.notificationNode=='ACTION'&&trial.status=='IN_PROGRESS')OutlinedButton(onPressed:saving?null:()=>_capture('继续观察'),child:const Text('核对当前状态')),
+            if(trial.status=='RESULT_CAPTURED')FilledButton(onPressed:saving?null:_resumeReview,child:const Text('结果已保存，继续复盘'))
+          ])),
           Wrap(spacing: 7, children: [_Chip(trial.primaryModule.label, _brand), _Chip(trial.stretchLevel, trial.stretchLevel == 'RECOVERY' ? Colors.blue : _brand)]),
           const SizedBox(height: 12),
           EvidenceGrowthCycleCard(trial:trial),
@@ -804,16 +850,7 @@ class _TrialPageState extends State<_TrialPage> {
             _Card(title:'当前承诺 ${trial.commitmentLevel}',child:Text('${EvidenceGrowthWorkflows.commitments[EvidenceGrowthWorkflows.normalizeCommitment(trial.commitmentLevel)]??trial.commitmentLevel}\n退出条件：${trial.operatorInputs['退出方式']??"随时检查风险与可撤回性"}')),
           if(trial.operatorInputs.containsKey('advanced_json')) ExpansionTile(title:const Text('风险／系统分析记录'),
             children:[Padding(padding:const EdgeInsets.all(12),child:Text(_workflowSummary(trial.operatorInputs['advanced_json']!)))]),
-          if (trial.status == 'READY') FilledButton(onPressed: saving ? null : () async {
-            setState(()=>saving=true);
-            try {
-              final started = await widget.dao.startTrial(trial);
-              await const EvidenceGrowthNotificationService().cancel(trial.id);
-              if (started.operatorInputs['remind'] == 'true') await const EvidenceGrowthNotificationService().scheduleTrial(started);
-              if (mounted) setState(() => trial = started);
-            } catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}
-            finally{if(mounted)setState(()=>saving=false);}
-          }, child: const Text('现在开始行动')),
+          if (trial.status == 'READY') FilledButton(onPressed: saving ? null : _start , child: const Text('现在开始行动')),
           if (trial.status == 'RESULT_CAPTURED') FilledButton(onPressed: saving ? null : _resumeReview, child: const Text('结果已保存，继续复盘')),
           if (trial.status == 'READY') TextButton.icon(icon:const Icon(Icons.more_time),label:const Text('延后开始时间'),onPressed:saving?null:() async {
             final now=DateTime.now();
@@ -955,7 +992,8 @@ class _ResultDialogState extends State<_ResultDialog> {
 }
 
 class _DecisionPage extends StatefulWidget {
-  const _DecisionPage({required this.trial, required this.dao, required this.ai, this.review});
+  const _DecisionPage({required this.trial, required this.dao, required this.ai, this.review,this.fromNotification=false});
+  final bool fromNotification;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
@@ -1043,6 +1081,7 @@ class _DecisionPageState extends State<_DecisionPage> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('复盘结果 · 本轮出口'),actions:[IconButton(tooltip:'知识学习与应用',icon:const Icon(Icons.menu_book),onPressed:()=>_trialKnowledge(context,widget.dao,trial.id,'CHANGE'))]),
     body: ListView(padding: const EdgeInsets.all(16), children: [
+      if(widget.fromNotification)const Text('通知定位 · 改变节点：核对复盘建议后再确认下一步。'),
       EvidenceGrowthCycleCard(trial:trial),
       TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
         onPressed:()=>_openCycle(context,trial,widget.dao,widget.ai)),
@@ -1345,12 +1384,14 @@ Future<void> _showGuide(BuildContext context, EvidenceGrowthAiService ai) async 
 }
 
 class _ArchivePage extends StatelessWidget {
-  const _ArchivePage({required this.trial, required this.dao,required this.ai});
+  const _ArchivePage({required this.trial, required this.dao,required this.ai,this.notificationMessage=''});
+  final String notificationMessage;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
   @override
   Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Trial 证据档案')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    if(notificationMessage.isNotEmpty)_Card(title:'通知对应的原行动',child:Text(notificationMessage)),
     EvidenceGrowthCycleCard(trial:trial),
     TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
       onPressed:()=>_openCycle(context,trial,dao,ai)),

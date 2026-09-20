@@ -196,7 +196,7 @@ object EvidenceGrowthReminderNative {
                 db.execSQL("UPDATE $TABLE SET state='cancelled' WHERE trial_id=? AND kind='missing_result' AND scheduled_at_ms<>? AND state IN ('pending','scheduled','blocked')",arrayOf(trial,at))
                 val window = (at/60000).toString()
                 db.execSQL("INSERT OR IGNORE INTO $TABLE (event_key,trial_id,kind,scheduled_at_ms,window_key,title,body,source_ids_json,state) VALUES (?,?,'missing_result',?,?,?,?,'[\"KB35-R01\",\"KB35-G-EXT2-01\"]','pending')",
-                    arrayOf("$trial:$window",trial,at,window,"这条路线还缺少反馈","继续之前，先补充现实证据。记录完成、部分、未做、中止或继续观察；未反馈会按设置间隔继续提醒。"))
+                    arrayOf("$trial:$window",trial,at,window,"证据成长｜结果节点 · 待反馈","继续之前，先补充现实证据。记录完成、部分、未做、中止或继续观察；未反馈会按设置间隔继续提醒。"))
                 db.execSQL("UPDATE $TABLE SET state='pending',last_error='' WHERE trial_id=? AND window_key=? AND state='cancelled' AND delivered_at_ms=0",arrayOf(trial,window))
             }
         }

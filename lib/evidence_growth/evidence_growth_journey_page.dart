@@ -231,13 +231,16 @@ class EvidenceGrowthJourneyPage extends StatefulWidget {
       required this.onAction,
       required this.onTrial,
       required this.draft,
-      this.guidance});
+      this.guidance,
+      this.notificationNode = '',
+      this.notificationMessage = ''});
   final GrowthJourney journey;
   final EvidenceGrowthDao dao;
   final JourneyAction onAction;
   final JourneyTrial onTrial;
   final JourneyDraft draft;
   final JourneyGuidance? guidance;
+  final String notificationNode, notificationMessage;
   @override
   State<EvidenceGrowthJourneyPage> createState() => _JourneyPageState();
 }
@@ -1181,6 +1184,31 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
               const SizedBox(height: 8),
               Text(
                   '${GrowthJourney.labels[profile.lifecycle] ?? profile.lifecycle} · ${j.statusLabel} · 第 ${j.cycle} 轮'),
+              if (widget.notificationNode.isNotEmpty)
+                _card(
+                    '通知定位 · ${GrowthJourney.labels[widget.notificationNode] ?? widget.notificationNode}节点',
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.notificationMessage.isNotEmpty)
+                            Text(widget.notificationMessage),
+                          Text('当前：${j.nodeLabel} · ${j.statusLabel}'),
+                          if (active && j.node == 'REVIEW')
+                            Wrap(children: [
+                              action('现在可以复盘', () => readiness('READY_NOW')),
+                              action('继续暂缓', () => readiness('DEFERRED')),
+                              if (j.data['readiness'] == 'READY_NOW')
+                                action('比较事实，提炼学习', review)
+                            ])
+                          else if (active &&
+                              (j.status == 'MAINTAINING' ||
+                                  j.node == 'MAINTENANCE_GATE')) ...[
+                            Text(
+                                '保持区间：${growthMap(j.data['maintenance'])['acceptable_band'] ?? '尚未定义'}'),
+                            action('记录稳定／偏离', maintenanceCheck)
+                          ] else if (active)
+                            action('继续当前步骤', continueGuided)
+                        ])),
               if (busy) const LinearProgressIndicator(),
               EvidenceGrowthGuidanceCard(
                   value: guidance,
