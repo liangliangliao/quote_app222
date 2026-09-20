@@ -184,7 +184,8 @@ void main() {
     expect(result['origin'], 'LOCAL_RULE');
     expect(result['reason'], contains('情境已变化'));
   });
-  test('AI goal proposal enters the contract only after user confirmation',
+  test(
+      'goal carries confirmed belief knowledge into its confirmable AI proposal',
       () async {
     final j = await at('BELIEF');
     final ai = _Ai((purpose, _) async => jsonEncode(purpose.endsWith('.plan')

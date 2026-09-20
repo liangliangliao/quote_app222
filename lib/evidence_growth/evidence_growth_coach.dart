@@ -169,7 +169,12 @@ class EvidenceGrowthCoach {
           query.length > 600 ||
           missing is! String ||
           missing.length > 200) throw const FormatException('PLANNING_SCHEMA');
-      final chosen = EvidenceGrowthKnowledgeRuntime.appliedNodes(j, at);
+      // A goal is grounded in the upstream belief and its confirmed sources.
+      final chosen = [
+        ...EvidenceGrowthKnowledgeRuntime.appliedNodes(j, at),
+        if (at == 'GOAL')
+          ...EvidenceGrowthKnowledgeRuntime.appliedNodes(j, 'BELIEF')
+      ];
       final retrieved = EvidenceGrowthKnowledgeRuntime.retrieve(
           at, '$query ${EvidenceGrowthKnowledgeRuntime.query(context)}',
           limit: 24);
