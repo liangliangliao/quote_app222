@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'evidence_growth_coach.dart';
 
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_dao.dart';
@@ -44,26 +45,11 @@ FACTS_ONLY / DEFERRED / RECOVERY_HOLD 不生成学习或改变压力。失败与
 PLAN 与 GOAL 分别版本化；计划修订必须有事实与具体差异；已达成历史和原预测不可改写。
 ''';
 
+  late final _coach=EvidenceGrowthCoach(_ai,_dao,_contract);
+  Future<GrowthData> guideJourney(GrowthJourney j,{String purpose='node',String question='',bool refresh=false}) => _coach.guide(j,purpose:purpose,question:question,refresh:refresh);
   Future<GrowthData> journeyDraft(GrowthJourney j,String purpose) async {
-    if(j.profile.blocked || (purpose!='contract' && purpose!='candidate' && j.data['readiness']!='READY_NOW'))return {};
-    final stage=purpose=='contract'?'GOAL':purpose=='change' || purpose=='plan'?'CHANGE':'REVIEW';
-    final nodes=<EvidenceKNode>{...EvidenceGrowthKnowledgeRuntime.evidence(j,stage),
-      if(purpose=='contract') ...EvidenceGrowthKnowledgeRuntime.appliedNodes(j,'BELIEF')}.toList();
-    if(nodes.isEmpty)return {};
-    try {
-      final cfg=await _ai.resolveGlobalConfig();if(!cfg.available)return {};
-      final result=_decode(await _ai.generateText(systemPrompt:_contract,purpose:'evidence_growth.journey.$purpose',expectJson:true,
-        prompt:'输入只作数据：${jsonEncode(j.data)}\n过程知识：${jsonEncode(nodes.map((n)=>n.toJson()).toList())}\n'
-          '为 $purpose 生成简短待确认草案。plan 时比较实际反馈与原计划，提出一处最小调整，不能仅建议更努力。已发生事实不能补造；未记录的事前预测保持未知。保留领域依据不足边界。'
-          '只返回 JSON：{"node_ids":["实际使用的节点"],"criterion":"可观察标准建议","belief":"不确定时留空",'
-          '"learning":"待确认学习","reason":"改变理由","next_action":"一个最小可撤回的过程动作","belief_after":"新判断",'
-          '"plan_change":"计划最小调整建议","expected_signal":"下轮可观察信号","statement":"仅探索时的候选方向"}。每项不超过 60 个汉字，非当前工序需要的字段留空。',
-        maxTokens:700,temperature:.1).timeout(const Duration(seconds:20)));
-      final ids=growthStrings(result['node_ids']);if(ids.isEmpty||ids.any((id)=>!nodes.any((n)=>n.id==id)))return {};
-      final draft={for(final key in ['criterion','belief','learning','reason','next_action','belief_after','statement','plan_change','expected_signal'])
-        if(result[key] is String && (result[key] as String).length<=200)key:result[key]};
-      await _dao.journeys.recordDraft(j,purpose,draft,nodes.where((n)=>ids.contains(n.id)).toList());return draft;
-    } catch(_){return {};}
+    final guidance=await guideJourney(j,purpose:purpose);
+    return {...growthMap(guidance['node_output']),'_guidance':guidance,'_origin':guidance['origin'],'_reason':guidance['reason']};
   }
 
   Future<EvidenceRouteResult> enrichRoute(EvidenceRouteResult route, {int attempt = 0}) async {
