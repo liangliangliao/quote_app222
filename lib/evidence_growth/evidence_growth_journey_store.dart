@@ -1358,8 +1358,8 @@ class EvidenceGrowthJourneyStore {
       DatabaseExecutor tx, GrowthJourney j, RealityTrial trial) async {
     if (j.data['plan_revision_required'] == true) throw StateError('先完成执行计划修订');
     if (j.profile.data['self_judgment'] != null &&
-        growthRows(j.data['change_attempts']).isEmpty &&
-        (growthMap(j.data['pattern_context']).isEmpty ||
+        ((growthRows(j.data['change_attempts']).isEmpty &&
+                growthMap(j.data['pattern_context']).isEmpty) ||
             const ['NEED_MORE_EVIDENCE', 'DOMAIN_BOUNDARY']
                 .contains(growthMap(j.data['pattern_context'])['decision'])))
       throw StateError('先核对具体行为模式与改变是否必要');

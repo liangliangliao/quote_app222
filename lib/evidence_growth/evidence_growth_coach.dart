@@ -35,8 +35,8 @@ class EvidenceGrowthCoach {
       return GrowthGuidance.local(j, at, '尊重复盘准备度，未调用深度指导');
     if (at == 'ACTION' &&
         j.profile.data['self_judgment'] != null &&
-        growthRows(j.data['change_attempts']).isEmpty &&
-        (growthMap(j.data['pattern_context']).isEmpty ||
+        ((growthRows(j.data['change_attempts']).isEmpty &&
+                growthMap(j.data['pattern_context']).isEmpty) ||
             const ['NEED_MORE_EVIDENCE', 'DOMAIN_BOUNDARY']
                 .contains(growthMap(j.data['pattern_context'])['decision'])))
       return GrowthGuidance.local(j, at, '先核对具体行为模式与改变是否必要；尚未把人格标签当成正式干预对象');

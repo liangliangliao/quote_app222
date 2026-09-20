@@ -299,6 +299,27 @@ void main() {
           'decision': 'CHANGE'
         }),
         throwsArgumentError);
+    j = await store.change(j, 'change-attempt', {
+      'observed_pattern': '饭后没有整理草稿',
+      'context': '在家',
+      'impact': '草稿未完成',
+      'desired_pattern': '先整理一段',
+      'intervention': '移开手机',
+      'baseline': '昨天未开始',
+      'signal': '是否整理了一段'
+    });
+    j = await store.change(j, 'pattern', {
+      'observed_pattern': '饭后没有整理草稿',
+      'context': '在家',
+      'impact': '草稿未完成',
+      'decision': 'NEED_MORE_EVIDENCE'
+    });
+    await expectLater(create(j), throwsStateError);
+    final ai = _Ai((_, __) async => throw StateError('must not call'));
+    final guidance =
+        await EvidenceGrowthAiService(ai: ai, dao: dao).guideJourney(j);
+    expect(guidance['origin'], 'LOCAL_RULE');
+    expect(ai.calls, isEmpty);
     j = await store.change(j, 'pattern', {
       'observed_pattern': '坐到书桌前后打开了短视频，没有整理草稿',
       'context': '昨晚饭后',
