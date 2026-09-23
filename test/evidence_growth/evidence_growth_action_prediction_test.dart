@@ -7,25 +7,59 @@ import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 void main() {
   setUpAll(sqfliteFfiInit);
 
-  test('JEV action workflow mixes noul score and choice outputs', () {
+  test('JEV action workflow adapts to the interpreted action profile', () {
     final request = EvidenceGrowthJev.actionRequest({
-      'plan': '明天 8:00 出门',
-      'user_reported_conditions': {
-        'commitment': '已经决定必须做',
-        'physical_state': ['精力充足']
+      'plan': '未来7天不抽烟',
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'remain_abstinent',
+            'label': '未来7天保持不抽烟',
+            'true_criterion':
+                'No smoking occurs during the next seven days.',
+            'false_criterion':
+                'At least one smoking episode occurs during the next seven days.',
+            'primary': true,
+          }
+        ],
+        'relevant_core_factors': [
+          'commitment',
+          'emotion',
+          'alternatives',
+          'history_habit'
+        ],
+        'dynamic_factors': [
+          {
+            'id': 'smoking_cues',
+            'label': '吸烟诱因暴露',
+            'condition':
+                'Exposure to smoking cues is low or effectively managed.',
+            'evidence': ''
+          }
+        ],
+        'clarifying_questions': [
+          {
+            'id': 'current_smoking_rate',
+            'question': '你现在每天大约抽多少支烟？'
+          }
+        ],
+        'failure_modes': [
+          {
+            'id': 'cue_triggered_lapse',
+            'label': '诱因触发复吸',
+            'criterion':
+                'A smoking cue triggers at least one smoking episode.'
+          }
+        ]
       }
     }, 'jev-latest');
     final questions = request['questions'] as Map;
-    expect(questions, contains('start_on_time'));
-    expect(questions, contains('start_eventually'));
-    expect(questions, contains('complete_as_planned'));
-    expect(questions, contains('hard_blocker'));
+    expect(questions, contains('event_remain_abstinent'));
+    expect(questions, contains('factor_commitment'));
+    expect(questions, contains('factor_dynamic_smoking_cues'));
     expect(questions, contains('dominant_failure_mode'));
-    expect(questions, contains('most_decisive_missing_domain'));
-    for (final key in EvidenceGrowthJev.actionFactors.keys) {
-      expect(questions, contains('factor_$key'));
-      expect((questions['factor_$key'] as Map)['type'], 'score');
-    }
+    expect(questions, contains('most_decisive_missing_question'));
+    expect(questions, isNot(contains('factor_feasibility')));
 
     final scoreAnswer = {
       'type': 'score',
@@ -43,37 +77,36 @@ void main() {
     final parsed = EvidenceGrowthJev.parseAction({
       'model': 'jev-latest',
       'answers': {
-        'start_on_time': {'type': 'noul', 'noul': .72},
-        'start_eventually': {'type': 'noul', 'noul': .84},
-        'complete_as_planned': {'type': 'noul', 'noul': .67},
-        'hard_blocker': {'type': 'noul', 'noul': .11},
-        for (final key in EvidenceGrowthJev.actionFactors.keys)
-          'factor_$key': scoreAnswer,
+        'event_remain_abstinent': {'type': 'noul', 'noul': .58},
+        'hard_blocker': {'type': 'noul', 'noul': .04},
+        'factor_commitment': scoreAnswer,
+        'factor_emotion': scoreAnswer,
+        'factor_alternatives': scoreAnswer,
+        'factor_history_habit': scoreAnswer,
+        'factor_dynamic_smoking_cues': scoreAnswer,
         'dominant_failure_mode': {
           'type': 'choice',
-          'choice': 'decision_reopened',
+          'choice': 'cue_triggered_lapse',
           'confidence': .74,
           'probabilities': {
-            'decision_reopened': .55,
-            'aversive_state': .25,
-            'insufficient_evidence': .2
+            'cue_triggered_lapse': .7,
+            'insufficient_evidence': .3
           }
         },
-        'most_decisive_missing_domain': {
+        'most_decisive_missing_question': {
           'type': 'choice',
-          'choice': 'history_habit',
+          'choice': 'current_smoking_rate',
           'confidence': .69,
-          'probabilities': {'history_habit': .6, 'none': .4}
+          'probabilities': {'current_smoking_rate': .8, 'none': .2}
         },
       },
       'usage': {'input_tokens': 10, 'output_tokens': 20}
     });
-    expect(parsed['overall'], .72);
-    expect((parsed['forecasts'] as Map)['start_eventually'], .84);
-    expect((parsed['factors'] as Map)['decision_stability']['score'], .7);
-    expect((parsed['factors'] as Map)['decision_stability']['confidence'], .82);
+    expect(parsed['overall'], .58);
+    expect((parsed['events'] as Map)['remain_abstinent'], .58);
+    expect((parsed['factors'] as Map)['dynamic_smoking_cues']['score'], .7);
     expect((parsed['dominant_failure_mode'] as Map)['choice'],
-        'decision_reopened');
+        'cue_triggered_lapse');
   });
 
   test('action prediction history stores outcomes for later calibration', () async {
@@ -90,11 +123,11 @@ void main() {
       'outcome': 'PENDING',
       'scheduled_at_ms': 1,
     });
-    await service.recordOutcome('p1', 'ON_TIME');
+    await service.recordOutcome('p1', 'SUCCESS');
 
     final rows = await service.history();
     expect(rows, hasLength(1));
-    expect(rows.single['outcome'], 'ON_TIME');
+    expect(rows.single['outcome'], 'SUCCESS');
   });
 
   test('prediction bands remain descriptive rather than guaranteed', () {
