@@ -71,6 +71,64 @@ void main() {
     expect(selections['intention']['confidence'], .84);
   });
 
+  test('confirmed theory option has transparent support score', () {
+    expect(
+        EvidenceBehaviorTheoryCatalog.supportScore(
+            'knowledge_skills', 'adequate'),
+        3);
+    expect(
+        EvidenceBehaviorTheoryCatalog.supportScore('intention', 'firm'),
+        4);
+    expect(
+        EvidenceBehaviorTheoryCatalog.supportScore('intention', 'unknown'),
+        isNull);
+  });
+
+  test('JEV action request explicitly honors confirmed theory answers', () {
+    final request = EvidenceGrowthJev.actionRequest({
+      'plan': '今天重新去找工作',
+      'selected_theories': ['IBM'],
+      'theory_factor_answers': {
+        'knowledge_skills': {
+          'option_id': 'adequate',
+          'option_label': '基本具备',
+          'confirmed_by_user': true,
+        },
+        'intention': {
+          'option_id': 'weak',
+          'option_label': '有一点想法，但随时可以不做',
+          'confirmed_by_user': true,
+        },
+      },
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'restart_job_search',
+            'label': '完成一次具体求职行动',
+            'true_criterion': 'At least one concrete job search action occurs.',
+            'false_criterion': 'No concrete job search action occurs.',
+            'primary': true,
+          }
+        ],
+        'relevant_core_factors': ['intention', 'knowledge_skills'],
+        'dynamic_factors': [],
+        'clarifying_questions': [],
+        'failure_modes': [],
+      }
+    }, 'jev-latest');
+
+    final questions = request['questions'] as Map;
+    final skills = questions['factor_knowledge_skills'] as Map;
+    expect('${skills['instructions']}',
+        contains('explicitly confirmed the standardized option'));
+    expect('${skills['instructions']}', contains('基本具备'));
+
+    final failure = questions['dominant_failure_mode'] as Map;
+    final criteria = failure['criteria'] as Map;
+    expect(criteria.keys.any((k) => '$k'.contains('theory_intention_blocker')),
+        isTrue);
+  });
+
   test('original work-case predictor pool is preserved for dynamic reuse', () {
     final catalog =
         EvidenceGrowthActionPredictionService.preservedFactorCatalog;
