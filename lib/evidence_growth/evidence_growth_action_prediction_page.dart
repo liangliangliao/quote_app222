@@ -564,6 +564,7 @@ class _EvidenceGrowthActionPredictionPageState
         '${actionProfile['analysis_error_detail'] ?? ''}'.trim();
     final analysisErrorCode =
         '${actionProfile['analysis_error_code'] ?? ''}'.trim();
+    final analysisStages = growthRows(actionProfile['analysis_stages']);
     final coverage = '${actionProfile['coverage_summary'] ?? ''}'.trim();
     final appliedCorrection =
         '${actionProfile['analysis_correction_applied'] ?? ''}'.trim();
@@ -663,6 +664,53 @@ class _EvidenceGrowthActionPredictionPageState
                                   busy || preparing ? null : prepareAction,
                               icon: const Icon(Icons.refresh),
                               label: const Text('重新调用AI理解这个行动')))
+                    ]))
+          ],
+          if (analysisReady) ...[
+            const SizedBox(height: 12),
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    border: Border.all(color: _teal.withValues(alpha: .35)),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.check_circle_outline,
+                            color: _teal, size: 20),
+                        const SizedBox(width: 7),
+                        const Expanded(
+                            child: Text('AI已完成本轮行动理解',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w900))),
+                        if (analysisProvider.isNotEmpty ||
+                            analysisModel.isNotEmpty)
+                          Flexible(
+                              child: Text(
+                                  [analysisProvider, analysisModel]
+                                      .where((e) => e.isNotEmpty)
+                                      .join(' · '),
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.black54)))
+                      ]),
+                      if (analysisStages.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        for (final stage in analysisStages)
+                          Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(children: [
+                                const Icon(Icons.check,
+                                    size: 16, color: _teal),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                    child:
+                                        Text('${stage['label'] ?? ''}'))
+                              ]))
+                      ]
                     ]))
           ],
           if (normalized.isNotEmpty) ...[
