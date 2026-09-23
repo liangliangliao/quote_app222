@@ -327,9 +327,9 @@ class EvidenceGrowthJev {
       final answer = growthMap(entry.value);
       final optionId = '${answer['option_id'] ?? ''}';
       final optionLabel = '${answer['option_label'] ?? ''}'.trim();
-      final support =
-          EvidenceBehaviorTheoryCatalog.supportScore(entry.key, optionId);
-      if (support == null || support > 1) continue;
+      final ordinal =
+          EvidenceBehaviorTheoryCatalog.ordinalLevel(entry.key, optionId);
+      if (ordinal == null || ordinal > 1) continue;
       final factor = EvidenceBehaviorTheoryCatalog.factor(entry.key);
       if (factor == null) continue;
       final label = '${factor['label'] ?? entry.key}：$optionLabel';
@@ -339,7 +339,7 @@ class EvidenceGrowthJev {
         'id': id,
         'label': label,
         'criterion':
-            'The user-confirmed standardized answer for ${factor['label']} is "$optionLabel" (support $support/4), and this adverse condition is the dominant contributor to failure of the primary event.',
+            'The user-confirmed standardized answer for ${factor['label']} is "$optionLabel". It is in adverse ordinal category $ordinal (0=most adverse, 4=most supportive; ordinal distances are not interval weights). This condition may be the dominant contributor to failure of the primary event.',
         'source': 'USER_THEORY_OPTION',
         'factor_id': entry.key,
         'evidence': optionLabel,
@@ -432,13 +432,36 @@ class EvidenceGrowthJev {
         .toList();
 
     final theoryAnswers = growthMap(state['theory_factor_answers']);
+    final sanitizedTheoryAnswers = <String, GrowthData>{};
+    for (final entry in theoryAnswers.entries) {
+      final row = growthMap(entry.value);
+      final optionId = '${row['option_id'] ?? ''}'.trim();
+      final optionLabel = '${row['option_label'] ?? ''}'.trim();
+      if (optionId.isEmpty) continue;
+      sanitizedTheoryAnswers[entry.key] = {
+        'option_id': optionId,
+        'option_label': optionLabel,
+        'confirmed_by_user': row['confirmed_by_user'] == true,
+        'prefill_source': '${row['prefill_source'] ?? ''}',
+      };
+    }
+
+    final selectedTheoryIds = growthStrings(state['selected_theories']);
+    final expectedTheoryFactorIds = EvidenceBehaviorTheoryCatalog
+        .activeFactors(selectedTheoryIds)
+        .map((e) => '${e['id'] ?? ''}')
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    final unansweredTheoryFactorIds = expectedTheoryFactorIds
+        .where((id) => !sanitizedTheoryAnswers.containsKey(id))
+        .toList();
 
     GrowthData confirmedAnswerFor(String construct) {
-      final direct = growthMap(theoryAnswers[construct]);
+      final direct = growthMap(sanitizedTheoryAnswers[construct]);
       if (direct.isNotEmpty) return direct;
       for (final factorId
           in EvidenceBehaviorTheoryCatalog.factorIdsForConstruct(construct)) {
-        final row = growthMap(theoryAnswers[factorId]);
+        final row = growthMap(sanitizedTheoryAnswers[factorId]);
         if (row.isNotEmpty) return row;
       }
       return {};
@@ -472,6 +495,8 @@ class EvidenceGrowthJev {
     };
     final jevState = <String, dynamic>{
       ...state,
+      'theory_factor_answers': sanitizedTheoryAnswers,
+      'unanswered_theory_factor_ids': unansweredTheoryFactorIds,
       'action_profile': jevProfile,
     };
 
@@ -514,7 +539,7 @@ class EvidenceGrowthJev {
           'factor_$key': {
             'type': 'score',
             'instructions':
-                'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} ${confirmedTheoryEvidence(key)} Use only supplied facts and the action contract. If the user has explicitly confirmed a standardized option, do not describe that construct as missing. Missing evidence belongs at the neutral/insufficient level.',
+                'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} ${confirmedTheoryEvidence(key)} Use only supplied facts and the action contract. If the user has explicitly confirmed a standardized option, do not describe that construct as missing. If evidence is missing, use the center score only as JEV's typed representation of insufficient evidence; do not treat that center value as observed neutrality or as a numeric contribution to the final probability.',
             'criteria': _supportRubric,
           },
         for (final row in dynamicRows)
