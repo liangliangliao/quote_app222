@@ -779,6 +779,16 @@ ${jsonEncode(preservedFactorCatalog)}
         });
       }
 
+      final omittedPreserved = <GrowthData>[
+        for (final entry in preservedFactorCatalog.entries)
+          if (!preservedSeen.contains(entry.key))
+            {
+              'id': entry.key,
+              'label': entry.value['label'],
+              'ibm_construct': entry.value['ibm_construct'],
+            }
+      ];
+
       final adaptiveRows = <GrowthData>[];
       final adaptiveSeen = <String>{};
       for (final row in growthRows(decoded['dynamic_factors']).take(8)) {
@@ -840,6 +850,7 @@ ${jsonEncode(preservedFactorCatalog)}
             .toSet()
             .toList(),
         'selected_preserved_factors': preservedRows,
+        'omitted_preserved_factors': omittedPreserved,
         'adaptive_dynamic_factors': adaptiveRows,
         'dynamic_factors': <GrowthData>[
           ...preservedRows,
@@ -880,6 +891,14 @@ ${jsonEncode(preservedFactorCatalog)}
         ],
         'relevant_core_factors': factorLabels.keys.toList(),
         'selected_preserved_factors': <GrowthData>[],
+        'omitted_preserved_factors': [
+          for (final entry in preservedFactorCatalog.entries)
+            {
+              'id': entry.key,
+              'label': entry.value['label'],
+              'ibm_construct': entry.value['ibm_construct'],
+            }
+        ],
         'adaptive_dynamic_factors': <GrowthData>[],
         'dynamic_factors': <GrowthData>[],
         'clarifying_questions': <GrowthData>[],
