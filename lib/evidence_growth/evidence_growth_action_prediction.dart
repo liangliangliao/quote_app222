@@ -158,7 +158,16 @@ class EvidenceGrowthActionPredictionService {
     }
 
     final aiEstimate = _prob(ai['execution_likelihood']);
-    final jevEstimate = _prob(jev['overall']);
+    final eventProbabilities = growthMap(jev['events']);
+    final profileEvents = growthRows(profile['forecast_events']);
+    final primaryEvents =
+        profileEvents.where((e) => e['primary'] == true).toList();
+    final primaryEvent = primaryEvents.isNotEmpty
+        ? primaryEvents.first
+        : (profileEvents.isNotEmpty ? profileEvents.first : <String, dynamic>{});
+    final primaryEventId = '${primaryEvent['id'] ?? 'primary_success'}';
+    final jevEstimate =
+        _prob(eventProbabilities[primaryEventId]) ?? _prob(jev['overall']);
 
     // JEV is the primary forecast engine when configured because its output is
     // a typed probabilistic decision. The LLM remains an interpreter and
@@ -181,8 +190,31 @@ class EvidenceGrowthActionPredictionService {
     final factors = <String, GrowthData>{};
     final aiFactors = growthMap(ai['factors']);
     final jevFactors = growthMap(jev['factors']);
+    final activeLabels = <String, String>{};
 
-    for (final key in factorLabels.keys) {
+    final requestedCore = growthStrings(profile['relevant_core_factors'])
+        .where(factorLabels.containsKey)
+        .toList();
+    final coreKeys =
+        requestedCore.isEmpty ? factorLabels.keys.toList() : requestedCore;
+    for (final key in coreKeys) {
+      activeLabels[key] = factorLabels[key]!;
+    }
+
+    final dynamicByKey = <String, GrowthData>{};
+    for (final row in growthRows(profile['dynamic_factors']).take(8)) {
+      final rawId = '${row['id'] ?? ''}'
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9_]+'), '_');
+      if (rawId.isEmpty) continue;
+      final key = 'dynamic_$rawId';
+      final label = '${row['label'] ?? ''}'.trim();
+      if (label.isEmpty) continue;
+      activeLabels[key] = label;
+      dynamicByKey[key] = row;
+    }
+
+    for (final key in activeLabels.keys) {
       final aiRow = growthMap(aiFactors[key]);
       final jevRow = growthMap(jevFactors[key]);
       final a = _prob(aiRow['score']);
@@ -203,7 +235,7 @@ class EvidenceGrowthActionPredictionService {
                   (confidence == null || confidence < .5));
 
       factors[key] = {
-        'label': factorLabels[key],
+        'label': activeLabels[key],
         'score': score,
         'display_score': unknown ? null : score,
         'confidence': confidence,
@@ -220,8 +252,10 @@ class EvidenceGrowthActionPredictionService {
                 : score >= .65
                     ? 'SUPPORT'
                     : 'MIXED',
-        'evidence': _humanEvidence(
-            key, '${aiRow['evidence'] ?? ''}', state, resolved.length),
+        'evidence': dynamicByKey.containsKey(key)
+            ? _dynamicEvidence(dynamicByKey[key]!)
+            : _humanEvidence(
+                key, '${aiRow['evidence'] ?? ''}', state, resolved.length),
       };
     }
 
@@ -249,11 +283,29 @@ class EvidenceGrowthActionPredictionService {
         jevEstimate != null &&
         (aiEstimate - jevEstimate).abs() >= .20;
 
-    final forecasts = growthMap(jev['forecasts']);
     final dominantFailure = growthMap(jev['dominant_failure_mode']);
-    final missingDomain = growthMap(jev['most_decisive_missing_domain']);
+    final missingQuestion =
+        growthMap(jev['most_decisive_missing_question']);
     final dominantFailureKey = '${dominantFailure['choice'] ?? ''}';
-    final missingDomainKey = '${missingDomain['choice'] ?? ''}';
+    final missingQuestionKey = '${missingQuestion['choice'] ?? ''}';
+
+    final failureLabels = <String, String>{
+      ...failureModeLabels,
+      for (final row in growthRows(profile['failure_modes']))
+        '${row['id'] ?? ''}': '${row['label'] ?? ''}',
+    };
+    final questionLabels = <String, String>{
+      for (final row in growthRows(profile['clarifying_questions']))
+        '${row['id'] ?? ''}': '${row['question'] ?? ''}',
+    };
+    final eventRows = <GrowthData>[
+      for (final row in profileEvents)
+        {
+          ...row,
+          'probability':
+              _prob(eventProbabilities['${row['id'] ?? ''}']),
+        }
+    ];
 
     final improvement = growthMap(ai['improvement_scenario']);
     final improvementChanges =
@@ -342,7 +394,7 @@ class EvidenceGrowthActionPredictionService {
         for (final e in riskRows.take(3))
           {
             'key': e.key,
-            'label': factorLabels[e.key],
+            'label': activeLabels[e.key],
             'score': e.value['score'],
             'evidence': e.value['evidence'],
           }
