@@ -12,28 +12,23 @@ class EvidenceBehaviorTheoryCatalog {
       'name': '计划行为理论（TPB）',
       'short_name': 'TPB',
       'author': 'Icek Ajzen',
-      'scope': '通用意向型社会行为',
+      'scope': '通用意向型行为',
       'description':
-          '态度、主观规范和知觉行为控制形成行为意向；意向是行为的直接前因，实际行为控制会影响意向能否转化为行为。',
+          '态度、主观规范与知觉行为控制共同形成行为意向；在具备实际控制时，意向推动行为，知觉行为控制还可直接参与行为预测。',
+      'structure':
+          'behavioral beliefs → attitude; normative beliefs → subjective norm; control beliefs → perceived behavioral control; attitude + subjective norm + perceived behavioral control → intention; intention + perceived/actual control → behavior.',
+      'measurement_note':
+          '用于预测时可直接测量态度、主观规范、知觉行为控制和意向；行为/规范/控制信念是这些构念的信念基础，若要解释或干预可进一步 elicitation。',
       'factor_ids': <String>[
         'intention',
         'attitude_toward_behavior',
         'subjective_norm',
         'perceived_behavioral_control',
-        'actual_behavioral_control',
       ],
-      'belief_foundations': <String>[
+      'belief_basis': <String>[
         'behavioral_beliefs',
         'normative_beliefs',
-        'control_beliefs',
-      ],
-      'structural_notes': <String>[
-        '行为信念形成态度；规范信念形成主观规范；控制信念形成知觉行为控制。',
-        '实际行为控制并非通常意义上的主观量表构念，但对意向能否真正转化为行为是重要条件；研究中常用PBC作近似。',
-      ],
-      'source_refs': <String>[
-        'Ajzen, I. (1991). The Theory of Planned Behavior.',
-        'Ajzen TPB FAQ / current formulation.',
+        'control_beliefs'
       ],
     },
     'IBM': {
@@ -43,7 +38,9 @@ class EvidenceBehaviorTheoryCatalog {
       'author': 'Fishbein / Montaño / Kasprzyk 等',
       'scope': '通用行为发生预测',
       'description':
-          '意向由态度、知觉规范和个人能动性形成；实际行为还直接受知识与技能、行为显著性、环境约束和习惯影响。',
+          '意向由态度、知觉规范与个人能动性形成；行为还直接受到知识技能、行为显著性、环境约束以及经验/习惯影响。',
+      'structure':
+          'experiential + instrumental attitude; injunctive + descriptive norm; self-efficacy + perceived control → intention; intention + knowledge/skills + salience + environmental constraints + habit/experience → behavior.',
       'factor_ids': <String>[
         'intention',
         'experiential_attitude',
@@ -57,23 +54,17 @@ class EvidenceBehaviorTheoryCatalog {
         'environmental_constraints',
         'habit',
       ],
-      'structural_notes': <String>[
-        '态度分为体验性态度和工具性态度。',
-        '知觉规范分为命令性规范和描述性规范。',
-        '个人能动性由自我效能和知觉控制组成。',
-      ],
-      'source_refs': <String>[
-        'Integrated Behavioral Model (Fishbein / Montaño / Kasprzyk tradition).',
-      ],
     },
     'COM_B': {
       'id': 'COM_B',
       'name': 'COM-B 行为系统',
       'short_name': 'COM-B',
-      'author': 'Susan Michie / Maartje van Stralen / Robert West',
-      'scope': '跨行为的条件诊断与行为改变设计',
+      'author': 'Michie / van Stralen / West',
+      'scope': '几乎所有行为的条件诊断',
       'description':
-          '行为由能力、机会和动机相互作用产生；能力分心理/身体，机会分物理/社会，动机分反思/自动。',
+          '能力、机会和动机是行为发生的三个基本条件；能力分身体/心理，机会分物理/社会，动机分反思/自动过程。',
+      'structure':
+          'physical + psychological capability, physical + social opportunity, reflective + automatic motivation interact to generate behavior; capability/opportunity can influence motivation and behavior feeds back to all three.',
       'factor_ids': <String>[
         'physical_capability',
         'psychological_capability',
@@ -82,41 +73,27 @@ class EvidenceBehaviorTheoryCatalog {
         'reflective_motivation',
         'automatic_motivation',
       ],
-      'structural_notes': <String>[
-        '能力和机会还可以通过动机间接影响行为；行为发生后也会反馈影响能力、机会和动机。',
-      ],
-      'source_refs': <String>[
-        'Michie, van Stralen & West (2011), Behaviour Change Wheel / COM-B.',
-      ],
     },
     'SCT': {
       'id': 'SCT',
       'name': '社会认知理论（SCT）',
       'short_name': 'SCT',
       'author': 'Albert Bandura',
-      'scope': '学习、自我调节、坚持与环境交互',
+      'scope': '学习、动机、自我调节与行为维持',
       'description':
-          '个人因素、行为和环境存在三元交互决定；自我效能、结果预期、目标、自我调节、行为能力、观察学习、强化及环境促进/阻碍共同影响行为。',
+          'SCT以个人因素、行为和环境的三元互惠决定为结构，关键机制包括行为能力、自我效能、结果预期、目标、自我调节、观察学习与强化。',
+      'structure':
+          'person/cognition ↔ behavior ↔ environment (triadic reciprocal determinism); behavioral capability, self-efficacy, outcome expectations/values, goals/self-regulation, observational learning/modeling and reinforcement jointly shape learning, motivation and behavior.',
       'factor_ids': <String>[
+        'behavioral_capability',
         'self_efficacy',
         'outcome_expectations',
-        'goal_commitment',
-        'behavioral_capability',
+        'outcome_value',
+        'goals',
+        'self_regulation',
         'observational_learning',
         'reinforcement',
-        'self_regulation',
-        'environmental_facilitators',
-      ],
-      'structural_principles': <String>[
-        'reciprocal_determinism',
-      ],
-      'structural_notes': <String>[
-        '三元交互决定（人/认知—行为—环境）是SCT的结构原则，不应被错误做成单一高低分量表。',
-        '观察学习/示范和强化属于SCT的学习机制；自我效能是核心个人机制。',
-      ],
-      'source_refs': <String>[
-        'Bandura (1986/2001), Social Cognitive Theory.',
-        'Bandura (2004), Health Promotion by Social Cognitive Means.',
+        'environmental_influences',
       ],
     },
     'HAPA': {
@@ -124,9 +101,11 @@ class EvidenceBehaviorTheoryCatalog {
       'name': '健康行动过程模型（HAPA）',
       'short_name': 'HAPA',
       'author': 'Ralf Schwarzer',
-      'scope': '从动机形成到启动、维持、受挫后恢复',
+      'scope': '健康行为的形成、启动、维持与失败后恢复',
       'description':
-          '区分动机阶段与意志阶段：风险感知、结果预期和行动自我效能促成意向；之后由行动/应对计划、维持与恢复自我效能、行动控制及障碍/资源影响行为。',
+          'HAPA区分动机阶段与意志阶段：风险感知、结果预期和行动自我效能促进意向形成；计划、行动控制、维持/恢复自我效能以及情境障碍/资源影响意向向行为转化。',
+      'structure':
+          'risk perception + outcome expectancies + action self-efficacy → intention; intention + action/coping planning → action; maintenance/coping self-efficacy, recovery self-efficacy, action control and barriers/resources influence initiation, maintenance and recovery.',
       'factor_ids': <String>[
         'risk_perception',
         'outcome_expectations',
@@ -139,36 +118,25 @@ class EvidenceBehaviorTheoryCatalog {
         'action_control',
         'barriers_resources',
       ],
-      'structural_notes': <String>[
-        'HAPA将自我效能按阶段区分为行动（启动前）、维持/应对、恢复自我效能。',
-        '障碍与资源作用于意志阶段的行动实现，不能仅用一般自我效能替代。',
-      ],
-      'source_refs': <String>[
-        'Schwarzer, Health Action Process Approach (HAPA) overview.',
-      ],
     },
     'IMPLEMENTATION_INTENTION': {
       'id': 'IMPLEMENTATION_INTENTION',
-      'name': '执行意图（Implementation Intentions）',
+      'name': '执行意图（If-Then）扩展',
       'short_name': '执行意图',
       'author': 'Peter M. Gollwitzer',
-      'scope': '把已有目标意向转化为行动的自我调节策略',
+      'scope': '把已有目标意向转化为情境触发的行动',
       'description':
-          '以“如果遇到关键情境X，那么执行目标导向反应Y”的形式，把关键情境与目标导向反应建立明确联结。',
+          '执行意图不是与TPB/IBM同类型的完整行为预测理论，而是一种意志性自我调节策略：把预期的关键情境X与目标导向反应Y建立明确的“如果X，那么Y”连接。',
+      'structure':
+          'goal intention + specified critical/opportune cue + specified goal-directed response → strong cue-response link and more automatic initiation when the cue is encountered.',
       'factor_ids': <String>[
         'intention',
+        'implementation_intention',
         'cue_clarity',
         'response_specificity',
-        'implementation_intention',
-      ],
-      'structural_notes': <String>[
-        '执行意图不是一套完整的一般行为理论，而是建立在既有目标意向之上的自我调节策略。',
-        '核心成分是目标意向、关键情境（if部分）、目标导向反应（then部分）以及两者的if-then联结。',
-      ],
-      'source_refs': <String>[
-        'Gollwitzer (1999), Implementation Intentions: Strong Effects of Simple Plans.',
       ],
       'is_extension': true,
+      'framework_type': 'VOLITIONAL_STRATEGY',
     },
   };
 
@@ -271,12 +239,48 @@ class EvidenceBehaviorTheoryCatalog {
     {'id': 'unknown', 'label': '不清楚／无法判断'},
   ];
 
+  static const importanceOptions = <Map<String, String>>[
+    {'id': 'very_low', 'label': '这些结果对我几乎没有价值'},
+    {'id': 'low', 'label': '价值较低'},
+    {'id': 'medium', 'label': '有一定价值'},
+    {'id': 'high', 'label': '价值较高'},
+    {'id': 'very_high', 'label': '对我非常重要／很有价值'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
+  static const modelingOptions = <Map<String, String>>[
+    {'id': 'negative_models', 'label': '主要看到失败／反面示范'},
+    {'id': 'little_modeling', 'label': '几乎没有可参考的相似榜样'},
+    {'id': 'mixed', 'label': '有正反两类示范／作用不明确'},
+    {'id': 'useful_models', 'label': '有可参考的成功示范'},
+    {'id': 'strong_similar_models', 'label': '有与我相似且成功的强榜样／示范'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
+  static const reinforcementOptions = <Map<String, String>>[
+    {'id': 'punishing', 'label': '行动后主要得到惩罚／负反馈'},
+    {'id': 'weak_negative', 'label': '回报很少且有负反馈'},
+    {'id': 'neutral', 'label': '基本没有明显强化结果'},
+    {'id': 'rewarding', 'label': '会得到奖励／积极反馈'},
+    {'id': 'strong_rewarding', 'label': '有直接、稳定且重要的积极强化'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
+  static const goalOptions = <Map<String, String>>[
+    {'id': 'none', 'label': '没有明确目标'},
+    {'id': 'vague', 'label': '目标很模糊／不稳定'},
+    {'id': 'partial', 'label': '有目标，但标准或承诺仍不清楚'},
+    {'id': 'clear', 'label': '目标明确，并愿意为它行动'},
+    {'id': 'specific_committed', 'label': '目标具体、有标准，而且承诺很强'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
   static const factorDefinitions = <String, Map<String, Object?>>{
     'intention': {
       'id': 'intention',
       'label': '行动意向／决定',
       'question': '你现在到底有多明确地决定要执行这个行动？',
-      'theories': <String>['TPB', 'IBM', 'HAPA'],
+      'theories': <String>['TPB', 'IBM', 'HAPA', 'IMPLEMENTATION_INTENTION'],
       'options': intentionOptions,
       'covers': <String>['commitment', 'decision_stability', 'intention'],
     },
@@ -340,7 +344,7 @@ class EvidenceBehaviorTheoryCatalog {
       'id': 'self_efficacy',
       'label': '自我效能',
       'question': '你相信自己能够完成这个行动或下一关键步骤吗？',
-      'theories': <String>['IBM', 'SCT', 'HAPA'],
+      'theories': <String>['IBM', 'SCT'],
       'options': efficacyOptions,
       'covers': <String>['self_efficacy'],
     },
@@ -456,16 +460,95 @@ class EvidenceBehaviorTheoryCatalog {
     'outcome_expectations': {
       'id': 'outcome_expectations',
       'label': '结果预期',
-      'question': '你预期做这件事会带来怎样的结果？这些结果是否值得？',
+      'question': '你预期做这件事实际会带来有利还是不利的结果？',
       'theories': <String>['SCT', 'HAPA'],
       'options': valenceOptions,
       'covers': <String>['value_salience', 'instrumental_attitude'],
+    },
+    'outcome_value': {
+      'id': 'outcome_value',
+      'label': '结果价值／期望价值',
+      'question': '如果这些预期结果真的发生，它们对你有多重要、值得或有价值？',
+      'theories': <String>['SCT'],
+      'options': importanceOptions,
+      'covers': <String>['value_salience'],
+    },
+    'behavioral_capability': {
+      'id': 'behavioral_capability',
+      'label': '行为能力（知识与技能）',
+      'question': '你是否真正知道该怎么做，并具备执行这个行为所需的技能？',
+      'theories': <String>['SCT'],
+      'options': capabilityOptions,
+      'covers': <String>['knowledge_skills'],
+    },
+    'goals': {
+      'id': 'goals',
+      'label': '目标',
+      'question': '你针对这个行为是否有清楚、具体并真正承诺的目标？',
+      'theories': <String>['SCT'],
+      'options': goalOptions,
+      'covers': <String>['commitment', 'decision_stability', 'specificity'],
+    },
+    'observational_learning': {
+      'id': 'observational_learning',
+      'label': '观察学习／榜样示范',
+      'question': '你是否看过与你相似的人如何执行这个行为，以及这样做带来的结果？',
+      'theories': <String>['SCT'],
+      'options': modelingOptions,
+      'covers': <String>[],
+    },
+    'reinforcement': {
+      'id': 'reinforcement',
+      'label': '强化（奖励／惩罚／反馈）',
+      'question': '过去或预期中，做出这个行为之后得到的奖励、惩罚或反馈总体会把你推向还是拉离这个行为？',
+      'theories': <String>['SCT'],
+      'options': reinforcementOptions,
+      'covers': <String>['value_salience', 'habit'],
+    },
+    'environmental_influences': {
+      'id': 'environmental_influences',
+      'label': '环境影响',
+      'question': '你的现实和社会环境总体上是在促进还是阻碍这个行为？',
+      'theories': <String>[],
+      'options': opportunityOptions,
+      'covers': <String>[
+        'feasibility',
+        'time_capacity',
+        'prerequisite_readiness',
+        'preparation',
+        'friction',
+        'environmental_constraints'
+      ],
+    },
+    'action_self_efficacy': {
+      'id': 'action_self_efficacy',
+      'label': '行动自我效能',
+      'question': '在还没有真正开始之前，你相信自己能够启动并完成第一次关键行动吗？',
+      'theories': <String>['HAPA'],
+      'options': efficacyOptions,
+      'covers': <String>['self_efficacy'],
+    },
+    'barriers_resources': {
+      'id': 'barriers_resources',
+      'label': '情境障碍与资源',
+      'question': '在真正执行时，现实障碍、机会、资源和社会支持总体上是阻碍还是支持这个行动？',
+      'theories': <String>['HAPA'],
+      'options': opportunityOptions,
+      'covers': <String>[
+        'feasibility',
+        'time_capacity',
+        'prerequisite_readiness',
+        'preparation',
+        'friction',
+        'environmental_constraints',
+        'external_commitment'
+      ],
     },
     'goal_commitment': {
       'id': 'goal_commitment',
       'label': '目标承诺',
       'question': '你对这个目标的承诺有多稳定，遇到不舒服时还会继续吗？',
-      'theories': <String>['SCT'],
+      'theories': <String>[],
       'options': intentionOptions,
       'covers': <String>['commitment', 'decision_stability'],
     },
@@ -517,7 +600,7 @@ class EvidenceBehaviorTheoryCatalog {
     },
     'maintenance_self_efficacy': {
       'id': 'maintenance_self_efficacy',
-      'label': '维持自我效能',
+      'label': '维持／应对自我效能',
       'question': '如果行动需要持续一段时间，你相信自己能在困难和诱惑下坚持吗？',
       'theories': <String>['HAPA'],
       'options': efficacyOptions,
@@ -612,6 +695,7 @@ class EvidenceBehaviorTheoryCatalog {
   static const factorToCanonicalConstruct = <String, String>{
     'intention': 'intention',
     'goal_commitment': 'intention',
+    'goals': 'intention',
     'reflective_motivation': 'intention',
     'attitude_toward_behavior': 'instrumental_attitude',
     'experiential_attitude': 'experiential_attitude',
@@ -620,16 +704,20 @@ class EvidenceBehaviorTheoryCatalog {
     'injunctive_norm': 'injunctive_norm',
     'descriptive_norm': 'descriptive_norm',
     'self_efficacy': 'self_efficacy',
+    'action_self_efficacy': 'self_efficacy',
     'maintenance_self_efficacy': 'self_efficacy',
     'recovery_self_efficacy': 'self_efficacy',
     'perceived_behavioral_control': 'perceived_control',
     'perceived_control': 'perceived_control',
     'knowledge_skills': 'knowledge_skills',
+    'behavioral_capability': 'knowledge_skills',
     'psychological_capability': 'knowledge_skills',
     'salience': 'salience',
     'environmental_constraints': 'environmental_constraints',
     'physical_opportunity': 'environmental_constraints',
     'environmental_facilitators': 'environmental_constraints',
+    'environmental_influences': 'environmental_constraints',
+    'barriers_resources': 'environmental_constraints',
     'habit': 'habit',
     'automatic_motivation': 'habit',
     'implementation_intention': 'implementation_intention',
