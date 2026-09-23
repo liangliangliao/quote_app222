@@ -177,6 +177,42 @@ class EvidenceBehaviorTheoryCatalog {
     {'id': 'unknown', 'label': '不清楚／无法判断'},
   ];
 
+  static const actualBehavioralControlOptions = <Map<String, String>>[
+    {'id': 'blocked', 'label': '现实上缺少关键能力／资源，基本无法完成'},
+    {'id': 'low', 'label': '现实能力、资源或他人配合明显不足'},
+    {'id': 'partial', 'label': '具备一部分，但仍有关键现实限制'},
+    {'id': 'adequate', 'label': '所需能力与资源基本具备'},
+    {'id': 'strong', 'label': '所需能力、资源和配合条件都很充分'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
+  static const criticalSituationOptions = <Map<String, String>>[
+    {'id': 'none', 'label': '没有指定关键情境'},
+    {'id': 'vague', 'label': '只知道大概什么时候／什么情况下'},
+    {'id': 'partial', 'label': '有情境线索，但仍不够明确'},
+    {'id': 'clear', 'label': '关键时间／地点／事件线索清楚'},
+    {'id': 'specific', 'label': '关键情境具体、单义且容易识别'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
+  static const goalDirectedResponseOptions = <Map<String, String>>[
+    {'id': 'none', 'label': '没有指定情境出现后要做什么'},
+    {'id': 'vague', 'label': '只有大概方向'},
+    {'id': 'partial', 'label': '有目标反应，但还不能直接执行'},
+    {'id': 'clear', 'label': '目标导向反应已经清楚具体'},
+    {'id': 'executable', 'label': '反应非常具体，情境一出现即可直接执行'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
+  static const ifThenLinkOptions = <Map<String, String>>[
+    {'id': 'none', 'label': '没有把关键情境与目标反应连接起来'},
+    {'id': 'loose', 'label': '只是一般计划，没有明确If-Then联结'},
+    {'id': 'partial', 'label': '情境和反应有关联，但联结仍模糊'},
+    {'id': 'explicit', 'label': '已经明确形成“如果X，那么Y”'},
+    {'id': 'strong', 'label': 'If-Then联结明确、单义并已作为执行计划确认'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
   static const capabilityOptions = <Map<String, String>>[
     {'id': 'insufficient', 'label': '明显不具备'},
     {'id': 'weak', 'label': '有较大欠缺'},
@@ -320,6 +356,21 @@ class EvidenceBehaviorTheoryCatalog {
     },
     'actual_behavioral_control': {
       'id': 'actual_behavioral_control',
+      'label': '实际行为控制（现实能力／资源）',
+      'question':
+          '不考虑主观感觉，只看现实：完成这个行为所需的技能、知识、体力、时间、金钱、设备或他人配合，实际上具备到什么程度？',
+      'theories': <String>['TPB'],
+      'options': actualBehavioralControlOptions,
+      'covers': <String>[
+        'feasibility',
+        'time_capacity',
+        'physical_capacity',
+        'prerequisite_readiness',
+        'friction'
+      ],
+    },
+    'actual_behavioral_control': {
+      'id': 'actual_behavioral_control',
       'label': '实际行为控制（现实能力与机会）',
       'question': '现实上，你是否具备完成这个行为真正需要的能力、资源和机会？',
       'theories': <String>['TPB'],
@@ -429,7 +480,7 @@ class EvidenceBehaviorTheoryCatalog {
     'physical_capability': {
       'id': 'physical_capability',
       'label': '身体能力',
-      'question': '你的体力、精力、身体状态是否足以完成这个行动？',
+      'question': '你是否具备完成这个行为所需的身体技能、力量、耐力或其他身体能力？',
       'theories': <String>['COM_B'],
       'options': capabilityOptions,
       'covers': <String>['physical_capacity'],
@@ -648,33 +699,27 @@ class EvidenceBehaviorTheoryCatalog {
     },
     'implementation_intention': {
       'id': 'implementation_intention',
-      'label': '执行意图（If-Then）',
-      'question': '你是否已经形成明确的“如果X发生，我就立即做Y”的触发计划？',
+      'label': 'If-Then 联结',
+      'question':
+          '你是否已经把一个具体关键情境X与一个目标导向反应Y明确绑定成“如果X，那么Y”？',
       'theories': <String>['IMPLEMENTATION_INTENTION'],
-      'options': planOptions,
+      'options': ifThenLinkOptions,
       'covers': <String>['specificity', 'trigger'],
     },
     'cue_clarity': {
       'id': 'cue_clarity',
-      'label': '触发线索清晰度',
-      'question': '启动行动的具体时间、地点或情境线索清楚吗？',
+      'label': '关键情境（If部分）具体性',
+      'question': '你是否已经明确指定一个可识别的关键时间、地点、机会或障碍作为If部分？',
       'theories': <String>['IMPLEMENTATION_INTENTION'],
-      'options': <Map<String, String>>[
-        {'id': 'none', 'label': '没有明确触发线索'},
-        {'id': 'vague', 'label': '只有大概时间／情境'},
-        {'id': 'partial', 'label': '有线索，但仍可能错过'},
-        {'id': 'clear', 'label': '线索具体且容易识别'},
-        {'id': 'automatic', 'label': '线索一出现就很容易直接进入行动'},
-        {'id': 'unknown', 'label': '不清楚／无法判断'},
-      ],
+      'options': criticalSituationOptions,
       'covers': <String>['trigger'],
     },
     'response_specificity': {
       'id': 'response_specificity',
-      'label': '启动动作具体度',
-      'question': '触发出现后，你要立即做的第一步是否具体到可以直接执行？',
+      'label': '目标导向反应（Then部分）具体性',
+      'question': '关键情境出现后，你准备执行的目标导向反应是否具体到可以直接做？',
       'theories': <String>['IMPLEMENTATION_INTENTION'],
-      'options': planOptions,
+      'options': goalDirectedResponseOptions,
       'covers': <String>['specificity', 'preparation'],
     },
   };
@@ -716,39 +761,26 @@ class EvidenceBehaviorTheoryCatalog {
     return value == null ? null : Map<String, Object?>.from(value);
   }
 
+  /// Only close construct-equivalences are aliased here.
+  ///
+  /// Do not collapse distinct constructs (for example COM-B reflective
+  /// motivation into intention, or HAPA planning into implementation
+  /// intention) merely because they are related. That would distort the
+  /// source theories and double-count/overwrite user evidence.
   static const factorToCanonicalConstruct = <String, String>{
     'intention': 'intention',
-    'goal_commitment': 'intention',
-    'goals': 'intention',
-    'reflective_motivation': 'intention',
-    'attitude_toward_behavior': 'instrumental_attitude',
     'experiential_attitude': 'experiential_attitude',
     'instrumental_attitude': 'instrumental_attitude',
-    'subjective_norm': 'injunctive_norm',
     'injunctive_norm': 'injunctive_norm',
     'descriptive_norm': 'descriptive_norm',
     'self_efficacy': 'self_efficacy',
-    'action_self_efficacy': 'self_efficacy',
-    'maintenance_self_efficacy': 'self_efficacy',
-    'recovery_self_efficacy': 'self_efficacy',
     'perceived_behavioral_control': 'perceived_control',
-    'actual_behavioral_control': 'environmental_constraints',
     'perceived_control': 'perceived_control',
     'knowledge_skills': 'knowledge_skills',
-    'behavioral_capability': 'knowledge_skills',
-    'psychological_capability': 'knowledge_skills',
     'salience': 'salience',
     'environmental_constraints': 'environmental_constraints',
-    'physical_opportunity': 'environmental_constraints',
-    'environmental_facilitators': 'environmental_constraints',
-    'environmental_influences': 'environmental_constraints',
-    'barriers_resources': 'environmental_constraints',
     'habit': 'habit',
-    'automatic_motivation': 'habit',
     'implementation_intention': 'implementation_intention',
-    'action_planning': 'implementation_intention',
-    'cue_clarity': 'implementation_intention',
-    'response_specificity': 'implementation_intention',
   };
 
   static String canonicalConstruct(String factorId) =>
