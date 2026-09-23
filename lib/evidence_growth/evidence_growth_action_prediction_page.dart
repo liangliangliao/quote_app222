@@ -538,6 +538,8 @@ class _EvidenceGrowthActionPredictionPageState
         .toList();
     final adaptive =
         dynamicRows.where((row) => row['source'] == 'AI_DYNAMIC').toList();
+    final omittedPreserved =
+        growthRows(actionProfile['omitted_preserved_factors']);
     final questions = growthRows(actionProfile['clarifying_questions']);
     final assumptions = growthStrings(actionProfile['assumptions']);
     final checks = growthStrings(actionProfile['analysis_checks']);
@@ -671,6 +673,24 @@ class _EvidenceGrowthActionPredictionPageState
                 style: TextStyle(fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 6),
             for (final row in preserved) predictorRow(row),
+          ],
+          if (omittedPreserved.isNotEmpty) ...[
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text('本次未选入的原型因素（${omittedPreserved.length}）',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('用于核对AI有没有把本来重要的旧因素漏掉'),
+                children: [
+                  for (final row in omittedPreserved)
+                    ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.remove_circle_outline,
+                            size: 19),
+                        title: Text('${row['label'] ?? ''}'),
+                        subtitle: Text(
+                            '理论映射：${_constructLabel('${row['ibm_construct'] ?? ''}')}'))
+                ])
           ],
           if (adaptive.isNotEmpty) ...[
             const Divider(height: 28),
