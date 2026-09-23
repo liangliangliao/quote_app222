@@ -364,26 +364,26 @@ class EvidenceGrowthActionPredictionService {
       'headline_reason': '${ai['headline_reason'] ?? ''}'.trim(),
       'ai': ai,
       'jev': jev,
+      'action_profile': profile,
+      'clarification_answers': clarificationAnswers,
       'jev_workflow': {
-        'start_on_time': _prob(forecasts['start_on_time']),
-        'start_eventually': _prob(forecasts['start_eventually']),
-        'complete_as_planned': _prob(forecasts['complete_as_planned']),
+        'primary_event_id': primaryEventId,
+        'events': eventRows,
         'hard_blocker': _prob(jev['hard_blocker']),
         'dominant_failure_mode': dominantFailureKey,
         'dominant_failure_label':
-            failureModeLabels[dominantFailureKey] ?? dominantFailureKey,
+            failureLabels[dominantFailureKey] ?? dominantFailureKey,
         'dominant_failure_confidence':
             _prob(dominantFailure['confidence']),
         'dominant_failure_probabilities':
             growthMap(dominantFailure['probabilities']),
-        'most_decisive_missing_domain': missingDomainKey,
+        'most_decisive_missing_question': missingQuestionKey,
         'most_decisive_missing_label':
-            missingDomainLabels[missingDomainKey] ?? missingDomainKey,
-        'missing_domain_confidence': _prob(missingDomain['confidence']),
-        'missing_domain_probabilities':
-            growthMap(missingDomain['probabilities']),
-      },
-      'history_baseline': {
+            questionLabels[missingQuestionKey] ?? missingQuestionKey,
+        'missing_question_confidence': _prob(missingQuestion['confidence']),
+        'missing_question_probabilities':
+            growthMap(missingQuestion['probabilities']),
+      },      'history_baseline': {
         'resolved_count': resolved.length,
         'on_time_count': onTime,
         'rate': baseline,
