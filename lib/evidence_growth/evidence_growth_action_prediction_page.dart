@@ -943,7 +943,6 @@ class _EvidenceGrowthActionPredictionPageState
   Widget _secondaryDetails() {
     if (result.isEmpty) return const SizedBox.shrink();
     final ai = growthMap(result['ai']);
-    final jev = growthMap(result['jev']);
     final jevFlow = growthMap(result['jev_workflow']);
     final baseline = growthMap(result['history_baseline']);
     final missing = growthStrings(result['missing_information']);
