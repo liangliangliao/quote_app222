@@ -1273,7 +1273,7 @@ class _EvidenceGrowthActionPredictionPageState
       'VOLITIONAL_EXTENSION'
     ];
     final core = entries.where((e) => growthMap(e.value)['is_dynamic'] != true);
-    final dynamic =
+    final dynamicRows =
         entries.where((e) => growthMap(e.value)['is_dynamic'] == true).toList()
           ..sort(compareRows);
 
@@ -1326,7 +1326,7 @@ class _EvidenceGrowthActionPredictionPageState
                       ]);
                 })
               ],
-              if (dynamic.isNotEmpty) ...[
+              if (dynamicRows.isNotEmpty) ...[
                 const Divider(),
                 Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -1338,7 +1338,7 @@ class _EvidenceGrowthActionPredictionPageState
                         'AI只负责从当前行为中提取具体显著信念／现实条件，并把它们映射回IBM构念，而不是另造一套心理学因素。',
                         style:
                             TextStyle(fontSize: 12, color: Colors.black54))),
-                for (final row in dynamic) factorTile(row),
+                for (final row in dynamicRows) factorTile(row),
               ]
             ]));
   }
