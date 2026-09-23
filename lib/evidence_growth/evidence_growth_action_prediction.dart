@@ -178,9 +178,9 @@ class EvidenceGrowthActionPredictionService {
         'jev_probabilities': jevRow['probabilities'],
         'status': unknown
             ? 'UNKNOWN'
-            : score != null && score < .45
+            : score < .45
                 ? 'RISK'
-                : score != null && score >= .65
+                : score >= .65
                     ? 'SUPPORT'
                     : 'MIXED',
         'evidence': _humanEvidence(
