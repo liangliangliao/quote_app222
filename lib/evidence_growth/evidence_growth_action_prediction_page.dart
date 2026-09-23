@@ -839,6 +839,12 @@ class _EvidenceGrowthActionPredictionPageState
     final omittedPreserved =
         growthRows(actionProfile['omitted_preserved_factors']);
     final questions = growthRows(actionProfile['clarifying_questions']);
+    final theoryQuestionnaire =
+        growthRows(actionProfile['theory_factor_questionnaire']);
+    final coveredPreserved =
+        growthRows(actionProfile['theory_covered_preserved_factors']);
+    final selectedTheoryDetails =
+        growthRows(actionProfile['selected_theory_details']);
     final assumptions = growthStrings(actionProfile['assumptions']);
     final checks = growthStrings(actionProfile['analysis_checks']);
     final mode = '${actionProfile['action_mode'] ?? 'OTHER'}';
@@ -890,10 +896,11 @@ class _EvidenceGrowthActionPredictionPageState
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(spacing: 8, runSpacing: 6, children: [
             Chip(label: Text(_modeLabel(mode))),
-            const Chip(label: Text('IBM 理论骨架')),
-            const Chip(label: Text('原型关键因素保留池')),
+            for (final theory in selectedTheoryDetails)
+              Chip(label: Text('${theory['short_name'] ?? theory['id']}')),
+            const Chip(label: Text('原型补充因素')),
             const Chip(label: Text('AI 动态补充')),
-            if (actionProfile['version'] == 'ibm_action_v2_fallback')
+            if (actionProfile['analysis_status'] != 'READY')
               const Chip(label: Text('通用回退'))
           ]),
           if (!analysisReady) ...[
@@ -1075,13 +1082,32 @@ class _EvidenceGrowthActionPredictionPageState
                       ? const Text('主预测事件：最终总概率以它为准')
                       : const Text('辅助预测事件'))
           ],
+          if (analysisReady && theoryQuestionnaire.isNotEmpty)
+            _theoryQuestionnaire(theoryQuestionnaire),
+          if (analysisReady && coveredPreserved.isNotEmpty) ...[
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                    '原型因素中已有 ${coveredPreserved.length} 项被所选理论覆盖'),
+                subtitle: const Text('这些因素不会重复显示为第二套选项'),
+                children: [
+                  for (final row in coveredPreserved)
+                    ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.merge_type, size: 19),
+                        title: Text('${row['label'] ?? ''}'),
+                        subtitle: Text(
+                            '已由理论构念覆盖：${_constructLabel('${row['ibm_construct'] ?? ''}')}'))
+                ])
+          ],
           if (analysisReady && preserved.isNotEmpty) ...[
             const Divider(height: 28),
-            const Text('从原“上班／到场”模型中保留下来的关键因素',
+            const Text('理论尚未覆盖的原型补充因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
             const Text(
-                '原来验证有价值的条件没有删除；AI按当前行动逐项筛选，只有相关的才进入本次JEV判断。',
+                '只有“当前行动相关、且所选理论没有重复覆盖”的旧因素才会作为补充保留。',
                 style: TextStyle(fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 6),
             for (final row in preserved) predictorRow(row),
@@ -1165,15 +1191,18 @@ class _EvidenceGrowthActionPredictionPageState
                 child: FilledButton.icon(
                     onPressed: busy ||
                             preparing ||
-                            hasUnappliedCorrection
+                            hasUnappliedCorrection ||
+                            missingTheoryFactorCount > 0
                         ? null
                         : predict,
                     icon: const Icon(Icons.hub_outlined),
                     label: Text(busy
                         ? '正在预测…'
-                        : jevConfigured
-                            ? '确认理解并交给JEV'
-                            : '确认理解并开始预测')))
+                        : missingTheoryFactorCount > 0
+                            ? '还有 ${missingTheoryFactorCount} 个理论因素待选'
+                            : jevConfigured
+                                ? '确认选择并交给JEV'
+                                : '确认选择并开始预测')))
           ]),
           ],
           if (busy)
