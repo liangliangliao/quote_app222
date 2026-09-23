@@ -104,7 +104,7 @@ class EvidenceGrowthActionPredictionService {
     }
 
     final records = await history();
-    final resolved = records
+    final allResolved = records
         .where((r) => const {
               'SUCCESS',
               'PARTIAL',
@@ -114,11 +114,6 @@ class EvidenceGrowthActionPredictionService {
               'NOT_DONE'
             }.contains(r['outcome']))
         .toList();
-    final successes = resolved
-        .where((r) => const {'SUCCESS', 'ON_TIME'}.contains(r['outcome']))
-        .length;
-    final baseline =
-        resolved.isEmpty ? null : (successes + 1) / (resolved.length + 2);
 
     final state = <String, dynamic>{
       'plan': action,
@@ -136,27 +131,51 @@ class EvidenceGrowthActionPredictionService {
           'plan': journey.plan,
           'next_change': journey.data['next_change'],
         },
-      'personal_history_summary': {
-        'resolved_count': resolved.length,
-        'success_count': successes,
-        'on_time_count': successes,
-        'smoothed_on_time_rate': baseline,
-        'recent': [
-          for (final r in resolved.take(12))
-            {
-              'plan': r['plan'],
-              'scheduled_at_ms': r['scheduled_at_ms'],
-              'forecast': r['estimate'],
-              'outcome': r['outcome'],
-            }
-        ]
-      },
     };
 
+    // IBM treats habit/past behavior as behavior-specific. Do not calibrate a
+    // "submit report" forecast with unrelated records such as "go running".
     final profile =
         actionProfile.isEmpty ? await _interpretAction(state) : actionProfile;
+    final targetMode = '${profile['action_mode'] ?? ''}'.trim();
+    final targetTags = growthStrings(profile['action_tags']).toSet();
+
+    bool similarBehavior(GrowthData row) {
+      final past = growthMap(row['action_profile']);
+      if (past.isEmpty) return false;
+      final mode = '${past['action_mode'] ?? ''}'.trim();
+      if (targetMode.isEmpty || mode != targetMode) return false;
+      final tags = growthStrings(past['action_tags']).toSet();
+      if (targetTags.isEmpty || tags.isEmpty) return true;
+      return targetTags.any(tags.contains);
+    }
+
+    final resolved = allResolved.where(similarBehavior).toList();
+    final successes = resolved
+        .where((r) => const {'SUCCESS', 'ON_TIME'}.contains(r['outcome']))
+        .length;
+    final baseline =
+        resolved.isEmpty ? null : (successes + 1) / (resolved.length + 2);
+
     state['action_profile'] = profile;
     state['clarification_answers'] = clarificationAnswers;
+    state['personal_history_summary'] = {
+      'resolved_count': resolved.length,
+      'all_resolved_count': allResolved.length,
+      'success_count': successes,
+      'smoothed_success_rate': baseline,
+      'match_rule': 'same_action_mode_and_overlapping_tags_when_available',
+      'recent': [
+        for (final r in resolved.take(12))
+          {
+            'plan': r['plan'],
+            'forecast': r['estimate'],
+            'outcome': r['outcome'],
+            'action_mode':
+                growthMap(r['action_profile'])['action_mode'] ?? '',
+          }
+      ]
+    };
 
     final ai = await _aiAssessment(state);
     GrowthData jev = {'status': 'LOCAL', 'reason': 'JEV_NOT_CONFIGURED'};
