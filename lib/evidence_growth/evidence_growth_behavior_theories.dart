@@ -545,6 +545,66 @@ class EvidenceBehaviorTheoryCatalog {
     return value == null ? null : Map<String, Object?>.from(value);
   }
 
+  static const factorToCanonicalConstruct = <String, String>{
+    'intention': 'intention',
+    'goal_commitment': 'intention',
+    'reflective_motivation': 'intention',
+    'attitude_toward_behavior': 'instrumental_attitude',
+    'experiential_attitude': 'experiential_attitude',
+    'instrumental_attitude': 'instrumental_attitude',
+    'subjective_norm': 'injunctive_norm',
+    'injunctive_norm': 'injunctive_norm',
+    'descriptive_norm': 'descriptive_norm',
+    'self_efficacy': 'self_efficacy',
+    'maintenance_self_efficacy': 'self_efficacy',
+    'recovery_self_efficacy': 'self_efficacy',
+    'perceived_behavioral_control': 'perceived_control',
+    'perceived_control': 'perceived_control',
+    'knowledge_skills': 'knowledge_skills',
+    'psychological_capability': 'knowledge_skills',
+    'salience': 'salience',
+    'environmental_constraints': 'environmental_constraints',
+    'physical_opportunity': 'environmental_constraints',
+    'environmental_facilitators': 'environmental_constraints',
+    'habit': 'habit',
+    'automatic_motivation': 'habit',
+    'implementation_intention': 'implementation_intention',
+    'action_planning': 'implementation_intention',
+    'cue_clarity': 'implementation_intention',
+    'response_specificity': 'implementation_intention',
+  };
+
+  static String canonicalConstruct(String factorId) =>
+      factorToCanonicalConstruct[factorId] ?? factorId;
+
+  static List<String> factorIdsForConstruct(String construct) => [
+        for (final entry in factorToCanonicalConstruct.entries)
+          if (entry.value == construct) entry.key
+      ];
+
+  /// Standard program option -> support score used only for transparent
+  /// display/ranking after the user confirms an option.
+  ///
+  /// Every factor's non-unknown options are intentionally ordered from
+  /// strongest blocker (0) to strongest support (4). This is not a fitted
+  /// psychological coefficient and must not be treated as behavior
+  /// probability.
+  static double? supportScore(String factorId, String optionId) {
+    if (optionId == 'unknown') return null;
+    final factor = factorDefinitions[factorId];
+    final options = factor?['options'];
+    if (options is! List) return null;
+    final ordered = <Map>[];
+    for (final item in options) {
+      if (item is Map && '${item['id']}' != 'unknown') ordered.add(item);
+    }
+    if (ordered.isEmpty) return null;
+    final index = ordered.indexWhere((item) => '${item['id']}' == optionId);
+    if (index < 0) return null;
+    if (ordered.length == 1) return 2;
+    return index * 4 / (ordered.length - 1);
+  }
+
   static Map<String, String>? option(String factorId, String optionId) {
     final factor = factorDefinitions[factorId];
     final options = factor?['options'];
