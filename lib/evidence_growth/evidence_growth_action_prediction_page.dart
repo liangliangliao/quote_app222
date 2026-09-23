@@ -847,39 +847,120 @@ class _EvidenceGrowthActionPredictionPageState
   Widget _profileCard() {
     if (actionProfile.isEmpty) return const SizedBox.shrink();
     final events = growthRows(actionProfile['forecast_events']);
-    final dynamic = growthRows(actionProfile['dynamic_factors']);
+    final dynamicRows = growthRows(actionProfile['dynamic_factors']);
+    final preserved = dynamicRows
+        .where((row) => row['source'] == 'PRESERVED_BASELINE')
+        .toList();
+    final adaptive =
+        dynamicRows.where((row) => row['source'] == 'AI_DYNAMIC').toList();
     final questions = growthRows(actionProfile['clarifying_questions']);
+    final assumptions = growthStrings(actionProfile['assumptions']);
+    final checks = growthStrings(actionProfile['analysis_checks']);
     final mode = '${actionProfile['action_mode'] ?? 'OTHER'}';
     final interpretation = '${actionProfile['interpretation'] ?? ''}'.trim();
     final normalized = '${actionProfile['normalized_action'] ?? ''}'.trim();
+    final coverage = '${actionProfile['coverage_summary'] ?? ''}'.trim();
+    final appliedCorrection =
+        '${actionProfile['analysis_correction_applied'] ?? ''}'.trim();
+    final correction = analysisCorrection.text.trim();
+    final hasUnappliedCorrection =
+        correction.isNotEmpty && correction != appliedCorrection;
+
+    Widget predictorRow(GrowthData row) {
+      final reason = '${row['selection_reason'] ?? ''}'.trim();
+      final evidence = '${row['evidence'] ?? ''}'.trim();
+      final construct = '${row['ibm_construct'] ?? ''}'.trim();
+      return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(
+              row['source'] == 'PRESERVED_BASELINE'
+                  ? Icons.bookmark_added_outlined
+                  : Icons.auto_awesome_outlined,
+              size: 21,
+              color: _teal),
+          title: Text('${row['label'] ?? ''}',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (construct.isNotEmpty)
+                  Text('理论映射：${_constructLabel(construct)}'),
+                if (reason.isNotEmpty) Text('为什么保留：$reason'),
+                if (evidence.isNotEmpty) Text('已提取事实：$evidence'),
+              ]));
+    }
 
     return _section(
-        'AI 对这个行动的理解',
+        'AI 对这个行动的理解与选因',
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
+          Wrap(spacing: 8, runSpacing: 6, children: [
             Chip(label: Text(_modeLabel(mode))),
-            const SizedBox(width: 8),
-            const Chip(label: Text('IBM 主模型')),
-            const SizedBox(width: 8),
-            const Chip(label: Text('执行意图扩展')),
-            if (actionProfile['version'] == 'ibm_action_v2_fallback') ...[
-              const SizedBox(width: 8),
+            const Chip(label: Text('IBM 理论骨架')),
+            const Chip(label: Text('原型关键因素保留池')),
+            const Chip(label: Text('AI 动态补充')),
+            if (actionProfile['version'] == 'ibm_action_v2_fallback')
               const Chip(label: Text('通用回退'))
-            ]
           ]),
           if (normalized.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
+            const Text('AI理解的目标行动',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
             Text(normalized,
                 style: const TextStyle(
                     fontSize: 17, fontWeight: FontWeight.w800)),
           ],
           if (interpretation.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(interpretation,
-                style: const TextStyle(color: Colors.black54, height: 1.4)),
+                style: const TextStyle(color: Colors.black54, height: 1.45)),
+          ],
+          if (coverage.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('覆盖检查：$coverage',
+                style: const TextStyle(fontWeight: FontWeight.w700))
+          ],
+          if (checks.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('AI 本轮做了哪些分析检查',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('这里显示分析覆盖范围，不显示模型内部推理过程'),
+                children: [
+                  for (final item in checks)
+                    ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading:
+                            const Icon(Icons.check_circle_outline, size: 20),
+                        title: Text(item))
+                ])
+          ],
+          if (assumptions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    border: Border.all(color: Colors.orange.shade300),
+                    borderRadius: BorderRadius.circular(10)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('需要你核对的AI假设',
+                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 5),
+                      const Text('这些不是事实，也不会作为已确认事实直接交给JEV。',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.black54)),
+                      const SizedBox(height: 6),
+                      for (final item in assumptions) Text('• $item')
+                    ]))
           ],
           if (events.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const Divider(height: 28),
             const Text('JEV 实际要预测的可观察事件',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
@@ -892,44 +973,90 @@ class _EvidenceGrowthActionPredictionPageState
                       : Icons.radio_button_unchecked),
                   title: Text('${event['label'] ?? ''}'),
                   subtitle: event['primary'] == true
-                      ? const Text('主预测事件')
+                      ? const Text('主预测事件：最终总概率以它为准')
                       : const Text('辅助预测事件'))
           ],
-          if (dynamic.isNotEmpty) ...[
+          if (preserved.isNotEmpty) ...[
             const Divider(height: 28),
-            const Text('这个行动特有的变量',
+            const Text('从原“上班／到场”模型中保留下来的关键因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            for (final row in dynamic)
-              ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.account_tree_outlined, size: 20),
-                  title: Text('${row['label'] ?? ''}'),
-                  subtitle: Text(
-                      '归入理论构念：${_constructLabel('${row['ibm_construct'] ?? ''}')}'))
+            const SizedBox(height: 4),
+            const Text(
+                '原来验证有价值的条件没有删除；AI按当前行动逐项筛选，只有相关的才进入本次JEV判断。',
+                style: TextStyle(fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 6),
+            for (final row in preserved) predictorRow(row),
+          ],
+          if (adaptive.isNotEmpty) ...[
+            const Divider(height: 28),
+            const Text('AI 针对当前行动新增的关键因素',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            const Text(
+                '这些因素不是固定写死的；必须说明为什么影响当前行为，并映射回心理学理论构念。',
+                style: TextStyle(fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 6),
+            for (final row in adaptive) predictorRow(row),
           ],
           if (questions.isNotEmpty) ...[
             const Divider(height: 28),
-            const Text('AI 发现这些信息最值得补充',
+            const Text('还缺哪些关键事实',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            const Text('可以不回答；不回答时 JEV 会把它当作不确定，而不是自动判为负面。',
+            const Text('可以留空；留空时JEV把它当作不确定，而不是自动判成负面。',
                 style: TextStyle(fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 12),
             for (final row in questions) _clarifyingQuestion(row),
           ],
-          const SizedBox(height: 14),
-          SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                  onPressed: busy || preparing ? null : predict,
-                  icon: const Icon(Icons.hub_outlined),
-                  label: Text(busy
-                      ? '正在进行预测…'
-                      : jevConfigured
-                          ? '把这些事实交给 JEV 预测'
-                          : '开始预测（JEV未配置时回退到LLM）'))),
+          const Divider(height: 28),
+          const Text('核对AI的理解',
+              style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text(
+              '如果AI理解错了、漏掉关键条件或选错因素，请直接写出纠正；重新分析后再交给JEV。',
+              style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 10),
+          TextField(
+              controller: analysisCorrection,
+              enabled: !busy && !preparing,
+              minLines: 2,
+              maxLines: 5,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                  labelText: '哪里理解不对？还漏了什么？',
+                  hintText: '例如：这不是普通跑步，我是在比赛前做恢复跑；天气和膝盖状态是决定性条件。',
+                  helperText: appliedCorrection.isEmpty
+                      ? '没有需要纠正的可以留空'
+                      : '上一轮已应用你的修正：$appliedCorrection',
+                  border: const OutlineInputBorder())),
+          if (hasUnappliedCorrection) ...[
+            const SizedBox(height: 6),
+            const Text('你有新的修正尚未进入分析，请先重新分析。',
+                style:
+                    TextStyle(fontWeight: FontWeight.w700, color: Colors.orange))
+          ],
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+                child: OutlinedButton.icon(
+                    onPressed: busy || preparing ? null : prepareAction,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('按当前信息重新分析'))),
+            const SizedBox(width: 10),
+            Expanded(
+                child: FilledButton.icon(
+                    onPressed: busy ||
+                            preparing ||
+                            hasUnappliedCorrection
+                        ? null
+                        : predict,
+                    icon: const Icon(Icons.hub_outlined),
+                    label: Text(busy
+                        ? '正在预测…'
+                        : jevConfigured
+                            ? '确认理解并交给JEV'
+                            : '确认理解并开始预测')))
+          ]),
           if (busy)
             const Padding(
                 padding: EdgeInsets.only(top: 10),
