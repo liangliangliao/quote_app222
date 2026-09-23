@@ -1631,6 +1631,47 @@ ${jsonEncode(state)}
     return 'ACTION_SPECIFIC';
   }
 
+  static GrowthData _confirmedTheoryAnswer(
+      String construct, GrowthData state) {
+    final answers = growthMap(state['theory_factor_answers']);
+    if (answers.isEmpty) return {};
+
+    final direct = growthMap(answers[construct]);
+    if (direct.isNotEmpty) {
+      return {
+        ...direct,
+        'factor_id': construct,
+        'construct': construct,
+      };
+    }
+
+    for (final factorId
+        in EvidenceBehaviorTheoryCatalog.factorIdsForConstruct(construct)) {
+      final row = growthMap(answers[factorId]);
+      if (row.isEmpty) continue;
+      return {
+        ...row,
+        'factor_id': factorId,
+        'construct': construct,
+      };
+    }
+    return {};
+  }
+
+  static String _theoryAnswerEvidence(String construct, GrowthData state) {
+    final answer = _confirmedTheoryAnswer(construct, state);
+    if (answer.isEmpty) return '';
+    final optionId = '${answer['option_id'] ?? ''}';
+    final optionLabel = '${answer['option_label'] ?? ''}'.trim();
+    if (optionId == 'unknown') {
+      return optionLabel.isEmpty
+          ? '你在理论标准选项中明确选择了“不清楚／无法判断”。'
+          : '你在理论标准选项中选择了：“$optionLabel”。';
+    }
+    if (optionLabel.isEmpty) return '';
+    return '你在理论标准选项中已经确认：“$optionLabel”。';
+  }
+
   static String _dynamicEvidence(GrowthData row) {
     final evidence = _cleanUserText('${row['evidence'] ?? ''}');
     if (evidence.isNotEmpty) return evidence;
@@ -1651,6 +1692,9 @@ ${jsonEncode(state)}
 
   static String _humanEvidence(
       String key, String raw, GrowthData state, int resolvedCount) {
+    final theoryEvidence = _theoryAnswerEvidence(key, state);
+    if (theoryEvidence.isNotEmpty) return theoryEvidence;
+
     final cleaned = _cleanUserText(raw);
     if (cleaned.isNotEmpty) return cleaned;
 
