@@ -137,59 +137,85 @@ class EvidenceGrowthJev {
   /// Factor scores use JEV's native score output so we get confidence and
   /// probability distributions instead of pretending a single noul is a
   /// complete explanation.
+  /// Theory-grounded constructs for general action prediction.
+  ///
+  /// The core is the Integrated Behavioral Model (IBM): intention is the
+  /// proximal determinant of behavior, while knowledge/skills, salience,
+  /// environmental constraints and habit directly affect whether intention
+  /// becomes behavior. Attitude, perceived norm and personal agency feed
+  /// intention. implementation_intention is an explicitly-labelled
+  /// evidence-based volitional extension rather than an IBM construct.
   static const actionFactors = <String, String>{
-    'feasibility':
-        'The action is objectively feasible at the scheduled time: access, money, transport, permission and required resources are available.',
-    'time_capacity':
-        'There is enough usable time and no known schedule collision that would prevent starting on time.',
-    'physical_capacity':
-        'Sleep, energy and current physical condition are sufficient to initiate the action.',
-    'prerequisite_readiness':
-        'Required preparation, materials, route, information and prerequisites are ready enough to begin.',
-    'commitment':
-        'The person has a strong current intention and treats this action as a priority rather than merely a preference.',
-    'value_salience':
-        'The immediate reason, consequence or value of acting is salient enough at action time to compete with short-term comfort.',
-    'emotion':
-        'The expected near-action emotional state supports rather than suppresses initiation.',
+    'intention':
+        'The person has formed a clear and sufficiently strong current intention or decision to perform the target behavior.',
+    'experiential_attitude':
+        'The person\'s immediate affective or experiential evaluation of performing the target behavior is favorable enough to support action.',
+    'instrumental_attitude':
+        'The person expects the consequences, benefits and costs of the target behavior to make performing it worthwhile.',
+    'injunctive_norm':
+        'When socially relevant, important others are perceived to approve of, expect, or support performing the target behavior.',
+    'descriptive_norm':
+        'When socially relevant, people or groups important to the person are perceived as actually performing or supporting the target behavior.',
     'self_efficacy':
-        'The person expects they can perform the next concrete step successfully.',
-    'decision_stability':
-        'The go/no-go decision is stable and is unlikely to be reopened at action time without genuinely new objective information.',
-    'specificity':
-        'The plan is concrete about the next physical action, time and context.',
-    'trigger':
-        'A clear cue will start the action without requiring another round of deliberation.',
-    'preparation':
-        'The environment is prepared so the first action can happen with little setup.',
-    'friction':
-        'Distance, complexity, cost, effort and other practical friction are manageable.',
-    'alternatives':
-        'Immediately easier or more rewarding alternatives are unlikely to displace the intended action.',
-    'external_commitment':
-        'Appointments, accountability, deadlines or immediate consequences support follow-through.',
-    'history_habit':
-        'Genuinely similar past behavior or an established routine supports follow-through in this situation.',
+        'The person believes they are capable of successfully performing the target behavior or its next required step.',
+    'perceived_control':
+        'The person perceives sufficient control over whether the target behavior occurs despite internal and external conditions.',
+    'knowledge_skills':
+        'The person has the knowledge and skills actually required to perform the target behavior.',
+    'salience':
+        'The target behavior and its reason are likely to be salient and mentally accessible at the moment action is required.',
+    'environmental_constraints':
+        'Environmental, resource, timing, access, dependency and physical constraints are absent or manageable enough for the target behavior to occur.',
+    'habit':
+        'Past repetition and contextual habits support the target behavior rather than automatically pulling behavior in a competing direction.',
+    'implementation_intention':
+        'A concrete cue-to-action link exists, such as a specific when/where/if-then plan that can translate intention into behavior without renewed deliberation.',
   };
 
   static const actionFactorLabels = <String, String>{
-    'feasibility': '客观可行性',
-    'time_capacity': '时间可用性',
-    'physical_capacity': '身体／精力状态',
-    'prerequisite_readiness': '前置准备完整度',
-    'commitment': '行动承诺强度',
-    'value_salience': '价值／后果的临场显著性',
-    'emotion': '临场情绪支持度',
+    'intention': '行动意向／决定',
+    'experiential_attitude': '体验性态度（感受）',
+    'instrumental_attitude': '工具性态度（结果判断）',
+    'injunctive_norm': '命令性规范（重要他人期望）',
+    'descriptive_norm': '描述性规范（重要他人实际行为）',
     'self_efficacy': '自我效能',
-    'decision_stability': '决策稳定性',
-    'specificity': '计划具体度',
-    'trigger': '启动触发清晰度',
-    'preparation': '环境准备度',
-    'friction': '现实阻力可克服性',
-    'alternatives': '替代行为竞争',
-    'external_commitment': '外部约束／责任',
-    'history_habit': '相似历史／习惯支持',
+    'perceived_control': '知觉行为控制',
+    'knowledge_skills': '知识与技能',
+    'salience': '行动显著性／临场可及性',
+    'environmental_constraints': '环境约束可克服性',
+    'habit': '习惯／过去行为支持',
+    'implementation_intention': '执行意图（If-Then触发）',
   };
+
+  static const actionFactorGroups = <String, List<String>>{
+    'INTENTION_FORMATION': [
+      'experiential_attitude',
+      'instrumental_attitude',
+      'injunctive_norm',
+      'descriptive_norm',
+      'self_efficacy',
+      'perceived_control',
+    ],
+    'DIRECT_BEHAVIOR': [
+      'intention',
+      'knowledge_skills',
+      'salience',
+      'environmental_constraints',
+      'habit',
+    ],
+    'VOLITIONAL_EXTENSION': [
+      'implementation_intention',
+    ],
+  };
+
+  static const ibmDirectFactors = <String>[
+    'intention',
+    'knowledge_skills',
+    'salience',
+    'environmental_constraints',
+    'habit',
+  ];
+
 
   static const _supportRubric = <String>[
     'Strongly blocks execution under the stated facts.',
@@ -215,7 +241,15 @@ class EvidenceGrowthJev {
         .where(actionFactors.containsKey)
         .toSet()
         .toList();
-    return requested.isEmpty ? actionFactors.keys.toList() : requested;
+    if (requested.isEmpty) return actionFactors.keys.toList();
+
+    // Preserve IBM's direct behavior determinants even when the interpreter
+    // decides some intention antecedents are not salient for this behavior.
+    final result = <String>{...ibmDirectFactors, ...requested};
+    // Implementation intentions are an evidence-based bridge for the
+    // intention-behavior gap and are kept explicit as an extension.
+    result.add('implementation_intention');
+    return result.toList();
   }
 
   static List<GrowthData> _dynamicFactors(GrowthData state) {
@@ -227,11 +261,14 @@ class EvidenceGrowthJev {
       final label = '${row['label'] ?? ''}'.trim();
       final condition = '${row['condition'] ?? row['question'] ?? ''}'.trim();
       if (label.isEmpty || condition.isEmpty || !seen.add(id)) continue;
+      final construct = '${row['ibm_construct'] ?? ''}'.trim();
       out.add({
         'id': id,
         'label': label,
         'condition': condition,
         'evidence': '${row['evidence'] ?? ''}'.trim(),
+        'ibm_construct':
+            actionFactors.containsKey(construct) ? construct : 'environmental_constraints',
       });
     }
     return out;
