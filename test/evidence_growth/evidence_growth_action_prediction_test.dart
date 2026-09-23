@@ -1,11 +1,75 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_action_prediction.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_behavior_theories.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_dao.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
+
+  test('major behavior theory packs expose deduplicated standard factors', () {
+    expect(
+        EvidenceBehaviorTheoryCatalog.theories.keys,
+        containsAll([
+          'TPB',
+          'IBM',
+          'COM_B',
+          'SCT',
+          'HAPA',
+          'IMPLEMENTATION_INTENTION'
+        ]));
+    final factors = EvidenceBehaviorTheoryCatalog.activeFactors(
+        ['TPB', 'IBM', 'COM_B']);
+    final ids = factors.map((e) => e['id']).toList();
+    expect(ids.where((id) => id == 'intention').length, 1);
+    expect(ids.where((id) => id == 'self_efficacy').length, 1);
+    expect(ids, contains('physical_opportunity'));
+    expect(
+        EvidenceBehaviorTheoryCatalog.option('intention', 'firm')?['label'],
+        contains('坚定'));
+    expect(
+        EvidenceBehaviorTheoryCatalog.coverageKeys(['IBM', 'COM_B']),
+        containsAll(['feasibility', 'physical_capacity', 'history_habit']));
+  });
+
+  test('JEV theory prefill uses typed choices for theory options', () {
+    final request = EvidenceGrowthJev.theoryPrefillRequest(
+      {
+        'plan': '明天重新去找工作',
+        'additional_notes': '我已经决定要继续找，但有点害怕'
+      },
+      ['intention', 'self_efficacy'],
+      'jev-latest',
+    );
+    final questions = request['questions'] as Map;
+    expect((questions['theory_intention'] as Map)['type'], 'choice');
+    expect((questions['theory_self_efficacy'] as Map)['type'], 'choice');
+    expect(
+        ((questions['theory_intention'] as Map)['criteria'] as Map),
+        contains('unknown'));
+
+    final parsed = EvidenceGrowthJev.parseTheoryPrefill({
+      'model': 'jev-latest',
+      'answers': {
+        'theory_intention': {
+          'type': 'choice',
+          'choice': 'firm',
+          'confidence': .84,
+          'probabilities': {'firm': .84, 'clear': .12, 'unknown': .04}
+        },
+        'theory_self_efficacy': {
+          'type': 'choice',
+          'choice': 'unknown',
+          'confidence': .78,
+          'probabilities': {'unknown': .78, 'medium': .22}
+        }
+      }
+    });
+    final selections = parsed['selections'] as Map;
+    expect(selections['intention']['option_id'], 'firm');
+    expect(selections['intention']['confidence'], .84);
+  });
 
   test('original work-case predictor pool is preserved for dynamic reuse', () {
     final catalog =
