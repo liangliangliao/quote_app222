@@ -474,38 +474,43 @@ class EvidenceGrowthActionPredictionService {
       final raw = await _ai.generateText(
         purpose: 'evidence_growth.action_interpretation',
         systemPrompt: '''
-你是“通用行动语义解释器”，不是预测器。你的任务是把用户的一句话行动计划转换成可观察、可判定、适合概率预测的 action profile。
+你是“通用行动语义解释器”，不是预测器。你的任务是把用户的一句话行动计划转换成可观察、可判定、适合 JEV 概率判断的 action profile。
+
+理论主干必须使用 Integrated Behavioral Model（IBM，整合行为模型）：
+- 行动意向 intention 是行为最接近的心理决定因素；
+- 意向由态度、知觉规范与个人能动性形成；
+- 态度拆成 experiential_attitude（做这件事的感受）和 instrumental_attitude（对结果/代价的判断）；
+- 规范拆成 injunctive_norm（重要他人认为我应不应该做）和 descriptive_norm（重要他人实际上怎么做）；
+- 个人能动性拆成 self_efficacy 与 perceived_control；
+- intention 形成后，knowledge_skills、salience、environmental_constraints、habit 会直接影响意向能否转成真实行为；
+- implementation_intention 不是 IBM 原始构念，而是明确标注的执行意图扩展，用于描述“如果X发生，我就立即做Y”的 cue→action 连接，以处理 intention-behavior gap。
 
 必须遵守：
-1. 不预测成功率，不评价用户人格，不做心理诊断。
+1. 不预测成功率，不评价人格，不做心理诊断。
 2. 可以从语言中提取语义，但绝不能虚构现实事实。未知事实保持未知，并通过 clarifying_questions 提问。
-3. 先判断“成功到底是什么事件”。不同类型行动不能强行套用“按时出门”模型：
-   - INITIATE：开始某行为，如开始学习、开始跑步。
-   - COMPLETE：完成/提交一个结果，如交报告、办完手续。
-   - SUSTAIN：持续一段时间，如连续学习2小时。
-   - REFRAIN：在一段时间内不做某行为，如今天不抽烟。
-   - REPEAT：按频率重复，如每天跑步30分钟。
-   - INTERACT：与人/系统发生互动，如打电话、道歉、面试。
-   - SEQUENCE：多个依赖步骤组成的行动，如搬家、办证、完成项目。
-   - OTHER：确实无法归类。
-4. forecast_events 必须是可观察、可证伪的事件，1~4个；其中只能有一个 primary=true。不要把“有动力”“认真”等内部状态当作成功事件。
-5. relevant_core_factors 只能从以下键选择，并只选真正适用于当前行动的：
-feasibility,time_capacity,physical_capacity,prerequisite_readiness,commitment,value_salience,emotion,self_efficacy,decision_stability,specificity,trigger,preparation,friction,alternatives,external_commitment,history_habit
-6. dynamic_factors 只添加当前行动特有、固定核心因素覆盖不了的变量，0~6个。例如“对方是否接电话”“天气是否允许户外跑步”“文件是否需要第三方审批”“戒烟时是否接触吸烟场景”。不得重复核心因素。
-7. clarifying_questions 只问最可能显著改变预测的缺失事实，最多5个。问题要具体、容易回答；不要问泛泛的“还有什么吗”。
-8. failure_modes 必须针对当前行动生成，最多6个；每个是具体可识别的失败机制。
-9. 所有 id 只用小写英文字母、数字、下划线。
-10. 只输出 JSON。
-''',
+3. 先定义“成功到底是什么可观察事件”。不同类型行动不能强行套“按时出门”：
+   INITIATE=启动；COMPLETE=完成/提交；SUSTAIN=持续；REFRAIN=在时间窗内不做；REPEAT=重复/习惯；INTERACT=与人/系统互动；SEQUENCE=多步骤；OTHER=其他。
+4. forecast_events 必须可观察、可证伪，1~4个，只能一个 primary=true。
+5. relevant_core_factors 只能从以下理论构念选择：
+intention,experiential_attitude,instrumental_attitude,injunctive_norm,descriptive_norm,self_efficacy,perceived_control,knowledge_skills,salience,environmental_constraints,habit,implementation_intention
+   其中 IBM 的五个直接行为决定因素 intention,knowledge_skills,salience,environmental_constraints,habit 无论如何都会由程序保留；你主要负责判断哪些“意向前因”在当前行动中真正相关。
+6. dynamic_factors 不是自由发明新心理学变量。它们必须是“当前具体行为中的显著信念/现实条件”，并映射到一个 ibm_construct。例：对方今晚是否会接电话→environmental_constraints；我认为道歉会改善关系→instrumental_attitude；想到跑步就很厌烦→experiential_attitude。
+7. clarifying_questions 只问最可能显著改变预测的缺失事实，最多5个；每一问必须标明 ibm_construct。优先询问理论上关键但证据缺失的构念，不问泛泛问题。
+8. failure_modes 最多6个，也尽量标明最接近的 ibm_construct。
+9. action_tags 用于以后匹配“真正相似的过去行为”，必须具体且稳定，例如 work_submission、exercise_running、smoking_abstinence、social_apology_call；不要只写 goal/action/task 这种泛标签。
+10. 所有 id 只用小写英文字母、数字、下划线。
+11. 只输出 JSON。
+'''
         prompt: '''INPUT:
 ${jsonEncode(state)}
 
 返回：
 {
-  "version":"universal_action_v1",
+  "version":"ibm_action_v2",
+  "theory_model":"IBM_2015_PLUS_IMPLEMENTATION_INTENTION",
   "normalized_action":"把用户原话改写成明确、可观察的一句话",
   "action_mode":"INITIATE|COMPLETE|SUSTAIN|REFRAIN|REPEAT|INTERACT|SEQUENCE|OTHER",
-  "action_tags":["最多5个语义标签"],
+  "action_tags":["2~5个具体稳定标签"],
   "interpretation":"一句自然中文说明你把这个行动理解成什么，不做预测",
   "forecast_events":[
     {
@@ -516,11 +521,12 @@ ${jsonEncode(state)}
       "primary":true
     }
   ],
-  "relevant_core_factors":["只从允许键中选择"],
+  "relevant_core_factors":["从允许的IBM/扩展构念中选择"],
   "dynamic_factors":[
     {
-      "id":"action_specific_factor",
-      "label":"中文因素名",
+      "id":"behavior_specific_belief",
+      "label":"中文名称",
+      "ibm_construct":"必须是允许的理论构念之一",
       "condition":"English condition whose presence supports the primary event",
       "evidence":"若输入中已有相关事实，用中文概括；没有则为空"
     }
@@ -530,6 +536,7 @@ ${jsonEncode(state)}
       "id":"missing_fact",
       "question":"中文具体问题？",
       "why":"为什么它会显著改变预测",
+      "ibm_construct":"允许的理论构念之一",
       "criticality":0.0,
       "answer_type":"text|choice",
       "options":["choice时才给简短选项"]
@@ -539,6 +546,7 @@ ${jsonEncode(state)}
     {
       "id":"specific_failure",
       "label":"中文失败机制",
+      "ibm_construct":"允许的理论构念之一",
       "criterion":"English criterion describing this failure mechanism"
     }
   ]
@@ -582,7 +590,8 @@ ${jsonEncode(state)}
       final mode = '${decoded['action_mode'] ?? 'OTHER'}'.toUpperCase();
 
       return {
-        'version': 'universal_action_v1',
+        'version': 'ibm_action_v2',
+        'theory_model': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
         'normalized_action':
             _cleanUserText('${decoded['normalized_action'] ?? ''}').isEmpty
                 ? '${state['plan'] ?? ''}'.trim()
@@ -609,11 +618,12 @@ ${jsonEncode(state)}
   }
 
   GrowthData _fallbackActionProfile(GrowthData state) => {
-        'version': 'universal_action_v1_fallback',
+        'version': 'ibm_action_v2_fallback',
+        'theory_model': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
         'normalized_action': '${state['plan'] ?? ''}'.trim(),
         'action_mode': 'OTHER',
         'action_tags': <String>[],
-        'interpretation': '按你输入的原始行动进行通用预测；当前无法完成更细的行动类型解析。',
+        'interpretation': '按你输入的原始行动进行预测；当前无法完成更细的行为语义解析，因此保留 IBM 全部核心构念。',
         'forecast_events': [
           {
             'id': 'primary_success',
