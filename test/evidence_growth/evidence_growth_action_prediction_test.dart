@@ -55,7 +55,7 @@ void main() {
 
   test('prediction bands remain descriptive rather than guaranteed', () {
     expect(EvidenceGrowthActionPredictionService.band(.9), '执行条件很强');
-    expect(EvidenceGrowthActionPredictionService.band(.6), '中等，仍有明显变数');
+    expect(EvidenceGrowthActionPredictionService.band(.6), '有一定把握，但仍可能被打断');
     expect(EvidenceGrowthActionPredictionService.band(.2), '较低，计划结构容易失效');
   });
 }
