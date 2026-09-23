@@ -540,14 +540,14 @@ class EvidenceGrowthJev {
           'factor_$key': {
             'type': 'score',
             'instructions':
-                'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} ${confirmedTheoryEvidence(key)} Use only supplied facts and the action contract. If the user has explicitly confirmed a standardized option, do not describe that construct as missing. If evidence is missing, use the center score only as JEV's typed representation of insufficient evidence; do not treat that center value as observed neutrality or as a numeric contribution to the final probability.',
+                'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} ${confirmedTheoryEvidence(key)} Use only supplied facts and the action contract. If the user has explicitly confirmed a standardized option, do not describe that construct as missing. If evidence is missing, use the center score only as JEV typed representation of insufficient evidence; do not treat that center value as observed neutrality or as a numeric contribution to the final probability.',
             'criteria': _supportRubric,
           },
         for (final row in dynamicRows)
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
-                'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence may use the center score only as JEV's typed representation of insufficient evidence; it is not observed neutrality and must not contribute as a fixed numeric weight to the final event probability.',
+                'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence may use the center score only as JEV typed representation of insufficient evidence; it is not observed neutrality and must not contribute as a fixed numeric weight to the final event probability.',
             'criteria': _supportRubric,
           },
         'dominant_failure_mode': {
@@ -824,7 +824,7 @@ class EvidenceGrowthJev {
     if (utf8.encode(body).length > 64000) {
       return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
     }
-    final key = sha256.convert(utf8.encode('action-v3|$apiKey|$body')).toString();
+    final key = sha256.convert(utf8.encode('action-v4|$apiKey|$body')).toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
     final pending = _sendAction(body, apiKey);
