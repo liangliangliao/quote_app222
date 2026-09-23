@@ -719,6 +719,7 @@ class EvidenceGrowthActionPredictionService {
     return {
       ...profile,
       'version': 'multi_theory_action_v3',
+      'theory_model': 'MULTI_THEORY_ACTION_PREDICTION_V3',
       'selected_theories': theories,
       'selected_theory_details':
           EvidenceBehaviorTheoryCatalog.theoryRows(theories),
