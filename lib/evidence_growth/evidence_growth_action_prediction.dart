@@ -978,23 +978,30 @@ ${jsonEncode(state)}
             ? '尚未说明想到或临近执行这件事时的直接感受。'
             : '当前与行动相关的直接感受：${values.join('、')}。';
       case 'instrumental_attitude':
-        final value = '${structured['value_salience'] ?? ''}'.trim();
+        final value = '${structured['instrumental_attitude'] ?? ''}'.trim();
         return value.isEmpty
             ? '尚未说明你如何看待做与不做这件事的结果、收益和代价。'
-            : '你当前对行动后果／价值的判断：$value。';
+            : '你当前对行动结果／代价的评价：$value。';
       case 'injunctive_norm':
+        final explicit = '${structured['injunctive_norm'] ?? ''}'.trim();
         final values = list('commitments');
+        if (explicit.isNotEmpty) return '你感受到的重要他人期望：$explicit。';
         return values.isEmpty
             ? '尚未说明重要他人是否期待、要求或支持你做这件事。'
             : '与重要他人期望相关的事实：${values.join('、')}。';
       case 'descriptive_norm':
-        return '尚未说明与你相关的人通常会不会做这种行为；若这对当前行动不重要，会保持中性或低置信度。';
+        final value = '${structured['descriptive_norm'] ?? ''}'.trim();
+        return value.isEmpty
+            ? '尚未说明与你相关的人通常会不会做这种行为；若这对当前行动不重要，会保持中性或低置信度。'
+            : '你观察到的重要他人实际行为：$value。';
       case 'self_efficacy':
         final value = '${structured['self_efficacy'] ?? ''}'.trim();
         return value.isEmpty
             ? '尚未说明你相信自己能否完成这个具体行为。'
             : '你对自己完成这件事的把握：$value。';
       case 'perceived_control':
+        final explicit = '${structured['perceived_control'] ?? ''}'.trim();
+        if (explicit.isNotEmpty) return '你对行为控制程度的主观判断：$explicit。';
         final feasibility = list('feasibility');
         final time = list('time_capacity');
         final frictions = list('frictions');
@@ -1003,7 +1010,10 @@ ${jsonEncode(state)}
             ? '尚未说明你认为这件事在多大程度上真正受自己控制。'
             : '会影响你知觉控制的现实条件：${known.join('、')}。';
       case 'knowledge_skills':
-        return '尚未直接说明完成该行为需要的知识或技能是否已经具备；若行动本身不需要特殊技能，这项可接近中性。';
+        final value = '${structured['knowledge_skills'] ?? ''}'.trim();
+        return value.isEmpty
+            ? '尚未直接说明完成该行为需要的知识或技能是否已经具备；若行动本身不需要特殊技能，这项可接近中性。'
+            : '你对知识／技能准备程度的判断：$value。';
       case 'salience':
         final value = '${structured['value_salience'] ?? ''}'.trim();
         final scheduled = '${state['scheduled_at'] ?? ''}'.trim();
