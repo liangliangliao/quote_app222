@@ -1298,6 +1298,8 @@ class _EvidenceGrowthActionPredictionPageState
         '${jevFlow['dominant_failure_source'] ?? ''}'.trim();
     final provenance = growthMap(result['forecast_provenance']);
     final historyBaseline = growthMap(result['history_baseline']);
+    final historyWeightValue =
+        (provenance['history_weight'] as num?)?.toDouble() ?? 0;
 
     return _section(
         '本次预测',
@@ -1336,11 +1338,10 @@ class _EvidenceGrowthActionPredictionPageState
                     : '这个总百分数不是由下面各因素评分简单相加得到。',
                 style: const TextStyle(
                     fontSize: 11, color: Colors.black54)),
-            if ((provenance['history_weight'] as num?)?.toDouble() case final w?
-                when w > 0) ...[
+            if (historyWeightValue > 0) ...[
               const SizedBox(height: 4),
               Text(
-                  '已使用同类个人历史进行校准：历史权重 ${_pct(w)}；同类真实结果 ${historyBaseline['resolved_count'] ?? 0} 次。',
+                  '已使用同类个人历史进行校准：历史权重 ${_pct(historyWeightValue)}；同类真实结果 ${historyBaseline['resolved_count'] ?? 0} 次。',
                   style: const TextStyle(
                       fontSize: 11, color: Colors.black54))
             ] else ...[
