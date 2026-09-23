@@ -282,6 +282,7 @@ class EvidenceGrowthActionPredictionService {
         'confidence': confidence,
         'unknown': unknown,
         'source': useJev ? 'JEV' : a != null ? 'AI' : 'NONE',
+        'is_dynamic': dynamicByKey.containsKey(key),
         'theory_construct': dynamicByKey.containsKey(key)
             ? '${dynamicByKey[key]!['ibm_construct'] ?? 'environmental_constraints'}'
             : key,
