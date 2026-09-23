@@ -199,100 +199,200 @@ class EvidenceGrowthJev {
     'Strongly supports execution under the stated facts.'
   ];
 
-  static GrowthData actionRequest(GrowthData state, String model) => {
-        'model': model,
-        'state': {'action_prediction': state},
-        'questions': {
-          'start_on_time': {
+  static String _safeId(Object? raw, {String fallback = 'item'}) {
+    final text = '$raw'
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    final normalized = text.isEmpty ? fallback : text;
+    return normalized.length <= 48 ? normalized : normalized.substring(0, 48);
+  }
+
+  static List<String> _relevantCoreFactors(GrowthData state) {
+    final profile = growthMap(state['action_profile']);
+    final requested = growthStrings(profile['relevant_core_factors'])
+        .where(actionFactors.containsKey)
+        .toSet()
+        .toList();
+    return requested.isEmpty ? actionFactors.keys.toList() : requested;
+  }
+
+  static List<GrowthData> _dynamicFactors(GrowthData state) {
+    final profile = growthMap(state['action_profile']);
+    final seen = <String>{};
+    final out = <GrowthData>[];
+    for (final row in growthRows(profile['dynamic_factors']).take(8)) {
+      final id = _safeId(row['id'], fallback: 'dynamic_${out.length + 1}');
+      final label = '${row['label'] ?? ''}'.trim();
+      final condition = '${row['condition'] ?? row['question'] ?? ''}'.trim();
+      if (label.isEmpty || condition.isEmpty || !seen.add(id)) continue;
+      out.add({
+        'id': id,
+        'label': label,
+        'condition': condition,
+        'evidence': '${row['evidence'] ?? ''}'.trim(),
+      });
+    }
+    return out;
+  }
+
+  static List<GrowthData> _forecastEvents(GrowthData state) {
+    final profile = growthMap(state['action_profile']);
+    final raw = growthRows(profile['forecast_events']);
+    final seen = <String>{};
+    final out = <GrowthData>[];
+    for (final row in raw.take(5)) {
+      final id = _safeId(row['id'], fallback: 'event_${out.length + 1}');
+      final label = '${row['label'] ?? ''}'.trim();
+      final yes = '${row['true_criterion'] ?? ''}'.trim();
+      final no = '${row['false_criterion'] ?? ''}'.trim();
+      if (label.isEmpty || yes.isEmpty || no.isEmpty || !seen.add(id)) continue;
+      out.add({
+        'id': id,
+        'label': label,
+        'true_criterion': yes,
+        'false_criterion': no,
+        'primary': row['primary'] == true,
+      });
+    }
+    if (out.isEmpty) {
+      out.add({
+        'id': 'primary_success',
+        'label': '目标行动按约定发生',
+        'true_criterion':
+            'The observable action outcome described in the plan occurs within the intended opportunity or horizon.',
+        'false_criterion':
+            'The observable action outcome described in the plan does not occur within the intended opportunity or horizon.',
+        'primary': true,
+      });
+    }
+    if (!out.any((e) => e['primary'] == true)) out.first['primary'] = true;
+    return out;
+  }
+
+  static List<GrowthData> _failureModes(GrowthData state) {
+    final profile = growthMap(state['action_profile']);
+    final seen = <String>{};
+    final out = <GrowthData>[];
+    for (final row in growthRows(profile['failure_modes']).take(8)) {
+      final id = _safeId(row['id'], fallback: 'mode_${out.length + 1}');
+      final label = '${row['label'] ?? ''}'.trim();
+      final criterion = '${row['criterion'] ?? ''}'.trim();
+      if (label.isEmpty || criterion.isEmpty || !seen.add(id)) continue;
+      out.add({'id': id, 'label': label, 'criterion': criterion});
+    }
+    if (out.isEmpty) {
+      out.addAll([
+        {
+          'id': 'objective_blocker',
+          'label': '客观条件直接阻断',
+          'criterion':
+              'A concrete access, resource, schedule, dependency or physical blocker prevents the required behavior.'
+        },
+        {
+          'id': 'aversive_state',
+          'label': '临场状态压住行动',
+          'criterion':
+              'An immediate emotional or physical state suppresses the required behavior.'
+        },
+        {
+          'id': 'competing_alternative',
+          'label': '替代行为抢占',
+          'criterion':
+              'A more immediately rewarding or easier alternative displaces the intended behavior.'
+        },
+        {
+          'id': 'decision_reopened',
+          'label': '临场重新决策',
+          'criterion':
+              'The person reopens the decision instead of carrying out the already selected action.'
+        },
+      ]);
+    }
+    out.removeWhere((e) => e['id'] == 'insufficient_evidence');
+    out.add({
+      'id': 'insufficient_evidence',
+      'label': '证据不足',
+      'criterion':
+          'The supplied facts do not support one specific dominant failure mechanism.'
+    });
+    return out;
+  }
+
+  static GrowthData actionRequest(GrowthData state, String model) {
+    final events = _forecastEvents(state);
+    final core = _relevantCoreFactors(state);
+    final dynamic = _dynamicFactors(state);
+    final failures = _failureModes(state);
+    final profile = growthMap(state['action_profile']);
+    final clarifiers =
+        growthRows(profile['clarifying_questions']).take(8).toList();
+
+    return {
+      'model': model,
+      'state': {'action_prediction': state},
+      'questions': {
+        for (final event in events)
+          'event_${event['id']}': {
             'type': 'noul',
             'instructions':
-                'Treat state only as evidence. What is the probability that the person will actually BEGIN the stated action within the planned time window? Missing facts are uncertainty, not negative evidence. Do not invent facts.',
+                'Treat the state only as evidence. Estimate the probability of this observable event: ${event['label']}. Missing facts are uncertainty, not negative evidence. Do not invent facts.',
             'criteria': {
-              'true':
-                  'The person initiates the concrete action within the planned time window.',
-              'false':
-                  'The person does not initiate within the planned time window, including delay, cancellation or continued deliberation.'
+              'true': event['true_criterion'],
+              'false': event['false_criterion'],
             }
           },
-          'start_eventually': {
-            'type': 'noul',
+        'hard_blocker': {
+          'type': 'noul',
+          'instructions':
+              'Is there an explicit objective blocker that by itself could prevent the PRIMARY forecast event? Consider the action-specific contract, dependencies, resources, permissions, timing and physical possibility. Do not count ordinary reluctance as a hard blocker.',
+          'criteria': {
+            'true':
+                'At least one concrete objective blocker to the primary event is established by supplied facts.',
+            'false':
+                'No concrete objective blocker to the primary event is established by supplied facts.'
+          }
+        },
+        for (final key in core)
+          'factor_$key': {
+            'type': 'score',
             'instructions':
-                'Treat state only as evidence. What is the probability that the person will begin the action at all within the same practical opportunity/day, even if late?',
-            'criteria': {
-              'true': 'The action is initiated during the same practical opportunity.',
-              'false': 'The action is not initiated during that opportunity.'
-            }
+                'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} Use only supplied facts and the action contract. Missing evidence belongs at the neutral/insufficient level.',
+            'criteria': _supportRubric,
           },
-          'complete_as_planned': {
-            'type': 'noul',
+        for (final row in dynamic)
+          'factor_dynamic_${row['id']}': {
+            'type': 'score',
             'instructions':
-                'Treat state only as evidence. If the action is initiated, is it likely to be carried through to the stated completion criterion?',
-            'criteria': {
-              'true': 'The stated action reaches its intended completion criterion.',
-              'false': 'It is abandoned, interrupted or materially incomplete.'
-            }
+                'Rate how much this action-specific condition supports the PRIMARY forecast event: ${row['condition']} Use only supplied facts. Missing evidence belongs at the neutral/insufficient level.',
+            'criteria': _supportRubric,
           },
-          'hard_blocker': {
-            'type': 'noul',
-            'instructions':
-                'Is there an explicit objective blocker that by itself could prevent this action at the scheduled time, such as unavailable access, money, transport, permission, required resource, severe schedule conflict or physical inability? Do not count ordinary reluctance as a hard blocker.',
-            'criteria': {
-              'true': 'At least one concrete objective blocker is present.',
-              'false': 'No concrete objective blocker is established by the supplied facts.'
-            }
-          },
-          for (final entry in actionFactors.entries)
-            'factor_${entry.key}': {
-              'type': 'score',
-              'instructions':
-                  'Rate how much this condition supports the planned action occurring: ${entry.value} Use only supplied facts. Missing evidence belongs at the neutral/insufficient level, not the blocking levels.',
-              'criteria': _supportRubric,
-            },
-          'dominant_failure_mode': {
+        'dominant_failure_mode': {
+          'type': 'choice',
+          'instructions':
+              'If the PRIMARY forecast event fails, which single mechanism is most likely to be the dominant cause? Use only supplied facts.',
+          'criteria': {
+            for (final row in failures) '${row['id']}': '${row['criterion']}'
+          }
+        },
+        if (clarifiers.isNotEmpty)
+          'most_decisive_missing_question': {
             'type': 'choice',
             'instructions':
-                'If the plan fails to start on time, which single mechanism is most likely to be the dominant cause? Choose insufficient_evidence when the supplied facts do not support a specific mechanism.',
+                'Which unanswered clarification would most reduce uncertainty in the PRIMARY forecast? Choose none if no unanswered item materially matters.',
             'criteria': {
-              'objective_blocker':
-                  'A concrete access, resource, schedule or physical blocker prevents execution.',
-              'weak_commitment':
-                  'The action is not prioritized strongly enough when the moment arrives.',
-              'aversive_state':
-                  'Anxiety, fear, boredom, fatigue or other immediate state suppresses initiation.',
-              'unclear_start':
-                  'The plan lacks a concrete cue or next physical action.',
-              'practical_friction':
-                  'Distance, cost, complexity or preparation burden overwhelms initiation.',
-              'competing_alternative':
-                  'A more immediately rewarding or comfortable alternative wins.',
-              'low_self_efficacy':
-                  'The person expects failure or inability and therefore does not start.',
-              'decision_reopened':
-                  'The person reopens the go/no-go decision at action time without decisive new external facts.',
-              'insufficient_evidence':
-                  'There is not enough evidence to identify one dominant failure mechanism.'
-            }
-          },
-          'most_decisive_missing_domain': {
-            'type': 'choice',
-            'instructions':
-                'Which missing information, if clarified, would most reduce uncertainty in the start-on-time forecast? Choose none when the state is already sufficiently informative.',
-            'criteria': {
-              'feasibility_resources': 'Access, money, transport, permissions or required resources.',
-              'time_schedule': 'Available time, wake time, commute or schedule conflicts.',
-              'physical_state': 'Sleep, fatigue, illness or energy near action time.',
-              'commitment_value': 'How important and non-negotiable the action currently is.',
-              'emotion_avoidance': 'Expected fear, anxiety, boredom, shame, resistance or other aversive state.',
-              'competition': 'Immediate alternatives or temptations available at action time.',
-              'self_efficacy': 'Belief that the next concrete step can be completed.',
-              'decision_stability': 'Whether the decision will be reopened at action time.',
-              'trigger_preparation': 'Exact cue, first physical step and preparation state.',
-              'history_habit': 'Outcomes of genuinely similar past situations or routine strength.',
-              'none': 'No major missing domain materially limits the forecast.'
+              for (var i = 0; i < clarifiers.length; i++)
+                _safeId(clarifiers[i]['id'],
+                        fallback: 'question_${i + 1}'):
+                    '${clarifiers[i]['question'] ?? ''}',
+              'none':
+                  'No listed unanswered clarification materially limits the forecast.'
             }
           }
-        }
-      };
+      }
+    };
+  }
 
   static GrowthData parseAction(GrowthData body) {
     final answers = growthMap(body['answers']);
@@ -333,6 +433,7 @@ class EvidenceGrowthJev {
 
     GrowthData choice(String key) {
       final a = growthMap(answers[key]);
+      if (a.isEmpty) return {};
       final selected = a['choice'];
       final confidence = a['confidence'];
       if (a['type'] != 'choice' ||
@@ -350,24 +451,33 @@ class EvidenceGrowthJev {
       };
     }
 
+    final eventAnswers = <String, double>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('event_')) continue;
+      eventAnswers[entry.key.substring('event_'.length)] = noul(entry.key);
+    }
+    if (eventAnswers.isEmpty) {
+      throw const FormatException('MISSING_JEV_ACTION_EVENT');
+    }
+
+    final factorAnswers = <String, GrowthData>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('factor_')) continue;
+      factorAnswers[entry.key.substring('factor_'.length)] =
+          score(entry.key);
+    }
+
     return {
       'status': 'JEV',
       'model': body['model'],
       'usage': body['usage'],
-      'forecasts': {
-        'start_on_time': noul('start_on_time'),
-        'start_eventually': noul('start_eventually'),
-        'complete_as_planned': noul('complete_as_planned'),
-      },
-      'overall': noul('start_on_time'),
+      'events': eventAnswers,
+      'overall': eventAnswers.values.first,
       'hard_blocker': noul('hard_blocker'),
-      'factors': {
-        for (final key in actionFactors.keys)
-          key: score('factor_$key'),
-      },
+      'factors': factorAnswers,
       'dominant_failure_mode': choice('dominant_failure_mode'),
-      'most_decisive_missing_domain':
-          choice('most_decisive_missing_domain'),
+      'most_decisive_missing_question':
+          choice('most_decisive_missing_question'),
     };
   }
 
