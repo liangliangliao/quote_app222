@@ -318,6 +318,45 @@ class EvidenceGrowthActionPredictionService {
             ? growthStrings(profile['selected_theories'])
             : selectedTheoryIds);
     state['theory_factor_answers'] = theoryFactorAnswers;
+
+    final theoryQuestionnaire =
+        growthRows(profile['theory_factor_questionnaire']);
+    var theoryKnownCount = 0;
+    var theoryUnknownCount = 0;
+    var theoryMissingCount = 0;
+    for (final row in theoryQuestionnaire) {
+      final id = '${row['id'] ?? ''}';
+      if (id.isEmpty) continue;
+      final answer = growthMap(theoryFactorAnswers[id]);
+      if (answer.isEmpty) {
+        theoryMissingCount++;
+        continue;
+      }
+      if ('${answer['option_id'] ?? ''}' == 'unknown') {
+        theoryUnknownCount++;
+      } else {
+        theoryKnownCount++;
+      }
+    }
+    final theoryTotalCount =
+        theoryKnownCount + theoryUnknownCount + theoryMissingCount;
+    final theoryResponseCoverage = theoryTotalCount == 0
+        ? 1.0
+        : (theoryKnownCount + theoryUnknownCount) / theoryTotalCount;
+    final theoryKnownEvidenceCoverage = theoryTotalCount == 0
+        ? 1.0
+        : theoryKnownCount / theoryTotalCount;
+    state['theory_input_completeness'] = {
+      'total': theoryTotalCount,
+      'known_answers': theoryKnownCount,
+      'explicit_unknown': theoryUnknownCount,
+      'unselected_missing': theoryMissingCount,
+      'response_coverage': theoryResponseCoverage,
+      'known_evidence_coverage': theoryKnownEvidenceCoverage,
+      'missing_rule':
+          'Unselected items are missing evidence: no 0/2/4 score, no neutral imputation, and no negative penalty.'
+    };
+
     state['personal_history_summary'] = {
       'resolved_count': resolved.length,
       'all_resolved_count': allResolved.length,
@@ -359,18 +398,22 @@ class EvidenceGrowthActionPredictionService {
     // JEV is the primary forecast engine when configured because its output is
     // a typed probabilistic decision. The LLM remains an interpreter and
     // cross-check, not an equally weighted probability source.
+    //
+    // IMPORTANT: do not post-hoc blend the model probability with an arbitrary
+    // hand-written history weight. The same personal history summary is already
+    // included in the JEV evidence state; blending it again would double-count
+    // history and create a pseudo-precision coefficient with no validation.
     final rawEstimate = jevEstimate ?? aiEstimate;
-    final forecastSource =
-        jevEstimate != null ? 'JEV_PRIMARY' : aiEstimate != null ? 'AI_FALLBACK' : 'HISTORY_ONLY';
-
+    var forecastSource = jevEstimate != null
+        ? 'JEV_PRIMARY'
+        : aiEstimate != null
+            ? 'AI_FALLBACK'
+            : 'NO_MODEL_ESTIMATE';
     double? estimate = rawEstimate;
     double historyWeight = 0;
-    if (estimate != null && baseline != null && resolved.length >= 3) {
-      historyWeight =
-          (resolved.length / 30 * .30).clamp(0, .30).toDouble();
-      estimate = estimate * (1 - historyWeight) + baseline * historyWeight;
-    } else if (estimate == null && baseline != null && resolved.length >= 5) {
+    if (estimate == null && baseline != null && resolved.length >= 5) {
       estimate = baseline;
+      forecastSource = 'HISTORY_ONLY';
       historyWeight = 1;
     }
 
@@ -608,6 +651,9 @@ class EvidenceGrowthActionPredictionService {
         'ai_fallback_probability': aiEstimate,
         'history_baseline': baseline,
         'history_weight': historyWeight,
+        'posthoc_history_blend_applied': false,
+        'history_usage':
+            'Personal history is supplied to JEV as evidence. It is not blended a second time with an arbitrary manual weight; history-only fallback is used only when no model estimate exists and at least 5 similar outcomes are available.',
         'factor_scores_are_not_probability_weights': true,
         'jev_confidence_semantics':
             'JEV confidence is model-reported confidence for its typed answer; it is not a statistical confidence interval or observed accuracy rate.',
@@ -635,6 +681,8 @@ class EvidenceGrowthActionPredictionService {
             '理论负责定义需要观察的构念与标准选项；相同构念去重。LLM/JEV只做可审计预填，用户最终选择进入预测；原上班模型中的因素仅在理论未覆盖时作为补充。',
       },
       'theory_factor_answers': theoryFactorAnswers,
+      'theory_input_completeness':
+          growthMap(state['theory_input_completeness']),
       'clarification_answers': clarificationAnswers,
       'jev_workflow': {
         'primary_event_id': primaryEventId,
@@ -711,8 +759,8 @@ class EvidenceGrowthActionPredictionService {
         'is_hypothetical': true,
       },
       'calibration_note': resolved.length < 5
-          ? '当前同类行动的真实结果还不足5次，所以不会拿其他类型行动硬凑个人基线；主要依赖理论结构 + AI/JEV 判断。'
-          : '个人基线只使用行动类型相同、且标签相近的历史结果进行有限校准；它仍然是预测，不是保证。',
+          ? '当前同类行动真实结果不足5次；个人历史仅作为模型可见的有限证据，不做人工加权。'
+          : '同类个人历史已作为JEV输入证据；程序不再用未经验证的固定权重把历史基线二次混入概率，避免重复计算。',
       'outcome': 'PENDING',
     };
   }
