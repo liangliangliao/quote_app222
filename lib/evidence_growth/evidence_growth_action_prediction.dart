@@ -745,6 +745,78 @@ ${jsonEncode(preservedFactorCatalog)}
       };
       final mode = '${decoded['action_mode'] ?? 'OTHER'}'.toUpperCase();
 
+      String profileId(Object? raw, String fallback) {
+        var value = '$raw'
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9_]+'), '_')
+            .replaceAll(RegExp(r'_+'), '_');
+        while (value.startsWith('_')) {
+          value = value.substring(1);
+        }
+        while (value.endsWith('_')) {
+          value = value.substring(0, value.length - 1);
+        }
+        return value.isEmpty ? fallback : value;
+      }
+
+      final preservedRows = <GrowthData>[];
+      final preservedSeen = <String>{};
+      for (final row
+          in growthRows(decoded['selected_preserved_factors']).take(16)) {
+        final catalogId = profileId(row['id'], '');
+        final catalog = preservedFactorCatalog[catalogId];
+        if (catalog == null || !preservedSeen.add(catalogId)) continue;
+        preservedRows.add({
+          'id': 'preserved_$catalogId',
+          'catalog_id': catalogId,
+          'label': catalog['label'],
+          'ibm_construct': catalog['ibm_construct'],
+          'condition': catalog['condition'],
+          'selection_reason':
+              _cleanUserText('${row['selection_reason'] ?? ''}'),
+          'evidence': _cleanUserText('${row['evidence'] ?? ''}'),
+          'source': 'PRESERVED_BASELINE',
+        });
+      }
+
+      final adaptiveRows = <GrowthData>[];
+      final adaptiveSeen = <String>{};
+      for (final row in growthRows(decoded['dynamic_factors']).take(8)) {
+        final rawId =
+            profileId(row['id'], 'factor_${adaptiveRows.length + 1}');
+        final id = 'adaptive_$rawId';
+        final label = _cleanUserText('${row['label'] ?? ''}');
+        final condition = '${row['condition'] ?? ''}'.trim();
+        final construct = '${row['ibm_construct'] ?? ''}'.trim();
+        if (label.isEmpty ||
+            condition.isEmpty ||
+            !factorLabels.containsKey(construct) ||
+            !adaptiveSeen.add(id)) {
+          continue;
+        }
+        adaptiveRows.add({
+          'id': id,
+          'label': label,
+          'ibm_construct': construct,
+          'condition': condition,
+          'selection_reason':
+              _cleanUserText('${row['selection_reason'] ?? ''}'),
+          'evidence': _cleanUserText('${row['evidence'] ?? ''}'),
+          'source': 'AI_DYNAMIC',
+        });
+      }
+
+      final analysisChecks = growthStrings(decoded['analysis_checks'])
+          .map(_cleanUserText)
+          .where((e) => e.isNotEmpty)
+          .take(8)
+          .toList();
+      final assumptions = growthStrings(decoded['assumptions'])
+          .map(_cleanUserText)
+          .where((e) => e.isNotEmpty)
+          .take(6)
+          .toList();
+
       return {
         'version': 'ibm_action_v2',
         'theory_model': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
@@ -756,13 +828,23 @@ ${jsonEncode(preservedFactorCatalog)}
         'action_tags': growthStrings(decoded['action_tags']).take(5).toList(),
         'interpretation':
             _cleanUserText('${decoded['interpretation'] ?? ''}'),
+        'assumptions': assumptions,
+        'analysis_checks': analysisChecks,
+        'coverage_summary':
+            _cleanUserText('${decoded['coverage_summary'] ?? ''}'),
+        'analysis_correction_applied':
+            '${state['analysis_correction'] ?? ''}'.trim(),
         'forecast_events': events,
         'relevant_core_factors': growthStrings(decoded['relevant_core_factors'])
             .where(factorLabels.containsKey)
             .toSet()
             .toList(),
-        'dynamic_factors':
-            growthRows(decoded['dynamic_factors']).take(6).toList(),
+        'selected_preserved_factors': preservedRows,
+        'adaptive_dynamic_factors': adaptiveRows,
+        'dynamic_factors': <GrowthData>[
+          ...preservedRows,
+          ...adaptiveRows,
+        ],
         'clarifying_questions':
             growthRows(decoded['clarifying_questions']).take(5).toList(),
         'failure_modes':
@@ -780,6 +862,11 @@ ${jsonEncode(preservedFactorCatalog)}
         'action_mode': 'OTHER',
         'action_tags': <String>[],
         'interpretation': '按你输入的原始行动进行预测；当前无法完成更细的行为语义解析，因此保留 IBM 全部核心构念。',
+        'assumptions': <String>[],
+        'analysis_checks': <String>[],
+        'coverage_summary': 'AI语义分析当前不可用，未动态选择原型因素；JEV只能使用通用理论构念。',
+        'analysis_correction_applied':
+            '${state['analysis_correction'] ?? ''}'.trim(),
         'forecast_events': [
           {
             'id': 'primary_success',
@@ -792,6 +879,8 @@ ${jsonEncode(preservedFactorCatalog)}
           }
         ],
         'relevant_core_factors': factorLabels.keys.toList(),
+        'selected_preserved_factors': <GrowthData>[],
+        'adaptive_dynamic_factors': <GrowthData>[],
         'dynamic_factors': <GrowthData>[],
         'clarifying_questions': <GrowthData>[],
         'failure_modes': <GrowthData>[],
