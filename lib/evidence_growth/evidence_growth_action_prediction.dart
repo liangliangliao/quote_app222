@@ -818,6 +818,12 @@ ${jsonEncode(state)}
         RegExp(r'\b[a-z]+_[a-z_]+\b').hasMatch(text);
   }
 
+  static String _dynamicEvidence(GrowthData row) {
+    final evidence = _cleanUserText('${row['evidence'] ?? ''}');
+    if (evidence.isNotEmpty) return evidence;
+    final label = '${row['label'] ?? '这个行动特有因素'}'.trim();
+    return '这是“$label”这一行动中特有的预测变量；当前若没有明确事实，JEV 会把它视为不确定，而不是自动判为负面。';
+  }
   static String _humanEvidence(
       String key, String raw, GrowthData state, int resolvedCount) {
     final cleaned = _cleanUserText(raw);
