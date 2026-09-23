@@ -256,7 +256,7 @@ class EvidenceGrowthJev {
     final profile = growthMap(state['action_profile']);
     final seen = <String>{};
     final out = <GrowthData>[];
-    for (final row in growthRows(profile['dynamic_factors']).take(8)) {
+    for (final row in growthRows(profile['dynamic_factors']).take(24)) {
       final id = _safeId(row['id'], fallback: 'dynamic_${out.length + 1}');
       final label = '${row['label'] ?? ''}'.trim();
       final condition = '${row['condition'] ?? row['question'] ?? ''}'.trim();
@@ -267,8 +267,11 @@ class EvidenceGrowthJev {
         'label': label,
         'condition': condition,
         'evidence': '${row['evidence'] ?? ''}'.trim(),
-        'ibm_construct':
-            actionFactors.containsKey(construct) ? construct : 'environmental_constraints',
+        'selection_reason': '${row['selection_reason'] ?? ''}'.trim(),
+        'source': '${row['source'] ?? 'AI_DYNAMIC'}'.trim(),
+        'ibm_construct': actionFactors.containsKey(construct)
+            ? construct
+            : 'environmental_constraints',
       });
     }
     return out;
@@ -393,10 +396,29 @@ class EvidenceGrowthJev {
         .take(8)
         .toList();
 
+    // JEV receives the user's facts plus the prediction contract, but not the
+    // LLM's narrative interpretation, assumptions, coverage summary or other
+    // meta-evaluation. This reduces anchoring while preserving dynamically
+    // generated factor definitions.
+    final jevProfile = <String, dynamic>{
+      'action_mode': profile['action_mode'],
+      'action_tags': profile['action_tags'],
+      'normalized_action': profile['normalized_action'],
+      'forecast_events': events,
+      'relevant_core_factors': core,
+      'dynamic_factors': dynamic,
+      'clarifying_questions': profile['clarifying_questions'],
+      'failure_modes': failures,
+    };
+    final jevState = <String, dynamic>{
+      ...state,
+      'action_profile': jevProfile,
+    };
+
     return {
       'model': model,
       'state': {
-        'action_prediction': state,
+        'action_prediction': jevState,
         'theoretical_model': {
           'name': 'Integrated Behavioral Model',
           'structure':
