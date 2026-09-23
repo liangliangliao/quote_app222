@@ -36,26 +36,7 @@ class _EvidenceGrowthActionPredictionPageState
   final historyNotes = TextEditingController();
   final analysisCorrection = TextEditingController();
 
-  final feasibility = <String>{};
-  final timeCapacity = <String>{};
-  final physicalState = <String>{};
-  final emotions = <String>{};
-  final frictions = <String>{};
-  final commitments = <String>{};
-  final alternatives = <String>{};
-  final executionSupport = <String>{};
   final appliedImprovements = <String>{};
-
-  String commitmentStrength = '不清楚';
-  String instrumentalAttitude = '不清楚';
-  String valueSalience = '不清楚';
-  String injunctiveNorm = '不清楚';
-  String descriptiveNorm = '不清楚';
-  String selfEfficacy = '不清楚';
-  String perceivedControl = '不清楚';
-  String knowledgeSkills = '不清楚';
-  String historyPattern = '不清楚';
-  String decisionStability = '不清楚';
 
   DateTime? scheduledAt;
   GrowthData actionProfile = {};
@@ -67,146 +48,6 @@ class _EvidenceGrowthActionPredictionPageState
   bool preparing = false;
   bool jevConfigured = false;
 
-  static const feasibilityOptions = [
-    '交通已确认',
-    '费用可承担',
-    '权限／资格齐全',
-    '必要物品齐全',
-    '交通存在问题',
-    '费用存在问题',
-    '缺少权限／资格',
-    '缺少必要物品'
-  ];
-  static const timeCapacityOptions = [
-    '时间充足',
-    '已留缓冲时间',
-    '通勤时间确定',
-    '可能睡过头',
-    '存在日程冲突',
-    '通勤时间不确定'
-  ];
-  static const physicalStateOptions = [
-    '精力充足',
-    '状态一般',
-    '睡眠不足',
-    '明显疲惫',
-    '身体不适'
-  ];
-  static const emotionOptions = [
-    '有动力',
-    '平静',
-    '无趣',
-    '焦虑',
-    '害怕',
-    '抵触',
-    '犹豫',
-    '厌恶',
-    '羞耻／尴尬'
-  ];
-  static const frictionOptions = [
-    '通勤远',
-    '费用高',
-    '步骤多',
-    '流程复杂',
-    '不熟悉环境',
-    '需要与陌生人互动'
-  ];
-  static const commitmentOptions = [
-    '必须打卡',
-    '迟到/缺勤有损失',
-    '已预约',
-    '有人在等',
-    '有明确截止时间',
-    '已答应别人'
-  ];
-  static const alternativeOptions = [
-    '继续躺着',
-    '刷手机',
-    '再想一想',
-    '晚点再做',
-    '找别的机会',
-    '逃避/取消'
-  ];
-  static const supportOptions = [
-    '闹钟已设',
-    '路线已确认',
-    '物品已准备',
-    '到点直接出门',
-    '有人会提醒',
-    '已提前预留时间'
-  ];
-  static const historyOptions = [
-    '不清楚',
-    '没有相似经历',
-    '过去经常取消',
-    '过去经常拖延',
-    '有时做到有时没做到',
-    '多数能按时做到',
-    '几乎总能按时做到'
-  ];
-  static const efficacyOptions = [
-    '很没把握',
-    '有些没把握',
-    '不清楚',
-    '有些把握',
-    '很有把握'
-  ];
-  static const commitmentStrengthOptions = [
-    '可做可不做',
-    '想做但可以推迟',
-    '比较重要',
-    '已经决定必须做',
-    '已经做出不可轻易撤回的承诺'
-  ];
-  static const valueSalienceOptions = [
-    '几乎没有即时后果',
-    '有一些损失或收益',
-    '有明显责任／损失',
-    '错过会失去重要机会',
-    '结果对我现在非常重要'
-  ];
-  static const attitudeOptions = [
-    '明显不值得做',
-    '有些不值得',
-    '不清楚',
-    '比较值得做',
-    '非常值得做'
-  ];
-  static const normOptions = [
-    '重要他人明确反对',
-    '重要他人有些反对',
-    '不清楚',
-    '重要他人有些支持',
-    '重要他人明确支持／期待'
-  ];
-  static const descriptiveNormOptions = [
-    '重要他人多数不这样做',
-    '较少这样做',
-    '不清楚',
-    '不少人会这样做',
-    '重要他人多数这样做'
-  ];
-  static const controlOptions = [
-    '几乎不受我控制',
-    '受我控制较少',
-    '不清楚',
-    '大部分受我控制',
-    '基本由我决定和控制'
-  ];
-  static const knowledgeSkillOptions = [
-    '明显缺少必要知识／技能',
-    '还有关键欠缺',
-    '不清楚',
-    '基本具备',
-    '完全具备'
-  ];
-  static const stabilityOptions = [
-    '到时还会重新考虑',
-    '可能会犹豫',
-    '不清楚',
-    '基本不会重新决定',
-    '到点直接执行'
-  ];
 
   @override
   void initState() {
@@ -354,40 +195,10 @@ class _EvidenceGrowthActionPredictionPageState
   }
 
   GrowthData get structuredContext => {
-        'feasibility': feasibility.toList(),
-        'time_capacity': timeCapacity.toList(),
-        'physical_state': physicalState.toList(),
-        'commitment':
-            commitmentStrength == '不清楚' ? '' : commitmentStrength,
-        'instrumental_attitude':
-            instrumentalAttitude == '不清楚' ? '' : instrumentalAttitude,
-        'value_salience': valueSalience == '不清楚' ? '' : valueSalience,
-        'injunctive_norm': injunctiveNorm == '不清楚' ? '' : injunctiveNorm,
-        'descriptive_norm':
-            descriptiveNorm == '不清楚' ? '' : descriptiveNorm,
-        'emotions': emotions.toList(),
-        'frictions': frictions.toList(),
-        'commitments': commitments.toList(),
-        'alternatives': alternatives.toList(),
-        'execution_support': executionSupport.toList(),
-        'self_efficacy': selfEfficacy == '不清楚' ? '' : selfEfficacy,
-        'perceived_control':
-            perceivedControl == '不清楚' ? '' : perceivedControl,
-        'knowledge_skills':
-            knowledgeSkills == '不清楚' ? '' : knowledgeSkills,
-        'decision_stability':
-            decisionStability == '不清楚' ? '' : decisionStability,
-        'history_pattern': historyPattern == '不清楚' ? '' : historyPattern,
         'applied_improvements': appliedImprovements.toList(),
       };
 
-  String get similarHistory {
-    final pieces = <String>[
-      if (historyPattern != '不清楚') historyPattern,
-      if (historyNotes.text.trim().isNotEmpty) historyNotes.text.trim()
-    ];
-    return pieces.join('；');
-  }
+  String get similarHistory => historyNotes.text.trim();
 
   String _safeQuestionId(Object? raw) {
     var text = '$raw'
@@ -619,70 +430,6 @@ class _EvidenceGrowthActionPredictionPageState
                     const SizedBox(height: 10),
                     child
                   ])));
-
-  Widget _chipGroup(
-      String title, List<String> options, Set<String> selected,
-      {String? helper}) {
-    return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-          if (helper != null)
-            Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(helper,
-                    style:
-                        const TextStyle(fontSize: 12, color: Colors.black54))),
-          const SizedBox(height: 8),
-          Wrap(
-              spacing: 7,
-              runSpacing: 6,
-              children: options
-                  .map((item) => FilterChip(
-                      label: Text(item),
-                      selected: selected.contains(item),
-                      onSelected: busy
-                          ? null
-                          : (v) => setState(() {
-                                if (v) {
-                                  selected.add(item);
-                                } else {
-                                  selected.remove(item);
-                                }
-                              })))
-                  .toList())
-        ]));
-  }
-
-  Widget _singleChoice(
-      String title, List<String> options, String value, ValueChanged<String> onChanged,
-      {String? helper}) {
-    return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-          if (helper != null)
-            Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(helper,
-                    style:
-                        const TextStyle(fontSize: 12, color: Colors.black54))),
-          const SizedBox(height: 8),
-          Wrap(
-              spacing: 7,
-              runSpacing: 6,
-              children: options
-                  .map((item) => ChoiceChip(
-                      label: Text(item),
-                      selected: value == item,
-                      onSelected: busy
-                          ? null
-                          : (v) {
-                              if (v) onChanged(item);
-                            }))
-                  .toList())
-        ]));
-  }
 
   String _modeLabel(String mode) => const {
         'INITIATE': '启动一个行为',
