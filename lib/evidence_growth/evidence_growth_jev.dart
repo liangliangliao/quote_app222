@@ -703,19 +703,50 @@ class EvidenceGrowthJev {
     required String apiKey,
     String model = 'jev-latest',
   }) async {
-    if (apiKey.isEmpty || factorIds.isEmpty) {
+    final ids = factorIds
+        .where((id) => EvidenceBehaviorTheoryCatalog.factor(id) != null)
+        .toSet()
+        .toList();
+    if (apiKey.isEmpty || ids.isEmpty) {
       return {'status': 'LOCAL', 'reason': 'NO_KEY_OR_FACTORS'};
     }
     if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
       return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
     }
-    final ids = factorIds.take(28).toList();
+
+    // A user may select all theory packs (currently ~40 unique constructs).
+    // Do not silently drop constructs. Batch JEV typed-choice prefilling and
+    // merge the answers; the questionnaire itself always remains complete.
+    if (ids.length > 18) {
+      final merged = <String, dynamic>{};
+      final batchStatuses = <String>[];
+      for (var offset = 0; offset < ids.length; offset += 18) {
+        final chunk = ids.sublist(
+            offset, (offset + 18).clamp(0, ids.length));
+        final part = await assessTheoryOptions(
+          state,
+          chunk,
+          apiKey: apiKey,
+          model: model,
+        );
+        batchStatuses.add('${part['status'] ?? 'LOCAL'}');
+        merged.addAll(growthMap(part['selections']));
+      }
+      return {
+        'status': merged.isEmpty ? 'LOCAL' : 'JEV',
+        'model': model,
+        'batched': true,
+        'batch_statuses': batchStatuses,
+        'selections': merged,
+      };
+    }
+
     final body = jsonEncode(theoryPrefillRequest(state, ids, model));
     if (utf8.encode(body).length > 64000) {
       return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
     }
     final key =
-        sha256.convert(utf8.encode('theory-prefill-v1|$apiKey|$body')).toString();
+        sha256.convert(utf8.encode('theory-prefill-v2|$apiKey|$body')).toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
     final pending = _sendTheoryPrefill(body, apiKey);
