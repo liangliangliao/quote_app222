@@ -38,8 +38,7 @@ class _EvidenceGrowthActionPredictionPageState
   final analysisCorrection = TextEditingController();
 
   final appliedImprovements = <String>{};
-  final selectedTheoryIds =
-      EvidenceBehaviorTheoryCatalog.defaultTheoryIds.toSet();
+  final selectedTheoryIds = <String>{};
   final theoryFactorSelections = <String, String>{};
   final theoryFactorSelectionSources = <String, String>{};
 
@@ -52,6 +51,8 @@ class _EvidenceGrowthActionPredictionPageState
   bool busy = false;
   bool preparing = false;
   bool jevConfigured = false;
+  bool theorySelectionManuallyEdited = false;
+  GrowthData theorySelectionAnalysis = {};
 
 
   @override
@@ -243,10 +244,20 @@ class _EvidenceGrowthActionPredictionPageState
         theoryFactorSelectionSources[id] = 'AUTO_LLM_JEV';
       }
     }
+    final profileTheories = growthStrings(profile['selected_theories']);
+    if (profileTheories.isNotEmpty) {
+      selectedTheoryIds
+        ..clear()
+        ..addAll(profileTheories);
+    }
+    theorySelectionManuallyEdited =
+        '${profile['theory_selection_mode'] ?? 'AUTO'}' == 'MANUAL';
+    theorySelectionAnalysis =
+        growthMap(profile['theory_selection_analysis']);
     actionProfile = profile;
   }
 
-  void _invalidateActionProfile() {
+  void _invalidateActionProfile({bool clearTheoryAnalysis = false}) {
     for (final controller in clarificationText.values) {
       controller.dispose();
     }
@@ -254,6 +265,7 @@ class _EvidenceGrowthActionPredictionPageState
     clarificationChoice.clear();
     theoryFactorSelections.clear();
     theoryFactorSelectionSources.clear();
+    if (clearTheoryAnalysis) theorySelectionAnalysis = {};
     actionProfile = {};
   }
 
@@ -299,6 +311,16 @@ class _EvidenceGrowthActionPredictionPageState
     return missing;
   }
 
+  Future<void> rematchTheories() async {
+    if (busy || preparing || plan.text.trim().isEmpty) return;
+    setState(() {
+      theorySelectionManuallyEdited = false;
+      selectedTheoryIds.clear();
+      _invalidateActionProfile(clearTheoryAnalysis: true);
+    });
+    await prepareAction();
+  }
+
   Future<void> prepareAction() async {
     if (preparing || busy || plan.text.trim().isEmpty) return;
     setState(() => preparing = true);
@@ -311,6 +333,7 @@ class _EvidenceGrowthActionPredictionPageState
         analysisCorrection: analysisCorrection.text,
         structuredContext: structuredContext,
         selectedTheoryIds: selectedTheoryIds.toList(),
+        autoSelectTheories: !theorySelectionManuallyEdited,
         jevApiKey: await _jevKey(),
         journey: widget.journey,
       );
@@ -579,7 +602,7 @@ class _EvidenceGrowthActionPredictionPageState
         '输入一个行动',
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text(
-              '先描述你准备做什么，再选择要使用的行为预测理论。AI会理解行动并辅助预填，JEV独立交叉判断；只有两者对同一标准选项都达到75%以上把握时才自动选中，且你始终可以修改。',
+              '先描述你准备做什么。AI会根据行动类型、核心阻碍与需要解释的问题自动匹配最适合的一套或多套理论；你可以随时取消、增加或改选。理论确定后，LLM/JEV再辅助预填各理论的标准选项。',
               style: TextStyle(color: Colors.black54, height: 1.4)),
           const SizedBox(height: 12),
           TextField(
@@ -588,7 +611,10 @@ class _EvidenceGrowthActionPredictionPageState
               minLines: 2,
               maxLines: 5,
               onChanged: (_) => setState(() {
-                    _invalidateActionProfile();
+                    if (!theorySelectionManuallyEdited) {
+                      selectedTheoryIds.clear();
+                    }
+                    _invalidateActionProfile(clearTheoryAnalysis: true);
                     analysisCorrection.clear();
                   }),
               decoration: const InputDecoration(
@@ -640,10 +666,10 @@ class _EvidenceGrowthActionPredictionPageState
                       : prepareAction,
                   icon: const Icon(Icons.auto_awesome),
                   label: Text(preparing
-                      ? 'AI 正在理解这个行动…'
+                      ? 'AI 正在理解行动并匹配理论…'
                       : actionProfile.isEmpty
-                          ? 'AI 先理解这个行动'
-                          : '重新理解这个行动'))),
+                          ? 'AI理解行动并自动匹配理论'
+                          : '重新分析行动与理论'))),
           if (preparing)
             const Padding(
                 padding: EdgeInsets.only(top: 10),
