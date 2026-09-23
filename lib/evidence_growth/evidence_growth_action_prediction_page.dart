@@ -1290,6 +1290,14 @@ class _EvidenceGrowthActionPredictionPageState
         '${jevFlow['most_decisive_missing_label'] ?? ''}'.trim();
     final eventRows = growthRows(jevFlow['events']);
     final hardBlocker = jevFlow['hard_blocker'];
+    final dominantDisplayable =
+        jevFlow['dominant_failure_displayable'] == true;
+    final dominantEvidence =
+        '${jevFlow['dominant_failure_evidence'] ?? ''}'.trim();
+    final dominantSource =
+        '${jevFlow['dominant_failure_source'] ?? ''}'.trim();
+    final provenance = growthMap(result['forecast_provenance']);
+    final historyBaseline = growthMap(result['history_baseline']);
 
     return _section(
         '本次预测',
@@ -1321,6 +1329,27 @@ class _EvidenceGrowthActionPredictionPageState
                         : '主预测来源：个人历史基线',
                 style: const TextStyle(
                     fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 5),
+            Text(
+                source == 'JEV_PRIMARY'
+                    ? '这个总百分数来自JEV对“主预测事件”的直接概率判断，不是把下面各因素评分做加权平均。'
+                    : '这个总百分数不是由下面各因素评分简单相加得到。',
+                style: const TextStyle(
+                    fontSize: 11, color: Colors.black54)),
+            if ((provenance['history_weight'] as num?)?.toDouble() case final w?
+                when w > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                  '已使用同类个人历史进行校准：历史权重 ${_pct(w)}；同类真实结果 ${historyBaseline['resolved_count'] ?? 0} 次。',
+                  style: const TextStyle(
+                      fontSize: 11, color: Colors.black54))
+            ] else ...[
+              const SizedBox(height: 4),
+              const Text(
+                  '当前没有足够同类真实结果做经验校准，因此这是未充分校准的模型概率估计。',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.black54))
+            ],
             if (source == 'JEV_PRIMARY') ...[
               const SizedBox(height: 12),
               Wrap(
@@ -1344,17 +1373,33 @@ class _EvidenceGrowthActionPredictionPageState
                     'JEV 检测到客观硬阻断的可能性为 ${_pct(hardBlocker)}，请先核对交通、资源、权限、时间冲突或身体条件。',
                     style: const TextStyle(fontWeight: FontWeight.w700))
               ],
-              if (dominantFailure.isNotEmpty) ...[
+              if (dominantDisplayable && dominantFailure.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Text(
-                    'JEV 最可能失败机制：$dominantFailure（判断把握 ${_pct(jevFlow['dominant_failure_confidence'])}）',
-                    style: const TextStyle(fontWeight: FontWeight.w700))
+                    'JEV 当前最有证据支持的失败机制：$dominantFailure',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                Text(
+                    'JEV 自报选择置信度：${_pct(jevFlow['dominant_failure_confidence'])}（不是统计置信区间）'
+                    '${dominantSource == 'USER_THEORY_OPTION' ? ' · 主要依据：用户确认的理论选项' : ''}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.black54)),
+                if (dominantEvidence.isNotEmpty)
+                  Text('直接证据：$dominantEvidence',
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.black54))
+              ] else if (source == 'JEV_PRIMARY') ...[
+                const SizedBox(height: 10),
+                const Text(
+                    'JEV 暂时没有足够证据可靠锁定单一“最可能失败机制”，因此不强行给出一个阻碍结论。',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700))
               ],
               if (missingQuestion.isNotEmpty &&
                   jevFlow['most_decisive_missing_question'] != 'none') ...[
                 const SizedBox(height: 6),
                 Text(
-                    'JEV 认为最值得补充的信息：$missingQuestion（判断把握 ${_pct(jevFlow['missing_question_confidence'])}）')
+                    'JEV 认为最值得补充的信息：$missingQuestion（JEV自报选择置信度 ${_pct(jevFlow['missing_question_confidence'])}）')
               ],
             ],
           ] else
@@ -1522,8 +1567,14 @@ class _EvidenceGrowthActionPredictionPageState
           leading: Icon(_factorIcon(row), color: _teal),
           title: Text('${row['label'] ?? entry.key}'),
           subtitle: Text(row['unknown'] == true
-              ? '待补充 · 当前证据不足$mapped'
-              : '$state · $source 判断把握：${_confidenceLabel(confidence)}$mapped'),
+              ? source == 'USER_CONFIRMED_THEORY'
+                  ? '待补充 · 用户明确选择“不清楚／无法判断”$mapped'
+                  : '待补充 · 当前证据不足$mapped'
+              : source == 'USER_CONFIRMED_THEORY'
+                  ? '$state · 用户确认标准选项$mapped'
+                  : source == 'JEV'
+                      ? '$state · JEV评分 · 自报置信度：${_confidenceLabel(confidence)}$mapped'
+                      : '$state · $source$mapped'),
           children: [
             Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -1533,7 +1584,12 @@ class _EvidenceGrowthActionPredictionPageState
                       Text('${row['evidence'] ?? ''}'),
                       if (score is num) ...[
                         const SizedBox(height: 8),
-                        if (source == 'JEV' && row['jev_raw_score'] is num)
+                        if (source == 'USER_CONFIRMED_THEORY')
+                          Text(
+                              '标准选项支持刻度：${(score.toDouble() * 4).toStringAsFixed(1)} / 4',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700))
+                        else if (source == 'JEV' && row['jev_raw_score'] is num)
                           Text(
                               'JEV 支持评分：${(row['jev_raw_score'] as num).toStringAsFixed(1)} / 4',
                               style:
@@ -1544,14 +1600,17 @@ class _EvidenceGrowthActionPredictionPageState
                               style:
                                   const TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 3),
-                        const Text(
-                            '评分含义：0=强阻碍，2=中性／信息不足，4=强支持。它不是行动成功概率，也不是理论构念的固定权重。',
-                            style: TextStyle(
+                        Text(
+                            source == 'USER_CONFIRMED_THEORY'
+                                ? '这是把你确认的有序标准选项透明映射到0~4，仅用于因素展示和阻碍排序；不是行动概率，也不是理论固定权重。'
+                                : '评分含义：0=强阻碍，2=中性／信息不足，4=强支持。它不是行动成功概率，也不是理论构念的固定权重。',
+                            style: const TextStyle(
                                 fontSize: 12, color: Colors.black54)),
                       ],
-                      if (confidence is num) ...[
+                      if (confidence is num && source == 'JEV') ...[
                         const SizedBox(height: 5),
-                        Text('$source 对上述评分的置信度：${_pct(confidence)}',
+                        Text(
+                            'JEV 对这个typed评分的自报置信度：${_pct(confidence)}。这不是统计置信区间，也不是历史验证准确率。',
                             style: const TextStyle(
                                 fontSize: 12, color: Colors.black54))
                       ]
@@ -1575,7 +1634,7 @@ class _EvidenceGrowthActionPredictionPageState
             title: const Text('查看理论模型中的决定因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             subtitle: const Text(
-                '按 IBM 的因果层级展示；执行意图明确标为扩展，不再把所有因素平铺成一组'),
+                '优先显示你已确认的理论标准选项；JEV只对仍需模型判断的因素给typed评分。'),
             children: [
               for (final group in groupOrder) ...[
                 Builder(builder: (_) {
