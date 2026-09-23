@@ -346,7 +346,7 @@ void main() {
     final rows = await prediction.history();
     expect(rows.single['outcome'], 'ON_TIME');
     expect(EvidenceGrowthActionPredictionService.band(.64),
-        '中等，仍有明显变数');
+        '有一定把握，但仍可能被打断');
   });
   testWidgets('learning opens all stages and browsing does not mark mastery',
       (tester) async {
