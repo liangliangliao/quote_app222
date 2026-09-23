@@ -657,53 +657,73 @@ ${jsonEncode(state)}
           .generateText(
             purpose: 'evidence_growth.action_prediction',
             systemPrompt: '''
-你是“行动发生可能性预测器”的结构化分析器。目标是帮助用户判断一个具体行动能否按计划发生，并找到最值得修改的执行条件；不替用户做价值判断。
+你是“行动发生可能性预测器”的结构化分析器。使用 Integrated Behavioral Model（IBM）作为理论主干，并把 implementation intention 明确当作独立的意向→行动扩展。目标是解释一个具体行动为什么更可能发生或不发生；不替用户做价值判断。
+
+理论结构：
+A. 意向形成层：
+- experiential_attitude：做这件事时预期的感受/情绪评价
+- instrumental_attitude：对结果、收益、代价的认知评价
+- injunctive_norm：重要他人认为用户应不应该做
+- descriptive_norm：重要他人实际上是否做/支持这种行为
+- self_efficacy：相信自己能不能做到
+- perceived_control：认为这件事在多大程度上受自己控制
+
+B. IBM 直接行为决定因素：
+- intention：是否已经形成清楚而有强度的行动决定
+- knowledge_skills：是否具备所需知识和技能
+- salience：到关键时刻这件事是否会进入注意、保持心理可及
+- environmental_constraints：资源、时间、地点、权限、第三方、身体/环境等约束是否可克服
+- habit：过去相似行为和情境习惯是否支持目标行为
+
+C. 执行意图扩展：
+- implementation_intention：是否形成明确 cue→action / if-then 连接，帮助跨越 intention-behavior gap
 
 规则：
-1. 只根据 state 的事实分析。未知就是未知，绝不能把“没有提供信息”当成负面事实。
-2. 十六个因素 score 范围 0-1，1 表示更支持“行动按计划发生”，0 表示更阻碍。因素包括客观可行性、时间可用性、身体/精力、前置准备、行动承诺、价值/后果显著性、情绪、自我效能、决策稳定性、具体度、触发、环境准备、现实阻力、替代行为、外部约束、相似历史/习惯。
-3. 每个因素必须给 status：SUPPORT / RISK / UNKNOWN。信息不足时 status=UNKNOWN、score 接近 0.5、confidence 较低。
-4. evidence、summary、headline_reason、failure_modes、protective_actions、missing_information 必须是自然中文，面向普通用户。绝对不要输出字段名、JSON key、null、[]、resolved_count、similar_history_report、personal_history_summary 等内部实现细节。
-5. 不要因为没有个人历史而降低 history 分数；应标记 UNKNOWN。只有明确提供了相似行为记录，才判断其支持或阻碍。
-6. protective_actions 必须具体到马上能做的物理动作或可设置条件，最多3条，不说“提高动力”“坚持一下”之类空话。
-7. improvement_scenario 是“假设这些改变真的完成之后”的情景模拟，不是保证。只改变最关键的1-3个可控因素，不改变外部世界中未知事实。
-8. execution_likelihood 和 improvement_scenario.execution_likelihood 都是模型估计，不得声称具有统计保证。
-9. 不输出推理过程，只输出 JSON。
-''',
+1. 只根据 state 事实分析。未知就是未知，不能把未提供的信息当负面事实。
+2. 上述每个因素 score 0-1：1=当前事实强支持主预测事件发生；0=强阻碍。不要把 score 当概率。
+3. status 只能 SUPPORT / RISK / UNKNOWN。信息不足时 UNKNOWN、score≈0.5、confidence低。
+4. 不要把所有因素当作平级加权平均。态度/规范/agency主要解释 intention；IBM五个直接因素解释 intention 是否转成行为；implementation_intention 是额外的执行桥梁。
+5. action_profile.dynamic_factors 是针对当前具体行为提取的显著信念/现实条件；若存在，按其 ibm_construct 理解，不创造新的心理学理论。
+6. 对 personal_history_summary 只使用“同类行为匹配后的历史”；没有同类历史时 habit 保持未知。绝不能用无关行为做强校准。
+7. protective_actions 必须针对最弱的理论构念给出可执行物理动作，最多3条。
+8. improvement_scenario 只改变1~3个可控理论构念，并明确是情景模拟。
+9. execution_likelihood 是模型交叉判断，不是统计保证；JEV配置可用时它不是最终主预测值。
+10. evidence、summary、headline_reason、failure_modes、protective_actions、missing_information 用自然中文，不输出内部字段名或推理过程。
+11. 只输出 JSON。
+'''
             prompt: '''STATE:
 ${jsonEncode(state)}
 返回：
 {
-  "summary":"一句话结论，例如：这一步目前把握偏低，主要卡在触发不清和临场重新决策。",
-  "headline_reason":"用1-2句人话解释为什么，不得出现内部字段名。",
+  "summary":"一句话结论，必须用IBM构念解释最关键瓶颈",
+  "headline_reason":"1-2句自然中文解释，不得出现内部字段名",
   "execution_likelihood":0.0,
   "overall_confidence":0.0,
   "factors":{
-    "feasibility":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "time_capacity":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "physical_capacity":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "prerequisite_readiness":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "commitment":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "value_salience":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "emotion":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "intention":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "experiential_attitude":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "instrumental_attitude":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "injunctive_norm":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "descriptive_norm":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "self_efficacy":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "decision_stability":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "specificity":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "trigger":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "preparation":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "friction":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "alternatives":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "external_commitment":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "history_habit":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""}
+    "perceived_control":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "knowledge_skills":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "salience":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "environmental_constraints":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "habit":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "implementation_intention":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""}
   },
-  "missing_information":["最多4个真正会改变预测、且用户容易回答的问题"],
+  "dynamic_factors":{
+    "dynamic_<action_profile.dynamic_factors.id>":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""}
+  },
+  "missing_information":["最多4个真正会改变预测的问题，优先理论关键构念"],
   "failure_modes":["最多3条具体失败路径"],
-  "protective_actions":["最多3条现在就能执行的具体动作"],
+  "protective_actions":["最多3条现在就能做的具体动作"],
   "improvement_scenario":{
-    "revised_plan":"把原计划改写成更可执行的一句话",
-    "changes":["最多3条假设已经完成的改变"],
+    "revised_plan":"更可执行的一句话",
+    "changes":["最多3条，并尽量指出改善的是哪个IBM构念"],
     "execution_likelihood":0.0,
-    "explanation":"为什么这些改变可能提高执行机会，明确这是情景模拟"
+    "explanation":"为什么这些改变可能提高执行机会；明确只是情景模拟"
   }
 }''',
             expectJson: true,
@@ -734,6 +754,28 @@ ${jsonEncode(state)}
           'score': score,
           'confidence': confidence,
           'status': status,
+          'evidence': '${row['evidence'] ?? ''}'.trim(),
+        };
+      }
+
+      final dynamicInput = growthMap(decoded['dynamic_factors']);
+      final profile = growthMap(state['action_profile']);
+      for (final item in growthRows(profile['dynamic_factors'])) {
+        final rawId = '${item['id'] ?? ''}'
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9_]+'), '_');
+        if (rawId.isEmpty) continue;
+        final key = 'dynamic_$rawId';
+        final row = growthMap(dynamicInput[key]);
+        final score = _prob(row['score']);
+        final confidence = _prob(row['confidence']);
+        final status = '${row['status'] ?? 'UNKNOWN'}'.toUpperCase();
+        output[key] = {
+          'score': score ?? .5,
+          'confidence': confidence ?? 0,
+          'status': const {'SUPPORT', 'RISK', 'UNKNOWN'}.contains(status)
+              ? status
+              : 'UNKNOWN',
           'evidence': '${row['evidence'] ?? ''}'.trim(),
         };
       }
