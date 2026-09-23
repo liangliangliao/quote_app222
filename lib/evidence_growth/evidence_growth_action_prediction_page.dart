@@ -467,8 +467,11 @@ class _EvidenceGrowthActionPredictionPageState
                   .map((item) => ChoiceChip(
                       label: Text(item),
                       selected: value == item,
-                      onSelected:
-                          busy ? null : (v) => v ? onChanged(item) : null))
+                      onSelected: busy
+                          ? null
+                          : (v) {
+                              if (v) onChanged(item);
+                            }))
                   .toList())
         ]));
   }
