@@ -310,27 +310,68 @@ void main() {
     expect(calls, 1);
     client.close();
   });
-  test('JEV action prediction asks overall plus all nine typed factors', () {
+  test('JEV action prediction uses decomposed typed workflow', () {
     final request = EvidenceGrowthJev.actionRequest({
       'plan': '明天 8:00 出门去体检',
-      'current_context': '已经预约，地点较远'
+      'user_reported_conditions': {
+        'commitment': '已经决定必须做',
+        'frictions': ['地点较远']
+      }
     }, 'jev-latest');
     final questions = request['questions'] as Map;
-    expect(questions, contains('execute_on_time'));
+    expect(questions, contains('start_on_time'));
+    expect(questions, contains('start_eventually'));
+    expect(questions, contains('complete_as_planned'));
+    expect(questions, contains('dominant_failure_mode'));
     for (final key in EvidenceGrowthJev.actionFactors.keys) {
       expect(questions, contains('factor_$key'));
+      expect((questions['factor_$key'] as Map)['type'], 'score');
     }
+
+    final scoreAnswer = {
+      'type': 'score',
+      'score': 2.4,
+      'confidence': .75,
+      'legend': {
+        '0': 'blocks',
+        '1': 'somewhat blocks',
+        '2': 'neutral',
+        '3': 'supports',
+        '4': 'strongly supports'
+      },
+      'probabilities': {'0': .05, '1': .15, '2': .3, '3': .4, '4': .1}
+    };
     final parsed = EvidenceGrowthJev.parseAction({
       'model': 'jev-latest',
       'answers': {
-        'execute_on_time': {'type': 'noul', 'noul': .72},
+        'start_on_time': {'type': 'noul', 'noul': .72},
+        'start_eventually': {'type': 'noul', 'noul': .81},
+        'complete_as_planned': {'type': 'noul', 'noul': .66},
+        'hard_blocker': {'type': 'noul', 'noul': .12},
         for (final key in EvidenceGrowthJev.actionFactors.keys)
-          'factor_$key': {'type': 'noul', 'noul': .61},
+          'factor_$key': scoreAnswer,
+        'dominant_failure_mode': {
+          'type': 'choice',
+          'choice': 'practical_friction',
+          'confidence': .7,
+          'probabilities': {'practical_friction': .55, 'insufficient_evidence': .45}
+        },
+        'most_decisive_missing_domain': {
+          'type': 'choice',
+          'choice': 'history_habit',
+          'confidence': .64,
+          'probabilities': {'history_habit': .58, 'none': .42}
+        },
       }
     });
     expect(parsed['overall'], .72);
-    expect(growthMap(parsed['factors'])['decision_stability'], .61);
+    expect(growthMap(parsed['forecasts'])['start_eventually'], .81);
+    expect(growthMap(growthMap(parsed['factors'])['decision_stability'])['score'],
+        .6);
+    expect(growthMap(parsed['dominant_failure_mode'])['choice'],
+        'practical_friction');
   });
+
   test('action prediction records reality outcome for later personal calibration',
       () async {
     final prediction =
