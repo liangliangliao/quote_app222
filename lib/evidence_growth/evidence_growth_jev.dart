@@ -508,9 +508,10 @@ class EvidenceGrowthJev {
           'selected_ids': growthStrings(state['selected_theories']),
           'models': EvidenceBehaviorTheoryCatalog.theoryRows(
               growthStrings(state['selected_theories'])),
-          'theory_factor_answers': state['theory_factor_answers'],
+          'theory_factor_answers': sanitizedTheoryAnswers,
+          'unanswered_factor_ids': unansweredTheoryFactorIds,
           'rule':
-              'Treat confirmed user questionnaire answers as evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically. An unselected theory item is missing evidence: never impute 0, 2/4, 0.5, or any other pseudo-score. Explicit unknown is also uncertainty, not neutral evidence.'
+              'Treat confirmed user questionnaire answers as categorical evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically. Unselected theory item is missing evidence: never impute 0, 2/4, 0.5, or any other pseudo-score. Explicit unknown is also uncertainty, not neutral evidence.'
         }
       },
       'questions': {
@@ -546,7 +547,7 @@ class EvidenceGrowthJev {
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
-                'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence belongs at the neutral/insufficient level.',
+                'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence may use the center score only as JEV's typed representation of insufficient evidence; it is not observed neutrality and must not contribute as a fixed numeric weight to the final event probability.',
             'criteria': _supportRubric,
           },
         'dominant_failure_mode': {
