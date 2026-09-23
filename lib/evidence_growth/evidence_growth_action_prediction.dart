@@ -917,6 +917,11 @@ ${jsonEncode({
         'analysis_model': config.displayModel,
         'analysis_error_code': '',
         'analysis_error_detail': '',
+        'analysis_stages': const [
+          {'id': 'core', 'label': '行为理解与成功事件', 'status': 'READY'},
+          {'id': 'factors', 'label': '关键因素筛选与动态补充', 'status': 'READY'},
+          {'id': 'questions', 'label': '缺失信息与失败机制', 'status': 'READY'},
+        ],
         'theory_model': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
         'normalized_action':
             _cleanUserText('${decoded['normalized_action'] ?? ''}').isEmpty
@@ -973,6 +978,7 @@ ${jsonEncode({
         'analysis_model': model,
         'analysis_error_code': reason,
         'analysis_error_detail': detail,
+        'analysis_stages': const [],
         'theory_model': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
         'normalized_action': '${state['plan'] ?? ''}'.trim(),
         'action_mode': 'OTHER',
