@@ -471,9 +471,9 @@ class EvidenceGrowthActionPredictionService {
           isDynamic ? <String, dynamic>{} : _confirmedTheoryAnswer(construct, state);
       final theoryFactorId = '${theoryAnswer['factor_id'] ?? ''}';
       final theoryOptionId = '${theoryAnswer['option_id'] ?? ''}';
-      final theoryRawScore = theoryFactorId.isEmpty
+      final theoryOrdinalLevel = theoryFactorId.isEmpty
           ? null
-          : EvidenceBehaviorTheoryCatalog.supportScore(
+          : EvidenceBehaviorTheoryCatalog.ordinalLevel(
               theoryFactorId, theoryOptionId);
       final hasTheoryAnswer = theoryAnswer.isNotEmpty;
       final theoryUnknown = hasTheoryAnswer && theoryOptionId == 'unknown';
@@ -481,7 +481,7 @@ class EvidenceGrowthActionPredictionService {
       final useTheory = hasTheoryAnswer;
       final useJev = !useTheory && j != null;
       final score = useTheory
-          ? (theoryRawScore == null ? null : theoryRawScore / 4)
+          ? (theoryOrdinalLevel == null ? null : theoryOrdinalLevel / 4)
           : useJev
               ? j
               : a;
@@ -525,6 +525,7 @@ class EvidenceGrowthActionPredictionService {
         'theory_construct': construct,
         'theory_group': _theoryGroup(construct),
         'theory_answer': theoryAnswer,
+        'ordinal_level': theoryOrdinalLevel,
         'ai': a,
         'jev': j,
         'jev_raw_score': jevRow['raw_score'],
@@ -543,27 +544,38 @@ class EvidenceGrowthActionPredictionService {
       };
     }
 
+    int riskTier(GrowthData row) {
+      if (row['source'] == 'USER_CONFIRMED_THEORY') {
+        final level = row['ordinal_level'];
+        if (level == 0) return 3;
+        if (level == 1) return 2;
+        return 0;
+      }
+      final score = (row['score'] as num?)?.toDouble();
+      if (score == null) return 0;
+      if (score <= .20) return 3;
+      if (score < .50) return 2;
+      return 0;
+    }
+
     final riskRows = factors.entries
         .where((e) {
           final row = e.value;
-          final score = row['score'];
           final strength = row['evidence_strength'];
           return row['unknown'] != true &&
-              score is num &&
-              score < .5 &&
+              riskTier(row) > 0 &&
               strength is num &&
               strength.toDouble() >= .55;
         })
         .toList()
       ..sort((a, b) {
-        double priority(GrowthData row) {
-          final score = (row['score'] as num?)?.toDouble() ?? 1;
-          final strength =
-              (row['evidence_strength'] as num?)?.toDouble() ?? .5;
-          return (1 - score) * strength;
-        }
-
-        return priority(b.value).compareTo(priority(a.value));
+        final tierCompare = riskTier(b.value).compareTo(riskTier(a.value));
+        if (tierCompare != 0) return tierCompare;
+        final as =
+            (a.value['evidence_strength'] as num?)?.toDouble() ?? .5;
+        final bs =
+            (b.value['evidence_strength'] as num?)?.toDouble() ?? .5;
+        return bs.compareTo(as);
       });
 
     final disagreement = aiEstimate != null &&
@@ -658,7 +670,7 @@ class EvidenceGrowthActionPredictionService {
         'jev_confidence_semantics':
             'JEV confidence is model-reported confidence for its typed answer; it is not a statistical confidence interval or observed accuracy rate.',
         'theory_option_score_semantics':
-            'Confirmed standardized options are transparently mapped from ordered blocker→support choices to 0..4 for factor display/ranking only; they are not fitted behavioral coefficients.',
+            'Confirmed standardized options are ordinal categories (0<1<2<3<4). Adjacent distances are not assumed equal. Ordinal levels are for display/categorical blocker ordering only; they are not fitted coefficients, fixed theory weights, or behavior probabilities.',
       },
       'agreement': disagreement
           ? 'MODEL_DISAGREEMENT'
@@ -737,9 +749,8 @@ class EvidenceGrowthActionPredictionService {
             'score': e.value['score'],
             'source': e.value['source'],
             'evidence_strength': e.value['evidence_strength'],
-            'priority':
-                (1 - ((e.value['score'] as num?)?.toDouble() ?? 1)) *
-                    ((e.value['evidence_strength'] as num?)?.toDouble() ?? .5),
+            'risk_tier': riskTier(e.value),
+            'ordinal_level': e.value['ordinal_level'],
             'evidence': e.value['evidence'],
           }
       ],
