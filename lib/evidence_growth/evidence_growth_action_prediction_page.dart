@@ -516,10 +516,10 @@ class _EvidenceGrowthActionPredictionPageState
     return ExpansionTile(
         initiallyExpanded: true,
         tilePadding: EdgeInsets.zero,
-        title: const Text('选择行为预测理论',
+        title: const Text('选择行为预测理论／扩展',
             style: TextStyle(fontWeight: FontWeight.w800)),
         subtitle: Text(
-            '当前已选 ${selectedTheoryIds.length} 套。相同构念会自动去重；专业量表选项不会替代正式心理测量。'),
+            '当前已选 ${selectedTheoryIds.length} 个理论包／扩展。TPB、IBM、COM-B、SCT、HAPA是理论/模型；执行意图是独立的意志性自我调节扩展。相同构念会自动去重；程序选项不是原作者的正式量表。'),
         children: [
           Align(
               alignment: Alignment.centerLeft,
