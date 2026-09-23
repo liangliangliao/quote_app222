@@ -593,10 +593,22 @@ class EvidenceGrowthActionPredictionService {
     UnifiedAiResolvedConfig config;
     try {
       config = await _ai.resolveGlobalConfig();
-    } catch (_) {
-      return _fallbackActionProfile(state);
+    } catch (e) {
+      return _fallbackActionProfile(
+        state,
+        reason: 'AI_CONFIG_ERROR',
+        detail: _safeAnalysisError(e),
+      );
     }
-    if (!config.available) return _fallbackActionProfile(state);
+    if (!config.available) {
+      return _fallbackActionProfile(
+        state,
+        reason: 'AI_NOT_CONFIGURED',
+        detail: '当前统一AI配置不可用，请检查供应商、模型和API Key。',
+        provider: config.provider,
+        model: config.displayModel,
+      );
+    }
 
     try {
       final raw = await _ai.generateText(
@@ -709,8 +721,18 @@ ${jsonEncode(preservedFactorCatalog)}
 }''',
         expectJson: true,
         temperature: .05,
-        maxTokens: 2200,
-      ).timeout(const Duration(seconds: 25));
+        maxTokens: 5200,
+      );
+
+      if (raw.trim().isEmpty) {
+        return _fallbackActionProfile(
+          state,
+          reason: 'AI_EMPTY_RESPONSE',
+          detail: 'AI调用已完成，但没有返回可解析内容。',
+          provider: config.provider,
+          model: config.displayModel,
+        );
+      }
 
       final decoded = _decode(raw);
       final events = growthRows(decoded['forecast_events'])
@@ -721,7 +743,15 @@ ${jsonEncode(preservedFactorCatalog)}
               '${e['false_criterion'] ?? ''}'.trim().isNotEmpty)
           .take(4)
           .toList();
-      if (events.isEmpty) return _fallbackActionProfile(state);
+      if (events.isEmpty) {
+        return _fallbackActionProfile(
+          state,
+          reason: 'AI_INVALID_ACTION_CONTRACT',
+          detail: 'AI返回了内容，但没有生成有效的可观察预测事件。',
+          provider: config.provider,
+          model: config.displayModel,
+        );
+      }
 
       var primarySeen = false;
       for (final event in events) {
@@ -829,6 +859,11 @@ ${jsonEncode(preservedFactorCatalog)}
 
       return {
         'version': 'ibm_action_v2',
+        'analysis_status': 'READY',
+        'analysis_provider': config.provider,
+        'analysis_model': config.displayModel,
+        'analysis_error_code': '',
+        'analysis_error_detail': '',
         'theory_model': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
         'normalized_action':
             _cleanUserText('${decoded['normalized_action'] ?? ''}').isEmpty
@@ -861,13 +896,30 @@ ${jsonEncode(preservedFactorCatalog)}
         'failure_modes':
             growthRows(decoded['failure_modes']).take(6).toList(),
       };
-    } catch (_) {
-      return _fallbackActionProfile(state);
+    } catch (e) {
+      return _fallbackActionProfile(
+        state,
+        reason: 'AI_ANALYSIS_FAILED',
+        detail: _safeAnalysisError(e),
+        provider: config.provider,
+        model: config.displayModel,
+      );
     }
   }
 
-  GrowthData _fallbackActionProfile(GrowthData state) => {
+  GrowthData _fallbackActionProfile(
+    GrowthData state, {
+    String reason = 'AI_UNAVAILABLE',
+    String detail = '',
+    String provider = '',
+    String model = '',
+  }) => {
         'version': 'ibm_action_v2_fallback',
+        'analysis_status': 'FALLBACK',
+        'analysis_provider': provider,
+        'analysis_model': model,
+        'analysis_error_code': reason,
+        'analysis_error_detail': detail,
         'theory_model': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
         'normalized_action': '${state['plan'] ?? ''}'.trim(),
         'action_mode': 'OTHER',
@@ -1141,14 +1193,70 @@ ${jsonEncode(state)}
 
   static GrowthData _decode(String raw) {
     var text = raw.trim();
+    if (text.isEmpty) throw const FormatException('EMPTY_AI_RESPONSE');
+
     final fence = String.fromCharCodes([96, 96, 96]);
     if (text.startsWith(fence)) {
-      text = text.replaceFirst(RegExp(r'^...(?:json)?\s*'), '');
-      text = text.replaceFirst(RegExp(r'\s*...$'), '');
+      text = text.replaceFirst(RegExp(r'^\x60\x60\x60(?:json)?\s*'), '');
+      text = text.replaceFirst(RegExp(r'\s*\x60\x60\x60$'), '');
     }
-    final value = jsonDecode(text);
-    if (value is! Map) throw const FormatException('INVALID_JSON_OBJECT');
-    return growthMap(value);
+
+    try {
+      final value = jsonDecode(text);
+      if (value is! Map) throw const FormatException('INVALID_JSON_OBJECT');
+      return growthMap(value);
+    } catch (_) {
+      // Some providers still prepend a short sentence even with JSON mode.
+      // Extract the first balanced top-level JSON object instead of silently
+      // discarding an otherwise valid LLM analysis.
+      final object = _extractBalancedJsonObject(text);
+      if (object == null) {
+        throw const FormatException('INVALID_AI_JSON');
+      }
+      final value = jsonDecode(object);
+      if (value is! Map) throw const FormatException('INVALID_JSON_OBJECT');
+      return growthMap(value);
+    }
+  }
+
+  static String? _extractBalancedJsonObject(String text) {
+    final start = text.indexOf('{');
+    if (start < 0) return null;
+    var depth = 0;
+    var inString = false;
+    var escaped = false;
+    for (var i = start; i < text.length; i++) {
+      final ch = text.codeUnitAt(i);
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch == 92) {
+          escaped = true;
+        } else if (ch == 34) {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch == 34) {
+        inString = true;
+      } else if (ch == 123) {
+        depth++;
+      } else if (ch == 125) {
+        depth--;
+        if (depth == 0) return text.substring(start, i + 1);
+      }
+    }
+    return null;
+  }
+
+  static String _safeAnalysisError(Object error) {
+    var text = error.toString().trim();
+    if (text.isEmpty) return error.runtimeType.toString();
+    text = text
+        .replaceAll(RegExp(r'Bearer\s+[A-Za-z0-9._-]+'), 'Bearer ***')
+        .replaceAll(RegExp(r'sk-[A-Za-z0-9_-]+'), 'sk-***');
+    if (text.length > 240) text = '${text.substring(0, 240)}…';
+    return text;
   }
 
   static double? _prob(Object? value) {
