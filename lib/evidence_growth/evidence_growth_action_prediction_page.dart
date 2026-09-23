@@ -45,9 +45,14 @@ class _EvidenceGrowthActionPredictionPageState
   final appliedImprovements = <String>{};
 
   String commitmentStrength = '不清楚';
+  String instrumentalAttitude = '不清楚';
   String valueSalience = '不清楚';
-  String historyPattern = '不清楚';
+  String injunctiveNorm = '不清楚';
+  String descriptiveNorm = '不清楚';
   String selfEfficacy = '不清楚';
+  String perceivedControl = '不清楚';
+  String knowledgeSkills = '不清楚';
+  String historyPattern = '不清楚';
   String decisionStability = '不清楚';
 
   DateTime? scheduledAt;
@@ -157,6 +162,41 @@ class _EvidenceGrowthActionPredictionPageState
     '有明显责任／损失',
     '错过会失去重要机会',
     '结果对我现在非常重要'
+  ];
+  static const attitudeOptions = [
+    '明显不值得做',
+    '有些不值得',
+    '不清楚',
+    '比较值得做',
+    '非常值得做'
+  ];
+  static const normOptions = [
+    '重要他人明确反对',
+    '重要他人有些反对',
+    '不清楚',
+    '重要他人有些支持',
+    '重要他人明确支持／期待'
+  ];
+  static const descriptiveNormOptions = [
+    '重要他人多数不这样做',
+    '较少这样做',
+    '不清楚',
+    '不少人会这样做',
+    '重要他人多数这样做'
+  ];
+  static const controlOptions = [
+    '几乎不受我控制',
+    '受我控制较少',
+    '不清楚',
+    '大部分受我控制',
+    '基本由我决定和控制'
+  ];
+  static const knowledgeSkillOptions = [
+    '明显缺少必要知识／技能',
+    '还有关键欠缺',
+    '不清楚',
+    '基本具备',
+    '完全具备'
   ];
   static const stabilityOptions = [
     '到时还会重新考虑',
@@ -316,13 +356,22 @@ class _EvidenceGrowthActionPredictionPageState
         'physical_state': physicalState.toList(),
         'commitment':
             commitmentStrength == '不清楚' ? '' : commitmentStrength,
+        'instrumental_attitude':
+            instrumentalAttitude == '不清楚' ? '' : instrumentalAttitude,
         'value_salience': valueSalience == '不清楚' ? '' : valueSalience,
+        'injunctive_norm': injunctiveNorm == '不清楚' ? '' : injunctiveNorm,
+        'descriptive_norm':
+            descriptiveNorm == '不清楚' ? '' : descriptiveNorm,
         'emotions': emotions.toList(),
         'frictions': frictions.toList(),
         'commitments': commitments.toList(),
         'alternatives': alternatives.toList(),
         'execution_support': executionSupport.toList(),
         'self_efficacy': selfEfficacy == '不清楚' ? '' : selfEfficacy,
+        'perceived_control':
+            perceivedControl == '不清楚' ? '' : perceivedControl,
+        'knowledge_skills':
+            knowledgeSkills == '不清楚' ? '' : knowledgeSkills,
         'decision_stability':
             decisionStability == '不清楚' ? '' : decisionStability,
         'history_pattern': historyPattern == '不清楚' ? '' : historyPattern,
