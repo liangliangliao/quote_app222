@@ -1443,7 +1443,6 @@ class _EvidenceGrowthActionPredictionPageState
         '${jevFlow['dominant_failure_evidence'] ?? ''}'.trim();
     final dominantSource =
         '${jevFlow['dominant_failure_source'] ?? ''}'.trim();
-    final provenance = growthMap(result['forecast_provenance']);
     final historyBaseline = growthMap(result['history_baseline']);
     final theoryCompleteness =
         growthMap(result['theory_input_completeness']);
@@ -1761,7 +1760,7 @@ class _EvidenceGrowthActionPredictionPageState
                         const SizedBox(height: 8),
                         if (source == 'USER_CONFIRMED_THEORY')
                           Text(
-                              '标准选项支持刻度：${(score.toDouble() * 4).toStringAsFixed(1)} / 4',
+                              '标准选项序位：${row['ordinal_level'] ?? '—'} / 4',
                               style:
                                   const TextStyle(fontWeight: FontWeight.w700))
                         else if (source == 'JEV' && row['jev_raw_score'] is num)
@@ -1777,7 +1776,7 @@ class _EvidenceGrowthActionPredictionPageState
                         const SizedBox(height: 3),
                         Text(
                             source == 'USER_CONFIRMED_THEORY'
-                                ? '这是把你确认的有序标准选项透明映射到0~4，仅用于因素展示和阻碍排序；不是行动概率，也不是理论固定权重。'
+                                ? '这里只表示选项顺序：0更偏阻碍、4更偏支持；相邻等级不假设等距。它仅用于展示和分级排序，不是行动概率、理论权重或回归系数。'
                                 : '评分含义：0=强阻碍，2=中性／信息不足，4=强支持。它不是行动成功概率，也不是理论构念的固定权重。',
                             style: const TextStyle(
                                 fontSize: 12, color: Colors.black54)),
