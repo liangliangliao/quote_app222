@@ -445,6 +445,7 @@ class _EvidenceGrowthActionPredictionPageState
         ..clear()
         ..addAll(changes);
       if (revised.isNotEmpty) plan.text = revised;
+      _invalidateActionProfile();
     });
     await predict();
   }
