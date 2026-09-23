@@ -1203,78 +1203,143 @@ class _EvidenceGrowthActionPredictionPageState
 
   Widget _factorDetails() {
     if (result.isEmpty) return const SizedBox.shrink();
-    final factors = growthMap(result['factors']).entries.toList()
-      ..sort((a, b) {
-        final ar = growthMap(a.value);
-        final br = growthMap(b.value);
-        if (ar['unknown'] == true && br['unknown'] != true) return 1;
-        if (ar['unknown'] != true && br['unknown'] == true) return -1;
-        final av = ar['display_score'] as num?;
-        final bv = br['display_score'] as num?;
-        return (av ?? 2).compareTo(bv ?? 2);
-      });
+    final entries = growthMap(result['factors']).entries.toList();
+
+    int compareRows(MapEntry<String, dynamic> a, MapEntry<String, dynamic> b) {
+      final ar = growthMap(a.value);
+      final br = growthMap(b.value);
+      if (ar['unknown'] == true && br['unknown'] != true) return 1;
+      if (ar['unknown'] != true && br['unknown'] == true) return -1;
+      final av = ar['display_score'] as num?;
+      final bv = br['display_score'] as num?;
+      return (av ?? 2).compareTo(bv ?? 2);
+    }
+
+    Widget factorTile(MapEntry<String, dynamic> entry) {
+      final row = growthMap(entry.value);
+      final score = row['display_score'];
+      final confidence = row['confidence'];
+      final state = _factorState(row);
+      final source = '${row['source'] ?? 'NONE'}';
+      final construct = '${row['theory_construct'] ?? entry.key}';
+      final mapped = row['is_dynamic'] == true
+          ? ' · 归入：${_constructLabel(construct)}'
+          : '';
+      return ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          leading: Icon(_factorIcon(row), color: _teal),
+          title: Text('${row['label'] ?? entry.key}'),
+          subtitle: Text(row['unknown'] == true
+              ? '待补充 · 当前证据不足$mapped'
+              : '$state · $source 判断把握：${_confidenceLabel(confidence)}$mapped'),
+          children: [
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${row['evidence'] ?? ''}'),
+                      if (score is num) ...[
+                        const SizedBox(height: 8),
+                        if (source == 'JEV' && row['jev_raw_score'] is num)
+                          Text(
+                              'JEV 支持评分：${(row['jev_raw_score'] as num).toStringAsFixed(1)} / 4',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700))
+                        else
+                          Text(
+                              'LLM 支持评分：${(score.toDouble() * 100).round()} / 100',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 3),
+                        const Text(
+                            '评分含义：0=强阻碍，2=中性／信息不足，4=强支持。它不是行动成功概率，也不是理论构念的固定权重。',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.black54)),
+                      ],
+                      if (confidence is num) ...[
+                        const SizedBox(height: 5),
+                        Text('$source 对上述评分的置信度：${_pct(confidence)}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.black54))
+                      ]
+                    ]))
+          ]);
+    }
+
+    const groupOrder = [
+      'INTENTION_FORMATION',
+      'DIRECT_BEHAVIOR',
+      'VOLITIONAL_EXTENSION'
+    ];
+    final core = entries.where((e) => growthMap(e.value)['is_dynamic'] != true);
+    final dynamic =
+        entries.where((e) => growthMap(e.value)['is_dynamic'] == true).toList()
+          ..sort(compareRows);
 
     return Card(
         elevation: 0,
         child: ExpansionTile(
-            title: const Text('查看当前行动的决定因素',
+            title: const Text('查看理论模型中的决定因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('核心因素会按行动类型筛选，还会加入这个行动特有的动态因素'),
+            subtitle: const Text(
+                '按 IBM 的因果层级展示；执行意图明确标为扩展，不再把所有因素平铺成一组'),
             children: [
-              for (final entry in factors)
+              for (final group in groupOrder) ...[
                 Builder(builder: (_) {
-                  final row = growthMap(entry.value);
-                  final score = row['display_score'];
-                  final confidence = row['confidence'];
-                  final state = _factorState(row);
-                  final source = '${row['source'] ?? 'NONE'}';
-                  return ExpansionTile(
-                      tilePadding:
-                          const EdgeInsets.symmetric(horizontal: 16),
-                      leading: Icon(_factorIcon(row), color: _teal),
-                      title: Text('${row['label'] ?? entry.key}'),
-                      subtitle: Text(row['unknown'] == true
-                          ? '待补充 · 当前证据不足'
-                          : '$state · $source 判断把握：${_confidenceLabel(confidence)}'),
+                  final rows = core
+                      .where((e) =>
+                          growthMap(e.value)['theory_group'] == group)
+                      .toList()
+                    ..sort(compareRows);
+                  if (rows.isEmpty) return const SizedBox.shrink();
+                  return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('${row['evidence'] ?? ''}'),
-                                  if (score is num) ...[
-                                    const SizedBox(height: 8),
-                                    if (source == 'JEV' &&
-                                        row['jev_raw_score'] is num)
-                                      Text(
-                                          'JEV 支持评分：${(row['jev_raw_score'] as num).toStringAsFixed(1)} / 4',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w700))
-                                    else
-                                      Text(
-                                          'LLM 支持评分：${(score.toDouble() * 100).round()} / 100',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 3),
-                                    const Text(
-                                        '评分含义：0=强阻碍，2=中性／信息不足，4=强支持。它不是行动成功概率，也不是这个因素的重要性权重。',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.black54)),
-                                  ],
-                                  if (confidence is num) ...[
-                                    const SizedBox(height: 5),
-                                    Text(
-                                        '$source 对上述评分的置信度：${_pct(confidence)}',
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.black54))
-                                  ]
-                                ]))
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                            child: Text(_groupLabel(group),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900))),
+                        if (group == 'INTENTION_FORMATION')
+                          const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+                              child: Text(
+                                  '这些构念主要解释“意向怎样形成”，不是直接和最终行为做简单平均。',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54))),
+                        if (group == 'DIRECT_BEHAVIOR')
+                          const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+                              child: Text(
+                                  'IBM认为这些因素直接影响行为是否发生。',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54))),
+                        if (group == 'VOLITIONAL_EXTENSION')
+                          const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+                              child: Text(
+                                  '这是执行意图（if-then）扩展，用于处理“已经想做但没有真正行动”的意向—行为缺口。',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54))),
+                        for (final row in rows) factorTile(row),
                       ]);
                 })
+              ],
+              if (dynamic.isNotEmpty) ...[
+                const Divider(),
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Text(_groupLabel('ACTION_SPECIFIC'),
+                        style: const TextStyle(fontWeight: FontWeight.w900))),
+                const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+                    child: Text(
+                        'AI只负责从当前行为中提取具体显著信念／现实条件，并把它们映射回IBM构念，而不是另造一套心理学因素。',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.black54))),
+                for (final row in dynamic) factorTile(row),
+              ]
             ]));
   }
 
