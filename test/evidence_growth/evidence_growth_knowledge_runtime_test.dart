@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_dao.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_action_prediction.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_journey_models.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_journey_store.dart';
@@ -308,6 +309,44 @@ void main() {
     await jev.rank({'changed': true}, [n], apiKey: 'key');
     expect(calls, 1);
     client.close();
+  });
+  test('JEV action prediction asks overall plus all nine typed factors', () {
+    final request = EvidenceGrowthJev.actionRequest({
+      'plan': '明天 8:00 出门去体检',
+      'current_context': '已经预约，地点较远'
+    }, 'jev-latest');
+    final questions = request['questions'] as Map;
+    expect(questions, contains('execute_on_time'));
+    for (final key in EvidenceGrowthJev.actionFactors.keys) {
+      expect(questions, contains('factor_$key'));
+    }
+    final parsed = EvidenceGrowthJev.parseAction({
+      'model': 'jev-latest',
+      'answers': {
+        'execute_on_time': {'type': 'noul', 'noul': .72},
+        for (final key in EvidenceGrowthJev.actionFactors.keys)
+          'factor_$key': {'type': 'noul', 'noul': .61},
+      }
+    });
+    expect(parsed['overall'], .72);
+    expect(growthMap(parsed['factors'])['decision_stability'], .61);
+  });
+  test('action prediction records reality outcome for later personal calibration',
+      () async {
+    final prediction =
+        EvidenceGrowthActionPredictionService(dao: dao);
+    await prediction.savePrediction({
+      'id': 'prediction-1',
+      'plan': '去体检',
+      'estimate': .64,
+      'outcome': 'PENDING',
+      'scheduled_at_ms': 1,
+    });
+    await prediction.recordOutcome('prediction-1', 'ON_TIME');
+    final rows = await prediction.history();
+    expect(rows.single['outcome'], 'ON_TIME');
+    expect(EvidenceGrowthActionPredictionService.band(.64),
+        '中等，仍有明显变数');
   });
   testWidgets('learning opens all stages and browsing does not mark mastery',
       (tester) async {
