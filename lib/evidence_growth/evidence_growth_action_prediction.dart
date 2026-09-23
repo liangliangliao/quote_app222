@@ -720,7 +720,7 @@ class EvidenceGrowthActionPredictionService {
   }) async {
     final theories = _validTheoryIds(selectedTheoryIds);
     final factorDefs =
-        EvidenceBehaviorTheoryCatalog.activeFactors(theories).take(28).toList();
+        EvidenceBehaviorTheoryCatalog.activeFactors(theories).toList();
     final factorIds =
         factorDefs.map((e) => '${e['id']}').where((e) => e.isNotEmpty).toList();
 
@@ -907,7 +907,7 @@ ${jsonEncode(EvidenceBehaviorTheoryCatalog.theories.values
       );
       final decoded = _decode(raw);
       final selections = <String, GrowthData>{};
-      for (final row in growthRows(decoded['selections']).take(16)) {
+      for (final row in growthRows(decoded['selections']).take(40)) {
         final factorId = '${row['factor_id'] ?? ''}';
         final optionId = '${row['option_id'] ?? ''}';
         final factor = EvidenceBehaviorTheoryCatalog.factor(factorId);
