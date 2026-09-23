@@ -369,6 +369,176 @@ class EvidenceGrowthActionPredictionService {
     };
   }
 
+  Future<GrowthData> _interpretAction(GrowthData state) async {
+    UnifiedAiResolvedConfig config;
+    try {
+      config = await _ai.resolveGlobalConfig();
+    } catch (_) {
+      return _fallbackActionProfile(state);
+    }
+    if (!config.available) return _fallbackActionProfile(state);
+
+    try {
+      final raw = await _ai.generateText(
+        purpose: 'evidence_growth.action_interpretation',
+        systemPrompt: '''
+你是“通用行动语义解释器”，不是预测器。你的任务是把用户的一句话行动计划转换成可观察、可判定、适合概率预测的 action profile。
+
+必须遵守：
+1. 不预测成功率，不评价用户人格，不做心理诊断。
+2. 可以从语言中提取语义，但绝不能虚构现实事实。未知事实保持未知，并通过 clarifying_questions 提问。
+3. 先判断“成功到底是什么事件”。不同类型行动不能强行套用“按时出门”模型：
+   - INITIATE：开始某行为，如开始学习、开始跑步。
+   - COMPLETE：完成/提交一个结果，如交报告、办完手续。
+   - SUSTAIN：持续一段时间，如连续学习2小时。
+   - REFRAIN：在一段时间内不做某行为，如今天不抽烟。
+   - REPEAT：按频率重复，如每天跑步30分钟。
+   - INTERACT：与人/系统发生互动，如打电话、道歉、面试。
+   - SEQUENCE：多个依赖步骤组成的行动，如搬家、办证、完成项目。
+   - OTHER：确实无法归类。
+4. forecast_events 必须是可观察、可证伪的事件，1~4个；其中只能有一个 primary=true。不要把“有动力”“认真”等内部状态当作成功事件。
+5. relevant_core_factors 只能从以下键选择，并只选真正适用于当前行动的：
+feasibility,time_capacity,physical_capacity,prerequisite_readiness,commitment,value_salience,emotion,self_efficacy,decision_stability,specificity,trigger,preparation,friction,alternatives,external_commitment,history_habit
+6. dynamic_factors 只添加当前行动特有、固定核心因素覆盖不了的变量，0~6个。例如“对方是否接电话”“天气是否允许户外跑步”“文件是否需要第三方审批”“戒烟时是否接触吸烟场景”。不得重复核心因素。
+7. clarifying_questions 只问最可能显著改变预测的缺失事实，最多5个。问题要具体、容易回答；不要问泛泛的“还有什么吗”。
+8. failure_modes 必须针对当前行动生成，最多6个；每个是具体可识别的失败机制。
+9. 所有 id 只用小写英文字母、数字、下划线。
+10. 只输出 JSON。
+''',
+        prompt: '''INPUT:
+${jsonEncode(state)}
+
+返回：
+{
+  "version":"universal_action_v1",
+  "normalized_action":"把用户原话改写成明确、可观察的一句话",
+  "action_mode":"INITIATE|COMPLETE|SUSTAIN|REFRAIN|REPEAT|INTERACT|SEQUENCE|OTHER",
+  "action_tags":["最多5个语义标签"],
+  "interpretation":"一句自然中文说明你把这个行动理解成什么，不做预测",
+  "forecast_events":[
+    {
+      "id":"observable_event",
+      "label":"给用户看的事件名称",
+      "true_criterion":"English: precise observable criterion for event=true",
+      "false_criterion":"English: precise observable criterion for event=false",
+      "primary":true
+    }
+  ],
+  "relevant_core_factors":["只从允许键中选择"],
+  "dynamic_factors":[
+    {
+      "id":"action_specific_factor",
+      "label":"中文因素名",
+      "condition":"English condition whose presence supports the primary event",
+      "evidence":"若输入中已有相关事实，用中文概括；没有则为空"
+    }
+  ],
+  "clarifying_questions":[
+    {
+      "id":"missing_fact",
+      "question":"中文具体问题？",
+      "why":"为什么它会显著改变预测",
+      "criticality":0.0,
+      "answer_type":"text|choice",
+      "options":["choice时才给简短选项"]
+    }
+  ],
+  "failure_modes":[
+    {
+      "id":"specific_failure",
+      "label":"中文失败机制",
+      "criterion":"English criterion describing this failure mechanism"
+    }
+  ]
+}''',
+        expectJson: true,
+        temperature: .05,
+        maxTokens: 2200,
+      ).timeout(const Duration(seconds: 25));
+
+      final decoded = _decode(raw);
+      final events = growthRows(decoded['forecast_events'])
+          .where((e) =>
+              '${e['id'] ?? ''}'.trim().isNotEmpty &&
+              '${e['label'] ?? ''}'.trim().isNotEmpty &&
+              '${e['true_criterion'] ?? ''}'.trim().isNotEmpty &&
+              '${e['false_criterion'] ?? ''}'.trim().isNotEmpty)
+          .take(4)
+          .toList();
+      if (events.isEmpty) return _fallbackActionProfile(state);
+
+      var primarySeen = false;
+      for (final event in events) {
+        if (event['primary'] == true && !primarySeen) {
+          primarySeen = true;
+        } else {
+          event['primary'] = false;
+        }
+      }
+      if (!primarySeen) events.first['primary'] = true;
+
+      const allowedModes = {
+        'INITIATE',
+        'COMPLETE',
+        'SUSTAIN',
+        'REFRAIN',
+        'REPEAT',
+        'INTERACT',
+        'SEQUENCE',
+        'OTHER'
+      };
+      final mode = '${decoded['action_mode'] ?? 'OTHER'}'.toUpperCase();
+
+      return {
+        'version': 'universal_action_v1',
+        'normalized_action':
+            _cleanUserText('${decoded['normalized_action'] ?? ''}').isEmpty
+                ? '${state['plan'] ?? ''}'.trim()
+                : _cleanUserText('${decoded['normalized_action']}'),
+        'action_mode': allowedModes.contains(mode) ? mode : 'OTHER',
+        'action_tags': growthStrings(decoded['action_tags']).take(5).toList(),
+        'interpretation':
+            _cleanUserText('${decoded['interpretation'] ?? ''}'),
+        'forecast_events': events,
+        'relevant_core_factors': growthStrings(decoded['relevant_core_factors'])
+            .where(factorLabels.containsKey)
+            .toSet()
+            .toList(),
+        'dynamic_factors':
+            growthRows(decoded['dynamic_factors']).take(6).toList(),
+        'clarifying_questions':
+            growthRows(decoded['clarifying_questions']).take(5).toList(),
+        'failure_modes':
+            growthRows(decoded['failure_modes']).take(6).toList(),
+      };
+    } catch (_) {
+      return _fallbackActionProfile(state);
+    }
+  }
+
+  GrowthData _fallbackActionProfile(GrowthData state) => {
+        'version': 'universal_action_v1_fallback',
+        'normalized_action': '${state['plan'] ?? ''}'.trim(),
+        'action_mode': 'OTHER',
+        'action_tags': <String>[],
+        'interpretation': '按你输入的原始行动进行通用预测；当前无法完成更细的行动类型解析。',
+        'forecast_events': [
+          {
+            'id': 'primary_success',
+            'label': '目标行动按约定发生',
+            'true_criterion':
+                'The observable action described by the user occurs within the intended opportunity or horizon.',
+            'false_criterion':
+                'The observable action described by the user does not occur within the intended opportunity or horizon.',
+            'primary': true,
+          }
+        ],
+        'relevant_core_factors': factorLabels.keys.toList(),
+        'dynamic_factors': <GrowthData>[],
+        'clarifying_questions': <GrowthData>[],
+        'failure_modes': <GrowthData>[],
+      };
+
   Future<GrowthData> _aiAssessment(GrowthData state) async {
     UnifiedAiResolvedConfig config;
     try {
