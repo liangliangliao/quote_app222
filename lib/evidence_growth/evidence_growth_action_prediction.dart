@@ -54,12 +54,44 @@ class EvidenceGrowthActionPredictionService {
     'none': '目前没有一个特别关键的缺失信息域。',
   };
 
+  Future<GrowthData> prepareAction({
+    required String plan,
+    DateTime? scheduledAt,
+    String context = '',
+    String similarHistory = '',
+    GrowthData structuredContext = const {},
+    GrowthJourney? journey,
+  }) async {
+    final action = plan.trim();
+    if (action.isEmpty) throw ArgumentError('请先写清楚准备做什么');
+    final state = <String, dynamic>{
+      'plan': action,
+      'scheduled_at': scheduledAt?.toIso8601String() ?? '',
+      'user_reported_conditions': structuredContext,
+      'additional_notes': context.trim(),
+      'similar_history_report': similarHistory.trim(),
+      if (journey != null)
+        'journey': {
+          'goal': journey.title,
+          'node': journey.node,
+          'status': journey.status,
+          'current_facts': journey.data['current'],
+          'belief': journey.data['belief'],
+          'plan': journey.plan,
+          'next_change': journey.data['next_change'],
+        },
+    };
+    return _interpretAction(state);
+  }
+
   Future<GrowthData> predict({
     required String plan,
     DateTime? scheduledAt,
     String context = '',
     String similarHistory = '',
     GrowthData structuredContext = const {},
+    GrowthData actionProfile = const {},
+    GrowthData clarificationAnswers = const {},
     GrowthJourney? journey,
     String jevApiKey = '',
   }) async {
@@ -111,6 +143,11 @@ class EvidenceGrowthActionPredictionService {
         ]
       },
     };
+
+    final profile =
+        actionProfile.isEmpty ? await _interpretAction(state) : actionProfile;
+    state['action_profile'] = profile;
+    state['clarification_answers'] = clarificationAnswers;
 
     final ai = await _aiAssessment(state);
     GrowthData jev = {'status': 'LOCAL', 'reason': 'JEV_NOT_CONFIGURED'};
