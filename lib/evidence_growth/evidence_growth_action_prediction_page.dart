@@ -89,16 +89,15 @@ class _EvidenceGrowthActionPredictionPageState
     '害怕',
     '抵触',
     '犹豫',
-    '疲惫'
+    '厌恶',
+    '羞耻／尴尬'
   ];
   static const frictionOptions = [
     '通勤远',
-    '时间紧',
-    '睡眠不足',
-    '身体疲劳',
+    '费用高',
+    '步骤多',
     '流程复杂',
     '不熟悉环境',
-    '担心做不好',
     '需要与陌生人互动'
   ];
   static const commitmentOptions = [
