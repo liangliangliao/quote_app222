@@ -310,23 +310,61 @@ void main() {
     expect(calls, 1);
     client.close();
   });
-  test('JEV action prediction uses decomposed typed workflow', () {
+  test('JEV action prediction follows the interpreted contract', () {
     final request = EvidenceGrowthJev.actionRequest({
-      'plan': '明天 8:00 出门去体检',
-      'user_reported_conditions': {
-        'commitment': '已经决定必须做',
-        'frictions': ['地点较远']
+      'plan': '周五前提交报告',
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'submit_report',
+            'label': '周五前提交报告',
+            'true_criterion':
+                'The report is submitted before the Friday deadline.',
+            'false_criterion':
+                'The report is not submitted before the Friday deadline.',
+            'primary': true,
+          },
+          {
+            'id': 'finish_draft',
+            'label': '完成可提交版本',
+            'true_criterion':
+                'A submission-ready draft is completed before the deadline.',
+            'false_criterion':
+                'No submission-ready draft is completed before the deadline.',
+            'primary': false,
+          }
+        ],
+        'relevant_core_factors': [
+          'time_capacity',
+          'prerequisite_readiness',
+          'commitment',
+          'specificity'
+        ],
+        'dynamic_factors': [
+          {
+            'id': 'review_dependency',
+            'label': '他人审核依赖',
+            'condition':
+                'Any required external review can be completed before the deadline.',
+            'evidence': ''
+          }
+        ],
+        'failure_modes': [
+          {
+            'id': 'review_delay',
+            'label': '审核延误',
+            'criterion':
+                'Required external review is not completed before the deadline.'
+          }
+        ]
       }
     }, 'jev-latest');
     final questions = request['questions'] as Map;
-    expect(questions, contains('start_on_time'));
-    expect(questions, contains('start_eventually'));
-    expect(questions, contains('complete_as_planned'));
+    expect(questions, contains('event_submit_report'));
+    expect(questions, contains('event_finish_draft'));
+    expect(questions, contains('factor_time_capacity'));
+    expect(questions, contains('factor_dynamic_review_dependency'));
     expect(questions, contains('dominant_failure_mode'));
-    for (final key in EvidenceGrowthJev.actionFactors.keys) {
-      expect(questions, contains('factor_$key'));
-      expect((questions['factor_$key'] as Map)['type'], 'score');
-    }
 
     final scoreAnswer = {
       'type': 'score',
@@ -344,32 +382,33 @@ void main() {
     final parsed = EvidenceGrowthJev.parseAction({
       'model': 'jev-latest',
       'answers': {
-        'start_on_time': {'type': 'noul', 'noul': .72},
-        'start_eventually': {'type': 'noul', 'noul': .81},
-        'complete_as_planned': {'type': 'noul', 'noul': .66},
+        'event_submit_report': {'type': 'noul', 'noul': .72},
+        'event_finish_draft': {'type': 'noul', 'noul': .81},
         'hard_blocker': {'type': 'noul', 'noul': .12},
-        for (final key in EvidenceGrowthJev.actionFactors.keys)
-          'factor_$key': scoreAnswer,
+        'factor_time_capacity': scoreAnswer,
+        'factor_prerequisite_readiness': scoreAnswer,
+        'factor_commitment': scoreAnswer,
+        'factor_specificity': scoreAnswer,
+        'factor_dynamic_review_dependency': scoreAnswer,
         'dominant_failure_mode': {
           'type': 'choice',
-          'choice': 'practical_friction',
+          'choice': 'review_delay',
           'confidence': .7,
-          'probabilities': {'practical_friction': .55, 'insufficient_evidence': .45}
-        },
-        'most_decisive_missing_domain': {
-          'type': 'choice',
-          'choice': 'history_habit',
-          'confidence': .64,
-          'probabilities': {'history_habit': .58, 'none': .42}
+          'probabilities': {
+            'review_delay': .55,
+            'insufficient_evidence': .45
+          }
         },
       }
     });
     expect(parsed['overall'], .72);
-    expect(growthMap(parsed['forecasts'])['start_eventually'], .81);
-    expect(growthMap(growthMap(parsed['factors'])['decision_stability'])['score'],
+    expect(growthMap(parsed['events'])['finish_draft'], .81);
+    expect(
+        growthMap(growthMap(parsed['factors'])['dynamic_review_dependency'])[
+            'score'],
         .6);
     expect(growthMap(parsed['dominant_failure_mode'])['choice'],
-        'practical_friction');
+        'review_delay');
   });
 
   test('action prediction records reality outcome for later personal calibration',
@@ -383,9 +422,9 @@ void main() {
       'outcome': 'PENDING',
       'scheduled_at_ms': 1,
     });
-    await prediction.recordOutcome('prediction-1', 'ON_TIME');
+    await prediction.recordOutcome('prediction-1', 'SUCCESS');
     final rows = await prediction.history();
-    expect(rows.single['outcome'], 'ON_TIME');
+    expect(rows.single['outcome'], 'SUCCESS');
     expect(EvidenceGrowthActionPredictionService.band(.64),
         '有一定把握，但仍可能被打断');
   });
