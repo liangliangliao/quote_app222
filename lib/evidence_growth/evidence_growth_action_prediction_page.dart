@@ -817,8 +817,9 @@ class _EvidenceGrowthActionPredictionPageState
     final source = '${result['forecast_source'] ?? ''}';
     final dominantFailure =
         '${jevFlow['dominant_failure_label'] ?? ''}'.trim();
-    final missingDomain =
+    final missingQuestion =
         '${jevFlow['most_decisive_missing_label'] ?? ''}'.trim();
+    final eventRows = growthRows(jevFlow['events']);
     final hardBlocker = jevFlow['hard_blocker'];
 
     return _section(
@@ -853,20 +854,20 @@ class _EvidenceGrowthActionPredictionPageState
                     fontSize: 12, color: Colors.black54)),
             if (source == 'JEV_PRIMARY') ...[
               const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                Chip(
-                    label:
-                        Text('按时开始 ${_pct(jevFlow['start_on_time'])}')),
-                Chip(
-                    label:
-                        Text('当天最终开始 ${_pct(jevFlow['start_eventually'])}')),
-                Chip(
-                    label:
-                        Text('完成计划 ${_pct(jevFlow['complete_as_planned'])}')),
-              ]),
+              Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: eventRows
+                      .map((event) => Chip(
+                          avatar: event['primary'] == true
+                              ? const Icon(Icons.star, size: 16)
+                              : null,
+                          label: Text(
+                              '${event['label'] ?? '事件'} ${_pct(event['probability'])}')))
+                      .toList()),
               const SizedBox(height: 6),
               const Text(
-                  '以上三个百分数是 JEV 对三个具体事件的概率判断；它们和下面“因素支持度”不是同一种百分数。',
+                  '这些百分数分别对应当前行动中真实可观察的事件；AI 会根据“打电话、戒烟、提交报告、跑步、长期习惯”等不同类型动态定义事件。',
                   style: TextStyle(fontSize: 12, color: Colors.black54)),
               if (hardBlocker is num && hardBlocker.toDouble() >= .6) ...[
                 const SizedBox(height: 10),
@@ -880,11 +881,11 @@ class _EvidenceGrowthActionPredictionPageState
                     'JEV 最可能失败机制：$dominantFailure（判断把握 ${_pct(jevFlow['dominant_failure_confidence'])}）',
                     style: const TextStyle(fontWeight: FontWeight.w700))
               ],
-              if (missingDomain.isNotEmpty &&
-                  jevFlow['most_decisive_missing_domain'] != 'none') ...[
+              if (missingQuestion.isNotEmpty &&
+                  jevFlow['most_decisive_missing_question'] != 'none') ...[
                 const SizedBox(height: 6),
                 Text(
-                    'JEV 认为最值得补充的信息：$missingDomain（判断把握 ${_pct(jevFlow['missing_domain_confidence'])}）')
+                    'JEV 认为最值得补充的信息：$missingQuestion（判断把握 ${_pct(jevFlow['missing_question_confidence'])}）')
               ],
             ],
           ] else
@@ -1039,9 +1040,9 @@ class _EvidenceGrowthActionPredictionPageState
     return Card(
         elevation: 0,
         child: ExpansionTile(
-            title: const Text('查看完整 16 个决定因素',
+            title: const Text('查看当前行动的决定因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('这里只显示“阻碍／中性／支持／未知”，避免把因素支持度误当成行动概率'),
+            subtitle: const Text('核心因素会按行动类型筛选，还会加入这个行动特有的动态因素'),
             children: [
               for (final entry in factors)
                 Builder(builder: (_) {
@@ -1244,6 +1245,7 @@ class _EvidenceGrowthActionPredictionPageState
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           _inputCard(),
+          _profileCard(),
           if (result.isNotEmpty) ...[
             _summaryCard(),
             _improvementCard(),
