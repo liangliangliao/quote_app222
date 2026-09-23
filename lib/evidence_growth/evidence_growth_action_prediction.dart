@@ -222,9 +222,14 @@ class EvidenceGrowthActionPredictionService {
 
     final requestedCore = growthStrings(profile['relevant_core_factors'])
         .where(factorLabels.containsKey)
-        .toList();
-    final coreKeys =
-        requestedCore.isEmpty ? factorLabels.keys.toList() : requestedCore;
+        .toSet();
+    final coreKeys = requestedCore.isEmpty
+        ? factorLabels.keys.toList()
+        : <String>{
+            ...EvidenceGrowthJev.ibmDirectFactors,
+            ...requestedCore,
+            'implementation_intention',
+          }.toList();
     for (final key in coreKeys) {
       activeLabels[key] = factorLabels[key]!;
     }
@@ -269,6 +274,12 @@ class EvidenceGrowthActionPredictionService {
         'confidence': confidence,
         'unknown': unknown,
         'source': useJev ? 'JEV' : a != null ? 'AI' : 'NONE',
+        'theory_construct': dynamicByKey.containsKey(key)
+            ? '${dynamicByKey[key]!['ibm_construct'] ?? 'environmental_constraints'}'
+            : key,
+        'theory_group': _theoryGroup(dynamicByKey.containsKey(key)
+            ? '${dynamicByKey[key]!['ibm_construct'] ?? 'environmental_constraints'}'
+            : key),
         'ai': a,
         'jev': j,
         'jev_raw_score': jevRow['raw_score'],
@@ -852,6 +863,13 @@ ${jsonEncode(state)}
     ];
     return tokens.any(text.contains) ||
         RegExp(r'\b[a-z]+_[a-z_]+\b').hasMatch(text);
+  }
+
+  static String _theoryGroup(String construct) {
+    for (final entry in EvidenceGrowthJev.actionFactorGroups.entries) {
+      if (entry.value.contains(construct)) return entry.key;
+    }
+    return 'ACTION_SPECIFIC';
   }
 
   static String _dynamicEvidence(GrowthData row) {
