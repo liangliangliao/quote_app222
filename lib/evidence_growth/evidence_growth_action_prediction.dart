@@ -768,7 +768,7 @@ class EvidenceGrowthActionPredictionService {
 9. 重叠理论不要机械同时选择。若两个理论覆盖高度重复，只保留更能解释当前问题的那个；若互补，说明各自角色。
 10. 必须综合用户原始输入、补充事实、过去相似行为、AI解析出的行动类型/边界/失败机制。不要根据用户人格做无根据推断。
 11. 对全部候选都给 suitability 0~1、role、reason；selected 表示是否建议自动勾选。
-12. AUTO_SELECTED：selected=true 且 suitability>=0.72。若没有任何理论达到0.72，仍选择 suitability 最高的一个作为 PRIMARY。
+12. AUTO_SELECTED：selected=true 且 suitability>=0.75。若没有任何理论达到0.72，仍选择 suitability 最高的一个作为 PRIMARY。
 13. 只输出JSON，不输出额外文字。
 ''',
         prompt: '''USER_INPUT:
@@ -844,7 +844,7 @@ ${jsonEncode(theoryRows)}
       var autoIds = recommendations
           .where((r) =>
               r['selected'] == true &&
-              ((r['suitability'] as num?)?.toDouble() ?? 0) >= .72)
+              ((r['suitability'] as num?)?.toDouble() ?? 0) >= .75)
           .map((r) => '${r['theory_id']}')
           .take(4)
           .toList();
@@ -857,7 +857,7 @@ ${jsonEncode(theoryRows)}
 
       return {
         'status': 'AI',
-        'auto_threshold': .72,
+        'auto_threshold': .75,
         'auto_selected_theories': autoIds,
         'recommendations': recommendations,
         'selection_summary':
@@ -871,7 +871,7 @@ ${jsonEncode(theoryRows)}
   GrowthData _fallbackTheorySelection() {
     return {
       'status': 'RULE_FALLBACK',
-      'auto_threshold': .72,
+      'auto_threshold': .75,
       'auto_selected_theories':
           EvidenceBehaviorTheoryCatalog.defaultTheoryIds.toList(),
       'selection_summary':
@@ -887,7 +887,7 @@ ${jsonEncode(theoryRows)}
         },
         {
           'theory_id': 'TPB',
-          'suitability': .72,
+          'suitability': .75,
           'selected': true,
           'role': 'COMPLEMENTARY',
           'reason': '补充态度、规范与知觉控制',
@@ -895,7 +895,7 @@ ${jsonEncode(theoryRows)}
         },
         {
           'theory_id': 'COM_B',
-          'suitability': .72,
+          'suitability': .75,
           'selected': true,
           'role': 'COMPLEMENTARY',
           'reason': '补充能力、机会与动机诊断',
