@@ -335,15 +335,16 @@ void main() {
           }
         ],
         'relevant_core_factors': [
-          'time_capacity',
-          'prerequisite_readiness',
-          'commitment',
-          'specificity'
+          'intention',
+          'instrumental_attitude',
+          'self_efficacy',
+          'perceived_control'
         ],
         'dynamic_factors': [
           {
             'id': 'review_dependency',
             'label': '他人审核依赖',
+            'ibm_construct': 'environmental_constraints',
             'condition':
                 'Any required external review can be completed before the deadline.',
             'evidence': ''
@@ -362,7 +363,9 @@ void main() {
     final questions = request['questions'] as Map;
     expect(questions, contains('event_submit_report'));
     expect(questions, contains('event_finish_draft'));
-    expect(questions, contains('factor_time_capacity'));
+    expect(questions, contains('factor_intention'));
+    expect(questions, contains('factor_environmental_constraints'));
+    expect(questions, contains('factor_implementation_intention'));
     expect(questions, contains('factor_dynamic_review_dependency'));
     expect(questions, contains('dominant_failure_mode'));
 
@@ -385,10 +388,15 @@ void main() {
         'event_submit_report': {'type': 'noul', 'noul': .72},
         'event_finish_draft': {'type': 'noul', 'noul': .81},
         'hard_blocker': {'type': 'noul', 'noul': .12},
-        'factor_time_capacity': scoreAnswer,
-        'factor_prerequisite_readiness': scoreAnswer,
-        'factor_commitment': scoreAnswer,
-        'factor_specificity': scoreAnswer,
+        'factor_intention': scoreAnswer,
+        'factor_instrumental_attitude': scoreAnswer,
+        'factor_self_efficacy': scoreAnswer,
+        'factor_perceived_control': scoreAnswer,
+        'factor_knowledge_skills': scoreAnswer,
+        'factor_salience': scoreAnswer,
+        'factor_environmental_constraints': scoreAnswer,
+        'factor_habit': scoreAnswer,
+        'factor_implementation_intention': scoreAnswer,
         'factor_dynamic_review_dependency': scoreAnswer,
         'dominant_failure_mode': {
           'type': 'choice',
