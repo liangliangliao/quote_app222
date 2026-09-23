@@ -611,130 +611,183 @@ class EvidenceGrowthActionPredictionService {
     }
 
     try {
-      final raw = await _ai.generateText(
-        purpose: 'evidence_growth.action_interpretation',
+      // IMPORTANT: keep the interpretation pipeline split into several compact
+      // JSON calls. Global AI settings may cap output tokens (e.g. 2200).
+      // A single giant JSON response used to be truncated mid-object even
+      // though the provider returned HTTP 200, which silently forced fallback.
+      final coreRaw = await _ai.generateText(
+        purpose: 'evidence_growth.action_interpretation.core',
         systemPrompt: '''
-你是“通用行动语义解释器”，不是预测器。你的任务是把用户的一句话行动计划转换成可观察、可判定、适合 JEV 概率判断的 action profile。
+你是“通用行动语义解释器”的第1阶段。只负责定义行为与预测事件，不做概率预测。
+使用 IBM 作为理论骨架，但这一阶段不要展开因素明细。
 
-理论主干必须使用 Integrated Behavioral Model（IBM，整合行为模型）：
-- 行动意向 intention 是行为最接近的心理决定因素；
-- 意向由态度、知觉规范与个人能动性形成；
-- 态度拆成 experiential_attitude（做这件事的感受）和 instrumental_attitude（对结果/代价的判断）；
-- 规范拆成 injunctive_norm（重要他人认为我应不应该做）和 descriptive_norm（重要他人实际上怎么做）；
-- 个人能动性拆成 self_efficacy 与 perceived_control；
-- intention 形成后，knowledge_skills、salience、environmental_constraints、habit 会直接影响意向能否转成真实行为；
-- implementation_intention 不是 IBM 原始构念，而是明确标注的执行意图扩展，用于描述“如果X发生，我就立即做Y”的 cue→action 连接，以处理 intention-behavior gap。
-
-必须遵守：
-1. 不预测成功率，不评价人格，不做心理诊断。
-2. 可以从语言中提取语义，但绝不能虚构现实事实。未知事实保持未知，并通过 clarifying_questions 提问。
-3. 先定义“成功到底是什么可观察事件”。不同类型行动不能强行套“按时出门”：
-   INITIATE=启动；COMPLETE=完成/提交；SUSTAIN=持续；REFRAIN=在时间窗内不做；REPEAT=重复/习惯；INTERACT=与人/系统互动；SEQUENCE=多步骤；OTHER=其他。
-4. forecast_events 必须可观察、可证伪，1~4个，只能一个 primary=true。
-5. relevant_core_factors 只能从以下理论构念选择：
-intention,experiential_attitude,instrumental_attitude,injunctive_norm,descriptive_norm,self_efficacy,perceived_control,knowledge_skills,salience,environmental_constraints,habit,implementation_intention
-   其中 IBM 的五个直接行为决定因素 intention,knowledge_skills,salience,environmental_constraints,habit 无论如何都会由程序保留；你主要负责判断哪些“意向前因”在当前行动中真正相关。
-6. dynamic_factors 不是自由发明新心理学变量。它们必须是“当前具体行为中的显著信念/现实条件”，并映射到一个 ibm_construct。例：对方今晚是否会接电话→environmental_constraints；我认为道歉会改善关系→instrumental_attitude；想到跑步就很厌烦→experiential_attitude。
-7. clarifying_questions 只问最可能显著改变预测的缺失事实，最多5个；每一问必须标明 ibm_construct。优先询问理论上关键但证据缺失的构念，不问泛泛问题。
-8. failure_modes 最多6个，也尽量标明最接近的 ibm_construct。
-9. action_tags 用于以后匹配“真正相似的过去行为”，必须具体且稳定，例如 work_submission、exercise_running、smoking_abstinence、social_apology_call；不要只写 goal/action/task 这种泛标签。
-10. 必须同时检查 PRESERVED_FACTOR_CATALOG。它来自最早“去上班/去体检”原型中已经验证有价值的16类预测条件。不要因为采用IBM就把它们丢掉；要根据当前行动逐项判断是否相关。相关的放入 selected_preserved_factors，不相关的不要硬塞。
-11. 对于“去上班、面试、体检、出门、赴约、办理手续”等启动/到场型行动，应特别检查：客观可行性、时间可用性、身体精力、前置准备、承诺强度、临场价值、情绪、自我效能、决策稳定性、计划具体度、启动触发、环境准备、现实摩擦、替代行为、外部责任、相似历史。
-12. 对任何其他行动，也必须执行同样的覆盖扫描：①客观/环境约束；②时间与资源；③身体与能力；④意向/价值；⑤情绪/回避；⑥自我效能/控制；⑦触发/计划；⑧替代行为/习惯；⑨社会承诺；⑩该行为独有依赖。最后才生成 adaptive dynamic_factors。
-13. selected_preserved_factors 只能从目录选，必须给 selection_reason，说明“为什么当前这个行动需要它”；不要为了凑数量而选择。
-14. dynamic_factors 只补充目录和IBM构念都没有具体覆盖好的“当前行动特有条件”，必须给 selection_reason，并映射到 ibm_construct。
-15. assumptions 只记录为了理解行动而暂时采用、但用户并未明确确认的假设；没有就返回空数组。绝不能把 assumption 当成事实交给JEV。
-16. analysis_checks 要用自然中文简短说明你是否检查了：行为定义、目标事件、原型关键因素、IBM构念、行动特有依赖、缺失信息。用于让用户核对你的分析过程是否完整，不输出内部推理链。
-17. 如果 analysis_correction 非空，它是用户对上一轮AI理解的纠正，优先级高于上一轮解释；重新分析时必须明确吸收纠正。
-18. 所有 id 只用小写英文字母、数字、下划线。
-19. 只输出 JSON。
+要求：
+1. 把用户输入转成明确、可观察、可证伪的目标行为。
+2. 区分 INITIATE / COMPLETE / SUSTAIN / REFRAIN / REPEAT / INTERACT / SEQUENCE / OTHER。
+3. forecast_events 只给1~3个，只能一个 primary=true。
+4. interpretation 2~4句，必须说明：你把用户真正要做的行动理解成什么；什么算成功；哪些边界仍未知。
+5. assumptions 只放用户没明确说但你暂时采用的假设，最多4条。
+6. relevant_core_factors 只从 IBM/执行意图允许构念中选。
+7. analysis_checks 只输出简短覆盖项，不输出内部推理链。
+8. 如果 analysis_correction 非空，必须优先吸收。
+9. 只输出JSON；内容精炼，避免冗长。
 ''',
         prompt: '''INPUT:
 ${jsonEncode(state)}
+
+允许构念：
+intention,experiential_attitude,instrumental_attitude,injunctive_norm,descriptive_norm,self_efficacy,perceived_control,knowledge_skills,salience,environmental_constraints,habit,implementation_intention
+
+返回：
+{
+  "normalized_action":"",
+  "action_mode":"INITIATE|COMPLETE|SUSTAIN|REFRAIN|REPEAT|INTERACT|SEQUENCE|OTHER",
+  "action_tags":["2~5个稳定标签"],
+  "interpretation":"",
+  "assumptions":[],
+  "analysis_checks":[],
+  "coverage_summary":"",
+  "forecast_events":[
+    {"id":"event_id","label":"","true_criterion":"English observable true criterion","false_criterion":"English observable false criterion","primary":true}
+  ],
+  "relevant_core_factors":[]
+}''',
+        expectJson: true,
+        temperature: .05,
+        maxTokens: 1500,
+      );
+      if (coreRaw.trim().isEmpty) {
+        return _fallbackActionProfile(
+          state,
+          reason: 'AI_EMPTY_CORE_RESPONSE',
+          detail: 'AI已响应请求，但行为理解阶段没有返回内容。',
+          provider: config.provider,
+          model: config.displayModel,
+        );
+      }
+      final core = _decode(coreRaw);
+
+      final factorRaw = await _ai.generateText(
+        purpose: 'evidence_growth.action_interpretation.factors',
+        systemPrompt: '''
+你是“通用行动语义解释器”的第2阶段：只负责找关键预测因素，不做概率预测。
+
+必须同时做两件事：
+A. 从 PRESERVED_FACTOR_CATALOG（最早上班/到场原型的16类因素）中筛选当前行动真正相关的因素。
+B. 再补充当前行动独有、旧目录没有具体覆盖好的动态因素，并映射到IBM构念。
+
+覆盖扫描必须包括：客观可行性、时间资源、身体能力、前置准备、意向/承诺、价值/后果、情绪/回避、自我效能/控制、计划具体度、启动触发、环境准备、现实摩擦、替代行为、外部责任、相似历史/习惯，以及当前行动特有依赖。
+
+规则：
+1. 旧因素重要就必须保留，不要因为采用IBM而删除。
+2. 不相关的旧因素不要硬塞。
+3. 每个 selection_reason 最多28个中文字符；evidence 最多36个中文字符，必须来自用户输入，未知则空字符串。
+4. dynamic_factors 最多6个；selection_reason同样简短。
+5. 不得把假设写成事实。
+6. 只输出JSON，严禁额外解释。
+''',
+        prompt: '''INPUT:
+${jsonEncode(state)}
+
+ACTION_CONTRACT:
+${jsonEncode({
+          'normalized_action': core['normalized_action'],
+          'action_mode': core['action_mode'],
+          'forecast_events': core['forecast_events'],
+          'relevant_core_factors': core['relevant_core_factors'],
+        })}
 
 PRESERVED_FACTOR_CATALOG:
 ${jsonEncode(preservedFactorCatalog)}
 
 返回：
 {
-  "version":"ibm_action_v2",
-  "theory_model":"IBM_2015_PLUS_IMPLEMENTATION_INTENTION",
-  "normalized_action":"把用户原话改写成明确、可观察的一句话",
-  "action_mode":"INITIATE|COMPLETE|SUSTAIN|REFRAIN|REPEAT|INTERACT|SEQUENCE|OTHER",
-  "action_tags":["2~5个具体稳定标签"],
-  "interpretation":"用2~4句自然中文说明你把这个行动理解成什么、行动边界是什么、什么才算真正发生；不做预测",
-  "assumptions":["用户没有明确说、但为了理解暂时采用的假设；没有则空"],
-  "analysis_checks":[
-    "已核对行为定义与成功标准",
-    "已扫描原型关键因素",
-    "已扫描IBM构念",
-    "已扫描当前行动特有依赖",
-    "已识别关键缺失信息"
-  ],
-  "coverage_summary":"一句话说明本轮因素覆盖是否充分、还缺什么",
-  "forecast_events":[
-    {
-      "id":"observable_event",
-      "label":"给用户看的事件名称",
-      "true_criterion":"English: precise observable criterion for event=true",
-      "false_criterion":"English: precise observable criterion for event=false",
-      "primary":true
-    }
-  ],
-  "relevant_core_factors":["从允许的IBM/扩展构念中选择"],
   "selected_preserved_factors":[
-    {
-      "id":"必须来自PRESERVED_FACTOR_CATALOG",
-      "selection_reason":"为什么这个旧原型因素对当前行动仍然关键",
-      "evidence":"若用户输入中已有相关事实，用中文概括；没有则为空"
-    }
+    {"id":"catalog_id","selection_reason":"","evidence":""}
   ],
   "dynamic_factors":[
-    {
-      "id":"behavior_specific_belief",
-      "label":"中文名称",
-      "ibm_construct":"必须是允许的理论构念之一",
-      "condition":"English condition whose presence supports the primary event",
-      "selection_reason":"为什么这个行动特有因素会显著改变预测",
-      "evidence":"若输入中已有相关事实，用中文概括；没有则为空"
-    }
-  ],
-  "clarifying_questions":[
-    {
-      "id":"missing_fact",
-      "question":"中文具体问题？",
-      "why":"为什么它会显著改变预测",
-      "ibm_construct":"允许的理论构念之一",
-      "criticality":0.0,
-      "answer_type":"text|choice",
-      "options":["choice时才给简短选项"]
-    }
-  ],
-  "failure_modes":[
-    {
-      "id":"specific_failure",
-      "label":"中文失败机制",
-      "ibm_construct":"允许的理论构念之一",
-      "criterion":"English criterion describing this failure mechanism"
-    }
+    {"id":"factor_id","label":"","ibm_construct":"允许构念之一","condition":"English condition supporting the primary event","selection_reason":"","evidence":""}
   ]
 }''',
         expectJson: true,
         temperature: .05,
-        maxTokens: 5200,
+        maxTokens: 1900,
       );
-
-      if (raw.trim().isEmpty) {
+      if (factorRaw.trim().isEmpty) {
         return _fallbackActionProfile(
           state,
-          reason: 'AI_EMPTY_RESPONSE',
-          detail: 'AI调用已完成，但没有返回可解析内容。',
+          reason: 'AI_EMPTY_FACTOR_RESPONSE',
+          detail: 'AI完成了行为理解，但关键因素选择阶段没有返回内容。',
           provider: config.provider,
           model: config.displayModel,
         );
       }
+      final factorPart = _decode(factorRaw);
 
-      final decoded = _decode(raw);
+      final questionRaw = await _ai.generateText(
+        purpose: 'evidence_growth.action_interpretation.questions',
+        systemPrompt: '''
+你是“通用行动语义解释器”的第3阶段：只负责找关键缺失信息与失败机制，不做概率预测。
+
+规则：
+1. clarifying_questions 最多5个，只问最可能显著改变预测的缺失事实。
+2. 每一问必须具体、容易回答，并标记IBM构念。
+3. failure_modes 最多5个，要针对当前具体行动，不要写泛泛的“可能失败”。
+4. 不重复已经从用户输入中明确知道的事实。
+5. 不把假设当事实。
+6. 文本尽量简洁，只输出JSON。
+''',
+        prompt: '''INPUT:
+${jsonEncode(state)}
+
+ACTION_CONTRACT:
+${jsonEncode({
+          'normalized_action': core['normalized_action'],
+          'action_mode': core['action_mode'],
+          'forecast_events': core['forecast_events'],
+        })}
+
+SELECTED_FACTORS:
+${jsonEncode({
+          'selected_preserved_factors':
+              factorPart['selected_preserved_factors'],
+          'dynamic_factors': factorPart['dynamic_factors'],
+        })}
+
+返回：
+{
+  "clarifying_questions":[
+    {"id":"missing_fact","question":"","why":"","ibm_construct":"允许构念之一","criticality":0.0,"answer_type":"text|choice","options":[]}
+  ],
+  "failure_modes":[
+    {"id":"specific_failure","label":"","ibm_construct":"允许构念之一","criterion":"English criterion"}
+  ]
+}''',
+        expectJson: true,
+        temperature: .05,
+        maxTokens: 1500,
+      );
+      if (questionRaw.trim().isEmpty) {
+        return _fallbackActionProfile(
+          state,
+          reason: 'AI_EMPTY_QUESTION_RESPONSE',
+          detail: 'AI已完成行为理解和因素选择，但缺失信息分析阶段没有返回内容。',
+          provider: config.provider,
+          model: config.displayModel,
+        );
+      }
+      final questionPart = _decode(questionRaw);
+
+      final decoded = <String, dynamic>{
+        ...core,
+        'selected_preserved_factors':
+            factorPart['selected_preserved_factors'] ?? const [],
+        'dynamic_factors': factorPart['dynamic_factors'] ?? const [],
+        'clarifying_questions':
+            questionPart['clarifying_questions'] ?? const [],
+        'failure_modes': questionPart['failure_modes'] ?? const [],
+      };
+
       final events = growthRows(decoded['forecast_events'])
           .where((e) =>
               '${e['id'] ?? ''}'.trim().isNotEmpty &&
