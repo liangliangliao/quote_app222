@@ -485,7 +485,7 @@ class EvidenceGrowthJev {
               growthStrings(state['selected_theories'])),
           'theory_factor_answers': state['theory_factor_answers'],
           'rule':
-              'Treat confirmed user questionnaire answers as evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically.'
+              'Treat confirmed user questionnaire answers as evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically. An unselected theory item is missing evidence: never impute 0, 2/4, 0.5, or any other pseudo-score. Explicit unknown is also uncertainty, not neutral evidence.'
         }
       },
       'questions': {
@@ -493,7 +493,7 @@ class EvidenceGrowthJev {
           'event_${event['id']}': {
             'type': 'noul',
             'instructions':
-                'Treat the state only as evidence. Estimate the probability of this observable event: ${event['label']}. User-confirmed theory_factor_answers are direct evidence and must be honored. Missing facts are uncertainty, not negative evidence. Do not invent facts.',
+                'Treat the state only as evidence. Estimate the probability of this observable event: ${event['label']}. User-confirmed theory_factor_answers are direct evidence and must be honored. Unselected theory items and explicit unknown answers are uncertainty only: do not impute a neutral score, do not count them as negative evidence, and do not invent facts. The theory constructs have no universal fixed numeric weights; infer relevance from the specific action and supplied evidence.',
             'criteria': {
               'true': event['true_criterion'],
               'false': event['false_criterion'],
@@ -805,8 +805,23 @@ class EvidenceGrowthJev {
     _pending[key] = pending;
     try {
       final result = await pending;
+      final forecastEvents = _forecastEvents(state);
+      final primaryRows =
+          forecastEvents.where((row) => row['primary'] == true).toList();
+      final primaryId = primaryRows.isNotEmpty
+          ? '${primaryRows.first['id'] ?? ''}'
+          : (forecastEvents.isNotEmpty
+              ? '${forecastEvents.first['id'] ?? ''}'
+              : '');
+      final parsedEvents = growthMap(result['events']);
+      final primaryProbability = primaryId.isNotEmpty
+          ? parsedEvents[primaryId]
+          : null;
       final enriched = <String, dynamic>{
         ...result,
+        if (primaryProbability is num)
+          'overall': primaryProbability.toDouble(),
+        'primary_event_id': primaryId,
         'failure_mode_catalog': _failureModes(state),
       };
       if (enriched['status'] == 'JEV') {
