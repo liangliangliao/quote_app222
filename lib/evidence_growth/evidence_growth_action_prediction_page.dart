@@ -502,12 +502,75 @@ class _EvidenceGrowthActionPredictionPageState
         'OTHER': '其他行动',
       }[mode] ?? mode;
 
+  Widget _theorySelector() {
+    final rows = EvidenceBehaviorTheoryCatalog.theories.values.toList();
+    return ExpansionTile(
+        initiallyExpanded: true,
+        tilePadding: EdgeInsets.zero,
+        title: const Text('选择行为预测理论',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        subtitle: Text(
+            '当前已选 ${selectedTheoryIds.length} 套。相同构念会自动去重；专业量表选项不会替代正式心理测量。'),
+        children: [
+          Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final theory in rows)
+                      FilterChip(
+                          label: Text('${theory['short_name']}'),
+                          selected:
+                              selectedTheoryIds.contains('${theory['id']}'),
+                          onSelected: busy || preparing
+                              ? null
+                              : (selected) {
+                                  final id = '${theory['id']}';
+                                  if (!selected &&
+                                      selectedTheoryIds.length == 1 &&
+                                      selectedTheoryIds.contains(id)) {
+                                    _message('至少保留一套理论');
+                                    return;
+                                  }
+                                  setState(() {
+                                    if (selected) {
+                                      selectedTheoryIds.add(id);
+                                    } else {
+                                      selectedTheoryIds.remove(id);
+                                    }
+                                    _invalidateActionProfile();
+                                  });
+                                })
+                  ])),
+          const SizedBox(height: 10),
+          for (final theory in rows)
+            if (selectedTheoryIds.contains('${theory['id']}'))
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${theory['name']}',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800)),
+                        Text('${theory['description']}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.black54)),
+                        Text('适用重点：${theory['scope']}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.black54)),
+                      ])),
+          const SizedBox(height: 4),
+        ]);
+  }
+
   Widget _inputCard() {
     return _section(
         '输入一个行动',
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text(
-              '先用一句自然语言说你准备做什么。AI 会先定义可观察行为，再按整合行为模型（IBM）提取理论构念与行为特有信念，最后交给 JEV 判断。',
+              '先描述你准备做什么，再选择要使用的行为预测理论。AI会理解行动并辅助预填，JEV独立交叉判断；只有两者对同一标准选项都达到75%以上把握时才自动选中，且你始终可以修改。',
               style: TextStyle(color: Colors.black54, height: 1.4)),
           const SizedBox(height: 12),
           TextField(
@@ -523,7 +586,9 @@ class _EvidenceGrowthActionPredictionPageState
                   labelText: '你接下来准备做什么？',
                   hintText: '例如：今晚给朋友打电话道歉 / 未来7天不抽烟 / 周五前提交报告 / 明早跑步30分钟',
                   border: OutlineInputBorder())),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          _theorySelector(),
+          const SizedBox(height: 8),
           ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('时间／期限（可选）'),
