@@ -844,7 +844,7 @@ class _EvidenceGrowthActionPredictionPageState
       ]),
       const SizedBox(height: 4),
       const Text(
-          '相同构念只显示一次，并标出来自哪些理论。AI/JEV只能帮助预填；自动选中阈值为双方对同一选项的最低置信度≥75%，用户可随时改。',
+          '相同构念只显示一次。AI/JEV只能帮助预填；你可以修改。未选择的项目不会被当作中性或0分，而是作为“缺失/未知证据”交给最终判断。',
           style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.4)),
       if (missing > 0) ...[
         const SizedBox(height: 8),
