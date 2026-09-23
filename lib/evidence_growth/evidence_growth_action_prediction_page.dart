@@ -431,6 +431,24 @@ class _EvidenceGrowthActionPredictionPageState
     return '需优先修';
   }
 
+  String _confidenceLabel(Object? value) {
+    if (value is! num) return '未知';
+    final v = value.toDouble();
+    if (v >= .8) return '高';
+    if (v >= .6) return '中';
+    return '低';
+  }
+
+  IconData _factorIcon(GrowthData row) {
+    if (row['unknown'] == true || row['display_score'] == null) {
+      return Icons.help_outline;
+    }
+    final score = (row['display_score'] as num).toDouble();
+    if (score < .45) return Icons.warning_amber_rounded;
+    if (score >= .65) return Icons.check_circle_outline;
+    return Icons.remove_circle_outline;
+  }
+
   String _gainText(Object? value) {
     if (value is! num) return '';
     final points = (value.toDouble() * 100).round();
@@ -644,6 +662,13 @@ class _EvidenceGrowthActionPredictionPageState
     final reason = '${result['headline_reason'] ?? ''}'.trim();
     final risks = growthRows(result['top_risks']);
     final actions = growthStrings(result['protective_actions']);
+    final jevFlow = growthMap(result['jev_workflow']);
+    final source = '${result['forecast_source'] ?? ''}';
+    final dominantFailure =
+        '${jevFlow['dominant_failure_label'] ?? ''}'.trim();
+    final missingDomain =
+        '${jevFlow['most_decisive_missing_label'] ?? ''}'.trim();
+    final hardBlocker = jevFlow['hard_blocker'];
 
     return _section(
         '本次预测',
@@ -666,6 +691,49 @@ class _EvidenceGrowthActionPredictionPageState
             ]),
             const SizedBox(height: 12),
             LinearProgressIndicator(value: estimate!.toDouble()),
+            const SizedBox(height: 10),
+            Text(
+                source == 'JEV_PRIMARY'
+                    ? '主预测来源：JEV typed workflow'
+                    : source == 'AI_FALLBACK'
+                        ? '主预测来源：LLM（JEV当前不可用）'
+                        : '主预测来源：个人历史基线',
+                style: const TextStyle(
+                    fontSize: 12, color: Colors.black54)),
+            if (source == 'JEV_PRIMARY') ...[
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                Chip(
+                    label:
+                        Text('按时开始 ${_pct(jevFlow['start_on_time'])}')),
+                Chip(
+                    label:
+                        Text('当天最终开始 ${_pct(jevFlow['start_eventually'])}')),
+                Chip(
+                    label:
+                        Text('完成计划 ${_pct(jevFlow['complete_as_planned'])}')),
+              ]),
+              const SizedBox(height: 6),
+              const Text(
+                  '以上三个百分数是 JEV 对三个具体事件的概率判断；它们和下面“因素支持度”不是同一种百分数。',
+                  style: TextStyle(fontSize: 12, color: Colors.black54)),
+              if (hardBlocker is num && hardBlocker.toDouble() >= .6) ...[
+                const SizedBox(height: 10),
+                Text(
+                    'JEV 检测到客观硬阻断的可能性为 ${_pct(hardBlocker)}，请先核对交通、资源、权限、时间冲突或身体条件。',
+                    style: const TextStyle(fontWeight: FontWeight.w700))
+              ],
+              if (dominantFailure.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text('JEV 最可能失败机制：$dominantFailure',
+                    style: const TextStyle(fontWeight: FontWeight.w700))
+              ],
+              if (missingDomain.isNotEmpty &&
+                  jevFlow['most_decisive_missing_domain'] != 'none') ...[
+                const SizedBox(height: 6),
+                Text('JEV 认为最值得补充的信息：$missingDomain')
+              ],
+            ],
           ] else
             const Text('当前信息还不足以形成综合估计。'),
           if (headline.isNotEmpty) ...[
@@ -818,35 +886,55 @@ class _EvidenceGrowthActionPredictionPageState
     return Card(
         elevation: 0,
         child: ExpansionTile(
-            title: const Text('查看完整九因素分析',
+            title: const Text('查看完整 16 个决定因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('默认只看关键阻碍；需要时再展开全部细节'),
+            subtitle: const Text('这里只显示“阻碍／中性／支持／未知”，避免把因素支持度误当成行动概率'),
             children: [
               for (final entry in factors)
                 Builder(builder: (_) {
                   final row = growthMap(entry.value);
                   final score = row['display_score'];
+                  final confidence = row['confidence'];
                   final state = _factorState(row);
+                  final source = '${row['source'] ?? 'NONE'}';
                   return ExpansionTile(
                       tilePadding:
                           const EdgeInsets.symmetric(horizontal: 16),
+                      leading: Icon(_factorIcon(row), color: _teal),
                       title: Text('${row['label'] ?? entry.key}'),
-                      subtitle: Text(score is num
-                          ? '$state · ${_pct(score)}'
-                          : '$state · 不因缺少信息扣分'),
-                      trailing: score is num
-                          ? SizedBox(
-                              width: 72,
-                              child: LinearProgressIndicator(
-                                  value: score.toDouble()))
-                          : const Icon(Icons.help_outline),
+                      subtitle: Text(row['unknown'] == true
+                          ? '待补充 · 当前证据不足'
+                          : '$state · $source 判断把握：${_confidenceLabel(confidence)}'),
                       children: [
                         Padding(
                             padding:
                                 const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                            child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text('${row['evidence'] ?? ''}')))
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${row['evidence'] ?? ''}'),
+                                  if (score is num) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                        '$source 对“这个条件支持执行”的支持度：${_pct(score)}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 3),
+                                    const Text(
+                                        '注意：这个百分数不是行动成功概率，也不是该因素的重要性权重；它只是模型对“该条件目前有多支持执行”的判断。',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.black54)),
+                                  ],
+                                  if (confidence is num) ...[
+                                    const SizedBox(height: 5),
+                                    Text(
+                                        '$source 对上述评分的置信度：${_pct(confidence)}',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.black54))
+                                  ]
+                                ]))
                       ]);
                 })
             ]));
@@ -856,6 +944,7 @@ class _EvidenceGrowthActionPredictionPageState
     if (result.isEmpty) return const SizedBox.shrink();
     final ai = growthMap(result['ai']);
     final jev = growthMap(result['jev']);
+    final jevFlow = growthMap(result['jev_workflow']);
     final baseline = growthMap(result['history_baseline']);
     final missing = growthStrings(result['missing_information']);
     final failures = growthStrings(result['failure_modes']);
@@ -896,11 +985,26 @@ class _EvidenceGrowthActionPredictionPageState
               subtitle: const Text('一般无需关注；用于核对 AI、JEV 与个人基线'),
               children: [
                 ListTile(
-                    title: const Text('AI 模型估计'),
-                    trailing: Text(_pct(ai['execution_likelihood']))),
+                    title: const Text('主预测引擎'),
+                    subtitle: Text(result['forecast_source'] == 'JEV_PRIMARY'
+                        ? 'JEV 的 typed probabilistic workflow'
+                        : 'JEV 不可用时才回退到 LLM'),
+                    trailing: Text(result['forecast_source'] == 'JEV_PRIMARY'
+                        ? 'JEV'
+                        : 'LLM')),
                 ListTile(
-                    title: const Text('JEV typed 判断'),
-                    trailing: Text(_pct(jev['overall']))),
+                    title: const Text('JEV：按时开始'),
+                    trailing: Text(_pct(jevFlow['start_on_time']))),
+                ListTile(
+                    title: const Text('JEV：当天最终开始'),
+                    trailing: Text(_pct(jevFlow['start_eventually']))),
+                ListTile(
+                    title: const Text('JEV：完成计划'),
+                    trailing: Text(_pct(jevFlow['complete_as_planned']))),
+                ListTile(
+                    title: const Text('LLM 交叉判断'),
+                    subtitle: const Text('用于解释、发现遗漏和提出干预，不再与 JEV 50/50 平均'),
+                    trailing: Text(_pct(ai['execution_likelihood']))),
                 ListTile(
                     title: const Text('个人历史基线'),
                     subtitle: Text((baseline['resolved_count'] as num? ?? 0) == 0
