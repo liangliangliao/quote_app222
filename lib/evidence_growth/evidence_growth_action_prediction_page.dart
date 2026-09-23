@@ -338,11 +338,75 @@ class _EvidenceGrowthActionPredictionPageState
   }
 
   String _safeQuestionId(Object? raw) {
-    final text = '$raw'
+    var text = '$raw'
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9_]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .replaceAll(RegExp(r'^_|_
+        .replaceAll(RegExp(r'_+'), '_');
+    while (text.startsWith('_')) {
+      text = text.substring(1);
+    }
+    while (text.endsWith('_')) {
+      text = text.substring(0, text.length - 1);
+    }
+    return text.isEmpty ? 'question' : text;
+  }
+
+  void _installActionProfile(GrowthData profile) {
+    for (final controller in clarificationText.values) {
+      controller.dispose();
+    }
+    clarificationText.clear();
+    clarificationChoice.clear();
+    for (final row in growthRows(profile['clarifying_questions'])) {
+      final id = _safeQuestionId(row['id']);
+      if ('${row['answer_type'] ?? 'text'}' == 'choice') {
+        clarificationChoice[id] = '';
+      } else {
+        clarificationText[id] = TextEditingController();
+      }
+    }
+    actionProfile = profile;
+  }
+
+  void _invalidateActionProfile() {
+    for (final controller in clarificationText.values) {
+      controller.dispose();
+    }
+    clarificationText.clear();
+    clarificationChoice.clear();
+    actionProfile = {};
+  }
+
+  GrowthData get clarificationAnswers => {
+        for (final entry in clarificationText.entries)
+          if (entry.value.text.trim().isNotEmpty)
+            entry.key: entry.value.text.trim(),
+        for (final entry in clarificationChoice.entries)
+          if (entry.value.trim().isNotEmpty) entry.key: entry.value.trim(),
+      };
+
+  Future<void> prepareAction() async {
+    if (preparing || busy || plan.text.trim().isEmpty) return;
+    setState(() => preparing = true);
+    try {
+      final profile = await service.prepareAction(
+        plan: plan.text,
+        scheduledAt: scheduledAt,
+        context: notes.text,
+        similarHistory: similarHistory,
+        structuredContext: structuredContext,
+        journey: widget.journey,
+      );
+      if (!mounted) return;
+      setState(() => _installActionProfile(profile));
+    } catch (e) {
+      if (mounted) _message('$e');
+    } finally {
+      if (mounted) setState(() => preparing = false);
+    }
+  }
+
+  Future<void> predict() async {
     if (busy || preparing || plan.text.trim().isEmpty) return;
     if (actionProfile.isEmpty) {
       await prepareAction();
@@ -371,7 +435,6 @@ class _EvidenceGrowthActionPredictionPageState
       if (mounted) setState(() => busy = false);
     }
   }
-
   Future<void> applyImprovementAndPredict() async {
     final scenario = growthMap(result['improvement_scenario']);
     final changes = growthStrings(scenario['changes']);
