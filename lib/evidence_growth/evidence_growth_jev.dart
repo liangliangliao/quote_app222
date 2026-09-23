@@ -324,28 +324,46 @@ class EvidenceGrowthJev {
     if (out.isEmpty) {
       out.addAll([
         {
-          'id': 'objective_blocker',
-          'label': '客观条件直接阻断',
+          'id': 'intention_failure',
+          'label': '行动意向不足或未真正形成决定',
           'criterion':
-              'A concrete access, resource, schedule, dependency or physical blocker prevents the required behavior.'
+              'A sufficiently strong intention or decision to perform the target behavior is not established.'
         },
         {
-          'id': 'aversive_state',
-          'label': '临场状态压住行动',
+          'id': 'agency_failure',
+          'label': '自我效能或知觉控制不足',
           'criterion':
-              'An immediate emotional or physical state suppresses the required behavior.'
+              'Low self-efficacy or perceived behavioral control prevents the person from translating preference into action.'
         },
         {
-          'id': 'competing_alternative',
-          'label': '替代行为抢占',
+          'id': 'knowledge_skill_gap',
+          'label': '知识或技能不足',
           'criterion':
-              'A more immediately rewarding or easier alternative displaces the intended behavior.'
+              'Required knowledge or skill is insufficient for the target behavior.'
         },
         {
-          'id': 'decision_reopened',
-          'label': '临场重新决策',
+          'id': 'low_salience',
+          'label': '关键时刻行动没有进入注意',
           'criterion':
-              'The person reopens the decision instead of carrying out the already selected action.'
+              'The intended behavior is not salient or mentally accessible when the opportunity to act occurs.'
+        },
+        {
+          'id': 'environmental_constraint',
+          'label': '环境约束阻断',
+          'criterion':
+              'A resource, access, schedule, dependency, social or physical environmental constraint blocks performance.'
+        },
+        {
+          'id': 'habit_competition',
+          'label': '既有习惯把行为拉向另一方向',
+          'criterion':
+              'An established contextual habit or automatic competing response displaces the target behavior.'
+        },
+        {
+          'id': 'implementation_gap',
+          'label': '有意向但缺少触发执行的具体计划',
+          'criterion':
+              'A genuine intention exists but lacks a sufficiently concrete cue-to-action or implementation plan at the critical moment.'
         },
       ]);
     }
@@ -377,7 +395,16 @@ class EvidenceGrowthJev {
 
     return {
       'model': model,
-      'state': {'action_prediction': state},
+      'state': {
+        'action_prediction': state,
+        'theoretical_model': {
+          'name': 'Integrated Behavioral Model',
+          'structure':
+              'experiential/instrumental attitude + perceived norms + personal agency -> intention; intention + knowledge/skills + salience + environmental constraints + habit -> behavior',
+          'extension':
+              'implementation intention is an explicitly separate volitional bridge for the intention-behavior gap'
+        }
+      },
       'questions': {
         for (final event in events)
           'event_${event['id']}': {
@@ -411,7 +438,7 @@ class EvidenceGrowthJev {
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
-                'Rate how much this action-specific condition supports the PRIMARY forecast event: ${row['condition']} Use only supplied facts. Missing evidence belongs at the neutral/insufficient level.',
+                'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence belongs at the neutral/insufficient level.',
             'criteria': _supportRubric,
           },
         'dominant_failure_mode': {
