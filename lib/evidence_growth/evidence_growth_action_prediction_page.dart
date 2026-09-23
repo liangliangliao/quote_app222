@@ -555,6 +555,8 @@ class _EvidenceGrowthActionPredictionPageState
 
     final selectionSummary =
         '${theorySelectionAnalysis['selection_summary'] ?? ''}'.trim();
+    final selectionStatus =
+        '${theorySelectionAnalysis['status'] ?? ''}'.trim();
 
     return ExpansionTile(
         initiallyExpanded: true,
@@ -582,7 +584,9 @@ class _EvidenceGrowthActionPredictionPageState
                             child: Text(
                                 theorySelectionManuallyEdited
                                     ? 'AI匹配结果仍保留供参考；当前以你的手动选择为准'
-                                    : 'AI已根据当前行动自动匹配理论',
+                                    : selectionStatus == 'AI'
+                                        ? 'AI已根据当前行动自动匹配理论'
+                                        : 'AI理论匹配当前不可用，已使用通用后备组合',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w800)))
                       ]),
