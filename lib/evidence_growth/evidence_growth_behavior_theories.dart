@@ -768,15 +768,16 @@ class EvidenceBehaviorTheoryCatalog {
           if (entry.value == construct) entry.key
       ];
 
-  /// Standard program option -> support score used only for transparent
-  /// display/ranking after the user confirms an option.
+  /// Standard program option -> ordinal support index used only for
+  /// transparent display/ranking after the user confirms an option.
   ///
-  /// Every factor's non-unknown options are intentionally ordered from
-  /// strongest blocker (0) to strongest support (4). This is not a fitted
-  /// psychological coefficient and must not be treated as behavior
-  /// probability.
+  /// This is NOT an empirically fitted coefficient, interval-scale measure,
+  /// theory weight, or behavior probability. For constructs whose relation to
+  /// behavior is not safely monotonic (for example HAPA risk perception), no
+  /// ordinal support index is produced.
   static double? supportScore(String factorId, String optionId) {
     if (optionId == 'unknown') return null;
+    if (factorId == 'risk_perception') return null;
     final factor = factorDefinitions[factorId];
     final options = factor?['options'];
     if (options is! List) return null;
