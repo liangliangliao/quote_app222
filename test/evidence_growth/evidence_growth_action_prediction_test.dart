@@ -331,6 +331,13 @@ void main() {
     }, 'jev-latest');
 
     final questions = request['questions'] as Map;
+    final theoreticalModels =
+        ((request['state'] as Map)['theoretical_models'] as Map);
+    expect('${theoreticalModels['rule']}',
+        contains('Unselected theory item is missing evidence'));
+    final event = questions['event_restart_job_search'] as Map;
+    expect('${event['instructions']}',
+        contains('do not impute a neutral score'));
     final skills = questions['factor_knowledge_skills'] as Map;
     expect('${skills['instructions']}',
         contains('explicitly confirmed the standardized option'));
