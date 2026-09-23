@@ -34,6 +34,7 @@ class _EvidenceGrowthActionPredictionPageState
   final plan = TextEditingController();
   final notes = TextEditingController();
   final historyNotes = TextEditingController();
+  final analysisCorrection = TextEditingController();
 
   final feasibility = <String>{};
   final timeCapacity = <String>{};
@@ -247,6 +248,7 @@ class _EvidenceGrowthActionPredictionPageState
     plan.dispose();
     notes.dispose();
     historyNotes.dispose();
+    analysisCorrection.dispose();
     for (final controller in clarificationText.values) {
       controller.dispose();
     }
@@ -444,6 +446,7 @@ class _EvidenceGrowthActionPredictionPageState
         scheduledAt: scheduledAt,
         context: notes.text,
         similarHistory: similarHistory,
+        analysisCorrection: analysisCorrection.text,
         structuredContext: structuredContext,
         journey: widget.journey,
       );
@@ -469,6 +472,8 @@ class _EvidenceGrowthActionPredictionPageState
         scheduledAt: scheduledAt,
         context: notes.text,
         similarHistory: similarHistory,
+        analysisCorrection:
+            '${actionProfile['analysis_correction_applied'] ?? ''}',
         structuredContext: structuredContext,
         actionProfile: actionProfile,
         clarificationAnswers: clarificationAnswers,
@@ -703,7 +708,10 @@ class _EvidenceGrowthActionPredictionPageState
               enabled: !busy && !preparing,
               minLines: 2,
               maxLines: 5,
-              onChanged: (_) => setState(_invalidateActionProfile),
+              onChanged: (_) => setState(() {
+                    _invalidateActionProfile();
+                    analysisCorrection.clear();
+                  }),
               decoration: const InputDecoration(
                   labelText: '你接下来准备做什么？',
                   hintText: '例如：今晚给朋友打电话道歉 / 未来7天不抽烟 / 周五前提交报告 / 明早跑步30分钟',
