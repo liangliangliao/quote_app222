@@ -435,6 +435,31 @@ class EvidenceGrowthJev {
         .take(8)
         .toList();
 
+    final theoryAnswers = growthMap(state['theory_factor_answers']);
+
+    GrowthData confirmedAnswerFor(String construct) {
+      final direct = growthMap(theoryAnswers[construct]);
+      if (direct.isNotEmpty) return direct;
+      for (final factorId
+          in EvidenceBehaviorTheoryCatalog.factorIdsForConstruct(construct)) {
+        final row = growthMap(theoryAnswers[factorId]);
+        if (row.isNotEmpty) return row;
+      }
+      return {};
+    }
+
+    String confirmedTheoryEvidence(String construct) {
+      final answer = confirmedAnswerFor(construct);
+      if (answer.isEmpty) return '';
+      final label = '${answer['option_label'] ?? ''}'.trim();
+      final option = '${answer['option_id'] ?? ''}'.trim();
+      if (option == 'unknown') {
+        return 'The user explicitly confirmed that this construct is unknown/unclear.';
+      }
+      if (label.isEmpty) return '';
+      return 'The user explicitly confirmed the standardized option: "$label". Treat this as direct evidence, not missing information.';
+    }
+
     // JEV receives the user's facts plus the prediction contract, but not the
     // LLM's narrative interpretation, assumptions, coverage summary or other
     // meta-evaluation. This reduces anchoring while preserving dynamically
@@ -472,7 +497,7 @@ class EvidenceGrowthJev {
           'event_${event['id']}': {
             'type': 'noul',
             'instructions':
-                'Treat the state only as evidence. Estimate the probability of this observable event: ${event['label']}. Missing facts are uncertainty, not negative evidence. Do not invent facts.',
+                'Treat the state only as evidence. Estimate the probability of this observable event: ${event['label']}. User-confirmed theory_factor_answers are direct evidence and must be honored. Missing facts are uncertainty, not negative evidence. Do not invent facts.',
             'criteria': {
               'true': event['true_criterion'],
               'false': event['false_criterion'],
@@ -493,7 +518,7 @@ class EvidenceGrowthJev {
           'factor_$key': {
             'type': 'score',
             'instructions':
-                'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} Use only supplied facts and the action contract. Missing evidence belongs at the neutral/insufficient level.',
+                'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} ${confirmedTheoryEvidence(key)} Use only supplied facts and the action contract. If the user has explicitly confirmed a standardized option, do not describe that construct as missing. Missing evidence belongs at the neutral/insufficient level.',
             'criteria': _supportRubric,
           },
         for (final row in dynamicRows)
@@ -746,7 +771,7 @@ class EvidenceGrowthJev {
     if (utf8.encode(body).length > 64000) {
       return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
     }
-    final key = sha256.convert(utf8.encode('action-v2|$apiKey|$body')).toString();
+    final key = sha256.convert(utf8.encode('action-v3|$apiKey|$body')).toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
     final pending = _sendAction(body, apiKey);
