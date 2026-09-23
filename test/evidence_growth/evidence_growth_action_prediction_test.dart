@@ -8,6 +8,128 @@ import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 void main() {
   setUpAll(sqfliteFfiInit);
 
+  test('theory catalog matches source-theory core constructs', () {
+    List<String> factorIds(String theory) =>
+        (EvidenceBehaviorTheoryCatalog.theories[theory]!['factor_ids'] as List)
+            .cast<String>();
+
+    expect(
+        factorIds('TPB'),
+        containsAll([
+          'intention',
+          'attitude_toward_behavior',
+          'subjective_norm',
+          'perceived_behavioral_control',
+          'actual_behavioral_control',
+        ]));
+    expect(
+        EvidenceBehaviorTheoryCatalog.theories['TPB']!['belief_basis'],
+        containsAll([
+          'behavioral_beliefs',
+          'normative_beliefs',
+          'control_beliefs'
+        ]));
+
+    expect(
+        factorIds('IBM'),
+        containsAll([
+          'intention',
+          'experiential_attitude',
+          'instrumental_attitude',
+          'injunctive_norm',
+          'descriptive_norm',
+          'self_efficacy',
+          'perceived_control',
+          'knowledge_skills',
+          'salience',
+          'environmental_constraints',
+          'habit',
+        ]));
+
+    expect(
+        factorIds('COM_B'),
+        equals([
+          'physical_capability',
+          'psychological_capability',
+          'physical_opportunity',
+          'social_opportunity',
+          'reflective_motivation',
+          'automatic_motivation',
+        ]));
+
+    expect(
+        factorIds('SCT'),
+        containsAll([
+          'behavioral_capability',
+          'self_efficacy',
+          'outcome_expectations',
+          'outcome_value',
+          'goals',
+          'self_regulation',
+          'observational_learning',
+          'reinforcement',
+          'environmental_influences',
+        ]));
+
+    expect(
+        factorIds('HAPA'),
+        containsAll([
+          'risk_perception',
+          'outcome_expectations',
+          'action_self_efficacy',
+          'intention',
+          'action_planning',
+          'coping_planning',
+          'maintenance_self_efficacy',
+          'recovery_self_efficacy',
+          'action_control',
+          'barriers_resources',
+        ]));
+
+    expect(
+        factorIds('IMPLEMENTATION_INTENTION'),
+        equals([
+          'intention',
+          'implementation_intention',
+          'cue_clarity',
+          'response_specificity',
+        ]));
+    expect(
+        EvidenceBehaviorTheoryCatalog
+            .theories['IMPLEMENTATION_INTENTION']!['is_extension'],
+        isTrue);
+
+    for (final theory in EvidenceBehaviorTheoryCatalog.theories.values) {
+      for (final id in (theory['factor_ids'] as List).cast<String>()) {
+        expect(EvidenceBehaviorTheoryCatalog.factor(id), isNotNull,
+            reason: '${theory['id']} references missing factor $id');
+      }
+    }
+  });
+
+  test('cross-theory aliases do not collapse distinct constructs', () {
+    expect(
+        EvidenceBehaviorTheoryCatalog.canonicalConstruct(
+            'reflective_motivation'),
+        'reflective_motivation');
+    expect(EvidenceBehaviorTheoryCatalog.canonicalConstruct('action_planning'),
+        'action_planning');
+    expect(
+        EvidenceBehaviorTheoryCatalog.canonicalConstruct(
+            'action_self_efficacy'),
+        'action_self_efficacy');
+    expect(
+        EvidenceBehaviorTheoryCatalog.canonicalConstruct(
+            'attitude_toward_behavior'),
+        'attitude_toward_behavior');
+
+    final cue = EvidenceBehaviorTheoryCatalog.factor('cue_clarity')!;
+    final cueOptions = (cue['options'] as List)
+        .map((e) => (e as Map)['id'])
+        .toList();
+    expect(cueOptions, isNot(contains('automatic')));
+  });
+
   test('major behavior theory packs expose deduplicated standard factors', () {
     expect(
         EvidenceBehaviorTheoryCatalog.theories.keys,
