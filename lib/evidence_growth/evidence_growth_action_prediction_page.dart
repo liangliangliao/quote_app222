@@ -31,7 +31,7 @@ class _EvidenceGrowthActionPredictionPageState
 
   late final EvidenceGrowthActionPredictionService service;
   final plan = TextEditingController();
-  final context = TextEditingController();
+  final situation = TextEditingController();
   final similarHistory = TextEditingController();
 
   DateTime? scheduledAt;
@@ -71,13 +71,13 @@ class _EvidenceGrowthActionPredictionPageState
       if ('${j.plan['resource_limit'] ?? ''}'.trim().isNotEmpty)
         '资源限制：${j.plan['resource_limit']}',
     ];
-    context.text = facts.join('\n');
+    situation.text = facts.join('\n');
   }
 
   @override
   void dispose() {
     plan.dispose();
-    context.dispose();
+    situation.dispose();
     similarHistory.dispose();
     super.dispose();
   }
@@ -186,7 +186,7 @@ class _EvidenceGrowthActionPredictionPageState
       final output = await service.predict(
         plan: plan.text,
         scheduledAt: scheduledAt,
-        context: context.text,
+        context: situation.text,
         similarHistory: similarHistory.text,
         journey: widget.journey,
         jevApiKey: await _jevKey(),
@@ -447,7 +447,7 @@ class _EvidenceGrowthActionPredictionPageState
                     trailing: TextButton(
                         onPressed: chooseTime, child: const Text('选择'))),
                 TextField(
-                    controller: context,
+                    controller: situation,
                     minLines: 4,
                     maxLines: 9,
                     decoration: const InputDecoration(
