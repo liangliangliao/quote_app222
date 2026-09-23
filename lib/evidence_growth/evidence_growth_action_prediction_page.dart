@@ -306,6 +306,7 @@ class _EvidenceGrowthActionPredictionPageState
     setState(() {
       scheduledAt =
           DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _invalidateActionProfile();
     });
   }
 
@@ -561,93 +562,89 @@ class _EvidenceGrowthActionPredictionPageState
         ]));
   }
 
+  String _modeLabel(String mode) => const {
+        'INITIATE': '启动一个行为',
+        'COMPLETE': '完成一个结果',
+        'SUSTAIN': '持续一段行为',
+        'REFRAIN': '在一段时间内不做某行为',
+        'REPEAT': '重复／习惯行动',
+        'INTERACT': '与人或系统互动',
+        'SEQUENCE': '多步骤行动',
+        'OTHER': '其他行动',
+      }[mode] ?? mode;
+
   Widget _inputCard() {
     return _section(
-        '描述下一步',
+        '输入一个行动',
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text(
+              '先用一句自然语言说你准备做什么。AI 会先理解“成功到底是什么事件”，再把结构化事实交给 JEV，而不是先套固定问卷。',
+              style: TextStyle(color: Colors.black54, height: 1.4)),
+          const SizedBox(height: 12),
           TextField(
               controller: plan,
-              enabled: !busy,
+              enabled: !busy && !preparing,
               minLines: 2,
-              maxLines: 4,
-              onChanged: (_) => setState(() {}),
+              maxLines: 5,
+              onChanged: (_) => setState(_invalidateActionProfile),
               decoration: const InputDecoration(
-                  labelText: '具体准备做什么？',
-                  hintText: '例如：明天 7:25 出门去上班',
+                  labelText: '你接下来准备做什么？',
+                  hintText: '例如：今晚给朋友打电话道歉 / 未来7天不抽烟 / 周五前提交报告 / 明早跑步30分钟',
                   border: OutlineInputBorder())),
           const SizedBox(height: 12),
           ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('计划开始时间'),
+              title: const Text('时间／期限（可选）'),
               subtitle: Text(scheduledAt == null
-                  ? '建议设定到具体时间'
+                  ? '没有明确时间也可以，AI会根据行动语义判断需要补什么'
                   : _time(scheduledAt!.millisecondsSinceEpoch)),
               trailing: TextButton(
-                  onPressed: busy ? null : chooseTime,
+                  onPressed: busy || preparing ? null : chooseTime,
                   child: Text(scheduledAt == null ? '选择' : '修改'))),
-          const Divider(),
-          const Text('关键条件',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          const Padding(
-              padding: EdgeInsets.only(top: 4, bottom: 12),
-              child: Text('选中真实符合你的情况即可；不知道的不要猜。',
-                  style: TextStyle(color: Colors.black54))),
-          _chipGroup('客观可行性', feasibilityOptions, feasibility,
-              helper: '交通、费用、权限、必要物品中，哪些事实已经确定？'),
-          _chipGroup('时间条件', timeCapacityOptions, timeCapacity,
-              helper: '有没有时间冲突、睡过头风险或通勤不确定？'),
-          _chipGroup('身体／精力状态', physicalStateOptions, physicalState),
-          _singleChoice('这件事现在对你有多“必须做”？',
-              commitmentStrengthOptions, commitmentStrength,
-              (v) => setState(() => commitmentStrength = v)),
-          _singleChoice('行动或不行动的即时价值／后果有多明显？',
-              valueSalienceOptions, valueSalience,
-              (v) => setState(() => valueSalience = v)),
-          _chipGroup('临近行动时的情绪', emotionOptions, emotions),
-          _chipGroup('现实阻力', frictionOptions, frictions),
-          _chipGroup('外部约束／承诺', commitmentOptions, commitments),
-          _chipGroup('可能抢走行动的替代行为', alternativeOptions, alternatives),
-          _chipGroup('已经准备好的启动条件', supportOptions, executionSupport),
-          _singleChoice('你觉得自己能完成这一步吗？', efficacyOptions,
-              selfEfficacy, (v) => setState(() => selfEfficacy = v)),
-          _singleChoice('到了时间点，你还会重新考虑“去不去”吗？',
-              stabilityOptions, decisionStability,
-              (v) => setState(() => decisionStability = v)),
-          _singleChoice('过去相似计划通常怎样？', historyOptions, historyPattern,
-              (v) => setState(() => historyPattern = v)),
-          if (appliedImprovements.isNotEmpty) ...[
-            const Text('已套用的改进条件',
-                style: TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: appliedImprovements
-                    .map((e) => Chip(
-                        label: Text(e),
-                        onDeleted: busy
-                            ? null
-                            : () => setState(() => appliedImprovements.remove(e))))
-                    .toList()),
-            const SizedBox(height: 12),
-          ],
           ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: const Text('补充说明（可选）'),
-              subtitle: const Text('只写上面选项没有覆盖、但确实会影响这次行动的事实'),
+              title: const Text('手动补充通用条件（可选）'),
+              subtitle: const Text('不是所有行动都需要这些；只选真正已知的事实'),
+              children: [
+                _chipGroup('客观可行性', feasibilityOptions, feasibility),
+                _chipGroup('时间条件', timeCapacityOptions, timeCapacity),
+                _chipGroup('身体／精力状态', physicalStateOptions, physicalState),
+                _singleChoice('这件事现在对你有多“必须做”？',
+                    commitmentStrengthOptions, commitmentStrength,
+                    (v) => setState(() => commitmentStrength = v)),
+                _singleChoice('行动或不行动的即时价值／后果有多明显？',
+                    valueSalienceOptions, valueSalience,
+                    (v) => setState(() => valueSalience = v)),
+                _chipGroup('临近行动时的情绪', emotionOptions, emotions),
+                _chipGroup('现实阻力', frictionOptions, frictions),
+                _chipGroup('外部约束／承诺', commitmentOptions, commitments),
+                _chipGroup('可能抢走行动的替代行为', alternativeOptions, alternatives),
+                _chipGroup('已经准备好的启动条件', supportOptions, executionSupport),
+                _singleChoice('你觉得自己能完成这一步吗？', efficacyOptions,
+                    selfEfficacy, (v) => setState(() => selfEfficacy = v)),
+                _singleChoice('到了关键时刻会不会重新考虑是否执行？',
+                    stabilityOptions, decisionStability,
+                    (v) => setState(() => decisionStability = v)),
+                _singleChoice('过去真正相似的计划通常怎样？', historyOptions,
+                    historyPattern, (v) => setState(() => historyPattern = v)),
+              ]),
+          ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('其他事实（可选）'),
+              subtitle: const Text('写固定选项覆盖不了、但现实中确实存在的信息'),
               children: [
                 TextField(
                     controller: historyNotes,
-                    enabled: !busy,
+                    enabled: !busy && !preparing,
                     minLines: 2,
                     maxLines: 4,
                     decoration: const InputDecoration(
-                        labelText: '过去相似经历补充',
+                        labelText: '相似经历补充',
                         border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(
                     controller: notes,
-                    enabled: !busy,
+                    enabled: !busy && !preparing,
                     minLines: 3,
                     maxLines: 7,
                     decoration: const InputDecoration(
@@ -659,18 +656,155 @@ class _EvidenceGrowthActionPredictionPageState
           SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                  onPressed:
-                      busy || plan.text.trim().isEmpty ? null : predict,
-                  icon: const Icon(Icons.psychology_alt_outlined),
-                  label: Text(busy ? 'AI + JEV 正在判断…' : '开始预测'))),
+                  onPressed: busy || preparing || plan.text.trim().isEmpty
+                      ? null
+                      : prepareAction,
+                  icon: const Icon(Icons.auto_awesome),
+                  label: Text(preparing
+                      ? 'AI 正在理解这个行动…'
+                      : actionProfile.isEmpty
+                          ? 'AI 先理解这个行动'
+                          : '重新理解这个行动'))),
+          if (preparing)
+            const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: LinearProgressIndicator())
+        ]),
+        icon: Icons.edit_note_outlined);
+  }
+
+  Widget _profileCard() {
+    if (actionProfile.isEmpty) return const SizedBox.shrink();
+    final events = growthRows(actionProfile['forecast_events']);
+    final dynamic = growthRows(actionProfile['dynamic_factors']);
+    final questions = growthRows(actionProfile['clarifying_questions']);
+    final mode = '${actionProfile['action_mode'] ?? 'OTHER'}';
+    final interpretation = '${actionProfile['interpretation'] ?? ''}'.trim();
+    final normalized = '${actionProfile['normalized_action'] ?? ''}'.trim();
+
+    return _section(
+        'AI 对这个行动的理解',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Chip(label: Text(_modeLabel(mode))),
+            const SizedBox(width: 8),
+            if (actionProfile['version'] == 'universal_action_v1_fallback')
+              const Chip(label: Text('通用回退'))
+          ]),
+          if (normalized.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(normalized,
+                style: const TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.w800)),
+          ],
+          if (interpretation.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(interpretation,
+                style: const TextStyle(color: Colors.black54, height: 1.4)),
+          ],
+          if (events.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text('JEV 实际要预测的可观察事件',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            for (final event in events)
+              ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(event['primary'] == true
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked),
+                  title: Text('${event['label'] ?? ''}'),
+                  subtitle: event['primary'] == true
+                      ? const Text('主预测事件')
+                      : const Text('辅助预测事件'))
+          ],
+          if (dynamic.isNotEmpty) ...[
+            const Divider(height: 28),
+            const Text('这个行动特有的变量',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: dynamic
+                    .map((row) => Chip(label: Text('${row['label'] ?? ''}')))
+                    .toList())
+          ],
+          if (questions.isNotEmpty) ...[
+            const Divider(height: 28),
+            const Text('AI 发现这些信息最值得补充',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            const Text('可以不回答；不回答时 JEV 会把它当作不确定，而不是自动判为负面。',
+                style: TextStyle(fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 12),
+            for (final row in questions) _clarifyingQuestion(row),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                  onPressed: busy || preparing ? null : predict,
+                  icon: const Icon(Icons.hub_outlined),
+                  label: Text(busy
+                      ? '正在进行预测…'
+                      : jevConfigured
+                          ? '把这些事实交给 JEV 预测'
+                          : '开始预测（JEV未配置时回退到LLM）'))),
           if (busy)
             const Padding(
                 padding: EdgeInsets.only(top: 10),
                 child: LinearProgressIndicator())
         ]),
-        icon: Icons.directions_run_outlined);
+        icon: Icons.account_tree_outlined);
   }
 
+  Widget _clarifyingQuestion(GrowthData row) {
+    final id = _safeQuestionId(row['id']);
+    final question = '${row['question'] ?? ''}'.trim();
+    final why = '${row['why'] ?? ''}'.trim();
+    final options = growthStrings(row['options']);
+    final isChoice = '${row['answer_type'] ?? 'text'}' == 'choice' &&
+        options.isNotEmpty;
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(question, style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (why.isNotEmpty)
+            Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 6),
+                child: Text(why,
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.black54))),
+          if (isChoice)
+            Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: options
+                    .map((option) => ChoiceChip(
+                        label: Text(option),
+                        selected: clarificationChoice[id] == option,
+                        onSelected: busy
+                            ? null
+                            : (selected) {
+                                if (selected) {
+                                  setState(() =>
+                                      clarificationChoice[id] = option);
+                                }
+                              }))
+                    .toList())
+          else
+            TextField(
+                controller: clarificationText[id] ??=
+                    TextEditingController(),
+                enabled: !busy,
+                decoration: const InputDecoration(
+                    hintText: '不知道可以留空',
+                    isDense: true,
+                    border: OutlineInputBorder()))
+        ]));
+  }
   Widget _summaryCard() {
     if (result.isEmpty) return const SizedBox.shrink();
     final available = result['estimate_available'] == true;
