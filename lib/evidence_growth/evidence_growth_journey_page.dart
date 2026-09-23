@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_action_prediction_page.dart';
 import 'evidence_growth_guidance.dart';
 import 'evidence_growth_guidance_card.dart';
 import 'evidence_growth_knowledge_page.dart';
@@ -148,6 +149,21 @@ class _JourneyHomeState extends State<EvidenceGrowthJourneyHome> {
               onPressed: busy ? null : enter,
               icon: const Icon(Icons.arrow_forward),
               label: Text(busy ? '正在承接…' : '从这件事继续')),
+          Card(
+              child: ListTile(
+                  leading: const CircleAvatar(
+                      child: Icon(Icons.psychology_alt_outlined)),
+                  title: const Text('行动发生可能性预测'),
+                  subtitle: const Text('AI 理解情境 + JEV typed 判断 + 真实结果个人校准'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => EvidenceGrowthActionPredictionPage(
+                                dao: widget.dao)));
+                    await reload();
+                  })),
           if (journeys.isEmpty)
             Wrap(
                 spacing: 6,
@@ -1455,6 +1471,14 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                                 else
                                   await widget.onTrial(j.trialId);
                               }, primary: true),
+                              action('预测这一步会不会如期发生', () async {
+                                await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) =>
+                                            EvidenceGrowthActionPredictionPage(
+                                                dao: widget.dao, journey: j)));
+                              }),
                               if (j.trialId.isEmpty)
                                 action('已有结果，核对事实', outcome)
                             ]),
