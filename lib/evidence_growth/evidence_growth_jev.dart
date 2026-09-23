@@ -420,12 +420,13 @@ class EvidenceGrowthJev {
       'model': model,
       'state': {
         'action_prediction': jevState,
-        'theoretical_model': {
-          'name': 'Integrated Behavioral Model',
-          'structure':
-              'experiential/instrumental attitude + perceived norms + personal agency -> intention; intention + knowledge/skills + salience + environmental constraints + habit -> behavior',
-          'extension':
-              'implementation intention is an explicitly separate volitional bridge for the intention-behavior gap'
+        'theoretical_models': {
+          'selected_ids': growthStrings(state['selected_theories']),
+          'models': EvidenceBehaviorTheoryCatalog.theoryRows(
+              growthStrings(state['selected_theories'])),
+          'theory_factor_answers': state['theory_factor_answers'],
+          'rule':
+              'Treat confirmed user questionnaire answers as evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically.'
         }
       },
       'questions': {
