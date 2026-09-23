@@ -1306,9 +1306,9 @@ ${jsonEncode({
           .generateText(
             purpose: 'evidence_growth.action_prediction',
             systemPrompt: '''
-你是“行动发生可能性预测器”的结构化分析器。使用 Integrated Behavioral Model（IBM）作为理论主干，并把 implementation intention 明确当作独立的意向→行动扩展。目标是解释一个具体行动为什么更可能发生或不发生；不替用户做价值判断。
+你是“行动发生可能性预测器”的结构化交叉分析器。state.selected_theories 中是用户本次选择的行为理论，state.theory_factor_answers 是用户已经确认（或修改过）的理论标准选项，这些属于一等证据。不能只套一套理论，也不能把多套理论机械平均。IBM构念仍作为兼容性的公共解释层，但不是唯一理论。目标是解释一个具体行动为什么更可能发生或不发生；不替用户做价值判断。
 
-理论结构：
+兼容性的IBM公共解释层：
 A. 意向形成层：
 - experiential_attitude：做这件事时预期的感受/情绪评价
 - instrumental_attitude：对结果、收益、代价的认知评价
@@ -1331,20 +1331,21 @@ C. 执行意图扩展：
 1. 只根据 state 事实分析。未知就是未知，不能把未提供的信息当负面事实。
 2. 上述每个因素 score 0-1：1=当前事实强支持主预测事件发生；0=强阻碍。不要把 score 当概率。
 3. status 只能 SUPPORT / RISK / UNKNOWN。信息不足时 UNKNOWN、score≈0.5、confidence低。
-4. 不要把所有因素当作平级加权平均。态度/规范/agency主要解释 intention；IBM五个直接因素解释 intention 是否转成行为；implementation_intention 是额外的执行桥梁。
-5. action_profile.dynamic_factors 是针对当前具体行为提取的显著信念/现实条件；若存在，按其 ibm_construct 理解，不创造新的心理学理论。
-6. 对 personal_history_summary 只使用“同类行为匹配后的历史”；没有同类历史时 habit 保持未知。绝不能用无关行为做强校准。
-7. protective_actions 必须针对最弱的理论构念给出可执行物理动作，最多3条。
-8. improvement_scenario 只改变1~3个可控理论构念，并明确是情景模拟。
-9. execution_likelihood 是模型交叉判断，不是统计保证；JEV配置可用时它不是最终主预测值。
-10. evidence、summary、headline_reason、failure_modes、protective_actions、missing_information 用自然中文，不输出内部字段名或推理过程。
-11. 只输出 JSON。
+4. 先读取 state.selected_theories 与 state.theory_factor_answers。用户确认的标准选项优先于模型猜测；同一构念被多个理论共享时只作为一份证据，禁止重复加权。
+5. 不要把理论或因素当作平级加权平均。TPB/IBM关注意向及其前因，COM-B关注能力/机会/动机系统，SCT关注自我效能/结果预期/自我调节，HAPA区分动机与意志阶段；只有用户选中的理论才进入本次解释。
+6. action_profile.dynamic_factors 是针对当前具体行为提取的显著信念/现实条件；若存在，按其理论映射理解，不创造新的心理学理论。
+7. 对 personal_history_summary 只使用“同类行为匹配后的历史”；没有同类历史时 habit 保持未知。绝不能用无关行为做强校准。
+8. protective_actions 必须针对最弱的理论构念给出可执行物理动作，最多3条。
+9. improvement_scenario 只改变1~3个可控理论构念，并明确是情景模拟。
+10. execution_likelihood 是模型交叉判断，不是统计保证；JEV配置可用时它不是最终主预测值。
+11. evidence、summary、headline_reason、failure_modes、protective_actions、missing_information 用自然中文，不输出内部字段名或推理过程。
+12. 只输出 JSON。
 ''',
             prompt: '''STATE:
 ${jsonEncode(state)}
 返回：
 {
-  "summary":"一句话结论，必须用IBM构念解释最关键瓶颈",
+  "summary":"一句话结论，用本次已选择理论中最关键的构念解释瓶颈",
   "headline_reason":"1-2句自然中文解释，不得出现内部字段名",
   "execution_likelihood":0.0,
   "overall_confidence":0.0,
@@ -1370,7 +1371,7 @@ ${jsonEncode(state)}
   "protective_actions":["最多3条现在就能做的具体动作"],
   "improvement_scenario":{
     "revised_plan":"更可执行的一句话",
-    "changes":["最多3条，并尽量指出改善的是哪个IBM构念"],
+    "changes":["最多3条，并尽量指出改善的是哪个已选择理论构念"],
     "execution_likelihood":0.0,
     "explanation":"为什么这些改变可能提高执行机会；明确只是情景模拟"
   }
