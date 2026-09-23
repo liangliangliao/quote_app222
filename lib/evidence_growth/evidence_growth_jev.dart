@@ -721,8 +721,8 @@ class EvidenceGrowthJev {
       final merged = <String, dynamic>{};
       final batchStatuses = <String>[];
       for (var offset = 0; offset < ids.length; offset += 18) {
-        final chunk = ids.sublist(
-            offset, (offset + 18).clamp(0, ids.length));
+        final end = offset + 18 < ids.length ? offset + 18 : ids.length;
+        final chunk = ids.sublist(offset, end);
         final part = await assessTheoryOptions(
           state,
           chunk,
