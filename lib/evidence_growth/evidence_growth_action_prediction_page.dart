@@ -654,6 +654,179 @@ class _EvidenceGrowthActionPredictionPageState
       }[key] ??
       key;
 
+  String _theoryShortName(String id) =>
+      '${EvidenceBehaviorTheoryCatalog.theories[id]?['short_name'] ?? id}';
+
+  String _factorOptionLabel(GrowthData row, String optionId) {
+    for (final option in growthRows(row['options'])) {
+      if ('${option['id'] ?? ''}' == optionId) {
+        return '${option['label'] ?? optionId}';
+      }
+    }
+    return optionId;
+  }
+
+  Widget _theoryQuestionnaire(List<GrowthData> rows) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final missing = missingTheoryFactorCount;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Divider(height: 28),
+      Row(children: [
+        const Expanded(
+            child: Text('理论关键因素与标准选项',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+        if (missing > 0)
+          Text('待选 $missing',
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800, color: Colors.orange))
+        else
+          const Text('已完成',
+              style: TextStyle(fontWeight: FontWeight.w800, color: _teal))
+      ]),
+      const SizedBox(height: 4),
+      const Text(
+          '相同构念只显示一次，并标出来自哪些理论。AI/JEV只能帮助预填；自动选中阈值为双方对同一选项的最低置信度≥75%，用户可随时改。',
+          style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.4)),
+      if (missing > 0) ...[
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+            onPressed: busy
+                ? null
+                : () {
+                    setState(() {
+                      for (final row in rows) {
+                        final id = '${row['id'] ?? ''}';
+                        if (id.isEmpty ||
+                            theoryFactorSelections[id]?.isNotEmpty == true) {
+                          continue;
+                        }
+                        final hasUnknown = growthRows(row['options'])
+                            .any((o) => o['id'] == 'unknown');
+                        if (hasUnknown) {
+                          theoryFactorSelections[id] = 'unknown';
+                          theoryFactorSelectionSources[id] = 'MANUAL_UNKNOWN';
+                        }
+                      }
+                    });
+                  },
+            icon: const Icon(Icons.help_outline),
+            label: const Text('把所有未选项设为“不清楚”'))
+      ],
+      const SizedBox(height: 10),
+      for (final row in rows)
+        Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 10),
+            shape: RoundedRectangleBorder(
+                side: BorderSide(color: Colors.black.withValues(alpha: .08)),
+                borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Builder(builder: (_) {
+                  final id = '${row['id'] ?? ''}';
+                  final selected = theoryFactorSelections[id] ?? '';
+                  final source = theoryFactorSelectionSources[id] ?? '';
+                  final theories = growthStrings(row['theory_ids']);
+                  final llm = growthMap(row['llm_suggestion']);
+                  final jev = growthMap(row['jev_suggestion']);
+                  final llmOption = '${llm['option_id'] ?? ''}';
+                  final jevOption = '${jev['option_id'] ?? ''}';
+                  final auto = row['auto_selected'] == true;
+                  final autoConfidence = row['auto_confidence'];
+                  return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                  child: Text('${row['label'] ?? id}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 15))),
+                              if (theories.isNotEmpty)
+                                Flexible(
+                                    child: Wrap(
+                                        spacing: 4,
+                                        runSpacing: 4,
+                                        alignment: WrapAlignment.end,
+                                        children: [
+                                      for (final theory in theories)
+                                        Chip(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            label: Text(
+                                                _theoryShortName(theory),
+                                                style: const TextStyle(
+                                                    fontSize: 10)))
+                                    ]))
+                            ]),
+                        const SizedBox(height: 3),
+                        Text('${row['question'] ?? ''}',
+                            style: const TextStyle(height: 1.35)),
+                        const SizedBox(height: 8),
+                        if (auto) ...[
+                          Text(
+                              'LLM + JEV 一致，自动预填：${_factorOptionLabel(row, '${row['auto_option_id']}')} · 把握 ${_pct(autoConfidence)}',
+                              style: const TextStyle(
+                                  color: _teal,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 5),
+                        ] else if (llmOption.isNotEmpty ||
+                            jevOption.isNotEmpty) ...[
+                          Text(
+                              '未达到自动选择条件：${[
+                                if (llmOption.isNotEmpty)
+                                  'LLM→${_factorOptionLabel(row, llmOption)} ${_pct(llm['confidence'])}',
+                                if (jevOption.isNotEmpty)
+                                  'JEV→${_factorOptionLabel(row, jevOption)} ${_pct(jev['confidence'])}'
+                              ].join('；')}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.black54)),
+                          const SizedBox(height: 5),
+                        ],
+                        if (source.startsWith('MANUAL') &&
+                            selected.isNotEmpty) ...[
+                          const Text('用户已手动确认／修改',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: _teal,
+                                  fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 5),
+                        ],
+                        Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final option in growthRows(row['options']))
+                                ChoiceChip(
+                                    label: Text('${option['label'] ?? ''}'),
+                                    selected:
+                                        selected == '${option['id'] ?? ''}',
+                                    onSelected: busy
+                                        ? null
+                                        : (yes) {
+                                            if (!yes) return;
+                                            setState(() {
+                                              theoryFactorSelections[id] =
+                                                  '${option['id'] ?? ''}';
+                                              theoryFactorSelectionSources[id] =
+                                                  'MANUAL';
+                                            });
+                                          })
+                            ]),
+                        if ('${llm['evidence'] ?? ''}'.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text('AI提取证据：${llm['evidence']}',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.black54))
+                        ]
+                      ]);
+                })))
+    ]);
+  }
+
   Widget _profileCard() {
     if (actionProfile.isEmpty) return const SizedBox.shrink();
     final events = growthRows(actionProfile['forecast_events']);
