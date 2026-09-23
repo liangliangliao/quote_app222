@@ -33,6 +33,91 @@ void main() {
         containsAll(['feasibility', 'physical_capacity', 'history_habit']));
   });
 
+  test('theory catalog preserves source-theory construct coverage', () {
+    final allTheoryIds = EvidenceBehaviorTheoryCatalog.theories.keys.toList();
+    final allFactors = EvidenceBehaviorTheoryCatalog.activeFactors(allTheoryIds);
+    expect(allFactors.length, greaterThan(28));
+
+    for (final theory in EvidenceBehaviorTheoryCatalog.theories.values) {
+      final factorIds = (theory['factor_ids'] as List).cast<String>();
+      for (final id in factorIds) {
+        expect(EvidenceBehaviorTheoryCatalog.factor(id), isNotNull,
+            reason: '${theory['id']} references missing factor $id');
+      }
+    }
+
+    final tpb = EvidenceBehaviorTheoryCatalog.theories['TPB']!;
+    expect((tpb['factor_ids'] as List),
+        containsAll(['intention', 'attitude_toward_behavior',
+          'subjective_norm', 'perceived_behavioral_control',
+          'actual_behavioral_control']));
+    expect((tpb['belief_basis'] as List),
+        containsAll(['behavioral_beliefs', 'normative_beliefs',
+          'control_beliefs']));
+
+    final ibm = EvidenceBehaviorTheoryCatalog.theories['IBM']!;
+    expect((ibm['factor_ids'] as List), containsAll([
+      'intention',
+      'experiential_attitude',
+      'instrumental_attitude',
+      'injunctive_norm',
+      'descriptive_norm',
+      'self_efficacy',
+      'perceived_control',
+      'knowledge_skills',
+      'salience',
+      'environmental_constraints',
+      'habit',
+    ]));
+
+    final comb = EvidenceBehaviorTheoryCatalog.theories['COM_B']!;
+    expect((comb['factor_ids'] as List), containsAll([
+      'physical_capability',
+      'psychological_capability',
+      'physical_opportunity',
+      'social_opportunity',
+      'reflective_motivation',
+      'automatic_motivation',
+    ]));
+
+    final sct = EvidenceBehaviorTheoryCatalog.theories['SCT']!;
+    expect((sct['factor_ids'] as List), containsAll([
+      'behavioral_capability',
+      'self_efficacy',
+      'outcome_expectations',
+      'outcome_value',
+      'goals',
+      'self_regulation',
+      'observational_learning',
+      'reinforcement',
+      'environmental_influences',
+    ]));
+
+    final hapa = EvidenceBehaviorTheoryCatalog.theories['HAPA']!;
+    expect((hapa['factor_ids'] as List), containsAll([
+      'risk_perception',
+      'outcome_expectations',
+      'action_self_efficacy',
+      'intention',
+      'action_planning',
+      'coping_planning',
+      'maintenance_self_efficacy',
+      'recovery_self_efficacy',
+      'action_control',
+      'barriers_resources',
+    ]));
+
+    final ii =
+        EvidenceBehaviorTheoryCatalog.theories['IMPLEMENTATION_INTENTION']!;
+    expect(ii['is_extension'], isTrue);
+    expect((ii['factor_ids'] as List), containsAll([
+      'intention',
+      'implementation_intention',
+      'cue_clarity',
+      'response_specificity',
+    ]));
+  });
+
   test('JEV theory prefill uses typed choices for theory options', () {
     final request = EvidenceGrowthJev.theoryPrefillRequest(
       {
