@@ -626,11 +626,22 @@ intention,experiential_attitude,instrumental_attitude,injunctive_norm,descriptiv
 7. clarifying_questions 只问最可能显著改变预测的缺失事实，最多5个；每一问必须标明 ibm_construct。优先询问理论上关键但证据缺失的构念，不问泛泛问题。
 8. failure_modes 最多6个，也尽量标明最接近的 ibm_construct。
 9. action_tags 用于以后匹配“真正相似的过去行为”，必须具体且稳定，例如 work_submission、exercise_running、smoking_abstinence、social_apology_call；不要只写 goal/action/task 这种泛标签。
-10. 所有 id 只用小写英文字母、数字、下划线。
-11. 只输出 JSON。
+10. 必须同时检查 PRESERVED_FACTOR_CATALOG。它来自最早“去上班/去体检”原型中已经验证有价值的16类预测条件。不要因为采用IBM就把它们丢掉；要根据当前行动逐项判断是否相关。相关的放入 selected_preserved_factors，不相关的不要硬塞。
+11. 对于“去上班、面试、体检、出门、赴约、办理手续”等启动/到场型行动，应特别检查：客观可行性、时间可用性、身体精力、前置准备、承诺强度、临场价值、情绪、自我效能、决策稳定性、计划具体度、启动触发、环境准备、现实摩擦、替代行为、外部责任、相似历史。
+12. 对任何其他行动，也必须执行同样的覆盖扫描：①客观/环境约束；②时间与资源；③身体与能力；④意向/价值；⑤情绪/回避；⑥自我效能/控制；⑦触发/计划；⑧替代行为/习惯；⑨社会承诺；⑩该行为独有依赖。最后才生成 adaptive dynamic_factors。
+13. selected_preserved_factors 只能从目录选，必须给 selection_reason，说明“为什么当前这个行动需要它”；不要为了凑数量而选择。
+14. dynamic_factors 只补充目录和IBM构念都没有具体覆盖好的“当前行动特有条件”，必须给 selection_reason，并映射到 ibm_construct。
+15. assumptions 只记录为了理解行动而暂时采用、但用户并未明确确认的假设；没有就返回空数组。绝不能把 assumption 当成事实交给JEV。
+16. analysis_checks 要用自然中文简短说明你是否检查了：行为定义、目标事件、原型关键因素、IBM构念、行动特有依赖、缺失信息。用于让用户核对你的分析过程是否完整，不输出内部推理链。
+17. 如果 analysis_correction 非空，它是用户对上一轮AI理解的纠正，优先级高于上一轮解释；重新分析时必须明确吸收纠正。
+18. 所有 id 只用小写英文字母、数字、下划线。
+19. 只输出 JSON。
 ''',
         prompt: '''INPUT:
 ${jsonEncode(state)}
+
+PRESERVED_FACTOR_CATALOG:
+${jsonEncode(preservedFactorCatalog)}
 
 返回：
 {
@@ -639,7 +650,16 @@ ${jsonEncode(state)}
   "normalized_action":"把用户原话改写成明确、可观察的一句话",
   "action_mode":"INITIATE|COMPLETE|SUSTAIN|REFRAIN|REPEAT|INTERACT|SEQUENCE|OTHER",
   "action_tags":["2~5个具体稳定标签"],
-  "interpretation":"一句自然中文说明你把这个行动理解成什么，不做预测",
+  "interpretation":"用2~4句自然中文说明你把这个行动理解成什么、行动边界是什么、什么才算真正发生；不做预测",
+  "assumptions":["用户没有明确说、但为了理解暂时采用的假设；没有则空"],
+  "analysis_checks":[
+    "已核对行为定义与成功标准",
+    "已扫描原型关键因素",
+    "已扫描IBM构念",
+    "已扫描当前行动特有依赖",
+    "已识别关键缺失信息"
+  ],
+  "coverage_summary":"一句话说明本轮因素覆盖是否充分、还缺什么",
   "forecast_events":[
     {
       "id":"observable_event",
@@ -650,12 +670,20 @@ ${jsonEncode(state)}
     }
   ],
   "relevant_core_factors":["从允许的IBM/扩展构念中选择"],
+  "selected_preserved_factors":[
+    {
+      "id":"必须来自PRESERVED_FACTOR_CATALOG",
+      "selection_reason":"为什么这个旧原型因素对当前行动仍然关键",
+      "evidence":"若用户输入中已有相关事实，用中文概括；没有则为空"
+    }
+  ],
   "dynamic_factors":[
     {
       "id":"behavior_specific_belief",
       "label":"中文名称",
       "ibm_construct":"必须是允许的理论构念之一",
       "condition":"English condition whose presence supports the primary event",
+      "selection_reason":"为什么这个行动特有因素会显著改变预测",
       "evidence":"若输入中已有相关事实，用中文概括；没有则为空"
     }
   ],
