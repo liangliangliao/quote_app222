@@ -27,6 +27,110 @@ class EvidenceGrowthActionPredictionService {
 
   /// Every score means "how much this factor supports execution".
   static const factorLabels = EvidenceGrowthJev.actionFactorLabels;
+  /// Preserved predictor pool from the original work-attendance prototype.
+  ///
+  /// These conditions are not shown as mandatory fixed fields. The LLM
+  /// selects only the ones relevant to the current action and maps each one
+  /// back to the IBM construct that explains why it matters.
+  static const preservedFactorCatalog = <String, GrowthData>{
+    'feasibility': {
+      'label': '客观可行性',
+      'ibm_construct': 'environmental_constraints',
+      'condition':
+          'Required access, money, transport, permission and resources are actually available.'
+    },
+    'time_capacity': {
+      'label': '时间可用性',
+      'ibm_construct': 'environmental_constraints',
+      'condition':
+          'There is enough usable time and no schedule collision that blocks the target behavior.'
+    },
+    'physical_capacity': {
+      'label': '身体／精力状态',
+      'ibm_construct': 'perceived_control',
+      'condition':
+          'Current sleep, energy and physical condition are sufficient for the target behavior.'
+    },
+    'prerequisite_readiness': {
+      'label': '前置准备完整度',
+      'ibm_construct': 'environmental_constraints',
+      'condition':
+          'Required materials, information, route, account, permission or other prerequisites are ready.'
+    },
+    'commitment': {
+      'label': '行动承诺强度',
+      'ibm_construct': 'intention',
+      'condition':
+          'The person has made a sufficiently strong current decision to perform the target behavior.'
+    },
+    'value_salience': {
+      'label': '价值／后果的临场显著性',
+      'ibm_construct': 'salience',
+      'condition':
+          'The reason, consequence or value of acting is likely to remain salient at the critical moment.'
+    },
+    'emotion': {
+      'label': '临场情绪支持度',
+      'ibm_construct': 'experiential_attitude',
+      'condition':
+          'The expected immediate emotional experience supports rather than suppresses the target behavior.'
+    },
+    'self_efficacy': {
+      'label': '自我效能',
+      'ibm_construct': 'self_efficacy',
+      'condition':
+          'The person believes they can successfully perform the target behavior or its next required step.'
+    },
+    'decision_stability': {
+      'label': '决策稳定性',
+      'ibm_construct': 'intention',
+      'condition':
+          'The action decision is stable and is unlikely to be reopened without genuinely new information.'
+    },
+    'specificity': {
+      'label': '计划具体度',
+      'ibm_construct': 'implementation_intention',
+      'condition':
+          'The plan specifies a concrete next action, timing or context clearly enough to execute.'
+    },
+    'trigger': {
+      'label': '启动触发清晰度',
+      'ibm_construct': 'implementation_intention',
+      'condition':
+          'A clear cue or if-then trigger connects the critical situation to the first action.'
+    },
+    'preparation': {
+      'label': '环境准备度',
+      'ibm_construct': 'environmental_constraints',
+      'condition':
+          'The immediate environment is prepared so execution can begin with little setup.'
+    },
+    'friction': {
+      'label': '现实阻力可克服性',
+      'ibm_construct': 'environmental_constraints',
+      'condition':
+          'Distance, effort, complexity, cost and other practical friction are manageable.'
+    },
+    'alternatives': {
+      'label': '替代行为竞争',
+      'ibm_construct': 'habit',
+      'condition':
+          'Immediately easier, habitual or more rewarding alternatives are unlikely to displace the target behavior.'
+    },
+    'external_commitment': {
+      'label': '外部约束／责任',
+      'ibm_construct': 'injunctive_norm',
+      'condition':
+          'Appointments, accountability, deadlines, people waiting or immediate consequences support follow-through.'
+    },
+    'history_habit': {
+      'label': '相似历史／习惯支持',
+      'ibm_construct': 'habit',
+      'condition':
+          'Genuinely similar past behavior and contextual habits support the target behavior in this situation.'
+    },
+  };
+
 
   static const failureModeLabels = <String, String>{
     'intention_failure': '行动意向不足或尚未真正形成决定',
@@ -67,6 +171,7 @@ class EvidenceGrowthActionPredictionService {
     DateTime? scheduledAt,
     String context = '',
     String similarHistory = '',
+    String analysisCorrection = '',
     GrowthData structuredContext = const {},
     GrowthJourney? journey,
   }) async {
@@ -78,6 +183,7 @@ class EvidenceGrowthActionPredictionService {
       'user_reported_conditions': structuredContext,
       'additional_notes': context.trim(),
       'similar_history_report': similarHistory.trim(),
+      'analysis_correction': analysisCorrection.trim(),
       if (journey != null)
         'journey': {
           'goal': journey.title,
@@ -97,6 +203,7 @@ class EvidenceGrowthActionPredictionService {
     DateTime? scheduledAt,
     String context = '',
     String similarHistory = '',
+    String analysisCorrection = '',
     GrowthData structuredContext = const {},
     GrowthData actionProfile = const {},
     GrowthData clarificationAnswers = const {},
@@ -129,6 +236,7 @@ class EvidenceGrowthActionPredictionService {
       'user_reported_conditions': structuredContext,
       'additional_notes': context.trim(),
       'similar_history_report': similarHistory.trim(),
+      'analysis_correction': analysisCorrection.trim(),
       if (journey != null)
         'journey': {
           'goal': journey.title,
