@@ -268,6 +268,8 @@ class EvidenceGrowthJev {
       });
     }
     if (!out.any((e) => e['primary'] == true)) out.first['primary'] = true;
+    out.sort((a, b) => (b['primary'] == true ? 1 : 0)
+        .compareTo(a['primary'] == true ? 1 : 0));
     return out;
   }
 
@@ -326,8 +328,15 @@ class EvidenceGrowthJev {
     final dynamic = _dynamicFactors(state);
     final failures = _failureModes(state);
     final profile = growthMap(state['action_profile']);
-    final clarifiers =
-        growthRows(profile['clarifying_questions']).take(8).toList();
+    final answers = growthMap(state['clarification_answers']);
+    final clarifiers = growthRows(profile['clarifying_questions'])
+        .where((row) {
+          final id = _safeId(row['id']);
+          final answer = answers[id];
+          return answer == null || '$answer'.trim().isEmpty;
+        })
+        .take(8)
+        .toList();
 
     return {
       'model': model,
