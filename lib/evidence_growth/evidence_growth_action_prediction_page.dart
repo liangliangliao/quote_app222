@@ -34,6 +34,9 @@ class _EvidenceGrowthActionPredictionPageState
   final notes = TextEditingController();
   final historyNotes = TextEditingController();
 
+  final feasibility = <String>{};
+  final timeCapacity = <String>{};
+  final physicalState = <String>{};
   final emotions = <String>{};
   final frictions = <String>{};
   final commitments = <String>{};
@@ -41,6 +44,8 @@ class _EvidenceGrowthActionPredictionPageState
   final executionSupport = <String>{};
   final appliedImprovements = <String>{};
 
+  String commitmentStrength = '不清楚';
+  String valueSalience = '不清楚';
   String historyPattern = '不清楚';
   String selfEfficacy = '不清楚';
   String decisionStability = '不清楚';
@@ -51,6 +56,31 @@ class _EvidenceGrowthActionPredictionPageState
   bool busy = false;
   bool jevConfigured = false;
 
+  static const feasibilityOptions = [
+    '交通已确认',
+    '费用可承担',
+    '权限／资格齐全',
+    '必要物品齐全',
+    '交通存在问题',
+    '费用存在问题',
+    '缺少权限／资格',
+    '缺少必要物品'
+  ];
+  static const timeCapacityOptions = [
+    '时间充足',
+    '已留缓冲时间',
+    '通勤时间确定',
+    '可能睡过头',
+    '存在日程冲突',
+    '通勤时间不确定'
+  ];
+  static const physicalStateOptions = [
+    '精力充足',
+    '状态一般',
+    '睡眠不足',
+    '明显疲惫',
+    '身体不适'
+  ];
   static const emotionOptions = [
     '有动力',
     '平静',
@@ -110,6 +140,20 @@ class _EvidenceGrowthActionPredictionPageState
     '不清楚',
     '有些把握',
     '很有把握'
+  ];
+  static const commitmentStrengthOptions = [
+    '可做可不做',
+    '想做但可以推迟',
+    '比较重要',
+    '已经决定必须做',
+    '已经做出不可轻易撤回的承诺'
+  ];
+  static const valueSalienceOptions = [
+    '几乎没有即时后果',
+    '有一些损失或收益',
+    '有明显责任／损失',
+    '错过会失去重要机会',
+    '结果对我现在非常重要'
   ];
   static const stabilityOptions = [
     '到时还会重新考虑',
@@ -260,6 +304,12 @@ class _EvidenceGrowthActionPredictionPageState
   }
 
   GrowthData get structuredContext => {
+        'feasibility': feasibility.toList(),
+        'time_capacity': timeCapacity.toList(),
+        'physical_state': physicalState.toList(),
+        'commitment':
+            commitmentStrength == '不清楚' ? '' : commitmentStrength,
+        'value_salience': valueSalience == '不清楚' ? '' : valueSalience,
         'emotions': emotions.toList(),
         'frictions': frictions.toList(),
         'commitments': commitments.toList(),
@@ -507,6 +557,17 @@ class _EvidenceGrowthActionPredictionPageState
               padding: EdgeInsets.only(top: 4, bottom: 12),
               child: Text('选中真实符合你的情况即可；不知道的不要猜。',
                   style: TextStyle(color: Colors.black54))),
+          _chipGroup('客观可行性', feasibilityOptions, feasibility,
+              helper: '交通、费用、权限、必要物品中，哪些事实已经确定？'),
+          _chipGroup('时间条件', timeCapacityOptions, timeCapacity,
+              helper: '有没有时间冲突、睡过头风险或通勤不确定？'),
+          _chipGroup('身体／精力状态', physicalStateOptions, physicalState),
+          _singleChoice('这件事现在对你有多“必须做”？',
+              commitmentStrengthOptions, commitmentStrength,
+              (v) => setState(() => commitmentStrength = v)),
+          _singleChoice('行动或不行动的即时价值／后果有多明显？',
+              valueSalienceOptions, valueSalience,
+              (v) => setState(() => valueSalience = v)),
           _chipGroup('临近行动时的情绪', emotionOptions, emotions),
           _chipGroup('现实阻力', frictionOptions, frictions),
           _chipGroup('外部约束／承诺', commitmentOptions, commitments),
