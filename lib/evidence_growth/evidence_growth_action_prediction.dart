@@ -500,7 +500,7 @@ intention,experiential_attitude,instrumental_attitude,injunctive_norm,descriptiv
 9. action_tags 用于以后匹配“真正相似的过去行为”，必须具体且稳定，例如 work_submission、exercise_running、smoking_abstinence、social_apology_call；不要只写 goal/action/task 这种泛标签。
 10. 所有 id 只用小写英文字母、数字、下划线。
 11. 只输出 JSON。
-'''
+''',
         prompt: '''INPUT:
 ${jsonEncode(state)}
 
