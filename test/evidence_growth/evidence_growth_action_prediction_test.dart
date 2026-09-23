@@ -278,17 +278,23 @@ void main() {
     expect(selections['intention']['confidence'], .84);
   });
 
-  test('confirmed theory option has transparent support score', () {
+  test('confirmed theory options use ordinal levels, not interval weights', () {
     expect(
-        EvidenceBehaviorTheoryCatalog.supportScore(
+        EvidenceBehaviorTheoryCatalog.ordinalLevel(
             'knowledge_skills', 'adequate'),
         3);
     expect(
-        EvidenceBehaviorTheoryCatalog.supportScore('intention', 'firm'),
+        EvidenceBehaviorTheoryCatalog.ordinalLevel('intention', 'firm'),
         4);
     expect(
-        EvidenceBehaviorTheoryCatalog.supportScore('intention', 'unknown'),
+        EvidenceBehaviorTheoryCatalog.ordinalLevel('intention', 'unknown'),
         isNull);
+    expect(
+        EvidenceBehaviorTheoryCatalog.ordinalLevel(
+            'risk_perception', 'very_high'),
+        isNull,
+        reason:
+            'HAPA risk perception must not be forced into a monotonic support weight');
   });
 
   test('JEV action request explicitly honors confirmed theory answers', () {
@@ -334,6 +340,51 @@ void main() {
     final criteria = failure['criteria'] as Map;
     expect(criteria.keys.any((k) => '$k'.contains('theory_intention_blocker')),
         isTrue);
+  });
+
+  test('JEV request strips pseudo-scores and keeps unselected factors missing', () {
+    final request = EvidenceGrowthJev.actionRequest({
+      'plan': '今天重新去找工作',
+      'selected_theories': ['IBM'],
+      'theory_factor_answers': {
+        'intention': {
+          'option_id': 'clear',
+          'option_label': '已经明确决定要做',
+          'confirmed_by_user': true,
+          'support_score': 3.0,
+          'prefill_confidence': .91,
+        },
+      },
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'restart_job_search',
+            'label': '完成一次具体求职行动',
+            'true_criterion': 'At least one concrete job search action occurs.',
+            'false_criterion': 'No concrete job search action occurs.',
+            'primary': true,
+          }
+        ],
+        'relevant_core_factors': ['intention', 'knowledge_skills'],
+        'dynamic_factors': [],
+        'clarifying_questions': [],
+        'failure_modes': [],
+      }
+    }, 'jev-latest');
+
+    final state = (request['state'] as Map)['action_prediction'] as Map;
+    final answers = state['theory_factor_answers'] as Map;
+    final intention = answers['intention'] as Map;
+    expect(intention.containsKey('support_score'), isFalse);
+    expect(intention.containsKey('prefill_confidence'), isFalse);
+    expect(intention['option_id'], 'clear');
+
+    final missing = (state['unanswered_theory_factor_ids'] as List).cast<String>();
+    expect(missing, contains('knowledge_skills'));
+    expect(missing, contains('habit'));
+
+    final theoretical = (request['state'] as Map)['theoretical_models'] as Map;
+    expect('${theoretical['rule']}', contains('MISSING evidence'));
   });
 
   test('original work-case predictor pool is preserved for dynamic reuse', () {
