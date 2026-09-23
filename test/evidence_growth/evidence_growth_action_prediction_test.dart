@@ -23,15 +23,16 @@ void main() {
           }
         ],
         'relevant_core_factors': [
-          'commitment',
-          'emotion',
-          'alternatives',
-          'history_habit'
+          'intention',
+          'experiential_attitude',
+          'self_efficacy',
+          'habit'
         ],
         'dynamic_factors': [
           {
             'id': 'smoking_cues',
             'label': '吸烟诱因暴露',
+            'ibm_construct': 'environmental_constraints',
             'condition':
                 'Exposure to smoking cues is low or effectively managed.',
             'evidence': ''
@@ -55,11 +56,13 @@ void main() {
     }, 'jev-latest');
     final questions = request['questions'] as Map;
     expect(questions, contains('event_remain_abstinent'));
-    expect(questions, contains('factor_commitment'));
+    expect(questions, contains('factor_intention'));
+    expect(questions, contains('factor_habit'));
+    expect(questions, contains('factor_implementation_intention'));
     expect(questions, contains('factor_dynamic_smoking_cues'));
     expect(questions, contains('dominant_failure_mode'));
     expect(questions, contains('most_decisive_missing_question'));
-    expect(questions, isNot(contains('factor_feasibility')));
+    expect(questions, isNot(contains('factor_injunctive_norm')));
 
     final scoreAnswer = {
       'type': 'score',
@@ -79,10 +82,11 @@ void main() {
       'answers': {
         'event_remain_abstinent': {'type': 'noul', 'noul': .58},
         'hard_blocker': {'type': 'noul', 'noul': .04},
-        'factor_commitment': scoreAnswer,
-        'factor_emotion': scoreAnswer,
-        'factor_alternatives': scoreAnswer,
-        'factor_history_habit': scoreAnswer,
+        'factor_intention': scoreAnswer,
+        'factor_experiential_attitude': scoreAnswer,
+        'factor_self_efficacy': scoreAnswer,
+        'factor_habit': scoreAnswer,
+        'factor_implementation_intention': scoreAnswer,
         'factor_dynamic_smoking_cues': scoreAnswer,
         'dominant_failure_mode': {
           'type': 'choice',
