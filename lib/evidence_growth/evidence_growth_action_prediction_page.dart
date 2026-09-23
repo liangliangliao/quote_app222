@@ -376,7 +376,7 @@ class _EvidenceGrowthActionPredictionPageState
       _section(
           '现实结果',
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('当前：${_outcome('${result['outcome'] ?? 'PENDING'}')}'),
+            Text('当前：${_outcome((result['outcome'] ?? 'PENDING').toString())}'),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               OutlinedButton(
@@ -407,7 +407,7 @@ class _EvidenceGrowthActionPredictionPageState
               title: Text('${row['plan']}',
                   maxLines: 2, overflow: TextOverflow.ellipsis),
               subtitle: Text(
-                  '${_pct(row['estimate'])} · ${_outcome('${row['outcome'] ?? 'PENDING'}')} · ${_time((row['scheduled_at_ms'] as num?)?.toInt() ?? 0)}'),
+                  '${_pct(row['estimate'])} · ${_outcome((row['outcome'] ?? 'PENDING').toString())} · ${_time((row['scheduled_at_ms'] as num?)?.toInt() ?? 0)}'),
               onTap: () => setState(() => result = row)),
       ]);
 
