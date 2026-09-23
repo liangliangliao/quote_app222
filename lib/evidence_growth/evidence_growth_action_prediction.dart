@@ -422,12 +422,14 @@ class EvidenceGrowthActionPredictionService {
         'missing_question_confidence': _prob(missingQuestion['confidence']),
         'missing_question_probabilities':
             growthMap(missingQuestion['probabilities']),
-      },      'history_baseline': {
+      },
+      'history_baseline': {
         'resolved_count': resolved.length,
+        'all_resolved_count': allResolved.length,
         'success_count': successes,
-        'on_time_count': successes,
         'rate': baseline,
         'weight': historyWeight,
+        'behavior_specific': true,
       },
       'factors': factors,
       'top_risks': [
@@ -455,8 +457,8 @@ class EvidenceGrowthActionPredictionService {
         'is_hypothetical': true,
       },
       'calibration_note': resolved.length < 5
-          ? '你还没有足够的个人结果记录，所以当前主要依赖 AI/JEV 的模型判断。记录真实结果后，个人基线会逐渐参与校准。'
-          : '已经加入你的个人历史基线进行有限校准；它仍然是预测，不是保证。',
+          ? '当前同类行动的真实结果还不足5次，所以不会拿其他类型行动硬凑个人基线；主要依赖理论结构 + AI/JEV 判断。'
+          : '个人基线只使用行动类型相同、且标签相近的历史结果进行有限校准；它仍然是预测，不是保证。',
       'outcome': 'PENDING',
     };
   }
@@ -690,7 +692,7 @@ C. 执行意图扩展：
 9. execution_likelihood 是模型交叉判断，不是统计保证；JEV配置可用时它不是最终主预测值。
 10. evidence、summary、headline_reason、failure_modes、protective_actions、missing_information 用自然中文，不输出内部字段名或推理过程。
 11. 只输出 JSON。
-'''
+''',
             prompt: '''STATE:
 ${jsonEncode(state)}
 返回：
@@ -928,8 +930,14 @@ ${jsonEncode(state)}
     final evidence = _cleanUserText('${row['evidence'] ?? ''}');
     if (evidence.isNotEmpty) return evidence;
     final label = '${row['label'] ?? '这个行动特有因素'}'.trim();
-    return '这是“$label”这一行动中特有的预测变量；当前若没有明确事实，JEV 会把它视为不确定，而不是自动判为负面。';
+    final construct = '${row['ibm_construct'] ?? ''}'.trim();
+    final constructLabel =
+        EvidenceGrowthJev.actionFactorLabels[construct] ?? construct;
+    return constructLabel.isEmpty
+        ? '这是“$label”这一具体行动中的显著信念／现实条件；当前没有明确事实时保持未知。'
+        : '这是“$label”这一行为特有条件，理论上归入“$constructLabel”；当前没有明确事实时保持未知。';
   }
+
   static String _humanEvidence(
       String key, String raw, GrowthData state, int resolvedCount) {
     final cleaned = _cleanUserText(raw);
@@ -940,92 +948,86 @@ ${jsonEncode(state)}
     final history = '${state['similar_history_report'] ?? ''}'.trim();
 
     switch (key) {
-      case 'history_habit':
-        if (history.isNotEmpty) {
-          return '你提供了过去相似行动的实际经历，可作为这次判断的参考。';
+      case 'intention':
+        final commitment = '${structured['commitment'] ?? ''}'.trim();
+        final stability = '${structured['decision_stability'] ?? ''}'.trim();
+        if (commitment.isEmpty && stability.isEmpty) {
+          return '尚未明确这件事是“想做”，还是已经形成清楚而稳定的行动决定。';
         }
-        if (resolvedCount == 0) {
-          return '还没有足够的相似行动结果记录，这一项暂时保持未知，不算负面证据。';
-        }
-        return '已经有 $resolvedCount 次真实行动结果，可用于个人基线校准。';
-      case 'feasibility':
-        final values = list('feasibility');
-        return values.isEmpty
-            ? '尚未说明交通、资金、权限、地点或必需资源是否存在硬性阻断。'
-            : '已记录的客观可行性信息：${values.join('、')}。';
-      case 'time_capacity':
-        final values = list('time_capacity');
-        return values.isEmpty
-            ? '尚未说明起床、通勤、日程冲突和时间缓冲是否足够。'
-            : '已记录的时间条件：${values.join('、')}。';
-      case 'physical_capacity':
-        final values = list('physical_state');
-        return values.isEmpty
-            ? '尚未说明行动时的睡眠、疲劳、身体状态或精力。'
-            : '已记录的身体／精力状态：${values.join('、')}。';
-      case 'prerequisite_readiness':
-        final values = list('execution_support');
-        return values.isEmpty
-            ? '尚未确认路线、物品、资料、权限等前置条件是否准备好。'
-            : '已经完成的前置准备：${values.join('、')}。';
-      case 'commitment':
-        final value = '${structured['commitment'] ?? ''}'.trim();
-        return value.isEmpty
-            ? '尚未说明这件事现在是“想做”，还是已经决定必须做。'
-            : '你对这次行动的承诺：$value。';
-      case 'value_salience':
-        final value = '${structured['value_salience'] ?? ''}'.trim();
-        return value.isEmpty
-            ? '尚未说明行动或不行动会带来的即时价值、损失或后果。'
-            : '当前最显著的价值／后果：$value。';
-      case 'emotion':
+        return '当前行动决定：${[commitment, stability].where((e) => e.isNotEmpty).join('；')}。';
+      case 'experiential_attitude':
         final values = list('emotions');
         return values.isEmpty
-            ? '尚未说明临近行动时最可能出现的情绪。'
-            : '你当前选择的情绪：${values.join('、')}。';
-      case 'friction':
-        final values = list('frictions');
-        return values.isEmpty
-            ? '尚未记录明显的时间、距离、疲劳或流程阻力。'
-            : '目前记录的现实阻力：${values.join('、')}。';
-      case 'alternatives':
-        final values = list('alternatives');
-        return values.isEmpty
-            ? '尚未记录会和目标行动竞争的更舒服替代行为。'
-            : '可能抢走行动的替代选择：${values.join('、')}。';
-      case 'external_commitment':
+            ? '尚未说明想到或临近执行这件事时的直接感受。'
+            : '当前与行动相关的直接感受：${values.join('、')}。';
+      case 'instrumental_attitude':
+        final value = '${structured['value_salience'] ?? ''}'.trim();
+        return value.isEmpty
+            ? '尚未说明你如何看待做与不做这件事的结果、收益和代价。'
+            : '你当前对行动后果／价值的判断：$value。';
+      case 'injunctive_norm':
         final values = list('commitments');
         return values.isEmpty
-            ? '目前没有记录到明确的打卡、截止时间、他人等待或即时损失等外部约束。'
-            : '当前外部约束：${values.join('、')}。';
-      case 'trigger':
-        final values = list('execution_support');
-        final scheduled = '${state['scheduled_at'] ?? ''}'.trim();
-        if (values.isNotEmpty) {
-          return '已经设置的启动条件：${values.join('、')}。';
-        }
-        return scheduled.isEmpty
-            ? '还没有明确到“什么一发生就立即开始”的启动触发。'
-            : '已经指定开始时间，但还没有记录更具体的第一步触发。';
-      case 'preparation':
-        final values = list('execution_support');
-        return values.isEmpty
-            ? '尚未记录物品、路线、环境或提醒等提前准备。'
-            : '已完成的准备：${values.join('、')}。';
+            ? '尚未说明重要他人是否期待、要求或支持你做这件事。'
+            : '与重要他人期望相关的事实：${values.join('、')}。';
+      case 'descriptive_norm':
+        return '尚未说明与你相关的人通常会不会做这种行为；若这对当前行动不重要，会保持中性或低置信度。';
       case 'self_efficacy':
         final value = '${structured['self_efficacy'] ?? ''}'.trim();
         return value.isEmpty
-            ? '尚未说明你对自己完成这一步的把握。'
-            : '你对完成这一步的判断：$value。';
-      case 'decision_stability':
-        final value = '${structured['decision_stability'] ?? ''}'.trim();
-        return value.isEmpty
-            ? '尚未说明到行动时会直接执行，还是会重新考虑去不去。'
-            : '你对临场决策的描述：$value。';
-      case 'specificity':
-        return '系统会根据行动内容、开始时间和启动步骤判断计划是否足够具体。';
+            ? '尚未说明你相信自己能否完成这个具体行为。'
+            : '你对自己完成这件事的把握：$value。';
+      case 'perceived_control':
+        final feasibility = list('feasibility');
+        final time = list('time_capacity');
+        final frictions = list('frictions');
+        final known = [...feasibility, ...time, ...frictions];
+        return known.isEmpty
+            ? '尚未说明你认为这件事在多大程度上真正受自己控制。'
+            : '会影响你知觉控制的现实条件：${known.join('、')}。';
+      case 'knowledge_skills':
+        return '尚未直接说明完成该行为需要的知识或技能是否已经具备；若行动本身不需要特殊技能，这项可接近中性。';
+      case 'salience':
+        final value = '${structured['value_salience'] ?? ''}'.trim();
+        final scheduled = '${state['scheduled_at'] ?? ''}'.trim();
+        final values = list('execution_support');
+        if (value.isEmpty && scheduled.isEmpty && values.isEmpty) {
+          return '尚未说明到了关键时刻，这件事会通过提醒、情境线索或重要后果进入注意。';
+        }
+        return '已有可能让行动在关键时刻保持显著的条件：${[
+          if (value.isNotEmpty) value,
+          if (scheduled.isNotEmpty) '已设置时间',
+          ...values
+        ].join('、')}。';
+      case 'environmental_constraints':
+        final feasibility = list('feasibility');
+        final time = list('time_capacity');
+        final physical = list('physical_state');
+        final frictions = list('frictions');
+        final known = [...feasibility, ...time, ...physical, ...frictions];
+        return known.isEmpty
+            ? '尚未说明资源、时间、地点、权限、第三方依赖、身体或环境是否会形成现实约束。'
+            : '当前已知的环境／现实约束信息：${known.join('、')}。';
+      case 'habit':
+        if (history.isNotEmpty) {
+          return '你提供了真正相似行为的过去经历，这比一般性的“自我感觉”更适合判断习惯支持。';
+        }
+        if (resolvedCount == 0) {
+          return '还没有匹配到同类行动的真实结果，因此习惯／过去行为暂时保持未知。';
+        }
+        return '已经匹配到 $resolvedCount 次同类真实行动结果，可作为习惯与个人基线的有限证据。';
+      case 'implementation_intention':
+        final values = list('execution_support');
+        final scheduled = '${state['scheduled_at'] ?? ''}'.trim();
+        if (values.isEmpty && scheduled.isEmpty) {
+          return '尚未形成清楚的“当X发生→立即做Y”的启动连接；这属于执行意图扩展，不是IBM原始构念。';
+        }
+        return '已有的启动线索／准备：${[
+          if (scheduled.isNotEmpty) '已设置时间',
+          ...values
+        ].join('、')}。';
       default:
-        return '这一项目前还需要更多现实信息。';
+        return '这一项目前还需要更多与该具体行为直接相关的现实信息。';
     }
   }
 }
