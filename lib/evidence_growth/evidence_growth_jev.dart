@@ -99,15 +99,11 @@ class EvidenceGrowthJev {
     _pending[key] = pending;
     try {
       final result = await pending;
-      final enriched = <String, dynamic>{
-        ...result,
-        'failure_mode_catalog': _failureModes(state),
-      };
-      if (enriched['status'] == 'JEV') {
+      if (result['status'] == 'JEV') {
         if (_cache.length >= 48) _cache.remove(_cache.keys.first);
-        _cache[key] = enriched;
+        _cache[key] = result;
       }
-      return enriched;
+      return result;
     } finally {
       _pending.remove(key);
     }
@@ -778,11 +774,15 @@ class EvidenceGrowthJev {
     _pending[key] = pending;
     try {
       final result = await pending;
-      if (result['status'] == 'JEV') {
+      final enriched = <String, dynamic>{
+        ...result,
+        'failure_mode_catalog': _failureModes(state),
+      };
+      if (enriched['status'] == 'JEV') {
         if (_cache.length >= 48) _cache.remove(_cache.keys.first);
-        _cache[key] = result;
+        _cache[key] = enriched;
       }
-      return result;
+      return enriched;
     } finally {
       _pending.remove(key);
     }
