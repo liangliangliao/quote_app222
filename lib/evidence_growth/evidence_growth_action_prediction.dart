@@ -628,14 +628,10 @@ class EvidenceGrowthActionPredictionService {
       }, apiKey: jevApiKey.trim());
     }
     final improvementJevEstimate = _prob(improvementJev['overall']);
-    final improvementModels = <double>[
-      if (improvementAi != null) improvementAi,
-      if (improvementJevEstimate != null) improvementJevEstimate,
-    ];
-    final improvementEstimate = improvementModels.isEmpty
-        ? null
-        : improvementModels.reduce((a, b) => a + b) /
-            improvementModels.length;
+    // Keep the same source hierarchy as the main forecast. Do not create an
+    // arbitrary 50/50 ensemble between AI and JEV for the hypothetical case.
+    final improvementEstimate =
+        improvementJevEstimate ?? improvementAi;
     final improvementGain =
         improvementEstimate != null && estimate != null
             ? improvementEstimate - estimate
