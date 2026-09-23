@@ -768,14 +768,15 @@ class EvidenceBehaviorTheoryCatalog {
           if (entry.value == construct) entry.key
       ];
 
-  /// Standard program option -> ordinal support index used only for
-  /// transparent display/ranking after the user confirms an option.
+  /// Returns the ordinal position of a program option.
   ///
-  /// This is NOT an empirically fitted coefficient, interval-scale measure,
-  /// theory weight, or behavior probability. For constructs whose relation to
-  /// behavior is not safely monotonic (for example HAPA risk perception), no
-  /// ordinal support index is produced.
-  static double? supportScore(String factorId, String optionId) {
+  /// Non-unknown options are authored from the most adverse/least supportive
+  /// end to the most supportive end. The returned value is ORDINAL only:
+  /// 0 < 1 < 2 < 3 < 4. The distance between adjacent levels is not assumed
+  /// to be equal, and this value must never be used as a theory weight or as
+  /// a behavior probability. Constructs without a safe monotonic support
+  /// direction (for example HAPA risk perception) return null.
+  static int? ordinalLevel(String factorId, String optionId) {
     if (optionId == 'unknown') return null;
     if (factorId == 'risk_perception') return null;
     final factor = factorDefinitions[factorId];
@@ -789,8 +790,14 @@ class EvidenceBehaviorTheoryCatalog {
     final index = ordered.indexWhere((item) => '${item['id']}' == optionId);
     if (index < 0) return null;
     if (ordered.length == 1) return 2;
-    return index * 4 / (ordered.length - 1);
+    if (ordered.length == 5) return index;
+    return (index * 4 / (ordered.length - 1)).round();
   }
+
+  /// Backward-compatible UI helper. This returns an ordinal display level,
+  /// not an interval score, fitted coefficient, weight, or probability.
+  static double? supportScore(String factorId, String optionId) =>
+      ordinalLevel(factorId, optionId)?.toDouble();
 
   static Map<String, String>? option(String factorId, String optionId) {
     final factor = factorDefinitions[factorId];
