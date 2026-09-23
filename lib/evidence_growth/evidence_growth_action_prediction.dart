@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_behavior_theories.dart';
 import 'evidence_growth_jev.dart';
 import 'evidence_growth_journey_models.dart';
 
