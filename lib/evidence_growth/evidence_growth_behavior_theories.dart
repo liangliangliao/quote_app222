@@ -276,15 +276,6 @@ class EvidenceBehaviorTheoryCatalog {
     {'id': 'unknown', 'label': '不清楚／无法判断'},
   ];
 
-  static const actualControlOptions = <Map<String, String>>[
-    {'id': 'blocked', 'label': '现实上缺少关键能力／资源／机会，基本无法执行'},
-    {'id': 'low', 'label': '存在明显的实际控制限制'},
-    {'id': 'partial', 'label': '具备一部分条件，但仍有关键限制'},
-    {'id': 'adequate', 'label': '必要能力、资源与机会基本具备'},
-    {'id': 'strong', 'label': '现实控制条件充分，几乎没有执行性阻断'},
-    {'id': 'unknown', 'label': '不清楚／无法判断'},
-  ];
-
   static const importanceOptions = <Map<String, String>>[
     {'id': 'very_low', 'label': '这些结果对我几乎没有价值'},
     {'id': 'low', 'label': '价值较低'},
@@ -367,20 +358,6 @@ class EvidenceBehaviorTheoryCatalog {
         'physical_capacity',
         'prerequisite_readiness',
         'friction'
-      ],
-    },
-    'actual_behavioral_control': {
-      'id': 'actual_behavioral_control',
-      'label': '实际行为控制（现实能力与机会）',
-      'question': '现实上，你是否具备完成这个行为真正需要的能力、资源和机会？',
-      'theories': <String>['TPB'],
-      'options': actualControlOptions,
-      'covers': <String>[
-        'feasibility',
-        'time_capacity',
-        'prerequisite_readiness',
-        'friction',
-        'environmental_constraints'
       ],
     },
     'experiential_attitude': {
