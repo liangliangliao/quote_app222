@@ -536,14 +536,67 @@ class _EvidenceGrowthActionPredictionPageState
 
   Widget _theorySelector() {
     final rows = EvidenceBehaviorTheoryCatalog.theories.values.toList();
+    final recommendations =
+        growthRows(theorySelectionAnalysis['recommendations']);
+
+    GrowthData recommendationFor(String id) {
+      for (final row in recommendations) {
+        if ('${row['theory_id'] ?? ''}' == id) return row;
+      }
+      return {};
+    }
+
+    String roleLabel(String role) => const {
+          'PRIMARY': '主要',
+          'COMPLEMENTARY': '互补',
+          'NOT_NEEDED': '当前非必要',
+        }[role] ??
+        role;
+
+    final selectionSummary =
+        '${theorySelectionAnalysis['selection_summary'] ?? ''}'.trim();
+
     return ExpansionTile(
         initiallyExpanded: true,
         tilePadding: EdgeInsets.zero,
         title: const Text('选择行为预测理论／扩展',
             style: TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text(
-            '当前已选 ${selectedTheoryIds.length} 个理论包／扩展。TPB、IBM、COM-B、SCT、HAPA是理论/模型；执行意图是独立的意志性自我调节扩展。相同构念会自动去重；程序选项不是原作者的正式量表。'),
+        subtitle: Text(selectedTheoryIds.isEmpty
+            ? '尚未匹配。点击下方分析后，AI会按当前行动自动勾选最适合的一套或多套理论。'
+            : '当前已选 ${selectedTheoryIds.length} 个 · ${theorySelectionManuallyEdited ? '用户已手动调整' : 'AI自动匹配，可继续修改'}'),
         children: [
+          if (theorySelectionAnalysis.isNotEmpty) ...[
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    border: Border.all(color: _teal.withValues(alpha: .25)),
+                    borderRadius: BorderRadius.circular(10)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.auto_awesome, size: 18, color: _teal),
+                        const SizedBox(width: 6),
+                        Expanded(
+                            child: Text(
+                                theorySelectionManuallyEdited
+                                    ? 'AI匹配结果仍保留供参考；当前以你的手动选择为准'
+                                    : 'AI已根据当前行动自动匹配理论',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800)))
+                      ]),
+                      if (selectionSummary.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(selectionSummary,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black54,
+                                height: 1.4))
+                      ]
+                    ])),
+            const SizedBox(height: 10),
+          ],
           Align(
               alignment: Alignment.centerLeft,
               child: Wrap(
@@ -551,49 +604,123 @@ class _EvidenceGrowthActionPredictionPageState
                   runSpacing: 8,
                   children: [
                     for (final theory in rows)
-                      FilterChip(
-                          label: Text('${theory['short_name']}'),
-                          selected:
-                              selectedTheoryIds.contains('${theory['id']}'),
-                          onSelected: busy || preparing
-                              ? null
-                              : (selected) {
-                                  final id = '${theory['id']}';
-                                  if (!selected &&
-                                      selectedTheoryIds.length == 1 &&
-                                      selectedTheoryIds.contains(id)) {
-                                    _message('至少保留一套理论');
-                                    return;
-                                  }
-                                  setState(() {
-                                    if (selected) {
-                                      selectedTheoryIds.add(id);
-                                    } else {
-                                      selectedTheoryIds.remove(id);
+                      Builder(builder: (_) {
+                        final id = '${theory['id']}';
+                        final rec = recommendationFor(id);
+                        final suitability = rec['suitability'];
+                        return FilterChip(
+                            label: Text(suitability is num
+                                ? '${theory['short_name']} ${_pct(suitability)}'
+                                : '${theory['short_name']}'),
+                            selected: selectedTheoryIds.contains(id),
+                            onSelected: busy || preparing
+                                ? null
+                                : (selected) {
+                                    if (!selected &&
+                                        selectedTheoryIds.length == 1 &&
+                                        selectedTheoryIds.contains(id)) {
+                                      _message('至少保留一套理论；如需更换，请先勾选另一套再取消当前理论。');
+                                      return;
                                     }
-                                    _invalidateActionProfile();
+                                    setState(() {
+                                      theorySelectionManuallyEdited = true;
+                                      if (selected) {
+                                        selectedTheoryIds.add(id);
+                                      } else {
+                                        selectedTheoryIds.remove(id);
+                                      }
+                                      _invalidateActionProfile();
+                                    });
                                   });
-                                })
+                      })
                   ])),
           const SizedBox(height: 10),
-          for (final theory in rows)
-            if (selectedTheoryIds.contains('${theory['id']}'))
-              Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${theory['name']}',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w800)),
-                        Text('${theory['description']}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.black54)),
-                        Text('适用重点：${theory['scope']}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.black54)),
-                      ])),
+          if (plan.text.trim().isNotEmpty)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                    onPressed: busy || preparing ? null : rematchTheories,
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('按当前行动重新自动匹配理论'))),
+          if (selectedTheoryIds.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final theory in rows)
+              if (selectedTheoryIds.contains('${theory['id']}'))
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Builder(builder: (_) {
+                      final id = '${theory['id']}';
+                      final rec = recommendationFor(id);
+                      final reason = '${rec['reason'] ?? ''}'.trim();
+                      final role = '${rec['role'] ?? ''}'.trim();
+                      final suitability = rec['suitability'];
+                      return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Expanded(
+                                  child: Text('${theory['name']}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800))),
+                              if (suitability is num)
+                                Text(
+                                    '${role.isEmpty ? '' : '${roleLabel(role)} · '}${_pct(suitability)}',
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: _teal,
+                                        fontWeight: FontWeight.w700))
+                            ]),
+                            Text('${theory['description']}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black54)),
+                            Text('适用重点：${theory['scope']}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black54)),
+                            if (reason.isNotEmpty)
+                              Text('本次匹配理由：$reason',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                      fontWeight: FontWeight.w700)),
+                          ]);
+                    }))
+          ],
+          if (recommendations.isNotEmpty)
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('查看AI对全部理论的适配分析',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle:
+                    const Text('适配度只表示“当前行动是否值得用这个理论分析”，不是行为成功概率'),
+                children: [
+                  for (final rec in recommendations)
+                    Builder(builder: (_) {
+                      final id = '${rec['theory_id'] ?? ''}';
+                      final theory =
+                          EvidenceBehaviorTheoryCatalog.theories[id];
+                      final reason = '${rec['reason'] ?? ''}'.trim();
+                      final needs = growthStrings(rec['matched_needs']);
+                      return ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                              selectedTheoryIds.contains(id)
+                                  ? Icons.check_circle_outline
+                                  : Icons.radio_button_unchecked,
+                              color: selectedTheoryIds.contains(id)
+                                  ? _teal
+                                  : Colors.black38),
+                          title: Text(
+                              '${theory?['name'] ?? id} · ${_pct(rec['suitability'])}'),
+                          subtitle: Text(
+                              '${roleLabel('${rec['role'] ?? ''}')}${reason.isEmpty ? '' : ' · $reason'}${needs.isEmpty ? '' : ' · 关注：${needs.join('、')}'}'));
+                    })
+                ]),
           const SizedBox(height: 4),
+          const Text(
+              '说明：AI自动匹配的是理论“适配度”，不是行为概率。你可以取消、增加或替换任何理论；一旦手动修改，以你的选择为准。',
+              style: TextStyle(
+                  fontSize: 11, color: Colors.black54, height: 1.4)),
         ]);
   }
 
