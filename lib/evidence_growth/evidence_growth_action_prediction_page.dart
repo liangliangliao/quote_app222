@@ -263,6 +263,12 @@ class _EvidenceGrowthActionPredictionPageState
       );
       if (!mounted) return;
       setState(() => _installActionProfile(profile));
+      if (profile['analysis_status'] != 'READY') {
+        final detail = '${profile['analysis_error_detail'] ?? ''}'.trim();
+        _message(detail.isEmpty
+            ? 'AI行动理解没有成功，请检查统一AI配置后重试。'
+            : 'AI行动理解失败：$detail');
+      }
     } catch (e) {
       if (mounted) _message('$e');
     } finally {
@@ -275,6 +281,10 @@ class _EvidenceGrowthActionPredictionPageState
     if (actionProfile.isEmpty) {
       await prepareAction();
       if (actionProfile.isEmpty) return;
+    }
+    if (actionProfile['analysis_status'] != 'READY') {
+      _message('AI还没有成功完成行动理解，请先重新调用AI分析。');
+      return;
     }
     setState(() => busy = true);
     try {
@@ -546,6 +556,14 @@ class _EvidenceGrowthActionPredictionPageState
     final mode = '${actionProfile['action_mode'] ?? 'OTHER'}';
     final interpretation = '${actionProfile['interpretation'] ?? ''}'.trim();
     final normalized = '${actionProfile['normalized_action'] ?? ''}'.trim();
+    final analysisReady = actionProfile['analysis_status'] == 'READY';
+    final analysisProvider =
+        '${actionProfile['analysis_provider'] ?? ''}'.trim();
+    final analysisModel = '${actionProfile['analysis_model'] ?? ''}'.trim();
+    final analysisError =
+        '${actionProfile['analysis_error_detail'] ?? ''}'.trim();
+    final analysisErrorCode =
+        '${actionProfile['analysis_error_code'] ?? ''}'.trim();
     final coverage = '${actionProfile['coverage_summary'] ?? ''}'.trim();
     final appliedCorrection =
         '${actionProfile['analysis_correction_applied'] ?? ''}'.trim();
@@ -589,26 +607,84 @@ class _EvidenceGrowthActionPredictionPageState
             if (actionProfile['version'] == 'ibm_action_v2_fallback')
               const Chip(label: Text('通用回退'))
           ]),
+          if (!analysisReady) ...[
+            const SizedBox(height: 12),
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: .08),
+                    border: Border.all(color: Colors.orange.shade400),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(children: [
+                        Icon(Icons.error_outline, color: Colors.orange),
+                        SizedBox(width: 8),
+                        Expanded(
+                            child: Text('AI实际上没有完成本轮行动理解',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16)))
+                      ]),
+                      const SizedBox(height: 8),
+                      const Text(
+                          '当前看到的是“通用回退”，不是AI分析结果。因此不会把它当作已完成的理解交给JEV。',
+                          style: TextStyle(height: 1.4)),
+                      if (analysisProvider.isNotEmpty ||
+                          analysisModel.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                            '调用配置：${[
+                              analysisProvider,
+                              analysisModel
+                            ].where((e) => e.isNotEmpty).join(' · ')}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.black54))
+                      ],
+                      if (analysisErrorCode.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text('失败类型：$analysisErrorCode',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700))
+                      ],
+                      if (analysisError.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text('具体原因：$analysisError',
+                            style: const TextStyle(fontSize: 12))
+                      ],
+                      const SizedBox(height: 10),
+                      SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                              onPressed:
+                                  busy || preparing ? null : prepareAction,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('重新调用AI理解这个行动')))
+                    ]))
+          ],
           if (normalized.isNotEmpty) ...[
             const SizedBox(height: 8),
-            const Text('AI理解的目标行动',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            Text(analysisReady ? 'AI理解的目标行动' : '原始目标行动（AI尚未成功解析）',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 3),
             Text(normalized,
                 style: const TextStyle(
                     fontSize: 17, fontWeight: FontWeight.w800)),
           ],
-          if (interpretation.isNotEmpty) ...[
+          if (analysisReady && interpretation.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(interpretation,
                 style: const TextStyle(color: Colors.black54, height: 1.45)),
           ],
-          if (coverage.isNotEmpty) ...[
+          if (analysisReady && coverage.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text('覆盖检查：$coverage',
                 style: const TextStyle(fontWeight: FontWeight.w700))
           ],
-          if (checks.isNotEmpty) ...[
+          if (analysisReady && checks.isNotEmpty) ...[
             const SizedBox(height: 12),
             ExpansionTile(
                 tilePadding: EdgeInsets.zero,
@@ -625,7 +701,7 @@ class _EvidenceGrowthActionPredictionPageState
                         title: Text(item))
                 ])
           ],
-          if (assumptions.isNotEmpty) ...[
+          if (analysisReady && assumptions.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
                 width: double.infinity,
@@ -646,7 +722,7 @@ class _EvidenceGrowthActionPredictionPageState
                       for (final item in assumptions) Text('• $item')
                     ]))
           ],
-          if (events.isNotEmpty) ...[
+          if (analysisReady && events.isNotEmpty) ...[
             const Divider(height: 28),
             const Text('JEV 实际要预测的可观察事件',
                 style: TextStyle(fontWeight: FontWeight.w800)),
@@ -663,7 +739,7 @@ class _EvidenceGrowthActionPredictionPageState
                       ? const Text('主预测事件：最终总概率以它为准')
                       : const Text('辅助预测事件'))
           ],
-          if (preserved.isNotEmpty) ...[
+          if (analysisReady && preserved.isNotEmpty) ...[
             const Divider(height: 28),
             const Text('从原“上班／到场”模型中保留下来的关键因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
@@ -674,7 +750,7 @@ class _EvidenceGrowthActionPredictionPageState
             const SizedBox(height: 6),
             for (final row in preserved) predictorRow(row),
           ],
-          if (omittedPreserved.isNotEmpty) ...[
+          if (analysisReady && omittedPreserved.isNotEmpty) ...[
             ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 title: Text('本次未选入的原型因素（${omittedPreserved.length}）',
@@ -692,7 +768,7 @@ class _EvidenceGrowthActionPredictionPageState
                             '理论映射：${_constructLabel('${row['ibm_construct'] ?? ''}')}'))
                 ])
           ],
-          if (adaptive.isNotEmpty) ...[
+          if (analysisReady && adaptive.isNotEmpty) ...[
             const Divider(height: 28),
             const Text('AI 针对当前行动新增的关键因素',
                 style: TextStyle(fontWeight: FontWeight.w800)),
@@ -703,7 +779,7 @@ class _EvidenceGrowthActionPredictionPageState
             const SizedBox(height: 6),
             for (final row in adaptive) predictorRow(row),
           ],
-          if (questions.isNotEmpty) ...[
+          if (analysisReady && questions.isNotEmpty) ...[
             const Divider(height: 28),
             const Text('还缺哪些关键事实',
                 style: TextStyle(fontWeight: FontWeight.w800)),
@@ -713,6 +789,7 @@ class _EvidenceGrowthActionPredictionPageState
             const SizedBox(height: 12),
             for (final row in questions) _clarifyingQuestion(row),
           ],
+          if (analysisReady) ...[
           const Divider(height: 28),
           const Text('核对AI的理解',
               style: TextStyle(fontWeight: FontWeight.w800)),
@@ -762,6 +839,7 @@ class _EvidenceGrowthActionPredictionPageState
                             ? '确认理解并交给JEV'
                             : '确认理解并开始预测')))
           ]),
+          ],
           if (busy)
             const Padding(
                 padding: EdgeInsets.only(top: 10),
