@@ -26,16 +26,32 @@ class EvidenceGrowthActionPredictionService {
   static const historySetting = 'action_prediction_history_v1';
 
   /// Every score means "how much this factor supports execution".
-  static const factorLabels = <String, String>{
-    'history': '过去相似行为支持度',
-    'specificity': '计划具体度',
-    'trigger': '时间／情境触发清晰度',
-    'emotion': '临场情绪支持度',
-    'friction': '现实阻力可克服性',
-    'alternatives': '替代行为不抢占',
-    'self_efficacy': '自我效能',
-    'external_commitment': '外部约束／承诺',
-    'decision_stability': '决策稳定性（不临场反悔）',
+  static const factorLabels = EvidenceGrowthJev.actionFactorLabels;
+
+  static const failureModeLabels = <String, String>{
+    'objective_blocker': '客观条件直接阻断',
+    'weak_commitment': '当前承诺强度不足',
+    'aversive_state': '临场情绪／身体状态压住行动',
+    'unclear_start': '不知道到点后的第一步是什么',
+    'practical_friction': '现实摩擦过大',
+    'competing_alternative': '更舒服的替代行为抢走行动',
+    'low_self_efficacy': '预期自己做不好而不启动',
+    'decision_reopened': '临场重新打开“去不去”的决定',
+    'insufficient_evidence': '证据不足，暂时无法锁定一个机制',
+  };
+
+  static const missingDomainLabels = <String, String>{
+    'feasibility_resources': '客观可行性：交通、钱、权限、资源是否真的具备？',
+    'time_schedule': '时间条件：起床、通勤、冲突和缓冲时间是否足够？',
+    'physical_state': '身体状态：睡眠、疲劳、身体不适会不会卡住启动？',
+    'commitment_value': '行动承诺：这件事现在到底有多重要、多不可退让？',
+    'emotion_avoidance': '临场状态：焦虑、无趣、害怕、抵触会有多强？',
+    'competition': '竞争行为：到时候最容易把你吸走的替代行为是什么？',
+    'self_efficacy': '自我效能：你是否相信自己能完成第一步？',
+    'decision_stability': '决策稳定性：到点会直接执行，还是重新讨论去不去？',
+    'trigger_preparation': '启动条件：具体触发、第一步和提前准备是否明确？',
+    'history_habit': '相似历史：过去真正类似的情境通常发生了什么？',
+    'none': '目前没有一个特别关键的缺失信息域。',
   };
 
   Future<GrowthData> predict({
@@ -111,15 +127,15 @@ class EvidenceGrowthActionPredictionService {
 
     final aiEstimate = _prob(ai['execution_likelihood']);
     final jevEstimate = _prob(jev['overall']);
-    final modelEstimates = <double>[
-      if (aiEstimate != null) aiEstimate,
-      if (jevEstimate != null) jevEstimate,
-    ];
-    final modelCenter = modelEstimates.isEmpty
-        ? null
-        : modelEstimates.reduce((a, b) => a + b) / modelEstimates.length;
 
-    double? estimate = modelCenter;
+    // JEV is the primary forecast engine when configured because its output is
+    // a typed probabilistic decision. The LLM remains an interpreter and
+    // cross-check, not an equally weighted probability source.
+    final rawEstimate = jevEstimate ?? aiEstimate;
+    final forecastSource =
+        jevEstimate != null ? 'JEV_PRIMARY' : aiEstimate != null ? 'AI_FALLBACK' : 'HISTORY_ONLY';
+
+    double? estimate = rawEstimate;
     double historyWeight = 0;
     if (estimate != null && baseline != null && resolved.length >= 3) {
       historyWeight =
@@ -133,55 +149,79 @@ class EvidenceGrowthActionPredictionService {
     final factors = <String, GrowthData>{};
     final aiFactors = growthMap(ai['factors']);
     final jevFactors = growthMap(jev['factors']);
+
     for (final key in factorLabels.keys) {
       final aiRow = growthMap(aiFactors[key]);
-      final aiStatus = '${aiRow['status'] ?? 'UNKNOWN'}';
-      final aiConfidence = _prob(aiRow['confidence']);
+      final jevRow = growthMap(jevFactors[key]);
       final a = _prob(aiRow['score']);
-      final j = _prob(jevFactors[key]);
-      final values = <double>[
-        if (a != null) a,
-        if (j != null) j,
-      ];
-      final unknown =
-          aiStatus == 'UNKNOWN' && (aiConfidence == null || aiConfidence < .5);
-      final combined = values.isEmpty
-          ? null
-          : values.reduce((x, y) => x + y) / values.length;
+      final j = _prob(jevRow['score']);
+      final jConfidence = _prob(jevRow['confidence']);
+      final aiConfidence = _prob(aiRow['confidence']);
+      final aiStatus = '${aiRow['status'] ?? 'UNKNOWN'}';
+
+      final useJev = j != null;
+      final score = useJev ? j : a;
+      final confidence = useJev ? jConfidence : aiConfidence;
+      final unknown = score == null ||
+          (useJev
+              ? (confidence ?? 0) < .45 &&
+                  score >= .35 &&
+                  score <= .65
+              : aiStatus == 'UNKNOWN' &&
+                  (confidence == null || confidence < .5));
+
       factors[key] = {
         'label': factorLabels[key],
+        'score': score,
+        'display_score': unknown ? null : score,
+        'confidence': confidence,
+        'unknown': unknown,
+        'source': useJev ? 'JEV' : a != null ? 'AI' : 'NONE',
         'ai': a,
         'jev': j,
-        'score': combined,
-        'display_score': unknown ? null : combined,
-        'status': aiStatus,
-        'unknown': unknown,
+        'jev_raw_score': jevRow['raw_score'],
+        'jev_probabilities': jevRow['probabilities'],
+        'status': unknown
+            ? 'UNKNOWN'
+            : score != null && score < .45
+                ? 'RISK'
+                : score != null && score >= .65
+                    ? 'SUPPORT'
+                    : 'MIXED',
         'evidence': _humanEvidence(
             key, '${aiRow['evidence'] ?? ''}', state, resolved.length),
-        'confidence': aiConfidence,
       };
     }
 
     final riskRows = factors.entries
         .where((e) {
           final row = e.value;
-          if (row['unknown'] == true) return false;
-          if (row['status'] == 'RISK') return true;
           final score = row['score'];
           final confidence = row['confidence'];
-          return score is num &&
+          return row['unknown'] != true &&
+              score is num &&
               score < .5 &&
               (confidence == null ||
-                  (confidence is num && confidence.toDouble() >= .45));
+                  (confidence is num && confidence.toDouble() >= .5));
         })
         .toList()
-      ..sort((a, b) =>
-          ((a.value['score'] as num?) ?? 1)
-              .compareTo((b.value['score'] as num?) ?? 1));
+      ..sort((a, b) {
+        final as = (a.value['score'] as num?)?.toDouble() ?? 1;
+        final bs = (b.value['score'] as num?)?.toDouble() ?? 1;
+        final ac = (a.value['confidence'] as num?)?.toDouble() ?? .5;
+        final bc = (b.value['confidence'] as num?)?.toDouble() ?? .5;
+        return (as + (1 - ac) * .25).compareTo(bs + (1 - bc) * .25);
+      });
 
     final disagreement = aiEstimate != null &&
         jevEstimate != null &&
         (aiEstimate - jevEstimate).abs() >= .20;
+
+    final forecasts = growthMap(jev['forecasts']);
+    final dominantFailure = growthMap(jev['dominant_failure_mode']);
+    final missingDomain = growthMap(jev['most_decisive_missing_domain']);
+    final dominantFailureKey = '${dominantFailure['choice'] ?? ''}';
+    final missingDomainKey = '${missingDomain['choice'] ?? ''}';
 
     final improvement = growthMap(ai['improvement_scenario']);
     final improvementChanges =
@@ -229,15 +269,36 @@ class EvidenceGrowthActionPredictionService {
       'estimate_available': estimate != null,
       'estimate': estimate,
       'band': estimate == null ? '信息不足' : band(estimate),
+      'forecast_source': forecastSource,
+      'raw_model_estimate': rawEstimate,
       'agreement': disagreement
           ? 'MODEL_DISAGREEMENT'
-          : modelEstimates.length >= 2
+          : aiEstimate != null && jevEstimate != null
               ? 'MODEL_AGREEMENT'
               : 'SINGLE_MODEL',
       'headline': '${ai['summary'] ?? ''}'.trim(),
       'headline_reason': '${ai['headline_reason'] ?? ''}'.trim(),
       'ai': ai,
       'jev': jev,
+      'jev_workflow': {
+        'start_on_time': _prob(forecasts['start_on_time']),
+        'start_eventually': _prob(forecasts['start_eventually']),
+        'complete_as_planned': _prob(forecasts['complete_as_planned']),
+        'hard_blocker': _prob(jev['hard_blocker']),
+        'dominant_failure_mode': dominantFailureKey,
+        'dominant_failure_label':
+            failureModeLabels[dominantFailureKey] ?? dominantFailureKey,
+        'dominant_failure_confidence':
+            _prob(dominantFailure['confidence']),
+        'dominant_failure_probabilities':
+            growthMap(dominantFailure['probabilities']),
+        'most_decisive_missing_domain': missingDomainKey,
+        'most_decisive_missing_label':
+            missingDomainLabels[missingDomainKey] ?? missingDomainKey,
+        'missing_domain_confidence': _prob(missingDomain['confidence']),
+        'missing_domain_probabilities':
+            growthMap(missingDomain['probabilities']),
+      },
       'history_baseline': {
         'resolved_count': resolved.length,
         'on_time_count': onTime,
@@ -296,7 +357,7 @@ class EvidenceGrowthActionPredictionService {
 
 规则：
 1. 只根据 state 的事实分析。未知就是未知，绝不能把“没有提供信息”当成负面事实。
-2. 九个因素 score 范围 0-1，1 表示更支持“行动按计划发生”，0 表示更阻碍。
+2. 十六个因素 score 范围 0-1，1 表示更支持“行动按计划发生”，0 表示更阻碍。因素包括客观可行性、时间可用性、身体/精力、前置准备、行动承诺、价值/后果显著性、情绪、自我效能、决策稳定性、具体度、触发、环境准备、现实阻力、替代行为、外部约束、相似历史/习惯。
 3. 每个因素必须给 status：SUPPORT / RISK / UNKNOWN。信息不足时 status=UNKNOWN、score 接近 0.5、confidence 较低。
 4. evidence、summary、headline_reason、failure_modes、protective_actions、missing_information 必须是自然中文，面向普通用户。绝对不要输出字段名、JSON key、null、[]、resolved_count、similar_history_report、personal_history_summary 等内部实现细节。
 5. 不要因为没有个人历史而降低 history 分数；应标记 UNKNOWN。只有明确提供了相似行为记录，才判断其支持或阻碍。
@@ -314,15 +375,22 @@ ${jsonEncode(state)}
   "execution_likelihood":0.0,
   "overall_confidence":0.0,
   "factors":{
-    "history":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "feasibility":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "time_capacity":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "physical_capacity":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "prerequisite_readiness":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "commitment":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "value_salience":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "emotion":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "self_efficacy":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "decision_stability":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "specificity":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "trigger":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "emotion":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "preparation":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "friction":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "alternatives":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "self_efficacy":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "external_commitment":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
-    "decision_stability":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""}
+    "history_habit":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""}
   },
   "missing_information":["最多4个真正会改变预测、且用户容易回答的问题"],
   "failure_modes":["最多3条具体失败路径"],
@@ -506,7 +574,7 @@ ${jsonEncode(state)}
     final history = '${state['similar_history_report'] ?? ''}'.trim();
 
     switch (key) {
-      case 'history':
+      case 'history_habit':
         if (history.isNotEmpty) {
           return '你提供了过去相似行动的实际经历，可作为这次判断的参考。';
         }
@@ -514,6 +582,36 @@ ${jsonEncode(state)}
           return '还没有足够的相似行动结果记录，这一项暂时保持未知，不算负面证据。';
         }
         return '已经有 $resolvedCount 次真实行动结果，可用于个人基线校准。';
+      case 'feasibility':
+        final values = list('feasibility');
+        return values.isEmpty
+            ? '尚未说明交通、资金、权限、地点或必需资源是否存在硬性阻断。'
+            : '已记录的客观可行性信息：${values.join('、')}。';
+      case 'time_capacity':
+        final values = list('time_capacity');
+        return values.isEmpty
+            ? '尚未说明起床、通勤、日程冲突和时间缓冲是否足够。'
+            : '已记录的时间条件：${values.join('、')}。';
+      case 'physical_capacity':
+        final values = list('physical_state');
+        return values.isEmpty
+            ? '尚未说明行动时的睡眠、疲劳、身体状态或精力。'
+            : '已记录的身体／精力状态：${values.join('、')}。';
+      case 'prerequisite_readiness':
+        final values = list('execution_support');
+        return values.isEmpty
+            ? '尚未确认路线、物品、资料、权限等前置条件是否准备好。'
+            : '已经完成的前置准备：${values.join('、')}。';
+      case 'commitment':
+        final value = '${structured['commitment'] ?? ''}'.trim();
+        return value.isEmpty
+            ? '尚未说明这件事现在是“想做”，还是已经决定必须做。'
+            : '你对这次行动的承诺：$value。';
+      case 'value_salience':
+        final value = '${structured['value_salience'] ?? ''}'.trim();
+        return value.isEmpty
+            ? '尚未说明行动或不行动会带来的即时价值、损失或后果。'
+            : '当前最显著的价值／后果：$value。';
       case 'emotion':
         final values = list('emotions');
         return values.isEmpty
@@ -542,7 +640,12 @@ ${jsonEncode(state)}
         }
         return scheduled.isEmpty
             ? '还没有明确到“什么一发生就立即开始”的启动触发。'
-            : '已经指定开始时间，但还没有记录更具体的启动动作或提前准备。';
+            : '已经指定开始时间，但还没有记录更具体的第一步触发。';
+      case 'preparation':
+        final values = list('execution_support');
+        return values.isEmpty
+            ? '尚未记录物品、路线、环境或提醒等提前准备。'
+            : '已完成的准备：${values.join('、')}。';
       case 'self_efficacy':
         final value = '${structured['self_efficacy'] ?? ''}'.trim();
         return value.isEmpty
