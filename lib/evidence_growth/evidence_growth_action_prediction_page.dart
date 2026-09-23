@@ -1441,6 +1441,12 @@ class _EvidenceGrowthActionPredictionPageState
                           Text('${risks[i]['label']}',
                               style:
                                   const TextStyle(fontWeight: FontWeight.w700)),
+                          Text(
+                              '${risks[i]['source'] == 'USER_CONFIRMED_THEORY' ? '依据：用户确认的理论标准选项' : risks[i]['source'] == 'JEV' ? '依据：JEV typed评分' : '依据：模型提取证据'}',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.black54,
+                                  fontWeight: FontWeight.w700)),
                           if ('${risks[i]['evidence'] ?? ''}'.trim().isNotEmpty)
                             Text('${risks[i]['evidence']}',
                                 style: const TextStyle(
