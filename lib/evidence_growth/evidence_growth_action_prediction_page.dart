@@ -725,13 +725,15 @@ class _EvidenceGrowthActionPredictionPageState
               ],
               if (dominantFailure.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Text('JEV 最可能失败机制：$dominantFailure',
+                Text(
+                    'JEV 最可能失败机制：$dominantFailure（判断把握 ${_pct(jevFlow['dominant_failure_confidence'])}）',
                     style: const TextStyle(fontWeight: FontWeight.w700))
               ],
               if (missingDomain.isNotEmpty &&
                   jevFlow['most_decisive_missing_domain'] != 'none') ...[
                 const SizedBox(height: 6),
-                Text('JEV 认为最值得补充的信息：$missingDomain')
+                Text(
+                    'JEV 认为最值得补充的信息：$missingDomain（判断把握 ${_pct(jevFlow['missing_domain_confidence'])}）')
               ],
             ],
           ] else
@@ -915,13 +917,20 @@ class _EvidenceGrowthActionPredictionPageState
                                   Text('${row['evidence'] ?? ''}'),
                                   if (score is num) ...[
                                     const SizedBox(height: 8),
-                                    Text(
-                                        '$source 对“这个条件支持执行”的支持度：${_pct(score)}',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w700)),
+                                    if (source == 'JEV' &&
+                                        row['jev_raw_score'] is num)
+                                      Text(
+                                          'JEV 支持评分：${(row['jev_raw_score'] as num).toStringAsFixed(1)} / 4',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700))
+                                    else
+                                      Text(
+                                          'LLM 支持评分：${(score.toDouble() * 100).round()} / 100',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 3),
                                     const Text(
-                                        '注意：这个百分数不是行动成功概率，也不是该因素的重要性权重；它只是模型对“该条件目前有多支持执行”的判断。',
+                                        '评分含义：0=强阻碍，2=中性／信息不足，4=强支持。它不是行动成功概率，也不是这个因素的重要性权重。',
                                         style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.black54)),
