@@ -105,12 +105,20 @@ class EvidenceGrowthActionPredictionService {
 
     final records = await history();
     final resolved = records
-        .where((r) =>
-            const {'ON_TIME', 'LATE', 'NOT_DONE'}.contains(r['outcome']))
+        .where((r) => const {
+              'SUCCESS',
+              'PARTIAL',
+              'FAILED',
+              'ON_TIME',
+              'LATE',
+              'NOT_DONE'
+            }.contains(r['outcome']))
         .toList();
-    final onTime = resolved.where((r) => r['outcome'] == 'ON_TIME').length;
+    final successes = resolved
+        .where((r) => const {'SUCCESS', 'ON_TIME'}.contains(r['outcome']))
+        .length;
     final baseline =
-        resolved.isEmpty ? null : (onTime + 1) / (resolved.length + 2);
+        resolved.isEmpty ? null : (successes + 1) / (resolved.length + 2);
 
     final state = <String, dynamic>{
       'plan': action,
@@ -130,7 +138,8 @@ class EvidenceGrowthActionPredictionService {
         },
       'personal_history_summary': {
         'resolved_count': resolved.length,
-        'on_time_count': onTime,
+        'success_count': successes,
+        'on_time_count': successes,
         'smoothed_on_time_rate': baseline,
         'recent': [
           for (final r in resolved.take(12))
@@ -385,7 +394,8 @@ class EvidenceGrowthActionPredictionService {
             growthMap(missingQuestion['probabilities']),
       },      'history_baseline': {
         'resolved_count': resolved.length,
-        'on_time_count': onTime,
+        'success_count': successes,
+        'on_time_count': successes,
         'rate': baseline,
         'weight': historyWeight,
       },
@@ -752,7 +762,14 @@ ${jsonEncode(state)}
   }
 
   Future<void> recordOutcome(String id, String outcome) async {
-    if (!const {'ON_TIME', 'LATE', 'NOT_DONE'}.contains(outcome)) {
+    if (!const {
+      'SUCCESS',
+      'PARTIAL',
+      'FAILED',
+      'ON_TIME',
+      'LATE',
+      'NOT_DONE'
+    }.contains(outcome)) {
       throw ArgumentError('未知结果');
     }
     final rows = await history();
