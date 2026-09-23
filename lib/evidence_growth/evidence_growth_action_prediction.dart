@@ -175,6 +175,7 @@ class EvidenceGrowthActionPredictionService {
     String analysisCorrection = '',
     GrowthData structuredContext = const {},
     List<String> selectedTheoryIds = const [],
+    bool autoSelectTheories = true,
     String jevApiKey = '',
     GrowthJourney? journey,
   }) async {
@@ -187,7 +188,11 @@ class EvidenceGrowthActionPredictionService {
       'additional_notes': context.trim(),
       'similar_history_report': similarHistory.trim(),
       'analysis_correction': analysisCorrection.trim(),
-      'selected_theories': _validTheoryIds(selectedTheoryIds),
+      'selected_theories': autoSelectTheories
+          ? <String>[]
+          : _validTheoryIds(selectedTheoryIds),
+      'theory_selection_mode':
+          autoSelectTheories ? 'AUTO' : 'MANUAL',
       if (journey != null)
         'journey': {
           'goal': journey.title,
@@ -201,11 +206,21 @@ class EvidenceGrowthActionPredictionService {
     };
     final profile = await _interpretAction(state);
     if (profile['analysis_status'] != 'READY') return profile;
+
+    final theorySelection = await _recommendTheories(state, profile);
+    final recommendedTheoryIds =
+        growthStrings(theorySelection['auto_selected_theories']);
+    final finalTheoryIds = autoSelectTheories
+        ? _validTheoryIds(recommendedTheoryIds)
+        : _validTheoryIds(selectedTheoryIds);
+
     return _attachTheoryQuestionnaire(
       state,
       profile,
-      selectedTheoryIds: _validTheoryIds(selectedTheoryIds),
+      selectedTheoryIds: finalTheoryIds,
       jevApiKey: jevApiKey.trim(),
+      theorySelectionAnalysis: theorySelection,
+      theorySelectionMode: autoSelectTheories ? 'AUTO' : 'MANUAL',
     );
   }
 
@@ -712,11 +727,191 @@ class EvidenceGrowthActionPredictionService {
         : selected;
   }
 
+  Future<GrowthData> _recommendTheories(
+      GrowthData state, GrowthData profile) async {
+    UnifiedAiResolvedConfig config;
+    try {
+      config = await _ai.resolveGlobalConfig();
+    } catch (_) {
+      return _fallbackTheorySelection();
+    }
+    if (!config.available) return _fallbackTheorySelection();
+
+    try {
+      final theoryRows = EvidenceBehaviorTheoryCatalog.theories.values
+          .map((e) => {
+                'id': e['id'],
+                'name': e['name'],
+                'scope': e['scope'],
+                'description': e['description'],
+                'structure': e['structure'],
+                'is_extension': e['is_extension'] == true,
+              })
+          .toList();
+
+      final raw = await _ai.generateText(
+        purpose: 'evidence_growth.action_interpretation.theory_selection',
+        systemPrompt: '''
+你是“行为预测理论路由器”。任务不是预测行为概率，而是判断当前这个具体行动最适合用哪些理论/扩展来测量与解释。
+
+候选包括 TPB、IBM、COM-B、SCT、HAPA、IMPLEMENTATION_INTENTION。
+
+必须遵守：
+1. 目标是“最小但足够”的理论组合，而不是理论越多越好。通常自动选择1~3个；只有确有互补价值时最多4个。
+2. suitability 是“这个理论对当前行动预测/诊断的适配度”，不是理论优劣，也不是行为成功概率。
+3. IBM：适合通用行动预测，尤其要同时处理意向及知识技能、显著性、环境约束、习惯等意向→行为条件。
+4. TPB：当态度、主观规范、知觉行为控制与意向形成是核心问题时价值高。
+5. COM-B：当能力、机会、反思/自动动机中存在明显瓶颈，需要系统诊断行为条件时价值高。
+6. SCT：当自我效能、技能学习、目标/自我调节、榜样学习、强化或环境互动是核心机制时价值高。
+7. HAPA：主要用于健康相关行为，尤其涉及形成意向、行动/应对计划、维持、复发和恢复时价值高。普通一次性非健康任务不要因为“有计划”就选HAPA。
+8. IMPLEMENTATION_INTENTION：它是意志性扩展，不是完整理论。只有“已经想做/决定做但经常没有真正启动”、需要明确情境触发和第一步时才应高适配。
+9. 重叠理论不要机械同时选择。若两个理论覆盖高度重复，只保留更能解释当前问题的那个；若互补，说明各自角色。
+10. 必须综合用户原始输入、补充事实、过去相似行为、AI解析出的行动类型/边界/失败机制。不要根据用户人格做无根据推断。
+11. 对全部候选都给 suitability 0~1、role、reason；selected 表示是否建议自动勾选。
+12. AUTO_SELECTED：selected=true 且 suitability>=0.72。若没有任何理论达到0.72，仍选择 suitability 最高的一个作为 PRIMARY。
+13. 只输出JSON，不输出额外文字。
+''',
+        prompt: '''USER_INPUT:
+${jsonEncode({
+          'plan': state['plan'],
+          'scheduled_at': state['scheduled_at'],
+          'additional_notes': state['additional_notes'],
+          'similar_history_report': state['similar_history_report'],
+          'analysis_correction': state['analysis_correction'],
+        })}
+
+ACTION_PROFILE:
+${jsonEncode({
+          'normalized_action': profile['normalized_action'],
+          'action_mode': profile['action_mode'],
+          'action_tags': profile['action_tags'],
+          'interpretation': profile['interpretation'],
+          'selected_preserved_factors':
+              profile['selected_preserved_factors'],
+          'adaptive_dynamic_factors':
+              profile['adaptive_dynamic_factors'],
+          'failure_modes': profile['failure_modes'],
+        })}
+
+CANDIDATES:
+${jsonEncode(theoryRows)}
+
+返回：
+{
+  "recommendations":[
+    {
+      "theory_id":"IBM",
+      "suitability":0.0,
+      "selected":true,
+      "role":"PRIMARY|COMPLEMENTARY|NOT_NEEDED",
+      "reason":"最多42个中文字符",
+      "matched_needs":["最多3个简短标签"]
+    }
+  ],
+  "selection_summary":"一句话说明为什么是这个最小组合"
+}''',
+        expectJson: true,
+        temperature: .05,
+        maxTokens: 1300,
+      );
+      final decoded = _decode(raw);
+      final recommendations = <GrowthData>[];
+      for (final row in growthRows(decoded['recommendations'])) {
+        final id = '${row['theory_id'] ?? ''}';
+        if (!EvidenceBehaviorTheoryCatalog.theories.containsKey(id)) continue;
+        final suitability = _prob(row['suitability']);
+        if (suitability == null) continue;
+        final role = '${row['role'] ?? 'NOT_NEEDED'}'.toUpperCase();
+        recommendations.add({
+          'theory_id': id,
+          'suitability': suitability,
+          'selected': row['selected'] == true,
+          'role': const {'PRIMARY', 'COMPLEMENTARY', 'NOT_NEEDED'}
+                  .contains(role)
+              ? role
+              : 'NOT_NEEDED',
+          'reason': _cleanUserText('${row['reason'] ?? ''}'),
+          'matched_needs':
+              growthStrings(row['matched_needs']).take(3).toList(),
+        });
+      }
+      if (recommendations.isEmpty) return _fallbackTheorySelection();
+
+      recommendations.sort((a, b) =>
+          ((b['suitability'] as num?)?.toDouble() ?? 0).compareTo(
+              (a['suitability'] as num?)?.toDouble() ?? 0));
+
+      var autoIds = recommendations
+          .where((r) =>
+              r['selected'] == true &&
+              ((r['suitability'] as num?)?.toDouble() ?? 0) >= .72)
+          .map((r) => '${r['theory_id']}')
+          .take(4)
+          .toList();
+
+      if (autoIds.isEmpty && recommendations.isNotEmpty) {
+        autoIds = ['${recommendations.first['theory_id']}'];
+        recommendations.first['selected'] = true;
+        recommendations.first['role'] = 'PRIMARY';
+      }
+
+      return {
+        'status': 'AI',
+        'auto_threshold': .72,
+        'auto_selected_theories': autoIds,
+        'recommendations': recommendations,
+        'selection_summary':
+            _cleanUserText('${decoded['selection_summary'] ?? ''}'),
+      };
+    } catch (_) {
+      return _fallbackTheorySelection();
+    }
+  }
+
+  GrowthData _fallbackTheorySelection() {
+    return {
+      'status': 'RULE_FALLBACK',
+      'auto_threshold': .72,
+      'auto_selected_theories':
+          EvidenceBehaviorTheoryCatalog.defaultTheoryIds.toList(),
+      'selection_summary':
+          'AI理论匹配当前不可用，暂用通用组合 IBM + TPB + COM-B；用户可自行修改。',
+      'recommendations': [
+        {
+          'theory_id': 'IBM',
+          'suitability': .85,
+          'selected': true,
+          'role': 'PRIMARY',
+          'reason': '通用行为发生预测主干',
+          'matched_needs': ['意向到行为']
+        },
+        {
+          'theory_id': 'TPB',
+          'suitability': .72,
+          'selected': true,
+          'role': 'COMPLEMENTARY',
+          'reason': '补充态度、规范与知觉控制',
+          'matched_needs': ['意向形成']
+        },
+        {
+          'theory_id': 'COM_B',
+          'suitability': .72,
+          'selected': true,
+          'role': 'COMPLEMENTARY',
+          'reason': '补充能力、机会与动机诊断',
+          'matched_needs': ['行为条件']
+        }
+      ],
+    };
+  }
+
   Future<GrowthData> _attachTheoryQuestionnaire(
     GrowthData state,
     GrowthData profile, {
     required List<String> selectedTheoryIds,
     required String jevApiKey,
+    GrowthData theorySelectionAnalysis = const {},
+    String theorySelectionMode = 'MANUAL',
   }) async {
     final theories = _validTheoryIds(selectedTheoryIds);
     final factorDefs =
@@ -806,8 +1001,10 @@ class EvidenceGrowthActionPredictionService {
       'selected_theories': theories,
       'selected_theory_details':
           EvidenceBehaviorTheoryCatalog.theoryRows(theories),
+      'theory_selection_mode': theorySelectionMode,
+      'theory_selection_analysis': theorySelectionAnalysis,
       'theory_recommendations':
-          growthRows(llmPrefill['theory_recommendations']),
+          growthRows(theorySelectionAnalysis['recommendations']),
       'theory_factor_questionnaire': questionnaire,
       'theory_prefill_status': {
         'llm': llmPrefill['status'] ?? 'LOCAL',
@@ -862,7 +1059,7 @@ class EvidenceGrowthActionPredictionService {
 3. confidence < 0.75 仍可以给建议，但程序不会自动选中；没有足够证据的因素直接省略。
 4. evidence 必须是用户输入中的短证据，最多36个中文字符。
 5. option_id 必须来自该factor提供的options。
-6. 同时可以给出理论适用性建议，但不能替用户锁定理论。
+6. 这里只负责标准选项预填；理论适配已经在独立路由阶段完成。
 7. 只输出JSON，尽量精炼。
 ''',
         prompt: '''USER_STATE:
@@ -896,9 +1093,6 @@ ${jsonEncode(EvidenceBehaviorTheoryCatalog.theories.values
 {
   "selections":[
     {"factor_id":"","option_id":"","confidence":0.0,"evidence":""}
-  ],
-  "theory_recommendations":[
-    {"theory_id":"","confidence":0.0,"reason":""}
   ]
 }''',
         expectJson: true,
@@ -922,25 +1116,9 @@ ${jsonEncode(EvidenceBehaviorTheoryCatalog.theories.values
           'source': 'LLM',
         };
       }
-      final recommendations = <GrowthData>[];
-      for (final row
-          in growthRows(decoded['theory_recommendations']).take(6)) {
-        final theoryId = '${row['theory_id'] ?? ''}';
-        final confidence = _prob(row['confidence']);
-        if (!EvidenceBehaviorTheoryCatalog.theories.containsKey(theoryId) ||
-            confidence == null) {
-          continue;
-        }
-        recommendations.add({
-          'theory_id': theoryId,
-          'confidence': confidence,
-          'reason': _cleanUserText('${row['reason'] ?? ''}'),
-        });
-      }
       return {
         'status': 'AI',
         'selections': selections,
-        'theory_recommendations': recommendations,
       };
     } catch (_) {
       return {'status': 'LOCAL', 'reason': 'AI_PREFILL_FAILED'};
