@@ -115,14 +115,9 @@ class EvidenceGrowthActionPredictionService {
     final ai = await _aiAssessment(state);
     GrowthData jev = {'status': 'LOCAL', 'reason': 'JEV_NOT_CONFIGURED'};
     if (jevApiKey.trim().isNotEmpty) {
-      jev = await _jev.assessAction({
-        ...state,
-        'ai_structured_extraction': {
-          'factors': ai['factors'],
-          'missing_information': ai['missing_information'],
-          'failure_modes': ai['failure_modes'],
-        }
-      }, apiKey: jevApiKey.trim());
+      // Keep JEV independent from the LLM. It sees the same raw state but not
+      // the LLM's intermediate scores or conclusions, avoiding anchoring.
+      jev = await _jev.assessAction(state, apiKey: jevApiKey.trim());
     }
 
     final aiEstimate = _prob(ai['execution_likelihood']);
