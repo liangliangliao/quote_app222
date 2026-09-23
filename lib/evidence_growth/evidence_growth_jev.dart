@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'evidence_growth_journey_models.dart';
+import 'evidence_growth_behavior_theories.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_models.dart';
@@ -574,6 +575,126 @@ class EvidenceGrowthJev {
       'most_decisive_missing_question':
           choice('most_decisive_missing_question'),
     };
+  }
+
+  static GrowthData theoryPrefillRequest(
+      GrowthData state, List<String> factorIds, String model) {
+    final factors = <Map<String, Object?>>[
+      for (final id in factorIds)
+        if (EvidenceBehaviorTheoryCatalog.factor(id) != null)
+          EvidenceBehaviorTheoryCatalog.factor(id)!
+    ];
+    return {
+      'model': model,
+      'state': {
+        'action_prediction': state,
+        'instruction':
+            'Use only explicit user facts. Missing information is unknown. Do not infer a personality trait or treat an LLM suggestion as evidence.'
+      },
+      'questions': {
+        for (final factor in factors)
+          'theory_${factor['id']}': {
+            'type': 'choice',
+            'instructions':
+                'Choose the single option best supported by explicit facts for this construct: ${factor['label']}. Question: ${factor['question']} If evidence is insufficient choose unknown. Do not choose an option merely because it seems typical.',
+            'criteria': {
+              for (final option in (factor['options'] as List))
+                '${(option as Map)['id']}': '${option['label']}'
+            }
+          }
+      }
+    };
+  }
+
+  static GrowthData parseTheoryPrefill(GrowthData body) {
+    final answers = growthMap(body['answers']);
+    final selections = <String, GrowthData>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('theory_')) continue;
+      final answer = growthMap(entry.value);
+      final choice = answer['choice'];
+      final confidence = answer['confidence'];
+      if (answer['type'] != 'choice' ||
+          choice is! String ||
+          confidence is! num ||
+          !confidence.isFinite ||
+          confidence < 0 ||
+          confidence > 1) {
+        continue;
+      }
+      selections[entry.key.substring('theory_'.length)] = {
+        'option_id': choice,
+        'confidence': confidence.toDouble(),
+        'probabilities': growthMap(answer['probabilities']),
+        'source': 'JEV',
+      };
+    }
+    return {
+      'status': selections.isEmpty ? 'LOCAL' : 'JEV',
+      'model': body['model'],
+      'usage': body['usage'],
+      'selections': selections,
+    };
+  }
+
+  Future<GrowthData> assessTheoryOptions(
+    GrowthData state,
+    List<String> factorIds, {
+    required String apiKey,
+    String model = 'jev-latest',
+  }) async {
+    if (apiKey.isEmpty || factorIds.isEmpty) {
+      return {'status': 'LOCAL', 'reason': 'NO_KEY_OR_FACTORS'};
+    }
+    if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
+      return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
+    }
+    final ids = factorIds.take(28).toList();
+    final body = jsonEncode(theoryPrefillRequest(state, ids, model));
+    if (utf8.encode(body).length > 64000) {
+      return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
+    }
+    final key =
+        sha256.convert(utf8.encode('theory-prefill-v1|$apiKey|$body')).toString();
+    if (_cache.containsKey(key)) return _cache[key]!;
+    if (_pending.containsKey(key)) return _pending[key]!;
+    final pending = _sendTheoryPrefill(body, apiKey);
+    _pending[key] = pending;
+    try {
+      final result = await pending;
+      if (result['status'] == 'JEV') {
+        if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+        _cache[key] = result;
+      }
+      return result;
+    } finally {
+      _pending.remove(key);
+    }
+  }
+
+  Future<GrowthData> _sendTheoryPrefill(String body, String key) async {
+    final client = _client ?? http.Client();
+    try {
+      final response = await client
+          .post(endpoint,
+              headers: {
+                'Authorization': 'Bearer $key',
+                'Content-Type': 'application/json',
+              },
+              body: body)
+          .timeout(timeout);
+      if (response.statusCode == 429 || response.statusCode == 529) {
+        _cooldown = DateTime.now().add(const Duration(seconds: 45));
+      }
+      if (response.statusCode != 200) {
+        return {'status': 'LOCAL', 'reason': 'SERVICE_UNAVAILABLE'};
+      }
+      return parseTheoryPrefill(growthMap(jsonDecode(response.body)));
+    } catch (_) {
+      return {'status': 'LOCAL', 'reason': 'REQUEST_FAILED'};
+    } finally {
+      if (_client == null) client.close();
+    }
   }
 
   Future<GrowthData> assessAction(GrowthData state,
