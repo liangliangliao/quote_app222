@@ -351,7 +351,7 @@ class EvidenceGrowthActionPredictionService {
     }
 
     final dynamicByKey = <String, GrowthData>{};
-    for (final row in growthRows(profile['dynamic_factors']).take(8)) {
+    for (final row in growthRows(profile['dynamic_factors']).take(24)) {
       final rawId = '${row['id'] ?? ''}'
           .toLowerCase()
           .replaceAll(RegExp(r'[^a-z0-9_]+'), '_');
@@ -1176,9 +1176,15 @@ ${jsonEncode(state)}
     final construct = '${row['ibm_construct'] ?? ''}'.trim();
     final constructLabel =
         EvidenceGrowthJev.actionFactorLabels[construct] ?? construct;
-    return constructLabel.isEmpty
-        ? '这是“$label”这一具体行动中的显著信念／现实条件；当前没有明确事实时保持未知。'
-        : '这是“$label”这一行为特有条件，理论上归入“$constructLabel”；当前没有明确事实时保持未知。';
+    final source = '${row['source'] ?? ''}';
+    final reason = _cleanUserText('${row['selection_reason'] ?? ''}');
+    final origin = source == 'PRESERVED_BASELINE'
+        ? '这是从原“去上班/到场”预测模型中保留下来的关键条件'
+        : '这是AI针对当前行动新增的特有条件';
+    final mapping =
+        constructLabel.isEmpty ? '' : '，理论上归入“$constructLabel”';
+    final selected = reason.isEmpty ? '' : '。选择理由：$reason';
+    return '$origin：“$label”$mapping；当前没有明确事实时保持未知$selected。';
   }
 
   static String _humanEvidence(
