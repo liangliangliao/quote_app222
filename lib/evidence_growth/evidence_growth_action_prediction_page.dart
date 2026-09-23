@@ -287,9 +287,6 @@ class _EvidenceGrowthActionPredictionPageState
                       '${row['id']}',
                       theoryFactorSelections['${row['id']}']!)?['label'] ??
                   '',
-              'support_score': EvidenceBehaviorTheoryCatalog.supportScore(
-                  '${row['id']}',
-                  theoryFactorSelections['${row['id']}']!),
               'confirmed_by_user': true,
               'prefill_source':
                   theoryFactorSelectionSources['${row['id']}'] ?? 'MANUAL',
@@ -360,10 +357,6 @@ class _EvidenceGrowthActionPredictionPageState
     }
     if (actionProfile['analysis_status'] != 'READY') {
       _message('AI还没有成功完成行动理解，请先重新调用AI分析。');
-      return;
-    }
-    if (missingTheoryFactorCount > 0) {
-      _message('还有 $missingTheoryFactorCount 个理论因素未选择；可以选择“不清楚／无法判断”。');
       return;
     }
     setState(() => busy = true);
@@ -1357,18 +1350,15 @@ class _EvidenceGrowthActionPredictionPageState
                 child: FilledButton.icon(
                     onPressed: busy ||
                             preparing ||
-                            hasUnappliedCorrection ||
-                            missingTheoryFactorCount > 0
+                            hasUnappliedCorrection
                         ? null
                         : predict,
                     icon: const Icon(Icons.hub_outlined),
                     label: Text(busy
                         ? '正在预测…'
-                        : missingTheoryFactorCount > 0
-                            ? '还有 ${missingTheoryFactorCount} 个理论因素待选'
-                            : jevConfigured
-                                ? '确认选择并交给JEV'
-                                : '确认选择并开始预测')))
+                        : jevConfigured
+                            ? '按当前已填信息交给JEV'
+                            : '按当前已填信息开始预测')))
           ]),
           ],
           if (busy)
