@@ -383,7 +383,7 @@ class EvidenceGrowthJev {
   static GrowthData actionRequest(GrowthData state, String model) {
     final events = _forecastEvents(state);
     final core = _relevantCoreFactors(state);
-    final dynamic = _dynamicFactors(state);
+    final dynamicRows = _dynamicFactors(state);
     final failures = _failureModes(state);
     final profile = growthMap(state['action_profile']);
     final answers = growthMap(state['clarification_answers']);
@@ -406,7 +406,7 @@ class EvidenceGrowthJev {
       'normalized_action': profile['normalized_action'],
       'forecast_events': events,
       'relevant_core_factors': core,
-      'dynamic_factors': dynamic,
+      'dynamic_factors': dynamicRows,
       'clarifying_questions': profile['clarifying_questions'],
       'failure_modes': failures,
     };
@@ -456,7 +456,7 @@ class EvidenceGrowthJev {
                 'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} Use only supplied facts and the action contract. Missing evidence belongs at the neutral/insufficient level.',
             'criteria': _supportRubric,
           },
-        for (final row in dynamic)
+        for (final row in dynamicRows)
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
