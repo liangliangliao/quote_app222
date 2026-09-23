@@ -174,6 +174,8 @@ class EvidenceGrowthActionPredictionService {
     String similarHistory = '',
     String analysisCorrection = '',
     GrowthData structuredContext = const {},
+    List<String> selectedTheoryIds = const [],
+    String jevApiKey = '',
     GrowthJourney? journey,
   }) async {
     final action = plan.trim();
@@ -185,6 +187,7 @@ class EvidenceGrowthActionPredictionService {
       'additional_notes': context.trim(),
       'similar_history_report': similarHistory.trim(),
       'analysis_correction': analysisCorrection.trim(),
+      'selected_theories': _validTheoryIds(selectedTheoryIds),
       if (journey != null)
         'journey': {
           'goal': journey.title,
@@ -196,7 +199,14 @@ class EvidenceGrowthActionPredictionService {
           'next_change': journey.data['next_change'],
         },
     };
-    return _interpretAction(state);
+    final profile = await _interpretAction(state);
+    if (profile['analysis_status'] != 'READY') return profile;
+    return _attachTheoryQuestionnaire(
+      state,
+      profile,
+      selectedTheoryIds: _validTheoryIds(selectedTheoryIds),
+      jevApiKey: jevApiKey.trim(),
+    );
   }
 
   Future<GrowthData> predict({
@@ -208,6 +218,8 @@ class EvidenceGrowthActionPredictionService {
     GrowthData structuredContext = const {},
     GrowthData actionProfile = const {},
     GrowthData clarificationAnswers = const {},
+    List<String> selectedTheoryIds = const [],
+    GrowthData theoryFactorAnswers = const {},
     GrowthJourney? journey,
     String jevApiKey = '',
   }) async {
@@ -238,6 +250,8 @@ class EvidenceGrowthActionPredictionService {
       'additional_notes': context.trim(),
       'similar_history_report': similarHistory.trim(),
       'analysis_correction': analysisCorrection.trim(),
+      'selected_theories': _validTheoryIds(selectedTheoryIds),
+      'theory_factor_answers': theoryFactorAnswers,
       if (journey != null)
         'journey': {
           'goal': journey.title,
@@ -252,8 +266,16 @@ class EvidenceGrowthActionPredictionService {
 
     // IBM treats habit/past behavior as behavior-specific. Do not calibrate a
     // "submit report" forecast with unrelated records such as "go running".
-    final profile =
+    var profile =
         actionProfile.isEmpty ? await _interpretAction(state) : actionProfile;
+    if (actionProfile.isEmpty && profile['analysis_status'] == 'READY') {
+      profile = await _attachTheoryQuestionnaire(
+        state,
+        profile,
+        selectedTheoryIds: _validTheoryIds(selectedTheoryIds),
+        jevApiKey: jevApiKey.trim(),
+      );
+    }
     final targetMode = '${profile['action_mode'] ?? ''}'.trim();
     final targetTags = growthStrings(profile['action_tags']).toSet();
 
@@ -276,6 +298,11 @@ class EvidenceGrowthActionPredictionService {
 
     state['action_profile'] = profile;
     state['clarification_answers'] = clarificationAnswers;
+    state['selected_theories'] = _validTheoryIds(
+        selectedTheoryIds.isEmpty
+            ? growthStrings(profile['selected_theories'])
+            : selectedTheoryIds);
+    state['theory_factor_answers'] = theoryFactorAnswers;
     state['personal_history_summary'] = {
       'resolved_count': resolved.length,
       'all_resolved_count': allResolved.length,
@@ -588,6 +615,250 @@ class EvidenceGrowthActionPredictionService {
           : '个人基线只使用行动类型相同、且标签相近的历史结果进行有限校准；它仍然是预测，不是保证。',
       'outcome': 'PENDING',
     };
+  }
+
+  static List<String> _validTheoryIds(Iterable<String> ids) {
+    final selected = ids
+        .where(EvidenceBehaviorTheoryCatalog.theories.containsKey)
+        .toSet()
+        .toList();
+    return selected.isEmpty
+        ? EvidenceBehaviorTheoryCatalog.defaultTheoryIds.toList()
+        : selected;
+  }
+
+  Future<GrowthData> _attachTheoryQuestionnaire(
+    GrowthData state,
+    GrowthData profile, {
+    required List<String> selectedTheoryIds,
+    required String jevApiKey,
+  }) async {
+    final theories = _validTheoryIds(selectedTheoryIds);
+    final factorDefs =
+        EvidenceBehaviorTheoryCatalog.activeFactors(theories).take(28).toList();
+    final factorIds =
+        factorDefs.map((e) => '${e['id']}').where((e) => e.isNotEmpty).toList();
+
+    final llmPrefill =
+        await _aiTheoryOptionSuggestions(state, profile, theories, factorDefs);
+    GrowthData jevPrefill = {'status': 'LOCAL', 'reason': 'NO_KEY'};
+    if (jevApiKey.isNotEmpty && factorIds.isNotEmpty) {
+      final jevState = <String, dynamic>{
+        ...state,
+        'action_profile': {
+          'normalized_action': profile['normalized_action'],
+          'action_mode': profile['action_mode'],
+          'action_tags': profile['action_tags'],
+          'forecast_events': profile['forecast_events'],
+        },
+        'selected_theories': theories,
+      };
+      jevPrefill = await _jev.assessTheoryOptions(
+        jevState,
+        factorIds,
+        apiKey: jevApiKey,
+      );
+    }
+
+    final llmRows = growthMap(llmPrefill['selections']);
+    final jevRows = growthMap(jevPrefill['selections']);
+    final questionnaire = <GrowthData>[];
+
+    for (final factor in factorDefs) {
+      final id = '${factor['id']}';
+      final llm = growthMap(llmRows[id]);
+      final jev = growthMap(jevRows[id]);
+      final llmOption = '${llm['option_id'] ?? ''}';
+      final jevOption = '${jev['option_id'] ?? ''}';
+      final llmConfidence = _prob(llm['confidence']);
+      final jevConfidence = _prob(jev['confidence']);
+      final agree = llmOption.isNotEmpty &&
+          llmOption == jevOption &&
+          llmOption != 'unknown';
+      final autoConfidence = agree &&
+              llmConfidence != null &&
+              jevConfidence != null
+          ? (llmConfidence < jevConfidence ? llmConfidence : jevConfidence)
+          : null;
+      final autoSelected = autoConfidence != null && autoConfidence >= .75;
+
+      final theoryIds = growthStrings(factor['theories'])
+          .where(theories.contains)
+          .toList();
+      questionnaire.add({
+        ...factor,
+        'theory_ids': theoryIds,
+        'llm_suggestion': llm,
+        'jev_suggestion': jev,
+        'auto_selected': autoSelected,
+        'auto_option_id': autoSelected ? llmOption : '',
+        'auto_confidence': autoConfidence,
+        'auto_rule':
+            'LLM与JEV选择同一选项，且双方置信度最低值≥75%时才自动选中',
+      });
+    }
+
+    final coverage = EvidenceBehaviorTheoryCatalog.coverageKeys(theories);
+    final selectedPreserved =
+        growthRows(profile['selected_preserved_factors']);
+    final supplemental = <GrowthData>[];
+    final coveredPreserved = <GrowthData>[];
+    for (final row in selectedPreserved) {
+      final catalogId = '${row['catalog_id'] ?? ''}';
+      final construct = '${row['ibm_construct'] ?? ''}';
+      if (coverage.contains(catalogId) || coverage.contains(construct)) {
+        coveredPreserved.add(row);
+      } else {
+        supplemental.add(row);
+      }
+    }
+    final adaptive = growthRows(profile['adaptive_dynamic_factors']);
+
+    return {
+      ...profile,
+      'version': 'multi_theory_action_v3',
+      'selected_theories': theories,
+      'selected_theory_details':
+          EvidenceBehaviorTheoryCatalog.theoryRows(theories),
+      'theory_recommendations':
+          growthRows(llmPrefill['theory_recommendations']),
+      'theory_factor_questionnaire': questionnaire,
+      'theory_prefill_status': {
+        'llm': llmPrefill['status'] ?? 'LOCAL',
+        'jev': jevPrefill['status'] ?? 'LOCAL',
+        'auto_threshold': .75,
+      },
+      'preserved_factors_all_selected': selectedPreserved,
+      'theory_covered_preserved_factors': coveredPreserved,
+      'supplemental_preserved_factors': supplemental,
+      'selected_preserved_factors': supplemental,
+      'dynamic_factors': <GrowthData>[
+        ...supplemental,
+        ...adaptive,
+      ],
+    };
+  }
+
+  Future<GrowthData> _aiTheoryOptionSuggestions(
+    GrowthData state,
+    GrowthData profile,
+    List<String> theoryIds,
+    List<Map<String, Object?>> factors,
+  ) async {
+    UnifiedAiResolvedConfig config;
+    try {
+      config = await _ai.resolveGlobalConfig();
+    } catch (_) {
+      return {'status': 'LOCAL', 'reason': 'AI_CONFIG_ERROR'};
+    }
+    if (!config.available || factors.isEmpty) {
+      return {'status': 'LOCAL', 'reason': 'AI_NOT_AVAILABLE'};
+    }
+
+    try {
+      final compactFactors = [
+        for (final factor in factors)
+          {
+            'id': factor['id'],
+            'label': factor['label'],
+            'question': factor['question'],
+            'options': factor['options'],
+          }
+      ];
+      final raw = await _ai.generateText(
+        purpose: 'evidence_growth.action_interpretation.theory_prefill',
+        systemPrompt: '''
+你负责根据用户明确表达的事实，为行为预测理论问卷提供“可审计的预填建议”，不是最终预测器。
+
+规则：
+1. 只有用户原话或明确补充事实与某个选项高度匹配时才建议；不能根据人格、常识或刻板印象补全。
+2. confidence表示“这段事实与该标准选项完全匹配”的把握，不是行动成功概率。
+3. confidence < 0.75 仍可以给建议，但程序不会自动选中；没有足够证据的因素直接省略。
+4. evidence 必须是用户输入中的短证据，最多36个中文字符。
+5. option_id 必须来自该factor提供的options。
+6. 同时可以给出理论适用性建议，但不能替用户锁定理论。
+7. 只输出JSON，尽量精炼。
+''',
+        prompt: '''USER_STATE:
+${jsonEncode({
+          'plan': state['plan'],
+          'scheduled_at': state['scheduled_at'],
+          'additional_notes': state['additional_notes'],
+          'similar_history_report': state['similar_history_report'],
+          'analysis_correction': state['analysis_correction'],
+          'normalized_action': profile['normalized_action'],
+          'interpretation': profile['interpretation'],
+        })}
+
+SELECTED_THEORIES:
+${jsonEncode(EvidenceBehaviorTheoryCatalog.theoryRows(theoryIds))}
+
+FACTORS:
+${jsonEncode(compactFactors)}
+
+ALL_THEORIES:
+${jsonEncode(EvidenceBehaviorTheoryCatalog.theories.values
+            .map((e) => {
+                  'id': e['id'],
+                  'name': e['name'],
+                  'scope': e['scope'],
+                  'description': e['description'],
+                })
+            .toList())}
+
+返回：
+{
+  "selections":[
+    {"factor_id":"","option_id":"","confidence":0.0,"evidence":""}
+  ],
+  "theory_recommendations":[
+    {"theory_id":"","confidence":0.0,"reason":""}
+  ]
+}''',
+        expectJson: true,
+        temperature: .05,
+        maxTokens: 1500,
+      );
+      final decoded = _decode(raw);
+      final selections = <String, GrowthData>{};
+      for (final row in growthRows(decoded['selections']).take(16)) {
+        final factorId = '${row['factor_id'] ?? ''}';
+        final optionId = '${row['option_id'] ?? ''}';
+        final factor = EvidenceBehaviorTheoryCatalog.factor(factorId);
+        final option =
+            EvidenceBehaviorTheoryCatalog.option(factorId, optionId);
+        final confidence = _prob(row['confidence']);
+        if (factor == null || option == null || confidence == null) continue;
+        selections[factorId] = {
+          'option_id': optionId,
+          'confidence': confidence,
+          'evidence': _cleanUserText('${row['evidence'] ?? ''}'),
+          'source': 'LLM',
+        };
+      }
+      final recommendations = <GrowthData>[];
+      for (final row
+          in growthRows(decoded['theory_recommendations']).take(6)) {
+        final theoryId = '${row['theory_id'] ?? ''}';
+        final confidence = _prob(row['confidence']);
+        if (!EvidenceBehaviorTheoryCatalog.theories.containsKey(theoryId) ||
+            confidence == null) {
+          continue;
+        }
+        recommendations.add({
+          'theory_id': theoryId,
+          'confidence': confidence,
+          'reason': _cleanUserText('${row['reason'] ?? ''}'),
+        });
+      }
+      return {
+        'status': 'AI',
+        'selections': selections,
+        'theory_recommendations': recommendations,
+      };
+    } catch (_) {
+      return {'status': 'LOCAL', 'reason': 'AI_PREFILL_FAILED'};
+    }
   }
 
   Future<GrowthData> _interpretAction(GrowthData state) async {
