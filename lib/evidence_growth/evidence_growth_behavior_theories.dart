@@ -24,6 +24,7 @@ class EvidenceBehaviorTheoryCatalog {
         'attitude_toward_behavior',
         'subjective_norm',
         'perceived_behavioral_control',
+        'actual_behavioral_control',
       ],
       'belief_basis': <String>[
         'behavioral_beliefs',
@@ -239,6 +240,15 @@ class EvidenceBehaviorTheoryCatalog {
     {'id': 'unknown', 'label': '不清楚／无法判断'},
   ];
 
+  static const actualControlOptions = <Map<String, String>>[
+    {'id': 'blocked', 'label': '现实上缺少关键能力／资源／机会，基本无法执行'},
+    {'id': 'low', 'label': '存在明显的实际控制限制'},
+    {'id': 'partial', 'label': '具备一部分条件，但仍有关键限制'},
+    {'id': 'adequate', 'label': '必要能力、资源与机会基本具备'},
+    {'id': 'strong', 'label': '现实控制条件充分，几乎没有执行性阻断'},
+    {'id': 'unknown', 'label': '不清楚／无法判断'},
+  ];
+
   static const importanceOptions = <Map<String, String>>[
     {'id': 'very_low', 'label': '这些结果对我几乎没有价值'},
     {'id': 'low', 'label': '价值较低'},
@@ -307,6 +317,20 @@ class EvidenceBehaviorTheoryCatalog {
       'theories': <String>['TPB'],
       'options': controlOptions,
       'covers': <String>['perceived_control'],
+    },
+    'actual_behavioral_control': {
+      'id': 'actual_behavioral_control',
+      'label': '实际行为控制（现实能力与机会）',
+      'question': '现实上，你是否具备完成这个行为真正需要的能力、资源和机会？',
+      'theories': <String>['TPB'],
+      'options': actualControlOptions,
+      'covers': <String>[
+        'feasibility',
+        'time_capacity',
+        'prerequisite_readiness',
+        'friction',
+        'environmental_constraints'
+      ],
     },
     'experiential_attitude': {
       'id': 'experiential_attitude',
@@ -509,7 +533,7 @@ class EvidenceBehaviorTheoryCatalog {
       'id': 'environmental_influences',
       'label': '环境影响',
       'question': '你的现实和社会环境总体上是在促进还是阻碍这个行为？',
-      'theories': <String>[],
+      'theories': <String>['SCT'],
       'options': opportunityOptions,
       'covers': <String>[
         'feasibility',
@@ -562,9 +586,9 @@ class EvidenceBehaviorTheoryCatalog {
     },
     'environmental_facilitators': {
       'id': 'environmental_facilitators',
-      'label': '环境促进／阻碍',
+      'label': '环境促进／阻碍（兼容旧字段）',
       'question': '现实环境里，促进因素与阻碍因素总体是什么关系？',
-      'theories': <String>['SCT'],
+      'theories': <String>[],
       'options': opportunityOptions,
       'covers': <String>[
         'feasibility',
@@ -577,7 +601,7 @@ class EvidenceBehaviorTheoryCatalog {
     'risk_perception': {
       'id': 'risk_perception',
       'label': '不行动的风险感知',
-      'question': '如果不做这件事，你感受到的现实风险、损失或后果有多强？',
+      'question': '针对这个健康行为所要预防或改善的问题，你对自身风险／脆弱性以及后果严重性的感受有多强？',
       'theories': <String>['HAPA'],
       'options': riskOptions,
       'covers': <String>['value_salience'],
@@ -617,7 +641,7 @@ class EvidenceBehaviorTheoryCatalog {
     'action_control': {
       'id': 'action_control',
       'label': '行动控制／自我监控',
-      'question': '执行过程中，你会不会持续对照目标、监控偏差并及时纠正？',
+      'question': '执行过程中，你是否清楚目标标准、持续自我监控，并在偏离时投入自我调节努力？',
       'theories': <String>['HAPA'],
       'options': regulationOptions,
       'covers': <String>['decision_stability', 'alternatives', 'salience'],
@@ -708,6 +732,7 @@ class EvidenceBehaviorTheoryCatalog {
     'maintenance_self_efficacy': 'self_efficacy',
     'recovery_self_efficacy': 'self_efficacy',
     'perceived_behavioral_control': 'perceived_control',
+    'actual_behavioral_control': 'environmental_constraints',
     'perceived_control': 'perceived_control',
     'knowledge_skills': 'knowledge_skills',
     'behavioral_capability': 'knowledge_skills',
