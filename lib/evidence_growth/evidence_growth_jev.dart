@@ -99,11 +99,15 @@ class EvidenceGrowthJev {
     _pending[key] = pending;
     try {
       final result = await pending;
-      if (result['status'] == 'JEV') {
+      final enriched = <String, dynamic>{
+        ...result,
+        'failure_mode_catalog': _failureModes(state),
+      };
+      if (enriched['status'] == 'JEV') {
         if (_cache.length >= 48) _cache.remove(_cache.keys.first);
-        _cache[key] = result;
+        _cache[key] = enriched;
       }
-      return result;
+      return enriched;
     } finally {
       _pending.remove(key);
     }
@@ -318,12 +322,46 @@ class EvidenceGrowthJev {
     final profile = growthMap(state['action_profile']);
     final seen = <String>{};
     final out = <GrowthData>[];
+
+    // User-confirmed standardized theory options are the strongest available
+    // evidence for blocker candidates. Only clearly adverse options (0/4 or
+    // 1/4 support) are promoted as dominant-failure candidates.
+    final theoryAnswers = growthMap(state['theory_factor_answers']);
+    for (final entry in theoryAnswers.entries) {
+      final answer = growthMap(entry.value);
+      final optionId = '${answer['option_id'] ?? ''}';
+      final optionLabel = '${answer['option_label'] ?? ''}'.trim();
+      final support =
+          EvidenceBehaviorTheoryCatalog.supportScore(entry.key, optionId);
+      if (support == null || support > 1) continue;
+      final factor = EvidenceBehaviorTheoryCatalog.factor(entry.key);
+      if (factor == null) continue;
+      final label = '${factor['label'] ?? entry.key}：$optionLabel';
+      final id = _safeId('theory_${entry.key}_blocker');
+      if (!seen.add(id)) continue;
+      out.add({
+        'id': id,
+        'label': label,
+        'criterion':
+            'The user-confirmed standardized answer for ${factor['label']} is "$optionLabel" (support $support/4), and this adverse condition is the dominant contributor to failure of the primary event.',
+        'source': 'USER_THEORY_OPTION',
+        'factor_id': entry.key,
+        'evidence': optionLabel,
+      });
+    }
     for (final row in growthRows(profile['failure_modes']).take(8)) {
       final id = _safeId(row['id'], fallback: 'mode_${out.length + 1}');
       final label = '${row['label'] ?? ''}'.trim();
       final criterion = '${row['criterion'] ?? ''}'.trim();
       if (label.isEmpty || criterion.isEmpty || !seen.add(id)) continue;
-      out.add({'id': id, 'label': label, 'criterion': criterion});
+      out.add({
+        'id': id,
+        'label': label,
+        'criterion': criterion,
+        'source': '${row['source'] ?? 'AI_FAILURE_MODE'}',
+        'factor_id': '${row['factor_id'] ?? ''}',
+        'evidence': '${row['evidence'] ?? ''}',
+      });
     }
     if (out.isEmpty) {
       out.addAll([
@@ -468,7 +506,7 @@ class EvidenceGrowthJev {
         'dominant_failure_mode': {
           'type': 'choice',
           'instructions':
-              'If the PRIMARY forecast event fails, which single mechanism is most likely to be the dominant cause? Use only supplied facts.',
+              'If the PRIMARY forecast event fails, choose the single most evidence-supported dominant cause. Give priority to explicit user-confirmed standardized answers and concrete observed facts. Do not choose a speculative mechanism merely because it is plausible. If evidence does not clearly support one mechanism, choose insufficient_evidence.',
           'criteria': {
             for (final row in failures) '${row['id']}': '${row['criterion']}'
           }
