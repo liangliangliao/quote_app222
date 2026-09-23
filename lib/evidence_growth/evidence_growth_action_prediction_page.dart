@@ -1445,8 +1445,17 @@ class _EvidenceGrowthActionPredictionPageState
         '${jevFlow['dominant_failure_source'] ?? ''}'.trim();
     final provenance = growthMap(result['forecast_provenance']);
     final historyBaseline = growthMap(result['history_baseline']);
-    final historyWeightValue =
-        (provenance['history_weight'] as num?)?.toDouble() ?? 0;
+    final theoryCompleteness =
+        growthMap(result['theory_input_completeness']);
+    final theoryTotal = (theoryCompleteness['total'] as num?)?.toInt() ?? 0;
+    final theoryKnown =
+        (theoryCompleteness['known_answers'] as num?)?.toInt() ?? 0;
+    final theoryUnknown =
+        (theoryCompleteness['explicit_unknown'] as num?)?.toInt() ?? 0;
+    final theoryMissing =
+        (theoryCompleteness['unselected_missing'] as num?)?.toInt() ?? 0;
+    final theoryResponseCoverage =
+        (theoryCompleteness['response_coverage'] as num?)?.toDouble();
 
     return _section(
         '本次预测',
@@ -1485,18 +1494,30 @@ class _EvidenceGrowthActionPredictionPageState
                     : '这个总百分数不是由下面各因素评分简单相加得到。',
                 style: const TextStyle(
                     fontSize: 11, color: Colors.black54)),
-            if (historyWeightValue > 0) ...[
+            if (source == 'HISTORY_ONLY') ...[
               const SizedBox(height: 4),
               Text(
-                  '已使用同类个人历史进行校准：历史权重 ${_pct(historyWeightValue)}；同类真实结果 ${historyBaseline['resolved_count'] ?? 0} 次。',
+                  '当前没有可用模型概率，因此使用同类个人历史基线；同类真实结果 ${historyBaseline['resolved_count'] ?? 0} 次。',
                   style: const TextStyle(
                       fontSize: 11, color: Colors.black54))
             ] else ...[
               const SizedBox(height: 4),
-              const Text(
-                  '当前没有足够同类真实结果做经验校准，因此这是未充分校准的模型概率估计。',
-                  style: TextStyle(
+              Text(
+                  '同类个人历史 ${historyBaseline['resolved_count'] ?? 0} 次已作为模型输入证据；程序不再用未经验证的固定权重二次混合历史概率。',
+                  style: const TextStyle(
                       fontSize: 11, color: Colors.black54))
+            ],
+            if (theoryTotal > 0) ...[
+              const SizedBox(height: 6),
+              Text(
+                  '理论问卷信息：已明确回答 $theoryKnown / $theoryTotal；明确“不清楚” $theoryUnknown；未选择 $theoryMissing；作答覆盖 ${_pct(theoryResponseCoverage)}。',
+                  style: const TextStyle(
+                      fontSize: 11, color: Colors.black54)),
+              if (theoryMissing > 0)
+                const Text(
+                    '未选择项没有被赋任何分数或权重，只增加信息不确定性；不会直接把最终概率拉高或拉低。',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.black54))
             ],
             if (source == 'JEV_PRIMARY') ...[
               const SizedBox(height: 12),
