@@ -275,8 +275,17 @@ class _EvidenceGrowthActionPredictionPageState
                       '${row['id']}',
                       theoryFactorSelections['${row['id']}']!)?['label'] ??
                   '',
-              'source':
+              'support_score': EvidenceBehaviorTheoryCatalog.supportScore(
+                  '${row['id']}',
+                  theoryFactorSelections['${row['id']}']!),
+              'confirmed_by_user': true,
+              'prefill_source':
                   theoryFactorSelectionSources['${row['id']}'] ?? 'MANUAL',
+              'prefill_confidence':
+                  theoryFactorSelectionSources['${row['id']}'] ==
+                          'AUTO_LLM_JEV'
+                      ? row['auto_confidence']
+                      : null,
             }
       };
 
