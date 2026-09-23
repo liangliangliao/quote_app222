@@ -399,32 +399,74 @@ class EvidenceGrowthActionPredictionService {
       final jConfidence = _prob(jevRow['confidence']);
       final aiConfidence = _prob(aiRow['confidence']);
       final aiStatus = '${aiRow['status'] ?? 'UNKNOWN'}';
+      final isDynamic = dynamicByKey.containsKey(key);
+      final construct = isDynamic
+          ? '${dynamicByKey[key]!['ibm_construct'] ?? 'environmental_constraints'}'
+          : key;
 
-      final useJev = j != null;
-      final score = useJev ? j : a;
-      final confidence = useJev ? jConfidence : aiConfidence;
-      final unknown = score == null ||
-          (useJev
-              ? (confidence ?? 0) < .45 &&
-                  score >= .35 &&
-                  score <= .65
-              : aiStatus == 'UNKNOWN' &&
-                  (confidence == null || confidence < .5));
+      // Once the user has confirmed a standardized theory option, that answer
+      // is direct evidence. Do not ask JEV to overwrite it with a second,
+      // opaque score. Convert the ordered program option transparently to
+      // 0..4 support only for factor display/risk ranking; it is NOT a
+      // behavior probability and NOT a fitted theory coefficient.
+      final theoryAnswer =
+          isDynamic ? <String, dynamic>{} : _confirmedTheoryAnswer(construct, state);
+      final theoryFactorId = '${theoryAnswer['factor_id'] ?? ''}';
+      final theoryOptionId = '${theoryAnswer['option_id'] ?? ''}';
+      final theoryRawScore = theoryFactorId.isEmpty
+          ? null
+          : EvidenceBehaviorTheoryCatalog.supportScore(
+              theoryFactorId, theoryOptionId);
+      final hasTheoryAnswer = theoryAnswer.isNotEmpty;
+      final theoryUnknown = hasTheoryAnswer && theoryOptionId == 'unknown';
+
+      final useTheory = hasTheoryAnswer;
+      final useJev = !useTheory && j != null;
+      final score = useTheory
+          ? (theoryRawScore == null ? null : theoryRawScore / 4)
+          : useJev
+              ? j
+              : a;
+      final confidence = useTheory
+          ? null
+          : useJev
+              ? jConfidence
+              : aiConfidence;
+      final unknown = useTheory
+          ? theoryUnknown || score == null
+          : score == null ||
+              (useJev
+                  ? (confidence ?? 0) < .45 &&
+                      score >= .35 &&
+                      score <= .65
+                  : aiStatus == 'UNKNOWN' &&
+                      (confidence == null || confidence < .5));
+
+      final source = useTheory
+          ? 'USER_CONFIRMED_THEORY'
+          : useJev
+              ? 'JEV'
+              : a != null
+                  ? 'AI'
+                  : 'NONE';
+      final evidenceStrength = useTheory
+          ? 1.0
+          : useJev
+              ? (jConfidence ?? .5)
+              : (aiConfidence ?? .4);
 
       factors[key] = {
         'label': activeLabels[key],
         'score': score,
         'display_score': unknown ? null : score,
         'confidence': confidence,
+        'evidence_strength': evidenceStrength,
         'unknown': unknown,
-        'source': useJev ? 'JEV' : a != null ? 'AI' : 'NONE',
-        'is_dynamic': dynamicByKey.containsKey(key),
-        'theory_construct': dynamicByKey.containsKey(key)
-            ? '${dynamicByKey[key]!['ibm_construct'] ?? 'environmental_constraints'}'
-            : key,
-        'theory_group': _theoryGroup(dynamicByKey.containsKey(key)
-            ? '${dynamicByKey[key]!['ibm_construct'] ?? 'environmental_constraints'}'
-            : key),
+        'source': source,
+        'is_dynamic': isDynamic,
+        'theory_construct': construct,
+        'theory_group': _theoryGroup(construct),
+        'theory_answer': theoryAnswer,
         'ai': a,
         'jev': j,
         'jev_raw_score': jevRow['raw_score'],
@@ -436,7 +478,7 @@ class EvidenceGrowthActionPredictionService {
                 : score >= .65
                     ? 'SUPPORT'
                     : 'MIXED',
-        'evidence': dynamicByKey.containsKey(key)
+        'evidence': isDynamic
             ? _dynamicEvidence(dynamicByKey[key]!)
             : _humanEvidence(
                 key, '${aiRow['evidence'] ?? ''}', state, resolved.length),
@@ -447,20 +489,23 @@ class EvidenceGrowthActionPredictionService {
         .where((e) {
           final row = e.value;
           final score = row['score'];
-          final confidence = row['confidence'];
+          final strength = row['evidence_strength'];
           return row['unknown'] != true &&
               score is num &&
               score < .5 &&
-              (confidence == null ||
-                  (confidence is num && confidence.toDouble() >= .5));
+              strength is num &&
+              strength.toDouble() >= .55;
         })
         .toList()
       ..sort((a, b) {
-        final as = (a.value['score'] as num?)?.toDouble() ?? 1;
-        final bs = (b.value['score'] as num?)?.toDouble() ?? 1;
-        final ac = (a.value['confidence'] as num?)?.toDouble() ?? .5;
-        final bc = (b.value['confidence'] as num?)?.toDouble() ?? .5;
-        return (as + (1 - ac) * .25).compareTo(bs + (1 - bc) * .25);
+        double priority(GrowthData row) {
+          final score = (row['score'] as num?)?.toDouble() ?? 1;
+          final strength =
+              (row['evidence_strength'] as num?)?.toDouble() ?? .5;
+          return (1 - score) * strength;
+        }
+
+        return priority(b.value).compareTo(priority(a.value));
       });
 
     final disagreement = aiEstimate != null &&
@@ -473,9 +518,12 @@ class EvidenceGrowthActionPredictionService {
     final dominantFailureKey = '${dominantFailure['choice'] ?? ''}';
     final missingQuestionKey = '${missingQuestion['choice'] ?? ''}';
 
+    final failureCatalog = growthRows(jev['failure_mode_catalog']);
     final failureLabels = <String, String>{
       ...failureModeLabels,
       for (final row in growthRows(profile['failure_modes']))
+        '${row['id'] ?? ''}': '${row['label'] ?? ''}',
+      for (final row in failureCatalog)
         '${row['id'] ?? ''}': '${row['label'] ?? ''}',
     };
     final questionLabels = <String, String>{
@@ -572,6 +620,20 @@ class EvidenceGrowthActionPredictionService {
             _prob(dominantFailure['confidence']),
         'dominant_failure_probabilities':
             growthMap(dominantFailure['probabilities']),
+        'dominant_failure_evidence': (() {
+          final rows = failureCatalog
+              .where((row) => '${row['id'] ?? ''}' == dominantFailureKey)
+              .toList();
+          if (rows.isEmpty) return '';
+          return '${rows.first['evidence'] ?? ''}';
+        })(),
+        'dominant_failure_source': (() {
+          final rows = failureCatalog
+              .where((row) => '${row['id'] ?? ''}' == dominantFailureKey)
+              .toList();
+          if (rows.isEmpty) return '';
+          return '${rows.first['source'] ?? ''}';
+        })(),
         'most_decisive_missing_question': missingQuestionKey,
         'most_decisive_missing_label':
             questionLabels[missingQuestionKey] ?? missingQuestionKey,
@@ -594,6 +656,11 @@ class EvidenceGrowthActionPredictionService {
             'key': e.key,
             'label': activeLabels[e.key],
             'score': e.value['score'],
+            'source': e.value['source'],
+            'evidence_strength': e.value['evidence_strength'],
+            'priority':
+                (1 - ((e.value['score'] as num?)?.toDouble() ?? 1)) *
+                    ((e.value['evidence_strength'] as num?)?.toDouble() ?? .5),
             'evidence': e.value['evidence'],
           }
       ],
