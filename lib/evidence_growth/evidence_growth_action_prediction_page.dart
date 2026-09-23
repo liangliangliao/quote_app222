@@ -31,14 +31,93 @@ class _EvidenceGrowthActionPredictionPageState
 
   late final EvidenceGrowthActionPredictionService service;
   final plan = TextEditingController();
-  final situation = TextEditingController();
-  final similarHistory = TextEditingController();
+  final notes = TextEditingController();
+  final historyNotes = TextEditingController();
+
+  final emotions = <String>{};
+  final frictions = <String>{};
+  final commitments = <String>{};
+  final alternatives = <String>{};
+  final executionSupport = <String>{};
+  final appliedImprovements = <String>{};
+
+  String historyPattern = '不清楚';
+  String selfEfficacy = '不清楚';
+  String decisionStability = '不清楚';
 
   DateTime? scheduledAt;
   GrowthData result = {};
   List<GrowthData> records = [];
   bool busy = false;
   bool jevConfigured = false;
+
+  static const emotionOptions = [
+    '有动力',
+    '平静',
+    '无趣',
+    '焦虑',
+    '害怕',
+    '抵触',
+    '犹豫',
+    '疲惫'
+  ];
+  static const frictionOptions = [
+    '通勤远',
+    '时间紧',
+    '睡眠不足',
+    '身体疲劳',
+    '流程复杂',
+    '不熟悉环境',
+    '担心做不好',
+    '需要与陌生人互动'
+  ];
+  static const commitmentOptions = [
+    '必须打卡',
+    '迟到/缺勤有损失',
+    '已预约',
+    '有人在等',
+    '有明确截止时间',
+    '已答应别人'
+  ];
+  static const alternativeOptions = [
+    '继续躺着',
+    '刷手机',
+    '再想一想',
+    '晚点再做',
+    '找别的机会',
+    '逃避/取消'
+  ];
+  static const supportOptions = [
+    '闹钟已设',
+    '路线已确认',
+    '物品已准备',
+    '到点直接出门',
+    '有人会提醒',
+    '已提前预留时间'
+  ];
+  static const historyOptions = [
+    '不清楚',
+    '没有相似经历',
+    '过去经常取消',
+    '过去经常拖延',
+    '有时做到有时没做到',
+    '多数能按时做到',
+    '几乎总能按时做到'
+  ];
+  static const efficacyOptions = [
+    '很没把握',
+    '有些没把握',
+    '不清楚',
+    '有些把握',
+    '很有把握'
+  ];
+  static const stabilityOptions = [
+    '到时还会重新考虑',
+    '可能会犹豫',
+    '不清楚',
+    '基本不会重新决定',
+    '到点直接执行'
+  ];
 
   @override
   void initState() {
@@ -59,6 +138,7 @@ class _EvidenceGrowthActionPredictionPageState
         ? '${actionApps.last['application'] ?? ''}'
         : '${next['next_action'] ?? j.plan['strategy'] ?? ''}';
     plan.text = candidate.trim().isNotEmpty ? candidate : j.title;
+
     final facts = <String>[
       if ('${j.data['current'] ?? ''}'.trim().isNotEmpty)
         '当前事实：${j.data['current']}',
@@ -71,14 +151,14 @@ class _EvidenceGrowthActionPredictionPageState
       if ('${j.plan['resource_limit'] ?? ''}'.trim().isNotEmpty)
         '资源限制：${j.plan['resource_limit']}',
     ];
-    situation.text = facts.join('\n');
+    notes.text = facts.join('\n');
   }
 
   @override
   void dispose() {
     plan.dispose();
-    situation.dispose();
-    similarHistory.dispose();
+    notes.dispose();
+    historyNotes.dispose();
     super.dispose();
   }
 
@@ -113,7 +193,7 @@ class _EvidenceGrowthActionPredictionPageState
               title: const Text('JEV 行动预测'),
               content: Column(mainAxisSize: MainAxisSize.min, children: [
                 const Text(
-                    '与知识匹配共用 TypeSafe JEV 配置。预测时发送当前行动、现实情境、AI 结构化提取和有限的个人结果摘要；密钥仍在 Android Keystore 加密保存。'),
+                    '与知识匹配共用 TypeSafe JEV 配置。预测时只发送本次行动、你填写的条件、有限个人结果摘要和 AI 结构化结果。密钥仍在 Android Keystore 加密保存。'),
                 TextField(
                     controller: controller,
                     obscureText: true,
@@ -179,6 +259,27 @@ class _EvidenceGrowthActionPredictionPageState
     });
   }
 
+  GrowthData get structuredContext => {
+        'emotions': emotions.toList(),
+        'frictions': frictions.toList(),
+        'commitments': commitments.toList(),
+        'alternatives': alternatives.toList(),
+        'execution_support': executionSupport.toList(),
+        'self_efficacy': selfEfficacy == '不清楚' ? '' : selfEfficacy,
+        'decision_stability':
+            decisionStability == '不清楚' ? '' : decisionStability,
+        'history_pattern': historyPattern == '不清楚' ? '' : historyPattern,
+        'applied_improvements': appliedImprovements.toList(),
+      };
+
+  String get similarHistory {
+    final pieces = <String>[
+      if (historyPattern != '不清楚') historyPattern,
+      if (historyNotes.text.trim().isNotEmpty) historyNotes.text.trim()
+    ];
+    return pieces.join('；');
+  }
+
   Future<void> predict() async {
     if (busy || plan.text.trim().isEmpty) return;
     setState(() => busy = true);
@@ -186,8 +287,9 @@ class _EvidenceGrowthActionPredictionPageState
       final output = await service.predict(
         plan: plan.text,
         scheduledAt: scheduledAt,
-        context: situation.text,
-        similarHistory: similarHistory.text,
+        context: notes.text,
+        similarHistory: similarHistory,
+        structuredContext: structuredContext,
         journey: widget.journey,
         jevApiKey: await _jevKey(),
       );
@@ -202,13 +304,27 @@ class _EvidenceGrowthActionPredictionPageState
     }
   }
 
+  Future<void> applyImprovementAndPredict() async {
+    final scenario = growthMap(result['improvement_scenario']);
+    final changes = growthStrings(scenario['changes']);
+    if (changes.isEmpty) return;
+    final revised = '${scenario['revised_plan'] ?? ''}'.trim();
+    setState(() {
+      appliedImprovements
+        ..clear()
+        ..addAll(changes);
+      if (revised.isNotEmpty) plan.text = revised;
+    });
+    await predict();
+  }
+
   Future<void> recordOutcome(String id, String outcome) async {
     try {
       await service.recordOutcome(id, outcome);
       await reload();
-      if (result['id'] == id) {
-        final latest = records.where((r) => r['id'] == id).firstOrNull;
-        if (latest != null && mounted) setState(() => result = latest);
+      final latest = records.where((r) => r['id'] == id).toList();
+      if (latest.isNotEmpty && mounted) {
+        setState(() => result = latest.first);
       }
     } catch (e) {
       if (mounted) _message('$e');
@@ -257,159 +373,537 @@ class _EvidenceGrowthActionPredictionPageState
       }[value] ??
       value;
 
-  Widget _section(String title, Widget child) => Card(
-      elevation: 0,
-      child: Padding(
-          padding: const EdgeInsets.all(16),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            child
-          ])));
+  String _factorState(GrowthData row) {
+    if (row['unknown'] == true || row['display_score'] == null) return '待补充';
+    final score = (row['display_score'] as num).toDouble();
+    if (score >= .7) return '较稳';
+    if (score >= .55) return '一般';
+    return '需优先修';
+  }
 
-  Widget _result() {
+  String _gainText(Object? value) {
+    if (value is! num) return '';
+    final points = (value.toDouble() * 100).round();
+    if (points <= 0) return '';
+    return '+$points 个百分点';
+  }
+
+  Widget _section(String title, Widget child,
+          {IconData? icon, EdgeInsetsGeometry? padding}) =>
+      Card(
+          elevation: 0,
+          child: Padding(
+              padding: padding ?? const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: 20, color: _teal),
+                        const SizedBox(width: 8)
+                      ],
+                      Expanded(
+                          child: Text(title,
+                              style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800))),
+                    ]),
+                    const SizedBox(height: 10),
+                    child
+                  ])));
+
+  Widget _chipGroup(
+      String title, List<String> options, Set<String> selected,
+      {String? helper}) {
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (helper != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(helper,
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black54))),
+          const SizedBox(height: 8),
+          Wrap(
+              spacing: 7,
+              runSpacing: 6,
+              children: options
+                  .map((item) => FilterChip(
+                      label: Text(item),
+                      selected: selected.contains(item),
+                      onSelected: busy
+                          ? null
+                          : (v) => setState(() {
+                                if (v) {
+                                  selected.add(item);
+                                } else {
+                                  selected.remove(item);
+                                }
+                              })))
+                  .toList())
+        ]));
+  }
+
+  Widget _singleChoice(
+      String title, List<String> options, String value, ValueChanged<String> onChanged,
+      {String? helper}) {
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (helper != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(helper,
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black54))),
+          const SizedBox(height: 8),
+          Wrap(
+              spacing: 7,
+              runSpacing: 6,
+              children: options
+                  .map((item) => ChoiceChip(
+                      label: Text(item),
+                      selected: value == item,
+                      onSelected:
+                          busy ? null : (v) => v ? onChanged(item) : null))
+                  .toList())
+        ]));
+  }
+
+  Widget _inputCard() {
+    return _section(
+        '描述下一步',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(
+              controller: plan,
+              enabled: !busy,
+              minLines: 2,
+              maxLines: 4,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                  labelText: '具体准备做什么？',
+                  hintText: '例如：明天 7:25 出门去上班',
+                  border: OutlineInputBorder())),
+          const SizedBox(height: 12),
+          ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('计划开始时间'),
+              subtitle: Text(scheduledAt == null
+                  ? '建议设定到具体时间'
+                  : _time(scheduledAt!.millisecondsSinceEpoch)),
+              trailing: TextButton(
+                  onPressed: busy ? null : chooseTime,
+                  child: Text(scheduledAt == null ? '选择' : '修改'))),
+          const Divider(),
+          const Text('关键条件',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          const Padding(
+              padding: EdgeInsets.only(top: 4, bottom: 12),
+              child: Text('选中真实符合你的情况即可；不知道的不要猜。',
+                  style: TextStyle(color: Colors.black54))),
+          _chipGroup('临近行动时的情绪', emotionOptions, emotions),
+          _chipGroup('现实阻力', frictionOptions, frictions),
+          _chipGroup('外部约束／承诺', commitmentOptions, commitments),
+          _chipGroup('可能抢走行动的替代行为', alternativeOptions, alternatives),
+          _chipGroup('已经准备好的启动条件', supportOptions, executionSupport),
+          _singleChoice('你觉得自己能完成这一步吗？', efficacyOptions,
+              selfEfficacy, (v) => setState(() => selfEfficacy = v)),
+          _singleChoice('到了时间点，你还会重新考虑“去不去”吗？',
+              stabilityOptions, decisionStability,
+              (v) => setState(() => decisionStability = v)),
+          _singleChoice('过去相似计划通常怎样？', historyOptions, historyPattern,
+              (v) => setState(() => historyPattern = v)),
+          if (appliedImprovements.isNotEmpty) ...[
+            const Text('已套用的改进条件',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: appliedImprovements
+                    .map((e) => Chip(
+                        label: Text(e),
+                        onDeleted: busy
+                            ? null
+                            : () => setState(() => appliedImprovements.remove(e))))
+                    .toList()),
+            const SizedBox(height: 12),
+          ],
+          ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('补充说明（可选）'),
+              subtitle: const Text('只写上面选项没有覆盖、但确实会影响这次行动的事实'),
+              children: [
+                TextField(
+                    controller: historyNotes,
+                    enabled: !busy,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                        labelText: '过去相似经历补充',
+                        border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: notes,
+                    enabled: !busy,
+                    minLines: 3,
+                    maxLines: 7,
+                    decoration: const InputDecoration(
+                        labelText: '其他现实信息',
+                        border: OutlineInputBorder())),
+                const SizedBox(height: 8)
+              ]),
+          const SizedBox(height: 12),
+          SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                  onPressed:
+                      busy || plan.text.trim().isEmpty ? null : predict,
+                  icon: const Icon(Icons.psychology_alt_outlined),
+                  label: Text(busy ? 'AI + JEV 正在判断…' : '开始预测'))),
+          if (busy)
+            const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: LinearProgressIndicator())
+        ]),
+        icon: Icons.directions_run_outlined);
+  }
+
+  Widget _summaryCard() {
     if (result.isEmpty) return const SizedBox.shrink();
     final available = result['estimate_available'] == true;
     final estimate = result['estimate'] as num?;
-    final ai = growthMap(result['ai']);
-    final jev = growthMap(result['jev']);
-    final baseline = growthMap(result['history_baseline']);
+    final headline = '${result['headline'] ?? ''}'.trim();
+    final reason = '${result['headline_reason'] ?? ''}'.trim();
+    final risks = growthRows(result['top_risks']);
+    final actions = growthStrings(result['protective_actions']);
+
+    return _section(
+        '本次预测',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (available) ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(_pct(estimate),
+                  style: const TextStyle(
+                      fontSize: 46,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      color: _teal)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text('${result['band']}',
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800))))
+            ]),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: estimate!.toDouble()),
+          ] else
+            const Text('当前信息还不足以形成综合估计。'),
+          if (headline.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(headline,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))
+          ],
+          if (reason.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(reason, style: const TextStyle(height: 1.45))
+          ],
+          if (risks.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Text('最关键的阻碍',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            for (var i = 0; i < risks.length; i++)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 9),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    CircleAvatar(
+                        radius: 11,
+                        backgroundColor: _teal.withValues(alpha: .1),
+                        child: Text('${i + 1}',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: _teal))),
+                    const SizedBox(width: 9),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text('${risks[i]['label']}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700)),
+                          if ('${risks[i]['evidence'] ?? ''}'.trim().isNotEmpty)
+                            Text('${risks[i]['evidence']}',
+                                style: const TextStyle(
+                                    color: Colors.black54, height: 1.35))
+                        ]))
+                  ]))
+          ] else ...[
+            const SizedBox(height: 14),
+            const Text('目前还没有足够证据锁定前三大阻碍；未知项不会被当成负面证据。',
+                style: TextStyle(color: Colors.black54))
+          ],
+          if (actions.isNotEmpty) ...[
+            const Divider(height: 28),
+            const Text('现在最值得做的事',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            for (final action in actions)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    const Icon(Icons.arrow_right_alt, color: _teal),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(action))
+                  ]))
+          ]
+        ]),
+        icon: Icons.insights_outlined);
+  }
+
+  Widget _improvementCard() {
+    final scenario = growthMap(result['improvement_scenario']);
+    final estimate = scenario['estimate'];
+    final gain = scenario['gain'];
+    final changes = growthStrings(scenario['changes']);
+    if (result.isEmpty || (estimate == null && changes.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    final current = result['estimate'];
+    final explanation = '${scenario['explanation'] ?? ''}'.trim();
+    final revised = '${scenario['revised_plan'] ?? ''}'.trim();
+
+    return _section(
+        '如果先修关键条件，会怎样？',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('下面是“假设这些改变真的完成”的情景模拟，不是保证。',
+              style: TextStyle(color: Colors.black54)),
+          if (current is num && estimate is num) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Text(_pct(current),
+                  style: const TextStyle(
+                      fontSize: 27, fontWeight: FontWeight.w800)),
+              const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Icon(Icons.arrow_forward, color: _teal)),
+              Text(_pct(estimate),
+                  style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      color: _teal)),
+              if (_gainText(gain).isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(_gainText(gain),
+                    style: const TextStyle(
+                        color: _teal, fontWeight: FontWeight.w700))
+              ]
+            ])
+          ],
+          if (changes.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            for (final change in changes)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• $change'))
+          ],
+          if (revised.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('更可执行的计划：$revised',
+                style: const TextStyle(fontWeight: FontWeight.w700))
+          ],
+          if (explanation.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(explanation)
+          ],
+          if (changes.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                    onPressed: busy ? null : applyImprovementAndPredict,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('套用这些条件并重新预测')))
+          ]
+        ]),
+        icon: Icons.trending_up);
+  }
+
+  Widget _factorDetails() {
+    if (result.isEmpty) return const SizedBox.shrink();
     final factors = growthMap(result['factors']).entries.toList()
       ..sort((a, b) {
-        final av = growthMap(a.value)['score'] as num?;
-        final bv = growthMap(b.value)['score'] as num?;
+        final ar = growthMap(a.value);
+        final br = growthMap(b.value);
+        if (ar['unknown'] == true && br['unknown'] != true) return 1;
+        if (ar['unknown'] != true && br['unknown'] == true) return -1;
+        final av = ar['display_score'] as num?;
+        final bv = br['display_score'] as num?;
         return (av ?? 2).compareTo(bv ?? 2);
       });
 
+    return Card(
+        elevation: 0,
+        child: ExpansionTile(
+            title: const Text('查看完整九因素分析',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('默认只看关键阻碍；需要时再展开全部细节'),
+            children: [
+              for (final entry in factors)
+                Builder(builder: (_) {
+                  final row = growthMap(entry.value);
+                  final score = row['display_score'];
+                  final state = _factorState(row);
+                  return ExpansionTile(
+                      tilePadding:
+                          const EdgeInsets.symmetric(horizontal: 16),
+                      title: Text('${row['label'] ?? entry.key}'),
+                      subtitle: Text(score is num
+                          ? '$state · ${_pct(score)}'
+                          : '$state · 不因缺少信息扣分'),
+                      trailing: score is num
+                          ? SizedBox(
+                              width: 72,
+                              child: LinearProgressIndicator(
+                                  value: score.toDouble()))
+                          : const Icon(Icons.help_outline),
+                      children: [
+                        Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                            child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text('${row['evidence'] ?? ''}')))
+                      ]);
+                })
+            ]));
+  }
+
+  Widget _secondaryDetails() {
+    if (result.isEmpty) return const SizedBox.shrink();
+    final ai = growthMap(result['ai']);
+    final jev = growthMap(result['jev']);
+    final baseline = growthMap(result['history_baseline']);
+    final missing = growthStrings(result['missing_information']);
+    final failures = growthStrings(result['failure_modes']);
+
     return Column(children: [
-      _section(
-          '本次预测',
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (available) ...[
-              Text(_pct(estimate),
-                  style: const TextStyle(
-                      fontSize: 38,
-                      fontWeight: FontWeight.w900,
-                      color: _teal)),
-              Text('${result['band']}',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: estimate!.toDouble()),
-            ] else
-              const Text('当前没有足够的 AI、JEV 或个人历史数据形成综合估计。'),
-            const SizedBox(height: 12),
-            Text('AI：${_pct(ai['execution_likelihood'])} · ${ai['status'] ?? '—'}'),
-            Text('JEV：${_pct(jev['overall'])} · ${jev['status'] ?? '—'}'),
-            Text(
-                '个人基线：${_pct(baseline['rate'])} · 已记录 ${baseline['resolved_count'] ?? 0} 次现实结果'),
-            if (result['agreement'] == 'MODEL_DISAGREEMENT')
-              const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('AI 与 JEV 的估计差异较大：不要急着相信单一数字，优先补充缺失信息。',
-                      style: TextStyle(fontWeight: FontWeight.w700))),
-            const SizedBox(height: 10),
-            Text('${result['calibration_note']}',
-                style: const TextStyle(color: Colors.black54)),
-          ])),
-      _section(
-          '九个预测因素',
-          Column(children: [
-            for (final entry in factors)
-              Builder(builder: (_) {
-                final row = growthMap(entry.value);
-                return ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: Text('${row['label'] ?? entry.key}'),
-                    subtitle: Text(
-                        '综合 ${_pct(row['score'])} · AI ${_pct(row['ai'])} · JEV ${_pct(row['jev'])}'),
-                    children: [
-                      Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('${row['evidence'] ?? '暂无明确事实依据'}'))
-                    ]);
-              })
-          ])),
-      if (growthRows(result['top_risks']).isNotEmpty)
-        _section(
-            '最可能拉住行动的地方',
-            Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: growthRows(result['top_risks'])
-                    .map((r) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                            '• ${r['label']} · ${_pct(r['score'])}\n  ${r['evidence'] ?? ''}')))
-                    .toList())),
-      if (growthStrings(result['failure_modes']).isNotEmpty)
-        _section(
-            '可能的失败路径',
-            Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: growthStrings(result['failure_modes'])
-                    .map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text('• $s')))
-                    .toList())),
-      if (growthStrings(result['protective_actions']).isNotEmpty)
-        _section(
-            '优先修改这些行动条件',
-            Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: growthStrings(result['protective_actions'])
-                    .map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text('• $s')))
-                    .toList())),
-      if (growthStrings(result['missing_information']).isNotEmpty)
-        _section(
-            '补充这些信息会让下一次预测更可靠',
-            Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: growthStrings(result['missing_information'])
-                    .map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text('• $s')))
-                    .toList())),
-      _section(
-          '现实结果',
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('当前：${_outcome((result['outcome'] ?? 'PENDING').toString())}'),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton(
-                  onPressed: () => recordOutcome(result['id'], 'ON_TIME'),
-                  child: const Text('按时开始')),
-              OutlinedButton(
-                  onPressed: () => recordOutcome(result['id'], 'LATE'),
-                  child: const Text('完成但延期')),
-              OutlinedButton(
-                  onPressed: () => recordOutcome(result['id'], 'NOT_DONE'),
-                  child: const Text('未执行')),
-            ])
-          ])),
+      if (missing.isNotEmpty)
+        Card(
+            elevation: 0,
+            child: ExpansionTile(
+                title: const Text('补充哪些信息会让预测更可靠',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                children: [
+                  for (final item in missing)
+                    ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.help_outline, size: 20),
+                        title: Text(item))
+                ])),
+      if (failures.isNotEmpty)
+        Card(
+            elevation: 0,
+            child: ExpansionTile(
+                title: const Text('可能的失败路径',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                children: [
+                  for (final item in failures)
+                    ListTile(
+                        dense: true,
+                        leading:
+                            const Icon(Icons.alt_route_outlined, size: 20),
+                        title: Text(item))
+                ])),
+      Card(
+          elevation: 0,
+          child: ExpansionTile(
+              title: const Text('模型与校准信息',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('一般无需关注；用于核对 AI、JEV 与个人基线'),
+              children: [
+                ListTile(
+                    title: const Text('AI 模型估计'),
+                    trailing: Text(_pct(ai['execution_likelihood']))),
+                ListTile(
+                    title: const Text('JEV typed 判断'),
+                    trailing: Text(_pct(jev['overall']))),
+                ListTile(
+                    title: const Text('个人历史基线'),
+                    subtitle: Text((baseline['resolved_count'] as num? ?? 0) == 0
+                        ? '尚无个人结果记录'
+                        : '已记录 ${baseline['resolved_count']} 次现实结果'),
+                    trailing: Text(_pct(baseline['rate']))),
+                if (result['agreement'] == 'MODEL_DISAGREEMENT')
+                  const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                      child: Text(
+                          'AI 与 JEV 差异较大。此时优先补充事实，不要把单一数字当结论。',
+                          style: TextStyle(fontWeight: FontWeight.w700))),
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('${result['calibration_note']}',
+                            style:
+                                const TextStyle(color: Colors.black54))))
+              ]))
     ]);
   }
 
-  Widget _history() => ExpansionTile(
-      title: Text('预测历史（${records.length}）'),
-      subtitle: const Text('真实结果会逐渐形成你的个人执行基线'),
-      children: [
-        if (records.isNotEmpty)
-          Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                  onPressed: clearHistory, child: const Text('清空历史'))),
-        for (final row in records.take(20))
-          ListTile(
-              title: Text('${row['plan']}',
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-              subtitle: Text(
-                  '${_pct(row['estimate'])} · ${_outcome((row['outcome'] ?? 'PENDING').toString())} · ${_time((row['scheduled_at_ms'] as num?)?.toInt() ?? 0)}'),
-              onTap: () => setState(() => result = row)),
-      ]);
+  Widget _outcomeCard() {
+    if (result.isEmpty) return const SizedBox.shrink();
+    return _section(
+        '现实结果',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('当前：${_outcome((result['outcome'] ?? 'PENDING').toString())}'),
+          const SizedBox(height: 8),
+          const Text('行动发生后回来点一次，系统才会逐渐学到你的个人执行基线。',
+              style: TextStyle(color: Colors.black54)),
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton(
+                onPressed: () => recordOutcome(result['id'], 'ON_TIME'),
+                child: const Text('按时开始')),
+            OutlinedButton(
+                onPressed: () => recordOutcome(result['id'], 'LATE'),
+                child: const Text('完成但延期')),
+            OutlinedButton(
+                onPressed: () => recordOutcome(result['id'], 'NOT_DONE'),
+                child: const Text('未执行')),
+          ])
+        ]),
+        icon: Icons.fact_check_outlined);
+  }
+
+  Widget _history() => Card(
+      elevation: 0,
+      child: ExpansionTile(
+          title: Text('预测历史（${records.length}）'),
+          subtitle: const Text('真实结果越多，个人基线越有参考价值'),
+          children: [
+            if (records.isNotEmpty)
+              Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                      onPressed: clearHistory, child: const Text('清空历史'))),
+            for (final row in records.take(20))
+              ListTile(
+                  title: Text('${row['plan']}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(
+                      '${_pct(row['estimate'])} · ${_outcome((row['outcome'] ?? 'PENDING').toString())} · ${_time((row['scheduled_at_ms'] as num?)?.toInt() ?? 0)}'),
+                  onTap: () => setState(() => result = row)),
+          ]));
 
   @override
   Widget build(BuildContext context) {
@@ -418,72 +912,18 @@ class _EvidenceGrowthActionPredictionPageState
           IconButton(
               tooltip: jevConfigured ? 'JEV 已配置' : '配置 JEV',
               onPressed: busy ? null : configureJev,
-              icon: Icon(
-                  jevConfigured ? Icons.hub : Icons.hub_outlined))
+              icon:
+                  Icon(jevConfigured ? Icons.hub : Icons.hub_outlined))
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          _section(
-              'AI + JEV 行动预测器',
-              const Text(
-                  '预测“这一步会不会如期发生”，而不是判断目标好不好。AI 负责理解情境和提取九个因素，JEV 用 typed questions 独立判断，真实结果再形成个人基线。数字在充分校准前只是模型估计，不是保证。')),
-          _section(
-              '1. 描述下一步',
-              Column(children: [
-                TextField(
-                    controller: plan,
-                    minLines: 2,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                        labelText: '具体准备做什么？',
-                        hintText: '例如：明天 8:00 出门去公司体检',
-                        border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('计划开始时间'),
-                    subtitle: Text(scheduledAt == null
-                        ? '未指定'
-                        : _time(scheduledAt!.millisecondsSinceEpoch)),
-                    trailing: TextButton(
-                        onPressed: chooseTime, child: const Text('选择'))),
-                TextField(
-                    controller: situation,
-                    minLines: 4,
-                    maxLines: 9,
-                    decoration: const InputDecoration(
-                        labelText: '现在的现实情况、情绪、阻力、替代选择、承诺',
-                        hintText:
-                            '不用自己给因素打分，直接把真实情况告诉 AI。',
-                        border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: similarHistory,
-                    minLines: 2,
-                    maxLines: 6,
-                    decoration: const InputDecoration(
-                        labelText: '过去相似计划通常怎样？（可选）',
-                        hintText: '例如：以前临近出发时常会重新犹豫，然后取消。',
-                        border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                      child: FilledButton.icon(
-                          onPressed: busy || plan.text.trim().isEmpty
-                              ? null
-                              : predict,
-                          icon: const Icon(Icons.psychology_alt_outlined),
-                          label: Text(busy ? '正在联合判断…' : '开始预测'))),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                      onPressed: busy ? null : configureJev,
-                      child: Text(jevConfigured ? 'JEV已配置' : '配置JEV'))
-                ]),
-                if (busy)
-                  const Padding(
-                      padding: EdgeInsets.only(top: 10),
-                      child: LinearProgressIndicator())
-              ])),
-          _result(),
+          _inputCard(),
+          if (result.isNotEmpty) ...[
+            _summaryCard(),
+            _improvementCard(),
+            _factorDetails(),
+            _secondaryDetails(),
+            _outcomeCard(),
+          ],
           _history(),
           const SizedBox(height: 30),
         ]));
