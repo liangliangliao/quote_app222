@@ -550,14 +550,16 @@ class EvidenceGrowthActionPredictionService {
       'jev': jev,
       'action_profile': profile,
       'theory': {
-        'name': 'Integrated Behavioral Model (IBM)',
-        'extension': 'Implementation Intentions',
-        'model_id': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
-        'direct_behavior_constructs': EvidenceGrowthJev.ibmDirectFactors,
-        'factor_groups': EvidenceGrowthJev.actionFactorGroups,
+        'selected_ids': growthStrings(state['selected_theories']),
+        'models': EvidenceBehaviorTheoryCatalog.theoryRows(
+            growthStrings(state['selected_theories'])),
+        'questionnaire':
+            growthRows(profile['theory_factor_questionnaire']),
+        'answers': theoryFactorAnswers,
         'note':
-            'IBM提供行为预测的理论结构；执行意图用于补充意向到真实行动之间的转化。模型系数不人为伪造，最终概率由JEV判断并用同类个人结果逐步校准。',
+            '理论负责定义需要观察的构念与标准选项；相同构念去重。LLM/JEV只做可审计预填，用户最终选择进入预测；原上班模型中的因素仅在理论未覆盖时作为补充。',
       },
+      'theory_factor_answers': theoryFactorAnswers,
       'clarification_answers': clarificationAnswers,
       'jev_workflow': {
         'primary_event_id': primaryEventId,
