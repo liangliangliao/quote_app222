@@ -7,6 +7,35 @@ import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 void main() {
   setUpAll(sqfliteFfiInit);
 
+  test('original work-case predictor pool is preserved for dynamic reuse', () {
+    final catalog =
+        EvidenceGrowthActionPredictionService.preservedFactorCatalog;
+    expect(catalog.length, 16);
+    expect(
+        catalog.keys,
+        containsAll([
+          'feasibility',
+          'time_capacity',
+          'physical_capacity',
+          'prerequisite_readiness',
+          'commitment',
+          'value_salience',
+          'emotion',
+          'self_efficacy',
+          'decision_stability',
+          'specificity',
+          'trigger',
+          'preparation',
+          'friction',
+          'alternatives',
+          'external_commitment',
+          'history_habit',
+        ]));
+    expect(catalog['trigger']!['ibm_construct'], 'implementation_intention');
+    expect(catalog['emotion']!['ibm_construct'], 'experiential_attitude');
+    expect(catalog['friction']!['ibm_construct'], 'environmental_constraints');
+  });
+
   test('JEV action workflow adapts to the interpreted action profile', () {
     final request = EvidenceGrowthJev.actionRequest({
       'plan': '未来7天不抽烟',
