@@ -587,6 +587,18 @@ class EvidenceGrowthActionPredictionService {
       'band': estimate == null ? '信息不足' : band(estimate),
       'forecast_source': forecastSource,
       'raw_model_estimate': rawEstimate,
+      'forecast_provenance': {
+        'primary_source': forecastSource,
+        'jev_primary_event_probability': jevEstimate,
+        'ai_fallback_probability': aiEstimate,
+        'history_baseline': baseline,
+        'history_weight': historyWeight,
+        'factor_scores_are_not_probability_weights': true,
+        'jev_confidence_semantics':
+            'JEV confidence is model-reported confidence for its typed answer; it is not a statistical confidence interval or observed accuracy rate.',
+        'theory_option_score_semantics':
+            'Confirmed standardized options are transparently mapped from ordered blocker→support choices to 0..4 for factor display/ranking only; they are not fitted behavioral coefficients.',
+      },
       'agreement': disagreement
           ? 'MODEL_DISAGREEMENT'
           : aiEstimate != null && jevEstimate != null
@@ -618,6 +630,10 @@ class EvidenceGrowthActionPredictionService {
             failureLabels[dominantFailureKey] ?? dominantFailureKey,
         'dominant_failure_confidence':
             _prob(dominantFailure['confidence']),
+        'dominant_failure_displayable':
+            dominantFailureKey.isNotEmpty &&
+                dominantFailureKey != 'insufficient_evidence' &&
+                (_prob(dominantFailure['confidence']) ?? 0) >= .60,
         'dominant_failure_probabilities':
             growthMap(dominantFailure['probabilities']),
         'dominant_failure_evidence': (() {
