@@ -825,6 +825,17 @@ class _EvidenceGrowthActionPredictionPageState
         icon: Icons.edit_note_outlined);
   }
 
+  String _constructLabel(String key) =>
+      EvidenceGrowthJev.actionFactorLabels[key] ?? key;
+
+  String _groupLabel(String key) => const {
+        'INTENTION_FORMATION': 'A. 意向形成层',
+        'DIRECT_BEHAVIOR': 'B. IBM 直接行为决定因素',
+        'VOLITIONAL_EXTENSION': 'C. 执行意图扩展',
+        'ACTION_SPECIFIC': 'D. 当前行为特有信念／条件',
+      }[key] ??
+      key;
+
   Widget _profileCard() {
     if (actionProfile.isEmpty) return const SizedBox.shrink();
     final events = growthRows(actionProfile['forecast_events']);
@@ -840,8 +851,13 @@ class _EvidenceGrowthActionPredictionPageState
           Row(children: [
             Chip(label: Text(_modeLabel(mode))),
             const SizedBox(width: 8),
-            if (actionProfile['version'] == 'universal_action_v1_fallback')
+            const Chip(label: Text('IBM 主模型')),
+            const SizedBox(width: 8),
+            const Chip(label: Text('执行意图扩展')),
+            if (actionProfile['version'] == 'ibm_action_v2_fallback') ...[
+              const SizedBox(width: 8),
               const Chip(label: Text('通用回退'))
+            ]
           ]),
           if (normalized.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -876,12 +892,14 @@ class _EvidenceGrowthActionPredictionPageState
             const Text('这个行动特有的变量',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
-            Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: dynamic
-                    .map((row) => Chip(label: Text('${row['label'] ?? ''}')))
-                    .toList())
+            for (final row in dynamic)
+              ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.account_tree_outlined, size: 20),
+                  title: Text('${row['label'] ?? ''}'),
+                  subtitle: Text(
+                      '归入理论构念：${_constructLabel('${row['ibm_construct'] ?? ''}')}'))
           ],
           if (questions.isNotEmpty) ...[
             const Divider(height: 28),
@@ -923,6 +941,13 @@ class _EvidenceGrowthActionPredictionPageState
         padding: const EdgeInsets.only(bottom: 14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(question, style: const TextStyle(fontWeight: FontWeight.w700)),
+          if ('${row['ibm_construct'] ?? ''}'.trim().isNotEmpty)
+            Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                    '理论构念：${_constructLabel('${row['ibm_construct']}')}',
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700))),
           if (why.isNotEmpty)
             Padding(
                 padding: const EdgeInsets.only(top: 2, bottom: 6),
