@@ -435,9 +435,12 @@ class _EvidenceGrowthActionPredictionPageState
 
   String _outcome(String value) => const {
         'PENDING': '等待现实结果',
-        'ON_TIME': '按时开始',
-        'LATE': '完成但延期',
-        'NOT_DONE': '未执行',
+        'SUCCESS': '主预测事件达成',
+        'PARTIAL': '部分达成／偏离原计划',
+        'FAILED': '主预测事件未达成',
+        'ON_TIME': '主预测事件达成',
+        'LATE': '部分达成／延期',
+        'NOT_DONE': '主预测事件未达成',
       }[value] ??
       value;
 
@@ -1152,15 +1155,11 @@ class _EvidenceGrowthActionPredictionPageState
                     trailing: Text(result['forecast_source'] == 'JEV_PRIMARY'
                         ? 'JEV'
                         : 'LLM')),
-                ListTile(
-                    title: const Text('JEV：按时开始'),
-                    trailing: Text(_pct(jevFlow['start_on_time']))),
-                ListTile(
-                    title: const Text('JEV：当天最终开始'),
-                    trailing: Text(_pct(jevFlow['start_eventually']))),
-                ListTile(
-                    title: const Text('JEV：完成计划'),
-                    trailing: Text(_pct(jevFlow['complete_as_planned']))),
+                for (final event in growthRows(jevFlow['events']))
+                  ListTile(
+                      title: Text(
+                          'JEV：${event['label'] ?? '预测事件'}${event['primary'] == true ? '（主）' : ''}'),
+                      trailing: Text(_pct(event['probability']))),
                 ListTile(
                     title: const Text('LLM 交叉判断'),
                     subtitle: const Text('用于解释、发现遗漏和提出干预，不再与 JEV 50/50 平均'),
@@ -1200,14 +1199,14 @@ class _EvidenceGrowthActionPredictionPageState
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
             OutlinedButton(
-                onPressed: () => recordOutcome(result['id'], 'ON_TIME'),
-                child: const Text('按时开始')),
+                onPressed: () => recordOutcome(result['id'], 'SUCCESS'),
+                child: const Text('主事件达成')),
             OutlinedButton(
-                onPressed: () => recordOutcome(result['id'], 'LATE'),
-                child: const Text('完成但延期')),
+                onPressed: () => recordOutcome(result['id'], 'PARTIAL'),
+                child: const Text('部分达成／偏离计划')),
             OutlinedButton(
-                onPressed: () => recordOutcome(result['id'], 'NOT_DONE'),
-                child: const Text('未执行')),
+                onPressed: () => recordOutcome(result['id'], 'FAILED'),
+                child: const Text('主事件未达成')),
           ])
         ]),
         icon: Icons.fact_check_outlined);
