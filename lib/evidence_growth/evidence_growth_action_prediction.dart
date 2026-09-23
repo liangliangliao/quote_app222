@@ -29,6 +29,15 @@ class EvidenceGrowthActionPredictionService {
   static const factorLabels = EvidenceGrowthJev.actionFactorLabels;
 
   static const failureModeLabels = <String, String>{
+    'intention_failure': '行动意向不足或尚未真正形成决定',
+    'agency_failure': '自我效能或知觉控制不足',
+    'knowledge_skill_gap': '知识或技能不足',
+    'low_salience': '关键时刻行动没有进入注意',
+    'environmental_constraint': '环境／现实约束阻断',
+    'habit_competition': '既有习惯把行为拉向另一方向',
+    'implementation_gap': '有意向但缺少触发执行的具体计划',
+    'insufficient_evidence': '证据不足，暂时无法锁定一个机制',
+    // Legacy labels are retained so old saved predictions remain readable.
     'objective_blocker': '客观条件直接阻断',
     'weak_commitment': '当前承诺强度不足',
     'aversive_state': '临场情绪／身体状态压住行动',
@@ -37,7 +46,6 @@ class EvidenceGrowthActionPredictionService {
     'competing_alternative': '更舒服的替代行为抢走行动',
     'low_self_efficacy': '预期自己做不好而不启动',
     'decision_reopened': '临场重新打开“去不去”的决定',
-    'insufficient_evidence': '证据不足，暂时无法锁定一个机制',
   };
 
   static const missingDomainLabels = <String, String>{
@@ -404,6 +412,15 @@ class EvidenceGrowthActionPredictionService {
       'ai': ai,
       'jev': jev,
       'action_profile': profile,
+      'theory': {
+        'name': 'Integrated Behavioral Model (IBM)',
+        'extension': 'Implementation Intentions',
+        'model_id': 'IBM_2015_PLUS_IMPLEMENTATION_INTENTION',
+        'direct_behavior_constructs': EvidenceGrowthJev.ibmDirectFactors,
+        'factor_groups': EvidenceGrowthJev.actionFactorGroups,
+        'note':
+            'IBM提供行为预测的理论结构；执行意图用于补充意向到真实行动之间的转化。模型系数不人为伪造，最终概率由JEV判断并用同类个人结果逐步校准。',
+      },
       'clarification_answers': clarificationAnswers,
       'jev_workflow': {
         'primary_event_id': primaryEventId,
