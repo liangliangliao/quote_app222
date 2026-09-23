@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'evidence_growth_action_prediction.dart';
+import 'evidence_growth_behavior_theories.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_jev.dart';
 import 'evidence_growth_journey_models.dart';
@@ -37,6 +38,10 @@ class _EvidenceGrowthActionPredictionPageState
   final analysisCorrection = TextEditingController();
 
   final appliedImprovements = <String>{};
+  final selectedTheoryIds =
+      EvidenceBehaviorTheoryCatalog.defaultTheoryIds.toSet();
+  final theoryFactorSelections = <String, String>{};
+  final theoryFactorSelectionSources = <String, String>{};
 
   DateTime? scheduledAt;
   GrowthData actionProfile = {};
@@ -220,12 +225,22 @@ class _EvidenceGrowthActionPredictionPageState
     }
     clarificationText.clear();
     clarificationChoice.clear();
+    theoryFactorSelections.clear();
+    theoryFactorSelectionSources.clear();
     for (final row in growthRows(profile['clarifying_questions'])) {
       final id = _safeQuestionId(row['id']);
       if ('${row['answer_type'] ?? 'text'}' == 'choice') {
         clarificationChoice[id] = '';
       } else {
         clarificationText[id] = TextEditingController();
+      }
+    }
+    for (final row in growthRows(profile['theory_factor_questionnaire'])) {
+      final id = '${row['id'] ?? ''}';
+      final option = '${row['auto_option_id'] ?? ''}';
+      if (id.isNotEmpty && row['auto_selected'] == true && option.isNotEmpty) {
+        theoryFactorSelections[id] = option;
+        theoryFactorSelectionSources[id] = 'AUTO_LLM_JEV';
       }
     }
     actionProfile = profile;
@@ -237,6 +252,8 @@ class _EvidenceGrowthActionPredictionPageState
     }
     clarificationText.clear();
     clarificationChoice.clear();
+    theoryFactorSelections.clear();
+    theoryFactorSelectionSources.clear();
     actionProfile = {};
   }
 
@@ -247,6 +264,31 @@ class _EvidenceGrowthActionPredictionPageState
         for (final entry in clarificationChoice.entries)
           if (entry.value.trim().isNotEmpty) entry.key: entry.value.trim(),
       };
+
+  GrowthData get theoryFactorAnswers => {
+        for (final row in growthRows(actionProfile['theory_factor_questionnaire']))
+          if ('${row['id'] ?? ''}'.isNotEmpty &&
+              theoryFactorSelections['${row['id']}']?.isNotEmpty == true)
+            '${row['id']}': {
+              'option_id': theoryFactorSelections['${row['id']}'],
+              'option_label': EvidenceBehaviorTheoryCatalog.option(
+                      '${row['id']}',
+                      theoryFactorSelections['${row['id']}']!)?['label'] ??
+                  '',
+              'source':
+                  theoryFactorSelectionSources['${row['id']}'] ?? 'MANUAL',
+            }
+      };
+
+  int get missingTheoryFactorCount {
+    var missing = 0;
+    for (final row in growthRows(actionProfile['theory_factor_questionnaire'])) {
+      final id = '${row['id'] ?? ''}';
+      if (id.isEmpty) continue;
+      if (theoryFactorSelections[id]?.isNotEmpty != true) missing++;
+    }
+    return missing;
+  }
 
   Future<void> prepareAction() async {
     if (preparing || busy || plan.text.trim().isEmpty) return;
@@ -259,6 +301,8 @@ class _EvidenceGrowthActionPredictionPageState
         similarHistory: similarHistory,
         analysisCorrection: analysisCorrection.text,
         structuredContext: structuredContext,
+        selectedTheoryIds: selectedTheoryIds.toList(),
+        jevApiKey: await _jevKey(),
         journey: widget.journey,
       );
       if (!mounted) return;
@@ -286,6 +330,10 @@ class _EvidenceGrowthActionPredictionPageState
       _message('AI还没有成功完成行动理解，请先重新调用AI分析。');
       return;
     }
+    if (missingTheoryFactorCount > 0) {
+      _message('还有 $missingTheoryFactorCount 个理论因素未选择；可以选择“不清楚／无法判断”。');
+      return;
+    }
     setState(() => busy = true);
     try {
       final output = await service.predict(
@@ -298,6 +346,8 @@ class _EvidenceGrowthActionPredictionPageState
         structuredContext: structuredContext,
         actionProfile: actionProfile,
         clarificationAnswers: clarificationAnswers,
+        selectedTheoryIds: selectedTheoryIds.toList(),
+        theoryFactorAnswers: theoryFactorAnswers,
         journey: widget.journey,
         jevApiKey: await _jevKey(),
       );
