@@ -728,6 +728,7 @@ void main() {
     );
 
     final questions = request['questions'] as Map;
+    expect(questions, contains('synthesis_event_probability'));
     expect(questions, contains('synthesis_support_candidate_1'));
     expect(questions, contains('synthesis_primary'));
     expect(questions, contains('synthesis_quality'));
@@ -739,6 +740,10 @@ void main() {
     final parsed = EvidenceGrowthJev.parseTheorySynthesis({
       'model': 'jev-latest',
       'answers': {
+        'synthesis_event_probability': {
+          'type': 'noul',
+          'noul': .38,
+        },
         'synthesis_support_candidate_1': {
           'type': 'choice',
           'choice': 'supported',
@@ -768,6 +773,7 @@ void main() {
         },
       }
     });
+    expect(parsed['final_event_probability'], .38);
     expect(
         (parsed['conclusion_verdicts'] as Map)['candidate_1']['choice'],
         'supported');
