@@ -1699,7 +1699,7 @@ class EvidenceGrowthActionPredictionService {
 7. HAPA：主要用于健康相关行为，尤其涉及形成意向、行动/应对计划、维持、复发和恢复时价值高。普通一次性非健康任务不要因为“有计划”就选HAPA。
 8. IMPLEMENTATION_INTENTION：它是意志性扩展，不是完整理论。只有“已经想做/决定做但经常没有真正启动”、需要明确情境触发和第一步时才应高适配。
 9. 重叠理论不要机械同时选择。若两个理论覆盖高度重复，只保留更能解释当前问题的那个；若互补，说明各自角色。
-10. 必须综合用户原始输入、补充事实、过去相似行为、AI解析出的行动类型/边界/失败机制。不要根据用户人格做无根据推断。
+10. 必须综合用户原始输入、补充事实、过去相似行为、AI解析出的行动类型/边界/失败机制。adaptive_dynamic_factors 在这一阶段只是LLM候选，尚未经过JEV裁决；不得仅因为某个动态候选写得具体就选择某个理论，也不要让低预测价值候选主导理论路由。
 11. 对全部候选都给 suitability 0~1、role、reason；selected 表示是否建议自动勾选。
 12. AUTO_SELECTED：selected=true 且 suitability>=0.75。若没有任何理论达到0.72，仍选择 suitability 最高的一个作为 PRIMARY。
 13. 只输出JSON，不输出额外文字。
