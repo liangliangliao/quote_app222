@@ -550,6 +550,7 @@ class EvidenceGrowthActionPredictionService {
         'option_id': optionId,
         'option_label': optionLabel,
         'confirmed_by_user': answer['confirmed_by_user'] == true,
+        'selection_source': answer['prefill_source'] ?? 'MANUAL',
         'ordinal_level':
             EvidenceBehaviorTheoryCatalog.ordinalLevel(factorId, optionId),
         'jev_role': role['choice'] ?? '',
@@ -2254,8 +2255,9 @@ ${jsonEncode({
 证据优先级：
 1. 用户确认的 theory factor option 是一等证据，不能被LLM/JEV改写成相反选项。
 2. JEV theory role 是对该已确认因素在当前行动中的角色判断，可用于判断它更像关键阻碍、次要风险、保护因素或低相关；JEV不是因果真理。
-3. 用户原始行动事实、相似历史和已确认补充信息。
-4. 第一阶段LLM分析只能作为交叉解释，不能覆盖以上证据。
+3. selection_source 只表示选项最初来自手动选择还是LLM+JEV预填；用户提交后的选项才进入这里。预填置信度本身不是行为证据，禁止拿它当权重。
+4. 用户原始行动事实、相似历史和已确认补充信息。
+5. 第一阶段LLM分析只能作为交叉解释，不能覆盖以上证据。
 
 必须做到：
 - 保留各理论自己的结构。TPB、IBM、COM-B、SCT、HAPA、执行意图不能全部压成IBM字段。
