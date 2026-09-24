@@ -509,6 +509,16 @@ class _EvidenceGrowthActionPredictionPageState
       }['$value'] ??
       '$value';
 
+  String _dynamicPredictiveRoleLabel(Object? value) => const {
+        'high_value': 'JEV：高增量预测价值',
+        'moderate_value': 'JEV：中等预测价值',
+        'low_value': 'JEV：低预测价值',
+        'duplicate': 'JEV：与现有因素重复',
+        'outcome_or_step': 'JEV：属于结果/步骤，不是预测因素',
+        'insufficient': 'JEV：证据不足',
+      }['$value'] ??
+      'JEV：未裁决';
+
   String _theoryRoleLabel(Object? value) => const {
         'key_blocker': 'JEV：关键阻碍',
         'secondary_risk': 'JEV：次要风险',
@@ -1071,8 +1081,13 @@ class _EvidenceGrowthActionPredictionPageState
     final preserved = dynamicRows
         .where((row) => row['source'] == 'PRESERVED_BASELINE')
         .toList();
-    final adaptive =
-        dynamicRows.where((row) => row['source'] == 'AI_DYNAMIC').toList();
+    final adaptive = dynamicRows
+        .where((row) => row['source'] == 'AI_JEV_DYNAMIC')
+        .toList();
+    final rejectedDynamic =
+        growthRows(actionProfile['rejected_dynamic_factors']);
+    final dynamicSelection =
+        growthMap(actionProfile['dynamic_factor_selection_status']);
     final omittedPreserved =
         growthRows(actionProfile['omitted_preserved_factors']);
     final questions = growthRows(actionProfile['clarifying_questions']);
@@ -1107,13 +1122,21 @@ class _EvidenceGrowthActionPredictionPageState
       final reason = '${row['selection_reason'] ?? ''}'.trim();
       final evidence = '${row['evidence'] ?? ''}'.trim();
       final construct = '${row['ibm_construct'] ?? ''}'.trim();
+      final llmRelevance = row['predictive_relevance'];
+      final counterfactual =
+          '${row['counterfactual_effect'] ?? ''}'.trim();
+      final jevRole = '${row['jev_predictive_role'] ?? ''}'.trim();
+      final jevConfidence = row['jev_role_confidence'];
+      final failurePath = '${row['failure_path'] ?? ''}'.trim();
+      final whyNew =
+          '${row['why_not_existing_factor'] ?? ''}'.trim();
       return ListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
           leading: Icon(
               row['source'] == 'PRESERVED_BASELINE'
                   ? Icons.bookmark_added_outlined
-                  : Icons.auto_awesome_outlined,
+                  : Icons.hub_outlined,
               size: 21,
               color: _teal),
           title: Text('${row['label'] ?? ''}',
@@ -1123,7 +1146,22 @@ class _EvidenceGrowthActionPredictionPageState
               children: [
                 if (construct.isNotEmpty)
                   Text('理论映射：${_constructLabel(construct)}'),
-                if (reason.isNotEmpty) Text('为什么保留：$reason'),
+                if (row['source'] == 'AI_JEV_DYNAMIC' && jevRole.isNotEmpty)
+                  Text(
+                      '${_dynamicPredictiveRoleLabel(jevRole)}'
+                      '${jevConfidence is num ? ' · 自报置信度 ${_pct(jevConfidence)}' : ''}',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (llmRelevance is num)
+                  Text(
+                      'LLM增量预测价值自评：${_pct(llmRelevance)}'
+                      '${counterfactual.isNotEmpty ? ' · 反事实影响：$counterfactual' : ''}',
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.black54)),
+                if (reason.isNotEmpty) Text('为什么候选：$reason'),
+                if (failurePath.isNotEmpty)
+                  Text('失败路径：$failurePath'),
+                if (whyNew.isNotEmpty)
+                  Text('为什么不是已有因素的重复：$whyNew'),
                 if (evidence.isNotEmpty) Text('已提取事实：$evidence'),
               ]));
     }
@@ -1367,24 +1405,73 @@ class _EvidenceGrowthActionPredictionPageState
                             '理论映射：${_constructLabel('${row['ibm_construct'] ?? ''}')}'))
                 ])
           ],
-          if (analysisReady && adaptive.isNotEmpty) ...[
+          if (analysisReady &&
+              (adaptive.isNotEmpty ||
+                  rejectedDynamic.isNotEmpty ||
+                  dynamicSelection.isNotEmpty)) ...[
             const Divider(height: 28),
-            const Text('AI 针对当前行动新增的关键因素',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            Row(children: [
+              const Expanded(
+                  child: Text('LLM + JEV 针对当前行动筛出的高价值因素',
+                      style: TextStyle(fontWeight: FontWeight.w800))),
+              if ('${dynamicSelection['status'] ?? ''}' ==
+                  'LLM_JEV_JOINT')
+                const Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text('联合筛选',
+                        style: TextStyle(fontSize: 10)))
+            ]),
             const SizedBox(height: 4),
             const Text(
-                '这些因素不是固定写死的；必须说明为什么影响当前行为，并映射回心理学理论构念。',
-                style: TextStyle(fontSize: 12, color: Colors.black54)),
-            const SizedBox(height: 6),
-            for (final row in adaptive) predictorRow(row),
+                'LLM先提出候选，JEV再独立判断它是否真的具有“增量预测价值”：必须是行为发生前的上游因素、与当前行动高度相关、不是已有理论的换名，也不是目标行为/操作步骤本身。',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.black54, height: 1.4)),
+            if (dynamicSelection.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(
+                  '候选 ${dynamicSelection['candidate_count'] ?? 0} 个 · 通过 ${dynamicSelection['selected_count'] ?? 0} 个 · 淘汰 ${dynamicSelection['rejected_count'] ?? 0} 个'
+                  '${dynamicSelection['jev_status'] == 'JEV' ? '' : ' · JEV未完成裁决，因此候选不会升级为关键因素'}',
+                  style: const TextStyle(
+                      fontSize: 11, color: Colors.black54))
+            ],
+            if (adaptive.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final row in adaptive) predictorRow(row),
+            ] else ...[
+              const SizedBox(height: 8),
+              const Text(
+                  '当前没有行动特异候选通过LLM+JEV联合门槛。此时应主要依赖理论问卷、原型因素和现实事实，而不是为了“显得具体”强行增加新因素。',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.black54, height: 1.4))
+            ],
+            if (rejectedDynamic.isNotEmpty)
+              ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text(
+                      '查看被JEV淘汰的候选（${rejectedDynamic.length}）',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: const Text(
+                      '用于核对：低价值、重复、结果/步骤型因素不会再进入最终预测'),
+                  children: [
+                    for (final row in rejectedDynamic)
+                      ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${row['label'] ?? ''}'),
+                          subtitle: Text(
+                              '${_dynamicPredictiveRoleLabel(row['jev_predictive_role'])}'
+                              '${row['selection_reason'] == null ? '' : ' · LLM候选原因：${row['selection_reason']}'}'))
+                  ])
           ],
           if (analysisReady && questions.isNotEmpty) ...[
             const Divider(height: 28),
-            const Text('还缺哪些关键事实',
+            const Text('LLM + JEV 认为最值得补充的高信息事实',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            const Text('可以留空；留空时JEV把它当作不确定，而不是自动判成负面。',
-                style: TextStyle(fontSize: 12, color: Colors.black54)),
+            const Text(
+                '这里只保留“答案不同会显著改变预测或关键瓶颈判断”的问题；不会为了精细化计划而追问无关紧要的分钟数或微步骤。可以留空，留空按未知处理。',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.black54, height: 1.4)),
             const SizedBox(height: 12),
             for (final row in questions) _clarifyingQuestion(row),
           ],
