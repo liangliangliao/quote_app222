@@ -488,10 +488,10 @@ class _EvidenceGrowthActionPredictionPageState
   String _bottleneckLabel(Object? value) {
     if (value is! num) return '未判断';
     final v = value.toDouble();
-    if (v >= .75) return '强瓶颈信号';
-    if (v >= .60) return '较明显瓶颈';
-    if (v >= .45) return '需要继续验证';
-    return '目前不像主要瓶颈';
+    if (v >= .80) return '强瓶颈信号';
+    if (v >= .65) return '较可能是瓶颈';
+    if (v >= .50) return '边界判断／需要验证';
+    return '目前更偏向非瓶颈';
   }
 
   String _weaknessClassLabel(Object? value) => const {
@@ -2312,6 +2312,8 @@ class _EvidenceGrowthActionPredictionPageState
       final source = '${row['source'] ?? 'NONE'}';
       final evidenceState = _evidenceStateLabel(row['evidence_status']);
       final bottleneck = row['bottleneck_probability'];
+      final rawBottleneck = row['raw_bottleneck_probability'];
+      final bottleneckConflict = row['bottleneck_evidence_conflict'] == true;
       final construct = '${row['theory_construct'] ?? entry.key}';
       final mapped = row['is_dynamic'] == true
           ? ' · 归入：${_constructLabel(construct)}'
@@ -2323,10 +2325,12 @@ class _EvidenceGrowthActionPredictionPageState
           subtitle: Text(row['unknown'] == true
               ? '证据不足 · 不把未知当中性或阻碍$mapped'
               : bottleneck is num
-                  ? '$evidenceState · ${_bottleneckLabel(bottleneck)} ${_pct(bottleneck)}$mapped'
-                  : source == 'USER_CONFIRMED_THEORY'
-                      ? '$evidenceState · 用户确认标准选项$mapped'
-                      : '$state · $source$mapped'),
+                  ? '$evidenceState · JEV有效瓶颈判断：${_bottleneckLabel(bottleneck)} ${_pct(bottleneck)}$mapped'
+                  : bottleneckConflict && rawBottleneck is num
+                      ? '$evidenceState · JEV原始瓶颈值 ${_pct(rawBottleneck)} 与证据状态冲突，未采纳$mapped'
+                      : source == 'USER_CONFIRMED_THEORY'
+                          ? '$evidenceState · 用户确认标准选项$mapped'
+                          : '$state · $source$mapped'),
           children: [
             Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -2341,12 +2345,25 @@ class _EvidenceGrowthActionPredictionPageState
                       if (bottleneck is num) ...[
                         const SizedBox(height: 3),
                         Text(
-                            'JEV当前瓶颈判断：${_pct(bottleneck)} · ${_bottleneckLabel(bottleneck)}',
+                            'JEV有效瓶颈判断：${_pct(bottleneck)} · ${_bottleneckLabel(bottleneck)}',
                             style: const TextStyle(
                                 fontWeight: FontWeight.w700)),
                         const SizedBox(height: 3),
                         const Text(
-                            '这里判断的是“当前是否构成现实瓶颈”，不是因果效应大小，也不是理论权重。',
+                            '这里的百分比是JEV对“当前是否构成现实瓶颈”的typed noul，不是置信度、因果效应大小、理论权重或成功概率。',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.black54))
+                      ] else if (bottleneckConflict &&
+                          rawBottleneck is num) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                            'JEV原始瓶颈值：${_pct(rawBottleneck)}（与当前证据状态冲突，未采纳）',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.orange)),
+                        const SizedBox(height: 3),
+                        const Text(
+                            '规则：支持性证据或证据不足时，不应同时判成“当前瓶颈”。原始JEV值保留用于审计，但不会进入关键阻碍排序或最终瓶颈结论。',
                             style: TextStyle(
                                 fontSize: 12, color: Colors.black54))
                       ],
