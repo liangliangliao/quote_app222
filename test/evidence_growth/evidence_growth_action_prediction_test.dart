@@ -451,7 +451,7 @@ void main() {
             'ibm_construct': 'environmental_constraints',
             'condition':
                 'Exposure to smoking cues is low or effectively managed.',
-            'evidence': ''
+            'evidence': '饭后和同事在一起时会明显想抽烟'
           }
         ],
         'clarifying_questions': [
