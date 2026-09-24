@@ -346,6 +346,7 @@ class EvidenceGrowthActionPredictionService {
     GrowthData theoryFactorAnswers = const {},
     GrowthJourney? journey,
     String jevApiKey = '',
+    bool requireJev = false,
   }) async {
     final action = plan.trim();
     if (action.isEmpty) throw ArgumentError('请先写清楚接下来准备做什么');
@@ -565,6 +566,100 @@ class EvidenceGrowthActionPredictionService {
       jevAssessment: jev,
       theoryFeedbackRows: theoryFeedbackRows,
     );
+
+    GrowthData finalJevAdjudication = {
+      'status': 'LOCAL',
+      'reason': jev['status'] == 'JEV'
+          ? 'NOT_RUN'
+          : '${jev['reason'] ?? 'FIRST_PASS_JEV_UNAVAILABLE'}',
+    };
+    if (jev['status'] == 'JEV' && jevApiKey.trim().isNotEmpty) {
+      finalJevAdjudication = await _jev.assessTheorySynthesis(
+        state: state,
+        theoryFeedbackRows: theoryFeedbackRows,
+        llmSynthesis: theoryFeedbackSynthesis,
+        firstPassJev: jev,
+        apiKey: jevApiKey.trim(),
+      );
+    }
+
+    if (requireJev) {
+      if (jev['status'] != 'JEV') {
+        throw StateError(
+            'JEV_FIRST_PASS_FAILED:${jev['reason'] ?? 'UNKNOWN'}');
+      }
+      if (finalJevAdjudication['status'] != 'JEV') {
+        throw StateError(
+            'JEV_FINAL_ADJUDICATION_FAILED:${finalJevAdjudication['reason'] ?? 'UNKNOWN'}');
+      }
+    }
+
+    final adjudicationCatalog =
+        growthRows(finalJevAdjudication['candidate_catalog']);
+    final adjudicationVerdicts =
+        growthMap(finalJevAdjudication['conclusion_verdicts']);
+    final primaryAdjudication =
+        growthMap(finalJevAdjudication['primary_conclusion']);
+    final synthesisQuality =
+        growthMap(finalJevAdjudication['synthesis_quality']);
+    final catalogByKey = <String, GrowthData>{
+      for (final row in adjudicationCatalog)
+        if ('${row['key'] ?? ''}'.isNotEmpty) '${row['key']}': row
+    };
+    final llmConclusionRows =
+        growthRows(theoryFeedbackSynthesis['core_conclusions']);
+    final llmConclusionById = <String, GrowthData>{
+      for (final row in llmConclusionRows)
+        if ('${row['id'] ?? ''}'.isNotEmpty) '${row['id']}': row
+    };
+
+    final jointTheoryConclusions = <GrowthData>[];
+    for (final catalog in adjudicationCatalog) {
+      final key = '${catalog['key'] ?? ''}';
+      final id = '${catalog['id'] ?? ''}';
+      final candidate = growthMap(llmConclusionById[id]);
+      if (candidate.isEmpty) continue;
+      final verdict = growthMap(adjudicationVerdicts[key]);
+      final choice = '${verdict['choice'] ?? ''}';
+      final confidence = _prob(verdict['confidence']);
+      if (!const {'supported', 'partially_supported'}.contains(choice) ||
+          (confidence ?? 0) < .55) {
+        continue;
+      }
+      jointTheoryConclusions.add({
+        ...candidate,
+        'jev_final_verdict': choice,
+        'jev_final_confidence': confidence,
+        'jev_final_probabilities': growthMap(verdict['probabilities']),
+        'jointly_supported': true,
+      });
+    }
+
+    final primaryCandidateKey =
+        '${primaryAdjudication['choice'] ?? ''}'.trim();
+    final primaryCatalog = growthMap(catalogByKey[primaryCandidateKey]);
+    final primaryCandidateId = '${primaryCatalog['id'] ?? ''}'.trim();
+    final primaryJointConclusion = primaryCandidateId.isEmpty
+        ? <String, dynamic>{}
+        : jointTheoryConclusions
+            .where((row) => '${row['id'] ?? ''}' == primaryCandidateId)
+            .cast<GrowthData>()
+            .fold<GrowthData>(
+                <String, dynamic>{},
+                (previous, element) =>
+                    previous.isEmpty ? element : previous);
+
+    final jointDecisionComplete = jev['status'] == 'JEV' &&
+        finalJevAdjudication['status'] == 'JEV' &&
+        '${synthesisQuality['choice'] ?? ''}' == 'joint_supported';
+    final jointDecisionMode = jointDecisionComplete
+        ? 'LLM_JEV_JOINT'
+        : jev['status'] == 'JEV' &&
+                finalJevAdjudication['status'] == 'JEV'
+            ? 'LLM_JEV_DISAGREEMENT_OR_INSUFFICIENT'
+            : jev['status'] == 'JEV'
+                ? 'JEV_FIRST_PASS_ONLY'
+                : 'LLM_ONLY_DEGRADED';
 
     final aiEstimate = _prob(ai['execution_likelihood']);
     final eventProbabilities = growthMap(jev['events']);
@@ -1083,11 +1178,21 @@ class EvidenceGrowthActionPredictionService {
         '${theoryFeedbackSynthesis['bottom_line'] ?? ''}'.trim();
     final theorySynthesisPattern =
         '${theoryFeedbackSynthesis['integrated_pattern'] ?? ''}'.trim();
-    final diagnosisHeadline = theorySynthesisBottomLine.isNotEmpty
-        ? theorySynthesisBottomLine
-        : fallbackDiagnosisHeadline;
+    final primaryJointTitle =
+        '${primaryJointConclusion['title'] ?? ''}'.trim();
+    final diagnosisHeadline = jointDecisionComplete && primaryJointTitle.isNotEmpty
+        ? primaryJointTitle
+        : jointDecisionComplete && theorySynthesisBottomLine.isNotEmpty
+            ? theorySynthesisBottomLine
+            : !jointDecisionComplete && jev['status'] == 'JEV'
+                ? 'LLM 与 JEV 尚未形成足够一致的最终结论；请查看分歧或补充证据。'
+                : theorySynthesisBottomLine.isNotEmpty
+                    ? 'JEV未参与最终裁决：$theorySynthesisBottomLine'
+                    : fallbackDiagnosisHeadline;
     final theoryReviewFactorIds = <String>{
-      for (final row in theorySynthesisConclusions)
+      for (final row in jointTheoryConclusions.isNotEmpty
+          ? jointTheoryConclusions
+          : theorySynthesisConclusions)
         ...growthStrings(row['factor_ids'])
     };
 
@@ -1110,6 +1215,12 @@ class EvidenceGrowthActionPredictionService {
       'forecast_provenance': {
         'primary_source': forecastSource,
         'jev_primary_event_probability': jevEstimate,
+        'jev_first_pass_status': jev['status'],
+        'jev_first_pass_reason': jev['reason'],
+        'jev_final_adjudication_status': finalJevAdjudication['status'],
+        'jev_final_adjudication_reason': finalJevAdjudication['reason'],
+        'joint_decision_mode': jointDecisionMode,
+        'joint_decision_complete': jointDecisionComplete,
         'ai_fallback_probability': aiEstimate,
         'history_baseline': baseline,
         'history_weight': historyWeight,
@@ -1232,12 +1343,21 @@ class EvidenceGrowthActionPredictionService {
           'pattern_explanation':
               theoryFeedbackSynthesis['pattern_explanation'],
           'bottom_line': theorySynthesisBottomLine,
-          'core_conclusions': theorySynthesisConclusions,
+          'llm_candidate_conclusions': theorySynthesisConclusions,
+          'jev_final_adjudication': finalJevAdjudication,
+          'joint_decision_mode': jointDecisionMode,
+          'joint_decision_complete': jointDecisionComplete,
+          'joint_conclusions': jointTheoryConclusions,
+          'primary_joint_conclusion': primaryJointConclusion,
+          'synthesis_quality': synthesisQuality,
+          'core_conclusions': jointDecisionComplete
+              ? jointTheoryConclusions
+              : <GrowthData>[],
           'interactions':
               growthRows(theoryFeedbackSynthesis['interactions']),
           'unknowns': growthStrings(theoryFeedbackSynthesis['unknowns']),
           'rule':
-              '用户确认的理论选项不会被模型改写；JEV负责独立角色判断，LLM负责跨因素综合。最终结论必须能追溯到具体factor_id，且不把一次状态直接写成人格特征。',
+              '用户确认的理论选项是一等证据。LLM先生成跨因素综合候选；JEV在最终阶段独立裁决每个候选，只有JEV支持且联合质量判定为joint_supported的结论才会升级为正式联合结论。JEV失败或与LLM显著分歧时，不再伪装成“LLM+JEV最终结论”。',
         },
         'key_weaknesses': [
           for (final e in weaknessRows)
