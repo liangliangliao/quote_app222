@@ -1167,14 +1167,14 @@ class _EvidenceGrowthActionPredictionPageState
     }
 
     return _section(
-        'AI 对这个行动的理解与选因',
+        '行为理解与关键预测因素筛选',
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(spacing: 8, runSpacing: 6, children: [
             Chip(label: Text(_modeLabel(mode))),
             for (final theory in selectedTheoryDetails)
               Chip(label: Text('${theory['short_name'] ?? theory['id']}')),
             const Chip(label: Text('原型补充因素')),
-            const Chip(label: Text('AI 动态补充')),
+            const Chip(label: Text('LLM+JEV 动态筛选')),
             if (actionProfile['analysis_status'] != 'READY')
               const Chip(label: Text('通用回退'))
           ]),
