@@ -1631,7 +1631,15 @@ class _EvidenceGrowthActionPredictionPageState
     final theoryResponseCoverage =
         (theoryCompleteness['response_coverage'] as num?)?.toDouble();
     final diagnostic = growthMap(result['diagnostic_summary']);
-    final diagnosticSupports = growthRows(diagnostic['supports']);
+    final directSupports = growthRows(diagnostic['supports']);
+    final theorySupports = growthRows(diagnostic['theory_supports']);
+    final supportByKey = <String, GrowthData>{};
+    for (final item in [...directSupports, ...theorySupports]) {
+      final key = '${item['key'] ?? item['label'] ?? ''}'.trim();
+      if (key.isEmpty) continue;
+      supportByKey.putIfAbsent(key, () => item);
+    }
+    final diagnosticSupports = supportByKey.values.toList();
     final diagnosticUnknowns = growthRows(diagnostic['unknowns']);
     final usesJevBottleneck =
         diagnostic['uses_jev_bottleneck_judgement'] == true;
@@ -2250,8 +2258,10 @@ class _EvidenceGrowthActionPredictionPageState
             const SizedBox(height: 10),
             ExpansionTile(
                 tilePadding: EdgeInsets.zero,
-                title: const Text('当前已经在支持你的因素',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: Text('当前已经在支持你的因素（${diagnosticSupports.length}）',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text(
+                    '这里现在显示全部已识别的支持因素，不再只截取前3项；理论问卷中被JEV判为保护因素的项目也会纳入。'),
                 children: [
                   for (final item in diagnosticSupports)
                     ListTile(
@@ -2263,7 +2273,8 @@ class _EvidenceGrowthActionPredictionPageState
                         subtitle: Text(
                             '${item['evidence'] ?? ''}'.trim().isEmpty
                                 ? '已有支持证据'
-                                : '${item['evidence']}'))
+                                : '${item['evidence']}'
+                                  '${item['jev_role'] == 'protective' && item['jev_role_confidence'] is num ? ' · JEV角色：保护因素 ${_pct(item['jev_role_confidence'])}' : ''}'))
                 ])
           ],
           if (diagnosticUnknowns.isNotEmpty) ...[
