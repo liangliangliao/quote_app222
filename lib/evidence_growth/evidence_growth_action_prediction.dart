@@ -200,6 +200,82 @@ class EvidenceGrowthActionPredictionService {
     'implementation_intention': '写成明确的 If-Then：当具体情境X出现，我不再讨论，立即执行第一步Y。',
   };
 
+
+  /// Final diagnosis is organized as a behavior process instead of a flat
+  /// list of low scores. This lets the user see where execution first breaks.
+  static const factorProcessStageZh = <String, String>{
+    'environmental_constraints': '现实前提',
+    'knowledge_skills': '能力准备',
+    'instrumental_attitude': '结果权衡',
+    'experiential_attitude': '临场情绪',
+    'injunctive_norm': '社会责任',
+    'descriptive_norm': '社会线索',
+    'self_efficacy': '能否做到',
+    'perceived_control': '可控性感受',
+    'intention': '决定形成／稳定',
+    'implementation_intention': '启动触发',
+    'salience': '关键时刻注意',
+    'habit': '自动习惯／替代行为',
+  };
+
+  static const factorProcessStageOrder = <String, int>{
+    'environmental_constraints': 10,
+    'knowledge_skills': 20,
+    'instrumental_attitude': 30,
+    'experiential_attitude': 40,
+    'injunctive_norm': 45,
+    'descriptive_norm': 46,
+    'self_efficacy': 50,
+    'perceived_control': 55,
+    'intention': 60,
+    'implementation_intention': 70,
+    'salience': 80,
+    'habit': 90,
+  };
+
+  static const diagnosticDomains = <String, GrowthData>{
+    'reality': {
+      'label': '客观可行性／现实阻力',
+      'constructs': ['environmental_constraints', 'perceived_control']
+    },
+    'decision': {
+      'label': '行动意向／决策稳定',
+      'constructs': ['intention']
+    },
+    'emotion': {
+      'label': '临场情绪／回避',
+      'constructs': ['experiential_attitude']
+    },
+    'value': {
+      'label': '收益代价／价值显著性',
+      'constructs': ['instrumental_attitude', 'salience']
+    },
+    'efficacy': {
+      'label': '自我效能／控制感',
+      'constructs': ['self_efficacy', 'perceived_control']
+    },
+    'planning': {
+      'label': '计划具体度／启动触发',
+      'constructs': ['implementation_intention']
+    },
+    'habit': {
+      'label': '习惯／替代行为竞争',
+      'constructs': ['habit']
+    },
+    'social': {
+      'label': '重要他人／外部责任',
+      'constructs': ['injunctive_norm', 'descriptive_norm']
+    },
+    'skills': {
+      'label': '知识技能／前置准备',
+      'constructs': ['knowledge_skills', 'environmental_constraints']
+    },
+    'history': {
+      'label': '相似历史／是否反复出现',
+      'constructs': ['habit']
+    },
+  };
+
   Future<GrowthData> prepareAction({
     required String plan,
     DateTime? scheduledAt,
@@ -343,6 +419,45 @@ class EvidenceGrowthActionPredictionService {
         .length;
     final baseline =
         resolved.isEmpty ? null : (successes + 1) / (resolved.length + 2);
+
+    // Repeated weakness evidence must come from genuinely similar *resolved*
+    // actions. A one-off current blocker is not promoted to a stable personal
+    // weakness. Old records without diagnostic fields simply do not count.
+    final pastDiagnosticFailures = resolved
+        .where((r) => const {'FAILED', 'NOT_DONE', 'LATE', 'PARTIAL'}
+            .contains(r['outcome']))
+        .toList();
+    final pastBarrierCounts = <String, int>{};
+    final pastBarrierObserved = <String, int>{};
+    for (final past in pastDiagnosticFailures) {
+      final pastFactors = growthMap(past['factors']);
+      for (final entry in pastFactors.entries) {
+        final row = growthMap(entry.value);
+        if (row.isEmpty) continue;
+        pastBarrierObserved[entry.key] =
+            (pastBarrierObserved[entry.key] ?? 0) + 1;
+        final evidenceStatus = '${row['evidence_status'] ?? ''}';
+        final bottleneck =
+            (row['bottleneck_probability'] as num?)?.toDouble();
+        final legacyRisk = '${row['status'] ?? ''}' == 'RISK';
+        if ((const {'adverse', 'mixed'}.contains(evidenceStatus) &&
+                bottleneck != null &&
+                bottleneck >= .55) ||
+            (bottleneck == null && legacyRisk)) {
+          pastBarrierCounts[entry.key] =
+              (pastBarrierCounts[entry.key] ?? 0) + 1;
+        }
+      }
+      // Earlier saved versions may have top_risks but not factor diagnostics.
+      if (pastFactors.isEmpty) {
+        for (final row in growthRows(past['top_risks'])) {
+          final key = '${row['key'] ?? ''}'.trim();
+          if (key.isEmpty) continue;
+          pastBarrierObserved[key] = (pastBarrierObserved[key] ?? 0) + 1;
+          pastBarrierCounts[key] = (pastBarrierCounts[key] ?? 0) + 1;
+        }
+      }
+    }
 
     state['action_profile'] = profile;
     state['clarification_answers'] = clarificationAnswers;
@@ -594,6 +709,13 @@ class EvidenceGrowthActionPredictionService {
         'evidence_status': evidenceStatus,
         'evidence_status_confidence': evidenceStatusConfidence,
         'bottleneck_probability': bottleneckProbability,
+        'past_failure_observations': pastBarrierObserved[key] ?? 0,
+        'past_barrier_recurrence_count': pastBarrierCounts[key] ?? 0,
+        'recurrence_status': (pastBarrierCounts[key] ?? 0) >= 2
+            ? 'REPEATED'
+            : (pastBarrierCounts[key] ?? 0) == 1
+                ? 'SEEN_ONCE'
+                : 'NOT_ESTABLISHED',
         'diagnostic_role': evidenceStatus == 'insufficient'
             ? 'UNKNOWN'
             : bottleneckProbability != null &&
@@ -708,6 +830,24 @@ class EvidenceGrowthActionPredictionService {
         ? diagnosticBarrierRows
         : fallbackRiskRows;
 
+    // "Key weakness" is stricter than "current blocker": repeated occurrence
+    // in similar failed actions is considered first, then current bottleneck
+    // strength. This avoids calling a one-time obstacle a personal weakness.
+    final keyWeaknessRows = [...riskRows]
+      ..sort((a, b) {
+        final ar =
+            (a.value['past_barrier_recurrence_count'] as num?)?.toInt() ?? 0;
+        final br =
+            (b.value['past_barrier_recurrence_count'] as num?)?.toInt() ?? 0;
+        final recurringCompare = br.compareTo(ar);
+        if (recurringCompare != 0) return recurringCompare;
+        final ap =
+            (a.value['bottleneck_probability'] as num?)?.toDouble() ?? 0;
+        final bp =
+            (b.value['bottleneck_probability'] as num?)?.toDouble() ?? 0;
+        return bp.compareTo(ap);
+      });
+
     final supportRows = factors.entries
         .where((e) =>
             e.value['unknown'] != true &&
@@ -817,6 +957,91 @@ class EvidenceGrowthActionPredictionService {
         improvementEstimate != null && estimate != null
             ? improvementEstimate - estimate
             : null;
+
+    final weaknessRows = keyWeaknessRows.take(4).toList();
+    final weaknessKeys = weaknessRows.map((e) => e.key).toSet();
+    final failureChainRows = [...weaknessRows]
+      ..sort((a, b) {
+        final ac = '${a.value['theory_construct'] ?? a.key}';
+        final bc = '${b.value['theory_construct'] ?? b.key}';
+        return (factorProcessStageOrder[ac] ?? 999)
+            .compareTo(factorProcessStageOrder[bc] ?? 999);
+      });
+
+    final coverageRows = <GrowthData>[];
+    for (final domain in diagnosticDomains.entries) {
+      final constructs = growthStrings(domain.value['constructs']);
+      final matched = factors.entries
+          .where((e) => constructs.contains(
+              '${e.value['theory_construct'] ?? e.key}'))
+          .toList();
+      final known = matched
+          .where((e) => e.value['evidence_status'] != 'insufficient')
+          .toList();
+      final risk = known.any((e) => const {'adverse', 'mixed'}
+          .contains('${e.value['evidence_status'] ?? ''}'));
+      final support =
+          known.any((e) => e.value['evidence_status'] == 'supportive');
+      String status;
+      if (domain.key == 'history') {
+        status = pastDiagnosticFailures.isEmpty
+            ? 'UNKNOWN'
+            : weaknessRows.any((e) =>
+                    ((e.value['past_barrier_recurrence_count'] as num?)
+                            ?.toInt() ??
+                        0) >=
+                    2)
+                ? 'RISK'
+                : 'KNOWN';
+      } else if (matched.isEmpty) {
+        status = 'NOT_RELEVANT_OR_NOT_SELECTED';
+      } else if (known.isEmpty) {
+        status = 'UNKNOWN';
+      } else if (risk) {
+        status = 'RISK';
+      } else if (support) {
+        status = 'SUPPORT';
+      } else {
+        status = 'KNOWN';
+      }
+      coverageRows.add({
+        'id': domain.key,
+        'label': domain.value['label'],
+        'status': status,
+        'matched_factor_keys': matched.map((e) => e.key).toList(),
+        'known_evidence_count': known.length,
+      });
+    }
+    final knownCoverageCount = coverageRows
+        .where((row) => !const {
+              'UNKNOWN',
+              'NOT_RELEVANT_OR_NOT_SELECTED'
+            }.contains(row['status']))
+        .length;
+    final unknownCoverageCount =
+        coverageRows.where((row) => row['status'] == 'UNKNOWN').length;
+
+    final repeatedWeaknesses = weaknessRows
+        .where((e) =>
+            ((e.value['past_barrier_recurrence_count'] as num?)?.toInt() ??
+                0) >=
+            2)
+        .toList();
+    final centralWeakness = repeatedWeaknesses.isNotEmpty
+        ? repeatedWeaknesses.first
+        : (weaknessRows.isNotEmpty ? weaknessRows.first : null);
+    final centralWeaknessLabel =
+        centralWeakness == null ? '' : '${centralWeakness.value['label']}';
+    final centralRepeated = centralWeakness != null &&
+        ((centralWeakness.value['past_barrier_recurrence_count'] as num?)
+                    ?.toInt() ??
+                0) >=
+            2;
+    final diagnosisHeadline = centralWeakness == null
+        ? '当前证据还不足以锁定一个关键弱点；先补最关键事实，再做判断。'
+        : centralRepeated
+            ? '当前最值得优先改正的反复弱点：$centralWeaknessLabel'
+            : '当前最值得优先验证的行动瓶颈：$centralWeaknessLabel（尚不能仅凭一次情境定义为长期弱点）';
 
     final id = 'ap_${DateTime.now().microsecondsSinceEpoch}';
 
@@ -943,6 +1168,87 @@ class EvidenceGrowthActionPredictionService {
                 '先只改变“${activeLabels[e.key]}”这一条件，再重新预测并记录现实结果；若执行明显改善，才更支持它是真正关键杠杆。',
           }
       ],
+      'behavior_diagnosis': {
+        'version': 'behavior_diagnosis_v2',
+        'headline': diagnosisHeadline,
+        'purpose':
+            '把一次预测转成可复盘的行为诊断：区分当前瓶颈、反复弱点、保护因素和未知项，并保存下一次验证所需的证据。',
+        'key_weaknesses': [
+          for (final e in weaknessRows)
+            {
+              'key': e.key,
+              'label': e.value['label'],
+              'construct': e.value['theory_construct'],
+              'stage': factorProcessStageZh[
+                      '${e.value['theory_construct'] ?? e.key}'] ??
+                  '行动过程',
+              'classification':
+                  ((e.value['past_barrier_recurrence_count'] as num?)
+                                  ?.toInt() ??
+                              0) >=
+                          2
+                      ? 'RECURRING_WEAKNESS'
+                      : 'CURRENT_BOTTLENECK',
+              'current_evidence': e.value['evidence'],
+              'evidence_status': e.value['evidence_status'],
+              'bottleneck_probability':
+                  e.value['bottleneck_probability'],
+              'past_failure_observations':
+                  e.value['past_failure_observations'],
+              'past_recurrence_count':
+                  e.value['past_barrier_recurrence_count'],
+              'mechanism': e.value['mechanism'],
+              'correction': e.value['intervention'],
+              'review_question':
+                  '现实结果出来后检查：这次“${e.value['label']}”是否真的在行动断点前出现？若已经改善，行动是否随之改善？',
+              'falsifier':
+                  '如果这一条件已经明显改善但行动仍然失败，或多次失败时它都没有出现，就应降低它作为关键弱点的优先级。',
+            }
+        ],
+        'failure_chain': [
+          for (var i = 0; i < failureChainRows.length; i++)
+            {
+              'order': i + 1,
+              'factor_key': failureChainRows[i].key,
+              'stage': factorProcessStageZh[
+                      '${failureChainRows[i].value['theory_construct'] ?? failureChainRows[i].key}'] ??
+                  '行动过程',
+              'label': failureChainRows[i].value['label'],
+              'evidence': failureChainRows[i].value['evidence'],
+              'mechanism': failureChainRows[i].value['mechanism'],
+            }
+        ],
+        'coverage': coverageRows,
+        'coverage_summary': {
+          'domains_scanned': coverageRows.length,
+          'domains_with_evidence': knownCoverageCount,
+          'domains_unknown': unknownCoverageCount,
+          'note':
+              '“全面”指这些诊断域都被扫描；没有事实的域明确保留为未知，而不是由模型猜测补齐。',
+        },
+        'protective_factors': [
+          for (final e in supportRows.take(4))
+            {
+              'key': e.key,
+              'label': e.value['label'],
+              'evidence': e.value['evidence'],
+              'mechanism': e.value['mechanism'],
+            }
+        ],
+        'review_blueprint': {
+          'compare_keys': weaknessKeys.toList(),
+          'questions': [
+            '结果：目标行动最终是按计划发生、延迟、部分完成，还是没有发生？',
+            if (weaknessRows.isNotEmpty)
+              '断点：最先出现问题的是哪一个环节——${weaknessRows.map((e) => e.value['label']).join('、')}，还是一个当前未识别的新因素？',
+            '机制：失败前发生了什么具体事件、念头、感受或现实阻力？不要只记录“我不想做”。',
+            '干预：本次是否真正执行了针对关键弱点的改正动作？',
+            '更新：现实结果支持、削弱还是推翻了当前“关键弱点”假设？',
+          ],
+          'update_rule':
+              '复盘不是证明模型正确，而是用现实结果更新弱点假设；连续反复出现才逐步升级为稳定模式。',
+        },
+      },
       'diagnostic_summary': {
         'version': 'evidence_bottleneck_v1',
         'rule':
