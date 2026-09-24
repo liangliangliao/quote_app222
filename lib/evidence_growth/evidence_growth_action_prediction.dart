@@ -2709,6 +2709,8 @@ ${jsonEncode(state)}
     if (index < 0) throw StateError('预测记录不存在');
     final diagnosis = growthMap(rows[index]['behavior_diagnosis']);
     final reviewBlueprint = growthMap(diagnosis['review_blueprint']);
+    final theoryFeedback =
+        growthMap(diagnosis['theory_feedback_analysis']);
     final weaknessSnapshot = growthRows(diagnosis['key_weaknesses'])
         .take(4)
         .map((row) => {
@@ -2719,6 +2721,20 @@ ${jsonEncode(state)}
               'past_recurrence_count': row['past_recurrence_count'],
             })
         .toList();
+    final theoryConclusionSnapshot =
+        growthRows(theoryFeedback['core_conclusions'])
+            .take(6)
+            .map((row) => {
+                  'id': row['id'],
+                  'type': row['type'],
+                  'title': row['title'],
+                  'factor_ids': growthStrings(row['factor_ids']),
+                  'theory_ids': growthStrings(row['theory_ids']),
+                  'epistemic_status': row['epistemic_status'],
+                  'correction': row['correction'],
+                  'review_focus': row['review_focus'],
+                })
+            .toList();
     final outcomeAt = DateTime.now().millisecondsSinceEpoch;
     rows[index] = {
       ...rows[index],
@@ -2732,8 +2748,11 @@ ${jsonEncode(state)}
           'compare_keys': growthStrings(reviewBlueprint['compare_keys']),
           'questions': growthStrings(reviewBlueprint['questions']),
           'weakness_hypothesis_snapshot': weaknessSnapshot,
+          'theory_conclusion_snapshot': theoryConclusionSnapshot,
+          'theory_factor_snapshot':
+              growthRows(theoryFeedback['factor_rows']).take(32).toList(),
           'rule':
-              '现实结果用于支持、削弱或推翻预测时保存的弱点假设；不要把一次结果直接解释成稳定人格特征。',
+              '现实结果用于支持、削弱或推翻预测时保存的理论综合结论与弱点假设；用户确认的理论因素保留原值，不把一次结果直接解释成稳定人格特征。',
         },
     };
     await _dao.setSetting(historySetting, jsonEncode(rows));
