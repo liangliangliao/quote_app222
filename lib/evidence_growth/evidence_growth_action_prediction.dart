@@ -2351,10 +2351,34 @@ ${jsonEncode(state)}
     final rows = await history();
     final index = rows.indexWhere((r) => r['id'] == id);
     if (index < 0) throw StateError('预测记录不存在');
+    final diagnosis = growthMap(rows[index]['behavior_diagnosis']);
+    final reviewBlueprint = growthMap(diagnosis['review_blueprint']);
+    final weaknessSnapshot = growthRows(diagnosis['key_weaknesses'])
+        .take(4)
+        .map((row) => {
+              'key': row['key'],
+              'label': row['label'],
+              'classification': row['classification'],
+              'bottleneck_probability': row['bottleneck_probability'],
+              'past_recurrence_count': row['past_recurrence_count'],
+            })
+        .toList();
+    final outcomeAt = DateTime.now().millisecondsSinceEpoch;
     rows[index] = {
       ...rows[index],
       'outcome': outcome,
-      'outcome_at_ms': DateTime.now().millisecondsSinceEpoch,
+      'outcome_at_ms': outcomeAt,
+      if (diagnosis.isNotEmpty)
+        'diagnostic_review': {
+          'status': 'PENDING',
+          'created_at_ms': outcomeAt,
+          'outcome': outcome,
+          'compare_keys': growthStrings(reviewBlueprint['compare_keys']),
+          'questions': growthStrings(reviewBlueprint['questions']),
+          'weakness_hypothesis_snapshot': weaknessSnapshot,
+          'rule':
+              '现实结果用于支持、削弱或推翻预测时保存的弱点假设；不要把一次结果直接解释成稳定人格特征。',
+        },
     };
     await _dao.setSetting(historySetting, jsonEncode(rows));
   }
