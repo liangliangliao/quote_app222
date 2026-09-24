@@ -475,6 +475,23 @@ class _EvidenceGrowthActionPredictionPageState
     return '低';
   }
 
+  String _evidenceStateLabel(Object? value) => const {
+        'adverse': '已有不利证据',
+        'mixed': '证据混合／不稳定',
+        'supportive': '已有支持证据',
+        'insufficient': '证据不足',
+      }['$value'] ??
+      '未分类';
+
+  String _bottleneckLabel(Object? value) {
+    if (value is! num) return '未判断';
+    final v = value.toDouble();
+    if (v >= .75) return '强瓶颈信号';
+    if (v >= .60) return '较明显瓶颈';
+    if (v >= .45) return '需要继续验证';
+    return '目前不像主要瓶颈';
+  }
+
   IconData _factorIcon(GrowthData row) {
     if (row['unknown'] == true || row['display_score'] == null) {
       return Icons.help_outline;
@@ -1455,6 +1472,11 @@ class _EvidenceGrowthActionPredictionPageState
         (theoryCompleteness['unselected_missing'] as num?)?.toInt() ?? 0;
     final theoryResponseCoverage =
         (theoryCompleteness['response_coverage'] as num?)?.toDouble();
+    final diagnostic = growthMap(result['diagnostic_summary']);
+    final diagnosticSupports = growthRows(diagnostic['supports']);
+    final diagnosticUnknowns = growthRows(diagnostic['unknowns']);
+    final usesJevBottleneck =
+        diagnostic['uses_jev_bottleneck_judgement'] == true;
 
     return _section(
         '本次预测',
@@ -1544,22 +1566,22 @@ class _EvidenceGrowthActionPredictionPageState
               if (dominantDisplayable && dominantFailure.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Text(
-                    'JEV 当前最有证据支持的失败机制：$dominantFailure',
+                    'JEV 当前最有证据支持的风险路径：$dominantFailure',
                     style: const TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 3),
                 Text(
-                    'JEV 自报选择置信度：${_pct(jevFlow['dominant_failure_confidence'])}（不是统计置信区间）'
-                    '${dominantSource == 'USER_THEORY_OPTION' ? ' · 主要依据：用户确认的理论选项' : ''}',
+                    '这是“当前证据最支持的风险路径”，不是已经证明的心理原因。JEV 自报选择置信度：${_pct(jevFlow['dominant_failure_confidence'])}'
+                    '${dominantSource == 'USER_THEORY_OPTION' ? ' · 直接依据包含：你确认的理论选项' : ''}',
                     style: const TextStyle(
                         fontSize: 12, color: Colors.black54)),
                 if (dominantEvidence.isNotEmpty)
-                  Text('直接证据：$dominantEvidence',
+                  Text('已知证据：$dominantEvidence',
                       style: const TextStyle(
                           fontSize: 12, color: Colors.black54))
               ] else if (source == 'JEV_PRIMARY') ...[
                 const SizedBox(height: 10),
                 const Text(
-                    'JEV 暂时没有足够证据可靠锁定单一“最可能失败机制”，因此不强行给出一个阻碍结论。',
+                    'JEV 目前没有同时满足“有不利证据 + 能构成现实瓶颈”的单一风险路径，因此不强行给出原因标签。',
                     style: TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w700))
               ],
@@ -1574,6 +1596,12 @@ class _EvidenceGrowthActionPredictionPageState
             const Text('当前信息还不足以形成综合估计。'),
           if (headline.isNotEmpty) ...[
             const SizedBox(height: 14),
+            const Text('AI交叉解释（辅助理解，不覆盖JEV结论）',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
             Text(headline,
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))
@@ -1582,48 +1610,151 @@ class _EvidenceGrowthActionPredictionPageState
             const SizedBox(height: 6),
             Text(reason, style: const TextStyle(height: 1.45))
           ],
-          if (risks.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            const Text('最关键的阻碍',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
+          const SizedBox(height: 18),
+          Row(children: [
+            const Expanded(
+                child: Text('当前行动瓶颈：证据 → 机制 → JEV判断',
+                    style: TextStyle(fontWeight: FontWeight.w900))),
+            if (usesJevBottleneck)
+              const Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text('JEV瓶颈诊断',
+                      style: TextStyle(fontSize: 10)))
+          ]),
+          const SizedBox(height: 5),
+          Text(
+              '${diagnostic['rule'] ?? '关键阻碍需要同时有当前不利证据与现实瓶颈判断；不会因为某项分数低就自动判为关键原因。'}',
+              style: const TextStyle(
+                  fontSize: 12, color: Colors.black54, height: 1.4)),
+          const SizedBox(height: 10),
+          if (risks.isNotEmpty)
             for (var i = 0; i < risks.length; i++)
-              Padding(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start,
+              Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      border: Border.all(
+                          color: _teal.withValues(alpha: .22)),
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                    CircleAvatar(
-                        radius: 11,
-                        backgroundColor: _teal.withValues(alpha: .1),
-                        child: Text('${i + 1}',
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: _teal))),
-                    const SizedBox(width: 9),
-                    Expanded(
-                        child: Column(
+                        Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                          Text('${risks[i]['label']}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700)),
-                          Text(
-                              '${risks[i]['source'] == 'USER_CONFIRMED_THEORY' ? '依据：用户确认的理论标准选项' : risks[i]['source'] == 'JEV' ? '依据：JEV typed评分' : '依据：模型提取证据'}',
+                              CircleAvatar(
+                                  radius: 11,
+                                  backgroundColor:
+                                      _teal.withValues(alpha: .1),
+                                  child: Text('${i + 1}',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: _teal))),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                  child: Text('${risks[i]['label']}',
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w900))),
+                            ]),
+                        const SizedBox(height: 7),
+                        Wrap(spacing: 6, runSpacing: 6, children: [
+                          Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(
+                                  _evidenceStateLabel(
+                                      risks[i]['evidence_status']),
+                                  style: const TextStyle(fontSize: 10))),
+                          if (risks[i]['bottleneck_probability'] is num)
+                            Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(
+                                    'JEV：${_bottleneckLabel(risks[i]['bottleneck_probability'])} ${_pct(risks[i]['bottleneck_probability'])}',
+                                    style:
+                                        const TextStyle(fontSize: 10))),
+                          Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(
+                                  risks[i]['diagnostic_basis'] ==
+                                          'JEV_BOTTLENECK'
+                                      ? '按瓶颈证据排序'
+                                      : 'JEV不可用·候选项',
+                                  style: const TextStyle(fontSize: 10)))
+                        ]),
+                        if ('${risks[i]['evidence'] ?? ''}'.trim().isNotEmpty) ...[
+                          const SizedBox(height: 7),
+                          Text('你提供/确认的证据：${risks[i]['evidence']}',
+                              style: const TextStyle(
+                                  fontSize: 12, height: 1.4))
+                        ],
+                        if ('${risks[i]['mechanism'] ?? ''}'.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text('它可能怎样影响行动：${risks[i]['mechanism']}',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                  height: 1.4))
+                        ],
+                        if ('${risks[i]['intervention'] ?? ''}'.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text('优先改什么：${risks[i]['intervention']}',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4))
+                        ],
+                        if ('${risks[i]['verification'] ?? ''}'.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text('如何验证它是不是真关键：${risks[i]['verification']}',
                               style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.black54,
-                                  fontWeight: FontWeight.w700)),
-                          if ('${risks[i]['evidence'] ?? ''}'.trim().isNotEmpty)
-                            Text('${risks[i]['evidence']}',
-                                style: const TextStyle(
-                                    color: Colors.black54, height: 1.35))
-                        ]))
-                  ]))
-          ] else ...[
-            const SizedBox(height: 14),
-            const Text('目前还没有足够证据锁定前三大阻碍；未知项不会被当成负面证据。',
-                style: TextStyle(color: Colors.black54))
+                                  height: 1.4))
+                        ]
+                      ]))
+          else
+            const Text(
+                '目前没有因素同时达到“已有不利/混合证据”与“JEV判断为现实瓶颈”的条件，所以这里不强行列出前三大阻碍。',
+                style: TextStyle(color: Colors.black54, height: 1.4)),
+          if (diagnosticSupports.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('当前已经在支持你的因素',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                children: [
+                  for (final item in diagnosticSupports)
+                    ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.shield_outlined,
+                            color: _teal),
+                        title: Text('${item['label'] ?? ''}'),
+                        subtitle: Text(
+                            '${item['evidence'] ?? ''}'.trim().isEmpty
+                                ? '已有支持证据'
+                                : '${item['evidence']}'))
+                ])
+          ],
+          if (diagnosticUnknowns.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('还不能判断、最需要补事实的因素',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text('未知不是中性，更不是负面；先补事实再判断'),
+                children: [
+                  for (final item in diagnosticUnknowns)
+                    ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.help_outline),
+                        title: Text('${item['label'] ?? ''}'),
+                        subtitle:
+                            Text('${item['next_check'] ?? ''}'))
+                ])
           ],
           if (actions.isNotEmpty) ...[
             const Divider(height: 28),
@@ -1721,6 +1852,12 @@ class _EvidenceGrowthActionPredictionPageState
       final br = growthMap(b.value);
       if (ar['unknown'] == true && br['unknown'] != true) return 1;
       if (ar['unknown'] != true && br['unknown'] == true) return -1;
+      final ab = (ar['bottleneck_probability'] as num?)?.toDouble();
+      final bb = (br['bottleneck_probability'] as num?)?.toDouble();
+      if (ab != null || bb != null) {
+        final compared = (bb ?? -1).compareTo(ab ?? -1);
+        if (compared != 0) return compared;
+      }
       final av = ar['display_score'] as num?;
       final bv = br['display_score'] as num?;
       return (av ?? 2).compareTo(bv ?? 2);
@@ -1732,6 +1869,8 @@ class _EvidenceGrowthActionPredictionPageState
       final confidence = row['confidence'];
       final state = _factorState(row);
       final source = '${row['source'] ?? 'NONE'}';
+      final evidenceState = _evidenceStateLabel(row['evidence_status']);
+      final bottleneck = row['bottleneck_probability'];
       final construct = '${row['theory_construct'] ?? entry.key}';
       final mapped = row['is_dynamic'] == true
           ? ' · 归入：${_constructLabel(construct)}'
@@ -1741,13 +1880,11 @@ class _EvidenceGrowthActionPredictionPageState
           leading: Icon(_factorIcon(row), color: _teal),
           title: Text('${row['label'] ?? entry.key}'),
           subtitle: Text(row['unknown'] == true
-              ? source == 'USER_CONFIRMED_THEORY'
-                  ? '待补充 · 用户明确选择“不清楚／无法判断”$mapped'
-                  : '待补充 · 当前证据不足$mapped'
-              : source == 'USER_CONFIRMED_THEORY'
-                  ? '$state · 用户确认标准选项$mapped'
-                  : source == 'JEV'
-                      ? '$state · JEV评分 · 自报置信度：${_confidenceLabel(confidence)}$mapped'
+              ? '证据不足 · 不把未知当中性或阻碍$mapped'
+              : bottleneck is num
+                  ? '$evidenceState · ${_bottleneckLabel(bottleneck)} ${_pct(bottleneck)}$mapped'
+                  : source == 'USER_CONFIRMED_THEORY'
+                      ? '$evidenceState · 用户确认标准选项$mapped'
                       : '$state · $source$mapped'),
           children: [
             Padding(
@@ -1756,6 +1893,34 @@ class _EvidenceGrowthActionPredictionPageState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('${row['evidence'] ?? ''}'),
+                      const SizedBox(height: 7),
+                      Text('证据状态：$evidenceState',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700)),
+                      if (bottleneck is num) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                            'JEV当前瓶颈判断：${_pct(bottleneck)} · ${_bottleneckLabel(bottleneck)}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 3),
+                        const Text(
+                            '这里判断的是“当前是否构成现实瓶颈”，不是因果效应大小，也不是理论权重。',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.black54))
+                      ],
+                      if ('${row['mechanism'] ?? ''}'.trim().isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text('机制说明：${row['mechanism']}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.black54))
+                      ],
+                      if ('${row['intervention'] ?? ''}'.trim().isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text('可控改进：${row['intervention']}',
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700))
+                      ],
                       if (score is num) ...[
                         const SizedBox(height: 8),
                         if (source == 'USER_CONFIRMED_THEORY')
@@ -1805,10 +1970,10 @@ class _EvidenceGrowthActionPredictionPageState
     return Card(
         elevation: 0,
         child: ExpansionTile(
-            title: const Text('查看理论模型中的决定因素',
+            title: const Text('查看决定因素证据与JEV瓶颈判断',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             subtitle: const Text(
-                '优先显示你已确认的理论标准选项；JEV只对仍需模型判断的因素给typed评分。'),
+                '先看“证据状态”，再看“是否构成当前瓶颈”；0~4支持评分只保留为辅助信息，不再直接决定关键阻碍排序。'),
             children: [
               for (final group in groupOrder) ...[
                 Builder(builder: (_) {
