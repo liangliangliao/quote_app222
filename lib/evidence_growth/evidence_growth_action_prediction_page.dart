@@ -2538,6 +2538,56 @@ class _EvidenceGrowthActionPredictionPageState
           ]);
     }
 
+    Widget theoryFactorTile(GrowthData row) {
+      final factorId = '${row['factor_id'] ?? ''}';
+      final theories = growthStrings(row['theory_ids']);
+      final option = '${row['option_label'] ?? ''}'.trim();
+      final role = '${row['jev_role'] ?? ''}'.trim();
+      final roleConfidence = row['jev_role_confidence'];
+      final inJointConclusion = jointFactorIds.contains(factorId);
+      final selectionSource = '${row['selection_source'] ?? ''}';
+      return ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          leading: Icon(
+              role == 'protective'
+                  ? Icons.shield_outlined
+                  : role == 'key_blocker'
+                      ? Icons.warning_amber_outlined
+                      : Icons.psychology_alt_outlined,
+              color: _teal),
+          title: Text('${row['factor_label'] ?? factorId}',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (option.isNotEmpty) Text('你确认：$option'),
+                if (theories.isNotEmpty)
+                  Text('来源理论：${theories.join(' + ')}',
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.black54)),
+                Text(
+                    '${_theoryRoleLabel(role)}'
+                    '${roleConfidence is num ? ' · 自报置信度 ${_pct(roleConfidence)}' : ''}',
+                    style: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w700)),
+                Text(
+                    inJointConclusion
+                        ? '最终LLM+JEV联合结论：已纳入'
+                        : '最终LLM+JEV联合结论：未提升为关键联合因素',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: inJointConclusion ? _teal : Colors.black54)),
+                if (selectionSource.isNotEmpty)
+                  Text(
+                      selectionSource == 'AUTO_LLM_JEV'
+                          ? '选项来源：LLM+JEV预填后由用户提交确认'
+                          : '选项来源：用户选择/确认',
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.black54)),
+              ]));
+    }
+
     const groupOrder = [
       'DIRECT_BEHAVIOR',
       'VOLITIONAL_EXTENSION'
@@ -2550,11 +2600,35 @@ class _EvidenceGrowthActionPredictionPageState
     return Card(
         elevation: 0,
         child: ExpansionTile(
-            title: const Text('查看决定因素证据与JEV瓶颈判断',
+            title: const Text('查看决定因素证据与JEV判断',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             subtitle: const Text(
-                '先看“证据状态”，再看“是否构成当前瓶颈”；0~4支持评分只保留为辅助信息，不再直接决定关键阻碍排序。'),
+                '分两层看：①全部用户确认的理论因素及JEV角色；②真正直接影响行为/执行的因素才显示JEV第一阶段瓶颈判断。瓶颈数值不是LLM+JEV综合分。'),
             children: [
+              if (theoryFactorRows.isNotEmpty) ...[
+                const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
+                    child: Text('A. 用户确认的理论关键因素（全量）',
+                        style: TextStyle(fontWeight: FontWeight.w900))),
+                const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+                    child: Text(
+                        '这里应覆盖已选理论问卷中所有已确认因素。重点看：你的实际选项、所属理论、JEV对当前行动的角色判断，以及它是否进入最终LLM+JEV联合结论。',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.black54, height: 1.4))),
+                for (final row in theoryFactorRows) theoryFactorTile(row),
+                const Divider(),
+              ],
+              const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Text('B. 直接行为／执行决定因素',
+                      style: TextStyle(fontWeight: FontWeight.w900))),
+              const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+                  child: Text(
+                      '只有对最终行为有直接执行意义的因素（IBM直接行为因素、执行意图，以及通过筛选的行动特异因素）才适合显示“当前瓶颈”判断。意向形成层因素不再用瓶颈百分比表达。',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.black54, height: 1.4))),
               for (final group in groupOrder) ...[
                 Builder(builder: (_) {
                   final rows = core
@@ -2605,7 +2679,7 @@ class _EvidenceGrowthActionPredictionPageState
                 const Padding(
                     padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
                     child: Text(
-                        'AI只负责从当前行为中提取具体显著信念／现实条件，并把它们映射回IBM构念，而不是另造一套心理学因素。',
+                        '这里仅显示已经通过LLM候选生成 + JEV增量预测价值筛选的行动特异因素，并映射回既有理论构念。',
                         style:
                             TextStyle(fontSize: 12, color: Colors.black54))),
                 for (final row in dynamicRows) factorTile(row),
