@@ -672,21 +672,22 @@ class EvidenceGrowthActionPredictionService {
     final primaryEventId = '${primaryEvent['id'] ?? 'primary_success'}';
     final jevEstimate =
         _prob(eventProbabilities[primaryEventId]) ?? _prob(jev['overall']);
+    final finalJevEstimate =
+        _prob(finalJevAdjudication['final_event_probability']);
 
-    // JEV is the primary forecast engine when configured because its output is
-    // a typed probabilistic decision. The LLM remains an interpreter and
-    // cross-check, not an equally weighted probability source.
-    //
-    // IMPORTANT: do not post-hoc blend the model probability with an arbitrary
-    // hand-written history weight. The same personal history summary is already
-    // included in the JEV evidence state; blending it again would double-count
-    // history and create a pseudo-precision coefficient with no validation.
-    final rawEstimate = jevEstimate ?? aiEstimate;
-    var forecastSource = jevEstimate != null
-        ? 'JEV_PRIMARY'
-        : aiEstimate != null
-            ? 'AI_FALLBACK'
-            : 'NO_MODEL_ESTIMATE';
+    // The final percentage is no longer an arbitrary AI/JEV average. When the
+    // JEV final adjudication succeeds, it re-evaluates the raw user input,
+    // confirmed theory questionnaire, first-pass JEV judgements and LLM
+    // synthesis together and emits the final typed probability. First-pass JEV
+    // is only the fallback JEV probability.
+    final rawEstimate = finalJevEstimate ?? jevEstimate ?? aiEstimate;
+    var forecastSource = finalJevEstimate != null
+        ? 'JEV_FINAL_SYNTHESIS'
+        : jevEstimate != null
+            ? 'JEV_PRIMARY'
+            : aiEstimate != null
+                ? 'AI_FALLBACK'
+                : 'NO_MODEL_ESTIMATE';
     double? estimate = rawEstimate;
     double historyWeight = 0;
     if (estimate == null && baseline != null && resolved.length >= 5) {
@@ -1215,6 +1216,7 @@ class EvidenceGrowthActionPredictionService {
       'forecast_provenance': {
         'primary_source': forecastSource,
         'jev_primary_event_probability': jevEstimate,
+        'jev_final_synthesis_probability': finalJevEstimate,
         'jev_first_pass_status': jev['status'],
         'jev_first_pass_reason': jev['reason'],
         'jev_final_adjudication_status': finalJevAdjudication['status'],
