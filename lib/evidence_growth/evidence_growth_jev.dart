@@ -962,6 +962,224 @@ class EvidenceGrowthJev {
     }
   }
 
+  static GrowthData theorySynthesisRequest({
+    required GrowthData state,
+    required List<GrowthData> theoryFeedbackRows,
+    required GrowthData llmSynthesis,
+    required GrowthData firstPassJev,
+    required String model,
+  }) {
+    final candidates = growthRows(llmSynthesis['core_conclusions']).take(6).toList();
+    final candidateCatalog = <GrowthData>[];
+    for (var i = 0; i < candidates.length; i++) {
+      final row = candidates[i];
+      candidateCatalog.add({
+        'key': 'candidate_${i + 1}',
+        'id': '${row['id'] ?? 'candidate_${i + 1}'}',
+        'type': row['type'],
+        'title': row['title'],
+        'factor_ids': growthStrings(row['factor_ids']),
+        'theory_ids': growthStrings(row['theory_ids']),
+        'mechanism': row['mechanism'],
+        'why_key': row['why_key'],
+        'counterevidence': row['counterevidence'],
+        'correction': row['correction'],
+        'review_focus': row['review_focus'],
+      });
+    }
+
+    return {
+      'model': model,
+      'state': {
+        'action_prediction': state,
+        'user_confirmed_theory_feedback': theoryFeedbackRows,
+        'first_pass_jev': {
+          'events': firstPassJev['events'],
+          'overall': firstPassJev['overall'],
+          'theory_factor_roles': firstPassJev['theory_factor_roles'],
+          'theory_feedback_pattern': firstPassJev['theory_feedback_pattern'],
+          'dominant_failure_mode': firstPassJev['dominant_failure_mode'],
+        },
+        'llm_candidate_synthesis': {
+          'integrated_pattern': llmSynthesis['integrated_pattern'],
+          'pattern_explanation': llmSynthesis['pattern_explanation'],
+          'bottom_line': llmSynthesis['bottom_line'],
+          'candidates': candidateCatalog,
+        },
+        'instruction':
+            'This is the FINAL adjudication stage. The user-confirmed theory options are primary evidence. The LLM candidates are hypotheses, not facts. Independently judge whether each candidate is supported by the raw action facts, confirmed theory answers, and first-pass JEV judgements. Do not rubber-stamp the LLM. Select a primary conclusion only when support is adequate.'
+      },
+      'questions': {
+        for (final row in candidateCatalog)
+          'synthesis_support_${row['key']}': {
+            'type': 'choice',
+            'instructions':
+                'Adjudicate this LLM candidate conclusion against the user-confirmed theory factors and action facts. Candidate: "${row['title']}". Factor ids: ${growthStrings(row['factor_ids']).join(', ')}. Judge evidential support, not writing quality.',
+            'criteria': {
+              'supported':
+                  'The candidate is materially supported by the confirmed factors and action facts, and is consistent with the first-pass JEV judgements.',
+              'partially_supported':
+                  'The candidate captures an important pattern but overstates certainty, omits a material condition, or is only partly supported.',
+              'contradicted':
+                  'The candidate conflicts with confirmed factor feedback, action facts, or the first-pass JEV judgements.',
+              'insufficient':
+                  'There is not enough evidence to judge this candidate reliably.'
+            }
+          },
+        if (candidateCatalog.isNotEmpty)
+          'synthesis_primary': {
+            'type': 'choice',
+            'instructions':
+                'Choose the single candidate that should be promoted as the PRIMARY final diagnostic conclusion after independent adjudication. Choose none when no candidate is sufficiently supported.',
+            'criteria': {
+              for (final row in candidateCatalog)
+                '${row['key']}': '${row['title']}',
+              'none':
+                  'No LLM candidate is sufficiently supported to become the primary final conclusion.'
+            }
+          },
+        'synthesis_quality': {
+          'type': 'choice',
+          'instructions':
+              'Judge whether the combined LLM+JEV decision is sufficiently grounded to present as a joint final diagnosis.',
+          'criteria': {
+            'joint_supported':
+                'The confirmed theory evidence, first-pass JEV analysis, and at least one LLM candidate converge enough for a joint conclusion.',
+            'material_disagreement':
+                'LLM and JEV materially disagree on the key interpretation; present disagreement instead of a single conclusion.',
+            'insufficient_evidence':
+                'Evidence is too incomplete for a reliable joint conclusion.'
+          }
+        }
+      }
+    };
+  }
+
+  static GrowthData parseTheorySynthesis(GrowthData body) {
+    final answers = growthMap(body['answers']);
+
+    GrowthData choice(String key) {
+      final a = growthMap(answers[key]);
+      if (a.isEmpty) return {};
+      final selected = a['choice'];
+      final confidence = a['confidence'];
+      if (a['type'] != 'choice' ||
+          selected is! String ||
+          confidence is! num ||
+          !confidence.isFinite ||
+          confidence < 0 ||
+          confidence > 1) {
+        throw const FormatException('INVALID_JEV_SYNTHESIS_CHOICE');
+      }
+      return {
+        'choice': selected,
+        'confidence': confidence.toDouble(),
+        'probabilities': growthMap(a['probabilities']),
+      };
+    }
+
+    final verdicts = <String, GrowthData>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('synthesis_support_')) continue;
+      verdicts[entry.key.substring('synthesis_support_'.length)] =
+          choice(entry.key);
+    }
+
+    return {
+      'status': 'JEV',
+      'model': body['model'],
+      'usage': body['usage'],
+      'conclusion_verdicts': verdicts,
+      'primary_conclusion': choice('synthesis_primary'),
+      'synthesis_quality': choice('synthesis_quality'),
+    };
+  }
+
+  Future<GrowthData> assessTheorySynthesis({
+    required GrowthData state,
+    required List<GrowthData> theoryFeedbackRows,
+    required GrowthData llmSynthesis,
+    required GrowthData firstPassJev,
+    required String apiKey,
+    String model = 'jev-latest',
+  }) async {
+    if (apiKey.isEmpty) return {'status': 'LOCAL', 'reason': 'NO_KEY'};
+    if (firstPassJev['status'] != 'JEV') {
+      return {'status': 'LOCAL', 'reason': 'FIRST_PASS_JEV_UNAVAILABLE'};
+    }
+    final candidates = growthRows(llmSynthesis['core_conclusions']);
+    if (candidates.isEmpty) {
+      return {'status': 'LOCAL', 'reason': 'NO_LLM_CANDIDATES'};
+    }
+    if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
+      return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
+    }
+    final request = theorySynthesisRequest(
+      state: state,
+      theoryFeedbackRows: theoryFeedbackRows,
+      llmSynthesis: llmSynthesis,
+      firstPassJev: firstPassJev,
+      model: model,
+    );
+    final body = jsonEncode(request);
+    if (utf8.encode(body).length > 64000) {
+      return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
+    }
+    final key = sha256
+        .convert(utf8.encode('action-v7-final-adjudication|$apiKey|$body'))
+        .toString();
+    if (_cache.containsKey(key)) return _cache[key]!;
+    if (_pending.containsKey(key)) return _pending[key]!;
+    final pending = _sendTheorySynthesis(body, apiKey);
+    _pending[key] = pending;
+    try {
+      final result = await pending;
+      final catalog = growthRows(
+          growthMap(growthMap(request['state'])['llm_candidate_synthesis'])[
+              'candidates']);
+      final enriched = <String, dynamic>{
+        ...result,
+        'candidate_catalog': catalog,
+      };
+      if (enriched['status'] == 'JEV') {
+        if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+        _cache[key] = enriched;
+      }
+      return enriched;
+    } finally {
+      _pending.remove(key);
+    }
+  }
+
+  Future<GrowthData> _sendTheorySynthesis(String body, String key) async {
+    final client = _client ?? http.Client();
+    try {
+      final response = await client
+          .post(endpoint,
+              headers: {
+                'Authorization': 'Bearer $key',
+                'Content-Type': 'application/json',
+              },
+              body: body)
+          .timeout(timeout);
+      if (response.statusCode == 429 || response.statusCode == 529) {
+        _cooldown = DateTime.now().add(const Duration(seconds: 45));
+      }
+      if (response.statusCode != 200) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'SERVICE_UNAVAILABLE',
+          'http_status': response.statusCode,
+        };
+      }
+      return parseTheorySynthesis(growthMap(jsonDecode(response.body)));
+    } catch (_) {
+      return {'status': 'LOCAL', 'reason': 'REQUEST_FAILED'};
+    } finally {
+      if (_client == null) client.close();
+    }
+  }
+
   Future<GrowthData> assessAction(GrowthData state,
       {required String apiKey, String model = 'jev-latest'}) async {
     if (apiKey.isEmpty) return {'status': 'LOCAL', 'reason': 'NO_KEY'};
