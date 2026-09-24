@@ -2732,12 +2732,17 @@ class _EvidenceGrowthActionPredictionPageState
               children: [
                 ListTile(
                     title: const Text('主预测引擎'),
-                    subtitle: Text(result['forecast_source'] == 'JEV_PRIMARY'
-                        ? 'JEV 的 typed probabilistic workflow'
-                        : 'JEV 不可用时才回退到 LLM'),
-                    trailing: Text(result['forecast_source'] == 'JEV_PRIMARY'
-                        ? 'JEV'
-                        : 'LLM')),
+                    subtitle: Text(result['forecast_source'] == 'JEV_FINAL_SYNTHESIS'
+                        ? 'JEV最终联合裁决：读取用户事实、理论问卷、JEV初判与LLM综合'
+                        : result['forecast_source'] == 'JEV_PRIMARY'
+                            ? 'JEV第一阶段 typed probabilistic workflow'
+                            : 'JEV不可用时才回退到其他来源'),
+                    trailing: Text(
+                        result['forecast_source'] == 'JEV_FINAL_SYNTHESIS'
+                            ? 'JEV终裁'
+                            : result['forecast_source'] == 'JEV_PRIMARY'
+                                ? 'JEV初判'
+                                : '降级')),
                 for (final event in growthRows(jevFlow['events']))
                   ListTile(
                       title: Text(
