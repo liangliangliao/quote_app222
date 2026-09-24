@@ -364,6 +364,55 @@ void main() {
         isTrue);
   });
 
+  test('JEV bottleneck noul is limited to direct behavior and execution factors', () {
+    final request = EvidenceGrowthJev.actionRequest({
+      'plan': '明早去上班',
+      'selected_theories': ['IBM'],
+      'theory_factor_answers': {
+        'perceived_control': {
+          'option_id': 'mostly_controlled',
+          'option_label': '大部分在我控制之内',
+          'confirmed_by_user': true,
+        },
+        'intention': {
+          'option_id': 'clear',
+          'option_label': '已经明确决定要做',
+          'confirmed_by_user': true,
+        }
+      },
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'go_work',
+            'label': '按计划去上班',
+            'true_criterion': 'The person goes to work as planned.',
+            'false_criterion': 'The person does not go to work as planned.',
+            'primary': true,
+          }
+        ],
+        'relevant_core_factors': [
+          'perceived_control',
+          'intention',
+          'knowledge_skills',
+          'environmental_constraints'
+        ],
+        'dynamic_factors': [],
+        'clarifying_questions': [],
+        'failure_modes': [],
+      }
+    }, 'jev-latest');
+
+    final questions = request['questions'] as Map;
+    expect(questions, contains('evidence_perceived_control'));
+    expect(questions, isNot(contains('bottleneck_perceived_control')),
+        reason:
+            'Perceived control is an upstream intention-formation construct; use JEV theory role rather than a direct behavior bottleneck noul.');
+    expect(questions, contains('bottleneck_intention'));
+    expect(questions, contains('bottleneck_knowledge_skills'));
+    expect(questions, contains('bottleneck_environmental_constraints'));
+    expect(questions, contains('bottleneck_implementation_intention'));
+  });
+
   test('JEV request strips pseudo-scores and keeps unselected factors missing', () {
     final request = EvidenceGrowthJev.actionRequest({
       'plan': '今天重新去找工作',
