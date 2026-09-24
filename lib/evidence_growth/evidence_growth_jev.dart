@@ -435,6 +435,11 @@ class EvidenceGrowthJev {
     final events = _forecastEvents(state);
     final core = _relevantCoreFactors(state);
     final dynamicRows = _dynamicFactors(state);
+    final directBottleneckCore = core
+        .where((key) =>
+            ibmDirectFactors.contains(key) ||
+            key == 'implementation_intention')
+        .toSet();
     // Detailed bottleneck diagnosis is intentionally narrower than the
     // general factor scan. A dynamic factor without any extracted direct
     // evidence cannot responsibly be promoted to a "key blocker"; limiting
@@ -593,17 +598,18 @@ class EvidenceGrowthJev {
                 'Classify the CURRENT EVIDENCE STATE for this factor, not its importance and not the final behavior probability. ${confirmedTheoryEvidence(key)} Use only explicit supplied facts. Distinguish genuinely mixed evidence from missing evidence. If the current state is not established, choose insufficient.',
             'criteria': _diagnosticEvidenceCriteria,
           },
-          'bottleneck_$key': {
-            'type': 'noul',
-            'instructions':
-                'Given only the supplied facts, is this factor CURRENTLY a material bottleneck for the PRIMARY event? True requires BOTH: (1) an adverse or genuinely mixed current state is supported by evidence, and (2) that state is relevant enough to materially prevent, delay, or displace the primary event. Missing evidence, a merely possible problem, or a supportive state is false. This is a diagnostic bottleneck judgement, not a causal proof and not a fixed theory weight.',
-            'criteria': {
-              'true':
-                  'Current adverse/mixed evidence plus action relevance jointly support treating this factor as a material bottleneck for the primary event.',
-              'false':
-                  'The factor is supportive, not established, only speculative, or not material enough to count as a current bottleneck.'
-            }
-          },
+          if (directBottleneckCore.contains(key))
+            'bottleneck_$key': {
+              'type': 'noul',
+              'instructions':
+                  'Given only the supplied facts, is this DIRECT/EXECUTION factor CURRENTLY a material bottleneck for the PRIMARY event? True requires BOTH: (1) an adverse or genuinely mixed current state is supported by evidence, and (2) that state is relevant enough to materially prevent, delay, or displace the primary event. Missing evidence, a merely possible problem, or a supportive state is false. This is a first-pass independent JEV bottleneck judgement, not a causal proof, theory weight, LLM+JEV combined score, or calibrated effect size.',
+              'criteria': {
+                'true':
+                    'Current adverse/mixed evidence plus direct execution relevance jointly support treating this factor as a material bottleneck for the primary event.',
+                'false':
+                    'The factor is supportive, not established, only speculative, or not material enough to count as a current direct bottleneck.'
+              }
+            },
         },
         for (final row in dynamicRows)
           'factor_dynamic_${row['id']}': {
