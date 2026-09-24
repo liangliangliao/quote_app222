@@ -359,8 +359,12 @@ class _EvidenceGrowthActionPredictionPageState
       _message('AI还没有成功完成行动理解，请先重新调用AI分析。');
       return;
     }
+    if (!jevConfigured) {
+      _message('最终预测要求 LLM + JEV 共同参与。请先配置JEV；当前AI分析可以继续查看，但不会生成正式最终预测。');
+      return;
+    }
     final jevKey = await _jevKey();
-    if (jevConfigured && jevKey.isEmpty) {
+    if (jevKey.isEmpty) {
       _message('JEV已启用，但密钥无法读取。为避免生成“伪联合预测”，本次不会继续；请重新配置JEV。');
       return;
     }
@@ -380,7 +384,7 @@ class _EvidenceGrowthActionPredictionPageState
         theoryFactorAnswers: theoryFactorAnswers,
         journey: widget.journey,
         jevApiKey: jevKey,
-        requireJev: jevConfigured,
+        requireJev: true,
       );
       await service.savePrediction(output);
       if (!mounted) return;
@@ -1426,13 +1430,13 @@ class _EvidenceGrowthActionPredictionPageState
                             preparing ||
                             hasUnappliedCorrection
                         ? null
-                        : predict,
+                        : (jevConfigured ? predict : configureJev),
                     icon: const Icon(Icons.hub_outlined),
                     label: Text(busy
                         ? '正在预测…'
                         : jevConfigured
-                            ? '按当前已填信息交给JEV'
-                            : '按当前已填信息开始预测')))
+                            ? 'LLM分析后交给JEV最终裁决'
+                            : '先配置JEV再进行最终预测')))
           ]),
           ],
           if (busy)
