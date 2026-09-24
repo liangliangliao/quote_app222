@@ -622,12 +622,59 @@ void main() {
       'estimate': .64,
       'outcome': 'PENDING',
       'scheduled_at_ms': 1,
+      'behavior_diagnosis': {
+        'key_weaknesses': [
+          {
+            'key': 'implementation_intention',
+            'label': '启动触发',
+            'classification': 'CURRENT_BOTTLENECK',
+            'bottleneck_probability': .72,
+            'past_recurrence_count': 0,
+          }
+        ],
+        'review_blueprint': {
+          'compare_keys': ['implementation_intention'],
+          'questions': ['这次启动触发是否真的在行动断点前出现？'],
+        }
+      }
     });
     await service.recordOutcome('p1', 'SUCCESS');
 
     final rows = await service.history();
     expect(rows, hasLength(1));
     expect(rows.single['outcome'], 'SUCCESS');
+    final review = rows.single['diagnostic_review'] as Map;
+    expect(review['status'], 'PENDING');
+    expect(review['outcome'], 'SUCCESS');
+    expect((review['compare_keys'] as List),
+        contains('implementation_intention'));
+    expect((review['weakness_hypothesis_snapshot'] as List), hasLength(1));
+  });
+
+  test('diagnostic model distinguishes current bottleneck from repeated weakness', () {
+    expect(
+        EvidenceGrowthActionPredictionService.factorProcessStageZh['intention'],
+        contains('决定'));
+    expect(
+        EvidenceGrowthActionPredictionService
+            .factorProcessStageOrder['implementation_intention'],
+        greaterThan(
+            EvidenceGrowthActionPredictionService
+                .factorProcessStageOrder['intention']!));
+    expect(
+        EvidenceGrowthActionPredictionService.diagnosticDomains.keys,
+        containsAll([
+          'reality',
+          'decision',
+          'emotion',
+          'value',
+          'efficacy',
+          'planning',
+          'habit',
+          'social',
+          'skills',
+          'history'
+        ]));
   });
 
   test('prediction bands remain descriptive rather than guaranteed', () {
