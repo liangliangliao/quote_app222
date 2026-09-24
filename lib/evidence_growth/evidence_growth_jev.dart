@@ -1228,6 +1228,217 @@ class EvidenceGrowthJev {
     }
   }
 
+  static GrowthData dynamicFactorSelectionRequest({
+    required GrowthData state,
+    required GrowthData profile,
+    required List<GrowthData> candidates,
+    required List<String> selectedTheoryIds,
+    required String model,
+  }) {
+    final actionProfile = growthMap(state['action_profile']);
+    final events = growthRows(
+        profile['forecast_events'] ?? actionProfile['forecast_events']);
+    final primaryEvents =
+        events.where((row) => row['primary'] == true).toList();
+    final primaryEvent = primaryEvents.isNotEmpty
+        ? primaryEvents.first
+        : (events.isNotEmpty ? events.first : <String, dynamic>{});
+    final theoryFactors = EvidenceBehaviorTheoryCatalog
+        .activeFactors(selectedTheoryIds)
+        .map((row) => {
+              'id': row['id'],
+              'label': row['label'],
+              'question': row['question'],
+              'theories': row['theories'],
+            })
+        .toList();
+
+    final catalog = <GrowthData>[];
+    for (var i = 0; i < candidates.length && i < 10; i++) {
+      final row = candidates[i];
+      catalog.add({
+        'key': 'candidate_${i + 1}',
+        'id': '${row['id'] ?? 'candidate_${i + 1}'}',
+        'label': row['label'],
+        'ibm_construct': row['ibm_construct'],
+        'condition': row['condition'],
+        'selection_reason': row['selection_reason'],
+        'evidence': row['evidence'],
+        'llm_predictive_relevance': row['predictive_relevance'],
+        'counterfactual_effect': row['counterfactual_effect'],
+        'why_not_existing_factor': row['why_not_existing_factor'],
+        'failure_path': row['failure_path'],
+      });
+    }
+
+    return {
+      'model': model,
+      'state': {
+        'action': {
+          'plan': state['plan'],
+          'scheduled_at': state['scheduled_at'],
+          'additional_notes': state['additional_notes'],
+          'similar_history_report': state['similar_history_report'],
+          'analysis_correction': state['analysis_correction'],
+          'normalized_action': profile['normalized_action'],
+          'action_mode': profile['action_mode'],
+          'primary_event': primaryEvent,
+        },
+        'selected_theory_factors': theoryFactors,
+        'preserved_factors': profile['selected_preserved_factors'],
+        'candidates': catalog,
+        'instruction':
+            'Select only action-specific predictors with real incremental predictive value. Reject restatements of the target event, trivial micro-steps, generic advice, and factors already adequately represented by selected theory/preserved factors. The key test is counterfactual: if this factor were favorable versus unfavorable, would the probability of the primary event materially change?'
+      },
+      'questions': {
+        for (final row in catalog)
+          'dynamic_role_${row['key']}': {
+            'type': 'choice',
+            'instructions':
+                'Judge candidate "${row['label']}" for incremental predictive value for the primary event. It must be causally upstream, current-action-specific, non-duplicate, and capable of materially changing the forecast when its state changes. Do not reward merely concrete wording.',
+            'criteria': {
+              'high_value':
+                  'Strong action-specific predictor with clear upstream mechanism, meaningful counterfactual impact, and little duplication with existing theory factors.',
+              'moderate_value':
+                  'Relevant predictor with some incremental value, but likely secondary or partly overlapping.',
+              'low_value':
+                  'Weak, trivial, low-information, or unlikely to materially change the forecast.',
+              'duplicate':
+                  'Mostly a rewording of an existing theory/preserved factor and adds little new predictive information.',
+              'outcome_or_step':
+                  'Restates the target behavior, an operational step, success criterion, or micro-procedure rather than a predictor of whether the behavior occurs.',
+              'insufficient':
+                  'Current facts are too incomplete to establish that this candidate has meaningful predictive value.'
+            }
+          },
+        if (catalog.isNotEmpty)
+          'dynamic_primary': {
+            'type': 'choice',
+            'instructions':
+                'Choose the single candidate with the greatest incremental predictive value for this specific action. Choose none if no candidate is materially useful beyond the existing theory factors.',
+            'criteria': {
+              for (final row in catalog)
+                '${row['key']}': '${row['label']}',
+              'none': 'No candidate adds enough predictive value.'
+            }
+          }
+      }
+    };
+  }
+
+  static GrowthData parseDynamicFactorSelection(GrowthData body) {
+    final answers = growthMap(body['answers']);
+
+    GrowthData choice(String key) {
+      final a = growthMap(answers[key]);
+      if (a.isEmpty) return {};
+      final selected = a['choice'];
+      final confidence = a['confidence'];
+      if (a['type'] != 'choice' ||
+          selected is! String ||
+          confidence is! num ||
+          !confidence.isFinite ||
+          confidence < 0 ||
+          confidence > 1) {
+        throw const FormatException('INVALID_JEV_DYNAMIC_CHOICE');
+      }
+      return {
+        'choice': selected,
+        'confidence': confidence.toDouble(),
+        'probabilities': growthMap(a['probabilities']),
+      };
+    }
+
+    final roles = <String, GrowthData>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('dynamic_role_')) continue;
+      roles[entry.key.substring('dynamic_role_'.length)] =
+          choice(entry.key);
+    }
+    return {
+      'status': 'JEV',
+      'model': body['model'],
+      'usage': body['usage'],
+      'roles': roles,
+      'primary': choice('dynamic_primary'),
+    };
+  }
+
+  Future<GrowthData> assessDynamicFactorCandidates({
+    required GrowthData state,
+    required GrowthData profile,
+    required List<GrowthData> candidates,
+    required List<String> selectedTheoryIds,
+    required String apiKey,
+    String model = 'jev-latest',
+  }) async {
+    if (apiKey.isEmpty || candidates.isEmpty) {
+      return {'status': 'LOCAL', 'reason': 'NO_KEY_OR_CANDIDATES'};
+    }
+    if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
+      return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
+    }
+    final request = dynamicFactorSelectionRequest(
+      state: state,
+      profile: profile,
+      candidates: candidates,
+      selectedTheoryIds: selectedTheoryIds,
+      model: model,
+    );
+    final body = jsonEncode(request);
+    if (utf8.encode(body).length > 64000) {
+      return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
+    }
+    final key = sha256
+        .convert(utf8.encode('action-v8-dynamic-factor-selection|$apiKey|$body'))
+        .toString();
+    if (_cache.containsKey(key)) return _cache[key]!;
+    if (_pending.containsKey(key)) return _pending[key]!;
+    final pending = _sendDynamicFactorSelection(body, apiKey);
+    _pending[key] = pending;
+    try {
+      final result = await pending;
+      if (result['status'] == 'JEV') {
+        if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+        _cache[key] = result;
+      }
+      return result;
+    } finally {
+      _pending.remove(key);
+    }
+  }
+
+  Future<GrowthData> _sendDynamicFactorSelection(
+      String body, String key) async {
+    final client = _client ?? http.Client();
+    try {
+      final response = await client
+          .post(endpoint,
+              headers: {
+                'Authorization': 'Bearer $key',
+                'Content-Type': 'application/json',
+              },
+              body: body)
+          .timeout(timeout);
+      if (response.statusCode == 429 || response.statusCode == 529) {
+        _cooldown = DateTime.now().add(const Duration(seconds: 45));
+      }
+      if (response.statusCode != 200) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'SERVICE_UNAVAILABLE',
+          'http_status': response.statusCode,
+        };
+      }
+      return parseDynamicFactorSelection(
+          growthMap(jsonDecode(response.body)));
+    } catch (_) {
+      return {'status': 'LOCAL', 'reason': 'REQUEST_FAILED'};
+    } finally {
+      if (_client == null) client.close();
+    }
+  }
+
   Future<GrowthData> assessAction(GrowthData state,
       {required String apiKey, String model = 'jev-latest'}) async {
     if (apiKey.isEmpty) return {'status': 'LOCAL', 'reason': 'NO_KEY'};
