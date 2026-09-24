@@ -1434,7 +1434,7 @@ class EvidenceGrowthActionPredictionService {
               '“全面”指这些诊断域都被扫描；没有事实的域明确保留为未知，而不是由模型猜测补齐。',
         },
         'protective_factors': [
-          for (final e in supportRows.take(4))
+          for (final e in supportRows)
             {
               'key': e.key,
               'label': e.value['label'],
@@ -1467,18 +1467,35 @@ class EvidenceGrowthActionPredictionService {
             '关键阻碍不再按“最低分”直接排序。JEV必须同时判断：当前存在不利/混合证据，并且该因素足以构成主预测事件的现实瓶颈；缺失证据不会被当作阻碍。',
         'barrier_count': diagnosticBarrierRows.length,
         'uses_jev_bottleneck_judgement': jevEstimate != null,
+        'support_count': supportRows.length,
         'supports': [
-          for (final e in supportRows.take(3))
+          for (final e in supportRows)
             {
               'key': e.key,
               'label': activeLabels[e.key],
               'evidence': e.value['evidence'],
               'mechanism': e.value['mechanism'],
               'source': e.value['source'],
+              'evidence_status': e.value['evidence_status'],
             }
         ],
+        'theory_supports': [
+          for (final row in theoryFeedbackRows)
+            if ('${row['jev_role'] ?? ''}' == 'protective')
+              {
+                'key': row['factor_id'],
+                'label': row['factor_label'],
+                'evidence':
+                    '你确认：“${row['option_label'] ?? ''}”。',
+                'source': 'USER_THEORY_JEV_ROLE',
+                'theory_ids': row['theory_ids'],
+                'jev_role': row['jev_role'],
+                'jev_role_confidence': row['jev_role_confidence'],
+              }
+        ],
+        'unknown_count': unknownRows.length,
         'unknowns': [
-          for (final e in unknownRows.take(3))
+          for (final e in unknownRows)
             {
               'key': e.key,
               'label': activeLabels[e.key],
