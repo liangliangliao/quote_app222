@@ -359,6 +359,11 @@ class _EvidenceGrowthActionPredictionPageState
       _message('AI还没有成功完成行动理解，请先重新调用AI分析。');
       return;
     }
+    final jevKey = await _jevKey();
+    if (jevConfigured && jevKey.isEmpty) {
+      _message('JEV已启用，但密钥无法读取。为避免生成“伪联合预测”，本次不会继续；请重新配置JEV。');
+      return;
+    }
     setState(() => busy = true);
     try {
       final output = await service.predict(
@@ -374,7 +379,8 @@ class _EvidenceGrowthActionPredictionPageState
         selectedTheoryIds: selectedTheoryIds.toList(),
         theoryFactorAnswers: theoryFactorAnswers,
         journey: widget.journey,
-        jevApiKey: await _jevKey(),
+        jevApiKey: jevKey,
+        requireJev: jevConfigured,
       );
       await service.savePrediction(output);
       if (!mounted) return;
@@ -522,6 +528,14 @@ class _EvidenceGrowthActionPredictionPageState
         'TENTATIVE': '暂定假设',
       }['$value'] ??
       '暂定假设';
+
+  String _jointDecisionModeLabel(Object? value) => const {
+        'LLM_JEV_JOINT': '完整联合决策',
+        'LLM_JEV_DISAGREEMENT_OR_INSUFFICIENT': '双方已参与但存在分歧/证据不足',
+        'JEV_FIRST_PASS_ONLY': 'JEV仅完成初判',
+        'LLM_ONLY_DEGRADED': '仅LLM降级分析',
+      }['$value'] ??
+      '$value';
 
   String _theoryPatternLabel(Object? value) => const {
         'intention_not_formed': '意向尚未真正形成',
@@ -1504,6 +1518,16 @@ class _EvidenceGrowthActionPredictionPageState
     final dominantSource =
         '${jevFlow['dominant_failure_source'] ?? ''}'.trim();
     final historyBaseline = growthMap(result['history_baseline']);
+    final forecastProvenance =
+        growthMap(result['forecast_provenance']);
+    final jevFirstPassStatus =
+        '${forecastProvenance['jev_first_pass_status'] ?? ''}';
+    final jevFinalStatus =
+        '${forecastProvenance['jev_final_adjudication_status'] ?? ''}';
+    final jointDecisionMode =
+        '${forecastProvenance['joint_decision_mode'] ?? ''}';
+    final jointDecisionComplete =
+        forecastProvenance['joint_decision_complete'] == true;
     final theoryCompleteness =
         growthMap(result['theory_input_completeness']);
     final theoryTotal = (theoryCompleteness['total'] as num?)?.toInt() ?? 0;
@@ -1570,9 +1594,15 @@ class _EvidenceGrowthActionPredictionPageState
             if (theoryFeedback.isNotEmpty) ...[
               const SizedBox(height: 12),
               Row(children: [
-                const Expanded(
-                    child: Text('LLM + JEV 理论反馈综合',
-                        style: TextStyle(
+                Expanded(
+                    child: Text(
+                        jointDecisionComplete
+                            ? 'LLM + JEV 最终联合判断'
+                            : jevFirstPassStatus == 'JEV' &&
+                                    jevFinalStatus == 'JEV'
+                                ? 'LLM ↔ JEV 联合裁决：尚未形成一致结论'
+                                : '当前不是完整的 LLM + JEV 联合判断',
+                        style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w900))),
                 Chip(
                     visualDensity: VisualDensity.compact,
@@ -1580,10 +1610,32 @@ class _EvidenceGrowthActionPredictionPageState
                         '已确认 ${theoryFeedback['confirmed_factor_count'] ?? theoryFactorRows.length} 项',
                         style: const TextStyle(fontSize: 10)))
               ]),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                        'LLM：${theoryFeedback['status'] == 'AI_SYNTHESIS' ? '已参与' : '降级/本地'}',
+                        style: const TextStyle(fontSize: 10))),
+                Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                        'JEV初判：${jevFirstPassStatus == 'JEV' ? '已参与' : '未参与'}',
+                        style: const TextStyle(fontSize: 10))),
+                Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                        'JEV终裁：${jevFinalStatus == 'JEV' ? '已参与' : '未参与'}',
+                        style: const TextStyle(fontSize: 10))),
+              ]),
               const SizedBox(height: 3),
-              const Text(
-                  '主证据来自你亲自确认的理论选项；JEV独立判断每个因素在这次行动中的角色，LLM再综合多个因素之间的冲突、配合与阶段断裂。',
-                  style: TextStyle(
+              Text(
+                  jointDecisionComplete
+                      ? '证据链：用户输入与理论问卷 → LLM跨因素综合 → JEV逐条独立裁决 → 只保留双方共同支持的最终结论。'
+                      : jevFirstPassStatus == 'JEV' && jevFinalStatus == 'JEV'
+                          ? 'LLM与JEV都已实际参与，但JEV最终质量判断没有确认足够一致；因此不强行输出“共同结论”。'
+                          : 'JEV没有完整参与最终决策，本页只能视为降级分析，不能标记为LLM+JEV联合结论。',
+                  style: const TextStyle(
                       fontSize: 12, color: Colors.black54, height: 1.4)),
               if (theoryPattern.isNotEmpty) ...[
                 const SizedBox(height: 10),
@@ -1854,6 +1906,12 @@ class _EvidenceGrowthActionPredictionPageState
             const Divider(height: 30),
             const Text('行动发生概率（辅助参考）',
                 style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
+            Text(
+                '决策状态：${_jointDecisionModeLabel(jointDecisionMode)}'
+                '${source == 'JEV_PRIMARY' ? ' · 概率来自JEV主事件判断' : ' · 当前概率不是JEV正式主判断'}',
+                style: const TextStyle(
+                    fontSize: 11, color: Colors.black54)),
             const SizedBox(height: 8),
           ],
           if (available) ...[
