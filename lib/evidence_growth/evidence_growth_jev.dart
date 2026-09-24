@@ -535,7 +535,7 @@ class EvidenceGrowthJev {
           'theory_factor_answers': sanitizedTheoryAnswers,
           'unanswered_factor_ids': unansweredTheoryFactorIds,
           'rule':
-              'Treat confirmed user questionnaire answers as categorical evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically. Unselected theory item is MISSING evidence: never impute 0, 2/4, 0.5, or any other pseudo-score. Explicit unknown is also uncertainty, not neutral evidence.'
+              'Treat confirmed user questionnaire answers as categorical evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically. Unselected theory item is missing evidence (MISSING evidence): never impute 0, 2/4, 0.5, or any other pseudo-score. Explicit unknown is also uncertainty, not neutral evidence.'
         }
       },
       'questions': {
