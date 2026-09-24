@@ -523,6 +523,18 @@ class _EvidenceGrowthActionPredictionPageState
       }['$value'] ??
       '暂定假设';
 
+  String _theoryPatternLabel(Object? value) => const {
+        'intention_not_formed': '意向尚未真正形成',
+        'intention_behavior_gap': '意向—行为转化断裂',
+        'capability_opportunity_gap': '能力／机会条件成为主要限制',
+        'automatic_motivation_conflict': '自动性动机与反思目标冲突',
+        'self_regulation_maintenance_gap': '自我调节／维持恢复环节薄弱',
+        'multi_factor_conflict': '多因素共同冲突',
+        'no_major_theory_blocker': '暂未发现主要理论阻碍',
+        'insufficient_evidence': '证据不足，无法形成单一模式',
+      }['$value'] ??
+      '$value';
+
   IconData _factorIcon(GrowthData row) {
     if (row['unknown'] == true || row['display_score'] == null) {
       return Icons.help_outline;
@@ -1588,7 +1600,7 @@ class _EvidenceGrowthActionPredictionPageState
               if ('${jevTheoryPattern['choice'] ?? ''}'.trim().isNotEmpty) ...[
                 const SizedBox(height: 5),
                 Text(
-                    'JEV独立模式判断：${jevTheoryPattern['choice']} · 自报置信度 ${_pct(jevTheoryPattern['confidence'])}',
+                    'JEV独立模式判断：${_theoryPatternLabel(jevTheoryPattern['choice'])} · 自报置信度 ${_pct(jevTheoryPattern['confidence'])}',
                     style: const TextStyle(
                         fontSize: 11, color: Colors.black54))
               ],
