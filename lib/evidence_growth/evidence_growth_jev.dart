@@ -1107,10 +1107,6 @@ class EvidenceGrowthJev {
     if (firstPassJev['status'] != 'JEV') {
       return {'status': 'LOCAL', 'reason': 'FIRST_PASS_JEV_UNAVAILABLE'};
     }
-    final candidates = growthRows(llmSynthesis['core_conclusions']);
-    if (candidates.isEmpty) {
-      return {'status': 'LOCAL', 'reason': 'NO_LLM_CANDIDATES'};
-    }
     if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
       return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
     }
