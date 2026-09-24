@@ -795,7 +795,14 @@ class EvidenceGrowthActionPredictionService {
           useTheory && theoryEvidenceStatus.isNotEmpty
               ? 1.0
               : jevEvidenceConfidence;
-      final bottleneckProbability = _prob(jevBottlenecks[key]);
+      final rawBottleneckProbability = _prob(jevBottlenecks[key]);
+      final bottleneckEvidenceCompatible =
+          const {'adverse', 'mixed'}.contains(evidenceStatus);
+      final bottleneckProbability =
+          bottleneckEvidenceCompatible ? rawBottleneckProbability : null;
+      final bottleneckEvidenceConflict = rawBottleneckProbability != null &&
+          !bottleneckEvidenceCompatible &&
+          rawBottleneckProbability >= .50;
 
       final score = useTheory
           ? (theoryOrdinalLevel == null ? null : theoryOrdinalLevel / 4)
@@ -840,6 +847,11 @@ class EvidenceGrowthActionPredictionService {
         'evidence_status': evidenceStatus,
         'evidence_status_confidence': evidenceStatusConfidence,
         'bottleneck_probability': bottleneckProbability,
+        'raw_bottleneck_probability': rawBottleneckProbability,
+        'bottleneck_evidence_compatible': bottleneckEvidenceCompatible,
+        'bottleneck_evidence_conflict': bottleneckEvidenceConflict,
+        'bottleneck_consistency_rule':
+            '只有已有不利证据或真正混合证据时，JEV瓶颈noul才进入有效瓶颈判断；支持性或证据不足状态下的高noul保留原始值用于审计，但不采纳为瓶颈。',
         'past_failure_observations': pastBarrierObserved[key] ?? 0,
         'past_barrier_recurrence_count': pastBarrierCounts[key] ?? 0,
         'recurrence_status': (pastBarrierCounts[key] ?? 0) >= 2
