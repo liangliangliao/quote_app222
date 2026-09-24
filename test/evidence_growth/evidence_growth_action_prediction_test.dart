@@ -342,6 +342,21 @@ void main() {
     expect('${skills['instructions']}',
         contains('explicitly confirmed the standardized option'));
     expect('${skills['instructions']}', contains('基本具备'));
+    expect(questions, contains('theory_role_knowledge_skills'));
+    expect(questions, contains('theory_role_intention'));
+    expect(questions, contains('theory_feedback_pattern'));
+    final theoryRole = questions['theory_role_intention'] as Map;
+    expect(theoryRole['type'], 'choice');
+    expect('${theoryRole['instructions']}',
+        contains('User-confirmed option'));
+    expect((theoryRole['criteria'] as Map).keys,
+        containsAll([
+          'key_blocker',
+          'secondary_risk',
+          'protective',
+          'low_relevance',
+          'uncertain'
+        ]));
 
     final failure = questions['dominant_failure_mode'] as Map;
     final criteria = failure['criteria'] as Map;
@@ -571,6 +586,61 @@ void main() {
         'cue_triggered_lapse');
   });
 
+  test('JEV parses independent roles for user-confirmed theory factors', () {
+    final parsed = EvidenceGrowthJev.parseAction({
+      'model': 'jev-latest',
+      'answers': {
+        'event_primary_success': {'type': 'noul', 'noul': .42},
+        'hard_blocker': {'type': 'noul', 'noul': .08},
+        'theory_role_intention': {
+          'type': 'choice',
+          'choice': 'protective',
+          'confidence': .86,
+          'probabilities': {
+            'protective': .86,
+            'key_blocker': .04,
+            'secondary_risk': .04,
+            'low_relevance': .04,
+            'uncertain': .02
+          }
+        },
+        'theory_role_action_planning': {
+          'type': 'choice',
+          'choice': 'key_blocker',
+          'confidence': .82,
+          'probabilities': {
+            'key_blocker': .82,
+            'secondary_risk': .10,
+            'protective': .02,
+            'low_relevance': .02,
+            'uncertain': .04
+          }
+        },
+        'theory_feedback_pattern': {
+          'type': 'choice',
+          'choice': 'intention_behavior_gap',
+          'confidence': .88,
+          'probabilities': {
+            'intention_behavior_gap': .88,
+            'multi_factor_conflict': .08,
+            'insufficient_evidence': .04
+          }
+        },
+        'dominant_failure_mode': {
+          'type': 'choice',
+          'choice': 'insufficient_evidence',
+          'confidence': .7,
+          'probabilities': {'insufficient_evidence': .7}
+        }
+      }
+    });
+    final roles = parsed['theory_factor_roles'] as Map;
+    expect(roles['intention']['choice'], 'protective');
+    expect(roles['action_planning']['choice'], 'key_blocker');
+    expect((parsed['theory_feedback_pattern'] as Map)['choice'],
+        'intention_behavior_gap');
+  });
+
   test('diagnostic evidence criteria keep missing separate from mixed', () {
     final request = EvidenceGrowthJev.actionRequest({
       'plan': '明早去体检',
@@ -623,6 +693,28 @@ void main() {
       'outcome': 'PENDING',
       'scheduled_at_ms': 1,
       'behavior_diagnosis': {
+        'theory_feedback_analysis': {
+          'factor_rows': [
+            {
+              'factor_id': 'implementation_intention',
+              'factor_label': '执行意图',
+              'option_label': '没有形成明确If-Then',
+              'jev_role': 'key_blocker',
+            }
+          ],
+          'core_conclusions': [
+            {
+              'id': 'intention_execution_gap',
+              'type': 'CORE_WEAKNESS',
+              'title': '意向存在，但启动联结不足',
+              'factor_ids': ['implementation_intention'],
+              'theory_ids': ['IMPLEMENTATION_INTENTION'],
+              'epistemic_status': 'MODERATE',
+              'correction': '形成明确If-Then',
+              'review_focus': '关键情境出现时是否立即启动',
+            }
+          ]
+        },
         'key_weaknesses': [
           {
             'key': 'implementation_intention',
@@ -649,6 +741,11 @@ void main() {
     expect((review['compare_keys'] as List),
         contains('implementation_intention'));
     expect((review['weakness_hypothesis_snapshot'] as List), hasLength(1));
+    expect((review['theory_conclusion_snapshot'] as List), hasLength(1));
+    expect(
+        (review['theory_conclusion_snapshot'] as List).first['factor_ids'],
+        contains('implementation_intention'));
+    expect((review['theory_factor_snapshot'] as List), hasLength(1));
   });
 
   test('diagnostic model distinguishes current bottleneck from repeated weakness', () {
