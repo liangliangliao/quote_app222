@@ -313,7 +313,7 @@ class EvidenceGrowthActionPredictionService {
           'next_change': journey.data['next_change'],
         },
     };
-    final profile = await _interpretAction(state);
+    var profile = await _interpretAction(state);
     if (profile['analysis_status'] != 'READY') return profile;
 
     final theorySelection = await _recommendTheories(state, profile);
@@ -322,6 +322,13 @@ class EvidenceGrowthActionPredictionService {
     final finalTheoryIds = autoSelectTheories
         ? _validTheoryIds(recommendedTheoryIds)
         : _validTheoryIds(selectedTheoryIds);
+
+    profile = await _adjudicateActionSpecificFactors(
+      state,
+      profile,
+      selectedTheoryIds: finalTheoryIds,
+      jevApiKey: jevApiKey.trim(),
+    );
 
     return _attachTheoryQuestionnaire(
       state,
@@ -1512,6 +1519,145 @@ class EvidenceGrowthActionPredictionService {
     return selected.isEmpty
         ? EvidenceBehaviorTheoryCatalog.defaultTheoryIds.toList()
         : selected;
+  }
+
+  Future<GrowthData> _adjudicateActionSpecificFactors(
+    GrowthData state,
+    GrowthData profile, {
+    required List<String> selectedTheoryIds,
+    required String jevApiKey,
+  }) async {
+    final candidates =
+        growthRows(profile['adaptive_dynamic_factors']).take(10).toList();
+    final preserved = growthRows(profile['selected_preserved_factors']);
+    final questionCandidates =
+        growthRows(profile['clarifying_questions']).take(8).toList();
+
+    if (candidates.isEmpty) {
+      return {
+        ...profile,
+        'dynamic_factor_selection_status': {
+          'status': 'NO_CANDIDATES',
+          'reason':
+              'LLM没有发现超出标准理论/原型因素之外、具有足够增量预测价值的行动特异因素。',
+        },
+        'adaptive_dynamic_factor_candidates': <GrowthData>[],
+        'rejected_dynamic_factors': <GrowthData>[],
+      };
+    }
+
+    GrowthData jevSelection = {
+      'status': 'LOCAL',
+      'reason': jevApiKey.isEmpty ? 'NO_KEY' : 'NOT_RUN',
+    };
+    if (jevApiKey.isNotEmpty) {
+      jevSelection = await _jev.assessDynamicFactorCandidates(
+        state: {
+          ...state,
+          'action_profile': {
+            'normalized_action': profile['normalized_action'],
+            'action_mode': profile['action_mode'],
+            'forecast_events': profile['forecast_events'],
+          }
+        },
+        profile: profile,
+        candidates: candidates,
+        selectedTheoryIds: selectedTheoryIds,
+        apiKey: jevApiKey,
+      );
+    }
+
+    final roles = growthMap(jevSelection['roles']);
+    final primary = growthMap(jevSelection['primary']);
+    final primaryKey = '${primary['choice'] ?? ''}';
+
+    final enriched = <GrowthData>[];
+    for (var i = 0; i < candidates.length; i++) {
+      final candidate = candidates[i];
+      final key = 'candidate_${i + 1}';
+      final role = growthMap(roles[key]);
+      final choice = '${role['choice'] ?? ''}';
+      final confidence = _prob(role['confidence']);
+      final llmRelevance = _prob(candidate['predictive_relevance']);
+      final selected = jevSelection['status'] == 'JEV' &&
+          ((choice == 'high_value' && (confidence ?? 0) >= .60) ||
+              (key == primaryKey &&
+                  const {'high_value', 'moderate_value'}.contains(choice) &&
+                  (confidence ?? 0) >= .60));
+
+      enriched.add({
+        ...candidate,
+        'jev_candidate_key': key,
+        'jev_predictive_role': choice,
+        'jev_role_confidence': confidence,
+        'jev_role_probabilities': growthMap(role['probabilities']),
+        'jev_primary_dynamic_factor': key == primaryKey,
+        'joint_selected': selected,
+        'source': selected ? 'AI_JEV_DYNAMIC' : candidate['source'],
+        'selection_method':
+            'LLM提出候选；JEV按增量预测价值、上游机制、当前行动特异性和去重规则独立裁决。',
+        'joint_priority_score': selected
+            ? ((choice == 'high_value' ? 2.0 : 1.0) +
+                (confidence ?? 0) +
+                (llmRelevance ?? 0))
+            : 0.0,
+      });
+    }
+
+    final selected = enriched.where((row) => row['joint_selected'] == true).toList()
+      ..sort((a, b) => ((b['joint_priority_score'] as num?)?.toDouble() ?? 0)
+          .compareTo((a['joint_priority_score'] as num?)?.toDouble() ?? 0));
+    final selectedLimited = selected.take(4).toList();
+    final selectedIds =
+        selectedLimited.map((row) => '${row['llm_candidate_id'] ?? ''}').where((e) => e.isNotEmpty).toSet();
+    final preservedIds = preserved
+        .map((row) => '${row['catalog_id'] ?? ''}')
+        .where((e) => e.isNotEmpty)
+        .toSet();
+
+    final filteredQuestions = <GrowthData>[];
+    for (final row in questionCandidates) {
+      final criticality = _prob(row['criticality']);
+      if (criticality == null || criticality < .60) continue;
+      final related = growthStrings(row['related_factor_ids']);
+      final relatedToKept = related.isEmpty
+          ? criticality >= .82
+          : related.any((id) =>
+              selectedIds.contains(id) || preservedIds.contains(id));
+      if (!relatedToKept) continue;
+      filteredQuestions.add({
+        ...row,
+        'selection_rule':
+            'LLM认为具高信息增益，且只保留与JEV通过的动态因素或重要原型因素相关的问题。',
+      });
+      if (filteredQuestions.length >= 4) break;
+    }
+
+    final rejected = enriched
+        .where((row) => row['joint_selected'] != true)
+        .toList();
+
+    return {
+      ...profile,
+      'dynamic_factor_selection_status': {
+        'status': jevSelection['status'] == 'JEV'
+            ? 'LLM_JEV_JOINT'
+            : 'LLM_CANDIDATES_UNADJUDICATED',
+        'jev_status': jevSelection['status'],
+        'jev_reason': jevSelection['reason'],
+        'primary_candidate_key': primaryKey,
+        'rule':
+            '只有JEV判为high_value，或被JEV选为primary且至少moderate_value、并达到最低自报置信度的候选，才升级为当前行动关键动态因素。',
+        'candidate_count': candidates.length,
+        'selected_count': selectedLimited.length,
+        'rejected_count': rejected.length,
+      },
+      'adaptive_dynamic_factor_candidates': enriched,
+      'adaptive_dynamic_factors': selectedLimited,
+      'rejected_dynamic_factors': rejected,
+      'clarifying_question_candidates': questionCandidates,
+      'clarifying_questions': filteredQuestions,
+    };
   }
 
   Future<GrowthData> _recommendTheories(
