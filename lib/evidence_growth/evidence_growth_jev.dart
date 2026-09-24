@@ -471,6 +471,26 @@ class EvidenceGrowthJev {
     }
 
     final selectedTheoryIds = growthStrings(state['selected_theories']);
+    final confirmedTheoryRows = <GrowthData>[];
+    for (final entry in sanitizedTheoryAnswers.entries) {
+      final factor = EvidenceBehaviorTheoryCatalog.factor(entry.key);
+      final answer = entry.value;
+      final optionId = '${answer['option_id'] ?? ''}';
+      final optionLabel = '${answer['option_label'] ?? ''}'.trim();
+      if (factor == null || optionId.isEmpty || optionId == 'unknown') continue;
+      confirmedTheoryRows.add({
+        'factor_id': entry.key,
+        'label': factor['label'],
+        'question': factor['question'],
+        'theory_ids': growthStrings(factor['theories'])
+            .where(selectedTheoryIds.contains)
+            .toList(),
+        'option_id': optionId,
+        'option_label': optionLabel,
+      });
+      if (confirmedTheoryRows.length >= 32) break;
+    }
+
     final expectedTheoryFactorIds = EvidenceBehaviorTheoryCatalog
         .activeFactors(selectedTheoryIds)
         .map((e) => '${e['id'] ?? ''}')
@@ -611,6 +631,48 @@ class EvidenceGrowthJev {
             }
           },
         },
+        for (final row in confirmedTheoryRows)
+          'theory_role_${row['factor_id']}': {
+            'type': 'choice',
+            'instructions':
+                'The user has explicitly confirmed this theory factor and option. Do NOT replace or reinterpret the answer. Judge what ROLE this confirmed factor state plays for the PRIMARY observable event in this specific action. Factor: ${row['label']}. Theories: ${(row['theory_ids'] as List).join(', ')}. User-confirmed option: "${row['option_label']}". Consider the original theory structure and supplied facts; do not force every theory into IBM and do not double-count overlapping constructs across theories.',
+            'criteria': {
+              'key_blocker':
+                  'This confirmed factor state is adverse/misaligned and is one of the most material current bottlenecks for the primary event.',
+              'secondary_risk':
+                  'This confirmed factor state is adverse/misaligned but is more likely a contributing or secondary risk than the central bottleneck.',
+              'protective':
+                  'This confirmed factor state materially supports execution of the primary event.',
+              'low_relevance':
+                  'The confirmed answer is valid, but this factor has little material relevance to the primary event in the present action.',
+              'uncertain':
+                  'Its role cannot be determined reliably from the supplied facts or depends strongly on unresolved interactions.'
+            }
+          },
+        if (confirmedTheoryRows.isNotEmpty)
+          'theory_feedback_pattern': {
+            'type': 'choice',
+            'instructions':
+                'Integrate ONLY the user-confirmed theory-factor feedback with the action contract and supplied facts. Choose the broad process pattern that best describes where the action system is currently vulnerable. This is an independent JEV synthesis, not a personality diagnosis. Do not mechanically average factors or theories. Give special attention to cross-factor contradictions such as strong intention with weak planning/control, strong reflective motivation with adverse automatic motivation, or adequate capability with blocked opportunity.',
+            'criteria': {
+              'intention_not_formed':
+                  'The main issue is that a sufficiently clear/strong intention or goal commitment has not formed.',
+              'intention_behavior_gap':
+                  'A meaningful intention exists, but planning, cue-response linkage, action control, self-regulation, coping, salience or competing automatic processes impede translation into behavior.',
+              'capability_opportunity_gap':
+                  'Capability, skill, physical/social opportunity, resources or actual control are the main constraints despite motivation.',
+              'automatic_motivation_conflict':
+                  'Emotional, habitual, impulsive or automatic motivation conflicts with reflective goals or intentions.',
+              'self_regulation_maintenance_gap':
+                  'Initiation may be possible, but monitoring, coping, maintenance, recovery or reinforcement processes are the main vulnerability.',
+              'multi_factor_conflict':
+                  'No single stage explains the evidence; several theory factors interact materially and should be treated as a combined conflict pattern.',
+              'no_major_theory_blocker':
+                  'The confirmed theory factors are mostly supportive or low relevance; no major theory-based blocker is established.',
+              'insufficient_evidence':
+                  'The confirmed factor feedback is too incomplete or contradictory to support one integrated process pattern.'
+            }
+          },
         'dominant_failure_mode': {
           'type': 'choice',
           'instructions':
@@ -724,6 +786,13 @@ class EvidenceGrowthJev {
           noul(entry.key);
     }
 
+    final theoryRoleAnswers = <String, GrowthData>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('theory_role_')) continue;
+      theoryRoleAnswers[entry.key.substring('theory_role_'.length)] =
+          choice(entry.key);
+    }
+
     return {
       'status': 'JEV',
       'model': body['model'],
@@ -734,6 +803,8 @@ class EvidenceGrowthJev {
       'factors': factorAnswers,
       'factor_evidence': evidenceAnswers,
       'factor_bottlenecks': bottleneckAnswers,
+      'theory_factor_roles': theoryRoleAnswers,
+      'theory_feedback_pattern': choice('theory_feedback_pattern'),
       'dominant_failure_mode': choice('dominant_failure_mode'),
       'most_decisive_missing_question':
           choice('most_decisive_missing_question'),
@@ -901,7 +972,7 @@ class EvidenceGrowthJev {
     if (utf8.encode(body).length > 64000) {
       return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
     }
-    final key = sha256.convert(utf8.encode('action-v5-diagnostics|$apiKey|$body')).toString();
+    final key = sha256.convert(utf8.encode('action-v6-theory-synthesis|$apiKey|$body')).toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
     final pending = _sendAction(body, apiKey);
