@@ -1909,7 +1909,7 @@ class _EvidenceGrowthActionPredictionPageState
             const SizedBox(height: 3),
             Text(
                 '决策状态：${_jointDecisionModeLabel(jointDecisionMode)}'
-                '${source == 'JEV_PRIMARY' ? ' · 概率来自JEV主事件判断' : ' · 当前概率不是JEV正式主判断'}',
+                '${source == 'JEV_FINAL_SYNTHESIS' ? ' · 概率来自JEV最终联合裁决' : source == 'JEV_PRIMARY' ? ' · 概率来自JEV第一阶段主事件判断' : ' · 当前概率不是JEV正式判断'}',
                 style: const TextStyle(
                     fontSize: 11, color: Colors.black54)),
             const SizedBox(height: 8),
@@ -1934,18 +1934,22 @@ class _EvidenceGrowthActionPredictionPageState
             LinearProgressIndicator(value: estimate!.toDouble()),
             const SizedBox(height: 10),
             Text(
-                source == 'JEV_PRIMARY'
-                    ? '主预测来源：JEV typed workflow'
-                    : source == 'AI_FALLBACK'
-                        ? '主预测来源：LLM（JEV当前不可用）'
-                        : '主预测来源：个人历史基线',
+                source == 'JEV_FINAL_SYNTHESIS'
+                    ? '主预测来源：JEV最终联合裁决（已读取LLM综合 + 理论问卷 + 用户事实）'
+                    : source == 'JEV_PRIMARY'
+                        ? '主预测来源：JEV第一阶段 typed workflow'
+                        : source == 'AI_FALLBACK'
+                            ? '主预测来源：LLM（JEV当前不可用）'
+                            : '主预测来源：个人历史基线',
                 style: const TextStyle(
                     fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 5),
             Text(
-                source == 'JEV_PRIMARY'
-                    ? '这个总百分数来自JEV对“主预测事件”的直接概率判断，不是把下面各因素评分做加权平均。'
-                    : '这个总百分数不是由下面各因素评分简单相加得到。',
+                source == 'JEV_FINAL_SYNTHESIS'
+                    ? '这个总百分数由JEV在最终裁决阶段重新判断：它同时读取用户输入、已确认理论问卷、JEV第一阶段结果与LLM综合分析；不是把两个模型的数字做平均。'
+                    : source == 'JEV_PRIMARY'
+                        ? '这个总百分数来自JEV第一阶段对“主预测事件”的直接概率判断，不是把下面各因素评分做加权平均。'
+                        : '这个总百分数不是由下面各因素评分简单相加得到。',
                 style: const TextStyle(
                     fontSize: 11, color: Colors.black54)),
             if (source == 'HISTORY_ONLY') ...[
@@ -1973,7 +1977,7 @@ class _EvidenceGrowthActionPredictionPageState
                     style: TextStyle(
                         fontSize: 11, color: Colors.black54))
             ],
-            if (source == 'JEV_PRIMARY') ...[
+            if (source == 'JEV_PRIMARY' || source == 'JEV_FINAL_SYNTHESIS') ...[
               const SizedBox(height: 12),
               Wrap(
                   spacing: 8,
@@ -2011,7 +2015,7 @@ class _EvidenceGrowthActionPredictionPageState
                   Text('已知证据：$dominantEvidence',
                       style: const TextStyle(
                           fontSize: 12, color: Colors.black54))
-              ] else if (source == 'JEV_PRIMARY') ...[
+              ] else if (source == 'JEV_PRIMARY' || source == 'JEV_FINAL_SYNTHESIS') ...[
                 const SizedBox(height: 10),
                 const Text(
                     'JEV 目前没有同时满足“有不利证据 + 能构成现实瓶颈”的单一风险路径，因此不强行给出原因标签。',
