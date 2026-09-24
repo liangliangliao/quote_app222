@@ -1719,6 +1719,29 @@ class _EvidenceGrowthActionPredictionPageState
                     style: TextStyle(
                         fontSize: 12, color: Colors.black54, height: 1.4))
               ],
+              if (theoryFactorRows.isNotEmpty)
+                ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('查看全部已确认理论因素与JEV角色',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text(
+                        '用于核对综合结论有没有遗漏或错误使用你的问卷反馈'),
+                    children: [
+                      for (final row in theoryFactorRows)
+                        ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                                '${row['factor_label'] ?? row['factor_id']}：${row['option_label'] ?? ''}'),
+                            subtitle: Text(
+                                '理论：${growthStrings(row['theory_ids']).join(' + ')}'
+                                '${row['selection_source'] == 'AUTO_LLM_JEV' ? ' · 最初由LLM+JEV预填，提交时进入本次反馈' : ' · 用户选择'}'),
+                            trailing: Text(
+                                '${_theoryRoleLabel(row['jev_role'])}'
+                                '${row['jev_role_confidence'] is num ? '\n${_pct(row['jev_role_confidence'])}' : ''}',
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(fontSize: 10)))
+                    ]),
               if (theoryInteractions.isNotEmpty)
                 ExpansionTile(
                     tilePadding: EdgeInsets.zero,
