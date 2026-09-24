@@ -2385,6 +2385,15 @@ class _EvidenceGrowthActionPredictionPageState
   Widget _factorDetails() {
     if (result.isEmpty) return const SizedBox.shrink();
     final entries = growthMap(result['factors']).entries.toList();
+    final diagnosis = growthMap(result['behavior_diagnosis']);
+    final theoryFeedback =
+        growthMap(diagnosis['theory_feedback_analysis']);
+    final theoryFactorRows = growthRows(theoryFeedback['factor_rows']);
+    final jointConclusions = growthRows(theoryFeedback['core_conclusions']);
+    final jointFactorIds = <String>{
+      for (final row in jointConclusions)
+        ...growthStrings(row['factor_ids'])
+    };
 
     int compareRows(MapEntry<String, dynamic> a, MapEntry<String, dynamic> b) {
       final ar = growthMap(a.value);
@@ -2413,6 +2422,10 @@ class _EvidenceGrowthActionPredictionPageState
       final rawBottleneck = row['raw_bottleneck_probability'];
       final bottleneckConflict = row['bottleneck_evidence_conflict'] == true;
       final construct = '${row['theory_construct'] ?? entry.key}';
+      final group = '${row['theory_group'] ?? ''}';
+      final directBottleneckApplicable = row['is_dynamic'] == true ||
+          group == 'DIRECT_BEHAVIOR' ||
+          group == 'VOLITIONAL_EXTENSION';
       final mapped = row['is_dynamic'] == true
           ? ' · 归入：${_constructLabel(construct)}'
           : '';
@@ -2422,13 +2435,17 @@ class _EvidenceGrowthActionPredictionPageState
           title: Text('${row['label'] ?? entry.key}'),
           subtitle: Text(row['unknown'] == true
               ? '证据不足 · 不把未知当中性或阻碍$mapped'
-              : bottleneck is num
-                  ? '$evidenceState · JEV有效瓶颈判断：${_bottleneckLabel(bottleneck)} ${_pct(bottleneck)}$mapped'
-                  : bottleneckConflict && rawBottleneck is num
-                      ? '$evidenceState · JEV原始瓶颈值 ${_pct(rawBottleneck)} 与证据状态冲突，未采纳$mapped'
-                      : source == 'USER_CONFIRMED_THEORY'
-                          ? '$evidenceState · 用户确认标准选项$mapped'
-                          : '$state · $source$mapped'),
+              : directBottleneckApplicable && bottleneck is num
+                  ? '$evidenceState · JEV第一阶段独立瓶颈判断：${_bottleneckLabel(bottleneck)} ${_pct(bottleneck)}$mapped'
+                  : directBottleneckApplicable &&
+                          bottleneckConflict &&
+                          rawBottleneck is num
+                      ? '$evidenceState · 瓶颈值与证据冲突，未采纳$mapped'
+                      : !directBottleneckApplicable
+                          ? '$evidenceState · 上游意向形成因素；不再计算“直接行为瓶颈”$mapped'
+                          : source == 'USER_CONFIRMED_THEORY'
+                              ? '$evidenceState · 用户确认标准选项$mapped'
+                              : '$state · $source$mapped'),
           children: [
             Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -2440,18 +2457,20 @@ class _EvidenceGrowthActionPredictionPageState
                       Text('证据状态：$evidenceState',
                           style: const TextStyle(
                               fontWeight: FontWeight.w700)),
-                      if (bottleneck is num) ...[
+                      if (directBottleneckApplicable &&
+                          bottleneck is num) ...[
                         const SizedBox(height: 3),
                         Text(
-                            'JEV有效瓶颈判断：${_pct(bottleneck)} · ${_bottleneckLabel(bottleneck)}',
+                            'JEV第一阶段独立瓶颈判断：${_pct(bottleneck)} · ${_bottleneckLabel(bottleneck)}',
                             style: const TextStyle(
                                 fontWeight: FontWeight.w700)),
                         const SizedBox(height: 3),
                         const Text(
-                            '这里的百分比是JEV对“当前是否构成现实瓶颈”的typed noul，不是置信度、因果效应大小、理论权重或成功概率。',
+                            '这个数值直接来自JEV对“该直接/执行因素当前是否构成现实瓶颈”的typed noul。它读取用户事实、理论问卷与行动上下文，但不是LLM+JEV加权综合分，也不是因果效应大小、理论权重或最终行动成功概率。',
                             style: TextStyle(
                                 fontSize: 12, color: Colors.black54))
-                      ] else if (bottleneckConflict &&
+                      ] else if (directBottleneckApplicable &&
+                          bottleneckConflict &&
                           rawBottleneck is num) ...[
                         const SizedBox(height: 3),
                         Text(
@@ -2461,7 +2480,13 @@ class _EvidenceGrowthActionPredictionPageState
                                 color: Colors.orange)),
                         const SizedBox(height: 3),
                         const Text(
-                            '规则：支持性证据或证据不足时，不应同时判成“当前瓶颈”。原始JEV值保留用于审计，但不会进入关键阻碍排序或最终瓶颈结论。',
+                            '规则：支持性证据或证据不足时，不应同时判成“当前瓶颈”。原始JEV值只保留用于审计，不进入关键阻碍排序或最终瓶颈结论。',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.black54))
+                      ] else if (!directBottleneckApplicable) ...[
+                        const SizedBox(height: 3),
+                        const Text(
+                            '该因素属于意向形成/上游解释层。它应通过用户理论答案、JEV理论角色与最终LLM+JEV联合结论判断其作用，而不是用“直接行为瓶颈百分比”表达。',
                             style: TextStyle(
                                 fontSize: 12, color: Colors.black54))
                       ],
@@ -2514,7 +2539,6 @@ class _EvidenceGrowthActionPredictionPageState
     }
 
     const groupOrder = [
-      'INTENTION_FORMATION',
       'DIRECT_BEHAVIOR',
       'VOLITIONAL_EXTENSION'
     ];
