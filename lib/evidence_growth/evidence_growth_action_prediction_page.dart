@@ -467,14 +467,6 @@ class _EvidenceGrowthActionPredictionPageState
     return '需优先修';
   }
 
-  String _confidenceLabel(Object? value) {
-    if (value is! num) return '未知';
-    final v = value.toDouble();
-    if (v >= .8) return '高';
-    if (v >= .6) return '中';
-    return '低';
-  }
-
   String _evidenceStateLabel(Object? value) => const {
         'adverse': '已有不利证据',
         'mixed': '证据混合／不稳定',
