@@ -226,6 +226,21 @@ class EvidenceGrowthJev {
     'Strongly supports execution under the stated facts.'
   ];
 
+  /// Diagnostic evidence state is deliberately separate from the 0..4 support
+  /// score. A center score may mean either genuinely mixed evidence or simply
+  /// missing evidence; collapsing those two cases made the old "key barrier"
+  /// list look more certain than the facts justified.
+  static const _diagnosticEvidenceCriteria = <String, String>{
+    'adverse':
+        'Explicit supplied facts establish that the current state of this factor is unfavorable for the primary event.',
+    'mixed':
+        'Explicit supplied facts establish a genuinely mixed, unstable, or conflicting state for this factor.',
+    'supportive':
+        'Explicit supplied facts establish that the current state of this factor supports the primary event.',
+    'insufficient':
+        'The supplied facts do not establish the current state of this factor. Missing evidence is not neutrality and is not a blocker.'
+  };
+
   static String _safeId(Object? raw, {String fallback = 'item'}) {
     final text = '$raw'
         .toLowerCase()
@@ -536,24 +551,60 @@ class EvidenceGrowthJev {
                 'No concrete objective blocker to the primary event is established by supplied facts.'
           }
         },
-        for (final key in core)
+        for (final key in core) ...{
           'factor_$key': {
             'type': 'score',
             'instructions':
                 'Rate how much this generally applicable condition supports the PRIMARY forecast event: ${actionFactors[key]} ${confirmedTheoryEvidence(key)} Use only supplied facts and the action contract. If the user has explicitly confirmed a standardized option, do not describe that construct as missing. If evidence is missing, use the center score only as JEV typed representation of insufficient evidence; do not treat that center value as observed neutrality or as a numeric contribution to the final probability.',
             'criteria': _supportRubric,
           },
-        for (final row in dynamicRows)
+          'evidence_$key': {
+            'type': 'choice',
+            'instructions':
+                'Classify the CURRENT EVIDENCE STATE for this factor, not its importance and not the final behavior probability. ${confirmedTheoryEvidence(key)} Use only explicit supplied facts. Distinguish genuinely mixed evidence from missing evidence. If the current state is not established, choose insufficient.',
+            'criteria': _diagnosticEvidenceCriteria,
+          },
+          'bottleneck_$key': {
+            'type': 'noul',
+            'instructions':
+                'Given only the supplied facts, is this factor CURRENTLY a material bottleneck for the PRIMARY event? True requires BOTH: (1) an adverse or genuinely mixed current state is supported by evidence, and (2) that state is relevant enough to materially prevent, delay, or displace the primary event. Missing evidence, a merely possible problem, or a supportive state is false. This is a diagnostic bottleneck judgement, not a causal proof and not a fixed theory weight.',
+            'criteria': {
+              'true':
+                  'Current adverse/mixed evidence plus action relevance jointly support treating this factor as a material bottleneck for the primary event.',
+              'false':
+                  'The factor is supportive, not established, only speculative, or not material enough to count as a current bottleneck.'
+            }
+          },
+        },
+        for (final row in dynamicRows) ...{
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
                 'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence may use the center score only as JEV typed representation of insufficient evidence; it is not observed neutrality and must not contribute as a fixed numeric weight to the final event probability.',
             'criteria': _supportRubric,
           },
+          'evidence_dynamic_${row['id']}': {
+            'type': 'choice',
+            'instructions':
+                'Classify the CURRENT EVIDENCE STATE for this action-specific condition: ${row['condition']} Use only explicit supplied facts. Distinguish genuinely mixed evidence from missing evidence. If the current state is not established, choose insufficient.',
+            'criteria': _diagnosticEvidenceCriteria,
+          },
+          'bottleneck_dynamic_${row['id']}': {
+            'type': 'noul',
+            'instructions':
+                'Given only the supplied facts, is this action-specific condition CURRENTLY a material bottleneck for the PRIMARY event? True requires explicit adverse/mixed evidence and a credible direct path to preventing, delaying, or displacing the primary event. Missing evidence or mere plausibility is false.',
+            'criteria': {
+              'true':
+                  'Current evidence supports this condition as a material bottleneck for the primary event.',
+              'false':
+                  'This condition is supportive, not established, speculative, or not material enough to be a current bottleneck.'
+            }
+          },
+        },
         'dominant_failure_mode': {
           'type': 'choice',
           'instructions':
-              'If the PRIMARY forecast event fails, choose the single most evidence-supported dominant cause. Give priority to explicit user-confirmed standardized answers and concrete observed facts. Do not choose a speculative mechanism merely because it is plausible. If evidence does not clearly support one mechanism, choose insufficient_evidence.',
+              'Choose the single CURRENT RISK PATHWAY that is best supported by the supplied evidence for the PRIMARY event. Do not invent a post-hoc cause. A pathway should be selected only when there is direct adverse/mixed evidence and it plausibly connects to a current material bottleneck; a mechanism that is merely possible is not enough. Give priority to explicit user-confirmed standardized answers and concrete observed facts. If the evidence does not clearly support one pathway, choose insufficient_evidence.',
           'criteria': {
             for (final row in failures) '${row['id']}': '${row['criterion']}'
           }
@@ -649,6 +700,20 @@ class EvidenceGrowthJev {
           score(entry.key);
     }
 
+    final evidenceAnswers = <String, GrowthData>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('evidence_')) continue;
+      evidenceAnswers[entry.key.substring('evidence_'.length)] =
+          choice(entry.key);
+    }
+
+    final bottleneckAnswers = <String, double>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('bottleneck_')) continue;
+      bottleneckAnswers[entry.key.substring('bottleneck_'.length)] =
+          noul(entry.key);
+    }
+
     return {
       'status': 'JEV',
       'model': body['model'],
@@ -657,6 +722,8 @@ class EvidenceGrowthJev {
       'overall': eventAnswers.values.first,
       'hard_blocker': noul('hard_blocker'),
       'factors': factorAnswers,
+      'factor_evidence': evidenceAnswers,
+      'factor_bottlenecks': bottleneckAnswers,
       'dominant_failure_mode': choice('dominant_failure_mode'),
       'most_decisive_missing_question':
           choice('most_decisive_missing_question'),
@@ -824,7 +891,7 @@ class EvidenceGrowthJev {
     if (utf8.encode(body).length > 64000) {
       return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
     }
-    final key = sha256.convert(utf8.encode('action-v4|$apiKey|$body')).toString();
+    final key = sha256.convert(utf8.encode('action-v5-diagnostics|$apiKey|$body')).toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
     final pending = _sendAction(body, apiKey);
