@@ -526,10 +526,44 @@ class EvidenceGrowthActionPredictionService {
     final ai = await _aiAssessment(state);
     GrowthData jev = {'status': 'LOCAL', 'reason': 'JEV_NOT_CONFIGURED'};
     if (jevApiKey.trim().isNotEmpty) {
-      // Keep JEV independent from the LLM. It sees the same raw state but not
-      // the LLM's intermediate scores or conclusions, avoiding anchoring.
+      // First-pass JEV remains independent from the LLM. It receives the raw
+      // user-confirmed theory answers and action facts, not the LLM's
+      // conclusions. A later LLM synthesis may compare both outputs.
       jev = await _jev.assessAction(state, apiKey: jevApiKey.trim());
     }
+
+    final jevTheoryRoles = growthMap(jev['theory_factor_roles']);
+    final theoryFeedbackRows = <GrowthData>[];
+    for (final item in theoryQuestionnaire) {
+      final factorId = '${item['id'] ?? ''}'.trim();
+      if (factorId.isEmpty) continue;
+      final answer = growthMap(theoryFactorAnswers[factorId]);
+      if (answer.isEmpty) continue;
+      final optionId = '${answer['option_id'] ?? ''}'.trim();
+      final optionLabel = '${answer['option_label'] ?? ''}'.trim();
+      final role = growthMap(jevTheoryRoles[factorId]);
+      theoryFeedbackRows.add({
+        'factor_id': factorId,
+        'factor_label': item['label'],
+        'question': item['question'],
+        'theory_ids': growthStrings(item['theory_ids']),
+        'option_id': optionId,
+        'option_label': optionLabel,
+        'confirmed_by_user': answer['confirmed_by_user'] == true,
+        'ordinal_level':
+            EvidenceBehaviorTheoryCatalog.ordinalLevel(factorId, optionId),
+        'jev_role': role['choice'] ?? '',
+        'jev_role_confidence': _prob(role['confidence']),
+        'jev_role_probabilities': growthMap(role['probabilities']),
+      });
+    }
+    final theoryFeedbackSynthesis = await _synthesizeTheoryFeedback(
+      state: state,
+      profile: profile,
+      aiAssessment: ai,
+      jevAssessment: jev,
+      theoryFeedbackRows: theoryFeedbackRows,
+    );
 
     final aiEstimate = _prob(ai['execution_likelihood']);
     final eventProbabilities = growthMap(jev['events']);
@@ -2133,6 +2167,292 @@ ${jsonEncode({
         'clarifying_questions': <GrowthData>[],
         'failure_modes': <GrowthData>[],
       };
+
+  Future<GrowthData> _synthesizeTheoryFeedback({
+    required GrowthData state,
+    required GrowthData profile,
+    required GrowthData aiAssessment,
+    required GrowthData jevAssessment,
+    required List<GrowthData> theoryFeedbackRows,
+  }) async {
+    if (theoryFeedbackRows.isEmpty) {
+      return {
+        'status': 'LOCAL',
+        'reason': 'NO_CONFIRMED_THEORY_FEEDBACK',
+        'integrated_pattern': '',
+        'core_conclusions': <GrowthData>[],
+        'interactions': <GrowthData>[],
+        'unknowns': <String>[],
+      };
+    }
+
+    final selectedTheoryIds = growthStrings(state['selected_theories']);
+    final theoryDetails =
+        EvidenceBehaviorTheoryCatalog.theoryRows(selectedTheoryIds);
+    final jevPattern = growthMap(jevAssessment['theory_feedback_pattern']);
+
+    UnifiedAiResolvedConfig config;
+    try {
+      config = await _ai.resolveGlobalConfig();
+    } catch (_) {
+      return _localTheoryFeedbackSynthesis(
+        theoryFeedbackRows,
+        jevPattern: jevPattern,
+        reason: 'AI_CONFIG_UNAVAILABLE',
+      );
+    }
+    if (!config.available) {
+      return _localTheoryFeedbackSynthesis(
+        theoryFeedbackRows,
+        jevPattern: jevPattern,
+        reason: 'AI_NOT_CONFIGURED',
+      );
+    }
+
+    try {
+      final raw = await _ai.generateText(
+        purpose: 'evidence_growth.action_prediction.theory_feedback_synthesis',
+        systemPrompt: '''
+你是“行为理论反馈综合诊断器”。你的核心任务不是重新给问卷打分，而是基于用户已经亲自确认的理论关键因素，结合JEV独立typed判断和当前行动事实，形成对“为什么这次行动容易成功/失败”的综合结论。
+
+证据优先级：
+1. 用户确认的 theory factor option 是一等证据，不能被LLM/JEV改写成相反选项。
+2. JEV theory role 是对该已确认因素在当前行动中的角色判断，可用于判断它更像关键阻碍、次要风险、保护因素或低相关；JEV不是因果真理。
+3. 用户原始行动事实、相似历史和已确认补充信息。
+4. 第一阶段LLM分析只能作为交叉解释，不能覆盖以上证据。
+
+必须做到：
+- 保留各理论自己的结构。TPB、IBM、COM-B、SCT、HAPA、执行意图不能全部压成IBM字段。
+- 真正“综合”多个因素：优先寻找因素之间的组合关系、矛盾和阶段断裂，而不是逐项复述问卷。
+- 典型但非强制模式包括：意向强但计划/行动控制弱；反思性动机强但自动性动机拉向相反方向；能力够但机会不足；结果价值高但自我效能低；能启动但维持/恢复机制弱。
+- 同一个心理构念被多个理论重复测量时，只作为同一证据链的交叉支持，禁止机械重复计数。
+- “关键弱点”必须说明：哪些用户确认因素共同支持、JEV是否一致、为什么它能解释当前行为断点、有什么反证/替代解释。
+- 不把一次状态写成人格标签；使用“当前模式/本次关键弱点假设/反复模式（仅有历史证据时）”。
+- 必须给后续改正和复盘留下可验证项。
+- 如果证据冲突或不足，要明确写出来，不强行得出单一结论。
+- 不输出隐藏推理过程，只输出结构化结论。
+- 只输出JSON。
+
+结论类型：
+CORE_WEAKNESS = 当前最关键的弱点/断点假设
+INTERACTION = 多因素相互作用或冲突
+PROTECTIVE = 明显保护因素
+UNCERTAINTY = 仍需补证据的重要问题
+''',
+        prompt: '''ACTION:
+${jsonEncode({
+          'plan': state['plan'],
+          'scheduled_at': state['scheduled_at'],
+          'additional_notes': state['additional_notes'],
+          'similar_history_report': state['similar_history_report'],
+          'normalized_action': profile['normalized_action'],
+          'action_mode': profile['action_mode'],
+          'forecast_events': profile['forecast_events'],
+        })}
+
+SELECTED_THEORIES:
+${jsonEncode(theoryDetails)}
+
+USER_CONFIRMED_THEORY_FEEDBACK_WITH_JEV_ROLE:
+${jsonEncode(theoryFeedbackRows)}
+
+JEV_INTEGRATED_PATTERN:
+${jsonEncode(jevPattern)}
+
+JEV_PRIMARY:
+${jsonEncode({
+          'overall': jevAssessment['overall'],
+          'dominant_failure_mode': jevAssessment['dominant_failure_mode'],
+          'hard_blocker': jevAssessment['hard_blocker'],
+        })}
+
+LLM_FIRST_PASS_CROSSCHECK:
+${jsonEncode({
+          'summary': aiAssessment['summary'],
+          'headline_reason': aiAssessment['headline_reason'],
+          'failure_modes': aiAssessment['failure_modes'],
+        })}
+
+返回：
+{
+  "integrated_pattern":"一句话描述由多个理论因素共同形成的当前行为模式",
+  "pattern_explanation":"2-4句，说明从哪些用户确认因素组合出这个模式，以及JEV是否支持",
+  "core_conclusions":[
+    {
+      "id":"short_id",
+      "type":"CORE_WEAKNESS|INTERACTION|PROTECTIVE|UNCERTAINTY",
+      "title":"自然中文结论",
+      "factor_ids":["必须来自USER_CONFIRMED_THEORY_FEEDBACK_WITH_JEV_ROLE"],
+      "theory_ids":["必须来自SELECTED_THEORIES"],
+      "epistemic_status":"STRONG|MODERATE|TENTATIVE",
+      "mechanism":"因素之间如何共同影响当前行为",
+      "why_key":"为什么它比单独某个低分更关键",
+      "counterevidence":"已有反证、冲突或尚未排除的替代解释；没有则写空字符串",
+      "correction":"针对这个综合模式最优先改变的1个具体抓手",
+      "review_focus":"现实结果回来后最应该验证什么"
+    }
+  ],
+  "interactions":[
+    {
+      "factor_ids":[],
+      "label":"例如：意向—执行鸿沟",
+      "description":"两个或多个用户确认因素之间的关系"
+    }
+  ],
+  "unknowns":["最多4条真正限制结论可靠性的未知信息"],
+  "bottom_line":"1-2句最终综合结论，优先回答：这次最可能卡在哪里、用户真正需要改什么"
+}''',
+        expectJson: true,
+        temperature: .08,
+        maxTokens: 2300,
+      ).timeout(const Duration(seconds: 28));
+
+      final decoded = _decode(raw);
+      final validFactorIds =
+          theoryFeedbackRows.map((e) => '${e['factor_id']}').toSet();
+      final validTheoryIds = selectedTheoryIds.toSet();
+      final conclusions = <GrowthData>[];
+      for (final row in growthRows(decoded['core_conclusions']).take(6)) {
+        final ids = growthStrings(row['factor_ids'])
+            .where(validFactorIds.contains)
+            .toSet()
+            .toList();
+        if (ids.isEmpty) continue;
+        final type = '${row['type'] ?? ''}'.toUpperCase();
+        final epistemic =
+            '${row['epistemic_status'] ?? 'TENTATIVE'}'.toUpperCase();
+        conclusions.add({
+          'id': _cleanUserText('${row['id'] ?? ''}'),
+          'type': const {
+            'CORE_WEAKNESS',
+            'INTERACTION',
+            'PROTECTIVE',
+            'UNCERTAINTY'
+          }.contains(type)
+              ? type
+              : 'INTERACTION',
+          'title': _cleanUserText('${row['title'] ?? ''}'),
+          'factor_ids': ids,
+          'theory_ids': growthStrings(row['theory_ids'])
+              .where(validTheoryIds.contains)
+              .toSet()
+              .toList(),
+          'epistemic_status':
+              const {'STRONG', 'MODERATE', 'TENTATIVE'}.contains(epistemic)
+                  ? epistemic
+                  : 'TENTATIVE',
+          'mechanism': _cleanUserText('${row['mechanism'] ?? ''}'),
+          'why_key': _cleanUserText('${row['why_key'] ?? ''}'),
+          'counterevidence':
+              _cleanUserText('${row['counterevidence'] ?? ''}'),
+          'correction': _cleanUserText('${row['correction'] ?? ''}'),
+          'review_focus':
+              _cleanUserText('${row['review_focus'] ?? ''}'),
+        });
+      }
+
+      final interactions = <GrowthData>[];
+      for (final row in growthRows(decoded['interactions']).take(6)) {
+        final ids = growthStrings(row['factor_ids'])
+            .where(validFactorIds.contains)
+            .toSet()
+            .toList();
+        if (ids.length < 2) continue;
+        interactions.add({
+          'factor_ids': ids,
+          'label': _cleanUserText('${row['label'] ?? ''}'),
+          'description':
+              _cleanUserText('${row['description'] ?? ''}'),
+        });
+      }
+
+      return {
+        'status': 'AI_SYNTHESIS',
+        'model': config.displayModel,
+        'integrated_pattern':
+            _cleanUserText('${decoded['integrated_pattern'] ?? ''}'),
+        'pattern_explanation':
+            _cleanUserText('${decoded['pattern_explanation'] ?? ''}'),
+        'bottom_line':
+            _cleanUserText('${decoded['bottom_line'] ?? ''}'),
+        'core_conclusions': conclusions,
+        'interactions': interactions,
+        'unknowns': growthStrings(decoded['unknowns'])
+            .map(_cleanUserText)
+            .where((e) => e.isNotEmpty)
+            .take(4)
+            .toList(),
+        'jev_pattern': jevPattern,
+      };
+    } catch (_) {
+      return _localTheoryFeedbackSynthesis(
+        theoryFeedbackRows,
+        jevPattern: jevPattern,
+        reason: 'AI_SYNTHESIS_FAILED',
+      );
+    }
+  }
+
+  GrowthData _localTheoryFeedbackSynthesis(
+    List<GrowthData> rows, {
+    required GrowthData jevPattern,
+    required String reason,
+  }) {
+    final priorities = rows.where((row) {
+      final role = '${row['jev_role'] ?? ''}';
+      final ordinal = row['ordinal_level'];
+      return role == 'key_blocker' ||
+          role == 'secondary_risk' ||
+          (ordinal is num && ordinal.toInt() <= 1);
+    }).toList()
+      ..sort((a, b) {
+        int rank(GrowthData row) {
+          final role = '${row['jev_role'] ?? ''}';
+          if (role == 'key_blocker') return 3;
+          if (role == 'secondary_risk') return 2;
+          final ordinal = row['ordinal_level'];
+          return ordinal is num && ordinal.toInt() <= 1 ? 1 : 0;
+        }
+        final r = rank(b).compareTo(rank(a));
+        if (r != 0) return r;
+        return ((_prob(b['jev_role_confidence']) ?? 0)
+            .compareTo(_prob(a['jev_role_confidence']) ?? 0));
+      });
+
+    return {
+      'status': 'LOCAL_SYNTHESIS',
+      'reason': reason,
+      'integrated_pattern': '${jevPattern['choice'] ?? ''}',
+      'pattern_explanation':
+          '当前无法完成LLM二次综合；以下只按用户确认理论因素与JEV独立角色判断保留候选，不推断隐藏心理原因。',
+      'bottom_line': priorities.isEmpty
+          ? '用户确认的理论因素中暂未形成一个足够明确的核心阻碍。'
+          : '当前最应优先核对：${priorities.take(3).map((e) => e['factor_label']).join('、')}。',
+      'core_conclusions': [
+        for (final row in priorities.take(4))
+          {
+            'id': 'factor_${row['factor_id']}',
+            'type': 'CORE_WEAKNESS',
+            'title':
+                '${row['factor_label']}：${row['option_label']}',
+            'factor_ids': [row['factor_id']],
+            'theory_ids': row['theory_ids'],
+            'epistemic_status':
+                row['jev_role'] == 'key_blocker' ? 'MODERATE' : 'TENTATIVE',
+            'mechanism': '',
+            'why_key':
+                '这是用户确认的理论因素；JEV角色判断为${row['jev_role'] ?? '未判断'}。',
+            'counterevidence': '',
+            'correction': '',
+            'review_focus':
+                '现实结果回来后检查该因素是否真的出现在行动断点之前。',
+          }
+      ],
+      'interactions': <GrowthData>[],
+      'unknowns': <String>[],
+      'jev_pattern': jevPattern,
+    };
+  }
 
   Future<GrowthData> _aiAssessment(GrowthData state) async {
     UnifiedAiResolvedConfig config;
