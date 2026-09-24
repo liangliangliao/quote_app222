@@ -484,6 +484,21 @@ class _EvidenceGrowthActionPredictionPageState
     return '目前不像主要瓶颈';
   }
 
+  String _weaknessClassLabel(Object? value) => const {
+        'RECURRING_WEAKNESS': '相似失败中反复出现',
+        'CURRENT_BOTTLENECK': '本次关键瓶颈',
+      }['$value'] ??
+      '待验证';
+
+  String _coverageStatusLabel(Object? value) => const {
+        'RISK': '已发现风险',
+        'SUPPORT': '已有支持',
+        'KNOWN': '已有事实',
+        'UNKNOWN': '证据不足',
+        'NOT_RELEVANT_OR_NOT_SELECTED': '当前未进入重点',
+      }['$value'] ??
+      '$value';
+
   IconData _factorIcon(GrowthData row) {
     if (row['unknown'] == true || row['display_score'] == null) {
       return Icons.help_outline;
@@ -1469,10 +1484,169 @@ class _EvidenceGrowthActionPredictionPageState
     final diagnosticUnknowns = growthRows(diagnostic['unknowns']);
     final usesJevBottleneck =
         diagnostic['uses_jev_bottleneck_judgement'] == true;
+    final behaviorDiagnosis = growthMap(result['behavior_diagnosis']);
+    final diagnosisHeadline =
+        '${behaviorDiagnosis['headline'] ?? ''}'.trim();
+    final weaknessRows = growthRows(behaviorDiagnosis['key_weaknesses']);
+    final failureChainRows = growthRows(behaviorDiagnosis['failure_chain']);
+    final coverageRows = growthRows(behaviorDiagnosis['coverage']);
+    final coverageSummary =
+        growthMap(behaviorDiagnosis['coverage_summary']);
+    final reviewBlueprint =
+        growthMap(behaviorDiagnosis['review_blueprint']);
+    final reviewQuestions = growthStrings(reviewBlueprint['questions']);
 
     return _section(
         '本次预测',
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (behaviorDiagnosis.isNotEmpty) ...[
+            const Text('行为诊断结论（核心）',
+                style: TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            const Text(
+                '这里的目标不是只给一个百分比，而是找出这次行动最可能先断在哪里、哪些弱点正在反复出现，以及下一次复盘要验证什么。',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.black54, height: 1.4)),
+            if (diagnosisHeadline.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(diagnosisHeadline,
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w900))
+            ],
+            if (weaknessRows.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              for (var i = 0; i < weaknessRows.length; i++)
+                Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                        border: Border.all(
+                            color: _teal.withValues(alpha: .25)),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Expanded(
+                                child: Text(
+                                    '${i + 1}. ${weaknessRows[i]['label'] ?? ''}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900))),
+                            const SizedBox(width: 6),
+                            Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(
+                                    _weaknessClassLabel(
+                                        weaknessRows[i]['classification']),
+                                    style: const TextStyle(fontSize: 10)))
+                          ]),
+                          Text(
+                              '行动环节：${weaknessRows[i]['stage'] ?? '行动过程'}'
+                              '${(weaknessRows[i]['past_recurrence_count'] as num?)?.toInt() != null && (weaknessRows[i]['past_recurrence_count'] as num).toInt() > 0 ? ' · 相似失败中出现 ${(weaknessRows[i]['past_recurrence_count'] as num).toInt()} 次' : ''}',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.black54)),
+                          if ('${weaknessRows[i]['current_evidence'] ?? ''}'.trim().isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                                '证据：${weaknessRows[i]['current_evidence']}',
+                                style: const TextStyle(
+                                    fontSize: 12, height: 1.4))
+                          ],
+                          if ('${weaknessRows[i]['mechanism'] ?? ''}'.trim().isNotEmpty) ...[
+                            const SizedBox(height: 5),
+                            Text(
+                                '为什么关键：${weaknessRows[i]['mechanism']}',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black54,
+                                    height: 1.4))
+                          ],
+                          if ('${weaknessRows[i]['correction'] ?? ''}'.trim().isNotEmpty) ...[
+                            const SizedBox(height: 5),
+                            Text(
+                                '改正抓手：${weaknessRows[i]['correction']}',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.4))
+                          ],
+                          if ('${weaknessRows[i]['review_question'] ?? ''}'.trim().isNotEmpty) ...[
+                            const SizedBox(height: 5),
+                            Text(
+                                '复盘验证：${weaknessRows[i]['review_question']}',
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.black54,
+                                    height: 1.4))
+                          ],
+                        ]))
+            ] else ...[
+              const SizedBox(height: 10),
+              const Text(
+                  '目前还没有足够证据把任何因素提升为“关键弱点”。这本身也是结果：不要为了得到一个解释而制造弱点。',
+                  style: TextStyle(color: Colors.black54, height: 1.4))
+            ],
+            if (failureChainRows.isNotEmpty)
+              ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('查看可能的失败链',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: const Text('按行动过程排序，帮助定位“最先从哪里开始断”'),
+                  children: [
+                    for (final row in failureChainRows)
+                      ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                              radius: 11,
+                              child: Text('${row['order'] ?? ''}',
+                                  style: const TextStyle(fontSize: 10))),
+                          title: Text(
+                              '${row['stage'] ?? ''} → ${row['label'] ?? ''}'),
+                          subtitle: Text(
+                              '${row['evidence'] ?? ''}'.trim().isEmpty
+                                  ? '${row['mechanism'] ?? ''}'
+                                  : '${row['evidence']}'))
+                  ]),
+            if (coverageRows.isNotEmpty)
+              ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text(
+                      '分析覆盖：扫描 ${coverageSummary['domains_scanned'] ?? coverageRows.length} 个诊断域',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text(
+                      '已有事实 ${coverageSummary['domains_with_evidence'] ?? 0} · 证据不足 ${coverageSummary['domains_unknown'] ?? 0}；未知项保留未知，不由模型猜。'),
+                  children: [
+                    for (final row in coverageRows)
+                      ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${row['label'] ?? ''}'),
+                          trailing: Text(
+                              _coverageStatusLabel(row['status']),
+                              style: const TextStyle(fontSize: 11)))
+                  ]),
+            if (reviewQuestions.isNotEmpty)
+              ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('为下一次复盘保存的问题',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: const Text('现实结果回来后，不只记成功/失败，还要更新“弱点假设”'),
+                  children: [
+                    for (var i = 0; i < reviewQuestions.length; i++)
+                      ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Text('${i + 1}.'),
+                          title: Text(reviewQuestions[i]))
+                  ]),
+            const Divider(height: 30),
+            const Text('行动发生概率（辅助参考）',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+          ],
           if (available) ...[
             Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text(_pct(estimate),
