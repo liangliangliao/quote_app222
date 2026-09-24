@@ -641,6 +641,140 @@ void main() {
         'intention_behavior_gap');
   });
 
+  test('JEV final adjudication independently judges LLM theory conclusions', () {
+    final request = EvidenceGrowthJev.theorySynthesisRequest(
+      state: {
+        'plan': '明早去体检',
+        'scheduled_at': '2026-09-25T08:00:00',
+        'selected_theories': ['HAPA', 'IMPLEMENTATION_INTENTION'],
+        'theory_factor_answers': {
+          'intention': {
+            'option_id': 'firm',
+            'option_label': '已经坚定决定要做',
+            'confirmed_by_user': true,
+          },
+          'action_planning': {
+            'option_id': 'weak',
+            'option_label': '只有大概想法，没有具体安排',
+            'confirmed_by_user': true,
+          }
+        },
+        'action_profile': {
+          'normalized_action': '按计划到达体检',
+          'action_mode': 'INITIATE',
+          'action_tags': ['体检', '到场'],
+          'forecast_events': [
+            {
+              'id': 'attend_exam',
+              'label': '按计划到达体检',
+              'primary': true,
+            }
+          ],
+          'theory_factor_questionnaire': [
+            {'id': 'should_not_be_forwarded_in_final_adjudication'}
+          ]
+        }
+      },
+      theoryFeedbackRows: [
+        {
+          'factor_id': 'intention',
+          'factor_label': '行动意向',
+          'option_label': '已经坚定决定要做',
+          'jev_role': 'protective',
+        },
+        {
+          'factor_id': 'action_planning',
+          'factor_label': '行动计划',
+          'option_label': '只有大概想法，没有具体安排',
+          'jev_role': 'key_blocker',
+        }
+      ],
+      llmSynthesis: {
+        'integrated_pattern': '意向—行为转化断裂',
+        'bottom_line': '想做，但启动计划不足。',
+        'core_conclusions': [
+          {
+            'id': 'intention_execution_gap',
+            'type': 'CORE_WEAKNESS',
+            'title': '意向存在，但计划不足阻断启动',
+            'factor_ids': ['intention', 'action_planning'],
+            'theory_ids': ['HAPA', 'IMPLEMENTATION_INTENTION'],
+            'mechanism': '强意向没有被具体计划转成启动行为',
+            'why_key': '解释了想做但没启动',
+            'counterevidence': '',
+            'correction': '形成具体行动计划',
+            'review_focus': '到点是否直接启动',
+          }
+        ]
+      },
+      firstPassJev: {
+        'status': 'JEV',
+        'events': {'attend_exam': .44},
+        'overall': .44,
+        'theory_factor_roles': {
+          'intention': {'choice': 'protective'},
+          'action_planning': {'choice': 'key_blocker'},
+        },
+        'theory_feedback_pattern': {
+          'choice': 'intention_behavior_gap',
+          'confidence': .86,
+        },
+        'dominant_failure_mode': {
+          'choice': 'implementation_gap',
+          'confidence': .78,
+        }
+      },
+      model: 'jev-latest',
+    );
+
+    final questions = request['questions'] as Map;
+    expect(questions, contains('synthesis_support_candidate_1'));
+    expect(questions, contains('synthesis_primary'));
+    expect(questions, contains('synthesis_quality'));
+    final actionState =
+        ((request['state'] as Map)['action_prediction'] as Map);
+    final compactProfile = actionState['action_profile'] as Map;
+    expect(compactProfile, isNot(contains('theory_factor_questionnaire')));
+
+    final parsed = EvidenceGrowthJev.parseTheorySynthesis({
+      'model': 'jev-latest',
+      'answers': {
+        'synthesis_support_candidate_1': {
+          'type': 'choice',
+          'choice': 'supported',
+          'confidence': .87,
+          'probabilities': {
+            'supported': .87,
+            'partially_supported': .08,
+            'contradicted': .02,
+            'insufficient': .03,
+          }
+        },
+        'synthesis_primary': {
+          'type': 'choice',
+          'choice': 'candidate_1',
+          'confidence': .84,
+          'probabilities': {'candidate_1': .84, 'none': .16}
+        },
+        'synthesis_quality': {
+          'type': 'choice',
+          'choice': 'joint_supported',
+          'confidence': .82,
+          'probabilities': {
+            'joint_supported': .82,
+            'material_disagreement': .10,
+            'insufficient_evidence': .08,
+          }
+        },
+      }
+    });
+    expect(
+        (parsed['conclusion_verdicts'] as Map)['candidate_1']['choice'],
+        'supported');
+    expect((parsed['primary_conclusion'] as Map)['choice'], 'candidate_1');
+    expect((parsed['synthesis_quality'] as Map)['choice'], 'joint_supported');
+  });
+
   test('diagnostic evidence criteria keep missing separate from mixed', () {
     final request = EvidenceGrowthJev.actionRequest({
       'plan': '明早去体检',
