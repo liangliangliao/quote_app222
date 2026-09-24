@@ -167,6 +167,39 @@ class EvidenceGrowthActionPredictionService {
     'none': '目前没有一个特别关键的缺失信息域。',
   };
 
+  /// Human-readable mechanism descriptions used by the diagnostic cards.
+  /// They explain *how* a factor can matter without pretending the model has
+  /// proven a hidden psychological cause.
+  static const factorMechanismsZh = <String, String>{
+    'intention': '决定本身不稳定时，临场更容易重新讨论“做不做”，从而让启动被取消。',
+    'experiential_attitude': '临近行动时的直接厌恶、焦虑或抗拒会提高回避倾向，尤其会影响第一步启动。',
+    'instrumental_attitude': '如果当下更看重成本而不是结果价值，行动在临场权衡中更容易被放弃。',
+    'injunctive_norm': '重要他人的明确期待、责任或监督可能增强执行；缺失时通常不应自动视为阻碍。',
+    'descriptive_norm': '身边人的实际行为可提供社会线索，但只有在当前行为确实受同伴影响时才重要。',
+    'self_efficacy': '如果预期自己做不好，常见结果是延迟开始、缩小投入或直接回避第一步。',
+    'perceived_control': '即使想做，若主观上觉得时间、资源或局面不受自己控制，也可能不启动。',
+    'knowledge_skills': '缺少完成行为所需的知识或技能时，行动可能卡在“不知道怎么做”的具体步骤。',
+    'salience': '关键时刻若目标没有进入注意，原本的决定可能被当下情绪、习惯或其他任务替代。',
+    'environmental_constraints': '交通、时间、资源、权限、身体条件或第三方依赖可以直接让行为无法按计划发生。',
+    'habit': '熟悉情境会自动唤起旧反应；竞争习惯越强，越容易在没有重新思考时把行动带偏。',
+    'implementation_intention': '只有“想做”还不够；明确的情境→第一步连接可减少临场再次决策与拖延。',
+  };
+
+  static const factorInterventionsZh = <String, String>{
+    'intention': '把决定冻结成一个不可临场重开的最小承诺，并写清什么新事实才允许改变决定。',
+    'experiential_attitude': '把第一步缩小到能带着不舒服完成，并提前写好“出现抗拒也执行”的应对句。',
+    'instrumental_attitude': '把做与不做的近期代价写成具体事实，在行动前只看这张对照而不重新泛化权衡。',
+    'injunctive_norm': '若社会责任确实重要，可增加一个真实的预约、同伴等待或公开承诺。',
+    'descriptive_norm': '若同伴行为确实影响你，选择更支持目标行为的同伴、场景或范例。',
+    'self_efficacy': '把任务缩到一个你确信能完成的第一步，完成后再扩大，而不是先证明整件事都能做好。',
+    'perceived_control': '把不可控部分与可控第一步分开，只对今天能控制的动作做承诺。',
+    'knowledge_skills': '在行动前补齐一个最关键的知识/技能缺口，并把“学会”的判据写成可验证动作。',
+    'salience': '在关键时间和地点设置外部提醒或视觉线索，让行动在需要启动时进入注意。',
+    'environmental_constraints': '先清除一个真正会阻断执行的现实条件，例如路线、费用、权限、材料或时间冲突。',
+    'habit': '提前移走最容易抢走行动的替代行为，并让目标行为成为默认路径。',
+    'implementation_intention': '写成明确的 If-Then：当具体情境X出现，我不再讨论，立即执行第一步Y。',
+  };
+
   Future<GrowthData> prepareAction({
     required String plan,
     DateTime? scheduledAt,
@@ -420,6 +453,8 @@ class EvidenceGrowthActionPredictionService {
     final factors = <String, GrowthData>{};
     final aiFactors = growthMap(ai['factors']);
     final jevFactors = growthMap(jev['factors']);
+    final jevEvidenceStates = growthMap(jev['factor_evidence']);
+    final jevBottlenecks = growthMap(jev['factor_bottlenecks']);
     final activeLabels = <String, String>{};
 
     final requestedCore = growthStrings(profile['relevant_core_factors'])
@@ -480,6 +515,42 @@ class EvidenceGrowthActionPredictionService {
 
       final useTheory = hasTheoryAnswer;
       final useJev = !useTheory && j != null;
+      final jevEvidenceRow = growthMap(jevEvidenceStates[key]);
+      final jevEvidenceChoice = '${jevEvidenceRow['choice'] ?? ''}';
+      final jevEvidenceConfidence = _prob(jevEvidenceRow['confidence']);
+      final theoryEvidenceStatus = theoryUnknown
+          ? 'insufficient'
+          : theoryOrdinalLevel == null
+              ? ''
+              : theoryOrdinalLevel <= 1
+                  ? 'adverse'
+                  : theoryOrdinalLevel >= 3
+                      ? 'supportive'
+                      : 'mixed';
+      final modelEvidenceStatus = const {
+        'adverse',
+        'mixed',
+        'supportive',
+        'insufficient'
+      }.contains(jevEvidenceChoice)
+          ? jevEvidenceChoice
+          : aiStatus == 'RISK'
+              ? 'adverse'
+              : aiStatus == 'SUPPORT'
+                  ? 'supportive'
+                  : aiStatus == 'UNKNOWN'
+                      ? 'insufficient'
+                      : 'mixed';
+      final evidenceStatus =
+          useTheory && theoryEvidenceStatus.isNotEmpty
+              ? theoryEvidenceStatus
+              : modelEvidenceStatus;
+      final evidenceStatusConfidence =
+          useTheory && theoryEvidenceStatus.isNotEmpty
+              ? 1.0
+              : jevEvidenceConfidence;
+      final bottleneckProbability = _prob(jevBottlenecks[key]);
+
       final score = useTheory
           ? (theoryOrdinalLevel == null ? null : theoryOrdinalLevel / 4)
           : useJev
@@ -490,15 +561,16 @@ class EvidenceGrowthActionPredictionService {
           : useJev
               ? jConfidence
               : aiConfidence;
-      final unknown = useTheory
-          ? theoryUnknown || score == null
-          : score == null ||
-              (useJev
-                  ? (confidence ?? 0) < .45 &&
-                      score >= .35 &&
-                      score <= .65
-                  : aiStatus == 'UNKNOWN' &&
-                      (confidence == null || confidence < .5));
+      final unknown = evidenceStatus == 'insufficient' ||
+          (useTheory
+              ? theoryUnknown || score == null
+              : score == null ||
+                  (useJev
+                      ? (confidence ?? 0) < .45 &&
+                          score >= .35 &&
+                          score <= .65
+                      : aiStatus == 'UNKNOWN' &&
+                          (confidence == null || confidence < .5)));
 
       final source = useTheory
           ? 'USER_CONFIRMED_THEORY'
@@ -519,6 +591,22 @@ class EvidenceGrowthActionPredictionService {
         'display_score': unknown ? null : score,
         'confidence': confidence,
         'evidence_strength': evidenceStrength,
+        'evidence_status': evidenceStatus,
+        'evidence_status_confidence': evidenceStatusConfidence,
+        'bottleneck_probability': bottleneckProbability,
+        'diagnostic_role': evidenceStatus == 'insufficient'
+            ? 'UNKNOWN'
+            : bottleneckProbability != null &&
+                    bottleneckProbability >= .60 &&
+                    const {'adverse', 'mixed'}.contains(evidenceStatus)
+                ? 'CURRENT_BOTTLENECK'
+                : evidenceStatus == 'supportive'
+                    ? 'CURRENT_SUPPORT'
+                    : 'SECONDARY_OR_MIXED',
+        'mechanism': isDynamic
+            ? '${dynamicByKey[key]!['condition'] ?? ''}'.trim()
+            : factorMechanismsZh[construct] ?? '',
+        'intervention': factorInterventionsZh[construct] ?? '',
         'unknown': unknown,
         'source': source,
         'is_dynamic': isDynamic,
@@ -544,7 +632,7 @@ class EvidenceGrowthActionPredictionService {
       };
     }
 
-    int riskTier(GrowthData row) {
+    int legacyRiskTier(GrowthData row) {
       if (row['source'] == 'USER_CONFIRMED_THEORY') {
         final level = row['ordinal_level'];
         if (level == 0) return 3;
@@ -558,24 +646,86 @@ class EvidenceGrowthActionPredictionService {
       return 0;
     }
 
-    final riskRows = factors.entries
+    bool hasReliableEvidenceState(GrowthData row) {
+      if (row['source'] == 'USER_CONFIRMED_THEORY') return true;
+      final c = row['evidence_status_confidence'];
+      return c is num && c.toDouble() >= .55;
+    }
+
+    final diagnosticBarrierRows = factors.entries
         .where((e) {
           final row = e.value;
-          final strength = row['evidence_strength'];
+          final status = '${row['evidence_status'] ?? ''}';
+          final p = (row['bottleneck_probability'] as num?)?.toDouble();
           return row['unknown'] != true &&
-              riskTier(row) > 0 &&
-              strength is num &&
-              strength.toDouble() >= .55;
+              const {'adverse', 'mixed'}.contains(status) &&
+              p != null &&
+              p >= .55 &&
+              hasReliableEvidenceState(row);
         })
         .toList()
       ..sort((a, b) {
-        final tierCompare = riskTier(b.value).compareTo(riskTier(a.value));
-        if (tierCompare != 0) return tierCompare;
+        final ap =
+            (a.value['bottleneck_probability'] as num?)?.toDouble() ?? 0;
+        final bp =
+            (b.value['bottleneck_probability'] as num?)?.toDouble() ?? 0;
+        final pCompare = bp.compareTo(ap);
+        if (pCompare != 0) return pCompare;
         final as =
-            (a.value['evidence_strength'] as num?)?.toDouble() ?? .5;
+            (a.value['evidence_status_confidence'] as num?)?.toDouble() ?? 0;
         final bs =
-            (b.value['evidence_strength'] as num?)?.toDouble() ?? .5;
+            (b.value['evidence_status_confidence'] as num?)?.toDouble() ?? 0;
         return bs.compareTo(as);
+      });
+
+    // When JEV diagnostics are unavailable, retain the old low-score heuristic
+    // only as an explicitly marked fallback candidate list. When JEV is
+    // available but does not establish a bottleneck, do not manufacture one.
+    final fallbackRiskRows = jevEstimate == null
+        ? (factors.entries
+            .where((e) {
+              final row = e.value;
+              final strength = row['evidence_strength'];
+              return row['unknown'] != true &&
+                  legacyRiskTier(row) > 0 &&
+                  strength is num &&
+                  strength.toDouble() >= .55;
+            })
+            .toList()
+          ..sort((a, b) {
+            final tierCompare =
+                legacyRiskTier(b.value).compareTo(legacyRiskTier(a.value));
+            if (tierCompare != 0) return tierCompare;
+            final as =
+                (a.value['evidence_strength'] as num?)?.toDouble() ?? .5;
+            final bs =
+                (b.value['evidence_strength'] as num?)?.toDouble() ?? .5;
+            return bs.compareTo(as);
+          }))
+        : <MapEntry<String, GrowthData>>[];
+
+    final riskRows = diagnosticBarrierRows.isNotEmpty
+        ? diagnosticBarrierRows
+        : fallbackRiskRows;
+
+    final supportRows = factors.entries
+        .where((e) =>
+            e.value['unknown'] != true &&
+            e.value['evidence_status'] == 'supportive')
+        .toList()
+      ..sort((a, b) {
+        final av = (a.value['score'] as num?)?.toDouble() ?? 0;
+        final bv = (b.value['score'] as num?)?.toDouble() ?? 0;
+        return bv.compareTo(av);
+      });
+
+    final unknownRows = factors.entries
+        .where((e) => e.value['evidence_status'] == 'insufficient')
+        .toList()
+      ..sort((a, b) {
+        final ad = a.value['is_dynamic'] == true ? 1 : 0;
+        final bd = b.value['is_dynamic'] == true ? 1 : 0;
+        return ad.compareTo(bd);
       });
 
     final disagreement = aiEstimate != null &&
@@ -589,6 +739,37 @@ class EvidenceGrowthActionPredictionService {
     final missingQuestionKey = '${missingQuestion['choice'] ?? ''}';
 
     final failureCatalog = growthRows(jev['failure_mode_catalog']);
+    final selectedFailureRows = failureCatalog
+        .where((row) => '${row['id'] ?? ''}' == dominantFailureKey)
+        .toList();
+    final selectedFailure =
+        selectedFailureRows.isEmpty ? <String, dynamic>{} : selectedFailureRows.first;
+    final dominantFailureFactorId =
+        '${selectedFailure['factor_id'] ?? ''}'.trim();
+    final dominantFailureConstruct = dominantFailureFactorId.isEmpty
+        ? ''
+        : EvidenceBehaviorTheoryCatalog
+            .canonicalConstruct(dominantFailureFactorId);
+    final dominantMatchesBarrier = diagnosticBarrierRows.any((entry) {
+      final row = entry.value;
+      final construct = '${row['theory_construct'] ?? entry.key}';
+      return dominantFailureFactorId == entry.key ||
+          dominantFailureFactorId == construct ||
+          (dominantFailureConstruct.isNotEmpty &&
+              dominantFailureConstruct == construct);
+    });
+    final hardBlockerProbability = _prob(jev['hard_blocker']);
+    final dominantEvidenceGrounded =
+        '${selectedFailure['source'] ?? ''}' == 'USER_THEORY_OPTION' ||
+            dominantMatchesBarrier ||
+            ((hardBlockerProbability ?? 0) >= .70 &&
+                dominantFailureKey == 'environmental_constraint');
+    final dominantFailureDisplayable =
+        dominantFailureKey.isNotEmpty &&
+            dominantFailureKey != 'insufficient_evidence' &&
+            (_prob(dominantFailure['confidence']) ?? 0) >= .65 &&
+            dominantEvidenceGrounded;
+
     final failureLabels = <String, String>{
       ...failureModeLabels,
       for (final row in growthRows(profile['failure_modes']))
@@ -665,6 +846,8 @@ class EvidenceGrowthActionPredictionService {
         'factor_scores_are_not_probability_weights': true,
         'jev_confidence_semantics':
             'JEV confidence is model-reported confidence for its typed answer; it is not a statistical confidence interval or observed accuracy rate.',
+        'bottleneck_semantics':
+            'A bottleneck noul is a model judgement that the factor is currently materially obstructive under supplied evidence. It is not a causal-effect estimate, regression coefficient, or validated probability of causation.',
         'theory_option_score_semantics':
             'Confirmed standardized options are ordinal categories (0<1<2<3<4). Adjacent distances are not assumed equal. Ordinal levels are for display/categorical blocker ordering only; they are not fitted coefficients, fixed theory weights, or behavior probabilities.',
       },
@@ -695,16 +878,15 @@ class EvidenceGrowthActionPredictionService {
       'jev_workflow': {
         'primary_event_id': primaryEventId,
         'events': eventRows,
-        'hard_blocker': _prob(jev['hard_blocker']),
+        'hard_blocker': hardBlockerProbability,
         'dominant_failure_mode': dominantFailureKey,
         'dominant_failure_label':
             failureLabels[dominantFailureKey] ?? dominantFailureKey,
         'dominant_failure_confidence':
             _prob(dominantFailure['confidence']),
-        'dominant_failure_displayable':
-            dominantFailureKey.isNotEmpty &&
-                dominantFailureKey != 'insufficient_evidence' &&
-                (_prob(dominantFailure['confidence']) ?? 0) >= .60,
+        'dominant_failure_displayable': dominantFailureDisplayable,
+        'dominant_failure_grounded': dominantEvidenceGrounded,
+        'dominant_failure_factor_id': dominantFailureFactorId,
         'dominant_failure_probabilities':
             growthMap(dominantFailure['probabilities']),
         'dominant_failure_evidence': (() {
@@ -745,11 +927,50 @@ class EvidenceGrowthActionPredictionService {
             'score': e.value['score'],
             'source': e.value['source'],
             'evidence_strength': e.value['evidence_strength'],
-            'risk_tier': riskTier(e.value),
+            'evidence_status': e.value['evidence_status'],
+            'evidence_status_confidence':
+                e.value['evidence_status_confidence'],
+            'bottleneck_probability': e.value['bottleneck_probability'],
+            'diagnostic_role': e.value['diagnostic_role'],
+            'diagnostic_basis': diagnosticBarrierRows.contains(e)
+                ? 'JEV_BOTTLENECK'
+                : 'LEGACY_SCORE_FALLBACK',
             'ordinal_level': e.value['ordinal_level'],
             'evidence': e.value['evidence'],
+            'mechanism': e.value['mechanism'],
+            'intervention': e.value['intervention'],
+            'verification':
+                '先只改变“${activeLabels[e.key]}”这一条件，再重新预测并记录现实结果；若执行明显改善，才更支持它是真正关键杠杆。',
           }
       ],
+      'diagnostic_summary': {
+        'version': 'evidence_bottleneck_v1',
+        'rule':
+            '关键阻碍不再按“最低分”直接排序。JEV必须同时判断：当前存在不利/混合证据，并且该因素足以构成主预测事件的现实瓶颈；缺失证据不会被当作阻碍。',
+        'barrier_count': diagnosticBarrierRows.length,
+        'uses_jev_bottleneck_judgement': jevEstimate != null,
+        'supports': [
+          for (final e in supportRows.take(3))
+            {
+              'key': e.key,
+              'label': activeLabels[e.key],
+              'evidence': e.value['evidence'],
+              'mechanism': e.value['mechanism'],
+              'source': e.value['source'],
+            }
+        ],
+        'unknowns': [
+          for (final e in unknownRows.take(3))
+            {
+              'key': e.key,
+              'label': activeLabels[e.key],
+              'evidence': e.value['evidence'],
+              'mechanism': e.value['mechanism'],
+              'next_check':
+                  '补充一个关于“${activeLabels[e.key]}”的具体事实后再判断，不用猜。',
+            }
+        ],
+      },
       'missing_information':
           growthStrings(ai['missing_information']).take(4).toList(),
       'failure_modes': growthStrings(ai['failure_modes']).take(4).toList(),
