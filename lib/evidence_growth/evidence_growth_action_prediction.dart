@@ -1071,11 +1071,24 @@ class EvidenceGrowthActionPredictionService {
                     ?.toInt() ??
                 0) >=
             2;
-    final diagnosisHeadline = centralWeakness == null
+    final fallbackDiagnosisHeadline = centralWeakness == null
         ? '当前证据还不足以锁定一个关键弱点；先补最关键事实，再做判断。'
         : centralRepeated
             ? '当前最值得优先改正的反复弱点：$centralWeaknessLabel'
             : '当前最值得优先验证的行动瓶颈：$centralWeaknessLabel（尚不能仅凭一次情境定义为长期弱点）';
+    final theorySynthesisConclusions =
+        growthRows(theoryFeedbackSynthesis['core_conclusions']);
+    final theorySynthesisBottomLine =
+        '${theoryFeedbackSynthesis['bottom_line'] ?? ''}'.trim();
+    final theorySynthesisPattern =
+        '${theoryFeedbackSynthesis['integrated_pattern'] ?? ''}'.trim();
+    final diagnosisHeadline = theorySynthesisBottomLine.isNotEmpty
+        ? theorySynthesisBottomLine
+        : fallbackDiagnosisHeadline;
+    final theoryReviewFactorIds = <String>{
+      for (final row in theorySynthesisConclusions)
+        ...growthStrings(row['factor_ids'])
+    };
 
     final id = 'ap_${DateTime.now().microsecondsSinceEpoch}';
 
@@ -1203,10 +1216,28 @@ class EvidenceGrowthActionPredictionService {
           }
       ],
       'behavior_diagnosis': {
-        'version': 'behavior_diagnosis_v2',
+        'version': 'behavior_diagnosis_v3_theory_feedback',
         'headline': diagnosisHeadline,
         'purpose':
-            '把一次预测转成可复盘的行为诊断：区分当前瓶颈、反复弱点、保护因素和未知项，并保存下一次验证所需的证据。',
+            '以用户亲自确认的理论关键因素为一等证据，由JEV独立判断各因素在当前行动中的角色，再由LLM综合因素之间的交互、冲突与阶段断裂；通用IBM瓶颈仅作为辅助校验。',
+        'theory_feedback_analysis': {
+          'status': theoryFeedbackSynthesis['status'],
+          'selected_theories': growthStrings(state['selected_theories']),
+          'confirmed_factor_count': theoryFeedbackRows.length,
+          'factor_rows': theoryFeedbackRows,
+          'jev_integrated_pattern':
+              growthMap(jev['theory_feedback_pattern']),
+          'llm_integrated_pattern': theorySynthesisPattern,
+          'pattern_explanation':
+              theoryFeedbackSynthesis['pattern_explanation'],
+          'bottom_line': theorySynthesisBottomLine,
+          'core_conclusions': theorySynthesisConclusions,
+          'interactions':
+              growthRows(theoryFeedbackSynthesis['interactions']),
+          'unknowns': growthStrings(theoryFeedbackSynthesis['unknowns']),
+          'rule':
+              '用户确认的理论选项不会被模型改写；JEV负责独立角色判断，LLM负责跨因素综合。最终结论必须能追溯到具体factor_id，且不把一次状态直接写成人格特征。',
+        },
         'key_weaknesses': [
           for (final e in weaknessRows)
             {
@@ -1270,14 +1301,19 @@ class EvidenceGrowthActionPredictionService {
             }
         ],
         'review_blueprint': {
-          'compare_keys': weaknessKeys.toList(),
+          'compare_keys': <String>{...theoryReviewFactorIds, ...weaknessKeys}.toList(),
           'questions': [
             '结果：目标行动最终是按计划发生、延迟、部分完成，还是没有发生？',
+            if (theorySynthesisConclusions.isNotEmpty)
+              '理论结论验证：哪些用户确认因素真的在行动前发挥了作用——${theorySynthesisConclusions.take(3).map((e) => e['title']).join('；')}？',
             if (weaknessRows.isNotEmpty)
               '断点：最先出现问题的是哪一个环节——${weaknessRows.map((e) => e.value['label']).join('、')}，还是一个当前未识别的新因素？',
+            for (final row in theorySynthesisConclusions.take(3))
+              if ('${row['review_focus'] ?? ''}'.trim().isNotEmpty)
+                '${row['review_focus']}',
             '机制：失败前发生了什么具体事件、念头、感受或现实阻力？不要只记录“我不想做”。',
-            '干预：本次是否真正执行了针对关键弱点的改正动作？',
-            '更新：现实结果支持、削弱还是推翻了当前“关键弱点”假设？',
+            '干预：本次是否真正执行了针对综合结论中的关键抓手？',
+            '更新：现实结果支持、削弱还是推翻了当前“关键弱点/因素交互”假设？',
           ],
           'update_rule':
               '复盘不是证明模型正确，而是用现实结果更新弱点假设；连续反复出现才逐步升级为稳定模式。',
