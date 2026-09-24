@@ -2068,15 +2068,17 @@ ${jsonEncode(preservedFactorCatalog)}
       final questionRaw = await _ai.generateText(
         purpose: 'evidence_growth.action_interpretation.questions',
         systemPrompt: '''
-你是“通用行动语义解释器”的第3阶段：只负责找关键缺失信息与失败机制，不做概率预测。
+你是“通用行动语义解释器”的第3阶段：只负责找高信息增益的缺失事实与失败机制，不做概率预测。
 
 规则：
-1. clarifying_questions 最多5个，只问最可能显著改变预测的缺失事实。
-2. 每一问必须具体、容易回答，并标记IBM构念。
-3. failure_modes 最多5个，要针对当前具体行动，不要写泛泛的“可能失败”。
-4. 不重复已经从用户输入中明确知道的事实。
-5. 不把假设当事实。
-6. 文本尽量简洁，只输出JSON。
+1. clarifying_questions最多4个，只问“答案不同会显著改变行为预测或关键瓶颈判断”的事实。
+2. 不问为了把计划写得更漂亮的细节；不要把分钟数、按钮、门把手、微步骤本身当成关键事实，除非它们确实是独立的上游限制条件。
+3. 优先问：现实硬约束、真正的时间可行性、身体/资源状态、竞争行为、临场回避、既往相似行为、重要外部责任/依赖，以及JEV/理论无法从现有事实确定的高价值因素。
+4. 每一问必须标记related_factor_ids，只能引用SELECTED_FACTORS中已有id；criticality是0~1的信息价值自评，不是行为概率，低于0.60不要输出。
+5. 每一问必须具体、容易回答；若“粗略区间”足够改变预测，就不要追求不必要的精确分钟数。
+6. failure_modes最多5个，必须是导致主行为不发生的上游失败路径，不是把目标行为换一种说法。
+7. 不重复用户已经明确提供的事实，不把假设当事实。
+8. 只输出JSON。
 ''',
         prompt: '''INPUT:
 ${jsonEncode(state)}
@@ -2098,7 +2100,16 @@ ${jsonEncode({
 返回：
 {
   "clarifying_questions":[
-    {"id":"missing_fact","question":"","why":"","ibm_construct":"允许构念之一","criticality":0.0,"answer_type":"text|choice","options":[]}
+    {
+      "id":"missing_fact",
+      "question":"",
+      "why":"",
+      "ibm_construct":"允许构念之一",
+      "related_factor_ids":["只能引用SELECTED_FACTORS中的id"],
+      "criticality":0.0,
+      "answer_type":"text|choice",
+      "options":[]
+    }
   ],
   "failure_modes":[
     {"id":"specific_failure","label":"","ibm_construct":"允许构念之一","criterion":"English criterion"}
@@ -2245,6 +2256,7 @@ ${jsonEncode({
           'selection_reason':
               _cleanUserText('${row['selection_reason'] ?? ''}'),
           'evidence': _cleanUserText('${row['evidence'] ?? ''}'),
+          'llm_candidate_id': rawId,
           'predictive_relevance': predictiveRelevance,
           'counterfactual_effect': counterfactual,
           'failure_path':
