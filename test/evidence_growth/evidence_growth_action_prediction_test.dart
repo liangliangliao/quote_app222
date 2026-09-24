@@ -641,6 +641,122 @@ void main() {
         'intention_behavior_gap');
   });
 
+  test('JEV dynamic factor selection rejects steps and rewards incremental predictors', () {
+    final request = EvidenceGrowthJev.dynamicFactorSelectionRequest(
+      state: {
+        'plan': '明早去上班',
+        'scheduled_at': '2026-09-25T08:00:00',
+        'additional_notes': '闹钟响后经常继续躺着，偶尔会重新考虑要不要去',
+        'similar_history_report': '过去两次都是临出门前放弃',
+      },
+      profile: {
+        'normalized_action': '明早按时出门并到岗',
+        'action_mode': 'SEQUENCE',
+        'forecast_events': [
+          {
+            'id': 'arrive_work',
+            'label': '按计划到岗',
+            'true_criterion': 'The person arrives at work as planned.',
+            'false_criterion': 'The person does not arrive at work as planned.',
+            'primary': true,
+          }
+        ],
+        'selected_preserved_factors': [
+          {
+            'id': 'preserved_time_capacity',
+            'catalog_id': 'time_capacity',
+            'label': '时间可用性',
+            'ibm_construct': 'environmental_constraints',
+          }
+        ]
+      },
+      candidates: [
+        {
+          'id': 'adaptive_alarm_exit_minutes',
+          'label': '响铃后固定出门时窗',
+          'ibm_construct': 'implementation_intention',
+          'condition': 'Leave within a fixed number of minutes after alarm.',
+          'selection_reason': '把启动变具体',
+          'evidence': '',
+          'predictive_relevance': .72,
+          'counterfactual_effect': 'MEDIUM',
+          'why_not_existing_factor': '比一般执行意图更具体',
+          'failure_path': '拖延导致错过出门时点',
+        },
+        {
+          'id': 'adaptive_reopen_decision',
+          'label': '临出门重新开启去不去的决策',
+          'ibm_construct': 'intention',
+          'condition':
+              'The prior decision remains closed unless genuinely new information appears.',
+          'selection_reason': '过去失败发生在临出门重新犹豫',
+          'evidence': '过去两次都是临出门前放弃',
+          'predictive_relevance': .92,
+          'counterfactual_effect': 'LARGE',
+          'why_not_existing_factor': '捕捉当前行动特有的临界时刻重新决策模式',
+          'failure_path': '已经形成的意向在执行前被重新打开并被回避取代',
+        }
+      ],
+      selectedTheoryIds: ['IBM', 'IMPLEMENTATION_INTENTION'],
+      model: 'jev-latest',
+    );
+
+    final questions = request['questions'] as Map;
+    expect(questions, contains('dynamic_role_candidate_1'));
+    expect(questions, contains('dynamic_role_candidate_2'));
+    expect(questions, contains('dynamic_primary'));
+    expect(
+        '${(questions['dynamic_role_candidate_1'] as Map)['instructions']}',
+        contains('incremental predictive value'));
+
+    final parsed = EvidenceGrowthJev.parseDynamicFactorSelection({
+      'model': 'jev-latest',
+      'answers': {
+        'dynamic_role_candidate_1': {
+          'type': 'choice',
+          'choice': 'outcome_or_step',
+          'confidence': .91,
+          'probabilities': {
+            'outcome_or_step': .91,
+            'high_value': .02,
+            'moderate_value': .03,
+            'low_value': .02,
+            'duplicate': .01,
+            'insufficient': .01,
+          }
+        },
+        'dynamic_role_candidate_2': {
+          'type': 'choice',
+          'choice': 'high_value',
+          'confidence': .88,
+          'probabilities': {
+            'high_value': .88,
+            'moderate_value': .07,
+            'low_value': .01,
+            'duplicate': .01,
+            'outcome_or_step': .01,
+            'insufficient': .02,
+          }
+        },
+        'dynamic_primary': {
+          'type': 'choice',
+          'choice': 'candidate_2',
+          'confidence': .86,
+          'probabilities': {
+            'candidate_1': .05,
+            'candidate_2': .86,
+            'none': .09,
+          }
+        },
+      }
+    });
+
+    expect((parsed['roles'] as Map)['candidate_1']['choice'],
+        'outcome_or_step');
+    expect((parsed['roles'] as Map)['candidate_2']['choice'], 'high_value');
+    expect((parsed['primary'] as Map)['choice'], 'candidate_2');
+  });
+
   test('JEV final adjudication independently judges LLM theory conclusions', () {
     final request = EvidenceGrowthJev.theorySynthesisRequest(
       state: {
