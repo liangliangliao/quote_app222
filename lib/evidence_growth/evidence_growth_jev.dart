@@ -989,6 +989,19 @@ class EvidenceGrowthJev {
     }
 
     final actionProfile = growthMap(state['action_profile']);
+    final events = growthRows(actionProfile['forecast_events']);
+    final primaryEvents =
+        events.where((row) => row['primary'] == true).toList();
+    final primaryEvent = primaryEvents.isNotEmpty
+        ? primaryEvents.first
+        : (events.isNotEmpty ? events.first : <String, dynamic>{});
+    final primaryLabel =
+        '${primaryEvent['label'] ?? state['plan'] ?? 'target behavior'}';
+    final primaryTrueCriterion =
+        '${primaryEvent['true_criterion'] ?? ''}'.trim();
+    final primaryFalseCriterion =
+        '${primaryEvent['false_criterion'] ?? ''}'.trim();
+
     final compactActionState = <String, dynamic>{
       'plan': state['plan'],
       'scheduled_at': state['scheduled_at'],
@@ -1031,6 +1044,13 @@ class EvidenceGrowthJev {
             'This is the FINAL adjudication stage. The user-confirmed theory options are primary evidence. The LLM candidates are hypotheses, not facts. Independently judge whether each candidate is supported by the raw action facts, confirmed theory answers, and first-pass JEV judgements. Do not rubber-stamp the LLM. Select a primary conclusion only when support is adequate.'
       },
       'questions': {
+        'synthesis_event_probability': {
+          'type': 'noul',
+          'instructions':
+              'Make the FINAL probability judgement for the PRIMARY observable event after reviewing the raw user input, user-confirmed theory questionnaire, first-pass JEV analysis, and the LLM synthesis candidates. Do not mechanically average the first-pass JEV probability with any LLM number. Re-evaluate the evidence as a whole. Primary event: "$primaryLabel".'
+              '${primaryTrueCriterion.isEmpty ? '' : ' TRUE when: $primaryTrueCriterion.'}'
+              '${primaryFalseCriterion.isEmpty ? '' : ' FALSE when: $primaryFalseCriterion.'}'
+        },
         for (final row in candidateCatalog)
           'synthesis_support_${row['key']}': {
             'type': 'choice',
@@ -1079,6 +1099,16 @@ class EvidenceGrowthJev {
   static GrowthData parseTheorySynthesis(GrowthData body) {
     final answers = growthMap(body['answers']);
 
+    double? noul(String key) {
+      final a = growthMap(answers[key]);
+      if (a.isEmpty) return null;
+      final p = a['noul'];
+      if (a['type'] != 'noul' || p is! num || !p.isFinite || p < 0 || p > 1) {
+        throw const FormatException('INVALID_JEV_SYNTHESIS_NOUL');
+      }
+      return p.toDouble();
+    }
+
     GrowthData choice(String key) {
       final a = growthMap(answers[key]);
       if (a.isEmpty) return {};
@@ -1110,6 +1140,7 @@ class EvidenceGrowthJev {
       'status': 'JEV',
       'model': body['model'],
       'usage': body['usage'],
+      'final_event_probability': noul('synthesis_event_probability'),
       'conclusion_verdicts': verdicts,
       'primary_conclusion': choice('synthesis_primary'),
       'synthesis_quality': choice('synthesis_quality'),
