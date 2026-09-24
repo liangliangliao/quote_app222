@@ -1993,21 +1993,28 @@ intention,experiential_attitude,instrumental_attitude,injunctive_norm,descriptiv
       final factorRaw = await _ai.generateText(
         purpose: 'evidence_growth.action_interpretation.factors',
         systemPrompt: '''
-你是“通用行动语义解释器”的第2阶段：只负责找关键预测因素，不做概率预测。
+你是“通用行动语义解释器”的第2阶段：生成对行为预测真正有增量价值的候选因素，不做概率预测。
 
 必须同时做两件事：
-A. 从 PRESERVED_FACTOR_CATALOG（最早上班/到场原型的16类因素）中筛选当前行动真正相关的因素。
-B. 再补充当前行动独有、旧目录没有具体覆盖好的动态因素，并映射到IBM构念。
+A. 从 PRESERVED_FACTOR_CATALOG 中筛选当前行动真正相关的已有因素。
+B. 只在已有理论/原型因素仍明显缺口时，提出“当前行动特异”的动态候选因素，随后会由JEV独立淘汰/保留。
 
-覆盖扫描必须包括：客观可行性、时间资源、身体能力、前置准备、意向/承诺、价值/后果、情绪/回避、自我效能/控制、计划具体度、启动触发、环境准备、现实摩擦、替代行为、外部责任、相似历史/习惯，以及当前行动特有依赖。
+核心判据不是“越具体越好”，而是“如果这个因素从有利变为不利，主预测事件的发生概率是否会明显改变”。
 
-规则：
-1. 旧因素重要就必须保留，不要因为采用IBM而删除。
-2. 不相关的旧因素不要硬塞。
-3. 每个 selection_reason 最多28个中文字符；evidence 最多36个中文字符，必须来自用户输入，未知则空字符串。
-4. dynamic_factors 最多6个；selection_reason同样简短。
-5. 不得把假设写成事实。
-6. 只输出JSON，严禁额外解释。
+覆盖扫描包括：客观可行性、时间资源、身体能力、前置准备、意向/承诺、价值/后果、情绪/回避、自我效能/控制、计划与触发、环境阻力、替代行为、外部责任、相似历史/习惯，以及当前行动特有依赖。
+
+动态因素必须同时满足：
+1. 是主行为发生之前的上游预测因素，不是目标行为本身、成功标准、操作步骤或微小流程描述。
+2. 对当前行动有特异性，不能只是把IBM/TPB/COM-B/HAPA/SCT/执行意图已有构念换一个说法。
+3. 有明确机制：为什么它变化会改变“做/不做”的可能性。
+4. 有反事实区分力：有利与不利状态之间预计至少有中等以上预测差异。
+5. 不要因为某个细节很具体就把它提升为关键因素。例如“摸门把手提醒自己”“响铃后几分钟出门”“出门后开始工作”通常只是提示线索、操作步骤或结果链，除非用户事实证明它们本身反复决定成败。
+6. selection_reason最多32个中文字符；evidence最多40个中文字符，必须来自用户输入，未知则空。
+7. predictive_relevance是LLM对“增量预测价值”的0~1自评，不是成功概率；低于0.55的候选不要输出。
+8. counterfactual_effect只能是 LARGE / MEDIUM / SMALL；dynamic_factors最多8个。
+9. why_not_existing_factor必须说明为什么标准理论/原型因素不足以表达它；如果说不清，就不要新增。
+10. 不得把假设写成事实。
+11. 只输出JSON，严禁额外解释。
 ''',
         prompt: '''INPUT:
 ${jsonEncode(state)}
@@ -2029,7 +2036,18 @@ ${jsonEncode(preservedFactorCatalog)}
     {"id":"catalog_id","selection_reason":"","evidence":""}
   ],
   "dynamic_factors":[
-    {"id":"factor_id","label":"","ibm_construct":"允许构念之一","condition":"English condition supporting the primary event","selection_reason":"","evidence":""}
+    {
+      "id":"factor_id",
+      "label":"",
+      "ibm_construct":"允许构念之一",
+      "condition":"English condition supporting the primary event",
+      "selection_reason":"",
+      "evidence":"",
+      "predictive_relevance":0.0,
+      "counterfactual_effect":"LARGE|MEDIUM|SMALL",
+      "failure_path":"该因素不利时如何导致主行为不发生",
+      "why_not_existing_factor":"为什么现有理论/原型因素不足以表达这一特异因素"
+    }
   ]
 }''',
         expectJson: true,
@@ -2197,16 +2215,25 @@ ${jsonEncode({
 
       final adaptiveRows = <GrowthData>[];
       final adaptiveSeen = <String>{};
-      for (final row in growthRows(decoded['dynamic_factors']).take(8)) {
+      for (final row in growthRows(decoded['dynamic_factors']).take(10)) {
         final rawId =
             profileId(row['id'], 'factor_${adaptiveRows.length + 1}');
         final id = 'adaptive_$rawId';
         final label = _cleanUserText('${row['label'] ?? ''}');
         final condition = '${row['condition'] ?? ''}'.trim();
         final construct = '${row['ibm_construct'] ?? ''}'.trim();
+        final predictiveRelevance = _prob(row['predictive_relevance']);
+        final counterfactual =
+            '${row['counterfactual_effect'] ?? ''}'.toUpperCase();
+        final whyNotExisting =
+            _cleanUserText('${row['why_not_existing_factor'] ?? ''}');
         if (label.isEmpty ||
             condition.isEmpty ||
             !factorLabels.containsKey(construct) ||
+            predictiveRelevance == null ||
+            predictiveRelevance < .55 ||
+            !const {'LARGE', 'MEDIUM', 'SMALL'}.contains(counterfactual) ||
+            whyNotExisting.isEmpty ||
             !adaptiveSeen.add(id)) {
           continue;
         }
@@ -2218,7 +2245,12 @@ ${jsonEncode({
           'selection_reason':
               _cleanUserText('${row['selection_reason'] ?? ''}'),
           'evidence': _cleanUserText('${row['evidence'] ?? ''}'),
-          'source': 'AI_DYNAMIC',
+          'predictive_relevance': predictiveRelevance,
+          'counterfactual_effect': counterfactual,
+          'failure_path':
+              _cleanUserText('${row['failure_path'] ?? ''}'),
+          'why_not_existing_factor': whyNotExisting,
+          'source': 'AI_DYNAMIC_CANDIDATE',
         });
       }
 
