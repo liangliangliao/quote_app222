@@ -499,6 +499,30 @@ class _EvidenceGrowthActionPredictionPageState
       }['$value'] ??
       '$value';
 
+  String _theoryRoleLabel(Object? value) => const {
+        'key_blocker': 'JEV：关键阻碍',
+        'secondary_risk': 'JEV：次要风险',
+        'protective': 'JEV：保护因素',
+        'low_relevance': 'JEV：当前相关性较低',
+        'uncertain': 'JEV：作用不确定',
+      }['$value'] ??
+      'JEV：未判断';
+
+  String _conclusionTypeLabel(Object? value) => const {
+        'CORE_WEAKNESS': '核心弱点假设',
+        'INTERACTION': '因素交互',
+        'PROTECTIVE': '保护模式',
+        'UNCERTAINTY': '关键未知',
+      }['$value'] ??
+      '综合结论';
+
+  String _epistemicLabel(Object? value) => const {
+        'STRONG': '证据较强',
+        'MODERATE': '中等支持',
+        'TENTATIVE': '暂定假设',
+      }['$value'] ??
+      '暂定假设';
+
   IconData _factorIcon(GrowthData row) {
     if (row['unknown'] == true || row['display_score'] == null) {
       return Icons.help_outline;
@@ -1495,6 +1519,23 @@ class _EvidenceGrowthActionPredictionPageState
     final reviewBlueprint =
         growthMap(behaviorDiagnosis['review_blueprint']);
     final reviewQuestions = growthStrings(reviewBlueprint['questions']);
+    final theoryFeedback =
+        growthMap(behaviorDiagnosis['theory_feedback_analysis']);
+    final theoryFactorRows = growthRows(theoryFeedback['factor_rows']);
+    final theoryConclusions = growthRows(theoryFeedback['core_conclusions']);
+    final theoryInteractions = growthRows(theoryFeedback['interactions']);
+    final theoryUnknowns = growthStrings(theoryFeedback['unknowns']);
+    final theoryPattern =
+        '${theoryFeedback['llm_integrated_pattern'] ?? ''}'.trim();
+    final theoryPatternExplanation =
+        '${theoryFeedback['pattern_explanation'] ?? ''}'.trim();
+    final jevTheoryPattern =
+        growthMap(theoryFeedback['jev_integrated_pattern']);
+    final theoryById = <String, GrowthData>{
+      for (final row in theoryFactorRows)
+        if ('${row['factor_id'] ?? ''}'.isNotEmpty)
+          '${row['factor_id']}': row
+    };
 
     return _section(
         '本次预测',
@@ -1514,78 +1555,211 @@ class _EvidenceGrowthActionPredictionPageState
                   style: const TextStyle(
                       fontSize: 17, fontWeight: FontWeight.w900))
             ],
-            if (weaknessRows.isNotEmpty) ...[
+            if (theoryFeedback.isNotEmpty) ...[
               const SizedBox(height: 12),
-              for (var i = 0; i < weaknessRows.length; i++)
-                Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                        border: Border.all(
-                            color: _teal.withValues(alpha: .25)),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(children: [
-                            Expanded(
-                                child: Text(
-                                    '${i + 1}. ${weaknessRows[i]['label'] ?? ''}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w900))),
-                            const SizedBox(width: 6),
-                            Chip(
-                                visualDensity: VisualDensity.compact,
-                                label: Text(
-                                    _weaknessClassLabel(
-                                        weaknessRows[i]['classification']),
-                                    style: const TextStyle(fontSize: 10)))
-                          ]),
-                          Text(
-                              '行动环节：${weaknessRows[i]['stage'] ?? '行动过程'}'
-                              '${(weaknessRows[i]['past_recurrence_count'] as num?)?.toInt() != null && (weaknessRows[i]['past_recurrence_count'] as num).toInt() > 0 ? ' · 相似失败中出现 ${(weaknessRows[i]['past_recurrence_count'] as num).toInt()} 次' : ''}',
-                              style: const TextStyle(
-                                  fontSize: 11, color: Colors.black54)),
-                          if ('${weaknessRows[i]['current_evidence'] ?? ''}'.trim().isNotEmpty) ...[
-                            const SizedBox(height: 6),
+              Row(children: [
+                const Expanded(
+                    child: Text('LLM + JEV 理论反馈综合',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w900))),
+                Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                        '已确认 ${theoryFeedback['confirmed_factor_count'] ?? theoryFactorRows.length} 项',
+                        style: const TextStyle(fontSize: 10)))
+              ]),
+              const SizedBox(height: 3),
+              const Text(
+                  '主证据来自你亲自确认的理论选项；JEV独立判断每个因素在这次行动中的角色，LLM再综合多个因素之间的冲突、配合与阶段断裂。',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.black54, height: 1.4)),
+              if (theoryPattern.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text('综合模式：$theoryPattern',
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w900)),
+              ],
+              if (theoryPatternExplanation.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(theoryPatternExplanation,
+                    style: const TextStyle(
+                        fontSize: 12, height: 1.45))
+              ],
+              if ('${jevTheoryPattern['choice'] ?? ''}'.trim().isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Text(
+                    'JEV独立模式判断：${jevTheoryPattern['choice']} · 自报置信度 ${_pct(jevTheoryPattern['confidence'])}',
+                    style: const TextStyle(
+                        fontSize: 11, color: Colors.black54))
+              ],
+              if (theoryConclusions.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                for (var i = 0; i < theoryConclusions.length; i++)
+                  Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          border: Border.all(
+                              color: _teal.withValues(alpha: .28)),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                      child: Text(
+                                          '${i + 1}. ${theoryConclusions[i]['title'] ?? ''}',
+                                          style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w900))),
+                                  const SizedBox(width: 6),
+                                  Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text(
+                                          _conclusionTypeLabel(
+                                              theoryConclusions[i]['type']),
+                                          style:
+                                              const TextStyle(fontSize: 9)))
+                                ]),
                             Text(
-                                '证据：${weaknessRows[i]['current_evidence']}',
+                                '${_epistemicLabel(theoryConclusions[i]['epistemic_status'])}'
+                                '${growthStrings(theoryConclusions[i]['theory_ids']).isEmpty ? '' : ' · 理论：${growthStrings(theoryConclusions[i]['theory_ids']).join(' + ')}'}',
                                 style: const TextStyle(
-                                    fontSize: 12, height: 1.4))
-                          ],
-                          if ('${weaknessRows[i]['mechanism'] ?? ''}'.trim().isNotEmpty) ...[
-                            const SizedBox(height: 5),
-                            Text(
-                                '为什么关键：${weaknessRows[i]['mechanism']}',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.black54,
-                                    height: 1.4))
-                          ],
-                          if ('${weaknessRows[i]['correction'] ?? ''}'.trim().isNotEmpty) ...[
-                            const SizedBox(height: 5),
-                            Text(
-                                '改正抓手：${weaknessRows[i]['correction']}',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.4))
-                          ],
-                          if ('${weaknessRows[i]['review_question'] ?? ''}'.trim().isNotEmpty) ...[
-                            const SizedBox(height: 5),
-                            Text(
-                                '复盘验证：${weaknessRows[i]['review_question']}',
-                                style: const TextStyle(
+                                    fontSize: 11, color: Colors.black54)),
+                            const SizedBox(height: 7),
+                            const Text('直接依据：你确认的理论因素',
+                                style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.black54,
-                                    height: 1.4))
-                          ],
-                        ]))
-            ] else ...[
+                                    fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            for (final factorId
+                                in growthStrings(
+                                    theoryConclusions[i]['factor_ids']))
+                              if (theoryById[factorId] != null)
+                                Padding(
+                                    padding:
+                                        const EdgeInsets.only(bottom: 5),
+                                    child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('• '),
+                                          Expanded(
+                                              child: Text(
+                                                  '${theoryById[factorId]!['factor_label']}：${theoryById[factorId]!['option_label']}'
+                                                  ' · ${_theoryRoleLabel(theoryById[factorId]!['jev_role'])}'
+                                                  '${theoryById[factorId]!['jev_role_confidence'] is num ? ' ${_pct(theoryById[factorId]!['jev_role_confidence'])}' : ''}',
+                                                  style: const TextStyle(
+                                                      fontSize: 12,
+                                                      height: 1.35)))
+                                        ])),
+                            if ('${theoryConclusions[i]['mechanism'] ?? ''}'.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                  '综合机制：${theoryConclusions[i]['mechanism']}',
+                                  style: const TextStyle(
+                                      fontSize: 12, height: 1.4))
+                            ],
+                            if ('${theoryConclusions[i]['why_key'] ?? ''}'.trim().isNotEmpty) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                  '为什么抓住重点：${theoryConclusions[i]['why_key']}',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.4))
+                            ],
+                            if ('${theoryConclusions[i]['counterevidence'] ?? ''}'.trim().isNotEmpty) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                  '反证／替代解释：${theoryConclusions[i]['counterevidence']}',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.black54,
+                                      height: 1.4))
+                            ],
+                            if ('${theoryConclusions[i]['correction'] ?? ''}'.trim().isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                  '优先改正：${theoryConclusions[i]['correction']}',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
+                                      height: 1.4))
+                            ],
+                            if ('${theoryConclusions[i]['review_focus'] ?? ''}'.trim().isNotEmpty) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                  '复盘要验证：${theoryConclusions[i]['review_focus']}',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.black54,
+                                      height: 1.4))
+                            ],
+                          ]))
+              ] else ...[
+                const SizedBox(height: 10),
+                const Text(
+                    '本次理论反馈尚不足以形成可靠的跨因素综合结论；不会为了“看起来深入”而强行制造一个根因。',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.black54, height: 1.4))
+              ],
+              if (theoryInteractions.isNotEmpty)
+                ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('查看因素之间的交互关系',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('重点不只是哪个因素低，而是它们怎样组合起来影响行动'),
+                    children: [
+                      for (final row in theoryInteractions)
+                        ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('${row['label'] ?? ''}'),
+                            subtitle:
+                                Text('${row['description'] ?? ''}'))
+                    ]),
+              if (theoryUnknowns.isNotEmpty)
+                ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('仍限制综合结论的未知信息',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    children: [
+                      for (final item in theoryUnknowns)
+                        ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.help_outline),
+                            title: Text(item))
+                    ]),
+            ],
+            if (weaknessRows.isNotEmpty)
+              ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('查看通用行为瓶颈辅助校验',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: const Text(
+                      '这是IBM/通用执行因素的辅助结果，不覆盖上面的理论反馈综合结论'),
+                  children: [
+                    for (var i = 0; i < weaknessRows.length; i++)
+                      ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                              radius: 11,
+                              child: Text('${i + 1}',
+                                  style: const TextStyle(fontSize: 10))),
+                          title: Text('${weaknessRows[i]['label'] ?? ''}'),
+                          subtitle: Text(
+                              '${_weaknessClassLabel(weaknessRows[i]['classification'])} · ${weaknessRows[i]['current_evidence'] ?? ''}'))
+                  ])
+            else if (theoryConclusions.isEmpty) ...[
               const SizedBox(height: 10),
               const Text(
-                  '目前还没有足够证据把任何因素提升为“关键弱点”。这本身也是结果：不要为了得到一个解释而制造弱点。',
+                  '目前既没有形成可靠的理论综合结论，也没有通用瓶颈达到关键阈值；需要补充事实，而不是强行下结论。',
                   style: TextStyle(color: Colors.black54, height: 1.4))
             ],
             if (failureChainRows.isNotEmpty)
