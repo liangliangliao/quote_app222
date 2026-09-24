@@ -434,6 +434,14 @@ class EvidenceGrowthJev {
     final events = _forecastEvents(state);
     final core = _relevantCoreFactors(state);
     final dynamicRows = _dynamicFactors(state);
+    // Detailed bottleneck diagnosis is intentionally narrower than the
+    // general factor scan. A dynamic factor without any extracted direct
+    // evidence cannot responsibly be promoted to a "key blocker"; limiting
+    // this set also keeps the typed JEV request compact and auditable.
+    final diagnosticDynamicRows = dynamicRows
+        .where((row) => '${row['evidence'] ?? ''}'.trim().isNotEmpty)
+        .take(8)
+        .toList();
     final failures = _failureModes(state);
     final profile = growthMap(state['action_profile']);
     final answers = growthMap(state['clarification_answers']);
@@ -576,23 +584,24 @@ class EvidenceGrowthJev {
             }
           },
         },
-        for (final row in dynamicRows) ...{
+        for (final row in dynamicRows)
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
                 'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence may use the center score only as JEV typed representation of insufficient evidence; it is not observed neutrality and must not contribute as a fixed numeric weight to the final event probability.',
             'criteria': _supportRubric,
           },
+        for (final row in diagnosticDynamicRows) ...{
           'evidence_dynamic_${row['id']}': {
             'type': 'choice',
             'instructions':
-                'Classify the CURRENT EVIDENCE STATE for this action-specific condition: ${row['condition']} Use only explicit supplied facts. Distinguish genuinely mixed evidence from missing evidence. If the current state is not established, choose insufficient.',
+                'Classify the CURRENT EVIDENCE STATE for this action-specific condition: ${row['condition']} Direct extracted evidence: ${row['evidence']} Use only explicit supplied facts. Distinguish genuinely mixed evidence from missing evidence. If the current state is not established, choose insufficient.',
             'criteria': _diagnosticEvidenceCriteria,
           },
           'bottleneck_dynamic_${row['id']}': {
             'type': 'noul',
             'instructions':
-                'Given only the supplied facts, is this action-specific condition CURRENTLY a material bottleneck for the PRIMARY event? True requires explicit adverse/mixed evidence and a credible direct path to preventing, delaying, or displacing the primary event. Missing evidence or mere plausibility is false.',
+                'Given only the supplied facts, is this action-specific condition CURRENTLY a material bottleneck for the PRIMARY event? Direct extracted evidence: ${row['evidence']} True requires explicit adverse/mixed evidence and a credible direct path to preventing, delaying, or displacing the primary event. Missing evidence or mere plausibility is false.',
             'criteria': {
               'true':
                   'Current evidence supports this condition as a material bottleneck for the primary event.',
