@@ -988,10 +988,31 @@ class EvidenceGrowthJev {
       });
     }
 
+    final actionProfile = growthMap(state['action_profile']);
+    final compactActionState = <String, dynamic>{
+      'plan': state['plan'],
+      'scheduled_at': state['scheduled_at'],
+      'user_reported_conditions': state['user_reported_conditions'],
+      'additional_notes': state['additional_notes'],
+      'similar_history_report': state['similar_history_report'],
+      'analysis_correction': state['analysis_correction'],
+      'clarification_answers': state['clarification_answers'],
+      'selected_theories': state['selected_theories'],
+      'theory_factor_answers': state['theory_factor_answers'],
+      'theory_input_completeness': state['theory_input_completeness'],
+      'personal_history_summary': state['personal_history_summary'],
+      'action_profile': {
+        'normalized_action': actionProfile['normalized_action'],
+        'action_mode': actionProfile['action_mode'],
+        'action_tags': actionProfile['action_tags'],
+        'forecast_events': actionProfile['forecast_events'],
+      },
+    };
+
     return {
       'model': model,
       'state': {
-        'action_prediction': state,
+        'action_prediction': compactActionState,
         'user_confirmed_theory_feedback': theoryFeedbackRows,
         'first_pass_jev': {
           'events': firstPassJev['events'],
