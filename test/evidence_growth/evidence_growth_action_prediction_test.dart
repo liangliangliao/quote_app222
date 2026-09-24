@@ -476,7 +476,15 @@ void main() {
     expect(questions, contains('factor_habit'));
     expect(questions, contains('factor_implementation_intention'));
     expect(questions, contains('factor_dynamic_smoking_cues'));
+    expect(questions, contains('evidence_intention'));
+    expect(questions, contains('bottleneck_intention'));
+    expect(questions, contains('evidence_dynamic_smoking_cues'));
+    expect(questions, contains('bottleneck_dynamic_smoking_cues'));
     expect(questions, contains('dominant_failure_mode'));
+    expect('${(questions['bottleneck_intention'] as Map)['instructions']}',
+        contains('material bottleneck'));
+    expect('${(questions['evidence_intention'] as Map)['instructions']}',
+        contains('CURRENT EVIDENCE STATE'));
     expect(questions, contains('most_decisive_missing_question'));
     expect(questions, isNot(contains('factor_injunctive_norm')));
 
@@ -504,6 +512,33 @@ void main() {
         'factor_habit': scoreAnswer,
         'factor_implementation_intention': scoreAnswer,
         'factor_dynamic_smoking_cues': scoreAnswer,
+        'evidence_intention': {
+          'type': 'choice',
+          'choice': 'adverse',
+          'confidence': .88,
+          'probabilities': {
+            'adverse': .88,
+            'mixed': .08,
+            'supportive': .02,
+            'insufficient': .02
+          }
+        },
+        'bottleneck_intention': {'type': 'noul', 'noul': .81},
+        'evidence_dynamic_smoking_cues': {
+          'type': 'choice',
+          'choice': 'mixed',
+          'confidence': .73,
+          'probabilities': {
+            'adverse': .20,
+            'mixed': .73,
+            'supportive': .02,
+            'insufficient': .05
+          }
+        },
+        'bottleneck_dynamic_smoking_cues': {
+          'type': 'noul',
+          'noul': .67
+        },
         'dominant_failure_mode': {
           'type': 'choice',
           'choice': 'cue_triggered_lapse',
@@ -525,8 +560,53 @@ void main() {
     expect(parsed['overall'], .58);
     expect((parsed['events'] as Map)['remain_abstinent'], .58);
     expect((parsed['factors'] as Map)['dynamic_smoking_cues']['score'], .7);
+    expect(
+        (parsed['factor_evidence'] as Map)['intention']['choice'], 'adverse');
+    expect((parsed['factor_bottlenecks'] as Map)['intention'], .81);
+    expect(
+        (parsed['factor_evidence'] as Map)['dynamic_smoking_cues']['choice'],
+        'mixed');
+    expect((parsed['factor_bottlenecks'] as Map)['dynamic_smoking_cues'], .67);
     expect((parsed['dominant_failure_mode'] as Map)['choice'],
         'cue_triggered_lapse');
+  });
+
+  test('diagnostic evidence criteria keep missing separate from mixed', () {
+    final request = EvidenceGrowthJev.actionRequest({
+      'plan': '明早去体检',
+      'selected_theories': ['IBM'],
+      'theory_factor_answers': {
+        'intention': {
+          'option_id': 'firm',
+          'option_label': '已经坚定决定要做',
+          'confirmed_by_user': true,
+        }
+      },
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'attend_exam',
+            'label': '按计划到达体检',
+            'true_criterion': 'The person attends the exam as planned.',
+            'false_criterion': 'The person does not attend the exam as planned.',
+            'primary': true,
+          }
+        ],
+        'relevant_core_factors': ['intention', 'implementation_intention'],
+        'dynamic_factors': [],
+        'clarifying_questions': [],
+        'failure_modes': [],
+      }
+    }, 'jev-latest');
+
+    final questions = request['questions'] as Map;
+    final evidence = questions['evidence_intention'] as Map;
+    final criteria = evidence['criteria'] as Map;
+    expect(criteria.keys,
+        containsAll(['adverse', 'mixed', 'supportive', 'insufficient']));
+    expect('${criteria['insufficient']}', contains('Missing evidence'));
+    expect('${(questions['dominant_failure_mode'] as Map)['instructions']}',
+        contains('CURRENT RISK PATHWAY'));
   });
 
   test('action prediction history stores outcomes for later calibration', () async {
