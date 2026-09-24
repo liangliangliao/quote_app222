@@ -370,7 +370,8 @@ class EvidenceGrowthJev {
         'label': label,
         'criterion': criterion,
         'source': '${row['source'] ?? 'AI_FAILURE_MODE'}',
-        'factor_id': '${row['factor_id'] ?? ''}',
+        'factor_id':
+            '${row['factor_id'] ?? row['ibm_construct'] ?? ''}',
         'evidence': '${row['evidence'] ?? ''}',
       });
     }
