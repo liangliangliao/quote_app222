@@ -343,7 +343,18 @@ class _EvidenceGrowthActionPredictionPageState
             : 'AI行动理解失败：$detail');
       }
     } catch (e) {
-      if (mounted) _message('$e');
+      if (mounted) {
+        final text = '$e';
+        if (text.contains('JEV_FIRST_PASS_FAILED:CORE_CONTEXT_TOO_LARGE')) {
+          _message('JEV第一阶段核心上下文仍过大。系统已经自动拆分理论角色；请先按当前信息重新分析后再试。');
+        } else if (text.contains('JEV_FIRST_PASS_FAILED:THEORY_ROLE_BATCH')) {
+          _message('JEV理论因素分批判断失败，没有生成伪联合结论。请稍后重试；若持续出现，请重新分析当前行动。');
+        } else if (text.contains('JEV_FIRST_PASS_FAILED:CONTEXT_TOO_LARGE')) {
+          _message('检测到旧版JEV上下文过大逻辑。请安装包含“自动拆分JEV请求”修复的新版本后重试。');
+        } else {
+          _message(text.replaceFirst('Bad state: ', ''));
+        }
+      }
     } finally {
       if (mounted) setState(() => preparing = false);
     }
@@ -2743,6 +2754,17 @@ class _EvidenceGrowthActionPredictionPageState
                             : result['forecast_source'] == 'JEV_PRIMARY'
                                 ? 'JEV初判'
                                 : '降级')),
+                if ('${jevFlow['request_mode'] ?? ''}'.isNotEmpty)
+                  ListTile(
+                      title: const Text('JEV第一阶段请求方式'),
+                      subtitle: Text(
+                          jevFlow['request_mode'] == 'CORE_PLUS_THEORY_ROLE_BATCHES'
+                              ? '上下文较大，已自动拆成“核心行为判断 + 理论角色分批”，理论答案不会因超限被静默丢弃。'
+                              : '单次请求完成。'),
+                      trailing: Text(
+                          jevFlow['theory_roles_batched'] == true
+                              ? '${jevFlow['theory_role_batch_count'] ?? 0} 批'
+                              : '单次')),
                 for (final event in growthRows(jevFlow['events']))
                   ListTile(
                       title: Text(
