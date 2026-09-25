@@ -431,7 +431,11 @@ class EvidenceGrowthJev {
     return out;
   }
 
-  static GrowthData actionRequest(GrowthData state, String model) {
+  static GrowthData actionRequest(
+    GrowthData state,
+    String model, {
+    bool includeTheoryRoles = true,
+  }) {
     final events = _forecastEvents(state);
     final core = _relevantCoreFactors(state);
     final dynamicRows = _dynamicFactors(state);
@@ -528,24 +532,40 @@ class EvidenceGrowthJev {
       return 'The user explicitly confirmed the standardized option: "$label". Treat this as direct evidence, not missing information.';
     }
 
-    // JEV receives the user's facts plus the prediction contract, but not the
-    // LLM's narrative interpretation, assumptions, coverage summary or other
-    // meta-evaluation. This reduces anchoring while preserving dynamically
-    // generated factor definitions.
+    // Keep the first-pass JEV payload intentionally compact. The previous
+    // implementation spread the entire prediction state (including the full
+    // theory questionnaire, recommendations and UI metadata) into this request.
+    // Selecting many theories could therefore exceed the local 64 KB guard
+    // before JEV was ever called.
+    final history = growthMap(state['personal_history_summary']);
     final jevProfile = <String, dynamic>{
       'action_mode': profile['action_mode'],
-      'action_tags': profile['action_tags'],
+      'action_tags': growthStrings(profile['action_tags']).take(12).toList(),
       'normalized_action': profile['normalized_action'],
       'forecast_events': events,
       'relevant_core_factors': core,
       'dynamic_factors': dynamicRows,
-      'clarifying_questions': profile['clarifying_questions'],
+      'clarifying_questions': clarifiers,
       'failure_modes': failures,
     };
     final jevState = <String, dynamic>{
-      ...state,
+      'plan': state['plan'],
+      'scheduled_at': state['scheduled_at'],
+      'user_reported_conditions': state['user_reported_conditions'],
+      'additional_notes': state['additional_notes'],
+      'similar_history_report': state['similar_history_report'],
+      'analysis_correction': state['analysis_correction'],
+      'clarification_answers': state['clarification_answers'],
+      'selected_theories': selectedTheoryIds,
       'theory_factor_answers': sanitizedTheoryAnswers,
       'unanswered_theory_factor_ids': unansweredTheoryFactorIds,
+      'theory_input_completeness': state['theory_input_completeness'],
+      'personal_history_summary': {
+        'resolved_count': history['resolved_count'],
+        'success_count': history['success_count'],
+        'smoothed_success_rate': history['smoothed_success_rate'],
+        'recent': growthRows(history['recent']).take(6).toList(),
+      },
       'action_profile': jevProfile,
     };
 
@@ -554,10 +574,8 @@ class EvidenceGrowthJev {
       'state': {
         'action_prediction': jevState,
         'theoretical_models': {
-          'selected_ids': growthStrings(state['selected_theories']),
-          'models': EvidenceBehaviorTheoryCatalog.theoryRows(
-              growthStrings(state['selected_theories'])),
-          'theory_factor_answers': sanitizedTheoryAnswers,
+          'selected_ids': selectedTheoryIds,
+          'confirmed_factor_ids': sanitizedTheoryAnswers.keys.toList(),
           'unanswered_factor_ids': unansweredTheoryFactorIds,
           'rule':
               'Treat confirmed user questionnaire answers as categorical evidence. Theory labels define constructs, not fixed numeric weights. Do not average theories mechanically. Unselected theory item is missing evidence (MISSING evidence): never impute 0, 2/4, 0.5, or any other pseudo-score. Explicit unknown is also uncertainty, not neutral evidence.'
@@ -637,8 +655,9 @@ class EvidenceGrowthJev {
             }
           },
         },
-        for (final row in confirmedTheoryRows)
-          'theory_role_${row['factor_id']}': {
+        if (includeTheoryRoles)
+          for (final row in confirmedTheoryRows)
+            'theory_role_${row['factor_id']}': {
             'type': 'choice',
             'instructions':
                 'The user has explicitly confirmed this theory factor and option. Do NOT replace or reinterpret the answer. Judge what ROLE this confirmed factor state plays for the PRIMARY observable event in this specific action. Factor: ${row['label']}. Theories: ${(row['theory_ids'] as List).join(', ')}. User-confirmed option: "${row['option_label']}". Consider the original theory structure and supplied facts; do not force every theory into IBM and do not double-count overlapping constructs across theories.',
@@ -655,7 +674,7 @@ class EvidenceGrowthJev {
                   'Its role cannot be determined reliably from the supplied facts or depends strongly on unresolved interactions.'
             }
           },
-        if (confirmedTheoryRows.isNotEmpty)
+        if (includeTheoryRoles && confirmedTheoryRows.isNotEmpty)
           'theory_feedback_pattern': {
             'type': 'choice',
             'instructions':
