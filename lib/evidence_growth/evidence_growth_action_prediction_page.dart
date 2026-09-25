@@ -2081,12 +2081,15 @@ class _EvidenceGrowthActionPredictionPageState
                           title: Text(reviewQuestions[i]))
                   ]),
             const Divider(height: 30),
-            const Text('行动发生概率（辅助参考）',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+                estimateIsCalibrated
+                    ? '行动发生概率（已用个人真实结果再校准）'
+                    : 'JEV原始模型估计（尚未校准为真实概率）',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 3),
             Text(
                 '决策状态：${_jointDecisionModeLabel(jointDecisionMode)}'
-                '${source == 'JEV_FINAL_SYNTHESIS' ? ' · 概率来自JEV最终联合裁决' : source == 'JEV_PRIMARY' ? ' · 概率来自JEV第一阶段主事件判断' : ' · 当前概率不是JEV正式判断'}',
+                '${estimateIsCalibrated ? ' · 已完成个人概率校准' : ' · 当前百分比只是模型原始估计'}',
                 style: const TextStyle(
                     fontSize: 11, color: Colors.black54)),
             const SizedBox(height: 8),
@@ -2111,24 +2114,37 @@ class _EvidenceGrowthActionPredictionPageState
             LinearProgressIndicator(value: estimate!.toDouble()),
             const SizedBox(height: 10),
             Text(
-                source == 'JEV_FINAL_SYNTHESIS'
-                    ? '主预测来源：JEV最终联合裁决（已读取LLM综合 + 理论问卷 + 用户事实）'
+                source.contains('JEV_FINAL_SYNTHESIS')
+                    ? '原始模型来源：JEV最终裁决（读取用户事实 + 理论结构 + LLM综合 + JEV初判）'
                     : source == 'JEV_PRIMARY'
-                        ? '主预测来源：JEV第一阶段 typed workflow'
+                        ? '原始模型来源：JEV第一阶段 typed workflow'
                         : source == 'AI_FALLBACK'
-                            ? '主预测来源：LLM（JEV当前不可用）'
-                            : '主预测来源：个人历史基线',
+                            ? '原始模型来源：LLM（JEV当前不可用）'
+                            : source == 'HISTORY_ONLY'
+                                ? '来源：个人历史基线'
+                                : '来源：模型估计',
                 style: const TextStyle(
                     fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 5),
             Text(
-                source == 'JEV_FINAL_SYNTHESIS'
-                    ? '这个总百分数由JEV在最终裁决阶段重新判断：它同时读取用户输入、已确认理论问卷、JEV第一阶段结果与LLM综合分析；不是把两个模型的数字做平均。'
-                    : source == 'JEV_PRIMARY'
-                        ? '这个总百分数来自JEV第一阶段对“主预测事件”的直接概率判断，不是把下面各因素评分做加权平均。'
-                        : '这个总百分数不是由下面各因素评分简单相加得到。',
+                estimateIsCalibrated
+                    ? '这个百分比先由JEV产生原始预测，再用你过去有明确现实结果的预测做正则化逻辑再校准；不是把理论因素做加权平均。'
+                    : '当前没有足够个人现实结果做概率校准，因此这个百分比只能理解为JEV的模型信念/排序信号，不能解释成“现实中有精确这么大概率”。',
                 style: const TextStyle(
                     fontSize: 11, color: Colors.black54)),
+            if (!estimateIsCalibrated) ...[
+              const SizedBox(height: 4),
+              Text(
+                  '校准状态：未校准。可用二元历史结果 ${probabilityCalibration['sample_count'] ?? 0} 次；达到至少30次且成功/失败各至少5次后，才启用个人概率再校准。',
+                  style: const TextStyle(
+                      fontSize: 11, color: Colors.black54))
+            ] else ...[
+              const SizedBox(height: 4),
+              Text(
+                  '校准状态：已校准 · 样本 ${probabilityCalibration['sample_count'] ?? 0} 次。',
+                  style: const TextStyle(
+                      fontSize: 11, color: Colors.black54))
+            ],
             if (source == 'HISTORY_ONLY') ...[
               const SizedBox(height: 4),
               Text(
