@@ -1279,6 +1279,21 @@ class EvidenceGrowthActionPredictionService {
       'estimate': estimate,
       'band': estimate == null ? '信息不足' : band(estimate),
       'forecast_source': forecastSource,
+      'forecast_algorithm': {
+        'version': 'theory_structure_llm_jev_calibration_v1',
+        'stages': const [
+          'USER_CONFIRMED_THEORY_EVIDENCE',
+          'THEORY_STRUCTURAL_BACKBONE',
+          'LLM_MECHANISM_SYNTHESIS',
+          'JEV_INDEPENDENT_ADJUDICATION',
+          'PERSONAL_PROBABILITY_RECALIBRATION_WHEN_ELIGIBLE',
+          'REAL_WORLD_OUTCOME_VALIDATION',
+        ],
+        'formal_conclusion_rule':
+            'Only promote a final diagnostic conclusion when theory structure, completed LLM synthesis and JEV final adjudication converge on auditable evidence.',
+        'probability_rule':
+            'JEV raw event probability is not called calibrated accuracy. Personal logistic recalibration starts only after sufficient resolved outcomes; Brier score and observed-vs-predicted rate are tracked afterward.',
+      },
       'raw_model_estimate': rawEstimate,
       'probability_calibration': probabilityCalibration,
       'forecast_validation': forecastValidation,
