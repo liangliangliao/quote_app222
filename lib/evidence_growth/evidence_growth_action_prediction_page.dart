@@ -402,7 +402,37 @@ class _EvidenceGrowthActionPredictionPageState
       setState(() => result = output);
       await reload();
     } catch (e) {
-      if (mounted) _message('$e');
+      if (mounted) {
+        final text = '$e'.replaceFirst('Bad state: ', '');
+        if (text.contains(
+            'JEV_FINAL_ADJUDICATION_FAILED:REQUEST_TIMEOUT')) {
+          _message(
+              'LLM分析与JEV第一阶段已经完成，但JEV最终裁决等待超时。新版已把终裁超时从8秒提高到至少30秒；请稍后重试，不会把这次超时误报成“AI分析失败”。');
+        } else if (text.contains(
+            'JEV_FINAL_ADJUDICATION_FAILED:RESPONSE_PARSE_FAILED')) {
+          _message(
+              'JEV最终裁决已收到HTTP成功响应，但返回字段没有完全通过本地解析。系统不会丢弃可用字段；新版已允许可选字段异常并单独标记解析问题。请用新版重试。');
+        } else if (text.contains(
+                'JEV_FINAL_ADJUDICATION_FAILED:NETWORK_ERROR') ||
+            text.contains(
+                'JEV_FINAL_ADJUDICATION_FAILED:TRANSPORT_ERROR')) {
+          _message(
+              'LLM分析可能已经成功；失败发生在JEV最终裁决的网络传输阶段。当前不会生成伪联合结论，请检查网络后重试。');
+        } else if (text.contains(
+            'JEV_FINAL_ADJUDICATION_FAILED:SERVICE_UNAVAILABLE')) {
+          _message(
+              'LLM分析与前序结果仍保留；JEV最终裁决服务本次返回非成功状态，因此没有生成正式联合预测。请稍后重试。');
+        } else if (text.contains(
+            'JEV_FINAL_ADJUDICATION_FAILED:CONTEXT_TOO_LARGE')) {
+          _message(
+              'JEV最终裁决上下文仍过大。新版已经进一步去除重复理论答案、概率分布和历史明细，请安装最新版本后重试。');
+        } else if (text.contains('JEV_FINAL_ADJUDICATION_FAILED:')) {
+          _message(
+              'LLM分析不一定失败；当前失败发生在JEV最终裁决阶段：${text.split('JEV_FINAL_ADJUDICATION_FAILED:').last}');
+        } else {
+          _message(text);
+        }
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
