@@ -584,7 +584,9 @@ class EvidenceGrowthActionPredictionService {
           ? 'NOT_RUN'
           : '${jev['reason'] ?? 'FIRST_PASS_JEV_UNAVAILABLE'}',
     };
-    if (jev['status'] == 'JEV' && jevApiKey.trim().isNotEmpty) {
+    if (jev['status'] == 'JEV' &&
+        jevApiKey.trim().isNotEmpty &&
+        theoryFeedbackSynthesis['status'] == 'AI_SYNTHESIS') {
       finalJevAdjudication = await _jev.assessTheorySynthesis(
         state: state,
         theoryFeedbackRows: theoryFeedbackRows,
@@ -592,12 +594,23 @@ class EvidenceGrowthActionPredictionService {
         firstPassJev: jev,
         apiKey: jevApiKey.trim(),
       );
+    } else if (jev['status'] == 'JEV' &&
+        theoryFeedbackSynthesis['status'] != 'AI_SYNTHESIS') {
+      finalJevAdjudication = {
+        'status': 'LOCAL',
+        'reason':
+            'LLM_SYNTHESIS_UNAVAILABLE_${theoryFeedbackSynthesis['reason'] ?? theoryFeedbackSynthesis['status'] ?? 'UNKNOWN'}',
+      };
     }
 
     if (requireJev) {
       if (jev['status'] != 'JEV') {
         throw StateError(
             'JEV_FIRST_PASS_FAILED:${jev['reason'] ?? 'UNKNOWN'}');
+      }
+      if (theoryFeedbackSynthesis['status'] != 'AI_SYNTHESIS') {
+        throw StateError(
+            'LLM_THEORY_SYNTHESIS_FAILED:${theoryFeedbackSynthesis['reason'] ?? 'UNKNOWN'}');
       }
       if (finalJevAdjudication['status'] != 'JEV') {
         throw StateError(
@@ -660,17 +673,42 @@ class EvidenceGrowthActionPredictionService {
                 (previous, element) =>
                     previous.isEmpty ? element : previous);
 
-    final jointDecisionComplete = jev['status'] == 'JEV' &&
+    final structuralPattern =
+        '${theoryStructuralBackbone['pattern_code'] ?? 'insufficient_evidence'}';
+    final llmPattern =
+        '${theoryFeedbackSynthesis['pattern_code'] ?? 'insufficient_evidence'}';
+    final structuralFactorIds =
+        growthStrings(theoryStructuralBackbone['key_factor_ids']).toSet();
+    final primaryJointFactorIds =
+        growthStrings(primaryJointConclusion['factor_ids']).toSet();
+    final structuralAlignment = structuralPattern == llmPattern ||
+        (structuralFactorIds.isNotEmpty &&
+            primaryJointFactorIds.any(structuralFactorIds.contains)) ||
+        (const {'no_major_theory_blocker', 'insufficient_evidence'}
+                .contains(structuralPattern) &&
+            structuralPattern == llmPattern);
+    final llmSynthesisCompleted =
+        theoryFeedbackSynthesis['status'] == 'AI_SYNTHESIS';
+    final hasUsableJointConclusion =
+        primaryJointConclusion.isNotEmpty ||
+            (structuralPattern == 'no_major_theory_blocker' &&
+                llmPattern == 'no_major_theory_blocker');
+    final jointDecisionComplete = llmSynthesisCompleted &&
+        jev['status'] == 'JEV' &&
         finalJevAdjudication['status'] == 'JEV' &&
-        '${synthesisQuality['choice'] ?? ''}' == 'joint_supported';
+        '${synthesisQuality['choice'] ?? ''}' == 'joint_supported' &&
+        structuralAlignment &&
+        hasUsableJointConclusion;
     final jointDecisionMode = jointDecisionComplete
-        ? 'LLM_JEV_JOINT'
-        : jev['status'] == 'JEV' &&
-                finalJevAdjudication['status'] == 'JEV'
-            ? 'LLM_JEV_DISAGREEMENT_OR_INSUFFICIENT'
-            : jev['status'] == 'JEV'
-                ? 'JEV_FIRST_PASS_ONLY'
-                : 'LLM_ONLY_DEGRADED';
+        ? 'STRUCTURE_LLM_JEV_CONVERGED'
+        : !llmSynthesisCompleted
+            ? 'LLM_SYNTHESIS_UNAVAILABLE'
+            : jev['status'] == 'JEV' &&
+                    finalJevAdjudication['status'] == 'JEV'
+                ? 'STRUCTURE_LLM_JEV_DISAGREEMENT_OR_INSUFFICIENT'
+                : jev['status'] == 'JEV'
+                    ? 'JEV_FIRST_PASS_ONLY'
+                    : 'NO_FORMAL_JOINT_DECISION';
 
     final aiEstimate = _prob(ai['execution_likelihood']);
     final eventProbabilities = growthMap(jev['events']);
