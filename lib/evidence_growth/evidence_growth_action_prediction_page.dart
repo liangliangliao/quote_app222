@@ -404,7 +404,10 @@ class _EvidenceGrowthActionPredictionPageState
     } catch (e) {
       if (mounted) {
         final text = '$e'.replaceFirst('Bad state: ', '');
-        if (text.contains(
+        if (text.contains('LLM_THEORY_SYNTHESIS_FAILED:')) {
+          _message(
+              '第一阶段分析与JEV初判已经完成，但LLM二次跨理论综合没有成功完成。为避免把JEV单独判断伪装成“LLM+JEV综合结论”，本次不生成正式最终结论；请重试。');
+        } else if (text.contains(
             'JEV_FINAL_ADJUDICATION_FAILED:REQUEST_TIMEOUT')) {
           _message(
               'LLM分析与JEV第一阶段已经完成，但JEV最终裁决等待超时。新版已把终裁超时从8秒提高到至少30秒；请稍后重试，不会把这次超时误报成“AI分析失败”。');
