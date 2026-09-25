@@ -2662,7 +2662,12 @@ ${jsonEncode({
       'environmental_influences',
       'barriers_resources',
     };
-    const intentionIds = {
+    const commitmentIds = {
+      'intention',
+      'goals',
+      'reflective_motivation',
+    };
+    const intentionSupportIds = {
       'intention',
       'goals',
       'reflective_motivation',
@@ -2694,8 +2699,9 @@ ${jsonEncode({
     };
 
     final feasibilityAdverse = adverse(feasibilityIds);
-    final intentionSupport = supportive(intentionIds);
-    final intentionAdverse = adverse(intentionIds);
+    final intentionSupport = supportive(intentionSupportIds);
+    final commitmentSupport = supportive(commitmentIds);
+    final intentionAdverse = adverse(commitmentIds);
     final volitionAdverse = adverse(volitionIds);
     final automaticAdverse = adverse(automaticIds);
     final maintenanceAdverse = adverse(maintenanceIds);
@@ -2707,9 +2713,21 @@ ${jsonEncode({
     String rationale =
         '当前理论反馈不足以形成一个由理论结构直接支持的阶段性模式。';
 
+    const hardFeasibilityIds = {
+      'actual_behavioral_control',
+      'physical_capability',
+      'psychological_capability',
+      'physical_opportunity',
+      'knowledge_skills',
+      'behavioral_capability',
+      'environmental_constraints',
+      'barriers_resources',
+    };
     final hardFeasibility = feasibilityAdverse.where((id) {
       final level = byId[id]?['ordinal_level'];
-      return level is num && level.toInt() == 0;
+      return hardFeasibilityIds.contains(id) &&
+          level is num &&
+          level.toInt() == 0;
     }).toList();
 
     if (hardFeasibility.isNotEmpty) {
@@ -2727,10 +2745,10 @@ ${jsonEncode({
       evidence.addAll(keyFactors);
       rationale =
           '用户对行动意向给出支持性回答，但计划/触发/行动控制等意志阶段存在不利证据，符合“意向已形成但向行动转化受阻”的结构条件。';
-    } else if (intentionSupport.isNotEmpty && automaticAdverse.isNotEmpty) {
+    } else if (commitmentSupport.isNotEmpty && automaticAdverse.isNotEmpty) {
       pattern = 'automatic_motivation_conflict';
       keyFactors
-        ..addAll(intentionSupport.take(2))
+        ..addAll(commitmentSupport.take(2))
         ..addAll(automaticAdverse);
       evidence.addAll(keyFactors);
       rationale =
