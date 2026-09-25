@@ -737,12 +737,17 @@ class EvidenceGrowthActionPredictionService {
             : aiEstimate != null
                 ? 'AI_FALLBACK'
                 : 'NO_MODEL_ESTIMATE';
-    double? estimate = rawEstimate;
+    final probabilityCalibration =
+        _calibrateRawForecast(rawEstimate, allResolved);
+    double? estimate = _prob(probabilityCalibration['probability']);
     double historyWeight = 0;
     if (estimate == null && baseline != null && resolved.length >= 5) {
       estimate = baseline;
       forecastSource = 'HISTORY_ONLY';
       historyWeight = 1;
+    } else if (probabilityCalibration['status'] ==
+        'PERSONAL_PLATT_CALIBRATED') {
+      forecastSource = '${forecastSource}_PERSONALLY_CALIBRATED';
     }
 
     final factors = <String, GrowthData>{};
@@ -1274,6 +1279,9 @@ class EvidenceGrowthActionPredictionService {
       'band': estimate == null ? '信息不足' : band(estimate),
       'forecast_source': forecastSource,
       'raw_model_estimate': rawEstimate,
+      'probability_calibration': probabilityCalibration,
+      'estimate_is_calibrated':
+          probabilityCalibration['status'] == 'PERSONAL_PLATT_CALIBRATED',
       'forecast_provenance': {
         'primary_source': forecastSource,
         'jev_primary_event_probability': jevEstimate,
@@ -1288,6 +1296,9 @@ class EvidenceGrowthActionPredictionService {
         'history_baseline': baseline,
         'history_weight': historyWeight,
         'posthoc_history_blend_applied': false,
+        'probability_calibration_status': probabilityCalibration['status'],
+        'probability_calibration_sample_count':
+            probabilityCalibration['sample_count'],
         'history_usage':
             'Personal history is supplied to JEV as evidence. It is not blended a second time with an arbitrary manual weight; history-only fallback is used only when no model estimate exists and at least 5 similar outcomes are available.',
         'factor_scores_are_not_probability_weights': true,
