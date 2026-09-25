@@ -366,8 +366,9 @@ void main() {
   });
 
   test('JEV first-pass request strips oversized UI/theory metadata', () {
+    final noiseText = List.filled(400, 'x').join();
     final hugeNoise = List.generate(
-        120, (i) => {'id': 'noise_$i', 'text': 'x' * 400});
+        120, (i) => {'id': 'noise_$i', 'text': noiseText});
     final request = EvidenceGrowthJev.actionRequest({
       'plan': '明早去跑步',
       'scheduled_at': '2026-09-26T06:00:00',
