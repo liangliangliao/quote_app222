@@ -2789,6 +2789,8 @@ class _EvidenceGrowthActionPredictionPageState
     final ai = growthMap(result['ai']);
     final jevFlow = growthMap(result['jev_workflow']);
     final baseline = growthMap(result['history_baseline']);
+    final calibration = growthMap(result['probability_calibration']);
+    final validation = growthMap(result['forecast_validation']);
     final missing = growthStrings(result['missing_information']);
     final failures = growthStrings(result['failure_modes']);
 
@@ -2829,17 +2831,33 @@ class _EvidenceGrowthActionPredictionPageState
               children: [
                 ListTile(
                     title: const Text('主预测引擎'),
-                    subtitle: Text(result['forecast_source'] == 'JEV_FINAL_SYNTHESIS'
-                        ? 'JEV最终联合裁决：读取用户事实、理论问卷、JEV初判与LLM综合'
+                    subtitle: Text('${result['forecast_source'] ?? ''}'.contains('JEV_FINAL_SYNTHESIS')
+                        ? 'JEV最终裁决：读取用户事实、理论结构、LLM综合与JEV初判'
                         : result['forecast_source'] == 'JEV_PRIMARY'
                             ? 'JEV第一阶段 typed probabilistic workflow'
                             : 'JEV不可用时才回退到其他来源'),
                     trailing: Text(
-                        result['forecast_source'] == 'JEV_FINAL_SYNTHESIS'
+                        '${result['forecast_source'] ?? ''}'.contains('JEV_FINAL_SYNTHESIS')
                             ? 'JEV终裁'
                             : result['forecast_source'] == 'JEV_PRIMARY'
                                 ? 'JEV初判'
                                 : '降级')),
+                ListTile(
+                    title: const Text('概率校准'),
+                    subtitle: Text(calibration['status'] == 'PERSONAL_PLATT_CALIBRATED'
+                        ? '已用过去真实结果做正则化逻辑再校准；当前百分比可作为个人化概率估计继续验证。'
+                        : '尚无足够个人真实结果，当前百分比只是模型原始估计，不应理解为精确现实概率。'),
+                    trailing: Text(
+                        calibration['status'] == 'PERSONAL_PLATT_CALIBRATED'
+                            ? '已校准'
+                            : '未校准')),
+                if ((validation['final_count'] as num? ?? 0) > 0)
+                  ListTile(
+                      title: const Text('真实结果验证'),
+                      subtitle: Text(
+                          '已验证 ${validation['final_count']} 次 · 实际发生率 ${_pct(validation['observed_rate'])} · 平均预测 ${_pct(validation['final_mean_prediction'])}'),
+                      trailing: Text(
+                          'Brier ${((validation['final_brier'] as num?)?.toDouble() ?? 0).toStringAsFixed(3)}')),
                 if ('${jevFlow['request_mode'] ?? ''}'.isNotEmpty)
                   ListTile(
                       title: const Text('JEV第一阶段请求方式'),
