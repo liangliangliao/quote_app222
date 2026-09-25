@@ -1273,7 +1273,7 @@ class EvidenceGrowthActionPredictionService {
         : jointDecisionComplete && theorySynthesisBottomLine.isNotEmpty
             ? theorySynthesisBottomLine
             : !jointDecisionComplete && jev['status'] == 'JEV'
-                ? 'LLM 与 JEV 尚未形成足够一致的最终结论；请查看分歧或补充证据。'
+                ? '理论结构、LLM 与 JEV 尚未形成足够收敛的最终结论；请查看分歧或补充证据。'
                 : theorySynthesisBottomLine.isNotEmpty
                     ? 'JEV未参与最终裁决：$theorySynthesisBottomLine'
                     : fallbackDiagnosisHeadline;
