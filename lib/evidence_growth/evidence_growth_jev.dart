@@ -1027,6 +1027,7 @@ class EvidenceGrowthJev {
     final primaryFalseCriterion =
         '${primaryEvent['false_criterion'] ?? ''}'.trim();
 
+    final history = growthMap(state['personal_history_summary']);
     final compactActionState = <String, dynamic>{
       'plan': state['plan'],
       'scheduled_at': state['scheduled_at'],
@@ -1036,28 +1037,59 @@ class EvidenceGrowthJev {
       'analysis_correction': state['analysis_correction'],
       'clarification_answers': state['clarification_answers'],
       'selected_theories': state['selected_theories'],
-      'theory_factor_answers': state['theory_factor_answers'],
       'theory_input_completeness': state['theory_input_completeness'],
-      'personal_history_summary': state['personal_history_summary'],
+      'personal_history_summary': {
+        'resolved_count': history['resolved_count'],
+        'success_count': history['success_count'],
+        'smoothed_success_rate': history['smoothed_success_rate'],
+        'recent': growthRows(history['recent']).take(6).toList(),
+      },
       'action_profile': {
         'normalized_action': actionProfile['normalized_action'],
         'action_mode': actionProfile['action_mode'],
-        'action_tags': actionProfile['action_tags'],
+        'action_tags': growthStrings(actionProfile['action_tags']).take(12).toList(),
         'forecast_events': actionProfile['forecast_events'],
       },
+    };
+    final compactTheoryFeedback = <GrowthData>[
+      for (final row in theoryFeedbackRows)
+        {
+          'factor_id': row['factor_id'],
+          'factor_label': row['factor_label'],
+          'theory_ids': row['theory_ids'],
+          'option_id': row['option_id'],
+          'option_label': row['option_label'],
+          'ordinal_level': row['ordinal_level'],
+          'jev_role': row['jev_role'],
+          'jev_role_confidence': row['jev_role_confidence'],
+        }
+    ];
+    final firstPassRoles = growthMap(firstPassJev['theory_factor_roles']);
+    final compactFirstPassRoles = <String, GrowthData>{
+      for (final entry in firstPassRoles.entries)
+        entry.key: {
+          'choice': growthMap(entry.value)['choice'],
+          'confidence': growthMap(entry.value)['confidence'],
+        }
     };
 
     return {
       'model': model,
       'state': {
         'action_prediction': compactActionState,
-        'user_confirmed_theory_feedback': theoryFeedbackRows,
+        'user_confirmed_theory_feedback': compactTheoryFeedback,
         'first_pass_jev': {
           'events': firstPassJev['events'],
           'overall': firstPassJev['overall'],
-          'theory_factor_roles': firstPassJev['theory_factor_roles'],
-          'theory_feedback_pattern': firstPassJev['theory_feedback_pattern'],
-          'dominant_failure_mode': firstPassJev['dominant_failure_mode'],
+          'theory_factor_roles': compactFirstPassRoles,
+          'theory_feedback_pattern': {
+            'choice': growthMap(firstPassJev['theory_feedback_pattern'])['choice'],
+            'confidence': growthMap(firstPassJev['theory_feedback_pattern'])['confidence'],
+          },
+          'dominant_failure_mode': {
+            'choice': growthMap(firstPassJev['dominant_failure_mode'])['choice'],
+            'confidence': growthMap(firstPassJev['dominant_failure_mode'])['confidence'],
+          },
         },
         'llm_candidate_synthesis': {
           'integrated_pattern': llmSynthesis['integrated_pattern'],
