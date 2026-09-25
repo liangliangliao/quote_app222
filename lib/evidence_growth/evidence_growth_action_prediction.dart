@@ -567,12 +567,15 @@ class EvidenceGrowthActionPredictionService {
         'jev_role_probabilities': growthMap(role['probabilities']),
       });
     }
+    final theoryStructuralBackbone =
+        _buildTheoryStructuralBackbone(theoryFeedbackRows, profile);
     final theoryFeedbackSynthesis = await _synthesizeTheoryFeedback(
       state: state,
       profile: profile,
       aiAssessment: ai,
       jevAssessment: jev,
       theoryFeedbackRows: theoryFeedbackRows,
+      structuralBackbone: theoryStructuralBackbone,
     );
 
     GrowthData finalJevAdjudication = {
@@ -2799,6 +2802,7 @@ ${jsonEncode({
     required GrowthData aiAssessment,
     required GrowthData jevAssessment,
     required List<GrowthData> theoryFeedbackRows,
+    required GrowthData structuralBackbone,
   }) async {
     if (theoryFeedbackRows.isEmpty) {
       return {
@@ -2850,6 +2854,7 @@ ${jsonEncode({
 必须做到：
 - 保留各理论自己的结构。TPB、IBM、COM-B、SCT、HAPA、执行意图不能全部压成IBM字段。
 - 真正“综合”多个因素：优先寻找因素之间的组合关系、矛盾和阶段断裂，而不是逐项复述问卷。
+- THEORY_STRUCTURAL_BACKBONE 是依据原理论结构和用户已确认选项生成的确定性骨架。你可以提出更细的机制，但若要与骨架不同，必须在 counterevidence 中明确说明是哪条用户事实支持偏离；不得凭语言流畅度覆盖骨架。
 - 典型但非强制模式包括：意向强但计划/行动控制弱；反思性动机强但自动性动机拉向相反方向；能力够但机会不足；结果价值高但自我效能低；能启动但维持/恢复机制弱。
 - 同一个心理构念被多个理论重复测量时，只作为同一证据链的交叉支持，禁止机械重复计数。
 - “关键弱点”必须说明：哪些用户确认因素共同支持、JEV是否一致、为什么它能解释当前行为断点、有什么反证/替代解释。
@@ -2882,6 +2887,9 @@ ${jsonEncode(theoryDetails)}
 USER_CONFIRMED_THEORY_FEEDBACK_WITH_JEV_ROLE:
 ${jsonEncode(theoryFeedbackRows)}
 
+THEORY_STRUCTURAL_BACKBONE:
+${jsonEncode(structuralBackbone)}
+
 JEV_INTEGRATED_PATTERN:
 ${jsonEncode(jevPattern)}
 
@@ -2901,6 +2909,7 @@ ${jsonEncode({
 
 返回：
 {
+  "pattern_code":"必须从 intention_not_formed|intention_behavior_gap|capability_opportunity_gap|automatic_motivation_conflict|self_regulation_maintenance_gap|multi_factor_conflict|no_major_theory_blocker|insufficient_evidence 中选择",
   "integrated_pattern":"一句话描述由多个理论因素共同形成的当前行为模式",
   "pattern_explanation":"2-4句，说明从哪些用户确认因素组合出这个模式，以及JEV是否支持",
   "core_conclusions":[
@@ -2995,6 +3004,19 @@ ${jsonEncode({
       return {
         'status': 'AI_SYNTHESIS',
         'model': config.displayModel,
+        'pattern_code': const {
+          'intention_not_formed',
+          'intention_behavior_gap',
+          'capability_opportunity_gap',
+          'automatic_motivation_conflict',
+          'self_regulation_maintenance_gap',
+          'multi_factor_conflict',
+          'no_major_theory_blocker',
+          'insufficient_evidence',
+        }.contains('${decoded['pattern_code'] ?? ''}')
+            ? '${decoded['pattern_code']}'
+            : 'insufficient_evidence',
+        'structural_backbone': structuralBackbone,
         'integrated_pattern':
             _cleanUserText('${decoded['integrated_pattern'] ?? ''}'),
         'pattern_explanation':
@@ -3048,7 +3070,9 @@ ${jsonEncode({
     return {
       'status': 'LOCAL_SYNTHESIS',
       'reason': reason,
-      'integrated_pattern': '${jevPattern['choice'] ?? ''}',
+      'pattern_code': '${structuralBackbone['pattern_code'] ?? 'insufficient_evidence'}',
+      'structural_backbone': structuralBackbone,
+      'integrated_pattern': '${jevPattern['choice'] ?? structuralBackbone['pattern_code'] ?? ''}',
       'pattern_explanation':
           '当前无法完成LLM二次综合；以下只按用户确认理论因素与JEV独立角色判断保留候选，不推断隐藏心理原因。',
       'bottom_line': priorities.isEmpty
