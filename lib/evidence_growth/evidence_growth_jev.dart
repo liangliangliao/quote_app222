@@ -1248,8 +1248,13 @@ class EvidenceGrowthJev {
       model: model,
     );
     final body = jsonEncode(request);
-    if (utf8.encode(body).length > 64000) {
-      return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
+    final requestBytes = utf8.encode(body).length;
+    if (requestBytes > 64000) {
+      return {
+        'status': 'LOCAL',
+        'reason': 'CONTEXT_TOO_LARGE',
+        'request_bytes': requestBytes,
+      };
     }
     final key = sha256
         .convert(utf8.encode('action-v7-final-adjudication|$apiKey|$body'))
@@ -1266,6 +1271,7 @@ class EvidenceGrowthJev {
       final enriched = <String, dynamic>{
         ...result,
         'candidate_catalog': catalog,
+        'request_bytes': requestBytes,
       };
       if (enriched['status'] == 'JEV') {
         if (_cache.length >= 48) _cache.remove(_cache.keys.first);
