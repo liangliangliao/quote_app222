@@ -1283,6 +1283,11 @@ class EvidenceGrowthActionPredictionService {
       'jev_workflow': {
         'primary_event_id': primaryEventId,
         'events': eventRows,
+        'request_mode': jev['request_mode'],
+        'core_request_bytes': jev['core_request_bytes'],
+        'full_request_bytes': jev['full_request_bytes'],
+        'theory_roles_batched': jev['theory_roles_batched'] == true,
+        'theory_role_batch_count': jev['theory_role_batch_count'],
         'hard_blocker': hardBlockerProbability,
         'dominant_failure_mode': dominantFailureKey,
         'dominant_failure_label':
