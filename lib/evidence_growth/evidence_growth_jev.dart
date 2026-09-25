@@ -1464,6 +1464,260 @@ class EvidenceGrowthJev {
     }
   }
 
+  static GrowthData theoryRoleBatchRequest(
+    GrowthData state,
+    List<String> factorIds,
+    String model, {
+    bool includePattern = false,
+  }) {
+    final selectedTheoryIds = growthStrings(state['selected_theories']);
+    final answers = growthMap(state['theory_factor_answers']);
+    final rows = <GrowthData>[];
+    final allConfirmed = <GrowthData>[];
+
+    for (final entry in answers.entries) {
+      final answer = growthMap(entry.value);
+      final optionId = '${answer['option_id'] ?? ''}'.trim();
+      final optionLabel = '${answer['option_label'] ?? ''}'.trim();
+      final factor = EvidenceBehaviorTheoryCatalog.factor(entry.key);
+      if (factor == null ||
+          optionId.isEmpty ||
+          optionId == 'unknown' ||
+          optionLabel.isEmpty) {
+        continue;
+      }
+      final compact = <String, dynamic>{
+        'factor_id': entry.key,
+        'label': factor['label'],
+        'theory_ids': growthStrings(factor['theories'])
+            .where(selectedTheoryIds.contains)
+            .toList(),
+        'option_id': optionId,
+        'option_label': optionLabel,
+      };
+      allConfirmed.add(compact);
+      if (factorIds.contains(entry.key)) rows.add(compact);
+    }
+
+    final profile = growthMap(state['action_profile']);
+    final events = _forecastEvents(state);
+    final history = growthMap(state['personal_history_summary']);
+    final compactState = <String, dynamic>{
+      'plan': state['plan'],
+      'scheduled_at': state['scheduled_at'],
+      'user_reported_conditions': state['user_reported_conditions'],
+      'additional_notes': state['additional_notes'],
+      'similar_history_report': state['similar_history_report'],
+      'clarification_answers': state['clarification_answers'],
+      'selected_theories': selectedTheoryIds,
+      'confirmed_theory_factors': allConfirmed,
+      'personal_history_summary': {
+        'resolved_count': history['resolved_count'],
+        'success_count': history['success_count'],
+        'smoothed_success_rate': history['smoothed_success_rate'],
+      },
+      'action_profile': {
+        'action_mode': profile['action_mode'],
+        'normalized_action': profile['normalized_action'],
+        'forecast_events': events,
+      },
+    };
+
+    return {
+      'model': model,
+      'state': {
+        'action_prediction': compactState,
+        'instruction':
+            'This is a batched continuation of the first-pass JEV action assessment. User-confirmed theory options are direct categorical evidence. Judge only the requested factor roles. The state includes all confirmed theory factors so interactions can be considered. Do not infer missing facts or mechanically average theories.'
+      },
+      'questions': {
+        for (final row in rows)
+          'theory_role_${row['factor_id']}': {
+            'type': 'choice',
+            'instructions':
+                'Judge what ROLE this user-confirmed factor state plays for the PRIMARY observable event in this specific action. Factor: ${row['label']}. Theories: ${growthStrings(row['theory_ids']).join(', ')}. User-confirmed option: "${row['option_label']}". Keep the original theory structure and do not double-count overlapping constructs.',
+            'criteria': {
+              'key_blocker':
+                  'This confirmed factor state is adverse/misaligned and is one of the most material current bottlenecks for the primary event.',
+              'secondary_risk':
+                  'This confirmed factor state is adverse/misaligned but is more likely a contributing or secondary risk than the central bottleneck.',
+              'protective':
+                  'This confirmed factor state materially supports execution of the primary event.',
+              'low_relevance':
+                  'The confirmed answer is valid, but this factor has little material relevance to the primary event in the present action.',
+              'uncertain':
+                  'Its role cannot be determined reliably from the supplied facts or depends strongly on unresolved interactions.'
+            }
+          },
+        if (includePattern && allConfirmed.isNotEmpty)
+          'theory_feedback_pattern': {
+            'type': 'choice',
+            'instructions':
+                'Integrate ALL user-confirmed theory factors in state with the action facts. Choose the broad process pattern that best describes where this action is currently vulnerable. This is an independent JEV synthesis. Do not mechanically average factors or theories.',
+            'criteria': {
+              'intention_not_formed':
+                  'A sufficiently clear or strong intention/goal commitment has not formed.',
+              'intention_behavior_gap':
+                  'A meaningful intention exists, but planning, cue-response linkage, action control, self-regulation, coping, salience or competing automatic processes impede translation into behavior.',
+              'capability_opportunity_gap':
+                  'Capability, skill, physical/social opportunity, resources or actual control are the main constraints despite motivation.',
+              'automatic_motivation_conflict':
+                  'Emotional, habitual, impulsive or automatic motivation conflicts with reflective goals or intentions.',
+              'self_regulation_maintenance_gap':
+                  'Initiation may be possible, but monitoring, coping, maintenance, recovery or reinforcement processes are the main vulnerability.',
+              'multi_factor_conflict':
+                  'No single stage explains the evidence; several theory factors interact materially.',
+              'no_major_theory_blocker':
+                  'The confirmed theory factors are mostly supportive or low relevance; no major theory-based blocker is established.',
+              'insufficient_evidence':
+                  'The confirmed factor feedback is too incomplete or contradictory to support one integrated process pattern.'
+            }
+          }
+      }
+    };
+  }
+
+  static GrowthData parseTheoryRoleBatch(GrowthData body) {
+    final answers = growthMap(body['answers']);
+
+    GrowthData choice(String key) {
+      final a = growthMap(answers[key]);
+      if (a.isEmpty) return {};
+      final selected = a['choice'];
+      final confidence = a['confidence'];
+      if (a['type'] != 'choice' ||
+          selected is! String ||
+          confidence is! num ||
+          !confidence.isFinite ||
+          confidence < 0 ||
+          confidence > 1) {
+        throw const FormatException('INVALID_JEV_THEORY_ROLE_CHOICE');
+      }
+      return {
+        'choice': selected,
+        'confidence': confidence.toDouble(),
+        'probabilities': growthMap(a['probabilities']),
+      };
+    }
+
+    final roles = <String, GrowthData>{};
+    for (final entry in answers.entries) {
+      if (!entry.key.startsWith('theory_role_')) continue;
+      roles[entry.key.substring('theory_role_'.length)] =
+          choice(entry.key);
+    }
+    return {
+      'status': 'JEV',
+      'model': body['model'],
+      'usage': body['usage'],
+      'theory_factor_roles': roles,
+      'theory_feedback_pattern': choice('theory_feedback_pattern'),
+    };
+  }
+
+  Future<GrowthData> _assessTheoryRolesBatched(
+    GrowthData state, {
+    required String apiKey,
+    required String model,
+  }) async {
+    final answers = growthMap(state['theory_factor_answers']);
+    final ids = <String>[];
+    for (final entry in answers.entries) {
+      final row = growthMap(entry.value);
+      final optionId = '${row['option_id'] ?? ''}'.trim();
+      if (EvidenceBehaviorTheoryCatalog.factor(entry.key) == null ||
+          optionId.isEmpty ||
+          optionId == 'unknown') {
+        continue;
+      }
+      ids.add(entry.key);
+    }
+    if (ids.isEmpty) {
+      return {
+        'status': 'JEV',
+        'theory_factor_roles': <String, GrowthData>{},
+        'theory_feedback_pattern': <String, dynamic>{},
+        'batched': true,
+        'batch_count': 0,
+      };
+    }
+
+    final merged = <String, dynamic>{};
+    GrowthData pattern = {};
+    var batchCount = 0;
+    for (var offset = 0; offset < ids.length; offset += 10) {
+      final end = (offset + 10 < ids.length) ? offset + 10 : ids.length;
+      final chunk = ids.sublist(offset, end);
+      final request = theoryRoleBatchRequest(
+        state,
+        chunk,
+        model,
+        includePattern: offset == 0,
+      );
+      final body = jsonEncode(request);
+      final bytes = utf8.encode(body).length;
+      if (bytes > 64000) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'THEORY_ROLE_BATCH_CONTEXT_TOO_LARGE',
+          'request_bytes': bytes,
+          'batch_offset': offset,
+        };
+      }
+      final part = await _sendTheoryRoleBatch(body, apiKey);
+      if (part['status'] != 'JEV') {
+        return {
+          'status': 'LOCAL',
+          'reason':
+              'THEORY_ROLE_BATCH_FAILED_${part['reason'] ?? 'UNKNOWN'}',
+          'batch_offset': offset,
+        };
+      }
+      batchCount++;
+      merged.addAll(growthMap(part['theory_factor_roles']));
+      if (pattern.isEmpty) {
+        pattern = growthMap(part['theory_feedback_pattern']);
+      }
+    }
+
+    return {
+      'status': 'JEV',
+      'theory_factor_roles': merged,
+      'theory_feedback_pattern': pattern,
+      'batched': true,
+      'batch_count': batchCount,
+    };
+  }
+
+  Future<GrowthData> _sendTheoryRoleBatch(String body, String key) async {
+    final client = _client ?? http.Client();
+    try {
+      final response = await client
+          .post(endpoint,
+              headers: {
+                'Authorization': 'Bearer $key',
+                'Content-Type': 'application/json',
+              },
+              body: body)
+          .timeout(timeout);
+      if (response.statusCode == 429 || response.statusCode == 529) {
+        _cooldown = DateTime.now().add(const Duration(seconds: 45));
+      }
+      if (response.statusCode != 200) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'SERVICE_UNAVAILABLE',
+          'http_status': response.statusCode,
+        };
+      }
+      return parseTheoryRoleBatch(growthMap(jsonDecode(response.body)));
+    } catch (_) {
+      return {'status': 'LOCAL', 'reason': 'REQUEST_FAILED'};
+    } finally {
+      if (_client == null) client.close();
+    }
+  }
+
   Future<GrowthData> assessAction(GrowthData state,
       {required String apiKey, String model = 'jev-latest'}) async {
     if (apiKey.isEmpty) return {'status': 'LOCAL', 'reason': 'NO_KEY'};
