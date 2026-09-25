@@ -1724,17 +1724,70 @@ class EvidenceGrowthJev {
     if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
       return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
     }
-    final body = jsonEncode(actionRequest(state, model));
-    if (utf8.encode(body).length > 64000) {
-      return {'status': 'LOCAL', 'reason': 'CONTEXT_TOO_LARGE'};
+
+    // Try the complete first-pass request first. When many theories are
+    // selected, the theory-role questions can make one typed request exceed
+    // the local 64 KB safety limit. In that case we keep the core action
+    // judgement in one request and continue the theory-role judgements in
+    // small typed batches. No theory answer is silently dropped.
+    final fullRequest = actionRequest(state, model);
+    final fullBody = jsonEncode(fullRequest);
+    final fullBytes = utf8.encode(fullBody).length;
+    final splitTheoryRoles = fullBytes > 56000;
+    final coreBody = splitTheoryRoles
+        ? jsonEncode(actionRequest(
+            state,
+            model,
+            includeTheoryRoles: false,
+          ))
+        : fullBody;
+    final coreBytes = utf8.encode(coreBody).length;
+    if (coreBytes > 64000) {
+      return {
+        'status': 'LOCAL',
+        'reason': 'CORE_CONTEXT_TOO_LARGE',
+        'request_bytes': coreBytes,
+        'full_request_bytes': fullBytes,
+      };
     }
-    final key = sha256.convert(utf8.encode('action-v6-theory-synthesis|$apiKey|$body')).toString();
+
+    final key = sha256
+        .convert(utf8.encode(
+            'action-v10-batched-theory-roles|$apiKey|$fullBody'))
+        .toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
-    final pending = _sendAction(body, apiKey);
-    _pending[key] = pending;
-    try {
-      final result = await pending;
+
+    final pending = (() async {
+      var result = await _sendAction(coreBody, apiKey);
+      if (result['status'] != 'JEV') return result;
+
+      if (splitTheoryRoles) {
+        final roleResult = await _assessTheoryRolesBatched(
+          state,
+          apiKey: apiKey,
+          model: model,
+        );
+        if (roleResult['status'] != 'JEV') {
+          return {
+            'status': 'LOCAL',
+            'reason': roleResult['reason'] ?? 'THEORY_ROLE_BATCH_FAILED',
+            'core_request_bytes': coreBytes,
+            'full_request_bytes': fullBytes,
+            'first_pass_core_completed': true,
+          };
+        }
+        result = {
+          ...result,
+          'theory_factor_roles':
+              growthMap(roleResult['theory_factor_roles']),
+          'theory_feedback_pattern':
+              growthMap(roleResult['theory_feedback_pattern']),
+          'theory_roles_batched': true,
+          'theory_role_batch_count': roleResult['batch_count'],
+        };
+      }
+
       final forecastEvents = _forecastEvents(state);
       final primaryRows =
           forecastEvents.where((row) => row['primary'] == true).toList();
@@ -1744,21 +1797,29 @@ class EvidenceGrowthJev {
               ? '${forecastEvents.first['id'] ?? ''}'
               : '');
       final parsedEvents = growthMap(result['events']);
-      final primaryProbability = primaryId.isNotEmpty
-          ? parsedEvents[primaryId]
-          : null;
+      final primaryProbability =
+          primaryId.isNotEmpty ? parsedEvents[primaryId] : null;
       final enriched = <String, dynamic>{
         ...result,
         if (primaryProbability is num)
           'overall': primaryProbability.toDouble(),
         'primary_event_id': primaryId,
         'failure_mode_catalog': _failureModes(state),
+        'request_mode':
+            splitTheoryRoles ? 'CORE_PLUS_THEORY_ROLE_BATCHES' : 'SINGLE',
+        'core_request_bytes': coreBytes,
+        'full_request_bytes': fullBytes,
       };
       if (enriched['status'] == 'JEV') {
         if (_cache.length >= 48) _cache.remove(_cache.keys.first);
         _cache[key] = enriched;
       }
       return enriched;
+    })();
+
+    _pending[key] = pending;
+    try {
+      return await pending;
     } finally {
       _pending.remove(key);
     }
