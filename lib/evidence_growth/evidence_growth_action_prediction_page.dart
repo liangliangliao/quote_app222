@@ -2173,7 +2173,7 @@ class _EvidenceGrowthActionPredictionPageState
                     style: TextStyle(
                         fontSize: 11, color: Colors.black54))
             ],
-            if (source == 'JEV_PRIMARY' || source == 'JEV_FINAL_SYNTHESIS') ...[
+            if (source == 'JEV_PRIMARY' || source.contains('JEV_FINAL_SYNTHESIS')) ...[
               const SizedBox(height: 12),
               Wrap(
                   spacing: 8,
@@ -2211,7 +2211,7 @@ class _EvidenceGrowthActionPredictionPageState
                   Text('已知证据：$dominantEvidence',
                       style: const TextStyle(
                           fontSize: 12, color: Colors.black54))
-              ] else if (source == 'JEV_PRIMARY' || source == 'JEV_FINAL_SYNTHESIS') ...[
+              ] else if (source == 'JEV_PRIMARY' || source.contains('JEV_FINAL_SYNTHESIS')) ...[
                 const SizedBox(height: 10),
                 const Text(
                     'JEV 目前没有同时满足“有不利证据 + 能构成现实瓶颈”的单一风险路径，因此不强行给出原因标签。',
