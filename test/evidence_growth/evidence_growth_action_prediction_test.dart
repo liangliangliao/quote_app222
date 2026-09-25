@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_action_prediction.dart';
@@ -362,6 +363,135 @@ void main() {
     final criteria = failure['criteria'] as Map;
     expect(criteria.keys.any((k) => '$k'.contains('theory_intention_blocker')),
         isTrue);
+  });
+
+  test('JEV first-pass request strips oversized UI/theory metadata', () {
+    final hugeNoise = List.generate(
+        120, (i) => {'id': 'noise_$i', 'text': 'x' * 400});
+    final request = EvidenceGrowthJev.actionRequest({
+      'plan': '明早去跑步',
+      'scheduled_at': '2026-09-26T06:00:00',
+      'selected_theories': ['IBM', 'TPB', 'HAPA'],
+      'theory_factor_answers': {
+        'intention': {
+          'option_id': 'clear',
+          'option_label': '已经明确决定要做',
+          'confirmed_by_user': true,
+        },
+        'action_planning': {
+          'option_id': 'specific',
+          'option_label': '时间地点步骤都比较清楚',
+          'confirmed_by_user': true,
+        },
+      },
+      'theory_input_completeness': {
+        'total': 2,
+        'known_answers': 2,
+      },
+      'personal_history_summary': {
+        'resolved_count': 2,
+        'success_count': 1,
+        'smoothed_success_rate': .5,
+        'recent': [
+          {'plan': '跑步', 'forecast': .5, 'outcome': 'FAILED'}
+        ],
+      },
+      'action_profile': {
+        'action_mode': 'INITIATE',
+        'action_tags': ['跑步'],
+        'normalized_action': '明早按计划开始跑步',
+        'forecast_events': [
+          {
+            'id': 'run',
+            'label': '按计划开始跑步',
+            'true_criterion': 'Running starts as planned.',
+            'false_criterion': 'Running does not start as planned.',
+            'primary': true,
+          }
+        ],
+        'relevant_core_factors': ['intention', 'habit'],
+        'dynamic_factors': [],
+        'clarifying_questions': [],
+        'failure_modes': [],
+        'theory_factor_questionnaire': hugeNoise,
+        'theory_selection_analysis': hugeNoise,
+        'debug_payload': hugeNoise,
+      },
+      'other_ui_metadata': hugeNoise,
+    }, 'jev-latest', includeTheoryRoles: false);
+
+    final encoded = jsonEncode(request);
+    expect(encoded, isNot(contains('theory_factor_questionnaire')));
+    expect(encoded, isNot(contains('theory_selection_analysis')));
+    expect(encoded, isNot(contains('debug_payload')));
+    expect(encoded, isNot(contains('other_ui_metadata')));
+    expect(utf8.encode(encoded).length, lessThan(64000));
+
+    final questions = request['questions'] as Map;
+    expect(questions.keys.where((e) => '$e'.startsWith('theory_role_')),
+        isEmpty);
+    expect(questions, isNot(contains('theory_feedback_pattern')));
+  });
+
+  test('JEV theory roles can be split into compact batches without dropping answers', () {
+    final request = EvidenceGrowthJev.theoryRoleBatchRequest(
+      {
+        'plan': '明早去上班',
+        'scheduled_at': '2026-09-26T08:00:00',
+        'selected_theories': ['IBM', 'HAPA'],
+        'theory_factor_answers': {
+          'intention': {
+            'option_id': 'clear',
+            'option_label': '已经明确决定要做',
+            'confirmed_by_user': true,
+          },
+          'action_planning': {
+            'option_id': 'specific',
+            'option_label': '已经有具体行动计划',
+            'confirmed_by_user': true,
+          },
+          'coping_planning': {
+            'option_id': 'weak',
+            'option_label': '还没有应对障碍的计划',
+            'confirmed_by_user': true,
+          },
+        },
+        'personal_history_summary': {
+          'resolved_count': 2,
+          'success_count': 1,
+          'smoothed_success_rate': .5,
+        },
+        'action_profile': {
+          'action_mode': 'INITIATE',
+          'normalized_action': '明早按计划到岗',
+          'forecast_events': [
+            {
+              'id': 'arrive',
+              'label': '按计划到岗',
+              'true_criterion': 'The person arrives as planned.',
+              'false_criterion': 'The person does not arrive as planned.',
+              'primary': true,
+            }
+          ]
+        }
+      },
+      ['intention', 'action_planning'],
+      'jev-latest',
+      includePattern: true,
+    );
+
+    final questions = request['questions'] as Map;
+    expect(questions, contains('theory_role_intention'));
+    expect(questions, contains('theory_role_action_planning'));
+    expect(questions, isNot(contains('theory_role_coping_planning')));
+    expect(questions, contains('theory_feedback_pattern'));
+
+    final state = (request['state'] as Map)['action_prediction'] as Map;
+    final confirmed = state['confirmed_theory_factors'] as List;
+    expect(confirmed.length, 3,
+        reason:
+            'Each batch judges only a subset, but the state keeps all confirmed factors so interactions are not lost.');
+    expect(utf8.encode(jsonEncode(request)).length, lessThan(64000));
   });
 
   test('JEV bottleneck noul is limited to direct behavior and execution factors', () {
