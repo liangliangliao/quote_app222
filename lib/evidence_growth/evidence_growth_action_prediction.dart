@@ -1418,6 +1418,11 @@ class EvidenceGrowthActionPredictionService {
           'factor_rows': theoryFeedbackRows,
           'jev_integrated_pattern':
               growthMap(jev['theory_feedback_pattern']),
+          'structural_backbone': theoryStructuralBackbone,
+          'structural_pattern': structuralPattern,
+          'llm_pattern_code': llmPattern,
+          'structural_alignment': structuralAlignment,
+          'llm_synthesis_completed': llmSynthesisCompleted,
           'llm_integrated_pattern': theorySynthesisPattern,
           'pattern_explanation':
               theoryFeedbackSynthesis['pattern_explanation'],
@@ -1436,7 +1441,7 @@ class EvidenceGrowthActionPredictionService {
               growthRows(theoryFeedbackSynthesis['interactions']),
           'unknowns': growthStrings(theoryFeedbackSynthesis['unknowns']),
           'rule':
-              '用户确认的理论选项是一等证据。LLM先生成跨因素综合候选；JEV在最终阶段独立裁决每个候选，只有JEV支持且联合质量判定为joint_supported的结论才会升级为正式联合结论。JEV失败或与LLM显著分歧时，不再伪装成“LLM+JEV最终结论”。',
+              '正式结论采用“理论结构骨架 → LLM机制综合 → JEV独立终裁”的三层收敛规则。用户确认选项是一等证据；结构骨架不产生概率；LLM必须真实完成二次综合；JEV必须支持候选且结构与LLM至少有可审计的一致性，才升级为正式联合结论。任一层失败或分歧均保留为不确定，不强行制造根因。',
         },
         'key_weaknesses': [
           for (final e in weaknessRows)
