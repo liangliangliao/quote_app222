@@ -1155,13 +1155,18 @@ class EvidenceGrowthJev {
 
   static GrowthData parseTheorySynthesis(GrowthData body) {
     final answers = growthMap(body['answers']);
+    if (answers.isEmpty) {
+      throw const FormatException('EMPTY_JEV_SYNTHESIS_ANSWERS');
+    }
+    final warnings = <String>[];
 
     double? noul(String key) {
       final a = growthMap(answers[key]);
       if (a.isEmpty) return null;
       final p = a['noul'];
       if (a['type'] != 'noul' || p is! num || !p.isFinite || p < 0 || p > 1) {
-        throw const FormatException('INVALID_JEV_SYNTHESIS_NOUL');
+        warnings.add('INVALID_$key');
+        return null;
       }
       return p.toDouble();
     }
@@ -1177,7 +1182,8 @@ class EvidenceGrowthJev {
           !confidence.isFinite ||
           confidence < 0 ||
           confidence > 1) {
-        throw const FormatException('INVALID_JEV_SYNTHESIS_CHOICE');
+        warnings.add('INVALID_$key');
+        return {};
       }
       return {
         'choice': selected,
@@ -1186,21 +1192,36 @@ class EvidenceGrowthJev {
       };
     }
 
+    final finalProbability = noul('synthesis_event_probability');
+    final synthesisQuality = choice('synthesis_quality');
+    final primaryConclusion = choice('synthesis_primary');
     final verdicts = <String, GrowthData>{};
     for (final entry in answers.entries) {
       if (!entry.key.startsWith('synthesis_support_')) continue;
-      verdicts[entry.key.substring('synthesis_support_'.length)] =
-          choice(entry.key);
+      final parsed = choice(entry.key);
+      if (parsed.isNotEmpty) {
+        verdicts[entry.key.substring('synthesis_support_'.length)] = parsed;
+      }
+    }
+
+    // A successful HTTP 200 should not be discarded merely because one
+    // optional candidate verdict is malformed. The final typed probability
+    // and joint-quality judgement are the two essential outputs.
+    if (finalProbability == null || synthesisQuality.isEmpty) {
+      throw FormatException(
+          'MISSING_ESSENTIAL_SYNTHESIS_OUTPUTS:${warnings.join(',')}');
     }
 
     return {
       'status': 'JEV',
       'model': body['model'],
       'usage': body['usage'],
-      'final_event_probability': noul('synthesis_event_probability'),
+      'final_event_probability': finalProbability,
       'conclusion_verdicts': verdicts,
-      'primary_conclusion': choice('synthesis_primary'),
-      'synthesis_quality': choice('synthesis_quality'),
+      'primary_conclusion': primaryConclusion,
+      'synthesis_quality': synthesisQuality,
+      'parse_warnings': warnings,
+      'partial_optional_answers': warnings.isNotEmpty,
     };
   }
 
