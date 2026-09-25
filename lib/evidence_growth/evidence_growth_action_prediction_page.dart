@@ -585,10 +585,14 @@ class _EvidenceGrowthActionPredictionPageState
       '暂定假设';
 
   String _jointDecisionModeLabel(Object? value) => const {
-        'LLM_JEV_JOINT': '完整联合决策',
-        'LLM_JEV_DISAGREEMENT_OR_INSUFFICIENT': '双方已参与但存在分歧/证据不足',
+        'STRUCTURE_LLM_JEV_CONVERGED': '理论结构 + LLM + JEV 三层收敛',
+        'STRUCTURE_LLM_JEV_DISAGREEMENT_OR_INSUFFICIENT':
+            '三层已运行但存在分歧/证据不足',
+        'LLM_SYNTHESIS_UNAVAILABLE': 'LLM二次综合未完成',
         'JEV_FIRST_PASS_ONLY': 'JEV仅完成初判',
-        'LLM_ONLY_DEGRADED': '仅LLM降级分析',
+        'NO_FORMAL_JOINT_DECISION': '未形成正式联合决策',
+        'LLM_JEV_JOINT': '旧版完整联合决策',
+        'LLM_JEV_DISAGREEMENT_OR_INSUFFICIENT': '旧版双方分歧/证据不足',
       }['$value'] ??
       '$value';
 
@@ -1652,6 +1656,10 @@ class _EvidenceGrowthActionPredictionPageState
     final historyBaseline = growthMap(result['history_baseline']);
     final forecastProvenance =
         growthMap(result['forecast_provenance']);
+    final probabilityCalibration =
+        growthMap(result['probability_calibration']);
+    final estimateIsCalibrated =
+        result['estimate_is_calibrated'] == true;
     final jevFirstPassStatus =
         '${forecastProvenance['jev_first_pass_status'] ?? ''}';
     final jevFinalStatus =
@@ -1703,6 +1711,14 @@ class _EvidenceGrowthActionPredictionPageState
     final theoryUnknowns = growthStrings(theoryFeedback['unknowns']);
     final theoryPattern =
         '${theoryFeedback['llm_integrated_pattern'] ?? ''}'.trim();
+    final structuralBackbone =
+        growthMap(theoryFeedback['structural_backbone']);
+    final structuralPattern =
+        '${theoryFeedback['structural_pattern'] ?? structuralBackbone['pattern_code'] ?? ''}'.trim();
+    final structuralAlignment =
+        theoryFeedback['structural_alignment'] == true;
+    final llmSynthesisCompleted =
+        theoryFeedback['llm_synthesis_completed'] == true;
     final theoryPatternExplanation =
         '${theoryFeedback['pattern_explanation'] ?? ''}'.trim();
     final jevTheoryPattern =
@@ -1737,7 +1753,7 @@ class _EvidenceGrowthActionPredictionPageState
                 Expanded(
                     child: Text(
                         jointDecisionComplete
-                            ? 'LLM + JEV 最终联合判断'
+                            ? '理论结构 + LLM + JEV 最终联合判断'
                             : jevFirstPassStatus == 'JEV' &&
                                     jevFinalStatus == 'JEV'
                                 ? 'LLM ↔ JEV 联合裁决：尚未形成一致结论'
@@ -1755,7 +1771,14 @@ class _EvidenceGrowthActionPredictionPageState
                 Chip(
                     visualDensity: VisualDensity.compact,
                     label: Text(
-                        'LLM：${theoryFeedback['status'] == 'AI_SYNTHESIS' ? '已参与' : '降级/本地'}',
+                        structuralPattern.isEmpty
+                            ? '理论结构：不足'
+                            : '理论结构：已生成',
+                        style: const TextStyle(fontSize: 10))),
+                Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                        'LLM二次综合：${llmSynthesisCompleted ? '已完成' : '未完成'}',
                         style: const TextStyle(fontSize: 10))),
                 Chip(
                     visualDensity: VisualDensity.compact,
@@ -1771,15 +1794,29 @@ class _EvidenceGrowthActionPredictionPageState
               const SizedBox(height: 3),
               Text(
                   jointDecisionComplete
-                      ? '证据链：用户输入与理论问卷 → LLM跨因素综合 → JEV逐条独立裁决 → 只保留双方共同支持的最终结论。'
-                      : jevFirstPassStatus == 'JEV' && jevFinalStatus == 'JEV'
-                          ? 'LLM与JEV都已实际参与，但JEV最终质量判断没有确认足够一致；因此不强行输出“共同结论”。'
-                          : 'JEV没有完整参与最终决策，本页只能视为降级分析，不能标记为LLM+JEV联合结论。',
+                      ? '证据链：用户确认问卷 → 原理论结构骨架 → LLM跨因素机制综合 → JEV独立终裁。只有三层相互兼容才输出正式结论。'
+                      : !llmSynthesisCompleted
+                          ? 'LLM二次综合没有真实完成，因此即使JEV返回了结果，也不能把它称为LLM+JEV联合结论。'
+                          : jevFirstPassStatus == 'JEV' && jevFinalStatus == 'JEV'
+                              ? '理论结构、LLM与JEV都已运行，但没有达到三层收敛条件；保留分歧，不强行制造根因。'
+                              : '当前链路没有完整跑通，因此只能查看各层独立结果，不能作为正式联合诊断。',
                   style: const TextStyle(
                       fontSize: 12, color: Colors.black54, height: 1.4)),
+              if (structuralPattern.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                    '原理论结构骨架：${_theoryPatternLabel(structuralPattern)}'
+                    '${structuralAlignment ? ' · 与最终候选相容' : ' · 尚未与最终候选形成一致'}',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w800)),
+                if ('${structuralBackbone['rationale'] ?? ''}'.trim().isNotEmpty)
+                  Text('${structuralBackbone['rationale']}',
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.black54, height: 1.4)),
+              ],
               if (theoryPattern.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Text('综合模式：$theoryPattern',
+                Text('LLM综合模式：$theoryPattern',
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w900)),
               ],
