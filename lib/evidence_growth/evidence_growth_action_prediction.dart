@@ -2827,6 +2827,7 @@ ${jsonEncode({
       return _localTheoryFeedbackSynthesis(
         theoryFeedbackRows,
         jevPattern: jevPattern,
+        structuralBackbone: structuralBackbone,
         reason: 'AI_CONFIG_UNAVAILABLE',
       );
     }
@@ -2834,6 +2835,7 @@ ${jsonEncode({
       return _localTheoryFeedbackSynthesis(
         theoryFeedbackRows,
         jevPattern: jevPattern,
+        structuralBackbone: structuralBackbone,
         reason: 'AI_NOT_CONFIGURED',
       );
     }
@@ -2940,7 +2942,7 @@ ${jsonEncode({
         expectJson: true,
         temperature: .08,
         maxTokens: 2300,
-      ).timeout(const Duration(seconds: 28));
+      ).timeout(const Duration(seconds: 45));
 
       final decoded = _decode(raw);
       final validFactorIds =
@@ -3036,6 +3038,7 @@ ${jsonEncode({
       return _localTheoryFeedbackSynthesis(
         theoryFeedbackRows,
         jevPattern: jevPattern,
+        structuralBackbone: structuralBackbone,
         reason: 'AI_SYNTHESIS_FAILED',
       );
     }
@@ -3044,6 +3047,7 @@ ${jsonEncode({
   GrowthData _localTheoryFeedbackSynthesis(
     List<GrowthData> rows, {
     required GrowthData jevPattern,
+    required GrowthData structuralBackbone,
     required String reason,
   }) {
     final priorities = rows.where((row) {
