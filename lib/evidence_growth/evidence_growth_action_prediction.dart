@@ -737,8 +737,28 @@ class EvidenceGrowthActionPredictionService {
             : aiEstimate != null
                 ? 'AI_FALLBACK'
                 : 'NO_MODEL_ESTIMATE';
-    final probabilityCalibration =
-        _calibrateRawForecast(rawEstimate, allResolved);
+    int binaryOutcomeCount(List<GrowthData> rows) => rows
+        .where((r) => const {'SUCCESS', 'ON_TIME', 'FAILED', 'NOT_DONE'}
+            .contains('${r['outcome'] ?? ''}'))
+        .length;
+    final similarCalibrationCount = binaryOutcomeCount(resolved);
+    final globalCalibrationCount = binaryOutcomeCount(allResolved);
+    final useSimilarCalibration = similarCalibrationCount >= 30;
+    final useGlobalCalibration =
+        !useSimilarCalibration && globalCalibrationCount >= 50;
+    final calibrationRows = useSimilarCalibration
+        ? resolved
+        : useGlobalCalibration
+            ? allResolved
+            : resolved;
+    final calibrationScope = useSimilarCalibration
+        ? 'SIMILAR_BEHAVIOR'
+        : useGlobalCalibration
+            ? 'ALL_PERSONAL_BEHAVIOR'
+            : 'SIMILAR_BEHAVIOR_INSUFFICIENT';
+    final probabilityCalibration = _calibrateRawForecast(
+        rawEstimate, calibrationRows,
+        scope: calibrationScope);
     final forecastValidation = _forecastValidationSummary(allResolved);
     double? estimate = _prob(probabilityCalibration['probability']);
     double historyWeight = 0;
@@ -2821,7 +2841,8 @@ ${jsonEncode({
   }
 
   GrowthData _calibrateRawForecast(
-      double? raw, List<GrowthData> historicalRows) {
+      double? raw, List<GrowthData> historicalRows,
+      {required String scope}) {
     if (raw == null) {
       return {'status': 'NO_RAW_ESTIMATE', 'probability': null};
     }
@@ -2852,8 +2873,9 @@ ${jsonEncode({
         'sample_count': samples.length,
         'positive_count': positives,
         'negative_count': negatives,
+        'scope': scope,
         'minimum_rule':
-            '至少30个有明确二元结果的历史预测，且成功/失败各至少5个，才启动个人概率再校准。',
+            '相似行为优先至少30个明确二元结果且成功/失败各至少5个；若只能使用跨行为个人历史，则要求更高样本量后才启用。',
       };
     }
 
@@ -2888,6 +2910,7 @@ ${jsonEncode({
       'negative_count': negatives,
       'intercept': a,
       'slope': b,
+      'scope': scope,
       'method':
           'Regularized logistic recalibration (Platt-style) fitted only to resolved personal forecasts; theory factors are not hand-weighted.',
     };
