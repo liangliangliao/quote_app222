@@ -1092,13 +1092,15 @@ class EvidenceGrowthJev {
           },
         },
         'llm_candidate_synthesis': {
+          'pattern_code': llmSynthesis['pattern_code'],
           'integrated_pattern': llmSynthesis['integrated_pattern'],
           'pattern_explanation': llmSynthesis['pattern_explanation'],
           'bottom_line': llmSynthesis['bottom_line'],
+          'structural_backbone': llmSynthesis['structural_backbone'],
           'candidates': candidateCatalog,
         },
         'instruction':
-            'This is the FINAL adjudication stage. The user-confirmed theory options are primary evidence. The LLM candidates are hypotheses, not facts. Independently judge whether each candidate is supported by the raw action facts, confirmed theory answers, and first-pass JEV judgements. Do not rubber-stamp the LLM. Select a primary conclusion only when support is adequate.'
+            'This is the FINAL adjudication stage. The user-confirmed theory options are primary evidence. The deterministic structural_backbone encodes theory-consistent stage conditions and must be checked before accepting a narrative explanation. The LLM candidates are hypotheses, not facts. Independently judge whether each candidate is supported by the raw action facts, confirmed theory answers, structural backbone, and first-pass JEV judgements. Do not rubber-stamp the LLM. Select a primary conclusion only when support is adequate.'
       },
       'questions': {
         'synthesis_event_probability': {
