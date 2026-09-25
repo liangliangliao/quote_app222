@@ -739,6 +739,7 @@ class EvidenceGrowthActionPredictionService {
                 : 'NO_MODEL_ESTIMATE';
     final probabilityCalibration =
         _calibrateRawForecast(rawEstimate, allResolved);
+    final forecastValidation = _forecastValidationSummary(allResolved);
     double? estimate = _prob(probabilityCalibration['probability']);
     double historyWeight = 0;
     if (estimate == null && baseline != null && resolved.length >= 5) {
@@ -1280,6 +1281,7 @@ class EvidenceGrowthActionPredictionService {
       'forecast_source': forecastSource,
       'raw_model_estimate': rawEstimate,
       'probability_calibration': probabilityCalibration,
+      'forecast_validation': forecastValidation,
       'estimate_is_calibrated':
           probabilityCalibration['status'] == 'PERSONAL_PLATT_CALIBRATED',
       'forecast_provenance': {
@@ -2847,6 +2849,53 @@ ${jsonEncode({
       'slope': b,
       'method':
           'Regularized logistic recalibration (Platt-style) fitted only to resolved personal forecasts; theory factors are not hand-weighted.',
+    };
+  }
+
+  GrowthData _forecastValidationSummary(List<GrowthData> rows) {
+    var nRaw = 0;
+    var nFinal = 0;
+    var rawBrier = 0.0;
+    var finalBrier = 0.0;
+    var rawMean = 0.0;
+    var finalMean = 0.0;
+    var observed = 0.0;
+
+    for (final row in rows) {
+      final outcome = '${row['outcome'] ?? ''}';
+      final y = const {'SUCCESS', 'ON_TIME'}.contains(outcome)
+          ? 1.0
+          : const {'FAILED', 'NOT_DONE'}.contains(outcome)
+              ? 0.0
+              : null;
+      if (y == null) continue;
+      final provenance = growthMap(row['forecast_provenance']);
+      final raw = _prob(provenance['jev_final_synthesis_probability']) ??
+          _prob(row['raw_model_estimate']);
+      final finalP = _prob(row['estimate']);
+      if (raw != null) {
+        nRaw++;
+        rawBrier += (raw - y) * (raw - y);
+        rawMean += raw;
+      }
+      if (finalP != null) {
+        nFinal++;
+        finalBrier += (finalP - y) * (finalP - y);
+        finalMean += finalP;
+        observed += y;
+      }
+    }
+
+    return {
+      'raw_count': nRaw,
+      'final_count': nFinal,
+      'raw_brier': nRaw == 0 ? null : rawBrier / nRaw,
+      'final_brier': nFinal == 0 ? null : finalBrier / nFinal,
+      'raw_mean_prediction': nRaw == 0 ? null : rawMean / nRaw,
+      'final_mean_prediction': nFinal == 0 ? null : finalMean / nFinal,
+      'observed_rate': nFinal == 0 ? null : observed / nFinal,
+      'note':
+          'Brier分数越低越好；均值预测与实际发生率用于检查整体校准。这里只使用预测之后才记录的现实结果，不把当前样本用于自身验证。',
     };
   }
 
