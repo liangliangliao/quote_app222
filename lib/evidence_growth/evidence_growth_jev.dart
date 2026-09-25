@@ -1258,15 +1258,47 @@ class EvidenceGrowthJev {
 
   Future<GrowthData> _sendTheorySynthesis(String body, String key) async {
     final client = _client ?? http.Client();
+    // Final adjudication is the heaviest JEV call: it evaluates the raw facts,
+    // first-pass JEV result and LLM candidates together. The global 8-second
+    // timeout is too short for this stage and previously collapsed both
+    // timeouts and valid-but-unexpected responses into REQUEST_FAILED.
+    final finalTimeout = timeout < const Duration(seconds: 30)
+        ? const Duration(seconds: 30)
+        : timeout;
+    http.Response response;
     try {
-      final response = await client
+      response = await client
           .post(endpoint,
               headers: {
                 'Authorization': 'Bearer $key',
                 'Content-Type': 'application/json',
               },
               body: body)
-          .timeout(timeout);
+          .timeout(finalTimeout);
+    } on TimeoutException {
+      if (_client == null) client.close();
+      return {
+        'status': 'LOCAL',
+        'reason': 'REQUEST_TIMEOUT',
+        'timeout_seconds': finalTimeout.inSeconds,
+      };
+    } on http.ClientException catch (e) {
+      if (_client == null) client.close();
+      return {
+        'status': 'LOCAL',
+        'reason': 'NETWORK_ERROR',
+        'error': e.message,
+      };
+    } catch (e) {
+      if (_client == null) client.close();
+      return {
+        'status': 'LOCAL',
+        'reason': 'TRANSPORT_ERROR',
+        'error_type': e.runtimeType.toString(),
+      };
+    }
+
+    try {
       if (response.statusCode == 429 || response.statusCode == 529) {
         _cooldown = DateTime.now().add(const Duration(seconds: 45));
       }
@@ -1275,11 +1307,59 @@ class EvidenceGrowthJev {
           'status': 'LOCAL',
           'reason': 'SERVICE_UNAVAILABLE',
           'http_status': response.statusCode,
+          'response_bytes': utf8.encode(response.body).length,
         };
       }
-      return parseTheorySynthesis(growthMap(jsonDecode(response.body)));
-    } catch (_) {
-      return {'status': 'LOCAL', 'reason': 'REQUEST_FAILED'};
+
+      Object decoded;
+      try {
+        decoded = jsonDecode(response.body);
+      } catch (_) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'RESPONSE_JSON_INVALID',
+          'http_status': response.statusCode,
+          'response_bytes': utf8.encode(response.body).length,
+        };
+      }
+      if (decoded is! Map) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'RESPONSE_SHAPE_INVALID',
+          'http_status': response.statusCode,
+          'response_bytes': utf8.encode(response.body).length,
+          'response_type': decoded.runtimeType.toString(),
+        };
+      }
+
+      final mapped = growthMap(decoded);
+      try {
+        final parsed = parseTheorySynthesis(mapped);
+        return {
+          ...parsed,
+          'http_status': response.statusCode,
+          'response_bytes': utf8.encode(response.body).length,
+          'answer_keys': growthMap(mapped['answers']).keys.toList(),
+        };
+      } on FormatException catch (e) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'RESPONSE_PARSE_FAILED',
+          'parse_error': e.message,
+          'http_status': response.statusCode,
+          'response_bytes': utf8.encode(response.body).length,
+          'answer_keys': growthMap(mapped['answers']).keys.toList(),
+        };
+      } catch (e) {
+        return {
+          'status': 'LOCAL',
+          'reason': 'RESPONSE_PARSE_FAILED',
+          'parse_error': e.runtimeType.toString(),
+          'http_status': response.statusCode,
+          'response_bytes': utf8.encode(response.body).length,
+          'answer_keys': growthMap(mapped['answers']).keys.toList(),
+        };
+      }
     } finally {
       if (_client == null) client.close();
     }
