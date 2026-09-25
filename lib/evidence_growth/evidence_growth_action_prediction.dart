@@ -1277,7 +1277,15 @@ class EvidenceGrowthActionPredictionService {
       'journey_id': journey?.id ?? '',
       'estimate_available': estimate != null,
       'estimate': estimate,
-      'band': estimate == null ? '信息不足' : band(estimate),
+      'band': estimate == null
+          ? '信息不足'
+          : probabilityCalibration['status'] == 'PERSONAL_PLATT_CALIBRATED'
+              ? band(estimate)
+              : estimate >= .70
+                  ? '原始模型估计偏高（未校准）'
+                  : estimate >= .45
+                      ? '原始模型估计中等／不确定（未校准）'
+                      : '原始模型估计偏低（未校准）',
       'forecast_source': forecastSource,
       'forecast_algorithm': {
         'version': 'theory_structure_llm_jev_calibration_v1',
