@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_dao.dart';
@@ -2550,6 +2551,247 @@ ${jsonEncode({
         'clarifying_questions': <GrowthData>[],
         'failure_modes': <GrowthData>[],
       };
+
+  GrowthData _buildTheoryStructuralBackbone(
+      List<GrowthData> rows, GrowthData profile) {
+    final byId = <String, GrowthData>{
+      for (final row in rows)
+        if ('${row['factor_id'] ?? ''}'.isNotEmpty)
+          '${row['factor_id']}': row
+    };
+
+    String stateOf(String id) {
+      final row = byId[id];
+      if (row == null) return 'missing';
+      final level = row['ordinal_level'];
+      if (level is! num) return 'unknown';
+      final v = level.toInt();
+      if (v <= 1) return 'adverse';
+      if (v >= 3) return 'supportive';
+      return 'mixed';
+    }
+
+    List<String> adverse(Iterable<String> ids) =>
+        ids.where((id) => stateOf(id) == 'adverse').toList();
+    List<String> supportive(Iterable<String> ids) =>
+        ids.where((id) => stateOf(id) == 'supportive').toList();
+
+    const feasibilityIds = {
+      'actual_behavioral_control',
+      'physical_capability',
+      'psychological_capability',
+      'physical_opportunity',
+      'social_opportunity',
+      'knowledge_skills',
+      'behavioral_capability',
+      'environmental_constraints',
+      'environmental_influences',
+      'barriers_resources',
+    };
+    const intentionIds = {
+      'intention',
+      'goals',
+      'reflective_motivation',
+      'action_self_efficacy',
+      'self_efficacy',
+      'perceived_behavioral_control',
+      'perceived_control',
+    };
+    const volitionIds = {
+      'action_planning',
+      'coping_planning',
+      'implementation_intention',
+      'cue_clarity',
+      'response_specificity',
+      'action_control',
+      'self_regulation',
+      'salience',
+    };
+    const automaticIds = {
+      'habit',
+      'automatic_motivation',
+      'reinforcement',
+    };
+    const maintenanceIds = {
+      'maintenance_self_efficacy',
+      'recovery_self_efficacy',
+      'action_control',
+      'self_regulation',
+    };
+
+    final feasibilityAdverse = adverse(feasibilityIds);
+    final intentionSupport = supportive(intentionIds);
+    final intentionAdverse = adverse(intentionIds);
+    final volitionAdverse = adverse(volitionIds);
+    final automaticAdverse = adverse(automaticIds);
+    final maintenanceAdverse = adverse(maintenanceIds);
+    final mode = '${profile['action_mode'] ?? ''}'.toUpperCase();
+
+    String pattern = 'insufficient_evidence';
+    final keyFactors = <String>[];
+    final evidence = <String>[];
+    String rationale =
+        '当前理论反馈不足以形成一个由理论结构直接支持的阶段性模式。';
+
+    final hardFeasibility = feasibilityAdverse.where((id) {
+      final level = byId[id]?['ordinal_level'];
+      return level is num && level.toInt() == 0;
+    }).toList();
+
+    if (hardFeasibility.isNotEmpty) {
+      pattern = 'capability_opportunity_gap';
+      keyFactors.addAll(hardFeasibility);
+      evidence.addAll(hardFeasibility);
+      rationale =
+          '现实能力/机会存在强不利证据。按照TPB实际控制、IBM环境约束与COM-B能力/机会逻辑，应先把它作为行为能否发生的前置条件，而不是先解释为意向问题。';
+    } else if (intentionSupport.contains('intention') &&
+        volitionAdverse.isNotEmpty) {
+      pattern = 'intention_behavior_gap';
+      keyFactors
+        ..add('intention')
+        ..addAll(volitionAdverse);
+      evidence.addAll(keyFactors);
+      rationale =
+          '用户对行动意向给出支持性回答，但计划/触发/行动控制等意志阶段存在不利证据，符合“意向已形成但向行动转化受阻”的结构条件。';
+    } else if (intentionSupport.isNotEmpty && automaticAdverse.isNotEmpty) {
+      pattern = 'automatic_motivation_conflict';
+      keyFactors
+        ..addAll(intentionSupport.take(2))
+        ..addAll(automaticAdverse);
+      evidence.addAll(keyFactors);
+      rationale =
+          '反思性目标/意向存在支持证据，同时习惯或自动动机存在反向证据，更符合反思系统与自动过程冲突。';
+    } else if (feasibilityAdverse.isNotEmpty) {
+      pattern = 'capability_opportunity_gap';
+      keyFactors.addAll(feasibilityAdverse);
+      evidence.addAll(keyFactors);
+      rationale =
+          '能力、资源、机会或现实控制存在不利证据，应优先解释为可行性/机会限制。';
+    } else if (const {'SUSTAIN', 'REPEAT'}.contains(mode) &&
+        maintenanceAdverse.isNotEmpty) {
+      pattern = 'self_regulation_maintenance_gap';
+      keyFactors.addAll(maintenanceAdverse);
+      evidence.addAll(keyFactors);
+      rationale =
+          '当前任务需要维持/重复，且自我调节、维持或恢复相关因素存在不利证据。';
+    } else if (intentionAdverse.isNotEmpty) {
+      pattern = 'intention_not_formed';
+      keyFactors.addAll(intentionAdverse);
+      evidence.addAll(keyFactors);
+      rationale =
+          '意向/目标承诺相关因素本身存在不利证据，因此不应先假设已经形成稳定意向。';
+    } else {
+      final adverseDomains = <String, List<String>>{
+        'feasibility': feasibilityAdverse,
+        'intention': intentionAdverse,
+        'volition': volitionAdverse,
+        'automatic': automaticAdverse,
+        'maintenance': maintenanceAdverse,
+      }..removeWhere((_, value) => value.isEmpty);
+      if (adverseDomains.length >= 2) {
+        pattern = 'multi_factor_conflict';
+        for (final ids in adverseDomains.values) {
+          keyFactors.addAll(ids.take(2));
+        }
+        evidence.addAll(keyFactors);
+        rationale =
+            '不利证据分布在两个以上不同阶段，单一“根因”不足以解释当前行为，应该保留多因素冲突。';
+      } else if (rows.where((r) => r['ordinal_level'] is num).length >= 3) {
+        pattern = 'no_major_theory_blocker';
+        rationale =
+            '已有多项已确认理论反馈，但没有形成满足结构条件的单一关键断点。';
+      }
+    }
+
+    final unique = keyFactors.toSet().toList();
+    return {
+      'version': 'theory_structural_backbone_v1',
+      'pattern_code': pattern,
+      'key_factor_ids': unique,
+      'rationale': rationale,
+      'evidence_factor_ids': evidence.toSet().toList(),
+      'rules': const [
+        '先检查现实能力/机会硬约束，再讨论动机与意向。',
+        '只有意向支持且意志阶段不利时，才使用“意向—行为鸿沟”。',
+        '反思目标支持且习惯/自动动机不利时，优先考虑自动动机冲突。',
+        '不同理论中重复测量的相近构念不得机械重复计权。',
+        '本层只生成结构性诊断假设，不把序位选项转换成行为概率。'
+      ],
+    };
+  }
+
+  GrowthData _calibrateRawForecast(
+      double? raw, List<GrowthData> historicalRows) {
+    if (raw == null) {
+      return {'status': 'NO_RAW_ESTIMATE', 'probability': null};
+    }
+    final samples = <GrowthData>[];
+    for (final row in historicalRows) {
+      final outcome = '${row['outcome'] ?? ''}';
+      final y = const {'SUCCESS', 'ON_TIME'}.contains(outcome)
+          ? 1.0
+          : const {'FAILED', 'NOT_DONE'}.contains(outcome)
+              ? 0.0
+              : null;
+      if (y == null) continue;
+      final provenance = growthMap(row['forecast_provenance']);
+      final p = _prob(provenance['jev_final_synthesis_probability']) ??
+          _prob(row['raw_model_estimate']) ??
+          _prob(row['estimate']);
+      if (p == null) continue;
+      samples.add({'p': p.clamp(.01, .99), 'y': y});
+    }
+
+    final positives = samples.where((r) => r['y'] == 1.0).length;
+    final negatives = samples.length - positives;
+    if (samples.length < 30 || positives < 5 || negatives < 5) {
+      return {
+        'status': 'UNCALIBRATED',
+        'probability': raw,
+        'raw_probability': raw,
+        'sample_count': samples.length,
+        'positive_count': positives,
+        'negative_count': negatives,
+        'minimum_rule':
+            '至少30个有明确二元结果的历史预测，且成功/失败各至少5个，才启动个人概率再校准。',
+      };
+    }
+
+    double a = 0.0;
+    double b = 1.0;
+    const lambda = 2.0;
+    for (var iter = 0; iter < 500; iter++) {
+      var ga = lambda * a;
+      var gb = lambda * (b - 1.0);
+      for (final row in samples) {
+        final p = (row['p'] as num).toDouble();
+        final y = (row['y'] as num).toDouble();
+        final x = math.log(p / (1 - p));
+        final q = 1 / (1 + math.exp(-(a + b * x)));
+        ga += q - y;
+        gb += (q - y) * x;
+      }
+      final lr = .08 / samples.length;
+      a -= lr * ga;
+      b -= lr * gb;
+    }
+
+    final clipped = raw.clamp(.01, .99);
+    final x = math.log(clipped / (1 - clipped));
+    final calibrated = 1 / (1 + math.exp(-(a + b * x)));
+    return {
+      'status': 'PERSONAL_PLATT_CALIBRATED',
+      'probability': calibrated.clamp(.01, .99),
+      'raw_probability': raw,
+      'sample_count': samples.length,
+      'positive_count': positives,
+      'negative_count': negatives,
+      'intercept': a,
+      'slope': b,
+      'method':
+          'Regularized logistic recalibration (Platt-style) fitted only to resolved personal forecasts; theory factors are not hand-weighted.',
+    };
+  }
 
   Future<GrowthData> _synthesizeTheoryFeedback({
     required GrowthData state,
