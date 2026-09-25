@@ -1077,6 +1077,140 @@ void main() {
     expect((parsed['synthesis_quality'] as Map)['choice'], 'joint_supported');
   });
 
+  test('JEV final adjudication keeps usable core output when an optional verdict is malformed', () {
+    final parsed = EvidenceGrowthJev.parseTheorySynthesis({
+      'model': 'jev-latest',
+      'answers': {
+        'synthesis_event_probability': {
+          'type': 'noul',
+          'noul': .41,
+        },
+        'synthesis_support_candidate_1': {
+          'type': 'choice',
+          'choice': 'supported',
+          // malformed optional answer: confidence missing
+          'probabilities': {'supported': .9}
+        },
+        'synthesis_primary': {
+          'type': 'choice',
+          'choice': 'candidate_1',
+          'confidence': .79,
+          'probabilities': {'candidate_1': .79, 'none': .21}
+        },
+        'synthesis_quality': {
+          'type': 'choice',
+          'choice': 'joint_supported',
+          'confidence': .81,
+          'probabilities': {
+            'joint_supported': .81,
+            'material_disagreement': .11,
+            'insufficient_evidence': .08,
+          }
+        },
+      }
+    });
+
+    expect(parsed['status'], 'JEV');
+    expect(parsed['final_event_probability'], .41);
+    expect((parsed['synthesis_quality'] as Map)['choice'], 'joint_supported');
+    expect(parsed['partial_optional_answers'], isTrue);
+    expect((parsed['parse_warnings'] as List),
+        contains('INVALID_synthesis_support_candidate_1'));
+  });
+
+  test('JEV final adjudication request omits duplicated full theory-answer payload', () {
+    final request = EvidenceGrowthJev.theorySynthesisRequest(
+      state: {
+        'plan': '明早去上班',
+        'scheduled_at': '2026-09-26T08:00:00',
+        'selected_theories': ['IBM', 'HAPA'],
+        'theory_factor_answers': {
+          'intention': {
+            'option_id': 'clear',
+            'option_label': '已经明确决定要做',
+            'confirmed_by_user': true,
+            'very_large_unused_metadata': List.filled(100, 'unused'),
+          }
+        },
+        'theory_input_completeness': {'total': 1, 'known_answers': 1},
+        'personal_history_summary': {
+          'resolved_count': 1,
+          'success_count': 0,
+          'smoothed_success_rate': .33,
+          'recent': [
+            {'plan': '去上班', 'forecast': .4, 'outcome': 'FAILED'}
+          ]
+        },
+        'action_profile': {
+          'normalized_action': '明早按计划到岗',
+          'action_mode': 'INITIATE',
+          'action_tags': ['上班'],
+          'forecast_events': [
+            {
+              'id': 'arrive',
+              'label': '按计划到岗',
+              'true_criterion': 'The person arrives as planned.',
+              'false_criterion': 'The person does not arrive as planned.',
+              'primary': true,
+            }
+          ],
+        }
+      },
+      theoryFeedbackRows: [
+        {
+          'factor_id': 'intention',
+          'factor_label': '行动意向',
+          'theory_ids': ['IBM'],
+          'option_id': 'clear',
+          'option_label': '已经明确决定要做',
+          'ordinal_level': 4,
+          'jev_role': 'protective',
+          'jev_role_confidence': .85,
+          'jev_role_probabilities': {
+            'protective': .85,
+            'key_blocker': .03,
+          },
+        }
+      ],
+      llmSynthesis: {
+        'integrated_pattern': '意向已形成',
+        'pattern_explanation': '意向本身不是主要问题。',
+        'bottom_line': '主要问题位于执行阶段。',
+        'core_conclusions': [],
+      },
+      firstPassJev: {
+        'events': {'arrive': .4},
+        'overall': .4,
+        'theory_factor_roles': {
+          'intention': {
+            'choice': 'protective',
+            'confidence': .85,
+            'probabilities': {'protective': .85}
+          }
+        },
+        'theory_feedback_pattern': {
+          'choice': 'intention_behavior_gap',
+          'confidence': .7,
+          'probabilities': {'intention_behavior_gap': .7}
+        },
+        'dominant_failure_mode': {
+          'choice': 'implementation_gap',
+          'confidence': .7,
+          'probabilities': {'implementation_gap': .7}
+        },
+      },
+      model: 'jev-latest',
+    );
+
+    final encoded = jsonEncode(request);
+    expect(encoded, isNot(contains('very_large_unused_metadata')));
+    expect(encoded, isNot(contains('jev_role_probabilities')));
+    final actionState =
+        ((request['state'] as Map)['action_prediction'] as Map);
+    expect(actionState, isNot(contains('theory_factor_answers')));
+    expect(utf8.encode(encoded).length, lessThan(64000));
+  });
+
   test('diagnostic evidence criteria keep missing separate from mixed', () {
     final request = EvidenceGrowthJev.actionRequest({
       'plan': '明早去体检',
