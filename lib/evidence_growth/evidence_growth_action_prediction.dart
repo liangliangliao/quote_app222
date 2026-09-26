@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_behavior_theories.dart';
 import 'evidence_growth_jev.dart';
 import 'evidence_growth_journey_models.dart';
+import 'evidence_growth_forecast_science.dart';
 
 /// AI + JEV action execution forecasting.
 ///
@@ -288,11 +288,13 @@ class EvidenceGrowthActionPredictionService {
     bool autoSelectTheories = true,
     String jevApiKey = '',
     GrowthJourney? journey,
+    GrowthData eventContract = const {},
   }) async {
     final action = plan.trim();
     if (action.isEmpty) throw ArgumentError('请先写清楚准备做什么');
     final state = <String, dynamic>{
       'plan': action,
+      'event_contract': EvidenceForecastScience.contract(eventContract),
       'scheduled_at': scheduledAt?.toIso8601String() ?? '',
       'user_reported_conditions': structuredContext,
       'additional_notes': context.trim(),
@@ -355,9 +357,21 @@ class EvidenceGrowthActionPredictionService {
     GrowthJourney? journey,
     String jevApiKey = '',
     bool requireJev = false,
+    GrowthData eventContract = const {},
+    GrowthData cycleContext = const {},
   }) async {
     final action = plan.trim();
     if (action.isEmpty) throw ArgumentError('请先写清楚接下来准备做什么');
+    if (scheduledAt != null && scheduledAt.isBefore(DateTime.now())) {
+      throw ArgumentError('原行动时间已经过去，请记录实际结果；预测下一次行动时选择新的时间');
+    }
+    // Only valid, user-submitted catalog options can act as theory evidence.
+    theoryFactorAnswers = {
+      for (final entry in theoryFactorAnswers.entries)
+        if (growthMap(entry.value)['confirmed_by_user'] == true &&
+            EvidenceBehaviorTheoryCatalog.option(entry.key, '${growthMap(entry.value)['option_id']}') != null)
+          entry.key: {...growthMap(entry.value), 'option_label': EvidenceBehaviorTheoryCatalog.option(entry.key, '${growthMap(entry.value)['option_id']}')!['label']},
+    };
     if (action.length > 2000 ||
         context.length > 6000 ||
         similarHistory.length > 4000) {
@@ -385,6 +399,8 @@ class EvidenceGrowthActionPredictionService {
       'analysis_correction': analysisCorrection.trim(),
       'selected_theories': _validTheoryIds(selectedTheoryIds),
       'theory_factor_answers': theoryFactorAnswers,
+      'event_contract': EvidenceForecastScience.contract(eventContract),
+      'cycle_context': cycleContext,
       if (journey != null)
         'journey': {
           'goal': journey.title,
@@ -409,25 +425,47 @@ class EvidenceGrowthActionPredictionService {
         jevApiKey: jevApiKey.trim(),
       );
     }
+    final frozenContract = EvidenceForecastScience.contract(eventContract);
+    if (EvidenceForecastScience.validContract(frozenContract)) {
+      profile = {...profile, 'forecast_events': [
+        {'id': 'confirmed_primary_event', 'primary': true,
+          'label': frozenContract['success_criterion'],
+          'true_criterion': '${frozenContract['observation_window']}内满足：${frozenContract['success_criterion']}',
+          'false_criterion': '观察窗口结束且可观察，但没有满足上述标准；未观察或取消不自动算失败。'},
+        for (final event in growthRows(profile['forecast_events']))
+          if (event['primary'] != true && event['id'] != 'confirmed_primary_event')
+            {...event, 'primary': false},
+      ]};
+    }
     final targetMode = '${profile['action_mode'] ?? ''}'.trim();
     final targetTags = growthStrings(profile['action_tags']).toSet();
 
     bool similarBehavior(GrowthData row) {
+      final key = EvidenceForecastScience.comparisonKey(frozenContract, targetMode);
+      if (key.isNotEmpty) return row['comparison_key'] == key;
       final past = growthMap(row['action_profile']);
       if (past.isEmpty) return false;
       final mode = '${past['action_mode'] ?? ''}'.trim();
       if (targetMode.isEmpty || mode != targetMode) return false;
       final tags = growthStrings(past['action_tags']).toSet();
-      if (targetTags.isEmpty || tags.isEmpty) return true;
+      if (targetTags.isEmpty || tags.isEmpty) return false;
       return targetTags.any(tags.contains);
     }
 
-    final resolved = allResolved.where(similarBehavior).toList();
+    final lastPerTrial = <String, GrowthData>{};
+    for (final row in records) {
+      // Records are newest-first. A pending latest revision excludes an older
+      // resolved revision from both model history and calibration.
+      lastPerTrial.putIfAbsent(EvidenceForecastScience.trialId(row), () => row);
+    }
+    final resolved = lastPerTrial.values.where((r) => allResolved.contains(r) && similarBehavior(r)).toList();
     final successes = resolved
-        .where((r) => const {'SUCCESS', 'ON_TIME'}.contains(r['outcome']))
+        .where((r) => EvidenceForecastScience.outcome(r) == 1)
         .length;
-    final baseline =
-        resolved.isEmpty ? null : (successes + 1) / (resolved.length + 2);
+    final binaryResolved = resolved.where((r) =>
+        EvidenceForecastScience.outcome(r) != null).toList();
+    final baseline = binaryResolved.isEmpty
+        ? null : (successes + 1) / (binaryResolved.length + 2);
 
     // Repeated weakness evidence must come from genuinely similar *resolved*
     // actions. A one-off current blocker is not promoted to a stable personal
@@ -449,21 +487,27 @@ class EvidenceGrowthActionPredictionService {
         final bottleneck =
             (row['bottleneck_probability'] as num?)?.toDouble();
         final legacyRisk = '${row['status'] ?? ''}' == 'RISK';
-        if ((const {'adverse', 'mixed'}.contains(evidenceStatus) &&
+        final review = growthMap(past['diagnostic_review']);
+        final observations = growthMap(growthMap(review['user_observations'])['hypothesis_verdicts']);
+        final observedInReview = observations[entry.key] == 'SUPPORTED';
+        if (observedInReview && ((const {'adverse', 'mixed'}.contains(evidenceStatus) &&
                 bottleneck != null &&
                 bottleneck >= .55) ||
-            (bottleneck == null && legacyRisk)) {
+            (bottleneck == null && legacyRisk))) {
           pastBarrierCounts[entry.key] =
               (pastBarrierCounts[entry.key] ?? 0) + 1;
         }
       }
       // Earlier saved versions may have top_risks but not factor diagnostics.
-      if (pastFactors.isEmpty) {
+      if (pastFactors.isEmpty && growthMap(past['diagnostic_review'])['status'] == 'COMPLETE') {
         for (final row in growthRows(past['top_risks'])) {
           final key = '${row['key'] ?? ''}'.trim();
           if (key.isEmpty) continue;
           pastBarrierObserved[key] = (pastBarrierObserved[key] ?? 0) + 1;
-          pastBarrierCounts[key] = (pastBarrierCounts[key] ?? 0) + 1;
+          final observations = growthMap(growthMap(growthMap(past['diagnostic_review'])['user_observations'])['hypothesis_verdicts']);
+          if (observations[key] == 'SUPPORTED') {
+            pastBarrierCounts[key] = (pastBarrierCounts[key] ?? 0) + 1;
+          }
         }
       }
     }
@@ -475,6 +519,15 @@ class EvidenceGrowthActionPredictionService {
             ? growthStrings(profile['selected_theories'])
             : selectedTheoryIds);
     state['theory_factor_answers'] = theoryFactorAnswers;
+
+    // Reject unchanged or closed revisions before any paid prediction calls.
+    _validateRevision({
+      'trial_id': cycleContext['trial_id'] ?? '',
+      'parent_prediction_id': cycleContext['parent_prediction_id'] ?? '',
+      'input_fingerprint': EvidenceForecastScience.inputFingerprint(state),
+      'event_contract': frozenContract,
+      'scheduled_at_ms': scheduledAt?.millisecondsSinceEpoch ?? 0,
+    }, records);
 
     final theoryQuestionnaire =
         growthRows(profile['theory_factor_questionnaire']);
@@ -532,14 +585,15 @@ class EvidenceGrowthActionPredictionService {
       ]
     };
 
-    final ai = await _aiAssessment(state);
-    GrowthData jev = {'status': 'LOCAL', 'reason': 'JEV_NOT_CONFIGURED'};
-    if (jevApiKey.trim().isNotEmpty) {
-      // First-pass JEV remains independent from the LLM. It receives the raw
-      // user-confirmed theory answers and action facts, not the LLM's
-      // conclusions. A later LLM synthesis may compare both outputs.
-      jev = await _jev.assessAction(state, apiKey: jevApiKey.trim());
-    }
+    // Independent first passes can run concurrently; neither sees the other's
+    // conclusion. The subsequent synthesis still runs in dependency order.
+    final independent = await Future.wait<GrowthData>([
+      _aiAssessment(state),
+      jevApiKey.trim().isNotEmpty ? _jev.assessAction(state, apiKey: jevApiKey.trim())
+        : Future.value({'status': 'LOCAL', 'reason': 'JEV_NOT_CONFIGURED'}),
+    ]);
+    final ai = independent[0];
+    final jev = independent[1];
 
     final jevTheoryRoles = growthMap(jev['theory_factor_roles']);
     final theoryFeedbackRows = <GrowthData>[];
@@ -603,20 +657,12 @@ class EvidenceGrowthActionPredictionService {
       };
     }
 
-    if (requireJev) {
-      if (jev['status'] != 'JEV') {
-        throw StateError(
-            'JEV_FIRST_PASS_FAILED:${jev['reason'] ?? 'UNKNOWN'}');
-      }
-      if (theoryFeedbackSynthesis['status'] != 'AI_SYNTHESIS') {
-        throw StateError(
-            'LLM_THEORY_SYNTHESIS_FAILED:${theoryFeedbackSynthesis['reason'] ?? 'UNKNOWN'}');
-      }
-      if (finalJevAdjudication['status'] != 'JEV') {
-        throw StateError(
-            'JEV_FINAL_ADJUDICATION_FAILED:${finalJevAdjudication['reason'] ?? 'UNKNOWN'}');
-      }
-    }
+    final pipelineErrors = <String>[
+      if (jev['status'] != 'JEV') 'JEV初判未完成：${jev['reason'] ?? '未知原因'}',
+      if (theoryFeedbackSynthesis['status'] != 'AI_SYNTHESIS') 'LLM综合未完成：${theoryFeedbackSynthesis['reason'] ?? '未知原因'}',
+      if (finalJevAdjudication['status'] != 'JEV') 'JEV终裁未完成：${finalJevAdjudication['reason'] ?? '未知原因'}',
+    ];
+    final pipelineComplete = pipelineErrors.isEmpty;
 
     final adjudicationCatalog =
         growthRows(finalJevAdjudication['candidate_catalog']);
@@ -737,36 +783,17 @@ class EvidenceGrowthActionPredictionService {
             : aiEstimate != null
                 ? 'AI_FALLBACK'
                 : 'NO_MODEL_ESTIMATE';
-    int binaryOutcomeCount(List<GrowthData> rows) => rows
-        .where((r) => const {'SUCCESS', 'ON_TIME', 'FAILED', 'NOT_DONE'}
-            .contains('${r['outcome'] ?? ''}'))
-        .length;
-    final similarCalibrationCount = binaryOutcomeCount(resolved);
-    final globalCalibrationCount = binaryOutcomeCount(allResolved);
-    final useSimilarCalibration = similarCalibrationCount >= 30;
-    final useGlobalCalibration =
-        !useSimilarCalibration && globalCalibrationCount >= 50;
-    final calibrationRows = useSimilarCalibration
-        ? resolved
-        : useGlobalCalibration
-            ? allResolved
-            : resolved;
-    final calibrationScope = useSimilarCalibration
-        ? 'SIMILAR_BEHAVIOR'
-        : useGlobalCalibration
-            ? 'ALL_PERSONAL_BEHAVIOR'
-            : 'SIMILAR_BEHAVIOR_INSUFFICIENT';
-    final probabilityCalibration = _calibrateRawForecast(
-        rawEstimate, calibrationRows,
-        scope: calibrationScope);
-    final forecastValidation = _forecastValidationSummary(allResolved);
-    double? estimate = _prob(probabilityCalibration['probability']);
-    double historyWeight = 0;
-    if (estimate == null && baseline != null && resolved.length >= 5) {
-      estimate = baseline;
-      forecastSource = 'HISTORY_ONLY';
-      historyWeight = 1;
-    } else if (probabilityCalibration['status'] ==
+    final contract = EvidenceForecastScience.contract(eventContract);
+    final comparisonKey = EvidenceForecastScience.comparisonKey(contract, targetMode);
+    final signature = EvidenceForecastScience.modelSignature(ai,
+        finalJevEstimate != null ? finalJevAdjudication : jev, forecastSource);
+    final calibrationRows = EvidenceForecastScience.eligible(records,
+        key: comparisonKey, signature: signature);
+    final probabilityCalibration = EvidenceForecastScience.calibrate(rawEstimate, calibrationRows);
+    final forecastValidation = EvidenceForecastScience.validation(calibrationRows);
+    final estimate = requireJev && !pipelineComplete ? null : _prob(probabilityCalibration['probability']);
+    const historyWeight = 0.0;
+    if (probabilityCalibration['status'] ==
         'PERSONAL_PLATT_CALIBRATED') {
       forecastSource = '${forecastSource}_PERSONALLY_CALIBRATED';
     }
@@ -1172,8 +1199,8 @@ class EvidenceGrowthActionPredictionService {
     final improvementEstimate =
         improvementJevEstimate ?? improvementAi;
     final improvementGain =
-        improvementEstimate != null && estimate != null
-            ? improvementEstimate - estimate
+        improvementJevEstimate != null && jevEstimate != null
+            ? improvementJevEstimate - jevEstimate
             : null;
 
     final weaknessRows = keyWeaknessRows.take(4).toList();
@@ -1286,8 +1313,19 @@ class EvidenceGrowthActionPredictionService {
 
     final id = 'ap_${DateTime.now().microsecondsSinceEpoch}';
 
-    return {
+    final output = <String, dynamic>{
       'id': id,
+      'science_version': EvidenceForecastScience.version,
+      'pipeline_status': pipelineComplete ? 'COMPLETE' : 'PARTIAL',
+      'pipeline_errors': pipelineErrors,
+      'input_fingerprint': EvidenceForecastScience.inputFingerprint(state),
+      'event_contract': contract,
+      'comparison_key': comparisonKey,
+      'model_signature': signature,
+      'trial_id': '${cycleContext['trial_id'] ?? id}',
+      'parent_prediction_id': cycleContext['parent_prediction_id'] ?? '',
+      'cycle_context': cycleContext,
+      'hypothetical': cycleContext['hypothetical'] == true,
       'created_at_ms': DateTime.now().millisecondsSinceEpoch,
       'plan': action,
       'scheduled_at_ms': scheduledAt?.millisecondsSinceEpoch ?? 0,
@@ -1326,7 +1364,7 @@ class EvidenceGrowthActionPredictionService {
       'probability_calibration': probabilityCalibration,
       'forecast_validation': forecastValidation,
       'estimate_is_calibrated':
-          probabilityCalibration['status'] == 'PERSONAL_PLATT_CALIBRATED',
+          estimate != null && probabilityCalibration['status'] == 'PERSONAL_PLATT_CALIBRATED',
       'forecast_provenance': {
         'primary_source': forecastSource,
         'jev_primary_event_probability': jevEstimate,
@@ -1428,7 +1466,7 @@ class EvidenceGrowthActionPredictionService {
       },
       'factors': factors,
       'top_risks': [
-        for (final e in riskRows.take(3))
+        for (final e in riskRows)
           {
             'key': e.key,
             'label': activeLabels[e.key],
@@ -1626,6 +1664,7 @@ class EvidenceGrowthActionPredictionService {
         'ai_estimate': improvementAi,
         'jev_estimate': improvementJevEstimate,
         'estimate': improvementEstimate,
+        'baseline_estimate': jevEstimate,
         'gain': improvementGain,
         'is_hypothetical': true,
       },
@@ -1634,6 +1673,8 @@ class EvidenceGrowthActionPredictionService {
           : '同类个人历史已作为JEV输入证据；程序不再用未经验证的固定权重把历史基线二次混入概率，避免重复计算。',
       'outcome': 'PENDING',
     };
+    output['scientific_report'] = EvidenceForecastScience.report(output, calibrationRows);
+    return output;
   }
 
   static List<String> _validTheoryIds(Iterable<String> ids) {
@@ -2816,7 +2857,13 @@ ${jsonEncode({
         evidence.addAll(keyFactors);
         rationale =
             '不利证据分布在两个以上不同阶段，单一“根因”不足以解释当前行为，应该保留多因素冲突。';
-      } else if (rows.where((r) => r['ordinal_level'] is num).length >= 3) {
+      } else if (rows.any((r) => const {'key_blocker', 'secondary_risk'}.contains(r['jev_role']) ||
+          (r['factor_id'] != 'risk_perception' && r['ordinal_level'] is num && (r['ordinal_level'] as num) <= 1))) {
+        pattern = 'insufficient_evidence';
+        rationale = '存在不利因素，但现有规则不足以判断其组合机制；不能据此宣称没有主要阻碍。';
+      } else if (rows.where((r) => r['ordinal_level'] is num).length >= 3 &&
+          commitmentIds.any((id) => stateOf(id) == 'supportive') &&
+          feasibilityIds.any((id) => stateOf(id) == 'supportive')) {
         pattern = 'no_major_theory_blocker';
         rationale =
             '已有多项已确认理论反馈，但没有形成满足结构条件的单一关键断点。';
@@ -2837,129 +2884,6 @@ ${jsonEncode({
         '不同理论中重复测量的相近构念不得机械重复计权。',
         '本层只生成结构性诊断假设，不把序位选项转换成行为概率。'
       ],
-    };
-  }
-
-  GrowthData _calibrateRawForecast(
-      double? raw, List<GrowthData> historicalRows,
-      {required String scope}) {
-    if (raw == null) {
-      return {'status': 'NO_RAW_ESTIMATE', 'probability': null};
-    }
-    final samples = <GrowthData>[];
-    for (final row in historicalRows) {
-      final outcome = '${row['outcome'] ?? ''}';
-      final y = const {'SUCCESS', 'ON_TIME'}.contains(outcome)
-          ? 1.0
-          : const {'FAILED', 'NOT_DONE'}.contains(outcome)
-              ? 0.0
-              : null;
-      if (y == null) continue;
-      final provenance = growthMap(row['forecast_provenance']);
-      final p = _prob(provenance['jev_final_synthesis_probability']) ??
-          _prob(row['raw_model_estimate']) ??
-          _prob(row['estimate']);
-      if (p == null) continue;
-      samples.add({'p': p.clamp(.01, .99), 'y': y});
-    }
-
-    final positives = samples.where((r) => r['y'] == 1.0).length;
-    final negatives = samples.length - positives;
-    if (samples.length < 30 || positives < 5 || negatives < 5) {
-      return {
-        'status': 'UNCALIBRATED',
-        'probability': raw,
-        'raw_probability': raw,
-        'sample_count': samples.length,
-        'positive_count': positives,
-        'negative_count': negatives,
-        'scope': scope,
-        'minimum_rule':
-            '相似行为优先至少30个明确二元结果且成功/失败各至少5个；若只能使用跨行为个人历史，则要求更高样本量后才启用。',
-      };
-    }
-
-    double a = 0.0;
-    double b = 1.0;
-    const lambda = 2.0;
-    for (var iter = 0; iter < 500; iter++) {
-      var ga = lambda * a;
-      var gb = lambda * (b - 1.0);
-      for (final row in samples) {
-        final p = (row['p'] as num).toDouble();
-        final y = (row['y'] as num).toDouble();
-        final x = math.log(p / (1 - p));
-        final q = 1 / (1 + math.exp(-(a + b * x)));
-        ga += q - y;
-        gb += (q - y) * x;
-      }
-      final lr = .08 / samples.length;
-      a -= lr * ga;
-      b -= lr * gb;
-    }
-
-    final clipped = raw.clamp(.01, .99);
-    final x = math.log(clipped / (1 - clipped));
-    final calibrated = 1 / (1 + math.exp(-(a + b * x)));
-    return {
-      'status': 'PERSONAL_PLATT_CALIBRATED',
-      'probability': calibrated.clamp(.01, .99),
-      'raw_probability': raw,
-      'sample_count': samples.length,
-      'positive_count': positives,
-      'negative_count': negatives,
-      'intercept': a,
-      'slope': b,
-      'scope': scope,
-      'method':
-          'Regularized logistic recalibration (Platt-style) fitted only to resolved personal forecasts; theory factors are not hand-weighted.',
-    };
-  }
-
-  GrowthData _forecastValidationSummary(List<GrowthData> rows) {
-    var nRaw = 0;
-    var nFinal = 0;
-    var rawBrier = 0.0;
-    var finalBrier = 0.0;
-    var rawMean = 0.0;
-    var finalMean = 0.0;
-    var observed = 0.0;
-
-    for (final row in rows) {
-      final outcome = '${row['outcome'] ?? ''}';
-      final y = const {'SUCCESS', 'ON_TIME'}.contains(outcome)
-          ? 1.0
-          : const {'FAILED', 'NOT_DONE'}.contains(outcome)
-              ? 0.0
-              : null;
-      if (y == null) continue;
-      final provenance = growthMap(row['forecast_provenance']);
-      final raw = _prob(provenance['jev_final_synthesis_probability']) ??
-          _prob(row['raw_model_estimate']);
-      final finalP = _prob(row['estimate']);
-      if (raw != null) {
-        nRaw++;
-        rawBrier += (raw - y) * (raw - y);
-        rawMean += raw;
-      }
-      if (finalP != null) {
-        nFinal++;
-        finalBrier += (finalP - y) * (finalP - y);
-        finalMean += finalP;
-        observed += y;
-      }
-    }
-
-    return {
-      'raw_count': nRaw,
-      'final_count': nFinal,
-      'raw_brier': nRaw == 0 ? null : rawBrier / nRaw,
-      'final_brier': nFinal == 0 ? null : finalBrier / nFinal,
-      'raw_mean_prediction': nRaw == 0 ? null : rawMean / nRaw,
-      'final_mean_prediction': nFinal == 0 ? null : finalMean / nFinal,
-      'observed_rate': nFinal == 0 ? null : observed / nFinal,
-      'note':
-          'Brier分数越低越好；均值预测与实际发生率用于检查整体校准。这里只使用预测之后才记录的现实结果，不把当前样本用于自身验证。',
     };
   }
 
@@ -3032,6 +2956,11 @@ ${jsonEncode({
 - 如果证据冲突或不足，要明确写出来，不强行得出单一结论。
 - 不输出隐藏推理过程，只输出结构化结论。
 - 只输出JSON。
+- 严格遵循 event_contract 中用户确认的成功标准和观察窗口，不得把“到场”偷换为“起床”等更容易事件。cycle_context 中记录的学习或态度变化只是用户自报，不自动视为实际改善。
+- 根源分为已观察事实、机制假设、维持条件；根因始终是待验证的假设。列出可被推翻的条件与至少一个替代解释，禁止凭空补童年、人格或潜意识故事。
+- 关系须明确是中介（经由另一因素）、调节（改变另一因素作用）、必要前提、冲突还是反馈；不能把同一证据在多个理论中重复加权。
+- 针对关键阻碍给一个低成本、可检验的改变和If-Then、风险/代价及停止条件。也允许合理放弃/改目标，不能强迫达到某个乐观分数。
+- 理论讲解要对应本次事实，并提出可检验的替代信念；不宣称阅读讲解必然改变态度。
 
 结论类型：
 CORE_WEAKNESS = 当前最关键的弱点/断点假设
@@ -3048,6 +2977,10 @@ ${jsonEncode({
           'normalized_action': profile['normalized_action'],
           'action_mode': profile['action_mode'],
           'forecast_events': profile['forecast_events'],
+          'event_contract': state['event_contract'],
+          'user_reported_conditions': state['user_reported_conditions'],
+          'clarification_answers': state['clarification_answers'],
+          'cycle_context': state['cycle_context'],
         })}
 
 SELECTED_THEORIES:
@@ -3093,13 +3026,26 @@ ${jsonEncode({
       "why_key":"为什么它比单独某个低分更关键",
       "counterevidence":"已有反证、冲突或尚未排除的替代解释；没有则写空字符串",
       "correction":"针对这个综合模式最优先改变的1个具体抓手",
-      "review_focus":"现实结果回来后最应该验证什么"
+      "review_focus":"现实结果回来后最应该验证什么",
+      "root_cause_hypothesis":"更深一层的机制假设，不能写成已证实根因",
+      "observed_basis":"只引用用户提供的事实和选项",
+      "maintaining_condition":"使障碍持续的条件，未知就写未知",
+      "alternative_explanation":"至少一个替代解释",
+      "falsifier":"出现什么观察会削弱或推翻假设",
+      "theory_lesson":"用本次事件解释理论关系，而非通用说教",
+      "belief_test":"需要检验什么判断？可考虑什么替代看法？",
+      "changed_conditions":["至多2条具体可控的假设变化；保持成功标准与窗口不变"],
+      "minimum_action":"现在可执行并验证的第一步",
+      "if_then":"遇到什么明确情境就执行哪个动作",
+      "cost_and_risk":"时间、费用、身体/人际等代价；未知明确说明",
+      "stop_rule":"何时执行、何时改目标或停止分析去收集现实证据"
     }
   ],
   "interactions":[
     {
       "factor_ids":[],
       "label":"例如：意向—执行鸿沟",
+      "relationship_type":"MEDIATION|MODERATION|GATE|CONFLICT|FEEDBACK|UNCERTAIN",
       "description":"两个或多个用户确认因素之间的关系"
     }
   ],
@@ -3108,8 +3054,8 @@ ${jsonEncode({
 }''',
         expectJson: true,
         temperature: .08,
-        maxTokens: 2300,
-      ).timeout(const Duration(seconds: 45));
+        maxTokens: 4400,
+      ).timeout(const Duration(seconds: 120));
 
       final decoded = _decode(raw);
       final validFactorIds =
@@ -3126,7 +3072,7 @@ ${jsonEncode({
         final epistemic =
             '${row['epistemic_status'] ?? 'TENTATIVE'}'.toUpperCase();
         conclusions.add({
-          'id': _cleanUserText('${row['id'] ?? ''}'),
+          'id': 'hypothesis_${conclusions.length + 1}',
           'type': const {
             'CORE_WEAKNESS',
             'INTERACTION',
@@ -3152,6 +3098,13 @@ ${jsonEncode({
           'correction': _cleanUserText('${row['correction'] ?? ''}'),
           'review_focus':
               _cleanUserText('${row['review_focus'] ?? ''}'),
+          for (final key in const ['root_cause_hypothesis', 'observed_basis',
+            'maintaining_condition', 'alternative_explanation', 'falsifier',
+            'theory_lesson', 'belief_test', 'minimum_action', 'if_then',
+            'cost_and_risk', 'stop_rule'])
+              key: EvidenceForecastScience.text(row[key], 800),
+          'changed_conditions': growthStrings(row['changed_conditions'])
+              .map((s) => EvidenceForecastScience.text(s, 400)).where((s) => s.isNotEmpty).take(2).toList(),
         });
       }
 
@@ -3167,6 +3120,8 @@ ${jsonEncode({
           'label': _cleanUserText('${row['label'] ?? ''}'),
           'description':
               _cleanUserText('${row['description'] ?? ''}'),
+          'relationship_type': const {'MEDIATION', 'MODERATION', 'GATE', 'CONFLICT', 'FEEDBACK'}
+              .contains(row['relationship_type']) ? row['relationship_type'] : 'UNCERTAIN',
         });
       }
 
@@ -3365,7 +3320,7 @@ ${jsonEncode(state)}
             temperature: .1,
             maxTokens: 2200,
           )
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 120));
 
       final decoded = _decode(raw);
       final likelihood = _prob(decoded['execution_likelihood']);
@@ -3471,27 +3426,59 @@ ${jsonEncode(state)}
     }
   }
 
+  void _validateRevision(GrowthData result, List<GrowthData> rows) {
+    final parentId = '${result['parent_prediction_id'] ?? ''}';
+    if (parentId.isNotEmpty) {
+      final parent = rows.where((row) => row['id'] == parentId).toList();
+      if (parent.isEmpty) throw StateError('原预测已删除，请新建行动');
+      if (EvidenceForecastScience.trialId(parent.first) == EvidenceForecastScience.trialId(result)) {
+        if (rows.any((r) => EvidenceForecastScience.trialId(r) == EvidenceForecastScience.trialId(result) && r['outcome'] != 'PENDING')) throw StateError('行动已结束，请新建下一次行动');
+        if (parent.first['pipeline_status'] != 'PARTIAL' && result['input_fingerprint'] != null && result['input_fingerprint'] == parent.first['input_fingerprint']) throw StateError('没有新增事实或修改答案，保留当前报告；请先行动或核实条件');
+        if (jsonEncode(parent.first['event_contract']) != jsonEncode(result['event_contract']) || parent.first['scheduled_at_ms'] != result['scheduled_at_ms']) {
+          throw StateError('成功标准或时间窗口改变，请作为新的行动预测');
+        }
+      }
+    }
+  }
+
   Future<void> savePrediction(GrowthData result) async {
     final rows = await history();
+    if (rows.any((row) => row['id'] == result['id'])) throw StateError('预测快照已经保存，不能覆盖');
+    if (result['hypothetical'] == true) throw StateError('情景模拟不进入现实行动历史');
+    _validateRevision(result, rows);
     rows.insert(0, result);
-    if (rows.length > 100) rows.removeRange(100, rows.length);
+    if (rows.length > 500) rows.removeRange(500, rows.length);
     await _dao.setSetting(historySetting, jsonEncode(rows));
   }
 
-  Future<void> recordOutcome(String id, String outcome) async {
+  Future<void> recordOutcome(String id, String outcome,
+      {bool? primaryEventObserved, DateTime? observedAt, GrowthData observations = const {}}) async {
+    if (observedAt != null && (observedAt.millisecondsSinceEpoch <= 0 || observedAt.isAfter(DateTime.now()))) {
+      throw ArgumentError('实际观察时间不能在未来');
+    }
     if (!const {
       'SUCCESS',
       'PARTIAL',
       'FAILED',
       'ON_TIME',
       'LATE',
-      'NOT_DONE'
+      'NOT_DONE',
+      'UNOBSERVED',
+      'CANCELLED',
     }.contains(outcome)) {
       throw ArgumentError('未知结果');
     }
     final rows = await history();
     final index = rows.indexWhere((r) => r['id'] == id);
     if (index < 0) throw StateError('预测记录不存在');
+    final original = rows[index];
+    if (original['science_version'] == EvidenceForecastScience.version) {
+      if (const {'SUCCESS', 'FAILED'}.contains(outcome) && primaryEventObserved == null) throw ArgumentError('请明确本次主事件是否达成');
+      if ((outcome == 'SUCCESS' && primaryEventObserved == false) ||
+          (outcome == 'FAILED' && primaryEventObserved == true)) throw ArgumentError('主事件观察与结果冲突');
+      if (rows.any((r) => EvidenceForecastScience.trialId(r) == EvidenceForecastScience.trialId(original) &&
+          (r['created_at_ms'] as num) > (original['created_at_ms'] as num))) throw StateError('请在本次行动最新的预测上记录结果，避免重复计数');
+    }
     final diagnosis = growthMap(rows[index]['behavior_diagnosis']);
     final reviewBlueprint = growthMap(diagnosis['review_blueprint']);
     final theoryFeedback =
@@ -3520,14 +3507,29 @@ ${jsonEncode(state)}
                   'review_focus': row['review_focus'],
                 })
             .toList();
-    final outcomeAt = DateTime.now().millisecondsSinceEpoch;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final unchangedOutcome = original['outcome'] == outcome &&
+        original['primary_event_observed'] == primaryEventObserved;
+    final outcomeAt = observedAt?.millisecondsSinceEpoch ?? (unchangedOutcome && original['outcome_at_ms'] is num
+        ? (original['outcome_at_ms'] as num).toInt() : nowMs);
     rows[index] = {
       ...rows[index],
       'outcome': outcome,
       'outcome_at_ms': outcomeAt,
+      'outcome_recorded_at_ms': nowMs,
+      'primary_event_observed': const {'CANCELLED', 'UNOBSERVED'}.contains(outcome) ? null : primaryEventObserved,
+      'outcome_audit': [
+        ...growthRows(original['outcome_audit']),
+        if (original['outcome'] != 'PENDING' && (!unchangedOutcome || outcomeAt != original['outcome_at_ms'])) {
+          'outcome': original['outcome'], 'outcome_at_ms': original['outcome_at_ms'],
+          'primary_event_observed': original['primary_event_observed'],
+          'previous_review': original['diagnostic_review'],
+        },
+      ],
       if (diagnosis.isNotEmpty)
         'diagnostic_review': {
           'status': 'PENDING',
+          'user_observations': observations,
           'created_at_ms': outcomeAt,
           'outcome': outcome,
           'compare_keys': growthStrings(reviewBlueprint['compare_keys']),
@@ -3540,6 +3542,18 @@ ${jsonEncode(state)}
               '现实结果用于支持、削弱或推翻预测时保存的理论综合结论与弱点假设；用户确认的理论因素保留原值，不把一次结果直接解释成稳定人格特征。',
         },
     };
+    await _dao.setSetting(historySetting, jsonEncode(rows));
+  }
+
+  Future<void> saveReview(String id, GrowthData review) async {
+    final rows = await history();
+    final index = rows.indexWhere((r) => r['id'] == id);
+    if (index < 0) throw StateError('预测记录不存在');
+    if (rows[index]['outcome'] == 'PENDING') throw StateError('请先记录实际结果');
+    rows[index] = {...rows[index], 'diagnostic_review': {
+      ...growthMap(rows[index]['diagnostic_review']), ...review,
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }};
     await _dao.setSetting(historySetting, jsonEncode(rows));
   }
 

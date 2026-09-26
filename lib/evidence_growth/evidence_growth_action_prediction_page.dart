@@ -9,6 +9,10 @@ import 'evidence_growth_behavior_theories.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_jev.dart';
 import 'evidence_growth_journey_models.dart';
+import 'evidence_growth_forecast_science.dart';
+import 'evidence_growth_forecast_report_page.dart';
+import 'evidence_growth_action_review_page.dart';
+import 'evidence_growth_reference_forecast_page.dart';
 
 class EvidenceGrowthActionPredictionPage extends StatefulWidget {
   const EvidenceGrowthActionPredictionPage({
@@ -36,6 +40,11 @@ class _EvidenceGrowthActionPredictionPageState
   final notes = TextEditingController();
   final historyNotes = TextEditingController();
   final analysisCorrection = TextEditingController();
+  final successCriterion = TextEditingController();
+  final observationWindow = TextEditingController();
+  final contextClass = TextEditingController();
+  bool contractConfirmed = false;
+  GrowthData cycleContext = {};
 
   final appliedImprovements = <String>{};
   final selectedTheoryIds = <String>{};
@@ -96,6 +105,9 @@ class _EvidenceGrowthActionPredictionPageState
     notes.dispose();
     historyNotes.dispose();
     analysisCorrection.dispose();
+    successCriterion.dispose();
+    observationWindow.dispose();
+    contextClass.dispose();
     for (final controller in clarificationText.values) {
       controller.dispose();
     }
@@ -186,7 +198,7 @@ class _EvidenceGrowthActionPredictionPageState
         context: context,
         firstDate: DateTime(now.year, now.month, now.day),
         lastDate: now.add(const Duration(days: 365)),
-        initialDate: scheduledAt ?? now);
+        initialDate: scheduledAt != null && scheduledAt!.isAfter(now) ? scheduledAt! : now);
     if (date == null || !mounted) return;
     final time = await showTimePicker(
         context: context,
@@ -196,6 +208,8 @@ class _EvidenceGrowthActionPredictionPageState
     setState(() {
       scheduledAt =
           DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      cycleContext = {};
+      contractConfirmed = false;
       _invalidateActionProfile();
     });
   }
@@ -203,6 +217,13 @@ class _EvidenceGrowthActionPredictionPageState
   GrowthData get structuredContext => {
         'applied_improvements': appliedImprovements.toList(),
       };
+
+  GrowthData get eventContract => EvidenceForecastScience.contract({
+    'success_criterion': successCriterion.text,
+    'observation_window': observationWindow.text,
+    'context_class': contextClass.text,
+    'confirmed': contractConfirmed,
+  });
 
   String get similarHistory => historyNotes.text.trim();
 
@@ -267,6 +288,7 @@ class _EvidenceGrowthActionPredictionPageState
     theoryFactorSelectionSources.clear();
     if (clearTheoryAnalysis) theorySelectionAnalysis = {};
     actionProfile = {};
+    result = {};
   }
 
   GrowthData get clarificationAnswers => {
@@ -333,6 +355,7 @@ class _EvidenceGrowthActionPredictionPageState
         autoSelectTheories: !theorySelectionManuallyEdited,
         jevApiKey: await _jevKey(),
         journey: widget.journey,
+        eventContract: eventContract,
       );
       if (!mounted) return;
       setState(() => _installActionProfile(profile));
@@ -362,6 +385,10 @@ class _EvidenceGrowthActionPredictionPageState
 
   Future<void> predict() async {
     if (busy || preparing || plan.text.trim().isEmpty) return;
+    if (!EvidenceForecastScience.validContract(eventContract)) {
+      _message('请先写明并确认可观察的达成标准和观察窗口。');
+      return;
+    }
     if (actionProfile.isEmpty) {
       await prepareAction();
       if (actionProfile.isEmpty) return;
@@ -396,10 +423,16 @@ class _EvidenceGrowthActionPredictionPageState
         journey: widget.journey,
         jevApiKey: jevKey,
         requireJev: true,
+        eventContract: eventContract,
+        cycleContext: cycleContext,
       );
       await service.savePrediction(output);
       if (!mounted) return;
       setState(() => result = output);
+      if (output['pipeline_status'] == 'PARTIAL') _message('已保存完成的分析与阶段错误；联合预测尚未完成，可从当前输入重试。');
+      cycleContext = {...growthMap(output['cycle_context']),
+        'trial_id': EvidenceForecastScience.trialId(output),
+        'parent_prediction_id': output['id']};
       await reload();
     } catch (e) {
       if (mounted) {
@@ -441,31 +474,109 @@ class _EvidenceGrowthActionPredictionPageState
     }
   }
   Future<void> applyImprovementAndPredict() async {
-    final scenario = growthMap(result['improvement_scenario']);
+    final snapshot = Map<String, dynamic>.from(result);
+    final scenario = growthMap(snapshot['improvement_scenario']);
     final changes = growthStrings(scenario['changes']);
-    if (changes.isEmpty) return;
-    final revised = '${scenario['revised_plan'] ?? ''}'.trim();
+    if (snapshot['outcome'] != 'PENDING') {
+      await startNextTrial();
+      return;
+    }
+    final facts = TextEditingController();
+    final learned = TextEditingController();
+    final attitude = TextEditingController();
+    final accepted = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('哪些条件已经真的改变？'),
+      content: SizedBox(width: 500, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('保持原成功标准和时间窗口。只将已经落实的事实用于新预测；想做、读懂或采纳建议，不等于条件已经改变。'),
+        for (final change in changes) Padding(padding: const EdgeInsets.only(top: 8), child: Text(change)),
+        const SizedBox(height: 12),
+        TextField(controller: facts, minLines: 2, maxLines: 5, maxLength: 1800, decoration: const InputDecoration(labelText: '已落实的变化及观察依据（必填）')),
+        TextField(controller: learned, minLines: 2, maxLines: 4, maxLength: 1200, decoration: const InputDecoration(labelText: '你对原因与理论关系的新理解')),
+        TextField(controller: attitude, minLines: 2, maxLines: 4, maxLength: 1200, decoration: const InputDecoration(labelText: '态度发生了什么变化？依据是什么？')),
+      ]))),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('尚未落实')),
+        FilledButton(onPressed: () {
+          if (facts.text.trim().isNotEmpty) Navigator.pop(ctx, true);
+        }, child: const Text('保存变化并重新分析'))],
+    ));
+    final actualFacts = facts.text.trim();
+    final learning = learned.text.trim();
+    final attitudeChange = attitude.text.trim();
+    facts.dispose(); learned.dispose(); attitude.dispose();
+    if (accepted != true || !mounted) return;
+    _restorePrediction(snapshot);
     setState(() {
-      appliedImprovements
-        ..clear()
-        ..addAll(changes);
-      if (revised.isNotEmpty) plan.text = revised;
+      cycleContext = {'trial_id': EvidenceForecastScience.trialId(snapshot),
+        'parent_prediction_id': snapshot['id'], 'actual_changed_facts': actualFacts,
+        'learning': learning, 'attitude_change_self_report': attitudeChange,
+        'iteration': ((growthMap(snapshot['cycle_context'])['iteration'] as num?)?.toInt() ?? 0) + 1};
+      appliedImprovements.add(actualFacts);
       _invalidateActionProfile();
     });
-    await predict();
+    // Re-analyze and stop at the editable questionnaire. The user must confirm
+    // refreshed options rather than silently converting suggestions to facts.
+    await prepareAction();
+    if (mounted) _message('变化已加入本次情境。请核对新问卷，再提交重预测。');
   }
 
-  Future<void> recordOutcome(String id, String outcome) async {
-    try {
-      await service.recordOutcome(id, outcome);
-      await reload();
-      final latest = records.where((r) => r['id'] == id).toList();
-      if (latest.isNotEmpty && mounted) {
-        setState(() => result = latest.first);
-      }
-    } catch (e) {
-      if (mounted) _message('$e');
+  void _restorePrediction(GrowthData snapshot) {
+    plan.text = '${snapshot['plan'] ?? ''}';
+    notes.text = '${snapshot['context'] ?? ''}';
+    historyNotes.text = '${snapshot['similar_history'] ?? ''}';
+    final at = (snapshot['scheduled_at_ms'] as num?)?.toInt() ?? 0;
+    scheduledAt = at == 0 ? null : DateTime.fromMillisecondsSinceEpoch(at);
+    final c = growthMap(snapshot['event_contract']);
+    successCriterion.text = '${c['success_criterion'] ?? ''}';
+    observationWindow.text = '${c['observation_window'] ?? ''}';
+    contextClass.text = '${c['context_class'] ?? ''}';
+    contractConfirmed = c['confirmed'] == true;
+    cycleContext = snapshot['outcome'] == 'PENDING'
+      ? {...growthMap(snapshot['cycle_context']), 'trial_id': EvidenceForecastScience.trialId(snapshot), 'parent_prediction_id': snapshot['id']}
+      : {'parent_prediction_id': snapshot['id']};
+    appliedImprovements..clear()..addAll(growthStrings(growthMap(snapshot['structured_context'])['applied_improvements']));
+    _installActionProfile(growthMap(snapshot['action_profile']));
+    for (final e in growthMap(snapshot['theory_factor_answers']).entries) {
+      theoryFactorSelections[e.key] = '${growthMap(e.value)['option_id'] ?? ''}';
+      theoryFactorSelectionSources[e.key] = '${growthMap(e.value)['prefill_source'] ?? 'MANUAL'}';
     }
+    for (final e in growthMap(snapshot['clarification_answers']).entries) {
+      if (clarificationText.containsKey(e.key)) clarificationText[e.key]!.text = '${e.value}';
+      if (clarificationChoice.containsKey(e.key)) clarificationChoice[e.key] = '${e.value}';
+    }
+    result = snapshot;
+  }
+
+  Future<void> startNextTrial() async {
+    if (result.isEmpty || busy || preparing) return;
+    final previous = Map<String, dynamic>.from(result);
+    setState(() {
+      _restorePrediction(previous);
+      cycleContext = {'parent_prediction_id': previous['id'],
+        'previous_trial_review': growthMap(previous['diagnostic_review'])['user_observations'],
+        'next_experiment': growthMap(growthMap(previous['diagnostic_review'])['llm_analysis'])['next_experiment']};
+      scheduledAt = null;
+      contractConfirmed = false;
+      _invalidateActionProfile();
+    });
+    _message('已带入上次复盘。请确认这一次的日期、事实和成功标准，再开始分析。');
+  }
+
+  Future<void> openReview() async {
+    if (result.isEmpty || busy || preparing) return;
+    final key = await _jevKey();
+    if (!mounted) return;
+    final updated = await Navigator.push<GrowthData>(context, MaterialPageRoute(builder: (_) =>
+      EvidenceGrowthActionReviewPage(prediction: result, service: service, jevApiKey: key)));
+    if (!mounted) return;
+    if (updated != null) setState(() => result = updated);
+    await reload();
+  }
+
+  Future<void> openReferenceForecast() async {
+    final key = await _jevKey();
+    if (!mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => EvidenceGrowthReferenceForecastPage(
+      dao: widget.dao, jevApiKey: key, action: plan.text, eventContract: eventContract)));
   }
 
   Future<void> clearHistory() async {
@@ -506,6 +617,8 @@ class _EvidenceGrowthActionPredictionPageState
         'PENDING': '等待现实结果',
         'SUCCESS': '主预测事件达成',
         'PARTIAL': '部分达成／偏离原计划',
+        'CANCELLED': '已取消',
+        'UNOBSERVED': '尚未观察／无法观察',
         'FAILED': '主预测事件未达成',
         'ON_TIME': '主预测事件达成',
         'LATE': '部分达成／延期',
@@ -871,6 +984,9 @@ class _EvidenceGrowthActionPredictionPageState
               minLines: 2,
               maxLines: 5,
               onChanged: (_) => setState(() {
+                    cycleContext = {};
+                    appliedImprovements.clear();
+                    contractConfirmed = false;
                     if (!theorySelectionManuallyEdited) {
                       selectedTheoryIds.clear();
                     }
@@ -881,6 +997,19 @@ class _EvidenceGrowthActionPredictionPageState
                   labelText: '你接下来准备做什么？',
                   hintText: '例如：今晚给朋友打电话道歉 / 未来7天不抽烟 / 周五前提交报告 / 明早跑步30分钟',
                   border: OutlineInputBorder())),
+          const SizedBox(height: 12),
+          TextField(controller: successCriterion, enabled: !busy && !preparing,
+              maxLines: 2, maxLength: 600,
+              onChanged: (_) => setState(() { contractConfirmed = false; cycleContext = {}; _invalidateActionProfile(); }),
+              decoration: const InputDecoration(labelText: '什么可观察结果算达成？', hintText: '例如：到达体检中心并完成登记', border: OutlineInputBorder())),
+          TextField(controller: observationWindow, enabled: !busy && !preparing,
+              maxLength: 300,
+              onChanged: (_) => setState(() { contractConfirmed = false; cycleContext = {}; _invalidateActionProfile(); }),
+              decoration: const InputDecoration(labelText: '观察窗口', hintText: '例如：预约开始前30分钟；或从现在起24小时内', border: OutlineInputBorder())),
+          CheckboxListTile(contentPadding: EdgeInsets.zero,
+              title: const Text('确认以这个标准和时间窗口检验预测'),
+              value: contractConfirmed,
+              onChanged: busy || preparing ? null : (v) => setState(() { contractConfirmed = v == true; result = {}; })),
           const SizedBox(height: 8),
           _theorySelector(),
           const SizedBox(height: 8),
@@ -898,9 +1027,16 @@ class _EvidenceGrowthActionPredictionPageState
               title: const Text('补充你已经知道的事实（可选）'),
               subtitle: const Text('不需要先选固定因素；用自然语言写事实，AI会负责提取、筛选并继续追问'),
               children: [
+                TextField(controller: contextClass, enabled: !busy && !preparing,
+                    maxLength: 400,
+                    onChanged: (_) => setState(() { cycleContext = {}; _invalidateActionProfile(); }),
+                    decoration: const InputDecoration(labelText: '可比情境组（可选，用于个人校准）',
+                      hintText: '仅条件与标准真正可比时沿用同名，如：工作日早班／相同通勤条件', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
                 TextField(
                     controller: historyNotes,
                     enabled: !busy && !preparing,
+                    onChanged: (_) => setState(() => _invalidateActionProfile()),
                     minLines: 2,
                     maxLines: 4,
                     decoration: const InputDecoration(
@@ -910,6 +1046,7 @@ class _EvidenceGrowthActionPredictionPageState
                 TextField(
                     controller: notes,
                     enabled: !busy && !preparing,
+                    onChanged: (_) => setState(() => _invalidateActionProfile()),
                     minLines: 3,
                     maxLines: 7,
                     decoration: const InputDecoration(
@@ -999,6 +1136,7 @@ class _EvidenceGrowthActionPredictionPageState
                             .any((o) => o['id'] == 'unknown');
                         if (hasUnknown) {
                           theoryFactorSelections[id] = 'unknown';
+                          result = {};
                           theoryFactorSelectionSources[id] = 'MANUAL_UNKNOWN';
                         }
                       }
@@ -1104,6 +1242,7 @@ class _EvidenceGrowthActionPredictionPageState
                                         : (yes) {
                                             if (!yes) return;
                                             setState(() {
+                                              result = {};
                                               theoryFactorSelections[id] =
                                                   '${option['id'] ?? ''}';
                                               theoryFactorSelectionSources[id] =
@@ -1537,7 +1676,7 @@ class _EvidenceGrowthActionPredictionPageState
               enabled: !busy && !preparing,
               minLines: 2,
               maxLines: 5,
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) => setState(() => result = {}),
               decoration: InputDecoration(
                   labelText: '哪里理解不对？还漏了什么？',
                   hintText: '例如：这不是普通跑步，我是在比赛前做恢复跑；天气和膝盖状态是决定性条件。',
@@ -1618,8 +1757,7 @@ class _EvidenceGrowthActionPredictionPageState
                             ? null
                             : (selected) {
                                 if (selected) {
-                                  setState(() =>
-                                      clarificationChoice[id] = option);
+                                  setState(() { clarificationChoice[id] = option; result = {}; });
                                 }
                               }))
                     .toList())
@@ -1628,6 +1766,7 @@ class _EvidenceGrowthActionPredictionPageState
                 controller: clarificationText[id] ??=
                     TextEditingController(),
                 enabled: !busy,
+                onChanged: (_) => setState(() => result = {}),
                 decoration: const InputDecoration(
                     hintText: '不知道可以留空',
                     isDense: true,
@@ -2419,7 +2558,7 @@ class _EvidenceGrowthActionPredictionPageState
     if (result.isEmpty || (estimate == null && changes.isEmpty)) {
       return const SizedBox.shrink();
     }
-    final current = result['estimate'];
+    final current = scenario['baseline_estimate'];
     final explanation = '${scenario['explanation'] ?? ''}'.trim();
     final revised = '${scenario['revised_plan'] ?? ''}'.trim();
 
@@ -2473,7 +2612,7 @@ class _EvidenceGrowthActionPredictionPageState
                 child: OutlinedButton.icon(
                     onPressed: busy ? null : applyImprovementAndPredict,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('套用这些条件并重新预测')))
+                    label: const Text('记录已落实的变化，再更新预测')))
           ]
         ]),
         icon: Icons.trending_up);
@@ -2903,28 +3042,34 @@ class _EvidenceGrowthActionPredictionPageState
 
   Widget _outcomeCard() {
     if (result.isEmpty) return const SizedBox.shrink();
-    return _section(
-        '现实结果',
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('当前：${_outcome((result['outcome'] ?? 'PENDING').toString())}'),
-          const SizedBox(height: 8),
-          const Text('行动发生后回来点一次，系统才会逐渐学到你的个人执行基线。',
-              style: TextStyle(color: Colors.black54)),
-          const SizedBox(height: 10),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton(
-                onPressed: () => recordOutcome(result['id'], 'SUCCESS'),
-                child: const Text('主事件达成')),
-            OutlinedButton(
-                onPressed: () => recordOutcome(result['id'], 'PARTIAL'),
-                child: const Text('部分达成／偏离计划')),
-            OutlinedButton(
-                onPressed: () => recordOutcome(result['id'], 'FAILED'),
-                child: const Text('主事件未达成')),
-          ])
-        ]),
-        icon: Icons.fact_check_outlined);
+    return _section('行动与复盘', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('当前：${_outcome((result['outcome'] ?? 'PENDING').toString())}'),
+      const SizedBox(height: 8),
+      const Text('先记录行动发生前后的真实过程，再检验原因假设与态度变化。未观察或合理取消不自动算失败。'),
+      const SizedBox(height: 12),
+      FilledButton.icon(onPressed: busy || preparing ? null : openReview,
+        icon: const Icon(Icons.fact_check_outlined), label: const Text('记录现实结果／LLM＋JEV深入复盘')),
+      if (result['outcome'] == 'PENDING') TextButton(
+        onPressed: busy || preparing ? null : applyImprovementAndPredict,
+        child: const Text('核实条件或态度变化后，更新本次预测')),
+      if (result['outcome'] != 'PENDING') TextButton(onPressed: busy || preparing ? null : startNextTrial,
+        child: const Text('基于这次复盘，开启下一次行动')),
+    ]), icon: Icons.loop);
   }
+
+  Widget _reportCard() => _section('行动预测与学习报告', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text('${forecastPercent(result['estimate'])} · ${result['estimate_is_calibrated'] == true ? '个人校准试用' : '尚未校准的模型估计'}', style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 8),
+    for (final error in growthStrings(result['pipeline_errors'])) Text(error),
+    Text('${growthMap(result['event_contract'])['success_criterion'] ?? result['plan']}'),
+    const SizedBox(height: 8),
+    Text('${growthMap(result['behavior_diagnosis'])['headline'] ?? ''}'),
+    const SizedBox(height: 12),
+    const Text('报告包含证据与分歧、因素关系、原因假设、理论学习、行动实验、个人校准及复盘。模型支持的原因仍须现实检验。'),
+    const SizedBox(height: 12),
+    FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
+      EvidenceGrowthForecastReportPage(prediction: result))), icon: const Icon(Icons.article_outlined), label: const Text('阅读完整报告／复制报告')),
+  ]), icon: Icons.analytics_outlined);
 
   Widget _history() => Card(
       elevation: 0,
@@ -2936,14 +3081,14 @@ class _EvidenceGrowthActionPredictionPageState
               Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                      onPressed: clearHistory, child: const Text('清空历史'))),
+                      onPressed: busy || preparing ? null : clearHistory, child: const Text('清空历史'))),
             for (final row in records.take(20))
               ListTile(
                   title: Text('${row['plan']}',
                       maxLines: 2, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                       '${_pct(row['estimate'])} · ${_outcome((row['outcome'] ?? 'PENDING').toString())} · ${_time((row['scheduled_at_ms'] as num?)?.toInt() ?? 0)}'),
-                  onTap: () => setState(() => result = row)),
+                  onTap: busy || preparing ? null : () => setState(() => _restorePrediction(row))),
           ]));
 
   @override
@@ -2957,14 +3102,20 @@ class _EvidenceGrowthActionPredictionPageState
                   Icon(jevConfigured ? Icons.hub : Icons.hub_outlined))
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
+          Card(child: ListTile(leading: const Icon(Icons.groups_outlined),
+            title: const Text('同情境下，其他人会怎样？'),
+            subtitle: const Text('单独比较全世界人群或指定人物，查看证据与不确定性'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: busy || preparing ? null : openReferenceForecast)),
           _inputCard(),
           _profileCard(),
           if (result.isNotEmpty) ...[
-            _summaryCard(),
-            _improvementCard(),
-            _factorDetails(),
-            _secondaryDetails(),
+            _reportCard(),
             _outcomeCard(),
+            _improvementCard(),
+            ExpansionTile(title: const Text('全部诊断证据与模型明细'), children: [
+              _summaryCard(), _factorDetails(), _secondaryDetails(),
+            ]),
           ],
           _history(),
           const SizedBox(height: 30),
