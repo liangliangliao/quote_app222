@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'evidence_growth_coach.dart';
 
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_journey_models.dart';
+import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_cycle.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
@@ -32,16 +35,31 @@ class EvidenceGrowthAiService {
 成功先提取可重复条件；痛苦先接纳与恢复；允许调整目标和有依据退出，不永远鼓励坚持。
 个人单次证据只在对应情境有效，不自动推成普遍规律。用户事实与候选信念必须分开。
 证据不足返回 KB_EVIDENCE_INSUFFICIENT。只输出结构化结果，不输出思维过程。
+遵守 v2.7：GoalJourney 的合同、计划版本、当前节点、问题空间坐标由运行时管理，模型不得宣告达成或改变状态。
+目标未知时仅探索与低成本现实采样；候选方向必须由用户明确选择，不能替用户发明人生目标。
+保持用户的父目标与质量边界；一次事件结束不代表父目标结束。共同目标不代表有权安排他人任务。
+数字默认是偏好/窗口；共同身体事件的时长/次数不能作为 KPI、倒计时或行动绩效。退出、暂停、拒绝优先于行动与提醒。
+拒绝需先明确对象，不将沉默当明确拒绝，不推断他人心理，不在明确拒绝后建议说服或反复联系。
+DOMAIN_INSUFFICIENT 时仅给有 KB 依据的过程方法或收集可靠领域证据的步骤，不给专业领域结论。
+FACTS_ONLY / DEFERRED / RECOVERY_HOLD 不生成学习或改变压力。失败与自我评价不是人格事实；复发不抹去进步。
+PLAN 与 GOAL 分别版本化；计划修订必须有事实与具体差异；已达成历史和原预测不可改写。
 ''';
 
+  late final _coach=EvidenceGrowthCoach(_ai,_dao,_contract);
+  Future<GrowthData> guideJourney(GrowthJourney j,{String purpose='node',String question='',bool refresh=false}) => _coach.guide(j,purpose:purpose,question:question,refresh:refresh);
+  Future<GrowthData> journeyDraft(GrowthJourney j,String purpose) async {
+    final guidance=await guideJourney(j,purpose:purpose);
+    return {...growthMap(guidance['node_output']),'_guidance':guidance,'_origin':guidance['origin'],'_reason':guidance['reason']};
+  }
+
   Future<EvidenceRouteResult> enrichRoute(EvidenceRouteResult route, {int attempt = 0}) async {
-    if(attempt==0 && !EvidenceGrowthRouter.protected(route)) {
+    if(attempt==0 && route.riskChecks['SELECTION']!='USER_KNOWLEDGE_APPLICATION' && !EvidenceGrowthRouter.protected(route)) {
       try { route=await _routeEvidence(route); } catch(_) { /* Keep local route usable. */ }
     }
-    if (!route.canAct || route.selectedNodes.isEmpty) return route;
+    if (!route.canAct || route.selectedNodes.isEmpty || route.riskChecks['SELECTION']=='USER_KNOWLEDGE_APPLICATION') return route;
     UnifiedAiResolvedConfig cfg;
-    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return route; }
-    if (!cfg.available) return route;
+    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return route.copyWith(riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'LOCAL_RULE','CONTENT_REASON':'无法读取 AI 配置'}); }
+    if (!cfg.available) return route.copyWith(riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'LOCAL_RULE','CONTENT_REASON':'未配置可用 AI'});
     final id = 'eg_route_${DateTime.now().microsecondsSinceEpoch}';
     final started = DateTime.now();
     var valid = false;
@@ -85,6 +103,10 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
       final completion = (map['completion_definition'] ?? '').toString().trim();
       if(route.cycleContext.isNotEmpty && route.cycleContext.first['decision']=='ACT' &&
           action!=route.cycleContext.first['action']) throw const FormatException('ACT_MUST_RETAIN_CONDITIONS');
+      final context=route.cycleContext.where((e)=>e.containsKey('journey_context')).toList();
+      if(context.isNotEmpty){final j=GrowthJourney(growthMap(context.last['journey_context']));
+        if(j.profile.intimate && RegExp(r'坚持.*分钟|达到.*分钟|延长.*时间|提高.*次数|绩效|倒计时').hasMatch('$action $completion'))throw const FormatException('SHARED_BODY_NO_PERFORMANCE');
+        if((growthMap(j.data['outcome'])['verb']=='REJECTION' || growthMap(j.data['last_outcome'])['verb']=='REJECTION') && RegExp(r'说服|反复联系|坚持追求|继续纠缠').hasMatch(action))throw const FormatException('REJECTION_BOUNDARY');}
       if (action.isEmpty || completion.isEmpty || action.length > 360) throw const FormatException('INVALID_ACTION');
       final actionGate = const EvidenceGrowthRouter().route(action);
       if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(actionGate.status)) {
@@ -116,6 +138,7 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
         }
       }
       return route.copyWith(
+        riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'AI','INFERENCE_ORIGIN':'AI','CONTENT_MODEL':cfg.displayModel,'CONTENT_REASON':''},
         selectedNodes: ids.map((e) => EvidenceGrowthKnowledge.byId(e)!).toList(),
         status: evidence == 'E0' ? 'KB_EVIDENCE_INSUFFICIENT' : gate == 'BLOCK' ? 'PANIC_RISK' : route.status,
         riskGate: evidence == 'E0' ? 'NEED_CHECK' : gate,
@@ -133,7 +156,7 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
       );
     } catch (e) {
       error = e is FormatException ? e.message : 'AI_REQUEST_FAILED';
-      return attempt < 1 ? await enrichRoute(route,attempt:attempt+1) : route;
+      return attempt < 1 ? await enrichRoute(route,attempt:attempt+1) : route.copyWith(riskChecks:{...route.riskChecks,'CONTENT_ORIGIN':'LOCAL_RULE','CONTENT_REASON':'AI 请求或内容校验未成功，保留本地动作'});
     } finally {
       await _dao.recordPromptRun(
         requestId: id,
@@ -214,7 +237,7 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
         valid=true;return local.copyWith(candidates:candidates);
       }
       final sameOperator=refined.operator==local.operator;
-      refined=refined.copyWith(personalEvidence:await _dao.personalEvidenceFor(refined),
+      refined=refined.copyWith(riskChecks:{...refined.riskChecks,'INFERENCE_ORIGIN':'AI'},personalEvidence:await _dao.personalEvidenceFor(refined),
         cycleContext:local.cycleContext,cyclePlan:local.cyclePlan,
         goalState:local.goalState,currentState:local.currentState,topGap:local.topGap,
         inputDrafts:sameOperator?local.inputDrafts:{
@@ -234,12 +257,14 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
   }
 
   Future<TrialReviewResult> review(RealityTrial trial, {int attempt = 0}) async {
+    final parent=await _dao.journeys.forTrial(trial.id);
+    if(parent!=null && (parent.node!='REVIEW'||parent.data['readiness']!='READY_NOW'))throw StateError('请先选择现在复盘');
     final history=await _dao.decisionHistory(trial);
     final fallback = const EvidenceGrowthReviewEngine().review(trial,history:history);
     final decisionRule=EvidenceGrowthDecisionEngine.evaluate(trial,history:history);
     UnifiedAiResolvedConfig cfg;
-    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return fallback; }
-    if (!cfg.available) return fallback;
+    try { cfg = await _ai.resolveGlobalConfig(); } catch (_) { return fallback.withOrigin('LOCAL_RULE','无法读取 AI 配置'); }
+    if (!cfg.available) return fallback.withOrigin('LOCAL_RULE','未配置可用 AI');
     final nodes=<EvidenceKNode>[];
     try {
       for(final record in await _dao.evidenceSnapshots(trial.id)) {
@@ -251,6 +276,11 @@ ALLOWED_K_NODES:${jsonEncode(route.selectedNodes.map((e) => e.toJson()).toList()
     } catch(_) { return fallback; }
     // Old Trials must not silently cite a newer KB version during review.
     if (nodes.length!=trial.nodeIds.length || nodes.isEmpty) return fallback;
+    if(parent!=null) {
+      for(final n in EvidenceGrowthKnowledgeRuntime.appliedNodes(parent,'REVIEW')) {
+        if(!nodes.any((old)=>old.id==n.id))nodes.add(n);
+      }
+    }
     final id = 'eg_review_${DateTime.now().microsecondsSinceEpoch}';
     final started = DateTime.now();
     var valid = false;
@@ -264,6 +294,9 @@ RESULT_STATUS:${trial.resultStatus}
 USER_EXPERIENCE:${jsonEncode({'shame':trial.shameSignal,'image_exposure':trial.imageExposureSignal})}
 DECISION_RULE（依据已确认条件的工程规则；不得把它冒充 Tal 原话）:${jsonEncode({'decision':decisionRule.type,'reason':decisionRule.reason,'protective':decisionRule.protective})}
 同一假设既往现实结果：${jsonEncode(history.take(8).map((h)=>{'id':h.id,'prediction':h.prediction,'actual':h.actualOutcome,'decision_evidence':h.operatorInputs['decision_evidence'],'hypothesis_support':h.operatorInputs['hypothesis_support']}).toList())}
+CAMPAIGN_SAMPLES（同一学习窗口，逐条保留原预测；不把不同试验合并成同一假设）:${jsonEncode(parent == null ? {} : growthMap(parent.data['campaign']))}
+ACTIVE_PLAN:${jsonEncode(parent?.plan ?? {})}
+CURRENT_REVIEW_APPLICATIONS（本次采用的方法，不是旧行动的依据）:${jsonEncode(parent==null?[]:EvidenceGrowthKnowledgeRuntime.applications(parent,'REVIEW'))}
 CYCLE_PLAN:${jsonEncode(EvidenceGrowthCycle.plan(trial))}
 CYCLE_HISTORY:${jsonEncode(history.take(6).map(EvidenceGrowthCycle.context).toList())}
 USER_MEASUREMENTS:${jsonEncode(trial.operatorInputs)}
@@ -321,6 +354,7 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
       final cycleUpdate=map['cycle_update']==null ? fallback.cycleUpdate : EvidenceGrowthCycle.checked(map['cycle_update'],update:true);
       valid = true;
       return TrialReviewResult(
+        contentOrigin:'AI',contentDetail:cfg.displayModel,
         predictionOriginal: trial.prediction,
         actualFacts: actualFacts,
         predictionError: (map['prediction_error'] ?? '').toString(),
@@ -334,7 +368,7 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
       );
     } catch (e) {
       error = e is FormatException ? e.message : 'AI_REQUEST_FAILED';
-      return attempt < 1 ? await review(trial,attempt:attempt+1) : fallback;
+      return attempt < 1 ? await review(trial,attempt:attempt+1) : fallback.withOrigin('LOCAL_RULE','AI 请求或内容校验未成功，保留本地复盘');
     } finally {
       await _dao.recordPromptRun(
         requestId: id,
@@ -371,19 +405,35 @@ learning、rule_update 与 cycle_update 每项只用一句话，尽量不超过 
     } catch(_){return {};}
   }
 
+  Future<String> explainKnowledge(GrowthJourney j,String stage,EvidenceKNode node,String question) async {
+    final fallback='【知识库内容·本地读取】\n知识库原理：${node.claim}\n练习：${node.howTo.join('；')}\n请用自己的话解释原理，指出它与当前情境的联系，再核对使用前提。';
+    if(j.profile.blocked)return fallback;
+    try {
+      final config=await _ai.resolveGlobalConfig();if(!config.available)return fallback;
+      final result=_decode(await _ai.generateText(systemPrompt:_contract,purpose:'evidence_growth.knowledge_teaching',expectJson:true,
+        prompt:'情境：${jsonEncode(EvidenceGrowthKnowledgeRuntime.context(j,stage,question:question))}\n唯一知识来源：${jsonEncode(node.toJson())}\n'
+          '解释这个原理在当前节点可能怎样用，给一个明确标记为假设的练习例子，指出适用边界，最后提出一道自我解释题。'
+          '不把假设当成用户经历。只输出 {"node_id":"${node.id}","answer":"不超过400字","source_quote":"从display_excerpt逐字截取一个短句；没有就留空"}。',maxTokens:850,temperature:.1).timeout(const Duration(seconds:20)));
+      final answer='${result['answer']??''}',quote='${result['source_quote']??''}';
+      if(result['node_id']!=node.id||answer.isEmpty||answer.length>1600||
+        (quote.isNotEmpty&&!node.displayExcerpt.contains(quote)))return fallback;
+      return 'AI 情境讲解（待核对）：\n$answer${quote.isEmpty?'':'\n知识库摘录：$quote'}\n来源：${node.locator.display}';
+    } catch(_){return fallback;}
+  }
+
   Future<String> answerGuide(String question) async {
     final text = question.trim();
     if (text.isEmpty) return '请问一个关于功能、流程、知识依据或如何填写的问题。';
     if (RegExp('怎么用|流程|如何开始|预测|退出|EXIT|提醒|如何填写|怎么填').hasMatch(text)) {
-      return '实战输入现实问题 → 确认一个动作与知识依据 → 保存预测、概率和安全条件 → 行动并记录完成/部分/未做/中止 → 比较预测与实际 → ACT、ADJUST、EXIT 或继续观察。\n'
+      return '【本地流程说明】\n实战输入现实问题 → 确认一个动作与知识依据 → 保存预测、概率和安全条件 → 行动并记录完成/部分/未做/中止 → 比较预测与实际 → ACT、ADJUST、EXIT 或继续观察。\n'
           '预测写“在何时看到什么”，结果只写已发生事实；EXIT 保存学习，ADJUST 只改一个变量。\n'
           '依据：KB35 A02、R01、C04、R-EXT2-01；这些页面步骤属于产品设计。';
     }
     final gate = const EvidenceGrowthRouter().route(text);
-    if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(gate.status)) return gate.actionInstruction;
+    if (const {'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS'}.contains(gate.status)) return '【本地边界规则】\n${gate.actionInstruction}';
     final nodes = EvidenceGrowthSearch.current.search(text,talOnly:true,limit:3).map((e)=>e.node).toList();
     if (nodes.isEmpty) return '当前没有足够的 KB35 依据，请补充具体情境。';
-    final fallback = '${nodes.first.title}：${nodes.first.claim}\n怎么做：${nodes.first.howTo.first}\n边界：${nodes.first.boundaries.first}\n来源：${nodes.first.locator.display}';
+    final fallback = '【知识库内容·本地读取】\n${nodes.first.title}：${nodes.first.claim}\n怎么做：${nodes.first.howTo.first}\n边界：${nodes.first.boundaries.first}\n来源：${nodes.first.locator.display}';
     try {
       final cfg = await _ai.resolveGlobalConfig();
       if (!cfg.available) return fallback;

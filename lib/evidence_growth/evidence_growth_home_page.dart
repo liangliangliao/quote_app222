@@ -1,3 +1,4 @@
+import 'evidence_growth_knowledge_page.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -12,6 +13,12 @@ import '../platform/native_scheduler.dart';
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_ai_service.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_notification_link.dart';
+import 'evidence_growth_notification_inbox.dart';
+import 'evidence_growth_guidance.dart';
+import 'evidence_growth_journey_models.dart';
+import 'evidence_growth_journey_page.dart';
+import 'evidence_growth_journey_runtime.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_cycle.dart';
@@ -37,7 +44,8 @@ const _soft = Color(0xFFF2F7F6);
 const _line = Color(0xFFD6E4E1);
 
 class EvidenceGrowthHomePage extends StatefulWidget {
-  const EvidenceGrowthHomePage({super.key, this.initialTrialId = '', this.initialInput = ''});
+  const EvidenceGrowthHomePage({super.key, this.initialTrialId = '', this.initialInput = '', this.notification});
+  final GrowthNotificationLink? notification;
   final String initialTrialId;
   final String initialInput;
   @override
@@ -47,7 +55,6 @@ class EvidenceGrowthHomePage extends StatefulWidget {
 class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with WidgetsBindingObserver {
   final _dao = EvidenceGrowthDao(database: AppDatabase.instance);
   late final _ai = EvidenceGrowthAiService(dao: _dao);
-  final _router = const EvidenceGrowthRouter();
   var _tab = 0;
   var _loading = true;
   var _routing = false;
@@ -73,7 +80,19 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
     unawaited(const EvidenceGrowthNotificationService().reconcile());
     await _reload();
     if (!mounted) return;
+    if(widget.notification!=null) {
+      final targets=widget.notification!.targets;
+      if(targets.length>1) {
+        await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthNotificationInbox(targets:targets,onOpen:_openNotificationTarget)));
+      } else if(targets.length==1) { await _openNotificationTarget(targets.single); }
+      else { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('这条旧通知没有具体记录地址，请从当前目标选择待办。'))); }
+      return;
+    }
     if (widget.initialTrialId.isNotEmpty) {
+      if(widget.initialTrialId.startsWith('journey:')) {
+        final j=await _dao.journeys.find(widget.initialTrialId.substring(8));
+        if(j!=null&&mounted)await _openJourney(j);return;
+      }
       final trial = await _dao.byId(widget.initialTrialId);
       if (trial != null && mounted) await _openTrial(trial);
     } else if (widget.initialInput.trim().isNotEmpty) {
@@ -121,32 +140,85 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
     unawaited(const EvidenceGrowthNotificationService().reconcile());
   }
 
-  Future<void> _begin(String input) async {
+  Future<void> _begin(String input, {String? knowledgeNodeId}) async {
     if (input.trim().isEmpty || _routing) return;
     setState(() => _routing = true);
     try {
-      var route = _router.route(input);
-      route = _router.route(input, personalFit: await _dao.nodeFitScores(contextTags: route.contextTags));
-      route = route.copyWith(personalEvidence: await _dao.personalEvidenceFor(route));
-      await _dao.recordRoute(route);
+      final existing=await _dao.journeys.list();
       if (!mounted) return;
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => _RoutePage(route: route, dao: _dao, ai: _ai)));
+      final active=existing.where((j)=>!j.terminal).toList();
+      final selected=active.isEmpty ? 'new' : await showDialog<String>(context:context,
+        builder:(ctx)=>SimpleDialog(title:const Text('这段输入属于哪个目标？'),children:[
+          SimpleDialogOption(onPressed:()=>Navigator.pop(ctx,'new'),child:const Text('开启新的目标或探索')),
+          for(final j in active) SimpleDialogOption(onPressed:()=>Navigator.pop(ctx,j.id),child:Text(j.safeTitle))]));
+      if(selected==null)return;
+      final journey=selected=='new' ? await _dao.journeys.create(input) :
+        await _dao.journeys.change(active.firstWhere((j)=>j.id==selected),'entry',{'text':input});
+      if (!mounted) return;
+      if(knowledgeNodeId!=null) {
+        await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthKnowledgePage(dao:_dao,journey:journey,stage:journey.node,initialNodeId:knowledgeNodeId)));
+        if(!mounted)return;
+      }
+      await _openJourney((await _dao.journeys.find(journey.id))??journey);
       await _reload();
     } finally {
       if (mounted) setState(() => _routing = false);
     }
   }
 
+  Future<void> _openNotificationTarget(GrowthNotificationTarget target) async {
+    final d=await GrowthNotificationDestination.resolve(_dao,target);if(!mounted)return;
+    if(d.page=='MISSING'){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(d.message)));return;}
+    if(d.page=='JOURNEY'){await _openJourney(d.journey!,notificationNode:d.node,notificationMessage:d.message);return;}
+    final t=d.trial!;
+    final Widget page=switch(d.page){
+      'ARCHIVE'=>_ArchivePage(trial:t,dao:_dao,ai:_ai,notificationMessage:d.message),
+      'DECISION'=>_DecisionPage(trial:t,dao:_dao,ai:_ai,fromNotification:true),
+      _=>_TrialPage(trial:t,dao:_dao,ai:_ai,notificationNode:d.node,initialFacts:'${d.journey?.data['pending_entry']??''}')
+    };
+    await Navigator.push(context,MaterialPageRoute(builder:(_)=>page));await _reload();
+  }
+  Future<void> _openJourney(GrowthJourney journey,{String notificationNode='',String notificationMessage=''}) async {
+    await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthJourneyPage(
+      journey:journey,dao:_dao,onAction:_journeyAction,onTrial:_openTrialId,draft:_ai.journeyDraft,guidance:_ai.guideJourney,notificationNode:notificationNode,notificationMessage:notificationMessage)));
+    await _reload();
+  }
+  Future<void> _journeyAction(GrowthJourney j) async {
+    final previousId=j.data['previous_trial_id'] as String? ?? '';
+    final previous=previousId.isEmpty?null:await _dao.byId(previousId);
+    final canLink=EvidenceGrowthJourneyRuntime.canInherit(j, previous);
+    final route=EvidenceGrowthJourneyRuntime.compile(j, previous: previous);
+    await _dao.recordRoute(route);
+    if(!mounted)return;
+    await Navigator.push(context,MaterialPageRoute(builder:(_)=>_RoutePage(route:route,dao:_dao,ai:_ai,
+      journey:j,previousTrialId:canLink?previous!.id:'')));
+  }
   Future<void> _openTrial(RealityTrial trial) async {
-    final Widget page = trial.status == 'REVIEWED'
+    final j=await _dao.journeys.forTrial(trial.id);
+    if(!mounted)return;
+    if(j!=null){await _openJourney(j);return;}
+    await _openTrialId(trial.id);
+  }
+  Future<void> _openTrialId(String id) async {
+    final trial=await _dao.byId(id);if(trial==null||!mounted)return;
+    final j=await _dao.journeys.forTrial(id);if(!mounted)return;
+    final Widget page = j != null && j.trialId != id
+        ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
+        : trial.status == 'REVIEWED'
         ? _DecisionPage(trial: trial, dao: _dao, ai: _ai)
-        : trial.isClosed
-            ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
-            : _TrialPage(trial: trial, dao: _dao, ai: _ai);
+        : trial.isClosed ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
+        : _TrialPage(trial: trial, dao: _dao, ai: _ai,initialFacts:'${j?.data['pending_entry']??''}');
     await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
     await _reload();
   }
 
+  Future<void> _legacy() async {
+    if(_summary==null)return;
+    await Navigator.push(context,MaterialPageRoute(builder:(_)=>Scaffold(
+      appBar:AppBar(title:const Text('此前实战与循环')),
+      body:_Practice(active:_active,recent:_recent,summary:_summary!,busy:_routing,
+        onBegin:_begin,onOpen:_openTrial,onLearn:()=>Navigator.pop(context)))));
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -155,6 +227,7 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
         title: const Text('六模块证据成长'),
         actions: [
           IconButton(tooltip: '功能问答助手', onPressed: () => _showGuide(context, _ai), icon: const Icon(Icons.auto_awesome_outlined)),
+          IconButton(tooltip:'此前实战与循环',icon:const Icon(Icons.history),onPressed:_legacy),
           IconButton(tooltip: '设置', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _SettingsPage(dao: _dao))).then((_) => _reload()), icon: const Icon(Icons.settings_outlined)),
         ],
       ),
@@ -163,10 +236,9 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
           : IndexedStack(
               index: _tab,
               children: [
-                _Practice(active: _active, recent:_recent, summary: _summary!, busy: _routing, onBegin: _begin,
-                  onOpen: _openTrial,onLearn:()=>setState(()=>_tab=2)),
+                EvidenceGrowthJourneyHome(dao:_dao,onOpen:_openJourney),
                 _Review(recent: _recent, onOpen: _openTrial),
-                _Learning(onApply: _begin, dao: _dao),
+                _Learning(onApply: (text,nodeId)=>_begin(text,knowledgeNodeId:nodeId), dao: _dao),
                 _Evidence(summary: _summary!, recent: _recent,onOpen:_openTrial),
               ],
             ),
@@ -323,11 +395,12 @@ class _PracticeState extends State<_Practice> {
 }
 
 class _RoutePage extends StatefulWidget {
-  const _RoutePage({required this.route, required this.dao, required this.ai, this.previousTrialId = ''});
+  const _RoutePage({required this.route, required this.dao, required this.ai, this.previousTrialId = '',this.journey});
   final EvidenceRouteResult route;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
   final String previousTrialId;
+  final GrowthJourney? journey;
   @override
   State<_RoutePage> createState() => _RoutePageState();
 }
@@ -349,8 +422,10 @@ class _RoutePageState extends State<_RoutePage> {
   Future<void> _enrich() async {
     if(mounted)setState(()=>enriching=true);
     try {
-      final parent=widget.previousTrialId.isEmpty || clarified?null:await widget.dao.byId(widget.previousTrialId);
-      final refined = parent==null?await widget.ai.enrichRoute(route):await widget.ai.continueCycle(parent);
+      final parent=widget.journey!=null || widget.previousTrialId.isEmpty || clarified?null:await widget.dao.byId(widget.previousTrialId);
+      var refined = parent==null?await widget.ai.enrichRoute(route):await widget.ai.continueCycle(parent);
+      final j=widget.journey;
+      if(j!=null)refined=refined.copyWith(goalState:j.title,currentState:'${j.data['current']??''}',cyclePlan:{...refined.cyclePlan,'goal':j.title,'current':'${j.data['current']??''}'});
       if(mounted && !starting)setState(()=>route=refined);
     } catch(_) {
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('智能分析暂未完成，已保留当前信息，可补充后重试。')));
@@ -395,6 +470,8 @@ class _RoutePageState extends State<_RoutePage> {
         goalState: setup.cyclePlan['goal'] ?? '', currentState: setup.cyclePlan['current'] ?? '',
         topGap: setup.cyclePlan['gap'] ?? '', operatorInputs: {...setup.inputs,
           ...workflow,'workflow_version':'2',
+          if(widget.journey!=null)...{'journey_id':widget.journey!.id,'journey_version':'${widget.journey!.version}',
+            'max_repeat':setup.inputs['max_repeat']??'3','sensitive':'${widget.journey!.profile.sensitive}','scope':widget.journey!.profile.scope},
           'remind': '$enableReminders', 'scheduled_start_ms': '${setup.startAt.millisecondsSinceEpoch}'},
         commitmentLevel: setup.commitment, stretchLevel: setup.stretch,
         stableContext: setup.inputs['稳定情境'] ?? '', worstCase: setup.worstCase,
@@ -418,7 +495,13 @@ class _RoutePageState extends State<_RoutePage> {
   Widget build(BuildContext context) {
     final blocked = !route.canAct;
     return Scaffold(
-      appBar: AppBar(title: const Text('现实下一步')),
+      appBar: AppBar(title: const Text('现实下一步'),actions:[
+        if(widget.journey!=null)IconButton(tooltip:'学习知识并重新准备动作',icon:const Icon(Icons.menu_book),onPressed:starting?null:()async{
+          final j=await widget.dao.journeys.find(widget.journey!.id);if(j==null||!mounted)return;
+          await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthKnowledgePage(dao:widget.dao,journey:j,stage:'ACTION')));
+          if(mounted)Navigator.pop(context);
+        }),
+      ]),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
@@ -444,6 +527,8 @@ class _RoutePageState extends State<_RoutePage> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(blocked ? route.status : '现在只做这一件事', style: TextStyle(color: blocked ? Colors.red : _brand, fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
+              Text(GrowthGuidance.label(route.riskChecks['CONTENT_ORIGIN'])),
+              if((route.riskChecks['CONTENT_REASON']??'').isNotEmpty)Text(route.riskChecks['CONTENT_REASON']!),
               Text(route.actionInstruction.isEmpty ? route.missingFacts.join('\n') : route.actionInstruction, style: const TextStyle(fontSize: 20, height: 1.4, fontWeight: FontWeight.w900, color: _ink)),
               if (route.completionDefinition.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -474,7 +559,7 @@ class _RoutePageState extends State<_RoutePage> {
                 '${e['result_status']} · ${e['actual_outcome']} · ${e['decision']}').join('\n')),
             ],
             const Divider(),
-            _Label('AI 推断', route.inference),
+            _Label('${GrowthGuidance.label(route.riskChecks['INFERENCE_ORIGIN']??route.riskChecks['CONTENT_ORIGIN'])} · 推断', route.inference),
             const Divider(),
             _Label('产品动作', route.actionInstruction),
           ]))]),
@@ -549,11 +634,13 @@ class _PredictionDialogState extends State<_PredictionDialog> {
     for (final prompt in spec.inputPrompts) prompt: TextEditingController(text:widget.route.inputDrafts[prompt]??''),
   };
   final worstCase = TextEditingController();
+  final duration=TextEditingController(text:'15');
+  var maxRepeat=3;
   late final budget = TextEditingController(text:widget.route.inputDrafts['cost_limit']??'');
   @override
   void dispose() {
     prediction.dispose();goal.dispose();current.dispose();gap.dispose();belief.dispose();action.dispose();
-    worstCase.dispose();
+    worstCase.dispose();duration.dispose();
     budget.dispose();
     for (final controller in inputs.values) { controller.dispose(); }
     super.dispose();
@@ -568,7 +655,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
         title: const Text('确认本轮，进入现实'),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('系统已起草，请确认是否符合你的实际情况。结果回来后，我们据此调整下一轮。'),
-          TextField(controller:goal,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'我希望推进的目标')),
+          TextField(controller:goal,readOnly:widget.route.cycleContext.any((e)=>e.containsKey('journey_context')),onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'我希望推进的目标')),
           TextField(controller:action,readOnly:const {'PREMORTEM','SYSTEM_SCAN','COMMITMENT_LADDER'}.contains(widget.route.operator),minLines:2,maxLines:4,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'现在做的这一件事')),
           ExpansionTile(title:const Text('本轮判断与差距（可纠正）'),children:[
             TextField(controller:current,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'当前已知事实')),
@@ -580,7 +667,7 @@ class _PredictionDialogState extends State<_PredictionDialog> {
           ExpansionTile(initiallyExpanded:inputs.values.any((v)=>v.text.trim().isEmpty),title:const Text('执行条件（核对草案）'),children:[...inputs.entries.map((entry) => Padding(padding: const EdgeInsets.only(top: 8), child:
             TextField(controller: entry.value, onChanged: (_) => setState(() {}),
               decoration: InputDecoration(labelText: entry.key,
-                helperText:widget.route.inputDrafts.containsKey(entry.key)?'系统草案，请核对或修改':null,
+                helperText:widget.route.inputDrafts.containsKey(entry.key)?'${GrowthGuidance.label(widget.route.riskChecks['CONTENT_ORIGIN'])}，请核对或修改':null,
                 border: const OutlineInputBorder()))))]),
           if (spec.needsCommitment) DropdownButtonFormField<String>(initialValue: commitment,
             decoration: const InputDecoration(labelText: '最低有效承诺'),
@@ -622,6 +709,8 @@ class _PredictionDialogState extends State<_PredictionDialog> {
               }
               setState(() => scheduledStart = date);
             }),
+          TextField(controller:duration,keyboardType:TextInputType.number,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'预计占用多少分钟',helperText:'仅用于避免与其他目标撞时间，不是完成绩效')),
+          DropdownButtonFormField<int>(initialValue:maxRepeat,decoration:const InputDecoration(labelText:'未反馈时最多重复提醒'),items:[1,2,3,5,10].map((v)=>DropdownMenuItem(value:v,child:Text('$v 次'))).toList(),onChanged:(v)=>setState(()=>maxRepeat=v??3)),
           if (scheduledStart != null) TextButton(onPressed:()=>setState(()=>scheduledStart=null),child:const Text('改为现在开始')),
           const SizedBox(height: 10),
           Text('发生概率：${(probability * 100).round()}%'),
@@ -638,10 +727,10 @@ class _PredictionDialogState extends State<_PredictionDialog> {
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(onPressed: !safe || prediction.text.trim().isEmpty || goal.text.trim().isEmpty || current.text.trim().isEmpty || gap.text.trim().isEmpty || action.text.trim().isEmpty || (budget.text.isNotEmpty && (double.tryParse(budget.text)==null || double.parse(budget.text)<=0 || !double.parse(budget.text).isFinite)) || (spec.needsCommitment && !goalValidated) || stretch == 'PANIC' || worstCase.text.trim().isEmpty ||
+          FilledButton(onPressed: (int.tryParse(duration.text)??0)<1 || (int.tryParse(duration.text)??1441)>1440 || !safe || prediction.text.trim().isEmpty || goal.text.trim().isEmpty || current.text.trim().isEmpty || gap.text.trim().isEmpty || action.text.trim().isEmpty || (budget.text.isNotEmpty && (double.tryParse(budget.text)==null || double.parse(budget.text)<=0 || !double.parse(budget.text).isFinite)) || (spec.needsCommitment && !goalValidated) || stretch == 'PANIC' || worstCase.text.trim().isEmpty ||
               inputs.values.any((v) => v.text.trim().isEmpty) ? null : () => Navigator.pop(context,
             _PredictionSetup(prediction.text.trim(), probability, reviewAt, remind,
-              {...inputs.map((k,v) => MapEntry(k,v.text.trim())),if(spec.needsCommitment)'目标已基本验证':'$goalValidated',
+              {...inputs.map((k,v) => MapEntry(k,v.text.trim())),'duration_minutes':duration.text,'max_repeat':'$maxRepeat',if(spec.needsCommitment)'目标已基本验证':'$goalValidated',
                 if(budget.text.trim().isNotEmpty)'cost_limit':budget.text.trim()}, commitment, stretch,
               worstCase.text.trim(), scheduledStart ?? DateTime.now(),
               {...widget.route.cyclePlan,'goal':goal.text.trim(),'current':current.text.trim(),'gap':gap.text.trim(),
@@ -652,7 +741,9 @@ class _PredictionDialogState extends State<_PredictionDialog> {
 }
 
 class _TrialPage extends StatefulWidget {
-  const _TrialPage({required this.trial, required this.dao, required this.ai});
+  const _TrialPage({required this.trial, required this.dao, required this.ai,this.initialFacts='',this.notificationNode=''});
+  final String notificationNode;
+  final String initialFacts;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
@@ -671,9 +762,26 @@ class _TrialPageState extends State<_TrialPage> {
   }
   @override
   void dispose() { ticker?.cancel(); super.dispose(); }
+  Future<void> _start() async {
+            setState(()=>saving=true);
+            try {
+              final started = await widget.dao.startTrial(trial);
+              await const EvidenceGrowthNotificationService().cancel(trial.id);
+              if (started.operatorInputs['remind'] == 'true') await const EvidenceGrowthNotificationService().scheduleTrial(started);
+              if (mounted) setState(() => trial = started);
+            } catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}
+            finally{if(mounted)setState(()=>saving=false);}
+
+  }
   Future<void> _resumeReview() async {
     setState(() => saving = true);
     try {
+      final j=await widget.dao.journeys.forTrial(trial.id);
+      if(j!=null) {
+        if(j.node!='REVIEW'||j.data['readiness']!='READY_NOW') {
+          if(mounted)Navigator.pop(context);return;
+        }
+      }
       final review = await widget.ai.review(trial);
       final reviewed = await widget.dao.saveReview(trial, review);
       if (!mounted) return;
@@ -684,7 +792,7 @@ class _TrialPageState extends State<_TrialPage> {
     } finally { if (mounted) setState(() => saving = false); }
   }
   Future<void> _capture(String kind) async {
-    final result = await showDialog<_Captured>(context: context, barrierDismissible: false, builder: (_) => _ResultDialog(kind,budget:trial.operatorInputs['cost_limit']??''));
+    final result = await showDialog<_Captured>(context: context, barrierDismissible: false, builder: (_) => _ResultDialog(kind,budget:trial.operatorInputs['cost_limit']??'',initialFacts:widget.initialFacts));
     if (result == null || !mounted) return;
     setState(() => saving = true);
     try {
@@ -693,6 +801,9 @@ class _TrialPageState extends State<_TrialPage> {
         resultMeasurements: result.measurements, shameSignal: result.shame, imageExposureSignal: result.imageExposure);
       trial = captured;
       await const EvidenceGrowthNotificationService().cancel(trial.id);
+      if(await widget.dao.journeys.forTrial(trial.id)!=null) {
+        if(mounted)Navigator.pop(context);return;
+      }
       final review = await widget.ai.review(captured);
       final reviewed = await widget.dao.saveReview(captured, review);
       if (!mounted) return;
@@ -706,32 +817,40 @@ class _TrialPageState extends State<_TrialPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text('Reality Trial · ${_status(trial.status)}'),actions:[
+          IconButton(tooltip:'知识学习与应用',icon:const Icon(Icons.menu_book),onPressed:saving?null:()=>_trialKnowledge(context,widget.dao,trial.id,trial.status=='RESULT_CAPTURED'?'REVIEW':'ACTION')),
           IconButton(tooltip:'本轮提醒',icon:const Icon(Icons.notifications_active_outlined),onPressed:()=>Navigator.push(context,
             MaterialPageRoute(builder:(_)=>EvidenceGrowthReminderPage(dao:widget.dao,trialId:trial.id)))),
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
+          if(widget.notificationNode.isNotEmpty) _Card(title:'通知定位 · ${GrowthJourney.labels[widget.notificationNode]??widget.notificationNode}节点',child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(trial.goalState.isEmpty?'本轮行动':trial.goalState),
+            Text(widget.notificationNode=='OUTCOME'?'原预测：${trial.prediction}':trial.actionInstruction),
+            if(widget.notificationNode=='OUTCOME'&&const {'READY','IN_PROGRESS','OBSERVING'}.contains(trial.status)) ...[
+              const Text('请记录现实情况；到期不代表已经完成。'),
+              Wrap(spacing:8,children:[for(final kind in trial.status=='READY'?['未做']:['完成','部分完成','未做','中止','继续观察'])OutlinedButton(onPressed:saving?null:()=>_capture(kind),child:Text(kind))])
+            ],
+            if(widget.notificationNode=='ACTION'&&trial.status=='READY')FilledButton(onPressed:saving?null:_start,child:const Text('现在开始行动')),
+            if(widget.notificationNode=='ACTION'&&trial.status=='IN_PROGRESS')OutlinedButton(onPressed:saving?null:()=>_capture('继续观察'),child:const Text('核对当前状态')),
+            if(trial.status=='RESULT_CAPTURED')FilledButton(onPressed:saving?null:_resumeReview,child:const Text('结果已保存，继续复盘'))
+          ])),
           Wrap(spacing: 7, children: [_Chip(trial.primaryModule.label, _brand), _Chip(trial.stretchLevel, trial.stretchLevel == 'RECOVERY' ? Colors.blue : _brand)]),
           const SizedBox(height: 12),
           EvidenceGrowthCycleCard(trial:trial),
           TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看完整成长链路'),
             onPressed:()=>_openCycle(context,trial,widget.dao,widget.ai)),
+          Text(GrowthGuidance.label(trial.riskChecks['CONTENT_ORIGIN'])),
           _Card(title: '唯一主动作', child: Text(trial.actionInstruction, style: const TextStyle(fontSize: 21, height: 1.4, fontWeight: FontWeight.w900, color: _ink))),
-          if (trial.startedAtMs > 0) _Card(title: '行动计时', child: Text(
+          if (trial.startedAtMs > 0 && trial.operatorInputs['sensitive']!='true') _Card(title: '行动计时', child: Text(
             '已进入现实 ${((DateTime.now().millisecondsSinceEpoch - trial.startedAtMs) / 60000).floor()} 分钟 · 到点允许停')),
           if (trial.operatorInputs.isNotEmpty) ExpansionTile(title: const Text('本轮执行细节'),
             children: trial.operatorInputs.entries.where((e) => !const {'remind','scheduled_start_ms','action_completed'}.contains(e.key))
-              .where((e)=>!e.key.startsWith('cycle_') && !const {'advanced_json','workflow_version','hypothesis_id','prediction_error','recommended_decision'}.contains(e.key))
+              .where((e)=>!e.key.startsWith('cycle_') && !const {'advanced_json','workflow_version','hypothesis_id','prediction_error','recommended_decision','journey_id','journey_version','max_repeat','sensitive','scope','duration_minutes'}.contains(e.key))
               .map((e) => ListTile(title: Text(e.key), subtitle: Text(e.value))).toList()),
           if(trial.commitmentLevel.isNotEmpty && trial.operator=='COMMITMENT_LADDER')
             _Card(title:'当前承诺 ${trial.commitmentLevel}',child:Text('${EvidenceGrowthWorkflows.commitments[EvidenceGrowthWorkflows.normalizeCommitment(trial.commitmentLevel)]??trial.commitmentLevel}\n退出条件：${trial.operatorInputs['退出方式']??"随时检查风险与可撤回性"}')),
           if(trial.operatorInputs.containsKey('advanced_json')) ExpansionTile(title:const Text('风险／系统分析记录'),
             children:[Padding(padding:const EdgeInsets.all(12),child:Text(_workflowSummary(trial.operatorInputs['advanced_json']!)))]),
-          if (trial.status == 'READY') FilledButton(onPressed: saving ? null : () async {
-            final started = await widget.dao.startTrial(trial);
-            await const EvidenceGrowthNotificationService().cancel(trial.id);
-            if (started.operatorInputs['remind'] == 'true') await const EvidenceGrowthNotificationService().scheduleTrial(started);
-            if (mounted) setState(() => trial = started);
-          }, child: const Text('现在开始行动')),
+          if (trial.status == 'READY') FilledButton(onPressed: saving ? null : _start , child: const Text('现在开始行动')),
           if (trial.status == 'RESULT_CAPTURED') FilledButton(onPressed: saving ? null : _resumeReview, child: const Text('结果已保存，继续复盘')),
           if (trial.status == 'READY') TextButton.icon(icon:const Icon(Icons.more_time),label:const Text('延后开始时间'),onPressed:saving?null:() async {
             final now=DateTime.now();
@@ -785,7 +904,8 @@ class _Captured {
 }
 
 class _ResultDialog extends StatefulWidget {
-  const _ResultDialog(this.kind,{this.budget=''});
+  const _ResultDialog(this.kind,{this.budget='',this.initialFacts=''});
+  final String initialFacts;
   final String kind;
   final String budget;
   @override
@@ -793,7 +913,7 @@ class _ResultDialog extends StatefulWidget {
 }
 
 class _ResultDialogState extends State<_ResultDialog> {
-  final actual = TextEditingController();
+  late final actual = TextEditingController(text:widget.initialFacts);
   final unexpected = TextEditingController();
   final recovery = TextEditingController();
   final anxiety = TextEditingController();
@@ -861,7 +981,7 @@ class _ResultDialogState extends State<_ResultDialog> {
               const {'完成':'DONE','部分完成':'PARTIAL','未做':'NOT_DONE','中止':'ABORTED','继续观察':'OBSERVING'}[widget.kind]!,
               {...decisionMeasurements,'prediction_occurred':occurred,'outcome_helpful':helpful,'failure_class':failure,
                 if(double.tryParse(recovery.text)!=null) 'recovery_hours':recovery.text,
-                if(double.tryParse(anxiety.text)!=null) 'actual_anxiety':anxiety.text}, shame, imageExposure)), child: const Text('保存事实并复盘')),
+                if(double.tryParse(anxiety.text)!=null) 'actual_anxiety':anxiety.text}, shame, imageExposure)), child: const Text('保存事实')),
         ],
       );
   bool _validNumber(String text, double? maximum) {
@@ -872,7 +992,8 @@ class _ResultDialogState extends State<_ResultDialog> {
 }
 
 class _DecisionPage extends StatefulWidget {
-  const _DecisionPage({required this.trial, required this.dao, required this.ai, this.review});
+  const _DecisionPage({required this.trial, required this.dao, required this.ai, this.review,this.fromNotification=false});
+  final bool fromNotification;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
@@ -884,6 +1005,8 @@ class _DecisionPage extends StatefulWidget {
 class _DecisionPageState extends State<_DecisionPage> {
   late RealityTrial trial = widget.trial;
   late TrialReviewResult review = widget.review ?? TrialReviewResult(
+    contentOrigin:trial.operatorInputs['review_content_origin']??'UNKNOWN',
+    contentDetail:trial.operatorInputs['review_content_detail']??'',
     predictionOriginal: trial.prediction,
     actualFacts: [trial.actualOutcome],
     predictionError: trial.operatorInputs['prediction_error']??'原预测与实际结果已分别保存。',
@@ -943,7 +1066,9 @@ class _DecisionPageState extends State<_DecisionPage> {
           await const EvidenceGrowthNotificationService().scheduleTrial(trial);
         }
         await const EvidenceGrowthNotificationService().reconcile();
-        if (mounted) setState(() => chosen = decision);
+        if(await widget.dao.journeys.forTrial(trial.id)!=null) {
+          if(mounted)Navigator.pop(context);
+        } else if (mounted) setState(() => chosen = decision);
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('未保存决定：$e')));
       }
@@ -954,14 +1079,16 @@ class _DecisionPageState extends State<_DecisionPage> {
   }
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('复盘结果 · 本轮出口')),
+    appBar: AppBar(title: const Text('复盘结果 · 本轮出口'),actions:[IconButton(tooltip:'知识学习与应用',icon:const Icon(Icons.menu_book),onPressed:()=>_trialKnowledge(context,widget.dao,trial.id,'CHANGE'))]),
     body: ListView(padding: const EdgeInsets.all(16), children: [
+      if(widget.fromNotification)const Text('通知定位 · 改变节点：核对复盘建议后再确认下一步。'),
       EvidenceGrowthCycleCard(trial:trial),
       TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
         onPressed:()=>_openCycle(context,trial,widget.dao,widget.ai)),
       _Card(title: '预测完整性', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _Label('原预测（未改写）', review.predictionOriginal), const Divider(),
         _Label('实际事实', trial.actualOutcome), const Divider(),
+        _Label('内容来源', '${GrowthGuidance.label(review.contentOrigin)} ${review.contentDetail}'),
         _Label('Prediction Error', review.predictionError),
       ])),
       const SizedBox(height: 10),
@@ -1010,7 +1137,7 @@ class _Review extends StatelessWidget {
 
 class _Learning extends StatefulWidget {
   const _Learning({required this.onApply, required this.dao});
-  final ValueChanged<String> onApply;
+  final void Function(String text,String nodeId) onApply;
   final EvidenceGrowthDao dao;
   @override
   State<_Learning> createState() => _LearningState();
@@ -1049,14 +1176,14 @@ class _LearningState extends State<_Learning> {
 class _NodeTile extends StatelessWidget {
   const _NodeTile(this.node, this.onApply, this.dao);
   final EvidenceKNode node;
-  final ValueChanged<String> onApply;
+  final void Function(String text,String nodeId) onApply;
   final EvidenceGrowthDao dao;
   @override
   Widget build(BuildContext context) => ListTile(
     title: Text('${node.id} · ${node.title}'),
     subtitle: Text(node.claim, maxLines: 2, overflow: TextOverflow.ellipsis),
     trailing: const Icon(Icons.chevron_right),
-    onTap: () { unawaited(dao.markLearned(node.id)); showModalBottomSheet(context: context, isScrollControlled: true, useSafeArea: true, builder: (_) => ListView(padding: const EdgeInsets.all(20), children: [
+    onTap: () { showModalBottomSheet(context: context, isScrollControlled: true, useSafeArea: true, builder: (_) => ListView(padding: const EdgeInsets.all(20), children: [
       Text(node.title, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
       EvidenceGrowthReadAloud(text:'${node.title}。${node.claim}。${node.mechanism}。${node.howTo.join('。')}。使用边界：${node.misuseBoundary.join('。')}'),
       const SizedBox(height: 12), _Label('是什么', node.claim), const Divider(),
@@ -1079,8 +1206,8 @@ class _NodeTile extends StatelessWidget {
           actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
             FilledButton(onPressed: () { if (controller.text.trim().isNotEmpty) Navigator.pop(dialogContext, controller.text.trim()); }, child: const Text('匹配下一步'))]));
         controller.dispose();
-        if (input != null && context.mounted) { Navigator.pop(context); onApply('$input\n学习应用：${node.title}'); }
-      }, icon: const Icon(Icons.play_arrow), label: const Text('立即应用，创建 Trial')),
+        if (input != null && context.mounted) { Navigator.pop(context); onApply(input,node.id); }
+      }, icon: const Icon(Icons.play_arrow), label: const Text('选择目标与节点，学习应用')),
     ])); },
   );
 }
@@ -1257,16 +1384,18 @@ Future<void> _showGuide(BuildContext context, EvidenceGrowthAiService ai) async 
 }
 
 class _ArchivePage extends StatelessWidget {
-  const _ArchivePage({required this.trial, required this.dao,required this.ai});
+  const _ArchivePage({required this.trial, required this.dao,required this.ai,this.notificationMessage=''});
+  final String notificationMessage;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
   @override
   Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Trial 证据档案')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    if(notificationMessage.isNotEmpty)_Card(title:'通知对应的原行动',child:Text(notificationMessage)),
     EvidenceGrowthCycleCard(trial:trial),
     TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
       onPressed:()=>_openCycle(context,trial,dao,ai)),
-    if(const {'ACT','ADJUST'}.contains(trial.decision)) FilledButton.icon(icon:const Icon(Icons.play_arrow),
+    if(!trial.operatorInputs.containsKey('journey_id') && const {'ACT','ADJUST'}.contains(trial.decision)) FilledButton.icon(icon:const Icon(Icons.play_arrow),
       label:Text(trial.nextTrialId.isEmpty?'继续这条学习，建立下一轮':'打开下一轮'),onPressed:()async{
         final current=await dao.byId(trial.id);
         if(current==null || !context.mounted)return;
@@ -1278,7 +1407,7 @@ class _ArchivePage extends StatelessWidget {
             route:const EvidenceGrowthRouter().nextTrial(current),dao:dao,ai:ai,previousTrialId:current.id)));
         }
       }),
-    _Card(title: '${trial.decision} · ${trial.primaryModule.label}', child: Text(trial.decision == 'EXIT' ? 'Hypothesis Closed：结束路线不等于否定自己。' : '本轮验证已完成。')),
+    _Card(title: '${trial.decision} · ${trial.primaryModule.label}', child: Text(trial.decision == 'EXIT' ? 'Hypothesis Closed：结束路线不等于否定自己。' : trial.isClosed ? '本轮验证已完成。' : '本次事实已记录，等待本学习窗口统一复盘。')),
     const SizedBox(height: 10), _Card(title: '原预测', child: Text(trial.prediction)),
     const SizedBox(height: 10), _Card(title: '实际事实', child: Text(trial.actualOutcome)),
     const SizedBox(height: 10), _Card(title: '学习与规则更新', child: Text('${trial.learning}\n\n${trial.ruleUpdate}')),
@@ -1437,4 +1566,11 @@ Future<void> _openCycle(BuildContext context,RealityTrial trial,EvidenceGrowthDa
       ])),
     ]),
   )));
+}
+
+Future<void> _trialKnowledge(BuildContext context,EvidenceGrowthDao dao,String trialId,String stage) async {
+  final j=await dao.journeys.forTrial(trialId);
+  if(!context.mounted)return;
+  if(j==null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('请从目标旅程打开知识学习，以保存对应情境和用法。')));return; }
+  await Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthKnowledgePage(dao:dao,journey:j,stage:stage)));
 }

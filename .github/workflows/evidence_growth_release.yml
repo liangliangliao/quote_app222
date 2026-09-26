@@ -3,7 +3,7 @@ name: Evidence Growth APK Delivery
 on:
   workflow_dispatch:
   push:
-    branches: [codex/growth-six-core-features]
+    branches: [codex/growth-six-core-features, codex/growth-v27-journeys]
     paths:
       - lib/**
       - android/**
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   deliver:
-    if: github.repository == 'liangliangliao/quote_app222' && github.ref == 'refs/heads/codex/growth-six-core-features'
+    if: github.repository == 'liangliangliao/quote_app222' && (github.ref == 'refs/heads/codex/growth-six-core-features' || github.ref == 'refs/heads/codex/growth-v27-journeys')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -47,7 +47,7 @@ jobs:
         run: flutter pub get
       - name: Build release APK
         run: flutter build apk --release -t lib/main.dart
-      - name: Deliver APK to a draft release
+      - name: Deliver direct-install APK release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: evidence-growth-${{ github.sha }}
@@ -66,21 +66,30 @@ jobs:
           repo = os.environ['GITHUB_REPOSITORY']
           run = os.environ['GITHUB_RUN_ID']
           Path('delivery/notes.md').write_text(
-              '六模块完整成长循环 · 安装包草稿\n\n'
+              '六模块证据成长 v2.7 · Android 直接安装包\n\n'
               f'源代码提交：{sha}\n'
               f'构建记录：https://github.com/{repo}/actions/runs/{run}\n\n'
-              'APK 与校验文件见附件。本条为草稿，不自动发布正式版本。\n'
-              '只构建安装包，业务验证结果见 PR #160。\n', encoding='utf-8')
+              '请直接下载 quote-app-evidence-growth.apk 安装；不要下载 Actions Artifact 后再解压。\n'
+              'GitHub Actions Artifact 会被平台强制包装成 ZIP，手机端解压可能失败；Release 附件是 APK 本体，不需要解压。\n'
+              'SHA256SUMS.txt 用于完整性校验。\n', encoding='utf-8')
           PY
           if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > delivery/is-draft.txt 2>/dev/null; then
-            test "$(cat delivery/is-draft.txt)" = 'true'
+            if [[ "$(cat delivery/is-draft.txt)" == "true" ]]; then
+              gh release edit "$RELEASE_TAG" --draft=false --prerelease \
+                --title "六模块证据成长 v2.7 · ${GITHUB_SHA:0:8} · 直接APK" \
+                --notes-file delivery/notes.md
+            fi
           else
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft \
-              --title "六模块完整成长循环 · ${GITHUB_SHA:0:8}" --notes-file delivery/notes.md
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
+              --title "六模块证据成长 v2.7 · ${GITHUB_SHA:0:8} · 直接APK" --notes-file delivery/notes.md
           fi
           gh release upload "$RELEASE_TAG" delivery/quote-app-evidence-growth.apk delivery/SHA256SUMS.txt --clobber
           gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > delivery/uploaded.txt
           grep -Fx 'quote-app-evidence-growth.apk' delivery/uploaded.txt
           grep -Fx 'SHA256SUMS.txt' delivery/uploaded.txt
           release_url="$(gh release view "$RELEASE_TAG" --json url --jq '.url')"
-          echo "APK 已上传：[打开安装包草稿]($release_url)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Android 直接安装 APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "不要下载 Actions Artifact ZIP。请从 Release 直接下载 **quote-app-evidence-growth.apk**，APK 本体无需解压。" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [打开 APK Release]($release_url)" >> "$GITHUB_STEP_SUMMARY"

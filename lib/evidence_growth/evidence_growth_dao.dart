@@ -5,6 +5,8 @@ import 'package:sqflite_common/sqlite_api.dart';
 
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
+import 'evidence_growth_journey_store.dart';
+import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_cycle.dart';
 import 'evidence_growth_operator_registry.dart';
 import 'evidence_growth_reminder_plan.dart';
@@ -16,6 +18,7 @@ class EvidenceGrowthDao {
   EvidenceGrowthDao({required Future<Database> Function() database})
       : _databaseProvider = database;
   final Future<Database> Function() _databaseProvider;
+  EvidenceGrowthJourneyStore get journeys => EvidenceGrowthJourneyStore(this);
   Future<void>? _ready;
   Future<Database> _database() => _databaseProvider();
   Future<Database> knowledgeDatabase() => _databaseProvider();
@@ -135,9 +138,10 @@ class EvidenceGrowthDao {
         }
         await txn.insert('evidence_growth_settings', {'setting_key':'reminder_schema','setting_value':'2'},conflictAlgorithm:ConflictAlgorithm.replace);
       }
-      await txn.insert('evidence_growth_settings', {'setting_key': 'schema_version', 'setting_value': '3'},
+      await txn.insert('evidence_growth_settings', {'setting_key': 'schema_version', 'setting_value': '4'},
           conflictAlgorithm: ConflictAlgorithm.replace);
     });
+    await EvidenceGrowthJourneyStore.install(db);
   }
 
   Future<RealityTrial> createTrial(EvidenceRouteResult route,
@@ -232,7 +236,7 @@ class EvidenceGrowthDao {
       goalState: confirmedGoal,
       currentState: confirmedCurrent,
       topGap: confirmedGap,
-      operatorInputs: {...operatorInputs,
+      operatorInputs: {if(parent?.operatorInputs['journey_id']!=null)'journey_id':parent!.operatorInputs['journey_id']!,...operatorInputs,
         'hypothesis_id':changedHypothesis?id:parent?.operatorInputs['hypothesis_id']??parent?.id??id,
         'cycle_root':parent?.operatorInputs['cycle_root']??parent?.id??id,
         'cycle_parent':parent?.id??'',
@@ -296,7 +300,7 @@ class EvidenceGrowthDao {
         await _event(txn, previousTrialId, 'NEXT_TRIAL_LINKED', {'next_trial_id': id}, now);
       }
     });
-    return trial;
+    return (await byId(trial.id))!;
   }
 
   Future<RealityTrial> startTrial(RealityTrial trial) async {
@@ -402,6 +406,7 @@ class EvidenceGrowthDao {
       for (final node in current.nodeIds) {
         await _refreshNodeStats(txn, node, now);
       }
+      await txn.delete('evidence_growth_settings',where:'setting_key=?',whereArgs:['feedback_state_${trial.id}']);
       await _event(txn, trial.id, 'RESULT_CAPTURED', {'result_status': result,
         'actual_outcome': actualOutcome.trim(), 'measurements': resultMeasurements}, now);
       await _updateReminders(txn, updated);
@@ -416,8 +421,12 @@ class EvidenceGrowthDao {
     return db.transaction((txn) async {
     final current = await _current(txn, trial.id);
     if (current.status != 'RESULT_CAPTURED') throw StateError('先保存现实结果再复盘。');
+    final links=await txn.query('evidence_growth_journey_actions',where:'trial_id=?',whereArgs:[trial.id]);
+    final parent=links.isEmpty?null:await EvidenceGrowthJourneyStore.read(txn,links.single['journey_id'] as String);
+    final reviewNodes=parent==null?<EvidenceKNode>[]:EvidenceGrowthKnowledgeRuntime.appliedNodes(parent,'REVIEW');
+    final allowed={...current.nodeIds,...reviewNodes.map((n)=>n.id)};
     if (review.knowledgeNodeIds.isEmpty || review.predictionOriginal != current.prediction ||
-        review.knowledgeNodeIds.any((id) => !current.nodeIds.contains(id))) {
+        review.knowledgeNodeIds.any((id) => !allowed.contains(id))) {
       throw StateError('复盘不得改写原预测或引入未引用知识。');
     }
     if(review.actualFacts.any((f)=>f!=current.actualOutcome && f!=current.unexpected)) {
@@ -431,6 +440,7 @@ class EvidenceGrowthDao {
       ruleUpdate: review.ruleUpdate,
       operatorInputs:{...current.operatorInputs,'recommended_decision':review.decision,
         'prediction_error':review.predictionError,
+        'review_content_origin':review.contentOrigin,'review_content_detail':review.contentDetail,
         'cycle_confirmed_json':'{}',
         if(cycleUpdate.isNotEmpty)'cycle_update_json':jsonEncode(cycleUpdate)},
       nextAction: review.nextChangeOneVariable,
@@ -448,6 +458,10 @@ class EvidenceGrowthDao {
         'next_change_one_variable': review.nextChangeOneVariable,
         'created_at_ms': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+      if(parent!=null) await EvidenceGrowthJourneyStore.log(txn,parent,'REVIEW_KNOWLEDGE_USED',{
+        'trial_id':trial.id,'node_ids':review.knowledgeNodeIds,
+        'additional_review_sources':reviewNodes.where((n)=>review.knowledgeNodeIds.contains(n.id)).map((n)=>n.toJson()).toList(),
+      });
       await _event(txn, trial.id, 'REVIEWED', {'rule_update': review.ruleUpdate}, now);
       await _updateReminders(txn, updated);
       return updated;
@@ -636,7 +650,8 @@ class EvidenceGrowthDao {
         'evidence_growth_reviews', 'evidence_growth_decisions', 'evidence_growth_personal_node_stats',
         'evidence_growth_router_logs', 'evidence_growth_prompt_runs', 'evidence_growth_trials',
         'evidence_growth_events', 'evidence_growth_learned_nodes', 'evidence_growth_feedback', 'evidence_growth_api_receipts',
-        'evidence_growth_sync_state', 'evidence_growth_reminders', 'evidence_growth_sync_archives'
+        'evidence_growth_sync_state', 'evidence_growth_reminders', 'evidence_growth_sync_archives',
+        'evidence_growth_journal','evidence_growth_journey_actions','evidence_growth_journeys'
       ]) {
         await txn.delete(table);
       }
@@ -648,7 +663,10 @@ class EvidenceGrowthDao {
     await ensureTables();
     final db = await _database();
     return const JsonEncoder.withIndent('  ').convert({
-      'schema': 'evidence_growth_export_v2',
+      'schema': 'evidence_growth_export_v2.7',
+      'journeys':await db.query('evidence_growth_journeys'),
+      'journey_records':await db.query('evidence_growth_journal'),
+      'journey_actions':await db.query('evidence_growth_journey_actions'),
       'kb_version': EvidenceGrowthKnowledge.kbVersion,
       'exported_at': DateTime.now().toIso8601String(),
       'trials': await db.query('evidence_growth_trials', orderBy: 'created_at_ms ASC'),
@@ -832,6 +850,7 @@ class EvidenceGrowthDao {
   Future<void> _event(DatabaseExecutor db, String id, String type, Map<String, Object?> payload, int now) async {
     await db.insert('evidence_growth_events', {'trial_id': id, 'event_type': type,
       'payload_json': jsonEncode(payload), 'created_at_ms': now});
+    await EvidenceGrowthJourneyStore.onTrialEvent(db,id,type);
   }
 
   double? _mean(Iterable<double> values) {
@@ -897,7 +916,21 @@ class EvidenceGrowthDao {
   Future<void> _updateReminders(DatabaseExecutor db, RealityTrial trial) async {
     final settings = {for (final row in await db.query('evidence_growth_settings'))
       row['setting_key'] as String: row['setting_value'] as String};
-    final enabled = settings['reminders_enabled'] != 'false' &&
+    final parentTables=await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='evidence_growth_journey_actions'");
+    var parentAllowed=true;
+    var sensitive=false;
+    if(parentTables.isNotEmpty) {
+      final links=await db.query('evidence_growth_journey_actions',where:'trial_id=?',whereArgs:[trial.id]);
+      if(links.isNotEmpty) {
+        final j=await EvidenceGrowthJourneyStore.read(db,links.single['journey_id'] as String);
+        parentAllowed=EvidenceGrowthJourneyStore.allowsReminder(j) && (j==null||j.trialId==trial.id);
+        sensitive=j?.profile.sensitive??false;
+        if(j!=null) {final p=await EvidenceGrowthJourneyStore.portfolioData(db);
+          final dep=await EvidenceGrowthJourneyStore.evaluateDependencies(db,j.id,p);
+          parentAllowed=parentAllowed && (dep['blocked_by'] as List).isEmpty;}
+      }
+    }
+    final enabled = parentAllowed && settings['reminders_enabled'] != 'false' &&
       (settings['remind_trial_${trial.id}'] ?? trial.operatorInputs['remind']) == 'true';
     final delay = (int.tryParse(settings['missing_result_hours'] ?? '') ?? 24).clamp(1,168);
     final repeat = (int.tryParse(settings['missing_repeat_hours'] ?? '') ?? delay).clamp(1,168);
@@ -919,14 +952,16 @@ class EvidenceGrowthDao {
     // Retain delivered records for idempotency; cancel obsolete schedules atomically with the Trial.
     await db.update('evidence_growth_reminders', {'state':'cancelled'},
       where: "trial_id = ? AND state IN ('pending','scheduled','blocked')", whereArgs:[trial.id]);
+    final cap=int.tryParse(trial.operatorInputs['max_repeat']??'0')??0;
     for (final plan in plans) {
+      if(plan.kind=='missing_result' && cap>0 && history.where((r)=>(r['delivered_at_ms'] as num).toInt()>0).length>=cap)continue;
       final window = '${plan.atMs ~/ 60000}';
       final old = await db.query('evidence_growth_reminders', where:'trial_id = ? AND window_key = ?', whereArgs:[trial.id, window]);
       if (old.isNotEmpty && (const {'delivered','expired'}.contains(old.first['state']) ||
           (old.first['delivered_at_ms'] as num).toInt() > 0)) continue;
       final values = <String,Object?>{'event_key':'${trial.id}:$window', 'trial_id':trial.id,
         'kind':plan.kind, 'scheduled_at_ms':plan.atMs, 'window_key':window, 'title':plan.title,
-        'body':plan.body, 'source_ids_json':jsonEncode(plan.sourceIds), 'state':'pending', 'last_error':''};
+        'body':sensitive?'私密目标 · ${plan.kind=='trial_start'?'到达开始时间':plan.kind=='recovery_end'?'核对恢复情况':plan.kind=='repeated_avoidance'?'回看本轮退出与下一步':'补充现实反馈'}；点击进入对应记录。':plan.body, 'source_ids_json':jsonEncode(plan.sourceIds), 'state':'pending', 'last_error':''};
       if (old.isEmpty) { await db.insert('evidence_growth_reminders', values); }
       else { await db.update('evidence_growth_reminders', values, where:'reminder_id = ?', whereArgs:[old.first['reminder_id']]); }
     }

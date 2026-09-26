@@ -289,6 +289,14 @@ object Channels {
               android.os.Handler(android.os.Looper.getMainLooper()).post { result.success(ok) }
             }
           }
+          "eg_pending_notification" -> result.success(appCtx.getSharedPreferences("eg_notification_navigation",Context.MODE_PRIVATE).getString("pending",null))
+          "eg_ack_notification" -> {
+            val prefs=appCtx.getSharedPreferences("eg_notification_navigation",Context.MODE_PRIVATE)
+            val token=call.argument<String>("tap_token") ?: ""
+            val pending=prefs.getString("pending",null)
+            if(token.isNotEmpty() && pending!=null && org.json.JSONObject(pending).optString("tap_token")==token) prefs.edit().remove("pending").commit()
+            result.success(true)
+          }
           "eg_notification_status" -> result.success(EvidenceGrowthReminderNative.status(appCtx))
           "eg_notification_settings" -> {
             EvidenceGrowthReminderNative.openSettings(appCtx)
