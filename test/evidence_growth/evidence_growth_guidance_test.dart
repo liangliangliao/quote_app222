@@ -153,7 +153,8 @@ void main() {
       final result =
           await EvidenceGrowthAiService(ai: ai, dao: dao).guideJourney(j);
       expect(result['origin'], 'LOCAL_RULE');
-      expect(result['reason'], contains('未通过'));
+      expect(result['reason'], isNotEmpty);
+      expect(result['reason'], isNot(contains('AI 请求或内容校验未成功')));
       expect(result['node_output'], isEmpty);
     }
     expect((await store.history(j.id)).where((r) => r['kind'] == 'AI_DRAFT'),

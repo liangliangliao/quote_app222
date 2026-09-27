@@ -272,6 +272,53 @@ class EvidenceGrowthJourneyStore {
   static Future<GrowthJourney> operate(
       DatabaseExecutor tx, GrowthJourney j, String op, GrowthData b) async {
     switch (op) {
+      case 'discovery-confirm':
+        final needs = growthRows(b['needs']),
+            knowledge = growthRows(b['knowledge']);
+        final solution = growthMap(b['solution']);
+        if (b['user_confirmed'] != true ||
+            needs.isEmpty ||
+            knowledge.isEmpty ||
+            knowledge.length > 5 ||
+            solution['origin'] != 'AI') {
+          throw ArgumentError('请完成需求与知识两轮选择，再生成方案');
+        }
+        for (final row in knowledge) {
+          final n = EvidenceGrowthKnowledge.byId('${row['id']}');
+          final snapshot = growthMap(row['snapshot']);
+          if (n == null ||
+              snapshot['node_id'] != n.id ||
+              snapshot['version'] != n.version) {
+            throw StateError('知识版本已变化，请重新匹配');
+          }
+          row['snapshot'] = n.toJson();
+        }
+        final needIds = needs.map((n) => '${n['id'] ?? ''}').toSet();
+        final nodeIds = knowledge.map((n) => '${n['id']}').toSet();
+        final steps = growthRows(solution['steps']);
+        if (needIds.contains('') ||
+            needIds.length != needs.length ||
+            nodeIds.length != knowledge.length ||
+            steps.isEmpty ||
+            needIds.any((id) =>
+                !steps.any((s) => growthStrings(s['need_ids']).contains(id))) ||
+            steps.any((s) =>
+                growthStrings(s['need_ids']).isEmpty ||
+                growthStrings(s['node_ids']).isEmpty ||
+                growthStrings(s['need_ids'])
+                    .any((id) => !needIds.contains(id)) ||
+                growthStrings(s['node_ids'])
+                    .any((id) => !nodeIds.contains(id)))) {
+          throw ArgumentError('方案必须完整回应你已选的需求，并只引用你已选的知识');
+        }
+        await log(tx, j, 'NEEDS_CONFIRMED',
+            {'needs': needs, 'knowledge': knowledge, 'solution': solution});
+        return j.copy({
+          'confirmed_needs': needs,
+          'selected_knowledge': knowledge,
+          'discovery_solution': solution,
+          'discovery_input': b['raw_input']
+        });
       case 'knowledge-apply':
         final at = EvidenceGrowthKnowledgeRuntime.stage('${b['stage']}');
         final n = EvidenceGrowthKnowledge.byId('${b['node_id']}');

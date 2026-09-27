@@ -144,26 +144,49 @@ class EvidenceKNode {
       };
 
   factory EvidenceKNode.fromJson(Map<String, dynamic> data) {
-    List<String> strings(String key) => (data[key] as List? ?? []).map((e) => e.toString()).toList();
-    final source = Map<String, dynamic>.from(data['source_locator'] as Map? ?? {});
-    return EvidenceKNode(id:data['node_id'] as String, version:(data['version'] as num).toInt(),
-      module:GrowthModuleX.parse(data['module']), sourceClass:data['source_class'] as String,
-      title:data['title'] as String, claim:data['claim'] as String, mechanism:data['mechanism'] as String? ?? '',
-      teachingContext:data['teaching_context'] as String? ?? '', storyOrStudy:data['story_or_study'] as String? ?? '',
-      howTo:strings('how_to'), misuseBoundary:strings('misuse_boundary'), triggers:strings('triggers'),
-      contraSignals:strings('contra_signals'), prerequisites:strings('prerequisites'), operators:strings('operators'),
-      boundaries:strings('risk_boundary'), nextNodes:strings('next_nodes'),
-      evidenceStrength:data['evidence_strength'] as String, displayExcerpt:data['display_excerpt'] as String? ?? '',
-      locator:EvidenceSourceLocator(document:source['document'] as String,
-        pages:(source['physical_pages'] as List).map((e)=>(e as num).toInt()).toList(),
-        lectures:(source['lectures'] as List? ?? []).map((e)=>(e as num).toInt()).toList(),
-        originalNodeIds:(source['original_node_ids'] as List? ?? []).map((e)=>e.toString()).toList(),
-        sourceType:source['source_type'] as String? ?? 'COURSE_SOURCE', note:source['note'] as String? ?? ''));
+    List<String> strings(String key) =>
+        (data[key] as List? ?? []).map((e) => e.toString()).toList();
+    final source =
+        Map<String, dynamic>.from(data['source_locator'] as Map? ?? {});
+    return EvidenceKNode(
+        id: data['node_id'] as String,
+        version: (data['version'] as num).toInt(),
+        module: GrowthModuleX.parse(data['module']),
+        sourceClass: data['source_class'] as String,
+        title: data['title'] as String,
+        claim: data['claim'] as String,
+        mechanism: data['mechanism'] as String? ?? '',
+        teachingContext: data['teaching_context'] as String? ?? '',
+        storyOrStudy: data['story_or_study'] as String? ?? '',
+        howTo: strings('how_to'),
+        misuseBoundary: strings('misuse_boundary'),
+        triggers: strings('triggers'),
+        contraSignals: strings('contra_signals'),
+        prerequisites: strings('prerequisites'),
+        operators: strings('operators'),
+        boundaries: strings('risk_boundary'),
+        nextNodes: strings('next_nodes'),
+        evidenceStrength: data['evidence_strength'] as String,
+        displayExcerpt: data['display_excerpt'] as String? ?? '',
+        locator: EvidenceSourceLocator(
+            document: source['document'] as String,
+            pages: (source['physical_pages'] as List)
+                .map((e) => (e as num).toInt())
+                .toList(),
+            lectures: (source['lectures'] as List? ?? [])
+                .map((e) => (e as num).toInt())
+                .toList(),
+            originalNodeIds: (source['original_node_ids'] as List? ?? [])
+                .map((e) => e.toString())
+                .toList(),
+            sourceType: source['source_type'] as String? ?? 'COURSE_SOURCE',
+            note: source['note'] as String? ?? ''));
   }
 }
 
 class RoutedNode {
-  const RoutedNode({required this.node, required this.score, required this.reason});
+  const RoutedNode(
+      {required this.node, required this.score, required this.reason});
   final EvidenceKNode node;
   final double score;
   final String reason;
@@ -198,9 +221,9 @@ class EvidenceRouteResult {
     this.reversible = true,
     this.nextRoundPreserved = true,
     this.personalEvidence = const <Map<String, Object?>>[],
-    this.inputDrafts = const <String,String>{},
-    this.cyclePlan = const <String,String>{},
-    this.cycleContext = const <Map<String,Object?>>[],
+    this.inputDrafts = const <String, String>{},
+    this.cyclePlan = const <String, String>{},
+    this.cycleContext = const <Map<String, Object?>>[],
   });
   final String rawInput;
   final List<String> facts;
@@ -229,9 +252,9 @@ class EvidenceRouteResult {
   final bool reversible;
   final bool nextRoundPreserved;
   final List<Map<String, Object?>> personalEvidence;
-  final Map<String,String> inputDrafts;
-  final Map<String,String> cyclePlan;
-  final List<Map<String,Object?>> cycleContext;
+  final Map<String, String> inputDrafts;
+  final Map<String, String> cyclePlan;
+  final List<Map<String, Object?>> cycleContext;
 
   bool get canAct => status == 'READY_FOR_ACTION' && riskGate == 'PASS';
 
@@ -262,9 +285,9 @@ class EvidenceRouteResult {
     bool? reversible,
     bool? nextRoundPreserved,
     List<Map<String, Object?>>? personalEvidence,
-    Map<String,String>? inputDrafts,
-    Map<String,String>? cyclePlan,
-    List<Map<String,Object?>>? cycleContext,
+    Map<String, String>? inputDrafts,
+    Map<String, String>? cyclePlan,
+    List<Map<String, Object?>>? cycleContext,
   }) =>
       EvidenceRouteResult(
         rawInput: rawInput,
@@ -482,7 +505,8 @@ class RealityTrial {
         'raw_input': rawInput,
         'facts_json': jsonEncode(facts),
         'primary_module': primaryModule.name,
-        'secondary_modules_json': jsonEncode(secondaryModules.map((e) => e.name).toList()),
+        'secondary_modules_json':
+            jsonEncode(secondaryModules.map((e) => e.name).toList()),
         'node_ids_json': jsonEncode(nodeIds),
         'evidence_level': evidenceLevel,
         'ai_inference': inference,
@@ -531,28 +555,34 @@ class RealityTrial {
     List<String> list(Object? raw) {
       try {
         final decoded = jsonDecode((raw ?? '[]').toString());
-        return decoded is List ? decoded.map((e) => e.toString()).toList() : <String>[];
+        return decoded is List
+            ? decoded.map((e) => e.toString()).toList()
+            : <String>[];
       } catch (_) {
         return <String>[];
       }
     }
+
     Map<String, String> stringMap(Object? raw) {
       try {
         final decoded = jsonDecode((raw ?? '{}').toString());
         return decoded is Map
-            ? decoded.map((key, value) => MapEntry(key.toString(), value.toString()))
+            ? decoded
+                .map((key, value) => MapEntry(key.toString(), value.toString()))
             : <String, String>{};
       } catch (_) {
         return <String, String>{};
       }
     }
+
     return RealityTrial(
       id: (row['trial_id'] ?? '').toString(),
       status: (row['status'] ?? 'DRAFT').toString(),
       rawInput: (row['raw_input'] ?? '').toString(),
       facts: list(row['facts_json']),
       primaryModule: GrowthModuleX.parse(row['primary_module']),
-      secondaryModules: list(row['secondary_modules_json']).map(GrowthModuleX.parse).toList(),
+      secondaryModules:
+          list(row['secondary_modules_json']).map(GrowthModuleX.parse).toList(),
       nodeIds: list(row['node_ids_json']),
       evidenceLevel: (row['evidence_level'] ?? 'E1').toString(),
       inference: (row['ai_inference'] ?? '').toString(),
@@ -601,12 +631,23 @@ class RealityTrial {
 
 class TrialReviewResult {
   final String contentOrigin, contentDetail;
-  TrialReviewResult withOrigin(String origin,String detail) => TrialReviewResult(
-    predictionOriginal:predictionOriginal,actualFacts:actualFacts,predictionError:predictionError,failureClass:failureClass,
-    learning:learning,ruleUpdate:ruleUpdate,decision:decision,nextChangeOneVariable:nextChangeOneVariable,
-    knowledgeNodeIds:knowledgeNodeIds,cycleUpdate:cycleUpdate,contentOrigin:origin,contentDetail:detail);
+  TrialReviewResult withOrigin(String origin, String detail) =>
+      TrialReviewResult(
+          predictionOriginal: predictionOriginal,
+          actualFacts: actualFacts,
+          predictionError: predictionError,
+          failureClass: failureClass,
+          learning: learning,
+          ruleUpdate: ruleUpdate,
+          decision: decision,
+          nextChangeOneVariable: nextChangeOneVariable,
+          knowledgeNodeIds: knowledgeNodeIds,
+          cycleUpdate: cycleUpdate,
+          contentOrigin: origin,
+          contentDetail: detail);
   const TrialReviewResult({
-    this.contentOrigin="LOCAL_RULE",this.contentDetail="",
+    this.contentOrigin = "LOCAL_RULE",
+    this.contentDetail = "",
     required this.predictionOriginal,
     required this.actualFacts,
     required this.predictionError,
@@ -616,7 +657,7 @@ class TrialReviewResult {
     required this.decision,
     required this.nextChangeOneVariable,
     required this.knowledgeNodeIds,
-    this.cycleUpdate = const <String,String>{},
+    this.cycleUpdate = const <String, String>{},
   });
   final String predictionOriginal;
   final List<String> actualFacts;
@@ -627,10 +668,21 @@ class TrialReviewResult {
   final String decision;
   final String nextChangeOneVariable;
   final List<String> knowledgeNodeIds;
-  final Map<String,String> cycleUpdate;
-  Map<String,Object?> toJson() => {'content_origin':contentOrigin,'content_detail':contentDetail,'prediction_original':predictionOriginal,'actual_facts':actualFacts,
-    'prediction_error':predictionError,'failure_class':failureClass,'learning':learning,'rule_update':ruleUpdate,
-    'decision':decision,'next_change_one_variable':nextChangeOneVariable,'knowledge_nodes_used':knowledgeNodeIds,'cycle_update':cycleUpdate};
+  final Map<String, String> cycleUpdate;
+  Map<String, Object?> toJson() => {
+        'content_origin': contentOrigin,
+        'content_detail': contentDetail,
+        'prediction_original': predictionOriginal,
+        'actual_facts': actualFacts,
+        'prediction_error': predictionError,
+        'failure_class': failureClass,
+        'learning': learning,
+        'rule_update': ruleUpdate,
+        'decision': decision,
+        'next_change_one_variable': nextChangeOneVariable,
+        'knowledge_nodes_used': knowledgeNodeIds,
+        'cycle_update': cycleUpdate
+      };
 }
 
 class EvidenceSummary {
@@ -644,6 +696,9 @@ class EvidenceSummary {
     required this.exits,
     required this.moduleCounts,
     required this.topNodeIds,
+    this.nodeRunCounts = const {},
+    this.aiCounts = const {},
+    this.knowledgeCounts = const {},
     this.partialActions = 0,
     this.notDoneActions = 0,
     this.abortedActions = 0,
@@ -660,6 +715,7 @@ class EvidenceSummary {
   final int strategyChanges;
   final int exits;
   final Map<GrowthModule, int> moduleCounts;
+  final Map<GrowthModule, int> nodeRunCounts, aiCounts, knowledgeCounts;
   final List<String> topNodeIds;
   final int partialActions;
   final int notDoneActions;
@@ -668,6 +724,8 @@ class EvidenceSummary {
   final double? averageRecoveryHours;
   final double? calibrationError;
   final List<String> ruleChanges;
-  double get activationRate => learnedNodes == 0 ? 0 : activatedNodes / learnedNodes;
-  double get actionRate => startedTrials == 0 ? 0 : completedActions / startedTrials;
+  double get activationRate =>
+      learnedNodes == 0 ? 0 : activatedNodes / learnedNodes;
+  double get actionRate =>
+      startedTrials == 0 ? 0 : completedActions / startedTrials;
 }

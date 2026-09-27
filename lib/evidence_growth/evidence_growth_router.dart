@@ -7,238 +7,407 @@ import 'evidence_growth_search.dart';
 /// Local routing is deterministic and keeps high-impact gates outside the model.
 class EvidenceGrowthRouter {
   const EvidenceGrowthRouter();
-  static bool protected(EvidenceRouteResult r)=>const {
-    'RUIN_RISK','PANIC_RISK','PROFESSIONAL_ESCALATION','NEEDS_MORE_FACTS',
-  }.contains(r.status);
+  static bool protected(EvidenceRouteResult r) => const {
+        'RUIN_RISK',
+        'PANIC_RISK',
+        'PROFESSIONAL_ESCALATION',
+        'NEEDS_MORE_FACTS',
+      }.contains(r.status);
 
   /// Recall never grants permission to act. Source sufficiency is decided
   /// separately; vector similarity cannot promote an extension over Tal.
-  List<RoutedNode> retrieve(String text, {Map<String,double> semantic=const {},
-      Map<String,double> personalFit=const {}, List<String> exact=const []}) {
-    final rule=route(text,personalFit:personalFit);
-    if(protected(rule)) return [];
-    final lexical=EvidenceGrowthSearch.current.search(text,limit:40);
-    final lex={for(final c in lexical)c.node.id:c.score};
-    final ruleIds=rule.candidates.map((c)=>c.node.id).toSet();
-    final graph=rule.selectedNodes.expand((n)=>n.nextNodes).toSet();
-    final maxLex=lexical.isEmpty?1.0:lexical.first.score;
-    final result=<RoutedNode>[];
-    for(final node in EvidenceGrowthKnowledge.nodes) {
-      final l=(lex[node.id]??0)/maxLex;
-      final s=semantic[node.id]??0;
-      final ruleMatch=ruleIds.contains(node.id);
-      if(!ruleMatch && l<.12 && s<.55 && !exact.contains(node.id)) continue;
+  List<RoutedNode> retrieve(String text,
+      {Map<String, double> semantic = const {},
+      Map<String, double> personalFit = const {},
+      List<String> exact = const []}) {
+    final rule = route(text, personalFit: personalFit);
+    if (protected(rule)) return [];
+    final lexical = EvidenceGrowthSearch.current.search(text, limit: 40);
+    final lex = {for (final c in lexical) c.node.id: c.score};
+    final ruleIds = rule.candidates.map((c) => c.node.id).toSet();
+    final graph = rule.selectedNodes.expand((n) => n.nextNodes).toSet();
+    final maxLex = lexical.isEmpty ? 1.0 : lexical.first.score;
+    final result = <RoutedNode>[];
+    for (final node in EvidenceGrowthKnowledge.nodes) {
+      final l = (lex[node.id] ?? 0) / maxLex;
+      final s = semantic[node.id] ?? 0;
+      final ruleMatch = ruleIds.contains(node.id);
+      if (!ruleMatch && l < .12 && s < .55 && !exact.contains(node.id))
+        continue;
       // Tokenized free-text contra fields from future manifests also filter.
-      if(node.contraSignals.any((c)=>!RegExp(r'^[A-Z_]+$').hasMatch(c) && c.length>2 && text.contains(c))) continue;
-      final score=.35*(semantic.isEmpty?l:(s.clamp(0,1)))+.25*(ruleMatch?1:l)+
-          .15 + .10*(personalFit[node.id]??.5).clamp(0,1)+.10*(node.isTal?1:node.isExtension1 ? .5 : .2)+
-          .05*(graph.contains(node.id)?1:.5)+(exact.contains(node.id) ? .03 : 0);
-      result.add(RoutedNode(node:node,score:score.toDouble(),reason:
-        '词法=${l.toStringAsFixed(2)}；向量=${semantic.containsKey(node.id)?s.toStringAsFixed(2):"未使用"}；'
-        '规则=$ruleMatch；关系=${graph.contains(node.id)}；个人=${(personalFit[node.id]??.5).toStringAsFixed(2)}'));
+      if (node.contraSignals.any((c) =>
+          !RegExp(r'^[A-Z_]+$').hasMatch(c) &&
+          c.length > 2 &&
+          text.contains(c))) continue;
+      final score = .35 * (semantic.isEmpty ? l : (s.clamp(0, 1))) +
+          .25 * (ruleMatch ? 1 : l) +
+          .15 +
+          .10 * (personalFit[node.id] ?? .5).clamp(0, 1) +
+          .10 *
+              (node.isTal
+                  ? 1
+                  : node.isExtension1
+                      ? .5
+                      : .2) +
+          .05 * (graph.contains(node.id) ? 1 : .5) +
+          (exact.contains(node.id) ? .03 : 0);
+      result.add(RoutedNode(
+          node: node,
+          score: score.toDouble(),
+          reason:
+              '词法=${l.toStringAsFixed(2)}；向量=${semantic.containsKey(node.id) ? s.toStringAsFixed(2) : "未使用"}；'
+              '规则=$ruleMatch；关系=${graph.contains(node.id)}；个人=${(personalFit[node.id] ?? .5).toStringAsFixed(2)}'));
     }
-    result.sort((a,b)=>b.score.compareTo(a.score));
+    result.sort((a, b) => b.score.compareTo(a.score));
     return result;
   }
 
-  EvidenceRouteResult fromSelection(String text,List<RoutedNode> candidates,List<EvidenceKNode> selected,
-      List<String> facts,String reason,{String gap=''}) {
-    final gate=route(text);
-    if(protected(gate)) return gate;
-    if(selected.isEmpty || !selected.first.isTal) return _insufficient(text);
-    final source=selected.last, spec=EvidenceGrowthOperatorRegistry.byId(source.operators.first);
-    return gate.copyWith(facts:facts,primaryModule:selected.first.module,
-      secondaryModules:selected.skip(1).map((n)=>n.module).where((m)=>m!=selected.first.module).toSet().take(2).toList(),
-      candidates:candidates,selectedNodes:selected,requiredChecks:selected.expand((n)=>n.prerequisites).toSet().toList(),
-      missingFacts:[],status:'READY_FOR_ACTION',riskGate:'PASS',inference:reason,confidence:.65,
-      operator:spec.id,actionInstruction:spec.id=='SOURCE_PRACTICE'?source.howTo.first:spec.instruction,
-      completionDefinition:spec.completion,reviewTrigger:spec.reviewTrigger,
-      evidenceLevel:selected.length>1?'E2':'E1',alternatives:spec.alternatives,
-      riskChecks:{'CONTENT_ORIGIN':'LOCAL_RULE',...gate.riskChecks,'SOURCE_GAP':gap.isEmpty?'TAL_SUFFICIENT':gap,
-        'SELECTION':'MODEL_VERIFIED_IDS_AND_USER_QUOTES'});
+  EvidenceRouteResult fromSelection(String text, List<RoutedNode> candidates,
+      List<EvidenceKNode> selected, List<String> facts, String reason,
+      {String gap = '', bool userSelected = false}) {
+    final gate = route(text);
+    if (protected(gate)) return gate;
+    if (selected.isEmpty || (!userSelected && !selected.first.isTal))
+      return _insufficient(text);
+    final source = selected.last,
+        spec = EvidenceGrowthOperatorRegistry.byId(source.operators.first);
+    return gate.copyWith(
+        facts: facts,
+        primaryModule: selected.first.module,
+        secondaryModules: selected
+            .skip(1)
+            .map((n) => n.module)
+            .where((m) => m != selected.first.module)
+            .toSet()
+            .take(2)
+            .toList(),
+        candidates: candidates,
+        selectedNodes: selected,
+        requiredChecks:
+            selected.expand((n) => n.prerequisites).toSet().toList(),
+        missingFacts: [],
+        status: 'READY_FOR_ACTION',
+        riskGate: 'PASS',
+        inference: reason,
+        confidence: .65,
+        operator: spec.id,
+        actionInstruction: spec.id == 'SOURCE_PRACTICE'
+            ? source.howTo.first
+            : spec.instruction,
+        completionDefinition: spec.completion,
+        reviewTrigger: spec.reviewTrigger,
+        evidenceLevel: selected.length > 1 ? 'E2' : 'E1',
+        alternatives: spec.alternatives,
+        riskChecks: {
+          'CONTENT_ORIGIN': 'LOCAL_RULE',
+          ...gate.riskChecks,
+          'SOURCE_GAP': gap.isEmpty ? 'TAL_SUFFICIENT' : gap,
+          'SELECTION': 'MODEL_VERIFIED_IDS_AND_USER_QUOTES'
+        });
   }
+
   static const _patterns = <(List<String>, String)>[
-    (['没开始','拖延','等待动力','没有动力','等状态','投简历','迟迟开不了头','还没动','知道但做不到','提不起劲'], 'A02'),
-    (['一直改','不敢发','怕拒绝','被拒绝','完美','不够好'], 'F01'),
-    (['自动','一上床','短视频','习惯','环境','总忘记'], 'C05'),
-    (['下一步','差距','目标明确','不知道今天'], 'G05'),
-    (['失败说明','天生','不适合','我不行','一次失败'], 'F03'),
-    (['复盘','只是感想','规则更新','预测和实际'], 'R01'),
-    (['坚持两年','退出','没结果','该继续'], 'R01'),
-    (['榜样','电影主角','完全像','照搬'], 'R-AUDIT-08'),
-    (['换了很多方法','换很多方法','还是反复','系统结构','结构问题'], 'C05'),
-    (['承诺','公开目标','背包过墙'], 'A05'),
-    (['恐惧','不敢','焦虑','暴露'], 'A04'),
-    (['积极思考','坏消息','一定成功','只要相信'], 'B02'),
-    (['概率','肯定','绝不','可能性'], 'B01'),
-    (['事实','解释','因果','造成','所以一定'], 'B01'),
-    (['高期望','基准线'], 'B-AUDIT-01'),
-    (['目标太多','舍弃','优先'], 'G-AUDIT-05'),
-    (['真正想要','价值','目标','兴趣'], 'G03'),
-    (['积极体验','重播','复现'], 'R03'),
-    (['巨大','任务太大','缩小','第一步'], 'A-AUDIT-05'),
-    (['反刍','停不下来','越想越'], 'R-AUDIT-01'),
-    (['羞耻','自责','辱骂自己'], 'F-AUDIT-05'),
-    (['重要项目','最可能失败','事前复盘'], 'G05'),
-    (['压抑','不该难过','难受'], 'F-AUDIT-13'),
-    (['Bennett','Brauer','带着不完美上场'], 'F-CASE-BENNETT'),
-    (['Five-Minute','five-minute','五分钟启动'], 'A02'),
+    (
+      [
+        '没开始',
+        '拖延',
+        '等待动力',
+        '没有动力',
+        '等状态',
+        '投简历',
+        '迟迟开不了头',
+        '还没动',
+        '知道但做不到',
+        '提不起劲'
+      ],
+      'A02'
+    ),
+    (['一直改', '不敢发', '怕拒绝', '被拒绝', '完美', '不够好'], 'F01'),
+    (['自动', '一上床', '短视频', '习惯', '环境', '总忘记'], 'C05'),
+    (['下一步', '差距', '目标明确', '不知道今天'], 'G05'),
+    (['失败说明', '天生', '不适合', '我不行', '一次失败'], 'F03'),
+    (['复盘', '只是感想', '规则更新', '预测和实际'], 'R01'),
+    (['坚持两年', '退出', '没结果', '该继续'], 'R01'),
+    (['榜样', '电影主角', '完全像', '照搬'], 'R-AUDIT-08'),
+    (['换了很多方法', '换很多方法', '还是反复', '系统结构', '结构问题'], 'C05'),
+    (['承诺', '公开目标', '背包过墙'], 'A05'),
+    (['恐惧', '不敢', '焦虑', '暴露'], 'A04'),
+    (['积极思考', '坏消息', '一定成功', '只要相信'], 'B02'),
+    (['概率', '肯定', '绝不', '可能性'], 'B01'),
+    (['事实', '解释', '因果', '造成', '所以一定'], 'B01'),
+    (['高期望', '基准线'], 'B-AUDIT-01'),
+    (['目标太多', '舍弃', '优先'], 'G-AUDIT-05'),
+    (['真正想要', '价值', '目标', '兴趣'], 'G03'),
+    (['积极体验', '重播', '复现'], 'R03'),
+    (['巨大', '任务太大', '缩小', '第一步'], 'A-AUDIT-05'),
+    (['反刍', '停不下来', '越想越'], 'R-AUDIT-01'),
+    (['羞耻', '自责', '辱骂自己'], 'F-AUDIT-05'),
+    (['重要项目', '最可能失败', '事前复盘'], 'G05'),
+    (['压抑', '不该难过', '难受'], 'F-AUDIT-13'),
+    (['Bennett', 'Brauer', '带着不完美上场'], 'F-CASE-BENNETT'),
+    (['Five-Minute', 'five-minute', '五分钟启动'], 'A02'),
   ];
 
-  EvidenceRouteResult route(String rawInput, {Map<String, double> personalFit = const {}}) {
+  EvidenceRouteResult route(String rawInput,
+      {Map<String, double> personalFit = const {}}) {
     final text = rawInput.trim();
     if (text.length < 2) return _insufficient(text);
-    if (_has(text, ['停药','药物剂量','自杀','伤害自己','伤害他人','医疗急救','法律诉讼',
-        '自残','不想活','胸痛','呼吸困难','昏厥','严重创伤','投资建议','买什么股票'])) {
+    if (_has(text, [
+      '停药',
+      '药物剂量',
+      '自杀',
+      '伤害自己',
+      '伤害他人',
+      '医疗急救',
+      '法律诉讼',
+      '自残',
+      '不想活',
+      '胸痛',
+      '呼吸困难',
+      '昏厥',
+      '严重创伤',
+      '投资建议',
+      '买什么股票'
+    ])) {
       return _stop(text, 'PROFESSIONAL_ESCALATION',
-        '输入涉及专业或人身安全边界；当前知识库不支持处置建议。',
-        '暂停当前干预，联系适当的专业支持；若有即时人身危险，联系当地紧急服务。');
+          '输入涉及专业或人身安全边界；当前知识库不支持处置建议。', '暂停当前干预，联系适当的专业支持；若有即时人身危险，联系当地紧急服务。');
     }
-    if (_has(text, ['惊恐发作','恐慌发作','已经失控','无法呼吸','极度恐慌','焦虑10分','焦虑9分'])) {
+    if (_has(text, ['惊恐发作', '恐慌发作', '已经失控', '无法呼吸', '极度恐慌', '焦虑10分', '焦虑9分'])) {
       return _stop(text, 'PANIC_RISK', '当前已出现 Panic 信号，不适合继续暴露。',
-        '停止本轮暴露，回到安全环境并寻求适当支持；恢复后再评估更小层级。');
+          '停止本轮暴露，回到安全环境并寻求适当支持；恢复后再评估更小层级。');
     }
-    if (_has(text, ['全部积蓄','借债','抵押房','孤注一掷','梭哈','没有退路','全部资源'])) {
+    if (_has(text, ['全部积蓄', '借债', '抵押房', '孤注一掷', '梭哈', '没有退路', '全部资源'])) {
       final tal = EvidenceGrowthKnowledge.source('A05');
       final ruin = EvidenceGrowthKnowledge.source('F-EXT2-02');
       return _stop(text, 'RUIN_RISK', '最坏损失可能破坏下一轮资格，不能开始本轮。',
-        '暂停不可逆承诺；先改为损失封顶、可撤回、保留生活资源的试验。')
-          .copyWith(selectedNodes: [tal, ruin], evidenceLevel: 'E2',
-            reversible: false, nextRoundPreserved: false,
-            worstCase: '不可逆资源或安全损失');
+              '暂停不可逆承诺；先改为损失封顶、可撤回、保留生活资源的试验。')
+          .copyWith(
+              selectedNodes: [tal, ruin],
+              evidenceLevel: 'E2',
+              reversible: false,
+              nextRoundPreserved: false,
+              worstCase: '不可逆资源或安全损失');
     }
-    if (_has(text, ['辞职','离婚','签合同','大额投入','手术']) &&
-        !_has(text, ['只做模拟','纸面模拟','不实际执行'])) {
+    if (_has(text, ['辞职', '离婚', '签合同', '大额投入', '手术']) &&
+        !_has(text, ['只做模拟', '纸面模拟', '不实际执行'])) {
       return _stop(text, 'NEEDS_MORE_FACTS', '高影响决定尚缺最坏结果、可逆性和专业前提。',
-        '先补充损失上限、撤回方式、生活保障和必要的专业意见。')
+              '先补充损失上限、撤回方式、生活保障和必要的专业意见。')
           .copyWith(riskGate: 'NEED_CHECK');
     }
-    final exhausted = _has(text, ['三天没睡','没睡好','没睡','耗竭','精疲力尽','通宵','特别累']);
+    final exhausted =
+        _has(text, ['三天没睡', '没睡好', '没睡', '耗竭', '精疲力尽', '通宵', '特别累']);
     final candidates = <RoutedNode>[];
     for (final rule in _patterns) {
       final hits = rule.$1.where(text.contains).toList();
       if (hits.isEmpty) continue;
       final node = EvidenceGrowthKnowledge.source(rule.$2);
-      final score = hits.fold<double>(0, (v, s) => v + (s.length >= 4 ? 3 : 2)) +
-          (personalFit[node.id] ?? .5).clamp(0, 1);
+      final score =
+          hits.fold<double>(0, (v, s) => v + (s.length >= 4 ? 3 : 2)) +
+              (personalFit[node.id] ?? .5).clamp(0, 1);
       if (!candidates.any((c) => c.node.id == node.id)) {
-        candidates.add(RoutedNode(node: node, score: score,
-          reason: '情境命中：${hits.join('、')}；个人适配只在已匹配节点间重排'));
+        candidates.add(RoutedNode(
+            node: node,
+            score: score,
+            reason: '情境命中：${hits.join('、')}；个人适配只在已匹配节点间重排'));
       }
     }
     // A learning-card application can select its exact source title.
     for (final node in EvidenceGrowthKnowledge.talNodes) {
       if (text.contains(node.title)) {
-        candidates.add(RoutedNode(node: node, score: 50, reason: '用户明确应用该知识节点'));
+        candidates
+            .add(RoutedNode(node: node, score: 50, reason: '用户明确应用该知识节点'));
       }
     }
     if (exhausted) {
-      candidates.insert(0, RoutedNode(node: EvidenceGrowthKnowledge.source('A-AUDIT-01'),
-        score: 100, reason: '先执行恢复前提检查'));
+      candidates.insert(
+          0,
+          RoutedNode(
+              node: EvidenceGrowthKnowledge.source('A-AUDIT-01'),
+              score: 100,
+              reason: '先执行恢复前提检查'));
     }
     if (candidates.isEmpty) return _insufficient(text);
-    candidates.sort((a,b) => b.score.compareTo(a.score));
+    candidates.sort((a, b) => b.score.compareTo(a.score));
     final selected = <EvidenceKNode>[candidates.first.node];
     String? gap;
     if (!exhausted) {
-      if (_has(text, ['所以一定','造成的','因果','每次戴红帽'])) gap = 'B-EXT2-02';
-      else if (_has(text, ['坚持两年','该继续','退出','没结果'])) gap = 'R-EXT-02';
-      else if (_has(text, ['换了很多方法','换很多方法','还是反复','系统结构','结构问题'])) gap = 'C-EXT2-01';
-      else if (_has(text, ['自动','一上床','手已经'])) gap = 'A-EXT2-01';
-      else if (_has(text, ['目标明确','目标很明确']) && _has(text, ['下一步','差距'])) gap = 'G-EXT2-02';
-      else if (_has(text, ['复盘很多','只是感想','复盘无效'])) gap = 'R-EXT2-01';
-      else if (_has(text, ['怕他们发现','不能让他们看出','承认错误比','别人知道就完'])) gap = 'F-EXT2-01';
-      else if (_has(text, ['重要项目','最可能失败','事前复盘'])) gap = 'R-EXT2-02';
-      else if (_has(text, ['概率','事后改写','置信度'])) gap = 'B-EXT2-01';
-      else if (_has(text, ['失败分类','复杂失败','聪明失败'])) gap = 'F-EXT-01';
-      else if (_has(text, ['嘴上相信','实际规则'])) gap = 'C-EXT-02';
+      if (_has(text, ['所以一定', '造成的', '因果', '每次戴红帽']))
+        gap = 'B-EXT2-02';
+      else if (_has(text, ['坚持两年', '该继续', '退出', '没结果']))
+        gap = 'R-EXT-02';
+      else if (_has(text, ['换了很多方法', '换很多方法', '还是反复', '系统结构', '结构问题']))
+        gap = 'C-EXT2-01';
+      else if (_has(text, ['自动', '一上床', '手已经']))
+        gap = 'A-EXT2-01';
+      else if (_has(text, ['目标明确', '目标很明确']) && _has(text, ['下一步', '差距']))
+        gap = 'G-EXT2-02';
+      else if (_has(text, ['复盘很多', '只是感想', '复盘无效']))
+        gap = 'R-EXT2-01';
+      else if (_has(text, ['怕他们发现', '不能让他们看出', '承认错误比', '别人知道就完']))
+        gap = 'F-EXT2-01';
+      else if (_has(text, ['重要项目', '最可能失败', '事前复盘']))
+        gap = 'R-EXT2-02';
+      else if (_has(text, ['概率', '事后改写', '置信度']))
+        gap = 'B-EXT2-01';
+      else if (_has(text, ['失败分类', '复杂失败', '聪明失败']))
+        gap = 'F-EXT-01';
+      else if (_has(text, ['嘴上相信', '实际规则'])) gap = 'C-EXT-02';
       for (final node in EvidenceGrowthKnowledge.extensionNodes) {
-        if (text.contains('学习应用：${node.title}')) gap = node.id.replaceFirst('KB35-', '');
+        if (text.contains('学习应用：${node.title}'))
+          gap = node.id.replaceFirst('KB35-', '');
       }
     }
     if (gap != null) {
       final node = EvidenceGrowthKnowledge.source(gap);
       selected.add(node);
-      candidates.add(RoutedNode(node: node, score: 1,
-        reason: 'Tal 主干之后的明确机制缺口：${node.mechanism}'));
+      candidates.add(RoutedNode(
+          node: node, score: 1, reason: 'Tal 主干之后的明确机制缺口：${node.mechanism}'));
     }
     var op = selected.last.operators.first;
     if (exhausted) op = 'RECOVER';
     // Dedicated primary mechanisms win over weaker incidental words.
-    if (!exhausted && gap == null && _has(text, ['一直改','不敢发'])) {
-      selected[0] = EvidenceGrowthKnowledge.source('F01'); op = 'SAFE_EXPOSURE';
+    if (!exhausted && gap == null && _has(text, ['一直改', '不敢发'])) {
+      selected[0] = EvidenceGrowthKnowledge.source('F01');
+      op = 'SAFE_EXPOSURE';
     }
-    if (!exhausted && text.contains('失败') && _has(text, ['天生','不适合','我不行']) && gap == null) {
-      selected[0] = EvidenceGrowthKnowledge.source('F03'); op = 'FAILURE_REFRAME';
+    if (!exhausted &&
+        text.contains('失败') &&
+        _has(text, ['天生', '不适合', '我不行']) &&
+        gap == null) {
+      selected[0] = EvidenceGrowthKnowledge.source('F03');
+      op = 'FAILURE_REFRAME';
     }
     final spec = EvidenceGrowthOperatorRegistry.byId(op);
     return EvidenceRouteResult(
-      rawInput: text, facts: ['用户原话：$text'],
+      rawInput: text,
+      facts: ['用户原话：$text'],
       primaryModule: selected.first.module,
-      secondaryModules: selected.skip(1).map((n)=>n.module).where((m)=>m!=selected.first.module).toSet().toList(),
-      candidates: candidates, selectedNodes: selected,
-      requiredChecks: selected.expand((n)=>n.prerequisites).toSet().toList(),
-      status: 'READY_FOR_ACTION', riskGate: 'PASS',
+      secondaryModules: selected
+          .skip(1)
+          .map((n) => n.module)
+          .where((m) => m != selected.first.module)
+          .toSet()
+          .toList(),
+      candidates: candidates,
+      selectedNodes: selected,
+      requiredChecks: selected.expand((n) => n.prerequisites).toSet().toList(),
+      status: 'READY_FOR_ACTION',
+      riskGate: 'PASS',
       inference: '当前可先使用“${spec.label}”获得现实证据。该判断需由你的结果验证。',
-      confidence: .7, operator: op,
-      actionInstruction: op == 'SOURCE_PRACTICE' ? selected.last.howTo.first : spec.instruction,
-      completionDefinition: spec.completion, reviewTrigger: spec.reviewTrigger,
-      evidenceLevel: gap == null ? 'E3' : 'E2', alternatives: spec.alternatives,
-      contextTags: [if(exhausted) 'RECOVERY', if(_has(text,['求职','简历','面试','工厂'])) 'WORK',
-        if(_has(text,['自动','习惯','上床'])) 'HABIT',
-        if(_has(text,['评价','不敢发','别人'])) 'EXPOSURE'],
+      confidence: .7,
+      operator: op,
+      actionInstruction: op == 'SOURCE_PRACTICE'
+          ? selected.last.howTo.first
+          : spec.instruction,
+      completionDefinition: spec.completion,
+      reviewTrigger: spec.reviewTrigger,
+      evidenceLevel: gap == null ? 'E3' : 'E2',
+      alternatives: spec.alternatives,
+      contextTags: [
+        if (exhausted) 'RECOVERY',
+        if (_has(text, ['求职', '简历', '面试', '工厂'])) 'WORK',
+        if (_has(text, ['自动', '习惯', '上床'])) 'HABIT',
+        if (_has(text, ['评价', '不敢发', '别人'])) 'EXPOSURE'
+      ],
       currentState: text,
       topGap: '待核对：${spec.label}是否是当前关键差距',
-      riskChecks: {'CONTENT_ORIGIN':'LOCAL_RULE','PROFESSIONAL_BOUNDARY':'NO_EXPLICIT_SIGNAL','RUIN_GATE':'NO_EXPLICIT_SIGNAL',
+      riskChecks: {
+        'CONTENT_ORIGIN': 'LOCAL_RULE',
+        'PROFESSIONAL_BOUNDARY': 'NO_EXPLICIT_SIGNAL',
+        'RUIN_GATE': 'NO_EXPLICIT_SIGNAL',
         'RECOVERY_CHECK': exhausted ? 'RECOVER_FIRST' : 'CONFIRM_BEFORE_START',
-        'STRETCH_ZONE_CHECK':'CONFIRM_BEFORE_START'},
+        'STRETCH_ZONE_CHECK': 'CONFIRM_BEFORE_START'
+      },
     );
   }
 
   EvidenceRouteResult nextTrial(RealityTrial previous) {
-    if (!previous.isClosed || !const {'ACT','ADJUST'}.contains(previous.decision)) {
+    if (!previous.isClosed ||
+        !const {'ACT', 'ADJUST'}.contains(previous.decision)) {
       return _insufficient('上一轮尚未完成继续或调整决定。');
     }
     // Route the latest reality, not an ever-growing copy of the first problem.
-    final input='${previous.actualOutcome}\n${previous.unexpected}\n${previous.nextAction}';
-    var fresh=route(input);
-    if(protected(fresh)) return fresh;
+    final input =
+        '${previous.actualOutcome}\n${previous.unexpected}\n${previous.nextAction}';
+    var fresh = route(input);
+    if (protected(fresh)) return fresh;
     // ACT retains confirmed experimental conditions. ADJUST reopens diagnosis,
     // including the operator and knowledge nodes, using the new evidence.
-    if(previous.decision=='ACT') {
-      final nodes=previous.nodeIds.map(EvidenceGrowthKnowledge.byId).whereType<EvidenceKNode>().toList();
-      if(nodes.isNotEmpty && nodes.first.isTal) {
-        fresh=fromSelection(input,fresh.candidates,nodes,[previous.actualOutcome],
-          '上一轮有帮助；先保留有效条件，再依据新证据核对适用性。').copyWith(
-            operator:previous.operator,actionInstruction:previous.actionInstruction,
-            completionDefinition:previous.completionDefinition);
+    if (previous.decision == 'ACT') {
+      final nodes = previous.nodeIds
+          .map(EvidenceGrowthKnowledge.byId)
+          .whereType<EvidenceKNode>()
+          .toList();
+      if (nodes.isNotEmpty &&
+          (nodes.first.isTal ||
+              previous.riskChecks['SELECTION'] == 'USER_KNOWLEDGE_SELECTION')) {
+        fresh = fromSelection(input, fresh.candidates, nodes,
+                [previous.actualOutcome], '上一轮有帮助；先保留有效条件，再依据新证据核对适用性。',
+                userSelected: previous.riskChecks['SELECTION'] ==
+                    'USER_KNOWLEDGE_SELECTION')
+            .copyWith(
+                operator: previous.operator,
+                riskChecks: {
+                  ...fresh.riskChecks,
+                  if (previous.riskChecks['SELECTION'] ==
+                      'USER_KNOWLEDGE_SELECTION')
+                    'SELECTION': 'USER_KNOWLEDGE_SELECTION'
+                },
+                actionInstruction: previous.actionInstruction,
+                completionDefinition: previous.completionDefinition);
       }
     }
-    final plan=EvidenceGrowthCycle.nextPlan(previous);
-    return fresh.copyWith(goalState:plan['goal'],currentState:previous.actualOutcome,
-      topGap:plan['gap'],cyclePlan:EvidenceGrowthCycle.plan(previous).isEmpty?{}:plan,cycleContext:[EvidenceGrowthCycle.context(previous)],
-      personalEvidence:[EvidenceGrowthCycle.context(previous)],
-      actionInstruction:previous.decision=='ADJUST' && fresh.canAct?previous.nextAction:fresh.actionInstruction,
-      inputDrafts:{
-        if(fresh.operator==previous.operator) ...previous.operatorInputs,
-        'prediction':'',
-        if(previous.decision=='ADJUST') 'confirmed_adjustment':previous.nextAction,
-      });
+    final plan = EvidenceGrowthCycle.nextPlan(previous);
+    return fresh.copyWith(
+        goalState: plan['goal'],
+        currentState: previous.actualOutcome,
+        topGap: plan['gap'],
+        cyclePlan: EvidenceGrowthCycle.plan(previous).isEmpty ? {} : plan,
+        cycleContext: [EvidenceGrowthCycle.context(previous)],
+        personalEvidence: [EvidenceGrowthCycle.context(previous)],
+        actionInstruction: previous.decision == 'ADJUST' && fresh.canAct
+            ? previous.nextAction
+            : fresh.actionInstruction,
+        inputDrafts: {
+          if (fresh.operator == previous.operator) ...previous.operatorInputs,
+          'prediction': '',
+          if (previous.decision == 'ADJUST')
+            'confirmed_adjustment': previous.nextAction,
+        });
   }
 
-  EvidenceRouteResult _insufficient(String text) => _stop(text,
-    'KB_EVIDENCE_INSUFFICIENT', '当前没有可靠的知识匹配，需补充现实信息。',
-    '请说明要做的具体事情、已发生的事实和卡住的位置。')
-    .copyWith(riskGate: 'NEED_CHECK');
+  EvidenceRouteResult _insufficient(String text) => _stop(
+          text,
+          'KB_EVIDENCE_INSUFFICIENT',
+          '当前没有可靠的知识匹配，需补充现实信息。',
+          '请说明要做的具体事情、已发生的事实和卡住的位置。')
+      .copyWith(riskGate: 'NEED_CHECK');
 
-  EvidenceRouteResult _stop(String text, String status, String inference, String action) =>
-    EvidenceRouteResult(rawInput:text, facts:[if(text.isNotEmpty)'用户原话：$text'],
-      primaryModule:GrowthModule.action, secondaryModules:const[], candidates:const[],
-      selectedNodes:const[], requiredChecks:const['REALITY_CHECK','PROFESSIONAL_BOUNDARY','RUIN_GATE'],
-      status:status, riskGate:'BLOCK', inference:inference, confidence:0,
-      operator:'', actionInstruction:action, completionDefinition:'', reviewTrigger:'',
-      evidenceLevel:'E0', alternatives:const[],
-      missingFacts:const['具体行为','已有事实','当前约束'],
-      riskChecks:{'CONTENT_ORIGIN':'LOCAL_RULE','GATE':status});
+  EvidenceRouteResult _stop(
+          String text, String status, String inference, String action) =>
+      EvidenceRouteResult(
+          rawInput: text,
+          facts: [if (text.isNotEmpty) '用户原话：$text'],
+          primaryModule: GrowthModule.action,
+          secondaryModules: const [],
+          candidates: const [],
+          selectedNodes: const [],
+          requiredChecks: const [
+            'REALITY_CHECK',
+            'PROFESSIONAL_BOUNDARY',
+            'RUIN_GATE'
+          ],
+          status: status,
+          riskGate: 'BLOCK',
+          inference: inference,
+          confidence: 0,
+          operator: '',
+          actionInstruction: action,
+          completionDefinition: '',
+          reviewTrigger: '',
+          evidenceLevel: 'E0',
+          alternatives: const [],
+          missingFacts: const ['具体行为', '已有事实', '当前约束'],
+          riskChecks: {'CONTENT_ORIGIN': 'LOCAL_RULE', 'GATE': status});
   bool _has(String text, List<String> words) => words.any(text.contains);
 }

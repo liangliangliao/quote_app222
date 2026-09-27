@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'evidence_growth_dao.dart';
 import 'evidence_growth_action_prediction_page.dart';
 import 'evidence_growth_guidance.dart';
+import 'evidence_growth_discovery_page.dart';
+import 'evidence_growth_form_drafts.dart';
+import 'evidence_growth_smart_form.dart';
 import 'evidence_growth_guidance_card.dart';
 import 'evidence_growth_knowledge_page.dart';
 import 'evidence_growth_knowledge_runtime.dart';
@@ -72,11 +75,21 @@ class _JourneyHomeState extends State<EvidenceGrowthJourneyHome> {
         if (choice == null) return;
         if (choice != 'new') bound = journeys.firstWhere((j) => j.id == choice);
       }
+      final newJourney = bound == null;
       bound = bound == null
           ? await widget.dao.journeys.create(text)
           : await widget.dao.journeys.change(bound, 'entry', {'text': text});
       input.clear();
-      if (mounted) await widget.onOpen(bound);
+      if (mounted && !newJourney) {
+        await widget.onOpen(bound);
+      } else if (mounted) {
+        final confirmed = await Navigator.push<GrowthJourney>(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    GrowthDiscoveryPage(dao: widget.dao, journey: bound!)));
+        if (confirmed != null && mounted) await widget.onOpen(confirmed);
+      }
       await reload();
     } catch (e) {
       if (mounted) _error(context, e);
@@ -87,17 +100,28 @@ class _JourneyHomeState extends State<EvidenceGrowthJourneyHome> {
 
   Future<void> budget() async {
     final current = growthMap(portfolio['budgets']);
-    final values = await _fields(
-        context,
-        '这一阶段能投入多少？',
-        {
-          'minutes': '每日可用分钟',
-          'money': '可用资金（自定同一单位）',
-          'energy': '每日精力容量（0–10）',
-          'risk': '可承受损失预算',
-          'attention': '同时高优先目标数量'
-        },
-        initial: current.map((k, v) => MapEntry(k, '$v')));
+    final fields = <String, String>{
+      'minutes': '每日可用分钟',
+      'money': '可用资金（自定同一单位）',
+      'energy': '每日精力容量（0–10）',
+      'risk': '可承受损失预算',
+      'attention': '同时高优先目标数量'
+    };
+    final initial = current.map((k, v) => MapEntry(k, '$v'));
+    final contextData = <String, dynamic>{
+      'title': '合理分配多个目标的资源',
+      'portfolio': portfolio,
+      'active_goals':
+          journeys.where((j) => !j.terminal).map((j) => j.title).toList()
+    };
+    final values = await GrowthSmartForm.show(context,
+        title: '这一阶段能投入多少？',
+        fields: fields,
+        initial: initial,
+        contextData: contextData,
+        loader: (refresh) => GrowthFormDrafts(widget.dao).generate(
+            '目标组合的资源预算', fields, contextData,
+            initial: initial, refresh: refresh));
     if (values == null) return;
     try {
       await widget.dao.journeys
@@ -390,6 +414,28 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
     await reload();
   }
 
+  Future<Map<String, String>?> _fields(
+      BuildContext context, String title, Map<String, String> fields,
+      {Map<String, String> initial = const {},
+      Map<String, String> fieldOrigins = const {},
+      String source = '用户记录／确认',
+      String sourceReason = '',
+      List<String> requiredKeys = const []}) {
+    final nodes = EvidenceGrowthKnowledgeRuntime.evidence(j, j.node);
+    return GrowthSmartForm.show(context,
+        title: title,
+        fields: fields,
+        initial: initial,
+        fieldOrigins: fieldOrigins,
+        source: source,
+        sourceReason: sourceReason,
+        requiredKeys: requiredKeys,
+        contextData: j.data,
+        loader: (refresh) => GrowthFormDrafts(widget.dao).generate(
+            title, fields, j.data,
+            initial: initial, nodes: nodes, refresh: refresh));
+  }
+
   Future<void> contract() async {
     final draft = await widget.draft(j, 'contract');
     if (!mounted) return;
@@ -422,10 +468,11 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
               ? j.title
               : j.profile.mode == 'EXPLORE'
                   ? '通过低成本体验，了解可能想追求的方向'
-                  : j.title,
+                  : growthMap(j.data['discovery_solution'])['suggested_goal'] ??
+                      j.title,
           'current': j.data['current'] ?? j.data['raw_input'] ?? '',
           'criterion': j.contract['criterion'] ?? draft['criterion'] ?? '',
-          'quality': j.contract['quality'] ?? '',
+          'quality': j.contract['quality'] ?? draft['quality'] ?? '',
           'belief': '${j.data['belief'] ?? ''}'.trim().isNotEmpty
               ? j.data['belief']
               : beliefDraft['belief'] ?? draft['belief'] ?? '',
@@ -446,8 +493,11 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
         source: GrowthGuidance.label(draft['_origin'] as String?),
         sourceReason: '${draft['_reason'] ?? ''}',
         fieldOrigins: {
-          'goal':
-              !j.confirmed && j.profile.mode == 'EXPLORE' ? '默认示例' : '用户原始记录',
+          'goal': !j.confirmed && j.data['discovery_solution'] != null
+              ? 'AI 方案草案 · 待核对'
+              : !j.confirmed && j.profile.mode == 'EXPLORE'
+                  ? '默认示例'
+                  : '用户原始记录',
           'current': '用户原始记录',
           'quality': '用户确认的边界',
           'criterion': j.contract['criterion'] != null
@@ -1225,6 +1275,19 @@ class _JourneyPageState extends State<EvidenceGrowthJourneyPage> {
                           ] else if (active)
                             action('继续当前步骤', continueGuided)
                         ])),
+              TextButton.icon(
+                  icon: const Icon(Icons.manage_search),
+                  label: const Text('重新梳理需求与选择知识'),
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => GrowthDiscoveryPage(
+                                      dao: widget.dao, journey: j)));
+                          await reload();
+                        }),
               if (busy) const LinearProgressIndicator(),
               EvidenceGrowthGuidanceCard(
                   value: guidance,
@@ -1736,67 +1799,20 @@ Future<String?> _choose(
                         child: Text(e.value))))
                 .toList()));
 Future<Map<String, String>?> _fields(
-    BuildContext context, String title, Map<String, String> fields,
-    {Map<String, String> initial = const {},
-    Map<String, String> fieldOrigins = const {},
-    String source = '用户记录／确认',
-    String sourceReason = '',
-    List<String> requiredKeys = const []}) async {
-  final controllers = {
-    for (final key in fields.keys)
-      key: TextEditingController(text: initial[key] ?? '')
-  };
-  final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-                  title: Text(title),
-                  content: SizedBox(
-                      width: 500,
-                      child: SingleChildScrollView(
-                          child:
-                              Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text('内容来源：$source'),
-                        if (sourceReason.isNotEmpty) Text(sourceReason),
-                        const Text('已有记录优先保留；修改并保存后标为用户确认。'),
-                        for (final e in fields.entries)
-                          Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: TextField(
-                                  controller: controllers[e.key],
-                                  minLines: 1,
-                                  maxLines: 4,
-                                  onChanged: (_) => setState(() {}),
-                                  decoration: InputDecoration(
-                                      labelText: e.value,
-                                      helperText: controllers[e.key]!.text !=
-                                              (initial[e.key] ?? '')
-                                          ? '用户修改，待确认'
-                                          : fieldOrigins[e.key] ??
-                                              ((initial[e.key] ?? '').isEmpty
-                                                  ? '用户填写'
-                                                  : source),
-                                      border: const OutlineInputBorder())))
-                      ]))),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('取消')),
-                    FilledButton(
-                        onPressed: requiredKeys
-                                .any((k) => controllers[k]!.text.trim().isEmpty)
-                            ? null
-                            : () => Navigator.pop(
-                                context,
-                                controllers
-                                    .map((k, c) => MapEntry(k, c.text.trim()))),
-                        child: const Text('确认保存'))
-                  ])));
-  // Dialog transition can still paint its fields during the closing frame.
-  await Future<void>.delayed(const Duration(milliseconds: 250));
-  for (final c in controllers.values) c.dispose();
-  return result;
-}
+        BuildContext context, String title, Map<String, String> fields,
+        {Map<String, String> initial = const {},
+        Map<String, String> fieldOrigins = const {},
+        String source = '用户记录／确认',
+        String sourceReason = '',
+        List<String> requiredKeys = const []}) =>
+    GrowthSmartForm.show(context,
+        title: title,
+        fields: fields,
+        initial: initial,
+        fieldOrigins: fieldOrigins,
+        source: source,
+        sourceReason: sourceReason,
+        requiredKeys: requiredKeys);
 
 Future<DateTime?> _pickDateTime(BuildContext context) async {
   final now = DateTime.now();

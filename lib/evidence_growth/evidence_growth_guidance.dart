@@ -10,7 +10,7 @@ class GrowthGuidance {
     'KNOWLEDGE': '知识库原文／整理内容',
     'DEFAULT': '默认示例',
     'USER': '用户记录／确认',
-    'UNKNOWN': '历史内容 · 来源未记录'
+    'UNKNOWN': '历史内容 · 来源未记录',
   };
   static String label(String? origin) => origins[origin] ?? origins['UNKNOWN']!;
   static const duties = <String, String>{
@@ -22,14 +22,14 @@ class GrowthGuidance {
     'REVIEW':
         '保留原预测和实际事实；无事前预测明确缺失。给1至3个原因假设及支持/反对证据、学习、保留项与1至2个改变候选；比较当前批次与同目标历史反馈。',
     'CHANGE':
-        '从确认的学习提出1至2处具体改变及检验信号。结构变化需新版计划，改目标需新合同；拒绝后不得劝说纠缠；证据不足可KEEP或NO_ACTION_YET。'
+        '从确认的学习提出1至2处具体改变及检验信号。结构变化需新版计划，改目标需新合同；拒绝后不得劝说纠缠；证据不足可KEEP或NO_ACTION_YET。',
   };
   static const fields = <String, List<String>>{
     'BELIEF': [
       'belief',
       'belief_basis',
       'testable_belief',
-      'belief_update_rule'
+      'belief_update_rule',
     ],
     'GOAL': [
       'criterion',
@@ -39,13 +39,13 @@ class GrowthGuidance {
       'stop_condition',
       'self_concordance',
       'statement',
-      'belief'
+      'belief',
     ],
     'ACTION': [
       'next_action',
       'expected_signal',
       'prerequisite',
-      'stop_condition'
+      'stop_condition',
     ],
     'OUTCOME': ['classification', 'object_question', 'readiness_question'],
     'REVIEW': [
@@ -53,7 +53,7 @@ class GrowthGuidance {
       'cause_hypothesis',
       'learning',
       'keep',
-      'change_candidate'
+      'change_candidate',
     ],
     'CHANGE': [
       'reason',
@@ -61,8 +61,8 @@ class GrowthGuidance {
       'belief_after',
       'change_object',
       'plan_change',
-      'expected_signal'
-    ]
+      'expected_signal',
+    ],
   };
   static const next = {
     'BELIEF': 'GOAL',
@@ -70,7 +70,7 @@ class GrowthGuidance {
     'ACTION': 'OUTCOME',
     'OUTCOME': 'REVIEW',
     'REVIEW': 'CHANGE',
-    'CHANGE': 'BELIEF_CHECKPOINT'
+    'CHANGE': 'BELIEF_CHECKPOINT',
   };
   static String stage(GrowthJourney j, String purpose) =>
       purpose == 'contract' || purpose == 'candidate'
@@ -83,7 +83,7 @@ class GrowthGuidance {
   static bool deferred(GrowthJourney j) => const [
         'FACTS_ONLY',
         'DEFERRED',
-        'RECOVERY_HOLD'
+        'RECOVERY_HOLD',
       ].contains(j.data['readiness']);
   static GrowthData local(GrowthJourney j, String at, String reason) => {
         'origin': 'LOCAL_RULE',
@@ -98,10 +98,26 @@ class GrowthGuidance {
         'interpretation': '',
         'next_step': '',
         'node_output': <String, dynamic>{},
-        'evidence': []
+        'evidence': [],
       };
-  static GrowthData validate(GrowthData v, GrowthJourney j, String at,
-      List<EvidenceKNode> nodes, List<String> facts) {
+  static GrowthData validate(
+    GrowthData v,
+    GrowthJourney j,
+    String at,
+    List<EvidenceKNode> nodes,
+    List<String> facts,
+  ) {
+    // Routing metadata is supplied by the app. Missing echoes are not fabricated facts.
+    v = {...v};
+    for (final e in {
+      'journey_id': j.id,
+      'current_node': j.node,
+      'stage': at,
+      'next_node': next[at],
+      'question': '',
+    }.entries) {
+      v.putIfAbsent(e.key, () => e.value);
+    }
     if (v['journey_id'] != j.id ||
         v['current_node'] != j.node ||
         v['stage'] != at ||
@@ -110,7 +126,12 @@ class GrowthGuidance {
     final ids = growthStrings(v['node_ids']);
     if (ids.isEmpty ||
         ids.any((id) => !nodes.any((n) => n.id == id)) ||
-        !nodes.firstWhere((n) => n.id == ids.first).isTal)
+        (EvidenceGrowthKnowledgeRuntime.selectedNodes(j).isEmpty &&
+            EvidenceGrowthKnowledgeRuntime.appliedNodes(j, at).isEmpty &&
+            (at != 'GOAL' ||
+                EvidenceGrowthKnowledgeRuntime.appliedNodes(j, 'BELIEF')
+                    .isEmpty) &&
+            !ids.any((id) => nodes.firstWhere((n) => n.id == id).isTal)))
       throw const FormatException('GUIDANCE_SOURCE');
     final quotes = growthStrings(v['fact_quotes']);
     if (quotes.any((q) => q.trim().isEmpty || !facts.any((f) => f.contains(q))))
@@ -121,9 +142,12 @@ class GrowthGuidance {
       return (v[key] as String).trim();
     }
 
-    final output = growthMap(v['node_output']);
-    if (output.isEmpty ||
-        output.keys.any((k) => !fields[at]!.contains(k)) ||
+    final output = Map<String, dynamic>.fromEntries(
+      growthMap(
+        v['node_output'],
+      ).entries.where((e) => fields[at]!.contains(e.key)),
+    );
+    if ((output.isEmpty && '${v['question'] ?? ''}'.trim().isEmpty) ||
         output.values.any((v) => v is! String || v.length > 600))
       throw const FormatException('GUIDANCE_OUTPUT');
     final result = <String, dynamic>{
@@ -141,7 +165,7 @@ class GrowthGuidance {
           .map((n) => n.toJson())
           .toList(),
       'evidence_level': 'E2',
-      'next_node': next[at]
+      'next_node': next[at],
     };
     if (result['summary'] == '' || result['interpretation'] == '')
       throw const FormatException('GUIDANCE_INCOMPLETE');

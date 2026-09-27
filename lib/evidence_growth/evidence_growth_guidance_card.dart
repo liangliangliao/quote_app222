@@ -53,6 +53,7 @@ class EvidenceGrowthGuidanceCard extends StatelessWidget {
             if (value.isNotEmpty)
               Text(GrowthGuidance.label(value['origin'] as String?),
                   style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (value['cache_hit'] == true) const Text('已复用当前情境的成功分析，未重新请求 AI'),
             if ('${value['model'] ?? ''}'.isNotEmpty)
               Text('模型：${value['model']}'),
             if ('${value['reason'] ?? ''}'.isNotEmpty)

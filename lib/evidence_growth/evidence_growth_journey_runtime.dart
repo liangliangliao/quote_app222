@@ -6,9 +6,21 @@ import 'evidence_growth_router.dart';
 
 /// Compiles the active plan, never an obsolete Trial's frozen ACT conditions.
 class EvidenceGrowthJourneyRuntime {
+  static String selectionKey(GrowthJourney j) =>
+      (EvidenceGrowthKnowledgeRuntime.selectedNodes(j)
+              .map((n) => '${n.id}@${n.version}')
+              .toList()
+            ..sort())
+          .join('|');
   static bool canInherit(GrowthJourney j, RealityTrial? previous) =>
       EvidenceGrowthKnowledgeRuntime.applications(j, 'ACTION').isEmpty &&
       previous != null &&
+      (EvidenceGrowthKnowledgeRuntime.selectedNodes(j).isEmpty ||
+          previous.riskChecks['SELECTED_NODE_VERSIONS'] == selectionKey(j) ||
+          (EvidenceGrowthKnowledgeRuntime.selectedNodes(j).length ==
+                  previous.nodeIds.length &&
+              EvidenceGrowthKnowledgeRuntime.selectedNodes(j)
+                  .every((n) => previous.nodeIds.contains(n.id)))) &&
       previous.isClosed &&
       previous.nextTrialId.isEmpty &&
       const ['ACT', 'ADJUST'].contains(previous.decision) &&
@@ -16,8 +28,10 @@ class EvidenceGrowthJourneyRuntime {
           growthInt(j.plan['version']) &&
       growthMap(j.data['next_change'])['target'] != 'EXIT';
 
-  static EvidenceRouteResult compile(GrowthJourney j,
-      {RealityTrial? previous}) {
+  static EvidenceRouteResult compile(
+    GrowthJourney j, {
+    RealityTrial? previous,
+  }) {
     const router = EvidenceGrowthRouter();
     final inherit = canInherit(j, previous);
     final change = growthMap(j.data['next_change']);
@@ -40,37 +54,91 @@ class EvidenceGrowthJourneyRuntime {
       if (!EvidenceGrowthRouter.protected(check))
         route = route.copyWith(actionInstruction: chosen);
     }
-    final applications =
-        EvidenceGrowthKnowledgeRuntime.applications(j, 'ACTION');
+    final applications = EvidenceGrowthKnowledgeRuntime.applications(
+      j,
+      'ACTION',
+    );
     if (applications.isNotEmpty && !EvidenceGrowthRouter.protected(route)) {
       final nodes = EvidenceGrowthKnowledgeRuntime.appliedNodes(j, 'ACTION');
       nodes.sort((a, b) => (a.isTal ? 0 : 1).compareTo(b.isTal ? 0 : 1));
       final instruction = applications.map((a) => a['application']).join('；');
-      final guard =
-          router.route('${j.title}\n${j.data['current']}\n$instruction');
+      final guard = router.route(
+        '${j.title}\n${j.data['current']}\n$instruction',
+      );
       if (EvidenceGrowthRouter.protected(guard)) {
         route = guard;
       } else {
-        route = router.fromSelection(route.rawInput, route.candidates, nodes,
-            ['${j.data['current'] ?? ''}'], '用户核对知识前提后选择的具体练习',
-            gap: nodes.any((n) => !n.isTal)
-                ? applications.map((a) => a['transfer_reason']).join('；')
-                : '');
+        route = router.fromSelection(
+          route.rawInput,
+          route.candidates,
+          nodes,
+          ['${j.data['current'] ?? ''}'],
+          '用户核对知识前提后选择的具体练习',
+          gap: nodes.any((n) => !n.isTal)
+              ? applications.map((a) => a['transfer_reason']).join('；')
+              : '',
+        );
         if (route.canAct)
           route = route.copyWith(
             actionInstruction: instruction,
             riskChecks: {
               ...route.riskChecks,
               'SELECTION': 'USER_KNOWLEDGE_APPLICATION',
-              'CONTENT_ORIGIN': 'USER'
+              'CONTENT_ORIGIN': 'USER',
             },
             inputDrafts: {
               ...route.inputDrafts,
               'prediction':
-                  applications.map((a) => a['expected_signal']).join('；')
+                  applications.map((a) => a['expected_signal']).join('；'),
             },
           );
       }
+    }
+    final selected = EvidenceGrowthKnowledgeRuntime.selectedNodes(j);
+    if (applications.isEmpty &&
+        selected.isNotEmpty &&
+        !EvidenceGrowthRouter.protected(route)) {
+      final proposal = growthMap(j.data['discovery_solution']);
+      final first = growthRows(proposal['steps']);
+      final firstIds =
+          first.isEmpty ? <String>[] : growthStrings(first.first['node_ids']);
+      selected.sort((a, b) {
+        final aMain = firstIds.contains(a.id), bMain = firstIds.contains(b.id);
+        if (aMain != bMain) return aMain ? 1 : -1;
+        return (a.isTal ? 0 : 1).compareTo(b.isTal ? 0 : 1);
+      });
+      route = router.fromSelection(
+        route.rawInput,
+        route.candidates,
+        selected,
+        ['${j.data['current'] ?? ''}'],
+        '依据用户两轮选择准备行动，行动草案仍待确认',
+        userSelected: true,
+      );
+      final action = inherit && previous?.decision == 'ACT'
+          ? previous!.actionInstruction
+          : chosen.isNotEmpty && chosen != '先完成一轮现实采样，再按结果调整'
+              ? chosen
+              : j.cycle == 1
+                  ? '${proposal['first_step'] ?? ''}'.trim()
+                  : '';
+      if (inherit && previous?.decision == 'ACT') {
+        route = route.copyWith(
+            operator: previous!.operator,
+            completionDefinition: previous.completionDefinition,
+            inputDrafts: {...previous.operatorInputs, 'prediction': ''});
+      }
+      route = route.copyWith(
+        riskChecks: {
+          ...route.riskChecks,
+          'SELECTION': 'USER_KNOWLEDGE_SELECTION',
+          'SELECTED_NODE_VERSIONS': selectionKey(j),
+        },
+        actionInstruction: action.isNotEmpty &&
+                !EvidenceGrowthRouter.protected(router.route(action))
+            ? action
+            : route.actionInstruction,
+      );
     }
     final constraints = [
       for (final key in ['quality', 'control_boundary', 'stop_condition'])
@@ -81,9 +149,9 @@ class EvidenceGrowthJourneyRuntime {
         'schedule',
         'resource_limit',
         'stop_rule',
-        'selection_rule'
+        'selection_rule',
       ])
-        if ('${j.plan[key] ?? ''}'.trim().isNotEmpty) '$key: ${j.plan[key]}'
+        if ('${j.plan[key] ?? ''}'.trim().isNotEmpty) '$key: ${j.plan[key]}',
     ];
     return route.copyWith(
       goalState: j.title,
@@ -106,7 +174,7 @@ class EvidenceGrowthJourneyRuntime {
             ? '${applications.last['expected_signal']}'
             : '${j.plan['expected_signal'] ?? ''}',
         'why_action': route.inference,
-        'learning_applied': '${j.data['learning'] ?? ''}'
+        'learning_applied': '${j.data['learning'] ?? ''}',
       },
       cycleContext: [
         if (inherit) EvidenceGrowthCycle.context(previous!),
@@ -114,8 +182,8 @@ class EvidenceGrowthJourneyRuntime {
           'journey_context': j.data,
           'active_plan': j.plan,
           'confirmed_next_change': change,
-          'plan_constraints': constraints
-        }
+          'plan_constraints': constraints,
+        },
       ],
     );
   }

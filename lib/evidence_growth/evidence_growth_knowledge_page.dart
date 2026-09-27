@@ -9,6 +9,8 @@ import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_knowledge_runtime.dart';
 import 'evidence_growth_models.dart';
+import 'evidence_growth_form_drafts.dart';
+import 'evidence_growth_smart_form.dart';
 
 /// Learn and apply from every step, with source snapshots and user reflection.
 class EvidenceGrowthKnowledgePage extends StatefulWidget {
@@ -172,7 +174,8 @@ class _KnowledgeState extends State<EvidenceGrowthKnowledgePage> {
       'expected_signal': '用什么可观察信号检验？',
       if (cross) 'transfer_reason': '为什么跨模块适用，或核心知识有什么缺口？'
     };
-    final values = await form('将知识用于${GrowthJourney.labels[at]}', fields,
+    final values = await form('用这个方法帮助当前步骤', fields,
+        node: n,
         boundary:
             '适用前提：${n.prerequisites.join('；')}\n反向信号：${n.contraSignals.join('；')}\n边界：${[
           ...n.boundaries,
@@ -220,69 +223,19 @@ class _KnowledgeState extends State<EvidenceGrowthKnowledgePage> {
   }
 
   Future<Map<String, String>?> form(String title, Map<String, String> fields,
-      {String? boundary}) async {
-    final controllers = {
-      for (final k in fields.keys) k: TextEditingController()
-    };
-    bool checked = boundary == null;
-    final key = GlobalKey<FormState>();
-    final result = await showDialog<Map<String, String>>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-            builder: (ctx, update) => AlertDialog(
-                    title: Text(title),
-                    content: SizedBox(
-                        width: 500,
-                        child: SingleChildScrollView(
-                            child: Form(
-                                key: key,
-                                child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (boundary != null) Text(boundary),
-                                      for (final e in fields.entries)
-                                        Padding(
-                                            padding:
-                                                const EdgeInsets.only(top: 12),
-                                            child: TextFormField(
-                                                controller: controllers[e.key],
-                                                minLines: 2,
-                                                maxLines: 5,
-                                                maxLength: 2000,
-                                                decoration: InputDecoration(
-                                                    labelText: e.value,
-                                                    alignLabelWithHint: true),
-                                                validator: (v) =>
-                                                    (v ?? '').trim().isEmpty
-                                                        ? '请填写具体内容'
-                                                        : null)),
-                                      if (boundary != null)
-                                        CheckboxListTile(
-                                            value: checked,
-                                            onChanged: (v) => update(
-                                                () => checked = v ?? false),
-                                            title: const Text(
-                                                '我已核对前提和边界；未知条件需先查证')),
-                                    ])))),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('取消')),
-                      FilledButton(
-                          onPressed: checked
-                              ? () {
-                                  if (key.currentState!.validate())
-                                    Navigator.pop(ctx, {
-                                      for (final e in controllers.entries)
-                                        e.key: e.value.text.trim()
-                                    });
-                                }
-                              : null,
-                          child: const Text('保存'))
-                    ])));
-    for (final c in controllers.values) c.dispose();
-    return result;
-  }
+          {String? boundary, EvidenceKNode? node}) =>
+      GrowthSmartForm.show(context,
+          title: title,
+          fields: fields,
+          requiredKeys: fields.keys.toList(),
+          contextData: j.data,
+          boundary: boundary,
+          loader: (refresh) => GrowthFormDrafts(widget.dao).generate(
+              title, fields, j.data,
+              nodes: node == null
+                  ? EvidenceGrowthKnowledgeRuntime.evidence(j, at)
+                  : [node],
+              refresh: refresh));
 
   Widget source(EvidenceKNode n) {
     final score =

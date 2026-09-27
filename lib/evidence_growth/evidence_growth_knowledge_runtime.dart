@@ -46,6 +46,8 @@ class EvidenceGrowthKnowledgeRuntime {
         'next_change': j.data['next_change'],
         'strategy': j.plan['strategy'],
         'readiness': j.data['readiness'],
+        'confirmed_needs': j.data['confirmed_needs'],
+        'solution_proposal': j.data['discovery_solution'],
         'input': input,
       };
   static String query(GrowthData data) {
@@ -87,15 +89,23 @@ class EvidenceGrowthKnowledgeRuntime {
       applications(j, at)
           .map((a) => EvidenceKNode.fromJson(growthMap(a['snapshot'])))
           .toList();
+  static List<EvidenceKNode> selectedNodes(GrowthJourney j) =>
+      growthRows(j.data['selected_knowledge'])
+          .map((r) => EvidenceKNode.fromJson(growthMap(r['snapshot'])))
+          .toList();
+
   static List<EvidenceKNode> evidence(GrowthJourney j, String at,
       {GrowthData input = const {}}) {
     final applied = appliedNodes(j, at);
+    final selected = selectedNodes(j);
     return applied.isNotEmpty
         ? applied
-        : retrieve(at, query(context(j, at, input: input)))
-            .where((n) => n.isTal)
-            .take(3)
-            .toList();
+        : selected.isNotEmpty
+            ? selected
+            : retrieve(at, query(context(j, at, input: input)))
+                .where((n) => n.isTal)
+                .take(3)
+                .toList();
   }
 
   static GrowthData brief(EvidenceKNode n) => {
