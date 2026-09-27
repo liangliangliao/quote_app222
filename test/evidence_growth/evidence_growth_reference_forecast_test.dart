@@ -225,6 +225,16 @@ void main() {
     expect(learning['success_criterion'], contains('连续30天'));
     expect(learning['observation_window'], contains('连续30天'));
     expect(learning['observation_window'], isNot(contains('观察30分钟')));
+    for (final start in ['明天', '下周']) {
+      final future =
+          ReferenceForecastDefaults.forAction('$start开始每天学习30分钟，连续三十天');
+      expect(future['observation_window'], contains(start));
+      expect(future['observation_window'], contains('连续三十天'));
+    }
+    final session = ReferenceForecastDefaults.forAction('明天开始每天连续学习30分钟');
+    expect(session['observation_window'], contains('明天'));
+    expect(session['observation_window'], contains('观察7天'));
+    expect(session['observation_window'], isNot(contains('周期：连续30分钟')));
     expect(learning['fixed_external_context'], contains('并不假定其已承诺'));
     final merged = ReferenceForecastDefaults.merge(
       current: {...running, 'success_criterion': '我自己写的标准'},
