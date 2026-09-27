@@ -304,7 +304,7 @@ void main() {
   });
 
   test(
-      'name-only person forecast suppresses a high JEV score and never poses as a precise estimate',
+      'name-only person forecast retains a conditional estimate with low confidence',
       () {
     final jev = {
       'status': 'JEV',
@@ -319,8 +319,10 @@ void main() {
         sources: [],
         jev: jev,
         model: 'fake');
-    expect(output['estimate_available'], isFalse);
-    expect(output['estimate'], isNull);
+    expect(output['estimate_available'], isTrue);
+    expect(output['estimate'], .97);
+    expect(output['estimate_confidence'], 'low');
+    expect(output['status'], 'ROUGH_ASSUMPTION_ESTIMATE');
     final world = EvidenceGrowthReferenceForecast.assemble(
         input: {'reference_mode': 'WORLD'},
         profile: {},
@@ -774,7 +776,7 @@ void main() {
                         'type': 'choice',
                         'choice': e.key == 'evidence_quality'
                             ? 'adequate_for_rough_estimate'
-                            : 'habit',
+                            : e.key == 'estimate_confidence' ? 'medium' : 'habit',
                         'confidence': .8
                       }
             }

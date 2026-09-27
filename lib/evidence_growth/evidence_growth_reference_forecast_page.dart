@@ -3,10 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'evidence_growth_dao.dart';
-import 'evidence_growth_forecast_report_page.dart';
 import 'evidence_growth_forecast_science.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_reference_forecast.dart';
+import 'evidence_growth_reference_defaults.dart';
+import 'evidence_growth_reference_report.dart';
 
 class EvidenceGrowthReferenceForecastPage extends StatefulWidget {
   const EvidenceGrowthReferenceForecastPage({
@@ -15,11 +16,13 @@ class EvidenceGrowthReferenceForecastPage extends StatefulWidget {
     required this.jevApiKey,
     this.action = '',
     this.eventContract = const {},
+    this.service,
   });
   final EvidenceGrowthDao dao;
   final String jevApiKey;
   final String action;
   final GrowthData eventContract;
+  final EvidenceGrowthReferenceForecast? service;
   @override
   State<EvidenceGrowthReferenceForecastPage> createState() =>
       _ReferenceForecastPageState();
@@ -32,16 +35,14 @@ class _ReferenceForecastPageState
   final criterion = TextEditingController();
   final window = TextEditingController();
   final contextFacts = TextEditingController();
-  final population = TextEditingController(
-    text: '全世界所有人；需说明行为资格与能力限制，不能把不具备资格的人默认为具备。',
-  );
+  final population = TextEditingController();
+  GrowthData lastDefaults = {};
   final identity = TextEditingController();
   final evidence = TextEditingController();
   String mode = 'WORLD';
   String personType = 'PUBLIC';
   String language = 'zh';
   bool identityConfirmed = false;
-  bool contractConfirmed = false;
   bool busy = false;
   String status = '';
   List<GrowthData> candidates = [];
@@ -52,11 +53,62 @@ class _ReferenceForecastPageState
   @override
   void initState() {
     super.initState();
-    service = EvidenceGrowthReferenceForecast(dao: widget.dao);
+    service =
+        widget.service ?? EvidenceGrowthReferenceForecast(dao: widget.dao);
     action.text = widget.action;
     criterion.text = '${widget.eventContract['success_criterion'] ?? ''}';
     window.text = '${widget.eventContract['observation_window'] ?? ''}';
+    _fillDefaults();
     _reload();
+  }
+
+  Map<String, TextEditingController> get defaultControllers => {
+        'success_criterion': criterion,
+        'observation_window': window,
+        'fixed_external_context': contextFacts,
+        'population_definition': population,
+      };
+
+  void _fillDefaults({GrowthData? draft, bool preserveExisting = false}) {
+    final proposed = draft ?? ReferenceForecastDefaults.forAction(action.text);
+    if (proposed.isEmpty) return;
+    final emptyFields = defaultControllers.entries
+        .where((e) => e.value.text.trim().isEmpty)
+        .map((e) => e.key)
+        .toSet();
+    final merged = ReferenceForecastDefaults.merge(
+      current: {
+        for (final e in defaultControllers.entries) e.key: e.value.text
+      },
+      previousDefaults: preserveExisting ? {} : lastDefaults,
+      proposed: proposed,
+    );
+    for (final e in defaultControllers.entries) {
+      e.value.text = '${merged[e.key] ?? ''}';
+    }
+    lastDefaults = preserveExisting
+        ? {...lastDefaults, for (final key in emptyFields) key: proposed[key]}
+        : proposed;
+  }
+
+  Future<void> _refineDefaults() async {
+    setState(() {
+      busy = true;
+      status = 'AI正在把行动整理成更具体的默认条件；你手动修改过的内容会保留…';
+    });
+    try {
+      final draft = await service.draftDefaults(action.text);
+      if (mounted)
+        setState(() {
+          _fillDefaults(draft: draft);
+          result = {};
+          status = '已优化默认内容，请核对；各项均可修改。';
+        });
+    } catch (_) {
+      if (mounted) setState(() => status = 'AI优化暂未完成，已保留可直接使用的默认内容。');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   Future<void> _reload() async {
@@ -121,7 +173,8 @@ class _ReferenceForecastPageState
       if (mounted)
         setState(() {
           selectedSource = source;
-          status = '已读取 ${source['title']}，请核对资料并确认身份。';
+          identityConfirmed = true;
+          status = '已采用你选定的 ${source['title']} 资料，可展开核对。';
         });
     } catch (e) {
       if (mounted) setState(() => status = '$e');
@@ -137,7 +190,7 @@ class _ReferenceForecastPageState
         'event_contract': EvidenceForecastScience.contract({
           'success_criterion': criterion.text,
           'observation_window': window.text,
-          'confirmed': contractConfirmed,
+          'confirmed': true,
         }),
         'fixed_external_context': contextFacts.text.trim(),
         'population_definition': mode == 'WORLD' ? population.text.trim() : '',
@@ -146,15 +199,19 @@ class _ReferenceForecastPageState
         'reference_evidence': evidence.text.trim(),
       };
   Future<void> _predict() async {
+    _fillDefaults(preserveExisting: true);
     setState(() {
       busy = true;
       result = {};
-      status = 'LLM正在梳理人物／群体证据，随后交给JEV独立判断…';
+      status = '正在准备资料与可编辑的默认条件…';
     });
     try {
       final output = await service.predict(
         input: input,
         jevApiKey: widget.jevApiKey,
+        onProgress: (message) {
+          if (mounted) setState(() => status = message);
+        },
         retrievedSources: mode == 'PERSON' && selectedSource.isNotEmpty
             ? [selectedSource]
             : [],
@@ -163,8 +220,8 @@ class _ReferenceForecastPageState
         setState(() {
           result = output;
           status = output['estimate_available'] == true
-              ? '参考报告已生成。'
-              : '证据不足，已保留分析与缺口，不显示伪精确概率。';
+              ? '粗估报告已生成。可修改条件、补充资料后重新判断。'
+              : '${output['unavailable_reason']}';
         });
       await _reload();
     } catch (e) {
@@ -192,10 +249,7 @@ class _ReferenceForecastPageState
           maxLength: max,
           onChanged: (_) => setState(() {
             result = {};
-            if (controller == criterion ||
-                controller == window ||
-                controller == contextFacts ||
-                controller == action) contractConfirmed = false;
+            if (controller == action) _fillDefaults();
           }),
           decoration: InputDecoration(
             labelText: label,
@@ -205,57 +259,14 @@ class _ReferenceForecastPageState
         ),
       );
 
-  String _reportText(GrowthData r) {
-    final profile = growthMap(r['profile']);
-    final snapshot = growthMap(r['input_snapshot']);
-    final range = growthMap(r['assumption_range']);
-    final answers = growthMap(growthMap(r['jev'])['answers']);
-    return [
-      '同情境参考报告 · ${snapshot['reference_mode'] == 'PERSON' ? snapshot['person_identity'] : '全世界人群'}',
-      '行动：${snapshot['action']}\n标准：${growthMap(snapshot['event_contract'])['success_criterion']}\n窗口：${growthMap(snapshot['event_contract'])['observation_window']}',
-      '固定外部情境：${snapshot['fixed_external_context']}',
-      if (snapshot['reference_mode'] == 'WORLD')
-        '比较范围：${snapshot['population_definition']}',
-      '估计：${r['estimate_available'] == true ? forecastPercent(r['estimate']) : '证据不足，暂不估计'}',
-      '${r['note']}\n${r['same_situation_rule']}',
-      'AI身份理解：${profile['identity_summary']}',
-      'LLM：${r['llm_model']}；JEV：${growthMap(r['jev'])['model'] ?? '未完成'}。',
-      'JEV证据判断：${const {
-            'adequate_for_rough_estimate': '支持粗略估计',
-            'insufficient': '证据不足',
-            'contradictory': '证据冲突'
-          }[growthMap(answers['evidence_quality'])['choice']] ?? '未完成'}；主要维度：${const {
-            'capability': '能力',
-            'opportunity': '机会与资源',
-            'motivation': '动机与态度',
-            'habit': '习惯与相似历史',
-            'planning': '计划与自我调节',
-            'unknown': '不明确'
-          }[growthMap(answers['dominant_dimension'])['choice']] ?? '未判断'}。',
-      for (final row in growthRows(profile['claims']))
-        '${row['dimension']} · ${row['evidence_status'] == 'SOURCE_LINKED' ? '有资料对应，待核实解释' : '模型假设，不能当事实'}\n${row['claim']}\n${row['relevance']}${row['source_id'] == '' ? '' : '\n依据 ${row['source_id']}：“${row['quote']}”'}',
-      '过往行为：${profile['past_behavior_analysis']}',
-      '态度与性格假设：${profile['attitude_and_personality_hypotheses']}',
-      '理论综合：${profile['theory_explanation']}',
-      '外推限制：${profile['transfer_limits']}',
-      '需要补充：${growthStrings(profile['unknowns']).join('；')}',
-      for (final row in growthRows(r['scenarios']))
-        '${row['label']}：${growthStrings(row['assumptions']).join('；')}\n${forecastPercent(row['probability'])}',
-      if (range.isNotEmpty)
-        '假设情景范围：${forecastPercent(range['low'])}—${forecastPercent(range['high'])}。${r['range_note']}',
-      '来源：',
-      for (final source in growthRows(r['sources']))
-        '${source['id']} · ${source['title']}\n${source['url'] ?? '用户提供，未独立核实'}\n${source['retrieved_at'] ?? ''}',
-    ].join('\n\n');
-  }
-
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('同情境下，其他人会怎样？')),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text('这是独立的参考功能。固定外部条件，比较不同主体的可能反应；不会把人物推测混入你的个人执行历史。'),
+            const Text(
+                '输入行动并选择参照对象，即可粗估。标准、期限和情境会自动补齐，均可修改；公开人物资料会在生成时自动联网检索。'),
             const SizedBox(height: 12),
             SegmentedButton<String>(
               segments: const [
@@ -268,10 +279,19 @@ class _ReferenceForecastPageState
                   : (s) => setState(() {
                         mode = s.first;
                         result = {};
-                        contractConfirmed = false;
                       }),
             ),
             _field(action, '要执行的行动', max: 2000),
+            const Text('下列默认内容用于明确这次比较。修改行动时，只更新尚未被你手动改动的默认项。'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed:
+                    busy || action.text.trim().isEmpty ? null : _refineDefaults,
+                icon: const Icon(Icons.auto_fix_high),
+                label: const Text('AI细化默认内容（保留手动修改）'),
+              ),
+            ),
             _field(criterion, '可观察的成功标准', lines: 1, max: 600),
             _field(window, '相同的观察窗口／期限', lines: 1, max: 300),
             _field(
@@ -322,6 +342,7 @@ class _ReferenceForecastPageState
                 ),
               ),
               if (personType == 'PUBLIC') ...[
+                const Text('只填姓名也可以生成。将自动查找相关经历、兴趣与态度；有同名歧义时可在这里手动检索并选择。'),
                 Wrap(
                   spacing: 8,
                   children: [
@@ -336,7 +357,7 @@ class _ReferenceForecastPageState
                     ),
                     OutlinedButton(
                       onPressed: busy ? null : _search,
-                      child: const Text('检索公开人物资料'),
+                      child: const Text('手动选定资料（可选）'),
                     ),
                   ],
                 ),
@@ -366,38 +387,20 @@ class _ReferenceForecastPageState
                     ],
                   ),
               ],
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: identityConfirmed,
-                title: const Text('确认这就是我要分析的人物；资料不足的部分保持未知'),
-                onChanged: busy
-                    ? null
-                    : (v) => setState(() {
-                          identityConfirmed = v == true;
-                          result = {};
-                        }),
-              ),
             ],
             _field(
               evidence,
-              mode == 'PERSON' ? '人物相关资料与过去相似行为（可粘贴出处与原文）' : '已有群体资料／统计及来源（可选）',
-              hint: '经历、实际行为、态度表达、习惯、能力，以及事实发生的时间。资料不足也可以提交，报告会指出缺口。',
+              mode == 'PERSON' ? '已知经历、兴趣、态度或行为资料（可选）' : '已有群体资料／统计及来源（可选）',
+              hint: '无需自行搜齐资料。可补充你知道的内容；没有资料时采用明确假设粗估。',
               max: 8000,
             ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: contractConfirmed,
-              title: const Text('确认行为标准、观察窗口和固定外部情境'),
-              onChanged: busy
-                  ? null
-                  : (v) => setState(() {
-                        contractConfirmed = v == true;
-                        result = {};
-                      }),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('点击生成即按当前可见条件估计；默认内容是假设，不代表已经核实。'),
             ),
             FilledButton(
               onPressed: busy ? null : _predict,
-              child: const Text('LLM＋JEV生成参考报告'),
+              child: const Text('联网分析＋JEV生成粗估报告'),
             ),
             if (status.isNotEmpty)
               Padding(
@@ -413,18 +416,19 @@ class _ReferenceForecastPageState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '参考结果：${forecastPercent(result['estimate'])}',
+                        '粗略可能性：${ReferenceForecastReport.percent(result['estimate'])}',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 12),
                       SelectableText(
-                        _reportText(result),
+                        ReferenceForecastReport.markdown(result),
                         style: const TextStyle(height: 1.5),
                       ),
                       TextButton.icon(
                         onPressed: () async {
                           await Clipboard.setData(
-                            ClipboardData(text: _reportText(result)),
+                            ClipboardData(
+                                text: ReferenceForecastReport.markdown(result)),
                           );
                         },
                         icon: const Icon(Icons.copy),
@@ -442,7 +446,7 @@ class _ReferenceForecastPageState
                     title:
                         Text('${growthMap(row['input_snapshot'])['action']}'),
                     subtitle: Text(
-                      '${growthMap(row['input_snapshot'])['person_identity'] ?? ''} ${forecastPercent(row['estimate'])}',
+                      '${growthMap(row['input_snapshot'])['person_identity'] ?? ''} ${ReferenceForecastReport.percent(row['estimate'])}',
                     ),
                     onTap: busy
                         ? null
