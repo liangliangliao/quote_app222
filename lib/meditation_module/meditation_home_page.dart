@@ -29,6 +29,9 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
   MeditationSessionTemplate? _aiSession;
   String? _aiReason;
   String? _aiUnderstoodNeed;
+  String? _aiCognitiveShift;
+  String? _aiEmbodiedGoal;
+  String? _aiRealLifeScene;
   List<String> _aiPracticeFocus = const <String>[];
   String? _aiError;
   int _aiDurationMinutes = 8;
@@ -77,6 +80,9 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
       _aiSession = null;
       _aiReason = null;
       _aiUnderstoodNeed = null;
+      _aiCognitiveShift = null;
+      _aiEmbodiedGoal = null;
+      _aiRealLifeScene = null;
       _aiPracticeFocus = const <String>[];
       _aiSaved = false;
     });
@@ -98,9 +104,14 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
       setState(() {
         _aiSession = result?.session;
         _aiUnderstoodNeed = result?.understoodNeed;
+        _aiCognitiveShift = result?.cognitiveShift;
+        _aiEmbodiedGoal = result?.embodiedGoal;
+        _aiRealLifeScene = result?.realLifeScene;
         _aiPracticeFocus = result?.practiceFocus ?? const <String>[];
         _aiReason = reason.trim().isEmpty ? null : reason.trim();
-        _aiError = result == null ? 'AI 暂时不可用，可能是未配置 API Key、网络异常或模型返回为空。你仍然可以使用本地推荐练习。' : null;
+        _aiError = result == null
+            ? 'AI 暂时未生成可用内容：可能是配置或网络异常，也可能是内容没有通过“认知 → 身体与情绪体验 → 现实演练”的质量校验。可以重试，或先使用本地推荐练习。'
+            : null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -132,6 +143,9 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
     _aiSession = null;
     _aiReason = null;
     _aiUnderstoodNeed = null;
+    _aiCognitiveShift = null;
+    _aiEmbodiedGoal = null;
+    _aiRealLifeScene = null;
     _aiPracticeFocus = const <String>[];
     _aiError = null;
     _aiSaved = false;
@@ -240,7 +254,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '直接写下此刻发生了什么。AI 会先理解表面困扰背后的真正需要，再生成一段直观、有温度、时长匹配的专属引导。',
+            '直接写下此刻发生了什么。AI 会先理解真正需要和需要松动的认知，再带你从“明白”走进身体、情绪与真实生活场景中的体验。',
             style: TextStyle(color: Colors.black.withOpacity(0.62), height: 1.45),
           ),
           const SizedBox(height: 12),
@@ -287,7 +301,13 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
               fillColor: Colors.white,
             ),
             onChanged: (_) {
-              if (_aiSession != null || _aiReason != null || _aiError != null || _aiUnderstoodNeed != null) {
+              if (_aiSession != null ||
+                  _aiReason != null ||
+                  _aiError != null ||
+                  _aiUnderstoodNeed != null ||
+                  _aiCognitiveShift != null ||
+                  _aiEmbodiedGoal != null ||
+                  _aiRealLifeScene != null) {
                 setState(_clearAiResult);
               }
             },
@@ -313,6 +333,24 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                     const Text('AI 理解到的真正需要', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
                     const SizedBox(height: 4),
                     Text(_aiUnderstoodNeed!, style: const TextStyle(height: 1.5)),
+                  ],
+                  if ((_aiCognitiveShift ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('这次要松动的认知', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const SizedBox(height: 4),
+                    Text(_aiCognitiveShift!, style: const TextStyle(height: 1.5)),
+                  ],
+                  if ((_aiEmbodiedGoal ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('身体与情绪体验目标', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const SizedBox(height: 4),
+                    Text(_aiEmbodiedGoal!, style: const TextStyle(height: 1.5)),
+                  ],
+                  if ((_aiRealLifeScene ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('会带你演练的现实场景', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const SizedBox(height: 4),
+                    Text(_aiRealLifeScene!, style: const TextStyle(height: 1.5)),
                   ],
                   if (_aiPracticeFocus.isNotEmpty) ...[
                     const SizedBox(height: 8),
