@@ -48,6 +48,24 @@ class MeditationSessionTemplate {
   bool get isAiGenerated => source == 'ai_generated';
 }
 
+class MeditationAiGenerationResult {
+  final MeditationSessionTemplate session;
+  final String understoodNeed;
+  final List<String> practiceFocus;
+  final String cognitiveShift;
+  final String embodiedGoal;
+  final String realLifeScene;
+
+  const MeditationAiGenerationResult({
+    required this.session,
+    required this.understoodNeed,
+    this.practiceFocus = const <String>[],
+    this.cognitiveShift = '',
+    this.embodiedGoal = '',
+    this.realLifeScene = '',
+  });
+}
+
 class MeditationRecord {
   final int? id;
   final String sessionKey;
