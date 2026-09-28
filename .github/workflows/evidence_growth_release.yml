@@ -6,6 +6,7 @@ on:
     branches: [codex/growth-six-core-features, codex/growth-v27-journeys]
     paths:
       - lib/**
+      - test/evidence_growth/**
       - android/**
       - assets/**
       - pubspec.yaml

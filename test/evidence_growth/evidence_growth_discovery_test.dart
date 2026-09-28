@@ -299,7 +299,7 @@ void main() {
     j = await dao.journeys.change(j, 'contract',
         {'goal': '获得作品反馈', 'current': raw, 'criterion': '收到一条建议'});
     final frozen =
-        EvidenceKNode.fromJson({...n.toJson(), 'version': 'frozen-test'});
+        EvidenceKNode.fromJson({...n.toJson(), 'version': n.version + 100});
     final route = EvidenceGrowthJourneyRuntime.compile(j).copyWith(
         selectedNodes: [frozen],
         operator: frozen.operators.first,
@@ -338,7 +338,7 @@ void main() {
         await EvidenceGrowthAiService(dao: dao, ai: ai).enrichRoute(route);
     expect(ai.calls, hasLength(1));
     expect(hit.facts, ['作品初稿写好了']);
-    expect(hit.selectedNodes.single.version, 'frozen-test');
+    expect(hit.selectedNodes.single.version, n.version + 100);
     expect(hit.riskChecks['CACHE_HIT'], 'true');
     await service.enrichRoute(route, refresh: true);
     expect(ai.calls, hasLength(2));
@@ -352,6 +352,7 @@ void main() {
         probability: .6,
         reviewAt: DateTime.now().subtract(const Duration(hours: 1)),
         riskConfirmed: true);
+    trial = await dao.startTrial(trial);
     trial = await dao.captureResult(trial,
         didAction: true,
         actualOutcome: '发出作品后，对方指出了两处可修改的地方。',
@@ -538,6 +539,14 @@ void main() {
       'new discovery page exposes two explicit choice gates before solution',
       (tester) async {
     await tester.runAsync(() async {
+      Future<void> reveal(Finder target, double delta) async {
+        await tester.scrollUntilVisible(target, delta,
+            scrollable: find.byType(Scrollable).first);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
+      }
+
       final j = await dao.journeys.create(raw);
       final ai = _TextAi((purpose, prompt) async {
         if (purpose.endsWith('.needs'))
@@ -568,18 +577,17 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
       final needsButton = find.byKey(const ValueKey('confirm_needs'));
-      await tester.scrollUntilVisible(needsButton, 300);
+      await reveal(needsButton, 300);
       expect(
           tester
               .widget<FilledButton>(find.byKey(const ValueKey('confirm_needs')))
               .onPressed,
           isNull);
       expect(ai.calls.where((s) => s.endsWith('.solution')), isEmpty);
-      await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('need_need_1')), -300);
+      await reveal(find.byKey(const ValueKey('need_need_1')), -300);
       await tester.tap(find.byKey(const ValueKey('need_need_1')));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(needsButton, 300);
+      await reveal(needsButton, 300);
       expect(
           tester
               .widget<FilledButton>(find.byKey(const ValueKey('confirm_needs')))
@@ -589,7 +597,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
       final knowledgeButton = find.byKey(const ValueKey('confirm_knowledge'));
-      await tester.scrollUntilVisible(knowledgeButton, 300);
+      await reveal(knowledgeButton, 300);
       expect(tester.widget<FilledButton>(knowledgeButton).onPressed, isNull);
       expect(ai.calls.where((s) => s.endsWith('.solution')), isEmpty);
       await tester.drag(find.byType(ListView), const Offset(0, 2000));
@@ -601,12 +609,11 @@ void main() {
       await tester.ensureVisible(knowledgeTile);
       await tester.tap(knowledgeTile);
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(knowledgeButton, 300);
+      await reveal(knowledgeButton, 300);
       await tester.tap(knowledgeButton);
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('continue_journey')), 300);
+      await reveal(find.byKey(const ValueKey('continue_journey')), 300);
       expect(ai.calls.where((s) => s.endsWith('.solution')), hasLength(1));
       expect((await dao.journeys.find(j.id))!.confirmed, false);
       expect(
