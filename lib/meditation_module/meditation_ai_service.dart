@@ -12,20 +12,29 @@ class MeditationAiService {
   final GlobalAiSettings _settings = GlobalAiSettings();
   final MeditationDao _dao = MeditationDao();
 
-  Future<MeditationSessionTemplate?> generateDailyMeditation({
+  Future<MeditationAiGenerationResult?> generateDailyMeditation({
     required String currentState,
     required MeditationSessionTemplate recommended,
     required List<MeditationRecord> recentRecords,
+    required int durationMinutes,
     String userDescription = '',
   }) async {
+    final targetMinutes = durationMinutes.clamp(1, 30).toInt();
+    final targetSegmentCount = math.max(4, (targetMinutes * 60 / 45).ceil()).clamp(4, 40).toInt();
+    final targetMinChars = targetMinutes * 45;
+    final targetMaxChars = targetMinutes * 75;
     final input = <String, dynamic>{
       'current_state': currentState,
       'recommended_type': recommended.type,
       'recommended_title': recommended.title,
-      'duration_minutes': recommended.durationMinutes,
+      'duration_minutes': targetMinutes,
+      'target_segment_count': targetSegmentCount,
+      'target_chinese_character_range': '$targetMinChars-$targetMaxChars',
       'recent_records': _recordsForJson(recentRecords.take(8).toList()),
       'user_description': userDescription.trim(),
-      'tone': '温和、稳定、不说教',
+      'need_analysis': '从用户原话中区分表面困扰、当下感受、未说出的真正需要和本次练习目标；使用“可能”而非诊断式断言',
+      'content_style': '直观、具体、有温度；少用抽象概念和宏大哲理；每一段都能直接听懂并照做',
+      'tone': '温和、稳定、不说教、不空泛鼓励',
       'language': 'zh-CN',
     };
     final prompt = await _renderPrompt(
@@ -34,7 +43,9 @@ class MeditationAiService {
       <String, String>{
         '{{current_state}}': currentState,
         '{{practice_type}}': recommended.type,
-        '{{duration_minutes}}': recommended.durationMinutes.toString(),
+        '{{duration_minutes}}': targetMinutes.toString(),
+        '{{target_segment_count}}': targetSegmentCount.toString(),
+        '{{target_character_range}}': '$targetMinChars-$targetMaxChars',
         '{{user_description}}': userDescription.trim().isEmpty ? '无' : userDescription.trim(),
         '{{recent_records_json}}': _prettyJson(input['recent_records']),
       },
@@ -45,15 +56,30 @@ class MeditationAiService {
     try {
       final raw = await _ai.generateText(
         purpose: 'meditation.daily_script',
-        systemPrompt: '你是一名温和、稳定、不说教的中文冥想引导师。若用户补充了文字描述，必须优先贴合这段描述生成。',
+        systemPrompt: '你是一名温和、稳定、不说教的中文冥想引导师。先从用户原话中理解表面困扰背后的真正需要，再生成直观、具体、能直接跟随的引导；不要堆砌抽象概念、哲学术语或空泛口号。若用户补充了文字描述，必须优先贴合这段描述。',
         prompt: prompt,
-        maxTokens: 1400,
+        maxTokens: (1200 + targetMinutes * 150).clamp(1400, 6000).toInt(),
         expectJson: true,
         temperature: 0.6,
       );
       if (raw.trim().isEmpty) return null;
       final parsedMap = _tryParseJsonObject(raw);
-      final session = _sessionFromAiText(raw, recommended, currentState, parsedMap);
+      final session = _sessionFromAiText(
+        raw,
+        recommended,
+        currentState,
+        parsedMap,
+        targetDurationMinutes: targetMinutes,
+        targetSegmentCount: targetSegmentCount,
+      );
+      final understoodNeed = _readUnderstoodNeed(
+        parsedMap,
+        userDescription: userDescription,
+        currentState: currentState,
+      );
+      final practiceFocus = _readStringList(
+        parsedMap?['practice_focus'] ?? parsedMap?['focus_points'] ?? parsedMap?['needs'],
+      ).take(4).toList();
       await _dao.insertAiOutput(
         feature: 'daily_script',
         inputJson: jsonEncode(input),
@@ -63,7 +89,11 @@ class MeditationAiService {
         model: cfg.model,
         success: true,
       );
-      return session;
+      return MeditationAiGenerationResult(
+        session: session,
+        understoodNeed: understoodNeed,
+        practiceFocus: practiceFocus,
+      );
     } catch (e) {
       await _dao.insertAiOutput(
         feature: 'daily_script',
@@ -391,8 +421,10 @@ class MeditationAiService {
     String raw,
     MeditationSessionTemplate fallback,
     String currentState,
-    Map<String, dynamic>? parsed,
-  ) {
+    Map<String, dynamic>? parsed, {
+    required int targetDurationMinutes,
+    required int targetSegmentCount,
+  }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final map = parsed ?? <String, dynamic>{};
     final title = _cleanOneLine(map['title']?.toString()).isNotEmpty
@@ -401,10 +433,11 @@ class MeditationAiService {
     final type = _cleanOneLine(map['type']?.toString()).isNotEmpty
         ? _cleanOneLine(map['type']?.toString())
         : fallback.type;
-    final durationMinutes = _readMinutes(map['duration_minutes'] ?? map['durationMinutes'], fallback.durationMinutes);
+    final durationMinutes = targetDurationMinutes.clamp(1, 30).toInt();
     final durationSeconds = durationMinutes * 60;
     final steps = _readSteps(map['segments'] ?? map['steps'], durationSeconds);
-    final safeSteps = steps.isNotEmpty ? steps : _plainTextToSteps(raw, durationSeconds);
+    final parsedSteps = steps.isNotEmpty ? steps : _plainTextToSteps(raw, durationSeconds, targetSegmentCount);
+    final safeSteps = _fitStepTimeline(parsedSteps, durationSeconds);
     final ending = _cleanText(map['ending_reflection'] ?? map['endingReflection']).isNotEmpty
         ? _cleanText(map['ending_reflection'] ?? map['endingReflection'])
         : fallback.endingReflection;
@@ -413,21 +446,13 @@ class MeditationAiService {
       title: title.isEmpty ? '今日专属冥想' : title,
       type: type.isEmpty ? fallback.type : type,
       category: 'AI 今日冥想',
-      description: 'AI 根据你当前状态和最近记录生成的今日专属练习。',
+      description: 'AI 根据你的输入分析真正需要后生成，可在本地保存并重复练习。',
       durationSeconds: durationSeconds,
       isSleep: fallback.isSleep || currentState.contains('睡'),
       source: 'ai_generated',
       steps: safeSteps,
       endingReflection: ending,
     );
-  }
-
-  int _readMinutes(dynamic value, int fallback) {
-    if (value is num) return value.toInt().clamp(1, 30).toInt();
-    final raw = value?.toString() ?? '';
-    final m = RegExp(r'\d+').firstMatch(raw);
-    if (m == null) return fallback.clamp(1, 30).toInt();
-    return (int.tryParse(m.group(0) ?? '') ?? fallback).clamp(1, 30).toInt();
   }
 
   List<MeditationStep> _readSteps(dynamic value, int durationSeconds) {
@@ -455,12 +480,18 @@ class MeditationAiService {
     }
     out.sort((a, b) => a.startSecond.compareTo(b.startSecond));
     if (out.isNotEmpty && out.first.startSecond != 0) {
-      out.insert(0, MeditationStep(startSecond: 0, text: out.first.text));
+      final first = out.first;
+      out[0] = MeditationStep(
+        startSecond: 0,
+        text: first.text,
+        pauseAfterSeconds: first.pauseAfterSeconds,
+        intent: first.intent,
+      );
     }
     return out;
   }
 
-  List<MeditationStep> _plainTextToSteps(String raw, int durationSeconds) {
+  List<MeditationStep> _plainTextToSteps(String raw, int durationSeconds, int targetSegmentCount) {
     final cleaned = _stripCodeFence(raw)
         .replaceAll(RegExp(r'^[#>*\-\s]+', multiLine: true), '')
         .replaceAll(RegExp(r'(?i)title\s*[:：]'), '')
@@ -470,12 +501,72 @@ class MeditationAiService {
         .map((e) => _cleanText(e))
         .where((e) => e.isNotEmpty)
         .toList();
-    final selected = pieces.length > 12 ? pieces.take(12).toList() : pieces;
+    final selected = pieces.length > targetSegmentCount ? pieces.take(targetSegmentCount).toList() : pieces;
     final safe = selected.isEmpty
         ? <String>['现在，先不用解决任何问题。只是坐下来，感受身体和呼吸。', '如果走神了，不用责备自己。看见它，然后回来。']
         : selected;
     final step = math.max(20, durationSeconds ~/ math.max(1, safe.length));
     return List.generate(safe.length, (i) => MeditationStep(startSecond: math.min(durationSeconds - 1, i * step), text: safe[i]));
+  }
+
+  List<MeditationStep> _fitStepTimeline(List<MeditationStep> steps, int durationSeconds) {
+    final safe = steps.where((e) => e.text.trim().isNotEmpty).toList();
+    if (safe.isEmpty) {
+      return const <MeditationStep>[
+        MeditationStep(startSecond: 0, text: '现在，先不用解决所有问题。感受身体被支撑，慢慢回到这一刻。'),
+      ];
+    }
+    if (safe.length == 1) {
+      return <MeditationStep>[
+        MeditationStep(
+          startSecond: 0,
+          text: safe.first.text,
+          pauseAfterSeconds: safe.first.pauseAfterSeconds,
+          intent: safe.first.intent,
+        ),
+      ];
+    }
+    final lastUsefulSecond = math.max(1, (durationSeconds * 0.88).round());
+    final interval = lastUsefulSecond / (safe.length - 1);
+    return List<MeditationStep>.generate(safe.length, (index) {
+      final original = safe[index];
+      return MeditationStep(
+        startSecond: math.min(durationSeconds - 1, (interval * index).round()),
+        text: original.text,
+        pauseAfterSeconds: original.pauseAfterSeconds,
+        intent: original.intent,
+      );
+    });
+  }
+
+  String _readUnderstoodNeed(
+    Map<String, dynamic>? parsed, {
+    required String userDescription,
+    required String currentState,
+  }) {
+    final candidates = <dynamic>[
+      parsed?['understood_need'],
+      parsed?['need_summary'],
+      parsed?['core_need'],
+      parsed?['true_need'],
+    ];
+    for (final value in candidates) {
+      final text = _cleanText(value);
+      if (text.isNotEmpty) return text;
+    }
+    final description = userDescription.trim();
+    if (description.isNotEmpty) {
+      return '这次练习会先承接你描述的处境，再帮助你回到身体、稳定注意力，并为下一步保留选择空间。';
+    }
+    return '你此刻可能需要的不是继续逼迫自己，而是先从“$currentState”中稳下来，重新感到自己仍有选择。';
+  }
+
+  List<String> _readStringList(dynamic value) {
+    if (value is! List) return const <String>[];
+    return value
+        .map((e) => _cleanOneLine(e?.toString()))
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 
 
