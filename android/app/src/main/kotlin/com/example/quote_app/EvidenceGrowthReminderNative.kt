@@ -16,6 +16,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.work.*
 import com.example.quote_app.data.DbInspector
 import org.json.JSONObject
+import org.json.JSONArray
+import com.example.quote_app.evidence.GrowthReminderText
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -75,15 +77,67 @@ object EvidenceGrowthReminderNative {
         WorkManager.getInstance(ctx).cancelUniqueWork("eg_reminder_$id")
         if (notification) manager(ctx).cancel(TAG, id)
     }
+    private fun journey(db: SQLiteDatabase, trial: String): JSONObject? {
+        val exists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='evidence_growth_journeys'", null).use { it.moveToFirst() }
+        if (!exists) return null
+        val id = if (trial.startsWith("journey:")) trial.substring(8) else db.rawQuery(
+            "SELECT journey_id FROM evidence_growth_journey_actions WHERE trial_id=?", arrayOf(trial)
+        ).use { if (it.moveToFirst()) it.getString(0) else return null }
+        return db.rawQuery("SELECT body_json FROM evidence_growth_journeys WHERE id=?", arrayOf(id)).use {
+            if (it.moveToFirst()) JSONObject(it.getString(0)) else null
+        }
+    }
+    private fun portfolio(db: SQLiteDatabase): JSONObject? = db.rawQuery(
+        "SELECT body_json FROM evidence_growth_journeys WHERE id='portfolio'", null
+    ).use { if (it.moveToFirst()) JSONObject(it.getString(0)) else null }
+    private fun parentAllows(db: SQLiteDatabase, j: JSONObject): Boolean {
+        if (j.optString("status") !in listOf("ACTIVE", "ACTIVE_BUILD", "RECOVERY_CYCLE")) return false
+        if (j.optString("node") != "ACTION" || j.optString("readiness") in listOf("FACTS_ONLY", "DEFERRED", "RECOVERY_HOLD")) return false
+        if (j.optString("mutuality") in listOf("PAUSED", "WITHDRAWN", "ENDED")) return false
+        val now = System.currentTimeMillis()
+        if (j.optString("event_phase") == "IN_EVENT_QUIET" && (j.optLong("event_end_ms") == 0L || j.optLong("event_end_ms") > now)) return false
+        val p = portfolio(db) ?: return true
+        val recovery = p.optJSONArray("protected_recovery")
+        for (i in 0 until (recovery?.length() ?: 0)) {
+            val slot = recovery!!.getJSONObject(i)
+            if (now >= slot.optLong("start") && now < slot.optLong("end")) return false
+        }
+        fun satisfied(ref: String): Boolean {
+            if (ref.startsWith("external:")) return p.optJSONObject("external_conditions")?.optBoolean(ref) == true
+            return db.rawQuery("SELECT status FROM evidence_growth_journeys WHERE id=?", arrayOf(ref)).use {
+                it.moveToFirst() && it.getString(0) in listOf("ACHIEVED", "MAINTAINING")
+            }
+        }
+        val edges = p.optJSONArray("edges")
+        for (i in 0 until (edges?.length() ?: 0)) {
+            val e = edges!!.getJSONObject(i)
+            if (e.optString("type") == "REQUIRES" && e.optString("from") == j.optString("id") && !satisfied(e.optString("to"))) return false
+            if (e.optString("type") == "BLOCKS" && e.optString("to") == j.optString("id") && !satisfied(e.optString("from"))) return false
+        }
+        return true
+    }
+    private fun withinRepeatLimit(db: SQLiteDatabase, trial: String, inputs: JSONObject): Boolean {
+        val cap = inputs.optString("max_repeat", "0").toIntOrNull() ?: 0
+        if (cap <= 0) return true // Existing user policy is preserved on migration.
+        val due = db.rawQuery("SELECT CASE WHEN next_review_at_ms>0 THEN next_review_at_ms ELSE review_at_ms END FROM evidence_growth_trials WHERE trial_id=?",arrayOf(trial)).use { if(it.moveToFirst()) it.getLong(0) else 0L }
+        val count = db.rawQuery("SELECT COUNT(*) FROM $TABLE WHERE trial_id=? AND kind='missing_result' AND scheduled_at_ms>=? AND delivered_at_ms>0",arrayOf(trial,due.toString())).use { it.moveToFirst();it.getInt(0) }
+        if(count >= cap) db.execSQL("INSERT OR REPLACE INTO evidence_growth_settings(setting_key,setting_value) VALUES (?, 'NO_REALITY_FEEDBACK')",arrayOf("feedback_state_$trial"))
+        return count < cap
+    }
     private fun valid(db: SQLiteDatabase, trialId: String, kind: String): Boolean {
         val global = db.rawQuery("SELECT setting_value FROM evidence_growth_settings WHERE setting_key='reminders_enabled'", null)
             .use { if (it.moveToFirst()) it.getString(0) else "true" }
         if (global == "false") return false
+        val j = journey(db, trialId)
+        if (kind == "journey_maintenance") return j != null && j.optString("status") == "MAINTAINING"
+        if (kind == "journey_review") return j != null && j.optString("readiness") == "DEFERRED" && j.optString("node") == "REVIEW" && j.optString("status") !in listOf("ARCHIVED","CLOSED","DELETED")
+        if (j != null && (j.optString("trial_id") != trialId || !parentAllows(db,j))) return false
         return db.rawQuery("SELECT status, operator, operator_inputs_json, decision FROM evidence_growth_trials WHERE trial_id=?", arrayOf(trialId)).use { c ->
             if (!c.moveToFirst()) return@use false
             val override = db.rawQuery("SELECT setting_value FROM evidence_growth_settings WHERE setting_key=?", arrayOf("remind_trial_$trialId"))
                 .use { if (it.moveToFirst()) it.getString(0) else null }
             if ((override ?: JSONObject(c.getString(2)).optString("remind")) != "true") return@use false
+            if (kind == "missing_result" && !withinRepeatLimit(db,trialId,JSONObject(c.getString(2)))) return@use false
             val state = c.getString(0)
             when (kind) {
                 "repeated_avoidance" -> state == "DECIDED" && c.getString(3) == "EXIT" && repeatedExit(db, trialId)
@@ -142,7 +196,7 @@ object EvidenceGrowthReminderNative {
                 db.execSQL("UPDATE $TABLE SET state='cancelled' WHERE trial_id=? AND kind='missing_result' AND scheduled_at_ms<>? AND state IN ('pending','scheduled','blocked')",arrayOf(trial,at))
                 val window = (at/60000).toString()
                 db.execSQL("INSERT OR IGNORE INTO $TABLE (event_key,trial_id,kind,scheduled_at_ms,window_key,title,body,source_ids_json,state) VALUES (?,?,'missing_result',?,?,?,?,'[\"KB35-R01\",\"KB35-G-EXT2-01\"]','pending')",
-                    arrayOf("$trial:$window",trial,at,window,"这条路线还缺少反馈","继续之前，先补充现实证据。记录完成、部分、未做、中止或继续观察；未反馈会按设置间隔继续提醒。"))
+                    arrayOf("$trial:$window",trial,at,window,"证据成长｜结果节点 · 待反馈","继续之前，先补充现实证据。记录完成、部分、未做、中止或继续观察；未反馈会按设置间隔继续提醒。"))
                 db.execSQL("UPDATE $TABLE SET state='pending',last_error='' WHERE trial_id=? AND window_key=? AND state='cancelled' AND delivered_at_ms=0",arrayOf(trial,window))
             }
         }
@@ -153,7 +207,12 @@ object EvidenceGrowthReminderNative {
         val db = database(ctx) ?: return true
         db.use {
             db.beginTransaction()
-            try { ensureMissingPlans(db); db.setTransactionSuccessful() } finally { db.endTransaction() }
+            try {
+                db.rawQuery("SELECT reminder_id,trial_id,kind FROM $TABLE WHERE state='cancelled' AND last_error='JOURNEY_HOLD' AND delivered_at_ms=0",null).use { held ->
+                    while(held.moveToNext()) if(valid(db,held.getString(1),held.getString(2))) db.execSQL("UPDATE $TABLE SET state='pending',last_error='' WHERE reminder_id=?",arrayOf(held.getInt(0)))
+                }
+                ensureMissingPlans(db); db.setTransactionSuccessful()
+            } finally { db.endTransaction() }
             val wm = WorkManager.getInstance(ctx)
             wm.enqueueUniquePeriodicWork("eg_reminder_repair", ExistingPeriodicWorkPolicy.KEEP,
                 PeriodicWorkRequestBuilder<EvidenceGrowthReminderWorker>(1, TimeUnit.HOURS).build())
@@ -173,7 +232,7 @@ object EvidenceGrowthReminderNative {
                     retained.add(id.toString())
                     if (!valid(db, trial, kind) || state == "cancelled" || state == "expired") {
                         cancel(ctx, id)
-                        if (state != "delivered") db.execSQL("UPDATE $TABLE SET state='cancelled' WHERE reminder_id=?", arrayOf(id))
+                        if (state != "delivered") db.execSQL("UPDATE $TABLE SET state='cancelled',last_error='JOURNEY_HOLD' WHERE reminder_id=?", arrayOf(id))
                         continue
                     }
                     if (state == "delivered") {
@@ -213,6 +272,32 @@ object EvidenceGrowthReminderNative {
         }
     }
 
+    private data class Notice(val id: Int, val text: GrowthReminderText, val target: JSONObject)
+    private fun notice(db: SQLiteDatabase, id: Int): Notice? {
+        return db.rawQuery("SELECT trial_id,kind,scheduled_at_ms,event_key FROM $TABLE WHERE reminder_id=?", arrayOf(id.toString())).use { c ->
+            if (!c.moveToFirst()) return@use null
+            val trialId=c.getString(0); val kind=c.getString(1)
+            val parent=journey(db,trialId); val profile=parent?.optJSONObject("profile")
+            var goal=parent?.optString("title") ?: ""; var action=""; var prediction=""
+            var sensitive=profile?.optBoolean("shared_body") == true || (profile != null && profile.optString("risk_class", "NORMAL") != "NORMAL")
+            if (!trialId.startsWith("journey:")) db.rawQuery("SELECT goal_state,action_instruction,prediction,operator_inputs_json FROM evidence_growth_trials WHERE trial_id=?", arrayOf(trialId)).use { t ->
+                if(t.moveToFirst()) {
+                    if(goal.isBlank())goal=t.getString(0) ?: ""
+                    action=t.getString(1) ?: ""; prediction=t.getString(2) ?: ""
+                    sensitive=sensitive || JSONObject(t.getString(3)).optString("sensitive")=="true"
+                }
+            }
+            val whenText=java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(c.getLong(2)))
+            val text=GrowthReminderText.build(kind,goal,action,prediction,whenText,parent?.optJSONObject("maintenance")?.optString("acceptable_band") ?: "",sensitive)
+            val target=JSONObject().put("trial_id",if(trialId.startsWith("journey:")) "" else trialId)
+                .put("journey_id",parent?.optString("id") ?: if(trialId.startsWith("journey:")) trialId.substring(8) else "")
+                .put("node",text.node).put("type",kind).put("reminder_id",id).put("event_key",c.getString(3))
+                .put("title",text.title+" · "+if(sensitive) "私密目标" else goal.take(36))
+                .put("summary",text.body)
+            Notice(id,text,target)
+        }
+    }
+
     @JvmStatic fun fire(ctx: Context, id: Int): Boolean {
         val db = database(ctx) ?: return true
         db.use {
@@ -223,7 +308,7 @@ object EvidenceGrowthReminderNative {
                     val trial = c.getString(0); val kind = c.getString(1); val at = c.getLong(2)
                     if (c.getString(6) !in listOf("pending", "scheduled", "blocked")) return true
                     if (!valid(db, trial, kind)) {
-                        db.execSQL("UPDATE $TABLE SET state='cancelled' WHERE reminder_id=?", arrayOf(id))
+                        db.execSQL("UPDATE $TABLE SET state='cancelled',last_error='JOURNEY_HOLD' WHERE reminder_id=?", arrayOf(id))
                         db.setTransactionSuccessful(); cancel(ctx, id); return true
                     }
                     if (at > System.currentTimeMillis()) return true
@@ -231,24 +316,48 @@ object EvidenceGrowthReminderNative {
                         db.execSQL("UPDATE $TABLE SET state='blocked',last_error='PERMISSION_UNAVAILABLE' WHERE reminder_id=?", arrayOf(id))
                         db.setTransactionSuccessful(); return true
                     }
-                    val payload = JSONObject().put("module", TAG).put("type", kind).put("trial_id", trial)
-                        .put("reminder_id", id).put("event_key", c.getString(7)).put("source_ids", org.json.JSONArray(c.getString(5)))
+                    val peers = mutableListOf<Int>()
+                    db.rawQuery("SELECT reminder_id,trial_id,kind FROM $TABLE WHERE reminder_id<>? AND scheduled_at_ms/60000=? AND scheduled_at_ms<=? AND state IN ('pending','scheduled','blocked') ORDER BY reminder_id LIMIT 49",arrayOf(id.toString(),(at/60000).toString(),System.currentTimeMillis().toString())).use { peer ->
+                        while(peer.moveToNext()) if(valid(db,peer.getString(1),peer.getString(2))) peers.add(peer.getInt(0))
+                    }
+                    val entries=(listOf(id)+peers).mapNotNull { notice(db,it) }
+                    if(entries.isEmpty()) return true
+                    val first=entries.first()
+                    val many=entries.size>1
+                    val labels=entries.map { GrowthReminderText.nodeLabel(it.text.node) }.distinct()
+                    val title=if(many) "证据成长｜${labels.take(3).joinToString("/")} · ${entries.size}项待办" else first.text.title
+                    val body=if(many) first.text.body.substringBefore("\n")+"；另有 ${entries.size-1} 项，点击逐项处理。" else first.text.body
+                    val payload=JSONObject().put("module",TAG).put("version",2).put("type",if(many) "portfolio_check" else kind)
+                        .put("trial_id",first.target.optString("trial_id")).put("journey_id",first.target.optString("journey_id"))
+                        .put("node",first.text.node).put("reminder_id",id).put("event_key",c.getString(7))
+                        .put("targets",JSONArray().apply { entries.forEach { put(it.target) } })
+                        .put("source_ids",JSONArray(c.getString(5)))
                     val launch = Intent(ctx, MainActivity::class.java)
                         .setData(Uri.parse("quote-app://evidence-growth/$id"))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         .putExtra("from_notification", true).putExtra("notif_type", TAG).putExtra("payload", payload.toString())
                     val click = PendingIntent.getActivity(ctx, id, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                    val notification = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info)
-                        .setContentTitle(c.getString(3)).setContentText(c.getString(4))
-                        .setStyle(NotificationCompat.BigTextStyle().bigText(c.getString(4)))
+                    val publicNotice=NotificationCompat.Builder(ctx,CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle(title).setContentText("打开查看对应事项").build()
+                    val builder = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle(title).setContentText(body).setSubText("发现之旅 · 六模块证据成长")
                         .setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_REMINDER)
-                        .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setOnlyAlertOnce(true).setAutoCancel(true)
-                        .setContentIntent(click).addAction(0, if (kind == "trial_start") "去开始" else "返回本轮", click).build()
+                        .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(publicNotice)
+                        .setOnlyAlertOnce(true).setAutoCancel(true).setContentIntent(click)
+                        .addAction(0, if(many) "查看待办清单" else first.text.actionLabel, click)
+                    if(many) builder.setStyle(NotificationCompat.InboxStyle().also { style ->
+                        entries.take(7).forEach { style.addLine("${GrowthReminderText.nodeLabel(it.text.node)}｜${it.text.body.substringBefore("\n")}") }
+                        style.setSummaryText("共 ${entries.size} 项，点击后逐项定位")
+                    }) else builder.setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    val notification=builder.build()
                     // Stable tag/ID replaces the same notification if interrupted between notify and commit.
                     manager(ctx).notify(TAG, id, notification)
-                    db.execSQL("UPDATE $TABLE SET state='delivered',delivered_at_ms=?,last_error='' WHERE reminder_id=?",
-                        arrayOf(System.currentTimeMillis(), id))
-                    if (kind == "missing_result") ensureMissingPlans(db)
+                    for(entry in entries) {
+                        db.execSQL("UPDATE $TABLE SET state='delivered',delivered_at_ms=?,last_error=?,title=?,body=? WHERE reminder_id=?",
+                            arrayOf(System.currentTimeMillis(),if(entry.id==id) "" else "PORTFOLIO_MERGED",entry.text.title,entry.text.body,entry.id))
+                        if(entry.id!=id)cancel(ctx,entry.id)
+                    }
+                    ensureMissingPlans(db)
                 }
                 db.setTransactionSuccessful()
             } finally { db.endTransaction() }

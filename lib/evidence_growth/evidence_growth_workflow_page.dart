@@ -110,6 +110,7 @@ class _WorkflowState extends State<EvidenceGrowthWorkflowPage> {
       TextButton.icon(onPressed:generating || (premortem && finished)?null:draft,
         icon:generating?const SizedBox(width:18,height:18,child:CircularProgressIndicator()):const Icon(Icons.auto_awesome),
         label:const Text('结合当前问题生成待核对草案')),
+      if(data['ai_draft']!=true) const Text('本地默认模板／已有填写内容，请按现实核对。'),
       if(data['ai_draft']==true) const Text('AI 草案是待核对假设，不是已经发生的事实；已有填写内容会保留。'),
       if(premortem)...premortemFields() else ...systemFields(),
       const SizedBox(height:16),FilledButton(onPressed:save,child:const Text('保存方案，进入现实行动')),

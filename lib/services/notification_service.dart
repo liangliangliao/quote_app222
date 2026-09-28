@@ -2,6 +2,8 @@ import '../services/native_guard.dart';
 
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart';
+import '../evidence_growth/evidence_growth_notification_link.dart';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -43,6 +45,10 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
+  static const _growthNative = MethodChannel('native.scheduler');
+  static final _growthTapTokens = <String>{};
+  static Route<void>? _growthNotificationRoute;
+  static bool get hasOpenEvidenceGrowthNotification => _growthNotificationRoute?.isActive ?? false;
   static bool _launchFromNotif = false;
   static String? _pendingPayload;
   static bool _homeVisible = false;
@@ -74,6 +80,11 @@ class NotificationService {
   /// 由 main / RootShell 在首帧后调用：如果通知携带健康饮食 payload，则直接进入对应页面；
   /// 否则保持旧行为回到首页。返回 true 表示已经处理过一次通知导航。
   static Future<bool> handlePendingNotificationNavigation() async {
+    // Native cold-start events may arrive before Dart has installed its handler.
+    try {
+      final pending=await _growthNative.invokeMethod<String>('eg_pending_notification');
+      if((_pendingPayload??'').isEmpty && (pending??'').isNotEmpty) _pendingPayload=pending;
+    } catch (_) {}
     final has =
         _launchFromNotif ||
         (_pendingPayload != null && _pendingPayload!.isNotEmpty);
@@ -323,20 +334,8 @@ class NotificationService {
   static Future<bool> _tryNavigateEvidenceGrowth(String? payload) async {
     final p = (payload ?? '').trim();
     if (p.isEmpty) return false;
-    var matched = p.startsWith('evidence_growth');
-    var trialId = '';
-    if (p.startsWith('{')) {
-      try {
-        final decoded = jsonDecode(p);
-        if (decoded is Map && (decoded['module'] ?? '').toString() == 'evidence_growth') {
-          matched = true;
-          trialId = (decoded['trial_id'] ?? '').toString();
-        }
-      } catch (_) {}
-    } else if (p.contains(':')) {
-      trialId = p.substring(p.indexOf(':') + 1).trim();
-    }
-    if (!matched) return false;
+    final link=GrowthNotificationLink.parse(p);
+    if(link==null)return false;
     final nav = SimpleBus.navigatorKey.currentState;
     if (nav == null) {
       _pendingPayload = p;
@@ -348,8 +347,15 @@ class NotificationService {
       });
       return true;
     }
+    if(link.tapToken.isNotEmpty && !_growthTapTokens.add(link.tapToken))return true;
+    if(_growthTapTokens.length>32)_growthTapTokens.remove(_growthTapTokens.first);
     nav.popUntil((route) => route.isFirst);
-    nav.push(MaterialPageRoute(builder: (_) => EvidenceGrowthHomePage(initialTrialId: trialId)));
+    final route=MaterialPageRoute<void>(builder: (_) => EvidenceGrowthHomePage(notification:link));
+    _growthNotificationRoute=route;
+    nav.push(route);
+    if(link.tapToken.isNotEmpty){
+      try { await _growthNative.invokeMethod('eg_ack_notification',{'tap_token':link.tapToken}); } catch (_) {}
+    }
     return true;
   }
 

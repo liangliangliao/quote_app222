@@ -1,3 +1,4 @@
+import 'evidence_growth_knowledge_page.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -12,6 +13,15 @@ import '../platform/native_scheduler.dart';
 import '../services/unified_ai_service.dart';
 import 'evidence_growth_ai_service.dart';
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_notification_link.dart';
+import 'evidence_growth_notification_inbox.dart';
+import 'evidence_growth_guidance.dart';
+import 'evidence_growth_discovery_page.dart';
+import 'evidence_growth_form_drafts.dart';
+import 'evidence_growth_smart_form.dart';
+import 'evidence_growth_journey_models.dart';
+import 'evidence_growth_journey_page.dart';
+import 'evidence_growth_journey_runtime.dart';
 import 'evidence_growth_knowledge.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_cycle.dart';
@@ -37,17 +47,22 @@ const _soft = Color(0xFFF2F7F6);
 const _line = Color(0xFFD6E4E1);
 
 class EvidenceGrowthHomePage extends StatefulWidget {
-  const EvidenceGrowthHomePage({super.key, this.initialTrialId = '', this.initialInput = ''});
+  const EvidenceGrowthHomePage(
+      {super.key,
+      this.initialTrialId = '',
+      this.initialInput = '',
+      this.notification});
+  final GrowthNotificationLink? notification;
   final String initialTrialId;
   final String initialInput;
   @override
   State<EvidenceGrowthHomePage> createState() => _EvidenceGrowthHomePageState();
 }
 
-class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with WidgetsBindingObserver {
+class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage>
+    with WidgetsBindingObserver {
   final _dao = EvidenceGrowthDao(database: AppDatabase.instance);
   late final _ai = EvidenceGrowthAiService(dao: _dao);
-  final _router = const EvidenceGrowthRouter();
   var _tab = 0;
   var _loading = true;
   var _routing = false;
@@ -64,16 +79,41 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
   }
 
   Future<void> _initialize() async {
-    try { await EvidenceGrowthKbStore(AppDatabase.instance).initialize(); }
-    catch (_) {
-      EvidenceGrowthKnowledge.activate(EvidenceGrowthKnowledge.bundledVersion,EvidenceGrowthKnowledge.bundledNodes);
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('知识缓存暂不可用，已使用随 App 提供的稳定版本。')));
+    try {
+      await EvidenceGrowthKbStore(AppDatabase.instance).initialize();
+    } catch (_) {
+      EvidenceGrowthKnowledge.activate(EvidenceGrowthKnowledge.bundledVersion,
+          EvidenceGrowthKnowledge.bundledNodes);
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('知识缓存暂不可用，已使用随 App 提供的稳定版本。')));
     }
     await _dao.ensureTables();
     unawaited(const EvidenceGrowthNotificationService().reconcile());
     await _reload();
     if (!mounted) return;
+    if (widget.notification != null) {
+      final targets = widget.notification!.targets;
+      if (targets.length > 1) {
+        await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => EvidenceGrowthNotificationInbox(
+                    targets: targets, onOpen: _openNotificationTarget)));
+      } else if (targets.length == 1) {
+        await _openNotificationTarget(targets.single);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('这条旧通知没有具体记录地址，请从当前目标选择待办。')));
+      }
+      return;
+    }
     if (widget.initialTrialId.isNotEmpty) {
+      if (widget.initialTrialId.startsWith('journey:')) {
+        final j = await _dao.journeys.find(widget.initialTrialId.substring(8));
+        if (j != null && mounted) await _openJourney(j);
+        return;
+      }
       final trial = await _dao.byId(widget.initialTrialId);
       if (trial != null && mounted) await _openTrial(trial);
     } else if (widget.initialInput.trim().isNotEmpty) {
@@ -82,31 +122,48 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
   }
 
   @override
-  void dispose() { WidgetsBinding.instance.removeObserver(this); super.dispose(); }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed) {
       unawaited(const EvidenceGrowthNotificationService().reconcile());
       unawaited(_sync());
     }
   }
+
   Future<void> _sync() async {
-    if(_syncing) return;
-    _syncing=true;
+    if (_syncing) return;
+    _syncing = true;
     EvidenceGrowthSyncClient? client;
     try {
-      client=await EvidenceGrowthSyncSettings(_dao).client();
-      if(client!=null) { await client.sync(); await _reload(sync:false); }
-    } catch(_) { /* Local results remain authoritative until a successful sync. */ }
-    finally { client?.close();_syncing=false; }
+      client = await EvidenceGrowthSyncSettings(_dao).client();
+      if (client != null) {
+        await client.sync();
+        await _reload(sync: false);
+      }
+    } catch (_) {
+      /* Local results remain authoritative until a successful sync. */
+    } finally {
+      client?.close();
+      _syncing = false;
+    }
   }
 
-  Future<void> _reload({bool sync=true}) async {
-    final active = await _dao.activeTrials(limit:3);
-    active.sort((a,b) {
-      int priority(RealityTrial t)=>const {'RESULT_CAPTURED','REVIEWED'}.contains(t.status)?0:t.status=='IN_PROGRESS'?1:2;
-      final order=priority(a).compareTo(priority(b));
-      return order!=0?order:a.reviewAtMs.compareTo(b.reviewAtMs);
+  Future<void> _reload({bool sync = true}) async {
+    final active = await _dao.activeTrials(limit: 3);
+    active.sort((a, b) {
+      int priority(RealityTrial t) =>
+          const {'RESULT_CAPTURED', 'REVIEWED'}.contains(t.status)
+              ? 0
+              : t.status == 'IN_PROGRESS'
+                  ? 1
+                  : 2;
+      final order = priority(a).compareTo(priority(b));
+      return order != 0 ? order : a.reviewAtMs.compareTo(b.reviewAtMs);
     });
     final recent = await _dao.recentTrials();
     final summary = await _dao.summary();
@@ -117,34 +174,172 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
       _summary = summary;
       _loading = false;
     });
-    if(sync) unawaited(_sync());
+    if (sync) unawaited(_sync());
     unawaited(const EvidenceGrowthNotificationService().reconcile());
   }
 
-  Future<void> _begin(String input) async {
+  Future<void> _begin(String input, {String? knowledgeNodeId}) async {
     if (input.trim().isEmpty || _routing) return;
     setState(() => _routing = true);
     try {
-      var route = _router.route(input);
-      route = _router.route(input, personalFit: await _dao.nodeFitScores(contextTags: route.contextTags));
-      route = route.copyWith(personalEvidence: await _dao.personalEvidenceFor(route));
-      await _dao.recordRoute(route);
+      final existing = await _dao.journeys.list();
       if (!mounted) return;
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => _RoutePage(route: route, dao: _dao, ai: _ai)));
+      final active = existing.where((j) => !j.terminal).toList();
+      final selected = active.isEmpty
+          ? 'new'
+          : await showDialog<String>(
+              context: context,
+              builder: (ctx) =>
+                  SimpleDialog(title: const Text('这段输入属于哪个目标？'), children: [
+                    SimpleDialogOption(
+                        onPressed: () => Navigator.pop(ctx, 'new'),
+                        child: const Text('开启新的目标或探索')),
+                    for (final j in active)
+                      SimpleDialogOption(
+                          onPressed: () => Navigator.pop(ctx, j.id),
+                          child: Text(j.safeTitle))
+                  ]));
+      if (selected == null) return;
+      final journey = selected == 'new'
+          ? await _dao.journeys.create(input)
+          : await _dao.journeys.change(
+              active.firstWhere((j) => j.id == selected),
+              'entry',
+              {'text': input});
+      if (!mounted) return;
+      if (knowledgeNodeId != null) {
+        await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => EvidenceGrowthKnowledgePage(
+                    dao: _dao,
+                    journey: journey,
+                    stage: journey.node,
+                    initialNodeId: knowledgeNodeId)));
+        if (!mounted) return;
+      }
+      final confirmed = await Navigator.push<GrowthJourney>(
+          context,
+          MaterialPageRoute(
+              builder: (_) =>
+                  GrowthDiscoveryPage(dao: _dao, journey: (journey))));
+      if (confirmed != null && mounted) await _openJourney(confirmed);
       await _reload();
     } finally {
       if (mounted) setState(() => _routing = false);
     }
   }
 
-  Future<void> _openTrial(RealityTrial trial) async {
-    final Widget page = trial.status == 'REVIEWED'
-        ? _DecisionPage(trial: trial, dao: _dao, ai: _ai)
-        : trial.isClosed
-            ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
-            : _TrialPage(trial: trial, dao: _dao, ai: _ai);
+  Future<void> _openNotificationTarget(GrowthNotificationTarget target) async {
+    final d = await GrowthNotificationDestination.resolve(_dao, target);
+    if (!mounted) return;
+    if (d.page == 'MISSING') {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(d.message)));
+      return;
+    }
+    if (d.page == 'JOURNEY') {
+      await _openJourney(d.journey!,
+          notificationNode: d.node, notificationMessage: d.message);
+      return;
+    }
+    final t = d.trial!;
+    final Widget page = switch (d.page) {
+      'ARCHIVE' => _ArchivePage(
+          trial: t, dao: _dao, ai: _ai, notificationMessage: d.message),
+      'DECISION' =>
+        _DecisionPage(trial: t, dao: _dao, ai: _ai, fromNotification: true),
+      _ => _TrialPage(
+          trial: t,
+          dao: _dao,
+          ai: _ai,
+          notificationNode: d.node,
+          initialFacts: '${d.journey?.data['pending_entry'] ?? ''}')
+    };
     await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
     await _reload();
+  }
+
+  Future<void> _openJourney(GrowthJourney journey,
+      {String notificationNode = '', String notificationMessage = ''}) async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => EvidenceGrowthJourneyPage(
+                journey: journey,
+                dao: _dao,
+                onAction: _journeyAction,
+                onTrial: _openTrialId,
+                draft: _ai.journeyDraft,
+                guidance: _ai.guideJourney,
+                notificationNode: notificationNode,
+                notificationMessage: notificationMessage)));
+    await _reload();
+  }
+
+  Future<void> _journeyAction(GrowthJourney j) async {
+    final previousId = j.data['previous_trial_id'] as String? ?? '';
+    final previous = previousId.isEmpty ? null : await _dao.byId(previousId);
+    final canLink = EvidenceGrowthJourneyRuntime.canInherit(j, previous);
+    final route = EvidenceGrowthJourneyRuntime.compile(j, previous: previous);
+    await _dao.recordRoute(route);
+    if (!mounted) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => _RoutePage(
+                route: route,
+                dao: _dao,
+                ai: _ai,
+                journey: j,
+                previousTrialId: canLink ? previous!.id : '')));
+  }
+
+  Future<void> _openTrial(RealityTrial trial) async {
+    final j = await _dao.journeys.forTrial(trial.id);
+    if (!mounted) return;
+    if (j != null) {
+      await _openJourney(j);
+      return;
+    }
+    await _openTrialId(trial.id);
+  }
+
+  Future<void> _openTrialId(String id) async {
+    final trial = await _dao.byId(id);
+    if (trial == null || !mounted) return;
+    final j = await _dao.journeys.forTrial(id);
+    if (!mounted) return;
+    final Widget page = j != null && j.trialId != id
+        ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
+        : trial.status == 'REVIEWED'
+            ? _DecisionPage(trial: trial, dao: _dao, ai: _ai)
+            : trial.isClosed
+                ? _ArchivePage(trial: trial, dao: _dao, ai: _ai)
+                : _TrialPage(
+                    trial: trial,
+                    dao: _dao,
+                    ai: _ai,
+                    initialFacts: '${j?.data['pending_entry'] ?? ''}');
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    await _reload();
+  }
+
+  Future<void> _legacy() async {
+    if (_summary == null) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => Scaffold(
+                appBar: AppBar(title: const Text('此前实战与循环')),
+                body: _Practice(
+                    active: _active,
+                    recent: _recent,
+                    summary: _summary!,
+                    busy: _routing,
+                    onBegin: _begin,
+                    onOpen: _openTrial,
+                    onLearn: () => Navigator.pop(context)))));
   }
 
   @override
@@ -154,8 +349,22 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
       appBar: AppBar(
         title: const Text('六模块证据成长'),
         actions: [
-          IconButton(tooltip: '功能问答助手', onPressed: () => _showGuide(context, _ai), icon: const Icon(Icons.auto_awesome_outlined)),
-          IconButton(tooltip: '设置', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _SettingsPage(dao: _dao))).then((_) => _reload()), icon: const Icon(Icons.settings_outlined)),
+          IconButton(
+              tooltip: '功能问答助手',
+              onPressed: () => _showGuide(context, _ai),
+              icon: const Icon(Icons.auto_awesome_outlined)),
+          IconButton(
+              tooltip: '此前实战与循环',
+              icon: const Icon(Icons.history),
+              onPressed: _legacy),
+          IconButton(
+              tooltip: '设置',
+              onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => _SettingsPage(dao: _dao)))
+                  .then((_) => _reload()),
+              icon: const Icon(Icons.settings_outlined)),
         ],
       ),
       body: _loading
@@ -163,21 +372,36 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
           : IndexedStack(
               index: _tab,
               children: [
-                _Practice(active: _active, recent:_recent, summary: _summary!, busy: _routing, onBegin: _begin,
-                  onOpen: _openTrial,onLearn:()=>setState(()=>_tab=2)),
+                EvidenceGrowthJourneyHome(dao: _dao, onOpen: _openJourney),
                 _Review(recent: _recent, onOpen: _openTrial),
-                _Learning(onApply: _begin, dao: _dao),
-                _Evidence(summary: _summary!, recent: _recent,onOpen:_openTrial),
+                _Learning(
+                    onApply: (text, nodeId) =>
+                        _begin(text, knowledgeNodeId: nodeId),
+                    dao: _dao),
+                _Evidence(
+                    summary: _summary!, recent: _recent, onOpen: _openTrial),
               ],
             ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (value) => setState(() => _tab = value),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.play_circle_outline), selectedIcon: Icon(Icons.play_circle), label: '实战'),
-          NavigationDestination(icon: Icon(Icons.replay_outlined), selectedIcon: Icon(Icons.replay_circle_filled), label: '复盘'),
-          NavigationDestination(icon: Icon(Icons.account_tree_outlined), selectedIcon: Icon(Icons.account_tree), label: '学习'),
-          NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: '我的证据'),
+          NavigationDestination(
+              icon: Icon(Icons.play_circle_outline),
+              selectedIcon: Icon(Icons.play_circle),
+              label: '实战'),
+          NavigationDestination(
+              icon: Icon(Icons.replay_outlined),
+              selectedIcon: Icon(Icons.replay_circle_filled),
+              label: '复盘'),
+          NavigationDestination(
+              icon: Icon(Icons.account_tree_outlined),
+              selectedIcon: Icon(Icons.account_tree),
+              label: '学习'),
+          NavigationDestination(
+              icon: Icon(Icons.insights_outlined),
+              selectedIcon: Icon(Icons.insights),
+              label: '我的证据'),
         ],
       ),
     );
@@ -185,7 +409,14 @@ class _EvidenceGrowthHomePageState extends State<EvidenceGrowthHomePage> with Wi
 }
 
 class _Practice extends StatefulWidget {
-  const _Practice({required this.active,required this.recent, required this.summary, required this.busy, required this.onBegin, required this.onOpen,required this.onLearn});
+  const _Practice(
+      {required this.active,
+      required this.recent,
+      required this.summary,
+      required this.busy,
+      required this.onBegin,
+      required this.onOpen,
+      required this.onLearn});
   final List<RealityTrial> active;
   final List<RealityTrial> recent;
   final EvidenceSummary summary;
@@ -227,19 +458,34 @@ class _PracticeState extends State<_Practice> {
 
   @override
   Widget build(BuildContext context) {
-    final now=DateTime.now();
-    final pending=widget.recent.where((t)=>t.isClosed && t.nextTrialId.isEmpty && const {'ACT','ADJUST'}.contains(t.decision)).take(3).toList();
-    final today=widget.recent.where((trial)=>trial.resultAtMs>=DateTime(now.year,now.month,now.day).millisecondsSinceEpoch).take(3).toList();
+    final now = DateTime.now();
+    final pending = widget.recent
+        .where((t) =>
+            t.isClosed &&
+            t.nextTrialId.isEmpty &&
+            const {'ACT', 'ADJUST'}.contains(t.decision))
+        .take(3)
+        .toList();
+    final today = widget.recent
+        .where((trial) =>
+            trial.resultAtMs >=
+            DateTime(now.year, now.month, now.day).millisecondsSinceEpoch)
+        .take(3)
+        .toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
       children: [
-        if(pending.isNotEmpty) ...[
-          const _Title('把上次的学习用起来','这些问题已完成复盘，下一轮还没有进入现实'),
-          ...pending.map((t)=>_TrialTile(trial:t,onTap:()=>widget.onOpen(t))),
+        if (pending.isNotEmpty) ...[
+          const _Title('把上次的学习用起来', '这些问题已完成复盘，下一轮还没有进入现实'),
+          ...pending
+              .map((t) => _TrialTile(trial: t, onTap: () => widget.onOpen(t))),
         ],
-        const Text('把一个真实问题带进现实', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900, color: _ink)),
+        const Text('把一个真实问题带进现实',
+            style: TextStyle(
+                fontSize: 25, fontWeight: FontWeight.w900, color: _ink)),
         const SizedBox(height: 6),
-        const Text('系统自动选择模块与知识依据，只给一个能获得现实证据的下一步。', style: TextStyle(color: Color(0xFF58706B), height: 1.45)),
+        const Text('先由你选择符合自己的需求，再筛选知识，AI 据此生成方案与现实下一步。',
+            style: TextStyle(color: Color(0xFF58706B), height: 1.45)),
         const SizedBox(height: 16),
         Card(
           elevation: 0,
@@ -260,12 +506,21 @@ class _PracticeState extends State<_Practice> {
               ),
               const SizedBox(height: 10),
               Row(children: [
-                IconButton.filledTonal(onPressed: _voice, icon: Icon(_listening ? Icons.stop : Icons.mic_none), tooltip: _listening ? '停止录音' : '语音输入'),
+                IconButton.filledTonal(
+                    onPressed: _voice,
+                    icon: Icon(_listening ? Icons.stop : Icons.mic_none),
+                    tooltip: _listening ? '停止录音' : '语音输入'),
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: _input.text.trim().isEmpty || widget.busy ? null : () => widget.onBegin(_input.text),
-                    icon: widget.busy ? const SizedBox.square(dimension: 17, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.route),
+                    onPressed: _input.text.trim().isEmpty || widget.busy
+                        ? null
+                        : () => widget.onBegin(_input.text),
+                    icon: widget.busy
+                        ? const SizedBox.square(
+                            dimension: 17,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.route),
                     label: Text(widget.busy ? '正在匹配证据' : '生成现实下一步'),
                   ),
                 ),
@@ -275,17 +530,38 @@ class _PracticeState extends State<_Practice> {
         ),
         if (widget.active.isNotEmpty) ...[
           const SizedBox(height: 20),
-          _Card(title:'当前下一步',child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text(const {'RESULT_CAPTURED','REVIEWED'}.contains(widget.active.first.status)
-              ?'已有现实结果，完成复盘并选择本轮出口。':widget.active.first.actionInstruction),
-            FilledButton(onPressed:()=>widget.onOpen(widget.active.first),child:Text('继续 · ${_status(widget.active.first.status)}')),
-          ])),
-          ...widget.active.skip(1).map((trial) => _TrialTile(trial: trial, onTap: () => widget.onOpen(trial))),
+          _Card(
+              title: '当前下一步',
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(const {'RESULT_CAPTURED', 'REVIEWED'}
+                            .contains(widget.active.first.status)
+                        ? '已有现实结果，完成复盘并选择本轮出口。'
+                        : widget.active.first.actionInstruction),
+                    FilledButton(
+                        onPressed: () => widget.onOpen(widget.active.first),
+                        child: Text(
+                            '继续 · ${_status(widget.active.first.status)}')),
+                  ])),
+          ...widget.active.skip(1).map((trial) =>
+              _TrialTile(trial: trial, onTap: () => widget.onOpen(trial))),
         ],
-        const SizedBox(height:16),
-        _Card(title:'今日现实证据',child:today.isEmpty?const Text('今天还没有结果记录。做完当前一步后，把真实发生的事情带回来。'):
-          Column(children:today.map((t)=>ListTile(contentPadding:EdgeInsets.zero,title:Text(t.actualOutcome,maxLines:3,overflow:TextOverflow.ellipsis),
-            subtitle:Text('${t.primaryModule.label} · ${t.resultStatus}'),onTap:()=>widget.onOpen(t))).toList())),
+        const SizedBox(height: 16),
+        _Card(
+            title: '今日现实证据',
+            child: today.isEmpty
+                ? const Text('今天还没有结果记录。做完当前一步后，把真实发生的事情带回来。')
+                : Column(
+                    children: today
+                        .map((t) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(t.actualOutcome,
+                                maxLines: 3, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                                '${t.primaryModule.label} · ${t.resultStatus}'),
+                            onTap: () => widget.onOpen(t)))
+                        .toList())),
         const SizedBox(height: 20),
         const _Title('20 个真实案例', '点击填入，再按自己的情况修改'),
         SizedBox(
@@ -298,8 +574,10 @@ class _PracticeState extends State<_Practice> {
               width: 230,
               child: ActionChip(
                 avatar: CircleAvatar(child: Text('${index + 1}')),
-                label: Text(EvidenceGrowthKnowledge.defaultCases[index], maxLines: 3, overflow: TextOverflow.ellipsis),
-                onPressed: () => setState(() => _input.text = EvidenceGrowthKnowledge.defaultCases[index]),
+                label: Text(EvidenceGrowthKnowledge.defaultCases[index],
+                    maxLines: 3, overflow: TextOverflow.ellipsis),
+                onPressed: () => setState(() =>
+                    _input.text = EvidenceGrowthKnowledge.defaultCases[index]),
               ),
             ),
           ),
@@ -308,13 +586,18 @@ class _PracticeState extends State<_Practice> {
         Card(
           elevation: 0,
           child: ListTile(
-            leading: const CircleAvatar(backgroundColor: Color(0xFFE2F2EE), child: Icon(Icons.hub_outlined, color: _brand)),
-            title: const Text('六模块共同推动一轮现实改变', style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            leading: const CircleAvatar(
+                backgroundColor: Color(0xFFE2F2EE),
+                child: Icon(Icons.hub_outlined, color: _brand)),
+            title: const Text('六模块共同推动一轮现实改变',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('信念 → 目标 → 行动 → 失败／成功反馈 → 复盘 → 改变 → 更新信念'),
-              Text('已完成 ${widget.summary.completedActions} 次行动 · 记录 ${widget.summary.strategyChanges} 次策略改变'),
+              Text(
+                  '已完成 ${widget.summary.completedActions} 次行动 · 记录 ${widget.summary.strategyChanges} 次策略改变'),
             ]),
-            onTap:widget.onLearn,
+            onTap: widget.onLearn,
           ),
         ),
       ],
@@ -323,57 +606,105 @@ class _PracticeState extends State<_Practice> {
 }
 
 class _RoutePage extends StatefulWidget {
-  const _RoutePage({required this.route, required this.dao, required this.ai, this.previousTrialId = ''});
+  const _RoutePage(
+      {required this.route,
+      required this.dao,
+      required this.ai,
+      this.previousTrialId = '',
+      this.journey});
   final EvidenceRouteResult route;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
   final String previousTrialId;
+  final GrowthJourney? journey;
   @override
   State<_RoutePage> createState() => _RoutePageState();
 }
 
 class _RoutePageState extends State<_RoutePage> {
   late EvidenceRouteResult route = widget.route;
+  late EvidenceRouteResult analysisSource = widget.route;
   var alternative = -1;
   var starting = false;
   var enriching = false;
-  final clarification=TextEditingController();
-  var clarified=false;
+  final clarification = TextEditingController();
+  var clarified = false;
   @override
-  void dispose(){clarification.dispose();super.dispose();}
+  void dispose() {
+    clarification.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
     if (!EvidenceGrowthRouter.protected(route)) unawaited(_enrich());
   }
-  Future<void> _enrich() async {
-    if(mounted)setState(()=>enriching=true);
+
+  Future<void> _enrich({bool refresh = false}) async {
+    if (mounted) setState(() => enriching = true);
     try {
-      final parent=widget.previousTrialId.isEmpty || clarified?null:await widget.dao.byId(widget.previousTrialId);
-      final refined = parent==null?await widget.ai.enrichRoute(route):await widget.ai.continueCycle(parent);
-      if(mounted && !starting)setState(()=>route=refined);
-    } catch(_) {
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('智能分析暂未完成，已保留当前信息，可补充后重试。')));
-    } finally { if(mounted)setState(()=>enriching=false); }
+      final parent =
+          widget.journey != null || widget.previousTrialId.isEmpty || clarified
+              ? null
+              : await widget.dao.byId(widget.previousTrialId);
+      var refined = parent == null
+          ? await widget.ai.enrichRoute(analysisSource, refresh: refresh)
+          : await widget.ai.continueCycle(parent, refresh: refresh);
+      final j = widget.journey;
+      if (j != null)
+        refined = refined.copyWith(
+            goalState: j.title,
+            currentState: '${j.data['current'] ?? ''}',
+            cyclePlan: {
+              ...refined.cyclePlan,
+              'goal': j.title,
+              'current': '${j.data['current'] ?? ''}'
+            });
+      if (mounted && !starting) setState(() => route = refined);
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('智能分析暂未完成，已保留当前信息，可补充后重试。')));
+    } finally {
+      if (mounted) setState(() => enriching = false);
+    }
   }
 
   Future<void> _start() async {
     if (!route.canAct || starting || enriching) return;
     setState(() => starting = true);
-    Map<String,String> workflow={};
-    if(const {'PREMORTEM','SYSTEM_SCAN'}.contains(route.operator)) {
-      final value=await Navigator.push<Map<String,String>>(context,MaterialPageRoute(builder:(_)=>
-        EvidenceGrowthWorkflowPage(route:route,dao:widget.dao,ai:widget.ai)));
-      if(value==null || !mounted){if(mounted)setState(()=>starting=false);return;}
-      workflow=value;
+    Map<String, String> workflow = {};
+    if (const {'PREMORTEM', 'SYSTEM_SCAN'}.contains(route.operator)) {
+      final value = await Navigator.push<Map<String, String>>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => EvidenceGrowthWorkflowPage(
+                  route: route, dao: widget.dao, ai: widget.ai)));
+      if (value == null || !mounted) {
+        if (mounted) setState(() => starting = false);
+        return;
+      }
+      workflow = value;
     }
-    final setupRoute=workflow.isEmpty?route:route.copyWith(actionInstruction:EvidenceGrowthWorkflows.action(route.operator,workflow));
-    final setup = await showDialog<_PredictionSetup>(context: context, barrierDismissible: false, builder: (_) => _PredictionDialog(setupRoute));
-    if (setup == null || !mounted) { if (mounted) setState(() => starting = false); return; }
+    final setupRoute = workflow.isEmpty
+        ? route
+        : route.copyWith(
+            actionInstruction:
+                EvidenceGrowthWorkflows.action(route.operator, workflow));
+    final setup = await showDialog<_PredictionSetup>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _PredictionDialog(setupRoute, widget.ai));
+    if (setup == null || !mounted) {
+      if (mounted) setState(() => starting = false);
+      return;
+    }
     try {
       var enableReminders = setup.remind;
       if (setup.remind) {
-        final notifications = await const EvidenceGrowthNotificationService().ensureNotificationsEnabled();
+        final notifications = await const EvidenceGrowthNotificationService()
+            .ensureNotificationsEnabled();
         if (!mounted) return;
         final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
           context,
@@ -382,33 +713,73 @@ class _RoutePageState extends State<_RoutePage> {
         );
         if (!mounted) return;
         enableReminders = notifications && granted;
-        if (!enableReminders) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('先保存本轮试验；提醒暂未开启，可在本轮提醒中授权恢复。')));
+        if (!enableReminders)
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('先保存本轮试验；提醒暂未开启，可在本轮提醒中授权恢复。')));
       }
-      var prepared=route.copyWith(cyclePlan:setup.cyclePlan,
-        goalState:setup.cyclePlan['goal'],currentState:setup.cyclePlan['current'],topGap:setup.cyclePlan['gap'],
-        actionInstruction:setup.action);
-      if(workflow.isNotEmpty) prepared=prepared.copyWith(actionInstruction:EvidenceGrowthWorkflows.action(route.operator,workflow));
-      final reviewAt=route.operator=='SYSTEM_SCAN' && workflow.isNotEmpty?
-        setup.startAt.add(Duration(days:(EvidenceGrowthWorkflows.decode(workflow['advanced_json'])['window_days'] as num).toInt())):setup.reviewAt;
-      var trial = await widget.dao.createTrial(prepared, prediction: setup.prediction,
-        probability: setup.probability, reviewAt: reviewAt, riskConfirmed: true,
-        goalState: setup.cyclePlan['goal'] ?? '', currentState: setup.cyclePlan['current'] ?? '',
-        topGap: setup.cyclePlan['gap'] ?? '', operatorInputs: {...setup.inputs,
-          ...workflow,'workflow_version':'2',
-          'remind': '$enableReminders', 'scheduled_start_ms': '${setup.startAt.millisecondsSinceEpoch}'},
-        commitmentLevel: setup.commitment, stretchLevel: setup.stretch,
-        stableContext: setup.inputs['稳定情境'] ?? '', worstCase: setup.worstCase,
-        previousTrialId: widget.previousTrialId);
-      if (!setup.startAt.isAfter(DateTime.now())) trial = await widget.dao.startTrial(trial);
+      var prepared = route.copyWith(
+          cyclePlan: setup.cyclePlan,
+          goalState: setup.cyclePlan['goal'],
+          currentState: setup.cyclePlan['current'],
+          topGap: setup.cyclePlan['gap'],
+          actionInstruction: setup.action);
+      if (workflow.isNotEmpty)
+        prepared = prepared.copyWith(
+            actionInstruction:
+                EvidenceGrowthWorkflows.action(route.operator, workflow));
+      final reviewAt = route.operator == 'SYSTEM_SCAN' && workflow.isNotEmpty
+          ? setup.startAt.add(Duration(
+              days: (EvidenceGrowthWorkflows.decode(
+                      workflow['advanced_json'])['window_days'] as num)
+                  .toInt()))
+          : setup.reviewAt;
+      var trial = await widget.dao.createTrial(prepared,
+          prediction: setup.prediction,
+          probability: setup.probability,
+          reviewAt: reviewAt,
+          riskConfirmed: true,
+          goalState: setup.cyclePlan['goal'] ?? '',
+          currentState: setup.cyclePlan['current'] ?? '',
+          topGap: setup.cyclePlan['gap'] ?? '',
+          operatorInputs: {
+            ...setup.inputs,
+            ...workflow,
+            'workflow_version': '2',
+            if (widget.journey != null) ...{
+              'journey_id': widget.journey!.id,
+              'journey_version': '${widget.journey!.version}',
+              'max_repeat': setup.inputs['max_repeat'] ?? '3',
+              'sensitive': '${widget.journey!.profile.sensitive}',
+              'scope': widget.journey!.profile.scope
+            },
+            'remind': '$enableReminders',
+            'scheduled_start_ms': '${setup.startAt.millisecondsSinceEpoch}'
+          },
+          commitmentLevel: setup.commitment,
+          stretchLevel: setup.stretch,
+          stableContext: setup.inputs['稳定情境'] ?? '',
+          worstCase: setup.worstCase,
+          previousTrialId: widget.previousTrialId);
+      if (!setup.startAt.isAfter(DateTime.now()))
+        trial = await widget.dao.startTrial(trial);
       if (enableReminders) {
-        final scheduled = await const EvidenceGrowthNotificationService().scheduleTrial(trial,
-          repeatedAvoidance: await widget.dao.repeatedAvoidance(trial));
-        if (!scheduled && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Trial 已保存；提醒未成功安排，请在设置检查通知权限。')));
+        final scheduled = await const EvidenceGrowthNotificationService()
+            .scheduleTrial(trial,
+                repeatedAvoidance: await widget.dao.repeatedAvoidance(trial));
+        if (!scheduled && mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Trial 已保存；提醒未成功安排，请在设置检查通知权限。')));
       }
       if (!mounted) return;
-      await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => _TrialPage(trial: trial, dao: widget.dao, ai: widget.ai)));
+      await Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+              builder: (_) =>
+                  _TrialPage(trial: trial, dao: widget.dao, ai: widget.ai)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('未能开始：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('未能开始：$e')));
     } finally {
       if (mounted) setState(() => starting = false);
     }
@@ -418,87 +789,216 @@ class _RoutePageState extends State<_RoutePage> {
   Widget build(BuildContext context) {
     final blocked = !route.canAct;
     return Scaffold(
-      appBar: AppBar(title: const Text('现实下一步')),
+      appBar: AppBar(title: const Text('现实下一步'), actions: [
+        if (widget.journey != null)
+          IconButton(
+              tooltip: '学习知识并重新准备动作',
+              icon: const Icon(Icons.menu_book),
+              onPressed: starting
+                  ? null
+                  : () async {
+                      final j =
+                          await widget.dao.journeys.find(widget.journey!.id);
+                      if (j == null || !mounted) return;
+                      await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => EvidenceGrowthKnowledgePage(
+                                  dao: widget.dao,
+                                  journey: j,
+                                  stage: 'ACTION')));
+                      if (mounted) Navigator.pop(context);
+                    }),
+      ]),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
           Wrap(spacing: 7, children: [
             _Chip(route.primaryModule.label, _brand),
-            _Chip(route.evidenceLevel, route.evidenceLevel == 'E0' ? Colors.red : _brand),
+            _Chip(route.evidenceLevel,
+                route.evidenceLevel == 'E0' ? Colors.red : _brand),
             if (route.riskGate != 'PASS') _Chip(route.riskGate, Colors.red),
           ]),
           const SizedBox(height: 12),
           if (enriching) const LinearProgressIndicator(minHeight: 2),
-          if(route.goalState.isNotEmpty) _Card(title:'这一步为哪个目标服务',child:Text('${route.goalState}\n当前差距：${route.topGap}')),
-          if((route.cyclePlan['belief']??'').isNotEmpty) _Card(title:'这一步要检验的判断（请核对）',child:Text(route.cyclePlan['belief']!)),
-          _Card(title: blocked ? '还需要确认什么' : '为什么现在做这一步', child: Text(route.cyclePlan['why_action']??route.inference, style: const TextStyle(height: 1.5))),
-          if((route.cyclePlan['learning_applied']??'').isNotEmpty) _Card(title:'上轮反馈如何改变本轮',child:Text(route.cyclePlan['learning_applied']!)),
+          if (route.goalState.isNotEmpty)
+            _Card(
+                title: '这一步为哪个目标服务',
+                child: Text('${route.goalState}\n当前差距：${route.topGap}')),
+          if ((route.cyclePlan['belief'] ?? '').isNotEmpty)
+            _Card(
+                title: '这一步要检验的判断（请核对）',
+                child: Text(route.cyclePlan['belief']!)),
+          _Card(
+              title: blocked ? '还需要确认什么' : '为什么现在做这一步',
+              child: Text(route.cyclePlan['why_action'] ?? route.inference,
+                  style: const TextStyle(height: 1.5))),
+          if ((route.cyclePlan['learning_applied'] ?? '').isNotEmpty)
+            _Card(
+                title: '上轮反馈如何改变本轮',
+                child: Text(route.cyclePlan['learning_applied']!)),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: blocked ? const Color(0xFFFFF1F0) : const Color(0xFFE7F5F1),
+              color:
+                  blocked ? const Color(0xFFFFF1F0) : const Color(0xFFE7F5F1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: blocked ? const Color(0xFFF0C1BD) : const Color(0xFFB8DBD3)),
+              border: Border.all(
+                  color: blocked
+                      ? const Color(0xFFF0C1BD)
+                      : const Color(0xFFB8DBD3)),
             ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(blocked ? route.status : '现在只做这一件事', style: TextStyle(color: blocked ? Colors.red : _brand, fontWeight: FontWeight.w800)),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(blocked ? route.status : '现在只做这一件事',
+                  style: TextStyle(
+                      color: blocked ? Colors.red : _brand,
+                      fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
-              Text(route.actionInstruction.isEmpty ? route.missingFacts.join('\n') : route.actionInstruction, style: const TextStyle(fontSize: 20, height: 1.4, fontWeight: FontWeight.w900, color: _ink)),
+              Text(GrowthGuidance.label(route.riskChecks['CONTENT_ORIGIN'])),
+              if ((route.riskChecks['CONTENT_REASON'] ?? '').isNotEmpty)
+                Text(route.riskChecks['CONTENT_REASON']!),
+              if (route.riskChecks['CACHE_HIT'] == 'true')
+                const Text('已复用成功分析，未重新请求 AI'),
+              TextButton.icon(
+                  onPressed: enriching || starting
+                      ? null
+                      : () => _enrich(refresh: true),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('重新进行 AI 分析')),
+              Text(
+                  route.actionInstruction.isEmpty
+                      ? route.missingFacts.join('\n')
+                      : route.actionInstruction,
+                  style: const TextStyle(
+                      fontSize: 20,
+                      height: 1.4,
+                      fontWeight: FontWeight.w900,
+                      color: _ink)),
               if (route.completionDefinition.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('完成定义｜${route.completionDefinition}', style: const TextStyle(color: Color(0xFF536A65))),
+                Text('完成定义｜${route.completionDefinition}',
+                    style: const TextStyle(color: Color(0xFF536A65))),
               ],
               if (!blocked) ...[
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: OutlinedButton.icon(onPressed: () => showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => _Why(route)), icon: const Icon(Icons.help_outline), label: const Text('为什么'))),
+                  Expanded(
+                      child: OutlinedButton.icon(
+                          onPressed: () => showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => _Why(route)),
+                          icon: const Icon(Icons.help_outline),
+                          label: const Text('为什么'))),
                   const SizedBox(width: 8),
-                  Expanded(child: OutlinedButton.icon(onPressed: enriching || route.alternatives.isEmpty ? null : () {
-                    setState(() {
-                      alternative = (alternative + 1) % route.alternatives.length;
-                      route = route.copyWith(actionInstruction: route.alternatives[alternative], completionDefinition: '完成替代动作并留下一个可观察事实。');
-                    });
-                  }, icon: const Icon(Icons.swap_horiz), label: const Text('换方案'))),
+                  Expanded(
+                      child: OutlinedButton.icon(
+                          onPressed: enriching || route.alternatives.isEmpty
+                              ? null
+                              : () {
+                                  setState(() {
+                                    alternative = (alternative + 1) %
+                                        route.alternatives.length;
+                                    route = route.copyWith(
+                                        actionInstruction:
+                                            route.alternatives[alternative],
+                                        completionDefinition:
+                                            '完成替代动作并留下一个可观察事实。');
+                                  });
+                                },
+                          icon: const Icon(Icons.swap_horiz),
+                          label: const Text('换方案'))),
                 ]),
               ],
             ]),
           ),
           const SizedBox(height: 10),
-          ExpansionTile(title: const Text('查看事实、知识依据与推断'), children: [Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _Label('用户事实', route.facts.join('\n')),
-            const Divider(),
-            _Label('知识证据', route.selectedNodes.map((e) => '${e.id} · ${e.title}').join('\n')),
-            if (route.personalEvidence.isNotEmpty) ...[
-              const Divider(), _Label('同类个人证据', route.personalEvidence.map((e) =>
-                '${e['result_status']} · ${e['actual_outcome']} · ${e['decision']}').join('\n')),
-            ],
-            const Divider(),
-            _Label('AI 推断', route.inference),
-            const Divider(),
-            _Label('产品动作', route.actionInstruction),
-          ]))]),
-          ExpansionTile(initiallyExpanded:blocked,title:Text(blocked?'补充这一条信息':'理解不准确？补充或纠正'),children:[
-            if(route.missingFacts.isNotEmpty) Text(route.missingFacts.join('\n')),
-            TextField(controller:clarification,minLines:2,maxLines:4,decoration:const InputDecoration(hintText:'写出实际情况或纠正目标，不需要分析属于哪个模块。')),
-            TextButton(onPressed:enriching?null:() async {
-              if(clarification.text.trim().isEmpty)return;
-              final fresh=const EvidenceGrowthRouter().route('${route.rawInput}\n用户补充：${clarification.text.trim()}');
-              setState((){route=fresh.copyWith(cycleContext:route.cycleContext,cyclePlan:route.cyclePlan);clarified=true;});
-              await _enrich();
-            },child:const Text('按补充的信息重新判断')),
+          ExpansionTile(title: const Text('查看事实、知识依据与推断'), children: [
+            Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _Label('用户事实', route.facts.join('\n')),
+                      const Divider(),
+                      _Label(
+                          '知识证据',
+                          route.selectedNodes
+                              .map((e) => '${e.id} · ${e.title}')
+                              .join('\n')),
+                      if (route.personalEvidence.isNotEmpty) ...[
+                        const Divider(),
+                        _Label(
+                            '同类个人证据',
+                            route.personalEvidence
+                                .map((e) =>
+                                    '${e['result_status']} · ${e['actual_outcome']} · ${e['decision']}')
+                                .join('\n')),
+                      ],
+                      const Divider(),
+                      _Label(
+                          '${GrowthGuidance.label(route.riskChecks['INFERENCE_ORIGIN'] ?? route.riskChecks['CONTENT_ORIGIN'])} · 推断',
+                          route.inference),
+                      const Divider(),
+                      _Label('产品动作', route.actionInstruction),
+                    ]))
           ]),
-          if (route.selectedNodes.isNotEmpty) TextButton.icon(
-            icon: const Icon(Icons.feedback_outlined), label: const Text('这条依据不适用？记录反馈'),
-            onPressed: () => _evidenceFeedback(context, widget.dao, route.selectedNodes.map((e) => e.id).toList())),
+          ExpansionTile(
+              initiallyExpanded: blocked,
+              title: Text(blocked ? '补充这一条信息' : '理解不准确？补充或纠正'),
+              children: [
+                if (route.missingFacts.isNotEmpty)
+                  Text(route.missingFacts.join('\n')),
+                TextField(
+                    controller: clarification,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                        hintText: '写出实际情况或纠正目标，不需要分析属于哪个模块。')),
+                TextButton(
+                    onPressed: enriching
+                        ? null
+                        : () async {
+                            if (clarification.text.trim().isEmpty) return;
+                            final fresh = const EvidenceGrowthRouter().route(
+                                '${route.rawInput}\n用户补充：${clarification.text.trim()}');
+                            setState(() {
+                              route = fresh.copyWith(
+                                  cycleContext: route.cycleContext,
+                                  cyclePlan: route.cyclePlan);
+                              analysisSource = route;
+                              clarified = true;
+                            });
+                            await _enrich();
+                          },
+                    child: const Text('按补充的信息重新判断')),
+              ]),
+          if (route.selectedNodes.isNotEmpty)
+            TextButton.icon(
+                icon: const Icon(Icons.feedback_outlined),
+                label: const Text('这条依据不适用？记录反馈'),
+                onPressed: () => _evidenceFeedback(context, widget.dao,
+                    route.selectedNodes.map((e) => e.id).toList())),
         ],
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: FilledButton(
-            onPressed: enriching || starting ? null : blocked ? () => Navigator.pop(context) : _start,
-            child: Text(enriching?'正在结合现实反馈谋划':blocked ? '暂不行动，返回' : starting ? '正在保存本轮行动' : '确认这一步与预测'),
+            onPressed: enriching || starting
+                ? null
+                : blocked
+                    ? () => Navigator.pop(context)
+                    : _start,
+            child: Text(enriching
+                ? '正在结合现实反馈谋划'
+                : blocked
+                    ? '暂不行动，返回'
+                    : starting
+                        ? '正在保存本轮行动'
+                        : '确认这一步与预测'),
           ),
         ),
       ),
@@ -507,8 +1007,18 @@ class _RoutePageState extends State<_RoutePage> {
 }
 
 class _PredictionSetup {
-  const _PredictionSetup(this.prediction, this.probability, this.reviewAt, this.remind,
-      this.inputs, this.commitment, this.stretch, this.worstCase, this.startAt,this.cyclePlan,this.action);
+  const _PredictionSetup(
+      this.prediction,
+      this.probability,
+      this.reviewAt,
+      this.remind,
+      this.inputs,
+      this.commitment,
+      this.stretch,
+      this.worstCase,
+      this.startAt,
+      this.cyclePlan,
+      this.action);
   final String prediction;
   final double probability;
   final DateTime reviewAt;
@@ -518,141 +1028,422 @@ class _PredictionSetup {
   final String stretch;
   final String worstCase;
   final DateTime startAt;
-  final Map<String,String> cyclePlan;
+  final Map<String, String> cyclePlan;
   final String action;
 }
 
 class _PredictionDialog extends StatefulWidget {
-  const _PredictionDialog(this.route);
+  const _PredictionDialog(this.route, this.ai);
   final EvidenceRouteResult route;
+  final EvidenceGrowthAiService ai;
   @override
   State<_PredictionDialog> createState() => _PredictionDialogState();
 }
 
 class _PredictionDialogState extends State<_PredictionDialog> {
-  late final prediction = TextEditingController(text:widget.route.cyclePlan['expected_signal']??widget.route.inputDrafts['prediction']??'');
-  late final goal=TextEditingController(text:widget.route.goalState);
-  late final current=TextEditingController(text:widget.route.currentState.isEmpty?widget.route.rawInput:widget.route.currentState);
-  late final gap=TextEditingController(text:widget.route.topGap);
-  late final belief=TextEditingController(text:widget.route.cyclePlan['belief']??'');
-  late final action=TextEditingController(text:widget.route.actionInstruction);
+  late final prediction = TextEditingController(
+      text: widget.route.cyclePlan['expected_signal'] ??
+          widget.route.inputDrafts['prediction'] ??
+          '');
+  late final goal = TextEditingController(text: widget.route.goalState);
+  late final current = TextEditingController(
+      text: widget.route.currentState.isEmpty
+          ? widget.route.rawInput
+          : widget.route.currentState);
+  late final gap = TextEditingController(text: widget.route.topGap);
+  late final belief =
+      TextEditingController(text: widget.route.cyclePlan['belief'] ?? '');
+  late final action =
+      TextEditingController(text: widget.route.actionInstruction);
   var probability = .6;
-  late int window = widget.route.operator == 'CONTEXT_REDESIGN' ? 4 : widget.route.operator == 'RECOVER' ? 2 : 0;
+  late int window = widget.route.operator == 'CONTEXT_REDESIGN'
+      ? 4
+      : widget.route.operator == 'RECOVER'
+          ? 2
+          : 0;
   var remind = true;
   var safe = false;
   var stretch = 'STRETCH';
   var commitment = 'L1';
-  var goalValidated=false;
+  var goalValidated = false;
   DateTime? scheduledStart;
   late final spec = EvidenceGrowthOperatorRegistry.byId(widget.route.operator);
   late final inputs = <String, TextEditingController>{
-    for (final prompt in spec.inputPrompts) prompt: TextEditingController(text:widget.route.inputDrafts[prompt]??''),
+    for (final prompt in spec.inputPrompts)
+      prompt:
+          TextEditingController(text: widget.route.inputDrafts[prompt] ?? ''),
   };
   final worstCase = TextEditingController();
-  late final budget = TextEditingController(text:widget.route.inputDrafts['cost_limit']??'');
+  final duration = TextEditingController(text: '15');
+  var maxRepeat = 3;
+  late final budget =
+      TextEditingController(text: widget.route.inputDrafts['cost_limit'] ?? '');
+  bool filling = false;
+  final fillable = <String>{};
+  String draftStatus = '参考草案可编辑；安全、意愿与实际结果由你确认。';
+  Map<String, TextEditingController> get formControllers => {
+        'goal': goal,
+        'current': current,
+        'gap': gap,
+        'belief': belief,
+        'action': action,
+        'prediction': prediction,
+        'worst_case': worstCase,
+        'duration_minutes': duration,
+        ...inputs
+      };
+  Map<String, String> get formLabels => {
+        'goal': '希望推进什么',
+        'current': '已知事实',
+        'gap': '当前卡点',
+        'belief': '待检验判断',
+        'action': '准备做的一步',
+        'prediction': '预计会观察到什么',
+        'worst_case': '最坏结果与损失上限',
+        'duration_minutes': '预计占用分钟数',
+        for (final k in inputs.keys) k: k
+      };
+  GrowthData get formContext => {
+        'title': goal.text,
+        'raw_input': widget.route.rawInput,
+        'current': widget.route.currentState,
+        'action': widget.route.actionInstruction,
+        'cycle_plan': widget.route.cyclePlan,
+        'journey_context': widget.route.cycleContext
+      };
+  @override
+  void initState() {
+    super.initState();
+    final defaults = GrowthFormDrafts.defaults(formLabels, formContext);
+    for (final e in formControllers.entries) {
+      if (e.value.text.trim().isEmpty) {
+        fillable.add(e.key);
+        e.value.text = defaults[e.key] ?? '';
+      }
+    }
+    unawaited(fillForm());
+  }
+
+  Future<void> fillForm({bool refresh = false}) async {
+    if (filling) return;
+    setState(() => filling = true);
+    final before = {
+      for (final e in formControllers.entries) e.key: e.value.text
+    };
+    try {
+      final result = await widget.ai.formDraft(
+          '确认本轮行动', formLabels, formContext,
+          initial: before, nodes: widget.route.selectedNodes, refresh: refresh);
+      if (!mounted) return;
+      setState(() {
+        draftStatus =
+            '${GrowthGuidance.label(result['origin'] as String?)}：${result['reason'] ?? ''}';
+        final values = growthMap(result['fields']);
+        for (final e in formControllers.entries) {
+          // Existing recorded/AI action and prediction stay intact; only missing setup detail is completed.
+          if (fillable.contains(e.key) && e.value.text == before[e.key]) {
+            if (values[e.key] is String) e.value.text = values[e.key] as String;
+          }
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => draftStatus = 'AI 预填暂未完成，保留可修改的参考草案。');
+    } finally {
+      if (mounted) setState(() => filling = false);
+    }
+  }
+
   @override
   void dispose() {
-    prediction.dispose();goal.dispose();current.dispose();gap.dispose();belief.dispose();action.dispose();
+    prediction.dispose();
+    goal.dispose();
+    current.dispose();
+    gap.dispose();
+    belief.dispose();
+    action.dispose();
     worstCase.dispose();
+    duration.dispose();
     budget.dispose();
-    for (final controller in inputs.values) { controller.dispose(); }
+    for (final controller in inputs.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
+
   DateTime get reviewAt {
     final now = scheduledStart ?? DateTime.now();
-    return [now.add(const Duration(minutes: 10)), now.add(const Duration(hours: 1)), now.add(const Duration(hours: 4)),
-      DateTime(now.year, now.month, now.day + 1, 20),now.add(const Duration(days:7)),now.add(const Duration(days:14))][window];
+    return [
+      now.add(const Duration(minutes: 10)),
+      now.add(const Duration(hours: 1)),
+      now.add(const Duration(hours: 4)),
+      DateTime(now.year, now.month, now.day + 1, 20),
+      now.add(const Duration(days: 7)),
+      now.add(const Duration(days: 14))
+    ][window];
   }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
         title: const Text('确认本轮，进入现实'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('系统已起草，请确认是否符合你的实际情况。结果回来后，我们据此调整下一轮。'),
-          TextField(controller:goal,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'我希望推进的目标')),
-          TextField(controller:action,readOnly:const {'PREMORTEM','SYSTEM_SCAN','COMMITMENT_LADDER'}.contains(widget.route.operator),minLines:2,maxLines:4,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'现在做的这一件事')),
-          ExpansionTile(title:const Text('本轮判断与差距（可纠正）'),children:[
-            TextField(controller:current,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'当前已知事实')),
-            TextField(controller:gap,onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'这次先解决的差距')),
-            TextField(controller:belief,decoration:const InputDecoration(labelText:'待检验的判断（不明确可留空）',helperText:'这是候选解释，不是对你的诊断')),
+        content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('先核对目标、动作和预期反馈。其余内容已提供草案，可展开修改。'),
+          Text(draftStatus),
+          if (filling) const LinearProgressIndicator(),
+          TextButton.icon(
+              onPressed: filling ? null : () => fillForm(refresh: true),
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('AI 补齐执行条件')),
+          TextField(
+              controller: goal,
+              readOnly: widget.route.cycleContext
+                  .any((e) => e.containsKey('journey_context')),
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: '我希望推进的目标')),
+          TextField(
+              controller: action,
+              readOnly: const {'PREMORTEM', 'SYSTEM_SCAN', 'COMMITMENT_LADDER'}
+                  .contains(widget.route.operator),
+              minLines: 2,
+              maxLines: 4,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: '现在做的这一件事')),
+          ExpansionTile(title: const Text('本轮判断与差距（可纠正）'), children: [
+            TextField(
+                controller: current,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: '当前已知事实')),
+            TextField(
+                controller: gap,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: '这次先解决的差距')),
+            TextField(
+                controller: belief,
+                decoration: const InputDecoration(
+                    labelText: '待检验的判断（不明确可留空）', helperText: '这是候选解释，不是对你的诊断')),
           ]),
           const SizedBox(height: 10),
-          TextField(controller: prediction, onChanged:(_)=>setState((){}), minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '我预测会发生什么？', border: OutlineInputBorder())),
-          ExpansionTile(initiallyExpanded:inputs.values.any((v)=>v.text.trim().isEmpty),title:const Text('执行条件（核对草案）'),children:[...inputs.entries.map((entry) => Padding(padding: const EdgeInsets.only(top: 8), child:
-            TextField(controller: entry.value, onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(labelText: entry.key,
-                helperText:widget.route.inputDrafts.containsKey(entry.key)?'系统草案，请核对或修改':null,
-                border: const OutlineInputBorder()))))]),
-          if (spec.needsCommitment) DropdownButtonFormField<String>(initialValue: commitment,
-            decoration: const InputDecoration(labelText: '最低有效承诺'),
-            isExpanded:true,
-            items: EvidenceGrowthWorkflows.commitments.entries.map((e)=>DropdownMenuItem(value:e.key,
-              child:Text('${e.key} ${e.value}',overflow:TextOverflow.ellipsis))).toList(),
-            onChanged: (v) => setState(() => commitment = v ?? 'L1')),
-          if(spec.needsCommitment) CheckboxListTile(value:goalValidated,
-            title:const Text('目标已基本验证，选择最低但足以促进行动的承诺'),
-            onChanged:(v)=>setState(()=>goalValidated=v??false)),
-          if (spec.needsExposureLevel) DropdownButtonFormField<String>(initialValue: stretch,
-            decoration: const InputDecoration(labelText: '当前挑战程度'),
-            items: const [DropdownMenuItem(value:'COMFORT',child:Text('舒适区：可以轻松做到')),
-              DropdownMenuItem(value:'STRETCH',child:Text('伸展区：紧张但可应对')),
-              DropdownMenuItem(value:'PANIC',child:Text('恐慌区：失控或无法承受'))],
-            onChanged:(v)=>setState(()=>stretch=v??'STRETCH')),
+          TextField(
+              controller: prediction,
+              onChanged: (_) => setState(() {}),
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                  labelText: '我预测会发生什么？', border: OutlineInputBorder())),
+          ExpansionTile(
+              initiallyExpanded:
+                  inputs.values.any((v) => v.text.trim().isEmpty),
+              title: const Text('执行条件（核对草案）'),
+              children: [
+                ...inputs.entries.map((entry) => Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: TextField(
+                        controller: entry.value,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                            labelText: entry.key,
+                            helperText: widget.route.inputDrafts
+                                    .containsKey(entry.key)
+                                ? '${GrowthGuidance.label(widget.route.riskChecks['CONTENT_ORIGIN'])}，请核对或修改'
+                                : null,
+                            border: const OutlineInputBorder()))))
+              ]),
+          if (spec.needsCommitment)
+            DropdownButtonFormField<String>(
+                initialValue: commitment,
+                decoration: const InputDecoration(labelText: '最低有效承诺'),
+                isExpanded: true,
+                items: EvidenceGrowthWorkflows.commitments.entries
+                    .map((e) => DropdownMenuItem(
+                        value: e.key,
+                        child: Text('${e.key} ${e.value}',
+                            overflow: TextOverflow.ellipsis)))
+                    .toList(),
+                onChanged: (v) => setState(() => commitment = v ?? 'L1')),
+          if (spec.needsCommitment)
+            CheckboxListTile(
+                value: goalValidated,
+                title: const Text('目标已基本验证，选择最低但足以促进行动的承诺'),
+                onChanged: (v) => setState(() => goalValidated = v ?? false)),
+          if (spec.needsExposureLevel)
+            DropdownButtonFormField<String>(
+                initialValue: stretch,
+                decoration: const InputDecoration(labelText: '当前挑战程度'),
+                items: const [
+                  DropdownMenuItem(value: 'COMFORT', child: Text('舒适区：可以轻松做到')),
+                  DropdownMenuItem(value: 'STRETCH', child: Text('伸展区：紧张但可应对')),
+                  DropdownMenuItem(value: 'PANIC', child: Text('恐慌区：失控或无法承受'))
+                ],
+                onChanged: (v) => setState(() => stretch = v ?? 'STRETCH')),
           const SizedBox(height: 8),
-          TextField(controller: worstCase, onChanged: (_) => setState(() {}), decoration: const InputDecoration(
-            labelText: '最坏结果与损失上限', hintText: '例如：被拒绝一次；随时停止；不影响生活保障', border: OutlineInputBorder())),
-          ExpansionTile(title:const Text('为持续投入设置成本预算（可选）'),children:[
-            TextField(controller:budget,keyboardType:const TextInputType.numberWithOptions(decimal:true),
-              onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'本路线总预算数值',helperText:'可用金额或小时；在最坏结果中注明单位。结果阶段只能记录实际花费。')),
+          TextField(
+              controller: worstCase,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                  labelText: '最坏结果与损失上限',
+                  hintText: '例如：被拒绝一次；随时停止；不影响生活保障',
+                  border: OutlineInputBorder())),
+          ExpansionTile(title: const Text('为持续投入设置成本预算（可选）'), children: [
+            TextField(
+                controller: budget,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                    labelText: '本路线总预算数值',
+                    helperText: '可用金额或小时；在最坏结果中注明单位。结果阶段只能记录实际花费。')),
           ]),
-          CheckboxListTile(contentPadding: EdgeInsets.zero, value: safe,
-            title: const Text('已核实必要前提；身体允许；动作可撤回且保留下一轮资格'),
-            onChanged: (v) => setState(() => safe = v ?? false)),
-          if (stretch == 'PANIC') const Text('请停止当前暴露并改为恢复或更小层级。', style: TextStyle(color: Colors.red)),
-          TextButton.icon(icon: const Icon(Icons.schedule), label: Text(scheduledStart == null ? '现在开始（可改时间）' : '开始于 ${_date(scheduledStart!)}'),
-            onPressed: () async {
-              final now = DateTime.now();
-              final day = await showDatePicker(context:context,initialDate:scheduledStart ?? now,firstDate:DateTime(now.year,now.month,now.day),lastDate:now.add(const Duration(days:365)));
-              if (day == null || !mounted) return;
-              final picked = await showTimePicker(context:context,initialTime:TimeOfDay.fromDateTime(scheduledStart ?? now));
-              if (picked == null || !mounted) return;
-              final date = DateTime(day.year,day.month,day.day,picked.hour,picked.minute);
-              if (!date.isAfter(DateTime.now())) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('请选择未来的开始时间，或选择现在开始。')));
-                return;
-              }
-              setState(() => scheduledStart = date);
-            }),
-          if (scheduledStart != null) TextButton(onPressed:()=>setState(()=>scheduledStart=null),child:const Text('改为现在开始')),
-          const SizedBox(height: 10),
-          Text('发生概率：${(probability * 100).round()}%'),
-          Slider(value: probability, min: 0, max: 1, divisions: 10, onChanged: (v) => setState(() => probability = v)),
-          DropdownButtonFormField<int>(
-            initialValue: window,
-            decoration: const InputDecoration(labelText: '结果观察窗口', border: OutlineInputBorder()),
-            items: const [DropdownMenuItem(value: 0, child: Text('10 分钟后')), DropdownMenuItem(value: 1, child: Text('1 小时后')), DropdownMenuItem(value: 2, child: Text('4 小时后')), DropdownMenuItem(value: 3, child: Text('明天 20:00')),
-              DropdownMenuItem(value:4,child:Text('7 天观察')),DropdownMenuItem(value:5,child:Text('14 天观察'))],
-            onChanged: (v) => setState(() => window = v ?? 0),
-          ),
-          Text('观察窗口到期：${_date(reviewAt)}。缺反馈提醒从此时再加上提醒管理中设置的等待时长。'),
-          SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, value: remind, onChanged: (v) => setState(() => remind = v), title: const Text('开始、反馈与恢复提醒'), subtitle: const Text('保存时引导授权；按本轮状态提醒，记录结果后取消过时提醒')),
+          CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: safe,
+              title: const Text('已核实必要前提；身体允许；动作可撤回且保留下一轮资格'),
+              onChanged: (v) => setState(() => safe = v ?? false)),
+          if (stretch == 'PANIC')
+            const Text('请停止当前暴露并改为恢复或更小层级。',
+                style: TextStyle(color: Colors.red)),
+          ExpansionTile(title: const Text('时间、提醒和观察设置（可修改）'), children: [
+            TextButton.icon(
+                icon: const Icon(Icons.schedule),
+                label: Text(scheduledStart == null
+                    ? '现在开始（可改时间）'
+                    : '开始于 ${_date(scheduledStart!)}'),
+                onPressed: () async {
+                  final now = DateTime.now();
+                  final day = await showDatePicker(
+                      context: context,
+                      initialDate: scheduledStart ?? now,
+                      firstDate: DateTime(now.year, now.month, now.day),
+                      lastDate: now.add(const Duration(days: 365)));
+                  if (day == null || !mounted) return;
+                  final picked = await showTimePicker(
+                      context: context,
+                      initialTime:
+                          TimeOfDay.fromDateTime(scheduledStart ?? now));
+                  if (picked == null || !mounted) return;
+                  final date = DateTime(
+                      day.year, day.month, day.day, picked.hour, picked.minute);
+                  if (!date.isAfter(DateTime.now())) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('请选择未来的开始时间，或选择现在开始。')));
+                    return;
+                  }
+                  setState(() => scheduledStart = date);
+                }),
+            TextField(
+                controller: duration,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                    labelText: '预计占用多少分钟', helperText: '仅用于避免与其他目标撞时间，不是完成绩效')),
+            DropdownButtonFormField<int>(
+                initialValue: maxRepeat,
+                decoration: const InputDecoration(labelText: '未反馈时最多重复提醒'),
+                items: [1, 2, 3, 5, 10]
+                    .map((v) => DropdownMenuItem(value: v, child: Text('$v 次')))
+                    .toList(),
+                onChanged: (v) => setState(() => maxRepeat = v ?? 3)),
+            if (scheduledStart != null)
+              TextButton(
+                  onPressed: () => setState(() => scheduledStart = null),
+                  child: const Text('改为现在开始')),
+            const SizedBox(height: 10),
+            Text('发生概率：${(probability * 100).round()}%'),
+            Slider(
+                value: probability,
+                min: 0,
+                max: 1,
+                divisions: 10,
+                onChanged: (v) => setState(() => probability = v)),
+            DropdownButtonFormField<int>(
+              initialValue: window,
+              decoration: const InputDecoration(
+                  labelText: '结果观察窗口', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 0, child: Text('10 分钟后')),
+                DropdownMenuItem(value: 1, child: Text('1 小时后')),
+                DropdownMenuItem(value: 2, child: Text('4 小时后')),
+                DropdownMenuItem(value: 3, child: Text('明天 20:00')),
+                DropdownMenuItem(value: 4, child: Text('7 天观察')),
+                DropdownMenuItem(value: 5, child: Text('14 天观察'))
+              ],
+              onChanged: (v) => setState(() => window = v ?? 0),
+            ),
+            Text('观察窗口到期：${_date(reviewAt)}。缺反馈提醒从此时再加上提醒管理中设置的等待时长。'),
+            SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: remind,
+                onChanged: (v) => setState(() => remind = v),
+                title: const Text('开始、反馈与恢复提醒'),
+                subtitle: const Text('保存时引导授权；按本轮状态提醒，记录结果后取消过时提醒')),
+          ]),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(onPressed: !safe || prediction.text.trim().isEmpty || goal.text.trim().isEmpty || current.text.trim().isEmpty || gap.text.trim().isEmpty || action.text.trim().isEmpty || (budget.text.isNotEmpty && (double.tryParse(budget.text)==null || double.parse(budget.text)<=0 || !double.parse(budget.text).isFinite)) || (spec.needsCommitment && !goalValidated) || stretch == 'PANIC' || worstCase.text.trim().isEmpty ||
-              inputs.values.any((v) => v.text.trim().isEmpty) ? null : () => Navigator.pop(context,
-            _PredictionSetup(prediction.text.trim(), probability, reviewAt, remind,
-              {...inputs.map((k,v) => MapEntry(k,v.text.trim())),if(spec.needsCommitment)'目标已基本验证':'$goalValidated',
-                if(budget.text.trim().isNotEmpty)'cost_limit':budget.text.trim()}, commitment, stretch,
-              worstCase.text.trim(), scheduledStart ?? DateTime.now(),
-              {...widget.route.cyclePlan,'goal':goal.text.trim(),'current':current.text.trim(),'gap':gap.text.trim(),
-                'belief':belief.text.trim(),'expected_signal':prediction.text.trim(),
-                'why_action':widget.route.cyclePlan['why_action']??widget.route.inference},action.text.trim())), child: const Text('保存并开始这一轮')),
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(
+              onPressed: (int.tryParse(duration.text) ?? 0) < 1 ||
+                      (int.tryParse(duration.text) ?? 1441) > 1440 ||
+                      !safe ||
+                      prediction.text.trim().isEmpty ||
+                      goal.text.trim().isEmpty ||
+                      current.text.trim().isEmpty ||
+                      gap.text.trim().isEmpty ||
+                      action.text.trim().isEmpty ||
+                      (budget.text.isNotEmpty &&
+                          (double.tryParse(budget.text) == null ||
+                              double.parse(budget.text) <= 0 ||
+                              !double.parse(budget.text).isFinite)) ||
+                      (spec.needsCommitment && !goalValidated) ||
+                      stretch == 'PANIC' ||
+                      worstCase.text.trim().isEmpty ||
+                      inputs.values.any((v) => v.text.trim().isEmpty)
+                  ? null
+                  : () => Navigator.pop(
+                      context,
+                      _PredictionSetup(
+                          prediction.text.trim(),
+                          probability,
+                          reviewAt,
+                          remind,
+                          {
+                            ...inputs.map((k, v) => MapEntry(k, v.text.trim())),
+                            'duration_minutes': duration.text,
+                            'max_repeat': '$maxRepeat',
+                            if (spec.needsCommitment)
+                              '目标已基本验证': '$goalValidated',
+                            if (budget.text.trim().isNotEmpty)
+                              'cost_limit': budget.text.trim()
+                          },
+                          commitment,
+                          stretch,
+                          worstCase.text.trim(),
+                          scheduledStart ?? DateTime.now(),
+                          {
+                            ...widget.route.cyclePlan,
+                            'goal': goal.text.trim(),
+                            'current': current.text.trim(),
+                            'gap': gap.text.trim(),
+                            'belief': belief.text.trim(),
+                            'expected_signal': prediction.text.trim(),
+                            'why_action':
+                                widget.route.cyclePlan['why_action'] ??
+                                    widget.route.inference
+                          },
+                          action.text.trim())),
+              child: const Text('保存并开始这一轮')),
         ],
       );
 }
 
 class _TrialPage extends StatefulWidget {
-  const _TrialPage({required this.trial, required this.dao, required this.ai});
+  const _TrialPage(
+      {required this.trial,
+      required this.dao,
+      required this.ai,
+      this.initialFacts = '',
+      this.notificationNode = ''});
+  final String notificationNode;
+  final String initialFacts;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
@@ -667,114 +1458,345 @@ class _TrialPageState extends State<_TrialPage> {
   @override
   void initState() {
     super.initState();
-    ticker = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted) setState(() {}); });
+    ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
+
   @override
-  void dispose() { ticker?.cancel(); super.dispose(); }
-  Future<void> _resumeReview() async {
-    setState(() => saving = true);
-    try {
-      final review = await widget.ai.review(trial);
-      final reviewed = await widget.dao.saveReview(trial, review);
-      if (!mounted) return;
-      await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) =>
-        _DecisionPage(trial: reviewed, review: review, dao: widget.dao, ai: widget.ai)));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('结果已保留，可稍后复盘：$e')));
-    } finally { if (mounted) setState(() => saving = false); }
+  void dispose() {
+    ticker?.cancel();
+    super.dispose();
   }
-  Future<void> _capture(String kind) async {
-    final result = await showDialog<_Captured>(context: context, barrierDismissible: false, builder: (_) => _ResultDialog(kind,budget:trial.operatorInputs['cost_limit']??''));
-    if (result == null || !mounted) return;
+
+  Future<void> _start() async {
     setState(() => saving = true);
     try {
-      final captured = await widget.dao.captureResult(trial, didAction: result.did,
-        actualOutcome: result.actual, unexpected: result.unexpected, resultStatus: result.status,
-        resultMeasurements: result.measurements, shameSignal: result.shame, imageExposureSignal: result.imageExposure);
-      trial = captured;
+      final started = await widget.dao.startTrial(trial);
       await const EvidenceGrowthNotificationService().cancel(trial.id);
-      final review = await widget.ai.review(captured);
-      final reviewed = await widget.dao.saveReview(captured, review);
-      if (!mounted) return;
-      await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => _DecisionPage(trial: reviewed, review: review, dao: widget.dao, ai: widget.ai)));
+      if (started.operatorInputs['remind'] == 'true')
+        await const EvidenceGrowthNotificationService().scheduleTrial(started);
+      if (mounted) setState(() => trial = started);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('记录未丢失，可重试：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => saving = false);
     }
   }
+
+  Future<void> _resumeReview() async {
+    setState(() => saving = true);
+    try {
+      final j = await widget.dao.journeys.forTrial(trial.id);
+      if (j != null) {
+        if (j.node != 'REVIEW' || j.data['readiness'] != 'READY_NOW') {
+          if (mounted) Navigator.pop(context);
+          return;
+        }
+      }
+      final review = await widget.ai.review(trial);
+      final reviewed = await widget.dao.saveReview(trial, review);
+      if (!mounted) return;
+      await Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+              builder: (_) => _DecisionPage(
+                  trial: reviewed,
+                  review: review,
+                  dao: widget.dao,
+                  ai: widget.ai)));
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('结果已保留，可稍后复盘：$e')));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> _capture(String kind) async {
+    final result = await showDialog<_Captured>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _ResultDialog(kind,
+            ai: widget.ai,
+            trial: trial,
+            budget: trial.operatorInputs['cost_limit'] ?? '',
+            initialFacts: widget.initialFacts));
+    if (result == null || !mounted) return;
+    setState(() => saving = true);
+    try {
+      final captured = await widget.dao.captureResult(trial,
+          didAction: result.did,
+          actualOutcome: result.actual,
+          unexpected: result.unexpected,
+          resultStatus: result.status,
+          resultMeasurements: result.measurements,
+          shameSignal: result.shame,
+          imageExposureSignal: result.imageExposure);
+      trial = captured;
+      await const EvidenceGrowthNotificationService().cancel(trial.id);
+      if (await widget.dao.journeys.forTrial(trial.id) != null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      final review = await widget.ai.review(captured);
+      final reviewed = await widget.dao.saveReview(captured, review);
+      if (!mounted) return;
+      await Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+              builder: (_) => _DecisionPage(
+                  trial: reviewed,
+                  review: review,
+                  dao: widget.dao,
+                  ai: widget.ai)));
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('记录未丢失，可重试：$e')));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text('Reality Trial · ${_status(trial.status)}'),actions:[
-          IconButton(tooltip:'本轮提醒',icon:const Icon(Icons.notifications_active_outlined),onPressed:()=>Navigator.push(context,
-            MaterialPageRoute(builder:(_)=>EvidenceGrowthReminderPage(dao:widget.dao,trialId:trial.id)))),
-        ]),
+        appBar: AppBar(
+            title: Text('Reality Trial · ${_status(trial.status)}'),
+            actions: [
+              IconButton(
+                  tooltip: '知识学习与应用',
+                  icon: const Icon(Icons.menu_book),
+                  onPressed: saving
+                      ? null
+                      : () => _trialKnowledge(
+                          context,
+                          widget.dao,
+                          trial.id,
+                          trial.status == 'RESULT_CAPTURED'
+                              ? 'REVIEW'
+                              : 'ACTION')),
+              IconButton(
+                  tooltip: '本轮提醒',
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => EvidenceGrowthReminderPage(
+                              dao: widget.dao, trialId: trial.id)))),
+            ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          Wrap(spacing: 7, children: [_Chip(trial.primaryModule.label, _brand), _Chip(trial.stretchLevel, trial.stretchLevel == 'RECOVERY' ? Colors.blue : _brand)]),
+          if (widget.notificationNode.isNotEmpty)
+            _Card(
+                title:
+                    '通知定位 · ${GrowthJourney.labels[widget.notificationNode] ?? widget.notificationNode}节点',
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(trial.goalState.isEmpty ? '本轮行动' : trial.goalState),
+                      Text(widget.notificationNode == 'OUTCOME'
+                          ? '原预测：${trial.prediction}'
+                          : trial.actionInstruction),
+                      if (widget.notificationNode == 'OUTCOME' &&
+                          const {'READY', 'IN_PROGRESS', 'OBSERVING'}
+                              .contains(trial.status)) ...[
+                        const Text('请记录现实情况；到期不代表已经完成。'),
+                        Wrap(spacing: 8, children: [
+                          for (final kind in trial.status == 'READY'
+                              ? ['未做']
+                              : ['完成', '部分完成', '未做', '中止', '继续观察'])
+                            OutlinedButton(
+                                onPressed: saving ? null : () => _capture(kind),
+                                child: Text(kind))
+                        ])
+                      ],
+                      if (widget.notificationNode == 'ACTION' &&
+                          trial.status == 'READY')
+                        FilledButton(
+                            onPressed: saving ? null : _start,
+                            child: const Text('现在开始行动')),
+                      if (widget.notificationNode == 'ACTION' &&
+                          trial.status == 'IN_PROGRESS')
+                        OutlinedButton(
+                            onPressed: saving ? null : () => _capture('继续观察'),
+                            child: const Text('核对当前状态')),
+                      if (trial.status == 'RESULT_CAPTURED')
+                        FilledButton(
+                            onPressed: saving ? null : _resumeReview,
+                            child: const Text('结果已保存，继续复盘'))
+                    ])),
+          Wrap(spacing: 7, children: [
+            _Chip(trial.primaryModule.label, _brand),
+            _Chip(trial.stretchLevel,
+                trial.stretchLevel == 'RECOVERY' ? Colors.blue : _brand)
+          ]),
           const SizedBox(height: 12),
-          EvidenceGrowthCycleCard(trial:trial),
-          TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看完整成长链路'),
-            onPressed:()=>_openCycle(context,trial,widget.dao,widget.ai)),
-          _Card(title: '唯一主动作', child: Text(trial.actionInstruction, style: const TextStyle(fontSize: 21, height: 1.4, fontWeight: FontWeight.w900, color: _ink))),
-          if (trial.startedAtMs > 0) _Card(title: '行动计时', child: Text(
-            '已进入现实 ${((DateTime.now().millisecondsSinceEpoch - trial.startedAtMs) / 60000).floor()} 分钟 · 到点允许停')),
-          if (trial.operatorInputs.isNotEmpty) ExpansionTile(title: const Text('本轮执行细节'),
-            children: trial.operatorInputs.entries.where((e) => !const {'remind','scheduled_start_ms','action_completed'}.contains(e.key))
-              .where((e)=>!e.key.startsWith('cycle_') && !const {'advanced_json','workflow_version','hypothesis_id','prediction_error','recommended_decision'}.contains(e.key))
-              .map((e) => ListTile(title: Text(e.key), subtitle: Text(e.value))).toList()),
-          if(trial.commitmentLevel.isNotEmpty && trial.operator=='COMMITMENT_LADDER')
-            _Card(title:'当前承诺 ${trial.commitmentLevel}',child:Text('${EvidenceGrowthWorkflows.commitments[EvidenceGrowthWorkflows.normalizeCommitment(trial.commitmentLevel)]??trial.commitmentLevel}\n退出条件：${trial.operatorInputs['退出方式']??"随时检查风险与可撤回性"}')),
-          if(trial.operatorInputs.containsKey('advanced_json')) ExpansionTile(title:const Text('风险／系统分析记录'),
-            children:[Padding(padding:const EdgeInsets.all(12),child:Text(_workflowSummary(trial.operatorInputs['advanced_json']!)))]),
-          if (trial.status == 'READY') FilledButton(onPressed: saving ? null : () async {
-            final started = await widget.dao.startTrial(trial);
-            await const EvidenceGrowthNotificationService().cancel(trial.id);
-            if (started.operatorInputs['remind'] == 'true') await const EvidenceGrowthNotificationService().scheduleTrial(started);
-            if (mounted) setState(() => trial = started);
-          }, child: const Text('现在开始行动')),
-          if (trial.status == 'RESULT_CAPTURED') FilledButton(onPressed: saving ? null : _resumeReview, child: const Text('结果已保存，继续复盘')),
-          if (trial.status == 'READY') TextButton.icon(icon:const Icon(Icons.more_time),label:const Text('延后开始时间'),onPressed:saving?null:() async {
-            final now=DateTime.now();
-            final day=await showDatePicker(context:context,initialDate:now,firstDate:DateTime(now.year,now.month,now.day),lastDate:now.add(const Duration(days:365)));
-            if(day==null || !mounted) return;
-            final time=await showTimePicker(context:context,initialTime:TimeOfDay.now());
-            if(time==null || !mounted) return;
-            setState(()=>saving=true);
-            try {
-              final updated=await widget.dao.rescheduleStart(trial,DateTime(day.year,day.month,day.day,time.hour,time.minute));
-              await const EvidenceGrowthNotificationService().reconcile();
-              if(mounted) setState(()=>trial=updated);
-            } catch(_) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('请选择原观察窗口内的未来时间；窗口已过时，先记录未做再创建下一轮。'))); }
-            finally { if(mounted) setState(()=>saving=false); }
-          }),
-          if (trial.status == 'READY') TextButton(onPressed:saving ? null : ()=>_capture('未做'),child:const Text('这轮没有开始，如实记录原因')),
+          EvidenceGrowthCycleCard(trial: trial),
+          TextButton.icon(
+              icon: const Icon(Icons.history),
+              label: const Text('查看完整成长链路'),
+              onPressed: () =>
+                  _openCycle(context, trial, widget.dao, widget.ai)),
+          Text(GrowthGuidance.label(trial.riskChecks['CONTENT_ORIGIN'])),
+          _Card(
+              title: '唯一主动作',
+              child: Text(trial.actionInstruction,
+                  style: const TextStyle(
+                      fontSize: 21,
+                      height: 1.4,
+                      fontWeight: FontWeight.w900,
+                      color: _ink))),
+          if (trial.startedAtMs > 0 &&
+              trial.operatorInputs['sensitive'] != 'true')
+            _Card(
+                title: '行动计时',
+                child: Text(
+                    '已进入现实 ${((DateTime.now().millisecondsSinceEpoch - trial.startedAtMs) / 60000).floor()} 分钟 · 到点允许停')),
+          if (trial.operatorInputs.isNotEmpty)
+            ExpansionTile(
+                title: const Text('本轮执行细节'),
+                children: trial.operatorInputs.entries
+                    .where((e) => !const {
+                          'remind',
+                          'scheduled_start_ms',
+                          'action_completed'
+                        }.contains(e.key))
+                    .where((e) =>
+                        !e.key.startsWith('cycle_') &&
+                        !const {
+                          'advanced_json',
+                          'workflow_version',
+                          'hypothesis_id',
+                          'prediction_error',
+                          'recommended_decision',
+                          'journey_id',
+                          'journey_version',
+                          'max_repeat',
+                          'sensitive',
+                          'scope',
+                          'duration_minutes'
+                        }.contains(e.key))
+                    .map((e) =>
+                        ListTile(title: Text(e.key), subtitle: Text(e.value)))
+                    .toList()),
+          if (trial.commitmentLevel.isNotEmpty &&
+              trial.operator == 'COMMITMENT_LADDER')
+            _Card(
+                title: '当前承诺 ${trial.commitmentLevel}',
+                child: Text(
+                    '${EvidenceGrowthWorkflows.commitments[EvidenceGrowthWorkflows.normalizeCommitment(trial.commitmentLevel)] ?? trial.commitmentLevel}\n退出条件：${trial.operatorInputs['退出方式'] ?? "随时检查风险与可撤回性"}')),
+          if (trial.operatorInputs.containsKey('advanced_json'))
+            ExpansionTile(title: const Text('风险／系统分析记录'), children: [
+              Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                      _workflowSummary(trial.operatorInputs['advanced_json']!)))
+            ]),
+          if (trial.status == 'READY')
+            FilledButton(
+                onPressed: saving ? null : _start, child: const Text('现在开始行动')),
+          if (trial.status == 'RESULT_CAPTURED')
+            FilledButton(
+                onPressed: saving ? null : _resumeReview,
+                child: const Text('结果已保存，继续复盘')),
+          if (trial.status == 'READY')
+            TextButton.icon(
+                icon: const Icon(Icons.more_time),
+                label: const Text('延后开始时间'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final now = DateTime.now();
+                        final day = await showDatePicker(
+                            context: context,
+                            initialDate: now,
+                            firstDate: DateTime(now.year, now.month, now.day),
+                            lastDate: now.add(const Duration(days: 365)));
+                        if (day == null || !mounted) return;
+                        final time = await showTimePicker(
+                            context: context, initialTime: TimeOfDay.now());
+                        if (time == null || !mounted) return;
+                        setState(() => saving = true);
+                        try {
+                          final updated = await widget.dao.rescheduleStart(
+                              trial,
+                              DateTime(day.year, day.month, day.day, time.hour,
+                                  time.minute));
+                          await const EvidenceGrowthNotificationService()
+                              .reconcile();
+                          if (mounted) setState(() => trial = updated);
+                        } catch (_) {
+                          if (mounted)
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        '请选择原观察窗口内的未来时间；窗口已过时，先记录未做再创建下一轮。')));
+                        } finally {
+                          if (mounted) setState(() => saving = false);
+                        }
+                      }),
+          if (trial.status == 'READY')
+            TextButton(
+                onPressed: saving ? null : () => _capture('未做'),
+                child: const Text('这轮没有开始，如实记录原因')),
           const SizedBox(height: 10),
-          _Card(title: '事前预测 · 已锁定', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(trial.prediction),
-            const SizedBox(height: 6),
-            Text('置信度 ${(trial.probability * 100).round()}% · 观察至 ${_date(DateTime.fromMillisecondsSinceEpoch(trial.reviewAtMs))}', style: const TextStyle(color: Color(0xFF60736E))),
-          ])),
+          _Card(
+              title: '事前预测 · 已锁定',
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(trial.prediction),
+                    const SizedBox(height: 6),
+                    Text(
+                        '置信度 ${(trial.probability * 100).round()}% · 观察至 ${_date(DateTime.fromMillisecondsSinceEpoch(trial.reviewAtMs))}',
+                        style: const TextStyle(color: Color(0xFF60736E))),
+                  ])),
           const SizedBox(height: 10),
-          _Card(title: '安全与证据', child: Text('风险门 ${trial.riskGate} · 可撤回：${trial.reversible ? '是' : '否'} · 保留下一轮：${trial.nextRoundPreserved ? '是' : '否'}\n依据 ${trial.nodeIds.join(' / ')}')),
-          TextButton.icon(icon: const Icon(Icons.feedback_outlined), label: const Text('记录依据问题'),
-            onPressed: () => _evidenceFeedback(context, widget.dao, trial.nodeIds, trialId: trial.id)),
+          _Card(
+              title: '安全与证据',
+              child: Text(
+                  '风险门 ${trial.riskGate} · 可撤回：${trial.reversible ? '是' : '否'} · 保留下一轮：${trial.nextRoundPreserved ? '是' : '否'}\n依据 ${trial.nodeIds.join(' / ')}')),
+          TextButton.icon(
+              icon: const Icon(Icons.feedback_outlined),
+              label: const Text('记录依据问题'),
+              onPressed: () => _evidenceFeedback(
+                  context, widget.dao, trial.nodeIds,
+                  trialId: trial.id)),
           const SizedBox(height: 16),
           const Text('完成、部分、未做、中止都允许；只记录事实。'),
           const SizedBox(height: 10),
-          if (const {'IN_PROGRESS','OBSERVING'}.contains(trial.status)) Wrap(spacing: 8, runSpacing: 8, children: [
-            FilledButton(onPressed: saving ? null : () => _capture('完成'), child: const Text('完成')),
-            OutlinedButton(onPressed: saving ? null : () => _capture('部分完成'), child: const Text('部分完成')),
-            OutlinedButton(onPressed: saving ? null : () => _capture('未做'), child: const Text('未做')),
-            TextButton(onPressed: saving ? null : () => _capture('中止'), child: const Text('中止')),
-            TextButton(onPressed: saving ? null : () => _capture('继续观察'), child: const Text('结果未到，继续观察')),
-          ]),
-          if (saving) const Padding(padding: EdgeInsets.only(top: 16), child: LinearProgressIndicator()),
+          if (const {'IN_PROGRESS', 'OBSERVING'}.contains(trial.status))
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton(
+                  onPressed: saving ? null : () => _capture('完成'),
+                  child: const Text('完成')),
+              OutlinedButton(
+                  onPressed: saving ? null : () => _capture('部分完成'),
+                  child: const Text('部分完成')),
+              OutlinedButton(
+                  onPressed: saving ? null : () => _capture('未做'),
+                  child: const Text('未做')),
+              TextButton(
+                  onPressed: saving ? null : () => _capture('中止'),
+                  child: const Text('中止')),
+              TextButton(
+                  onPressed: saving ? null : () => _capture('继续观察'),
+                  child: const Text('结果未到，继续观察')),
+            ]),
+          if (saving)
+            const Padding(
+                padding: EdgeInsets.only(top: 16),
+                child: LinearProgressIndicator()),
         ]),
       );
 }
 
 class _Captured {
-  const _Captured(this.did, this.actual, this.unexpected, this.status, this.measurements, this.shame, this.imageExposure);
+  const _Captured(this.did, this.actual, this.unexpected, this.status,
+      this.measurements, this.shame, this.imageExposure);
   final bool did;
   final String actual;
   final String unexpected;
@@ -785,7 +1807,14 @@ class _Captured {
 }
 
 class _ResultDialog extends StatefulWidget {
-  const _ResultDialog(this.kind,{this.budget=''});
+  const _ResultDialog(this.kind,
+      {required this.ai,
+      required this.trial,
+      this.budget = '',
+      this.initialFacts = ''});
+  final EvidenceGrowthAiService ai;
+  final RealityTrial trial;
+  final String initialFacts;
   final String kind;
   final String budget;
   @override
@@ -793,7 +1822,7 @@ class _ResultDialog extends StatefulWidget {
 }
 
 class _ResultDialogState extends State<_ResultDialog> {
-  final actual = TextEditingController();
+  late final actual = TextEditingController(text: widget.initialFacts);
   final unexpected = TextEditingController();
   final recovery = TextEditingController();
   final anxiety = TextEditingController();
@@ -804,75 +1833,242 @@ class _ResultDialogState extends State<_ResultDialog> {
   bool shame = false;
   bool imageExposure = false;
   bool listening = false;
-  Map<String,String> decisionMeasurements={};
+  Map<String, String> decisionMeasurements = {};
+  bool filling = false;
+  String source = '默认参考 · 待核对';
+  late final fillable = {
+    if (widget.initialFacts.trim().isEmpty) 'facts',
+    'unexpected'
+  };
+  final edited = <String>{};
+  @override
+  void initState() {
+    super.initState();
+    if (actual.text.isEmpty)
+      actual.text = '本次选择记录为“${widget.kind}”；具体经过尚未补充，请根据实际修改。';
+    unexpected.text = '尚未记录意外情况；没有意外时可写“无”。';
+    unawaited(fillDraft());
+  }
+
+  Future<void> fillDraft({bool refresh = false}) async {
+    if (filling) return;
+    setState(() => filling = true);
+    final before = {'facts': actual.text, 'unexpected': unexpected.text};
+    try {
+      final result = await widget.ai.formDraft(
+          '核对本次现实结果',
+          {'facts': '实际发生了什么（仅限已提供事实）', 'unexpected': '意外情况或尚未记录'},
+          {
+            'title': widget.trial.goalState,
+            'reported_result': widget.kind,
+            'action': widget.trial.actionInstruction,
+            'prediction': widget.trial.prediction,
+            'known_outcome': widget.initialFacts,
+            'instruction': '用户只选择了结果类别；未提供的实际经过、测量值或反馈均保持尚未记录，绝不能从预测推断实际结果。'
+          },
+          initial: {'facts': widget.initialFacts},
+          refresh: refresh);
+      if (!mounted) return;
+      setState(() {
+        source =
+            '${GrowthGuidance.label(result['origin'] as String?)} · 请核对后保存';
+        final values = growthMap(result['fields']);
+        if (fillable.contains('facts') &&
+            !edited.contains('facts') &&
+            actual.text == before['facts'] &&
+            values['facts'] is String) actual.text = values['facts'];
+        if (!edited.contains('unexpected') &&
+            unexpected.text == before['unexpected'] &&
+            values['unexpected'] is String)
+          unexpected.text = values['unexpected'];
+      });
+    } catch (_) {
+      if (mounted) setState(() => source = '默认参考 · AI 暂未完成，可自行修改');
+    } finally {
+      if (mounted) setState(() => filling = false);
+    }
+  }
+
   Future<void> _voice() async {
-    if (listening) { await speech.stop(); if (mounted) setState(() => listening = false); return; }
+    if (listening) {
+      await speech.stop();
+      if (mounted) setState(() => listening = false);
+      return;
+    }
     if (!await speech.initialize() || !mounted) return;
     setState(() => listening = true);
-    await speech.listen(listenOptions: SpeechListenOptions(localeId: 'zh_CN'), onResult: (r) {
-      if (!mounted) return;
-      setState(() { actual.text = r.recognizedWords; if(r.finalResult) listening = false; });
-    });
+    await speech.listen(
+        listenOptions: SpeechListenOptions(localeId: 'zh_CN'),
+        onResult: (r) {
+          if (!mounted) return;
+          setState(() {
+            edited.add('facts');
+            actual.text = r.recognizedWords;
+            if (r.finalResult) listening = false;
+          });
+        });
   }
+
   @override
   void dispose() {
     actual.dispose();
     unexpected.dispose();
-    recovery.dispose(); anxiety.dispose(); unawaited(speech.cancel());
+    recovery.dispose();
+    anxiety.dispose();
+    unawaited(speech.cancel());
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
         title: Text('${widget.kind} · 只记录事实'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: actual, minLines: 3, maxLines: 6, onChanged: (_) => setState(() {}), decoration: const InputDecoration(labelText: '实际发生了什么？', border: OutlineInputBorder())),
-          TextButton.icon(onPressed: _voice, icon: Icon(listening ? Icons.stop : Icons.mic_none), label: Text(listening ? '停止语音' : '语音记录事实')),
+        content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(source),
+          if (filling) const LinearProgressIndicator(),
+          TextButton.icon(
+              onPressed: filling ? null : () => fillDraft(refresh: true),
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('AI 补齐未修改的草案')),
+          TextField(
+              controller: actual,
+              minLines: 3,
+              maxLines: 6,
+              onChanged: (_) => setState(() => edited.add('facts')),
+              decoration: const InputDecoration(
+                  labelText: '实际发生了什么？', border: OutlineInputBorder())),
+          TextButton.icon(
+              onPressed: _voice,
+              icon: Icon(listening ? Icons.stop : Icons.mic_none),
+              label: Text(listening ? '停止语音' : '语音记录事实')),
           const SizedBox(height: 10),
-          TextField(controller: unexpected, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '最意外的是什么？（可选）', border: OutlineInputBorder())),
-          DropdownButtonFormField<String>(initialValue: occurred, decoration: const InputDecoration(labelText: '原预测是否发生？'),
-            items: const [DropdownMenuItem(value:'unknown', child:Text('还不能判断')),
-              DropdownMenuItem(value:'true', child:Text('发生了')), DropdownMenuItem(value:'false', child:Text('没有发生'))],
-            onChanged:(v)=>setState(()=>occurred=v??'unknown')),
-          DropdownButtonFormField<String>(initialValue: helpful, decoration: const InputDecoration(labelText: '这个结果对目标有帮助吗？'),
-            items: const [DropdownMenuItem(value:'unknown', child:Text('还不能判断')),
-              DropdownMenuItem(value:'true', child:Text('有帮助')), DropdownMenuItem(value:'false', child:Text('没有帮助'))],
-            onChanged:(v)=>setState(()=>helpful=v??'unknown')),
-          EvidenceGrowthDecisionFields(budget:widget.budget,onChanged:(v)=>setState(()=>decisionMeasurements=v)),
+          TextField(
+              controller: unexpected,
+              onChanged: (_) => edited.add('unexpected'),
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                  labelText: '最意外的是什么？（可选）', border: OutlineInputBorder())),
+          DropdownButtonFormField<String>(
+              initialValue: occurred,
+              decoration: const InputDecoration(labelText: '原预测是否发生？'),
+              items: const [
+                DropdownMenuItem(value: 'unknown', child: Text('还不能判断')),
+                DropdownMenuItem(value: 'true', child: Text('发生了')),
+                DropdownMenuItem(value: 'false', child: Text('没有发生'))
+              ],
+              onChanged: (v) => setState(() => occurred = v ?? 'unknown')),
+          DropdownButtonFormField<String>(
+              initialValue: helpful,
+              decoration: const InputDecoration(labelText: '这个结果对目标有帮助吗？'),
+              items: const [
+                DropdownMenuItem(value: 'unknown', child: Text('还不能判断')),
+                DropdownMenuItem(value: 'true', child: Text('有帮助')),
+                DropdownMenuItem(value: 'false', child: Text('没有帮助'))
+              ],
+              onChanged: (v) => setState(() => helpful = v ?? 'unknown')),
+          EvidenceGrowthDecisionFields(
+              budget: widget.budget,
+              onChanged: (v) => setState(() => decisionMeasurements = v)),
           ExpansionTile(title: const Text('失败分类与体验（可选）'), children: [
-            DropdownButtonFormField<String>(initialValue: failure, decoration: const InputDecoration(labelText: '根据事实分类'),
-              items: const [DropdownMenuItem(value:'NOT_CLASSIFIED',child:Text('暂不分类')),
-                DropdownMenuItem(value:'NO_FAILURE',child:Text('没有失败')),
-                DropdownMenuItem(value:'BASIC',child:Text('已知流程的基本错误')),
-                DropdownMenuItem(value:'COMPLEX',child:Text('多个因素相互作用')),
-                DropdownMenuItem(value:'INTELLIGENT',child:Text('低风险新实验提供反证'))],
-              onChanged:(v)=>setState(()=>failure=v??'NOT_CLASSIFIED')),
-            TextField(controller: anxiety, onChanged: (_) => setState(() {}), keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText:'实际焦虑峰值 0–10', errorText: _validNumber(anxiety.text, 10) ? null : '请输入 0–10')),
-            TextField(controller: recovery, onChanged: (_) => setState(() {}), keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText:'恢复到可行动所用小时', errorText: _validNumber(recovery.text, null) ? null : '请输入非负小时')),
-            CheckboxListTile(value:shame, title:const Text('出现羞耻/自我攻击'),onChanged:(v)=>setState(()=>shame=v??false)),
-            CheckboxListTile(value:imageExposure, title:const Text('主要担心不完美被别人看见'),onChanged:(v)=>setState(()=>imageExposure=v??false)),
+            DropdownButtonFormField<String>(
+                initialValue: failure,
+                decoration: const InputDecoration(labelText: '根据事实分类'),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'NOT_CLASSIFIED', child: Text('暂不分类')),
+                  DropdownMenuItem(value: 'NO_FAILURE', child: Text('没有失败')),
+                  DropdownMenuItem(value: 'BASIC', child: Text('已知流程的基本错误')),
+                  DropdownMenuItem(value: 'COMPLEX', child: Text('多个因素相互作用')),
+                  DropdownMenuItem(
+                      value: 'INTELLIGENT', child: Text('低风险新实验提供反证'))
+                ],
+                onChanged: (v) =>
+                    setState(() => failure = v ?? 'NOT_CLASSIFIED')),
+            TextField(
+                controller: anxiety,
+                onChanged: (_) => setState(() {}),
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                    labelText: '实际焦虑峰值 0–10',
+                    hintText: '未记录，不自动估计',
+                    errorText:
+                        _validNumber(anxiety.text, 10) ? null : '请输入 0–10')),
+            TextField(
+                controller: recovery,
+                onChanged: (_) => setState(() {}),
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                    labelText: '恢复到可行动所用小时',
+                    hintText: '未记录，不自动估计',
+                    errorText:
+                        _validNumber(recovery.text, null) ? null : '请输入非负小时')),
+            CheckboxListTile(
+                value: shame,
+                title: const Text('出现羞耻/自我攻击'),
+                onChanged: (v) => setState(() => shame = v ?? false)),
+            CheckboxListTile(
+                value: imageExposure,
+                title: const Text('主要担心不完美被别人看见'),
+                onChanged: (v) => setState(() => imageExposure = v ?? false)),
           ]),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(onPressed: actual.text.trim().isEmpty || !_validNumber(decisionMeasurements['cost_spent']??'',null) || !_validNumber(anxiety.text, 10) || !_validNumber(recovery.text, null) ? null : () => Navigator.pop(context,
-            _Captured(widget.kind == '完成' || widget.kind == '部分完成', actual.text.trim(), unexpected.text.trim(),
-              const {'完成':'DONE','部分完成':'PARTIAL','未做':'NOT_DONE','中止':'ABORTED','继续观察':'OBSERVING'}[widget.kind]!,
-              {...decisionMeasurements,'prediction_occurred':occurred,'outcome_helpful':helpful,'failure_class':failure,
-                if(double.tryParse(recovery.text)!=null) 'recovery_hours':recovery.text,
-                if(double.tryParse(anxiety.text)!=null) 'actual_anxiety':anxiety.text}, shame, imageExposure)), child: const Text('保存事实并复盘')),
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(
+              onPressed: actual.text.trim().isEmpty ||
+                      !_validNumber(
+                          decisionMeasurements['cost_spent'] ?? '', null) ||
+                      !_validNumber(anxiety.text, 10) ||
+                      !_validNumber(recovery.text, null)
+                  ? null
+                  : () => Navigator.pop(
+                      context,
+                      _Captured(
+                          widget.kind == '完成' || widget.kind == '部分完成',
+                          actual.text.trim(),
+                          unexpected.text.trim(),
+                          const {
+                            '完成': 'DONE',
+                            '部分完成': 'PARTIAL',
+                            '未做': 'NOT_DONE',
+                            '中止': 'ABORTED',
+                            '继续观察': 'OBSERVING'
+                          }[widget.kind]!,
+                          {
+                            ...decisionMeasurements,
+                            'prediction_occurred': occurred,
+                            'outcome_helpful': helpful,
+                            'failure_class': failure,
+                            if (double.tryParse(recovery.text) != null)
+                              'recovery_hours': recovery.text,
+                            if (double.tryParse(anxiety.text) != null)
+                              'actual_anxiety': anxiety.text
+                          },
+                          shame,
+                          imageExposure)),
+              child: const Text('保存事实')),
         ],
       );
   bool _validNumber(String text, double? maximum) {
     if (text.trim().isEmpty) return true;
     final value = double.tryParse(text);
-    return value != null && value.isFinite && value >= 0 && (maximum == null || value <= maximum);
+    return value != null &&
+        value.isFinite &&
+        value >= 0 &&
+        (maximum == null || value <= maximum);
   }
 }
 
 class _DecisionPage extends StatefulWidget {
-  const _DecisionPage({required this.trial, required this.dao, required this.ai, this.review});
+  const _DecisionPage(
+      {required this.trial,
+      required this.dao,
+      required this.ai,
+      this.review,
+      this.fromNotification = false});
+  final bool fromNotification;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
@@ -883,114 +2079,247 @@ class _DecisionPage extends StatefulWidget {
 
 class _DecisionPageState extends State<_DecisionPage> {
   late RealityTrial trial = widget.trial;
-  late TrialReviewResult review = widget.review ?? TrialReviewResult(
-    predictionOriginal: trial.prediction,
-    actualFacts: [trial.actualOutcome],
-    predictionError: trial.operatorInputs['prediction_error']??'原预测与实际结果已分别保存。',
-    failureClass: trial.failureClass,
-    learning: trial.learning,
-    ruleUpdate: trial.ruleUpdate,
-    decision: trial.decision.isEmpty ? trial.operatorInputs['recommended_decision']??'OBSERVE' : trial.decision,
-    nextChangeOneVariable: trial.nextAction,
-    knowledgeNodeIds: trial.nodeIds,
-    cycleUpdate:EvidenceGrowthCycle.update(trial),
-  );
+  late TrialReviewResult review = widget.review ??
+      TrialReviewResult(
+        contentOrigin:
+            trial.operatorInputs['review_content_origin'] ?? 'UNKNOWN',
+        contentDetail: trial.operatorInputs['review_content_detail'] ?? '',
+        predictionOriginal: trial.prediction,
+        actualFacts: [trial.actualOutcome],
+        predictionError:
+            trial.operatorInputs['prediction_error'] ?? '原预测与实际结果已分别保存。',
+        failureClass: trial.failureClass,
+        learning: trial.learning,
+        ruleUpdate: trial.ruleUpdate,
+        decision: trial.decision.isEmpty
+            ? trial.operatorInputs['recommended_decision'] ?? 'OBSERVE'
+            : trial.decision,
+        nextChangeOneVariable: trial.nextAction,
+        knowledgeNodeIds: trial.nodeIds,
+        cycleUpdate: EvidenceGrowthCycle.update(trial),
+      );
   String? chosen;
   bool deciding = false;
+  Future<void> _refreshReview() async {
+    if (deciding) return;
+    setState(() => deciding = true);
+    try {
+      final value = await widget.ai.review(trial, refresh: true);
+      if (value.contentOrigin == 'AI') {
+        final saved =
+            await widget.dao.saveReview(trial, value, replaceDraft: true);
+        if (mounted)
+          setState(() {
+            trial = saved;
+            review = value;
+          });
+      } else if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(value.contentDetail)));
+      }
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => deciding = false);
+    }
+  }
+
   Future<void> _choose(String decision) async {
     if (deciding || chosen != null) return;
     deciding = true;
-    final reason = TextEditingController(text: review.learning);
-    final next = TextEditingController(text: review.nextChangeOneVariable);
-    final update=review.cycleUpdate.isEmpty?EvidenceGrowthCycle.fallbackUpdate(trial,decision,review.learning,review.nextChangeOneVariable):review.cycleUpdate;
-    final beliefAfter=TextEditingController(text:update['belief_after']??'');
-    final nextGoal=TextEditingController(text:update['next_goal']??'');
-    final nextGap=TextEditingController(text:update['next_gap']??'');
-    var target=update['change_target']??'action';
-    if(decision=='ACT')target='retain';
-    if(decision=='OBSERVE')target='observe';
-    if(decision=='EXIT')target='exit';
-    final tomorrow=DateTime.now().add(const Duration(days:1));
-    final original=DateTime.fromMillisecondsSinceEpoch(trial.nextReviewAtMs>0?trial.nextReviewAtMs:trial.reviewAtMs);
-    final observeAt=original.isAfter(tomorrow)?original:tomorrow;
-    final ok = await showDialog<bool>(context: context, builder: (_) => StatefulBuilder(builder:(context,refresh)=>AlertDialog(
-      title: Text('$decision · 确认学习与下一轮'),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: reason, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '依据 / 学习')),
-        TextField(controller: next, minLines: 2, maxLines: 4, decoration: InputDecoration(labelText: decision == 'EXIT' ? 'Hypothesis Closed / 替代路线' : '下一轮只改变什么？')),
-        Text(update['belief_reason']??''),
-        TextField(controller:beliefAfter,minLines:1,maxLines:3,decoration:const InputDecoration(labelText:'经过这次事实，现在如何判断？',helperText:'候选判断可修改或留空；不确定就保留不确定。')),
-        if(decision=='ADJUST') DropdownButtonFormField<String>(initialValue:target,
-          decoration:const InputDecoration(labelText:'本轮只改变哪一处'),
-          items:EvidenceGrowthCycle.targetLabels.entries.map((e)=>DropdownMenuItem(value:e.key,child:Text(e.value))).toList(),
-          onChanged:(v)=>refresh(()=>target=v??'action')),
-        ExpansionTile(title:const Text('核对下一轮目标与差距'),children:[
-          TextField(controller:nextGoal,decoration:const InputDecoration(labelText:'调整后的目标（不改则留空）')),
-          TextField(controller:nextGap,decoration:const InputDecoration(labelText:'下一轮需要解决的差距')),
-        ]),
-        if (decision == 'OBSERVE') Text('下一次复盘：${_date(observeAt)}。原预测保持不变。'),
-      ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('确认'))],
-    )));
-    if (ok == true) {
+    final update = review.cycleUpdate.isEmpty
+        ? EvidenceGrowthCycle.fallbackUpdate(
+            trial, decision, review.learning, review.nextChangeOneVariable)
+        : review.cycleUpdate;
+    var target = update['change_target'] ?? 'action';
+    if (decision == 'ACT') target = 'retain';
+    if (decision == 'OBSERVE') target = 'observe';
+    if (decision == 'EXIT') target = 'exit';
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    final original = DateTime.fromMillisecondsSinceEpoch(
+        trial.nextReviewAtMs > 0 ? trial.nextReviewAtMs : trial.reviewAtMs);
+    final observeAt = original.isAfter(tomorrow) ? original : tomorrow;
+    if (decision == 'ADJUST') {
+      final selected = await showDialog<String>(
+          context: context,
+          builder: (c) =>
+              SimpleDialog(title: const Text('这次只调整哪一处？'), children: [
+                for (final e in EvidenceGrowthCycle.targetLabels.entries)
+                  SimpleDialogOption(
+                      onPressed: () => Navigator.pop(c, e.key),
+                      child: Text(e.value))
+              ]));
+      if (selected == null || !mounted) {
+        deciding = false;
+        return;
+      }
+      target = selected;
+    }
+    final fields = {
+      'reason': '这次学到了什么，依据是什么',
+      'next': decision == 'EXIT' ? '停止这条路线后，可选择什么' : '下一轮怎么做',
+      'belief_after': '经过事实，现在如何判断',
+      'next_goal': '下一轮目标',
+      'next_gap': '还需解决什么差距'
+    };
+    final initial = {
+      'reason': review.learning,
+      'next': review.nextChangeOneVariable,
+      'belief_after': update['belief_after'] ?? '',
+      'next_goal': update['next_goal'] ?? '',
+      'next_gap': update['next_gap'] ?? ''
+    };
+    final contextData = <String, dynamic>{
+      'title': trial.goalState,
+      'current': trial.actualOutcome,
+      'decision': decision,
+      'change_target': target,
+      'review': review.toJson(),
+      'trial': trial.toRow()
+    };
+    final values = await GrowthSmartForm.show(context,
+        title: '$decision · 核对下一步',
+        fields: fields,
+        initial: initial,
+        source: GrowthGuidance.label(review.contentOrigin),
+        sourceReason: decision == 'OBSERVE'
+            ? '下一次复盘：${_date(observeAt)}；预测保持原样。'
+            : '这仍是建议，确认后才保存你的决定。',
+        requiredKeys: const ['reason', 'next'],
+        contextData: contextData,
+        loader: (refresh) => widget.ai.formDraft('复盘后的下一步', fields, contextData,
+            initial: initial, refresh: refresh));
+    if (values != null) {
       try {
-        trial = await widget.dao.decide(trial, decision: decision, reason: reason.text, nextAction: next.text,
-          nextReviewAt: decision == 'OBSERVE' ? observeAt : null,
-          cycleUpdate:{...update,'belief_after':beliefAfter.text.trim(),'next_goal':nextGoal.text.trim(),
-            'next_gap':nextGap.text.trim(),'change_target':target,'change_reason':reason.text.trim(),
-            'carry_forward':next.text.trim()});
+        trial = await widget.dao.decide(trial,
+            decision: decision,
+            reason: values['reason']!,
+            nextAction: values['next']!,
+            nextReviewAt: decision == 'OBSERVE' ? observeAt : null,
+            cycleUpdate: {
+              ...update,
+              'belief_after': values['belief_after']!,
+              'next_goal': values['next_goal']!,
+              'next_gap': values['next_gap']!,
+              'change_target': target,
+              'change_reason': values['reason']!,
+              'carry_forward': values['next']!
+            });
         if (decision == 'OBSERVE' && trial.operatorInputs['remind'] == 'true') {
           await const EvidenceGrowthNotificationService().scheduleTrial(trial);
         }
         await const EvidenceGrowthNotificationService().reconcile();
-        if (mounted) setState(() => chosen = decision);
+        if (await widget.dao.journeys.forTrial(trial.id) != null) {
+          if (mounted) Navigator.pop(context);
+        } else if (mounted) setState(() => chosen = decision);
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('未保存决定：$e')));
+        if (mounted)
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('未保存决定：$e')));
       }
     }
     deciding = false;
-    reason.dispose();
-    next.dispose();beliefAfter.dispose();nextGoal.dispose();nextGap.dispose();
   }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('复盘结果 · 本轮出口')),
-    body: ListView(padding: const EdgeInsets.all(16), children: [
-      EvidenceGrowthCycleCard(trial:trial),
-      TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
-        onPressed:()=>_openCycle(context,trial,widget.dao,widget.ai)),
-      _Card(title: '预测完整性', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _Label('原预测（未改写）', review.predictionOriginal), const Divider(),
-        _Label('实际事实', trial.actualOutcome), const Divider(),
-        _Label('Prediction Error', review.predictionError),
-      ])),
-      const SizedBox(height: 10),
-      _Card(title: '经历产生的信息', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(spacing: 7, children: [_Chip(review.failureClass, _brand), _Chip('建议 ${review.decision}', const Color(0xFF5268A0))]),
-        const SizedBox(height: 10), Text(review.learning), const SizedBox(height: 6), Text('规则更新｜${review.ruleUpdate}', style: const TextStyle(color: Color(0xFF5C706B))),
-      ])),
-      const SizedBox(height: 16),
-      if(review.cycleUpdate.isNotEmpty) _Card(title:'这次学习如何进入下一轮',child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        _Label('目标进展',review.cycleUpdate['goal_progress']??''),
-        _Label('新判断候选',review.cycleUpdate['belief_after']??''),
-        _Label('依据与未知',review.cycleUpdate['belief_reason']??''),
-        _Label('具体改变',review.cycleUpdate['change_reason']??''),
-        _Label('下一轮检验',review.cycleUpdate['carry_forward']??''),
-      ])),
-      const _Title('选择 ACT / ADJUST / EXIT', '退出也是完成验证，不等于否定自己'),
-      _DecisionTile('ACT · 继续取样', '核心假设仍有支持；再取一个现实样本。', chosen == 'ACT', () => _choose('ACT')),
-      _DecisionTile('ADJUST · 只改一个变量', '方法、强度或环境被反证；只改一个条件。', chosen == 'ADJUST', () => _choose('ADJUST')),
-      _DecisionTile('EXIT · 结束路线', '保存 Hypothesis Closed、成本与学习。', chosen == 'EXIT', () => _choose('EXIT')),
-      _DecisionTile('OBSERVE · 继续观察', '等待新的现实信号，保留原观察窗口。', chosen == 'OBSERVE', () => _choose('OBSERVE')),
-      if (chosen == 'ACT' || chosen == 'ADJUST') FilledButton.icon(icon: const Icon(Icons.add_task),
-        label: const Text('用这条学习创建下一轮'), onPressed: () async {
-          final route = const EvidenceGrowthRouter().nextTrial(trial);
-          await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => _RoutePage(
-            route: route, dao: widget.dao, ai: widget.ai, previousTrialId: trial.id)));
-        }),
-      if (chosen != null) FilledButton(onPressed: () => Navigator.pop(context), child: Text(chosen=='ACT'||chosen=='ADJUST'?'已保存学习，稍后继续下一轮':'返回')),
-    ]),
-  );
+        appBar: AppBar(title: const Text('复盘结果 · 本轮出口'), actions: [
+          IconButton(
+              tooltip: '知识学习与应用',
+              icon: const Icon(Icons.menu_book),
+              onPressed: () =>
+                  _trialKnowledge(context, widget.dao, trial.id, 'CHANGE'))
+        ]),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          if (widget.fromNotification) const Text('通知定位 · 改变节点：核对复盘建议后再确认下一步。'),
+          TextButton.icon(
+              onPressed: deciding ? null : _refreshReview,
+              icon: const Icon(Icons.refresh),
+              label: const Text('AI 重新分析复盘（保留原预测与事实）')),
+          EvidenceGrowthCycleCard(trial: trial),
+          TextButton.icon(
+              icon: const Icon(Icons.history),
+              label: const Text('查看这个问题的完整成长链路'),
+              onPressed: () =>
+                  _openCycle(context, trial, widget.dao, widget.ai)),
+          _Card(
+              title: '预测完整性',
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Label('原预测（未改写）', review.predictionOriginal),
+                    const Divider(),
+                    _Label('实际事实', trial.actualOutcome),
+                    const Divider(),
+                    _Label('内容来源',
+                        '${GrowthGuidance.label(review.contentOrigin)} ${review.contentDetail}'),
+                    _Label('Prediction Error', review.predictionError),
+                  ])),
+          const SizedBox(height: 10),
+          _Card(
+              title: '经历产生的信息',
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(spacing: 7, children: [
+                      _Chip(review.failureClass, _brand),
+                      _Chip('建议 ${review.decision}', const Color(0xFF5268A0))
+                    ]),
+                    const SizedBox(height: 10),
+                    Text(review.learning),
+                    const SizedBox(height: 6),
+                    Text('规则更新｜${review.ruleUpdate}',
+                        style: const TextStyle(color: Color(0xFF5C706B))),
+                  ])),
+          const SizedBox(height: 16),
+          if (review.cycleUpdate.isNotEmpty)
+            _Card(
+                title: '这次学习如何进入下一轮',
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _Label('目标进展', review.cycleUpdate['goal_progress'] ?? ''),
+                      _Label('新判断候选', review.cycleUpdate['belief_after'] ?? ''),
+                      _Label(
+                          '依据与未知', review.cycleUpdate['belief_reason'] ?? ''),
+                      _Label('具体改变', review.cycleUpdate['change_reason'] ?? ''),
+                      _Label(
+                          '下一轮检验', review.cycleUpdate['carry_forward'] ?? ''),
+                    ])),
+          const _Title('选择 ACT / ADJUST / EXIT', '退出也是完成验证，不等于否定自己'),
+          _DecisionTile('ACT · 继续取样', '核心假设仍有支持；再取一个现实样本。', chosen == 'ACT',
+              () => _choose('ACT')),
+          _DecisionTile('ADJUST · 只改一个变量', '方法、强度或环境被反证；只改一个条件。',
+              chosen == 'ADJUST', () => _choose('ADJUST')),
+          _DecisionTile('EXIT · 结束路线', '保存 Hypothesis Closed、成本与学习。',
+              chosen == 'EXIT', () => _choose('EXIT')),
+          _DecisionTile('OBSERVE · 继续观察', '等待新的现实信号，保留原观察窗口。',
+              chosen == 'OBSERVE', () => _choose('OBSERVE')),
+          if (chosen == 'ACT' || chosen == 'ADJUST')
+            FilledButton.icon(
+                icon: const Icon(Icons.add_task),
+                label: const Text('用这条学习创建下一轮'),
+                onPressed: () async {
+                  final route = const EvidenceGrowthRouter().nextTrial(trial);
+                  await Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => _RoutePage(
+                              route: route,
+                              dao: widget.dao,
+                              ai: widget.ai,
+                              previousTrialId: trial.id)));
+                }),
+          if (chosen != null)
+            FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(chosen == 'ACT' || chosen == 'ADJUST'
+                    ? '已保存学习，稍后继续下一轮'
+                    : '返回')),
+        ]),
+      );
 }
 
 class _Review extends StatelessWidget {
@@ -999,18 +2328,18 @@ class _Review extends StatelessWidget {
   final ValueChanged<RealityTrial> onOpen;
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      const _Title('现实证据复盘', '比较预测与实际，再决定继续、调整或退出'),
-      if (recent.isEmpty) const _Empty('还没有 Trial。先从“实战”输入一个现实问题。'),
-      ...recent.map((e) => _TrialTile(trial: e, onTap: () => onOpen(e))),
-    ],
-  );
+        padding: const EdgeInsets.all(16),
+        children: [
+          const _Title('现实证据复盘', '比较预测与实际，再决定继续、调整或退出'),
+          if (recent.isEmpty) const _Empty('还没有 Trial。先从“实战”输入一个现实问题。'),
+          ...recent.map((e) => _TrialTile(trial: e, onTap: () => onOpen(e))),
+        ],
+      );
 }
 
 class _Learning extends StatefulWidget {
   const _Learning({required this.onApply, required this.dao});
-  final ValueChanged<String> onApply;
+  final void Function(String text, String nodeId) onApply;
   final EvidenceGrowthDao dao;
   @override
   State<_Learning> createState() => _LearningState();
@@ -1021,26 +2350,49 @@ class _LearningState extends State<_Learning> {
   var query = '';
   @override
   Widget build(BuildContext context) {
-    final nodes = query.isEmpty ? EvidenceGrowthKnowledge.nodes.where((node) => module == null || node.module == module).toList()
-        : EvidenceGrowthSearch.current.search(query,module:module,limit:80).map((e)=>e.node).toList();
+    final nodes = query.isEmpty
+        ? EvidenceGrowthKnowledge.nodes
+            .where((node) => module == null || node.module == module)
+            .toList()
+        : EvidenceGrowthSearch.current
+            .search(query, module: module, limit: 80)
+            .map((e) => e.node)
+            .toList();
     return ListView(padding: const EdgeInsets.all(16), children: [
       const _Title('Tal 六模块母树', 'Tal 核心默认展开；专家只在明确缺口时补位'),
-      TextField(onChanged: (v) => setState(() => query = v.trim()), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: '搜索知识、情境或 Operator', border: OutlineInputBorder())),
+      TextField(
+          onChanged: (v) => setState(() => query = v.trim()),
+          decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: '搜索知识、情境或 Operator',
+              border: OutlineInputBorder())),
       const SizedBox(height: 10),
       Wrap(spacing: 6, runSpacing: 6, children: [
-        FilterChip(label: const Text('全部'), selected: module == null, onSelected: (_) => setState(() => module = null)),
-        ...GrowthModule.values.map((m) => FilterChip(label: Text(m.label), selected: module == m, onSelected: (_) => setState(() => module = m))),
+        FilterChip(
+            label: const Text('全部'),
+            selected: module == null,
+            onSelected: (_) => setState(() => module = null)),
+        ...GrowthModule.values.map((m) => FilterChip(
+            label: Text(m.label),
+            selected: module == m,
+            onSelected: (_) => setState(() => module = m))),
       ]),
       const SizedBox(height: 10),
       ExpansionTile(
         initiallyExpanded: true,
         title: Text('Tal 核心 · ${nodes.where((e) => e.isTal).length} 个'),
-        children: nodes.where((e) => e.isTal).map((node) => _NodeTile(node, widget.onApply, widget.dao)).toList(),
+        children: nodes
+            .where((e) => e.isTal)
+            .map((node) => _NodeTile(node, widget.onApply, widget.dao))
+            .toList(),
       ),
       ExpansionTile(
         title: Text('专家延伸 I / II · ${nodes.where((e) => !e.isTal).length} 个'),
         subtitle: const Text('仅用于明确机制缺口'),
-        children: nodes.where((e) => !e.isTal).map((node) => _NodeTile(node, widget.onApply, widget.dao)).toList(),
+        children: nodes
+            .where((e) => !e.isTal)
+            .map((node) => _NodeTile(node, widget.onApply, widget.dao))
+            .toList(),
       ),
     ]);
   }
@@ -1049,84 +2401,169 @@ class _LearningState extends State<_Learning> {
 class _NodeTile extends StatelessWidget {
   const _NodeTile(this.node, this.onApply, this.dao);
   final EvidenceKNode node;
-  final ValueChanged<String> onApply;
+  final void Function(String text, String nodeId) onApply;
   final EvidenceGrowthDao dao;
   @override
   Widget build(BuildContext context) => ListTile(
-    title: Text('${node.id} · ${node.title}'),
-    subtitle: Text(node.claim, maxLines: 2, overflow: TextOverflow.ellipsis),
-    trailing: const Icon(Icons.chevron_right),
-    onTap: () { unawaited(dao.markLearned(node.id)); showModalBottomSheet(context: context, isScrollControlled: true, useSafeArea: true, builder: (_) => ListView(padding: const EdgeInsets.all(20), children: [
-      Text(node.title, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
-      EvidenceGrowthReadAloud(text:'${node.title}。${node.claim}。${node.mechanism}。${node.howTo.join('。')}。使用边界：${node.misuseBoundary.join('。')}'),
-      const SizedBox(height: 12), _Label('是什么', node.claim), const Divider(),
-      _Label('为什么', node.mechanism), const Divider(),
-      _Label('课堂语境', node.teachingContext), const Divider(),
-      _Label('原案例 / 研究依据', node.storyOrStudy), const Divider(),
-      _Label('知识库中的 How-to', node.howTo.join('\n')), const Divider(),
-      _Label('产品动作', EvidenceGrowthOperatorRegistry.byId(node.operators.first).label), const Divider(),
-      _Label('使用边界', node.misuseBoundary.join('\n')), const Divider(),
-      _Label('来源', node.locator.display), const SizedBox(height: 16),
-      _Label('原节点与课程定位', '${node.locator.originalNodeIds.join(' / ')}\n${node.locator.note}'),
-      const SizedBox(height: 12),
-      _Label('下一模块', node.nextNodes.map((id) => EvidenceGrowthKnowledge.byId(id)?.title ?? id).join('\n')),
-      FilledButton.icon(onPressed: () async {
-        final controller = TextEditingController();
-        final input = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
-          title: const Text('把知识用到哪件事？'),
-          content: TextField(controller: controller, autofocus: true, minLines: 2, maxLines: 5,
-            decoration: const InputDecoration(hintText: '说一件真实的事情、已发生的事实或卡住的位置')),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
-            FilledButton(onPressed: () { if (controller.text.trim().isNotEmpty) Navigator.pop(dialogContext, controller.text.trim()); }, child: const Text('匹配下一步'))]));
-        controller.dispose();
-        if (input != null && context.mounted) { Navigator.pop(context); onApply('$input\n学习应用：${node.title}'); }
-      }, icon: const Icon(Icons.play_arrow), label: const Text('立即应用，创建 Trial')),
-    ])); },
-  );
+        title: Text('${node.id} · ${node.title}'),
+        subtitle:
+            Text(node.claim, maxLines: 2, overflow: TextOverflow.ellipsis),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              builder: (_) =>
+                  ListView(padding: const EdgeInsets.all(20), children: [
+                    Text(node.title,
+                        style: const TextStyle(
+                            fontSize: 23, fontWeight: FontWeight.w900)),
+                    EvidenceGrowthReadAloud(
+                        text:
+                            '${node.title}。${node.claim}。${node.mechanism}。${node.howTo.join('。')}。使用边界：${node.misuseBoundary.join('。')}'),
+                    const SizedBox(height: 12),
+                    _Label('是什么', node.claim),
+                    const Divider(),
+                    _Label('为什么', node.mechanism),
+                    const Divider(),
+                    _Label('课堂语境', node.teachingContext),
+                    const Divider(),
+                    _Label('原案例 / 研究依据', node.storyOrStudy),
+                    const Divider(),
+                    _Label('知识库中的 How-to', node.howTo.join('\n')),
+                    const Divider(),
+                    _Label(
+                        '产品动作',
+                        EvidenceGrowthOperatorRegistry.byId(
+                                node.operators.first)
+                            .label),
+                    const Divider(),
+                    _Label('使用边界', node.misuseBoundary.join('\n')),
+                    const Divider(),
+                    _Label('来源', node.locator.display),
+                    const SizedBox(height: 16),
+                    _Label('原节点与课程定位',
+                        '${node.locator.originalNodeIds.join(' / ')}\n${node.locator.note}'),
+                    const SizedBox(height: 12),
+                    _Label(
+                        '下一模块',
+                        node.nextNodes
+                            .map((id) =>
+                                EvidenceGrowthKnowledge.byId(id)?.title ?? id)
+                            .join('\n')),
+                    FilledButton.icon(
+                        onPressed: () async {
+                          final controller = TextEditingController();
+                          final input = await showDialog<String>(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                      title: const Text('把知识用到哪件事？'),
+                                      content: TextField(
+                                          controller: controller,
+                                          autofocus: true,
+                                          minLines: 2,
+                                          maxLines: 5,
+                                          decoration: const InputDecoration(
+                                              hintText:
+                                                  '说一件真实的事情、已发生的事实或卡住的位置')),
+                                      actions: [
+                                        TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(dialogContext),
+                                            child: const Text('取消')),
+                                        FilledButton(
+                                            onPressed: () {
+                                              if (controller.text
+                                                  .trim()
+                                                  .isNotEmpty)
+                                                Navigator.pop(dialogContext,
+                                                    controller.text.trim());
+                                            },
+                                            child: const Text('匹配下一步'))
+                                      ]));
+                          controller.dispose();
+                          if (input != null && context.mounted) {
+                            Navigator.pop(context);
+                            onApply(input, node.id);
+                          }
+                        },
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('选择目标与节点，学习应用')),
+                  ]));
+        },
+      );
 }
 
 class _Evidence extends StatelessWidget {
-  const _Evidence({required this.summary, required this.recent,required this.onOpen});
+  const _Evidence(
+      {required this.summary, required this.recent, required this.onOpen});
   final EvidenceSummary summary;
   final List<RealityTrial> recent;
   final ValueChanged<RealityTrial> onOpen;
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
-    const _Title('我的证据，不是公共真理', '只更新你在具体情境中的适配度，不修改 Tal/专家节点'),
-    GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.7,
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      children: [
-        _Metric('知识激活', '${(summary.activationRate * 100).round()}%'),
-        _Metric('行动完成', '${(summary.actionRate * 100).round()}%'),
-        _Metric('失败样本', '${summary.failureSamples}'),
-        _Metric('策略调整', '${summary.strategyChanges}'),
-        _Metric('主动退出', '${summary.exits}'),
-        _Metric('Reality Trial', '${summary.startedTrials}'),
-        _Metric('部分完成', '${summary.partialActions}'),
-        _Metric('未做 / 中止', '${summary.notDoneActions} / ${summary.abortedActions}'),
-        _Metric('现实暴露', '${summary.exposureCount}'),
-        _Metric('平均恢复小时', summary.averageRecoveryHours?.toStringAsFixed(1) ?? '暂无数据'),
-        _Metric('预测误差 Brier', summary.calibrationError?.toStringAsFixed(2) ?? '暂无数据'),
-      ],
-    ),
-    const SizedBox(height: 16),
-    _Card(title: '六模块调用分布', child: Column(children: GrowthModule.values.map((m) {
-      final count = summary.moduleCounts[m] ?? 0;
-      return Row(children: [Expanded(child: Text(m.label)), Text('$count 次')]);
-    }).toList())),
-    const SizedBox(height: 10),
-    _Card(title: '最常调用节点', child: Text(summary.topNodeIds.isEmpty ? '完成 Trial 后形成个人适配证据。' : summary.topNodeIds.join(' · '))),
-    const SizedBox(height: 10),
-    _Card(title: '最近的规则变化', child: Text(summary.ruleChanges.isEmpty ? '完成复盘后，在这里回看自己改变了什么。' : summary.ruleChanges.join('\n\n'))),
-    const SizedBox(height: 10),
-    const Text('预测误差只使用你明确标记“发生/未发生”的样本；单次得分不能代表长期校准。'),
-    EvidenceGrowthEvidenceHistory(trials:recent,onOpen:onOpen),
-  ]);
+  Widget build(BuildContext context) =>
+      ListView(padding: const EdgeInsets.all(16), children: [
+        const _Title('我的证据，不是公共真理', '只更新你在具体情境中的适配度，不修改 Tal/专家节点'),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.7,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          children: [
+            _Metric('知识激活', '${(summary.activationRate * 100).round()}%'),
+            _Metric('行动完成', '${(summary.actionRate * 100).round()}%'),
+            _Metric('失败样本', '${summary.failureSamples}'),
+            _Metric('策略调整', '${summary.strategyChanges}'),
+            _Metric('主动退出', '${summary.exits}'),
+            _Metric('Reality Trial', '${summary.startedTrials}'),
+            _Metric('部分完成', '${summary.partialActions}'),
+            _Metric('未做 / 中止',
+                '${summary.notDoneActions} / ${summary.abortedActions}'),
+            _Metric('现实暴露', '${summary.exposureCount}'),
+            _Metric('平均恢复小时',
+                summary.averageRecoveryHours?.toStringAsFixed(1) ?? '暂无数据'),
+            _Metric('预测误差 Brier',
+                summary.calibrationError?.toStringAsFixed(2) ?? '暂无数据'),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _Card(
+            title: '六模块使用分布',
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('分别统计已确认的节点运行、成功 AI 指导与知识采用。重复查看缓存不增加 AI 次数。'),
+              for (final m in GrowthModule.values)
+                Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(m.label),
+                          Text(
+                              '节点运行 ${summary.nodeRunCounts[m] ?? 0} · AI 指导 ${summary.aiCounts[m] ?? 0} · 知识采用 ${summary.knowledgeCounts[m] ?? 0}')
+                        ])),
+              const Text(
+                  '知识采用含各节点确认的用法与行动冻结的知识来源；同一知识在不同环节使用分别计次。旧版本未留存的 AI 调用不会虚构补齐。'),
+            ])),
+        const SizedBox(height: 10),
+        _Card(
+            title: '最常调用节点',
+            child: Text(summary.topNodeIds.isEmpty
+                ? '完成 Trial 后形成个人适配证据。'
+                : summary.topNodeIds.join(' · '))),
+        const SizedBox(height: 10),
+        _Card(
+            title: '最近的规则变化',
+            child: Text(summary.ruleChanges.isEmpty
+                ? '完成复盘后，在这里回看自己改变了什么。'
+                : summary.ruleChanges.join('\n\n'))),
+        const SizedBox(height: 10),
+        const Text('预测误差只使用你明确标记“发生/未发生”的样本；单次得分不能代表长期校准。'),
+        EvidenceGrowthEvidenceHistory(trials: recent, onOpen: onOpen),
+      ]);
 }
 
 class _SettingsPage extends StatefulWidget {
@@ -1146,150 +2583,378 @@ class _SettingsPageState extends State<_SettingsPage> {
     super.initState();
     unawaited(_load());
   }
+
   Future<void> _load() async {
-    keepRaw = await widget.dao.getSetting('keep_raw_input', fallback: 'true') == 'true';
+    keepRaw = await widget.dao.getSetting('keep_raw_input', fallback: 'true') ==
+        'true';
     exact = await NativeScheduler.canScheduleExactAlarm();
     final cfg = await UnifiedAiService().resolveGlobalConfig();
-    provider = cfg.available ? '${cfg.label} · ${cfg.displayModel}' : '未配置（自动使用离线路由）';
+    provider =
+        cfg.available ? '${cfg.label} · ${cfg.displayModel}' : '未配置（自动使用离线路由）';
     if (mounted) setState(() => loading = false);
   }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('证据成长设置')),
-    body: loading ? const Center(child: CircularProgressIndicator()) : ListView(padding: const EdgeInsets.all(16), children: [
-      _Card(title: '运行配置', child: Column(children: [
-        ListTile(contentPadding: EdgeInsets.zero, title: const Text('AI Provider'), subtitle: Text(provider)),
-        const EvidenceGrowthVoiceSettings(),
-        EvidenceGrowthEmbeddingSettings(dao:widget.dao),
-        ListTile(contentPadding: EdgeInsets.zero, title: const Text('知识库版本'), subtitle: Text('KB35 ${EvidenceGrowthKnowledge.kbVersion} · Tal-first · Prompt ${EvidenceGrowthKnowledge.promptVersion}')),
-        ListTile(contentPadding: EdgeInsets.zero, title: const Text('回退到上一稳定知识库'),
-          subtitle: const Text('已创建试验保留原证据版本'), onTap: () async {
-            final restored = await EvidenceGrowthKbStore(AppDatabase.instance).rollback();
-            if (mounted) { setState(() {}); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(restored ? '已回退知识库版本。' : '目前没有可回退的版本。'))); }
-          }),
-        ListTile(contentPadding: EdgeInsets.zero, title: const Text('精准闹钟权限'), subtitle: Text(exact ? '已授权' : '未授权；仅在创建提醒时引导开启')),
-        ListTile(contentPadding:EdgeInsets.zero,title:const Text('提醒管理'),subtitle:const Text('五类提醒、授权恢复、每轮开关与发送记录'),
-          trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthReminderPage(
-            dao:widget.dao,onOpenTrial:(id)=>Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthHomePage(initialTrialId:id))))))),
-        ListTile(contentPadding: EdgeInsets.zero, title: const Text('跨设备同步'),
-          subtitle: const Text('默认关闭；可连接自己的服务'),trailing:const Icon(Icons.chevron_right),
-          onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>EvidenceGrowthSyncPage(dao:widget.dao)))),
-      ])),
-      const SizedBox(height: 10),
-      _Card(title: '隐私与数据', child: Column(children: [
-        SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, value: keepRaw, title: const Text('保存原始问题文本'), subtitle: const Text('关闭后只保存结构化事实、节点与结果'), onChanged: (v) async { await widget.dao.setSetting('keep_raw_input', '$v'); if (mounted) setState(() => keepRaw = v); }),
-        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.download_outlined), title: const Text('保存个人证据 JSON 文件'), onTap: () async {
-          File? temporary;
-          try {
-            final data=await widget.dao.exportJson();
-            final dir=await getTemporaryDirectory();
-            final name='evidence-growth-${DateTime.now().millisecondsSinceEpoch}.json';
-            temporary=File('${dir.path}/$name');
-            await temporary.writeAsString(data,flush:true);
-            final saved=await const MethodChannel('native.scheduler').invokeMethod<String>('saveFileToDownloads',{
-              'path':temporary.path,'name':name,'mime':'application/json','subDir':'EvidenceGrowth'});
-            if(saved==null || saved.isEmpty) throw StateError('未保存');
-            if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('已保存至 $saved')));
-          } catch(_) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('文件未保存，可重试或复制 JSON。'))); }
-          finally { if(temporary!=null && await temporary.exists()) await temporary.delete(); }
-        }),
-        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.copy_all_outlined), title: const Text('复制个人证据 JSON'), onTap: () async {
-          final data = await widget.dao.exportJson();
-          await Clipboard.setData(ClipboardData(text: data));
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制结构化 JSON')));
-        }),
-        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('删除个人证据', style: TextStyle(color: Colors.red)), onTap: () async {
-          final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(title: const Text('删除所有个人证据？'), content: const Text('Trial、结果、复盘和个人适配度会删除；公共知识节点不会改变。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('确认删除'))]));
-          if (ok == true) {
-            for (final trial in await widget.dao.recentTrials(limit: 10000)) {
-              await const EvidenceGrowthNotificationService().cancel(trial.id);
-            }
-            await widget.dao.deletePersonalEvidence();
-            await const EvidenceGrowthNotificationService().reconcile();
-            if((await widget.dao.getSetting('sync_endpoint')).isNotEmpty) {
-              await widget.dao.setSetting('sync_delete_pending','${DateTime.now().microsecondsSinceEpoch}');
-              final client=await EvidenceGrowthSyncSettings(widget.dao).client();
-              try { await client?.sync(); } catch(_) { /* Retried when this module resumes. */ } finally { client?.close(); }
-            }
-          }
-        }),
-      ])),
-    ]),
-  );
+        appBar: AppBar(title: const Text('证据成长设置')),
+        body: loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(padding: const EdgeInsets.all(16), children: [
+                _Card(
+                    title: '运行配置',
+                    child: Column(children: [
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('AI Provider'),
+                          subtitle: Text(provider)),
+                      const EvidenceGrowthVoiceSettings(),
+                      EvidenceGrowthEmbeddingSettings(dao: widget.dao),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('知识库版本'),
+                          subtitle: Text(
+                              'KB35 ${EvidenceGrowthKnowledge.kbVersion} · Tal-first · Prompt ${EvidenceGrowthKnowledge.promptVersion}')),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('回退到上一稳定知识库'),
+                          subtitle: const Text('已创建试验保留原证据版本'),
+                          onTap: () async {
+                            final restored = await EvidenceGrowthKbStore(
+                                    AppDatabase.instance)
+                                .rollback();
+                            if (mounted) {
+                              setState(() {});
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(restored
+                                          ? '已回退知识库版本。'
+                                          : '目前没有可回退的版本。')));
+                            }
+                          }),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('精准闹钟权限'),
+                          subtitle: Text(exact ? '已授权' : '未授权；仅在创建提醒时引导开启')),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('提醒管理'),
+                          subtitle: const Text('五类提醒、授权恢复、每轮开关与发送记录'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => EvidenceGrowthReminderPage(
+                                      dao: widget.dao,
+                                      onOpenTrial: (id) => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                              builder: (_) =>
+                                                  EvidenceGrowthHomePage(
+                                                      initialTrialId: id))))))),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('跨设备同步'),
+                          subtitle: const Text('默认关闭；可连接自己的服务'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => EvidenceGrowthSyncPage(
+                                      dao: widget.dao)))),
+                    ])),
+                const SizedBox(height: 10),
+                _Card(
+                    title: '隐私与数据',
+                    child: Column(children: [
+                      SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          value: keepRaw,
+                          title: const Text('保存原始问题文本'),
+                          subtitle: const Text('关闭后只保存结构化事实、节点与结果'),
+                          onChanged: (v) async {
+                            await widget.dao.setSetting('keep_raw_input', '$v');
+                            if (mounted) setState(() => keepRaw = v);
+                          }),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.download_outlined),
+                          title: const Text('保存个人证据 JSON 文件'),
+                          onTap: () async {
+                            File? temporary;
+                            try {
+                              final data = await widget.dao.exportJson();
+                              final dir = await getTemporaryDirectory();
+                              final name =
+                                  'evidence-growth-${DateTime.now().millisecondsSinceEpoch}.json';
+                              temporary = File('${dir.path}/$name');
+                              await temporary.writeAsString(data, flush: true);
+                              final saved =
+                                  await const MethodChannel('native.scheduler')
+                                      .invokeMethod<String>(
+                                          'saveFileToDownloads', {
+                                'path': temporary.path,
+                                'name': name,
+                                'mime': 'application/json',
+                                'subDir': 'EvidenceGrowth'
+                              });
+                              if (saved == null || saved.isEmpty)
+                                throw StateError('未保存');
+                              if (mounted)
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('已保存至 $saved')));
+                            } catch (_) {
+                              if (mounted)
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('文件未保存，可重试或复制 JSON。')));
+                            } finally {
+                              if (temporary != null && await temporary.exists())
+                                await temporary.delete();
+                            }
+                          }),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.copy_all_outlined),
+                          title: const Text('复制个人证据 JSON'),
+                          onTap: () async {
+                            final data = await widget.dao.exportJson();
+                            await Clipboard.setData(ClipboardData(text: data));
+                            if (mounted)
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('已复制结构化 JSON')));
+                          }),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.delete_outline,
+                              color: Colors.red),
+                          title: const Text('删除个人证据',
+                              style: TextStyle(color: Colors.red)),
+                          onTap: () async {
+                            final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                        title: const Text('删除所有个人证据？'),
+                                        content: const Text(
+                                            'Trial、结果、复盘和个人适配度会删除；公共知识节点不会改变。'),
+                                        actions: [
+                                          TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, false),
+                                              child: const Text('取消')),
+                                          FilledButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, true),
+                                              child: const Text('确认删除'))
+                                        ]));
+                            if (ok == true) {
+                              for (final trial in await widget.dao
+                                  .recentTrials(limit: 10000)) {
+                                await const EvidenceGrowthNotificationService()
+                                    .cancel(trial.id);
+                              }
+                              await widget.dao.deletePersonalEvidence();
+                              await const EvidenceGrowthNotificationService()
+                                  .reconcile();
+                              if ((await widget.dao.getSetting('sync_endpoint'))
+                                  .isNotEmpty) {
+                                await widget.dao.setSetting(
+                                    'sync_delete_pending',
+                                    '${DateTime.now().microsecondsSinceEpoch}');
+                                final client =
+                                    await EvidenceGrowthSyncSettings(widget.dao)
+                                        .client();
+                                try {
+                                  await client?.sync();
+                                } catch (_) {
+                                  /* Retried when this module resumes. */
+                                } finally {
+                                  client?.close();
+                                }
+                              }
+                            }
+                          }),
+                    ])),
+              ]),
+      );
 }
 
 class _Why extends StatelessWidget {
   const _Why(this.route);
   final EvidenceRouteResult route;
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
-    const Text('为什么推荐这个动作？', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-    const SizedBox(height: 12),
-    ...route.selectedNodes.map((node) => _Card(title: '${node.id} · ${node.title}', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(node.claim), const SizedBox(height: 8), Text('来源｜${node.locator.display}', style: const TextStyle(color: _brand)), const SizedBox(height: 5), Text('边界｜${node.boundaries.first}', style: const TextStyle(color: Color(0xFF5B6E69))),
-    ]))),
-    const SizedBox(height: 8),
-    _Label('适用理由', route.candidates.where((e) => route.selectedNodes.any((n) => n.id == e.node.id)).map((e) => e.reason).join('\n')),
-    const Divider(), _Label('前提检查', route.requiredChecks.join(' / ')),
-    const Divider(), _Label('候选与未选依据', route.candidates.where((e) => !route.selectedNodes.any((n) => n.id == e.node.id))
-      .take(3).map((e) => '${e.node.title}：本轮主卡点更匹配已选动作；${e.reason}').join('\n')),
-  ]);
+  Widget build(BuildContext context) =>
+      ListView(padding: const EdgeInsets.all(20), children: [
+        const Text('为什么推荐这个动作？',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 12),
+        ...route.selectedNodes.map((node) => _Card(
+            title: '${node.id} · ${node.title}',
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(node.claim),
+              const SizedBox(height: 8),
+              Text('来源｜${node.locator.display}',
+                  style: const TextStyle(color: _brand)),
+              const SizedBox(height: 5),
+              Text('边界｜${node.boundaries.first}',
+                  style: const TextStyle(color: Color(0xFF5B6E69))),
+            ]))),
+        const SizedBox(height: 8),
+        _Label(
+            '适用理由',
+            route.candidates
+                .where((e) => route.selectedNodes.any((n) => n.id == e.node.id))
+                .map((e) => e.reason)
+                .join('\n')),
+        const Divider(),
+        _Label('前提检查', route.requiredChecks.join(' / ')),
+        const Divider(),
+        _Label(
+            '候选与未选依据',
+            route.candidates
+                .where(
+                    (e) => !route.selectedNodes.any((n) => n.id == e.node.id))
+                .take(3)
+                .map((e) => '${e.node.title}：本轮主卡点更匹配已选动作；${e.reason}')
+                .join('\n')),
+      ]);
 }
 
-Future<void> _showGuide(BuildContext context, EvidenceGrowthAiService ai) async {
+Future<void> _showGuide(
+    BuildContext context, EvidenceGrowthAiService ai) async {
   final controller = TextEditingController();
   var answer = '可以问：这个模块怎么用？为什么要先保存预测？什么情况应该 EXIT？';
   var busy = false;
-  await showModalBottomSheet(context: context, isScrollControlled: true, useSafeArea: true, builder: (_) => StatefulBuilder(builder: (context, setState) => Padding(
-    padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
-    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('功能问答助手', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
-      const SizedBox(height: 10), Text(answer), const SizedBox(height: 12),
-      TextField(controller: controller, decoration: const InputDecoration(hintText: '询问流程、填写方法或知识依据', border: OutlineInputBorder())),
-      const SizedBox(height: 8), SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : () async {
-        setState(() => busy = true);
-        answer = await ai.answerGuide(controller.text);
-        setState(() => busy = false);
-      }, child: Text(busy ? '正在查找依据' : '提问'))),
-    ]),
-  )));
+  await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => StatefulBuilder(
+          builder: (context, setState) => Padding(
+                padding: EdgeInsets.fromLTRB(
+                    16, 16, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('功能问答助手',
+                          style: TextStyle(
+                              fontSize: 21, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 10),
+                      Text(answer),
+                      const SizedBox(height: 12),
+                      TextField(
+                          controller: controller,
+                          decoration: const InputDecoration(
+                              hintText: '询问流程、填写方法或知识依据',
+                              border: OutlineInputBorder())),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                              onPressed: busy
+                                  ? null
+                                  : () async {
+                                      setState(() => busy = true);
+                                      answer =
+                                          await ai.answerGuide(controller.text);
+                                      setState(() => busy = false);
+                                    },
+                              child: Text(busy ? '正在查找依据' : '提问'))),
+                    ]),
+              )));
   controller.dispose();
 }
 
 class _ArchivePage extends StatelessWidget {
-  const _ArchivePage({required this.trial, required this.dao,required this.ai});
+  const _ArchivePage(
+      {required this.trial,
+      required this.dao,
+      required this.ai,
+      this.notificationMessage = ''});
+  final String notificationMessage;
   final RealityTrial trial;
   final EvidenceGrowthDao dao;
   final EvidenceGrowthAiService ai;
   @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Trial 证据档案')), body: ListView(padding: const EdgeInsets.all(16), children: [
-    EvidenceGrowthCycleCard(trial:trial),
-    TextButton.icon(icon:const Icon(Icons.history),label:const Text('查看这个问题的完整成长链路'),
-      onPressed:()=>_openCycle(context,trial,dao,ai)),
-    if(const {'ACT','ADJUST'}.contains(trial.decision)) FilledButton.icon(icon:const Icon(Icons.play_arrow),
-      label:Text(trial.nextTrialId.isEmpty?'继续这条学习，建立下一轮':'打开下一轮'),onPressed:()async{
-        final current=await dao.byId(trial.id);
-        if(current==null || !context.mounted)return;
-        if(current.nextTrialId.isNotEmpty){
-          final next=await dao.byId(current.nextTrialId);
-          if(next!=null && context.mounted) await _openCycleTrial(context,next,dao,ai);
-        } else {
-          await Navigator.push(context,MaterialPageRoute(builder:(_)=>_RoutePage(
-            route:const EvidenceGrowthRouter().nextTrial(current),dao:dao,ai:ai,previousTrialId:current.id)));
-        }
-      }),
-    _Card(title: '${trial.decision} · ${trial.primaryModule.label}', child: Text(trial.decision == 'EXIT' ? 'Hypothesis Closed：结束路线不等于否定自己。' : '本轮验证已完成。')),
-    const SizedBox(height: 10), _Card(title: '原预测', child: Text(trial.prediction)),
-    const SizedBox(height: 10), _Card(title: '实际事实', child: Text(trial.actualOutcome)),
-    const SizedBox(height: 10), _Card(title: '学习与规则更新', child: Text('${trial.learning}\n\n${trial.ruleUpdate}')),
-    const SizedBox(height: 10), _Card(title: '决定依据与下一轮', child: Text('${trial.decisionReason}\n${trial.nextAction}\n${trial.nextTrialId}')),
-    const SizedBox(height: 10), FutureBuilder<List<Map<String, Object?>>>(future: dao.timeline(trial.id), builder: (_, snapshot) =>
-      _Card(title: '完整时间线', child: Text((snapshot.data ?? []).map((e) => '${_date(DateTime.fromMillisecondsSinceEpoch((e['created_at_ms'] as num).toInt()))} · ${e['event_type']}').join('\n')))),
-    const SizedBox(height: 10), FutureBuilder<List<Map<String, Object?>>>(future: dao.evidenceSnapshots(trial.id), builder: (_, snapshot) =>
-      _Card(title: '创建时的证据版本', child: Text((snapshot.data ?? []).map((e) => '${e['node_id']} v${e['node_version']} · ${e['source_locator_json']}').join('\n')))),
-    TextButton.icon(icon:const Icon(Icons.feedback_outlined),label:const Text('记录历史依据问题'),
-      onPressed:()=>_evidenceFeedback(context,dao,trial.nodeIds,trialId:trial.id)),
-  ]));
+  Widget build(BuildContext context) => Scaffold(
+      appBar: AppBar(title: const Text('Trial 证据档案')),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        if (notificationMessage.isNotEmpty)
+          _Card(title: '通知对应的原行动', child: Text(notificationMessage)),
+        EvidenceGrowthCycleCard(trial: trial),
+        TextButton.icon(
+            icon: const Icon(Icons.history),
+            label: const Text('查看这个问题的完整成长链路'),
+            onPressed: () => _openCycle(context, trial, dao, ai)),
+        if (!trial.operatorInputs.containsKey('journey_id') &&
+            const {'ACT', 'ADJUST'}.contains(trial.decision))
+          FilledButton.icon(
+              icon: const Icon(Icons.play_arrow),
+              label: Text(trial.nextTrialId.isEmpty ? '继续这条学习，建立下一轮' : '打开下一轮'),
+              onPressed: () async {
+                final current = await dao.byId(trial.id);
+                if (current == null || !context.mounted) return;
+                if (current.nextTrialId.isNotEmpty) {
+                  final next = await dao.byId(current.nextTrialId);
+                  if (next != null && context.mounted)
+                    await _openCycleTrial(context, next, dao, ai);
+                } else {
+                  await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => _RoutePage(
+                              route: const EvidenceGrowthRouter()
+                                  .nextTrial(current),
+                              dao: dao,
+                              ai: ai,
+                              previousTrialId: current.id)));
+                }
+              }),
+        _Card(
+            title: '${trial.decision} · ${trial.primaryModule.label}',
+            child: Text(trial.decision == 'EXIT'
+                ? 'Hypothesis Closed：结束路线不等于否定自己。'
+                : trial.isClosed
+                    ? '本轮验证已完成。'
+                    : '本次事实已记录，等待本学习窗口统一复盘。')),
+        const SizedBox(height: 10),
+        _Card(title: '原预测', child: Text(trial.prediction)),
+        const SizedBox(height: 10),
+        _Card(title: '实际事实', child: Text(trial.actualOutcome)),
+        const SizedBox(height: 10),
+        _Card(
+            title: '学习与规则更新',
+            child: Text('${trial.learning}\n\n${trial.ruleUpdate}')),
+        const SizedBox(height: 10),
+        _Card(
+            title: '决定依据与下一轮',
+            child: Text(
+                '${trial.decisionReason}\n${trial.nextAction}\n${trial.nextTrialId}')),
+        const SizedBox(height: 10),
+        FutureBuilder<List<Map<String, Object?>>>(
+            future: dao.timeline(trial.id),
+            builder: (_, snapshot) => _Card(
+                title: '完整时间线',
+                child: Text((snapshot.data ?? [])
+                    .map((e) =>
+                        '${_date(DateTime.fromMillisecondsSinceEpoch((e['created_at_ms'] as num).toInt()))} · ${e['event_type']}')
+                    .join('\n')))),
+        const SizedBox(height: 10),
+        FutureBuilder<List<Map<String, Object?>>>(
+            future: dao.evidenceSnapshots(trial.id),
+            builder: (_, snapshot) => _Card(
+                title: '创建时的证据版本',
+                child: Text((snapshot.data ?? [])
+                    .map((e) =>
+                        '${e['node_id']} v${e['node_version']} · ${e['source_locator_json']}')
+                    .join('\n')))),
+        TextButton.icon(
+            icon: const Icon(Icons.feedback_outlined),
+            label: const Text('记录历史依据问题'),
+            onPressed: () => _evidenceFeedback(context, dao, trial.nodeIds,
+                trialId: trial.id)),
+      ]));
 }
 
 class _DecisionTile extends StatelessWidget {
@@ -1299,7 +2964,17 @@ class _DecisionTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Card(elevation: 0, color: selected ? const Color(0xFFE4F3EF) : Colors.white, child: ListTile(onTap: onTap, leading: Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked, color: _brand), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)), subtitle: Text(body)));
+  Widget build(BuildContext context) => Card(
+      elevation: 0,
+      color: selected ? const Color(0xFFE4F3EF) : Colors.white,
+      child: ListTile(
+          onTap: onTap,
+          leading: Icon(
+              selected ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: _brand),
+          title:
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(body)));
 }
 
 class _TrialTile extends StatelessWidget {
@@ -1307,7 +2982,20 @@ class _TrialTile extends StatelessWidget {
   final RealityTrial trial;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Card(elevation: 0, child: ListTile(onTap: onTap, leading: CircleAvatar(backgroundColor: _moduleColor(trial.primaryModule).withValues(alpha: .14), child: Icon(Icons.route, color: _moduleColor(trial.primaryModule))), title: Text(trial.actionInstruction, maxLines: 2, overflow: TextOverflow.ellipsis), subtitle: Text('${trial.primaryModule.label} · ${_status(trial.status)} · ${_date(DateTime.fromMillisecondsSinceEpoch(trial.updatedAtMs))}'), trailing: const Icon(Icons.chevron_right)));
+  Widget build(BuildContext context) => Card(
+      elevation: 0,
+      child: ListTile(
+          onTap: onTap,
+          leading: CircleAvatar(
+              backgroundColor:
+                  _moduleColor(trial.primaryModule).withValues(alpha: .14),
+              child:
+                  Icon(Icons.route, color: _moduleColor(trial.primaryModule))),
+          title: Text(trial.actionInstruction,
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+              '${trial.primaryModule.label} · ${_status(trial.status)} · ${_date(DateTime.fromMillisecondsSinceEpoch(trial.updatedAtMs))}'),
+          trailing: const Icon(Icons.chevron_right)));
 }
 
 class _Card extends StatelessWidget {
@@ -1315,7 +3003,21 @@ class _Card extends StatelessWidget {
   final String title;
   final Widget child;
   @override
-  Widget build(BuildContext context) => Card(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17), side: const BorderSide(color: _line)), child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w800, color: _ink)), const SizedBox(height: 9), child])));
+  Widget build(BuildContext context) => Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(17),
+          side: const BorderSide(color: _line)),
+      child: Padding(
+          padding: const EdgeInsets.all(16),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, color: _ink)),
+            const SizedBox(height: 9),
+            child
+          ])));
 }
 
 class _Title extends StatelessWidget {
@@ -1323,7 +3025,14 @@ class _Title extends StatelessWidget {
   final String title;
   final String subtitle;
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 9), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)), Text(subtitle, style: const TextStyle(fontSize: 12.5, color: Color(0xFF60736E))) ]));
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        Text(subtitle,
+            style: const TextStyle(fontSize: 12.5, color: Color(0xFF60736E)))
+      ]));
 }
 
 class _Label extends StatelessWidget {
@@ -1331,7 +3040,14 @@ class _Label extends StatelessWidget {
   final String label;
   final String text;
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _brand)), const SizedBox(height: 3), Text(text.isEmpty ? '—' : text, style: const TextStyle(height: 1.45))]);
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w800, color: _brand)),
+        const SizedBox(height: 3),
+        Text(text.isEmpty ? '—' : text, style: const TextStyle(height: 1.45))
+      ]);
 }
 
 class _Chip extends StatelessWidget {
@@ -1339,7 +3055,14 @@ class _Chip extends StatelessWidget {
   final String text;
   final Color color;
   @override
-  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: color.withValues(alpha: .11), borderRadius: BorderRadius.circular(20)), child: Text(text, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w800)));
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: .11),
+          borderRadius: BorderRadius.circular(20)),
+      child: Text(text,
+          style: TextStyle(
+              fontSize: 11, color: color, fontWeight: FontWeight.w800)));
 }
 
 class _Metric extends StatelessWidget {
@@ -1347,54 +3070,121 @@ class _Metric extends StatelessWidget {
   final String label;
   final String value;
   @override
-  Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _soft, borderRadius: BorderRadius.circular(15)), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(value, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: _brand)), Text(label, style: const TextStyle(fontSize: 12))]));
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.all(12),
+      decoration:
+          BoxDecoration(color: _soft, borderRadius: BorderRadius.circular(15)),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text(value,
+            style: const TextStyle(
+                fontSize: 23, fontWeight: FontWeight.w900, color: _brand)),
+        Text(label, style: const TextStyle(fontSize: 12))
+      ]));
 }
 
 class _Empty extends StatelessWidget {
   const _Empty(this.text);
   final String text;
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.symmetric(vertical: 40), child: Center(child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF60736E)))));
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Center(
+          child: Text(text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF60736E)))));
 }
 
 Color _moduleColor(GrowthModule module) => switch (module) {
-  GrowthModule.belief => const Color(0xFF5268A0),
-  GrowthModule.goal => const Color(0xFFC77835),
-  GrowthModule.action => const Color(0xFF24766C),
-  GrowthModule.failure => const Color(0xFFA95361),
-  GrowthModule.review => const Color(0xFF76569B),
-  GrowthModule.change => const Color(0xFF3D7897),
-};
-String _status(String value) => switch (value) { 'READY' => '待开始', 'IN_PROGRESS' => '进行中', 'OBSERVING' => '继续观察', 'RESULT_CAPTURED' => '待复盘', 'REVIEWED' => '待决策', 'DECIDED' => '已验证', _ => value };
-String _date(DateTime value) => '${value.month}/${value.day} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+      GrowthModule.belief => const Color(0xFF5268A0),
+      GrowthModule.goal => const Color(0xFFC77835),
+      GrowthModule.action => const Color(0xFF24766C),
+      GrowthModule.failure => const Color(0xFFA95361),
+      GrowthModule.review => const Color(0xFF76569B),
+      GrowthModule.change => const Color(0xFF3D7897),
+    };
+String _status(String value) => switch (value) {
+      'READY' => '待开始',
+      'IN_PROGRESS' => '进行中',
+      'OBSERVING' => '继续观察',
+      'RESULT_CAPTURED' => '待复盘',
+      'REVIEWED' => '待决策',
+      'DECIDED' => '已验证',
+      _ => value
+    };
+String _date(DateTime value) =>
+    '${value.month}/${value.day} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 
-Future<void> _evidenceFeedback(BuildContext context, EvidenceGrowthDao dao, List<String> ids, {String trialId = ''}) async {
+Future<void> _evidenceFeedback(
+    BuildContext context, EvidenceGrowthDao dao, List<String> ids,
+    {String trialId = ''}) async {
   if (ids.isEmpty) return;
   var nodeId = ids.first;
   var category = 'NOT_APPLICABLE';
   final detail = TextEditingController();
-  final save = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (_, update) => AlertDialog(
-    title: const Text('记录依据问题'),
-    content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      DropdownButtonFormField<String>(initialValue: nodeId, isExpanded: true,
-        items: ids.map((id) => DropdownMenuItem(value:id, child:Text(id))).toList(),
-        onChanged:(v)=>update(()=>nodeId=v??ids.first)),
-      DropdownButtonFormField<String>(initialValue:category, isExpanded: true,
-        items: const [DropdownMenuItem(value:'NOT_APPLICABLE',child:Text('不适合我的情境')),
-          DropdownMenuItem(value:'SOURCE_ERROR',child:Text('来源或页码有误')),
-          DropdownMenuItem(value:'MISUNDERSTOOD',child:Text('系统理解错了')),
-          DropdownMenuItem(value:'OTHER',child:Text('其他依据问题'))], onChanged:(v)=>update(()=>category=v??category)),
-      TextField(controller:detail,minLines:3,maxLines:6,onChanged:(_)=>update((){}),
-        decoration:const InputDecoration(labelText:'具体哪里不适用？')),
-      const Text('反馈保存在个人证据中，供后续核查。'),
-    ])), actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:const Text('取消')),
-      FilledButton(onPressed:detail.text.trim().isEmpty?null:()=>Navigator.pop(dialogContext,true),child:const Text('保存反馈'))])));
+  final save = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+          builder: (_, update) => AlertDialog(
+                  title: const Text('记录依据问题'),
+                  content: SingleChildScrollView(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    DropdownButtonFormField<String>(
+                        initialValue: nodeId,
+                        isExpanded: true,
+                        items: ids
+                            .map((id) =>
+                                DropdownMenuItem(value: id, child: Text(id)))
+                            .toList(),
+                        onChanged: (v) =>
+                            update(() => nodeId = v ?? ids.first)),
+                    DropdownButtonFormField<String>(
+                        initialValue: category,
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'NOT_APPLICABLE', child: Text('不适合我的情境')),
+                          DropdownMenuItem(
+                              value: 'SOURCE_ERROR', child: Text('来源或页码有误')),
+                          DropdownMenuItem(
+                              value: 'MISUNDERSTOOD', child: Text('系统理解错了')),
+                          DropdownMenuItem(
+                              value: 'OTHER', child: Text('其他依据问题'))
+                        ],
+                        onChanged: (v) =>
+                            update(() => category = v ?? category)),
+                    TextField(
+                        controller: detail,
+                        minLines: 3,
+                        maxLines: 6,
+                        onChanged: (_) => update(() {}),
+                        decoration:
+                            const InputDecoration(labelText: '具体哪里不适用？')),
+                    const Text('反馈保存在个人证据中，供后续核查。'),
+                  ])),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('取消')),
+                    FilledButton(
+                        onPressed: detail.text.trim().isEmpty
+                            ? null
+                            : () => Navigator.pop(dialogContext, true),
+                        child: const Text('保存反馈'))
+                  ])));
   if (save == true) {
     try {
-      await dao.submitEvidenceFeedback(trialId:trialId,nodeId:nodeId,category:category,detail:detail.text);
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('反馈已保存。')));
+      await dao.submitEvidenceFeedback(
+          trialId: trialId,
+          nodeId: nodeId,
+          category: category,
+          detail: detail.text);
+      if (context.mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('反馈已保存。')));
     } catch (_) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('反馈未保存，请稍后重试。')));
+      if (context.mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('反馈未保存，请稍后重试。')));
     }
   }
   detail.dispose();
@@ -1402,39 +3192,74 @@ Future<void> _evidenceFeedback(BuildContext context, EvidenceGrowthDao dao, List
 
 String _workflowSummary(String json) {
   try {
-    final d=EvidenceGrowthWorkflows.decode(json);
-    if(d.containsKey('risks')) {
-      final count=(d['selected_count'] as num).toInt();
+    final d = EvidenceGrowthWorkflows.decode(json);
+    if (d.containsKey('risks')) {
+      final count = (d['selected_count'] as num).toInt();
       return EvidenceGrowthWorkflows.rankedRisks(d).asMap().entries.map((e) {
-        final r=e.value;
-        return '${e.key+1}. ${r['reason']}（${r['probability']}% × 损失 ${r['loss']}）'
-          '${e.key<count?"\n预防：${r['prevention']}\n信号：${r['signal']}\n备用：${r['backup']}":""}';
+        final r = e.value;
+        return '${e.key + 1}. ${r['reason']}（${r['probability']}% × 损失 ${r['loss']}）'
+            '${e.key < count ? "\n预防：${r['prevention']}\n信号：${r['signal']}\n备用：${r['backup']}" : ""}';
       }).join('\n\n');
     }
-    return '${EvidenceGrowthWorkflows.layers.entries.map((e)=>"${e.value}\n${(d['scans'] as Map)[e.key]}").join("\n\n")}\n\n'
-      '本轮层面：${EvidenceGrowthWorkflows.layers[d['layer']]}\n负责／配合：${d['owner']}\n'
-      '基线：${d['baseline']}\n只改：${d['change']}\n观察：${d['metric']} · ${d['window_days']} 天';
-  } catch(_) { return '历史方案可通过个人证据导出查看。'; }
+    return '${EvidenceGrowthWorkflows.layers.entries.map((e) => "${e.value}\n${(d['scans'] as Map)[e.key]}").join("\n\n")}\n\n'
+        '本轮层面：${EvidenceGrowthWorkflows.layers[d['layer']]}\n负责／配合：${d['owner']}\n'
+        '基线：${d['baseline']}\n只改：${d['change']}\n观察：${d['metric']} · ${d['window_days']} 天';
+  } catch (_) {
+    return '历史方案可通过个人证据导出查看。';
+  }
 }
 
-Future<void> _openCycleTrial(BuildContext context,RealityTrial trial,EvidenceGrowthDao dao,EvidenceGrowthAiService ai) async {
-  final Widget page=trial.isClosed?_ArchivePage(trial:trial,dao:dao,ai:ai):
-    trial.status=='REVIEWED'?_DecisionPage(trial:trial,dao:dao,ai:ai):_TrialPage(trial:trial,dao:dao,ai:ai);
-  await Navigator.push(context,MaterialPageRoute(builder:(_)=>page));
+Future<void> _openCycleTrial(BuildContext context, RealityTrial trial,
+    EvidenceGrowthDao dao, EvidenceGrowthAiService ai) async {
+  final Widget page = trial.isClosed
+      ? _ArchivePage(trial: trial, dao: dao, ai: ai)
+      : trial.status == 'REVIEWED'
+          ? _DecisionPage(trial: trial, dao: dao, ai: ai)
+          : _TrialPage(trial: trial, dao: dao, ai: ai);
+  await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
 }
-Future<void> _openCycle(BuildContext context,RealityTrial trial,EvidenceGrowthDao dao,EvidenceGrowthAiService ai) async {
-  final chain=await dao.cycleHistory((await dao.byId(trial.id))??trial);
-  if(!context.mounted)return;
-  await Navigator.push(context,MaterialPageRoute(builder:(context)=>Scaffold(
-    appBar:AppBar(title:const Text('这个问题如何一步步改变')),
-    body:ListView(padding:const EdgeInsets.all(16),children:[
-      const Text('每轮保留原预测与实际记录；新判断只影响下一轮，不改写过去。'),
-      for(final round in chain) Card(child:Column(children:[
-        EvidenceGrowthCycleCard(trial:round),
-        ListTile(title:Text('第 ${EvidenceGrowthCycle.round(round)} 轮 · ${_status(round.status)}'),
-          subtitle:Text(round.nextAction.isEmpty?round.actionInstruction:round.nextAction),
-          trailing:const Icon(Icons.chevron_right),onTap:()=>_openCycleTrial(context,round,dao,ai)),
-      ])),
-    ]),
-  )));
+
+Future<void> _openCycle(BuildContext context, RealityTrial trial,
+    EvidenceGrowthDao dao, EvidenceGrowthAiService ai) async {
+  final chain = await dao.cycleHistory((await dao.byId(trial.id)) ?? trial);
+  if (!context.mounted) return;
+  await Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (context) => Scaffold(
+                appBar: AppBar(title: const Text('这个问题如何一步步改变')),
+                body: ListView(padding: const EdgeInsets.all(16), children: [
+                  const Text('每轮保留原预测与实际记录；新判断只影响下一轮，不改写过去。'),
+                  for (final round in chain)
+                    Card(
+                        child: Column(children: [
+                      EvidenceGrowthCycleCard(trial: round),
+                      ListTile(
+                          title: Text(
+                              '第 ${EvidenceGrowthCycle.round(round)} 轮 · ${_status(round.status)}'),
+                          subtitle: Text(round.nextAction.isEmpty
+                              ? round.actionInstruction
+                              : round.nextAction),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () =>
+                              _openCycleTrial(context, round, dao, ai)),
+                    ])),
+                ]),
+              )));
+}
+
+Future<void> _trialKnowledge(BuildContext context, EvidenceGrowthDao dao,
+    String trialId, String stage) async {
+  final j = await dao.journeys.forTrial(trialId);
+  if (!context.mounted) return;
+  if (j == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请从目标旅程打开知识学习，以保存对应情境和用法。')));
+    return;
+  }
+  await Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) =>
+              EvidenceGrowthKnowledgePage(dao: dao, journey: j, stage: stage)));
 }

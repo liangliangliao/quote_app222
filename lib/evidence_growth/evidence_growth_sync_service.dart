@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'evidence_growth_dao.dart';
+import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_kb_store.dart';
 
 class EvidenceGrowthSyncResult {
@@ -44,10 +45,11 @@ class EvidenceGrowthSyncClient {
       await dao.setSetting('sync_delete_pending','');
     }
     if(await dao.getSetting('sync_enabled')!='true') return const EvidenceGrowthSyncResult(0,0,[]);
+    final journeyConflicts=await _syncJourneys();
     final state=await dao.syncState(), sent=<String,String>{};
     final changes=<Map<String,dynamic>>[];
     for(final trial in await dao.recentTrials(limit:10000)) {
-      final bundle=await dao.trialBundle(trial.id), digest=EvidenceGrowthDao.bundleDigest(await dao.trialBundle(trial.id));
+      final bundle=await dao.trialBundle(trial.id);final digest=EvidenceGrowthDao.bundleDigest(bundle);
       if(state[trial.id]?['local_digest']==digest) continue;
       sent[trial.id]=digest;
       changes.add({'base_digest':state[trial.id]?['remote_digest']??'','bundle':bundle});
@@ -59,7 +61,7 @@ class EvidenceGrowthSyncClient {
     for(final entry in ack.entries) {
       if(sent[entry.key]!=null) await dao.acknowledgeSync(entry.key,entry.value as String,sent[entry.key]!);
     }
-    final conflicts=(response['conflicts'] as List? ?? []).map((e)=>e.toString()).toList();
+    final conflicts=[...journeyConflicts,...(response['conflicts'] as List? ?? []).map((e)=>e.toString())];
     var downloaded=0;
     for(final change in response['changes'] as List? ?? []) {
       final bundle=Map<String,dynamic>.from(change['bundle'] as Map);
@@ -87,6 +89,68 @@ class EvidenceGrowthSyncClient {
     }
     await dao.setSetting('sync_last_at',DateTime.now().toIso8601String());
     return EvidenceGrowthSyncResult(ack.length,downloaded,conflicts.toSet().toList());
+  }
+  Future<List<String>> _syncJourneys() async {
+    final remoteIds=growthStrings((await request('GET','/v2.7/sync'))['ids']);
+    final state=await dao.syncState();final conflicts=<String>[];
+    for(final id in {...remoteIds,...await dao.journeys.ids()}) {
+      final key='journey:$id';final local=await dao.journeys.bundle(id);
+      final ld=local.isEmpty?'':EvidenceGrowthDao.bundleDigest(local);
+      final remote=await request('GET','/v2.7/sync/$id');final rb=growthMap(remote['bundle']);
+      final rd=rb.isEmpty?'':EvidenceGrowthDao.bundleDigest(rb);
+      if(remote['digest']!=rd)throw const FormatException('目标证据摘要不一致');
+      if(ld==rd){await dao.acknowledgeSync(key,rd,ld);continue;}
+      final base=state[key];
+      if(ld.isNotEmpty && rd.isNotEmpty && ld!=(base?['local_digest']??'') && rd!=(base?['remote_digest']??'')) {
+        conflicts.add(key);continue;
+      }
+      try {
+        if(ld.isEmpty||ld==(base?['local_digest']??'')) {
+          final applied=await dao.journeys.importBundle(rb,baseDigest:ld);
+          await dao.acknowledgeSync(key,rd,applied);
+        } else {
+          final response=await request('POST','/v2.7/sync',body:{'bundle':local,'base_digest':rd});
+          if(response['digest']!=ld)throw StateError('目标同步未确认');
+          await dao.acknowledgeSync(key,ld,ld);
+        }
+      } on StateError {conflicts.add(key);}
+    }
+    return conflicts;
+  }
+  Future<Map<String,dynamic>> journeyConflict(String key) async {
+    final id=key.substring(8);final remote=await request('GET','/v2.7/sync/$id');
+    final bundle=growthMap(remote['bundle']);
+    if(EvidenceGrowthDao.bundleDigest(bundle)!=remote['digest'])throw const FormatException('远程证据摘要不一致');
+    return {'local':await dao.journeys.bundle(id),'remote':bundle,'remote_digest':remote['digest']};
+  }
+  Future<void> resolveJourneyConflict(String key,Map<String,dynamic> comparison,{required bool keepLocal}) async {
+    final id=key.substring(8),local=growthMap(comparison['local']),remote=growthMap(comparison['remote']);
+    final ld=EvidenceGrowthDao.bundleDigest(local),rd=EvidenceGrowthDao.bundleDigest(remote);
+    if(EvidenceGrowthDao.bundleDigest(await dao.journeys.bundle(id))!=ld)throw StateError('本机已变化，请重新比较');
+    final latest=await request('GET','/v2.7/sync/$id');if(latest['digest']!=rd)throw StateError('远程已变化，请重新比较');
+    await dao.archiveSyncConflict(key,local,remote,keepLocal?'KEEP_LOCAL':'KEEP_REMOTE');
+    final records=<String,GrowthData>{},actions=<String,GrowthData>{};
+    for(final bundle in [local,remote]) {
+      for(final r in growthRows(bundle['records'])) {
+        final previous=records[r['id']];
+        if(previous!=null&&EvidenceGrowthDao.bundleDigest(previous)!=EvidenceGrowthDao.bundleDigest(r))throw StateError('历史证据不一致，不能覆盖');
+        records[r['id']]=r;
+      }
+      for(final a in growthRows(bundle['actions'])) {
+        final previous=actions[a['trial_id']];
+        if(previous!=null&&EvidenceGrowthDao.bundleDigest(previous)!=EvidenceGrowthDao.bundleDigest(a))throw StateError('行动归属不一致，不能覆盖');
+        actions[a['trial_id']]=a;
+      }
+    }
+    final selected=growthMap((keepLocal?local:remote)['journey']);
+    final journal=records.values.toList()..sort((a,b){final time=growthInt(a['created_at_ms']).compareTo(growthInt(b['created_at_ms']));return time==0?'${a['id']}'.compareTo('${b['id']}'):time;});
+    final bindings=actions.values.toList()..sort((a,b)=>'${a['trial_id']}'.compareTo('${b['trial_id']}'));
+    final merged={'journey':{...selected,'version':max(growthInt(growthMap(local['journey'])['version']),growthInt(growthMap(remote['journey'])['version']))+1},'records':journal,'actions':bindings};
+    final response=await request('POST','/v2.7/sync',body:{'bundle':merged,'base_digest':rd});
+    final digest=EvidenceGrowthDao.bundleDigest(merged);if(response['digest']!=digest)throw StateError('远程没有确认合并');
+    final applied=await dao.journeys.importBundle(merged,baseDigest:ld);await dao.acknowledgeSync(key,digest,applied);
+    final remaining=growthStrings(jsonDecode(await dao.getSetting('sync_conflicts',fallback:'[]'))).where((e)=>e!=key).toList();
+    await dao.setSetting('sync_conflicts',jsonEncode(remaining));
   }
   Future<void> updateKnowledge(EvidenceGrowthKbStore store) async {
     await store.install(await request('GET','/v1/kb/manifest'));

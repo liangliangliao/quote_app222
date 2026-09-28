@@ -633,7 +633,8 @@ class _RootShellState extends State<RootShell> {
               'RootShell postFrame: plugin=$launchedViaPlugin flag=$launchedViaFlag native=$viaNativeChannel handled=$handled',
             );
           } catch (_) {}
-          if (!handled) {
+          // Another cold-start callback may already have opened the exact growth route.
+          if (!handled && !NotificationService.hasOpenEvidenceGrowthNotification) {
             SimpleBus.navHome();
           }
         }
