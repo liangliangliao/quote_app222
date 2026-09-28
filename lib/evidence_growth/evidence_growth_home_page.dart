@@ -35,6 +35,7 @@ import 'evidence_growth_sync_service.dart';
 import 'evidence_growth_sync_page.dart';
 import 'evidence_growth_reminder_page.dart';
 import 'evidence_growth_read_aloud.dart';
+import 'evidence_growth_knowledge_transform.dart';
 import 'evidence_growth_evidence_history.dart';
 import 'evidence_growth_workflows.dart';
 import 'evidence_growth_workflow_page.dart';
@@ -2422,6 +2423,12 @@ class _NodeTile extends StatelessWidget {
                     EvidenceGrowthReadAloud(
                         text:
                             '${node.title}。${node.claim}。${node.mechanism}。${node.howTo.join('。')}。使用边界：${node.misuseBoundary.join('。')}'),
+                    OutlinedButton.icon(
+                        onPressed: () =>
+                            EvidenceGrowthKnowledgeTransformSheet.show(context,
+                                node: node, dao: dao),
+                        icon: const Icon(Icons.auto_awesome_outlined),
+                        label: const Text('转成直观与行动（6 步）')),
                     const SizedBox(height: 12),
                     _Label('是什么', node.claim),
                     const Divider(),
