@@ -7,171 +7,14 @@ import '../services/unified_ai_service.dart';
 import 'evidence_growth_ai_cache.dart';
 import 'evidence_growth_ai_json.dart';
 import 'evidence_growth_dao.dart';
-import 'evidence_growth_journey_models.dart';
+import 'evidence_growth_knowledge_transform_history.dart';
+import 'evidence_growth_knowledge_transform_model.dart';
+import 'evidence_growth_knowledge_transform_store.dart';
 import 'evidence_growth_models.dart';
 import 'evidence_growth_read_aloud.dart';
 
-/// 「抽象知识 → 直观 → 理解 → 行动」6 步转换。
-///
-/// 输入只有两样：知识卡的【大标题】和【原案例 / 研究依据】。
-/// 输出固定 6 步：还原问题 / 三正一反 / 类比或画图 / 用自己的话讲一遍 /
-/// 压缩成行动规则 / 马上小实验。
-
-class KnowledgeTransformRule {
-  const KnowledgeTransformRule(this.trigger, this.action);
-  final String trigger;
-  final String action;
-}
-
-class KnowledgeTransform {
-  const KnowledgeTransform({
-    required this.core,
-    required this.problem,
-    required this.examples,
-    required this.counter,
-    required this.analogy,
-    required this.differs,
-    required this.diagram,
-    required this.explain,
-    required this.selfCheck,
-    required this.rules,
-    required this.action,
-    required this.predict,
-    required this.check,
-    required this.safety,
-    this.fromCache = false,
-  });
-
-  static const String defaultSelfCheck = '合上这张卡，用一两句话把它讲给一个外行听；讲不顺的地方，就是还没真懂的地方。';
-  static const String defaultSafety =
-      '如果做的时候明显不适、会影响到别人，或事情无法挽回，就停下；需要时请找信任的人或专业人士。';
-
-  final String core;
-  final String problem;
-  final List<String> examples;
-  final String counter;
-  final String analogy;
-  final String differs;
-  final String diagram;
-  final String explain;
-  final String selfCheck;
-  final List<KnowledgeTransformRule> rules;
-  final String action;
-  final String predict;
-  final String check;
-  final String safety;
-  final bool fromCache;
-
-  /// 解析模型返回；缺少任何一步的必要内容都视为失败，不做本地编造。
-  factory KnowledgeTransform.fromJson(GrowthData json,
-      {bool fromCache = false}) {
-    String s(Object? v) => '${v ?? ''}'.trim();
-    final experiment = growthMap(json['experiment']);
-    final examples = growthStrings(json['examples'])
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    final rules = growthRows(json['rules'])
-        .map((r) => KnowledgeTransformRule(s(r['trigger']), s(r['action'])))
-        .where((r) => r.trigger.isNotEmpty && r.action.isNotEmpty)
-        .toList();
-    final selfCheck = s(json['selfCheck']);
-    final safety = s(experiment['safety']);
-    final result = KnowledgeTransform(
-      core: s(json['core']),
-      problem: s(json['problem']),
-      examples: examples.take(3).toList(),
-      counter: s(json['counter']),
-      analogy: s(json['analogy']),
-      differs: s(json['differs']),
-      diagram: s(json['diagram']),
-      explain: s(json['explain']),
-      selfCheck: selfCheck.isEmpty ? defaultSelfCheck : selfCheck,
-      rules: rules.take(3).toList(),
-      action: s(experiment['action']),
-      predict: s(experiment['predict']),
-      check: s(experiment['check']),
-      safety: safety.isEmpty ? defaultSafety : safety,
-      fromCache: fromCache,
-    );
-    if (!result.isComplete) throw const FormatException('TRANSFORM_INCOMPLETE');
-    return result;
-  }
-
-  bool get isComplete =>
-      core.isNotEmpty &&
-      problem.isNotEmpty &&
-      examples.length == 3 &&
-      counter.isNotEmpty &&
-      analogy.isNotEmpty &&
-      differs.isNotEmpty &&
-      explain.isNotEmpty &&
-      rules.isNotEmpty &&
-      action.isNotEmpty &&
-      predict.isNotEmpty &&
-      check.isNotEmpty;
-
-  GrowthData toJson() => {
-        'core': core,
-        'problem': problem,
-        'examples': examples,
-        'counter': counter,
-        'analogy': analogy,
-        'differs': differs,
-        'diagram': diagram,
-        'explain': explain,
-        'selfCheck': selfCheck,
-        'rules': [
-          for (final r in rules) {'trigger': r.trigger, 'action': r.action}
-        ],
-        'experiment': {
-          'action': action,
-          'predict': predict,
-          'check': check,
-          'safety': safety,
-        },
-      };
-
-  /// 复制与朗读共用的纯文本。
-  String toPlainText(String title) {
-    final b = StringBuffer()
-      ..writeln(title)
-      ..writeln('核心：$core')
-      ..writeln()
-      ..writeln('1 还原问题')
-      ..writeln(problem)
-      ..writeln()
-      ..writeln('2 三正一反');
-    for (var i = 0; i < examples.length; i++) {
-      b.writeln('正例${i + 1}：${examples[i]}');
-    }
-    b
-      ..writeln('反例：$counter')
-      ..writeln()
-      ..writeln('3 类比或画图')
-      ..writeln('类比：$analogy')
-      ..writeln('不像的地方：$differs');
-    if (diagram.isNotEmpty) b.writeln(diagram);
-    b
-      ..writeln()
-      ..writeln('4 用自己的话讲一遍')
-      ..writeln(explain)
-      ..writeln('自测：$selfCheck')
-      ..writeln()
-      ..writeln('5 压缩成行动规则');
-    for (final r in rules) {
-      b.writeln('${r.trigger}，${r.action}');
-    }
-    b
-      ..writeln()
-      ..writeln('6 马上小实验（24 小时内）')
-      ..writeln('做什么：$action')
-      ..writeln('事前预期：$predict')
-      ..writeln('事后对照：$check')
-      ..writeln('边界：$safety');
-    return b.toString().trim();
-  }
-}
+export 'evidence_growth_knowledge_transform_model.dart';
+export 'evidence_growth_knowledge_transform_store.dart';
 
 class KnowledgeTransformException implements Exception {
   const KnowledgeTransformException(this.message);
@@ -181,10 +24,17 @@ class KnowledgeTransformException implements Exception {
 }
 
 class EvidenceGrowthKnowledgeTransform {
-  EvidenceGrowthKnowledgeTransform({required this.dao, UnifiedAiService? ai})
-      : _ai = ai ?? UnifiedAiService();
+  EvidenceGrowthKnowledgeTransform(
+      {required this.dao,
+      UnifiedAiService? ai,
+      EvidenceGrowthKnowledgeTransformStore? store})
+      : _ai = ai ?? UnifiedAiService(),
+        store = store ?? EvidenceGrowthKnowledgeTransformStore(dao);
   final EvidenceGrowthDao dao;
   final UnifiedAiService _ai;
+
+  /// 转换成功后自动写入的本地历史（只增不改）。
+  final EvidenceGrowthKnowledgeTransformStore store;
 
   /// 改动提示词或输出结构时递增，让旧缓存自动失效。
   static const String promptVersion = 'eg-transform.1';
@@ -238,8 +88,14 @@ class EvidenceGrowthKnowledgeTransform {
     return '模型服务请求失败，请检查统一 AI 配置后重试。';
   }
 
-  Future<KnowledgeTransform> transform(EvidenceKNode node,
-      {bool refresh = false}) async {
+  /// 「大标题 + 原案例」的指纹；原卡片改动后可据此提示历史记录基于旧版本。
+  static String sourceHash(EvidenceKNode node) => GrowthAiCache.fingerprint(
+      [node.title.trim(), node.storyOrStudy.trim()]);
+
+  /// 调 AI 转换一次；成功后自动追加保存为一条新的历史记录。
+  /// 不读取、不改动已有历史，所以重新转换永远不会覆盖旧内容。
+  /// 失败（含超时、结构不完整）直接抛出，不写入任何东西。
+  Future<KnowledgeTransformEntry> convertAndSave(EvidenceKNode node) async {
     UnifiedAiResolvedConfig cfg;
     try {
       cfg = await _ai.resolveGlobalConfig();
@@ -249,48 +105,51 @@ class EvidenceGrowthKnowledgeTransform {
     if (!cfg.available) {
       throw const KnowledgeTransformException('还没有可用的 AI 配置，请先配置统一 AI 服务。');
     }
-    final data = await GrowthAiCache(dao).run(
-      'knowledge_transform',
-      [
-        node.id,
-        node.title,
-        node.storyOrStudy,
-        cfg.provider,
-        cfg.model,
-        cfg.endpoint,
-        promptVersion,
-      ],
-      () async {
-        try {
-          final raw = await _ai
-              .generateText(
-                systemPrompt: systemPrompt,
-                purpose: 'evidence_growth.knowledge_transform',
-                expectJson: true,
-                prompt: buildPrompt(node),
-                maxTokens: 1800,
-                temperature: .3,
-              )
-              .timeout(const Duration(seconds: 120));
-          final parsed = KnowledgeTransform.fromJson(GrowthAiJson.decode(raw));
-          return {'origin': 'AI', 'data': parsed.toJson()};
-        } catch (e) {
-          // 失败不进缓存，下次点开会重新请求。
-          return {'origin': 'FAILED', 'reason': reason(e)};
-        }
-      },
-      refresh: refresh,
-    );
-    if (data['origin'] != 'AI') {
-      throw KnowledgeTransformException(
-          '${data['reason'] ?? '生成失败，请稍后重试。'}');
+    final KnowledgeTransform parsed;
+    try {
+      final raw = await _ai
+          .generateText(
+            systemPrompt: systemPrompt,
+            purpose: 'evidence_growth.knowledge_transform',
+            expectJson: true,
+            prompt: buildPrompt(node),
+            maxTokens: 1800,
+            temperature: .3,
+          )
+          .timeout(const Duration(seconds: 120));
+      parsed = KnowledgeTransform.fromJson(GrowthAiJson.decode(raw));
+    } catch (e) {
+      throw KnowledgeTransformException(reason(e));
     }
-    return KnowledgeTransform.fromJson(growthMap(data['data']),
-        fromCache: data['cache_hit'] == true);
+    final hash = sourceHash(node);
+    try {
+      return await store.save(
+        nodeId: node.id,
+        nodeTitle: node.title,
+        transform: parsed,
+        provider: cfg.provider,
+        model: cfg.model,
+        promptVersion: promptVersion,
+        sourceHash: hash,
+      );
+    } catch (_) {
+      // AI 已经成功：不丢结果，交给界面提示“未保存”，让用户先复制留存。
+      return KnowledgeTransformEntry(
+        nodeId: node.id,
+        nodeTitle: node.title,
+        transform: parsed,
+        provider: cfg.provider,
+        model: cfg.model,
+        promptVersion: promptVersion,
+        sourceHash: hash,
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    }
   }
 }
 
-/// 点开后自动分析；同一张卡的成功结果会缓存，再次打开秒出。
+/// 打开时先看本地历史：有记录就直接显示最新一条（不花 AI 调用）；
+/// 一条都没有才自动转换。之后“重新转换”只会新增记录，不覆盖旧的。
 class EvidenceGrowthKnowledgeTransformSheet extends StatefulWidget {
   const EvidenceGrowthKnowledgeTransformSheet(
       {super.key, required this.node, required this.dao});
@@ -314,15 +173,19 @@ class EvidenceGrowthKnowledgeTransformSheet extends StatefulWidget {
 
 class _KnowledgeTransformSheetState
     extends State<EvidenceGrowthKnowledgeTransformSheet> {
-  KnowledgeTransform? result;
+  late final EvidenceGrowthKnowledgeTransform _service;
+  KnowledgeTransformEntry? current;
+  List<KnowledgeTransformEntry> history = const [];
   String? error;
-  bool loading = false;
+  bool loadingHistory = true;
+  bool busy = false;
   int _request = 0;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    _service = EvidenceGrowthKnowledgeTransform(dao: widget.dao);
+    unawaited(_init());
   }
 
   @override
@@ -331,30 +194,65 @@ class _KnowledgeTransformSheetState
     super.dispose();
   }
 
-  Future<void> _load({bool refresh = false}) async {
-    final current = ++_request;
+  Future<void> _init() async {
+    try {
+      final saved = await _service.store.list(widget.node.id);
+      if (!mounted) return;
+      setState(() {
+        history = saved;
+        current = saved.isEmpty ? null : saved.first;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => error = '读取本地历史失败，仍可点“重试”重新转换。');
+    }
+    if (!mounted) return;
+    setState(() => loadingHistory = false);
+    if (current == null && error == null) await _convert();
+  }
+
+  Future<void> _convert() async {
+    final ticket = ++_request;
     setState(() {
-      loading = true;
+      busy = true;
       error = null;
     });
     try {
-      final r = await EvidenceGrowthKnowledgeTransform(dao: widget.dao)
-          .transform(widget.node, refresh: refresh);
-      if (!mounted || current != _request) return;
-      setState(() => result = r);
+      final entry = await _service.convertAndSave(widget.node);
+      if (!mounted || ticket != _request) return;
+      setState(() {
+        current = entry;
+        if (entry.saved) history = [entry, ...history];
+        if (!entry.saved) {
+          error = '已生成，但保存到本地失败；请先点“复制全文”留存。';
+        }
+      });
     } catch (e) {
-      if (!mounted || current != _request) return;
+      if (!mounted || ticket != _request) return;
+      // 失败时保留正在显示的内容，历史一条不动。
       setState(() => error = e is KnowledgeTransformException
           ? e.message
           : '生成失败，请稍后重试。');
     } finally {
-      if (mounted && current == _request) setState(() => loading = false);
+      if (mounted && ticket == _request) setState(() => busy = false);
     }
   }
 
-  Future<void> _copy(KnowledgeTransform r) async {
-    await Clipboard.setData(
-        ClipboardData(text: r.toPlainText(widget.node.title)));
+  Future<void> _openHistory() async {
+    final picked = await EvidenceGrowthKnowledgeTransformHistorySheet.show(
+        context,
+        entries: history,
+        currentId: current?.id);
+    if (picked == null || !mounted) return;
+    setState(() {
+      current = picked;
+      error = null;
+    });
+  }
+
+  Future<void> _copy(KnowledgeTransformEntry entry) async {
+    await Clipboard.setData(ClipboardData(
+        text: entry.transform.toPlainText(widget.node.title)));
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('已复制全文')));
@@ -430,19 +328,50 @@ class _KnowledgeTransformSheetState
         ]),
       ];
 
+  /// 记录信息：时间、模型、是否最新、原卡片是否已更新。
+  String _meta(KnowledgeTransformEntry entry) {
+    final parts = <String>[
+      entry.saved ? '已保存 ${entry.timeLabel}' : '未保存 ${entry.timeLabel}',
+      if (entry.model.isNotEmpty) entry.model,
+      if (history.length > 1) '共 ${history.length} 条历史',
+    ];
+    if (entry.saved && history.isNotEmpty && entry.id != history.first.id) {
+      parts.add('正在查看较早的记录');
+    }
+    return parts.join(' · ');
+  }
+
+  bool _sourceChanged(KnowledgeTransformEntry entry) =>
+      entry.sourceHash.isNotEmpty &&
+      entry.sourceHash != EvidenceGrowthKnowledgeTransform.sourceHash(widget.node);
+
   @override
   Widget build(BuildContext context) {
-    final r = result;
+    final entry = current;
+    final theme = Theme.of(context);
     return ListView(padding: const EdgeInsets.all(20), children: [
       Text(widget.node.title,
           style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
       const SizedBox(height: 4),
-      Text('知识转换 · 6 步', style: Theme.of(context).textTheme.labelMedium),
-      if (r != null) EvidenceGrowthReadAloud(text: r.toPlainText(widget.node.title)),
-      if (loading && r != null)
+      Text('知识转换 · 6 步', style: theme.textTheme.labelMedium),
+      if (entry != null) ...[
+        Text(_meta(entry), style: theme.textTheme.bodySmall),
+        EvidenceGrowthReadAloud(
+            key: ValueKey(entry.id ?? entry.createdAtMs),
+            text: entry.transform.toPlainText(widget.node.title)),
+      ],
+      if (busy && entry != null)
         const Padding(
             padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
-      if (loading && r == null)
+      if (loadingHistory)
+        const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Column(children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 14),
+              Text('正在读取本地记录…'),
+            ])),
+      if (!loadingHistory && busy && entry == null)
         const Padding(
             padding: EdgeInsets.symmetric(vertical: 40),
             child: Column(children: [
@@ -453,26 +382,36 @@ class _KnowledgeTransformSheetState
       if (error != null)
         Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error))),
-      if (r != null) ..._body(r),
+            child: Text(error!, style: TextStyle(color: theme.colorScheme.error))),
+      if (entry != null && _sourceChanged(entry))
+        Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text('原卡片内容在这条记录之后有更新，可点“重新转换”生成基于新内容的一条（旧记录会保留）。',
+                style: theme.textTheme.bodySmall)),
+      if (entry != null) ..._body(entry.transform),
       const SizedBox(height: 20),
-      if (r != null)
-        Text(
-            '由 AI 依据「大标题 + 原案例/研究依据」生成${r.fromCache ? '（已缓存）' : ''}。例子、类比和实验都是假设性示例，不是原文，也不是你的经历；请对照原卡核对。',
-            style: Theme.of(context).textTheme.bodySmall),
+      if (entry != null)
+        Text('由 AI 依据「大标题 + 原案例/研究依据」生成。例子、类比和实验都是假设性示例，不是原文，也不是你的经历；请对照原卡核对。'
+            '“重新转换”会新增一条历史记录，不会覆盖已成功保存的内容。',
+            style: theme.textTheme.bodySmall),
       const SizedBox(height: 12),
-      Wrap(spacing: 8, children: [
-        OutlinedButton.icon(
-            onPressed: loading ? null : () => _load(refresh: true),
-            icon: const Icon(Icons.refresh),
-            label: Text(r == null ? '重试' : '重新分析')),
-        if (r != null)
+      if (!loadingHistory)
+        Wrap(spacing: 8, children: [
           OutlinedButton.icon(
-              onPressed: () => _copy(r),
-              icon: const Icon(Icons.copy_outlined),
-              label: const Text('复制全文')),
-      ]),
+              onPressed: busy ? null : _convert,
+              icon: const Icon(Icons.refresh),
+              label: Text(entry == null ? '重试' : '重新转换')),
+          if (history.isNotEmpty)
+            OutlinedButton.icon(
+                onPressed: busy ? null : _openHistory,
+                icon: const Icon(Icons.history),
+                label: Text('历史记录（${history.length}）')),
+          if (entry != null)
+            OutlinedButton.icon(
+                onPressed: () => _copy(entry),
+                icon: const Icon(Icons.copy_outlined),
+                label: const Text('复制全文')),
+        ]),
     ]);
   }
 }
