@@ -1122,6 +1122,91 @@ class UnifiedAiService {
     return true;
   }
 
+  /// Microsoft Foundry exposes Claude through the native Anthropic Messages
+  /// API rather than any OpenAI-compatible chat/completions route.
+  static bool isAzureClaudeDeployment(String deployment) {
+    return deployment.trim().toLowerCase().contains('claude');
+  }
+
+  static bool _usesAzureAnthropicApi(UnifiedAiResolvedConfig cfg) {
+    if (isAzureClaudeDeployment(cfg.deployment)) return true;
+    if (cfg.endpoint.toLowerCase().contains('/anthropic/')) return true;
+    return cfg.endpointCandidates.any((e) => e.toLowerCase().contains('/anthropic/'));
+  }
+
+  static String _azureMessageContentToPlainText(dynamic raw) {
+    if (raw is String) return raw.trim();
+    if (raw is List) {
+      final buffer = StringBuffer();
+      for (final item in raw) {
+        if (item is Map) {
+          final type = (item['type'] ?? '').toString().toLowerCase();
+          if (type == 'text' || type == 'input_text' || type.isEmpty) {
+            final value = (item['text'] ?? item['content'] ?? '').toString().trim();
+            if (value.isNotEmpty) {
+              if (buffer.isNotEmpty) buffer.writeln();
+              buffer.write(value);
+            }
+          } else if (type == 'image_url' || type == 'input_image') {
+            if (buffer.isNotEmpty) buffer.writeln();
+            buffer.write('[图片附件]');
+          } else if (type == 'file' || type == 'input_file') {
+            if (buffer.isNotEmpty) buffer.writeln();
+            buffer.write('[文件附件]');
+          }
+        } else {
+          final value = item.toString().trim();
+          if (value.isNotEmpty) {
+            if (buffer.isNotEmpty) buffer.writeln();
+            buffer.write(value);
+          }
+        }
+      }
+      return buffer.toString().trim();
+    }
+    return raw?.toString().trim() ?? '';
+  }
+
+  Map<String, dynamic> _azureAnthropicBody({
+    required UnifiedAiResolvedConfig cfg,
+    required List<Map<String, dynamic>> messages,
+    required int maxTokens,
+  }) {
+    final systemParts = <String>[];
+    final anthropicMessages = <Map<String, dynamic>>[];
+
+    for (final message in messages) {
+      final role = (message['role'] ?? '').toString().trim().toLowerCase();
+      final text = _azureMessageContentToPlainText(message['content']);
+      if (text.isEmpty) continue;
+      if (role == 'system') {
+        systemParts.add(text);
+        continue;
+      }
+      if (role != 'user' && role != 'assistant') continue;
+
+      // Keep the payload conservative and text-only here. Existing attachment
+      // parts are converted to readable placeholders by toJson(...false...),
+      // which avoids sending OpenAI image/file block shapes to Anthropic.
+      if (anthropicMessages.isNotEmpty && anthropicMessages.last['role'] == role) {
+        final previous = (anthropicMessages.last['content'] ?? '').toString();
+        anthropicMessages.last['content'] = previous.isEmpty ? text : '$previous\n\n$text';
+      } else {
+        anthropicMessages.add(<String, dynamic>{'role': role, 'content': text});
+      }
+    }
+
+    return <String, dynamic>{
+      'model': cfg.deployment,
+      'max_tokens': maxTokens,
+      if (systemParts.isNotEmpty) 'system': systemParts.join('\n\n'),
+      'messages': anthropicMessages,
+      // Non-streaming keeps response parsing deterministic across ordinary chat
+      // and strict-JSON tasks. The parser still understands Anthropic SSE deltas.
+      'stream': false,
+    };
+  }
+
   Map<String, dynamic> _azureBody({
     required UnifiedAiResolvedConfig cfg,
     required List<Map<String, dynamic>> messages,
@@ -1215,6 +1300,12 @@ class UnifiedAiService {
     final key = cfg.apiKey.trim();
     if (key.isEmpty) return const <String, String>{};
     final lower = endpoint.toLowerCase();
+    if (lower.contains('/anthropic/')) {
+      return <String, String>{
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      };
+    }
     final acceptsBearer = lower.contains('/models/') || lower.contains('/openai/v1/');
     return <String, String>{
       'api-key': key,
@@ -1235,8 +1326,11 @@ class UnifiedAiService {
     required int retryCount,
     required int retryDelayMs,
   }) async {
-    // 与其它服务商保持一致：严格 JSON 任务不走流式，避免推理增量把 JSON 撕碎。
-    final stream = !expectJson;
+    final anthropic = _usesAzureAnthropicApi(cfg);
+    // OpenAI-compatible Azure routes may stream ordinary chat. Claude uses the
+    // Anthropic Messages API and stays non-streaming here so the same app parser
+    // works reliably for both normal chat and strict-JSON tasks.
+    final stream = anthropic ? false : !expectJson;
     final messages = <Map<String, dynamic>>[
       if ((systemPrompt ?? '').trim().isNotEmpty)
         <String, dynamic>{'role': 'system', 'content': systemPrompt!.trim()},
@@ -1249,15 +1343,21 @@ class UnifiedAiService {
       timeout: timeout,
       retryCount: retryCount,
       retryDelayMs: retryDelayMs,
-      buildBody: () => _azureBody(
-        cfg: cfg,
-        messages: messages,
-        maxTokens: maxTokens,
-        expectJson: expectJson,
-        temperature: temperature,
-        topP: topP,
-        stream: stream,
-      ),
+      buildBody: () => anthropic
+          ? _azureAnthropicBody(
+              cfg: cfg,
+              messages: messages,
+              maxTokens: maxTokens,
+            )
+          : _azureBody(
+              cfg: cfg,
+              messages: messages,
+              maxTokens: maxTokens,
+              expectJson: expectJson,
+              temperature: temperature,
+              topP: topP,
+              stream: stream,
+            ),
     );
   }
 
@@ -1272,10 +1372,14 @@ class UnifiedAiService {
     required int retryCount,
     required int retryDelayMs,
   }) async {
+    final anthropic = _usesAzureAnthropicApi(cfg);
     final payload = messages
         .map((e) => e.toJson(
-              supportsVision: _supportsVisionInput('azure', cfg.deployment),
-              supportsFiles: _supportsFileInput('azure', cfg.deployment),
+              // OpenAI image/file block shapes are not valid Anthropic content
+              // blocks. Until native Anthropic multimodal mapping is added,
+              // preserve attachments as text placeholders instead of 400-ing.
+              supportsVision: anthropic ? false : _supportsVisionInput('azure', cfg.deployment),
+              supportsFiles: anthropic ? false : _supportsFileInput('azure', cfg.deployment),
             ))
         .toList();
     return _postAzureWithFallback(
@@ -1285,15 +1389,21 @@ class UnifiedAiService {
       timeout: timeout,
       retryCount: retryCount,
       retryDelayMs: retryDelayMs,
-      buildBody: () => _azureBody(
-        cfg: cfg,
-        messages: payload,
-        maxTokens: maxTokens,
-        expectJson: false,
-        temperature: temperature,
-        topP: topP,
-        stream: false,
-      ),
+      buildBody: () => anthropic
+          ? _azureAnthropicBody(
+              cfg: cfg,
+              messages: payload,
+              maxTokens: maxTokens,
+            )
+          : _azureBody(
+              cfg: cfg,
+              messages: payload,
+              maxTokens: maxTokens,
+              expectJson: false,
+              temperature: temperature,
+              topP: topP,
+              stream: false,
+            ),
     );
   }
 
@@ -1825,6 +1935,10 @@ class UnifiedAiService {
       // {"type":"response.output_text.delta", "delta":"..."}.
       final directDelta = decoded['delta'];
       if (directDelta is String && directDelta.isNotEmpty) return directDelta;
+      if (directDelta is Map) {
+        final deltaText = (directDelta['text'] ?? directDelta['content'] ?? '').toString();
+        if (deltaText.isNotEmpty) return deltaText;
+      }
       final directOutputText = decoded['output_text'];
       if (directOutputText is String && directOutputText.trim().isNotEmpty) {
         return directOutputText.trim();
@@ -1892,8 +2006,20 @@ class UnifiedAiService {
           if (text.trim().isNotEmpty) return text.trim();
         }
       }
-      final content = (decoded['content'] ?? '').toString();
-      if (content.trim().isNotEmpty) return content.trim();
+      final content = decoded['content'];
+      if (content is String && content.trim().isNotEmpty) return content.trim();
+      if (content is List) {
+        final buffer = StringBuffer();
+        for (final item in content) {
+          if (item is! Map) continue;
+          final type = (item['type'] ?? '').toString().toLowerCase();
+          if (type == 'text' || type.isEmpty) {
+            final text = (item['text'] ?? item['content'] ?? '').toString();
+            if (text.isNotEmpty) buffer.write(text);
+          }
+        }
+        if (buffer.toString().trim().isNotEmpty) return buffer.toString().trim();
+      }
     }
     return '';
   }

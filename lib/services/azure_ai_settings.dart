@@ -147,6 +147,7 @@ class AzureAiResource {
   /// 数据面路径的起始段。命中其中任意一个就说明后面是调用路径而不是资源地址。
   static const Set<String> _dataPlaneSegments = <String>{
     'openai',
+    'anthropic',
     'models',
     'deployments',
     'chat',
@@ -225,6 +226,16 @@ class AzureAiResource {
     final base = baseUrl;
     final name = deployment.trim();
     if (base.isEmpty || name.isEmpty) return const <String>[];
+    // Claude on Microsoft Foundry is exposed through the native Anthropic
+    // Messages API. It is not OpenAI chat/completions compatible. Also honor a
+    // pasted Anthropic target URI even when the deployment was given a custom
+    // name that does not contain "claude".
+    final isClaude = name.toLowerCase().contains('claude') ||
+        endpoint.toLowerCase().contains('/anthropic/');
+    if (resolvedKind == AzureAiSettings.kindFoundryModels && isClaude) {
+      return <String>['$base/anthropic/v1/messages'];
+    }
+
     final encoded = Uri.encodeComponent(name);
     final version = resolvedApiVersion;
     final azureOpenAi = '$base/openai/deployments/$encoded/chat/completions?api-version=$version';
@@ -271,6 +282,12 @@ class AzureAiResource {
     final key = apiKey.trim();
     if (key.isEmpty) return const <String, String>{};
     final lower = endpointUrl.toLowerCase();
+    if (lower.contains('/anthropic/')) {
+      return <String, String>{
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      };
+    }
     final acceptsBearer = lower.contains('/models/') || lower.contains('/openai/v1/') || lower.endsWith('/models');
     return <String, String>{
       'api-key': key,
