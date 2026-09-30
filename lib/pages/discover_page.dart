@@ -51,6 +51,8 @@ import '../belief_lab/belief_mentor_discover_entry.dart';
 import '../belief_lab/belief_mentor_home_page.dart';
 import '../kindling/kindling.dart';
 import '../kindling_host/kindling_host_page.dart';
+import '../beautiful_enemy/beautiful_enemy.dart' show EnemyDiscoverEntry;
+import '../beautiful_enemy_host/enemy_host_page.dart';
 import '../evidence_growth/evidence_growth_discover_entry.dart';
 import '../evidence_growth/evidence_growth_home_page.dart';
 
@@ -2509,6 +2511,15 @@ Widget _buildEmotionPieChart() {
     );
   }
 
+  /// 打开「美丽的敌人」。装配（等库、接证据来源与判词生成器）都在 EnemyHostPage 里。
+  Future<void> _openEnemyFromDiscover() async {
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => const EnemyHostPage(),
+      ),
+    );
+  }
+
   Widget _buildDiscoverEntry({
     required IconData icon,
     required String title,
@@ -2624,6 +2635,10 @@ Widget _buildEmotionPieChart() {
                     const SizedBox(height: 12),
                     KindlingDiscoverEntry(
                       onTap: _openKindlingFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    EnemyDiscoverEntry(
+                      onTap: _openEnemyFromDiscover,
                     ),
                     const SizedBox(height: 12),
                     Material(

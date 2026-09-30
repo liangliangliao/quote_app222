@@ -72,6 +72,8 @@ import 'boundary_action_coach/boundary_action_coach_home_page.dart';
 import 'self_determination_growth/self_determination_growth_home_page.dart';
 import 'kindling/kindling.dart';
 import 'kindling_host/kindling_host_page.dart';
+import 'beautiful_enemy/beautiful_enemy.dart' show EnemyEntry;
+import 'beautiful_enemy_host/enemy_host_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -189,6 +191,8 @@ class MyApp extends StatelessWidget {
 				routes: <String, WidgetBuilder>{
 					// 火种：模块只认这个路由名，装配交给 KindlingHostPage。
 					KindlingEntry.route: (_) => const KindlingHostPage(),
+					// 美丽的敌人：同样只认路由名，装配交给 EnemyHostPage。
+					EnemyEntry.route: (_) => const EnemyHostPage(),
 				},
 				theme: ThemeData(
 					scaffoldBackgroundColor: Colors.white,
