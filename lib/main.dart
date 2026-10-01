@@ -74,6 +74,7 @@ import 'kindling/kindling.dart';
 import 'kindling_host/kindling_host_page.dart';
 import 'beautiful_enemy/beautiful_enemy.dart' show EnemyEntry;
 import 'beautiful_enemy_host/enemy_host_page.dart';
+import 'beautiful_enemy_host/enemy_host_presence.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -622,6 +623,8 @@ class _RootShellState extends State<RootShell> {
   void initState() {
     super.initState();
     SchedulerService.scheduleNextForAll();
+    // 美丽的敌人：App 开着时，它也能在其它页面插话（开关在它的设置里）。
+    EnemyHostPresence.start();
     // Ensure runtime unlock receivers on first launch (post-frame)
     Future.delayed(const Duration(milliseconds: 80), () { try { NativeGuard.ensureRuntimeReceiversRegistered(); } catch (_) {} });
     WidgetsBinding.instance.addPostFrameCallback((_) async {

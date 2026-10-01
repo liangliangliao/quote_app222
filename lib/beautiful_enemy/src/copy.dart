@@ -13,6 +13,16 @@ class EnemyCopy {
   static const String quietHoursNote = '现在是静默时段，敌人不开庭。';
   static const String dailyCapNote = '今天的判词已经够多了。明天再来，或者手动开庭。';
 
+  static const String defaultAddress = '对手';
+  static const int maxAddressChars = 8;
+
+  static const String addressRejected = '这个称呼不行。换一个，8 个字以内，别拿它羞辱自己。';
+  static const String stakeRejected = '赌注只能是一个行动：不能伤害自己、羞辱自己，也不能涉及钱。换一个。';
+
+  static String opening(String address) =>
+      '$address，我是你的敌人。不是教练，不安慰你，也不骂你这个人。\n'
+      '我只做三件事：记账、盘问、认账。你先说——今天打算做成什么？';
+
   static const String defaultAppealPrompt = '如果我说错了，你拿什么反驳？';
 
   /// 安全阀触发后的回应。不评判、不提任务、不带敌意。

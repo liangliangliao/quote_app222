@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../beautiful_enemy/beautiful_enemy.dart';
 import '../services/unified_ai_service.dart';
+import 'enemy_persona_prompt.dart';
 
 /// 调一次模型，拿回纯文本。抽出来是为了测试可以不碰网络和宿主配置。
 typedef EnemyAiCall = Future<String> Function({
@@ -23,8 +24,7 @@ class EnemyAiOracle implements EnemyOracle {
   final EnemyAiCall _call;
   final Future<bool> Function() _isAvailable;
 
-  static const String systemPrompt = '你是「美丽的敌人」，用户为自己的成长设置的严厉对手。'
-      '表面上处处与他作对，实质上每句话都为了让他少走弯路。\n'
+  static const String systemPrompt = '${EnemyPersonaPrompt.core}\n'
       '\n'
       '【输入】用户消息里有一份证据摘要（JSON）。你只能依据其中的数据发言。\n'
       '【输出】只输出一个 JSON 对象，不要任何其他文字。字段：\n'

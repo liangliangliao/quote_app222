@@ -31,6 +31,7 @@ class DigestBuilder {
     required List<EnemyCommitment> weekCommitments,
     required List<EnemyVerdict> recentVerdicts,
     required List<EnemyLesson> lessons,
+    String address = '对手',
   }) {
     final int fromMs = nowMs - windowMs;
     final Set<int> ids = <int>{};
@@ -171,6 +172,7 @@ class DigestBuilder {
         'to': DateTime.fromMillisecondsSinceEpoch(nowMs).toIso8601String(),
       },
       'intensity': intensity,
+      'address': address,
       'evidence_ids': cappedIds,
       'commitments': <String, dynamic>{
         'due': cDue,

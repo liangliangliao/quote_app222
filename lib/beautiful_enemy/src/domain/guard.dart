@@ -88,6 +88,22 @@ class DraftValidator {
     return problems;
   }
 
+  static const int maxLineChars = 200;
+
+  /// 校验一句对话（对话回复、插话）。返回问题代码；空表示通过。
+  /// 对话没有证据 id、动作、截止时间，所以只查：长度、禁区、粗口档位。
+  List<String> validateLine(String line, {required int maxTone}) {
+    final String t = line.trim();
+    final List<String> problems = <String>[];
+    if (t.isEmpty) problems.add('empty');
+    if (t.length > maxLineChars) problems.add('too_long');
+    if (containsBanned(t)) problems.add('banned_content');
+    if (maxTone < 3 && profanityMarkers.any(t.contains)) {
+      problems.add('profanity_below_tier3');
+    }
+    return problems;
+  }
+
   static bool containsBanned(String text) {
     if (bannedPhrases.any(text.contains)) return true;
     return bannedPatterns.any((RegExp p) => p.hasMatch(text));
@@ -144,5 +160,25 @@ class IntensityGovernor {
     if (unansweredStreak >= 3) level -= 1;
     if (tooMuchRecently) level -= 1;
     return level < 1 ? 1 : level;
+  }
+}
+
+/// 赌注守卫：赌注只能是一个行动，不能伤害自己、羞辱自己，也不能涉及钱。
+class StakeGuard {
+  const StakeGuard._();
+
+  static const int maxChars = 40;
+
+  static const List<String> harmfulMarkers = <String>[
+    '不吃', '绝食', '饿', '打自己', '掐自己', '扇自己', '伤害', '自残', '冷水',
+    '不睡', '熬夜', '罚站', '罚跪', '羞辱', '发朋友圈', '公开道歉', '罚款', '转账', '红包', '赔钱',
+  ];
+
+  static bool isAcceptable(String stake) {
+    final String s = stake.trim();
+    if (s.isEmpty) return true;
+    if (s.length > maxChars) return false;
+    if (harmfulMarkers.any(s.contains)) return false;
+    return !DraftValidator.containsBanned(s);
   }
 }

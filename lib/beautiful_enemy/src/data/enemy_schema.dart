@@ -6,7 +6,7 @@ import 'package:sqflite/sqflite.dart';
 class EnemySchema {
   const EnemySchema._();
 
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
 
   static const List<String> _statements = <String>[
     '''
@@ -67,6 +67,18 @@ class EnemySchema {
     ''',
     'CREATE INDEX IF NOT EXISTS idx_be_lesson_cat ON be_lesson(category, created_ms)',
     '''
+    CREATE TABLE IF NOT EXISTS be_message (
+      id     INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts     INTEGER NOT NULL,
+      role   TEXT    NOT NULL,
+      kind   TEXT    NOT NULL,
+      text   TEXT    NOT NULL,
+      ref_id INTEGER,
+      tone   INTEGER NOT NULL DEFAULT 0
+    )
+    ''',
+    'CREATE INDEX IF NOT EXISTS idx_be_message_ts ON be_message(ts)',
+    '''
     CREATE TABLE IF NOT EXISTS be_setting (
       key   TEXT PRIMARY KEY,
       value TEXT
@@ -77,6 +89,21 @@ class EnemySchema {
   static Future<void> createAll(Database db) async {
     for (final String sql in _statements) {
       await db.execute(sql);
+    }
+    // v2：承诺加了赌注。已经装过 v1 的库在这里补列，幂等。
+    await _ensureColumn(db, 'be_commitment', 'stake', "TEXT NOT NULL DEFAULT ''");
+  }
+
+  static Future<void> _ensureColumn(
+    Database db,
+    String table,
+    String column,
+    String ddl,
+  ) async {
+    final List<Map<String, Object?>> info = await db.rawQuery('PRAGMA table_info($table)');
+    final bool has = info.any((Map<String, Object?> r) => (r['name'] ?? '').toString() == column);
+    if (!has) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $ddl');
     }
   }
 

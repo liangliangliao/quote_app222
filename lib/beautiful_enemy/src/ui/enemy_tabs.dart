@@ -5,7 +5,9 @@ import '../data/enemy_dao.dart';
 import '../data/models.dart';
 import '../domain/enemy_engine.dart';
 import '../domain/evidence_source.dart';
+import '../domain/enemy_presence.dart';
 import '../enemy_reminder.dart';
+import '../enemy_talker.dart';
 import 'ui_helpers.dart';
 
 /// 失败归因：先记为失效，再问原因。空话不收。
@@ -227,9 +229,10 @@ class _DossierTabState extends State<DossierTab> {
 // ------------------------------------------------------------------ 承诺
 
 class CommitmentsTab extends StatefulWidget {
-  const CommitmentsTab({super.key, required this.engine});
+  const CommitmentsTab({super.key, required this.engine, required this.presence});
 
   final EnemyEngine engine;
+  final EnemyPresence presence;
 
   @override
   State<CommitmentsTab> createState() => _CommitmentsTabState();
@@ -252,6 +255,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
   ];
 
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _stake = TextEditingController();
   List<EnemyCommitment> _items = <EnemyCommitment>[];
   int _dueIndex = 1;
 
@@ -266,6 +270,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
   @override
   void dispose() {
     _controller.dispose();
+    _stake.dispose();
     super.dispose();
   }
 
@@ -280,10 +285,16 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
     final String text = _controller.text.trim();
     if (text.isEmpty) return;
     final DateTime due = _dueOptions[_dueIndex].at(DateTime.fromMillisecondsSinceEpoch(_engine.nowMs()));
-    final ({int? id, bool crisis}) r = await _engine.addCommitment(text, due: due);
+    final ({int? id, bool crisis, String? error}) r =
+        await _engine.addCommitment(text, due: due, stake: _stake.text);
     if (!mounted) return;
+    if (r.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.error!)));
+      return;
+    }
     if (r.crisis) {
       _controller.clear();
+      _stake.clear();
       await showDialog<void>(
         context: context,
         builder: (BuildContext ctx) => AlertDialog(
@@ -297,14 +308,14 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
       return;
     }
     _controller.clear();
+    _stake.clear();
     await _load();
   }
 
   Future<void> _complete(EnemyCommitment c) async {
-    final String? msg = await _engine.complete(c.id);
-    if (mounted && msg != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
+    await _engine.complete(c.id);
+    // 敌人在对峙页里接话（认账 / 赌注作废）。
+    await widget.presence.react(force: true);
     await _load();
   }
 
@@ -320,8 +331,24 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
             controller: _controller,
             style: const TextStyle(color: kEnemyText),
             decoration: const InputDecoration(
-              hintText: '我承诺：做什么',
+              hintText: '我立字据：做什么',
               hintStyle: TextStyle(color: kEnemyMuted),
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _stake,
+            style: const TextStyle(color: kEnemyText),
+            decoration: const InputDecoration(
+              hintText: '赌注（可选）：输了，我就去做什么',
+              hintStyle: TextStyle(color: kEnemyMuted),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text(
+              '赌注只能是一个行动，不能伤害或羞辱自己，也不能涉及钱。',
+              style: TextStyle(color: kEnemyMuted, fontSize: 11),
             ),
           ),
           const SizedBox(height: 8),
@@ -337,7 +364,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
             ],
           ),
           const SizedBox(height: 8),
-          FilledButton(onPressed: _add, child: const Text('立下承诺')),
+          FilledButton(onPressed: _add, child: const Text('立字据')),
           const SizedBox(height: 12),
           if (_items.isEmpty)
             const Text(EnemyCopy.noCommitments, style: TextStyle(color: kEnemyMuted)),
@@ -353,6 +380,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
                       fmtRemaining(c.dueMs!, now),
                     commitmentStatusLabels[c.status] ?? c.status,
                     if (c.origin == 'verdict') '来自判词',
+                    if (c.stake.isNotEmpty) '赌注：${c.stake}',
                   ].join(' · '),
                   style: const TextStyle(color: kEnemyMuted, fontSize: 12),
                 ),
@@ -370,6 +398,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
                             tooltip: '没做到',
                             onPressed: () async {
                               await attributeFlow(context, _engine, c);
+                              await widget.presence.react(force: true);
                               await _load();
                             },
                           ),
@@ -501,10 +530,16 @@ class _LessonsTabState extends State<LessonsTab> {
 // ------------------------------------------------------------------ 设置
 
 class SettingsTab extends StatefulWidget {
-  const SettingsTab({super.key, required this.engine, required this.reminder});
+  const SettingsTab({
+    super.key,
+    required this.engine,
+    required this.reminder,
+    required this.voice,
+  });
 
   final EnemyEngine engine;
   final EnemyReminder reminder;
+  final EnemyVoiceOut voice;
 
   @override
   State<SettingsTab> createState() => _SettingsTabState();
@@ -528,6 +563,10 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _notify = false;
   int _notifyHour = 21;
   bool _muted = false;
+  bool _voiceOut = false;
+  bool _interject = true;
+  bool _interjectEverywhere = true;
+  String _address = EnemyCopy.defaultAddress;
   Map<String, bool> _consents = <String, bool>{};
 
   EnemyEngine get _engine => widget.engine;
@@ -548,9 +587,18 @@ class _SettingsTabState extends State<SettingsTab> {
     final bool notify = await _dao.boolSetting(EnemySettings.dailyNotify);
     final int notifyHour = await _dao.intSetting(EnemySettings.dailyNotifyHour, 21);
     final bool muted = await _engine.isMuted();
+    final bool voiceOut = await _dao.boolSetting(EnemySettings.voiceOut);
+    final bool interject = await _dao.boolSetting(EnemySettings.interject, fallback: true);
+    final bool everywhere =
+        await _dao.boolSetting(EnemySettings.interjectEverywhere, fallback: true);
+    final String address = await _engine.address();
     final Map<String, bool> consents = await _engine.consents();
     if (!mounted) return;
     setState(() {
+      _voiceOut = voiceOut;
+      _interject = interject;
+      _interjectEverywhere = everywhere;
+      _address = address;
       _intensity = intensity.clamp(1, 3);
       _quietStart = qs;
       _quietEnd = qe;
@@ -601,6 +649,63 @@ class _SettingsTabState extends State<SettingsTab> {
               ),
             ),
           ),
+        const Text('它怎么对你', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('称呼', style: TextStyle(color: kEnemyText)),
+          subtitle: Text(_address, style: const TextStyle(color: kEnemyMuted)),
+          trailing: const Icon(Icons.edit_outlined, color: kEnemyMuted),
+          onTap: () async {
+            final String? v = await askText(
+              context,
+              title: '它该怎么称呼你？',
+              hint: '8 个字以内，留空恢复「${EnemyCopy.defaultAddress}」',
+              maxLines: 1,
+            );
+            if (v == null) return;
+            final bool ok = await _engine.setAddress(v);
+            if (!mounted) return;
+            if (!ok) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(const SnackBar(content: Text(EnemyCopy.addressRejected)));
+            }
+            await _load();
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('实时插话', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text('你做完或没做某件事，它几秒内开口。', style: TextStyle(color: kEnemyMuted)),
+          value: _interject,
+          onChanged: (bool v) async {
+            setState(() => _interject = v);
+            await _dao.setBoolSetting(EnemySettings.interject, v);
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('在其它页面也插话', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text('App 开着、但不在这个页面时，用通知插话。', style: TextStyle(color: kEnemyMuted)),
+          value: _interjectEverywhere,
+          onChanged: _interject
+              ? (bool v) async {
+                  setState(() => _interjectEverywhere = v);
+                  await _dao.setBoolSetting(EnemySettings.interjectEverywhere, v);
+                }
+              : null,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('出声', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text('敌人的话用语音念出来。默认关。', style: TextStyle(color: kEnemyMuted)),
+          value: _voiceOut,
+          onChanged: (bool v) async {
+            setState(() => _voiceOut = v);
+            await _dao.setBoolSetting(EnemySettings.voiceOut, v);
+            if (!v) await widget.voice.stop();
+          },
+        ),
+        const Divider(height: 28),
         const Text('强度上限', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         SegmentedButton<int>(

@@ -24,6 +24,28 @@ class EnemySettings {
   /// 用户点「太过了」的时间。
   static const String tooMuchAtMs = 'too_much_at_ms';
 
+  /// 敌人怎么称呼你。默认「对手」。
+  static const String address = 'address';
+
+  /// 敌人的声音：用 TTS 念出来。默认关。
+  static const String voiceOut = 'voice_out';
+
+  /// 允许敌人随着你的行为实时插话（总开关，默认开）。
+  static const String interject = 'interject';
+
+  /// 在 App 的其它页面里，也允许它用通知插话（默认开）。
+  static const String interjectEverywhere = 'interject_everywhere';
+
+  /// 每天最多插话几次。
+  static const String interjectCap = 'interject_cap';
+
+  static const String lastInterjectMs = 'last_interject_ms';
+
+  /// 已经「看过」的最大事件 id；之后新增的事件才会触发插话。
+  static const String reactCursor = 'react_cursor';
+
+  static String warned(int commitmentId) => 'warned_$commitmentId';
+
   static const String dailyNotify = 'daily_notify';
   static const String dailyNotifyHour = 'daily_notify_hour';
   static const String crisisNoticePending = 'crisis_notice_pending';
@@ -131,6 +153,23 @@ class EnemyDao {
     return rows.map(EnemyEvent.fromMap).toList();
   }
 
+  Future<int> maxEventId() async {
+    final List<Map<String, Object?>> rows =
+        await db.rawQuery('SELECT COALESCE(MAX(id), 0) AS m FROM be_event');
+    return (rows.first['m'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<List<EnemyEvent>> eventsAfterId(int afterId, {int limit = 100}) async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_event',
+      where: 'id > ?',
+      whereArgs: <Object?>[afterId],
+      orderBy: 'id ASC',
+      limit: limit,
+    );
+    return rows.map(EnemyEvent.fromMap).toList();
+  }
+
   Future<int> eventCount({int? sinceMs}) async {
     final List<Map<String, Object?>> rows = await db.rawQuery(
       sinceMs == null
@@ -167,6 +206,7 @@ class EnemyDao {
     int? dueMs,
     String origin = 'manual',
     int? verdictId,
+    String stake = '',
   }) {
     return db.insert('be_commitment', <String, Object?>{
       'text': text,
@@ -175,6 +215,7 @@ class EnemyDao {
       'status': CommitmentStatus.open,
       'origin': origin,
       'verdict_id': verdictId,
+      'stake': stake,
     });
   }
 
@@ -400,6 +441,55 @@ class EnemyDao {
     return all.isEmpty ? null : all.first;
   }
 
+  // ---------------------------------------------------------------- messages
+
+  Future<int> insertMessage({
+    required int ts,
+    required String role,
+    required String kind,
+    required String text,
+    int? refId,
+    int tone = 0,
+  }) {
+    return db.insert('be_message', <String, Object?>{
+      'ts': ts,
+      'role': role,
+      'kind': kind,
+      'text': text,
+      'ref_id': refId,
+      'tone': tone,
+    });
+  }
+
+  /// 最近 [limit] 条，按时间从旧到新返回（直接可用于从上到下显示）。
+  Future<List<EnemyMessage>> recentMessages({int limit = 80}) async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_message',
+      orderBy: 'ts DESC, id DESC',
+      limit: limit,
+    );
+    return rows.reversed.map(EnemyMessage.fromMap).toList();
+  }
+
+  Future<int> messageCount({String? kind, int? sinceMs}) async {
+    final List<String> where = <String>[];
+    final List<Object?> args = <Object?>[];
+    if (kind != null) {
+      where.add('kind = ?');
+      args.add(kind);
+    }
+    if (sinceMs != null) {
+      where.add('ts >= ?');
+      args.add(sinceMs);
+    }
+    final List<Map<String, Object?>> rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM be_message'
+      '${where.isEmpty ? '' : ' WHERE ${where.join(' AND ')}'}',
+      args,
+    );
+    return (rows.first['c'] as num?)?.toInt() ?? 0;
+  }
+
   // ------------------------------------------------------------------- clear
 
   /// 只清证据（案卷）。判词、承诺、教训保留。
@@ -411,5 +501,6 @@ class EnemyDao {
     await db.delete('be_commitment');
     await db.delete('be_verdict');
     await db.delete('be_lesson');
+    await db.delete('be_message');
   }
 }

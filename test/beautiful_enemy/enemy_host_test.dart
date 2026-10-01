@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/beautiful_enemy/beautiful_enemy.dart';
 import 'package:quote_app/beautiful_enemy_host/enemy_ai_oracle.dart';
+import 'package:quote_app/beautiful_enemy_host/enemy_ai_talker.dart';
 import 'package:quote_app/beautiful_enemy_host/enemy_sources.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -217,6 +218,115 @@ void main() {
       expect(p, contains('只评行为不评人'));
       expect(p, contains('无证据不开口'));
       expect(p, contains('不能是人'));
+    });
+  });
+
+  group('AI 说话（对话 / 插话）', () {
+    test('清理模型输出：围栏、角色前缀、旁白、外层引号', () {
+      expect(EnemyAiTalker.clean('```\n对手，账在这。\n```'), '对手，账在这。');
+      expect(EnemyAiTalker.clean('敌人：对手，账在这。'), '对手，账在这。');
+      expect(EnemyAiTalker.clean('美丽的敌人：对手，账在这。'), '对手，账在这。');
+      expect(EnemyAiTalker.clean('（冷笑）对手，账在这。'), '对手，账在这。');
+      expect(EnemyAiTalker.clean('「对手，账在这。」'), '对手，账在这。');
+      expect(EnemyAiTalker.clean('“对手，账在这。”'), '对手，账在这。');
+    });
+
+    test('提示里带情境、称呼、强度、证据摘要，历史只取最近几条并截断', () {
+      final List<EnemyMessage> history = <EnemyMessage>[
+        for (int i = 0; i < 12; i++)
+          EnemyMessage(
+            id: i,
+            ts: i,
+            role: i.isEven ? MessageRole.enemy : MessageRole.user,
+            kind: 'chat',
+            text: 'm$i ${'字' * 100}',
+          ),
+      ];
+      final String prompt = EnemyAiTalker.buildPrompt(
+        digest: const <String, dynamic>{'evidence_ids': <int>[7]},
+        history: history,
+        situation: '刚刚发生了一件事',
+        userText: '我做完了',
+        intensity: 2,
+        address: '老对手',
+      );
+      expect(prompt, contains('刚刚发生了一件事'));
+      expect(prompt, contains('我做完了'));
+      expect(prompt, contains('称呼：老对手'));
+      expect(prompt, contains('强度：2'));
+      expect(prompt, contains('"evidence_ids":[7]'));
+      expect(prompt, contains('m11'));
+      expect(prompt, isNot(contains('m3 ')));
+      expect(prompt, contains('…'));
+    });
+
+    test('主动开口时标明「没有用户输入」', () {
+      final String prompt = EnemyAiTalker.buildPrompt(
+        digest: const <String, dynamic>{},
+        history: const <EnemyMessage>[],
+        situation: '刚刚发生了一件事',
+        userText: '',
+        intensity: 2,
+        address: '对手',
+      );
+      expect(prompt, contains('是你主动开口'));
+      expect(prompt, contains('还没有'));
+    });
+
+    test('模型不可用、抛错或只返回空白：返回 null，让模块用本地台词', () async {
+      Future<String> boom({
+        required String prompt,
+        required String systemPrompt,
+        required String purpose,
+      }) async =>
+          throw Exception('network down');
+      Future<String> blank({
+        required String prompt,
+        required String systemPrompt,
+        required String purpose,
+      }) async =>
+          '  ';
+      Future<String?> ask(EnemyAiTalker t) => t.talk(
+            digest: const <String, dynamic>{},
+            history: const <EnemyMessage>[],
+            situation: 's',
+            userText: '',
+            intensity: 2,
+            address: '对手',
+            nowMs: 1,
+          );
+      expect(await ask(EnemyAiTalker(isAvailable: () async => false, call: boom)), isNull);
+      expect(await ask(EnemyAiTalker(isAvailable: () async => true, call: boom)), isNull);
+      expect(await ask(EnemyAiTalker(isAvailable: () async => true, call: blank)), isNull);
+    });
+
+    test('正常返回时清理后交给模块', () async {
+      final EnemyAiTalker t = EnemyAiTalker(
+        isAvailable: () async => true,
+        call: ({required String prompt, required String systemPrompt, required String purpose}) async {
+          expect(purpose, 'beautiful_enemy.talk');
+          expect(systemPrompt, contains('美丽的敌人'));
+          return '敌人：对手，账在这。';
+        },
+      );
+      final String? out = await t.talk(
+        digest: const <String, dynamic>{},
+        history: const <EnemyMessage>[],
+        situation: 's',
+        userText: '在吗',
+        intensity: 2,
+        address: '对手',
+        nowMs: 1,
+      );
+      expect(out, '对手，账在这。');
+    });
+
+    test('系统提示写死了人设、铁律和退场条件', () {
+      const String p = EnemyAiTalker.systemPrompt;
+      expect(p, contains('值得尊重的对手'));
+      expect(p, contains('无证据不开口'));
+      expect(p, contains('只评行为不评人'));
+      expect(p, contains('放下角色'));
     });
   });
 }

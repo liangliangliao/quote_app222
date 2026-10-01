@@ -173,22 +173,31 @@ class EnemyEngine {
   }
 
   /// 立一条承诺。文字里出现危机表达时不入库，直接静音。
-  Future<({int? id, bool crisis})> addCommitment(String text, {DateTime? due}) async {
+  Future<({int? id, bool crisis, String? error})> addCommitment(
+    String text, {
+    DateTime? due,
+    String stake = '',
+  }) async {
     final String t = text.trim();
-    if (t.isEmpty) return (id: null, crisis: false);
-    if (SafetyValve.shouldMute(t)) {
-      await _muteForText(t);
-      return (id: null, crisis: true);
+    final String s = stake.trim();
+    if (t.isEmpty) return (id: null, crisis: false, error: null);
+    if (SafetyValve.shouldMute('$t $s')) {
+      await _muteForText('$t $s');
+      return (id: null, crisis: true, error: null);
+    }
+    if (!StakeGuard.isAcceptable(s)) {
+      return (id: null, crisis: false, error: EnemyCopy.stakeRejected);
     }
     final int now = nowMs();
     final int id = await dao.insertCommitment(
       text: t,
       createdMs: now,
       dueMs: due?.millisecondsSinceEpoch,
+      stake: s,
     );
     final EnemyCommitment? c = await dao.commitment(id);
     if (c != null) await _commitmentEvent(c, 'commitment_created', now);
-    return (id: id, crisis: false);
+    return (id: id, crisis: false, error: null);
   }
 
   /// 兑现一条承诺，返回认账的那句话。
@@ -281,24 +290,9 @@ class EnemyEngine {
     await sync();
     await settleOverdue();
 
-    final int windowMs = const Duration(hours: windowHours).inMilliseconds;
-    final List<EnemyEvent> events = await dao.eventsBetween(now - windowMs, now + 1);
-    final List<EnemyCommitment> weekCommitments =
-        await dao.commitmentsSince(now - const Duration(days: 7).inMilliseconds);
-    final List<EnemyVerdict> recentVerdicts = await dao.recentVerdicts(limit: 30);
-    final List<EnemyLesson> lessons = await dao.lessons(limit: 5);
-
-    final int intensity = await effectiveIntensity(recentVerdicts);
-
-    final EnemyDigest digest = DigestBuilder.build(
-      nowMs: now,
-      windowMs: windowMs,
-      intensity: intensity,
-      events: events,
-      weekCommitments: weekCommitments,
-      recentVerdicts: recentVerdicts,
-      lessons: lessons,
-    );
+    final ({EnemyDigest digest, int intensity, String address}) snap = await snapshot();
+    final EnemyDigest digest = snap.digest;
+    final int intensity = snap.intensity;
     if (!digest.sufficient) return EnemyOutcome.insufficient();
 
     EnemyDraft? chosen;
@@ -356,6 +350,56 @@ class EnemyEngine {
 
     final EnemyVerdict? saved = await dao.verdict(verdictId);
     return EnemyOutcome.verdict(saved!);
+  }
+
+  /// 此刻的证据摘要、实际档位和称呼。开庭、对话、插话都从这里取材。
+  Future<({EnemyDigest digest, int intensity, String address})> snapshot() async {
+    final int now = nowMs();
+    final int windowMs = const Duration(hours: windowHours).inMilliseconds;
+    final List<EnemyEvent> events = await dao.eventsBetween(now - windowMs, now + 1);
+    final List<EnemyCommitment> weekCommitments =
+        await dao.commitmentsSince(now - const Duration(days: 7).inMilliseconds);
+    final List<EnemyVerdict> recentVerdicts = await dao.recentVerdicts(limit: 30);
+    final List<EnemyLesson> lessons = await dao.lessons(limit: 5);
+    final int intensity = await effectiveIntensity(recentVerdicts);
+    final String addr = await address();
+    final EnemyDigest digest = DigestBuilder.build(
+      nowMs: now,
+      windowMs: windowMs,
+      intensity: intensity,
+      events: events,
+      weekCommitments: weekCommitments,
+      recentVerdicts: recentVerdicts,
+      lessons: lessons,
+      address: addr,
+    );
+    return (digest: digest, intensity: intensity, address: addr);
+  }
+
+  /// 敌人怎么称呼你。
+  Future<String> address() async {
+    final String? raw = await dao.getSetting(EnemySettings.address);
+    final String t = (raw ?? '').trim();
+    return t.isEmpty ? EnemyCopy.defaultAddress : t;
+  }
+
+  /// 改称呼。不能太长，不能是羞辱性的称呼（否则敌人就会这样叫你）。
+  Future<bool> setAddress(String raw) async {
+    final String t = raw.trim();
+    if (t.isEmpty) {
+      await dao.setSetting(EnemySettings.address, '');
+      return true;
+    }
+    if (t.length > EnemyCopy.maxAddressChars) return false;
+    if (DraftValidator.containsBanned(t) || SafetyValve.shouldMute(t)) return false;
+    await dao.setSetting(EnemySettings.address, t);
+    return true;
+  }
+
+  Future<bool> inQuietHours() async {
+    final int qs = await dao.intSetting(EnemySettings.quietStartHour, 23);
+    final int qe = await dao.intSetting(EnemySettings.quietEndHour, 7);
+    return _inQuietHours(_now().hour, qs, qe);
   }
 
   /// 实际生效的档位：用户设定为上限，只降不自动升。

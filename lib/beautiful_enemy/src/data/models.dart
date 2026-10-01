@@ -78,6 +78,7 @@ class EnemyCommitment {
     required this.status,
     required this.origin,
     this.verdictId,
+    this.stake = '',
   });
 
   final int id;
@@ -85,6 +86,9 @@ class EnemyCommitment {
   final int createdMs;
   final int? dueMs;
   final String status;
+
+  /// 赌注：输了要兑现的一个行动。空表示没有赌注。
+  final String stake;
 
   /// manual / verdict
   final String origin;
@@ -102,6 +106,7 @@ class EnemyCommitment {
       status: (row['status'] ?? CommitmentStatus.open).toString(),
       origin: (row['origin'] ?? 'manual').toString(),
       verdictId: (row['verdict_id'] as num?)?.toInt(),
+      stake: (row['stake'] ?? '').toString(),
     );
   }
 }
@@ -216,6 +221,63 @@ class EnemyLesson {
       lesson: (row['lesson'] ?? '').toString(),
       createdMs: (row['created_ms'] as num).toInt(),
       timesRepeated: (row['times_repeated'] as num?)?.toInt() ?? 1,
+    );
+  }
+}
+
+class MessageRole {
+  const MessageRole._();
+  static const String user = 'user';
+  static const String enemy = 'enemy';
+}
+
+class MessageKind {
+  const MessageKind._();
+
+  /// 日常对话（含开场白）。
+  static const String chat = 'chat';
+
+  /// 开庭产生的判词，refId 指向 be_verdict。
+  static const String verdict = 'verdict';
+
+  /// 敌人主动插话，refId 指向触发它的事件。
+  static const String interject = 'interject';
+
+  /// 敌人退场（安全阀 / 停战）。
+  static const String exit = 'exit';
+}
+
+/// 对峙页里的一条消息。判词、插话、对话统一在同一条时间线上。
+class EnemyMessage {
+  const EnemyMessage({
+    required this.id,
+    required this.ts,
+    required this.role,
+    required this.kind,
+    required this.text,
+    this.refId,
+    this.tone = 0,
+  });
+
+  final int id;
+  final int ts;
+  final String role;
+  final String kind;
+  final String text;
+  final int? refId;
+  final int tone;
+
+  bool get fromEnemy => role == MessageRole.enemy;
+
+  factory EnemyMessage.fromMap(Map<String, Object?> row) {
+    return EnemyMessage(
+      id: (row['id'] as num).toInt(),
+      ts: (row['ts'] as num).toInt(),
+      role: (row['role'] ?? MessageRole.enemy).toString(),
+      kind: (row['kind'] ?? MessageKind.chat).toString(),
+      text: (row['text'] ?? '').toString(),
+      refId: (row['ref_id'] as num?)?.toInt(),
+      tone: (row['tone'] as num?)?.toInt() ?? 0,
     );
   }
 }
