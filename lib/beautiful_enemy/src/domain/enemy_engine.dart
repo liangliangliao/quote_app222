@@ -140,6 +140,74 @@ class EnemyEngine {
     return added;
   }
 
+  final Map<String, String> _signatures = <String, String>{};
+
+  /// 只在来源的变更指纹变了才重新收集。敌人每隔几秒问一次，靠它保持便宜。
+  /// 指纹只存在内存里：新建的引擎（比如后台任务）第一次会完整收集一遍。
+  Future<int> syncIfChanged() async {
+    final int since = nowMs() - const Duration(days: lookbackDays).inMilliseconds;
+    int added = 0;
+    for (final EvidenceSource s in sources) {
+      if (!await dao.boolSetting(EnemySettings.consent(s.id))) {
+        _signatures.remove(s.id);
+        continue;
+      }
+      String? sig;
+      try {
+        sig = await s.watermark(dao.db);
+      } catch (_) {
+        sig = null;
+      }
+      if (sig != null && _signatures[s.id] == sig) continue;
+      List<EventDraft> drafts;
+      try {
+        drafts = await s.collect(dao.db, since);
+      } catch (_) {
+        continue;
+      }
+      for (final EventDraft d in drafts) {
+        if (await dao.insertEvent(d) != null) added++;
+      }
+      if (sig != null) _signatures[s.id] = sig;
+    }
+    return added;
+  }
+
+  // ------------------------------------------------------------------- usage
+
+  /// 来源标识：App 前台使用时长。这不是读宿主的表，而是敌人自己计的数。
+  static const String usageSourceId = 'usage';
+
+  /// 记一分钟 App 前台时间（需要授权）。静默时段内的算作深夜使用。
+  Future<void> recordUsageMinute() async {
+    if (!await dao.boolSetting(EnemySettings.consent(usageSourceId))) return;
+    final DateTime d = _now();
+    await dao.addUsageMinute(
+      day: dayKey(d),
+      lateNight: await inQuietHours(),
+      nowMs: nowMs(),
+    );
+  }
+
+  Future<Map<String, dynamic>> usageToday() async {
+    if (!await dao.boolSetting(EnemySettings.consent(usageSourceId))) {
+      return const <String, dynamic>{};
+    }
+    final DateTime d = _now();
+    final ({int minutes, int lateNight, int firstMs}) u = await dao.usageFor(dayKey(d));
+    String first = '';
+    if (u.firstMs > 0) {
+      final DateTime f = DateTime.fromMillisecondsSinceEpoch(u.firstMs);
+      String two(int v) => v.toString().padLeft(2, '0');
+      first = '${two(f.hour)}:${two(f.minute)}';
+    }
+    return <String, dynamic>{
+      'minutes_today': u.minutes,
+      'late_night_minutes_today': u.lateNight,
+      'first_open_today': first,
+    };
+  }
+
   // -------------------------------------------------------------- commitments
 
   /// 到期还没兑现的承诺一律记为失效，并写进证据。
@@ -363,6 +431,7 @@ class EnemyEngine {
     final List<EnemyLesson> lessons = await dao.lessons(limit: 5);
     final int intensity = await effectiveIntensity(recentVerdicts);
     final String addr = await address();
+    final Map<String, dynamic> usage = await usageToday();
     final EnemyDigest digest = DigestBuilder.build(
       nowMs: now,
       windowMs: windowMs,
@@ -372,6 +441,7 @@ class EnemyEngine {
       recentVerdicts: recentVerdicts,
       lessons: lessons,
       address: addr,
+      usage: usage,
     );
     return (digest: digest, intensity: intensity, address: addr);
   }
@@ -584,8 +654,10 @@ class EnemyEngine {
     return hour >= start && hour < end;
   }
 
-  static String _dayKey(DateTime d) {
+  static String dayKey(DateTime d) {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${two(d.month)}-${two(d.day)}';
   }
+
+  static String _dayKey(DateTime d) => dayKey(d);
 }

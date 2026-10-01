@@ -66,7 +66,7 @@ void main() {
           'updated_at_ms': now,
         });
       }
-      final List<EventDraft> drafts = await const HabitEvidenceSource().collect(db, 0);
+      final List<EventDraft> drafts = await HabitEvidenceSource().collect(db, 0);
       expect(drafts.map((EventDraft d) => d.type).toSet(),
           <String>{'habit_done', 'habit_missed', 'habit_skipped'});
       expect(drafts.every((EventDraft d) => d.payload['label'] == '晨跑'), isTrue);
@@ -88,7 +88,7 @@ void main() {
       await rec('没有来源', null);
       await rec('打卡生成', 'planned_behavior');
       await rec('AI 总结', 'auto_daily_summary');
-      final List<EventDraft> drafts = await const JournalEvidenceSource().collect(db, 0);
+      final List<EventDraft> drafts = await JournalEvidenceSource().collect(db, 0);
       expect(drafts.map((EventDraft d) => d.payload['label']).toSet(), <Object?>{'手动记录', '没有来源'});
     });
 
@@ -101,7 +101,7 @@ void main() {
       await db.insert('k_burn', <String, Object?>{
         'item_id': 1, 'started_at': now + 1, 'seconds': 120, 'aborted': 1,
       });
-      final List<EventDraft> drafts = await const KindlingEvidenceSource().collect(db, 0);
+      final List<EventDraft> drafts = await KindlingEvidenceSource().collect(db, 0);
       expect(drafts.map((EventDraft d) => d.type).toSet(),
           <String>{'kindling_completed', 'kindling_aborted'});
       final EventDraft done = drafts.firstWhere((EventDraft d) => d.type == 'kindling_completed');
@@ -114,8 +114,8 @@ void main() {
       await db.insert('k_burn', <String, Object?>{
         'item_id': 1, 'started_at': now, 'seconds': 900, 'aborted': 0,
       });
-      final List<EventDraft> a = await const KindlingEvidenceSource().collect(db, 0);
-      final List<EventDraft> b = await const KindlingEvidenceSource().collect(db, 0);
+      final List<EventDraft> a = await KindlingEvidenceSource().collect(db, 0);
+      final List<EventDraft> b = await KindlingEvidenceSource().collect(db, 0);
       expect(a.single.dedupeKey, b.single.dedupeKey);
     });
 
@@ -218,6 +218,90 @@ void main() {
       expect(p, contains('只评行为不评人'));
       expect(p, contains('无证据不开口'));
       expect(p, contains('不能是人'));
+    });
+  });
+
+  group('其它模块的动静', () {
+    Future<void> makeTables() async {
+      await db.execute(
+          'CREATE TABLE will_task_execution (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at_ms INTEGER, note TEXT)');
+      await db.execute(
+          'CREATE TABLE sport_records (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT)');
+      await db.execute('CREATE TABLE emotions (id INTEGER PRIMARY KEY AUTOINCREMENT, mood TEXT)');
+    }
+
+    test('认得出毫秒、秒、数字字符串、ISO 时间；认不出的返回 null', () {
+      expect(ModuleActivitySource.parseTimestamp(1790000000000), 1790000000000);
+      expect(ModuleActivitySource.parseTimestamp(1790000000), 1790000000000);
+      expect(ModuleActivitySource.parseTimestamp('1790000000000'), 1790000000000);
+      expect(ModuleActivitySource.parseTimestamp('2026-10-01T14:00:00'),
+          DateTime(2026, 10, 1, 14).millisecondsSinceEpoch);
+      expect(ModuleActivitySource.parseTimestamp('不是时间'), isNull);
+      expect(ModuleActivitySource.parseTimestamp(42), isNull);
+      expect(ModuleActivitySource.parseTimestamp(null), isNull);
+    });
+
+    test('库里没有这些表：不抛，也没有指纹', () async {
+      final ModuleActivitySource s = ModuleActivitySource();
+      expect(await s.collect(db, 0), isEmpty);
+      expect(await s.watermark(db), isNull);
+    });
+
+    test('找得到时间列的表产出动静；没有时间列的表跳过；旧的不翻', () async {
+      await makeTables();
+      final DateTime now = DateTime.now();
+      await db.insert('will_task_execution', <String, Object?>{
+        'created_at_ms': now.subtract(const Duration(minutes: 2)).millisecondsSinceEpoch,
+        'note': '内容不该被读取',
+      });
+      await db.insert('will_task_execution', <String, Object?>{
+        'created_at_ms': now.subtract(const Duration(days: 5)).millisecondsSinceEpoch,
+      });
+      await db.insert('sport_records', <String, Object?>{
+        'created_at': now.subtract(const Duration(minutes: 1)).toIso8601String(),
+      });
+      await db.insert('emotions', <String, Object?>{'mood': '平静'});
+
+      final List<EventDraft> drafts = await ModuleActivitySource().collect(db, 0);
+      expect(drafts.map((EventDraft d) => d.payload['label']).toSet(),
+          <Object?>{'意志力 · 任务执行', '运动'});
+      expect(drafts.every((EventDraft d) => d.type == 'module_activity'), isTrue);
+      expect(drafts.every((EventDraft d) => !d.payload.values.contains('内容不该被读取')), isTrue);
+    });
+
+    test('同一模块 10 分钟内的多条新记录合并成一次动静', () async {
+      await makeTables();
+      final int base = DateTime.now().subtract(const Duration(minutes: 30)).millisecondsSinceEpoch;
+      final int bucketStart = base - (base % ModuleActivitySource.bucketMs);
+      for (int i = 0; i < 3; i++) {
+        await db.insert('will_task_execution', <String, Object?>{
+          'created_at_ms': bucketStart + i * 1000,
+        });
+      }
+      final List<EventDraft> drafts = await ModuleActivitySource().collect(db, 0);
+      expect(drafts.map((EventDraft d) => d.dedupeKey).toSet().length, 1);
+    });
+
+    test('新增一行，指纹就变；没动，指纹不变', () async {
+      await makeTables();
+      final ModuleActivitySource s = ModuleActivitySource();
+      final String? a = await s.watermark(db);
+      expect(await s.watermark(db), a);
+      await db.insert('will_task_execution', <String, Object?>{
+        'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      });
+      expect(await s.watermark(db), isNot(a));
+    });
+
+    test('使用时长来源只是授权开关，不读任何表', () async {
+      expect(await UsageEvidenceSource().collect(db, 0), isEmpty);
+      expect(UsageEvidenceSource().id, 'usage');
+    });
+
+    test('默认接入的来源包含动静和使用时长，且标识不重复', () {
+      final List<String> ids = defaultEnemySources().map((EvidenceSource s) => s.id).toList();
+      expect(ids, containsAll(<String>['activity', 'usage', 'habit', 'kindling']));
+      expect(ids.toSet().length, ids.length);
     });
   });
 

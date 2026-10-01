@@ -72,6 +72,7 @@ class EnemyCopy {
   static const String factKindling = '火种十五分钟：完成 %d 次，中途退出 %d 次';
   static const String factKnowledge = '知识卡转换：%d 张';
   static const String factJournal = '行为记录：%d 条';
+  static const String factActivity = '其它模块有记录：%d 次';
 
   static const String actionCatchUp = '现在补做：';
   static const String actionKindling = '现在开一次十五分钟';

@@ -104,6 +104,76 @@ class PersonaLines {
     ], seed);
   }
 
+  /// 其它模块有动静，而字据还开着：点出「在忙别的」。
+  static String activity({
+    required String label,
+    required String address,
+    required String openText,
+    int seed = 0,
+  }) {
+    return _pick(<String>[
+      '$address，你在${_quote(label)}有动静。字据「$openText」还开着，别只顾着别处。',
+      '${_quote(label)}我看到了。可「$openText」还在等你，$address。',
+    ], seed);
+  }
+
+  /// 主动巡查：晨报。
+  static String morningBrief({
+    required String address,
+    required int open,
+    required String nextText,
+    required int yesterdayDone,
+    required int yesterdayMissed,
+    int seed = 0,
+  }) {
+    final String next = nextText.isEmpty ? '' : '，最近的是「$nextText」';
+    return _pick(<String>[
+      '$address，早。昨天账上：完成 $yesterdayDone，失败 $yesterdayMissed。今天开着 $open 条字据$next。',
+      '早，$address。昨天完成 $yesterdayDone、失败 $yesterdayMissed。今天开着 $open 条字据$next。我会盯着。',
+    ], seed);
+  }
+
+  /// 主动巡查：晚间结算。
+  static String eveningLedger({
+    required String address,
+    required int open,
+    required String nextText,
+    required int doneToday,
+    int seed = 0,
+  }) {
+    final String next = nextText.isEmpty ? '' : '，最近的是「$nextText」';
+    final String done = doneToday == 0 ? '今天案卷里一件完成的事都没有。' : '今天完成了 $doneToday 件。';
+    return _pick(<String>[
+      '$address，今晚结账。$done还开着 $open 条字据$next。',
+      '$address，天快黑了。$done还开着 $open 条字据$next。账不会自己平。',
+    ], seed);
+  }
+
+  /// 主动巡查：人在 App 里，案卷里却没有新记录。
+  static String stall({
+    required String address,
+    required int minutes,
+    required String openText,
+    int seed = 0,
+  }) {
+    return _pick(<String>[
+      '$address，你在这儿待了 $minutes 分钟，案卷里没有一条新记录。「$openText」还在等。',
+      '$minutes 分钟了，$address。账上一条新的都没有。「$openText」呢？',
+    ], seed);
+  }
+
+  /// 他说做完了，账上没有。
+  static String claimNoRecord(String address) =>
+      '$address，你说做完了。案卷里最近 24 小时没有一条完成记录。做的是什么，几点做的？';
+
+  /// 他说没时间，账上他在 App 里待了不短的时间。
+  static String claimBusy(String address, int minutes) =>
+      '$address，你说没时间。今天你在这个 App 里待了 $minutes 分钟。这段时间去哪了？';
+
+  /// 他说做完了，账上有。
+  static String claimConfirmed(String address, int records) =>
+      '$address，账上最近 24 小时有 $records 条完成记录。你说的是哪一条？对得上，我认。';
+
   /// 敌人让步：用户拿出了站得住的反驳。
   static String concede(String address) => '$address，这一条我看漏了。申辩成立，这一局算你的。';
 

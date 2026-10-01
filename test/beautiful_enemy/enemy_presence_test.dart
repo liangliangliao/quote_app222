@@ -10,7 +10,7 @@ import 'package:quote_app/beautiful_enemy/src/enemy_talker.dart';
 import 'package:quote_app/beautiful_enemy/src/persona.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-class MutableSource implements EvidenceSource {
+class MutableSource extends EvidenceSource {
   List<EventDraft> drafts = <EventDraft>[];
 
   @override

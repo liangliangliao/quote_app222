@@ -18,4 +18,11 @@ abstract class EvidenceSource {
   /// 必须是幂等的：同一件事每次都产出同一个 dedupeKey，重复调用不会重复入库。
   /// 表不存在或读失败时返回空列表，不要抛。
   Future<List<EventDraft>> collect(Database db, int sinceMs);
+
+  /// 廉价的「有没有变化」指纹：几次 O(1) 的查询，不读内容。
+  ///
+  /// 敌人每隔几秒就会问一次；指纹和上次一样就不用重新 [collect]。
+  /// 返回 null 表示这个来源不提供指纹，每次都完整收集。
+  /// 指纹必须在相关数据新增或更新时变化，否则敌人会漏看。
+  Future<String?> watermark(Database db) async => null;
 }

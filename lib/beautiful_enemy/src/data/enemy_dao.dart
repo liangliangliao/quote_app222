@@ -46,6 +46,19 @@ class EnemySettings {
 
   static String warned(int commitmentId) => 'warned_$commitmentId';
 
+  /// 主动巡查（晨报 / 晚间结算 / 发呆提醒）的总开关，默认开。
+  static const String patrol = 'patrol';
+
+  /// 晚间结算的整点，默认 20 点。
+  static const String patrolHour = 'patrol_hour';
+
+  /// 某一类巡查今天是否已经做过。
+  static String patrolDone(String kind, String day) => 'patrol_${kind}_$day';
+  static const String patrolStallMs = 'patrol_stall_ms';
+
+  /// App 在前台时每次心跳写入；后台巡查据此避免和前台重复开口。
+  static const String heartbeatMs = 'foreground_heartbeat_ms';
+
   static const String dailyNotify = 'daily_notify';
   static const String dailyNotifyHour = 'daily_notify_hour';
   static const String crisisNoticePending = 'crisis_notice_pending';
@@ -439,6 +452,31 @@ class EnemyDao {
   Future<EnemyLesson?> latestLesson() async {
     final List<EnemyLesson> all = await lessons(limit: 1);
     return all.isEmpty ? null : all.first;
+  }
+
+  // ------------------------------------------------------------------- usage
+
+  /// 记一分钟 App 前台时间。只存计数，不存任何内容。
+  Future<void> addUsageMinute({
+    required String day,
+    required bool lateNight,
+    required int nowMs,
+  }) async {
+    await setSetting('usage_min_$day', '${await intSetting('usage_min_$day', 0) + 1}');
+    if (lateNight) {
+      await setSetting('usage_late_$day', '${await intSetting('usage_late_$day', 0) + 1}');
+    }
+    if (await getSetting('usage_first_$day') == null) {
+      await setSetting('usage_first_$day', '$nowMs');
+    }
+  }
+
+  Future<({int minutes, int lateNight, int firstMs})> usageFor(String day) async {
+    return (
+      minutes: await intSetting('usage_min_$day', 0),
+      lateNight: await intSetting('usage_late_$day', 0),
+      firstMs: await intSetting('usage_first_$day', 0),
+    );
   }
 
   // ---------------------------------------------------------------- messages

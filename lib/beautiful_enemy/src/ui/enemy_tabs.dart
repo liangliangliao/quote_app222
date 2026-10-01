@@ -566,6 +566,7 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _voiceOut = false;
   bool _interject = true;
   bool _interjectEverywhere = true;
+  bool _patrol = true;
   String _address = EnemyCopy.defaultAddress;
   Map<String, bool> _consents = <String, bool>{};
 
@@ -592,9 +593,11 @@ class _SettingsTabState extends State<SettingsTab> {
     final bool everywhere =
         await _dao.boolSetting(EnemySettings.interjectEverywhere, fallback: true);
     final String address = await _engine.address();
+    final bool patrol = await _dao.boolSetting(EnemySettings.patrol, fallback: true);
     final Map<String, bool> consents = await _engine.consents();
     if (!mounted) return;
     setState(() {
+      _patrol = patrol;
       _voiceOut = voiceOut;
       _interject = interject;
       _interjectEverywhere = everywhere;
@@ -691,6 +694,21 @@ class _SettingsTabState extends State<SettingsTab> {
               ? (bool v) async {
                   setState(() => _interjectEverywhere = v);
                   await _dao.setBoolSetting(EnemySettings.interjectEverywhere, v);
+                }
+              : null,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('主动巡查', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text(
+            '没人叫它，它自己开口：早上的晨报、晚上的结算、你在 App 里待了很久却没有新记录时点名。',
+            style: TextStyle(color: kEnemyMuted),
+          ),
+          value: _patrol,
+          onChanged: _interject
+              ? (bool v) async {
+                  setState(() => _patrol = v);
+                  await _dao.setBoolSetting(EnemySettings.patrol, v);
                 }
               : null,
         ),

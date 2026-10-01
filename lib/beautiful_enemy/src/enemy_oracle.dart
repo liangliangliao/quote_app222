@@ -52,6 +52,7 @@ class LocalFactOracle implements EnemyOracle {
     final Map<String, dynamic> kindling = _map(digest['kindling']);
     final Map<String, dynamic> knowledge = _map(digest['knowledge']);
     final Map<String, dynamic> journal = _map(digest['journal']);
+    final Map<String, dynamic> activity = _map(digest['activity']);
 
     final List<String> parts = <String>[];
     if (_int(habits['done']) + _int(habits['missed']) + _int(habits['skipped']) > 0) {
@@ -79,6 +80,9 @@ class LocalFactOracle implements EnemyOracle {
     }
     if (_int(journal['entries']) > 0) {
       parts.add(_fmt(EnemyCopy.factJournal, <int>[_int(journal['entries'])]));
+    }
+    if (_int(activity['pulses']) > 0) {
+      parts.add(_fmt(EnemyCopy.factActivity, <int>[_int(activity['pulses'])]));
     }
     if (parts.isEmpty) return null;
 

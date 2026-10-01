@@ -3,6 +3,7 @@ import '../data/enemy_dao.dart';
 import '../data/models.dart';
 import '../enemy_talker.dart';
 import '../persona.dart';
+import 'claim_check.dart';
 import 'digest_builder.dart';
 import 'enemy_engine.dart';
 import 'guard.dart';
@@ -26,6 +27,17 @@ class SayResult {
   final bool muted;
 }
 
+/// 巡查时的现场信息。后台任务没有前台会话，页面内也不算「在别处发呆」。
+class PatrolContext {
+  const PatrolContext({this.foreground = false, this.sessionStartMs});
+
+  /// App 正在前台。
+  final bool foreground;
+
+  /// 这一次连续前台使用的开始时间；不知道就是 null（此时不做发呆检查）。
+  final int? sessionStartMs;
+}
+
 /// 敌人的「在场」：对话、实时插话、开庭，都落在同一条消息时间线上。
 ///
 /// 判词和事实仍然来自 [EnemyEngine]；这一层只负责让它像一个角色——
@@ -44,6 +56,11 @@ class EnemyPresence {
   static const int historyTurns = 12;
   static const int maxUserChars = 500;
 
+  /// 人在 App 里待多久、案卷里还没有新记录，就点名。
+  static const int stallMinutes = 20;
+  static const Duration stallCooldown = Duration(hours: 3);
+  static const int defaultPatrolHour = 20;
+
   /// 值得敌人开口的事件，数字越大越优先。
   static const Map<String, int> reactable = <String, int>{
     'commitment_missed': 100,
@@ -53,6 +70,7 @@ class EnemyPresence {
     'kindling_completed': 50,
     'habit_done': 40,
     'knowledge_converted': 30,
+    'module_activity': 20,
   };
 
   static const Map<String, String> _typeLabels = <String, String>{
@@ -63,6 +81,7 @@ class EnemyPresence {
     'habit_missed': '习惯没完成',
     'habit_done': '习惯完成了',
     'knowledge_converted': '知识卡转成了行动步骤',
+    'module_activity': '其它模块有了新记录',
   };
 
   bool _reacting = false;
@@ -150,16 +169,25 @@ class EnemyPresence {
     );
 
     final ({EnemyDigest digest, int intensity, String address}) snap = await _snapshot();
+
+    // 核对他的说法和案卷：账上有就认，账上没有就盘问。
+    final ClaimAssessment claim = ClaimCheck.assess(clipped, snap.digest.json);
     final EnemyMessage enemy = await _speak(
       snap: snap,
-      situation: '用户在跟你说话。盘问他，别替他找台阶。',
+      situation: '用户在跟你说话。盘问他，别替他找台阶。'
+          '${claim.hint.isEmpty ? '' : '\n【核对结果】${claim.hint}'}',
       userText: clipped,
       kind: MessageKind.chat,
-      fallback: () => PersonaLines.chat(
-        address: snap.address,
-        tone: _tone(snap.intensity),
-        seed: user.id,
-      ),
+      fallback: () => switch (claim.kind) {
+        ClaimKind.doneWithoutRecord => PersonaLines.claimNoRecord(snap.address),
+        ClaimKind.doneWithRecord => PersonaLines.claimConfirmed(snap.address, claim.records),
+        ClaimKind.busyButOnline => PersonaLines.claimBusy(snap.address, claim.minutes),
+        ClaimKind.none => PersonaLines.chat(
+            address: snap.address,
+            tone: _tone(snap.intensity),
+            seed: user.id,
+          ),
+      },
     );
     return SayResult(user: user, enemy: enemy);
   }
@@ -180,11 +208,26 @@ class EnemyPresence {
     }
   }
 
+  /// 敌人的一步：先对新事件做出反应；没有新事，再看有没有该主动开口的事
+  /// （晨报、晚间结算、人在 App 里却没有新记录）。定时器每隔几秒调一次，
+  /// 不需要任何人去叫醒它。[force] 用于用户刚做完动作时立即接话，不做主动巡查。
+  Future<EnemyMessage?> step({bool force = false, PatrolContext ctx = const PatrolContext()}) async {
+    if (_reacting) return null;
+    _reacting = true;
+    try {
+      final EnemyMessage? reacted = await _react(force);
+      if (reacted != null || force) return reacted;
+      return await _patrol(ctx);
+    } finally {
+      _reacting = false;
+    }
+  }
+
   Future<EnemyMessage?> _react(bool force) async {
     if (await engine.isMuted()) return null;
     if (!await dao.boolSetting(EnemySettings.interject, fallback: true)) return null;
 
-    await engine.sync();
+    await engine.syncIfChanged();
     await engine.settleOverdue();
 
     final int now = engine.nowMs();
@@ -209,7 +252,12 @@ class EnemyPresence {
     if (maxId > cursor) await dao.setSetting(EnemySettings.reactCursor, '$maxId');
     if (quiet || capped) return null;
 
-    final EnemyEvent? pick = _best(fresh);
+    EnemyEvent? pick = _best(fresh);
+    // 其它模块只是有动静：只有字据还开着时才值得开口（点出「在忙别的」）。
+    if (pick != null && pick.type == 'module_activity') {
+      final List<EnemyCommitment> open = await dao.commitments(status: CommitmentStatus.open);
+      if (open.isEmpty) pick = null;
+    }
     if (pick != null) return _interject(pick, fresh);
     return _dueSoon(now);
   }
@@ -261,21 +309,34 @@ class EnemyPresence {
         '${stake.isEmpty ? '' : '。这是一份有赌注的字据，赌注是「$stake」'}'
         '${others > 0 ? '。同一时间还有 $others 件别的事，只抓最重要的这一件' : ''}。';
 
+    String openText = '';
+    if (e.type == 'module_activity') {
+      final List<EnemyCommitment> open = await dao.commitments(status: CommitmentStatus.open);
+      if (open.isNotEmpty) openText = open.first.text;
+    }
+
     final EnemyMessage msg = await _speak(
       snap: snap,
-      situation: situation,
+      situation: openText.isEmpty ? situation : '$situation 字据「$openText」还开着：点出他在忙别处，别替他找台阶。',
       userText: '',
       kind: MessageKind.interject,
       refId: e.id,
-      fallback: () => PersonaLines.interject(
-        type: e.type,
-        label: label,
-        address: snap.address,
-        tone: _tone(snap.intensity),
-        minutes: minutes,
-        stake: stake,
-        seed: e.id,
-      ),
+      fallback: () => e.type == 'module_activity'
+          ? PersonaLines.activity(
+              label: label,
+              address: snap.address,
+              openText: openText,
+              seed: e.id,
+            )
+          : PersonaLines.interject(
+              type: e.type,
+              label: label,
+              address: snap.address,
+              tone: _tone(snap.intensity),
+              minutes: minutes,
+              stake: stake,
+              seed: e.id,
+            ),
     );
     await dao.setSetting(EnemySettings.lastInterjectMs, '${engine.nowMs()}');
     return msg;
@@ -311,11 +372,172 @@ class EnemyPresence {
     return null;
   }
 
+  // ------------------------------------------------------------------ patrol
+
+  static const Set<String> _doneTypes = <String>{
+    'habit_done',
+    'kindling_completed',
+    'commitment_done',
+    'knowledge_converted',
+  };
+  static const Set<String> _missedTypes = <String>{
+    'habit_missed',
+    'kindling_aborted',
+    'commitment_missed',
+  };
+
+  /// 主动巡查：没有人叫它，也没有新事件，它自己判断此刻该不该开口。
+  ///
+  /// 三件事：早上的晨报、晚上的结算、人在 App 里待了很久案卷里却没有新记录。
+  /// 同样受静音、静默时段、每日上限、最小间隔约束，「主动巡查」开关可关。
+  Future<EnemyMessage?> _patrol(PatrolContext ctx) async {
+    if (await engine.isMuted()) return null;
+    if (!await dao.boolSetting(EnemySettings.interject, fallback: true)) return null;
+    if (!await dao.boolSetting(EnemySettings.patrol, fallback: true)) return null;
+    if (await engine.inQuietHours()) return null;
+
+    final int now = engine.nowMs();
+    if (await _capReached(now) || await _tooSoon(now)) return null;
+
+    try {
+      await engine.syncIfChanged();
+      await engine.settleOverdue();
+    } catch (_) {
+      // 同步失败不拦巡查：用已有的案卷说话。
+    }
+
+    final DateTime dt = DateTime.fromMillisecondsSinceEpoch(now);
+    final String day = EnemyEngine.dayKey(dt);
+    final int quietEnd = await dao.intSetting(EnemySettings.quietEndHour, 7);
+    final int quietStart = await dao.intSetting(EnemySettings.quietStartHour, 23);
+    final int eveningHour = await dao.intSetting(EnemySettings.patrolHour, defaultPatrolHour);
+
+    // 1) 晨报：安静时段结束后的第一次巡查。
+    if (dt.hour >= quietEnd && dt.hour < 12) {
+      final String key = EnemySettings.patrolDone('morning', day);
+      if (!await dao.boolSetting(key)) {
+        await dao.setBoolSetting(key, true);
+        final _Facts f = await _facts(now);
+        if (f.open > 0 || f.yesterdayDone + f.yesterdayMissed > 0) {
+          return _patrolSay(
+            situation: '早上了，你主动开口做晨报。昨天完成 ${f.yesterdayDone} 件、失败 ${f.yesterdayMissed} 件；'
+                '今天开着 ${f.open} 条字据${f.nextText.isEmpty ? '' : '，最近的是「${f.nextText}」'}。'
+                '像对手那样开场：报账，不寒暄，不鼓励。',
+            fallback: (String a, int tone) => PersonaLines.morningBrief(
+              address: a,
+              open: f.open,
+              nextText: f.nextText,
+              yesterdayDone: f.yesterdayDone,
+              yesterdayMissed: f.yesterdayMissed,
+              seed: dt.day,
+            ),
+          );
+        }
+      }
+    }
+
+    // 2) 晚间结算：到了结算的钟点，还有账没平，或者今天一件完成的事都没有。
+    if (dt.hour >= eveningHour && dt.hour < quietStart) {
+      final String key = EnemySettings.patrolDone('evening', day);
+      if (!await dao.boolSetting(key)) {
+        final _Facts f = await _facts(now);
+        if (f.open > 0 || f.doneToday == 0) {
+          await dao.setBoolSetting(key, true);
+          return _patrolSay(
+            situation: '晚间结算，你主动开口。今天完成 ${f.doneToday} 件、失败 ${f.missedToday} 件；'
+                '还开着 ${f.open} 条字据${f.nextText.isEmpty ? '' : '，最近的是「${f.nextText}」'}。'
+                '盘点，催他，别替他找台阶。',
+            fallback: (String a, int tone) => PersonaLines.eveningLedger(
+              address: a,
+              open: f.open,
+              nextText: f.nextText,
+              doneToday: f.doneToday,
+              seed: dt.day,
+            ),
+          );
+        }
+      }
+    }
+
+    // 3) 发呆：人在 App 里很久了，案卷里没有任何新记录，而字据还开着。
+    final int? start = ctx.sessionStartMs;
+    if (ctx.foreground && start != null) {
+      final int minutes = ((now - start) / 60000).floor();
+      if (minutes >= stallMinutes) {
+        final int last = await dao.intSetting(EnemySettings.patrolStallMs, 0);
+        if (last == 0 || now - last >= stallCooldown.inMilliseconds) {
+          final List<EnemyEvent> since = await dao.eventsBetween(start, now + 1);
+          final bool anyAction = since.any(
+            (EnemyEvent e) => e.type != 'commitment_created' && reactable.containsKey(e.type),
+          );
+          final _Facts f = await _facts(now);
+          if (!anyAction && f.open > 0 && f.nextText.isNotEmpty) {
+            await dao.setSetting(EnemySettings.patrolStallMs, '$now');
+            return _patrolSay(
+              situation: '他在 App 里已经待了 $minutes 分钟，这段时间案卷里没有任何新记录，'
+                  '而字据「${f.nextText}」还开着。指出账上没有，别评价他这个人。',
+              fallback: (String a, int tone) => PersonaLines.stall(
+                address: a,
+                minutes: minutes,
+                openText: f.nextText,
+                seed: dt.hour,
+              ),
+            );
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<EnemyMessage> _patrolSay({
+    required String situation,
+    required String Function(String address, int tone) fallback,
+  }) async {
+    final ({EnemyDigest digest, int intensity, String address}) snap = await _snapshot();
+    final EnemyMessage msg = await _speak(
+      snap: snap,
+      situation: situation,
+      userText: '',
+      kind: MessageKind.interject,
+      fallback: () => fallback(snap.address, _tone(snap.intensity)),
+    );
+    await dao.setSetting(EnemySettings.lastInterjectMs, '${engine.nowMs()}');
+    return msg;
+  }
+
+  Future<_Facts> _facts(int now) async {
+    final DateTime d = DateTime.fromMillisecondsSinceEpoch(now);
+    final int todayStart = DateTime(d.year, d.month, d.day).millisecondsSinceEpoch;
+    final int yesterdayStart = todayStart - const Duration(days: 1).inMilliseconds;
+
+    final List<EnemyCommitment> open = await dao.commitments(status: CommitmentStatus.open);
+    EnemyCommitment? next;
+    for (final EnemyCommitment c in open) {
+      if (c.dueMs == null) continue;
+      if (next == null || c.dueMs! < next.dueMs!) next = c;
+    }
+
+    final List<EnemyEvent> today = await dao.eventsBetween(todayStart, now + 1);
+    final List<EnemyEvent> yesterday = await dao.eventsBetween(yesterdayStart, todayStart);
+    int count(List<EnemyEvent> es, Set<String> types) =>
+        es.where((EnemyEvent e) => types.contains(e.type)).length;
+
+    return _Facts(
+      open: open.length,
+      nextText: next?.text ?? (open.isEmpty ? '' : open.first.text),
+      doneToday: count(today, _doneTypes),
+      missedToday: count(today, _missedTypes),
+      yesterdayDone: count(yesterday, _doneTypes),
+      yesterdayMissed: count(yesterday, _missedTypes),
+    );
+  }
+
   // ----------------------------------------------------------------- helpers
 
   Future<({EnemyDigest digest, int intensity, String address})> _snapshot() async {
     try {
-      await engine.sync();
+      await engine.syncIfChanged();
       await engine.settleOverdue();
     } catch (_) {
       // 同步失败不该让敌人哑掉：用已有的案卷说话。
@@ -373,4 +595,22 @@ class EnemyPresence {
       tone: snap.intensity,
     );
   }
+}
+
+class _Facts {
+  const _Facts({
+    required this.open,
+    required this.nextText,
+    required this.doneToday,
+    required this.missedToday,
+    required this.yesterdayDone,
+    required this.yesterdayMissed,
+  });
+
+  final int open;
+  final String nextText;
+  final int doneToday;
+  final int missedToday;
+  final int yesterdayDone;
+  final int yesterdayMissed;
 }

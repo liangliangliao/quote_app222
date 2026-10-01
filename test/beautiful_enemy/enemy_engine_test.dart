@@ -7,7 +7,7 @@ import 'package:quote_app/beautiful_enemy/src/domain/evidence_source.dart';
 import 'package:quote_app/beautiful_enemy/src/enemy_oracle.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-class FakeSource implements EvidenceSource {
+class FakeSource extends EvidenceSource {
   FakeSource(this.build);
 
   final List<EventDraft> Function(int sinceMs) build;

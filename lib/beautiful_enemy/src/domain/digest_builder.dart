@@ -32,6 +32,7 @@ class DigestBuilder {
     required List<EnemyVerdict> recentVerdicts,
     required List<EnemyLesson> lessons,
     String address = '对手',
+    Map<String, dynamic>? usage,
   }) {
     final int fromMs = nowMs - windowMs;
     final Set<int> ids = <int>{};
@@ -96,6 +97,17 @@ class DigestBuilder {
     for (final EnemyEvent e in <EnemyEvent>[...knowledge, ...journal]) {
       ids.add(e.id);
     }
+
+    // ---- 其它模块的动静：只有「哪个模块、何时有新记录」，没有内容。
+    final Map<String, int> pulsesByModule = <String, int>{};
+    final List<int> activityEvidence = <int>[];
+    for (final EnemyEvent e in events.where((EnemyEvent e) => e.source == 'activity')) {
+      pulsesByModule[e.label] = (pulsesByModule[e.label] ?? 0) + 1;
+      ids.add(e.id);
+      if (activityEvidence.length < maxItems) activityEvidence.add(e.id);
+    }
+    final List<MapEntry<String, int>> topModules = pulsesByModule.entries.toList()
+      ..sort((MapEntry<String, int> a, MapEntry<String, int> b) => b.value.compareTo(a.value));
 
     // ---- 承诺：窗口内到期的，和它们对应的事件。
     final List<EnemyEvent> commitmentEvents =
@@ -200,6 +212,15 @@ class DigestBuilder {
         'conversions': knowledge.length,
         'evidence': knowledge.take(maxItems).map((EnemyEvent e) => e.id).toList(),
       },
+      'activity': <String, dynamic>{
+        'pulses': pulsesByModule.values.fold<int>(0, (int a, int b) => a + b),
+        'modules': topModules
+            .take(maxItems)
+            .map((MapEntry<String, int> e) => <String, dynamic>{'label': e.key, 'pulses': e.value})
+            .toList(),
+        'evidence': activityEvidence,
+      },
+      'usage': usage ?? const <String, dynamic>{},
       'journal': <String, dynamic>{
         'entries': journal.length,
         'evidence': journal.take(maxItems).map((EnemyEvent e) => e.id).toList(),

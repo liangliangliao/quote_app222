@@ -8,6 +8,7 @@ import '../data/enemy_dao.dart';
 import '../data/models.dart';
 import '../domain/enemy_engine.dart';
 import '../domain/enemy_presence.dart';
+import '../domain/evidence_source.dart';
 import '../enemy_talker.dart';
 import 'enemy_tabs.dart';
 import 'ui_helpers.dart';
@@ -27,7 +28,8 @@ class ThreadTab extends StatefulWidget {
 }
 
 class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
-  static const Duration tick = Duration(seconds: 30);
+  /// 页面打开期间每 3 秒看一眼。靠来源的变更指纹保持便宜，不是每次都重读数据。
+  static const Duration tick = Duration(seconds: 3);
 
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -43,6 +45,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   bool _muted = false;
   bool _crisisNotice = false;
   bool _noConsent = false;
+  List<String> _missingLabels = <String>[];
   String _brief = '';
   String _notice = '';
 
@@ -83,7 +86,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   Future<void> _tick({bool force = false}) async {
     EnemyMessage? msg;
     try {
-      msg = await _presence.react(force: force);
+      msg = await _presence.step(force: force);
     } catch (_) {
       msg = null;
     }
@@ -137,6 +140,10 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
       _muted = muted;
       _crisisNotice = crisis && muted;
       _noConsent = _engine.sources.isNotEmpty && !consents.values.any((bool b) => b);
+      _missingLabels = _engine.sources
+          .where((EvidenceSource s) => !(consents[s.id] ?? false))
+          .map((EvidenceSource s) => s.label)
+          .toList();
       _brief = brief;
     });
     _scrollToEnd();
@@ -252,6 +259,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
       children: <Widget>[
         if (_crisisNotice) _crisisCard(),
         if (_noConsent && !_crisisNotice) _consentCard(),
+        if (!_noConsent && _missingLabels.isNotEmpty && !_crisisNotice) _missingCard(),
         if (_brief.isNotEmpty && !_crisisNotice)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -317,6 +325,25 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
               '每个模块也可以在「设置」里单独开关。数据只存本机。',
               style: TextStyle(color: kEnemyMuted, fontSize: 12),
             ),
+          ],
+        ),
+      );
+
+  /// 已经授权了一部分、还有来源没授权：它看不到的地方就是它的死角。
+  Widget _missingCard() => Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: kEnemyCard, borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                '还有 ${_missingLabels.length} 处我看不到：${_missingLabels.join('、')}。看不到的地方，就是你的死角。',
+                style: const TextStyle(color: kEnemyMuted, fontSize: 12, height: 1.5),
+              ),
+            ),
+            TextButton(onPressed: _grantAll, child: const Text('全部授权')),
           ],
         ),
       );
