@@ -2989,7 +2989,7 @@ Widget _buildEmotionPieChart() {
                                       ),
                                       SizedBox(height: 2),
                                       Text(
-                                        '触摸入口已升级为 V167 可见七十二变光弦版：修复 V166 在黑色壁纸背景下“明明生成了分叉、场线、变身层但肉眼几乎只看到一条暗线”的问题；提高主光弦最低亮度、主体线宽、轮廓通道、变身分叉、场线和笔尖的可见度，同时保留单一主体、大留白、极淡同源时间切片，避免重新回到多主体分身或乱线团。',
+                                        '运动、AI 冥想专家、睡眠、饮食与触摸：从身体支撑开始，按当下状态选择合适的恢复入口。',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
