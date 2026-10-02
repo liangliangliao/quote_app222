@@ -142,6 +142,20 @@ void main() {
       );
     });
 
+    test('同一 Claude 目标 URI 下的 GPT 部署改走 Foundry 模型推理 API', () {
+      final resource = _resource(
+        name: 'modleapikey',
+        endpoint: 'https://my-res.services.ai.azure.com/anthropic/v1/messages',
+        apiVersion: '2024-05-01-preview',
+      );
+      final candidates = resource.chatEndpointCandidates('gpt-6-luna');
+      expect(
+        candidates.first,
+        'https://my-res.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview',
+      );
+      expect(candidates, isNot(contains('https://my-res.services.ai.azure.com/anthropic/v1/messages')));
+    });
+
     test('Foundry 非 Claude 模型仍优先走模型推理路径，并保留部署路径作为回退', () {
       final resource = _resource(
         name: 'modleapikey',

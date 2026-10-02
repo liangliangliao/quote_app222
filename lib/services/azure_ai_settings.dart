@@ -227,11 +227,15 @@ class AzureAiResource {
     final name = deployment.trim();
     if (base.isEmpty || name.isEmpty) return const <String>[];
     // Claude on Microsoft Foundry is exposed through the native Anthropic
-    // Messages API. It is not OpenAI chat/completions compatible. Also honor a
-    // pasted Anthropic target URI even when the deployment was given a custom
-    // name that does not contain "claude".
-    final isClaude = name.toLowerCase().contains('claude') ||
-        endpoint.toLowerCase().contains('/anthropic/');
+    // Messages API. It is not OpenAI chat/completions compatible. A resource
+    // endpoint may have been copied from a Claude target URI, but the same
+    // resource can also contain GPT/Grok deployments. Therefore the URL alone
+    // must not route every selected model through Anthropic: only keep that
+    // hint for an otherwise opaque custom deployment name.
+    final lowerName = name.toLowerCase();
+    final isKnownNonAnthropic = _knownNonAnthropicSignals.any((signal) => lowerName.contains(signal));
+    final isClaude = lowerName.contains('claude') ||
+        (endpoint.toLowerCase().contains('/anthropic/') && !isKnownNonAnthropic);
     if (resolvedKind == AzureAiSettings.kindFoundryModels && isClaude) {
       return <String>['$base/anthropic/v1/messages'];
     }
@@ -250,6 +254,23 @@ class AzureAiResource {
     }
     return unique;
   }
+
+  /// Deployment names are user-defined, so this is deliberately a small set
+  /// of model-family hints rather than a strict allow-list. It prevents a
+  /// pasted Claude endpoint from hijacking well-known OpenAI-compatible model
+  /// names such as `gpt-6-luna` while retaining support for custom Claude
+  /// deployment names.
+  static const List<String> _knownNonAnthropicSignals = <String>[
+    'gpt',
+    'grok',
+    'llama',
+    'mistral',
+    'phi',
+    'qwen',
+    'gemma',
+    'deepseek',
+    'command',
+  ];
 
   /// 模型/部署列举候选终结点，按顺序尝试，第一条拿到结果就停。
   ///
