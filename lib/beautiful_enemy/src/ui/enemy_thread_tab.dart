@@ -48,6 +48,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   List<String> _missingLabels = <String>[];
   String _brief = '';
   String _notice = '';
+  String _statusLine = '';
 
   EnemyPresence get _presence => widget.presence;
   EnemyEngine get _engine => widget.presence.engine;
@@ -76,12 +77,19 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   }
 
   Future<void> _boot() async {
-    await _presence.ensureOpening();
-    await _load();
-    // 起点：此刻之前的事不翻旧账，之后的事它会立刻接话。
-    await _tick();
+    // 先把定时器挂上：后面任何一步慢了或出错，都不能让它「永远不看」。
     _timer = Timer.periodic(tick, (_) => _tick());
+    try {
+      await _presence.ensureOpening();
+      await _load();
+    } catch (_) {
+      // 加载失败也要让它继续看。
+    }
+    // 起点：此刻之前的事不翻旧账，之后的事它会立刻接话。
+    unawaited(_tick());
   }
+
+  int _ticks = 0;
 
   Future<void> _tick({bool force = false}) async {
     EnemyMessage? msg;
@@ -91,6 +99,8 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
       msg = null;
     }
     if (!mounted) return;
+    // 状态行每 ~9 秒刷新一次，不必每次都查。
+    if (++_ticks % 3 == 0 || msg != null) _refreshStatusLine();
     if (msg != null) {
       await _load();
       await _announce(msg);
@@ -147,6 +157,20 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
       _brief = brief;
     });
     _scrollToEnd();
+  }
+
+  Future<void> _refreshStatusLine() async {
+    try {
+      final EnemyStatus s = await _presence.status();
+      final String why = EnemyStatus.whyText(s.lastWhy);
+      if (!mounted) return;
+      setState(() {
+        _statusLine = '在线 · 看着 ${s.sources.where((SourceStatus x) => x.consented).length} 处 · '
+            '今日开口 ${s.capUsed} 次 · $why';
+      });
+    } catch (_) {
+      // 状态行拿不到就不显示。
+    }
   }
 
   void _scrollToEnd() {
@@ -265,7 +289,10 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(_brief, style: const TextStyle(color: kEnemyMuted, fontSize: 12)),
+              child: Text(
+                _statusLine.isEmpty ? _brief : '$_brief\n$_statusLine',
+                style: const TextStyle(color: kEnemyMuted, fontSize: 12, height: 1.5),
+              ),
             ),
           ),
         Expanded(
@@ -413,7 +440,8 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
     if (m.kind == MessageKind.verdict) return _verdictBubble(m);
     final bool mine = m.role == MessageRole.user;
     final double maxWidth = MediaQuery.of(context).size.width * 0.8;
-    final bool interject = m.kind == MessageKind.interject;
+    final bool drill = m.kind == MessageKind.drill;
+    final bool interject = m.kind == MessageKind.interject || drill;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -431,9 +459,12 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             if (interject)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Text('敌人插话', style: TextStyle(color: kEnemyAccent, fontSize: 11)),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  drill ? '演练' : '敌人插话',
+                  style: const TextStyle(color: kEnemyAccent, fontSize: 11),
+                ),
               ),
             Text(m.text, style: const TextStyle(color: kEnemyText, fontSize: 16, height: 1.55)),
             const SizedBox(height: 4),

@@ -359,6 +359,193 @@ void main() {
     });
   });
 
+  group('开口的节奏', () {
+    test('间隔只防刷屏：20 秒后又有新事，立刻接话，不用等 5 分钟', () async {
+      final EnemyPresence p = await make();
+      await p.react();
+      habit.drafts = <EventDraft>[event('habit_missed', current, id: 1, label: '晨跑')];
+      habit.sig = 'a';
+      expect(await p.react(), isNotNull);
+
+      habit.drafts = <EventDraft>[
+        event('habit_missed', current, id: 1, label: '晨跑'),
+        event('habit_missed', current, id: 2, label: '读书'),
+      ];
+      habit.sig = 'b';
+      expect(await p.react(), isNull); // 刚说过
+
+      current = current.add(const Duration(seconds: 21));
+      final EnemyMessage? m = await p.react();
+      expect(m, isNotNull);
+      expect(m!.text, contains('读书'));
+    });
+
+    test('每日上限默认 30，不是 6：连续做 8 件事，敌人每一件都接话', () async {
+      final EnemyPresence p = await make();
+      await p.react();
+      for (int i = 1; i <= 8; i++) {
+        current = current.add(const Duration(seconds: 25));
+        habit.drafts = <EventDraft>[
+          for (int k = 1; k <= i; k++) event('habit_missed', current, id: k, label: '事$k'),
+        ];
+        habit.sig = 's$i';
+        expect(await p.react(), isNotNull, reason: '第 $i 件事');
+      }
+    });
+
+    test('主动巡查不占事件插话的上限：上限用光了，晚间结算照样开口', () async {
+      final EnemyPresence p = await make();
+      await dao.setSetting(EnemySettings.interjectCap, '1');
+      await p.engine.addCommitment('译完第九节', due: current.add(const Duration(days: 1)));
+      await p.react();
+      habit.drafts = <EventDraft>[event('habit_missed', current, id: 1)];
+      habit.sig = 'a';
+      expect(await p.react(), isNotNull);
+
+      current = DateTime(2026, 10, 1, 20, 30);
+      final EnemyMessage? m = await p.step();
+      expect(m, isNotNull);
+      expect(m!.text, contains('1 条字据'));
+    });
+  });
+
+  group('自检：它为什么没开口', () {
+    Future<String> why(EnemyPresence p) async => (await p.status()).lastWhy;
+
+    test('刚上线先记起点；之后没有新动静就是没有新动静', () async {
+      final EnemyPresence p = await make();
+      await p.step();
+      expect(await why(p), 'baseline');
+      current = current.add(const Duration(seconds: 20));
+      await p.step();
+      expect(await why(p), 'patrol_idle');
+    });
+
+    test('静音、静默时段、间隔、上限各有各的原因', () async {
+      final EnemyPresence p = await make();
+      await p.step();
+
+      await p.engine.muteFor24h(crisis: false);
+      await p.step();
+      expect(await why(p), 'muted');
+      await p.engine.unmute();
+
+      current = DateTime(2026, 10, 1, 23, 30);
+      habit.drafts = <EventDraft>[event('habit_missed', current, id: 1)];
+      habit.sig = 'q';
+      await p.step();
+      expect(await why(p), 'quiet');
+
+      current = DateTime(2026, 10, 2, 14);
+      habit.drafts = <EventDraft>[event('habit_missed', current, id: 2, label: '读书')];
+      habit.sig = 'r';
+      await p.step();
+      expect(await why(p), 'spoke');
+
+      habit.drafts = <EventDraft>[
+        event('habit_missed', current, id: 2, label: '读书'),
+        event('habit_missed', current, id: 3, label: '写作'),
+      ];
+      habit.sig = 't';
+      await p.step();
+      expect(await why(p), 'too_soon');
+
+      await dao.setSetting(EnemySettings.interjectCap, '1');
+      current = current.add(const Duration(minutes: 1));
+      await p.step();
+      expect(await why(p), 'capped');
+    });
+
+    test('开关关掉有各自的原因', () async {
+      final EnemyPresence p = await make();
+      await p.step();
+      await dao.setBoolSetting(EnemySettings.interject, false);
+      await p.step();
+      expect(await why(p), 'interject_off');
+      await dao.setBoolSetting(EnemySettings.interject, true);
+      await dao.setBoolSetting(EnemySettings.patrol, false);
+      current = current.add(const Duration(seconds: 20));
+      await p.step();
+      expect(await why(p), 'patrol_off');
+    });
+
+    test('状态快照：来源授权与条数、静默时段、今日开口、使用时长、后台记录', () async {
+      final EnemyPresence p = await make();
+      habit.drafts = <EventDraft>[event('habit_done', current.subtract(const Duration(minutes: 3)))];
+      habit.sig = 'x';
+      await p.engine.syncIfChanged();
+      await p.engine.setConsent('usage', false);
+      await dao.setSetting('usage_min_2026-10-01', '12');
+      await dao.setSetting(EnemySettings.bgScheduleError, '没有初始化');
+      await dao.setSetting(EnemySettings.bgLastNote, '巡查完成');
+      await dao.setSetting(EnemySettings.bgLastRunMs, '${current.millisecondsSinceEpoch - 90000}');
+
+      final EnemyStatus s = await p.status();
+      final SourceStatus h = s.sources.firstWhere((SourceStatus x) => x.id == 'habit');
+      expect(h.consented, isTrue);
+      expect(h.events, 1);
+      expect(h.lastEventAgeSec, 180);
+      expect(s.sources.firstWhere((SourceStatus x) => x.id == 'usage').consented, isFalse);
+      expect(s.quiet, isFalse);
+      expect(s.quietStart, 23);
+      expect(s.capMax, 30);
+      expect(s.usageMinutes, 12);
+      expect(s.bgScheduleError, '没有初始化');
+      expect(s.bgLastNote, '巡查完成');
+      expect(s.bgLastRunAgeSec, 90);
+      expect(s.heartbeatAgeSec, -1);
+    });
+
+    test('心跳年龄', () async {
+      final EnemyPresence p = await make();
+      await dao.setSetting(EnemySettings.heartbeatMs, '${current.millisecondsSinceEpoch - 7000}');
+      expect((await p.status()).heartbeatAgeSec, 7);
+    });
+  });
+
+  group('演练', () {
+    test('不等时段也能走一遍：带【演练】，不占上限，也不让今天真正的结算作废', () async {
+      final EnemyPresence p = await make();
+      await p.engine.addCommitment('译完第九节', due: current.add(const Duration(days: 1)));
+
+      final DrillResult r = await p.drill('evening');
+      expect(r.message, isNotNull);
+      expect(r.message!.kind, MessageKind.drill);
+      expect(r.message!.text, startsWith('【演练】'));
+      expect(r.message!.text, contains('译完第九节'));
+      expect((await p.status()).capUsed, 0);
+
+      current = DateTime(2026, 10, 1, 20, 30);
+      final EnemyMessage? real = await p.step();
+      expect(real, isNotNull);
+      expect(real!.kind, MessageKind.interject);
+      expect(real.text, isNot(startsWith('【演练】')));
+    });
+
+    test('晨报演练、发呆演练', () async {
+      final EnemyPresence p = await make();
+      await p.engine.addCommitment('译完第九节', due: current.add(const Duration(days: 1)));
+      final DrillResult m = await p.drill('morning');
+      expect(m.message!.text, contains('早'));
+      final DrillResult st = await p.drill('stall');
+      expect(st.message!.text, contains('译完第九节'));
+      expect(st.message!.text, contains('25'));
+    });
+
+    test('发呆演练：没有字据就说明为什么做不了；静音时不演练；不认识的演练', () async {
+      final EnemyPresence p = await make();
+      final DrillResult none = await p.drill('stall');
+      expect(none.message, isNull);
+      expect(none.note, contains('字据'));
+      expect((await p.drill('不认识')).message, isNull);
+
+      await p.engine.muteFor24h(crisis: false);
+      final DrillResult muted = await p.drill('morning');
+      expect(muted.message, isNull);
+      expect(muted.note, contains('静音'));
+    });
+  });
+
   group('台词', () {
     test('巡查和核对的台词都过同一套校验', () {
       const DraftValidator v = DraftValidator();
