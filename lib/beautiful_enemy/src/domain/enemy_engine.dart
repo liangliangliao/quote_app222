@@ -245,6 +245,8 @@ class EnemyEngine {
     String text, {
     DateTime? due,
     String stake = '',
+    String origin = 'manual',
+    String verify = '',
   }) async {
     final String t = text.trim();
     final String s = stake.trim();
@@ -262,6 +264,8 @@ class EnemyEngine {
       createdMs: now,
       dueMs: due?.millisecondsSinceEpoch,
       stake: s,
+      origin: origin,
+      verify: verify,
     );
     final EnemyCommitment? c = await dao.commitment(id);
     if (c != null) await _commitmentEvent(c, 'commitment_created', now);
@@ -277,6 +281,18 @@ class EnemyEngine {
     await _commitmentEvent(c, 'commitment_done', now);
     if (c.verdictId != null) {
       await dao.setVerdictOutcome(c.verdictId!, 'done', now);
+    }
+    // 核实：这条字据声明要靠账上的记录证明，而账上没有——勾可以打，但敌人不认。
+    if (c.verify == 'kindling') {
+      try {
+        await syncIfChanged();
+      } catch (_) {
+        // 同步不了就用已有的案卷核对。
+      }
+      final List<EnemyEvent> burns = await dao.eventsBetween(c.createdMs, now + 1, source: 'kindling');
+      if (!burns.any((EnemyEvent e) => e.type == 'kindling_completed')) {
+        await _commitmentEvent(c, 'commitment_unverified', now);
+      }
     }
     final List<EnemyVerdict> recent = await dao.recentVerdicts(limit: 10);
     int streak = 0;

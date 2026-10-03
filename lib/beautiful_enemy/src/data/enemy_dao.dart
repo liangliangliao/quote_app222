@@ -56,6 +56,21 @@ class EnemySettings {
   static String patrolDone(String kind, String day) => 'patrol_${kind}_$day';
   static const String patrolStallMs = 'patrol_stall_ms';
 
+  /// 反对党质询（主动盘问、动议、讽刺你的借口）的总开关，默认开。
+  static const String opposition = 'opposition';
+
+  /// 两次主动质询之间至少隔几分钟。默认 90。
+  static const String probeGapMin = 'probe_gap_min';
+
+  /// 每天最多几次主动质询 / 动议。
+  static const String probeCap = 'probe_cap';
+  static const String motionCap = 'motion_cap';
+  static const String probeGlobalMs = 'probe_global_ms';
+  static String probeLast(String type) => 'probe_last_$type';
+
+  /// 某条质询已经追问过几次。
+  static String inquiryFollow(int messageId) => 'inquiry_follow_$messageId';
+
   /// App 在前台时每次心跳写入；后台巡查据此避免和前台重复开口。
   static const String heartbeatMs = 'foreground_heartbeat_ms';
 
@@ -230,6 +245,7 @@ class EnemyDao {
     String origin = 'manual',
     int? verdictId,
     String stake = '',
+    String verify = '',
   }) {
     return db.insert('be_commitment', <String, Object?>{
       'text': text,
@@ -239,6 +255,7 @@ class EnemyDao {
       'origin': origin,
       'verdict_id': verdictId,
       'stake': stake,
+      'verify': verify,
     });
   }
 
@@ -489,6 +506,75 @@ class EnemyDao {
     );
   }
 
+  // ----------------------------------------------------------------- motions
+
+  Future<int> insertMotion({
+    required int ts,
+    required String kind,
+    required String text,
+    required int dueMs,
+    required bool needsText,
+    String verify = '',
+  }) {
+    return db.insert('be_motion', <String, Object?>{
+      'ts': ts,
+      'kind': kind,
+      'text': text,
+      'due_ms': dueMs,
+      'needs_text': needsText ? 1 : 0,
+      'verify': verify,
+      'status': MotionStatus.open,
+    });
+  }
+
+  Future<EnemyMotion?> motion(int id) async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_motion',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : EnemyMotion.fromMap(rows.first);
+  }
+
+  Future<EnemyMotion?> openMotion() async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_motion',
+      where: "status = 'open'",
+      orderBy: 'ts DESC, id DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : EnemyMotion.fromMap(rows.first);
+  }
+
+  Future<List<EnemyMotion>> motionsSince(int sinceMs) async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_motion',
+      where: 'ts >= ?',
+      whereArgs: <Object?>[sinceMs],
+      orderBy: 'ts DESC, id DESC',
+    );
+    return rows.map(EnemyMotion.fromMap).toList();
+  }
+
+  Future<void> setMotionStatus(
+    int id,
+    String status, {
+    int? commitmentId,
+    String responseText = '',
+  }) async {
+    await db.update(
+      'be_motion',
+      <String, Object?>{
+        'status': status,
+        'commitment_id': commitmentId,
+        'response_text': responseText,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
   // ---------------------------------------------------------------- messages
 
   Future<int> insertMessage({
@@ -517,6 +603,38 @@ class EnemyDao {
       limit: limit,
     );
     return rows.reversed.map(EnemyMessage.fromMap).toList();
+  }
+
+  /// 最近一条符合条件的消息。
+  Future<EnemyMessage?> latestMessage({required List<String> kinds, String? role}) async {
+    final String marks = List<String>.filled(kinds.length, '?').join(',');
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_message',
+      where: role == null ? 'kind IN ($marks)' : 'kind IN ($marks) AND role = ?',
+      whereArgs: <Object?>[...kinds, if (role != null) role],
+      orderBy: 'ts DESC, id DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : EnemyMessage.fromMap(rows.first);
+  }
+
+  /// 某条消息之后，用户说过几句话。按消息 id 比较：id 是严格递增的，时间戳可能相同。
+  Future<int> userMessagesAfterId(int messageId) async {
+    final List<Map<String, Object?>> rows = await db.rawQuery(
+      "SELECT COUNT(*) AS c FROM be_message WHERE role = 'user' AND id > ?",
+      <Object?>[messageId],
+    );
+    return (rows.first['c'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<int> messageCountOfKinds(List<String> kinds, {int? sinceMs}) async {
+    final String marks = List<String>.filled(kinds.length, '?').join(',');
+    final List<Map<String, Object?>> rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM be_message WHERE kind IN ($marks)'
+      '${sinceMs == null ? '' : ' AND ts >= ?'}',
+      <Object?>[...kinds, if (sinceMs != null) sinceMs],
+    );
+    return (rows.first['c'] as num?)?.toInt() ?? 0;
   }
 
   Future<int> messageCount({String? kind, int? sinceMs}) async {
@@ -550,5 +668,6 @@ class EnemyDao {
     await db.delete('be_verdict');
     await db.delete('be_lesson');
     await db.delete('be_message');
+    await db.delete('be_motion');
   }
 }

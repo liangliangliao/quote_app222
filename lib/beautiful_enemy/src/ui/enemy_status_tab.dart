@@ -160,6 +160,14 @@ class _StatusTabState extends State<StatusTab> {
           ),
           _row(s.usageMinutes > 0, '今日使用时长',
               s.usageMinutes > 0 ? '${s.usageMinutes} 分钟' : '0（没授权「使用时长」，或 App 刚启动）'),
+          _row(
+            s.opposition,
+            '反对党质询',
+            !s.opposition
+                ? '关'
+                : '开 · 今日 ${s.probesToday} / ${s.probeCap} · 上一次 ${_age(s.probeAgeSec)} · '
+                    '间隔 ${s.probeGapMin} 分钟${s.openMotion ? ' · 有一项动议等你处理' : ''}',
+          ),
           _title('后台巡查'),
           _row(
             s.bgScheduledAgeSec >= 0 && s.bgScheduleError.isEmpty,
@@ -191,6 +199,10 @@ class _StatusTabState extends State<StatusTab> {
               OutlinedButton(
                 onPressed: _busy ? null : () => _drill('stall', '发呆演练'),
                 child: const Text('发呆点名'),
+              ),
+              OutlinedButton(
+                onPressed: _busy ? null : () => _drill('probe', '质询演练'),
+                child: const Text('质询'),
               ),
               OutlinedButton(
                 onPressed: _busy

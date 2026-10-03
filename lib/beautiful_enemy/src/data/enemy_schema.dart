@@ -6,7 +6,7 @@ import 'package:sqflite/sqflite.dart';
 class EnemySchema {
   const EnemySchema._();
 
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
 
   static const List<String> _statements = <String>[
     '''
@@ -79,6 +79,21 @@ class EnemySchema {
     ''',
     'CREATE INDEX IF NOT EXISTS idx_be_message_ts ON be_message(ts)',
     '''
+    CREATE TABLE IF NOT EXISTS be_motion (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts            INTEGER NOT NULL,
+      kind          TEXT    NOT NULL,
+      text          TEXT    NOT NULL,
+      due_ms        INTEGER NOT NULL,
+      needs_text    INTEGER NOT NULL DEFAULT 0,
+      verify        TEXT    NOT NULL DEFAULT '',
+      status        TEXT    NOT NULL DEFAULT 'open',
+      commitment_id INTEGER,
+      response_text TEXT
+    )
+    ''',
+    'CREATE INDEX IF NOT EXISTS idx_be_motion_ts ON be_motion(ts)',
+    '''
     CREATE TABLE IF NOT EXISTS be_setting (
       key   TEXT PRIMARY KEY,
       value TEXT
@@ -92,6 +107,8 @@ class EnemySchema {
     }
     // v2：承诺加了赌注。已经装过 v1 的库在这里补列，幂等。
     await _ensureColumn(db, 'be_commitment', 'stake', "TEXT NOT NULL DEFAULT ''");
+    // v3：承诺可带「核实方式」（比如火种动议：标记完成时去账上核对有没有完整的火种）。
+    await _ensureColumn(db, 'be_commitment', 'verify', "TEXT NOT NULL DEFAULT ''");
   }
 
   static Future<void> _ensureColumn(
