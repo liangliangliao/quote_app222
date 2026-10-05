@@ -309,8 +309,9 @@ class ModuleActivitySource extends EvidenceSource {
   static const int bucketMs = 10 * 60 * 1000;
   static const int perTableLimit = 20;
 
-  /// 敌人只关心最近的动静，不翻两天前的旧账。
-  static const int lookbackMs = 48 * 3600 * 1000;
+  /// 往回看多久。看两周，是为了认出「曾经常有记录、最近一直没有」的沉寂模块；
+  /// 敌人只对刚发生的动静插话（见 EnemyPresence.freshWindow），旧的只作为背景。
+  static const int lookbackMs = 14 * 24 * 3600 * 1000;
 
   final Map<int, Map<String, String>> _plans = <int, Map<String, String>>{};
 

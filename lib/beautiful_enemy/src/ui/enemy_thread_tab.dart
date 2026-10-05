@@ -37,6 +37,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   List<EnemyMessage> _messages = <EnemyMessage>[];
   final Map<int, EnemyVerdict> _verdicts = <int, EnemyVerdict>{};
   final Map<int, EnemyCommitment> _commitments = <int, EnemyCommitment>{};
+  final Map<int, EnemyMotion> _motions = <int, EnemyMotion>{};
   int _latestVerdictId = -1;
 
   Timer? _timer;
@@ -121,8 +122,14 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
     final List<EnemyMessage> messages = await _presence.thread();
     final Map<int, EnemyVerdict> verdicts = <int, EnemyVerdict>{};
     final Map<int, EnemyCommitment> commitments = <int, EnemyCommitment>{};
+    final Map<int, EnemyMotion> motions = <int, EnemyMotion>{};
     int latest = -1;
     for (final EnemyMessage m in messages) {
+      if (m.kind == MessageKind.motion && m.refId != null) {
+        final EnemyMotion? mo = await _dao.motion(m.refId!);
+        if (mo != null) motions[mo.id] = mo;
+        continue;
+      }
       if (m.kind != MessageKind.verdict || m.refId == null) continue;
       final EnemyVerdict? v = await _dao.verdict(m.refId!);
       if (v == null) continue;
@@ -146,6 +153,9 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
       _commitments
         ..clear()
         ..addAll(commitments);
+      _motions
+        ..clear()
+        ..addAll(motions);
       _latestVerdictId = latest;
       _muted = muted;
       _crisisNotice = crisis && muted;
@@ -260,6 +270,57 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   Future<void> _failed(EnemyCommitment c) async {
     await attributeFlow(context, _engine, c);
     await _tick(force: true);
+  }
+
+  /// 接受动议：需要的话先写下具体做什么，再选一个赌注（可以不选）。
+  Future<void> _acceptMotion(EnemyMotion m) async {
+    String text = '';
+    if (m.needsText) {
+      final String? t = await askText(
+        context,
+        title: '动议：${m.text}',
+        hint: '写下具体做什么',
+        confirm: '下一步',
+        maxLines: 2,
+      );
+      if (t == null) return;
+      text = t;
+      if (text.trim().isEmpty) {
+        _snack('要写下具体做什么。');
+        return;
+      }
+    }
+    if (!mounted) return;
+    final String? stake = await askText(
+      context,
+      title: '赌注（可以不写）',
+      hint: '输了，我就去做什么（一个行动，不能伤害自己、羞辱自己、涉及钱）',
+      confirm: '立字据',
+      maxLines: 2,
+    );
+    if (stake == null) return;
+    final MotionResult r = await _presence.acceptMotion(m.id, text: text, stake: stake);
+    if (!r.ok) _snack(r.note);
+    await _load();
+    final EnemyMessage? enemy = r.enemy;
+    if (enemy != null && !r.crisis) await _announce(enemy);
+  }
+
+  /// 驳回动议：必须给理由，敌人会当场反驳。
+  Future<void> _rejectMotion(EnemyMotion m) async {
+    final String? reason = await askText(
+      context,
+      title: '驳回「${m.text}」',
+      hint: '写一句具体的理由',
+      confirm: '驳回',
+      maxLines: 3,
+    );
+    if (reason == null) return;
+    final MotionResult r = await _presence.rejectMotion(m.id, reason);
+    if (!r.ok && r.enemy == null) _snack(r.note);
+    await _load();
+    final EnemyMessage? enemy = r.enemy;
+    if (enemy != null && !r.crisis) await _announce(enemy);
   }
 
   Future<void> _appeal(EnemyVerdict v) async {
@@ -393,6 +454,14 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
             ),
             const SizedBox(width: 8),
             ActionChip(label: const Text('停战'), onPressed: _muted ? null : _truce),
+            const SizedBox(width: 8),
+            ActionChip(
+              label: const Text('太过了'),
+              onPressed: () async {
+                await _engine.markTooMuch();
+                _snack('记下了，接下来几天会降一档。');
+              },
+            ),
           ],
         ),
       );
@@ -438,10 +507,12 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
 
   Widget _row(EnemyMessage m) {
     if (m.kind == MessageKind.verdict) return _verdictBubble(m);
+    if (m.kind == MessageKind.motion) return _motionBubble(m);
     final bool mine = m.role == MessageRole.user;
     final double maxWidth = MediaQuery.of(context).size.width * 0.8;
     final bool drill = m.kind == MessageKind.drill;
-    final bool interject = m.kind == MessageKind.interject || drill;
+    final bool inquiry = m.kind == MessageKind.inquiry;
+    final bool interject = m.kind == MessageKind.interject || drill || inquiry;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -462,11 +533,64 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  drill ? '演练' : '敌人插话',
+                  drill ? '演练' : (inquiry ? '质询' : '敌人插话'),
                   style: const TextStyle(color: kEnemyAccent, fontSize: 11),
                 ),
               ),
             Text(m.text, style: const TextStyle(color: kEnemyText, fontSize: 16, height: 1.55)),
+            const SizedBox(height: 4),
+            Text(fmtTime(m.ts), style: const TextStyle(color: kEnemyMuted, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _motionBubble(EnemyMessage m) {
+    final EnemyMotion? mo = m.refId == null ? null : _motions[m.refId!];
+    final double maxWidth = MediaQuery.of(context).size.width * 0.86;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: kEnemyCard,
+          borderRadius: BorderRadius.circular(14),
+          border: const Border(left: BorderSide(color: kEnemyAccent, width: 3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('动议', style: TextStyle(color: kEnemyAccent, fontSize: 11)),
+            const SizedBox(height: 4),
+            Text(m.text, style: const TextStyle(color: kEnemyText, fontSize: 16, height: 1.55)),
+            if (mo != null) ...<Widget>[
+              const Divider(height: 20),
+              Text('动议：${mo.text}', style: const TextStyle(color: kEnemyText)),
+              const SizedBox(height: 2),
+              Text(
+                '限期 ${fmtTime(mo.dueMs)}',
+                style: const TextStyle(color: kEnemyAccent, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              if (mo.isOpen)
+                Wrap(
+                  spacing: 8,
+                  children: <Widget>[
+                    FilledButton(onPressed: () => _acceptMotion(mo), child: const Text('接受')),
+                    OutlinedButton(onPressed: () => _rejectMotion(mo), child: const Text('驳回')),
+                  ],
+                )
+              else
+                Text(
+                  mo.status == MotionStatus.accepted
+                      ? '你接受了，已立为字据。'
+                      : '你驳回了：${mo.responseText}',
+                  style: const TextStyle(color: kEnemyMuted, fontSize: 13),
+                ),
+            ],
             const SizedBox(height: 4),
             Text(fmtTime(m.ts), style: const TextStyle(color: kEnemyMuted, fontSize: 11)),
           ],

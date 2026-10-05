@@ -7,6 +7,7 @@ import 'claim_check.dart';
 import 'digest_builder.dart';
 import 'enemy_engine.dart';
 import 'guard.dart';
+import 'opposition.dart';
 
 /// 一次对话的结果。
 class SayResult {
@@ -62,8 +63,18 @@ class EnemyPresence {
   static const Duration stallCooldown = Duration(hours: 3);
   static const int defaultPatrolHour = 20;
 
+  /// 反对党质询的默认节奏：两次主动质询至少隔 90 分钟，一天最多 8 次、3 项动议。
+  static const int defaultProbeGapMin = 90;
+  static const int defaultProbeCap = 8;
+  static const int defaultMotionCap = 3;
+
+  /// 事件只有在发生后这么久之内才值得插话，免得刚授权时灌进来的旧账被当成新事。
+  /// 字据类事件（到期、兑现）是在被发现的那一刻产生的，不受此限。
+  static const Duration freshWindow = Duration(minutes: 30);
+
   /// 值得敌人开口的事件，数字越大越优先。
   static const Map<String, int> reactable = <String, int>{
+    'commitment_unverified': 95,
     'commitment_missed': 100,
     'kindling_aborted': 80,
     'habit_missed': 70,
@@ -75,6 +86,7 @@ class EnemyPresence {
   };
 
   static const Map<String, String> _typeLabels = <String, String>{
+    'commitment_unverified': '字据被标记完成，但账上没有对应的记录',
     'commitment_missed': '字据到期没兑现',
     'commitment_done': '字据兑现了',
     'kindling_aborted': '火种中途退出',
@@ -178,6 +190,8 @@ class EnemyPresence {
 
     final String clipped =
         text.length > maxUserChars ? text.substring(0, maxUserChars) : text;
+    // 他这句话是不是在回答敌人刚才的质询——要在存下他这句话之前判断。
+    final EnemyMessage? pending = await _pendingInquiry();
     final EnemyMessage user = await _store(
       role: MessageRole.user,
       kind: MessageKind.chat,
@@ -191,6 +205,8 @@ class EnemyPresence {
     final EnemyMessage enemy = await _speak(
       snap: snap,
       situation: '用户在跟你说话。盘问他，别替他找台阶。'
+          '${pending == null ? '' : '\n【他在回应你的质询】你刚才质询过他：「${_clipText(pending.text, 60)}」。'
+              '判断他是正面回答了，还是在回避：回答了就针对答案追问，回避了就点破。'}'
           '${claim.hint.isEmpty ? '' : '\n【核对结果】${claim.hint}'}',
       userText: clipped,
       kind: MessageKind.chat,
@@ -289,7 +305,12 @@ class EnemyPresence {
       return null;
     }
 
-    EnemyEvent? pick = _best(fresh);
+    // 只对刚发生的事插话；字据类事件是被发现的那一刻产生的，不看时间。
+    final List<EnemyEvent> timely = fresh
+        .where((EnemyEvent e) =>
+            e.source == 'commitment' || now - e.ts <= freshWindow.inMilliseconds)
+        .toList();
+    EnemyEvent? pick = _best(timely);
     // 其它模块只是有动静：只有字据还开着时才值得开口（点出「在忙别的」）。
     if (pick != null && pick.type == 'module_activity') {
       final List<EnemyCommitment> open = await dao.commitments(status: CommitmentStatus.open);
@@ -517,11 +538,311 @@ class EnemyPresence {
         }
       }
     }
+    // 4) 反对党：他一声不响的时候，敌人不跟着安静。
+    final EnemyMessage? probe = await _oppose(now, dt);
+    if (probe != null) return probe;
+
     // 事件那一步已经给出更有信息量的原因（比如「今天开口次数到上限」）就保留它。
     if (_why.isEmpty || _why == 'no_new' || _why == 'baseline') {
       if (_why != 'baseline') _why = 'patrol_idle';
     }
     return null;
+  }
+
+  // -------------------------------------------------------------- opposition
+
+  static String _clipText(String t, int n) => t.length > n ? '${t.substring(0, n)}…' : t;
+
+  /// 敌人最近一条还没被回应的质询或动议；没有则 null。
+  Future<EnemyMessage?> _pendingInquiry() async {
+    final EnemyMessage? last = await dao.latestMessage(
+      kinds: <String>[MessageKind.inquiry, MessageKind.motion],
+      role: MessageRole.enemy,
+    );
+    if (last == null) return null;
+    if (await dao.userMessagesAfterId(last.id) > 0) return null;
+    if (last.kind == MessageKind.motion && last.refId != null) {
+      final EnemyMotion? m = await dao.motion(last.refId!);
+      if (m != null && !m.isOpen) return null; // 已经接受或驳回，就是回应过了
+    }
+    return last;
+  }
+
+  Future<ProbeFacts> _probeFacts(int now, {required bool forDrill}) async {
+    const int hourMs = 3600 * 1000;
+    const int dayMs = 24 * hourMs;
+    final DateTime dt = DateTime.fromMillisecondsSinceEpoch(now);
+    final int startOfDay = DateTime(dt.year, dt.month, dt.day).millisecondsSinceEpoch;
+
+    final Map<String, bool> consents = await engine.consents();
+    final List<EnemyEvent> events = await dao.eventsBetween(now - 14 * dayMs, now + 1);
+
+    int knowledge24 = 0, actions24 = 0, habit7 = 0, lastKindling = 0, lastEventTs = 0;
+    final Map<String, List<int>> activity = <String, List<int>>{};
+    for (final EnemyEvent e in events) {
+      if (e.ts > lastEventTs && e.source != 'commitment') lastEventTs = e.ts;
+      final bool in24 = now - e.ts <= dayMs;
+      if (e.type == 'knowledge_converted' && in24) knowledge24++;
+      if (in24 && (e.type == 'habit_done' || e.type == 'kindling_completed' || e.type == 'commitment_done')) {
+        actions24++;
+      }
+      if (e.source == 'habit' && now - e.ts <= 7 * dayMs) habit7++;
+      if (e.type == 'kindling_completed' && e.ts > lastKindling) lastKindling = e.ts;
+      if (e.source == 'activity') (activity[e.label] ??= <int>[]).add(e.ts);
+    }
+
+    final List<DormantModule> dormant = <DormantModule>[];
+    activity.forEach((String label, List<int> stamps) {
+      if (stamps.length < 3) return;
+      final int last = stamps.reduce((int a, int b) => a > b ? a : b);
+      final int days = ((now - last) / dayMs).floor();
+      if (days >= Opposition.dormantAfterDays) dormant.add(DormantModule(label, days));
+    });
+    dormant.sort((DormantModule a, DormantModule b) => b.days.compareTo(a.days));
+
+    final List<EnemyCommitment> all = await dao.commitments(limit: 300);
+    final int open = all.where((EnemyCommitment c) => c.status == CommitmentStatus.open).length;
+    final int created24 = all.where((EnemyCommitment c) => now - c.createdMs <= dayMs).length;
+    final int done7 = all
+        .where((EnemyCommitment c) => c.status == CommitmentStatus.done && now - c.createdMs <= 7 * dayMs)
+        .length;
+
+    EnemyLesson? repeated;
+    for (final EnemyLesson l in await dao.lessons(limit: 20)) {
+      if (l.timesRepeated >= 2) {
+        repeated = l;
+        break;
+      }
+    }
+    EnemyVerdict? ignored;
+    for (final EnemyVerdict v in await dao.recentVerdicts(limit: 10)) {
+      if (v.userResponse == VerdictResponse.pending &&
+          now - v.ts >= Opposition.ignoredVerdictAfterHours * hourMs) {
+        ignored = v;
+        break;
+      }
+    }
+
+    final List<EnemyMotion> motions = await dao.motionsSince(now - 7 * dayMs);
+    final int rejected7 = motions.where((EnemyMotion m) => m.status == MotionStatus.rejected).length;
+    final int accepted7 = motions.where((EnemyMotion m) => m.status == MotionStatus.accepted).length;
+    final int motionsToday = motions.where((EnemyMotion m) => m.ts >= startOfDay).length;
+    final bool hasOpenMotion = await dao.openMotion() != null;
+    final int motionCap = await dao.intSetting(EnemySettings.motionCap, defaultMotionCap);
+
+    // 动议的截止时间：3 小时后，但不晚于静默时段开始前半小时；离得太近就不提动议。
+    final int quietStart = await dao.intSetting(EnemySettings.quietStartHour, 23);
+    int due = now + 3 * hourMs;
+    final int latest = DateTime(dt.year, dt.month, dt.day, quietStart).millisecondsSinceEpoch - 30 * 60 * 1000;
+    if (due > latest) due = latest;
+    final int motionDue = due - now >= 30 * 60 * 1000 ? due : 0;
+
+    final EnemyMessage? pending = await _pendingInquiry();
+    final int follow = pending == null ? 0 : await dao.intSetting(EnemySettings.inquiryFollow(pending.id), 0);
+
+    final Map<String, int> lastProbe = <String, int>{};
+    if (!forDrill) {
+      for (final String type in Opposition.cooldownHours.keys) {
+        lastProbe[type] = await dao.intSetting(EnemySettings.probeLast(type), 0);
+      }
+    }
+
+    return ProbeFacts(
+      nowMs: now,
+      consentKindling: consents['kindling'] ?? false,
+      consentHabit: consents['habit'] ?? false,
+      consentKnowledge: consents['knowledge'] ?? false,
+      openCommitments: open,
+      createdLast24h: created24,
+      lastKindlingCompletedMs: lastKindling,
+      knowledge24h: knowledge24,
+      actions24h: actions24,
+      habitEvents7d: habit7,
+      dormant: dormant,
+      repeatedLesson: repeated,
+      ignoredVerdict: ignored,
+      rejected7d: rejected7,
+      accepted7d: accepted7,
+      done7d: done7,
+      unanswered: pending,
+      unansweredFollowUps: follow,
+      silentHours: lastEventTs == 0 ? 24 : ((now - lastEventTs) / hourMs).floor(),
+      motionDueMs: forDrill ? 0 : motionDue,
+      motionAllowed: !forDrill && !hasOpenMotion && motionsToday < motionCap,
+      lastProbeMs: lastProbe,
+    );
+  }
+
+  /// 反对党：主动质询、提动议。沉默不是好结果。
+  /// 有自己的节奏——两次之间至少隔 [defaultProbeGapMin] 分钟（可调），一天有上限。
+  Future<EnemyMessage?> _oppose(int now, DateTime dt) async {
+    if (!await dao.boolSetting(EnemySettings.opposition, fallback: true)) {
+      _why = 'opposition_off';
+      return null;
+    }
+    final int gapMin = await dao.intSetting(EnemySettings.probeGapMin, defaultProbeGapMin);
+    final int lastProbe = await dao.intSetting(EnemySettings.probeGlobalMs, 0);
+    if (lastProbe > 0 && now - lastProbe < gapMin * 60 * 1000) {
+      _why = 'probe_wait';
+      return null;
+    }
+    final int startOfDay = DateTime(dt.year, dt.month, dt.day).millisecondsSinceEpoch;
+    final int cap = await dao.intSetting(EnemySettings.probeCap, defaultProbeCap);
+    final int today = await dao.messageCountOfKinds(
+      <String>[MessageKind.inquiry, MessageKind.motion],
+      sinceMs: startOfDay,
+    );
+    if (today >= cap) {
+      _why = 'probe_capped';
+      return null;
+    }
+
+    final ProbeFacts facts = await _probeFacts(now, forDrill: false);
+    final ProbePlan? plan = Opposition.choose(facts);
+    if (plan == null) {
+      _why = 'probe_wait';
+      return null;
+    }
+    _why = 'spoke';
+    final EnemyMessage msg = await _probeSay(plan, now, drill: false);
+    await dao.setSetting(EnemySettings.probeGlobalMs, '$now');
+    await dao.setSetting(EnemySettings.probeLast(plan.type), '$now');
+    await dao.setSetting(EnemySettings.lastInterjectMs, '$now');
+    if (plan.followUpOf != null) {
+      // 追问本身又是一条新的质询：把已追问次数传给它，否则链条永远断不了。
+      final int prev = await dao.intSetting(EnemySettings.inquiryFollow(plan.followUpOf!), 0);
+      await dao.setSetting(EnemySettings.inquiryFollow(msg.id), '${prev + 1}');
+    }
+    return msg;
+  }
+
+  String _dueText(int dueMs) {
+    final DateTime d = DateTime.fromMillisecondsSinceEpoch(dueMs);
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(d.hour)}:${two(d.minute)}';
+  }
+
+  Future<EnemyMessage> _probeSay(ProbePlan plan, int now, {required bool drill}) async {
+    final ({EnemyDigest digest, int intensity, String address}) snap = await _snapshot();
+    final MotionPlan? mp = drill ? null : plan.motion;
+    int? motionId;
+    if (mp != null) {
+      motionId = await dao.insertMotion(
+        ts: now,
+        kind: mp.kind,
+        text: mp.text,
+        dueMs: mp.dueMs,
+        needsText: mp.needsText,
+        verify: mp.verify,
+      );
+    }
+    final int tone = _tone(snap.intensity);
+    return _speak(
+      snap: snap,
+      situation: plan.situation,
+      userText: '',
+      kind: drill ? MessageKind.drill : (mp != null ? MessageKind.motion : MessageKind.inquiry),
+      refId: motionId,
+      prefix: drill ? drillPrefix : '',
+      fallback: () => mp != null
+          ? '${PersonaLines.probe(
+              type: plan.type,
+              address: snap.address,
+              tone: tone,
+              n: plan.n,
+              m: plan.m,
+              hours: plan.hours,
+              days: plan.days,
+              label: plan.label,
+              text: plan.text,
+              category: plan.category,
+              seed: now ~/ 60000,
+            )}\n${PersonaLines.motion(
+              address: snap.address,
+              text: mp.text,
+              dueText: _dueText(mp.dueMs),
+              tone: tone,
+              seed: now ~/ 60000,
+            )}'
+          : PersonaLines.probe(
+              type: plan.type,
+              address: snap.address,
+              tone: tone,
+              n: plan.n,
+              m: plan.m,
+              hours: plan.hours,
+              days: plan.days,
+              label: plan.label,
+              text: plan.text,
+              category: plan.category,
+              seed: now ~/ 60000,
+            ),
+    );
+  }
+
+  // ----------------------------------------------------------------- motions
+
+  /// 接受动议：立成字据（带你选的赌注）。需要你亲手写具体内容的动议，[text] 必填。
+  Future<MotionResult> acceptMotion(int id, {String text = '', String stake = ''}) async {
+    final EnemyMotion? m = await dao.motion(id);
+    if (m == null || !m.isOpen) return const MotionResult(note: '这项动议已经处理过了。');
+    final String content = m.needsText ? text.trim() : m.text;
+    if (content.isEmpty) return const MotionResult(note: '这项动议要你写下具体做什么。');
+    final ({int? id, bool crisis, String? error}) r = await engine.addCommitment(
+      content,
+      due: DateTime.fromMillisecondsSinceEpoch(m.dueMs),
+      stake: stake,
+      origin: 'motion',
+      verify: m.verify,
+    );
+    if (r.crisis) return const MotionResult(crisis: true, note: EnemyCopy.crisisMessage);
+    if (r.error != null || r.id == null) return MotionResult(note: r.error ?? '没立成。');
+    await dao.setMotionStatus(id, MotionStatus.accepted, commitmentId: r.id);
+    final ({EnemyDigest digest, int intensity, String address}) snap = await _snapshot();
+    final EnemyMessage msg = await _speak(
+      snap: snap,
+      situation: '他接受了你的动议，字据已立：「$content」，${_dueText(m.dueMs)}前。'
+          '${stake.trim().isEmpty ? '' : '赌注是「${stake.trim()}」。'}一句话认下，提醒你到期会来对账。',
+      userText: '',
+      kind: MessageKind.chat,
+      fallback: () => PersonaLines.motionAccepted(
+        address: snap.address,
+        text: content,
+        dueText: _dueText(m.dueMs),
+        stake: stake,
+      ),
+    );
+    return MotionResult(ok: true, enemy: msg);
+  }
+
+  /// 驳回动议：必须给理由，敌人当场反驳，动议不撤。
+  Future<MotionResult> rejectMotion(int id, String reason) async {
+    final EnemyMotion? m = await dao.motion(id);
+    if (m == null || !m.isOpen) return const MotionResult(note: '这项动议已经处理过了。');
+    final String text = reason.trim();
+    if (text.length < 4) return const MotionResult(note: '驳回要给理由，写一句具体的话。');
+    if (SafetyValve.shouldMute(text)) {
+      final bool crisis = SafetyValve.isCrisis(text);
+      await engine.muteFor24h(crisis: crisis);
+      final EnemyMessage exit = await _store(
+        role: MessageRole.enemy,
+        kind: MessageKind.exit,
+        text: crisis ? EnemyCopy.crisisMessage : EnemyCopy.truceAcknowledged,
+      );
+      return MotionResult(crisis: crisis, enemy: exit);
+    }
+    await dao.setMotionStatus(id, MotionStatus.rejected, responseText: text);
+    await _store(role: MessageRole.user, kind: MessageKind.chat, text: _clipText(text, maxUserChars));
+    final ({EnemyDigest digest, int intensity, String address}) snap = await _snapshot();
+    final EnemyMessage msg = await _speak(
+      snap: snap,
+      situation: '他驳回了你的动议「${m.text}」，理由是：「${_clipText(text, 80)}」。'
+          '反驳他的理由（不是他这个人），动议你保留。一句话。',
+      userText: text,
+      kind: MessageKind.chat,
+      fallback: () => PersonaLines.rebut(address: snap.address, reason: text, seed: id),
+    );
+    return MotionResult(ok: true, enemy: msg);
   }
 
   static const String drillPrefix = '【演练】';
@@ -633,6 +954,14 @@ class EnemyPresence {
             kind: MessageKind.drill,
           ),
         );
+      case 'probe':
+        {
+          // 质询演练：不看间隔和冷却，不提动议（免得留下一项真的待决动议）。
+          final ProbeFacts facts = await _probeFacts(now, forDrill: true);
+          final ProbePlan? plan = Opposition.choose(facts);
+          if (plan == null) return const DrillResult(note: '没有可以质询的事。');
+          return DrillResult(message: await _probeSay(plan, now, drill: true));
+        }
       default:
         return const DrillResult(note: '不认识的演练。');
     }
@@ -701,6 +1030,15 @@ class EnemyPresence {
             lastEventAgeSec: age(lastBySource[s0.id] ?? 0),
           ),
       ],
+      opposition: await dao.boolSetting(EnemySettings.opposition, fallback: true),
+      probeGapMin: await dao.intSetting(EnemySettings.probeGapMin, defaultProbeGapMin),
+      probeAgeSec: age(await dao.intSetting(EnemySettings.probeGlobalMs, 0)),
+      probesToday: await dao.messageCountOfKinds(
+        <String>[MessageKind.inquiry, MessageKind.motion],
+        sinceMs: startOfDay,
+      ),
+      probeCap: await dao.intSetting(EnemySettings.probeCap, defaultProbeCap),
+      openMotion: await dao.openMotion() != null,
       bgScheduledAgeSec: age(await dao.intSetting(EnemySettings.bgScheduledMs, 0)),
       bgScheduleError: await dao.getSetting(EnemySettings.bgScheduleError) ?? '',
       bgLastRunAgeSec: age(await dao.intSetting(EnemySettings.bgLastRunMs, 0)),
@@ -889,6 +1227,12 @@ class EnemyStatus {
     required this.cursor,
     required this.maxEventId,
     required this.sources,
+    required this.opposition,
+    required this.probeGapMin,
+    required this.probeAgeSec,
+    required this.probesToday,
+    required this.probeCap,
+    required this.openMotion,
     required this.bgScheduledAgeSec,
     required this.bgScheduleError,
     required this.bgLastRunAgeSec,
@@ -921,6 +1265,16 @@ class EnemyStatus {
   final int cursor;
   final int maxEventId;
   final List<SourceStatus> sources;
+  final bool opposition;
+  final int probeGapMin;
+
+  /// 上一次主动质询距今多少秒；从没有为 -1。
+  final int probeAgeSec;
+  final int probesToday;
+  final int probeCap;
+
+  /// 有没有一项还没被接受或驳回的动议。
+  final bool openMotion;
   final int bgScheduledAgeSec;
   final String bgScheduleError;
   final int bgLastRunAgeSec;
@@ -949,10 +1303,32 @@ class EnemyStatus {
         return '刚说过话，间隔没到';
       case 'patrol_idle':
         return '没有该主动说的事（晨报、结算、发呆的条件都没满足）';
+      case 'opposition_off':
+        return '「反对党质询」是关着的';
+      case 'probe_wait':
+        return '质询的间隔没到（两次主动质询之间要隔一段时间）';
+      case 'probe_capped':
+        return '今天的主动质询次数到上限了';
       case '':
         return '还没有记录';
       default:
         return code;
     }
   }
+}
+
+/// 动议的处理结果。
+class MotionResult {
+  const MotionResult({this.ok = false, this.note = '', this.enemy, this.crisis = false});
+
+  final bool ok;
+
+  /// 没处理成时的说明。
+  final String note;
+
+  /// 敌人接话的那条消息。
+  final EnemyMessage? enemy;
+
+  /// 你写的理由触发了安全阀：敌人已退场、静音。
+  final bool crisis;
 }

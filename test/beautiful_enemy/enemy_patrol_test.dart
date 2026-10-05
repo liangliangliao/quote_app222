@@ -7,6 +7,7 @@ import 'package:quote_app/beautiful_enemy/src/domain/enemy_presence.dart';
 import 'package:quote_app/beautiful_enemy/src/domain/evidence_source.dart';
 import 'package:quote_app/beautiful_enemy/src/domain/guard.dart';
 import 'package:quote_app/beautiful_enemy/src/enemy_oracle.dart';
+import 'package:quote_app/beautiful_enemy/src/enemy_talker.dart';
 import 'package:quote_app/beautiful_enemy/src/persona.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -66,15 +67,21 @@ void main() {
     await db.close();
   });
 
-  Future<EnemyPresence> make() async {
+  /// 默认关掉反对党质询：其它测试要的是「没有该说的事时它安静」，质询另有专门的测试。
+  Future<EnemyPresence> make({
+    bool opposition = false,
+    List<ProbeSource> extra = const <ProbeSource>[],
+    EnemyTalker? talker,
+  }) async {
     final EnemyEngine engine = EnemyEngine(
       dao: dao,
       oracle: const LocalFactOracle(),
-      sources: <EvidenceSource>[habit, usage],
+      sources: <EvidenceSource>[habit, usage, ...extra],
       clock: () => current,
     );
     await engine.grantAll();
-    return EnemyPresence(engine: engine);
+    await dao.setBoolSetting(EnemySettings.opposition, opposition);
+    return EnemyPresence(engine: engine, talker: talker);
   }
 
   group('变更指纹', () {

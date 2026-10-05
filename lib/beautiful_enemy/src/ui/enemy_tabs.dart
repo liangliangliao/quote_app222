@@ -567,6 +567,8 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _interject = true;
   bool _interjectEverywhere = true;
   bool _patrol = true;
+  bool _opposition = true;
+  int _probeGap = 90;
   String _address = EnemyCopy.defaultAddress;
   Map<String, bool> _consents = <String, bool>{};
 
@@ -594,9 +596,13 @@ class _SettingsTabState extends State<SettingsTab> {
         await _dao.boolSetting(EnemySettings.interjectEverywhere, fallback: true);
     final String address = await _engine.address();
     final bool patrol = await _dao.boolSetting(EnemySettings.patrol, fallback: true);
+    final bool opposition = await _dao.boolSetting(EnemySettings.opposition, fallback: true);
+    final int probeGap = await _dao.intSetting(EnemySettings.probeGapMin, 90);
     final Map<String, bool> consents = await _engine.consents();
     if (!mounted) return;
     setState(() {
+      _opposition = opposition;
+      _probeGap = const <int>[45, 90, 180].contains(probeGap) ? probeGap : 90;
       _patrol = patrol;
       _voiceOut = voiceOut;
       _interject = interject;
@@ -711,6 +717,47 @@ class _SettingsTabState extends State<SettingsTab> {
                   await _dao.setBoolSetting(EnemySettings.patrol, v);
                 }
               : null,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('反对党质询', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text(
+            '你一声不响的时候它也不闭嘴：从账上缺的东西发起质询、提动议、讽刺你的借口和回避。只冲着行为，不冲着你这个人。',
+            style: TextStyle(color: kEnemyMuted),
+          ),
+          value: _opposition,
+          onChanged: _interject
+              ? (bool v) async {
+                  setState(() => _opposition = v);
+                  await _dao.setBoolSetting(EnemySettings.opposition, v);
+                }
+              : null,
+        ),
+        if (_opposition && _interject)
+          Row(
+            children: <Widget>[
+              const Text('质询频率', style: TextStyle(color: kEnemyMuted)),
+              const SizedBox(width: 12),
+              SegmentedButton<int>(
+                segments: const <ButtonSegment<int>>[
+                  ButtonSegment<int>(value: 180, label: Text('疏')),
+                  ButtonSegment<int>(value: 90, label: Text('中')),
+                  ButtonSegment<int>(value: 45, label: Text('密')),
+                ],
+                selected: <int>{_probeGap},
+                onSelectionChanged: (Set<int> s) async {
+                  setState(() => _probeGap = s.first);
+                  await _set(EnemySettings.probeGapMin, s.first);
+                },
+              ),
+            ],
+          ),
+        const Padding(
+          padding: EdgeInsets.only(top: 2, bottom: 4),
+          child: Text(
+            '疏：每 3 小时一次；中：每 90 分钟；密：每 45 分钟。每天最多 8 次质询、3 项动议。',
+            style: TextStyle(color: kEnemyMuted, fontSize: 12),
+          ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

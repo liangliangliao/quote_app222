@@ -79,6 +79,7 @@ class EnemyCommitment {
     required this.origin,
     this.verdictId,
     this.stake = '',
+    this.verify = '',
   });
 
   final int id;
@@ -86,6 +87,9 @@ class EnemyCommitment {
   final int createdMs;
   final int? dueMs;
   final String status;
+
+  /// 核实方式：空表示不核实；'kindling' 表示标记完成时要去账上找一次完整的火种。
+  final String verify;
 
   /// 赌注：输了要兑现的一个行动。空表示没有赌注。
   final String stake;
@@ -107,6 +111,7 @@ class EnemyCommitment {
       origin: (row['origin'] ?? 'manual').toString(),
       verdictId: (row['verdict_id'] as num?)?.toInt(),
       stake: (row['stake'] ?? '').toString(),
+      verify: (row['verify'] ?? '').toString(),
     );
   }
 }
@@ -248,6 +253,12 @@ class MessageKind {
 
   /// 自检页上的演练。不算插话：不占每日上限。
   static const String drill = 'drill';
+
+  /// 反对党的质询：敌人主动发问，要你回答。
+  static const String inquiry = 'inquiry';
+
+  /// 反对党的动议：敌人提出一项要你接受或驳回的安排，refId 指向 be_motion。
+  static const String motion = 'motion';
 }
 
 /// 对峙页里的一条消息。判词、插话、对话统一在同一条时间线上。
@@ -281,6 +292,61 @@ class EnemyMessage {
       text: (row['text'] ?? '').toString(),
       refId: (row['ref_id'] as num?)?.toInt(),
       tone: (row['tone'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class MotionStatus {
+  const MotionStatus._();
+  static const String open = 'open';
+  static const String accepted = 'accepted';
+  static const String rejected = 'rejected';
+}
+
+/// 敌人提出的动议：一项带截止时间的具体安排，由你接受（立为字据）或驳回（要给理由）。
+class EnemyMotion {
+  const EnemyMotion({
+    required this.id,
+    required this.ts,
+    required this.kind,
+    required this.text,
+    required this.dueMs,
+    required this.needsText,
+    required this.verify,
+    required this.status,
+    required this.commitmentId,
+    required this.responseText,
+  });
+
+  final int id;
+  final int ts;
+
+  /// 来自哪一种质询（见 Opposition）。
+  final String kind;
+  final String text;
+  final int dueMs;
+
+  /// 接受时是否要你亲手写下具体做什么（动议本身只给了方向）。
+  final bool needsText;
+  final String verify;
+  final String status;
+  final int? commitmentId;
+  final String responseText;
+
+  bool get isOpen => status == MotionStatus.open;
+
+  factory EnemyMotion.fromMap(Map<String, Object?> row) {
+    return EnemyMotion(
+      id: (row['id'] as num).toInt(),
+      ts: (row['ts'] as num).toInt(),
+      kind: (row['kind'] ?? '').toString(),
+      text: (row['text'] ?? '').toString(),
+      dueMs: (row['due_ms'] as num).toInt(),
+      needsText: ((row['needs_text'] as num?)?.toInt() ?? 0) == 1,
+      verify: (row['verify'] ?? '').toString(),
+      status: (row['status'] ?? MotionStatus.open).toString(),
+      commitmentId: (row['commitment_id'] as num?)?.toInt(),
+      responseText: (row['response_text'] ?? '').toString(),
     );
   }
 }
