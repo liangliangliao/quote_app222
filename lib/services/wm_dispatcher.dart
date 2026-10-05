@@ -74,7 +74,7 @@ void workmanagerCallbackDispatcher() {
       return Future.value(true);
     } else if (job == EnemyHostPatrol.workJob) {
       // 美丽的敌人：后台巡查（约每 15 分钟一次，尽力而为）。
-      await EnemyHostPatrol.runScheduled();
+      await EnemyHostPatrol.runScheduled(inputData);
       return Future.value(true);
     } else if (job == EnemyHostReminder.workJob) {
       // 美丽的敌人：每日报到通知（默认关，开关在模块设置里）。

@@ -7,7 +7,6 @@ import '../beautiful_enemy/beautiful_enemy.dart';
 import '../data/db.dart';
 import '../services/notification_service.dart';
 import 'enemy_ai_talker.dart';
-import 'enemy_host_patrol.dart';
 import 'enemy_host_reminder.dart';
 import 'enemy_sources.dart';
 import 'enemy_voice_out.dart';
@@ -18,7 +17,7 @@ import 'enemy_voice_out.dart';
 /// 1. 每 3 秒看一眼（靠来源的变更指纹，没变化几乎不花力气）：你做了什么、没做什么，
 ///    它立刻接话；没有新事时它自己判断该不该主动开口（晨报、晚间结算、发呆点名）。
 /// 2. 每分钟记一分钟 App 前台时间——这是它核对「我没时间」的依据。
-/// 3. 登记一个后台巡查任务（见 [EnemyHostPatrol]），App 不在前台时也每隔一段时间巡一次。
+/// 3. 后台巡查任务（见 [EnemyHostPatrol]）由 main.dart 在 Workmanager 初始化之后登记。
 ///
 /// 敌人页面打开时，说话的事让给页面自己；其它页面里，它用通知开口。
 /// 开关都在模块设置里：「实时插话」「在其它页面也插话」「主动巡查」。
@@ -54,8 +53,8 @@ class EnemyHostPresence with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _fast = Timer.periodic(fastInterval, (_) => _fastTick());
     _minute = Timer.periodic(minuteInterval, (_) => _minuteTick());
-    // 后台也要有人盯着：登记一个周期任务（幂等）。
-    EnemyHostPatrol.ensureScheduled();
+    // 后台周期任务不在这里登记：这里跑在首帧里，Workmanager 还没初始化。
+    // 登记放在 main.dart 的启动流程里、Workmanager.initialize 之后。
   }
 
   @override

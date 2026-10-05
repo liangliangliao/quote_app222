@@ -245,6 +245,9 @@ class MessageKind {
 
   /// 敌人退场（安全阀 / 停战）。
   static const String exit = 'exit';
+
+  /// 自检页上的演练。不算插话：不占每日上限。
+  static const String drill = 'drill';
 }
 
 /// 对峙页里的一条消息。判词、插话、对话统一在同一条时间线上。

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../copy.dart';
 import '../domain/enemy_presence.dart';
+import '../enemy_host_tools.dart';
 import '../enemy_reminder.dart';
 import '../enemy_talker.dart';
+import 'enemy_status_tab.dart';
 import 'enemy_tabs.dart';
 import 'enemy_thread_tab.dart';
 import 'ui_helpers.dart';
@@ -14,11 +16,13 @@ class EnemyHomePage extends StatelessWidget {
     required this.presence,
     required this.voice,
     required this.reminder,
+    required this.tools,
   });
 
   final EnemyPresence presence;
   final EnemyVoiceOut voice;
   final EnemyReminder reminder;
+  final EnemyHostTools tools;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +46,7 @@ class EnemyHomePage extends StatelessWidget {
         ),
       ),
       child: DefaultTabController(
-        length: 5,
+        length: 6,
         child: Scaffold(
           appBar: AppBar(
             backgroundColor: kEnemyBg,
@@ -56,6 +60,7 @@ class EnemyHomePage extends StatelessWidget {
                 Tab(text: '字据'),
                 Tab(text: '案卷'),
                 Tab(text: '教训'),
+                Tab(text: '自检'),
                 Tab(text: '设置'),
               ],
             ),
@@ -66,6 +71,7 @@ class EnemyHomePage extends StatelessWidget {
               CommitmentsTab(engine: presence.engine, presence: presence),
               DossierTab(engine: presence.engine),
               LessonsTab(engine: presence.engine),
+              StatusTab(presence: presence, tools: tools),
               SettingsTab(engine: presence.engine, reminder: reminder, voice: voice),
             ],
           ),

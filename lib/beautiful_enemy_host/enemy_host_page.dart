@@ -7,6 +7,7 @@ import 'enemy_ai_oracle.dart';
 import 'enemy_ai_talker.dart';
 import 'enemy_host_presence.dart';
 import 'enemy_host_reminder.dart';
+import 'enemy_host_tools_impl.dart';
 import 'enemy_sources.dart';
 import 'enemy_voice_out.dart';
 
@@ -62,6 +63,7 @@ class _EnemyHostPageState extends State<EnemyHostPage> {
           voice: _voice,
           sources: defaultEnemySources(),
           reminder: const EnemyHostReminder(),
+          tools: const EnemyHostToolsImpl(),
         );
       },
     );

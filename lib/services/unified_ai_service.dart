@@ -1100,15 +1100,24 @@ class UnifiedAiService {
   }
 
 
-  /// gpt-5 / o 系列在 Azure OpenAI 上不接受 `max_tokens`，必须用
+  /// GPT-5 及以上版本 / o 系列在 Azure OpenAI 上不接受 `max_tokens`，必须用
   /// `max_completion_tokens`，而且只允许默认的 temperature / top_p。
   static bool isAzureReasoningDeployment(String deployment) {
     final d = deployment.trim().toLowerCase();
     if (d.isEmpty) return false;
-    return d.startsWith('gpt-5') ||
-        d.startsWith('gpt5') ||
-        d.contains('gpt-5') ||
-        RegExp(r'(^|[^a-z0-9])o[1345]([^a-z0-9]|$)').hasMatch(d);
+
+    // Azure historically calls GPT-3.5 deployments `gpt-35-turbo`; do not
+    // mistake that legacy spelling for a future GPT-35 model.
+    final legacyGpt35 = RegExp(r'gpt[-_. ]?35[-_. ]?turbo(?:[^a-z0-9]|$)').hasMatch(d);
+    if (!legacyGpt35) {
+      // Accept portal/deployment spellings such as gpt-5.6-chat, gpt6luna,
+      // my-gpt-6-luna and future major versions without hard-coding each one.
+      final gptVersion = RegExp(r'gpt[-_. ]?(\d+)').firstMatch(d);
+      final major = int.tryParse(gptVersion?.group(1) ?? '');
+      if (major != null && major >= 5) return true;
+    }
+
+    return RegExp(r'(^|[^a-z0-9])o[1-9]\d*([^a-z0-9]|$)').hasMatch(d);
   }
 
   /// Foundry 模型目录里的模型（Claude / Grok 等）对 OpenAI 扩展参数的容忍度

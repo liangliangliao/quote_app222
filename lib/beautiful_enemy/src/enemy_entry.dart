@@ -5,6 +5,7 @@ import 'data/enemy_dao.dart';
 import 'domain/enemy_engine.dart';
 import 'domain/enemy_presence.dart';
 import 'domain/evidence_source.dart';
+import 'enemy_host_tools.dart';
 import 'enemy_oracle.dart';
 import 'enemy_reminder.dart';
 import 'enemy_talker.dart';
@@ -55,6 +56,7 @@ class EnemyEntry {
     EnemyVoiceOut voice = const NoopEnemyVoiceOut(),
     List<EvidenceSource> sources = const <EvidenceSource>[],
     EnemyReminder reminder = const NoopEnemyReminder(),
+    EnemyHostTools tools = const NoopEnemyHostTools(),
   }) {
     return _EnemyLoader(
       db: db,
@@ -63,6 +65,7 @@ class EnemyEntry {
       voice: voice,
       sources: sources,
       reminder: reminder,
+      tools: tools,
     );
   }
 }
@@ -75,6 +78,7 @@ class _EnemyLoader extends StatefulWidget {
     required this.voice,
     required this.sources,
     required this.reminder,
+    required this.tools,
   });
 
   final Database db;
@@ -83,6 +87,7 @@ class _EnemyLoader extends StatefulWidget {
   final EnemyVoiceOut voice;
   final List<EvidenceSource> sources;
   final EnemyReminder reminder;
+  final EnemyHostTools tools;
 
   @override
   State<_EnemyLoader> createState() => _EnemyLoaderState();
@@ -112,6 +117,7 @@ class _EnemyLoaderState extends State<_EnemyLoader> {
           presence: presence,
           voice: widget.voice,
           reminder: widget.reminder,
+          tools: widget.tools,
         );
       },
     );

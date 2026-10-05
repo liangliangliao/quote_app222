@@ -59,6 +59,16 @@ class EnemySettings {
   /// App 在前台时每次心跳写入；后台巡查据此避免和前台重复开口。
   static const String heartbeatMs = 'foreground_heartbeat_ms';
 
+  /// 自检用：敌人最近一次「看了一眼」的时间，和它这次为什么没开口 / 开了口。
+  static const String lastStepMs = 'last_step_ms';
+  static const String lastWhy = 'last_why';
+
+  /// 自检用：后台巡查任务的登记结果与最近一次运行。
+  static const String bgScheduledMs = 'bg_scheduled_ms';
+  static const String bgScheduleError = 'bg_schedule_error';
+  static const String bgLastRunMs = 'bg_last_run_ms';
+  static const String bgLastNote = 'bg_last_note';
+
   static const String dailyNotify = 'daily_notify';
   static const String dailyNotifyHour = 'daily_notify_hour';
   static const String crisisNoticePending = 'crisis_notice_pending';

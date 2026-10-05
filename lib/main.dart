@@ -74,6 +74,7 @@ import 'kindling/kindling.dart';
 import 'kindling_host/kindling_host_page.dart';
 import 'beautiful_enemy/beautiful_enemy.dart' show EnemyEntry;
 import 'beautiful_enemy_host/enemy_host_page.dart';
+import 'beautiful_enemy_host/enemy_host_patrol.dart';
 import 'beautiful_enemy_host/enemy_host_presence.dart';
 
 void main() {
@@ -125,6 +126,8 @@ Future<void> _bootstrapAfterFirstFrame() async {
     _runBestEffort(() => DiaryTheme.reloadFromDatabase()),
     _runBestEffort(() => XiangjiStrategistMonitorService.syncSchedule()),
     _runBestEffort(() => HealthDietDailySchedulerService().tick()),
+    // 美丽的敌人的后台巡查：必须在 Workmanager.initialize 之后登记。
+    _runBestEffort(() => EnemyHostPatrol.ensureScheduled()),
   ]);
   try {
     await DLog.i('Startup', 'post-frame bootstrap completed in ${DateTime.now().difference(startedAt).inMilliseconds}ms');
