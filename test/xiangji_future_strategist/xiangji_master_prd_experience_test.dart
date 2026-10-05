@@ -5,6 +5,36 @@ import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
 
 void main() {
+  testWidgets('V5 Schopenhauer L0 architecture is visible and accessible',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() async => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(
+            size: Size(390, 844),
+            textScaler: TextScaler.linear(2),
+          ),
+          child: Scaffold(
+            body: SingleChildScrollView(
+              padding: EdgeInsets.all(16),
+              child: XiangjiEpistemicArchitectureCard(),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('叔本华 L0'), findsOneWidget);
+    expect(find.textContaining('经验世界 I'), findsWidgets);
+    expect(find.textContaining('抽象反思世界 C'), findsWidgets);
+    expect(find.textContaining('新经验世界 I′'), findsOneWidget);
+    expect(find.textContaining('L3 个人经验科学'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('G3/DOC-08 solver cockpit is first-class and uses user language',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -131,9 +161,14 @@ void main() {
     await tester.tap(find.textContaining('军师改判'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('叔本华认识纪律'), findsOneWidget);
-    expect(find.textContaining('从现实表象到目的的差距比较'), findsWidgets);
-    expect(find.text('这里用了什么方法？'), findsOneWidget);
+    expect(find.textContaining('持续问题求解'), findsOneWidget);
+    expect(find.textContaining('七维差距雷达'), findsWidgets);
+    expect(find.text('产品方案中的方法'), findsOneWidget);
+    expect(find.text('对应的原概念 / 求解概念'), findsOneWidget);
+    expect(find.text('本轮受哪些叔本华 L0 原则约束'), findsOneWidget);
+    expect(find.textContaining('经验世界（世界 A / I）'), findsOneWidget);
+    expect(find.textContaining('认识根据（Grounding）'), findsOneWidget);
+    expect(find.text('这个概念在产品中意味着什么'), findsOneWidget);
     expect(find.text('军师在这道题里怎样使用'), findsOneWidget);
     expect(find.text('下次可以迁移的问题'), findsOneWidget);
     expect(find.text('什么现实或线索触发了它'), findsOneWidget);
@@ -145,6 +180,7 @@ void main() {
     expect(find.textContaining('S0'), findsNothing);
     expect(find.textContaining('KeyGap'), findsNothing);
     expect(find.textContaining('Operator'), findsNothing);
+    expect(find.textContaining('叔本华认识纪律'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

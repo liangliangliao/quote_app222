@@ -120,9 +120,9 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
           : <int, MeditationSegmentAudioCache>{};
       // 保存当前冥想的 TTS 参数不会自动使旧语音失效。
       // 只有用户点击“重新生成”时才会按新参数覆盖生成。
-      // 因此如果当前参数没有命中缓存，但该冥想已有完整逐句语音，继续沿用原缓存。
+      // 因此如果当前参数没有命中缓存，但该冥想已有同服务商的完整逐句语音，继续沿用原缓存。
       if (settings.segmentVoiceEnabled && !widget.timerOnly && !_hasCompleteSegmentCache(matchingCaches)) {
-        final existingCompleteCaches = await _loadAnyCompleteSegmentCachesForCurrentSession();
+        final existingCompleteCaches = await _loadAnyCompleteSegmentCachesForCurrentSession(provider: settings.ttsProvider);
         if (_hasCompleteSegmentCache(existingCompleteCaches)) {
           matchingCaches = existingCompleteCaches;
         }
@@ -238,11 +238,12 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
     return result;
   }
 
-  Future<Map<int, MeditationSegmentAudioCache>> _loadAnyCompleteSegmentCachesForCurrentSession() async {
+  Future<Map<int, MeditationSegmentAudioCache>> _loadAnyCompleteSegmentCachesForCurrentSession({String? provider}) async {
     final allCaches = await _dao.segmentAudioCachesForSession(widget.session.key);
     if (allCaches.isEmpty) return <int, MeditationSegmentAudioCache>{};
     final latestByIndex = <int, MeditationSegmentAudioCache>{};
     for (final cache in allCaches) {
+      if ((provider ?? '').trim().isNotEmpty && cache.provider != provider) continue;
       if (cache.segmentIndex < 0 || cache.segmentIndex >= widget.session.steps.length) continue;
       if (!File(cache.audioPath).existsSync()) continue;
       final current = latestByIndex[cache.segmentIndex];
@@ -270,7 +271,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
     final settings = _ttsSettings ?? await _audioService.loadTtsRuntimeSettings(sessionKey: widget.session.key);
     var caches = await _loadMatchingSegmentCaches(settings);
     if (!_hasCompleteSegmentCache(caches)) {
-      final existingCompleteCaches = await _loadAnyCompleteSegmentCachesForCurrentSession();
+      final existingCompleteCaches = await _loadAnyCompleteSegmentCachesForCurrentSession(provider: settings.ttsProvider);
       if (_hasCompleteSegmentCache(existingCompleteCaches)) {
         caches = existingCompleteCaches;
       }
@@ -297,7 +298,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
     }
     final existingCaches = forceRegenerate
         ? <int, MeditationSegmentAudioCache>{}
-        : await _loadAnyCompleteSegmentCachesForCurrentSession();
+        : await _loadAnyCompleteSegmentCachesForCurrentSession(provider: settings.ttsProvider);
     setState(() {
       _ttsSettings = settings;
       _preparingSegmentAudio = true;
@@ -324,7 +325,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
         MeditationSegmentAudioCache? cache;
 
         if (!forceRegenerate) {
-          // 保存参数不会让旧缓存失效：优先使用该冥想当前已有的最新片段缓存。
+          // 保存参数不会让旧缓存失效：优先使用该冥想同服务商的最新片段缓存。
           cache = existingCaches[i];
           if (cache != null && !File(cache.audioPath).existsSync()) cache = null;
           if (cache == null) {
@@ -449,21 +450,50 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
   }
 
   Future<void> _saveSegmentTtsSettings(MeditationTtsRuntimeSettings settings, {bool prepareNow = false}) async {
+    final providerChanged = (_ttsSettings?.ttsProvider ?? '').trim() != settings.ttsProvider.trim();
     await _audioService.saveTtsRuntimeSettings(settings, sessionKey: widget.session.key);
+    if (providerChanged) {
+      await _guidedPlayer.stop();
+      await _audioService.stopSystemTts();
+    }
     if (!mounted) return;
     setState(() {
       _ttsSettings = settings;
       _segmentVoiceEnabled = settings.segmentVoiceEnabled;
       _autoPrepareSegmentVoice = settings.autoPrepareSegmentVoice;
-      _audioStatus = '本冥想的语音参数已保存；不会重新生成，旧缓存仍会继续使用。';
+      if (providerChanged) {
+        _guidedAudio = null;
+        _guidedAudioPlaying = false;
+      }
+      _audioStatus = providerChanged
+          ? (settings.segmentVoiceEnabled
+              ? '已保存并切换到 ${_providerLabel(settings.ttsProvider)}；正在使用该平台准备本冥想语音。'
+              : '已保存并切换到 ${_providerLabel(settings.ttsProvider)}；之后生成的冥想语音将使用该平台。')
+          : '本冥想的语音参数已保存；同平台旧缓存仍可继续使用。';
     });
-    if (prepareNow && settings.segmentVoiceEnabled) {
+    if ((prepareNow || providerChanged) && settings.segmentVoiceEnabled) {
       await _prepareSegmentAudios(forceRegenerate: false, playAfter: true);
     } else {
       await _reloadSegmentCaches();
       if (settings.segmentVoiceEnabled) {
         await _playSegmentVoice(_currentSegmentIndex);
       }
+    }
+  }
+
+  String _providerLabel(String provider) {
+    switch (provider) {
+      case 'resemble':
+        return 'Resemble AI';
+      case 'minimax':
+        return 'MiniMax';
+      case 'microsoft':
+        return 'Microsoft Azure Speech';
+      case 'iflytek':
+        return '讯飞语音';
+      case 'elevenlabs':
+      default:
+        return 'ElevenLabs';
     }
   }
 
@@ -639,10 +669,37 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
       ),
     ];
     var availableResembleProfiles = await _audioService.loadVoiceProfilesByProvider('resemble');
+    var availableMiniMaxVoices = <ProviderCatalogOption>[
+      ProviderCatalogOption(
+        id: base.minimaxVoiceId.trim().isEmpty ? VoiceProviderSettings.defaultMiniMaxVoiceId : base.minimaxVoiceId,
+        name: base.minimaxVoiceName.trim().isEmpty ? VoiceProviderSettings.defaultMiniMaxVoiceName : base.minimaxVoiceName,
+        category: '当前',
+      ),
+    ];
+    var availableMiniMaxModels = <ProviderCatalogOption>[
+      ProviderCatalogOption(
+        id: base.minimaxModel.trim().isEmpty ? VoiceProviderSettings.defaultMiniMaxModel : base.minimaxModel,
+        name: base.minimaxModel.trim().isEmpty ? VoiceProviderSettings.defaultMiniMaxModel : base.minimaxModel,
+        category: '当前',
+      ),
+    ];
+    var availableMiniMaxProfiles = await _audioService.loadVoiceProfilesByProvider('minimax');
+    var availableMicrosoftVoices = <ProviderCatalogOption>[
+      ProviderCatalogOption(
+        id: base.microsoftVoice.trim().isEmpty ? VoiceProviderSettings.defaultMicrosoftVoice : base.microsoftVoice,
+        name: base.microsoftVoice.trim().isEmpty ? VoiceProviderSettings.defaultMicrosoftVoice : base.microsoftVoice,
+        category: '当前',
+      ),
+    ];
+    var availableIflytekVoices = await _audioService.loadIflytekVoiceOptions();
     var loadingElevenLabsOptions = false;
     var loadingResembleOptions = false;
+    var loadingMiniMaxOptions = false;
+    var loadingMicrosoftOptions = false;
     String? elevenLabsOptionsError;
     String? resembleOptionsError;
+    String? minimaxOptionsError;
+    String? microsoftOptionsError;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -700,6 +757,51 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
                 resembleOptionsError = 'Resemble 声音或模型列表加载失败：$e';
               } finally {
                 loadingResembleOptions = false;
+                if (context.mounted) setSheetState(() {});
+              }
+            }
+
+            Future<void> loadMiniMaxOptionsOnTap() async {
+              if (loadingMiniMaxOptions) return;
+              loadingMiniMaxOptions = true;
+              minimaxOptionsError = null;
+              setSheetState(() {});
+              try {
+                final voices = await _audioService.loadMiniMaxVoiceOptions();
+                final models = await _audioService.loadMiniMaxModelOptions();
+                final profiles = await _audioService.loadVoiceProfilesByProvider('minimax');
+                availableMiniMaxVoices = <String, ProviderCatalogOption>{
+                  for (final v in availableMiniMaxVoices) v.id: v,
+                  for (final v in voices) v.id: v,
+                }.values.where((e) => e.id.trim().isNotEmpty).toList();
+                availableMiniMaxModels = <String, ProviderCatalogOption>{
+                  for (final m in availableMiniMaxModels) m.id: m,
+                  for (final m in models) m.id: m,
+                }.values.where((e) => e.id.trim().isNotEmpty).toList();
+                availableMiniMaxProfiles = profiles;
+              } catch (e) {
+                minimaxOptionsError = 'MiniMax 声音或模型列表加载失败：$e';
+              } finally {
+                loadingMiniMaxOptions = false;
+                if (context.mounted) setSheetState(() {});
+              }
+            }
+
+            Future<void> loadMicrosoftOptionsOnTap() async {
+              if (loadingMicrosoftOptions) return;
+              loadingMicrosoftOptions = true;
+              microsoftOptionsError = null;
+              setSheetState(() {});
+              try {
+                final voices = await _audioService.loadMicrosoftVoiceOptions();
+                availableMicrosoftVoices = <String, ProviderCatalogOption>{
+                  for (final v in availableMicrosoftVoices) v.id: v,
+                  for (final v in voices) v.id: v,
+                }.values.where((e) => e.id.trim().isNotEmpty).toList();
+              } catch (e) {
+                microsoftOptionsError = 'Microsoft 声音列表加载失败：$e';
+              } finally {
+                loadingMicrosoftOptions = false;
                 if (context.mounted) setSheetState(() {});
               }
             }
@@ -811,7 +913,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
                       ),
                       sectionTitle('文字转语音平台'),
                       Text(
-                        '当前冥想可单独选择 ElevenLabs 或 Resemble AI。不同平台的声音、模型和专属参数彼此独立，只保存到当前冥想，不影响其他冥想已经生成并缓存的语音。',
+                        '复用“语音与美好的祝福”中已配置的五家服务商及凭据。这里选择的平台、声音和参数只保存到当前冥想；保存后，新的冥想语音会采用该服务商生成。',
                         style: TextStyle(color: Colors.black.withOpacity(0.56), fontSize: 12, height: 1.35),
                       ),
                       const SizedBox(height: 8),
@@ -820,17 +922,32 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
                         children: [
                           ChoiceChip(
                             label: const Text('ElevenLabs'),
-                            selected: draft.ttsProvider != 'resemble',
-                            onSelected: (_) => updateDraft(draft.copyWith(ttsProvider: 'elevenlabs')),
+                            selected: draft.ttsProvider == 'elevenlabs',
+                            onSelected: (_) => updateDraft(draft.copyWith(ttsProvider: 'elevenlabs', voiceSource: 'premade')),
                           ),
                           ChoiceChip(
                             label: const Text('Resemble AI'),
                             selected: draft.ttsProvider == 'resemble',
-                            onSelected: (_) => updateDraft(draft.copyWith(ttsProvider: 'resemble')),
+                            onSelected: (_) => updateDraft(draft.copyWith(ttsProvider: 'resemble', voiceSource: 'premade')),
+                          ),
+                          ChoiceChip(
+                            label: const Text('MiniMax'),
+                            selected: draft.ttsProvider == 'minimax',
+                            onSelected: (_) => updateDraft(draft.copyWith(ttsProvider: 'minimax', voiceSource: 'premade')),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Microsoft'),
+                            selected: draft.ttsProvider == 'microsoft',
+                            onSelected: (_) => updateDraft(draft.copyWith(ttsProvider: 'microsoft', voiceSource: 'premade')),
+                          ),
+                          ChoiceChip(
+                            label: const Text('讯飞'),
+                            selected: draft.ttsProvider == 'iflytek',
+                            onSelected: (_) => updateDraft(draft.copyWith(ttsProvider: 'iflytek', voiceSource: 'premade')),
                           ),
                         ],
                       ),
-                      if (draft.ttsProvider != 'resemble') ...[
+                      if (draft.ttsProvider == 'elevenlabs') ...[
                         sectionTitle('ElevenLabs 声音与模型'),
                         const SizedBox(height: 8),
                         Wrap(
@@ -939,7 +1056,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
                             ),
                           ],
                         ),
-                      ] else ...[
+                      ] else if (draft.ttsProvider == 'resemble') ...[
                         sectionTitle('Resemble AI 声音与模型'),
                         const Text(
                           'Resemble AI 使用 voice_uuid、模型、SSML/Prompt 和高清合成参数。这里的 Resemble 参数与 ElevenLabs 参数独立，只保存到当前冥想。',
@@ -1129,6 +1246,270 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
                           subtitle: const Text('长留白会拆成多个较短 break，降低 Resemble 服务端报错和怪声概率。'),
                           value: draft.resembleMeditationSplitLongBreaks,
                           onChanged: (v) => updateDraft(draft.copyWith(resembleMeditationSplitLongBreaks: v)),
+                        ),
+                      ] else if (draft.ttsProvider == 'minimax') ...[
+                        sectionTitle('MiniMax 声音与模型'),
+                        const Text(
+                          '复用“美好的祝福”中的 MiniMax API Key、Endpoint 和声音配置；这里可为当前冥想单独选择声音、模型与冥想参数。',
+                          style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.35),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('系统/账号声音'),
+                              selected: draft.voiceSource != 'cloned',
+                              onSelected: (_) => updateDraft(draft.copyWith(voiceSource: 'premade')),
+                            ),
+                            ChoiceChip(
+                              label: const Text('MiniMax 克隆声音'),
+                              selected: draft.voiceSource == 'cloned',
+                              onSelected: (_) => updateDraft(draft.copyWith(voiceSource: 'cloned')),
+                            ),
+                          ],
+                        ),
+                        if (loadingMiniMaxOptions) ...[
+                          const SizedBox(height: 8),
+                          const LinearProgressIndicator(minHeight: 3),
+                          const SizedBox(height: 8),
+                          const Text('正在加载 MiniMax 声音和模型……', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                        ],
+                        if ((minimaxOptionsError ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(minimaxOptionsError!, style: const TextStyle(fontSize: 12, color: Colors.deepOrange, height: 1.4)),
+                        ],
+                        const SizedBox(height: 8),
+                        if (draft.voiceSource == 'cloned' && availableMiniMaxProfiles.isNotEmpty)
+                          DropdownButtonFormField<String>(
+                            value: availableMiniMaxProfiles.any((p) => p.id == (draft.voiceProfileId ?? '')) ? draft.voiceProfileId : availableMiniMaxProfiles.first.id,
+                            isExpanded: true,
+                            decoration: const InputDecoration(labelText: 'App 内 MiniMax 克隆声音', border: OutlineInputBorder()),
+                            onTap: loadMiniMaxOptionsOnTap,
+                            items: availableMiniMaxProfiles.map((profile) => DropdownMenuItem<String>(
+                                  value: profile.id,
+                                  child: Text('${profile.displayName}\nvoice_id: ${profile.elevenlabsVoiceId}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                                )).toList(),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              final selected = availableMiniMaxProfiles.firstWhere((profile) => profile.id == v);
+                              updateDraft(draft.copyWith(
+                                voiceProfileId: selected.id,
+                                voiceDisplayName: selected.displayName,
+                                minimaxVoiceId: selected.elevenlabsVoiceId,
+                                minimaxVoiceName: selected.displayName,
+                              ));
+                            },
+                          )
+                        else
+                          DropdownButtonFormField<String>(
+                            value: availableMiniMaxVoices.any((v) => v.id == draft.minimaxVoiceId) ? draft.minimaxVoiceId : availableMiniMaxVoices.first.id,
+                            isExpanded: true,
+                            decoration: const InputDecoration(labelText: 'MiniMax voice_id', border: OutlineInputBorder()),
+                            onTap: loadMiniMaxOptionsOnTap,
+                            items: availableMiniMaxVoices.map((voice) => DropdownMenuItem<String>(
+                                  value: voice.id,
+                                  child: Text(voice.subtitle.isEmpty ? voice.displayName : '${voice.displayName}\n${voice.subtitle}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                                )).toList(),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              final selected = availableMiniMaxVoices.firstWhere((voice) => voice.id == v);
+                              updateDraft(draft.copyWith(
+                                minimaxVoiceId: selected.id,
+                                minimaxVoiceName: selected.name.trim().isEmpty ? selected.id : selected.name,
+                              ));
+                            },
+                          ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: draft.minimaxVoiceId,
+                          decoration: const InputDecoration(labelText: '也可手动填写 MiniMax voice_id', border: OutlineInputBorder()),
+                          onChanged: (v) => draft = draft.copyWith(minimaxVoiceId: v.trim()),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          value: availableMiniMaxModels.any((m) => m.id == draft.minimaxModel) ? draft.minimaxModel : availableMiniMaxModels.first.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(labelText: 'MiniMax 模型', border: OutlineInputBorder()),
+                          onTap: loadMiniMaxOptionsOnTap,
+                          items: availableMiniMaxModels.map((model) => DropdownMenuItem<String>(
+                                value: model.id,
+                                child: Text(model.description.isEmpty ? model.displayName : '${model.displayName}\n${model.description}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                              )).toList(),
+                          onChanged: (v) => updateDraft(draft.copyWith(minimaxModel: v ?? VoiceProviderSettings.defaultMiniMaxModel)),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: <String>['mp3', 'wav', 'flac'].contains(draft.minimaxFormat) ? draft.minimaxFormat : 'mp3',
+                                decoration: const InputDecoration(labelText: '格式', border: OutlineInputBorder()),
+                                items: const [
+                                  DropdownMenuItem(value: 'mp3', child: Text('mp3')),
+                                  DropdownMenuItem(value: 'wav', child: Text('wav')),
+                                  DropdownMenuItem(value: 'flac', child: Text('flac')),
+                                ],
+                                onChanged: (v) => updateDraft(draft.copyWith(minimaxFormat: v ?? 'mp3')),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: draft.minimaxSampleRate.toString(),
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(labelText: '采样率', border: OutlineInputBorder()),
+                                onChanged: (v) => draft = draft.copyWith(minimaxSampleRate: int.tryParse(v.trim()) ?? draft.minimaxSampleRate),
+                              ),
+                            ),
+                          ],
+                        ),
+                        sliderRow(label: '音量', value: draft.minimaxVolume, min: 0, max: 2, divisions: 20, onChanged: (v) => updateDraft(draft.copyWith(minimaxVolume: v))),
+                        sliderRow(label: '音调', value: draft.minimaxPitch.toDouble(), min: -12, max: 12, divisions: 24, onChanged: (v) => updateDraft(draft.copyWith(minimaxPitch: v.round()))),
+                        DropdownButtonFormField<String>(
+                          value: <String>['calm', 'sad', 'happy', 'fearful', 'angry', 'surprised', 'neutral'].contains(draft.minimaxEmotion) ? draft.minimaxEmotion : 'calm',
+                          decoration: const InputDecoration(labelText: '情绪（冥想推荐 calm）', border: OutlineInputBorder()),
+                          items: const [
+                            DropdownMenuItem(value: 'calm', child: Text('calm 平静')),
+                            DropdownMenuItem(value: 'neutral', child: Text('neutral 中性')),
+                            DropdownMenuItem(value: 'sad', child: Text('sad')),
+                            DropdownMenuItem(value: 'happy', child: Text('happy')),
+                            DropdownMenuItem(value: 'fearful', child: Text('fearful')),
+                            DropdownMenuItem(value: 'angry', child: Text('angry')),
+                            DropdownMenuItem(value: 'surprised', child: Text('surprised')),
+                          ],
+                          onChanged: (v) => updateDraft(draft.copyWith(minimaxEmotion: v ?? 'calm')),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('MiniMax 文本规范化'),
+                          value: draft.minimaxTextNormalization,
+                          onChanged: (v) => updateDraft(draft.copyWith(minimaxTextNormalization: v)),
+                        ),
+                      ] else if (draft.ttsProvider == 'microsoft') ...[
+                        sectionTitle('Microsoft Azure Speech'),
+                        const Text(
+                          '复用“美好的祝福”中的 Microsoft Speech API Key。Region、声音、语言和输出格式可为当前冥想单独保存。',
+                          style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.35),
+                        ),
+                        if (loadingMicrosoftOptions) ...[
+                          const SizedBox(height: 8),
+                          const LinearProgressIndicator(minHeight: 3),
+                        ],
+                        if ((microsoftOptionsError ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(microsoftOptionsError!, style: const TextStyle(fontSize: 12, color: Colors.deepOrange, height: 1.4)),
+                        ],
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          value: availableMicrosoftVoices.any((v) => v.id == draft.microsoftVoice) ? draft.microsoftVoice : availableMicrosoftVoices.first.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(labelText: 'Microsoft 声音', border: OutlineInputBorder()),
+                          onTap: loadMicrosoftOptionsOnTap,
+                          items: availableMicrosoftVoices.map((voice) => DropdownMenuItem<String>(
+                                value: voice.id,
+                                child: Text(voice.subtitle.isEmpty ? voice.displayName : '${voice.displayName}\n${voice.subtitle}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                              )).toList(),
+                          onChanged: (v) {
+                            if (v == null) return;
+                            final selected = availableMicrosoftVoices.firstWhere((voice) => voice.id == v);
+                            updateDraft(draft.copyWith(
+                              microsoftVoice: selected.id,
+                              microsoftLanguage: selected.extra['locale'] ?? draft.microsoftLanguage,
+                            ));
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: draft.microsoftVoice,
+                          decoration: const InputDecoration(labelText: '也可手动填写 Microsoft voice', border: OutlineInputBorder()),
+                          onChanged: (v) => draft = draft.copyWith(microsoftVoice: v.trim()),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: draft.microsoftRegion,
+                                decoration: const InputDecoration(labelText: 'Region', border: OutlineInputBorder()),
+                                onChanged: (v) => draft = draft.copyWith(microsoftRegion: v.trim()),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: draft.microsoftLanguage,
+                                decoration: const InputDecoration(labelText: '语言', border: OutlineInputBorder()),
+                                onChanged: (v) => draft = draft.copyWith(microsoftLanguage: v.trim()),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: draft.microsoftOutputFormat,
+                          decoration: const InputDecoration(labelText: '输出格式', border: OutlineInputBorder()),
+                          onChanged: (v) => draft = draft.copyWith(microsoftOutputFormat: v.trim()),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: draft.microsoftEndpoint,
+                          decoration: const InputDecoration(labelText: '自定义 Endpoint（可留空）', border: OutlineInputBorder()),
+                          onChanged: (v) => draft = draft.copyWith(microsoftEndpoint: v.trim()),
+                        ),
+                      ] else if (draft.ttsProvider == 'iflytek') ...[
+                        sectionTitle('讯飞语音'),
+                        const Text(
+                          '复用“美好的祝福”中的讯飞 AppID、APIKey 和 APISecret。当前冥想只保存发音人和非敏感合成参数。',
+                          style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.35),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          value: availableIflytekVoices.any((v) => v.id == draft.iflytekVoiceName) ? draft.iflytekVoiceName : availableIflytekVoices.first.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(labelText: '讯飞发音人', border: OutlineInputBorder()),
+                          items: availableIflytekVoices.map((voice) => DropdownMenuItem<String>(
+                                value: voice.id,
+                                child: Text(voice.description.isEmpty ? voice.displayName : '${voice.displayName}\n${voice.description}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                              )).toList(),
+                          onChanged: (v) => updateDraft(draft.copyWith(iflytekVoiceName: v ?? VoiceProviderSettings.defaultIflytekVoiceName)),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: draft.iflytekVoiceName,
+                          decoration: const InputDecoration(labelText: '也可手动填写发音人 vcn', border: OutlineInputBorder()),
+                          onChanged: (v) => draft = draft.copyWith(iflytekVoiceName: v.trim()),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: <String>['lame', 'raw'].contains(draft.iflytekAudioEncoding) ? draft.iflytekAudioEncoding : 'lame',
+                                decoration: const InputDecoration(labelText: '编码', border: OutlineInputBorder()),
+                                items: const [
+                                  DropdownMenuItem(value: 'lame', child: Text('lame / mp3')),
+                                  DropdownMenuItem(value: 'raw', child: Text('raw / pcm')),
+                                ],
+                                onChanged: (v) => updateDraft(draft.copyWith(iflytekAudioEncoding: v ?? 'lame')),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: draft.iflytekSampleRate,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(labelText: '采样率', border: OutlineInputBorder()),
+                                onChanged: (v) => draft = draft.copyWith(iflytekSampleRate: v.trim()),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: draft.iflytekEndpoint,
+                          decoration: const InputDecoration(labelText: '讯飞 TTS Endpoint', border: OutlineInputBorder()),
+                          onChanged: (v) => draft = draft.copyWith(iflytekEndpoint: v.trim()),
                         ),
                       ],
                       sectionTitle('通用冥想语速与场景'),

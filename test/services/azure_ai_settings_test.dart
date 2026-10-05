@@ -44,6 +44,10 @@ void main() {
           'https://my-res.openai.azure.com');
       expect(_resource(endpoint: 'https://my-res.services.ai.azure.com/models').baseUrl,
           'https://my-res.services.ai.azure.com');
+      expect(
+        _resource(endpoint: 'https://my-res.services.ai.azure.com/anthropic/v1/messages').baseUrl,
+        'https://my-res.services.ai.azure.com',
+      );
     });
 
     test('门户部署页的“目标 URI”会被裁成资源根地址，查询串一并丢弃', () {
@@ -115,17 +119,40 @@ void main() {
       expect(candidates, contains('https://my-res.openai.azure.com/openai/v1/chat/completions'));
     });
 
-    test('Foundry 资源优先走模型推理路径，并保留部署路径作为回退', () {
+    test('Foundry Claude 资源固定走 Anthropic Messages API', () {
       final resource = _resource(
         name: 'modleapikey',
         endpoint: 'https://my-res.services.ai.azure.com/api/projects/p1',
         apiVersion: '2024-05-01-preview',
       );
-      final candidates = resource.chatEndpointCandidates('claude-sonnet-4-5');
+      final candidates = resource.chatEndpointCandidates('claude-sonnet-5-5');
+      expect(candidates, <String>['https://my-res.services.ai.azure.com/anthropic/v1/messages']);
+    });
+
+    test('直接粘贴 Claude Messages 目标 URI 时也固定走 Anthropic API', () {
+      final resource = _resource(
+        name: 'modleapikey',
+        endpoint: 'https://my-res.services.ai.azure.com/anthropic/v1/messages',
+        apiVersion: '2024-05-01-preview',
+      );
+      expect(resource.baseUrl, 'https://my-res.services.ai.azure.com');
+      expect(
+        resource.chatEndpointCandidates('custom-production-name'),
+        <String>['https://my-res.services.ai.azure.com/anthropic/v1/messages'],
+      );
+    });
+
+    test('Foundry 非 Claude 模型仍优先走模型推理路径，并保留部署路径作为回退', () {
+      final resource = _resource(
+        name: 'modleapikey',
+        endpoint: 'https://my-res.services.ai.azure.com/api/projects/p1',
+        apiVersion: '2024-05-01-preview',
+      );
+      final candidates = resource.chatEndpointCandidates('grok-4');
       expect(candidates.first,
           'https://my-res.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview');
       expect(
-        candidates.any((e) => e.contains('/openai/deployments/claude-sonnet-4-5/chat/completions')),
+        candidates.any((e) => e.contains('/openai/deployments/grok-4/chat/completions')),
         isTrue,
       );
     });
@@ -167,6 +194,12 @@ void main() {
       final modelHeaders = resource.authHeaders('https://my-res.services.ai.azure.com/models/chat/completions');
       expect(modelHeaders['api-key'], 'k1');
       expect(modelHeaders['Authorization'], 'Bearer k1');
+
+      final claudeHeaders = resource.authHeaders('https://my-res.services.ai.azure.com/anthropic/v1/messages');
+      expect(claudeHeaders['x-api-key'], 'k1');
+      expect(claudeHeaders['anthropic-version'], '2023-06-01');
+      expect(claudeHeaders.containsKey('api-key'), isFalse);
+      expect(claudeHeaders.containsKey('Authorization'), isFalse);
     });
 
     test('没有密钥时不产生鉴权头', () {

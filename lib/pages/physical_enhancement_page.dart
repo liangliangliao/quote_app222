@@ -74,7 +74,7 @@ class PhysicalEnhancementPage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.self_improvement, color: Colors.blue),
             title: const Text('冥想'),
-            subtitle: const Text('平静大脑，修复身心'),
+            subtitle: const Text('AI 冥想专家：个性化节奏、身体锚点与语音引导'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(

@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'will_mirror_models.dart';
+import 'will_mirror_practice_models.dart';
 import 'will_mirror_vault_cipher.dart';
 
 class WillMirrorIds {
@@ -47,6 +48,11 @@ class WillMirrorVault {
 
   static const String fileName = 'will_mirror_vault.sqlite';
   static const int schemaVersion = 1;
+  static const String practiceProfileKey = 'v5_practice_profile';
+  static const String activeActionPlanKey = 'v5_active_action_plan';
+  static const String assistantHistoryKey = 'v5_assistant_history';
+
+  static String actionPlanKey(String goalId) => 'v5_action_plan_$goalId';
 
   final WillMirrorVaultCipher _cipher;
   final DatabaseFactory? _factoryOverride;
@@ -824,6 +830,53 @@ class WillMirrorVault {
     return _readSettingWithDb(db, key);
   }
 
+  Future<void> savePracticeProfile(WillMirrorPracticeProfile profile) {
+    return writeSetting(practiceProfileKey, jsonEncode(profile.toJson()));
+  }
+
+  Future<WillMirrorPracticeProfile?> practiceProfile() async {
+    final raw = await readSetting(practiceProfileKey);
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      return WillMirrorPracticeProfile.fromJson(
+        decoded.map((key, value) => MapEntry(key.toString(), value)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveActionPlan(WillMirrorActionPlan plan) async {
+    await writeSetting(actionPlanKey(plan.goalId), plan.encode());
+    if (plan.status == 'active') {
+      await writeSetting(activeActionPlanKey, plan.goalId);
+    }
+  }
+
+  Future<WillMirrorActionPlan?> actionPlan(String goalId) async {
+    final raw = await readSetting(actionPlanKey(goalId));
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      return WillMirrorActionPlan.decode(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<WillMirrorActionPlan?> activeActionPlan() async {
+    final storedGoalId = await readSetting(activeActionPlanKey);
+    if (storedGoalId != null && storedGoalId.isNotEmpty) {
+      final stored = await actionPlan(storedGoalId);
+      if (stored != null && stored.status == 'active') return stored;
+    }
+    final goal = await activeGoal();
+    if (goal == null) return null;
+    final byGoal = await actionPlan(goal.id);
+    return byGoal?.status == 'active' ? byGoal : null;
+  }
+
   Future<WillMirrorVaultStatus> status() async {
     final path = await _resolvePath();
     final sync = await readSetting('cloud_sync_opt_in');
@@ -843,6 +896,7 @@ class WillMirrorVault {
       final evidence = await evidenceForGoal(goal.id);
       final goalProbes = await probes(goal.id);
       final hypothesisList = await hypotheses(goal.id);
+      final practicePlan = await actionPlan(goal.id);
       allHypotheses.addAll(hypothesisList);
       goalPayloads.add(<String, dynamic>{
         ...goal.toJson(),
@@ -850,6 +904,7 @@ class WillMirrorVault {
         'evidence': evidence.map((item) => item.toJson()).toList(),
         'probes': goalProbes.map((item) => item.toJson()).toList(),
         'hypotheses': hypothesisList.map((item) => item.toJson()).toList(),
+        if (practicePlan != null) 'practice_plan': practicePlan.toJson(),
       });
     }
     final experimentList = await experiments();
@@ -868,11 +923,23 @@ class WillMirrorVault {
         (await links(hypothesis.id)).map((item) => item.toJson()),
       );
     }
+    final profile = await practiceProfile();
+    final rawAssistantHistory = await readSetting(assistantHistoryKey);
+    Object? assistantHistory;
+    if (rawAssistantHistory != null && rawAssistantHistory.isNotEmpty) {
+      try {
+        assistantHistory = jsonDecode(rawAssistantHistory);
+      } catch (_) {
+        assistantHistory = rawAssistantHistory;
+      }
+    }
     return <String, dynamic>{
       'product': '意志之镜',
-      'schema_version': '4.0',
+      'schema_version': '5.0',
       'exported_at': DateTime.now().toIso8601String(),
       'notice': '这是用户主动导出的明文副本，请由用户自行安全保管。',
+      if (profile != null) 'practice_profile': profile.toJson(),
+      if (assistantHistory != null) 'assistant_history': assistantHistory,
       'goals': goalPayloads,
       'hypothesis_evidence': linkPayloads,
       'experiments': experimentPayloads,

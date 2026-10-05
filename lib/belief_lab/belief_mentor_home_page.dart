@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../platform/exact_alarm_permission_coordinator.dart';
 import '../services/global_ai_settings.dart';
 import 'belief_lab_home_page.dart';
 import 'belief_mentor_ai_service.dart';
@@ -2127,6 +2128,11 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
   }
 
   Future<void> _snoozeReminder(BeliefMentorReminder reminder) async {
+    final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '信念导师稍后提醒',
+    );
+    if (!granted) return;
     await _reminders.snooze(reminder.id);
     _refreshData();
   }
@@ -2145,6 +2151,11 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
       initialTime: TimeOfDay.fromDateTime(current),
     );
     if (time == null) return;
+    final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '信念导师定时提醒',
+    );
+    if (!granted) return;
     await _reminders.rescheduleReminder(
       reminder.id,
       DateTime(date.year, date.month, date.day, time.hour, time.minute),
@@ -2904,6 +2915,12 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
 
   Future<void> _toggleReminders(bool value) async {
     if (value) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '信念导师主动提醒',
+        explanation: '晨间启动、行动前提醒和复盘节点需要在设定时间准确触发。',
+      );
+      if (!exactGranted) return;
       final granted = await _reminders.requestPermission();
       if (!granted) {
         _show('未获得通知权限，提醒仍保持关闭');
@@ -2919,6 +2936,13 @@ class _BeliefMentorHomePageState extends State<BeliefMentorHomePage> {
   }
 
   Future<void> _setNotificationsPaused(bool value) async {
+    if (!value && _profile!.remindersEnabled) {
+      final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '信念导师主动提醒',
+      );
+      if (!granted) return;
+    }
     if (value) await _reminders.cancelAll();
     await _saveProfile(_profile!.copyWith(notificationsPaused: value));
     await _dao.track(

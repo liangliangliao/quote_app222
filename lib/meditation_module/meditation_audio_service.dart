@@ -40,6 +40,32 @@ class MeditationTtsRuntimeSettings {
   final String resembleMeditationPrompt;
   final double resembleMeditationMaxBreakSec;
   final bool resembleMeditationSplitLongBreaks;
+  final String minimaxVoiceId;
+  final String minimaxVoiceName;
+  final String minimaxModel;
+  final String minimaxEndpoint;
+  final String minimaxFormat;
+  final int minimaxSampleRate;
+  final int minimaxBitrate;
+  final int minimaxChannel;
+  final double minimaxVolume;
+  final int minimaxPitch;
+  final String minimaxEmotion;
+  final String minimaxLanguageBoost;
+  final bool minimaxTextNormalization;
+  final String minimaxSoundEffects;
+  final int minimaxVoiceModifyPitch;
+  final int minimaxVoiceModifyIntensity;
+  final int minimaxVoiceModifyTimbre;
+  final String microsoftRegion;
+  final String microsoftEndpoint;
+  final String microsoftVoice;
+  final String microsoftLanguage;
+  final String microsoftOutputFormat;
+  final String iflytekEndpoint;
+  final String iflytekVoiceName;
+  final String iflytekAudioEncoding;
+  final String iflytekSampleRate;
   final String modelId;
   final double stability;
   final double similarityBoost;
@@ -86,6 +112,32 @@ class MeditationTtsRuntimeSettings {
     this.resembleMeditationPrompt = VoiceProviderSettings.defaultResembleMeditationPrompt,
     this.resembleMeditationMaxBreakSec = VoiceProviderSettings.defaultResembleMeditationMaxBreakSec,
     this.resembleMeditationSplitLongBreaks = true,
+    this.minimaxVoiceId = VoiceProviderSettings.defaultMiniMaxVoiceId,
+    this.minimaxVoiceName = VoiceProviderSettings.defaultMiniMaxVoiceName,
+    this.minimaxModel = VoiceProviderSettings.defaultMiniMaxModel,
+    this.minimaxEndpoint = VoiceProviderSettings.defaultMiniMaxEndpoint,
+    this.minimaxFormat = 'mp3',
+    this.minimaxSampleRate = 32000,
+    this.minimaxBitrate = 128000,
+    this.minimaxChannel = 1,
+    this.minimaxVolume = 1.0,
+    this.minimaxPitch = 0,
+    this.minimaxEmotion = 'calm',
+    this.minimaxLanguageBoost = 'auto',
+    this.minimaxTextNormalization = true,
+    this.minimaxSoundEffects = '',
+    this.minimaxVoiceModifyPitch = 0,
+    this.minimaxVoiceModifyIntensity = 0,
+    this.minimaxVoiceModifyTimbre = 0,
+    this.microsoftRegion = VoiceProviderSettings.defaultMicrosoftRegion,
+    this.microsoftEndpoint = '',
+    this.microsoftVoice = VoiceProviderSettings.defaultMicrosoftVoice,
+    this.microsoftLanguage = VoiceProviderSettings.defaultMicrosoftLanguage,
+    this.microsoftOutputFormat = VoiceProviderSettings.defaultMicrosoftOutputFormat,
+    this.iflytekEndpoint = VoiceProviderSettings.defaultIflytekEndpoint,
+    this.iflytekVoiceName = VoiceProviderSettings.defaultIflytekVoiceName,
+    this.iflytekAudioEncoding = VoiceProviderSettings.defaultIflytekAudioEncoding,
+    this.iflytekSampleRate = VoiceProviderSettings.defaultIflytekSampleRate,
     required this.modelId,
     required this.stability,
     required this.similarityBoost,
@@ -135,6 +187,32 @@ class MeditationTtsRuntimeSettings {
     String? resembleMeditationPrompt,
     double? resembleMeditationMaxBreakSec,
     bool? resembleMeditationSplitLongBreaks,
+    String? minimaxVoiceId,
+    String? minimaxVoiceName,
+    String? minimaxModel,
+    String? minimaxEndpoint,
+    String? minimaxFormat,
+    int? minimaxSampleRate,
+    int? minimaxBitrate,
+    int? minimaxChannel,
+    double? minimaxVolume,
+    int? minimaxPitch,
+    String? minimaxEmotion,
+    String? minimaxLanguageBoost,
+    bool? minimaxTextNormalization,
+    String? minimaxSoundEffects,
+    int? minimaxVoiceModifyPitch,
+    int? minimaxVoiceModifyIntensity,
+    int? minimaxVoiceModifyTimbre,
+    String? microsoftRegion,
+    String? microsoftEndpoint,
+    String? microsoftVoice,
+    String? microsoftLanguage,
+    String? microsoftOutputFormat,
+    String? iflytekEndpoint,
+    String? iflytekVoiceName,
+    String? iflytekAudioEncoding,
+    String? iflytekSampleRate,
     String? modelId,
     double? stability,
     double? similarityBoost,
@@ -181,6 +259,32 @@ class MeditationTtsRuntimeSettings {
       resembleMeditationPrompt: resembleMeditationPrompt ?? this.resembleMeditationPrompt,
       resembleMeditationMaxBreakSec: resembleMeditationMaxBreakSec ?? this.resembleMeditationMaxBreakSec,
       resembleMeditationSplitLongBreaks: resembleMeditationSplitLongBreaks ?? this.resembleMeditationSplitLongBreaks,
+      minimaxVoiceId: minimaxVoiceId ?? this.minimaxVoiceId,
+      minimaxVoiceName: minimaxVoiceName ?? this.minimaxVoiceName,
+      minimaxModel: minimaxModel ?? this.minimaxModel,
+      minimaxEndpoint: minimaxEndpoint ?? this.minimaxEndpoint,
+      minimaxFormat: minimaxFormat ?? this.minimaxFormat,
+      minimaxSampleRate: minimaxSampleRate ?? this.minimaxSampleRate,
+      minimaxBitrate: minimaxBitrate ?? this.minimaxBitrate,
+      minimaxChannel: minimaxChannel ?? this.minimaxChannel,
+      minimaxVolume: minimaxVolume ?? this.minimaxVolume,
+      minimaxPitch: minimaxPitch ?? this.minimaxPitch,
+      minimaxEmotion: minimaxEmotion ?? this.minimaxEmotion,
+      minimaxLanguageBoost: minimaxLanguageBoost ?? this.minimaxLanguageBoost,
+      minimaxTextNormalization: minimaxTextNormalization ?? this.minimaxTextNormalization,
+      minimaxSoundEffects: minimaxSoundEffects ?? this.minimaxSoundEffects,
+      minimaxVoiceModifyPitch: minimaxVoiceModifyPitch ?? this.minimaxVoiceModifyPitch,
+      minimaxVoiceModifyIntensity: minimaxVoiceModifyIntensity ?? this.minimaxVoiceModifyIntensity,
+      minimaxVoiceModifyTimbre: minimaxVoiceModifyTimbre ?? this.minimaxVoiceModifyTimbre,
+      microsoftRegion: microsoftRegion ?? this.microsoftRegion,
+      microsoftEndpoint: microsoftEndpoint ?? this.microsoftEndpoint,
+      microsoftVoice: microsoftVoice ?? this.microsoftVoice,
+      microsoftLanguage: microsoftLanguage ?? this.microsoftLanguage,
+      microsoftOutputFormat: microsoftOutputFormat ?? this.microsoftOutputFormat,
+      iflytekEndpoint: iflytekEndpoint ?? this.iflytekEndpoint,
+      iflytekVoiceName: iflytekVoiceName ?? this.iflytekVoiceName,
+      iflytekAudioEncoding: iflytekAudioEncoding ?? this.iflytekAudioEncoding,
+      iflytekSampleRate: iflytekSampleRate ?? this.iflytekSampleRate,
       modelId: modelId ?? this.modelId,
       stability: stability ?? this.stability,
       similarityBoost: similarityBoost ?? this.similarityBoost,
@@ -256,6 +360,14 @@ class MeditationAudioService {
   final MultiProviderTtsService _multiProviderTtsService;
   final FlutterTts _systemTts = FlutterTts();
 
+  static const List<String> supportedTtsProviders = <String>[
+    'elevenlabs',
+    'resemble',
+    'minimax',
+    'microsoft',
+    'iflytek',
+  ];
+
   static const List<MeditationBackgroundSound> backgroundSounds = <MeditationBackgroundSound>[
     MeditationBackgroundSound(id: 'none', label: '无背景音', description: '只保留呼吸与文字引导'),
     MeditationBackgroundSound(id: 'rain', label: '雨声', description: '稳定、细密、适合反刍中断'),
@@ -274,6 +386,11 @@ class MeditationAudioService {
   int _parseInt(String? value, int fallback) => int.tryParse((value ?? '').trim()) ?? fallback;
   bool _parseBool(String? value, bool fallback) => value == null ? fallback : (value == '1' || value.toLowerCase() == 'true');
 
+  String _normalizeProvider(String value) {
+    final normalized = value.trim().toLowerCase();
+    return supportedTtsProviders.contains(normalized) ? normalized : 'elevenlabs';
+  }
+
   Future<MeditationTtsRuntimeSettings> loadTtsRuntimeSettings({String? sessionKey}) async {
     final sceneRaw = await _kvDao.getString(ElevenLabsSettings.ttsScene);
     final scene = ElevenLabsService.scenePresets.any((e) => e.id == sceneRaw) ? sceneRaw! : 'meditation_relax';
@@ -285,7 +402,7 @@ class MeditationAudioService {
         : (await _voiceDao.getVoiceProfileById(selectedVoiceId.trim()) ?? await _voiceDao.getDefaultVoiceProfile());
     final seedText = await _kvDao.getString(ElevenLabsSettings.ttsSeed) ?? '';
     final rawProvider = await _kvDao.getString(VoiceProviderSettings.provider) ?? VoiceProviderSettings.defaultProvider;
-    final ttsProvider = rawProvider == 'resemble' ? 'resemble' : 'elevenlabs';
+    final ttsProvider = _normalizeProvider(rawProvider);
     final resembleSampleRateText = await _kvDao.getString(VoiceProviderSettings.resembleSampleRate) ?? '48000';
     final resembleMaxBreakText = await _kvDao.getString(VoiceProviderSettings.resembleMeditationMaxBreakSec);
     final settings = MeditationTtsRuntimeSettings(
@@ -313,6 +430,32 @@ class MeditationAudioService {
       resembleMeditationPrompt: await _kvDao.getString(VoiceProviderSettings.resembleMeditationPrompt) ?? VoiceProviderSettings.defaultResembleMeditationPrompt,
       resembleMeditationMaxBreakSec: _parseDouble(resembleMaxBreakText, VoiceProviderSettings.defaultResembleMeditationMaxBreakSec).clamp(0.3, 10.0).toDouble(),
       resembleMeditationSplitLongBreaks: _parseBool(await _kvDao.getString(VoiceProviderSettings.resembleMeditationSplitLongBreaks), true),
+      minimaxVoiceId: await _kvDao.getString(VoiceProviderSettings.minimaxVoiceId) ?? VoiceProviderSettings.defaultMiniMaxVoiceId,
+      minimaxVoiceName: await _kvDao.getString(VoiceProviderSettings.minimaxVoiceName) ?? VoiceProviderSettings.defaultMiniMaxVoiceName,
+      minimaxModel: await _kvDao.getString(VoiceProviderSettings.minimaxModel) ?? VoiceProviderSettings.defaultMiniMaxModel,
+      minimaxEndpoint: await _kvDao.getString(VoiceProviderSettings.minimaxEndpoint) ?? VoiceProviderSettings.defaultMiniMaxEndpoint,
+      minimaxFormat: await _kvDao.getString(VoiceProviderSettings.minimaxFormat) ?? 'mp3',
+      minimaxSampleRate: _parseInt(await _kvDao.getString(VoiceProviderSettings.minimaxSampleRate), 32000).clamp(8000, 96000).toInt(),
+      minimaxBitrate: _parseInt(await _kvDao.getString(VoiceProviderSettings.minimaxBitrate), 128000).clamp(32000, 320000).toInt(),
+      minimaxChannel: _parseInt(await _kvDao.getString(VoiceProviderSettings.minimaxChannel), 1).clamp(1, 2).toInt(),
+      minimaxVolume: _parseDouble(await _kvDao.getString(VoiceProviderSettings.minimaxVolume), 1.0).clamp(0.0, 10.0).toDouble(),
+      minimaxPitch: _parseInt(await _kvDao.getString(VoiceProviderSettings.minimaxPitch), 0).clamp(-12, 12).toInt(),
+      minimaxEmotion: await _kvDao.getString(VoiceProviderSettings.minimaxEmotion) ?? 'calm',
+      minimaxLanguageBoost: await _kvDao.getString(VoiceProviderSettings.minimaxLanguageBoost) ?? 'auto',
+      minimaxTextNormalization: _parseBool(await _kvDao.getString(VoiceProviderSettings.minimaxTextNormalization), true),
+      minimaxSoundEffects: await _kvDao.getString(VoiceProviderSettings.minimaxSoundEffects) ?? '',
+      minimaxVoiceModifyPitch: _parseInt(await _kvDao.getString(VoiceProviderSettings.minimaxVoiceModifyPitch), 0).clamp(-100, 100).toInt(),
+      minimaxVoiceModifyIntensity: _parseInt(await _kvDao.getString(VoiceProviderSettings.minimaxVoiceModifyIntensity), 0).clamp(-100, 100).toInt(),
+      minimaxVoiceModifyTimbre: _parseInt(await _kvDao.getString(VoiceProviderSettings.minimaxVoiceModifyTimbre), 0).clamp(-100, 100).toInt(),
+      microsoftRegion: await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion,
+      microsoftEndpoint: await _kvDao.getString(VoiceProviderSettings.microsoftEndpoint) ?? '',
+      microsoftVoice: await _kvDao.getString(VoiceProviderSettings.microsoftVoice) ?? VoiceProviderSettings.defaultMicrosoftVoice,
+      microsoftLanguage: await _kvDao.getString(VoiceProviderSettings.microsoftLanguage) ?? VoiceProviderSettings.defaultMicrosoftLanguage,
+      microsoftOutputFormat: await _kvDao.getString(VoiceProviderSettings.microsoftOutputFormat) ?? VoiceProviderSettings.defaultMicrosoftOutputFormat,
+      iflytekEndpoint: await _kvDao.getString(VoiceProviderSettings.iflytekEndpoint) ?? VoiceProviderSettings.defaultIflytekEndpoint,
+      iflytekVoiceName: await _kvDao.getString(VoiceProviderSettings.iflytekVoiceName) ?? VoiceProviderSettings.defaultIflytekVoiceName,
+      iflytekAudioEncoding: await _kvDao.getString(VoiceProviderSettings.iflytekAudioEncoding) ?? VoiceProviderSettings.defaultIflytekAudioEncoding,
+      iflytekSampleRate: await _kvDao.getString(VoiceProviderSettings.iflytekSampleRate) ?? VoiceProviderSettings.defaultIflytekSampleRate,
       modelId: await _kvDao.getString(ElevenLabsSettings.defaultModel) ?? ElevenLabsSettings.defaultTtsModel,
       stability: _parseDouble(await _kvDao.getString(ElevenLabsSettings.ttsStability), preset.stability).clamp(0.0, 1.0).toDouble(),
       similarityBoost: _parseDouble(await _kvDao.getString(ElevenLabsSettings.ttsSimilarityBoost), preset.similarityBoost).clamp(0.0, 1.0).toDouble(),
@@ -392,6 +535,32 @@ class MeditationAudioService {
         resembleMeditationPrompt: str('resembleMeditationPrompt'),
         resembleMeditationMaxBreakSec: dbl('resembleMeditationMaxBreakSec'),
         resembleMeditationSplitLongBreaks: boolValue('resembleMeditationSplitLongBreaks'),
+        minimaxVoiceId: str('minimaxVoiceId'),
+        minimaxVoiceName: str('minimaxVoiceName'),
+        minimaxModel: str('minimaxModel'),
+        minimaxEndpoint: str('minimaxEndpoint'),
+        minimaxFormat: str('minimaxFormat'),
+        minimaxSampleRate: integer('minimaxSampleRate'),
+        minimaxBitrate: integer('minimaxBitrate'),
+        minimaxChannel: integer('minimaxChannel'),
+        minimaxVolume: dbl('minimaxVolume'),
+        minimaxPitch: integer('minimaxPitch'),
+        minimaxEmotion: str('minimaxEmotion'),
+        minimaxLanguageBoost: str('minimaxLanguageBoost'),
+        minimaxTextNormalization: boolValue('minimaxTextNormalization'),
+        minimaxSoundEffects: str('minimaxSoundEffects'),
+        minimaxVoiceModifyPitch: integer('minimaxVoiceModifyPitch'),
+        minimaxVoiceModifyIntensity: integer('minimaxVoiceModifyIntensity'),
+        minimaxVoiceModifyTimbre: integer('minimaxVoiceModifyTimbre'),
+        microsoftRegion: str('microsoftRegion'),
+        microsoftEndpoint: str('microsoftEndpoint'),
+        microsoftVoice: str('microsoftVoice'),
+        microsoftLanguage: str('microsoftLanguage'),
+        microsoftOutputFormat: str('microsoftOutputFormat'),
+        iflytekEndpoint: str('iflytekEndpoint'),
+        iflytekVoiceName: str('iflytekVoiceName'),
+        iflytekAudioEncoding: str('iflytekAudioEncoding'),
+        iflytekSampleRate: str('iflytekSampleRate'),
         modelId: str('modelId'),
         stability: dbl('stability'),
         similarityBoost: dbl('similarityBoost'),
@@ -442,6 +611,32 @@ class MeditationAudioService {
       'resembleMeditationPrompt': settings.resembleMeditationPrompt,
       'resembleMeditationMaxBreakSec': settings.resembleMeditationMaxBreakSec,
       'resembleMeditationSplitLongBreaks': settings.resembleMeditationSplitLongBreaks,
+      'minimaxVoiceId': settings.minimaxVoiceId,
+      'minimaxVoiceName': settings.minimaxVoiceName,
+      'minimaxModel': settings.minimaxModel,
+      'minimaxEndpoint': settings.minimaxEndpoint,
+      'minimaxFormat': settings.minimaxFormat,
+      'minimaxSampleRate': settings.minimaxSampleRate,
+      'minimaxBitrate': settings.minimaxBitrate,
+      'minimaxChannel': settings.minimaxChannel,
+      'minimaxVolume': settings.minimaxVolume,
+      'minimaxPitch': settings.minimaxPitch,
+      'minimaxEmotion': settings.minimaxEmotion,
+      'minimaxLanguageBoost': settings.minimaxLanguageBoost,
+      'minimaxTextNormalization': settings.minimaxTextNormalization,
+      'minimaxSoundEffects': settings.minimaxSoundEffects,
+      'minimaxVoiceModifyPitch': settings.minimaxVoiceModifyPitch,
+      'minimaxVoiceModifyIntensity': settings.minimaxVoiceModifyIntensity,
+      'minimaxVoiceModifyTimbre': settings.minimaxVoiceModifyTimbre,
+      'microsoftRegion': settings.microsoftRegion,
+      'microsoftEndpoint': settings.microsoftEndpoint,
+      'microsoftVoice': settings.microsoftVoice,
+      'microsoftLanguage': settings.microsoftLanguage,
+      'microsoftOutputFormat': settings.microsoftOutputFormat,
+      'iflytekEndpoint': settings.iflytekEndpoint,
+      'iflytekVoiceName': settings.iflytekVoiceName,
+      'iflytekAudioEncoding': settings.iflytekAudioEncoding,
+      'iflytekSampleRate': settings.iflytekSampleRate,
       'modelId': settings.modelId,
       'stability': settings.stability,
       'similarityBoost': settings.similarityBoost,
@@ -476,7 +671,7 @@ class MeditationAudioService {
       await _saveSessionTtsVoiceSettings(sessionKey!.trim(), settings);
       return;
     }
-    await _kvDao.setString(VoiceProviderSettings.provider, settings.ttsProvider == 'resemble' ? 'resemble' : 'elevenlabs');
+    await _kvDao.setString(VoiceProviderSettings.provider, _normalizeProvider(settings.ttsProvider));
     await _kvDao.setString(VoiceProviderSettings.resembleVoiceUuid, settings.resembleVoiceUuid);
     await _kvDao.setString(VoiceProviderSettings.resembleVoiceName, settings.resembleVoiceName);
     await _kvDao.setString(VoiceProviderSettings.resembleModel, settings.resembleModel);
@@ -491,6 +686,32 @@ class MeditationAudioService {
     await _kvDao.setString(VoiceProviderSettings.resembleMeditationPrompt, settings.resembleMeditationPrompt);
     await _kvDao.setString(VoiceProviderSettings.resembleMeditationMaxBreakSec, settings.resembleMeditationMaxBreakSec.toStringAsFixed(1));
     await _kvDao.setString(VoiceProviderSettings.resembleMeditationSplitLongBreaks, settings.resembleMeditationSplitLongBreaks ? '1' : '0');
+    await _kvDao.setString(VoiceProviderSettings.minimaxVoiceId, settings.minimaxVoiceId);
+    await _kvDao.setString(VoiceProviderSettings.minimaxVoiceName, settings.minimaxVoiceName);
+    await _kvDao.setString(VoiceProviderSettings.minimaxModel, settings.minimaxModel);
+    await _kvDao.setString(VoiceProviderSettings.minimaxEndpoint, settings.minimaxEndpoint);
+    await _kvDao.setString(VoiceProviderSettings.minimaxFormat, settings.minimaxFormat);
+    await _kvDao.setString(VoiceProviderSettings.minimaxSampleRate, settings.minimaxSampleRate.toString());
+    await _kvDao.setString(VoiceProviderSettings.minimaxBitrate, settings.minimaxBitrate.toString());
+    await _kvDao.setString(VoiceProviderSettings.minimaxChannel, settings.minimaxChannel.toString());
+    await _kvDao.setString(VoiceProviderSettings.minimaxVolume, settings.minimaxVolume.toString());
+    await _kvDao.setString(VoiceProviderSettings.minimaxPitch, settings.minimaxPitch.toString());
+    await _kvDao.setString(VoiceProviderSettings.minimaxEmotion, settings.minimaxEmotion);
+    await _kvDao.setString(VoiceProviderSettings.minimaxLanguageBoost, settings.minimaxLanguageBoost);
+    await _kvDao.setString(VoiceProviderSettings.minimaxTextNormalization, settings.minimaxTextNormalization ? '1' : '0');
+    await _kvDao.setString(VoiceProviderSettings.minimaxSoundEffects, settings.minimaxSoundEffects);
+    await _kvDao.setString(VoiceProviderSettings.minimaxVoiceModifyPitch, settings.minimaxVoiceModifyPitch.toString());
+    await _kvDao.setString(VoiceProviderSettings.minimaxVoiceModifyIntensity, settings.minimaxVoiceModifyIntensity.toString());
+    await _kvDao.setString(VoiceProviderSettings.minimaxVoiceModifyTimbre, settings.minimaxVoiceModifyTimbre.toString());
+    await _kvDao.setString(VoiceProviderSettings.microsoftRegion, settings.microsoftRegion);
+    await _kvDao.setString(VoiceProviderSettings.microsoftEndpoint, settings.microsoftEndpoint);
+    await _kvDao.setString(VoiceProviderSettings.microsoftVoice, settings.microsoftVoice);
+    await _kvDao.setString(VoiceProviderSettings.microsoftLanguage, settings.microsoftLanguage);
+    await _kvDao.setString(VoiceProviderSettings.microsoftOutputFormat, settings.microsoftOutputFormat);
+    await _kvDao.setString(VoiceProviderSettings.iflytekEndpoint, settings.iflytekEndpoint);
+    await _kvDao.setString(VoiceProviderSettings.iflytekVoiceName, settings.iflytekVoiceName);
+    await _kvDao.setString(VoiceProviderSettings.iflytekAudioEncoding, settings.iflytekAudioEncoding);
+    await _kvDao.setString(VoiceProviderSettings.iflytekSampleRate, settings.iflytekSampleRate);
     await _kvDao.setString(ElevenLabsSettings.ttsVoiceSource, settings.voiceSource);
     await _kvDao.setString(ElevenLabsSettings.presetVoiceId, settings.presetVoiceId);
     await _kvDao.setString(ElevenLabsSettings.presetVoiceName, settings.presetVoiceName);
@@ -615,6 +836,41 @@ class MeditationAudioService {
     }
   }
 
+  Future<List<ProviderCatalogOption>> loadMiniMaxVoiceOptions() async {
+    try {
+      return await _multiProviderTtsService.listMiniMaxVoices();
+    } catch (_) {
+      return const <ProviderCatalogOption>[
+        ProviderCatalogOption(id: 'Chinese_Mandarin_Ordinary', name: '普通中文', category: 'system'),
+        ProviderCatalogOption(id: 'Calm_Woman', name: 'Calm Woman', category: 'system', description: '冥想与安抚推荐'),
+        ProviderCatalogOption(id: 'Patient_Man', name: 'Patient Man', category: 'system', description: '平稳耐心男声'),
+      ];
+    }
+  }
+
+  Future<List<ProviderCatalogOption>> loadMiniMaxModelOptions() async {
+    try {
+      return await _multiProviderTtsService.listMiniMaxModels();
+    } catch (_) {
+      return const <ProviderCatalogOption>[
+        ProviderCatalogOption(id: 'speech-2.8-hd', name: 'Speech 2.8 HD', description: '高质量，适合冥想与旁白'),
+        ProviderCatalogOption(id: 'speech-2.8-turbo', name: 'Speech 2.8 Turbo', description: '低延迟'),
+      ];
+    }
+  }
+
+  Future<List<ProviderCatalogOption>> loadMicrosoftVoiceOptions() async {
+    try {
+      return await _multiProviderTtsService.listMicrosoftVoices();
+    } catch (_) {
+      return const <ProviderCatalogOption>[
+        ProviderCatalogOption(id: VoiceProviderSettings.defaultMicrosoftVoice, name: '晓晓', category: 'zh-CN'),
+      ];
+    }
+  }
+
+  Future<List<ProviderCatalogOption>> loadIflytekVoiceOptions() => _multiProviderTtsService.listIflytekVoices();
+
   Future<List<VoiceProfile>> loadVoiceProfilesByProvider(String provider) async {
     final profiles = await _voiceDao.listVoiceProfiles();
     return profiles.where((profile) => profile.provider == provider).toList();
@@ -625,7 +881,7 @@ class MeditationAudioService {
     required MeditationStep step,
     required MeditationTtsRuntimeSettings settings,
   }) async {
-    final provider = settings.ttsProvider == 'resemble' ? 'resemble' : 'elevenlabs';
+    final provider = _normalizeProvider(settings.ttsProvider);
     if (provider == 'resemble') {
       final useCloned = settings.voiceSource == 'cloned' && (settings.voiceProfileId ?? '').isNotEmpty;
       final profile = useCloned ? await _voiceDao.getVoiceProfileById(settings.voiceProfileId!) : null;
@@ -639,10 +895,40 @@ class MeditationAudioService {
         modelId: modelKey,
       );
     }
+    if (provider == 'minimax') {
+      final useCloned = settings.voiceSource == 'cloned' && (settings.voiceProfileId ?? '').isNotEmpty;
+      final profile = useCloned ? await _voiceDao.getVoiceProfileById(settings.voiceProfileId!) : null;
+      final selectedProfile = profile != null && profile.provider == 'minimax' ? profile : null;
+      final voiceId = selectedProfile?.elevenlabsVoiceId ?? settings.minimaxVoiceId.trim();
+      final voiceKey = selectedProfile?.id ?? voiceId;
+      final modelKey = 'minimax:${settings.minimaxModel.trim().isEmpty ? VoiceProviderSettings.defaultMiniMaxModel : settings.minimaxModel.trim()}';
+      return MeditationSegmentCacheKey(
+        textHash: segmentHash(step, settings, voiceKey),
+        voiceKey: voiceKey,
+        modelId: modelKey,
+      );
+    }
+    if (provider == 'microsoft') {
+      final voiceKey = settings.microsoftVoice.trim();
+      return MeditationSegmentCacheKey(
+        textHash: segmentHash(step, settings, voiceKey),
+        voiceKey: voiceKey,
+        modelId: 'microsoft:${settings.microsoftRegion}:${settings.microsoftOutputFormat}',
+      );
+    }
+    if (provider == 'iflytek') {
+      final voiceKey = settings.iflytekVoiceName.trim();
+      return MeditationSegmentCacheKey(
+        textHash: segmentHash(step, settings, voiceKey),
+        voiceKey: voiceKey,
+        modelId: 'iflytek:${settings.iflytekAudioEncoding}:${settings.iflytekSampleRate}',
+      );
+    }
     final useCloned = settings.voiceSource == 'cloned' && (settings.voiceProfileId ?? '').isNotEmpty;
     final profile = useCloned ? await _voiceDao.getVoiceProfileById(settings.voiceProfileId!) : null;
+    final selectedProfile = profile != null && profile.provider == 'elevenlabs' ? profile : null;
     final presetVoiceKey = settings.presetVoiceId.trim().isEmpty ? ElevenLabsSettings.defaultPresetVoiceId : settings.presetVoiceId.trim();
-    final voiceKey = useCloned && profile != null ? profile.id : presetVoiceKey;
+    final voiceKey = selectedProfile?.id ?? presetVoiceKey;
     return MeditationSegmentCacheKey(
       textHash: segmentHash(step, settings, voiceKey),
       voiceKey: voiceKey,
@@ -669,6 +955,31 @@ class MeditationAudioService {
       settings.resembleMeditationPrompt,
       settings.resembleMeditationMaxBreakSec,
       settings.resembleMeditationSplitLongBreaks,
+      settings.minimaxVoiceId,
+      settings.minimaxModel,
+      settings.minimaxEndpoint,
+      settings.minimaxFormat,
+      settings.minimaxSampleRate,
+      settings.minimaxBitrate,
+      settings.minimaxChannel,
+      settings.minimaxVolume,
+      settings.minimaxPitch,
+      settings.minimaxEmotion,
+      settings.minimaxLanguageBoost,
+      settings.minimaxTextNormalization,
+      settings.minimaxSoundEffects,
+      settings.minimaxVoiceModifyPitch,
+      settings.minimaxVoiceModifyIntensity,
+      settings.minimaxVoiceModifyTimbre,
+      settings.microsoftRegion,
+      settings.microsoftEndpoint,
+      settings.microsoftVoice,
+      settings.microsoftLanguage,
+      settings.microsoftOutputFormat,
+      settings.iflytekEndpoint,
+      settings.iflytekVoiceName,
+      settings.iflytekAudioEncoding,
+      settings.iflytekSampleRate,
       settings.stability,
       settings.similarityBoost,
       settings.style,
@@ -699,7 +1010,7 @@ class MeditationAudioService {
   }) async {
     final text = step.text.trim();
     if (text.isEmpty) throw StateError('当前冥想片段没有可朗读文字');
-    final provider = settings.ttsProvider == 'resemble' ? 'resemble' : 'elevenlabs';
+    final provider = _normalizeProvider(settings.ttsProvider);
     if (provider == 'resemble') {
       final useCloned = settings.voiceSource == 'cloned' && (settings.voiceProfileId ?? '').isNotEmpty;
       final profile = useCloned ? await _voiceDao.getVoiceProfileById(settings.voiceProfileId!) : null;
@@ -742,16 +1053,118 @@ class MeditationAudioService {
       return MeditationSegmentSynthesisResult(audio: audio, textHash: textHash, voiceKey: voiceKey, modelId: modelKey);
     }
 
+    if (provider == 'minimax') {
+      final useCloned = settings.voiceSource == 'cloned' && (settings.voiceProfileId ?? '').isNotEmpty;
+      final profile = useCloned ? await _voiceDao.getVoiceProfileById(settings.voiceProfileId!) : null;
+      final selectedProfile = profile != null && profile.provider == 'minimax' ? profile : null;
+      final voiceId = selectedProfile?.elevenlabsVoiceId ?? settings.minimaxVoiceId.trim();
+      if (voiceId.isEmpty) throw StateError('请先在当前冥想语音设置中选择或填写 MiniMax voice_id');
+      final voiceKey = selectedProfile?.id ?? voiceId;
+      final textHash = segmentHash(step, settings, voiceKey);
+      final modelKey = 'minimax:${settings.minimaxModel.trim().isEmpty ? VoiceProviderSettings.defaultMiniMaxModel : settings.minimaxModel.trim()}';
+      final audio = await _multiProviderTtsService.synthesizeMiniMaxAndSave(
+        text: text,
+        voiceId: voiceId,
+        voiceDisplayName: selectedProfile?.displayName ?? settings.minimaxVoiceName,
+        voiceProfileId: selectedProfile?.id,
+        moduleName: 'meditation_segment',
+        model: settings.minimaxModel,
+        endpoint: settings.minimaxEndpoint,
+        speed: settings.speed,
+        volume: settings.minimaxVolume,
+        pitch: settings.minimaxPitch,
+        emotion: settings.minimaxEmotion,
+        languageBoost: settings.minimaxLanguageBoost,
+        textNormalization: settings.minimaxTextNormalization,
+        format: settings.minimaxFormat,
+        sampleRate: settings.minimaxSampleRate,
+        bitrate: settings.minimaxBitrate,
+        channel: settings.minimaxChannel,
+        soundEffects: settings.minimaxSoundEffects,
+        voiceModifyPitch: settings.minimaxVoiceModifyPitch,
+        voiceModifyIntensity: settings.minimaxVoiceModifyIntensity,
+        voiceModifyTimbre: settings.minimaxVoiceModifyTimbre,
+        scene: settings.scene,
+        meditationAutoPauses: settings.meditationAutoPauses,
+        meditationPauseProfile: settings.meditationPauseProfile,
+        meditationSentenceBreakSec: settings.meditationSentenceBreakSec,
+        meditationParagraphBreakSec: settings.meditationParagraphBreakSec,
+        meditationBreathBreakSec: settings.meditationBreathBreakSec,
+        meditationTone: settings.meditationTone,
+        meditationAutoBreathPauses: settings.meditationAutoBreathPauses,
+        forceRegenerate: forceRegenerate,
+      );
+      return MeditationSegmentSynthesisResult(audio: audio, textHash: textHash, voiceKey: voiceKey, modelId: modelKey);
+    }
+
+    if (provider == 'microsoft') {
+      final voiceKey = settings.microsoftVoice.trim();
+      if (voiceKey.isEmpty) throw StateError('请先在当前冥想语音设置中选择或填写 Microsoft voice');
+      final textHash = segmentHash(step, settings, voiceKey);
+      final modelKey = 'microsoft:${settings.microsoftRegion}:${settings.microsoftOutputFormat}';
+      final path = await _multiProviderTtsService.synthesizeMicrosoftToFile(
+        text: text,
+        region: settings.microsoftRegion,
+        endpoint: settings.microsoftEndpoint,
+        voice: voiceKey,
+        language: settings.microsoftLanguage,
+        outputFormat: settings.microsoftOutputFormat,
+        rate: settings.speed,
+        pauseSeconds: settings.meditationAutoPauses ? settings.meditationSentenceBreakSec : 0,
+      );
+      final audio = await _registerExternalAudio(
+        path: path,
+        provider: provider,
+        voiceKey: voiceKey,
+        voiceDisplayName: voiceKey,
+        modelId: modelKey,
+        sourceText: text,
+        textHash: textHash,
+        settings: settings,
+      );
+      return MeditationSegmentSynthesisResult(audio: audio, textHash: textHash, voiceKey: voiceKey, modelId: modelKey);
+    }
+
+    if (provider == 'iflytek') {
+      final voiceKey = settings.iflytekVoiceName.trim();
+      if (voiceKey.isEmpty) throw StateError('请先在当前冥想语音设置中选择讯飞发音人');
+      final textHash = segmentHash(step, settings, voiceKey);
+      final modelKey = 'iflytek:${settings.iflytekAudioEncoding}:${settings.iflytekSampleRate}';
+      final path = await _multiProviderTtsService.synthesizeIflytekToFile(
+        text: text,
+        endpoint: settings.iflytekEndpoint,
+        voiceName: voiceKey,
+        encoding: settings.iflytekAudioEncoding,
+        sampleRate: settings.iflytekSampleRate,
+        speed: settings.speed,
+        volume: settings.minimaxVolume.clamp(0.0, 1.0).toDouble(),
+        pitch: settings.minimaxPitch.toDouble(),
+        forceNoCache: forceRegenerate,
+      );
+      final audio = await _registerExternalAudio(
+        path: path,
+        provider: provider,
+        voiceKey: voiceKey,
+        voiceDisplayName: voiceKey,
+        modelId: modelKey,
+        sourceText: text,
+        textHash: textHash,
+        settings: settings,
+      );
+      return MeditationSegmentSynthesisResult(audio: audio, textHash: textHash, voiceKey: voiceKey, modelId: modelKey);
+    }
+
     final useCloned = settings.voiceSource == 'cloned' && (settings.voiceProfileId ?? '').isNotEmpty;
     final profile = useCloned ? await _voiceDao.getVoiceProfileById(settings.voiceProfileId!) : null;
+    final selectedProfile = profile != null && profile.provider == 'elevenlabs' ? profile : null;
     final presetVoiceKey = settings.presetVoiceId.trim().isEmpty ? ElevenLabsSettings.defaultPresetVoiceId : settings.presetVoiceId.trim();
-    final voiceKey = useCloned && profile != null ? profile.id : presetVoiceKey;
+    final voiceKey = selectedProfile?.id ?? presetVoiceKey;
     final textHash = segmentHash(step, settings, voiceKey);
     TtsAudioFile audio;
-    if (useCloned && profile != null) {
+    if (selectedProfile != null) {
       audio = await _elevenLabsService.synthesizeAndSave(
         text: text,
-        voiceProfile: profile,
+        voiceProfile: selectedProfile,
         moduleName: 'meditation_segment',
         modelId: settings.modelId,
         stability: settings.stability,
@@ -809,6 +1222,61 @@ class MeditationAudioService {
     return MeditationSegmentSynthesisResult(audio: audio, textHash: textHash, voiceKey: voiceKey, modelId: settings.modelId);
   }
 
+  Future<TtsAudioFile> _registerExternalAudio({
+    required String path,
+    required String provider,
+    required String voiceKey,
+    required String voiceDisplayName,
+    required String modelId,
+    required String sourceText,
+    required String textHash,
+    required MeditationTtsRuntimeSettings settings,
+  }) async {
+    final file = File(path);
+    if (!await file.exists() || await file.length() < 128) {
+      throw StateError('$provider 未生成有效音频文件');
+    }
+    final extension = p.extension(path).toLowerCase();
+    final mimeType = extension == '.wav'
+        ? 'audio/wav'
+        : extension == '.pcm'
+            ? 'audio/pcm'
+            : 'audio/mpeg';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final audio = TtsAudioFile(
+      id: voiceLabUid('tts'),
+      moduleName: 'meditation_segment',
+      sourceText: sourceText,
+      textHash: textHash,
+      provider: provider,
+      elevenlabsVoiceId: voiceKey,
+      modelId: modelId,
+      audioFileName: p.basename(path),
+      audioFilePath: path,
+      mimeType: mimeType,
+      fileSize: await file.length(),
+      voiceSource: '${provider}_shared',
+      voiceDisplayName: voiceDisplayName,
+      ttsSpeed: settings.speed,
+      languageCode: provider == 'microsoft' ? settings.microsoftLanguage : 'zh-CN',
+      scene: settings.scene,
+      pauseMode: settings.pauseMode,
+      meditationAutoPauses: settings.meditationAutoPauses,
+      meditationPauseProfile: settings.meditationPauseProfile,
+      meditationSentenceBreakSec: settings.meditationSentenceBreakSec,
+      meditationParagraphBreakSec: settings.meditationParagraphBreakSec,
+      meditationBreathBreakSec: settings.meditationBreathBreakSec,
+      meditationTone: settings.meditationTone,
+      meditationAutoBreathPauses: settings.meditationAutoBreathPauses,
+      createdAt: now,
+      updatedAt: now,
+    );
+    if (await _multiProviderTtsService.isAutoSaveEnabled()) {
+      await _voiceDao.insertTtsAudio(audio);
+    }
+    return audio;
+  }
+
   Future<TtsAudioFile> synthesizeGuidedAudio({
     required MeditationSessionTemplate session,
     double stability = 0.78,
@@ -816,31 +1284,25 @@ class MeditationAudioService {
     double style = 0.12,
     bool forceRegenerate = false,
   }) async {
-    final profile = await _voiceDao.getDefaultVoiceProfile();
-    if (profile == null) {
-      throw StateError('还没有配置默认 ElevenLabs 声音。可先到“语音与美好的祝福配置”添加声音；也可以使用系统朗读。');
-    }
     final text = buildGuidedSpeechText(session);
-    return _elevenLabsService.synthesizeAndSave(
-      text: text,
-      voiceProfile: profile,
-      moduleName: 'meditation_guided',
+    final base = await loadTtsRuntimeSettings(sessionKey: session.key);
+    final settings = base.copyWith(
       stability: stability,
       similarityBoost: similarityBoost,
       style: style,
-      speed: 0.82,
-      languageCode: 'zh',
+      speed: base.speed.clamp(0.7, 0.9).toDouble(),
       scene: 'meditation_relax',
       pauseMode: 'long',
       meditationAutoPauses: true,
       meditationPauseProfile: 'deep',
-      meditationSentenceBreakSec: 1.5,
-      meditationParagraphBreakSec: 2.4,
-      meditationBreathBreakSec: 2.0,
       meditationTone: 'calm',
-      meditationAutoBreathPauses: true,
+    );
+    final result = await synthesizeSegmentGuidedAudio(
+      step: MeditationStep(startSecond: 0, text: text),
+      settings: settings,
       forceRegenerate: forceRegenerate,
     );
+    return result.audio;
   }
 
   String buildGuidedSpeechText(MeditationSessionTemplate session) {

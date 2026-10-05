@@ -28,7 +28,16 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
   bool _aiGenerating = false;
   MeditationSessionTemplate? _aiSession;
   String? _aiReason;
+  String? _aiUnderstoodNeed;
+  String? _aiCognitiveShift;
+  String? _aiEmbodiedGoal;
+  String? _aiRealLifeScene;
+  List<String> _aiPracticeFocus = const <String>[];
   String? _aiError;
+  String? _aiSafetyNotice;
+  int _aiDurationMinutes = 8;
+  bool _aiSaved = false;
+  MeditationExpertPreferences _expertPreferences = const MeditationExpertPreferences();
 
   MeditationSessionTemplate get _recommended => MeditationSeedData.defaultForState(_state);
 
@@ -67,30 +76,48 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
 
 
   Future<void> _generateAiDaily() async {
+    final userDescription = _descriptionController.text.trim();
+    final safety = _aiService.assessUserInput(userDescription);
     setState(() {
       _aiGenerating = true;
       _aiError = null;
+      _aiSafetyNotice = safety.isNormal ? null : safety.message;
       _aiSession = null;
       _aiReason = null;
+      _aiUnderstoodNeed = null;
+      _aiCognitiveShift = null;
+      _aiEmbodiedGoal = null;
+      _aiRealLifeScene = null;
+      _aiPracticeFocus = const <String>[];
+      _aiSaved = false;
     });
     try {
+      if (safety.requiresImmediateSupport) return;
       final recent = await _dao.recentRecords(limit: 8);
-      final userDescription = _descriptionController.text.trim();
-      final session = await _aiService.generateDailyMeditation(
+      final result = await _aiService.generateDailyMeditation(
         currentState: _state,
         recommended: _recommended,
         recentRecords: recent,
+        durationMinutes: _aiDurationMinutes,
         userDescription: userDescription,
+        preferences: _expertPreferences,
       );
       String reason = '';
-      if (session != null) {
-        reason = await _aiService.generateRecommendationReason(currentState: _state, recommended: session);
+      if (result != null) {
+        reason = await _aiService.generateRecommendationReason(currentState: _state, recommended: result.session);
       }
       if (!mounted) return;
       setState(() {
-        _aiSession = session;
+        _aiSession = result?.session;
+        _aiUnderstoodNeed = result?.understoodNeed;
+        _aiCognitiveShift = result?.cognitiveShift;
+        _aiEmbodiedGoal = result?.embodiedGoal;
+        _aiRealLifeScene = result?.realLifeScene;
+        _aiPracticeFocus = result?.practiceFocus ?? const <String>[];
         _aiReason = reason.trim().isEmpty ? null : reason.trim();
-        _aiError = session == null ? 'AI 暂时不可用，可能是未配置 API Key、网络异常或模型返回为空。你仍然可以使用本地推荐练习。' : null;
+        _aiError = result == null
+            ? 'AI 暂时未生成可用内容：可能是配置或网络异常，也可能是内容没有通过“认知 → 身体与情绪体验 → 现实演练”的质量校验。可以重试，或先使用本地推荐练习。'
+            : null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -98,6 +125,38 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
     } finally {
       if (mounted) setState(() => _aiGenerating = false);
     }
+  }
+
+  Future<void> _saveAiSession() async {
+    final session = _aiSession;
+    if (session == null || _aiSaved) return;
+    try {
+      await _dao.upsertCustomSession(session);
+      if (!mounted) return;
+      setState(() => _aiSaved = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已保存到“练习库 → 我的本地冥想”，以后可直接重复使用。')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('本地保存失败：$e')),
+      );
+    }
+  }
+
+  void _clearAiResult() {
+    _aiSession = null;
+    _aiReason = null;
+    _aiUnderstoodNeed = null;
+    _aiCognitiveShift = null;
+    _aiEmbodiedGoal = null;
+    _aiRealLifeScene = null;
+    _aiPracticeFocus = const <String>[];
+    _aiError = null;
+    final safety = _aiService.assessUserInput(_descriptionController.text);
+    _aiSafetyNotice = safety.isNormal ? null : safety.message;
+    _aiSaved = false;
   }
 
   Future<void> _openPromptSettings() async {
@@ -182,6 +241,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
 
   Widget _aiDailyCard() {
     final recommended = _recommended;
+    final generationBlocked = _aiService.assessUserInput(_descriptionController.text).requiresImmediateSupport;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       padding: const EdgeInsets.all(16),
@@ -197,13 +257,13 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
             children: [
               const Icon(Icons.auto_awesome, color: Colors.deepPurple),
               const SizedBox(width: 8),
-              const Expanded(child: Text('AI 今日冥想', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+              const Expanded(child: Text('AI 冥想专家', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
               TextButton(onPressed: _openPromptSettings, child: const Text('提示词')),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            '根据你当前状态和最近练习记录，生成一段更适合今天的专属练习。',
+            '写下此刻发生了什么。AI 会先辨认真正需要，再用身体锚点、自然留白和现实演练，把“明白”变成一次可以跟随的体验。',
             style: TextStyle(color: Colors.black.withOpacity(0.62), height: 1.45),
           ),
           const SizedBox(height: 12),
@@ -214,27 +274,65 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
             child: Text('当前状态：$_state\n本地推荐方向：${recommended.title} · ${recommended.type}', style: const TextStyle(height: 1.45)),
           ),
           const SizedBox(height: 12),
+          _expertCalibrationCard(),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.timer_outlined, size: 20, color: Colors.deepPurple),
+              const SizedBox(width: 8),
+              const Text('自定义冥想时长', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text('$_aiDurationMinutes 分钟', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+            ],
+          ),
+          Slider(
+            value: _aiDurationMinutes.toDouble(),
+            min: 1,
+            max: 30,
+            divisions: 29,
+            label: '$_aiDurationMinutes 分钟',
+            onChanged: _aiGenerating
+                ? null
+                : (value) => setState(() {
+                      _aiDurationMinutes = value.round();
+                      _clearAiResult();
+                    }),
+          ),
+          const Text('可选 1–30 分钟；AI 会按时长调整引导段数、文字量和留白。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 12),
           TextField(
             controller: _descriptionController,
             minLines: 2,
-            maxLines: 5,
+            maxLines: 7,
             decoration: InputDecoration(
-              labelText: '补充描述（可选）',
-              hintText: '例如：我今天被别人影响后一直反复想，想做一段帮我收回注意力的冥想。',
+              labelText: '告诉 AI：此刻发生了什么、你有何感受或想得到什么',
+              hintText: '例如：我今天被别人影响后一直反复想。我不是想听大道理，只想先停止内耗，把注意力收回来，然后去做手上的事。',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
               filled: true,
               fillColor: Colors.white,
             ),
-            onChanged: (_) {
-              if (_aiSession != null || _aiReason != null || _aiError != null) {
-                setState(() {
-                  _aiSession = null;
-                  _aiReason = null;
-                  _aiError = null;
-                });
-              }
-            },
+            onChanged: (_) => setState(_clearAiResult),
           ),
+          if ((_aiSafetyNotice ?? '').isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7E8),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFF1D08A)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.shield_outlined, size: 20, color: Color(0xFF9A6910)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_aiSafetyNotice!, style: const TextStyle(color: Color(0xFF6E5016), height: 1.45))),
+                ],
+              ),
+            ),
+          ],
           if (_aiError != null) ...[
             const SizedBox(height: 10),
             Text(_aiError!, style: const TextStyle(color: Colors.deepOrange, height: 1.45)),
@@ -250,7 +348,42 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                 children: [
                   Text(_aiSession!.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 4),
-                  Text('${_aiSession!.durationMinutes}分钟 · ${_aiSession!.type} · AI生成', style: const TextStyle(color: Colors.black54)),
+                  Text('${_aiSession!.durationMinutes}分钟 · ${_aiSession!.type} · 专家生成', style: const TextStyle(color: Colors.black54)),
+                  if ((_aiUnderstoodNeed ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('AI 理解到的真正需要', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const SizedBox(height: 4),
+                    Text(_aiUnderstoodNeed!, style: const TextStyle(height: 1.5)),
+                  ],
+                  if ((_aiCognitiveShift ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('这次要松动的认知', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const SizedBox(height: 4),
+                    Text(_aiCognitiveShift!, style: const TextStyle(height: 1.5)),
+                  ],
+                  if ((_aiEmbodiedGoal ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('身体与情绪体验目标', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const SizedBox(height: 4),
+                    Text(_aiEmbodiedGoal!, style: const TextStyle(height: 1.5)),
+                  ],
+                  if ((_aiRealLifeScene ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('会带你演练的现实场景', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const SizedBox(height: 4),
+                    Text(_aiRealLifeScene!, style: const TextStyle(height: 1.5)),
+                  ],
+                  if (_aiPracticeFocus.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: _aiPracticeFocus.map((item) => Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text(item),
+                          )).toList(),
+                    ),
+                  ],
                   if ((_aiReason ?? '').isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(_aiReason!, style: const TextStyle(height: 1.45)),
@@ -262,12 +395,21 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                         child: FilledButton.icon(
                           onPressed: () => _openPlayer(_aiSession!),
                           icon: const Icon(Icons.play_arrow),
-                          label: const Text('开始AI冥想'),
+                          label: const Text('开始专家引导'),
                         ),
                       ),
                       const SizedBox(width: 10),
                       OutlinedButton(onPressed: _aiGenerating ? null : _generateAiDaily, child: const Text('重生成')),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _aiSaved ? null : _saveAiSession,
+                      icon: Icon(_aiSaved ? Icons.check_circle : Icons.save_outlined),
+                      label: Text(_aiSaved ? '已保存，可在练习库重复使用' : '保存到本地，供以后重复使用'),
+                    ),
                   ),
                 ],
               ),
@@ -277,14 +419,84 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: _aiGenerating ? null : _generateAiDaily,
+                onPressed: _aiGenerating || generationBlocked ? null : _generateAiDaily,
                 icon: _aiGenerating
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.auto_awesome),
-                label: Text(_aiGenerating ? '正在生成今日冥想……' : 'AI为我生成今日冥想'),
+                label: Text(_aiGenerating ? '专家正在编排引导……' : '生成我的专家引导'),
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _expertCalibrationCard() {
+    const guidanceStyles = <String>['温柔陪伴', '安静留白', '直接落地'];
+    const anchors = <String>['身体触点', '自然呼吸', '环境感官'];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F3FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE3DDFB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune, size: 18, color: Colors.deepPurple),
+              const SizedBox(width: 7),
+              const Expanded(
+                child: Text('专家校准（可选）', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF40346B))),
+              ),
+              Text(
+                '影响本次节奏',
+                style: TextStyle(fontSize: 11, color: Colors.deepPurple.withOpacity(0.72)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text('引导风格', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 5),
+          Wrap(
+            spacing: 6,
+            runSpacing: 5,
+            children: guidanceStyles.map((style) {
+              return ChoiceChip(
+                label: Text(style),
+                selected: _expertPreferences.guidanceStyle == style,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) => setState(() {
+                  _expertPreferences = _expertPreferences.copyWith(guidanceStyle: style);
+                  _clearAiResult();
+                }),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          const Text('注意力锚点', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 5),
+          Wrap(
+            spacing: 6,
+            runSpacing: 5,
+            children: anchors.map((anchor) {
+              return ChoiceChip(
+                label: Text(anchor),
+                selected: _expertPreferences.anchorPreference == anchor,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) => setState(() {
+                  _expertPreferences = _expertPreferences.copyWith(anchorPreference: anchor);
+                  _clearAiResult();
+                }),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 4),
+          const Text('AI 还会参考最近练习中的分心、身体放松和重复主题，自动调整留白与动作密度。', style: TextStyle(fontSize: 11.5, color: Colors.black54, height: 1.35)),
         ],
       ),
     );
@@ -308,9 +520,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                 selected: selected,
                 onSelected: (_) => setState(() {
                   _state = state;
-                  _aiSession = null;
-                  _aiReason = null;
-                  _aiError = null;
+                  _clearAiResult();
                 }),
               );
             }).toList(),
@@ -603,8 +813,8 @@ class _MeditationPracticeLibraryPageState extends State<MeditationPracticeLibrar
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('删除本地脚本？'),
-        content: Text('确定从练习库移除“${session.title}”吗？不会删除你的冥想记录。'),
+        title: Text(session.isAiGenerated ? '删除已保存的 AI 冥想？' : '删除本地脚本？'),
+        content: Text('确定从我的本地冥想移除“${session.title}”吗？不会删除你的冥想记录。'),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
           TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('删除')),
@@ -651,16 +861,16 @@ class _MeditationPracticeLibraryPageState extends State<MeditationPracticeLibrar
             ] else if (_customSessions.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.only(top: 14, bottom: 8),
-                child: Text('本地上传', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                child: Text('我的本地冥想', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
               ),
               for (final session in _customSessions)
                 Card(
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: Colors.black.withOpacity(0.06))),
                   child: ListTile(
-                    leading: const Icon(Icons.description_outlined, color: Colors.deepPurple),
+                    leading: Icon(session.isAiGenerated ? Icons.auto_awesome : Icons.description_outlined, color: Colors.deepPurple),
                     title: Text(session.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${session.durationMinutes}分钟 · ${session.description}'),
+                    subtitle: Text('${session.durationMinutes}分钟 · ${session.isAiGenerated ? 'AI生成并保存在本地' : session.description}'),
                     trailing: Wrap(
                       spacing: 4,
                       children: [
@@ -701,7 +911,7 @@ class _MeditationPracticeLibraryPageState extends State<MeditationPracticeLibrar
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(20)),
       child: const Text(
-        '新增个性化恢复练习均不少于8分钟。也可以上传自己的冥想脚本，让系统按文字长度或时间标记自动生成对应时长。',
+        '练习库包含行动启动、工作适应、决策、羞耻、自尊、恐惧、关系与现实压力等完整引导。AI 生成的冥想可保存到这里反复使用；也可以上传自己的脚本。',
         style: TextStyle(height: 1.55),
       ),
     );

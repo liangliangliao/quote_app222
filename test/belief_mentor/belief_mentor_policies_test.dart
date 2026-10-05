@@ -145,7 +145,7 @@ void main() {
     },
   );
 
-  test('duplicate evidence has diminishing state-transition weight', () {
+  test('duplicates diminish while distinct evidence still counts', () {
     final now = DateTime.now().millisecondsSinceEpoch;
     BeliefMentorEvidence evidence(String id, String outcome) =>
         BeliefMentorEvidence(
@@ -170,7 +170,8 @@ void main() {
         evidence('3', '得到一个修改建议'),
         evidence('4', '得到了完全不同的合作邀请'),
       ]),
-      1,
+      2,
+      reason: '三条重复证据只能折减，另一条不同结果仍应独立计入',
     );
   });
 

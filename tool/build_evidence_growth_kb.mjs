@@ -1,0 +1,87 @@
+// Usage: node tool/build_evidence_growth_kb.mjs <pdftotext-layout-output>
+// Emits reviewed, page-addressable source records. It never writes files.
+import fs from 'node:fs';
+const pages = fs.readFileSync(process.argv[2], 'utf8').split('\f');
+const lines = pages.flatMap((page, i) => page.split('\n').map(text => ({text, page: i + 1})))
+  .filter(l => !/Harvard Positive Psychology|《哈佛幸福课》六大模块成长闭环知识库/.test(l.text));
+const heading = /^\s*(?:(?:信念|目标|行动|失败与完美主义|复盘|改变)｜)?([BGAFRC](?:-AUDIT-\d{2}|-EXT2?-\d{2}|\d{2}))｜(.+)/;
+const starts = lines.flatMap((l, i) => heading.test(l.text) ? [i] : []);
+const labels = /^(?:原案例\/实验|为什么属于六模块|引导\s*\/\s*提醒|边界|产品化动作|原文直译|原文\/课堂核心|证据类型|课程结论|Tal 的结论|Tal 的引导|Tal\/课程的引导|Tal 的提醒|提醒\s*\/\s*(?:警告|误用边界)|为什么这样|为什么值得补|为什么|课程证据(?:\s*\/\s*(?:论证|原例))?|Tal 怎么教你做|怎么教你做|强启发\/应用价值|现实触发条件|闭环连接|课程来源|知识库触发语|Tal 母库连接|外部专家理论|融合角色|Tal 体系尚未充分解决的问题|新增机制|外部证据基础|重要边界\s*\/\s*防误用|新的诊断问题|新的行动方法|AI\s*触发条件|闭环位置|正式入库建议|专家\s*\/\s*学科|专家延伸Ⅰ连接|为什么第二层才需要它)(?:[：｜]|\s{2,})/;
+const cards = [];
+for (let s=0;s<starts.length;s++) {
+  const from=starts[s], to=starts[s+1]??lines.length;
+  const match=lines[from].text.match(heading);
+  const originalId=match[1];
+  if (cards.some(c=>c.originalId===originalId)) continue;
+  const block=lines.slice(from,to);
+  const fields={}; let key='title'; fields.title=match[2].trim();
+  let lastPage=lines[from].page;
+  for (const line of block.slice(1)) {
+    const text=line.text.trim();
+    if (/^(?:模块\s*[一二三四五六0-9]|补充审计｜|v3\.5｜|新的总闭环｜|统一使用规则|Tal 课堂原文|\d+\.\s)/.test(text)) break;
+    const field=text.match(labels);
+    if (field) {
+      key=field[0].replace(/[：｜]\s*$/, '').trim();
+      fields[key]=(fields[key]??'')+text.slice(field[0].length).trim();
+    } else if (text) { fields[key]+=(fields[key]?' ':'')+text; }
+    if(text) lastPage=line.page;
+  }
+  const pick=(...names)=>names.map(n=>Object.entries(fields).find(([k])=>k.replace(/\s/g,'')===n.replace(/\s/g,''))?.[1]).find(Boolean)??'';
+  const claim=pick('课程结论','Tal 的结论','外部专家理论','为什么属于六模块');
+  const howTo=pick('Tal 怎么教你做','怎么教你做','新的行动方法','产品化动作');
+  if (!claim || !howTo) continue;
+  const title=fields.title;
+  const context=pick('Tal 的引导','Tal/课程的引导','Tal 母库连接','引导 / 提醒');
+  const mechanism=pick('为什么这样','为什么','新增机制','为什么值得补','为什么属于六模块');
+  const boundary=pick('Tal 的提醒','提醒 / 警告','提醒 / 误用边界','重要边界/防误用','边界');
+  const story=pick('课程证据','课程证据/论证','课程证据 / 原例','外部证据基础','原案例/实验');
+  const locator=pick('课程来源','证据类型','闭环位置');
+  cards.push({originalId,title,claim,howTo,context,mechanism,boundary,story,
+    trigger:pick('现实触发条件','AI 触发条件','新的诊断问题'),
+    sourceClass:originalId.includes('EXT2')?'K_EXT2':originalId.includes('EXT')?'K_EXT1':'K_TAL',
+    pages:Array.from({length:lastPage-lines[from].page+1},(_,i)=>lines[from].page+i),
+    locator,fields});
+}
+// Reviewed extraction corrections. Footer summaries must not extend a card's
+// physical page range; embedded labels sometimes share a PDF text line.
+for (const card of cards) {
+  if (card.sourceClass === 'K_EXT2' && card.locator.includes('外部证据基础：')) {
+    card.story = card.locator.split('外部证据基础：')[1].trim();
+  }
+  if (card.originalId === 'G-AUDIT-13' && card.context.includes('提醒 / 误用边界：')) {
+    [card.context, card.boundary] = card.context.split('提醒 / 误用边界：').map(s=>s.trim());
+  }
+  const pageFixes = {'C-AUDIT-19':[49], 'C-EXT-04':[181,182], 'C-AUDIT-16':[41]};
+  if (pageFixes[card.originalId]) card.pages = pageFixes[card.originalId];
+  if (card.originalId === 'B03') card.title = 'Stockdale 悖论：信念必须和残酷事实同时存在';
+  if (card.originalId === 'C-AUDIT-22') card.context = '检查每天已在做的任务中真实包含的能力、训练和贡献；重构后继续观察现实结果。';
+  if (card.originalId === 'R-EXT2-02') card.howTo = card.howTo.split(/\s*AI\s*触发条件[｜：]/)[0].trim();
+}
+const bennettPage = pages.findIndex(p => p.includes('案例二｜Bennett')) + 1;
+if (bennettPage) cards.push({
+  originalId:'F-CASE-BENNETT', sourceOriginalId:'50A. 案例二',
+  title:'Bennett Brauer：不完美，也可以被看见、也可以上场',
+  claim:'不完美不是上场资格的否决票。可以一边改进，一边出现。',
+  howTo:'当用户说“等我准备好/更自信/更体面再做”时，生成一次“带着不完美上场”的低风险暴露：允许一个缺点仍然存在，但完成一次面试、发言、提交、见人或公开表达。',
+  context:'Tal 在讲完 Lincoln、Gandhi、George Eliot 等失败与成长案例后，收束为“放手去做，放手行动，准备失败”，然后引出这段视频。',
+  mechanism:'缺点已经存在，也可能被别人看见，但这并不自动取消行动、表达和出现的资格。空气引号把“正常”“上镜”“有魅力”等从绝对事实降回社会评价标签。',
+  boundary:'这不是鼓励坏习惯或降低基本责任；它针对的是“必须先完美，才允许行动”的资格门槛。',
+  story:'《Saturday Night Live》Weekend Update 的虚构评论员 Bennett Brauer，由 Chris Farley 饰演。他主动说出可能让自己尴尬的缺点，没有等符合所有标准才允许自己出现在镜头前。',
+  trigger:'等我准备好、等更自信、等更体面才上场；Bennett；Bennett Brauer',
+  sourceClass:'K_TAL', pages:[bennettPage], locator:'Tal Lecture 14 完美主义段；SNL Weekend Update / Bennett Brauer，Chris Farley；原位置 50A. 案例二。',
+});
+for (const card of cards) {
+  delete card.fields;
+  for (const key of Object.keys(card)) if (typeof card[key] === 'string') {
+    card[key] = card[key].replace(/(?<=[\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '');
+  }
+}
+if (process.argv.includes('--dart')) {
+  const dartString = value => JSON.stringify(value).replaceAll('$', '\\$');
+  const content = '// Generated by tool/build_evidence_growth_kb.mjs from the user-supplied KB35.\n' +
+    '// Physical PDF pages; source text is separate from ENG operator instructions.\n' +
+    'const evidenceGrowthSourceCards = <Map<String, Object>>[\n' + cards.map(c =>
+      '  <String, Object>{\n' + Object.entries(c).map(([k,v]) =>
+        `    '${k}': ${Array.isArray(v) ? '<int>['+v.join(', ')+']' : dartString(v)},`).join('\n') + '\n  },').join('\n') + '\n];\n';
+  process.stdout.write(content);
+} else process.stdout.write(JSON.stringify(cards));

@@ -3,6 +3,7 @@ import '../data/kv_dao.dart';
 class ZxPromptConfig {
   static const String actionPromptKey = 'zhixing_action_prompt_v1';
   static const String expansionPromptKey = 'zhixing_expansion_prompt_v1';
+  static const String assistantPromptKey = 'zhixing_assistant_prompt_v3';
 
   static const String defaultActionPrompt = '''
 你是“知行树”的表达增强器。安全、诊断、思想匹配、难度、证据定位和奖励已由本地确定性规则完成，你无权修改它们。
@@ -22,6 +23,19 @@ class ZxPromptConfig {
 若无法给出可核查的一手或权威来源，source_uri 留空并在 risks 说明。不得虚构书目、页码或研究结论。
 ''';
 
+  static const String defaultAssistantPrompt = '''
+你是“知行树·智能行动成长”的模块助手。你的职责是教用户完成产品内已有流程，并把复杂概念解释成下一步可操作动作。
+
+必须遵守：
+1. 只依据随请求提供的“功能地图、当前状态、本地知识摘要”回答，不得虚构按钮、页面、服务商能力或用户行动结果；
+2. 优先给一个最短可执行路径，再按需解释是什么、为什么、怎么做；
+3. 用户不知道从哪开始时，引导到“现在做”：一个目标/问题 + 一个卡点即可，思想由系统先推荐；
+4. 用户报告未完成时，不羞辱、不伪装完成；帮助缩小负荷、找到现实障碍并进入复盘；
+5. 审核本地知识与AI派生知识必须清楚区分；AI内容不能覆盖核心知识、安全或奖励规则；
+6. 涉及即时危险、严重功能风险或专业决策时，只解释产品安全边界并建议现实支持，不生成普通行动指令；
+7. 回答简洁、具体，结尾给出一个可点击入口名称。不要输出JSON。
+''';
+
   final KeyValueDao _kv = KeyValueDao();
 
   Future<String> actionPrompt() => _get(actionPromptKey, defaultActionPrompt);
@@ -29,15 +43,22 @@ class ZxPromptConfig {
   Future<String> expansionPrompt() =>
       _get(expansionPromptKey, defaultExpansionPrompt);
 
+  Future<String> assistantPrompt() =>
+      _get(assistantPromptKey, defaultAssistantPrompt);
+
   Future<void> saveActionPrompt(String value) =>
       _save(actionPromptKey, value, defaultActionPrompt);
 
   Future<void> saveExpansionPrompt(String value) =>
       _save(expansionPromptKey, value, defaultExpansionPrompt);
 
+  Future<void> saveAssistantPrompt(String value) =>
+      _save(assistantPromptKey, value, defaultAssistantPrompt);
+
   Future<void> reset() async {
     await _kv.setString(actionPromptKey, defaultActionPrompt);
     await _kv.setString(expansionPromptKey, defaultExpansionPrompt);
+    await _kv.setString(assistantPromptKey, defaultAssistantPrompt);
   }
 
   Future<String> _get(String key, String fallback) async {

@@ -9,6 +9,7 @@ import 'xiangji_models.dart';
 import 'xiangji_repository.dart';
 import 'xiangji_rev3_models.dart';
 import 'xiangji_rev4_models.dart';
+import 'xiangji_schopenhauer_core_catalog.dart';
 import 'xiangji_ui_support.dart';
 
 class XiangjiCampaignListPage extends StatefulWidget {
@@ -1450,6 +1451,7 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
   Future<void> _complete() async {
     final feedback = await _realityForm();
     if (feedback == null || feedback.trim().isEmpty) return;
+    final actionBefore = _action;
     XiangjiCouncilResult? result;
     await _run(() async {
       final authorized =
@@ -1464,33 +1466,75 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
       );
     });
     if (!mounted || result == null) return;
+    await _showLearningAndReturn(
+      result: result!,
+      feedback: feedback,
+      action: actionBefore,
+    );
+  }
+
+  Future<void> _showLearningAndReturn({
+    required XiangjiCouncilResult result,
+    required String feedback,
+    required XiangjiActionRecord? action,
+  }) async {
+    String why(String key, [String fallback = '']) {
+      final value = (action?.whyChain[key] ?? '').toString().trim();
+      return value.isEmpty ? fallback : value;
+    }
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('现实已回流，模型已重算'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            XiangjiLabeledValue(
-              label: '新的军师判断',
-              value: result!.draft.judgment,
-            ),
-            XiangjiLabeledValue(
-              label: '新的当前一步',
-              value: result!.draft.currentAction,
-            ),
-          ],
+        title: const Text('现实已改变这道题'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              XiangjiLabeledValue(
+                label: '你报告的现实',
+                value: feedback.trim(),
+              ),
+              XiangjiLabeledValue(
+                label: '事前预测',
+                value: action?.prediction ?? '',
+              ),
+              XiangjiLabeledValue(
+                label: '现在的改判',
+                value: result.draft.judgment,
+              ),
+              if (why('principle_practice').isNotEmpty)
+                XiangjiLabeledValue(
+                  label: '这一轮练会的方法',
+                  value: why('principle_practice'),
+                ),
+              if (why('transfer_question').isNotEmpty)
+                XiangjiLabeledValue(
+                  label: '下次如何迁移',
+                  value: why('transfer_question'),
+                ),
+              XiangjiLabeledValue(
+                label: '新的当前一步',
+                value: result.draft.currentAction,
+              ),
+              if (why('knowledge_source').isNotEmpty)
+                XiangjiLabeledValue(
+                  label: '本轮知识依据',
+                  value: why('knowledge_source'),
+                ),
+            ],
+          ),
         ),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
+            child: const Text('带着新一步继续'),
           ),
         ],
       ),
     );
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop(result);
   }
 
   Future<void> _recordMissingReality() async {
@@ -1535,7 +1579,11 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
       );
     });
     if (!mounted || result == null) return;
-    xiangjiShowMessage(context, '已对照事前预测完成验算，并生成新的军师草案。');
+    await _showLearningAndReturn(
+      result: result!,
+      feedback: feedback,
+      action: _action,
+    );
   }
 
   Future<void> _block() async {
@@ -1771,6 +1819,46 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
                         ],
                       ),
                     ),
+                    if (_choiceWhy(action, 'visible_output').isNotEmpty ||
+                        _choiceWhy(action, 'completion_signal').isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      XiangjiSectionCard(
+                        title: '这次不是“学一个概念”，而是做出成果',
+                        subtitle: '完成与否由现实产出判断，不由打卡判断。',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            XiangjiLabeledValue(
+                              label: '可见产出',
+                              value: _choiceWhy(
+                                action,
+                                'visible_output',
+                                '一条能改变下一步的现实结果',
+                              ),
+                            ),
+                            XiangjiLabeledValue(
+                              label: '完成信号',
+                              value: _choiceWhy(
+                                action,
+                                'completion_signal',
+                                '取得可观察结果并回来记录',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (_choiceWhy(action, 'recovery_action').isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      XiangjiSectionCard(
+                        title: '卡住时不需要硬撑',
+                        subtitle: '受阻是新现实，不是品格判决。',
+                        child: Text(
+                          _choiceWhy(action, 'recovery_action'),
+                          style: const TextStyle(height: 1.5),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     XiangjiSectionCard(
                       title: '回来后只需告诉军师 1–3 项现实',
@@ -1803,6 +1891,45 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
                       tilePadding: const EdgeInsets.symmetric(horizontal: 4),
                       title: const Text('为什么做这件事（展开分析）'),
                       children: [
+                        if (_choiceWhy(action, 'principle_practice').isNotEmpty)
+                          XiangjiLabeledValue(
+                            label: '你正在练会什么',
+                            value: _choiceWhy(action, 'principle_practice'),
+                          ),
+                        if (_choiceWhy(action, 'transfer_question').isNotEmpty)
+                          XiangjiLabeledValue(
+                            label: '下次迁移问题',
+                            value: _choiceWhy(action, 'transfer_question'),
+                          ),
+                        if (_choiceWhy(action, 'motivation_cue').isNotEmpty)
+                          XiangjiLabeledValue(
+                            label: '这一步与你的价值',
+                            value: _choiceWhy(action, 'motivation_cue'),
+                          ),
+                        if (_whyStrings(action, 'thinker_names').isNotEmpty)
+                          XiangjiLabeledValue(
+                            label: '核心思想家',
+                            value: _whyStrings(action, 'thinker_names').join('、'),
+                          ),
+                        if (_whyStrings(action, 'active_method_labels')
+                            .isNotEmpty)
+                          XiangjiLabeledValue(
+                            label: '本轮实际调用的方法',
+                            value: _whyStrings(action, 'active_method_labels')
+                                .join('、'),
+                          ),
+                        if (_choiceWhy(action, 'knowledge_source').isNotEmpty)
+                          XiangjiLabeledValue(
+                            label: '知识来源',
+                            value: _choiceWhy(action, 'knowledge_source'),
+                          ),
+                        if (_whyStrings(action, 'core_concept_ids').isNotEmpty)
+                          XiangjiLabeledValue(
+                            label: '本轮使用的叔本华 L0 概念',
+                            value: _conceptNames(
+                              _whyStrings(action, 'core_concept_ids'),
+                            ),
+                          ),
                         for (final entry in action.whyChain.entries.where(
                           (entry) => <String>{
                             'strategic_meaning',
@@ -1858,6 +1985,32 @@ class _XiangjiActionModePageState extends State<XiangjiActionModePage> {
         'epistemic_grounding' => '认识根据',
         _ => '补充理由',
       };
+
+  String _choiceWhy(
+    XiangjiActionRecord action,
+    String key, [
+    String fallback = '',
+  ]) {
+    final value = (action.whyChain[key] ?? '').toString().trim();
+    return value.isEmpty ? fallback : value;
+  }
+
+  List<String> _whyStrings(XiangjiActionRecord action, String key) {
+    final raw = action.whyChain[key];
+    if (raw is! List) return const <String>[];
+    return raw
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  String _conceptNames(List<String> ids) => ids.map((id) {
+        try {
+          return XiangjiSchopenhauerCoreCatalog.forId(id).displayName;
+        } catch (_) {
+          return id;
+        }
+      }).join('；');
 
   String _listText(Object? raw) {
     try {

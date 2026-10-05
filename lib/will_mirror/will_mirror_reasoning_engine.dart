@@ -76,7 +76,11 @@ class WillMirrorReasoningEngine {
       ]);
     }
     if (goal.domain.trim().isNotEmpty) known.add('领域：${goal.domain}');
-    known.add('当前欲望强度：${goal.baselineDesire}/100');
+    if (goal.baselineDesire > 0) {
+      known.add('当前欲望强度：${goal.baselineDesire}/100');
+    } else {
+      unknowns.add('用户尚未主动填写欲望强度，系统不会代填');
+    }
     return WillMirrorSurfaceAnalysis(
       object: object,
       known: known,

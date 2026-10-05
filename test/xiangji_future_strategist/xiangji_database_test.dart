@@ -1,6 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_database.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_method_catalog.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_practical_product.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_repository.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_rev3_models.dart';
+import 'package:quote_app/xiangji_future_strategist/xiangji_schopenhauer_core_catalog.dart';
 import 'package:quote_app/xiangji_future_strategist/xiangji_signature_method_engine.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -32,6 +37,249 @@ void main() {
     );
   });
 
+  test('TC-KB-REV52 seeds the complete method and rule inventory', () async {
+    final coreNodes = await dao.knowledgeNodes(
+      sourceId: XiangjiSchopenhauerCoreCatalog.sourceId,
+      limit: 100,
+    );
+    final nodes = await dao.knowledgeNodes(
+      sourceId: XiangjiMethodCatalog.sourceId,
+      limit: 100,
+    );
+    final rules = await dao.knowledgeRules(sourceId: 'XF-K0-SCHOPENHAUER');
+    final methodCoreEdges = await database.query(
+      'xf_knowledge_edge',
+      where: 'relation_type = ?',
+      whereArgs: const <Object?>['L0_CONSTRAINS_METHOD'],
+    );
+
+    expect(coreNodes, hasLength(24));
+    expect(
+      coreNodes.map((row) => row['id']),
+      containsAll(XiangjiSchopenhauerCoreCatalog.ids),
+    );
+    expect(
+      coreNodes.every(
+        (row) => (row['provenance_json'] ?? '')
+            .toString()
+            .contains('feature_bindings'),
+      ),
+      isTrue,
+    );
+
+    expect(nodes, hasLength(14));
+    expect(
+      nodes.map((row) => row['id']),
+      containsAll(XiangjiMethodCatalog.ids),
+    );
+    expect(
+      nodes.every(
+        (row) => (row['provenance_json'] ?? '')
+            .toString()
+            .contains('source_concept'),
+      ),
+      isTrue,
+    );
+    expect(methodCoreEdges, isNotEmpty);
+    expect(
+      methodCoreEdges.map((row) => row['from_id']).toSet(),
+      containsAll(XiangjiSchopenhauerCoreCatalog.ids),
+    );
+    expect(
+      rules.where(
+        (row) => (row['rule_code'] ?? '').toString().startsWith('SCK-'),
+      ),
+      hasLength(18),
+    );
+    expect(
+      rules.where(
+        (row) => (row['rule_code'] ?? '').toString().startsWith('CEL-'),
+      ),
+      hasLength(18),
+    );
+    expect(
+      rules.where(
+        (row) => (row['rule_code'] ?? '').toString().startsWith('PS-'),
+      ),
+      hasLength(10),
+    );
+    expect(
+      rules.where((row) {
+        final code = (row['rule_code'] ?? '').toString();
+        return !code.startsWith('SCK-') &&
+            !code.startsWith('CEL-') &&
+            !code.startsWith('PS-');
+      }),
+      hasLength(17),
+    );
+  });
+
+  test('TC-V63-GUIDE seeds cases, feature grounding and user preferences',
+      () async {
+    final cases = await dao.guidedCases();
+    final guideNodes = await database.query(
+      'xf_knowledge_node',
+      where: 'source_id = ? AND node_type = ?',
+      whereArgs: <Object?>[
+        XiangjiPracticalProductContract.knowledgeSourceId,
+        'product_feature_guide',
+      ],
+    );
+    final caseNodes = await database.query(
+      'xf_knowledge_node',
+      where: 'source_id = ? AND node_type = ?',
+      whereArgs: <Object?>[
+        XiangjiPracticalProductContract.knowledgeSourceId,
+        'guided_complete_case',
+      ],
+    );
+    final featureEdges = await database.query(
+      'xf_knowledge_edge',
+      where: 'relation_type = ?',
+      whereArgs: const <Object?>['L0_GROUNDS_FEATURE'],
+    );
+
+    expect(cases, hasLength(XiangjiPracticalProductContract.guidedCases.length));
+    expect(
+      guideNodes,
+      hasLength(XiangjiPracticalProductContract.featureGuides.length),
+    );
+    expect(
+      caseNodes,
+      hasLength(XiangjiPracticalProductContract.guidedCases.length),
+    );
+    expect(
+      featureEdges.map((row) => row['from_id']).toSet(),
+      containsAll(XiangjiSchopenhauerCoreCatalog.ids),
+    );
+
+    const profile = XiangjiUserPreferenceProfile(
+      interestTags: <String>['探索挑战'],
+      valueTags: <String>['自由'],
+      strengthTags: <String>['好奇'],
+      obstacleTags: <String>['环境总打断'],
+      energyLevel: 'high',
+      supportStyle: 'challenge',
+      preferredMinutes: 20,
+      updatedAtMs: 123,
+    );
+    await dao.saveUserPreferenceProfile(profile);
+    final restored = await dao.userPreferenceProfile();
+    expect(restored.interestTags, profile.interestTags);
+    expect(restored.valueTags, profile.valueTags);
+    expect(restored.strengthTags, profile.strengthTags);
+    expect(restored.obstacleTags, profile.obstacleTags);
+    expect(restored.energyLevel, 'high');
+    expect(restored.supportStyle, 'challenge');
+    expect(restored.preferredMinutes, 20);
+  });
+
+  test('TC-V62-ACTION user-selected burden becomes the authoritative action',
+      () async {
+    await dao.createProblem(
+      id: 'problem-practical',
+      rawEventId: 'event-practical',
+      rawQuestion: '我想求职但一直只浏览',
+      contextText: '今天浏览了岗位但没有投递。',
+    );
+    await dao.saveSituationModel(
+      id: 'situation-practical',
+      objectType: 'problem',
+      objectId: 'problem-practical',
+      version: 1,
+      state: XiangjiSituationModelState.framed,
+      summary: '需要用真实投递取得反馈',
+      currentNeed: '找到工作',
+      model: const <String, Object?>{},
+      sourceRefs: const <String>['user:event-practical'],
+    );
+    await dao.createAction(
+      id: 'action-practical',
+      title: '发出一份定向申请',
+      whyChain: const <String, Object?>{'key_gap': '缺少真实投递样本'},
+      prediction: '会获得一个可比较结果',
+      problemId: 'problem-practical',
+      expectedMinutes: 15,
+    );
+    await dao.saveDecisionDraft(<String, Object?>{
+      'id': 'draft-practical',
+      'problem_id': 'problem-practical',
+      'campaign_id': '',
+      'action_id': 'action-practical',
+      'situation_model_id': 'situation-practical',
+      'true_problem': '浏览替代了现实投递',
+      'recommendation': '获得一个现实样本',
+      'judgment': '先投递再判断',
+      'why_text': '缺少现实反馈',
+      'current_action': '发出一份定向申请',
+      'change_signals': '收到回复或发现材料差异',
+      'epistemic_status': 'PROVISIONAL',
+      'clarification_question': '',
+      'options_json': '[]',
+      'uncertainty_json': '{}',
+      'weakest_premise': '尚不清楚材料是否匹配',
+      'unresolved_items_json': '[]',
+      'agent_run_id': '',
+      'user_status': XiangjiDecisionDraftStatus.proposed.wire,
+      'created_at_ms': 1,
+      'updated_at_ms': 1,
+    });
+    const choice = XiangjiActionChoice(
+      id: 'tiny_start',
+      label: '轻松起步',
+      action: '只用 3 分钟打开目标岗位并写出第一条匹配点',
+      minutes: 3,
+      stopCondition: '写出第一条匹配点或达到 3 分钟就停止',
+      fitReason: '当前能量低，先启动',
+      mechanism: '降低启动负担并取得第一个现实材料',
+      prediction: '3 分钟后应至少得到一条岗位匹配信息',
+      coreConceptIds: <String>['SC-K0-004', 'SC-K0-022'],
+      visibleOutput: '一条岗位匹配记录',
+      completionSignal: '写出第一条匹配点',
+      recoveryAction: '只打开职位页并标记一个要求',
+      principlePractice: '用经验检验抽象判断',
+      transferQuestion: '下次哪个启动动作可复用？',
+      motivationCue: '为成长得到一条现实进展',
+      knowledgeSource: '叔本华 L0：经验世界与熟练行动',
+      activeMethodLabels: <String>['持续问题求解'],
+      preferred: true,
+    );
+    final repository = XiangjiRepository(dao: dao);
+
+    await repository.adoptPracticalChoice(
+      decisionDraftId: 'draft-practical',
+      actionId: 'action-practical',
+      choice: choice,
+    );
+
+    final action = await dao.action('action-practical');
+    final draft = await dao.decisionDraft('draft-practical');
+    expect(action?.title, choice.action);
+    expect(action?.expectedMinutes, 3);
+    expect(action?.prediction, choice.prediction);
+    expect(action?.whyChain['stop_condition'], choice.stopCondition);
+    expect(action?.whyChain['selected_experience_mode'], 'tiny_start');
+    expect(action?.whyChain['visible_output'], choice.visibleOutput);
+    expect(action?.whyChain['completion_signal'], choice.completionSignal);
+    expect(action?.whyChain['recovery_action'], choice.recoveryAction);
+    expect(action?.whyChain['principle_practice'], choice.principlePractice);
+    expect(action?.whyChain['transfer_question'], choice.transferQuestion);
+    expect(action?.whyChain['knowledge_source'], choice.knowledgeSource);
+    expect(action?.whyChain['active_method_labels'], choice.activeMethodLabels);
+    expect(action?.whyChain['user_selected'], isTrue);
+    expect(draft?.status, XiangjiDecisionDraftStatus.adopted);
+    expect(draft?.currentAction, choice.action);
+
+    final assistantContext = await repository.usageAssistantContext();
+    expect(assistantContext.problemId, 'problem-practical');
+    expect(assistantContext.currentAction, choice.action);
+    expect(assistantContext.actionState, 'READY');
+    expect(assistantContext.recoveryAction, choice.recoveryAction);
+    expect(assistantContext.principlePractice, choice.principlePractice);
+    expect(assistantContext.knowledgeSource, choice.knowledgeSource);
+    expect(assistantContext.coreConceptIds, contains('SC-K0-004'));
+  });
+
   test('TC-PS-001 preserves user raw material and derived layers separately',
       () async {
     await dao.createProblem(
@@ -58,6 +306,42 @@ void main() {
     expect(experiences.single['content'], '经理在周一会议上取消了我的项目。');
     expect(claims.single['epistemic_status'], 'DRAFT');
     expect(claims.single['text'], isNot(equals(experiences.single['content'])));
+  });
+
+  test('rapid problem transitions keep every audit event without id collision',
+      () async {
+    await dao.createProblem(
+      id: 'problem-fast-audit',
+      rawEventId: 'event-fast-audit',
+      rawQuestion: '快速闭环也必须保留完整审计',
+      contextText: '同一毫秒内可能连续改变状态。',
+    );
+
+    await dao.updateProblemState(
+      'problem-fast-audit',
+      XiangjiProblemState.formalizing,
+      actor: 'test',
+    );
+    await dao.updateProblemState(
+      'problem-fast-audit',
+      XiangjiProblemState.conceptReview,
+      actor: 'test',
+    );
+    await dao.updateProblemState(
+      'problem-fast-audit',
+      XiangjiProblemState.solving,
+      actor: 'test',
+    );
+
+    final rows = await database.query(
+      'xf_audit_log',
+      where: 'object_id = ? AND event_type = ?',
+      whereArgs: const <Object?>['problem-fast-audit', 'state_changed'],
+      orderBy: 'created_at_ms ASC',
+    );
+    expect(rows, hasLength(3));
+    expect(rows.map((row) => row['id']).toSet(), hasLength(3));
+    expect(rows.last['after_json'].toString(), contains('SOLVING'));
   });
 
   test('TC-EP-008 deleting sole evidence downgrades high impact claim',
@@ -216,6 +500,11 @@ void main() {
     expect(await dao.problems(), isEmpty);
     expect(await dao.enabledRules(), isNotEmpty);
     expect(await dao.providerCapabilities(), isNotEmpty);
+    expect(
+      await dao.guidedCases(),
+      hasLength(XiangjiPracticalProductContract.guidedCases.length),
+      reason: '操作示例属于受保护产品说明，重置个人数据后仍应可用。',
+    );
   });
 
   test('T-MEC-DB atomically persists SolverSnapshot and MethodEvent', () async {
@@ -248,8 +537,10 @@ void main() {
     );
 
     final snapshot = await dao.solverSnapshot('problem-method');
+    final snapshots = await dao.solverSnapshots();
     final events = await dao.methodEvents(problemId: 'problem-method');
     expect(snapshot?.currentState['interpretations_may_drive_goal'], isFalse);
+    expect(snapshots.single.problemId, 'problem-method');
     expect(events.single.methodId, 'MEC-001');
     expect(events.single.dataMutations, isNotEmpty);
     expect(events.single.stateVersion, snapshot?.stateVersion);

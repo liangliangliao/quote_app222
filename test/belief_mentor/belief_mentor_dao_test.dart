@@ -116,6 +116,18 @@ void main() {
 
     expect(duplicate.id, first.id);
     expect(await dao.failures(openOnly: true), hasLength(1));
+    await expectLater(
+      dao.createFailure(
+        beliefId: 'belief-1',
+        experimentId: 'experiment-1',
+        facts: '我不想活了',
+        interpretation: '',
+        emotion: '',
+        nextStep: '',
+      ),
+      throwsStateError,
+      reason: '重复写入也不能绕过高风险语言的硬拦截',
+    );
   });
 
   test('P1 calendar and Past Me records are encrypted and deletable', () async {

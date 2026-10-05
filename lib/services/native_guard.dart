@@ -15,6 +15,7 @@ import '../pages/sport_running_page.dart';
 import '../behavior_tracking/behavior_tracking_home_page.dart';
 import '../mental_health_checkup/mental_health_checkup_page.dart';
 import 'sport_music_service.dart';
+import 'notification_service.dart';
 import 'package:flutter/material.dart';
 
 /// Native capability guard (kept minimal and backwards-compatible)
@@ -90,6 +91,11 @@ static Future<bool> isNativeAM() async {
         try {
           await DLog.i('NotifTap', 'NativeGuard handler: onNativeNotificationTap type='+ (type ?? 'null'));
         } catch (_) {}
+        if(type=='evidence_growth') {
+          await NotificationService.markLaunchedFromNotification(payload);
+          await NotificationService.handlePendingNotificationNavigation();
+          return null;
+        }
         // 行为观察 V21：通知点击后不进入首页，而是直接打开轻量“选择层面 + 对应字段”表单页。
         // 同一条通知可能会同时从通用 native.scheduler 通道和行为观察专用通道抵达，使用 Guard 去重。
         try {

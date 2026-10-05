@@ -20,7 +20,15 @@ class MainActivity : FlutterActivity() {
         if (intent.getBooleanExtra("from_notification", false)) {
             // Extract additional extras for navigation
             val notifType = intent.getStringExtra("notif_type")
-            val payload = intent.getStringExtra("payload")
+            var payload = intent.getStringExtra("payload")
+            if(notifType=="evidence_growth" && !payload.isNullOrBlank()) {
+                try {
+                    val token=intent.getStringExtra("eg_tap_token") ?: java.util.UUID.randomUUID().toString().also { intent.putExtra("eg_tap_token",it) }
+                    payload=org.json.JSONObject(payload).put("tap_token",token).toString()
+                    // Durable until Flutter has a navigator and acknowledges this exact tap.
+                    getSharedPreferences("eg_notification_navigation",MODE_PRIVATE).edit().putString("pending",payload).commit()
+                } catch (_: Throwable) {}
+            }
             // Record and emit the event with type/payload
             Channels.markNotificationTapped()
             Channels.emitNotificationTap(notifType, payload)
@@ -30,6 +38,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ExactAlarmHelper.attachActivity(this)
 
         // Edge-to-edge: allow Flutter to draw behind the system status/navigation bars.
         // This is required for background images/colors to be visible under 3-button navigation.
@@ -67,6 +76,17 @@ class MainActivity : FlutterActivity() {
                 )
             }
         } catch (_: Throwable) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        try { ReminderRecoveryWorker.enqueue(applicationContext) } catch (_: Throwable) {}
+        ExactAlarmHelper.attachActivity(this)
+    }
+
+    override fun onDestroy() {
+        ExactAlarmHelper.detachActivity(this)
+        super.onDestroy()
     }
 
 

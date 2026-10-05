@@ -93,7 +93,7 @@ object NotifyHelper {
         }
         val pi = PendingIntent.getActivity(
           ctx,
-          1001,
+          id,
           launchIntent,
           PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

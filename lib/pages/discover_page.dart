@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/location_service.dart';
 import '../platform/bg_guard_helper.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:math' as math;
 
@@ -50,6 +51,10 @@ import '../belief_lab/belief_mentor_discover_entry.dart';
 import '../belief_lab/belief_mentor_home_page.dart';
 import '../kindling/kindling.dart';
 import '../kindling_host/kindling_host_page.dart';
+import '../beautiful_enemy/beautiful_enemy.dart' show EnemyDiscoverEntry;
+import '../beautiful_enemy_host/enemy_host_page.dart';
+import '../evidence_growth/evidence_growth_discover_entry.dart';
+import '../evidence_growth/evidence_growth_home_page.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2506,6 +2511,15 @@ Widget _buildEmotionPieChart() {
     );
   }
 
+  /// 打开「美丽的敌人」。装配（等库、接证据来源与判词生成器）都在 EnemyHostPage 里。
+  Future<void> _openEnemyFromDiscover() async {
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => const EnemyHostPage(),
+      ),
+    );
+  }
+
   Widget _buildDiscoverEntry({
     required IconData icon,
     required String title,
@@ -2571,6 +2585,16 @@ Widget _buildEmotionPieChart() {
                       onTap: _openDiaryFromDiscover,
                     ),
                     const SizedBox(height: 12),
+                    EvidenceGrowthDiscoverEntry(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => const EvidenceGrowthHomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
                     BeliefMentorDiscoverEntry(
                       onTap: () {
                         Navigator.of(context).push(
@@ -2611,6 +2635,10 @@ Widget _buildEmotionPieChart() {
                     const SizedBox(height: 12),
                     KindlingDiscoverEntry(
                       onTap: _openKindlingFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    EnemyDiscoverEntry(
+                      onTap: _openEnemyFromDiscover,
                     ),
                     const SizedBox(height: 12),
                     Material(
@@ -2961,7 +2989,7 @@ Widget _buildEmotionPieChart() {
                                       ),
                                       SizedBox(height: 2),
                                       Text(
-                                        '触摸入口已升级为 V167 可见七十二变光弦版：修复 V166 在黑色壁纸背景下“明明生成了分叉、场线、变身层但肉眼几乎只看到一条暗线”的问题；提高主光弦最低亮度、主体线宽、轮廓通道、变身分叉、场线和笔尖的可见度，同时保留单一主体、大留白、极淡同源时间切片，避免重新回到多主体分身或乱线团。',
+                                        '运动、AI 冥想专家、睡眠、饮食与触摸：从身体支撑开始，按当下状态选择合适的恢复入口。',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
@@ -4185,6 +4213,13 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
                     return;
                   }
 
+                  final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                    context,
+                    featureName: '地点规则提醒',
+                    explanation: '后台守护会用精准闹钟维持规则检查，避免系统休眠后漏掉提醒。',
+                  );
+                  if (!exactGranted) return;
+
                   // 解锁/后台触发地点规则需要后台定位权限（Android 10+：始终允许定位）。
                   final okPerm = await _ensureGeoBackgroundLocationPermission();
                   if (!okPerm) {
@@ -4300,6 +4335,12 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
     final mm = picked.minute.toString().padLeft(2, '0');
     final tStr = '$hh:$mm';
 
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: 'OneThing 每日定时提醒',
+    );
+    if (!exactGranted) return;
+
     final dao = VisionDao();
     final cfg = <String, dynamic>{
       'time': tStr,
@@ -4317,6 +4358,13 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
   }
 
   Future<void> _onToggleTimeTrigger(String id, Map<String, dynamic> oldCfg, bool enabled) async {
+    if (enabled) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: 'OneThing 每日定时提醒',
+      );
+      if (!exactGranted) return;
+    }
     final dao = VisionDao();
     final cfg = Map<String, dynamic>.from(oldCfg);
     cfg['enabled'] = enabled;
@@ -4341,6 +4389,14 @@ class _VisionGoalPageState extends State<VisionGoalPage> {
   }
 
   Future<void> _onToggleUnlockTrigger(bool enabled) async {
+    if (enabled) {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '解锁轻提醒',
+        explanation: '后台守护会用精准闹钟维持触发链路，避免系统休眠后失效。',
+      );
+      if (!exactGranted) return;
+    }
     final dao = VisionDao();
     // Always remove all existing screen_unlock triggers to avoid duplicates.
     final rows = await dao.listTriggers();

@@ -48,6 +48,69 @@ class MeditationSessionTemplate {
   bool get isAiGenerated => source == 'ai_generated';
 }
 
+/// 用户可以在生成前给“冥想专家”提供的少量校准信息。
+///
+/// 这些选项只影响本次引导的入口、节奏和注意力锚点，不会替用户
+/// 推断人格或给出诊断。把它做成一个小对象，能让 UI、提示词和日志
+/// 使用同一套语义，避免把偏好散落成多个布尔值。
+class MeditationExpertPreferences {
+  final String guidanceStyle;
+  final String anchorPreference;
+
+  const MeditationExpertPreferences({
+    this.guidanceStyle = '温柔陪伴',
+    this.anchorPreference = '身体触点',
+  });
+
+  MeditationExpertPreferences copyWith({
+    String? guidanceStyle,
+    String? anchorPreference,
+  }) {
+    return MeditationExpertPreferences(
+      guidanceStyle: guidanceStyle ?? this.guidanceStyle,
+      anchorPreference: anchorPreference ?? this.anchorPreference,
+    );
+  }
+
+  Map<String, String> toMap() => <String, String>{
+        'guidance_style': guidanceStyle,
+        'anchor_preference': anchorPreference,
+      };
+}
+
+/// 仅做“是否需要先转向现实支持”的轻量安全分流，不是心理评估或诊断。
+class MeditationSafetyAssessment {
+  final String level;
+  final String message;
+
+  const MeditationSafetyAssessment({
+    required this.level,
+    required this.message,
+  });
+
+  bool get isNormal => level == 'normal';
+  bool get isMedium => level == 'medium';
+  bool get requiresImmediateSupport => level == 'high';
+}
+
+class MeditationAiGenerationResult {
+  final MeditationSessionTemplate session;
+  final String understoodNeed;
+  final List<String> practiceFocus;
+  final String cognitiveShift;
+  final String embodiedGoal;
+  final String realLifeScene;
+
+  const MeditationAiGenerationResult({
+    required this.session,
+    required this.understoodNeed,
+    this.practiceFocus = const <String>[],
+    this.cognitiveShift = '',
+    this.embodiedGoal = '',
+    this.realLifeScene = '',
+  });
+}
+
 class MeditationRecord {
   final int? id;
   final String sessionKey;

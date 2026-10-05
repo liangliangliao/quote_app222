@@ -1787,6 +1787,11 @@ class _AiPromptSettingsPageState extends State<AiPromptSettingsPage> {
           MapEntry('{{practice_type}}', '系统根据状态推荐的冥想类型。'),
           MapEntry('{{duration_minutes}}', '本次建议练习时长，单位分钟。'),
           MapEntry('{{recent_records_json}}', '用户最近若干次冥想记录 JSON。'),
+          MapEntry('{{user_description}}', '用户对当前处境、感受或希望得到的支持的补充描述。'),
+          MapEntry('{{guidance_style}}', '用户本次选择的引导风格：温柔陪伴 / 安静留白 / 直接落地。'),
+          MapEntry('{{anchor_preference}}', '用户本次选择的注意力锚点：身体触点 / 自然呼吸 / 环境感官。'),
+          MapEntry('{{adaptive_profile_json}}', '由最近练习的分心、身体放松和重复主题计算出的自适应画像 JSON。'),
+          MapEntry('{{safety_context}}', '轻量安全分流提示；若为普通输入则说明未发现额外分流表达。'),
         ];
       case 'meditation_feedback':
         return const <MapEntry<String, String>>[

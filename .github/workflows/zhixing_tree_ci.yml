@@ -1,0 +1,64 @@
+name: Zhixing Tree CI
+
+on:
+  push:
+    paths:
+      - "lib/zhixing_tree/**"
+      - "lib/data/db.dart"
+      - "lib/services/notification_service.dart"
+      - "lib/pages/discover_page.dart"
+      - "assets/zhixing_tree/**"
+      - "tools/zhixing_tree/**"
+      - "test/zhixing_tree/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/zhixing_tree_ci.yml"
+  pull_request:
+    paths:
+      - "lib/zhixing_tree/**"
+      - "lib/data/db.dart"
+      - "lib/services/notification_service.dart"
+      - "lib/pages/discover_page.dart"
+      - "assets/zhixing_tree/**"
+      - "tools/zhixing_tree/**"
+      - "test/zhixing_tree/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/zhixing_tree_ci.yml"
+
+concurrency:
+  group: zhixing-tree-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.3"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Verify knowledge generation stays synchronized
+        shell: bash
+        run: |
+          python3 tools/zhixing_tree/generate_knowledge_v2.py
+          git diff --exit-code -- \
+            assets/zhixing_tree/knowledge_v2_0.md \
+            assets/zhixing_tree/knowledge_manifest_v2_0.json \
+            lib/zhixing_tree/zhixing_thinker_catalog.g.dart
+
+      - name: Analyze Zhixing Tree module
+        run: flutter analyze --no-pub lib/zhixing_tree test/zhixing_tree
+
+      - name: Run Zhixing Tree tests
+        run: flutter test test/zhixing_tree

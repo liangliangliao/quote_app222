@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'xiangji_method_catalog.dart';
 import 'xiangji_models.dart';
 
 /// Runtime input for the Rev.5.2 Signature Capability Router.
@@ -109,22 +110,7 @@ class XiangjiSignatureRouterResult {
 class XiangjiSignatureCapabilityRouter {
   const XiangjiSignatureCapabilityRouter();
 
-  static const List<String> capabilityIds = <String>[
-    'MEC-001',
-    'MEC-002',
-    'MEC-003',
-    'MEC-004',
-    'MEC-005',
-    'MEC-006',
-    'MEC-007',
-    'MEC-008',
-    'MEC-009',
-    'MEC-010',
-    'MEC-011',
-    'MEC-012',
-    'MEC-013',
-    'MEC-014',
-  ];
+  static final List<String> capabilityIds = XiangjiMethodCatalog.ids;
 
   XiangjiSignatureRouterResult route({
     required XiangjiSolverSnapshot state,
@@ -143,6 +129,7 @@ class XiangjiSignatureCapabilityRouter {
 
     for (var index = 0; index < selected.length; index++) {
       final methodId = selected[index];
+      final methodKnowledge = XiangjiMethodCatalog.forId(methodId);
       final before = working;
       final mutation = _apply(methodId, before, context);
       final semanticChanged = _semanticJson(before) != _semanticJson(mutation.state);
@@ -161,7 +148,10 @@ class XiangjiSignatureCapabilityRouter {
         problemId: context.problemId,
         stateVersion: working.stateVersion,
         trigger: mutation.trigger,
-        sourceRefs: context.sourceRefs,
+        sourceRefs: <String>{
+          ...context.sourceRefs,
+          ...methodKnowledge.sourceRefs,
+        }.toList(growable: false),
         beforeStateRefs: _stateRefs(before),
         operationSummary: mutation.operationSummary,
         dataMutations: mutation.dataMutations,

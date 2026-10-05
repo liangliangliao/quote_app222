@@ -283,7 +283,35 @@ object Channels {
                 "isNativeWM" -> result.success(true)
                 "isNativeAM" -> result.success(true)
           "canScheduleExact" -> result.success(ExactAlarmHelper.hasExactAlarmPermission(appCtx))
+          "eg_reconcile_reminders" -> {
+            EvidenceGrowthReminderNative.background {
+              val ok = try { EvidenceGrowthReminderNative.reconcile(appCtx) } catch (_: Throwable) { false }
+              android.os.Handler(android.os.Looper.getMainLooper()).post { result.success(ok) }
+            }
+          }
+          "eg_pending_notification" -> result.success(appCtx.getSharedPreferences("eg_notification_navigation",Context.MODE_PRIVATE).getString("pending",null))
+          "eg_ack_notification" -> {
+            val prefs=appCtx.getSharedPreferences("eg_notification_navigation",Context.MODE_PRIVATE)
+            val token=call.argument<String>("tap_token") ?: ""
+            val pending=prefs.getString("pending",null)
+            if(token.isNotEmpty() && pending!=null && org.json.JSONObject(pending).optString("tap_token")==token) prefs.edit().remove("pending").commit()
+            result.success(true)
+          }
+          "eg_notification_status" -> result.success(EvidenceGrowthReminderNative.status(appCtx))
+          "eg_notification_settings" -> {
+            EvidenceGrowthReminderNative.openSettings(appCtx)
+            result.success(true)
+          }
+          "eg_background_settings" -> {
+            appCtx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:${appCtx.packageName}")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            result.success(true)
+          }
           "requestExactPermission" -> result.success(ExactAlarmHelper.requestExactAlarmPermission(appCtx))
+          "clearExactPermissionRequest" -> {
+            ExactAlarmHelper.clearPendingRequest(appCtx)
+            result.success(true)
+          }
           "scheduleExactAt" -> {
             val id = call.argument<Int>("id") ?: 0
             val epochMs = call.argument<Long>("epochMs") ?: 0L

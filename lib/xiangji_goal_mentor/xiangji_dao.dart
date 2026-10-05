@@ -31,6 +31,7 @@ class XiangjiGoalMentorDao {
     'step_shrunk',
     'checkin_submitted',
     'evidence_confirmed',
+    'goal_round_reviewed',
     'calibration_confirmed',
     'goal_paused',
     'goal_reselected',
@@ -163,6 +164,32 @@ class XiangjiGoalMentorDao {
         FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE CASCADE,
         FOREIGN KEY(checkin_id) REFERENCES xiangji_checkins(id) ON DELETE SET NULL
       )
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_goal_preferences (
+        goal_id INTEGER PRIMARY KEY,
+        interest TEXT NOT NULL,
+        support_tone TEXT NOT NULL,
+        available_minutes INTEGER NOT NULL,
+        allow_ai INTEGER NOT NULL DEFAULT 1,
+        updated_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
+      CREATE TABLE IF NOT EXISTS xiangji_goal_round_reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id INTEGER NOT NULL,
+        step_id INTEGER NOT NULL,
+        structured_output_json TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(goal_id) REFERENCES xiangji_goals(id) ON DELETE CASCADE,
+        FOREIGN KEY(step_id) REFERENCES xiangji_daily_steps(id) ON DELETE CASCADE
+      )
+    ''');
+    batch.execute('''
+      CREATE INDEX IF NOT EXISTS idx_xiangji_round_reviews_goal
+      ON xiangji_goal_round_reviews(goal_id, created_at_ms DESC, id DESC)
     ''');
     batch.execute('''
       CREATE TABLE IF NOT EXISTS xiangji_mentor_sessions (
@@ -534,6 +561,7 @@ class XiangjiGoalMentorDao {
   Future<XiangjiGoal> createAndActivateGoal(
     XiangjiGoalDraft draft, {
     String kbVersion = '2.1.0',
+    Map<String, Object?>? intelligenceReceipt,
   }) async {
     final db = await _database();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -625,6 +653,7 @@ class XiangjiGoalMentorDao {
         zoomMode: XiangjiZoomMode.panorama,
         kbVersion: kbVersion,
         now: now,
+        intelligenceReceipt: intelligenceReceipt,
       );
       await txn.insert('xiangji_mentor_selections', <String, Object?>{
         'goal_id': id,
@@ -668,6 +697,138 @@ class XiangjiGoalMentorDao {
     final created = await goalById(goalId);
     if (created == null) throw StateError('目标创建后读取失败');
     return created;
+  }
+
+  Future<Map<String, Object?>?> latestGoalIntelligenceReceipt(
+    int goalId,
+  ) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_mentor_sessions',
+      columns: const <String>['structured_output_json'],
+      where: 'goal_id = ?',
+      whereArgs: <Object?>[goalId],
+      orderBy: 'created_at_ms DESC, id DESC',
+    );
+    for (final row in rows) {
+      final raw = row['structured_output_json']?.toString() ?? '';
+      if (raw.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) continue;
+        final receipt = decoded['intelligence_receipt'];
+        if (receipt is! Map) continue;
+        return receipt.map<String, Object?>(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<void> saveGoalSupportProfile({
+    required int goalId,
+    required String interest,
+    required String supportTone,
+    required int availableMinutes,
+    required bool allowAi,
+  }) async {
+    if (!<int>[2, 5, 10, 15, 20].contains(availableMinutes)) {
+      throw ArgumentError.value(availableMinutes, 'availableMinutes');
+    }
+    final db = await _database();
+    await db.insert(
+      'xiangji_goal_preferences',
+      <String, Object?>{
+        'goal_id': goalId,
+        'interest': interest,
+        'support_tone': supportTone,
+        'available_minutes': availableMinutes,
+        'allow_ai': allowAi ? 1 : 0,
+        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, Object?>?> goalSupportProfile(int goalId) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_goal_preferences',
+      where: 'goal_id = ?',
+      whereArgs: <Object?>[goalId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return <String, Object?>{
+      'interest': row['interest'],
+      'support_tone': row['support_tone'],
+      'minutes': row['available_minutes'],
+      'allow_ai': _int(row['allow_ai']) == 1,
+    };
+  }
+
+  Future<void> saveGoalRoundReview({
+    required int goalId,
+    required int stepId,
+    required Map<String, Object?> review,
+  }) async {
+    final db = await _database();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert('xiangji_goal_round_reviews', <String, Object?>{
+      'goal_id': goalId,
+      'step_id': stepId,
+      'structured_output_json': jsonEncode(review),
+      'created_at_ms': now,
+    });
+    await _insertAnalyticsEvent(
+      db,
+      eventName: 'goal_round_reviewed',
+      goalId: goalId,
+      properties: <String, Object?>{
+        'result_type': review['result'],
+        'decision': review['decision'],
+        'ai_used': ((review['receipt'] as Map?)?['ai_used'] == true),
+      },
+    );
+  }
+
+  Future<Map<String, Object?>?> latestGoalRoundReview(int goalId) async {
+    final db = await _database();
+    final rows = await db.query(
+      'xiangji_goal_round_reviews',
+      columns: const <String>['structured_output_json'],
+      where: 'goal_id = ?',
+      whereArgs: <Object?>[goalId],
+      orderBy: 'created_at_ms DESC, id DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(
+        (rows.first['structured_output_json'] ?? '{}').toString(),
+      );
+      if (decoded is! Map) return null;
+      return decoded.map<String, Object?>(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int> goalRoundReviewCount(int goalId) async {
+    final db = await _database();
+    return Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM xiangji_goal_round_reviews WHERE goal_id = ?',
+            <Object?>[goalId],
+          ),
+        ) ??
+        0;
   }
 
   Future<XiangjiGoal> updateGoalVersion({
@@ -2065,6 +2226,8 @@ class XiangjiGoalMentorDao {
       'xiangji_daily_steps',
       'xiangji_checkins',
       'xiangji_growth_evidence',
+      'xiangji_goal_preferences',
+      'xiangji_goal_round_reviews',
       'xiangji_mentor_sessions',
       'xiangji_mentor_selections',
       'xiangji_mentor_kb_migrations',
@@ -2100,6 +2263,8 @@ class XiangjiGoalMentorDao {
       'xiangji_provider_events',
       'xiangji_provider_mirrors',
       'xiangji_book_chunks',
+      'xiangji_goal_round_reviews',
+      'xiangji_goal_preferences',
       'xiangji_growth_evidence',
       'xiangji_checkins',
       'xiangji_daily_steps',
@@ -2250,6 +2415,7 @@ class XiangjiGoalMentorDao {
     required XiangjiZoomMode zoomMode,
     required String kbVersion,
     required int now,
+    Map<String, Object?>? intelligenceReceipt,
   }) async {
     final structured = <String, Object?>{
       'mentor': guidance.mentorName,
@@ -2260,6 +2426,8 @@ class XiangjiGoalMentorDao {
       'source_ids': guidance.sources.map((item) => item.sourceId).toList(),
       'evidence_ids': guidance.sources.map((item) => item.evidenceId).toList(),
       'content_type': 'kb_application',
+      if (intelligenceReceipt != null)
+        'intelligence_receipt': intelligenceReceipt,
     };
     await db.insert('xiangji_mentor_sessions', <String, Object?>{
       'goal_id': goalId,

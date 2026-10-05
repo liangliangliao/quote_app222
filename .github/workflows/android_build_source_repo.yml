@@ -53,6 +53,9 @@ on:
 
 jobs:
   build:
+    # The dedicated delivery workflow handles branch pushes; PRs still need
+    # this workflow so the APK build check is not skipped on the review commit.
+    if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/codex/growth-six-core-features' && github.head_ref != 'codex/growth-six-core-features' && github.ref != 'refs/heads/codex/growth-v27-journeys' && github.head_ref != 'codex/growth-v27-journeys')
     runs-on: ubuntu-latest
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
@@ -120,16 +123,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Verify Zhixing V2 generated knowledge is synchronized
-        if: steps.detect.outputs.project_type == 'flutter'
-        working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: |
-          python3 tools/zhixing_tree/generate_knowledge_v2.py
-          git diff --exit-code -- \
-            assets/zhixing_tree/knowledge_manifest_v2_0.json \
-            assets/zhixing_tree/knowledge_v2_0.md \
-            lib/zhixing_tree/zhixing_thinker_catalog.g.dart
 
       - name: Set up Flutter
         if: steps.detect.outputs.project_type == 'flutter'

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../data/sport_dao.dart';
+import '../platform/exact_alarm_permission_coordinator.dart';
 import '../platform/native_scheduler.dart';
 
 /// 运动计划编辑/新增页面
@@ -164,6 +165,12 @@ class _SportPlanEditPageState extends State<SportPlanEditPage> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+      context,
+      featureName: '运动计划到点提醒',
+      explanation: '运动计划开始前的全屏提醒与可选提前通知都需要精准闹钟。',
+    );
+    if (!exactGranted || !mounted) return;
     final Map<String, dynamic> data = {};
     data['title'] = _titleCtrl.text.trim();
     data['sport_type'] = _sportType;
@@ -225,24 +232,30 @@ class _SportPlanEditPageState extends State<SportPlanEditPage> {
         fireAt = fireAt.add(const Duration(days: 1));
       }
 
-      final fullPayload = json.encode({
-        'type': 'sport_fullscreen',
-        'planId': planId,
-        'mode': 'plan',
-        'triggerAt': fireAt.millisecondsSinceEpoch,
-      });
-      await NativeScheduler.scheduleExactAt(fullScreenAlarmId, fireAt.millisecondsSinceEpoch, fullPayload);
+      await NativeScheduler.scheduleExactAt(
+        id: fullScreenAlarmId,
+        epochMs: fireAt.millisecondsSinceEpoch,
+        payload: {
+          'type': 'sport_fullscreen',
+          'planId': planId,
+          'mode': 'plan',
+          'triggerAt': fireAt.millisecondsSinceEpoch,
+        },
+      );
 
       if (notifyEnabled && advanceMinutes > 0) {
         final remindAt = fireAt.subtract(Duration(minutes: advanceMinutes));
         if (remindAt.isAfter(now)) {
-          final remPayload = json.encode({
-            'type': 'sport_reminder',
-            'planId': planId,
-            'advanceMinutes': advanceMinutes,
-            'triggerAt': remindAt.millisecondsSinceEpoch,
-          });
-          await NativeScheduler.scheduleExactAt(reminderAlarmId, remindAt.millisecondsSinceEpoch, remPayload);
+          await NativeScheduler.scheduleExactAt(
+            id: reminderAlarmId,
+            epochMs: remindAt.millisecondsSinceEpoch,
+            payload: {
+              'type': 'sport_reminder',
+              'planId': planId,
+              'advanceMinutes': advanceMinutes,
+              'triggerAt': remindAt.millisecondsSinceEpoch,
+            },
+          );
         }
       }
     } catch (_) {
@@ -357,10 +370,16 @@ class _SportPlanEditPageState extends State<SportPlanEditPage> {
             SwitchListTile(
               value: _notifyEnabled,
               title: const Text('开启通知提醒'),
-              onChanged: (val) {
-                setState(() {
-                  _notifyEnabled = val;
-                });
+              onChanged: (val) async {
+                if (val) {
+                  final granted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                    context,
+                    featureName: '运动计划通知',
+                    explanation: '提前提醒和计划开始提醒需要在设定时间准确触发。',
+                  );
+                  if (!granted || !mounted) return;
+                }
+                setState(() => _notifyEnabled = val);
               },
             ),
             if (_notifyEnabled)

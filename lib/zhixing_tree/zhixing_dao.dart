@@ -7,6 +7,7 @@ import '../data/kv_dao.dart';
 import 'zhixing_extended_models.dart';
 import 'zhixing_knowledge_repository.dart';
 import 'zhixing_models.dart';
+import 'zhixing_productization.dart';
 import 'zhixing_remote_knowledge_models.dart';
 
 class ZxRewardContext {
@@ -30,6 +31,7 @@ class ZxDao {
   static const String _disabledLensesKey = 'zhixing_disabled_lenses_v1';
   static const String _selectedLensesKey = 'zhixing_selected_lenses_v1';
   static const String _personalizationKey = 'zhixing_personalization_v1';
+  static const String _actionPreferenceKey = 'zhixing_action_preference_v3';
 
   final KeyValueDao _kv = KeyValueDao();
 
@@ -793,10 +795,37 @@ class ZxDao {
   Future<void> setPersonalizationEnabled(bool enabled) =>
       _kv.setString(_personalizationKey, enabled ? '1' : '0');
 
+  Future<ZxActionPreference> actionPreference() async {
+    final raw = await _kv.getString(_actionPreferenceKey);
+    if (raw == null || raw.trim().isEmpty) {
+      return const ZxActionPreference();
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return ZxActionPreference.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
+      }
+    } catch (_) {}
+    return const ZxActionPreference();
+  }
+
+  Future<void> saveActionPreference(ZxActionPreference preference) =>
+      _kv.setString(
+        _actionPreferenceKey,
+        jsonEncode(
+          preference
+              .copyWith(updatedAtMs: DateTime.now().millisecondsSinceEpoch)
+              .toJson(),
+        ),
+      );
+
   Future<void> resetPersonalization() async {
     final database = await _db;
     await database.delete('zhixing_lens_feedback');
     await setDisabledLenses(<String>{});
+    await _kv.setString(_actionPreferenceKey, '');
   }
 
   Future<int> addCandidate(ZxCandidateLens candidate) async {
@@ -1118,8 +1147,9 @@ class ZxDao {
         database.query(name, orderBy: 'id ASC');
     final treeRows = await database.query('zhixing_tree_state');
     final selectedLensIds = (await selectedLenses()).toList()..sort();
+    final preference = await actionPreference();
     return <String, dynamic>{
-      'schema': 'zhixing-tree-export-v3',
+      'schema': 'zhixing-tree-export-v4',
       'exported_at': DateTime.now().toIso8601String(),
       'goals': await table('zhixing_goals'),
       'sessions': await table('zhixing_sessions'),
@@ -1130,6 +1160,7 @@ class ZxDao {
       'tree_events': await table('zhixing_tree_events'),
       'lens_feedback': await table('zhixing_lens_feedback'),
       'selected_lenses': selectedLensIds,
+      'action_preference': preference.toJson(),
       'candidates': await table('zhixing_candidates'),
       'ai_books': await table('zhixing_ai_books'),
       'ai_knowledge_drafts': await table('zhixing_ai_knowledge_drafts'),
@@ -1223,6 +1254,7 @@ class ZxDao {
     });
     await setDisabledLenses(<String>{});
     await setSelectedLenses(<String>{});
+    await _kv.setString(_actionPreferenceKey, '');
   }
 }
 

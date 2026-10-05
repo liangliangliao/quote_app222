@@ -8,7 +8,7 @@ class WillMirrorDiscoverEntry extends StatelessWidget {
     required this.onTap,
   });
 
-  static const Key entryKey = ValueKey<String>('discover_will_mirror_v4');
+  static const Key entryKey = ValueKey<String>('discover_will_mirror_v5');
 
   final VoidCallback onTap;
 
@@ -16,7 +16,7 @@ class WillMirrorDiscoverEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: '意志之镜 V4.0，表象、动机、跨人生证据、反证与现实实验',
+      label: '意志之镜 V5，说出目标或问题，生成今天能完成的一步并用现实反馈持续调整',
       child: Material(
         key: entryKey,
         color: const Color(0xFFF1EDE5),
@@ -43,7 +43,7 @@ class WillMirrorDiscoverEntry extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        '意志之镜 · 自我一致人生',
+                        '意志之镜 · 把想法变成行动',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -52,7 +52,7 @@ class WillMirrorDiscoverEntry extends StatelessWidget {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'Deep Why · 跨人生证据 · 强制反证 · 7日现实实验',
+                        '说出目标或问题 → 今天第一步 → 现实反馈 → 下一轮',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

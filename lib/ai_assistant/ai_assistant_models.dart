@@ -234,11 +234,13 @@ class AiAssistantContextBlock {
 
 class AiAssistantAttachmentType {
   static const String image = 'image';
+  static const String video = 'video';
   static const String file = 'file';
 
   static String normalize(String? value) {
     final v = (value ?? '').trim().toLowerCase();
     if (v == image) return image;
+    if (v == video) return video;
     return file;
   }
 }
@@ -277,6 +279,7 @@ class AiAssistantAttachment {
   });
 
   bool get isImage => AiAssistantAttachmentType.normalize(attachmentType) == AiAssistantAttachmentType.image;
+  bool get isVideo => AiAssistantAttachmentType.normalize(attachmentType) == AiAssistantAttachmentType.video;
 
   factory AiAssistantAttachment.fromMap(Map<String, Object?> map) {
     return AiAssistantAttachment(
@@ -314,6 +317,7 @@ class AiAssistantPendingAttachment {
   });
 
   bool get isImage => AiAssistantAttachmentType.normalize(attachmentType) == AiAssistantAttachmentType.image;
+  bool get isVideo => AiAssistantAttachmentType.normalize(attachmentType) == AiAssistantAttachmentType.video;
 
   factory AiAssistantPendingAttachment.fromAttachment(AiAssistantAttachment attachment) {
     return AiAssistantPendingAttachment(

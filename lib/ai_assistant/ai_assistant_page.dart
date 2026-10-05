@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/unified_ai_service.dart';
 import 'ai_assistant_dao.dart';
+import 'ai_assistant_media_service.dart';
 import 'ai_assistant_models.dart';
 import 'ai_assistant_service.dart';
 
@@ -24,6 +28,8 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
   final AiAssistantDao _dao = AiAssistantDao();
   final AiAssistantService _assistantService = AiAssistantService();
   final UnifiedAiService _unifiedAiService = UnifiedAiService();
+  final AiAssistantMediaService _mediaService = AiAssistantMediaService();
+  final AudioPlayer _speechPlayer = AudioPlayer();
   final TextEditingController _inputCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
 
@@ -36,15 +42,27 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
   String _contextMode = AiAssistantContextMode.defaultMode;
   bool _loading = true;
   bool _sending = false;
+  bool _capabilitiesLoading = true;
+  AiAssistantMediaCapabilities _mediaCapabilities = const AiAssistantMediaCapabilities.unavailable();
+  StreamSubscription<void>? _speechCompleteSubscription;
+  List<String> _speechQueue = const [];
+  int _speechQueueIndex = 0;
+  int _speechRequestId = 0;
+  int? _speakingMessageId;
+  int? _speechLoadingMessageId;
 
   @override
   void initState() {
     super.initState();
+    _speechCompleteSubscription = _speechPlayer.onPlayerComplete.listen((_) => _playNextSpeechChunk());
     _bootstrap();
   }
 
   @override
   void dispose() {
+    _speechRequestId++;
+    _speechCompleteSubscription?.cancel();
+    _speechPlayer.dispose();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -90,9 +108,36 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
     try {
       final cfg = await _unifiedAiService.resolveGlobalConfig();
       _modelLabel = cfg.label;
+      final alreadyResolved = _mediaCapabilities.provider == cfg.provider && _mediaCapabilities.model == cfg.model;
+      if (!alreadyResolved) {
+        _capabilitiesLoading = true;
+        unawaited(_refreshMediaCapabilities(cfg));
+      }
     } catch (_) {
       _modelLabel = 'AI';
+      _capabilitiesLoading = false;
+      _mediaCapabilities = const AiAssistantMediaCapabilities.unavailable();
     }
+  }
+
+  Future<void> _refreshMediaCapabilities(UnifiedAiResolvedConfig cfg) async {
+    AiAssistantMediaCapabilities capabilities;
+    try {
+      capabilities = await _mediaService.resolveCapabilities(cfg);
+    } catch (e) {
+      capabilities = AiAssistantMediaCapabilities.unavailable(
+        provider: cfg.provider,
+        model: cfg.model,
+        speechReason: '能力检测失败：$e',
+        imageReason: '能力检测失败：$e',
+        videoReason: '能力检测失败：$e',
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _mediaCapabilities = capabilities;
+      _capabilitiesLoading = false;
+    });
   }
 
   Future<void> _reloadCurrent() async {
@@ -235,6 +280,148 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _readMessage(AiAssistantMessage message) async {
+    if (!_mediaCapabilities.speech || message.content.trim().isEmpty) return;
+    if (_speakingMessageId == message.id || _speechLoadingMessageId == message.id) {
+      await _stopSpeech();
+      return;
+    }
+    final requestId = ++_speechRequestId;
+    await _speechPlayer.stop();
+    if (!mounted) return;
+    setState(() {
+      _speechLoadingMessageId = message.id;
+      _speakingMessageId = null;
+      _speechQueue = const [];
+      _speechQueueIndex = 0;
+    });
+    try {
+      final files = await _mediaService.synthesizeSpeech(message.content);
+      if (!mounted || requestId != _speechRequestId) return;
+      setState(() {
+        _speechLoadingMessageId = null;
+        _speakingMessageId = message.id;
+        _speechQueue = files;
+        _speechQueueIndex = 0;
+      });
+      if (files.isNotEmpty) await _speechPlayer.play(DeviceFileSource(files.first));
+    } catch (e) {
+      if (!mounted || requestId != _speechRequestId) return;
+      setState(() {
+        _speechLoadingMessageId = null;
+        _speakingMessageId = null;
+      });
+      _showSnack(_friendlyError('朗读失败', e));
+    }
+  }
+
+  Future<void> _playNextSpeechChunk() async {
+    if (!mounted || _speakingMessageId == null) return;
+    final next = _speechQueueIndex + 1;
+    if (next >= _speechQueue.length) {
+      setState(() {
+        _speakingMessageId = null;
+        _speechQueue = const [];
+        _speechQueueIndex = 0;
+      });
+      return;
+    }
+    setState(() => _speechQueueIndex = next);
+    await _speechPlayer.play(DeviceFileSource(_speechQueue[next]));
+  }
+
+  Future<void> _stopSpeech() async {
+    _speechRequestId++;
+    await _speechPlayer.stop();
+    if (!mounted) return;
+    setState(() {
+      _speechLoadingMessageId = null;
+      _speakingMessageId = null;
+      _speechQueue = const [];
+      _speechQueueIndex = 0;
+    });
+  }
+
+  Future<void> _generateMedia({required bool video}) async {
+    final id = _conversationId;
+    final prompt = _inputCtrl.text.trim();
+    final supported = video ? _mediaCapabilities.video : _mediaCapabilities.image;
+    if (id == null || _sending || !supported) return;
+    if (prompt.isEmpty) {
+      _showSnack('请先输入${video ? '视频' : '图片'}生成提示词');
+      return;
+    }
+    _inputCtrl.clear();
+    setState(() => _sending = true);
+    final startedAt = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final cfg = await _unifiedAiService.resolveGlobalConfig();
+      await _dao.insertMessage(
+        conversationId: id,
+        role: 'user',
+        content: prompt,
+        provider: cfg.provider,
+        model: cfg.model,
+      );
+      await _dao.touchConversation(
+        id,
+        provider: cfg.provider,
+        model: cfg.model,
+        title: prompt.length <= 32 ? prompt : '${prompt.substring(0, 32)}…',
+      );
+      final media = video ? await _mediaService.generateVideo(prompt) : await _mediaService.generateImage(prompt);
+      final assistantMessageId = await _dao.insertMessage(
+        conversationId: id,
+        role: 'assistant',
+        content: '已通过 ${media.provider} · ${media.model} 生成${video ? '视频' : '图片'}。',
+        provider: media.provider,
+        model: media.model,
+        latencyMs: DateTime.now().millisecondsSinceEpoch - startedAt,
+      );
+      final file = File(media.path);
+      await _dao.insertAttachments(
+        conversationId: id,
+        messageId: assistantMessageId,
+        attachments: [
+          AiAssistantAttachment(
+            id: 0,
+            conversationId: id,
+            messageId: assistantMessageId,
+            attachmentType: video ? AiAssistantAttachmentType.video : AiAssistantAttachmentType.image,
+            name: media.name,
+            path: media.path,
+            mimeType: media.mimeType,
+            sizeBytes: await file.length(),
+            provider: media.provider,
+            providerFileId: media.remoteUrl,
+            providerUploadedAtMs: DateTime.now().millisecondsSinceEpoch,
+            createdAtMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+        ],
+      );
+      await _reloadCurrent();
+    } catch (e) {
+      try {
+        await _dao.insertMessage(
+          conversationId: id,
+          role: 'assistant',
+          content: _friendlyError('${video ? '视频' : '图片'}生成失败', e),
+          error: e.toString(),
+        );
+        await _reloadCurrent();
+      } catch (_) {}
+      _showSnack(_friendlyError('${video ? '视频' : '图片'}生成失败', e));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  String _friendlyError(String prefix, Object error) {
+    final raw = error.toString();
+    final clean = raw.startsWith('Bad state: ') ? raw.substring('Bad state: '.length) : raw;
+    return '$prefix：$clean';
   }
 
 
@@ -719,6 +906,10 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
           onCopy: () => _copyMessage(message),
           onEdit: message.role == 'user' ? () => _editUserMessage(message) : null,
           onRetry: message.role == 'assistant' ? () => _retryAssistantMessage(message) : null,
+          onRead: message.role == 'assistant' && _mediaCapabilities.speech ? () => _readMessage(message) : null,
+          readDisabledReason: _capabilitiesLoading ? '正在检测当前模型的朗读能力' : _mediaCapabilities.speechReason,
+          isReading: _speakingMessageId == message.id,
+          isReadLoading: _speechLoadingMessageId == message.id,
           onPositiveFeedback: () => _setMessageFeedback(message, 1),
           onNegativeFeedback: () => _showNegativeFeedback(message),
         );
@@ -738,6 +929,39 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _MediaCapabilityButton(
+                      icon: Icons.image_outlined,
+                      label: '生成图片',
+                      enabled: !_capabilitiesLoading && _mediaCapabilities.image && !_sending,
+                      tooltip: _capabilitiesLoading ? '正在检测当前模型能力' : _mediaCapabilities.imageReason,
+                      onPressed: () => _generateMedia(video: false),
+                    ),
+                    const SizedBox(width: 8),
+                    _MediaCapabilityButton(
+                      icon: Icons.movie_creation_outlined,
+                      label: '生成视频',
+                      enabled: !_capabilitiesLoading && _mediaCapabilities.video && !_sending,
+                      tooltip: _capabilitiesLoading ? '正在检测当前模型能力' : _mediaCapabilities.videoReason,
+                      onPressed: () => _generateMedia(video: true),
+                    ),
+                    const SizedBox(width: 8),
+                    _CapabilityStatusChip(
+                      loading: _capabilitiesLoading,
+                      speech: _mediaCapabilities.speech,
+                      image: _mediaCapabilities.image,
+                      video: _mediaCapabilities.video,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 7),
             if (_pendingAttachments.isNotEmpty)
               Align(
                 alignment: Alignment.centerLeft,
@@ -824,6 +1048,58 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
   }
 }
 
+class _MediaCapabilityButton extends StatelessWidget {
+  const _MediaCapabilityButton({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: ActionChip(
+        avatar: Icon(icon, size: 18, color: enabled ? Theme.of(context).colorScheme.primary : const Color(0xFFB6BBC4)),
+        label: Text(label),
+        onPressed: enabled ? onPressed : null,
+      ),
+    );
+  }
+}
+
+class _CapabilityStatusChip extends StatelessWidget {
+  const _CapabilityStatusChip({required this.loading, required this.speech, required this.image, required this.video});
+
+  final bool loading;
+  final bool speech;
+  final bool image;
+  final bool video;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Chip(
+        avatar: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+        label: Text('检测能力'),
+      );
+    }
+    final enabledCount = [speech, image, video].where((value) => value).length;
+    return Chip(
+      avatar: Icon(enabledCount > 0 ? Icons.check_circle_outline : Icons.block_outlined, size: 17),
+      label: Text('朗${speech ? '✓' : '—'} 图${image ? '✓' : '—'} 影${video ? '✓' : '—'}'),
+    );
+  }
+}
+
 
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
@@ -832,8 +1108,12 @@ class _MessageBubble extends StatelessWidget {
     required this.onCopy,
     required this.onPositiveFeedback,
     required this.onNegativeFeedback,
+    required this.readDisabledReason,
+    required this.isReading,
+    required this.isReadLoading,
     this.onEdit,
     this.onRetry,
+    this.onRead,
   });
 
   final AiAssistantMessage message;
@@ -841,6 +1121,10 @@ class _MessageBubble extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback? onEdit;
   final VoidCallback? onRetry;
+  final VoidCallback? onRead;
+  final String readDisabledReason;
+  final bool isReading;
+  final bool isReadLoading;
   final VoidCallback onPositiveFeedback;
   final VoidCallback onNegativeFeedback;
 
@@ -884,6 +1168,10 @@ class _MessageBubble extends StatelessWidget {
           onCopy: onCopy,
           onEdit: onEdit,
           onRetry: onRetry,
+          onRead: onRead,
+          readDisabledReason: readDisabledReason,
+          isReading: isReading,
+          isReadLoading: isReadLoading,
           onPositive: onPositiveFeedback,
           onNegative: onNegativeFeedback,
         ),
@@ -905,12 +1193,20 @@ class _MessageActionBar extends StatelessWidget {
     required this.onNegative,
     this.onEdit,
     this.onRetry,
+    this.onRead,
+    this.readDisabledReason = '',
+    this.isReading = false,
+    this.isReadLoading = false,
   });
 
   final AiAssistantMessage message;
   final VoidCallback onCopy;
   final VoidCallback? onEdit;
   final VoidCallback? onRetry;
+  final VoidCallback? onRead;
+  final String readDisabledReason;
+  final bool isReading;
+  final bool isReadLoading;
   final VoidCallback onPositive;
   final VoidCallback onNegative;
 
@@ -947,6 +1243,21 @@ class _MessageActionBar extends StatelessWidget {
               iconSize: 18,
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, color: Color(0xFF6B7280)),
+            ),
+          if (isAssistant)
+            Tooltip(
+              message: onRead == null ? readDisabledReason : (isReading || isReadLoading ? '停止朗读' : '朗读回复'),
+              child: IconButton(
+                visualDensity: VisualDensity.compact,
+                iconSize: 18,
+                onPressed: onRead,
+                icon: isReadLoading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(
+                        isReading ? Icons.stop_circle_outlined : Icons.volume_up_outlined,
+                        color: onRead == null ? const Color(0xFFB6BBC4) : (isReading ? const Color(0xFFDC2626) : const Color(0xFF6B7280)),
+                      ),
+              ),
             ),
           if (isAssistant) ...[
             IconButton(
@@ -995,7 +1306,7 @@ class _AttachmentPreviewList extends StatelessWidget {
       runSpacing: 8,
       children: attachments.map((attachment) {
         final borderColor = isUser ? Colors.white.withOpacity(0.45) : const Color(0xFFD1D5DB);
-        return Container(
+        final card = Container(
           constraints: const BoxConstraints(maxWidth: 240),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
           decoration: BoxDecoration(
@@ -1019,10 +1330,34 @@ class _AttachmentPreviewList extends StatelessWidget {
                   ),
                 ),
               if (attachment.isImage && File(attachment.path).existsSync()) const SizedBox(height: 6),
+              if (attachment.isVideo)
+                Container(
+                  height: 112,
+                  width: 210,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF111827),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 42),
+                      SizedBox(height: 6),
+                      Text('点击播放生成视频', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              if (attachment.isVideo) const SizedBox(height: 6),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(attachment.isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined, size: 18, color: fg),
+                  Icon(
+                    attachment.isImage
+                        ? Icons.image_outlined
+                        : (attachment.isVideo ? Icons.movie_outlined : Icons.insert_drive_file_outlined),
+                    size: 18,
+                    color: fg,
+                  ),
                   const SizedBox(width: 6),
                   Flexible(child: Text(attachment.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fg, fontSize: 12))),
                 ],
@@ -1030,8 +1365,25 @@ class _AttachmentPreviewList extends StatelessWidget {
             ],
           ),
         );
+        if (!attachment.isVideo) return card;
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openVideo(context, attachment),
+          child: card,
+        );
       }).toList(),
     );
+  }
+
+  Future<void> _openVideo(BuildContext context, AiAssistantAttachment attachment) async {
+    final remote = (attachment.providerFileId ?? '').trim();
+    final uri = remote.startsWith('http://') || remote.startsWith('https://') ? Uri.parse(remote) : Uri.file(attachment.path);
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (opened) return;
+    } catch (_) {}
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('视频已保存在：${attachment.path}')));
   }
 }
 
