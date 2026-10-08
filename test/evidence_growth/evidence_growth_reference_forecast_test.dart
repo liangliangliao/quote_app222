@@ -185,6 +185,46 @@ GrowthData citedResponse() => {
     };
 
 void main() {
+  test('reference report explains a critical gate even when its construct is deduplicated', () {
+    final result = EvidenceGrowthReferenceForecast.assemble(
+      input: input(person: true),
+      profile: {
+        'execution_likelihood': .9,
+        'claims': [
+          {'id': 'available', 'dimension': '机会', 'claim': '场地平时可用',
+            'importance': .95, 'support_score': .95, 'direction': 'supportive',
+            'evidence_status': 'SOURCE_LINKED'},
+          {'id': 'permission', 'dimension': '机会', 'claim': '进入许可未通过',
+            'importance': .9, 'support_score': .05, 'direction': 'adverse',
+            'evidence_status': 'SOURCE_LINKED', 'evidence_kind': 'PAST_BEHAVIOR',
+            'quote': '指定场地的进入许可未通过',
+            'obstacle_reason': '没有进入许可，无法在指定场地执行'},
+        ],
+      },
+      sources: [],
+      model: 'test',
+      jev: {'status': 'JEV', 'answers': {'event': .9, 'hard_blocker': .99}},
+    );
+    expect(result['estimate'], lessThan(.2));
+    expect(growthRows(growthMap(result['factor_weight_analysis'])['factors']), hasLength(1));
+    final text = ReferenceForecastReport.markdown(result);
+    expect(text, contains('进入许可未通过'));
+    expect(text, contains('没有进入许可，无法在指定场地执行'));
+    expect(text, contains('其他有利因素无法完全抵消'));
+  });
+
+  test('successful works fallback is reported as available public evidence', () {
+    final text = ReferenceForecastReport.markdown({
+      'input_snapshot': input(person: true),
+      'profile': profile(),
+      'research': {'status': 'NO_SOURCES'},
+      'sources': [{'id': 'public_works', 'kind': 'PUBLISHED_WORKS_COLLECTION',
+        'title': '测试人物公开观点引文集', 'content': '测试资料，不是真实人物引文。'}],
+    });
+    expect(text, contains('已读取公开著作与观点引文'));
+    expect(text, isNot(contains('未取得可引用的网络资料')));
+  });
+
   test('public works lookup retains original work headings and rejects different people', () async {
     final research = ReferenceWorksResearch(client: MockClient((request) async {
       expect(request.url.host, 'en.wikiquote.org');
