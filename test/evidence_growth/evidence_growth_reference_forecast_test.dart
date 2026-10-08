@@ -16,6 +16,8 @@ import 'package:quote_app/evidence_growth/evidence_growth_reference_report.dart'
 import 'package:quote_app/evidence_growth/evidence_growth_reference_research.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
 
+import 'jev_wire_contract.dart';
+
 class ReferenceMemoryDao extends EvidenceGrowthDao {
   ReferenceMemoryDao() : super(database: () => throw StateError('unused'));
   final settings = <String, String>{};
@@ -307,6 +309,7 @@ void main() {
       });
     });
     final jev = EvidenceGrowthJev(client: MockClient((request) async {
+      validateJevWireRequest(request);
       final questions = growthMap(growthMap(jsonDecode(request.body))['questions']);
       expect(questions.length, lessThanOrEqualTo(24));
       return jsonResponse({'model': 'test-jev', 'answers': {

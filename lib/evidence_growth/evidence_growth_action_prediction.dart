@@ -663,7 +663,14 @@ class EvidenceGrowthActionPredictionService {
       if (theoryFeedbackSynthesis['status'] != 'AI_SYNTHESIS') 'LLM综合未完成：${theoryFeedbackSynthesis['reason'] ?? '未知原因'}',
       if (finalJevAdjudication['status'] != 'JEV') 'JEV终裁未完成：${finalJevAdjudication['reason'] ?? '未知原因'}',
     ];
-    final pipelineComplete = pipelineErrors.isEmpty;
+    final predictionComplete = pipelineErrors.isEmpty;
+    final pipelineWarnings = <String>[
+      if (jev['core_batches_complete'] == false) '部分JEV因素批次尚未完成',
+      if (jev['theory_roles_complete'] == false) '部分JEV理论角色尚未返回',
+      if (jev['importance_batch_complete'] == false) '部分JEV重要性评分尚未返回',
+      if (growthStrings(jev['parse_warnings']).isNotEmpty) '部分JEV因素判断未通过校验，已保留其他有效结果',
+    ];
+    final pipelineComplete = predictionComplete && pipelineWarnings.isEmpty;
 
     final adjudicationCatalog =
         growthRows(finalJevAdjudication['candidate_catalog']);
@@ -955,9 +962,9 @@ class EvidenceGrowthActionPredictionService {
                 : evidenceStatus == 'supportive'
                     ? 'CURRENT_SUPPORT'
                     : 'SECONDARY_OR_MIXED',
-        'mechanism': isDynamic
-            ? '${dynamicByKey[key]!['condition'] ?? ''}'.trim()
-            : factorMechanismsZh[construct] ?? '',
+        // A condition defines the desired state; it is not an explanation of
+        // why its absence blocks this action. Keep the explanation in Chinese.
+        'mechanism': factorMechanismsZh[construct] ?? '',
         'intervention': factorInterventionsZh[construct] ?? '',
         'unknown': unknown,
         'source': source,
@@ -1016,7 +1023,7 @@ class EvidenceGrowthActionPredictionService {
         key: comparisonKey, signature: signature);
     final probabilityCalibration = EvidenceForecastScience.calibrate(rawEstimate, calibrationRows);
     final forecastValidation = EvidenceForecastScience.validation(calibrationRows);
-    final calibrated = requireJev && !pipelineComplete ? null : _prob(probabilityCalibration['probability']);
+    final calibrated = requireJev && !predictionComplete ? null : _prob(probabilityCalibration['probability']);
     final ceiling = _prob(scoreAggregation['probability_ceiling']);
     // Empirical recalibration cannot erase a currently established prerequisite.
     final estimate = calibrated == null ? null : ceiling != null && calibrated > ceiling
@@ -1351,6 +1358,9 @@ class EvidenceGrowthActionPredictionService {
       'science_version': EvidenceForecastScience.version,
       'pipeline_status': pipelineComplete ? 'COMPLETE' : 'PARTIAL',
       'pipeline_errors': pipelineErrors,
+      'pipeline_warnings': pipelineWarnings,
+      'prediction_complete': predictionComplete,
+      'diagnostics_complete': pipelineWarnings.isEmpty,
       'input_fingerprint': EvidenceForecastScience.inputFingerprint(state),
       'event_contract': contract,
       'comparison_key': comparisonKey,
@@ -1368,6 +1378,10 @@ class EvidenceGrowthActionPredictionService {
       'journey_id': journey?.id ?? '',
       'estimate_available': estimate != null,
       'estimate': estimate,
+      'preliminary_estimate': predictionComplete ? null : rawEstimate,
+      'estimate_stage': predictionComplete ? 'FINAL'
+          : jevEstimate != null ? 'JEV_FIRST_PASS'
+          : aiEstimate != null ? 'LLM_ONLY' : 'UNAVAILABLE',
       'band': estimate == null
           ? '信息不足'
           : probabilityCalibration['status'] == 'PERSONAL_PLATT_CALIBRATED'
@@ -1409,6 +1423,10 @@ class EvidenceGrowthActionPredictionService {
         'aggregation_components': scoreAggregation['components'],
         'jev_first_pass_status': jev['status'],
         'jev_first_pass_reason': jev['reason'],
+        'jev_first_pass_http_status': jev['http_status'],
+        'jev_optional_answer_warnings': growthStrings(jev['parse_warnings']),
+        'jev_theory_role_error': jev['theory_role_error'],
+        'jev_core_batch_error': jev['core_batch_error'],
         'jev_final_adjudication_status': finalJevAdjudication['status'],
         'jev_final_adjudication_reason': finalJevAdjudication['reason'],
         'joint_decision_mode': jointDecisionMode,
@@ -1459,6 +1477,8 @@ class EvidenceGrowthActionPredictionService {
         'primary_event_id': primaryEventId,
         'events': eventRows,
         'request_mode': jev['request_mode'],
+        'core_questions_batched': jev['core_questions_batched'] == true,
+        'core_batch_count': jev['core_batch_count'],
         'core_request_bytes': jev['core_request_bytes'],
         'full_request_bytes': jev['full_request_bytes'],
         'theory_roles_batched': jev['theory_roles_batched'] == true,

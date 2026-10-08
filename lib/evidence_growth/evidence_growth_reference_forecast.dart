@@ -400,8 +400,8 @@ class EvidenceGrowthReferenceForecast {
           'factor_${row['id']}': {
             'type': 'score',
             'instructions': 'Assess CURRENT support of this factor for the frozen event, separately from importance: ${EvidenceForecastScience.text(row['claim'], 120)}. Honor verified excerpts. Writings inform attitudes, not current ability or a guarantee of behavior. Use 0 for strong obstruction, 4 for strong support; unknown is not adverse evidence.',
-            'criteria': {'0': 'Strong obstruction', '1': 'Some obstruction',
-              '2': 'Mixed or unknown', '3': 'Relevant support', '4': 'Strong support'},
+            'criteria': ['Strong obstruction', 'Some obstruction',
+              'Mixed or unknown', 'Relevant support', 'Strong support'],
           },
         },
         for (final row in growthRows(profile['scenarios']))

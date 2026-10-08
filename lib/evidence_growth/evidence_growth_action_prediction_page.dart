@@ -429,7 +429,7 @@ class _EvidenceGrowthActionPredictionPageState
       await service.savePrediction(output);
       if (!mounted) return;
       setState(() => result = output);
-      if (output['pipeline_status'] == 'PARTIAL') _message('已保存完成的分析与阶段错误；联合预测尚未完成，可从当前输入重试。');
+      if (output['pipeline_status'] == 'PARTIAL') _message(EvidenceGrowthForecastReportPage.completionNotice(output));
       cycleContext = {...growthMap(output['cycle_context']),
         'trial_id': EvidenceForecastScience.trialId(output),
         'parent_prediction_id': output['id']};
@@ -683,7 +683,7 @@ class _EvidenceGrowthActionPredictionPageState
         'low_relevance': 'JEV：当前相关性较低',
         'uncertain': 'JEV：作用不确定',
       }['$value'] ??
-      'JEV：未判断';
+      'JEV：待补全';
 
   String _conclusionTypeLabel(Object? value) => const {
         'CORE_WEAKNESS': '核心弱点假设',
@@ -2098,6 +2098,10 @@ class _EvidenceGrowthActionPredictionPageState
                     subtitle: const Text(
                         '用于核对综合结论有没有遗漏或错误使用你的问卷反馈'),
                     children: [
+                      if (EvidenceGrowthForecastReportPage.completionNotice(result).isNotEmpty)
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(EvidenceGrowthForecastReportPage.completionNotice(result),
+                            style: const TextStyle(color: Colors.deepOrange, height: 1.4))),
                       for (final row in theoryFactorRows)
                         ListTile(
                             dense: true,
@@ -2108,7 +2112,7 @@ class _EvidenceGrowthActionPredictionPageState
                                 '理论：${growthStrings(row['theory_ids']).join(' + ')}'
                                 '${row['selection_source'] == 'AUTO_LLM_JEV' ? ' · 最初由LLM+JEV预填，提交时进入本次反馈' : ' · 用户选择'}'),
                             trailing: Text(
-                                '${_theoryRoleLabel(row['jev_role'])}'
+                                '${row['option_id'] == 'unknown' ? '条件未知（未评估）' : _theoryRoleLabel(row['jev_role'])}'
                                 '${row['jev_role_confidence'] is num ? '\n${_pct(row['jev_role_confidence'])}' : ''}',
                                 textAlign: TextAlign.right,
                                 style: const TextStyle(fontSize: 10)))
@@ -2805,7 +2809,7 @@ class _EvidenceGrowthActionPredictionPageState
                       style: const TextStyle(
                           fontSize: 11, color: Colors.black54)),
                 Text(
-                    '${_theoryRoleLabel(role)}'
+                    '${row['option_id'] == 'unknown' ? '条件未知（未评估）' : _theoryRoleLabel(role)}'
                     '${roleConfidence is num ? ' · 自报置信度 ${_pct(roleConfidence)}' : ''}',
                     style: const TextStyle(
                         fontSize: 11, fontWeight: FontWeight.w700)),
@@ -3062,10 +3066,19 @@ class _EvidenceGrowthActionPredictionPageState
   Widget _reportCard() {
     final weights = growthMap(result['factor_weight_analysis']);
     final sections = EvidenceGrowthForecastReportPage.sections(result);
+    final estimate = EvidenceGrowthForecastReportPage.displayEstimate(result);
+    final notice = EvidenceGrowthForecastReportPage.completionNotice(result);
     return _section('行动预测与学习报告',
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(forecastPercent(result['estimate']), style: const TextStyle(
+        Text(EvidenceGrowthForecastReportPage.estimateTitle(result),
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(estimate == null ? '预测尚未完成' : forecastPercent(estimate), style: const TextStyle(
             fontSize: 42, fontWeight: FontWeight.w900, color: _teal)),
+        if (notice.isNotEmpty) ...[
+          Text(notice, style: const TextStyle(color: Colors.deepOrange, height: 1.4)),
+          TextButton.icon(onPressed: busy || preparing ? null : predict,
+            icon: const Icon(Icons.refresh), label: const Text('重试未完成的预测')),
+        ],
         Text('实际结果：${EvidenceGrowthForecastReportPage.outcomeLabel(result)}'),
         const SizedBox(height: 10),
         if (weights['status'] == 'WEIGHTED') ...[
@@ -3107,7 +3120,7 @@ class _EvidenceGrowthActionPredictionPageState
                   title: Text('${row['plan']}',
                       maxLines: 2, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
-                      '${_pct(row['estimate'])} · ${_outcome((row['outcome'] ?? 'PENDING').toString())} · ${_time((row['scheduled_at_ms'] as num?)?.toInt() ?? 0)}'),
+                      '${_pct(EvidenceGrowthForecastReportPage.displayEstimate(row))}${EvidenceGrowthForecastReportPage.preliminary(row) ? '（初步）' : ''} · ${_outcome((row['outcome'] ?? 'PENDING').toString())} · ${_time((row['scheduled_at_ms'] as num?)?.toInt() ?? 0)}'),
                   onTap: busy || preparing ? null : () => setState(() => _restorePrediction(row))),
           ]));
 

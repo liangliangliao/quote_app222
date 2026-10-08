@@ -14,24 +14,102 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
   const EvidenceGrowthForecastReportPage({super.key, required this.prediction});
   final GrowthData prediction;
 
+  static double? displayEstimate(GrowthData p) =>
+      EvidenceForecastScience.probability(p['estimate']) ??
+      EvidenceForecastScience.probability(p['preliminary_estimate']) ??
+      (p['pipeline_status'] == 'PARTIAL'
+          ? EvidenceForecastScience.probability(p['raw_model_estimate'])
+          : null);
+
+  static bool preliminary(GrowthData p) =>
+      p['prediction_complete'] == false ||
+      const {'LLM_ONLY', 'JEV_FIRST_PASS'}.contains(p['estimate_stage']) ||
+      (p['estimate'] == null && displayEstimate(p) != null);
+
+  static String estimateTitle(GrowthData p) {
+    if (displayEstimate(p) == null) return '行动预测（尚未完成）';
+    if (!preliminary(p)) return '行动发生可能性';
+    final source = growthMap(p['forecast_provenance']);
+    return source['jev_first_pass_status'] == 'JEV'
+        ? '初步估计（JEV初判已完成）'
+        : '初步估计（仅LLM，JEV未完成）';
+  }
+
+  static String failureReason(Object? reason) {
+    final code = '$reason';
+    if (code.contains('401')) return '密钥无效，请重新配置JEV';
+    if (code.contains('403')) return '当前密钥没有访问权限';
+    if (code.contains('422')) return '请求格式未通过JEV接口校验';
+    if (code.contains('429') ||
+        code.contains('529') ||
+        code.contains('COOLDOWN')) return '服务繁忙，请稍后重试';
+    if (code.contains('TIMEOUT')) return '请求超时，请重试';
+    if (code.contains('NETWORK') || code.contains('TRANSPORT'))
+      return '网络连接失败，请检查网络后重试';
+    if (code.contains('CONTEXT_TOO_LARGE')) return '资料过长，需分批判断';
+    if (code.contains('PARSE') || code.contains('TYPED_RESPONSE'))
+      return '返回结果不完整，请重试';
+    if (code.contains('NO_KEY') || code.contains('NOT_CONFIGURED'))
+      return '尚未配置JEV';
+    if (code.contains('SERVICE_UNAVAILABLE') || code.contains('HTTP_5'))
+      return '服务暂时不可用，请稍后重试';
+    return '请求未完成，可重试';
+  }
+
+  static String completionNotice(GrowthData p) {
+    if (p['pipeline_status'] != 'PARTIAL' && p['prediction_complete'] != false)
+      return '';
+    final source = growthMap(p['forecast_provenance']);
+    if (source['jev_first_pass_status'] != 'JEV') {
+      final hasAi = growthMap(p['ai'])['status'] == 'AI' ||
+          EvidenceForecastScience.probability(source['ai_fallback_probability']) != null;
+      return 'JEV初判未完成：${failureReason(source['jev_first_pass_reason'])}。${hasAi ? '已有LLM分析已保留。' : '尚未取得可用结果，可重试。'}';
+    }
+    if (source['jev_final_adjudication_status'] != 'JEV') {
+      if ('${source['jev_final_adjudication_reason']}'
+          .startsWith('LLM_SYNTHESIS_UNAVAILABLE')) {
+        return 'JEV初判已完成；LLM综合未完成，最终复核仍待完成，可重试。';
+      }
+      return 'JEV初判已完成，最终复核未完成：${failureReason(source['jev_final_adjudication_reason'])}。';
+    }
+    final warnings = growthStrings(p['pipeline_warnings']);
+    return warnings.isNotEmpty
+        ? '预测分数已完成；${warnings.join('；')}，可重试补全。'
+        : '部分分析尚未完成，已有判断已保留。';
+  }
+
   static String brief(Object? value, [int max = 120]) {
     final text = EvidenceForecastScience.text(value, max)
         .replaceAll(RegExp(r'\s+'), ' ');
-    if (RegExp(r'event_contract|normalized_action|confirmed=true|observation_window|success_criterion|\bnull\b').hasMatch(text)) {
+    if (RegExp(
+            r'event_contract|normalized_action|confirmed=true|observation_window|success_criterion|\bnull\b')
+        .hasMatch(text)) {
       return '';
     }
     return text;
   }
 
-  static String outcomeLabel(GrowthData p) => const {
-    'PENDING': '尚未记录', 'SUCCESS': '已完成', 'ON_TIME': '按时完成',
-    'FAILED': '未完成', 'NOT_DONE': '没有执行', 'LATE': '迟到',
-    'PARTIAL': '部分完成', 'CANCELLED': '已取消', 'UNOBSERVED': '无法观察',
-  }[p['outcome']] ?? '尚未记录';
+  static String outcomeLabel(GrowthData p) =>
+      const {
+        'PENDING': '尚未记录',
+        'SUCCESS': '已完成',
+        'ON_TIME': '按时完成',
+        'FAILED': '未完成',
+        'NOT_DONE': '没有执行',
+        'LATE': '迟到',
+        'PARTIAL': '部分完成',
+        'CANCELLED': '已取消',
+        'UNOBSERVED': '无法观察',
+      }[p['outcome']] ??
+      '尚未记录';
 
-  static String stateLabel(Object? value) => const {
-    'supportive': '有利', 'adverse': '不利', 'mixed': '利弊并存',
-  }[value] ?? '未知';
+  static String stateLabel(Object? value) =>
+      const {
+        'supportive': '有利',
+        'adverse': '不利',
+        'mixed': '利弊并存',
+      }[value] ??
+      '未知';
 
   static List<GrowthData> sections(GrowthData p) {
     final contract = growthMap(p['event_contract']);
@@ -40,19 +118,30 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
     final ranked = growthRows(weights['factors']);
     final provenance = growthMap(p['forecast_provenance']);
     final validation = growthMap(p['forecast_validation']).isNotEmpty
-        ? growthMap(p['forecast_validation']) : growthMap(report['validation']);
-    final estimate = EvidenceForecastScience.probability(p['estimate']);
+        ? growthMap(p['forecast_validation'])
+        : growthMap(report['validation']);
+    final estimate = displayEstimate(p);
     final observed = EvidenceForecastScience.outcome(p);
-    final observations = growthMap(growthMap(p['diagnostic_review'])['user_observations']);
+    final observations =
+        growthMap(growthMap(p['diagnostic_review'])['user_observations']);
     final count = (validation['final_count'] as num?)?.toInt() ?? 0;
-    final obstacles = ranked.where((r) => r['evidence_status'] == 'adverse' ||
-        r['evidence_status'] == 'mixed' &&
-        (EvidenceForecastScience.probability(r['bottleneck_probability']) ?? 0) >= .55)
-        .toList()..sort((a, b) => (b['opposition_contribution'] as num)
-            .compareTo(a['opposition_contribution'] as num));
+    final obstacles = ranked
+        .where((r) =>
+            r['evidence_status'] == 'adverse' ||
+            r['evidence_status'] == 'mixed' &&
+                (EvidenceForecastScience.probability(
+                            r['bottleneck_probability']) ??
+                        0) >=
+                    .55)
+        .toList()
+      ..sort((a, b) => (b['opposition_contribution'] as num)
+          .compareTo(a['opposition_contribution'] as num));
     for (final critical in growthRows(weights['critical_obstacles']).reversed) {
       obstacles.removeWhere((r) => r['key'] == critical['key']);
-      obstacles.insert(0, {...growthMap(growthMap(p['factors'])[critical['key']]), ...critical});
+      obstacles.insert(0, {
+        ...growthMap(growthMap(p['factors'])[critical['key']]),
+        ...critical
+      });
     }
     final fallback = growthRows(p['top_risks']);
     final roots = growthRows(report['roots_and_experiments']);
@@ -60,16 +149,16 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
       {
         'title': '预测与实际结果',
         'body': [
-          '行动发生可能性：${forecastPercent(p['estimate'])}',
+          '${estimateTitle(p)}：${estimate == null ? '预测尚未完成' : forecastPercent(estimate)}',
+          if (completionNotice(p).isNotEmpty) completionNotice(p),
           '实际结果：${outcomeLabel(p)}',
           if (observed != null && estimate != null)
-            '预测对照：${(estimate >= .5) == (observed == 1) ? '发生倾向与实际结果一致' : '发生倾向与实际结果不一致'}',
+            '${preliminary(p) ? '初步预测' : '预测'}对照：${(estimate >= .5) == (observed == 1) ? '发生倾向与实际结果一致' : '发生倾向与实际结果不一致'}',
           '行动：${brief(p['plan'], 300)}',
           '达成标准：${brief(contract['success_criterion'], 600).isEmpty ? '未记录' : brief(contract['success_criterion'], 600)}',
           '观察窗口：${brief(contract['observation_window'], 300).isEmpty ? '未记录' : brief(contract['observation_window'], 300)}',
           if (brief(observations['timeline']).isNotEmpty)
             '实际经过：${brief(observations['timeline'])}',
-          if (p['pipeline_status'] == 'PARTIAL') '计算尚未完成，可重试。',
           'LLM ${forecastPercent(provenance['ai_fallback_probability'])} · JEV初判 ${forecastPercent(provenance['jev_primary_event_probability'])} · JEV复核 ${forecastPercent(provenance['jev_final_synthesis_probability'])}',
         ].join('\n'),
       },
@@ -95,7 +184,7 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
                 '按本次行动的重要性分配占比，未知项不扣分。',
                 for (final row in ranked)
                   '${row['rank']}. ${brief(row['label'], 50)} · ${stateLabel(row['evidence_status'])} · 权重 ${forecastPercent(row['weight'])}'
-                  '${brief(row['importance_reason'], 70).isEmpty ? '' : '\n   ${brief(row['importance_reason'], 70)}'}',
+                      '${brief(row['importance_reason'], 70).isEmpty ? '' : '\n   ${brief(row['importance_reason'], 70)}'}',
                 if (growthStrings(weights['unknown_factors']).isNotEmpty)
                   '尚不清楚：${growthStrings(weights['unknown_factors']).take(3).join('、')}',
                 if (growthStrings(weights['unassessed_factors']).isNotEmpty)
@@ -107,21 +196,30 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
         'body': obstacles.isEmpty && fallback.isEmpty
             ? '目前没有证据明确的主要阻碍。'
             : [
-                for (final row in (obstacles.isNotEmpty ? obstacles : fallback).take(3)) ...[
+                for (final row in (obstacles.isNotEmpty ? obstacles : fallback)
+                    .take(3)) ...[
                   '${brief(row['label'], 50)}${row['weight'] == null ? '' : ' · 权重 ${forecastPercent(row['weight'])}'}',
-                  if (brief(row['evidence']).isNotEmpty) '依据：${brief(row['evidence'])}',
-                  if (brief(row['mechanism']).isNotEmpty) '为什么可能卡住：${brief(row['mechanism'])}',
-                  if (brief(row['intervention']).isNotEmpty) '可先处理：${brief(row['intervention'])}',
+                  if (brief(row['evidence']).isNotEmpty)
+                    '依据：${brief(row['evidence'])}',
+                  if (brief(row['mechanism']).isNotEmpty)
+                    '为什么可能卡住：${brief(row['mechanism'])}',
+                  if (brief(row['intervention']).isNotEmpty)
+                    '可先处理：${brief(row['intervention'])}',
                 ],
-                if (growthMap(p['score_aggregation'])['ceiling_applied'] == true)
+                if (growthMap(p['score_aggregation'])['ceiling_applied'] ==
+                    true)
                   '有关键条件未满足，其他有利因素无法完全抵消。',
               ].join('\n'),
       },
-      if (roots.any((r) => brief(r['minimum_action']).isNotEmpty)) {
-        'title': '下一步',
-        'body': roots.where((r) => brief(r['minimum_action']).isNotEmpty).take(1)
-            .map((r) => brief(r['minimum_action'])).join(),
-      },
+      if (roots.any((r) => brief(r['minimum_action']).isNotEmpty))
+        {
+          'title': '下一步',
+          'body': roots
+              .where((r) => brief(r['minimum_action']).isNotEmpty)
+              .take(1)
+              .map((r) => brief(r['minimum_action']))
+              .join(),
+        },
     ];
   }
 

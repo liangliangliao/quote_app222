@@ -127,6 +127,7 @@ class EvidenceForecastScience {
       final created = (row['created_at_ms'] as num).toInt();
       final observed = (row['outcome_at_ms'] as num?)?.toInt() ?? 0;
       return row['comparison_key'] == key &&
+          row['prediction_complete'] != false &&
           row['model_signature'] == signature &&
           validContract(growthMap(row['event_contract'])) &&
           observed > created &&

@@ -5,7 +5,10 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_forecast_weights.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_behavior_theories.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_journey_models.dart';
+
+import 'jev_wire_contract.dart';
 
 GrowthData factor(
   double importance,
@@ -35,11 +38,235 @@ GrowthData factor(
 
 void main() {
   test(
+      'a later role batch failure keeps the primary probability and reuses completed batches on retry',
+      () async {
+    final factors = EvidenceBehaviorTheoryCatalog.activeFactors(['IBM']);
+    final state = <String, dynamic>{
+      'plan': '明天去跑步',
+      'selected_theories': ['IBM'],
+      'theory_factor_answers': {
+        for (final row in factors)
+          '${row['id']}': {
+            'option_id': (row['options'] as List)
+                .where((o) => growthMap(o)['id'] != 'unknown')
+                .last['id'],
+            'option_label': (row['options'] as List)
+                .where((o) => growthMap(o)['id'] != 'unknown')
+                .last['label'],
+            'confirmed_by_user': true,
+          },
+      },
+      'action_profile': {
+        'dynamic_factors': [
+          for (var i = 0; i < 24; i++)
+            {
+              'id': 'condition_$i',
+              'label': '条件$i',
+              'condition':
+                  'Distinct condition $i: ${List.filled(150, 'x').join()}',
+              'ibm_construct': 'environmental_constraints'
+            },
+        ]
+      },
+    };
+    var fail = true;
+    final roleRequests = <String, int>{};
+    var coreRequests = 0;
+    final jev = EvidenceGrowthJev(client: MockClient((request) async {
+      expect(utf8.encode(request.body).length, lessThanOrEqualTo(64000));
+      final questions =
+          growthMap(growthMap(jsonDecode(request.body))['questions']);
+      if (questions.keys.any((k) => k.startsWith('theory_role_'))) {
+        final id = questions.keys.first;
+        roleRequests[id] = (roleRequests[id] ?? 0) + 1;
+        if (!questions.containsKey('theory_feedback_pattern') && fail)
+          return http.Response('{}', 503);
+      } else if (questions.keys.any((k) => k.startsWith('factor_'))) {
+        coreRequests++;
+      }
+      return validJevWireReply(request);
+    }));
+    final first = await jev.assessAction(state, apiKey: 'test');
+    expect(first['status'], 'JEV', reason: '$first');
+    expect(first['overall'], .85);
+    expect(first['theory_roles_complete'], isFalse);
+    expect(growthMap(first['theory_factor_roles']), hasLength(10));
+    final completedCoreRequests = coreRequests;
+    fail = false;
+    final second = await jev.assessAction(state, apiKey: 'test');
+    expect(second['theory_roles_complete'], isTrue);
+    expect(growthMap(second['theory_factor_roles']), hasLength(factors.length));
+    expect(coreRequests, completedCoreRequests);
+    expect(roleRequests.values, [1, 2]);
+  });
+
+  test(
+      'malformed optional answers preserve the primary event and other valid factors',
+      () {
+    final parsed = EvidenceGrowthJev.parseAction({
+      'answers': {
+        'event_running': {'type': 'noul', 'noul': .85},
+        'factor_intention': {'type': 'score', 'score': 3.2, 'confidence': .8},
+        'factor_habit': {'type': 'score', 'score': 'invalid', 'confidence': .8},
+        'theory_role_intention': {
+          'type': 'choice',
+          'choice': 'protective',
+          'confidence': .8
+        },
+        'theory_role_habit': {
+          'type': 'choice',
+          'choice': 'key_blocker',
+          'confidence': 'invalid'
+        },
+      }
+    }, primaryEventId: 'running');
+    expect(parsed['overall'], .85);
+    expect(growthMap(parsed['factors']).keys, ['intention']);
+    expect(growthMap(parsed['theory_factor_roles']).keys, ['intention']);
+    expect(parsed['hard_blocker'], isNull);
+    expect(growthStrings(parsed['parse_warnings']),
+        containsAll(['INVALID_factor_habit', 'INVALID_theory_role_habit']));
+  });
+
+  test('a different event cannot substitute for a missing frozen primary event',
+      () async {
+    final jev = EvidenceGrowthJev(
+        client: MockClient((request) async => http.Response(
+            jsonEncode({
+              'answers': {
+                'event_other': {'type': 'noul', 'noul': .9}
+              }
+            }),
+            200)));
+    final result = await jev.assessAction({
+      'plan': '明天去跑步',
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'running',
+            'primary': true,
+            'label': '跑步10分钟',
+            'true_criterion': '连续跑步10分钟',
+            'false_criterion': '没有连续跑步10分钟'
+          }
+        ],
+      }
+    }, apiKey: 'test');
+    expect(result['status'], 'LOCAL');
+    expect(result['reason'], 'RESPONSE_PARSE_FAILED');
+  });
+
+  test(
+      'authentication errors retain the HTTP status for a clear recovery message',
+      () async {
+    final jev = EvidenceGrowthJev(
+        client: MockClient((request) async => http.Response('{}', 401)));
+    final result = await jev.assessAction({'plan': '明天去跑步'}, apiKey: 'test');
+    expect(result['reason'], 'HTTP_401');
+    expect(result['http_status'], 401);
+  });
+
+  testWidgets('a healthy JEV response after eight seconds is still accepted',
+      (tester) async {
+    final jev = EvidenceGrowthJev(client: MockClient((request) async {
+      await Future<void>.delayed(const Duration(seconds: 9));
+      return http.Response(
+          jsonEncode({
+            'answers': {
+              'event_running': {'type': 'noul', 'noul': .85},
+            }
+          }),
+          200);
+    }));
+    GrowthData? result;
+    final future = jev.assessAction({
+      'plan': '明天去跑步',
+      'action_profile': {
+        'forecast_events': [
+          {
+            'id': 'running',
+            'primary': true,
+            'label': '跑步10分钟',
+            'true_criterion': '连续跑步10分钟',
+            'false_criterion': '未连续跑步10分钟'
+          }
+        ],
+      }
+    }, apiKey: 'test').then((r) => result = r);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 9));
+    await future;
+    expect(result?['status'], 'JEV', reason: '$result');
+    expect(result?['overall'], .85);
+  });
+
+  test(
+      'confirmed running questionnaire gets JEV probability and factor roles through the real wire schema',
+      () async {
+    final jev = EvidenceGrowthJev(client: MockClient((request) async {
+      try {
+        validateJevWireRequest(request);
+      } on FormatException {
+        return http.Response('{}', 422);
+      }
+      final questions =
+          growthMap(growthMap(jsonDecode(request.body))['questions']);
+      return http.Response(
+          jsonEncode({
+            'model': 'jev-schema-test',
+            'answers': {
+              for (final entry in questions.entries)
+                entry.key: switch (growthMap(entry.value)['type']) {
+                  'score' => {'type': 'score', 'score': 3.2, 'confidence': .8},
+                  'noul' => {'type': 'noul', 'noul': .8},
+                  _ => {
+                      'type': 'choice',
+                      'choice': entry.key.startsWith('theory_role_')
+                          ? 'protective'
+                          : growthMap(growthMap(entry.value)['criteria'])
+                              .keys
+                              .first,
+                      'confidence': .8
+                    },
+                },
+            }
+          }),
+          200);
+    }));
+    final factors = EvidenceBehaviorTheoryCatalog.activeFactors(['IBM']);
+    final result = await jev.assessAction({
+      'plan': '明天去跑步',
+      'selected_theories': ['IBM'],
+      'event_contract': {
+        'success_criterion': '跑步10分钟',
+        'observation_window': '明天',
+        'confirmed': true
+      },
+      'theory_factor_answers': {
+        for (final row in factors)
+          '${row['id']}': {
+            'option_id': (row['options'] as List)
+                .where((o) => growthMap(o)['id'] != 'unknown')
+                .last['id'],
+            'option_label': (row['options'] as List)
+                .where((o) => growthMap(o)['id'] != 'unknown')
+                .last['label'],
+            'confirmed_by_user': true,
+          },
+      },
+    }, apiKey: 'test');
+    expect(result['status'], 'JEV', reason: '$result');
+    expect(result['overall'], .8);
+    expect(growthMap(result['theory_factor_roles']), hasLength(factors.length));
+    expect(growthMap(result['factor_importance']), isNotEmpty);
+  });
+  test(
       'large action importance assessment is batched without losing core evidence',
       () async {
     var requests = 0;
     final jev = EvidenceGrowthJev(client: MockClient((request) async {
       requests++;
+      validateJevWireRequest(request);
       expect(utf8.encode(request.body).length, lessThanOrEqualTo(64000));
       final body = growthMap(jsonDecode(request.body));
       return http.Response(
@@ -70,7 +297,7 @@ void main() {
               'id': 'condition_$i',
               'label': '条件$i',
               'condition':
-                'Distinct prerequisite $i: ${List.filled(150, 'x').join()}',
+                  'Distinct prerequisite $i: ${List.filled(150, 'x').join()}',
               'ibm_construct': 'environmental_constraints'
             },
         ]
