@@ -2226,7 +2226,7 @@ class _EvidenceGrowthActionPredictionPageState
             Text(
                 estimateIsCalibrated
                     ? '行动发生概率（已用个人真实结果再校准）'
-                    : 'JEV原始模型估计（尚未校准为真实概率）',
+                    : '行动发生可能性（尚未用实际结果校准）',
                 style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 3),
             Text(
@@ -2256,7 +2256,9 @@ class _EvidenceGrowthActionPredictionPageState
             LinearProgressIndicator(value: estimate!.toDouble()),
             const SizedBox(height: 10),
             Text(
-                source.contains('JEV_FINAL_SYNTHESIS')
+                source.contains('contextual_factor_pool')
+                    ? '来源：因素重要性加权 + LLM判断 + JEV复核'
+                    : source.contains('JEV_FINAL_SYNTHESIS')
                     ? '原始模型来源：JEV最终裁决（读取用户事实 + 理论结构 + LLM综合 + JEV初判）'
                     : source == 'JEV_PRIMARY'
                         ? '原始模型来源：JEV第一阶段 typed workflow'
@@ -2270,14 +2272,14 @@ class _EvidenceGrowthActionPredictionPageState
             const SizedBox(height: 5),
             Text(
                 estimateIsCalibrated
-                    ? '这个百分比先由JEV产生原始预测，再用你过去有明确现实结果的预测做正则化逻辑再校准；不是把理论因素做加权平均。'
-                    : '当前没有足够个人现实结果做概率校准，因此这个百分比只能理解为JEV的模型信念/排序信号，不能解释成“现实中有精确这么大概率”。',
+                    ? '根据本次行动的重要性与因素状态综合，再用同类实际结果校准。'
+                    : '这是待实际行动检验的估计；记录结果后可评估准确度。',
                 style: const TextStyle(
                     fontSize: 11, color: Colors.black54)),
             if (!estimateIsCalibrated) ...[
               const SizedBox(height: 4),
               Text(
-                  '校准状态：未校准。可用二元历史结果 ${probabilityCalibration['sample_count'] ?? 0} 次；达到至少30次且成功/失败各至少5次后，才启用个人概率再校准。',
+                  '校准状态：未校准。可用二元历史结果 ${probabilityCalibration['sample_count'] ?? 0} 次；达到至少60次且成功/失败各至少10次，并通过时间留出验证后，才启用个人概率再校准。',
                   style: const TextStyle(
                       fontSize: 11, color: Colors.black54))
             ] else ...[
@@ -3057,19 +3059,37 @@ class _EvidenceGrowthActionPredictionPageState
     ]), icon: Icons.loop);
   }
 
-  Widget _reportCard() => _section('行动预测与学习报告', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Text('${forecastPercent(result['estimate'])} · ${result['estimate_is_calibrated'] == true ? '个人校准试用' : '尚未校准的模型估计'}', style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8),
-    for (final error in growthStrings(result['pipeline_errors'])) Text(error),
-    Text('${growthMap(result['event_contract'])['success_criterion'] ?? result['plan']}'),
-    const SizedBox(height: 8),
-    Text('${growthMap(result['behavior_diagnosis'])['headline'] ?? ''}'),
-    const SizedBox(height: 12),
-    const Text('报告包含证据与分歧、因素关系、原因假设、理论学习、行动实验、个人校准及复盘。模型支持的原因仍须现实检验。'),
-    const SizedBox(height: 12),
-    FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
-      EvidenceGrowthForecastReportPage(prediction: result))), icon: const Icon(Icons.article_outlined), label: const Text('阅读完整报告／复制报告')),
-  ]), icon: Icons.analytics_outlined);
+  Widget _reportCard() {
+    final weights = growthMap(result['factor_weight_analysis']);
+    final sections = EvidenceGrowthForecastReportPage.sections(result);
+    return _section('行动预测与学习报告',
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(forecastPercent(result['estimate']), style: const TextStyle(
+            fontSize: 42, fontWeight: FontWeight.w900, color: _teal)),
+        Text('实际结果：${EvidenceGrowthForecastReportPage.outcomeLabel(result)}'),
+        const SizedBox(height: 10),
+        if (weights['status'] == 'WEIGHTED') ...[
+          Text('有利 ${forecastPercent(weights['support_share'])} · 不利 ${forecastPercent(weights['opposing_share'])} · 利弊并存 ${forecastPercent(weights['mixed_share'])}'),
+          const SizedBox(height: 8),
+          Row(children: [
+            for (final entry in <String, Color>{'support_share': Colors.teal,
+              'opposing_share': Colors.redAccent, 'mixed_share': Colors.amber}.entries)
+              if ((weights[entry.key] as num? ?? 0) > 0)
+                Expanded(flex: ((weights[entry.key] as num) * 1000).round().clamp(1, 1000),
+                  child: Container(height: 8, color: entry.value)),
+          ]),
+          const SizedBox(height: 12),
+        ],
+        Text('${sections[1]['body']}', style: const TextStyle(height: 1.4)),
+        const SizedBox(height: 12),
+        const Text('可能让你没有行动的阻碍', style: TextStyle(fontWeight: FontWeight.bold)),
+        Text('${sections[3]['body']}', style: const TextStyle(height: 1.5)),
+        const SizedBox(height: 12),
+        FilledButton.icon(onPressed: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => EvidenceGrowthForecastReportPage(prediction: result))),
+          icon: const Icon(Icons.article_outlined), label: const Text('查看因素权重与预测对照／复制报告')),
+      ]), icon: Icons.analytics_outlined);
+  }
 
   Widget _history() => Card(
       elevation: 0,

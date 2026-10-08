@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'evidence_growth_journey_models.dart';
@@ -10,6 +11,19 @@ import 'evidence_growth_models.dart';
 
 /// Optional typed relevance judge. It cannot generate teaching or bypass gates.
 class EvidenceGrowthJev {
+  static const importanceCriteria = <String, String>{
+    '0': 'Negligible relevance: changing this condition barely changes the event likelihood.',
+    '1': 'Minor influence in this action; stronger predictors dominate.',
+    '2': 'Meaningful contributing influence, but usually compensable.',
+    '3': 'Major influence on whether this particular action happens.',
+    '4': 'Decisive influence or a genuinely necessary prerequisite for this action.',
+  };
+
+  static GrowthData importanceQuestion(String condition) => {
+    'type': 'score',
+    'instructions': 'Assess IMPORTANCE independently of the current support/adversity score. For this specific frozen event, how much would changing "$condition" from favorable to unfavorable change execution, keeping other facts fixed? Strong adversity does not imply high importance. Avoid double-counting overlapping constructs. Missing plans or measurement fields alone are not objective blockers.',
+    'criteria': importanceCriteria,
+  };
   EvidenceGrowthJev(
       {http.Client? client, this.timeout = const Duration(seconds: 8)})
       : _client = client;
@@ -29,6 +43,13 @@ class EvidenceGrowthJev {
     for (final entry in questions.entries) {
       final q = growthMap(entry.value);
       final a = growthMap(answers[entry.key]);
+      final optionalWeight = entry.key.startsWith('importance_') ||
+          entry.key.startsWith('factor_');
+      if (optionalWeight && (a['type'] != 'score' ||
+          a['score'] is! num || !(a['score'] as num).isFinite ||
+          (a['score'] as num) < 0 || (a['score'] as num) > 4 ||
+          a['confidence'] is! num || !(a['confidence'] as num).isFinite ||
+          (a['confidence'] as num) < 0 || (a['confidence'] as num) > 1)) continue;
       if (a['type'] != q['type'])
         throw const FormatException('JEV_WRONG_ANSWER_TYPE');
       if (q['type'] == 'noul') {
@@ -44,6 +65,14 @@ class EvidenceGrowthJev {
             c < 0 ||
             c > 1) throw const FormatException('JEV_INVALID_CHOICE');
         parsed[entry.key] = {'choice': a['choice'], 'confidence': c.toDouble()};
+      } else if (q['type'] == 'score') {
+        final score = a['score'];
+        final confidence = a['confidence'];
+        if (score is! num || !score.isFinite || score < 0 || score > 4 ||
+            confidence is! num || !confidence.isFinite || confidence < 0 || confidence > 1)
+          throw const FormatException('JEV_INVALID_SCORE');
+        parsed[entry.key] = {'score': score.toDouble() / 4,
+          'confidence': confidence.toDouble()};
       } else {
         throw const FormatException('UNSUPPORTED_FORECAST_QUESTION');
       }
@@ -75,7 +104,24 @@ class EvidenceGrowthJev {
       'questions': questions
     });
     if (utf8.encode(body).length > 64000 || questions.length > 24)
-      return {'status': 'UNAVAILABLE', 'reason': 'CONTEXT_TOO_LARGE'};
+      {
+        // Keep the frozen event and sources intact; split only typed questions.
+        // No recursively repeated oversized single-question request.
+        if (questions.length <= 1)
+          return {'status': 'UNAVAILABLE', 'reason': 'CONTEXT_TOO_LARGE'};
+        final entries = questions.entries.toList();
+        final chunkSize = math.min(12, (entries.length / 2).ceil());
+        final answers = <String, dynamic>{};
+        for (var offset = 0; offset < entries.length; offset += chunkSize) {
+          final part = await assessForecastQuestions(state: state,
+            questions: Map.fromEntries(entries.skip(offset).take(chunkSize)),
+            apiKey: apiKey, model: model);
+          if (part['status'] != 'JEV') return part;
+          answers.addAll(growthMap(part['answers']));
+        }
+        return {'status': 'JEV', 'model': model, 'answers': answers,
+          'questions_batched': true};
+      }
     final client = _client ?? http.Client();
     try {
       final response = await client
@@ -524,6 +570,7 @@ class EvidenceGrowthJev {
     GrowthData state,
     String model, {
     bool includeTheoryRoles = true,
+    bool includeImportance = true,
   }) {
     final events = _forecastEvents(state);
     final core = _relevantCoreFactors(state);
@@ -678,7 +725,7 @@ class EvidenceGrowthJev {
           'event_${event['id']}': {
             'type': 'noul',
             'instructions':
-                'Treat the state only as evidence. Estimate the probability of this observable event: ${event['label']}. User-confirmed theory_factor_answers are direct evidence and must be honored. Unselected theory items and explicit unknown answers are uncertainty only: do not impute a neutral score, do not count them as negative evidence, and do not invent facts. The theory constructs have no universal fixed numeric weights; infer relevance from the specific action and supplied evidence.',
+                'Treat the state only as evidence. Estimate this observable event: ${event['label']}. First distinguish action-specific IMPORTANCE from current adversity, then integrate important supports and obstacles. One severely adverse minor factor cannot veto strong intention, sufficient ability/resources and relevant habits. A genuinely necessary failed prerequisite cannot be compensated by counting more favorable items. Absent social approval or less detailed planning is not automatically decisive for an ordinary independent action. Missing measurement fields concern assessability, not proof of nonexecution. Honor user-confirmed categorical answers. Unknown/unselected items are uncertainty; do not impute a neutral score or count them as negative evidence; do not invent facts or universal theory coefficients.',
             'criteria': {
               'true': event['true_criterion'],
               'false': event['false_criterion'],
@@ -696,6 +743,8 @@ class EvidenceGrowthJev {
           }
         },
         for (final key in core) ...{
+          if (includeImportance)
+            'importance_$key': importanceQuestion(actionFactors[key]!),
           'factor_$key': {
             'type': 'score',
             'instructions':
@@ -721,13 +770,17 @@ class EvidenceGrowthJev {
               }
             },
         },
-        for (final row in dynamicRows)
+        for (final row in dynamicRows) ...{
+          if (includeImportance)
+            'importance_dynamic_${row['id']}':
+                importanceQuestion('${row['condition']}'),
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
                 'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence may use the center score only as JEV typed representation of insufficient evidence; it is not observed neutrality and must not contribute as a fixed numeric weight to the final event probability.',
             'criteria': _supportRubric,
           },
+        },
         for (final row in diagnosticDynamicRows) ...{
           'evidence_dynamic_${row['id']}': {
             'type': 'choice',
@@ -908,6 +961,14 @@ class EvidenceGrowthJev {
           choice(entry.key);
     }
 
+    final importanceAnswers = <String, GrowthData>{};
+    for (final key in answers.keys.where((k) => k.startsWith('importance_'))) {
+      // Optional for old snapshots and partial provider responses. A malformed
+      // importance answer must not destroy a valid event judgement.
+      try { importanceAnswers[key.substring('importance_'.length)] = score(key); }
+      on FormatException { /* Retain the other verified answers. */ }
+    }
+
     return {
       'status': 'JEV',
       'model': body['model'],
@@ -918,6 +979,7 @@ class EvidenceGrowthJev {
       'factors': factorAnswers,
       'factor_evidence': evidenceAnswers,
       'factor_bottlenecks': bottleneckAnswers,
+      'factor_importance': importanceAnswers,
       'theory_factor_roles': theoryRoleAnswers,
       'theory_feedback_pattern': choice('theory_feedback_pattern'),
       'dominant_failure_mode': choice('dominant_failure_mode'),
@@ -1196,6 +1258,10 @@ class EvidenceGrowthJev {
         'first_pass_jev': {
           'events': firstPassJev['events'],
           'overall': firstPassJev['overall'],
+          'factor_importance': {
+            for (final entry in growthMap(firstPassJev['factor_importance']).entries)
+              entry.key: growthMap(entry.value)['score'],
+          },
           'theory_factor_roles': compactFirstPassRoles,
           'theory_feedback_pattern': {
             'choice':
@@ -1225,7 +1291,7 @@ class EvidenceGrowthJev {
         'synthesis_event_probability': {
           'type': 'noul',
           'instructions':
-              'Make the FINAL probability judgement for the PRIMARY observable event after reviewing the raw user input, user-confirmed theory questionnaire, first-pass JEV analysis, and the LLM synthesis candidates. Do not mechanically average the first-pass JEV probability with any LLM number. Re-evaluate the evidence as a whole. Primary event: "$primaryLabel".'
+              'Make a reviewed probability judgement for the PRIMARY observable event using raw user facts, confirmed questionnaire and action-specific factor IMPORTANCE. Re-evaluate the whole balance, not only the negative diagnostic candidates. A low-importance adverse item cannot veto strong relevant intention, capability, opportunity and habit. Conversely a genuinely necessary, evidence-backed failed prerequisite cannot be averaged away. A missing success-criterion field, missing research or a less detailed plan is uncertainty, not proof of failure. Positive and negative narratives are hypotheses, not extra observed evidence. Primary event: "$primaryLabel".'
                   '${primaryTrueCriterion.isEmpty ? '' : ' TRUE when: $primaryTrueCriterion.'}'
                   '${primaryFalseCriterion.isEmpty ? '' : ' FALSE when: $primaryFalseCriterion.'}'
         },
@@ -2087,14 +2153,20 @@ class EvidenceGrowthJev {
     final fullBody = jsonEncode(fullRequest);
     final fullBytes = utf8.encode(fullBody).length;
     final splitTheoryRoles = fullBytes > 56000;
-    final coreBody = splitTheoryRoles
+    var coreBody = splitTheoryRoles
         ? jsonEncode(actionRequest(
             state,
             model,
             includeTheoryRoles: false,
           ))
         : fullBody;
-    final coreBytes = utf8.encode(coreBody).length;
+    var coreBytes = utf8.encode(coreBody).length;
+    final splitImportance = coreBytes > 56000;
+    if (splitImportance) {
+      coreBody = jsonEncode(actionRequest(state, model,
+          includeTheoryRoles: false, includeImportance: false));
+      coreBytes = utf8.encode(coreBody).length;
+    }
     if (coreBytes > 64000) {
       return {
         'status': 'LOCAL',
@@ -2106,7 +2178,7 @@ class EvidenceGrowthJev {
 
     final key = sha256
         .convert(
-            utf8.encode('action-v10-batched-theory-roles|$apiKey|$fullBody'))
+            utf8.encode('action-v11-contextual-importance|$apiKey|$fullBody'))
         .toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
@@ -2140,6 +2212,37 @@ class EvidenceGrowthJev {
         };
       }
 
+      if (splitImportance) {
+        final questions = growthMap(fullRequest['questions'])
+            .entries
+            .where((e) => e.key.startsWith('importance_'))
+            .toList();
+        final importance = <String, dynamic>{};
+        var complete = true;
+        for (var offset = 0; offset < questions.length; offset += 12) {
+          final part = await assessForecastQuestions(
+            state: growthMap(fullRequest['state']),
+            questions: Map.fromEntries(questions.skip(offset).take(12)),
+            apiKey: apiKey,
+            model: model,
+          );
+          if (part['status'] != 'JEV') {
+            complete = false;
+            break;
+          }
+          for (final entry in growthMap(part['answers']).entries) {
+            importance[entry.key.substring('importance_'.length)] = entry.value;
+          }
+        }
+        result = {
+          ...result,
+          'factor_importance': importance,
+          'importance_batched': true,
+          'importance_batch_complete':
+              complete && importance.length == questions.length,
+        };
+      }
+
       final forecastEvents = _forecastEvents(state);
       final primaryRows =
           forecastEvents.where((row) => row['primary'] == true).toList();
@@ -2161,7 +2264,8 @@ class EvidenceGrowthJev {
         'core_request_bytes': coreBytes,
         'full_request_bytes': fullBytes,
       };
-      if (enriched['status'] == 'JEV') {
+      if (enriched['status'] == 'JEV' &&
+          enriched['importance_batch_complete'] != false) {
         if (_cache.length >= 48) _cache.remove(_cache.keys.first);
         _cache[key] = enriched;
       }

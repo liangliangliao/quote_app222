@@ -390,8 +390,8 @@ class _ReferenceForecastPageState
             ],
             _field(
               evidence,
-              mode == 'PERSON' ? '已知经历、兴趣、态度或行为资料（可选）' : '已有群体资料／统计及来源（可选）',
-              hint: '无需自行搜齐资料。可补充你知道的内容；没有资料时采用明确假设粗估。',
+              mode == 'PERSON' ? '相关著作、观点、经历或行为资料（可选）' : '已有群体资料／统计及来源（可选）',
+              hint: '公开人物会自动检索相关资料。可补充作品片段或实际经历，并注明出处。',
               max: 8000,
             ),
             const Padding(
@@ -421,9 +421,14 @@ class _ReferenceForecastPageState
                       ),
                       const SizedBox(height: 12),
                       SelectableText(
-                        ReferenceForecastReport.markdown(result),
+                        ReferenceForecastReport.markdown(result, includeSources: false),
                         style: const TextStyle(height: 1.5),
                       ),
+                      if (growthRows(result['sources']).isNotEmpty)
+                        ExpansionTile(title: const Text('查看著作与资料出处'), children: [
+                          Padding(padding: const EdgeInsets.all(12),
+                            child: SelectableText(ReferenceForecastReport.sourcesMarkdown(result))),
+                        ]),
                       TextButton.icon(
                         onPressed: () async {
                           await Clipboard.setData(

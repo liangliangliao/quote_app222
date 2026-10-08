@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_dao.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_action_prediction.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_forecast_science.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_journey_models.dart';
@@ -184,6 +185,117 @@ GrowthData citedResponse() => {
     };
 
 void main() {
+  test('public works lookup retains original work headings and rejects different people', () async {
+    final research = ReferenceWorksResearch(client: MockClient((request) async {
+      expect(request.url.host, 'en.wikiquote.org');
+      if (request.url.queryParameters['list'] == 'search') {
+        return jsonResponse({'query': {'search': [
+          {'pageid': 1, 'title': 'Tal Ben-Shahar'},
+          {'pageid': 2, 'title': 'A Different Author'},
+        ]}});
+      }
+      expect(request.url.queryParameters['pageid'], '1');
+      return jsonResponse({'parse': {'wikitext':
+        "== Happier ==\n* Exercise and health are useful habits.\n* This is a test excerpt, not a verified quotation.\n"}});
+    }));
+    final sources = await research.search(['Tal Ben-Shahar'], '明天跑步');
+    expect(sources, hasLength(1));
+    expect(sources.single['kind'], 'PUBLISHED_WORKS_COLLECTION');
+    expect(sources.single['content'], contains('Happier'));
+    expect(sources.single['content'], contains('Exercise and health'));
+    expect(sources.single['limit'], contains('思想不等同于实际行为'));
+    var parsed = false;
+    final wrong = ReferenceWorksResearch(client: MockClient((request) async {
+      if (request.url.queryParameters['action'] == 'parse') parsed = true;
+      return jsonResponse({'query': {'search': [
+        {'pageid': 3, 'title': 'Tal Ben-Shahar Junior'},
+      ]}});
+    }));
+    expect(await wrong.search(['Tal Ben-Shahar'], '跑步'), isEmpty);
+    expect(parsed, isFalse);
+  });
+
+  test('work title and viewpoint need matching provided source passages', () {
+    final normalized = EvidenceGrowthReferenceForecast.normalizeProfile({
+      'claims': [
+        {'dimension': '态度', 'claim': '作品中表达重视运动',
+          'source_id': 'book', 'quote': '运动有助于形成健康习惯',
+          'evidence_kind': 'AUTHORED_WORK', 'work_title': '习惯与健康',
+          'transfer_reason': '可能认可跑步，但不能据此断言明天执行',
+          'importance': .7, 'support_score': .8, 'direction': 'supportive'},
+        {'dimension': '态度', 'claim': '未经核实的名言', 'source_id': 'invented',
+          'quote': '这句话不在资料中', 'work_title': '不存在的书',
+          'evidence_kind': 'AUTHORED_WORK'},
+      ],
+    }, [{'id': 'book', 'kind': 'PUBLISHED_WORKS_COLLECTION',
+      'content': '《习惯与健康》：运动有助于形成健康习惯。'}]);
+    final claims = growthRows(normalized['claims']);
+    expect(claims.first['work_title'], '习惯与健康');
+    expect(claims.first['evidence_status'], 'SOURCE_LINKED');
+    expect(claims.last['work_title'], isEmpty);
+    expect(claims.last['evidence_status'], 'MODEL_ASSUMPTION');
+    final text = ReferenceForecastReport.markdown({
+      'profile': normalized, 'input_snapshot': input(person: true),
+      'estimate_available': true, 'estimate': .8,
+    });
+    expect(text, contains('著作思想与本次行动'));
+    expect(text, contains('《习惯与健康》'));
+    expect(text, isNot(contains('《不存在的书》')));
+  });
+
+  test('person forecast pools important supports rather than copying a low JEV event score', () async {
+    const excerpt = '《习惯与健康》提出：运动有助于形成健康习惯。';
+    final dao = ReferenceMemoryDao();
+    final ai = ReferenceAi(respond: (purpose, prompt) {
+      expect(prompt, contains(excerpt));
+      return jsonEncode({
+        ...profile(), 'execution_likelihood': .85,
+        'likely_attitude': '根据作品观点，可能认可运动的价值',
+        'likely_behavior': '结合习惯条件，较可能执行',
+        'claims': [
+          {'dimension': '态度', 'claim': '认可健康习惯的价值',
+            'source_id': 'book', 'quote': '运动有助于形成健康习惯',
+            'work_title': '习惯与健康', 'evidence_kind': 'AUTHORED_WORK',
+            'transfer_reason': '支持运动态度，执行仍取决于实际条件',
+            'importance': .8, 'support_score': .9, 'direction': 'supportive'},
+          {'dimension': '习惯', 'claim': '假设有相关运动习惯',
+            'importance': .9, 'support_score': .9, 'direction': 'supportive'},
+          {'dimension': '规范', 'claim': '缺少他人鼓励', 'importance': .05,
+            'support_score': .05, 'direction': 'adverse',
+            'obstacle_reason': '鼓励较少，但独立运动不依赖他人赞许'},
+        ],
+      });
+    });
+    final jev = EvidenceGrowthJev(client: MockClient((request) async {
+      final questions = growthMap(growthMap(jsonDecode(request.body))['questions']);
+      expect(questions.length, lessThanOrEqualTo(24));
+      return jsonResponse({'model': 'test-jev', 'answers': {
+        for (final entry in questions.entries) entry.key: switch (growthMap(entry.value)['type']) {
+          'score' => {'type': 'score', 'confidence': .8,
+            'score': entry.key.endsWith('claim_3') ? 0 : 4},
+          'noul' => {'type': 'noul', 'noul': switch (entry.key) {
+            'plausible_low' => .2, 'plausible_high' => .95,
+            'hard_blocker' => .01, _ => .43,
+          }},
+          _ => {'type': 'choice', 'confidence': .8,
+            'choice': entry.key == 'evidence_quality' ? 'adequate_for_rough_estimate'
+                : entry.key == 'estimate_confidence' ? 'medium' : 'habit'},
+        },
+      }});
+    }));
+    final result = await EvidenceGrowthReferenceForecast(dao: dao, ai: ai, jev: jev).predict(
+      input: input(person: true, personType: 'KNOWN'), jevApiKey: 'test',
+      retrievedSources: [{'id': 'book', 'kind': 'USER_SUPPLIED',
+        'title': '习惯与健康', 'content': excerpt}]);
+    expect(result['raw_jev_estimate'], .43);
+    expect(result['estimate'], greaterThan(.75));
+    expect(result['estimate'], lessThan(.95));
+    expect(growthMap(result['factor_weight_analysis'])['status'], 'WEIGHTED');
+    expect(growthRows(growthMap(result['factor_weight_analysis'])['factors']).last['label'], '缺少他人鼓励');
+    expect(ReferenceForecastReport.markdown(result), contains('可能态度'));
+    expect(dao.settings[EvidenceGrowthActionPredictionService.historySetting], isNull);
+  });
+
   test(
       'both screenshot scenarios yield rough results despite insufficient evidence',
       () {
@@ -300,6 +412,7 @@ void main() {
       jev: judge(),
       client: MockClient((req) async {
         requests++;
+        if (req.url.host.endsWith('wikiquote.org')) return jsonResponse({}, 404);
         if (req.method == 'POST') return jsonResponse({}, 503);
         expect(req.url.host, 'en.wikipedia.org');
         if (req.url.queryParameters['list'] == 'search') {
@@ -327,7 +440,7 @@ void main() {
     );
     final r =
         await service.predict(input: input(person: true), jevApiKey: 'test');
-    expect(requests, 3);
+    expect(requests, 5, reason: 'Biography lookup plus bounded bilingual works lookup');
     expect(r['estimate_available'], isTrue);
     expect(growthMap(r['research'])['status'], 'ENCYCLOPEDIA');
     expect(growthRows(r['sources']).single['url'],

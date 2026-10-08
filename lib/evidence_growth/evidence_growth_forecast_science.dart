@@ -281,6 +281,10 @@ class EvidenceForecastScience {
     return {
       'raw_count': rows.length,
       'final_count': rows.length,
+      'direction_correct_count': rows.where((r) =>
+          (probability(r['estimate'])! >= .5) == (outcome(r) == 1)).length,
+      'direction_accuracy': rows.isEmpty ? null : rows.where((r) =>
+          (probability(r['estimate'])! >= .5) == (outcome(r) == 1)).length / rows.length,
       'raw_brier': raw['brier'],
       'final_brier': shown['brier'],
       'raw_log_loss': raw['log_loss'],
@@ -485,6 +489,7 @@ class EvidenceForecastScience {
       'version': version,
       'event_contract': result['event_contract'],
       'evidence_completeness': result['theory_input_completeness'],
+      'factor_weights': result['factor_weight_analysis'],
       'model_spread': predictions.length < 2
           ? null
           : {

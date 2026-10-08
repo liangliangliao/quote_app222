@@ -546,7 +546,8 @@ void main() {
       expect(aiCalls, 2);
       expect(jevCalls, 2, reason: '${output['pipeline_errors']}');
       expect(output['pipeline_status'], failFinal ? 'PARTIAL' : 'COMPLETE');
-      expect(output['estimate'], failFinal ? null : .57);
+      expect(output['estimate'], failFinal ? isNull : allOf(greaterThan(.42), lessThan(.75)));
+      expect(output['forecast_source'], startsWith('contextual_factor_pool_v1'));
       expect(output['event_contract'], contract);
       expect(growthMap(output['ai'])['status'], 'AI',
           reason: '${output['ai']}');
@@ -874,6 +875,31 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
         EvidenceGrowthForecastReportPage.markdown(p), contains('观察窗口：预约前30分钟'));
+  });
+
+  test('recording and correcting an outcome refreshes accuracy without rewriting prediction', () async {
+    final dao = MemoryForecastDao();
+    final service = EvidenceGrowthActionPredictionService(dao: dao);
+    final pending = {...trial(1, raw: .85), 'outcome': 'PENDING',
+      'primary_event_observed': null, 'outcome_at_ms': 0,
+      'scientific_report': {'roots_and_experiments': []}};
+    await service.savePrediction(pending);
+    await service.recordOutcome('p1', 'SUCCESS', primaryEventObserved: true,
+      observedAt: DateTime.fromMillisecondsSinceEpoch(2000));
+    var saved = (await service.history()).single;
+    expect(saved['estimate'], .85);
+    expect(growthMap(saved['forecast_validation'])['final_count'], 1);
+    expect(growthMap(saved['forecast_validation'])['direction_accuracy'], 1);
+    expect(growthMap(saved['forecast_validation'])['final_brier'], closeTo(.0225, 1e-9));
+    final text = EvidenceGrowthForecastReportPage.markdown(saved);
+    expect(text, contains('实际结果：已完成'));
+    expect(text, contains('命中率：100%'));
+    expect(text, isNot(contains('理论学习')));
+    await service.recordOutcome('p1', 'CANCELLED');
+    saved = (await service.history()).single;
+    expect(saved['estimate'], .85);
+    expect(growthMap(saved['forecast_validation'])['final_count'], 0);
+    expect(growthMap(saved['forecast_validation'])['direction_accuracy'], isNull);
   });
 
   testWidgets(

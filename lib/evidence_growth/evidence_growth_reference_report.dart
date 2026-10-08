@@ -33,63 +33,63 @@ class ReferenceForecastReport {
       }[growthMap(result['research'])['status']] ??
       '资料状态见下方来源。';
 
-  static String markdown(GrowthData r) {
+  static String _brief(Object? value, [int limit = 120]) =>
+      EvidenceForecastScience.text(value, limit).replaceAll(RegExp(r'\s+'), ' ');
+
+  static String sourcesMarkdown(GrowthData r) => growthRows(r['sources']).map((source) => [
+    '${_brief(source['title'], 180)} · ${source['kind'] == 'PUBLISHED_WORKS_COLLECTION' ? '引文集整理，原作待核对' : source['kind'] == 'GROUNDED_WEB_SUMMARY' ? '联网摘要' : '所提供的资料'}',
+    if (_brief(source['url'], 500).isNotEmpty) _brief(source['url'], 500),
+    for (final link in growthRows(source['links'])) '${_brief(link['title'])}：${_brief(link['url'], 500)}',
+  ].join('\n')).join('\n\n');
+
+  static String markdown(GrowthData r, {bool includeSources = true}) {
     final profile = growthMap(r['profile']);
     final snapshot = growthMap(r['input_snapshot']);
     final range = growthMap(r['assumption_range']);
-    final answers = growthMap(growthMap(r['jev'])['answers']);
-    final sources = growthRows(r['sources']);
-    final names = {for (final s in sources) s['id']: s['title']};
+    final weights = growthMap(r['factor_weight_analysis']);
+    final ranked = growthRows(weights['factors']);
+    final claims = growthRows(profile['claims']);
+    final obstacles = ranked.where((c) => c['evidence_status'] == 'adverse').toList()
+        ..sort((a, b) => (b['opposition_contribution'] as num)
+            .compareTo(a['opposition_contribution'] as num));
+    final works = claims.where((c) => c['evidence_kind'] == 'AUTHORED_WORK' &&
+        c['evidence_status'] != 'MODEL_ASSUMPTION').take(2);
     return [
-      '同情境参考报告 · ${snapshot['reference_mode'] == 'PERSON' ? snapshot['person_identity'] : '全世界人群'}',
+      '同情境参考 · ${snapshot['reference_mode'] == 'PERSON' ? _brief(snapshot['person_identity']) : '全世界人群'}',
       if (r['estimate_available'] == true) ...[
-        '粗略可能性：${percent(r['estimate'])} · ${direction(r['estimate'])}',
-        '判断把握：${r['estimate_confidence'] == 'medium' ? '中等' : '较低'}。${r['confidence_note'] ?? ''}',
+        '行动发生可能性：${percent(r['estimate'])} · ${direction(r['estimate'])}',
+        '判断把握：${r['estimate_confidence'] == 'medium' ? '中等' : '较低'} · 尚未用实际结果验证',
         if (range.isNotEmpty)
-          '可能范围：${percent(range['low'], lower: true)}—${percent(range['high'], lower: false)}。${r['range_note']}',
-      ] else
-        '${r['unavailable_reason'] ?? '旧报告未给出概率，可使用当前表单重新生成粗估。'}',
-      researchLabel(r),
-      '参照理解：${profile['identity_summary']}',
-      '主要影响：${const {
-            'capability': '能力与技能',
-            'opportunity': '机会与资源',
-            'motivation': '动机、兴趣与态度',
-            'habit': '习惯与相似经历',
-            'planning': '计划与自我调节',
-            'unknown': '多种未知条件，结合下面的情景判断'
-          }[growthMap(answers['dominant_dimension'])['choice']] ?? '见下面的因素分析'}。',
-      '综合判断与可借鉴之处：${profile['theory_explanation']}',
-      '行动：${snapshot['action']}\n标准：${growthMap(snapshot['event_contract'])['success_criterion']}\n窗口：${growthMap(snapshot['event_contract'])['observation_window']}',
-      '相同外部条件：${snapshot['fixed_external_context']}',
-      if (snapshot['reference_mode'] == 'WORLD')
-        '比较范围：${snapshot['population_definition']}',
-      '关键影响因素：',
-      for (final row in growthRows(profile['claims']))
-        '${row['dimension']} · ${const {
-              'SOURCE_LINKED': '有资料对应',
-              'RESEARCH_LINKED': '联网摘要线索',
-              'MODEL_ASSUMPTION': '条件假设'
-            }[row['evidence_status']] ?? '条件假设'}\n${row['claim']}\n${row['relevance']}${row['source_id'] == '' ? '' : '\n依据：${names[row['source_id']] ?? '提供的资料'}；片段：“${row['quote']}”'}',
-      '过往经验的影响：${profile['past_behavior_analysis']}',
-      '兴趣、态度与性格：${profile['attitude_and_personality_hypotheses']}',
-      for (final row in growthRows(r['scenarios']))
-        '${row['label']}：${growthStrings(row['assumptions']).join('；')}\n对应粗估：${percent(row['probability'])}',
-      if (growthStrings(profile['unknowns']).isNotEmpty)
-        '这些补充可能改变判断（可选）：${growthStrings(profile['unknowns']).join('；')}',
-      '${r['note']}\n${profile['transfer_limits']}\n${r['same_situation_rule']}',
-      '资料支持程度：${const {
-            'adequate_for_rough_estimate': '有相关线索',
-            'insufficient': '资料较少，采用条件假设',
-            'contradictory': '资料存在冲突，需结合不同情景'
-          }[growthMap(answers['evidence_quality'])['choice']] ?? '未完成'}。',
-      'LLM：${r['llm_model']}；JEV：${growthMap(r['jev'])['model'] ?? '未完成'}。',
-      if (sources.isNotEmpty) '参考资料：',
-      for (final source in sources) ...[
-        '${source['title']}\n${source['url'] ?? (source['kind'] == 'GROUNDED_WEB_SUMMARY' ? '联网摘要，原始来源如下' : '用户提供，未独立核实')}\n${source['retrieved_at'] ?? ''}',
-        for (final link in growthRows(source['links']))
-          '${link['title']}\n${link['url']}',
+          '可能范围：${percent(range['low'], lower: true)}—${percent(range['high'], lower: false)}（随未知条件变化）',
+      ] else _brief(r['unavailable_reason'], 160),
+      if (_brief(profile['likely_attitude']).isNotEmpty)
+        '可能态度：${_brief(profile['likely_attitude'])}',
+      '可能行为：${_brief(profile['likely_behavior']).isEmpty ? _brief(profile['theory_explanation'], 180) : _brief(profile['likely_behavior'])}',
+      '行动：${_brief(snapshot['action'], 200)}\n标准：${_brief(growthMap(snapshot['event_contract'])['success_criterion'], 200)}\n窗口：${_brief(growthMap(snapshot['event_contract'])['observation_window'])}',
+      if (ranked.isNotEmpty) ...[
+        '有利 ${percent(weights['support_share'])} · 不利 ${percent(weights['opposing_share'])} · 利弊并存 ${percent(weights['mixed_share'])}（按重要性加权）',
+        '关键因素：',
+        for (final row in ranked.take(6))
+          '${row['rank']}. ${_brief(row['label'], 90)} · 权重 ${percent(row['weight'])} · ${const {'supportive': '有利', 'adverse': '不利', 'mixed': '利弊并存'}[row['evidence_status']] ?? '未知'}',
+      ] else ...[
+        '关键因素：',
+        for (final c in claims.take(4))
+          '${_brief(c['claim'])}\n${_brief(c['relevance'])}',
       ],
-    ].join('\n\n');
+      if (obstacles.isNotEmpty) '可能的阻碍：',
+      for (final row in obstacles.take(2))
+        '${_brief(row['label'])}\n为什么可能卡住：${_brief(row['mechanism']).isEmpty ? _brief(row['importance_reason']) : _brief(row['mechanism'])}',
+      if (works.isNotEmpty) '著作思想与本次行动：',
+      for (final c in works)
+        '${_brief(c['work_title']).isEmpty ? '公开作品观点' : '《${_brief(c['work_title'])}》'}：${_brief(c['quote'], 100)}\n${_brief(c['transfer_reason'], 140)}',
+      for (final row in growthRows(r['scenarios']).take(2))
+        '${_brief(row['label'], 60)}：${growthStrings(row['assumptions']).take(2).map((s) => _brief(s, 60)).join('；')} → ${percent(row['probability'])}',
+      researchLabel(r),
+      if (includeSources && growthRows(r['sources']).isNotEmpty)
+        '资料出处：\n${sourcesMarkdown(r)}',
+      snapshot['reference_mode'] == 'PERSON'
+          ? '思想提供态度线索，实际行动仍取决于本人习惯与当前条件。'
+          : '这是所选人群的条件性模型粗估，尚非全球实际发生率。',
+    ].where((s) => s.isNotEmpty).join('\n\n');
   }
 }
