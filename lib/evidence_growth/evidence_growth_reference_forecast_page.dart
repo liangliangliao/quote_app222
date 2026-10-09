@@ -259,6 +259,25 @@ class _ReferenceForecastPageState
         ),
       );
 
+  Future<void> _retryPrediction() async {
+    if (busy || result.isEmpty) return;
+    setState(() { busy = true; status = '正在接续原参考报告…'; });
+    try {
+      final output = await service.resumePrediction('${result['id']}',
+        jevApiKey: widget.jevApiKey,
+        onProgress: (message) { if (mounted) setState(() => status = message); });
+      if (mounted) setState(() {
+        result = output;
+        status = output['prediction_complete'] == true ? '参考预测已完成。' : '${output['unavailable_reason']}';
+      });
+      await _reload();
+    } catch (error) {
+      if (mounted) setState(() => status = '$error'.replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('同情境下，其他人会怎样？')),
@@ -390,8 +409,8 @@ class _ReferenceForecastPageState
             ],
             _field(
               evidence,
-              mode == 'PERSON' ? '已知经历、兴趣、态度或行为资料（可选）' : '已有群体资料／统计及来源（可选）',
-              hint: '无需自行搜齐资料。可补充你知道的内容；没有资料时采用明确假设粗估。',
+              mode == 'PERSON' ? '相关著作、观点、经历或行为资料（可选）' : '已有群体资料／统计及来源（可选）',
+              hint: '公开人物会自动检索相关资料。可补充作品片段或实际经历，并注明出处。',
               max: 8000,
             ),
             const Padding(
@@ -420,10 +439,18 @@ class _ReferenceForecastPageState
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 12),
+                      if (result['prediction_complete'] == false)
+                        TextButton.icon(onPressed: busy ? null : _retryPrediction,
+                          icon: const Icon(Icons.refresh), label: const Text('继续完成参考预测')),
                       SelectableText(
-                        ReferenceForecastReport.markdown(result),
+                        ReferenceForecastReport.markdown(result, includeSources: false),
                         style: const TextStyle(height: 1.5),
                       ),
+                      if (growthRows(result['sources']).isNotEmpty)
+                        ExpansionTile(title: const Text('查看著作与资料出处'), children: [
+                          Padding(padding: const EdgeInsets.all(12),
+                            child: SelectableText(ReferenceForecastReport.sourcesMarkdown(result))),
+                        ]),
                       TextButton.icon(
                         onPressed: () async {
                           await Clipboard.setData(

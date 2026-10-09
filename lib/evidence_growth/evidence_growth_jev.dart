@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'evidence_growth_journey_models.dart';
@@ -10,11 +11,26 @@ import 'evidence_growth_models.dart';
 
 /// Optional typed relevance judge. It cannot generate teaching or bypass gates.
 class EvidenceGrowthJev {
+  static const importanceCriteria = <String>[
+    'Negligible relevance: changing this condition barely changes the event likelihood.',
+    'Minor influence in this action; stronger predictors dominate.',
+    'Meaningful contributing influence, but usually compensable.',
+    'Major influence on whether this particular action happens.',
+    'Decisive influence or a genuinely necessary prerequisite for this action.',
+  ];
+
+  static GrowthData importanceQuestion(String condition) => {
+    'type': 'score',
+    'instructions': 'Assess IMPORTANCE independently of the current support/adversity score. For this specific frozen event, how much would changing "$condition" from favorable to unfavorable change execution, keeping other facts fixed? Strong adversity does not imply high importance. Avoid double-counting overlapping constructs. Missing plans or measurement fields alone are not objective blockers.',
+    'criteria': importanceCriteria,
+  };
   EvidenceGrowthJev(
       {http.Client? client, this.timeout = const Duration(seconds: 8)})
       : _client = client;
   final http.Client? _client;
   final Duration timeout;
+  Duration get _actionTimeout => timeout < const Duration(seconds: 45)
+      ? const Duration(seconds: 45) : timeout;
   final _cache = <String, GrowthData>{};
   final _pending = <String, Future<GrowthData>>{};
   DateTime? _cooldown;
@@ -29,6 +45,19 @@ class EvidenceGrowthJev {
     for (final entry in questions.entries) {
       final q = growthMap(entry.value);
       final a = growthMap(answers[entry.key]);
+      if (entry.key.startsWith('bottleneck_') &&
+          (a['type'] != 'noul' ||
+              a['noul'] is! num ||
+              !(a['noul'] as num).isFinite ||
+              (a['noul'] as num) < 0 ||
+              (a['noul'] as num) > 1)) continue;
+      final optionalWeight = entry.key.startsWith('importance_') ||
+          entry.key.startsWith('factor_');
+      if (optionalWeight && (a['type'] != 'score' ||
+          a['score'] is! num || !(a['score'] as num).isFinite ||
+          (a['score'] as num) < 0 || (a['score'] as num) > 4 ||
+          a['confidence'] is! num || !(a['confidence'] as num).isFinite ||
+          (a['confidence'] as num) < 0 || (a['confidence'] as num) > 1)) continue;
       if (a['type'] != q['type'])
         throw const FormatException('JEV_WRONG_ANSWER_TYPE');
       if (q['type'] == 'noul') {
@@ -44,6 +73,14 @@ class EvidenceGrowthJev {
             c < 0 ||
             c > 1) throw const FormatException('JEV_INVALID_CHOICE');
         parsed[entry.key] = {'choice': a['choice'], 'confidence': c.toDouble()};
+      } else if (q['type'] == 'score') {
+        final score = a['score'];
+        final confidence = a['confidence'];
+        if (score is! num || !score.isFinite || score < 0 || score > 4 ||
+            confidence is! num || !confidence.isFinite || confidence < 0 || confidence > 1)
+          throw const FormatException('JEV_INVALID_SCORE');
+        parsed[entry.key] = {'score': score.toDouble() / 4,
+          'confidence': confidence.toDouble()};
       } else {
         throw const FormatException('UNSUPPORTED_FORECAST_QUESTION');
       }
@@ -63,8 +100,6 @@ class EvidenceGrowthJev {
       String model = 'jev-latest'}) async {
     if (apiKey.trim().isEmpty)
       return {'status': 'UNAVAILABLE', 'reason': 'NO_KEY'};
-    if (_cooldown != null && DateTime.now().isBefore(_cooldown!))
-      return {'status': 'UNAVAILABLE', 'reason': 'COOLDOWN'};
     final body = jsonEncode({
       'model': model,
       'state': {
@@ -74,8 +109,41 @@ class EvidenceGrowthJev {
       },
       'questions': questions
     });
-    if (utf8.encode(body).length > 64000 || questions.length > 24)
-      return {'status': 'UNAVAILABLE', 'reason': 'CONTEXT_TOO_LARGE'};
+    final cacheKey = sha256.convert(utf8.encode('forecast-batch-v3|$apiKey|$body')).toString();
+    if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
+    if (_cooldown != null && DateTime.now().isBefore(_cooldown!))
+      return {'status': 'UNAVAILABLE', 'reason': 'COOLDOWN'};
+    if (utf8.encode(body).length > 64000 || questions.length > 16)
+      {
+        // Keep the frozen event and sources intact; split only typed questions.
+        // No recursively repeated oversized single-question request.
+        if (questions.length <= 1)
+          return {'status': 'UNAVAILABLE', 'reason': 'CONTEXT_TOO_LARGE'};
+        final entries = questions.entries.toList();
+        final chunkSize = math.min(12, (entries.length / 2).ceil());
+        final answers = <String, dynamic>{};
+        for (var offset = 0; offset < entries.length; offset += chunkSize) {
+          final part = await assessForecastQuestions(state: state,
+            questions: Map.fromEntries(entries.skip(offset).take(chunkSize)),
+            apiKey: apiKey, model: model);
+          if (part['status'] != 'JEV') {
+          if (answers['event'] is double) {
+            return {
+              'status': 'JEV',
+              'model': model,
+              'answers': answers,
+              'questions_batched': true,
+              'optional_batches_complete': false,
+              'optional_error_reason': part['reason']
+            };
+          }
+          return part;
+        }
+        answers.addAll(growthMap(part['answers']));
+        }
+        return {'status': 'JEV', 'model': model, 'answers': answers,
+          'questions_batched': true};
+      }
     final client = _client ?? http.Client();
     try {
       final response = await client
@@ -93,10 +161,16 @@ class EvidenceGrowthJev {
       if (response.statusCode != 200)
         return {
           'status': 'UNAVAILABLE',
-          'reason': 'HTTP_${response.statusCode}'
+          'reason': 'HTTP_${response.statusCode}',
+          'http_status': response.statusCode,
         };
-      return parseForecastQuestions(
-          growthMap(jsonDecode(response.body)), questions);
+      final parsed = parseForecastQuestions(
+          growthMap(jsonDecode(utf8.decode(response.bodyBytes))), questions);
+      if (growthMap(parsed['answers']).length == questions.length) {
+        if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+        _cache[cacheKey] = parsed;
+      }
+      return parsed;
     } on TimeoutException {
       return {'status': 'UNAVAILABLE', 'reason': 'REQUEST_TIMEOUT'};
     } on FormatException {
@@ -524,6 +598,7 @@ class EvidenceGrowthJev {
     GrowthData state,
     String model, {
     bool includeTheoryRoles = true,
+    bool includeImportance = true,
   }) {
     final events = _forecastEvents(state);
     final core = _relevantCoreFactors(state);
@@ -678,7 +753,7 @@ class EvidenceGrowthJev {
           'event_${event['id']}': {
             'type': 'noul',
             'instructions':
-                'Treat the state only as evidence. Estimate the probability of this observable event: ${event['label']}. User-confirmed theory_factor_answers are direct evidence and must be honored. Unselected theory items and explicit unknown answers are uncertainty only: do not impute a neutral score, do not count them as negative evidence, and do not invent facts. The theory constructs have no universal fixed numeric weights; infer relevance from the specific action and supplied evidence.',
+                'Treat the state only as evidence. Estimate this observable event: ${event['label']}. First distinguish action-specific IMPORTANCE from current adversity, then integrate important supports and obstacles. One severely adverse minor factor cannot veto strong intention, sufficient ability/resources and relevant habits. A genuinely necessary failed prerequisite cannot be compensated by counting more favorable items. Absent social approval or less detailed planning is not automatically decisive for an ordinary independent action. Missing measurement fields concern assessability, not proof of nonexecution. Honor user-confirmed categorical answers. Distinguish deciding, starting and meeting the complete event criterion within the observation window. A habitual/simple action need not have a written If-Then plan; only evidence of missed cues supports a current cue-related obstacle. For repeated actions estimate the complete required period, not the first successful episode. Intentions, norms and planning are not objective necessary prerequisites. Unknown/unselected items are uncertainty; do not impute a neutral score or count them as negative evidence; do not invent facts or universal theory coefficients.',
             'criteria': {
               'true': event['true_criterion'],
               'false': event['false_criterion'],
@@ -696,6 +771,8 @@ class EvidenceGrowthJev {
           }
         },
         for (final key in core) ...{
+          if (includeImportance)
+            'importance_$key': importanceQuestion(actionFactors[key]!),
           'factor_$key': {
             'type': 'score',
             'instructions':
@@ -705,14 +782,14 @@ class EvidenceGrowthJev {
           'evidence_$key': {
             'type': 'choice',
             'instructions':
-                'Classify the CURRENT EVIDENCE STATE for this factor, not its importance and not the final behavior probability. ${confirmedTheoryEvidence(key)} Use only explicit supplied facts. Distinguish genuinely mixed evidence from missing evidence. If the current state is not established, choose insufficient.',
+                'Classify the CURRENT EVIDENCE STATE for this factor: ${actionFactors[key]} Not its importance and not the final behavior probability. ${confirmedTheoryEvidence(key)} Use only explicit supplied facts. Distinguish genuinely mixed evidence from missing evidence. If the current state is not established, choose insufficient.',
             'criteria': _diagnosticEvidenceCriteria,
           },
           if (directBottleneckCore.contains(key))
             'bottleneck_$key': {
               'type': 'noul',
               'instructions':
-                  'Given only the supplied facts, is this DIRECT/EXECUTION factor CURRENTLY a material bottleneck for the PRIMARY event? True requires BOTH: (1) an adverse or genuinely mixed current state is supported by evidence, and (2) that state is relevant enough to materially prevent, delay, or displace the primary event. Missing evidence, a merely possible problem, or a supportive state is false. This is a first-pass independent JEV bottleneck judgement, not a causal proof, theory weight, LLM+JEV combined score, or calibrated effect size.',
+                  'Given only the supplied facts, is this DIRECT/EXECUTION factor CURRENTLY a material bottleneck for the PRIMARY event? Factor: ${actionFactors[key]} ${confirmedTheoryEvidence(key)} True requires BOTH: (1) an adverse or genuinely mixed current state is supported by evidence, and (2) that state is relevant enough to materially prevent, delay, or displace the primary event. Missing evidence, a merely possible problem, or a supportive state is false. This is a first-pass independent JEV bottleneck judgement, not a causal proof, theory weight, LLM+JEV combined score, or calibrated effect size.',
               'criteria': {
                 'true':
                     'Current adverse/mixed evidence plus direct execution relevance jointly support treating this factor as a material bottleneck for the primary event.',
@@ -721,13 +798,17 @@ class EvidenceGrowthJev {
               }
             },
         },
-        for (final row in dynamicRows)
+        for (final row in dynamicRows) ...{
+          if (includeImportance)
+            'importance_dynamic_${row['id']}':
+                importanceQuestion('${row['condition']}'),
           'factor_dynamic_${row['id']}': {
             'type': 'score',
             'instructions':
                 'Rate how much this action-specific belief or condition supports the PRIMARY forecast event. It has been mapped to the IBM construct ${row['ibm_construct']}: ${row['condition']} Use only supplied facts. Missing evidence may use the center score only as JEV typed representation of insufficient evidence; it is not observed neutrality and must not contribute as a fixed numeric weight to the final event probability.',
             'criteria': _supportRubric,
           },
+        },
         for (final row in diagnosticDynamicRows) ...{
           'evidence_dynamic_${row['id']}': {
             'type': 'choice',
@@ -815,8 +896,16 @@ class EvidenceGrowthJev {
     };
   }
 
-  static GrowthData parseAction(GrowthData body) {
+  static GrowthData parseAction(GrowthData body, {
+    GrowthData questions = const {}, String primaryEventId = '',
+  }) {
     final answers = growthMap(body['answers']);
+    final warnings = <String>[];
+
+    T? optional<T>(String key, T Function() read) {
+      try { return read(); }
+      on FormatException { warnings.add('INVALID_$key'); return null; }
+    }
 
     double noul(String key) {
       final a = growthMap(answers[key]);
@@ -862,7 +951,9 @@ class EvidenceGrowthJev {
           confidence is! num ||
           !confidence.isFinite ||
           confidence < 0 ||
-          confidence > 1) {
+          confidence > 1 ||
+          (growthMap(growthMap(questions[key])['criteria']).isNotEmpty &&
+              !growthMap(growthMap(questions[key])['criteria']).containsKey(selected))) {
         throw const FormatException('INVALID_JEV_ACTION_CHOICE');
       }
       return {
@@ -875,37 +966,54 @@ class EvidenceGrowthJev {
     final eventAnswers = <String, double>{};
     for (final entry in answers.entries) {
       if (!entry.key.startsWith('event_')) continue;
-      eventAnswers[entry.key.substring('event_'.length)] = noul(entry.key);
+      final value = optional(entry.key, () => noul(entry.key));
+      if (value != null) eventAnswers[entry.key.substring('event_'.length)] = value;
     }
     if (eventAnswers.isEmpty) {
       throw const FormatException('MISSING_JEV_ACTION_EVENT');
+    }
+    if (primaryEventId.isNotEmpty && !eventAnswers.containsKey(primaryEventId)) {
+      throw const FormatException('MISSING_JEV_PRIMARY_EVENT');
     }
 
     final factorAnswers = <String, GrowthData>{};
     for (final entry in answers.entries) {
       if (!entry.key.startsWith('factor_')) continue;
-      factorAnswers[entry.key.substring('factor_'.length)] = score(entry.key);
+      final value = optional(entry.key, () => score(entry.key));
+      if (value != null) factorAnswers[entry.key.substring('factor_'.length)] = value;
     }
 
     final evidenceAnswers = <String, GrowthData>{};
     for (final entry in answers.entries) {
       if (!entry.key.startsWith('evidence_')) continue;
-      evidenceAnswers[entry.key.substring('evidence_'.length)] =
-          choice(entry.key);
+      final value = optional(entry.key, () => choice(entry.key));
+      if (value != null) evidenceAnswers[entry.key.substring('evidence_'.length)] = value;
     }
 
     final bottleneckAnswers = <String, double>{};
     for (final entry in answers.entries) {
       if (!entry.key.startsWith('bottleneck_')) continue;
-      bottleneckAnswers[entry.key.substring('bottleneck_'.length)] =
-          noul(entry.key);
+      final value = optional(entry.key, () => noul(entry.key));
+      if (value != null) bottleneckAnswers[entry.key.substring('bottleneck_'.length)] = value;
     }
 
     final theoryRoleAnswers = <String, GrowthData>{};
     for (final entry in answers.entries) {
       if (!entry.key.startsWith('theory_role_')) continue;
-      theoryRoleAnswers[entry.key.substring('theory_role_'.length)] =
-          choice(entry.key);
+      final value = optional(entry.key, () => choice(entry.key));
+      if (value != null) theoryRoleAnswers[entry.key.substring('theory_role_'.length)] = value;
+    }
+
+    final importanceAnswers = <String, GrowthData>{};
+    for (final key in answers.keys.where((k) => k.startsWith('importance_'))) {
+      // Optional for old snapshots and partial provider responses. A malformed
+      // importance answer must not destroy a valid event judgement.
+      final value = optional(key, () => score(key));
+      if (value != null) importanceAnswers[key.substring('importance_'.length)] = value;
+    }
+
+    for (final key in questions.keys) {
+      if (!answers.containsKey(key)) warnings.add('MISSING_$key');
     }
 
     return {
@@ -913,16 +1021,19 @@ class EvidenceGrowthJev {
       'model': body['model'],
       'usage': body['usage'],
       'events': eventAnswers,
-      'overall': eventAnswers.values.first,
-      'hard_blocker': noul('hard_blocker'),
+      'overall': primaryEventId.isEmpty ? eventAnswers.values.first : eventAnswers[primaryEventId],
+      'hard_blocker': answers.containsKey('hard_blocker')
+          ? optional('hard_blocker', () => noul('hard_blocker')) : null,
       'factors': factorAnswers,
       'factor_evidence': evidenceAnswers,
       'factor_bottlenecks': bottleneckAnswers,
+      'factor_importance': importanceAnswers,
       'theory_factor_roles': theoryRoleAnswers,
-      'theory_feedback_pattern': choice('theory_feedback_pattern'),
-      'dominant_failure_mode': choice('dominant_failure_mode'),
+      'theory_feedback_pattern': optional('theory_feedback_pattern', () => choice('theory_feedback_pattern')) ?? {},
+      'dominant_failure_mode': optional('dominant_failure_mode', () => choice('dominant_failure_mode')) ?? {},
       'most_decisive_missing_question':
-          choice('most_decisive_missing_question'),
+          optional('most_decisive_missing_question', () => choice('most_decisive_missing_question')) ?? {},
+      'parse_warnings': warnings,
     };
   }
 
@@ -1196,6 +1307,10 @@ class EvidenceGrowthJev {
         'first_pass_jev': {
           'events': firstPassJev['events'],
           'overall': firstPassJev['overall'],
+          'factor_importance': {
+            for (final entry in growthMap(firstPassJev['factor_importance']).entries)
+              entry.key: growthMap(entry.value)['score'],
+          },
           'theory_factor_roles': compactFirstPassRoles,
           'theory_feedback_pattern': {
             'choice':
@@ -1225,7 +1340,7 @@ class EvidenceGrowthJev {
         'synthesis_event_probability': {
           'type': 'noul',
           'instructions':
-              'Make the FINAL probability judgement for the PRIMARY observable event after reviewing the raw user input, user-confirmed theory questionnaire, first-pass JEV analysis, and the LLM synthesis candidates. Do not mechanically average the first-pass JEV probability with any LLM number. Re-evaluate the evidence as a whole. Primary event: "$primaryLabel".'
+              'Make a reviewed probability judgement for the PRIMARY observable event using raw user facts, confirmed questionnaire and action-specific factor IMPORTANCE. Re-evaluate the whole balance, not only the negative diagnostic candidates. A low-importance adverse item cannot veto strong relevant intention, capability, opportunity and habit. Conversely a genuinely necessary, evidence-backed failed prerequisite cannot be averaged away. A missing success-criterion field, missing research or a less detailed plan is uncertainty, not proof of failure. Positive and negative narratives are hypotheses, not extra observed evidence. Primary event: "$primaryLabel".'
                   '${primaryTrueCriterion.isEmpty ? '' : ' TRUE when: $primaryTrueCriterion.'}'
                   '${primaryFalseCriterion.isEmpty ? '' : ' FALSE when: $primaryFalseCriterion.'}'
         },
@@ -1506,9 +1621,7 @@ class EvidenceGrowthJev {
     // first-pass JEV result and LLM candidates together. The global 8-second
     // timeout is too short for this stage and previously collapsed both
     // timeouts and valid-but-unexpected responses into REQUEST_FAILED.
-    final finalTimeout = timeout < const Duration(seconds: 30)
-        ? const Duration(seconds: 30)
-        : timeout;
+    final finalTimeout = _actionTimeout;
     http.Response response;
     try {
       response = await client
@@ -1549,7 +1662,7 @@ class EvidenceGrowthJev {
       if (response.statusCode != 200) {
         return {
           'status': 'LOCAL',
-          'reason': 'SERVICE_UNAVAILABLE',
+          'reason': 'HTTP_${response.statusCode}',
           'http_status': response.statusCode,
           'response_bytes': utf8.encode(response.body).length,
         };
@@ -1557,7 +1670,7 @@ class EvidenceGrowthJev {
 
       Object decoded;
       try {
-        decoded = jsonDecode(response.body);
+        decoded = jsonDecode(utf8.decode(response.bodyBytes));
       } catch (_) {
         return {
           'status': 'LOCAL',
@@ -1932,8 +2045,9 @@ class EvidenceGrowthJev {
     };
   }
 
-  static GrowthData parseTheoryRoleBatch(GrowthData body) {
+  static GrowthData parseTheoryRoleBatch(GrowthData body, {GrowthData questions = const {}}) {
     final answers = growthMap(body['answers']);
+    final warnings = <String>[];
 
     GrowthData choice(String key) {
       final a = growthMap(answers[key]);
@@ -1958,14 +2072,28 @@ class EvidenceGrowthJev {
     final roles = <String, GrowthData>{};
     for (final entry in answers.entries) {
       if (!entry.key.startsWith('theory_role_')) continue;
-      roles[entry.key.substring('theory_role_'.length)] = choice(entry.key);
+      try {
+        final value = choice(entry.key);
+        final criteria = growthMap(growthMap(questions[entry.key])['criteria']);
+        if (criteria.isNotEmpty && !criteria.containsKey(value['choice'])) {
+          throw const FormatException('INVALID_JEV_THEORY_ROLE_CHOICE');
+        }
+        roles[entry.key.substring('theory_role_'.length)] = value;
+      } on FormatException { warnings.add('INVALID_${entry.key}'); }
     }
+    for (final key in questions.keys) {
+      if (!answers.containsKey(key)) warnings.add('MISSING_$key');
+    }
+    GrowthData pattern = {};
+    try { pattern = choice('theory_feedback_pattern'); }
+    on FormatException { warnings.add('INVALID_theory_feedback_pattern'); }
     return {
       'status': 'JEV',
       'model': body['model'],
       'usage': body['usage'],
       'theory_factor_roles': roles,
-      'theory_feedback_pattern': choice('theory_feedback_pattern'),
+      'theory_feedback_pattern': pattern,
+      'parse_warnings': warnings,
     };
   }
 
@@ -1999,6 +2127,8 @@ class EvidenceGrowthJev {
     final merged = <String, dynamic>{};
     GrowthData pattern = {};
     var batchCount = 0;
+    final warnings = <String>[];
+    final checkpoints = <String, dynamic>{};
     for (var offset = 0; offset < ids.length; offset += 10) {
       final end = (offset + 10 < ids.length) ? offset + 10 : ids.length;
       final chunk = ids.sublist(offset, end);
@@ -2016,18 +2146,28 @@ class EvidenceGrowthJev {
           'reason': 'THEORY_ROLE_BATCH_CONTEXT_TOO_LARGE',
           'request_bytes': bytes,
           'batch_offset': offset,
+          'theory_factor_roles': merged,
+          'theory_feedback_pattern': pattern,
+          'batch_count': batchCount,
         };
       }
       final part = await _sendTheoryRoleBatch(body, apiKey);
+      final cacheKey = sha256.convert(utf8.encode('role-v2|$apiKey|$body')).toString();
+      if (_cache.containsKey(cacheKey)) checkpoints[cacheKey] = _cache[cacheKey];
       if (part['status'] != 'JEV') {
         return {
           'status': 'LOCAL',
           'reason': 'THEORY_ROLE_BATCH_FAILED_${part['reason'] ?? 'UNKNOWN'}',
           'batch_offset': offset,
+          'theory_factor_roles': merged,
+          'theory_feedback_pattern': pattern,
+          'batch_count': batchCount,
+          'action_transport_checkpoint': checkpoints,
         };
       }
       batchCount++;
       merged.addAll(growthMap(part['theory_factor_roles']));
+      warnings.addAll(growthStrings(part['parse_warnings']));
       if (pattern.isEmpty) {
         pattern = growthMap(part['theory_feedback_pattern']);
       }
@@ -2039,10 +2179,15 @@ class EvidenceGrowthJev {
       'theory_feedback_pattern': pattern,
       'batched': true,
       'batch_count': batchCount,
+      'parse_warnings': warnings,
+      'complete': merged.length == ids.length && warnings.isEmpty,
+      'action_transport_checkpoint': checkpoints,
     };
   }
 
   Future<GrowthData> _sendTheoryRoleBatch(String body, String key) async {
+    final cacheKey = sha256.convert(utf8.encode('role-v2|$key|$body')).toString();
+    if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
     final client = _client ?? http.Client();
     try {
       final response = await client
@@ -2052,31 +2197,41 @@ class EvidenceGrowthJev {
                 'Content-Type': 'application/json',
               },
               body: body)
-          .timeout(timeout);
+          .timeout(_actionTimeout);
       if (response.statusCode == 429 || response.statusCode == 529) {
         _cooldown = DateTime.now().add(const Duration(seconds: 45));
       }
       if (response.statusCode != 200) {
         return {
           'status': 'LOCAL',
-          'reason': 'SERVICE_UNAVAILABLE',
+          'reason': 'HTTP_${response.statusCode}',
           'http_status': response.statusCode,
         };
       }
-      return parseTheoryRoleBatch(growthMap(jsonDecode(response.body)));
+      final result = parseTheoryRoleBatch(growthMap(jsonDecode(utf8.decode(response.bodyBytes))),
+          questions: growthMap(growthMap(jsonDecode(body))['questions']));
+      if (growthStrings(result['parse_warnings']).isEmpty) {
+        if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+        _cache[cacheKey] = result;
+      }
+      return result;
+    } on TimeoutException {
+      return {'status': 'LOCAL', 'reason': 'REQUEST_TIMEOUT'};
+    } on FormatException {
+      return {'status': 'LOCAL', 'reason': 'RESPONSE_PARSE_FAILED'};
+    } on http.ClientException {
+      return {'status': 'LOCAL', 'reason': 'NETWORK_ERROR'};
     } catch (_) {
-      return {'status': 'LOCAL', 'reason': 'REQUEST_FAILED'};
+      return {'status': 'LOCAL', 'reason': 'TRANSPORT_ERROR'};
     } finally {
       if (_client == null) client.close();
     }
   }
 
   Future<GrowthData> assessAction(GrowthData state,
-      {required String apiKey, String model = 'jev-latest'}) async {
+      {required String apiKey, String model = 'jev-latest',
+      GrowthData priorAssessment = const {}}) async {
     if (apiKey.isEmpty) return {'status': 'LOCAL', 'reason': 'NO_KEY'};
-    if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
-      return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
-    }
 
     // Try the complete first-pass request first. When many theories are
     // selected, the theory-role questions can make one typed request exceed
@@ -2087,33 +2242,62 @@ class EvidenceGrowthJev {
     final fullBody = jsonEncode(fullRequest);
     final fullBytes = utf8.encode(fullBody).length;
     final splitTheoryRoles = fullBytes > 56000;
-    final coreBody = splitTheoryRoles
+    var coreBody = splitTheoryRoles
         ? jsonEncode(actionRequest(
             state,
             model,
             includeTheoryRoles: false,
           ))
         : fullBody;
-    final coreBytes = utf8.encode(coreBody).length;
-    if (coreBytes > 64000) {
-      return {
-        'status': 'LOCAL',
-        'reason': 'CORE_CONTEXT_TOO_LARGE',
-        'request_bytes': coreBytes,
-        'full_request_bytes': fullBytes,
-      };
+    var coreBytes = utf8.encode(coreBody).length;
+    final splitImportance = coreBytes > 56000;
+    if (splitImportance) {
+      coreBody = jsonEncode(actionRequest(state, model,
+          includeTheoryRoles: false, includeImportance: false));
+      coreBytes = utf8.encode(coreBody).length;
     }
+    // Byte size alone does not bound model work. Ordinary questionnaires can
+    // contain 60+ typed judgements even when their JSON is well below 64 KB.
+    final coreBatched = coreBytes > 64000 ||
+        growthMap(growthMap(jsonDecode(coreBody))['questions']).length > 16;
 
     final key = sha256
         .convert(
-            utf8.encode('action-v10-batched-theory-roles|$apiKey|$fullBody'))
+            utf8.encode('action-v14-bounded|$apiKey|$fullBody'))
         .toString();
+    if (priorAssessment['action_request_fingerprint'] == key) {
+      for (final entry in growthMap(priorAssessment['action_transport_checkpoint']).entries.take(48)) {
+        final cached = growthMap(entry.value);
+        if (RegExp(r'^[a-f0-9]{64}$').hasMatch(entry.key) &&
+            const {'RAW_JEV', 'JEV'}.contains(cached['status'])) {
+          _cache[entry.key] = cached;
+        }
+      }
+    }
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
+    GrowthData retainPrimary(GrowthData failure) {
+      if (priorAssessment['action_request_fingerprint'] == key &&
+          priorAssessment['status'] == 'JEV' && priorAssessment['overall'] is num &&
+          (priorAssessment['overall'] as num).isFinite &&
+          (priorAssessment['overall'] as num) >= 0 && (priorAssessment['overall'] as num) <= 1) {
+        return {...priorAssessment, 'retry_error': failure['reason'],
+          'retry_http_status': failure['http_status']};
+      }
+      return failure;
+    }
+    if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
+      return retainPrimary({'status': 'LOCAL', 'reason': 'COOLDOWN'});
+    }
 
     final pending = (() async {
-      var result = await _sendAction(coreBody, apiKey);
-      if (result['status'] != 'JEV') return result;
+      final primaryEvents = _forecastEvents(state).where((e) => e['primary'] == true).toList();
+      final primaryEventId = primaryEvents.isEmpty ? '' : '${primaryEvents.first['id']}';
+      var result = coreBatched
+          ? await _sendActionBatched(growthMap(jsonDecode(coreBody)), apiKey,
+              primaryEventId: primaryEventId)
+          : await _sendAction(coreBody, apiKey, primaryEventId: primaryEventId);
+      if (result['status'] != 'JEV') return retainPrimary(result);
 
       if (splitTheoryRoles) {
         final roleResult = await _assessTheoryRolesBatched(
@@ -2121,15 +2305,6 @@ class EvidenceGrowthJev {
           apiKey: apiKey,
           model: model,
         );
-        if (roleResult['status'] != 'JEV') {
-          return {
-            'status': 'LOCAL',
-            'reason': roleResult['reason'] ?? 'THEORY_ROLE_BATCH_FAILED',
-            'core_request_bytes': coreBytes,
-            'full_request_bytes': fullBytes,
-            'first_pass_core_completed': true,
-          };
-        }
         result = {
           ...result,
           'theory_factor_roles': growthMap(roleResult['theory_factor_roles']),
@@ -2137,6 +2312,43 @@ class EvidenceGrowthJev {
               growthMap(roleResult['theory_feedback_pattern']),
           'theory_roles_batched': true,
           'theory_role_batch_count': roleResult['batch_count'],
+          'theory_roles_complete': roleResult['status'] == 'JEV' && roleResult['complete'] != false,
+          'action_transport_checkpoint': {...growthMap(result['action_transport_checkpoint']),
+            ...growthMap(roleResult['action_transport_checkpoint'])},
+          if (roleResult['status'] != 'JEV') 'theory_role_error': roleResult['reason'],
+          'parse_warnings': [...growthStrings(result['parse_warnings']),
+            ...growthStrings(roleResult['parse_warnings'])],
+        };
+      }
+
+      if (splitImportance) {
+        final questions = growthMap(fullRequest['questions'])
+            .entries
+            .where((e) => e.key.startsWith('importance_'))
+            .toList();
+        final importance = <String, dynamic>{};
+        var complete = true;
+        for (var offset = 0; offset < questions.length; offset += 12) {
+          final part = await assessForecastQuestions(
+            state: growthMap(fullRequest['state']),
+            questions: Map.fromEntries(questions.skip(offset).take(12)),
+            apiKey: apiKey,
+            model: model,
+          );
+          if (part['status'] != 'JEV') {
+            complete = false;
+            break;
+          }
+          for (final entry in growthMap(part['answers']).entries) {
+            importance[entry.key.substring('importance_'.length)] = entry.value;
+          }
+        }
+        result = {
+          ...result,
+          'factor_importance': importance,
+          'importance_batched': true,
+          'importance_batch_complete':
+              complete && importance.length == questions.length,
         };
       }
 
@@ -2156,12 +2368,16 @@ class EvidenceGrowthJev {
         if (primaryProbability is num) 'overall': primaryProbability.toDouble(),
         'primary_event_id': primaryId,
         'failure_mode_catalog': _failureModes(state),
-        'request_mode':
-            splitTheoryRoles ? 'CORE_PLUS_THEORY_ROLE_BATCHES' : 'SINGLE',
+        'request_mode': coreBatched ? 'CORE_QUESTION_BATCHES'
+            : splitTheoryRoles ? 'CORE_PLUS_THEORY_ROLE_BATCHES' : 'SINGLE',
         'core_request_bytes': coreBytes,
         'full_request_bytes': fullBytes,
+        'action_request_fingerprint': key,
       };
-      if (enriched['status'] == 'JEV') {
+      if (enriched['status'] == 'JEV' &&
+          enriched['importance_batch_complete'] != false &&
+          enriched['theory_roles_complete'] != false &&
+          growthStrings(enriched['parse_warnings']).isEmpty) {
         if (_cache.length >= 48) _cache.remove(_cache.keys.first);
         _cache[key] = enriched;
       }
@@ -2176,7 +2392,99 @@ class EvidenceGrowthJev {
     }
   }
 
-  Future<GrowthData> _sendAction(String body, String key) async {
+  /// Split questions, never the frozen facts. Keep an already valid primary
+  /// event even if a later diagnostic batch fails; retry reuses exact successes.
+  Future<GrowthData> _sendActionBatched(GrowthData request, String key,
+      {required String primaryEventId}) async {
+    final parts = <GrowthData>[];
+    var current = <String, dynamic>{};
+    for (final entry in growthMap(request['questions']).entries) {
+      final candidate = {...current, entry.key: entry.value};
+      if (current.isNotEmpty && (candidate.length > 16 ||
+          utf8.encode(jsonEncode({...request, 'questions': candidate})).length > 64000)) {
+        parts.add({...request, 'questions': current});
+        current = {};
+      }
+      current[entry.key] = entry.value;
+      if (utf8.encode(jsonEncode({...request, 'questions': current})).length > 64000) {
+        return {'status': 'LOCAL', 'reason': 'CORE_CONTEXT_TOO_LARGE'};
+      }
+    }
+    if (current.isNotEmpty) parts.add({...request, 'questions': current});
+    final answers = <String, dynamic>{};
+    String? failure;
+    GrowthData failureDetails = {};
+    Object? model;
+    var count = 0;
+    final checkpoints = <String, dynamic>{};
+    for (final part in parts) {
+      final bodyText = jsonEncode(part);
+      final response = await _sendActionChunk(bodyText, key);
+      final cacheKey = sha256.convert(utf8.encode('action-chunk-v14|$key|$bodyText')).toString();
+      if (_cache.containsKey(cacheKey)) checkpoints[cacheKey] = _cache[cacheKey];
+      if (response['status'] != 'RAW_JEV') {
+        failure = '${response['reason']}';
+        failureDetails = response;
+        break;
+      }
+      final body = growthMap(response['body']);
+      model ??= body['model'];
+      answers.addAll(growthMap(body['answers']));
+      count++;
+    }
+    try {
+      final parsed = parseAction({'model': model, 'answers': answers},
+          questions: growthMap(request['questions']), primaryEventId: primaryEventId);
+      return {...parsed, 'core_questions_batched': true, 'core_batch_count': count,
+        'action_transport_checkpoint': checkpoints,
+        'core_batches_complete': failure == null,
+        if (failure != null) 'core_batch_error': failure};
+    } on FormatException {
+      return {...failureDetails, 'status': 'LOCAL', 'reason': failure ?? 'RESPONSE_PARSE_FAILED',
+        'core_questions_batched': true, 'core_batch_count': count};
+    }
+  }
+
+  Future<GrowthData> _sendActionChunk(String body, String key) async {
+    final cacheKey = sha256.convert(utf8.encode('action-chunk-v14|$key|$body')).toString();
+    if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
+    final client = _client ?? http.Client();
+    try {
+      final response = await client.post(endpoint, headers: {
+        'Authorization': 'Bearer $key', 'Content-Type': 'application/json',
+      }, body: body).timeout(_actionTimeout);
+      if (response.statusCode == 429 || response.statusCode == 529) {
+        _cooldown = DateTime.now().add(const Duration(seconds: 45));
+      }
+      if (response.statusCode != 200) return {'status': 'LOCAL',
+        'reason': 'HTTP_${response.statusCode}', 'http_status': response.statusCode};
+      final data = growthMap(jsonDecode(utf8.decode(response.bodyBytes)));
+      if (growthMap(data['answers']).isEmpty) throw const FormatException('EMPTY_ANSWERS');
+      final result = <String, dynamic>{'status': 'RAW_JEV', 'body': data};
+      // Cache only fully validated answers, not missing or malformed results.
+      final questions = growthMap(growthMap(jsonDecode(body))['questions']);
+      try {
+        final parsed = parseForecastQuestions(data, questions);
+        if (growthMap(parsed['answers']).length == questions.length) {
+          if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+          _cache[cacheKey] = result;
+        }
+      } on FormatException { /* Optional errors are handled after merging. */ }
+      return result;
+    } on TimeoutException {
+      return {'status': 'LOCAL', 'reason': 'REQUEST_TIMEOUT'};
+    } on FormatException {
+      return {'status': 'LOCAL', 'reason': 'RESPONSE_PARSE_FAILED'};
+    } on http.ClientException {
+      return {'status': 'LOCAL', 'reason': 'NETWORK_ERROR'};
+    } catch (_) {
+      return {'status': 'LOCAL', 'reason': 'TRANSPORT_ERROR'};
+    } finally { if (_client == null) client.close(); }
+  }
+
+  Future<GrowthData> _sendAction(String body, String key, {String primaryEventId = ''}) async {
+    final cacheKey = sha256.convert(utf8.encode('action-core-v14|$key|$primaryEventId|$body')).toString();
+    if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
     final client = _client ?? http.Client();
     try {
       final response = await client
@@ -2186,16 +2494,30 @@ class EvidenceGrowthJev {
                 'Content-Type': 'application/json',
               },
               body: body)
-          .timeout(timeout);
+          .timeout(_actionTimeout);
       if (response.statusCode == 429 || response.statusCode == 529) {
         _cooldown = DateTime.now().add(const Duration(seconds: 45));
       }
       if (response.statusCode != 200) {
-        return {'status': 'LOCAL', 'reason': 'SERVICE_UNAVAILABLE'};
+        return {'status': 'LOCAL', 'reason': 'HTTP_${response.statusCode}',
+          'http_status': response.statusCode};
       }
-      return parseAction(growthMap(jsonDecode(response.body)));
+      final result = parseAction(growthMap(jsonDecode(utf8.decode(response.bodyBytes))),
+          questions: growthMap(growthMap(jsonDecode(body))['questions']),
+          primaryEventId: primaryEventId);
+      if (growthStrings(result['parse_warnings']).isEmpty) {
+        if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+        _cache[cacheKey] = result;
+      }
+      return result;
+    } on TimeoutException {
+      return {'status': 'LOCAL', 'reason': 'REQUEST_TIMEOUT'};
+    } on FormatException {
+      return {'status': 'LOCAL', 'reason': 'RESPONSE_PARSE_FAILED'};
+    } on http.ClientException {
+      return {'status': 'LOCAL', 'reason': 'NETWORK_ERROR'};
     } catch (_) {
-      return {'status': 'LOCAL', 'reason': 'REQUEST_FAILED'};
+      return {'status': 'LOCAL', 'reason': 'TRANSPORT_ERROR'};
     } finally {
       if (_client == null) client.close();
     }

@@ -30,10 +30,29 @@ class EvidenceForecastScience {
         'confirmed': input['confirmed'] == true,
       };
 
+  static bool _observableText(Object? value) {
+    final s = text(value).toLowerCase();
+    return s.isNotEmpty &&
+        !const {
+          '无',
+          '没有',
+          '未知',
+          '不确定',
+          '未定',
+          '未填写',
+          '待补充',
+          'none',
+          'null',
+          'n/a',
+          'na',
+          '-'
+        }.contains(s);
+  }
+
   static bool validContract(GrowthData value) =>
       value['confirmed'] == true &&
-      text(value['success_criterion']).isNotEmpty &&
-      text(value['observation_window']).isNotEmpty;
+      _observableText(value['success_criterion']) &&
+      _observableText(value['observation_window']);
 
   /// Only an explicitly named comparable context can pool trials. Exact event
   /// definition and observation-window semantics must also agree.
@@ -127,6 +146,7 @@ class EvidenceForecastScience {
       final created = (row['created_at_ms'] as num).toInt();
       final observed = (row['outcome_at_ms'] as num?)?.toInt() ?? 0;
       return row['comparison_key'] == key &&
+          row['prediction_complete'] != false &&
           row['model_signature'] == signature &&
           validContract(growthMap(row['event_contract'])) &&
           observed > created &&
@@ -196,7 +216,8 @@ class EvidenceForecastScience {
 
   /// Conservative operational gates, not universal statistical guarantees.
   /// Chronological holdout must beat the raw model on Brier AND log loss.
-  static GrowthData calibrate(double? raw, List<GrowthData> rows) {
+  static GrowthData calibrate(double? raw, List<GrowthData> rows,
+      {double minimumRelativeGain = 0}) {
     final positives = rows.where((r) => outcome(r) == 1).length;
     final base = <String, dynamic>{
       'status': raw == null ? 'NO_RAW_ESTIMATE' : 'UNCALIBRATED',
@@ -240,19 +261,30 @@ class EvidenceForecastScience {
         fit[0] + fit[1] * _logit(probability(r['raw_model_estimate'])!),
       ),
     );
+    final targetAudit = compareProbabilities([
+      for (final r in holdout)
+        {
+          'baseline': probability(r['raw_model_estimate']),
+          'candidate': _sigmoid(
+              fit[0] + fit[1] * _logit(probability(r['raw_model_estimate'])!)),
+          'outcome': outcome(r),
+        },
+    ], minimumCount: 15, minimumPerClass: 3, target: minimumRelativeGain);
     final improves = (adjusted['brier'] as double) + .002 <
             (rawMetrics['brier'] as double) &&
-        (adjusted['log_loss'] as double) < (rawMetrics['log_loss'] as double);
+        (adjusted['log_loss'] as double) < (rawMetrics['log_loss'] as double) &&
+        (minimumRelativeGain <= 0 || targetAudit['target_verified'] == true);
     final audited = {
       ...base,
       'holdout_count': holdout.length,
       'holdout_raw': rawMetrics,
       'holdout_calibrated': adjusted,
       'holdout_passed': improves,
+      'improvement_validation': targetAudit,
     };
     if (!improves)
       return {...audited, 'status': 'CALIBRATION_REJECTED_ON_HOLDOUT'};
-    final full = _fitCalibration(rows);
+    final full = minimumRelativeGain > 0 ? fit : _fitCalibration(rows);
     return {
       ...audited,
       'status': 'PERSONAL_PLATT_CALIBRATED',
@@ -260,6 +292,117 @@ class EvidenceForecastScience {
       'intercept': full[0],
       'slope': full[1],
       'method': '正则化逻辑校准；时间留出验证通过后，仅用先前独立结果拟合。个人试用校准，不是外部验证或因果模型。',
+    };
+  }
+
+  /// Paired probability forecasts of the same prospectively frozen events.
+  /// Callers select eligible real trials first. Block resampling preserves some
+  /// local temporal dependence; this is an operational audit, not a guarantee.
+  static GrowthData compareProbabilities(List<GrowthData> pairs,
+      {int minimumCount = 60, int minimumPerClass = 10, double target = .10}) {
+    final valid = pairs
+        .where((r) =>
+            probability(r['baseline']) != null &&
+            probability(r['candidate']) != null &&
+            (r['outcome'] == 0 || r['outcome'] == 1))
+        .toList();
+    final positives = valid.where((r) => r['outcome'] == 1).length;
+    final base = <String, dynamic>{
+      'status': 'INSUFFICIENT_REAL_OUTCOMES',
+      'count': valid.length,
+      'positive_count': positives,
+      'negative_count': valid.length - positives,
+      'target_relative_brier_reduction': target,
+      'target_verified': false,
+      'minimum_count': minimumCount,
+      'minimum_per_class': minimumPerClass,
+      'comparison': 'PAIRED_SAME_INPUT_AGGREGATION',
+    };
+    if (valid.isEmpty) return base;
+    var baselineLoss = 0.0;
+    var candidateLoss = 0.0;
+    var baselineLog = 0.0;
+    var candidateLog = 0.0;
+    var baselineHits = 0;
+    var candidateHits = 0;
+    final losses = <List<double>>[];
+    double logLoss(double p, double y) {
+      final q = p.clamp(.000001, .999999);
+      return -(y * math.log(q) + (1 - y) * math.log(1 - q));
+    }
+
+    for (final r in valid) {
+      final a = probability(r['baseline'])!;
+      final b = probability(r['candidate'])!;
+      final y = (r['outcome'] as num).toDouble();
+      final la = math.pow(a - y, 2).toDouble();
+      final lb = math.pow(b - y, 2).toDouble();
+      losses.add([la, lb]);
+      baselineLoss += la;
+      candidateLoss += lb;
+      baselineLog += logLoss(a, y);
+      candidateLog += logLoss(b, y);
+      if ((a >= .5) == (y == 1)) baselineHits++;
+      if ((b >= .5) == (y == 1)) candidateHits++;
+    }
+    final enough = valid.length >= minimumCount &&
+        positives >= minimumPerClass &&
+        valid.length - positives >= minimumPerClass;
+    final reductions = <double>[];
+    if (enough && baselineLoss > 1e-12) {
+      final rng = math.Random(4092026);
+      final block = math.sqrt(valid.length).ceil();
+      for (var sample = 0; sample < 500; sample++) {
+        var a = 0.0;
+        var b = 0.0;
+        var n = 0;
+        while (n < valid.length) {
+          final start = rng.nextInt(valid.length);
+          for (var k = 0; k < block && n < valid.length; k++, n++) {
+            final loss = losses[(start + k) % valid.length];
+            a += loss[0];
+            b += loss[1];
+          }
+        }
+        // Zero baseline error cannot demonstrate a relative improvement.
+        reductions.add(a <= 1e-12 ? 0 : 1 - b / a);
+      }
+      reductions.sort();
+    }
+    final improvement =
+        baselineLoss <= 1e-12 ? null : 1 - candidateLoss / baselineLoss;
+    final lower = reductions.isEmpty ? null : reductions[12];
+    final upper = reductions.isEmpty ? null : reductions[487];
+    final verified = enough &&
+        improvement != null &&
+        improvement >= target &&
+        lower != null &&
+        lower >= target &&
+        candidateLog <= baselineLog + 1e-9;
+    return {
+      ...base,
+      'status': !enough
+          ? 'INSUFFICIENT_REAL_OUTCOMES'
+          : baselineLoss <= 1e-12
+              ? 'ZERO_BASELINE_ERROR'
+              : verified
+                  ? 'TARGET_VERIFIED'
+                  : 'TARGET_NOT_DEMONSTRATED',
+      'target_verified': verified,
+      'baseline_brier': baselineLoss / valid.length,
+      'candidate_brier': candidateLoss / valid.length,
+      'relative_brier_reduction': improvement,
+      'relative_brier_reduction_interval':
+          lower == null ? null : {'low': lower, 'high': upper, 'level': .95},
+      'baseline_log_loss': baselineLog / valid.length,
+      'candidate_log_loss': candidateLog / valid.length,
+      'baseline_accuracy': baselineHits / valid.length,
+      'candidate_accuracy': candidateHits / valid.length,
+      'accuracy_point_change': (candidateHits - baselineHits) / valid.length,
+      'accuracy_relative_change': baselineHits == 0
+          ? null
+          : (candidateHits - baselineHits) / baselineHits,
+      'uncertainty_method': 'CHRONOLOGICAL_MOVING_BLOCK_BOOTSTRAP_500',
     };
   }
 
@@ -281,6 +424,10 @@ class EvidenceForecastScience {
     return {
       'raw_count': rows.length,
       'final_count': rows.length,
+      'direction_correct_count': rows.where((r) =>
+          (probability(r['estimate'])! >= .5) == (outcome(r) == 1)).length,
+      'direction_accuracy': rows.isEmpty ? null : rows.where((r) =>
+          (probability(r['estimate'])! >= .5) == (outcome(r) == 1)).length / rows.length,
       'raw_brier': raw['brier'],
       'final_brier': shown['brier'],
       'raw_log_loss': raw['log_loss'],
@@ -457,16 +604,18 @@ class EvidenceForecastScience {
         growthMap(finalJev['conclusion_verdicts'])[key],
       );
       final scenarioP = probability(scenarios[key]);
+      final baselineP = probability(provenance['jev_final_synthesis_probability']);
       roots.add({
         ...row, 'evidence_verdict': verdict,
         'root_verdict': growthMap(rootVerdicts[key]),
         'feasibility': growthMap(feasibility[key]),
         'scenario_probability': scenarioP,
-        // Both are uncalibrated probabilities for the SAME frozen event.
-        'model_sensitivity_delta': scenarioP == null ||
-                probability(result['raw_model_estimate']) == null
+        // Compare the same JEV stage and frozen event, not a JEV scenario to
+        // the pooled or calibrated probability of a different estimator.
+        'scenario_baseline_probability': baselineP,
+        'model_sensitivity_delta': scenarioP == null || baselineP == null
             ? null
-            : scenarioP - probability(result['raw_model_estimate'])!,
+            : scenarioP - baselineP,
         'causal_status': 'HYPOTHESIS_NOT_PROVEN',
         'jev_reviewed_excerpt':
             match.isNotEmpty && match.first['narrative_excerpted'] == true,
@@ -485,6 +634,7 @@ class EvidenceForecastScience {
       'version': version,
       'event_contract': result['event_contract'],
       'evidence_completeness': result['theory_input_completeness'],
+      'factor_weights': result['factor_weight_analysis'],
       'model_spread': predictions.length < 2
           ? null
           : {
