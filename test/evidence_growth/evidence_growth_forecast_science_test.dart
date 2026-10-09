@@ -11,6 +11,7 @@ import 'package:quote_app/evidence_growth/evidence_growth_action_review_page.dar
 import 'package:quote_app/evidence_growth/evidence_growth_dao.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_forecast_report_page.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_forecast_science.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_forecast_optimizer.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_journey_models.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_reference_forecast.dart';
@@ -454,11 +455,18 @@ void main() {
                   in EvidenceGrowthActionPredictionService.factorLabels.keys)
                 key: {
                   'score': .9,
+                  'importance': key == 'knowledge_skills' ? .9 : .1,
                   'confidence': .8,
                   'status': 'SUPPORT',
                   'evidence': '已确认意向坚定'
                 }
-            }
+            },
+            'action_guidance': [
+              {'factor_id': 'knowledge_skills', 'cue': '准备出发登记前',
+                'first_step': '对照预约要求检查材料清单',
+                'fallback': '缺少材料时先向登记处确认补交方式',
+                'check': '按原预约窗口完成登记'},
+            ],
           });
         }
         expect(purpose,
@@ -550,6 +558,14 @@ void main() {
           theoryFactorAnswers: answers,
           jevApiKey: 'test',
           requireJev: true);
+      expect(output['optimizer_version'], EvidenceForecastOptimizer.version);
+      expect(growthMap(output['optimizer_components'])['LLM'], .8);
+      expect(output['baseline_v3_estimate'], isNotNull);
+      expect(growthMap(output['performance_comparison'])['target_verified'], isFalse);
+      if (!failFirst) {
+        expect(growthRows(growthMap(output['action_guidance'])['steps'])
+            .first['plan'], '当准备出发登记前，就对照预约要求检查材料清单');
+      }
       expect(aiCalls, 2);
       expect(jevCalls, failFirst ? 1 : 2, reason: '${output['pipeline_errors']}');
       expect(output['pipeline_status'], incomplete ? 'PARTIAL' : 'COMPLETE');
@@ -560,7 +576,7 @@ void main() {
         expect(EvidenceGrowthForecastReportPage.markdown(output), contains('初步估计'));
         expect(EvidenceGrowthForecastReportPage.completionNotice(output), contains(failFirst ? '请求格式' : '最终复核未完成'));
       } else {
-        expect(output['forecast_source'], startsWith('contextual_factor_pool_v1'));
+        expect(output['forecast_source'], startsWith('event_pool_v4'));
       }
       expect(output['event_contract'], contract);
       expect(growthMap(output['ai'])['status'], 'AI',
@@ -921,6 +937,8 @@ void main() {
     final dao = MemoryForecastDao();
     final service = EvidenceGrowthActionPredictionService(dao: dao);
     final pending = {...trial(1, raw: .85), 'outcome': 'PENDING',
+      'optimizer_version': EvidenceForecastOptimizer.version,
+      'baseline_v3_estimate': .6,
       'primary_event_observed': null, 'outcome_at_ms': 0,
       'scientific_report': {'roots_and_experiments': []}};
     await service.savePrediction(pending);
@@ -929,6 +947,9 @@ void main() {
     var saved = (await service.history()).single;
     expect(saved['estimate'], .85);
     expect(growthMap(saved['forecast_validation'])['final_count'], 1);
+    expect(growthMap(saved['performance_comparison'])['count'], 1);
+    expect(growthMap(saved['performance_comparison'])['target_verified'], isFalse);
+    expect(saved['baseline_v3_estimate'], .6);
     expect(growthMap(saved['forecast_validation'])['direction_accuracy'], 1);
     expect(growthMap(saved['forecast_validation'])['final_brier'], closeTo(.0225, 1e-9));
     final text = EvidenceGrowthForecastReportPage.markdown(saved);
@@ -939,6 +960,7 @@ void main() {
     saved = (await service.history()).single;
     expect(saved['estimate'], .85);
     expect(growthMap(saved['forecast_validation'])['final_count'], 0);
+    expect(growthMap(saved['performance_comparison'])['count'], 0);
     expect(growthMap(saved['forecast_validation'])['direction_accuracy'], isNull);
   });
 

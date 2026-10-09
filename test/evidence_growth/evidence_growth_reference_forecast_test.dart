@@ -198,14 +198,15 @@ void main() {
             'evidence_status': 'SOURCE_LINKED'},
           {'id': 'permission', 'dimension': '机会', 'claim': '进入许可未通过',
             'importance': .9, 'support_score': .05, 'direction': 'adverse',
-            'evidence_status': 'SOURCE_LINKED', 'evidence_kind': 'PAST_BEHAVIOR',
+            'evidence_status': 'SOURCE_LINKED', 'evidence_kind': 'CURRENT_CONDITION',
+            'necessary_prerequisite': true, 'source_kind': 'USER_SUPPLIED',
             'quote': '指定场地的进入许可未通过',
             'obstacle_reason': '没有进入许可，无法在指定场地执行'},
         ],
       },
       sources: [],
       model: 'test',
-      jev: {'status': 'JEV', 'answers': {'event': .9, 'hard_blocker': .99}},
+      jev: {'status': 'JEV', 'answers': {'event': .9, 'hard_blocker': .99, 'bottleneck_permission': .99}},
     );
     expect(result['estimate'], lessThan(.2));
     expect(growthRows(growthMap(result['factor_weight_analysis'])['factors']), hasLength(1));
@@ -331,8 +332,8 @@ void main() {
       retrievedSources: [{'id': 'book', 'kind': 'USER_SUPPLIED',
         'title': '习惯与健康', 'content': excerpt}]);
     expect(result['raw_jev_estimate'], .43);
-    expect(result['estimate'], greaterThan(.75));
-    expect(result['estimate'], lessThan(.95));
+    expect(result['estimate'], greaterThan(.6));
+    expect(result['estimate'], lessThan(.7));
     expect(growthMap(result['factor_weight_analysis'])['status'], 'WEIGHTED');
     expect(growthRows(growthMap(result['factor_weight_analysis'])['factors']).last['label'], '缺少他人鼓励');
     expect(ReferenceForecastReport.markdown(result), contains('可能态度'));
@@ -734,7 +735,7 @@ void main() {
         judged = true;
         final state = growthMap(growthMap(body['state'])['evidence']);
         expect(growthMap(state['raw_input'])['成功标准'], long(600));
-        expect(growthRows(growthMap(state['llm_reference_profile'])['claims']),
+        expect(growthRows(state['extracted_claims_to_verify']),
             hasLength(12));
       }),
     );

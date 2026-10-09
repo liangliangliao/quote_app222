@@ -3068,6 +3068,9 @@ class _EvidenceGrowthActionPredictionPageState
     final sections = EvidenceGrowthForecastReportPage.sections(result);
     final estimate = EvidenceGrowthForecastReportPage.displayEstimate(result);
     final notice = EvidenceGrowthForecastReportPage.completionNotice(result);
+    final guidance = growthMap(result['action_guidance']);
+    final steps = growthRows(guidance['steps']);
+    final questions = growthRows(guidance['verification_questions']);
     return _section('行动预测与学习报告',
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(EvidenceGrowthForecastReportPage.estimateTitle(result),
@@ -3098,6 +3101,17 @@ class _EvidenceGrowthActionPredictionPageState
         const Text('可能让你没有行动的阻碍', style: TextStyle(fontWeight: FontWeight.bold)),
         Text('${sections[3]['body']}', style: const TextStyle(height: 1.5)),
         const SizedBox(height: 12),
+          if (steps.isNotEmpty) ...[
+            const Text('先做这一步', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('${steps.first['plan']}', style: const TextStyle(height: 1.5)),
+            const SizedBox(height: 12),
+          ],
+          if (questions.isNotEmpty) ...[
+            const Text('最需要核实', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('${questions.first['question']}',
+                style: const TextStyle(height: 1.5)),
+            const SizedBox(height: 12),
+          ],
         FilledButton.icon(onPressed: () => Navigator.push(context,
           MaterialPageRoute(builder: (_) => EvidenceGrowthForecastReportPage(prediction: result))),
           icon: const Icon(Icons.article_outlined), label: const Text('查看因素权重与预测对照／复制报告')),

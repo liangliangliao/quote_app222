@@ -7,6 +7,7 @@ import 'evidence_growth_jev.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_forecast_science.dart';
 import 'evidence_growth_forecast_weights.dart';
+import 'evidence_growth_forecast_optimizer.dart';
 
 /// AI + JEV action execution forecasting.
 ///
@@ -459,7 +460,14 @@ class EvidenceGrowthActionPredictionService {
       // resolved revision from both model history and calibration.
       lastPerTrial.putIfAbsent(EvidenceForecastScience.trialId(row), () => row);
     }
-    final resolved = lastPerTrial.values.where((r) => allResolved.contains(r) && similarBehavior(r)).toList();
+    final evidenceCutoff = DateTime.now().millisecondsSinceEpoch;
+    final resolved = lastPerTrial.values.where((r) {
+      final created = (r['created_at_ms'] as num?)?.toInt() ?? 0;
+      final observed = (r['outcome_at_ms'] as num?)?.toInt() ?? 0;
+      return r['hypothetical'] != true && created > 0 && observed > created &&
+          observed < evidenceCutoff && EvidenceForecastScience.outcome(r) != null &&
+          allResolved.contains(r) && similarBehavior(r);
+    }).toList();
     final successes = resolved
         .where((r) => EvidenceForecastScience.outcome(r) == 1)
         .length;
@@ -573,7 +581,8 @@ class EvidenceGrowthActionPredictionService {
       'all_resolved_count': allResolved.length,
       'success_count': successes,
       'smoothed_success_rate': baseline,
-      'match_rule': 'same_action_mode_and_overlapping_tags_when_available',
+      'match_rule': EvidenceForecastScience.comparisonKey(frozenContract, targetMode).isNotEmpty
+          ? 'exact_frozen_event_window_context' : 'same_action_mode_and_overlapping_tags_when_available',
       'recent': [
         for (final r in resolved.take(12))
           {
@@ -927,6 +936,8 @@ class EvidenceGrowthActionPredictionService {
         'display_score': unknown ? null : score,
         'confidence': confidence,
         'evidence_strength': evidenceStrength,
+        'necessary_prerequisite': aiRow['necessary_prerequisite'] == true &&
+            const {'environmental_constraints', 'knowledge_skills'}.contains(construct),
         'ai_importance': _prob(aiRow['importance']),
         'jev_importance': _prob(growthMap(jevImportance[key])['score']),
         'importance_reason': EvidenceForecastScience.text(aiRow['importance_reason'], 160),
@@ -970,7 +981,7 @@ class EvidenceGrowthActionPredictionService {
         'source': source,
         'is_dynamic': isDynamic,
         'theory_construct': construct,
-        'weight_group': isDynamic ? key : construct,
+        'weight_group': construct,
         'theory_group': _theoryGroup(construct),
         'theory_answer': theoryAnswer,
         'ordinal_level': theoryOrdinalLevel,
@@ -1004,25 +1015,38 @@ class EvidenceGrowthActionPredictionService {
     final groundedHardBlocker = growthRows(factorWeightAnalysis['critical_obstacles'])
         .any((row) => growthMap(factors['${row['key']}'])['theory_construct'] ==
             'environmental_constraints');
-    final scoreAggregation = EvidenceForecastWeights.combine(
+    final baselineAggregation = EvidenceForecastWeights.combine(
       analysis: factorWeightAnalysis, llm: aiEstimate, jev: jevEstimate,
       adjudication: finalJevEstimate, hardBlocker: hardBlockerProbability,
       groundedHardBlocker: groundedHardBlocker,
     );
-    final rawEstimate = _prob(scoreAggregation['probability']);
-    var forecastSource = scoreAggregation['status'] == 'WEIGHTED'
-        ? EvidenceForecastWeights.version
-        : finalJevEstimate != null ? 'JEV_FINAL_SYNTHESIS'
-        : jevEstimate != null ? 'JEV_PRIMARY'
-        : aiEstimate != null ? 'AI_FALLBACK' : 'NO_MODEL_ESTIMATE';
+    var forecastSource = EvidenceForecastOptimizer.version;
     final contract = EvidenceForecastScience.contract(eventContract);
     final comparisonKey = EvidenceForecastScience.comparisonKey(contract, targetMode);
     final signature = EvidenceForecastScience.modelSignature(ai,
         finalJevEstimate != null ? finalJevAdjudication : jev, forecastSource);
     final calibrationRows = EvidenceForecastScience.eligible(records,
         key: comparisonKey, signature: signature);
-    final probabilityCalibration = EvidenceForecastScience.calibrate(rawEstimate, calibrationRows);
+    final scoreAggregation = EvidenceForecastOptimizer.aggregate(
+      analysis: factorWeightAnalysis,
+      llm: aiEstimate,
+      jev: jevEstimate,
+      review: finalJevEstimate,
+      hardBlocker: hardBlockerProbability,
+      groundedHardBlocker: groundedHardBlocker,
+      eligibleRows: calibrationRows,
+    );
+    final rawEstimate = _prob(scoreAggregation['probability']);
+    final probabilityCalibration = EvidenceForecastScience.calibrate(rawEstimate, calibrationRows,
+        minimumRelativeGain: .10);
     final forecastValidation = EvidenceForecastScience.validation(calibrationRows);
+    final performanceComparison =
+        EvidenceForecastOptimizer.performance(calibrationRows);
+    final actionGuidance = EvidenceForecastOptimizer.guidance(
+      factors: factors,
+      analysis: factorWeightAnalysis,
+      proposed: growthRows(ai['action_guidance']),
+    );
     final calibrated = requireJev && !predictionComplete ? null : _prob(probabilityCalibration['probability']);
     final ceiling = _prob(scoreAggregation['probability_ceiling']);
     // Empirical recalibration cannot erase a currently established prerequisite.
@@ -1394,8 +1418,13 @@ class EvidenceGrowthActionPredictionService {
       'forecast_source': forecastSource,
       'factor_weight_analysis': factorWeightAnalysis,
       'score_aggregation': scoreAggregation,
+      'optimizer_version': EvidenceForecastOptimizer.version,
+      'optimizer_components': scoreAggregation['family_probabilities'],
+      'baseline_v3_estimate': _prob(baselineAggregation['probability']),
+      'performance_comparison': performanceComparison,
+      'action_guidance': actionGuidance,
       'forecast_algorithm': {
-        'version': EvidenceForecastWeights.version,
+        'version': EvidenceForecastOptimizer.version,
         'stages': const [
           'USER_CONFIRMED_THEORY_EVIDENCE',
           'THEORY_STRUCTURAL_BACKBONE',
@@ -1407,7 +1436,7 @@ class EvidenceGrowthActionPredictionService {
         'formal_conclusion_rule':
             'Only promote a final diagnostic conclusion when theory structure, completed LLM synthesis and JEV final adjudication converge on auditable evidence.',
         'probability_rule':
-            'Context-specific importance, deduplicated model factor support, consistency-weighted LLM/JEV pool and evidence-backed critical ceilings. These provisional weights are not fitted causal effects. Personal recalibration requires held-out real outcomes.',
+            'Pool only event probabilities; factor support is diagnostic, not a probability. Dependent JEV stages share one family budget. Context/model-matched stacking and personal calibration require chronological holdout improvement with a 10% Brier target and uncertainty audit. Keep evidence-backed critical ceilings.',
       },
       'raw_model_estimate': rawEstimate,
       'probability_calibration': probabilityCalibration,
@@ -1439,7 +1468,7 @@ class EvidenceGrowthActionPredictionService {
         'probability_calibration_sample_count':
             probabilityCalibration['sample_count'],
         'history_usage':
-            'Personal history is supplied to JEV as evidence. It is not blended a second time with an arbitrary manual weight; history-only fallback is used only when no model estimate exists and at least 5 similar outcomes are available.',
+            'Personal history is supplied as evidence. Only prospectively frozen, context/model-matched independent outcomes can fit ensemble weights or calibration. No arbitrary history blend or history-only probability fallback.',
         'factor_scores_are_not_probability_weights': true,
         'importance_weights_are_contextual_model_judgments': true,
         'jev_confidence_semantics':
@@ -3348,6 +3377,8 @@ C. 执行意图扩展：
 9. improvement_scenario 只改变1~3个可控理论构念，并明确是情景模拟。
 10. execution_likelihood 是模型交叉判断，不是统计保证；JEV配置可用时它不是最终主预测值。
 10a. factors 和 dynamic_factors 每一项另给 importance 0-1 和 importance_reason（最多40字）。重要性回答“仅把这个条件从有利改为不利，会多大程度改变本次行动？”；与当前 score 分开判断。必要的资源/资格/能力可高重要性；日常独立行动的他人赞许、未填测量字段通常低重要性。不能见到低分就给高权重。未知状态仍可判断相关性，但不能编造阻碍；已形成明确意向时，不重复累计其态度/规范前因。
+10c. necessary_prerequisite只有具体行动必需的现实资源、权限、资格或技能可以为true。意向、态度、社会规范、提醒、习惯和写计划均不能单独视为客观必要前提。真实的既有习惯可补偿计划不够细；没有If-Then计划不能自动否定普通日常行为。反复未启动或未达标的事实比抽象自律评价更有价值。
+10b. action_guidance 最多3项，只绑定一个已有因素factor_id。针对有依据的主要阻碍给cue（真实已知情境或待用户确认的触发）、first_step（立即可执行的第一步）、fallback（遇到阻碍的替代步骤，保留原成功标准）、check（怎样观察完成）、verification_question（真正影响判断的未知项）。不要编造具体日程、降低目标、保证效果或用“提高动力”等抽象建议；未知前提先核实。分清形成意向、启动和达到成功标准，反复行动不能以第一次启动代替全周期达成。
 11. evidence、summary、headline_reason、failure_modes、protective_actions、missing_information 用自然中文，不输出内部字段名或推理过程。
 12. 只输出 JSON。
 ''',
@@ -3360,7 +3391,7 @@ ${jsonEncode(state)}
   "execution_likelihood":0.0,
   "overall_confidence":0.0,
   "factors":{
-    "intention":{"score":0.5,"importance":0.0,"importance_reason":"对此次行动为何重要或不重要","confidence":0.0,"status":"UNKNOWN","evidence":""},
+    "intention":{"score":0.5,"importance":0.0,"importance_reason":"对此次行动为何重要或不重要","necessary_prerequisite":false,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "experiential_attitude":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "instrumental_attitude":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
     "injunctive_norm":{"score":0.5,"confidence":0.0,"status":"UNKNOWN","evidence":""},
@@ -3379,6 +3410,7 @@ ${jsonEncode(state)}
   "missing_information":["最多4个真正会改变预测的问题，优先理论关键构念"],
   "failure_modes":["最多3条具体失败路径"],
   "protective_actions":["最多3条现在就能做的具体动作"],
+  "action_guidance":[{"factor_id":"已有因素id","cue":"明确触发条件","first_step":"可直接执行的第一步","fallback":"遇到原阻碍怎么办","check":"如何确认完成","verification_question":"需要先核实的问题"}],
   "improvement_scenario":{
     "revised_plan":"更可执行的一句话",
     "changes":["最多3条，并尽量指出改善的是哪个已选择理论构念"],
@@ -3388,7 +3420,7 @@ ${jsonEncode(state)}
 }''',
             expectJson: true,
             temperature: .1,
-            maxTokens: 2200,
+            maxTokens: 2800,
           )
           .timeout(const Duration(seconds: 120));
 
@@ -3413,6 +3445,7 @@ ${jsonEncode(state)}
         output[key] = {
           'score': score,
           'importance': _prob(row['importance']),
+          'necessary_prerequisite': row['necessary_prerequisite'] == true,
           'importance_reason': EvidenceForecastScience.text(row['importance_reason'], 160),
           'confidence': confidence,
           'status': status,
@@ -3435,6 +3468,7 @@ ${jsonEncode(state)}
         output[key] = {
           'score': score ?? .5,
           'importance': _prob(row['importance']),
+          'necessary_prerequisite': row['necessary_prerequisite'] == true,
           'importance_reason': EvidenceForecastScience.text(row['importance_reason'], 160),
           'confidence': confidence ?? 0,
           'status': const {'SUPPORT', 'RISK', 'UNKNOWN'}.contains(status)
@@ -3468,6 +3502,21 @@ ${jsonEncode(state)}
             .map(_cleanUserText)
             .where((e) => e.isNotEmpty)
             .toList(),
+        'action_guidance': [
+          for (final item in growthRows(decoded['action_guidance']).take(3))
+            {
+              for (final key in const [
+                'factor_id',
+                'cue',
+                'first_step',
+                'fallback',
+                'check',
+                'verification_question'
+              ])
+                key: key == 'factor_id' ? EvidenceForecastScience.text(item[key], 100)
+                    : _cleanUserText(EvidenceForecastScience.text(item[key], 160))
+            }
+        ],
         'improvement_scenario': {
           'revised_plan':
               _cleanUserText('${scenario['revised_plan'] ?? ''}'),
@@ -3622,10 +3671,13 @@ ${jsonEncode(state)}
       final paired = EvidenceForecastScience.eligible(rows, key: key,
         signature: signature, beforeMs: DateTime.now().millisecondsSinceEpoch + 1);
       final validation = EvidenceForecastScience.validation(paired);
+      final performance = EvidenceForecastOptimizer.performance(paired);
       // Refresh outcome statistics, never the frozen forecast or its weights.
       for (final row in rows.where((r) => r['comparison_key'] == key &&
           r['model_signature'] == signature)) {
         row['forecast_validation'] = validation;
+        if (row['optimizer_version'] == EvidenceForecastOptimizer.version)
+          row['performance_comparison'] = performance;
         row['validation_updated_at_ms'] = nowMs;
         row['scientific_report'] = {...growthMap(row['scientific_report']),
           'validation': validation};
@@ -3839,7 +3891,10 @@ ${jsonEncode(state)}
         if (commitment.isEmpty && stability.isEmpty) {
           return '尚未明确这件事是“想做”，还是已经形成清楚而稳定的行动决定。';
         }
-        return '当前行动决定：${[commitment, stability].where((e) => e.isNotEmpty).join('；')}。';
+        return '当前行动决定：${[
+          commitment,
+          stability
+        ].where((e) => e.isNotEmpty).join('；')}。';
       case 'experiential_attitude':
         final values = list('emotions');
         return values.isEmpty

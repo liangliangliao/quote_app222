@@ -33,6 +33,7 @@ GrowthData factor(
               : 'adverse',
       'evidence': '用户确认的条件',
       'fact_grounded': grounded,
+      'necessary_prerequisite': true,
       'bottleneck_probability': bottleneck,
     };
 

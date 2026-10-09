@@ -111,6 +111,19 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
       }[value] ??
       '未知';
 
+  static String improvementNote(GrowthData prediction) {
+    final audit = growthMap(prediction['performance_comparison']);
+    if (audit.isEmpty) return '';
+    final count = (audit['count'] as num?)?.toInt() ?? 0;
+    final minimum = (audit['minimum_count'] as num?)?.toInt() ?? 60;
+    if (audit['status'] == 'INSUFFICIENT_REAL_OUTCOMES')
+      return '改进验证：已配对$count次同类行动，需至少$minimum次且包含足够成功和失败；10%改善目标待验证。';
+    final gain = audit['relative_brier_reduction'];
+    if (gain is! num || !gain.isFinite) return '改进验证：旧组合在这些结果上已无概率误差，无法计算相对改善。';
+    return '与同次旧组合相比，概率误差${gain >= 0 ? '降低' : '增加'}${(gain.abs() * 100).toStringAsFixed(1)}%（$count次）。'
+        '${audit['target_verified'] == true ? '已通过至少10%改善的验证门槛。' : '尚未证明至少10%的稳定改善。'}';
+  }
+
   static List<GrowthData> sections(GrowthData p) {
     final contract = growthMap(p['event_contract']);
     final report = growthMap(p['scientific_report']);
@@ -145,6 +158,9 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
     }
     final fallback = growthRows(p['top_risks']);
     final roots = growthRows(report['roots_and_experiments']);
+    final guidance = growthMap(p['action_guidance']);
+    final steps = growthRows(guidance['steps']);
+    final questions = growthRows(guidance['verification_questions']);
     return [
       {
         'title': '预测与实际结果',
@@ -173,6 +189,7 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
                 '平均预测：${forecastPercent(validation['final_mean_prediction'])} · 实际完成率：${forecastPercent(validation['observed_rate'])}',
                 if (validation['final_brier'] is num)
                   '概率误差：${(validation['final_brier'] as num).toStringAsFixed(3)}（Brier，越低越好）',
+                if (improvementNote(p).isNotEmpty) improvementNote(p),
               ].join('\n'),
       },
       {
@@ -211,7 +228,24 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
                   '有关键条件未满足，其他有利因素无法完全抵消。',
               ].join('\n'),
       },
-      if (roots.any((r) => brief(r['minimum_action']).isNotEmpty))
+      if (steps.isNotEmpty)
+        {
+          'title': '下一步怎么做',
+          'body': [
+            for (final step in steps.take(2)) ...[
+              '${step['priority'] == 'PREREQUISITE' ? '先处理必要条件' : '先处理'}：${brief(step['label'], 60)}',
+              brief(step['plan'], 240),
+            if (step['basis'] != '有已提供的依据') brief(step['basis'], 90),
+              if (brief(step['fallback']).isNotEmpty)
+                '如果受阻：${brief(step['fallback'])}',
+              if (brief(step['check']).isNotEmpty)
+                '完成检查：${brief(step['check'])}',
+              if ((step['recurrence_count'] as num? ?? 0) >= 2)
+                '这项阻碍曾在${step['recurrence_count']}次同类行动复盘中出现。',
+            ]
+          ].join('\n'),
+        }
+      else if (roots.any((r) => brief(r['minimum_action']).isNotEmpty))
         {
           'title': '下一步',
           'body': roots
@@ -220,6 +254,13 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
               .map((r) => brief(r['minimum_action']))
               .join(),
         },
+      if (questions.isNotEmpty)
+        {
+          'title': '优先核实的关键条件',
+          'body': questions.map((q) => brief(q['question'], 160)).join('\n')
+        },
+      if (count == 0 && improvementNote(p).isNotEmpty)
+        {'title': '改进是否更准', 'body': improvementNote(p)},
     ];
   }
 

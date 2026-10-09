@@ -63,7 +63,8 @@ class EvidenceForecastWeights {
       final evidence = EvidenceForecastScience.text(row['evidence']);
       // Check every necessary obstacle before deduplication: overlapping
       // positive evidence must not hide a directly established failed gate.
-      if (row['fact_grounded'] == true &&
+      if (row['necessary_prerequisite'] == true &&
+          row['fact_grounded'] == true &&
           importance >= .75 &&
           state == 'adverse' &&
           support != null &&
@@ -153,6 +154,14 @@ class EvidenceForecastWeights {
           assessedImportance <= 0 ? null : knownImportance / assessedImportance,
       'unassessed_factors': unassessed,
       'unknown_factors': unknown,
+      'uncertain_factors': [
+        for (final row in groups.values)
+          if (row['support'] == null)
+            {
+              for (final e in row.entries)
+                if (e.key != '_priority') e.key: e.value
+            }
+      ],
       'probability_ceiling': cap,
       'critical_obstacles': caps,
       'note': '权重是针对本次行动的模型重要性判断；因素占比和支持度不是实测发生率。',

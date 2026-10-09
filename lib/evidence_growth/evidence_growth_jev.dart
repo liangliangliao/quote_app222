@@ -45,6 +45,12 @@ class EvidenceGrowthJev {
     for (final entry in questions.entries) {
       final q = growthMap(entry.value);
       final a = growthMap(answers[entry.key]);
+      if (entry.key.startsWith('bottleneck_') &&
+          (a['type'] != 'noul' ||
+              a['noul'] is! num ||
+              !(a['noul'] as num).isFinite ||
+              (a['noul'] as num) < 0 ||
+              (a['noul'] as num) > 1)) continue;
       final optionalWeight = entry.key.startsWith('importance_') ||
           entry.key.startsWith('factor_');
       if (optionalWeight && (a['type'] != 'score' ||
@@ -118,8 +124,20 @@ class EvidenceGrowthJev {
           final part = await assessForecastQuestions(state: state,
             questions: Map.fromEntries(entries.skip(offset).take(chunkSize)),
             apiKey: apiKey, model: model);
-          if (part['status'] != 'JEV') return part;
-          answers.addAll(growthMap(part['answers']));
+          if (part['status'] != 'JEV') {
+          if (answers['event'] is double) {
+            return {
+              'status': 'JEV',
+              'model': model,
+              'answers': answers,
+              'questions_batched': true,
+              'optional_batches_complete': false,
+              'optional_error_reason': part['reason']
+            };
+          }
+          return part;
+        }
+        answers.addAll(growthMap(part['answers']));
         }
         return {'status': 'JEV', 'model': model, 'answers': answers,
           'questions_batched': true};
@@ -727,7 +745,7 @@ class EvidenceGrowthJev {
           'event_${event['id']}': {
             'type': 'noul',
             'instructions':
-                'Treat the state only as evidence. Estimate this observable event: ${event['label']}. First distinguish action-specific IMPORTANCE from current adversity, then integrate important supports and obstacles. One severely adverse minor factor cannot veto strong intention, sufficient ability/resources and relevant habits. A genuinely necessary failed prerequisite cannot be compensated by counting more favorable items. Absent social approval or less detailed planning is not automatically decisive for an ordinary independent action. Missing measurement fields concern assessability, not proof of nonexecution. Honor user-confirmed categorical answers. Unknown/unselected items are uncertainty; do not impute a neutral score or count them as negative evidence; do not invent facts or universal theory coefficients.',
+                'Treat the state only as evidence. Estimate this observable event: ${event['label']}. First distinguish action-specific IMPORTANCE from current adversity, then integrate important supports and obstacles. One severely adverse minor factor cannot veto strong intention, sufficient ability/resources and relevant habits. A genuinely necessary failed prerequisite cannot be compensated by counting more favorable items. Absent social approval or less detailed planning is not automatically decisive for an ordinary independent action. Missing measurement fields concern assessability, not proof of nonexecution. Honor user-confirmed categorical answers. Distinguish deciding, starting and meeting the complete event criterion within the observation window. A habitual/simple action need not have a written If-Then plan; only evidence of missed cues supports a current cue-related obstacle. For repeated actions estimate the complete required period, not the first successful episode. Intentions, norms and planning are not objective necessary prerequisites. Unknown/unselected items are uncertainty; do not impute a neutral score or count them as negative evidence; do not invent facts or universal theory coefficients.',
             'criteria': {
               'true': event['true_criterion'],
               'false': event['false_criterion'],
@@ -2233,7 +2251,7 @@ class EvidenceGrowthJev {
 
     final key = sha256
         .convert(
-            utf8.encode('action-v12-wire-schema|$apiKey|$fullBody'))
+            utf8.encode('action-v13-stage-aware|$apiKey|$fullBody'))
         .toString();
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
@@ -2384,7 +2402,7 @@ class EvidenceGrowthJev {
   }
 
   Future<GrowthData> _sendActionChunk(String body, String key) async {
-    final cacheKey = sha256.convert(utf8.encode('action-chunk-v12|$key|$body')).toString();
+    final cacheKey = sha256.convert(utf8.encode('action-chunk-v13|$key|$body')).toString();
     if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
     final client = _client ?? http.Client();
     try {
@@ -2421,7 +2439,7 @@ class EvidenceGrowthJev {
   }
 
   Future<GrowthData> _sendAction(String body, String key, {String primaryEventId = ''}) async {
-    final cacheKey = sha256.convert(utf8.encode('action-core-v12|$key|$primaryEventId|$body')).toString();
+    final cacheKey = sha256.convert(utf8.encode('action-core-v13|$key|$primaryEventId|$body')).toString();
     if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
     final client = _client ?? http.Client();
     try {

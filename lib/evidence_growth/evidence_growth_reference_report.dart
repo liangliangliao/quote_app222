@@ -70,10 +70,14 @@ class ReferenceForecastReport {
     }
     final works = claims.where((c) => c['evidence_kind'] == 'AUTHORED_WORK' &&
         c['evidence_status'] != 'MODEL_ASSUMPTION').take(2);
+    final guidance = growthMap(r['action_guidance']);
+    final steps = growthRows(guidance['steps']);
+    final questions = growthRows(guidance['verification_questions']);
     return [
       '同情境参考 · ${snapshot['reference_mode'] == 'PERSON' ? _brief(snapshot['person_identity']) : '全世界人群'}',
       if (r['estimate_available'] == true) ...[
-        '行动发生可能性：${percent(r['estimate'])} · ${direction(r['estimate'])}',
+        '${r['preliminary'] == true ? '初步估计（仅LLM）' : '行动发生可能性'}：${percent(r['estimate'])} · ${direction(r['estimate'])}',
+        if (r['preliminary'] == true) _brief(r['unavailable_reason'], 180),
         '判断把握：${r['estimate_confidence'] == 'medium' ? '中等' : '较低'} · 尚未用实际结果验证',
         if (range.isNotEmpty)
           '可能范围：${percent(range['low'], lower: true)}—${percent(range['high'], lower: false)}（随未知条件变化）',
@@ -86,7 +90,11 @@ class ReferenceForecastReport {
         '有利 ${_weight(weights['support_share'])} · 不利 ${_weight(weights['opposing_share'])} · 利弊并存 ${_weight(weights['mixed_share'])}（按重要性加权）',
         '关键因素：',
         for (final row in ranked.take(6))
-          '${row['rank']}. ${_brief(row['label'], 90)} · 权重 ${_weight(row['weight'])} · ${const {'supportive': '有利', 'adverse': '不利', 'mixed': '利弊并存'}[row['evidence_status']] ?? '未知'}',
+          '${row['rank']}. ${_brief(row['label'], 90)} · 权重 ${_weight(row['weight'])} · ${const {
+                'supportive': '有利',
+                'adverse': '不利',
+                'mixed': '利弊并存'
+              }[row['evidence_status']] ?? '未知'}',
       ] else ...[
         '关键因素：',
         for (final c in claims.take(4))
@@ -95,6 +103,11 @@ class ReferenceForecastReport {
       if (obstacles.isNotEmpty) '可能的阻碍：',
       for (final row in obstacles.take(2))
         '${_brief(row['label'])}\n为什么可能卡住：${_brief(row['mechanism']).isEmpty ? _brief(row['importance_reason']) : _brief(row['mechanism'])}',
+      if (steps.isNotEmpty) '可以借鉴的具体做法：',
+      for (final step in steps.take(2))
+        '${_brief(step['plan'], 200)}${step['basis'] == '有已提供的依据' ? '' : '\n${_brief(step['basis'])}'}${_brief(step['fallback']).isEmpty ? '' : '\n如果受阻：${_brief(step['fallback'])}'}${_brief(step['check']).isEmpty ? '' : '\n完成检查：${_brief(step['check'])}'}',
+      if (questions.isNotEmpty) '最影响判断、需要核实：',
+      for (final question in questions) _brief(question['question'], 160),
       if (growthMap(r['score_aggregation'])['ceiling_applied'] == true)
         '有关键条件未满足，其他有利因素无法完全抵消。',
       if (works.isNotEmpty) '著作思想与本次行动：',
