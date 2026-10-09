@@ -58,6 +58,7 @@ class _EvidenceGrowthActionPredictionPageState
   GrowthData result = {};
   List<GrowthData> records = [];
   bool busy = false;
+  String predictionProgress = '';
   bool preparing = false;
   bool jevConfigured = false;
   bool theorySelectionManuallyEdited = false;
@@ -425,6 +426,7 @@ class _EvidenceGrowthActionPredictionPageState
         requireJev: true,
         eventContract: eventContract,
         cycleContext: cycleContext,
+        onStageChanged: _predictionStageChanged,
       );
       await service.savePrediction(output);
       if (!mounted) return;
@@ -471,6 +473,43 @@ class _EvidenceGrowthActionPredictionPageState
       }
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+  void _predictionStageChanged(String stage) {
+    if (!mounted) return;
+    setState(() => predictionProgress = const {
+      'LLM_FIRST_PASS': '正在完成初步分析与独立估计…',
+      'JEV_FIRST_PASS': '正在完成初步分析与独立估计…',
+      'LLM_SYNTHESIS': '正在综合重要支持与主要阻碍…',
+      'JEV_FINAL': '正在复核最终预测…',
+    }[stage] ?? '正在补全预测…');
+  }
+
+  Future<void> retryPrediction() async {
+    if (busy || preparing || result.isEmpty) return;
+    final key = await _jevKey();
+    if (key.isEmpty) {
+      _message('请先配置JEV，再补全这份预测。');
+      return;
+    }
+    setState(() { busy = true; predictionProgress = '正在接续已保存的分析…'; });
+    try {
+      final output = await service.resumePrediction('${result['id']}',
+          jevApiKey: key, onStageChanged: _predictionStageChanged);
+      await service.savePrediction(output);
+      if (!mounted) return;
+      setState(() => result = output);
+      cycleContext = {...growthMap(output['cycle_context']),
+        'trial_id': EvidenceForecastScience.trialId(output),
+        'parent_prediction_id': output['id']};
+      if (output['pipeline_status'] == 'PARTIAL') {
+        _message(EvidenceGrowthForecastReportPage.completionNotice(output));
+      }
+      await reload();
+    } catch (error) {
+      if (mounted) _message('$error'.replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() { busy = false; predictionProgress = ''; });
     }
   }
   Future<void> applyImprovementAndPredict() async {
@@ -1714,9 +1753,11 @@ class _EvidenceGrowthActionPredictionPageState
           ]),
           ],
           if (busy)
-            const Padding(
-                padding: EdgeInsets.only(top: 10),
-                child: LinearProgressIndicator())
+            Padding(padding: const EdgeInsets.only(top: 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(predictionProgress), const SizedBox(height: 6),
+                const LinearProgressIndicator(),
+              ]))
         ]),
         icon: Icons.account_tree_outlined);
   }
@@ -3079,8 +3120,12 @@ class _EvidenceGrowthActionPredictionPageState
             fontSize: 42, fontWeight: FontWeight.w900, color: _teal)),
         if (notice.isNotEmpty) ...[
           Text(notice, style: const TextStyle(color: Colors.deepOrange, height: 1.4)),
-          TextButton.icon(onPressed: busy || preparing ? null : predict,
-            icon: const Icon(Icons.refresh), label: const Text('重试未完成的预测')),
+          TextButton.icon(onPressed: busy || preparing ? null : retryPrediction,
+            icon: const Icon(Icons.refresh), label: const Text('继续完成预测')),
+          TextButton.icon(onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: EvidenceGrowthForecastReportPage.diagnostics(result)));
+            if (mounted) _message('已复制阶段故障信息');
+          }, icon: const Icon(Icons.copy_outlined), label: const Text('复制故障信息')),
         ],
         Text('实际结果：${EvidenceGrowthForecastReportPage.outcomeLabel(result)}'),
         const SizedBox(height: 10),

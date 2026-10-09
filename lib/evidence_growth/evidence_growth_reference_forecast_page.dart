@@ -259,6 +259,25 @@ class _ReferenceForecastPageState
         ),
       );
 
+  Future<void> _retryPrediction() async {
+    if (busy || result.isEmpty) return;
+    setState(() { busy = true; status = '正在接续原参考报告…'; });
+    try {
+      final output = await service.resumePrediction('${result['id']}',
+        jevApiKey: widget.jevApiKey,
+        onProgress: (message) { if (mounted) setState(() => status = message); });
+      if (mounted) setState(() {
+        result = output;
+        status = output['prediction_complete'] == true ? '参考预测已完成。' : '${output['unavailable_reason']}';
+      });
+      await _reload();
+    } catch (error) {
+      if (mounted) setState(() => status = '$error'.replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('同情境下，其他人会怎样？')),
@@ -420,6 +439,9 @@ class _ReferenceForecastPageState
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 12),
+                      if (result['prediction_complete'] == false)
+                        TextButton.icon(onPressed: busy ? null : _retryPrediction,
+                          icon: const Icon(Icons.refresh), label: const Text('继续完成参考预测')),
                       SelectableText(
                         ReferenceForecastReport.markdown(result, includeSources: false),
                         style: const TextStyle(height: 1.5),

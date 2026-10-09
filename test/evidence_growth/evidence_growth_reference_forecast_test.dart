@@ -563,7 +563,8 @@ void main() {
     expect(r['estimate'], isNull);
     expect(r['estimate_available'], isFalse);
     expect(r['status'], 'MODEL_UNAVAILABLE');
-    expect(r['unavailable_reason'], contains('计算服务'));
+    expect(r['unavailable_reason'], contains('JEV判断未完成'));
+    expect(r['unavailable_reason'], contains('服务暂时不可用'));
     expect(ai.calls, ['evidence_growth.reference_forecast']);
   });
 

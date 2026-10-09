@@ -35,22 +35,25 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
         : '初步估计（仅LLM，JEV未完成）';
   }
 
-  static String failureReason(Object? reason) {
-    final code = '$reason';
-    if (code.contains('401')) return '密钥无效，请重新配置JEV';
+  static String failureReason(Object? reason, {String service = 'JEV', Object? httpStatus}) {
+    final code = '$reason ${httpStatus ?? ''}'.toUpperCase();
+    if (code.contains('401')) return '密钥无效，请重新配置$service';
     if (code.contains('403')) return '当前密钥没有访问权限';
-    if (code.contains('422')) return '请求格式未通过JEV接口校验';
+    if (code.contains('422') || code.contains('400')) return '请求格式未通过$service接口校验';
     if (code.contains('429') ||
         code.contains('529') ||
         code.contains('COOLDOWN')) return '服务繁忙，请稍后重试';
-    if (code.contains('TIMEOUT')) return '请求超时，请重试';
+    if (code.contains('TIMEOUT') || code.contains('408') || code.contains('504')) return '请求超时，请重试';
     if (code.contains('NETWORK') || code.contains('TRANSPORT'))
       return '网络连接失败，请检查网络后重试';
     if (code.contains('CONTEXT_TOO_LARGE')) return '资料过长，需分批判断';
-    if (code.contains('PARSE') || code.contains('TYPED_RESPONSE'))
+    if (code.contains('PARSE') || code.contains('JSON_INVALID') ||
+        code.contains('SHAPE_INVALID') || code.contains('TYPED_RESPONSE'))
       return '返回结果不完整，请重试';
+    if (code.contains('EMPTY_AI_RESPONSE')) return '服务没有返回可用内容，请重试';
     if (code.contains('NO_KEY') || code.contains('NOT_CONFIGURED'))
-      return '尚未配置JEV';
+      return '尚未配置$service';
+    if (code.contains('CONFIG_UNAVAILABLE')) return '无法读取$service配置，请检查设置';
     if (code.contains('SERVICE_UNAVAILABLE') || code.contains('HTTP_5'))
       return '服务暂时不可用，请稍后重试';
     return '请求未完成，可重试';
@@ -60,22 +63,49 @@ class EvidenceGrowthForecastReportPage extends StatelessWidget {
     if (p['pipeline_status'] != 'PARTIAL' && p['prediction_complete'] != false)
       return '';
     final source = growthMap(p['forecast_provenance']);
+    if (source['llm_first_pass_status'] != null &&
+        source['llm_first_pass_status'] != 'AI') {
+      return 'LLM初步分析未完成：${failureReason(source['llm_first_pass_reason'], service: 'AI', httpStatus: source['llm_first_pass_http_status'])}。${source['jev_first_pass_status'] == 'JEV' ? 'JEV初判已保留，补全时继续缺失步骤。' : '已成功的步骤会保留。'}';
+    }
     if (source['jev_first_pass_status'] != 'JEV') {
       final hasAi = growthMap(p['ai'])['status'] == 'AI' ||
           EvidenceForecastScience.probability(source['ai_fallback_probability']) != null;
-      return 'JEV初判未完成：${failureReason(source['jev_first_pass_reason'])}。${hasAi ? '已有LLM分析已保留。' : '尚未取得可用结果，可重试。'}';
+      return 'JEV初判未完成：${failureReason(source['jev_first_pass_reason'], httpStatus: source['jev_first_pass_http_status'])}。${hasAi ? '已有LLM分析已保留，补全时继续缺失步骤。' : '尚未取得可用结果，可重试。'}';
     }
     if (source['jev_final_adjudication_status'] != 'JEV') {
       if ('${source['jev_final_adjudication_reason']}'
           .startsWith('LLM_SYNTHESIS_UNAVAILABLE')) {
-        return 'JEV初判已完成；LLM综合未完成，最终复核仍待完成，可重试。';
+        final reason = source['llm_synthesis_reason'] ??
+            '${source['jev_final_adjudication_reason']}'.replaceFirst('LLM_SYNTHESIS_UNAVAILABLE_', '');
+        return 'LLM综合未完成：${failureReason(reason, service: 'AI', httpStatus: source['llm_synthesis_http_status'])}。JEV初判已保留，补全时从综合继续。';
       }
-      return 'JEV初判已完成，最终复核未完成：${failureReason(source['jev_final_adjudication_reason'])}。';
+      return 'JEV初判已完成，最终复核未完成：${failureReason(source['jev_final_adjudication_reason'], httpStatus: source['jev_final_adjudication_http_status'])}。补全时继续最终复核。';
     }
     final warnings = growthStrings(p['pipeline_warnings']);
+    if (source['jev_retry_reason'] != null) {
+      return '已保留有效预测，JEV明细补全未成功：${failureReason(source['jev_retry_reason'], httpStatus: source['jev_retry_http_status'])}。';
+    }
     return warnings.isNotEmpty
         ? '预测分数已完成；${warnings.join('；')}，可重试补全。'
         : '部分分析尚未完成，已有判断已保留。';
+  }
+
+  static String diagnostics(GrowthData p) {
+    final source = growthMap(p['forecast_provenance']);
+    String code(Object? value) => value == null ? 'NONE'
+        : RegExp(r'^[A-Z][A-Z0-9_]{0,120}$').hasMatch('$value') ? '$value' : 'UNKNOWN';
+    String modelText(Object? value) => '$value'.replaceAll(RegExp(r'[\r\n]'), ' ').substring(
+        0, '$value'.length > 80 ? 80 : '$value'.length);
+    return [
+      '预测阶段诊断 v1',
+      if (growthMap(p['execution_model']).isNotEmpty)
+        'AI: ${modelText(growthMap(p['execution_model'])['provider'])} / ${modelText(growthMap(p['execution_model'])['model'])}; ${modelText(growthMap(p['execution_model'])['request_version'])}',
+      for (final stage in const {
+        'LLM初步分析': 'llm_first_pass', 'JEV初判': 'jev_first_pass',
+        'LLM综合': 'llm_synthesis', 'JEV复核': 'jev_final_adjudication',
+      }.entries)
+        '${stage.key}: ${code(source['${stage.value}_status'])}; ${code(source['${stage.value}_reason'])}${source['${stage.value}_http_status'] is num ? '; HTTP ${source['${stage.value}_http_status']}' : ''}${source['${stage.value}_detail_code'] != null ? '; ${code(source['${stage.value}_detail_code'])}' : ''}',
+    ].join('\n');
   }
 
   static String brief(Object? value, [int max = 120]) {

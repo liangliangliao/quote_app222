@@ -170,14 +170,11 @@ void main() {
   testWidgets('a healthy JEV response after eight seconds is still accepted',
       (tester) async {
     final jev = EvidenceGrowthJev(client: MockClient((request) async {
-      await Future<void>.delayed(const Duration(seconds: 9));
-      return http.Response(
-          jsonEncode({
-            'answers': {
-              'event_running': {'type': 'noul', 'noul': .85},
-            }
-          }),
-          200);
+      final questions = growthMap(growthMap(jsonDecode(request.body))['questions']);
+      if (questions.containsKey('event_running')) {
+        await Future<void>.delayed(const Duration(seconds: 9));
+      }
+      return validJevWireReply(request);
     }));
     GrowthData? result;
     final future = jev.assessAction({

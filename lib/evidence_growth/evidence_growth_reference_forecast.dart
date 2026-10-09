@@ -9,6 +9,7 @@ import 'evidence_growth_dao.dart';
 import 'evidence_growth_forecast_science.dart';
 import 'evidence_growth_forecast_weights.dart';
 import 'evidence_growth_forecast_optimizer.dart';
+import 'evidence_growth_forecast_report_page.dart';
 import 'evidence_growth_jev.dart';
 import 'evidence_growth_journey_models.dart';
 import 'evidence_growth_reference_defaults.dart';
@@ -44,8 +45,7 @@ class EvidenceGrowthReferenceForecast {
           expectJson: true,
           maxTokens: 1400,
           temperature: .1,
-        )
-        .timeout(const Duration(seconds: 60));
+        );
     final decoded = EvidenceGrowthActionReview.decode(raw);
     const limits = {
       'success_criterion': 600,
@@ -660,8 +660,7 @@ class EvidenceGrowthReferenceForecast {
           : 'MODEL_UNAVAILABLE',
       'unavailable_reason': complete
           ? ''
-          : available ? 'JEV判断未完成，已保留LLM初步估计；请检查配置或网络后重试。'
-              : '计算服务未返回有效概率，请重试或检查JEV配置与网络；这不是资料不足。',
+          : 'JEV判断未完成：${EvidenceGrowthForecastReportPage.failureReason(jev['reason'], httpStatus: jev['http_status'])}。已保留LLM分析与资料，可继续完成预测。',
       'note': person
           ? '基于公开线索及明确假设的粗略情境判断，不能视为本人真实意愿或精确预测。'
           : '依据明确人群范围与假设作模型粗估，不能称为全球真实发生率。',
@@ -735,8 +734,7 @@ class EvidenceGrowthReferenceForecast {
           expectJson: true,
           temperature: .1,
           maxTokens: 3400,
-        )
-        .timeout(const Duration(seconds: 120));
+        );
     final profile = normalizeProfile(
       EvidenceGrowthActionReview.decode(raw),
       sources,
@@ -772,6 +770,36 @@ class EvidenceGrowthReferenceForecast {
     } catch (_) {
       return [];
     }
+  }
+
+  /// Continue the independent judge using the original sources and event.
+  Future<GrowthData> resumePrediction(String predictionId, {
+    required String jevApiKey,
+    void Function(String message)? onProgress,
+  }) async {
+    final rows = await history();
+    final matches = rows.where((r) => r['id'] == predictionId).toList();
+    if (matches.isEmpty) throw StateError('参考报告已删除，请重新预测');
+    final previous = matches.first;
+    if (previous['prediction_complete'] == true) throw StateError('这份参考预测已经完成');
+    if (jevApiKey.trim().isEmpty) throw StateError('请先配置JEV');
+    final input = growthMap(previous['input_snapshot']);
+    final profile = growthMap(previous['profile']);
+    final sources = growthRows(previous['sources']);
+    if (!EvidenceForecastScience.validContract(growthMap(input['event_contract'])) ||
+        profile.isEmpty) throw StateError('原报告缺少行动条件，请重新分析');
+    onProgress?.call('沿用原资料与LLM分析，继续完成JEV判断…');
+    final jev = await _jev.assessForecastQuestions(
+      state: independentJudgeState(input, profile, sources),
+      questions: questions(profile), apiKey: jevApiKey.trim(),
+    );
+    final output = assemble(input: input, profile: profile, sources: sources,
+        jev: jev, model: '${previous['llm_model'] ?? ''}');
+    output['research'] = previous['research'];
+    output['parent_prediction_id'] = previous['id'];
+    rows.insert(0, output);
+    await _dao.setSetting(historySetting, jsonEncode(rows.take(30).toList()));
+    return output;
   }
 
   Future<void> clearHistory() => _dao.setSetting(historySetting, '');

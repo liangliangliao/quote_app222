@@ -443,6 +443,8 @@ void main() {
       final d = MemoryForecastDao();
       var aiCalls = 0;
       var jevCalls = 0;
+      var initialEventCalls = 0;
+      var finalJevCalls = 0;
       final ai = TestAi((purpose, prompt) {
         aiCalls++;
         expect(prompt, contains('完成登记'));
@@ -494,6 +496,8 @@ void main() {
         final body = growthMap(jsonDecode(request.body));
         final qs = growthMap(body['questions']);
         final isFinal = qs.containsKey('synthesis_event_probability');
+        if (isFinal) finalJevCalls++;
+        if (qs.keys.any((k) => k.startsWith('event_'))) initialEventCalls++;
         final requestState = growthMap(body['state']);
         expect(growthMap(requestState['action_prediction'])['event_contract'],
             contract);
@@ -566,8 +570,10 @@ void main() {
         expect(growthRows(growthMap(output['action_guidance'])['steps'])
             .first['plan'], '当准备出发登记前，就对照预约要求检查材料清单');
       }
-      expect(aiCalls, 2);
-      expect(jevCalls, failFirst ? 1 : 2, reason: '${output['pipeline_errors']}');
+      expect(aiCalls, failFirst ? 1 : 2);
+      expect(initialEventCalls, 1);
+      expect(finalJevCalls, failFirst ? 0 : 1, reason: '${output['pipeline_errors']}');
+      final completedJevCalls = jevCalls;
       expect(output['pipeline_status'], incomplete ? 'PARTIAL' : 'COMPLETE');
       expect(output['estimate'], incomplete ? isNull : allOf(greaterThan(.42), lessThan(.75)));
       if (incomplete) {
@@ -584,7 +590,7 @@ void main() {
       expect(
           growthRows(
               growthMap(output['scientific_report'])['roots_and_experiments']),
-          hasLength(1));
+          hasLength(failFirst ? 0 : 1));
       await service.savePrediction(output);
       expect(await service.history(), hasLength(1));
       if (!incomplete) {
@@ -604,7 +610,7 @@ void main() {
             throwsStateError);
         expect(aiCalls, 2,
             reason: 'unchanged revisions must fail before paid calls');
-        expect(jevCalls, 2);
+        expect(jevCalls, completedJevCalls);
       }
     });
   }

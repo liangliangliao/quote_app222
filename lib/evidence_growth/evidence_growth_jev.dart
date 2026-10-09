@@ -100,8 +100,6 @@ class EvidenceGrowthJev {
       String model = 'jev-latest'}) async {
     if (apiKey.trim().isEmpty)
       return {'status': 'UNAVAILABLE', 'reason': 'NO_KEY'};
-    if (_cooldown != null && DateTime.now().isBefore(_cooldown!))
-      return {'status': 'UNAVAILABLE', 'reason': 'COOLDOWN'};
     final body = jsonEncode({
       'model': model,
       'state': {
@@ -111,7 +109,11 @@ class EvidenceGrowthJev {
       },
       'questions': questions
     });
-    if (utf8.encode(body).length > 64000 || questions.length > 24)
+    final cacheKey = sha256.convert(utf8.encode('forecast-batch-v3|$apiKey|$body')).toString();
+    if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
+    if (_cooldown != null && DateTime.now().isBefore(_cooldown!))
+      return {'status': 'UNAVAILABLE', 'reason': 'COOLDOWN'};
+    if (utf8.encode(body).length > 64000 || questions.length > 16)
       {
         // Keep the frozen event and sources intact; split only typed questions.
         // No recursively repeated oversized single-question request.
@@ -159,10 +161,16 @@ class EvidenceGrowthJev {
       if (response.statusCode != 200)
         return {
           'status': 'UNAVAILABLE',
-          'reason': 'HTTP_${response.statusCode}'
+          'reason': 'HTTP_${response.statusCode}',
+          'http_status': response.statusCode,
         };
-      return parseForecastQuestions(
-          growthMap(jsonDecode(response.body)), questions);
+      final parsed = parseForecastQuestions(
+          growthMap(jsonDecode(utf8.decode(response.bodyBytes))), questions);
+      if (growthMap(parsed['answers']).length == questions.length) {
+        if (_cache.length >= 48) _cache.remove(_cache.keys.first);
+        _cache[cacheKey] = parsed;
+      }
+      return parsed;
     } on TimeoutException {
       return {'status': 'UNAVAILABLE', 'reason': 'REQUEST_TIMEOUT'};
     } on FormatException {
@@ -1613,9 +1621,7 @@ class EvidenceGrowthJev {
     // first-pass JEV result and LLM candidates together. The global 8-second
     // timeout is too short for this stage and previously collapsed both
     // timeouts and valid-but-unexpected responses into REQUEST_FAILED.
-    final finalTimeout = timeout < const Duration(seconds: 30)
-        ? const Duration(seconds: 30)
-        : timeout;
+    final finalTimeout = _actionTimeout;
     http.Response response;
     try {
       response = await client
@@ -1656,7 +1662,7 @@ class EvidenceGrowthJev {
       if (response.statusCode != 200) {
         return {
           'status': 'LOCAL',
-          'reason': 'SERVICE_UNAVAILABLE',
+          'reason': 'HTTP_${response.statusCode}',
           'http_status': response.statusCode,
           'response_bytes': utf8.encode(response.body).length,
         };
@@ -1664,7 +1670,7 @@ class EvidenceGrowthJev {
 
       Object decoded;
       try {
-        decoded = jsonDecode(response.body);
+        decoded = jsonDecode(utf8.decode(response.bodyBytes));
       } catch (_) {
         return {
           'status': 'LOCAL',
@@ -2122,6 +2128,7 @@ class EvidenceGrowthJev {
     GrowthData pattern = {};
     var batchCount = 0;
     final warnings = <String>[];
+    final checkpoints = <String, dynamic>{};
     for (var offset = 0; offset < ids.length; offset += 10) {
       final end = (offset + 10 < ids.length) ? offset + 10 : ids.length;
       final chunk = ids.sublist(offset, end);
@@ -2145,6 +2152,8 @@ class EvidenceGrowthJev {
         };
       }
       final part = await _sendTheoryRoleBatch(body, apiKey);
+      final cacheKey = sha256.convert(utf8.encode('role-v2|$apiKey|$body')).toString();
+      if (_cache.containsKey(cacheKey)) checkpoints[cacheKey] = _cache[cacheKey];
       if (part['status'] != 'JEV') {
         return {
           'status': 'LOCAL',
@@ -2153,6 +2162,7 @@ class EvidenceGrowthJev {
           'theory_factor_roles': merged,
           'theory_feedback_pattern': pattern,
           'batch_count': batchCount,
+          'action_transport_checkpoint': checkpoints,
         };
       }
       batchCount++;
@@ -2171,6 +2181,7 @@ class EvidenceGrowthJev {
       'batch_count': batchCount,
       'parse_warnings': warnings,
       'complete': merged.length == ids.length && warnings.isEmpty,
+      'action_transport_checkpoint': checkpoints,
     };
   }
 
@@ -2218,11 +2229,9 @@ class EvidenceGrowthJev {
   }
 
   Future<GrowthData> assessAction(GrowthData state,
-      {required String apiKey, String model = 'jev-latest'}) async {
+      {required String apiKey, String model = 'jev-latest',
+      GrowthData priorAssessment = const {}}) async {
     if (apiKey.isEmpty) return {'status': 'LOCAL', 'reason': 'NO_KEY'};
-    if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
-      return {'status': 'LOCAL', 'reason': 'COOLDOWN'};
-    }
 
     // Try the complete first-pass request first. When many theories are
     // selected, the theory-role questions can make one typed request exceed
@@ -2247,14 +2256,39 @@ class EvidenceGrowthJev {
           includeTheoryRoles: false, includeImportance: false));
       coreBytes = utf8.encode(coreBody).length;
     }
-    final coreBatched = coreBytes > 64000;
+    // Byte size alone does not bound model work. Ordinary questionnaires can
+    // contain 60+ typed judgements even when their JSON is well below 64 KB.
+    final coreBatched = coreBytes > 64000 ||
+        growthMap(growthMap(jsonDecode(coreBody))['questions']).length > 16;
 
     final key = sha256
         .convert(
-            utf8.encode('action-v13-stage-aware|$apiKey|$fullBody'))
+            utf8.encode('action-v14-bounded|$apiKey|$fullBody'))
         .toString();
+    if (priorAssessment['action_request_fingerprint'] == key) {
+      for (final entry in growthMap(priorAssessment['action_transport_checkpoint']).entries.take(48)) {
+        final cached = growthMap(entry.value);
+        if (RegExp(r'^[a-f0-9]{64}$').hasMatch(entry.key) &&
+            const {'RAW_JEV', 'JEV'}.contains(cached['status'])) {
+          _cache[entry.key] = cached;
+        }
+      }
+    }
     if (_cache.containsKey(key)) return _cache[key]!;
     if (_pending.containsKey(key)) return _pending[key]!;
+    GrowthData retainPrimary(GrowthData failure) {
+      if (priorAssessment['action_request_fingerprint'] == key &&
+          priorAssessment['status'] == 'JEV' && priorAssessment['overall'] is num &&
+          (priorAssessment['overall'] as num).isFinite &&
+          (priorAssessment['overall'] as num) >= 0 && (priorAssessment['overall'] as num) <= 1) {
+        return {...priorAssessment, 'retry_error': failure['reason'],
+          'retry_http_status': failure['http_status']};
+      }
+      return failure;
+    }
+    if (_cooldown != null && DateTime.now().isBefore(_cooldown!)) {
+      return retainPrimary({'status': 'LOCAL', 'reason': 'COOLDOWN'});
+    }
 
     final pending = (() async {
       final primaryEvents = _forecastEvents(state).where((e) => e['primary'] == true).toList();
@@ -2263,7 +2297,7 @@ class EvidenceGrowthJev {
           ? await _sendActionBatched(growthMap(jsonDecode(coreBody)), apiKey,
               primaryEventId: primaryEventId)
           : await _sendAction(coreBody, apiKey, primaryEventId: primaryEventId);
-      if (result['status'] != 'JEV') return result;
+      if (result['status'] != 'JEV') return retainPrimary(result);
 
       if (splitTheoryRoles) {
         final roleResult = await _assessTheoryRolesBatched(
@@ -2279,6 +2313,8 @@ class EvidenceGrowthJev {
           'theory_roles_batched': true,
           'theory_role_batch_count': roleResult['batch_count'],
           'theory_roles_complete': roleResult['status'] == 'JEV' && roleResult['complete'] != false,
+          'action_transport_checkpoint': {...growthMap(result['action_transport_checkpoint']),
+            ...growthMap(roleResult['action_transport_checkpoint'])},
           if (roleResult['status'] != 'JEV') 'theory_role_error': roleResult['reason'],
           'parse_warnings': [...growthStrings(result['parse_warnings']),
             ...growthStrings(roleResult['parse_warnings'])],
@@ -2336,6 +2372,7 @@ class EvidenceGrowthJev {
             : splitTheoryRoles ? 'CORE_PLUS_THEORY_ROLE_BATCHES' : 'SINGLE',
         'core_request_bytes': coreBytes,
         'full_request_bytes': fullBytes,
+        'action_request_fingerprint': key,
       };
       if (enriched['status'] == 'JEV' &&
           enriched['importance_batch_complete'] != false &&
@@ -2363,7 +2400,7 @@ class EvidenceGrowthJev {
     var current = <String, dynamic>{};
     for (final entry in growthMap(request['questions']).entries) {
       final candidate = {...current, entry.key: entry.value};
-      if (current.isNotEmpty && (candidate.length > 12 ||
+      if (current.isNotEmpty && (candidate.length > 16 ||
           utf8.encode(jsonEncode({...request, 'questions': candidate})).length > 64000)) {
         parts.add({...request, 'questions': current});
         current = {};
@@ -2376,12 +2413,18 @@ class EvidenceGrowthJev {
     if (current.isNotEmpty) parts.add({...request, 'questions': current});
     final answers = <String, dynamic>{};
     String? failure;
+    GrowthData failureDetails = {};
     Object? model;
     var count = 0;
+    final checkpoints = <String, dynamic>{};
     for (final part in parts) {
-      final response = await _sendActionChunk(jsonEncode(part), key);
+      final bodyText = jsonEncode(part);
+      final response = await _sendActionChunk(bodyText, key);
+      final cacheKey = sha256.convert(utf8.encode('action-chunk-v14|$key|$bodyText')).toString();
+      if (_cache.containsKey(cacheKey)) checkpoints[cacheKey] = _cache[cacheKey];
       if (response['status'] != 'RAW_JEV') {
         failure = '${response['reason']}';
+        failureDetails = response;
         break;
       }
       final body = growthMap(response['body']);
@@ -2393,16 +2436,17 @@ class EvidenceGrowthJev {
       final parsed = parseAction({'model': model, 'answers': answers},
           questions: growthMap(request['questions']), primaryEventId: primaryEventId);
       return {...parsed, 'core_questions_batched': true, 'core_batch_count': count,
+        'action_transport_checkpoint': checkpoints,
         'core_batches_complete': failure == null,
         if (failure != null) 'core_batch_error': failure};
     } on FormatException {
-      return {'status': 'LOCAL', 'reason': failure ?? 'RESPONSE_PARSE_FAILED',
+      return {...failureDetails, 'status': 'LOCAL', 'reason': failure ?? 'RESPONSE_PARSE_FAILED',
         'core_questions_batched': true, 'core_batch_count': count};
     }
   }
 
   Future<GrowthData> _sendActionChunk(String body, String key) async {
-    final cacheKey = sha256.convert(utf8.encode('action-chunk-v13|$key|$body')).toString();
+    final cacheKey = sha256.convert(utf8.encode('action-chunk-v14|$key|$body')).toString();
     if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
     final client = _client ?? http.Client();
     try {
@@ -2439,7 +2483,7 @@ class EvidenceGrowthJev {
   }
 
   Future<GrowthData> _sendAction(String body, String key, {String primaryEventId = ''}) async {
-    final cacheKey = sha256.convert(utf8.encode('action-core-v13|$key|$primaryEventId|$body')).toString();
+    final cacheKey = sha256.convert(utf8.encode('action-core-v14|$key|$primaryEventId|$body')).toString();
     if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
     final client = _client ?? http.Client();
     try {
