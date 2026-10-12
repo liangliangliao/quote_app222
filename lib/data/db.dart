@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 
 // 火种模块：宿主只接触其公开导出的 KindlingSchema。
 import '../kindling/kindling.dart';
+// 照见模块：宿主只接触其公开导出的 ZhaojianSchema。
+import '../zhaojian/zhaojian.dart' show ZhaojianSchema;
 
 class AppDatabase {
   static Database? _db;
@@ -30,7 +32,9 @@ class AppDatabase {
       // should increment this value accordingly.
       // v35: rebuild legacy 知行树 action tables that still contain required
       // columns such as diagnosis_id from pre-product schemas.
-      version: 35,
+      // v36: 照见模块新增 z_ 前缀表（模块自管迁移，幂等）。
+      // v37: 照见 schema v2（z_decision 新增 align_json）；模块的 migrate 按自己的版本补列。
+      version: 37,
       onCreate: _create,
       onUpgrade: _upgrade,
     );
@@ -344,6 +348,9 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
 
     // 火种模块建表（幂等）。
     await KindlingSchema.createAll(db);
+
+    // 照见模块建表（幂等）。
+    await ZhaojianSchema.createAll(db);
 
     // Self-help measurement records (Change module)
     await db.execute('''
@@ -1279,6 +1286,9 @@ await ensureSemanticConsistencyTables(db);
 
 // 火种模块按自己的 schemaVersion 自管迁移（幂等）。
 await KindlingSchema.migrate(db, oldV, newV);
+
+// 照见模块按自己的 schemaVersion 自管迁移（幂等）。
+await ZhaojianSchema.migrate(db, oldV, newV);
 
 // Add missing columns safely (no duplicate-column logs).
 await _addColumnIfMissing(db, 'quotes', 'task_type', 'TEXT');

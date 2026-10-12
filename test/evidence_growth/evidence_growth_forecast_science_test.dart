@@ -11,11 +11,14 @@ import 'package:quote_app/evidence_growth/evidence_growth_action_review_page.dar
 import 'package:quote_app/evidence_growth/evidence_growth_dao.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_forecast_report_page.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_forecast_science.dart';
+import 'package:quote_app/evidence_growth/evidence_growth_forecast_optimizer.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_jev.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_journey_models.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_reference_forecast.dart';
 import 'package:quote_app/evidence_growth/evidence_growth_reference_forecast_page.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
+
+import 'jev_wire_contract.dart';
 
 final contract = EvidenceForecastScience.contract({
   'success_criterion': '完成登记',
@@ -430,13 +433,18 @@ void main() {
     expect(growthMap(saved['diagnostic_review'])['status'], 'DRAFT');
   });
 
-  for (final failFinal in [false, true]) {
+  for (final failedStage in ['none', 'first', 'final']) {
+    final failFirst = failedStage == 'first';
+    final failFinal = failedStage == 'final';
+    final incomplete = failFirst || failFinal;
     test(
-        'full prediction pipeline preserves event and partial work: failFinal=$failFinal',
+        'full prediction pipeline preserves event and partial work: failedStage=$failedStage',
         () async {
       final d = MemoryForecastDao();
       var aiCalls = 0;
       var jevCalls = 0;
+      var initialEventCalls = 0;
+      var finalJevCalls = 0;
       final ai = TestAi((purpose, prompt) {
         aiCalls++;
         expect(prompt, contains('完成登记'));
@@ -449,11 +457,18 @@ void main() {
                   in EvidenceGrowthActionPredictionService.factorLabels.keys)
                 key: {
                   'score': .9,
+                  'importance': key == 'knowledge_skills' ? .9 : .1,
                   'confidence': .8,
                   'status': 'SUPPORT',
                   'evidence': '已确认意向坚定'
                 }
-            }
+            },
+            'action_guidance': [
+              {'factor_id': 'knowledge_skills', 'cue': '准备出发登记前',
+                'first_step': '对照预约要求检查材料清单',
+                'fallback': '缺少材料时先向登记处确认补交方式',
+                'check': '按原预约窗口完成登记'},
+            ],
           });
         }
         expect(purpose,
@@ -477,13 +492,17 @@ void main() {
       });
       final jev = EvidenceGrowthJev(client: MockClient((request) async {
         jevCalls++;
+        validateJevWireRequest(request);
         final body = growthMap(jsonDecode(request.body));
         final qs = growthMap(body['questions']);
         final isFinal = qs.containsKey('synthesis_event_probability');
+        if (isFinal) finalJevCalls++;
+        if (qs.keys.any((k) => k.startsWith('event_'))) initialEventCalls++;
         final requestState = growthMap(body['state']);
         expect(growthMap(requestState['action_prediction'])['event_contract'],
             contract);
         if (isFinal && failFinal) return http.Response('{}', 503);
+        if (!isFinal && failFirst) return http.Response('{}', 422);
         return http.Response(
             jsonEncode({
               'model': 'jev-fixed-test',
@@ -543,20 +562,38 @@ void main() {
           theoryFactorAnswers: answers,
           jevApiKey: 'test',
           requireJev: true);
-      expect(aiCalls, 2);
-      expect(jevCalls, 2, reason: '${output['pipeline_errors']}');
-      expect(output['pipeline_status'], failFinal ? 'PARTIAL' : 'COMPLETE');
-      expect(output['estimate'], failFinal ? null : .57);
+      expect(output['optimizer_version'], EvidenceForecastOptimizer.version);
+      expect(growthMap(output['optimizer_components'])['LLM'], .8);
+      expect(output['baseline_v3_estimate'], isNotNull);
+      expect(growthMap(output['performance_comparison'])['target_verified'], isFalse);
+      if (!failFirst) {
+        expect(growthRows(growthMap(output['action_guidance'])['steps'])
+            .first['plan'], '当准备出发登记前，就对照预约要求检查材料清单');
+      }
+      expect(aiCalls, failFirst ? 1 : 2);
+      expect(initialEventCalls, 1);
+      expect(finalJevCalls, failFirst ? 0 : 1, reason: '${output['pipeline_errors']}');
+      final completedJevCalls = jevCalls;
+      expect(output['pipeline_status'], incomplete ? 'PARTIAL' : 'COMPLETE');
+      expect(output['estimate'], incomplete ? isNull : allOf(greaterThan(.42), lessThan(.75)));
+      if (incomplete) {
+        expect(output['preliminary_estimate'], isNotNull);
+        expect(EvidenceGrowthForecastReportPage.displayEstimate(output), output['raw_model_estimate']);
+        expect(EvidenceGrowthForecastReportPage.markdown(output), contains('初步估计'));
+        expect(EvidenceGrowthForecastReportPage.completionNotice(output), contains(failFirst ? '请求格式' : '最终复核未完成'));
+      } else {
+        expect(output['forecast_source'], startsWith('event_pool_v4'));
+      }
       expect(output['event_contract'], contract);
       expect(growthMap(output['ai'])['status'], 'AI',
           reason: '${output['ai']}');
       expect(
           growthRows(
               growthMap(output['scientific_report'])['roots_and_experiments']),
-          hasLength(1));
+          hasLength(failFirst ? 0 : 1));
       await service.savePrediction(output);
       expect(await service.history(), hasLength(1));
-      if (!failFinal) {
+      if (!incomplete) {
         await expectLater(
             service.predict(
                 plan: '去登记',
@@ -573,10 +610,36 @@ void main() {
             throwsStateError);
         expect(aiCalls, 2,
             reason: 'unchanged revisions must fail before paid calls');
-        expect(jevCalls, 2);
+        expect(jevCalls, completedJevCalls);
       }
     });
   }
+
+  testWidgets('partial running report shows the preserved 85 percent and a clear JEV failure on a narrow screen', (tester) async {
+    final prediction = <String, dynamic>{
+      'plan': '明天去跑步', 'outcome': 'PENDING', 'pipeline_status': 'PARTIAL',
+      'estimate': null, 'raw_model_estimate': .85,
+      'forecast_provenance': {'jev_first_pass_status': 'LOCAL',
+        'jev_first_pass_reason': 'HTTP_422', 'ai_fallback_probability': .85},
+    };
+    final text = EvidenceGrowthForecastReportPage.markdown(prediction);
+    expect(text, contains('初步估计（仅LLM，JEV未完成）：85%'));
+    expect(text, contains('请求格式未通过JEV接口校验'));
+    expect(text, isNot(contains('行动发生可能性：尚不能估计')));
+    tester.view.physicalSize = const Size(390, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(home: EvidenceGrowthForecastReportPage(prediction: prediction)));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  test('preliminary forecasts are excluded from formal prediction accuracy even when they carry an outcome', () {
+    final prediction = trial(1)..['prediction_complete'] = false;
+    expect(EvidenceForecastScience.eligible([prediction], key: 'key', signature: 'model'), isEmpty);
+    expect(EvidenceForecastScience.eligible([trial(1)], key: 'key', signature: 'model'), hasLength(1));
+  });
 
   test('final optional adjudication rejects choices outside its requested enum',
       () {
@@ -874,6 +937,37 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
         EvidenceGrowthForecastReportPage.markdown(p), contains('观察窗口：预约前30分钟'));
+  });
+
+  test('recording and correcting an outcome refreshes accuracy without rewriting prediction', () async {
+    final dao = MemoryForecastDao();
+    final service = EvidenceGrowthActionPredictionService(dao: dao);
+    final pending = {...trial(1, raw: .85), 'outcome': 'PENDING',
+      'optimizer_version': EvidenceForecastOptimizer.version,
+      'baseline_v3_estimate': .6,
+      'primary_event_observed': null, 'outcome_at_ms': 0,
+      'scientific_report': {'roots_and_experiments': []}};
+    await service.savePrediction(pending);
+    await service.recordOutcome('p1', 'SUCCESS', primaryEventObserved: true,
+      observedAt: DateTime.fromMillisecondsSinceEpoch(2000));
+    var saved = (await service.history()).single;
+    expect(saved['estimate'], .85);
+    expect(growthMap(saved['forecast_validation'])['final_count'], 1);
+    expect(growthMap(saved['performance_comparison'])['count'], 1);
+    expect(growthMap(saved['performance_comparison'])['target_verified'], isFalse);
+    expect(saved['baseline_v3_estimate'], .6);
+    expect(growthMap(saved['forecast_validation'])['direction_accuracy'], 1);
+    expect(growthMap(saved['forecast_validation'])['final_brier'], closeTo(.0225, 1e-9));
+    final text = EvidenceGrowthForecastReportPage.markdown(saved);
+    expect(text, contains('实际结果：已完成'));
+    expect(text, contains('命中率：100%'));
+    expect(text, isNot(contains('理论学习')));
+    await service.recordOutcome('p1', 'CANCELLED');
+    saved = (await service.history()).single;
+    expect(saved['estimate'], .85);
+    expect(growthMap(saved['forecast_validation'])['final_count'], 0);
+    expect(growthMap(saved['performance_comparison'])['count'], 0);
+    expect(growthMap(saved['forecast_validation'])['direction_accuracy'], isNull);
   });
 
   testWidgets(
