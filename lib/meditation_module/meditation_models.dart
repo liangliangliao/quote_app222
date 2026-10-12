@@ -116,6 +116,82 @@ class MeditationAiGenerationResult {
   });
 }
 
+enum MeditationGenerationFailureKind {
+  configuration,
+  emptyResponse,
+  format,
+  quality,
+  request,
+}
+
+class MeditationGenerationException implements Exception {
+  final MeditationGenerationFailureKind kind;
+  final List<String> issues;
+  final bool repairFailed;
+  final Object? cause;
+
+  MeditationGenerationException(
+    this.kind, {
+    List<String> issues = const [],
+    this.repairFailed = false,
+    this.cause,
+  }) : issues = List.unmodifiable(issues);
+
+  String get userMessage {
+    switch (kind) {
+      case MeditationGenerationFailureKind.configuration:
+        return '尚未配置可用的 AI 模型，请检查 App 现有的 AI 设置。';
+      case MeditationGenerationFailureKind.emptyResponse:
+        return 'AI 返回了空内容，请重试生成。';
+      case MeditationGenerationFailureKind.request:
+        return 'AI 请求未完成，请重试；具体请求错误已记录在日志中。';
+      case MeditationGenerationFailureKind.format:
+        return 'AI 已返回内容，但未能识别为完整的冥想脚本。${repairFailed ? '自动修复未完成。' : '已尝试自动修复格式。'}请重试生成，具体原因已记录在日志中。';
+      case MeditationGenerationFailureKind.quality:
+        final detail = issues
+            .map(_friendlyIssue)
+            .toSet()
+            .take(3)
+            .map((s) => '• $s')
+            .join('\n');
+        return 'AI 已返回引导，但还需要调整：\n$detail\n${repairFailed ? '自动重写未完成，' : '已尝试自动重写，'}可以重试生成。';
+    }
+  }
+
+  static String _friendlyIssue(String issue) {
+    if (issue.contains('experience_design')) return '缺少把主题转成感官、身体和情绪体验的完整设计。';
+    if (issue.contains('input_anchor')) return '引导的主题未对应本次输入。';
+    const labels = {
+      'body_emotion': '身体与情绪觉察',
+      'allow_experience': '允许体验',
+      'embodied_shift': '身体体验',
+      'real_life_rehearsal': '生活场景体验',
+      'integration': '体验整合',
+      'closing': '结束收束',
+      'arrival': '进入练习',
+      'breath': '呼吸或感官锚点',
+      'pause_after_seconds': '体验停顿',
+      'start_seconds': '段落开始时间',
+      'duration_minutes': '练习时长',
+      'practice_focus': '体验重点',
+      'phase': '体验阶段',
+      'segments': '引导段落',
+      'segment': '引导段落',
+      'text 字符串': '正文',
+      'intent': '段落用途',
+    };
+    var text = issue;
+    labels.forEach((key, label) => text = text.replaceAll(key, label));
+    return text;
+  }
+
+  @override
+  String toString() =>
+      '${kind.name}: $userMessage'
+      '${issues.isEmpty ? '' : '\n校验详情：${issues.join('；')}'}'
+      '${cause == null ? '' : '\n原因：$cause'}';
+}
+
 class MeditationRecord {
   final int? id;
   final String sessionKey;

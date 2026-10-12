@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
+import '../utils/deepseek_logger.dart';
 import 'meditation_models.dart';
 
 class MeditationDao {
@@ -274,6 +275,16 @@ class MeditationDao {
     bool success = true,
     String? errorMessage,
   }) async {
+    if (!success && (errorMessage ?? '').trim().isNotEmpty) {
+      const logProviders = {'deepseek': 'DeepSeek', 'openai': 'OpenAI',
+        'openrouter': 'OpenRouter', 'edenai': 'Eden AI', 'gemini': 'Gemini',
+        'xgrok': 'xGrok', 'azure': 'Azure'};
+      await DeepSeekLogger.logError(
+        module: 'meditation.$feature.validation', endpoint: 'local://meditation',
+        provider: logProviders[provider] ?? provider ?? 'AI', model: model,
+        error: StateError('【错误】$errorMessage'),
+      );
+    }
     final db = await _database();
     return db.insert('meditation_ai_outputs', {
       'feature': feature,
