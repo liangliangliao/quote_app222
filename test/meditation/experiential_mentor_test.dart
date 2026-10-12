@@ -266,7 +266,7 @@ void main() {
           isTrue);
     });
 
-    test('重写后仍是没有停顿的稿件，不交付并保留失败记录', () async {
+    test('缺失的体验停顿由本地补齐，保留正文且不额外请求重写', () async {
       final bad = example();
       for (final segment in bad['segments'] as List) {
         segment['pause_after_seconds'] = 0;
@@ -281,17 +281,20 @@ void main() {
                   recentRecords: [],
                   durationMinutes: 5,
                   userDescription: topic);
-      expect(result, isNull);
-      expect(ai.calls, hasLength(2));
-      expect(dao.outputs.single['success'], isFalse);
-      expect(dao.outputs.single['error'], contains('pause_after_seconds'));
+      expect(result, isNotNull);
+      expect(
+          result!.session.steps.every((s) => s.pauseAfterSeconds >= 4), isTrue);
+      expect(ai.calls, hasLength(1));
+      expect(dao.outputs.single['success'], isTrue);
+      expect((dao.outputs.single['input'] as Map)['response_normalization'],
+          contains('experience_pauses'));
     });
 
     test('同一阶段后退不会穿过质量校验', () async {
       final bad = example();
       (bad['segments'] as List)[3]['phase'] = 'arrival';
       final dao = FakeDao();
-      final result = await MeditationAiService(
+      final generating = MeditationAiService(
               ai: FakeAi([jsonEncode(bad), jsonEncode(bad)]),
               settings: FakeSettings(),
               dao: dao)
@@ -301,7 +304,10 @@ void main() {
               recentRecords: [],
               durationMinutes: 5,
               userDescription: topic);
-      expect(result, isNull);
+      await expectLater(
+          generating,
+          throwsA(isA<MeditationGenerationException>().having(
+              (e) => e.kind, 'kind', MeditationGenerationFailureKind.quality)));
       expect(dao.outputs.single['error'], contains('顺序不正确'));
     });
   });
@@ -314,7 +320,7 @@ void main() {
       final bad = example();
       for (final s in bad['segments'] as List)
         s['text'] = (s['text'] as String).replaceAll(topic, '提高工作效率');
-      expect(check(bad).join(), contains('开场和核心体验正文'));
+      expect(check(bad).join(), contains('核心体验正文未呼应本次主题'));
     });
     test('设计字段齐全也不能让概念讲解代替体验', () {
       final bad = example();
@@ -340,6 +346,19 @@ void main() {
       final bad = example();
       (bad['segments'] as List).last['text'] = '你已经释怀了。温和睁眼看向周围。';
       expect(check(bad).join(), contains('不能替用户宣布'));
+    });
+    test('不保证或不一定放松不是对用户宣布结果', () {
+      final good = example();
+      (good['segments'] as List).last['text'] =
+          '无法预先保证放松。你现在不一定放松了，也可以保持原样；温和睁眼看向周围。';
+      expect(check(good), isEmpty);
+    });
+    test('真实感官中的“不需要在脑海中想象”不是想象邀请', () {
+      final good = example(imagery: false);
+      (good['segments'] as List)[5]['text'] = '不需要在脑海中想象。看看微光，允许自己为人，感受手掌触感。';
+      final issues = MeditationMentorGuidance.qualityIssues(good,
+          userInput: topic, durationSeconds: 300, useImagery: false);
+      expect(issues, isEmpty);
     });
     test('说话和留白放不进所选时长，会失败', () {
       final bad = example();

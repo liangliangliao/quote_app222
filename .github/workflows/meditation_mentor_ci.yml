@@ -30,6 +30,12 @@ jobs:
           cache: true
       - name: Resolve dependencies
         run: flutter pub get
+      - name: Provide SQLite for diagnostic logging tests
+        run: |
+          mentor_sqlite_dir="$RUNNER_TEMP/meditation-sqlite"
+          mkdir -p "$mentor_sqlite_dir"
+          ln -s /lib/x86_64-linux-gnu/libsqlite3.so.0 "$mentor_sqlite_dir/libsqlite3.so"
+          echo "LD_LIBRARY_PATH=$mentor_sqlite_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Analyze meditation generation and playback
         run: >-
           flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos

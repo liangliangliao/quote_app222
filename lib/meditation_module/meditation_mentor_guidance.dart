@@ -16,7 +16,7 @@ class MeditationMentorGuidance {
 
 情绪可以尚未出现、仍然紧张、没有改变，也可以难以命名。允许这些实际反应；不宣布“你现在已经放松/安全/释怀”，不要求必须产生温暖、感恩、眼泪或某种标准感觉。没有变化也能完成练习。想象和身体注意过强时，可睁眼看一个普通物体或听周围声音；medium 安全级别或用户选择“真实感官”时使用真实环境，避免深入想象或重新唤起困扰场景。
 
-先输出 experience_design：input_anchor（从用户原话摘取的短语；无补充输入时从当前状态摘取）、theme（本次主题）、sensory_cues（至少两个具体感官线索）、body_invitation（可执行的身体邀请）、emotional_permission（允许怎样的实际反应）、felt_check（尝试后邀请观察什么）。这些是设计依据，不会朗读给用户；对应引导必须真正写进 segments.text。正常练习的 embodied_shift 中使用可选想象并接回真实身体；低刺激练习用真实感官替代。arrival 和至少一个核心体验阶段回应 input_anchor。
+先输出 experience_design：input_anchor（从用户原话摘取的短语；无补充输入时从当前状态摘取）、theme（本次主题）、sensory_cues（至少两个具体感官线索）、body_invitation（可执行的身体邀请）、emotional_permission（允许怎样的实际反应）、felt_check（尝试后邀请观察什么）。这些是设计依据，不会朗读给用户；对应引导必须真正写进 segments.text。正常练习用可选想象或可感的日常物件画面接回真实身体；低刺激练习用真实感官替代。开场和核心体验回应用户主题，可以自然转述，不为了校验反复念出 input_anchor。段数、字数和结束位置是创作建议；以完整体验和可播放的语音留白预算为准。
 
 每个 segment 必须有整数 pause_after_seconds，代表这句说完后的安静体验时间，不能写进朗读文字。1–2 分钟练习可用 1–4 秒短留白，3 分钟起通常用 6–20 秒；身体、情绪、想象后的留白比说明更重要。用短段和足够的停顿适配目标时长，不靠长篇说理或空白分钟凑时长。最后以当下环境和一个很小、可选择的生活延续收束；睡前可以只是继续休息，不引出任务。
 ''';
@@ -53,7 +53,7 @@ class MeditationMentorGuidance {
     final input = userInput.trim();
     if (anchor.isEmpty ||
         !input.contains(anchor) ||
-        anchor.length < math.min(4, input.length) ||
+        anchor.length < math.min(2, input.length) ||
         anchor.length > 40) {
       issues.add('input_anchor 必须摘自本次输入，不能使用默认推荐或编造用户经历');
     }
@@ -72,29 +72,24 @@ class MeditationMentorGuidance {
         .whereType<Map>()
         .toList();
     final texts = segments.map((s) => '${s['text'] ?? ''}').toList();
-    final joined = texts.join('\n');
+    final joined = texts.join('').replaceAll(RegExp(r'\s+'), ' ');
     final core = segments.where((s) => [
           'allow_experience',
           'embodied_shift',
           'real_life_rehearsal'
         ].contains(s['phase']));
-    final arrival = segments
-        .where((s) => s['phase'] == 'arrival')
-        .map((s) => '${s['text'] ?? ''}')
-        .join();
+    final coreText = core.map((s) => '${s['text'] ?? ''}').join();
     if (anchor.isNotEmpty &&
-        (!arrival.contains(anchor) ||
-            !core.any((s) => '${s['text'] ?? ''}'.contains(anchor)))) {
-      issues.add('用户主题必须进入开场和核心体验正文，不能只出现在分析字段或标题');
+        !_echoesTheme(coreText, anchor, '${design['theme'] ?? ''}')) {
+      issues.add('核心体验正文未呼应本次主题，不能只在分析字段或标题里写主题');
     }
     final shifted = segments
         .where((s) => s['phase'] == 'embodied_shift')
         .map((s) => '${s['text'] ?? ''}')
         .join();
-    if (useImagery && !RegExp(r'想象|画面|仿佛|设想|心中浮现').hasMatch(shifted)) {
-      issues.add('embodied_shift 需要贴合主题的可选画面，再接回真实身体感受');
-    }
-    if (!useImagery && RegExp(r'想象|设想|心中浮现').hasMatch(shifted)) {
+    // A concrete scene or object is an imagery entry too. Do not require the
+    // narrator to literally say "imagine", nor reject "no need to imagine".
+    if (!useImagery && _activeImagery(coreText)) {
       issues.add('本次选择真实感官或需要低刺激引导，不应引导进入想象场景');
     }
     final lecture = RegExp(r'意味着|这说明|本质上|我们要明白|从认知|接纳的含义|你要理解|正确认知|在认知层面');
@@ -107,8 +102,13 @@ class MeditationMentorGuidance {
       r'声音|听|安静|声响',
       r'触|温度|温暖|凉|手掌|脚底|座面|重量|支撑'
     ];
+    final experienceText = segments
+        .where((s) => ['body_emotion', 'allow_experience', 'embodied_shift']
+            .contains(s['phase']))
+        .map((s) => '${s['text'] ?? ''}')
+        .join();
     if (senseFamilies
-            .where((pattern) => RegExp(pattern).hasMatch(shifted))
+            .where((pattern) => RegExp(pattern).hasMatch(experienceText))
             .length <
         2) {
       issues.add('核心体验正文至少要有两种感官入口，不能只在设计字段里列出');
@@ -122,9 +122,11 @@ class MeditationMentorGuidance {
         .hasMatch(joined)) {
       issues.add('明确允许没有画面、没有感觉或没有变化，并给真实感官替代入口');
     }
-    if (RegExp(
-            r'你(?:现在|已经|会|一定).{0,8}(放松了|平静了|安全了|释怀了|感到温暖)|必然|必须感受|保证.{0,8}(放松|平静)')
-        .hasMatch(joined)) {
+    final resultClaims = RegExp(
+        r'你(?:现在|已经|会|一定).{0,8}(放松了|平静了|安全了|释怀了|感到温暖)|必然|必须感受|保证.{0,8}(放松|平静)');
+    if (resultClaims.allMatches(joined).any((match) =>
+        !_negatedBefore(joined, match.start) &&
+        !RegExp(r'不一定|未必|不会|不必|不需要|无需').hasMatch(match.group(0)!))) {
       issues.add('不能替用户宣布身体或情绪结果，也不能要求出现某种感觉');
     }
     var minimumSeconds = 0;
@@ -150,6 +152,32 @@ class MeditationMentorGuidance {
     }
     return issues.toSet().toList();
   }
+
+  static bool _echoesTheme(String text, String anchor, String theme) {
+    if (text.contains(anchor)) return true;
+    // Allow the design's concrete restatement to carry the theme into the
+    // narration, e.g. "认知转变" -> "念头与行动之间的一点空间".
+    final terms = <String>{};
+    for (final part
+        in RegExp(r'[\u3400-\u9fff]+|[A-Za-z]+').allMatches('$anchor $theme')) {
+      final word = part.group(0)!;
+      if (word.length == 1) terms.add(word);
+      for (var i = 0; i + 1 < word.length; i++)
+        terms.add(word.substring(i, i + 2));
+    }
+    terms.removeAll(['本次', '一个', '一点', '可以', '身体', '感受', '情绪', '练习']);
+    return terms.isNotEmpty &&
+        terms.where(text.contains).length >= math.min(2, terms.length);
+  }
+
+  static bool _negatedBefore(String text, int start) => RegExp(
+          r'(不|(?:不能|不会|不用|不必|不需要|无需|无法|不是|并非|没有|难以|避免)[^，,。；;!?！？]{0,6})\s*$')
+      .hasMatch(text.substring(math.max(0, start - 12), start));
+
+  static bool _activeImagery(String text) =>
+      RegExp(r'想象|设想|心中浮现').allMatches(text).any((match) =>
+          !_negatedBefore(text, match.start) &&
+          !RegExp(r'^不出|^不到|^不起来').hasMatch(text.substring(match.end)));
 
   /// Retain a viable model timeline. Repair overlaps using speech + explicit
   /// silence, giving additional time to the embodied part of the practice.

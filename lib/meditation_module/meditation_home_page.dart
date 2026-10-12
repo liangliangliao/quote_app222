@@ -12,15 +12,18 @@ import 'meditation_settings_page.dart';
 import 'meditation_timer_page.dart';
 
 class MeditationModulePage extends StatefulWidget {
-  const MeditationModulePage({super.key});
+  final MeditationDao? dao;
+  final MeditationAiService? aiService;
+
+  const MeditationModulePage({super.key, this.dao, this.aiService});
 
   @override
   State<MeditationModulePage> createState() => _MeditationModulePageState();
 }
 
 class _MeditationModulePageState extends State<MeditationModulePage> {
-  final _dao = MeditationDao();
-  final _aiService = MeditationAiService();
+  late final _dao = widget.dao ?? MeditationDao();
+  late final _aiService = widget.aiService ?? MeditationAiService();
   final _descriptionController = TextEditingController();
   String _state = '日常练习';
   MeditationStats? _stats;
@@ -102,10 +105,6 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
         userDescription: userDescription,
         preferences: _expertPreferences,
       );
-      String reason = '';
-      if (result != null) {
-        reason = await _aiService.generateRecommendationReason(currentState: _state, recommended: result.session);
-      }
       if (!mounted) return;
       setState(() {
         _aiSession = result?.session;
@@ -114,16 +113,28 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
         _aiEmbodiedGoal = result?.embodiedGoal;
         _aiRealLifeScene = result?.realLifeScene;
         _aiPracticeFocus = result?.practiceFocus ?? const <String>[];
-        _aiReason = reason.trim().isEmpty ? null : reason.trim();
         _aiError = result == null
-            ? 'AI 暂时未生成可用内容：可能是配置或网络异常，也可能是内容没有通过“认知 → 身体与情绪体验 → 现实演练”的质量校验。可以重试，或先使用本地推荐练习。'
+            ? '本次暂未生成引导，可以重试或先使用本地练习。'
             : null;
       });
+      if (result != null) _loadAiReason(result.session);
+    } on MeditationGenerationException catch (e) {
+      if (mounted) setState(() => _aiError = e.userMessage);
     } catch (e) {
       if (!mounted) return;
       setState(() => _aiError = 'AI 生成失败：$e');
     } finally {
       if (mounted) setState(() => _aiGenerating = false);
+    }
+  }
+
+  Future<void> _loadAiReason(MeditationSessionTemplate session) async {
+    try {
+      final reason = await _aiService.generateRecommendationReason(currentState: _state, recommended: session);
+      if (!mounted || _aiSession?.key != session.key) return;
+      setState(() => _aiReason = reason.trim().isEmpty ? null : reason.trim());
+    } catch (_) {
+      // The optional explanation must not hide a usable practice or delay it.
     }
   }
 

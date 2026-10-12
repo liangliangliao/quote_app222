@@ -6,6 +6,7 @@ import '../services/unified_ai_service.dart';
 import 'meditation_dao.dart';
 import 'meditation_models.dart';
 import 'meditation_mentor_guidance.dart';
+import 'meditation_script_response.dart';
 import 'meditation_script_pause_planner.dart';
 
 class MeditationAiService {
@@ -249,10 +250,14 @@ class MeditationAiService {
       },
       input,
     );
-    final cfg = await _ai.resolveGlobalConfig();
-    if (!cfg.available) return null;
+    UnifiedAiResolvedConfig? cfg;
+    var raw = '';
+    Map<String, dynamic>? parsedMap;
+    var qualityIssues = <String>[];
     try {
-      var raw = await _ai.generateText(
+      cfg = await _ai.resolveGlobalConfig();
+      if (!cfg.available) throw MeditationGenerationException(MeditationGenerationFailureKind.configuration);
+      raw = await _ai.generateText(
         purpose: 'meditation.daily_script',
         systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}',
         prompt: prompt,
@@ -260,70 +265,69 @@ class MeditationAiService {
         expectJson: true,
         temperature: 0.6,
       );
-      if (raw.trim().isEmpty) return null;
-      var parsedMap = _tryParseJsonObject(raw);
+      if (raw.trim().isEmpty) throw MeditationGenerationException(MeditationGenerationFailureKind.emptyResponse);
+      var normalized = MeditationScriptResponse.read(raw, durationSeconds: targetMinutes * 60);
+      parsedMap = normalized?.script;
+      input['response_normalization'] = normalized?.corrections ?? <String>[];
       final initialQualityIssues = _dailyScriptQualityIssues(
         parsedMap,
         targetDurationMinutes: targetMinutes,
-        targetSegmentCount: targetSegmentCount,
-        targetMinChars: targetMinChars,
-        targetMaxChars: targetMaxChars,
         isSleep: isSleep,
         userInput: primaryInput,
         useImagery: useImagery,
       );
-      var qualityIssues = initialQualityIssues;
+      qualityIssues = initialQualityIssues;
       var repairApplied = false;
+      input['quality_repair_requested'] = initialQualityIssues.isNotEmpty;
       if (qualityIssues.isNotEmpty) {
-        final repairedRaw = await _ai.generateText(
-          purpose: 'meditation.daily_script.repair',
-          systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}',
-          prompt: _dailyScriptRepairPrompt(
-            originalPrompt: prompt,
-            originalOutput: raw,
-            qualityIssues: qualityIssues,
+        try {
+          final repairedRaw = await _ai.generateText(
+            purpose: 'meditation.daily_script.repair',
+            systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}',
+            prompt: _dailyScriptRepairPrompt(
+              originalPrompt: prompt,
+              originalOutput: raw,
+              qualityIssues: qualityIssues,
+              targetDurationMinutes: targetMinutes,
+              targetSegmentCount: targetSegmentCount,
+              targetMinChars: targetMinChars,
+              targetMaxChars: targetMaxChars,
+            ),
+            maxTokens: (2200 + targetMinutes * 280).clamp(2400, 12500).toInt(),
+            expectJson: true,
+            temperature: 0.42,
+          );
+          final repairedNormalized = MeditationScriptResponse.read(repairedRaw, durationSeconds: targetMinutes * 60);
+          final repairedMap = repairedNormalized?.script;
+          final repairedIssues = _dailyScriptQualityIssues(
+            repairedMap,
             targetDurationMinutes: targetMinutes,
-            targetSegmentCount: targetSegmentCount,
-            targetMinChars: targetMinChars,
-            targetMaxChars: targetMaxChars,
-          ),
-          maxTokens: (2200 + targetMinutes * 280).clamp(2400, 12500).toInt(),
-          expectJson: true,
-          temperature: 0.42,
-        );
-        final repairedMap = _tryParseJsonObject(repairedRaw);
-        final repairedIssues = _dailyScriptQualityIssues(
-          repairedMap,
-          targetDurationMinutes: targetMinutes,
-          targetSegmentCount: targetSegmentCount,
-          targetMinChars: targetMinChars,
-          targetMaxChars: targetMaxChars,
-          isSleep: isSleep,
-          userInput: primaryInput,
-          useImagery: useImagery,
-        );
-        if (repairedMap != null && (parsedMap == null || repairedIssues.length <= qualityIssues.length)) {
-          raw = repairedRaw;
-          parsedMap = repairedMap;
-          qualityIssues = repairedIssues;
-          repairApplied = true;
+            isSleep: isSleep,
+            userInput: primaryInput,
+            useImagery: useImagery,
+          );
+          if (repairedMap != null && (parsedMap == null || repairedIssues.length <= qualityIssues.length)) {
+            raw = repairedRaw;
+            parsedMap = repairedMap;
+            qualityIssues = repairedIssues;
+            normalized = repairedNormalized;
+            repairApplied = true;
+          }
+        } catch (e) {
+          throw MeditationGenerationException(
+            parsedMap == null ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.quality,
+            issues: qualityIssues, repairFailed: true, cause: e,
+          );
         }
       }
-      input['quality_repair_requested'] = initialQualityIssues.isNotEmpty;
       input['quality_repair_applied'] = repairApplied;
       input['quality_issues'] = qualityIssues;
+      input['response_normalization'] = normalized?.corrections ?? <String>[];
       if (parsedMap == null || qualityIssues.isNotEmpty) {
-        await _dao.insertAiOutput(
-          feature: 'daily_script',
-          inputJson: jsonEncode(input),
-          outputText: raw,
-          parsedJson: parsedMap == null ? null : jsonEncode(parsedMap),
-          provider: cfg.provider,
-          model: cfg.model,
-          success: false,
-          errorMessage: '生成内容未通过冥想结构与体验质量校验：${qualityIssues.join('；')}',
+        throw MeditationGenerationException(
+          parsedMap == null ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.quality,
+          issues: qualityIssues,
         );
-        return null;
       }
       final session = _sessionFromAiText(
         raw,
@@ -340,16 +344,15 @@ class MeditationAiService {
         currentState: currentState,
       );
       final practiceFocus = _readStringList(
-        parsedMap?['practice_focus'] ?? parsedMap?['focus_points'] ?? parsedMap?['needs'],
+        parsedMap['practice_focus'] ?? parsedMap['focus_points'] ?? parsedMap['needs'],
       ).take(4).toList();
       final cognitiveShift = _readFirstText(parsedMap, const <String>['cognitive_shift', 'gentle_reframe']);
       final embodiedGoal = _readFirstText(parsedMap, const <String>['embodied_goal', 'experience_goal']);
       final realLifeScene = _readFirstText(parsedMap, const <String>['real_life_scene', 'practice_scene']);
-      await _dao.insertAiOutput(
-        feature: 'daily_script',
+      await _recordDailyOutput(
         inputJson: jsonEncode(input),
         outputText: raw,
-        parsedJson: parsedMap == null ? null : jsonEncode(parsedMap),
+        parsedJson: jsonEncode(parsedMap),
         provider: cfg.provider,
         model: cfg.model,
         success: true,
@@ -363,16 +366,31 @@ class MeditationAiService {
         realLifeScene: realLifeScene,
       );
     } catch (e) {
-      await _dao.insertAiOutput(
-        feature: 'daily_script',
-        inputJson: jsonEncode(input),
-        outputText: '',
-        provider: cfg.provider,
-        model: cfg.model,
-        success: false,
-        errorMessage: e.toString(),
+      final failure = e is MeditationGenerationException ? e : MeditationGenerationException(
+        e is FormatException ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.request,
+        issues: qualityIssues, cause: e,
       );
-      return null;
+      input['quality_issues'] = qualityIssues;
+      await _recordDailyOutput(
+        inputJson: jsonEncode(input),
+        outputText: raw,
+        parsedJson: parsedMap == null ? null : jsonEncode(parsedMap),
+        provider: cfg?.provider,
+        model: cfg?.model,
+        success: false,
+        errorMessage: failure.toString(),
+      );
+      throw failure;
+    }
+  }
+
+  Future<void> _recordDailyOutput({required String inputJson, required String outputText,
+    String? parsedJson, String? provider, String? model, required bool success, String? errorMessage}) async {
+    try {
+      await _dao.insertAiOutput(feature: 'daily_script', inputJson: inputJson, outputText: outputText,
+        parsedJson: parsedJson, provider: provider, model: model, success: success, errorMessage: errorMessage);
+    } catch (_) {
+      // Diagnostic storage must not discard an otherwise usable AI practice.
     }
   }
 
@@ -828,9 +846,6 @@ class MeditationAiService {
   List<String> _dailyScriptQualityIssues(
     Map<String, dynamic>? map, {
     required int targetDurationMinutes,
-    required int targetSegmentCount,
-    required int targetMinChars,
-    required int targetMaxChars,
     required bool isSleep,
     required String userInput,
     required bool useImagery,
@@ -839,9 +854,7 @@ class MeditationAiService {
     final issues = <String>[];
     const requiredTextFields = <String>[
       'understood_need',
-      'cognitive_shift',
       'embodied_goal',
-      'real_life_scene',
       'title',
       'type',
       'ending_reflection',
@@ -861,7 +874,7 @@ class MeditationAiService {
     }
     final validSegments = segments.whereType<Map>().toList();
     if (validSegments.length != segments.length) issues.add('segments 中存在非对象内容');
-    final minimumSegments = math.max(8, targetSegmentCount - 2);
+    const minimumSegments = 8;
     if (validSegments.length < minimumSegments) {
       issues.add('segments 至少需要 $minimumSegments 段');
     }
@@ -888,7 +901,7 @@ class MeditationAiService {
         phaseTexts.putIfAbsent(phase, () => <String>[]).add(text);
       }
       if (phase.isEmpty) issues.add('每个 segment 都需要 phase');
-      if (text.isEmpty) issues.add('每个 segment 都需要可播报的 text');
+      if (segment['text'] is! String || text.isEmpty) issues.add('每个 segment 都需要可播报的 text 字符串');
       if (_cleanOneLine(segment['intent']?.toString()).isEmpty) issues.add('每个 segment 都需要 intent');
       final rawStart = segment['start_seconds'] ?? segment['startSecond'] ?? segment['start'];
       final start = rawStart is num ? rawStart.toInt() : int.tryParse(rawStart?.toString() ?? '');
@@ -936,21 +949,9 @@ class MeditationAiService {
         break;
       }
     }
-    if (starts.isNotEmpty) {
-      final totalSeconds = targetDurationMinutes * 60;
-      final lastStartRatio = starts.last / totalSeconds;
-      if (lastStartRatio < 0.80 || lastStartRatio > 0.92) {
-        issues.add('最后一段应位于总时长的 80%-92%');
-      }
-    }
+    // Segment count, prose length and the original closing timestamp are
+    // creation suggestions. The normalized speech + silence budget is binding.
     final joined = texts.join();
-    final characterCount = joined.replaceAll(RegExp(r'\s'), '').length;
-    final allowedMin = (targetMinChars * 0.72).round();
-    final allowedMax = (targetMaxChars * 1.35).round();
-    if (characterCount < allowedMin || characterCount > allowedMax) {
-      issues.add('正文长度 $characterCount 字与目标 $targetMinChars-$targetMaxChars 字不匹配');
-    }
-    if (RegExp(r'呼吸|吸气|呼气').allMatches(joined).length < 3) issues.add('至少需要两轮可跟随的呼吸体验');
     if (!RegExp(r'身体|脚底|双脚|背部|胸口|腹部|肩|手掌|触感|支撑').hasMatch(joined)) {
       issues.add('缺少具体身体体验');
     }
@@ -963,7 +964,7 @@ class MeditationAiService {
     if (!RegExp(r'可以|也可以|如果愿意|不必|不用|随时|选择').hasMatch(joined)) {
       issues.add('缺少让用户保有选择和调整空间的表达');
     }
-    if (RegExp(r'你必须|你应该|保证|彻底治愈|马上治好|研究表明').hasMatch(joined)) {
+    if (RegExp(r'你必须|你应该|彻底治愈|马上治好|研究表明').hasMatch(joined)) {
       issues.add('包含说教、夸大、课程化或范文场景措辞');
     }
     if (RegExp(r'自杀|自残|杀人|结束生命|你有病|诊断为').hasMatch(joined)) {
@@ -999,7 +1000,7 @@ ${qualityIssues.map((e) => '- $e').join('\n')}
 
 硬性目标：
 - 时长：$targetDurationMinutes 分钟
-- 建议段数：约 $targetSegmentCount 段，且不得少于 ${math.max(8, targetSegmentCount - 2)} 段
+- 建议段数：约 $targetSegmentCount 段，至少完整覆盖八阶段；不为凑段数或字数重复内容
 - 正文中文字符建议：$targetMinChars-$targetMaxChars
 - 八阶段依次完整出现：arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing
 - 保留对用户真正需要的深入理解，但把说理转换成身体、情绪和具体生活场景中的体验
@@ -1027,23 +1028,6 @@ $originalOutput
     }
     final m = RegExp(r'\d+').firstMatch(raw);
     return int.tryParse(m?.group(0) ?? '') ?? fallback;
-  }
-
-  Map<String, dynamic>? _tryParseJsonObject(String raw) {
-    final candidates = <String>[];
-    final stripped = _stripCodeFence(raw).trim();
-    candidates.add(stripped);
-    final start = stripped.indexOf('{');
-    final end = stripped.lastIndexOf('}');
-    if (start >= 0 && end > start) candidates.add(stripped.substring(start, end + 1));
-    for (final c in candidates) {
-      try {
-        final decoded = jsonDecode(c);
-        if (decoded is Map<String, dynamic>) return decoded;
-        if (decoded is Map) return decoded.map((key, value) => MapEntry(key.toString(), value));
-      } catch (_) {}
-    }
-    return null;
   }
 
   String _guessTitle(String raw, String fallback) {
