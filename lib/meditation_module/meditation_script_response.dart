@@ -1,13 +1,16 @@
 import 'dart:convert';
 
+import 'meditation_duration_planner.dart';
 import 'meditation_mentor_guidance.dart';
 import 'meditation_models.dart';
 
 class NormalizedMeditationScript {
   final Map<String, dynamic> script;
   final List<String> corrections;
+  final MeditationDurationPlan? durationPlan;
 
-  const NormalizedMeditationScript(this.script, this.corrections);
+  const NormalizedMeditationScript(this.script, this.corrections,
+      {this.durationPlan});
 }
 
 /// Recover presentation and scheduling fields without inventing narration.
@@ -19,6 +22,7 @@ class MeditationScriptResponse {
     if (decoded == null) return null;
     final script = Map<String, dynamic>.from(decoded);
     final corrections = <String>{};
+    MeditationDurationPlan? durationPlan;
     if (script['duration_minutes'] != durationSeconds ~/ 60) {
       script['duration_minutes'] = durationSeconds ~/ 60;
       corrections.add('duration_from_user_selection');
@@ -76,7 +80,9 @@ class MeditationScriptResponse {
       if (beats.length > 1) corrections.add('short_beats');
       var beatStart = start;
       for (var i = 0; i < beats.length; i++) {
-        final beatPause = i == beats.length - 1 ? pause : defaultPause;
+        // A formatting split is not a new full experience task. Keep a short
+        // pause here and preserve the original task's pause on its final beat.
+        final beatPause = i == beats.length - 1 ? pause : minimumPause;
         segments.add({
           ...segment,
           'text': beats[i],
@@ -104,16 +110,17 @@ class MeditationScriptResponse {
                 intent: '${s['phase']}',
               ))
           .toList();
-      try {
-        final scheduled =
-            MeditationMentorGuidance.schedule(steps, durationSeconds);
-        for (var i = 0; i < scheduled.length; i++) {
-          if (segments[i]['start_seconds'] != scheduled[i].startSecond)
-            corrections.add('speech_and_silence_timeline');
-          segments[i]['start_seconds'] = scheduled[i].startSecond;
-        }
-      } on FormatException {
-        // Overlong content must be rewritten, not shortened or silently lost.
+      durationPlan = MeditationDurationPlanner.plan(steps, durationSeconds);
+      if (durationPlan.pausesAdjusted)
+        corrections.add('pause_budget_calibration');
+      if (durationPlan.exceedsTarget)
+        corrections.add('complete_version_duration');
+      final scheduled = durationPlan.steps;
+      for (var i = 0; i < scheduled.length; i++) {
+        if (segments[i]['start_seconds'] != scheduled[i].startSecond)
+          corrections.add('speech_and_silence_timeline');
+        segments[i]['start_seconds'] = scheduled[i].startSecond;
+        segments[i]['pause_after_seconds'] = scheduled[i].pauseAfterSeconds;
       }
     }
 
@@ -150,7 +157,8 @@ class MeditationScriptResponse {
       script['ending_reflection'] = segments.last['text'];
       corrections.add('optional_metadata');
     }
-    return NormalizedMeditationScript(script, corrections.toList());
+    return NormalizedMeditationScript(script, corrections.toList(),
+        durationPlan: durationPlan);
   }
 
   static Map<String, dynamic>? _decodeObject(String raw, [int depth = 0]) {
