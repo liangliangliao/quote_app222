@@ -263,7 +263,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '写下此刻发生了什么。AI 会先辨认真正需要，再用身体锚点、自然留白和现实演练，把“明白”变成一次可以跟随的体验。',
+            '写下你想体验的主题或此刻的处境。导师会围绕你的原话，用温和画面、感官细节和安静留白，引导你觉察身体与情绪的真实反应。',
             style: TextStyle(color: Colors.black.withOpacity(0.62), height: 1.45),
           ),
           const SizedBox(height: 12),
@@ -298,15 +298,15 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                       _clearAiResult();
                     }),
           ),
-          const Text('可选 1–30 分钟；AI 会按时长调整引导段数、文字量和留白。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const Text('可选 1–30 分钟；短句之后留出体验时间，实际节奏会跟随语音播放。', style: TextStyle(fontSize: 12, color: Colors.black54)),
           const SizedBox(height: 12),
           TextField(
             controller: _descriptionController,
             minLines: 2,
             maxLines: 7,
             decoration: InputDecoration(
-              labelText: '告诉 AI：此刻发生了什么、你有何感受或想得到什么',
-              hintText: '例如：我今天被别人影响后一直反复想。我不是想听大道理，只想先停止内耗，把注意力收回来，然后去做手上的事。',
+              labelText: '本次想体验什么？',
+              hintText: '例如：允许自己为人。想练习不完美也能暂时放下证明自己，在身体和情绪里体验一点允许。',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
               filled: true,
               fillColor: Colors.white,
@@ -349,45 +349,51 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                   Text(_aiSession!.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 4),
                   Text('${_aiSession!.durationMinutes}分钟 · ${_aiSession!.type} · 专家生成', style: const TextStyle(color: Colors.black54)),
-                  if ((_aiUnderstoodNeed ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    const Text('AI 理解到的真正需要', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
-                    const SizedBox(height: 4),
-                    Text(_aiUnderstoodNeed!, style: const TextStyle(height: 1.5)),
-                  ],
-                  if ((_aiCognitiveShift ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    const Text('这次要松动的认知', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
-                    const SizedBox(height: 4),
-                    Text(_aiCognitiveShift!, style: const TextStyle(height: 1.5)),
-                  ],
                   if ((_aiEmbodiedGoal ?? '').isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    const Text('身体与情绪体验目标', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                    const Text('本次体验邀请', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
                     const SizedBox(height: 4),
                     Text(_aiEmbodiedGoal!, style: const TextStyle(height: 1.5)),
                   ],
-                  if ((_aiRealLifeScene ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    const Text('会带你演练的现实场景', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
-                    const SizedBox(height: 4),
-                    Text(_aiRealLifeScene!, style: const TextStyle(height: 1.5)),
-                  ],
-                  if (_aiPracticeFocus.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: _aiPracticeFocus.map((item) => Chip(
-                            visualDensity: VisualDensity.compact,
-                            label: Text(item),
-                          )).toList(),
-                    ),
-                  ],
-                  if ((_aiReason ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(_aiReason!, style: const TextStyle(height: 1.45)),
-                  ],
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('引导设计与生活延续', style: TextStyle(fontSize: 13)),
+                    children: [
+                      if ((_aiUnderstoodNeed ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        const Text('AI 理解到的真正需要', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                        const SizedBox(height: 4),
+                        Text(_aiUnderstoodNeed!, style: const TextStyle(height: 1.5)),
+                      ],
+                      if ((_aiCognitiveShift ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        const Text('这次要松动的认知', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                        const SizedBox(height: 4),
+                        Text(_aiCognitiveShift!, style: const TextStyle(height: 1.5)),
+                      ],
+                      if ((_aiRealLifeScene ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        const Text('会带你演练的现实场景', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                        const SizedBox(height: 4),
+                        Text(_aiRealLifeScene!, style: const TextStyle(height: 1.5)),
+                      ],
+                      if (_aiPracticeFocus.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: _aiPracticeFocus.map((item) => Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(item),
+                              )).toList(),
+                        ),
+                      ],
+                      if ((_aiReason ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(_aiReason!, style: const TextStyle(height: 1.45)),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -495,6 +501,16 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
               );
             }).toList(),
           ),
+          const SizedBox(height: 4),
+          const Text('画面入口', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          Wrap(spacing: 6, children: ['温和画面', '真实感官'].map((value) => ChoiceChip(
+            label: Text(value), selected: _expertPreferences.imageryPreference == value,
+            onSelected: (_) => setState(() {
+              _expertPreferences = _expertPreferences.copyWith(imageryPreference: value);
+              _clearAiResult();
+            }),
+          )).toList()),
+          const Text('看不见画面也可以；选择真实感官时，会以眼前的光线、声音和触感引导。', style: TextStyle(fontSize: 11.5, color: Colors.black54, height: 1.35)),
           const SizedBox(height: 4),
           const Text('AI 还会参考最近练习中的分心、身体放松和重复主题，自动调整留白与动作密度。', style: TextStyle(fontSize: 11.5, color: Colors.black54, height: 1.35)),
         ],
