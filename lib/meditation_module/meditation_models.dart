@@ -45,7 +45,15 @@ class MeditationSessionTemplate {
   });
 
   int get durationMinutes => (durationSeconds / 60).round();
+  String get durationLabel => formatMeditationDuration(durationSeconds);
   bool get isAiGenerated => source == 'ai_generated';
+}
+
+String formatMeditationDuration(int seconds) {
+  final minutes = seconds ~/ 60;
+  final remainder = seconds % 60;
+  if (remainder == 0) return '$minutes分钟';
+  return minutes == 0 ? '$remainder秒' : '$minutes分$remainder秒';
 }
 
 /// 用户可以在生成前给“冥想专家”提供的少量校准信息。
@@ -100,6 +108,8 @@ class MeditationSafetyAssessment {
 
 class MeditationAiGenerationResult {
   final MeditationSessionTemplate session;
+  final int targetDurationSeconds;
+  final bool pausesAdjusted;
   final String understoodNeed;
   final List<String> practiceFocus;
   final String cognitiveShift;
@@ -108,6 +118,8 @@ class MeditationAiGenerationResult {
 
   const MeditationAiGenerationResult({
     required this.session,
+    required this.targetDurationSeconds,
+    this.pausesAdjusted = false,
     required this.understoodNeed,
     this.practiceFocus = const <String>[],
     this.cognitiveShift = '',
@@ -293,7 +305,6 @@ class MeditationStats {
     this.mostUsedType,
   });
 }
-
 
 class MeditationWeeklySummary {
   final int? id;

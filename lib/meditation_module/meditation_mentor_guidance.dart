@@ -34,6 +34,7 @@ class MeditationMentorGuidance {
     required String userInput,
     required int durationSeconds,
     required bool useImagery,
+    int? plannedDurationSeconds,
   }) {
     final issues = <String>[];
     final design = map['experience_design'];
@@ -146,7 +147,7 @@ class MeditationMentorGuidance {
       minimumSeconds +=
           speechSeconds(text) + (pause is int ? math.max(0, pause) : 0);
     }
-    if (minimumSeconds > durationSeconds) {
+    if (minimumSeconds > (plannedDurationSeconds ?? durationSeconds)) {
       issues.add(
           '播报与停顿至少需 $minimumSeconds 秒，超过目标 $durationSeconds 秒；缩短文字，保留体验留白');
     }

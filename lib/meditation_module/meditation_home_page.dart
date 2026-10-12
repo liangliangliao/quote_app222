@@ -30,6 +30,8 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
   bool _loading = true;
   bool _aiGenerating = false;
   MeditationSessionTemplate? _aiSession;
+  int? _aiTargetDurationSeconds;
+  bool _aiPausesAdjusted = false;
   String? _aiReason;
   String? _aiUnderstoodNeed;
   String? _aiCognitiveShift;
@@ -86,6 +88,8 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
       _aiError = null;
       _aiSafetyNotice = safety.isNormal ? null : safety.message;
       _aiSession = null;
+      _aiTargetDurationSeconds = null;
+      _aiPausesAdjusted = false;
       _aiReason = null;
       _aiUnderstoodNeed = null;
       _aiCognitiveShift = null;
@@ -108,6 +112,8 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
       if (!mounted) return;
       setState(() {
         _aiSession = result?.session;
+        _aiTargetDurationSeconds = result?.targetDurationSeconds;
+        _aiPausesAdjusted = result?.pausesAdjusted ?? false;
         _aiUnderstoodNeed = result?.understoodNeed;
         _aiCognitiveShift = result?.cognitiveShift;
         _aiEmbodiedGoal = result?.embodiedGoal;
@@ -158,6 +164,8 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
 
   void _clearAiResult() {
     _aiSession = null;
+    _aiTargetDurationSeconds = null;
+    _aiPausesAdjusted = false;
     _aiReason = null;
     _aiUnderstoodNeed = null;
     _aiCognitiveShift = null;
@@ -251,6 +259,9 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
   }
 
   Widget _aiDailyCard() {
+    final targetSeconds = _aiTargetDurationSeconds ?? _aiDurationMinutes * 60;
+    final targetLabel = formatMeditationDuration(targetSeconds);
+    final exceedsTarget = _aiSession != null && _aiSession!.durationSeconds > targetSeconds;
     final recommended = _recommended;
     final generationBlocked = _aiService.assessUserInput(_descriptionController.text).requiresImmediateSupport;
     return Container(
@@ -359,7 +370,14 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                 children: [
                   Text(_aiSession!.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 4),
-                  Text('${_aiSession!.durationMinutes}分钟 · ${_aiSession!.type} · 专家生成', style: const TextStyle(color: Colors.black54)),
+                  Text('${exceedsTarget ? '目标$targetLabel · ' : ''}预计${_aiSession!.durationLabel} · ${_aiSession!.type} · 专家生成', style: const TextStyle(color: Colors.black54)),
+                  if (exceedsTarget) ...[
+                    const SizedBox(height: 8),
+                    Text('已保留完整引导与必要的体验留白。你可以选择完整版本，或重新生成$targetLabel版本；实际时长会随语音节奏略有变化。', style: const TextStyle(height: 1.45)),
+                  ] else if (_aiPausesAdjusted) ...[
+                    const SizedBox(height: 8),
+                    Text('已按$targetLabel校准停顿，保留核心体验留白。', style: const TextStyle(height: 1.45)),
+                  ],
                   if ((_aiEmbodiedGoal ?? '').isNotEmpty) ...[
                     const SizedBox(height: 10),
                     const Text('本次体验邀请', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
@@ -406,7 +424,24 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
+                  if (exceedsTarget) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _openPlayer(_aiSession!),
+                        icon: const Icon(Icons.play_arrow),
+                        label: Text('开始完整引导（${_aiSession!.durationLabel}）'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _aiGenerating ? null : _generateAiDaily,
+                        child: Text('重新生成$targetLabel版'),
+                      ),
+                    ),
+                  ] else Row(
                     children: [
                       Expanded(
                         child: FilledButton.icon(
@@ -897,7 +932,7 @@ class _MeditationPracticeLibraryPageState extends State<MeditationPracticeLibrar
                   child: ListTile(
                     leading: Icon(session.isAiGenerated ? Icons.auto_awesome : Icons.description_outlined, color: Colors.deepPurple),
                     title: Text(session.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${session.durationMinutes}分钟 · ${session.isAiGenerated ? 'AI生成并保存在本地' : session.description}'),
+                    subtitle: Text('${session.durationLabel} · ${session.isAiGenerated ? 'AI生成并保存在本地' : session.description}'),
                     trailing: Wrap(
                       spacing: 4,
                       children: [

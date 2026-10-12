@@ -205,6 +205,13 @@ class MeditationAiService {
       'duration_minutes': targetMinutes,
       'target_segment_count': targetSegmentCount,
       'target_chinese_character_range': '$targetMinChars-$targetMaxChars',
+      'duration_budget': {
+        'total_seconds': targetMinutes * 60,
+        'narration_seconds_at_most': (targetMinutes * 60 * .7).floor(),
+        'experience_silence_seconds_at_least': (targetMinutes * 60 * .3).ceil(),
+        'estimate': '中文每秒约3.2字，句子标点也占时间；先预算正文与停顿，再填写时间轴',
+        'priority': '减少重复解释，保留身体、情绪与生活演练的必要留白；不要堆长段落',
+      },
       'recent_records': _recordsForJson(recentRecords.take(8).toList()),
       'user_description': normalizedDescription,
       'primary_practice_input': primaryInput,
@@ -272,14 +279,17 @@ class MeditationAiService {
       final initialQualityIssues = _dailyScriptQualityIssues(
         parsedMap,
         targetDurationMinutes: targetMinutes,
+        plannedDurationSeconds: normalized?.durationPlan?.durationSeconds,
         isSleep: isSleep,
         userInput: primaryInput,
         useImagery: useImagery,
       );
       qualityIssues = initialQualityIssues;
+      final durationRepairNeeded = normalized?.durationPlan?.needsShorterVersion ?? false;
       var repairApplied = false;
       input['quality_repair_requested'] = initialQualityIssues.isNotEmpty;
-      if (qualityIssues.isNotEmpty) {
+      input['duration_repair_requested'] = durationRepairNeeded;
+      if (qualityIssues.isNotEmpty || durationRepairNeeded) {
         try {
           final repairedRaw = await _ai.generateText(
             purpose: 'meditation.daily_script.repair',
@@ -287,7 +297,10 @@ class MeditationAiService {
             prompt: _dailyScriptRepairPrompt(
               originalPrompt: prompt,
               originalOutput: raw,
-              qualityIssues: qualityIssues,
+              qualityIssues: [
+                ...qualityIssues,
+                if (durationRepairNeeded) normalized!.durationPlan!.shorteningRequest,
+              ],
               targetDurationMinutes: targetMinutes,
               targetSegmentCount: targetSegmentCount,
               targetMinChars: targetMinChars,
@@ -302,11 +315,19 @@ class MeditationAiService {
           final repairedIssues = _dailyScriptQualityIssues(
             repairedMap,
             targetDurationMinutes: targetMinutes,
+            plannedDurationSeconds: repairedNormalized?.durationPlan?.durationSeconds,
             isSleep: isSleep,
             userInput: primaryInput,
             useImagery: useImagery,
           );
-          if (repairedMap != null && (parsedMap == null || repairedIssues.length <= qualityIssues.length)) {
+          final contentImproved = parsedMap == null || repairedIssues.length < qualityIssues.length;
+          final contentTied = repairedIssues.length == qualityIssues.length;
+          final currentPlan = normalized?.durationPlan;
+          final repairedPlan = repairedNormalized?.durationPlan;
+          final durationImproved = currentPlan == null ||
+              (repairedPlan != null && repairedPlan.durationSeconds < currentPlan.durationSeconds);
+          if (repairedMap != null && (contentImproved ||
+              (contentTied && (qualityIssues.isNotEmpty || durationImproved)))) {
             raw = repairedRaw;
             parsedMap = repairedMap;
             qualityIssues = repairedIssues;
@@ -314,13 +335,19 @@ class MeditationAiService {
             repairApplied = true;
           }
         } catch (e) {
-          throw MeditationGenerationException(
-            parsedMap == null ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.quality,
-            issues: qualityIssues, repairFailed: true, cause: e,
-          );
+          if (qualityIssues.isNotEmpty) {
+            throw MeditationGenerationException(
+              parsedMap == null ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.quality,
+              issues: qualityIssues, repairFailed: true, cause: e,
+            );
+          }
+          // A failed shortening request cannot invalidate sound content. Offer
+          // the complete version with its actual plan instead of a retry loop.
+          input['duration_repair_error'] = e.toString();
         }
       }
       input['quality_repair_applied'] = repairApplied;
+      input['duration_repair_applied'] = durationRepairNeeded && repairApplied;
       input['quality_issues'] = qualityIssues;
       input['response_normalization'] = normalized?.corrections ?? <String>[];
       if (parsedMap == null || qualityIssues.isNotEmpty) {
@@ -329,12 +356,21 @@ class MeditationAiService {
           issues: qualityIssues,
         );
       }
+      final durationPlan = normalized!.durationPlan!;
+      input['duration_plan'] = {
+        'target_seconds': durationPlan.targetSeconds,
+        'original_minimum_seconds': durationPlan.originalMinimumSeconds,
+        'planned_seconds': durationPlan.durationSeconds,
+        'pauses_adjusted': durationPlan.pausesAdjusted,
+        'complete_version_offered': durationPlan.exceedsTarget,
+      };
       final session = _sessionFromAiText(
         raw,
         recommended,
         currentState,
         parsedMap,
         targetDurationMinutes: targetMinutes,
+        plannedDurationSeconds: durationPlan.durationSeconds,
         targetSegmentCount: targetSegmentCount,
         isSleep: isSleep,
       );
@@ -359,6 +395,8 @@ class MeditationAiService {
       );
       return MeditationAiGenerationResult(
         session: session,
+        targetDurationSeconds: targetMinutes * 60,
+        pausesAdjusted: durationPlan.pausesAdjusted,
         understoodNeed: understoodNeed,
         practiceFocus: practiceFocus,
         cognitiveShift: cognitiveShift,
@@ -713,6 +751,7 @@ class MeditationAiService {
     String currentState,
     Map<String, dynamic>? parsed, {
     required int targetDurationMinutes,
+    required int plannedDurationSeconds,
     required int targetSegmentCount,
     required bool isSleep,
   }) {
@@ -725,7 +764,7 @@ class MeditationAiService {
         ? _cleanOneLine(map['type']?.toString())
         : fallback.type;
     final durationMinutes = targetDurationMinutes.clamp(1, 30).toInt();
-    final durationSeconds = durationMinutes * 60;
+    final durationSeconds = plannedDurationSeconds;
     final steps = _readSteps(map['segments'] ?? map['steps'], durationSeconds);
     final parsedSteps = steps.isNotEmpty ? steps : _plainTextToSteps(raw, durationSeconds, targetSegmentCount);
     final safeSteps = _fitStepTimeline(parsedSteps, durationSeconds);
@@ -737,7 +776,8 @@ class MeditationAiService {
       title: title.isEmpty ? '今日专属冥想' : title,
       type: type.isEmpty ? fallback.type : type,
       category: 'AI 冥想专家',
-      description: '根据你的输入、专家校准和近期练习反馈生成，可在本地保存并重复练习。',
+      description: '根据你的输入、专家校准和近期练习反馈生成，可在本地保存并重复练习。'
+          '${durationSeconds > durationMinutes * 60 ? '目标$durationMinutes分钟，完整引导预计${formatMeditationDuration(durationSeconds)}；实际时长随语音节奏调整。' : ''}',
       durationSeconds: durationSeconds,
       isSleep: isSleep,
       source: 'ai_generated',
@@ -846,6 +886,7 @@ class MeditationAiService {
   List<String> _dailyScriptQualityIssues(
     Map<String, dynamic>? map, {
     required int targetDurationMinutes,
+    int? plannedDurationSeconds,
     required bool isSleep,
     required String userInput,
     required bool useImagery,
@@ -979,7 +1020,8 @@ class MeditationAiService {
       issues.add('practice_focus 至少需要一项');
     }
     issues.addAll(MeditationMentorGuidance.qualityIssues(map,
-      userInput: userInput, durationSeconds: targetDurationMinutes * 60, useImagery: useImagery));
+      userInput: userInput, durationSeconds: targetDurationMinutes * 60,
+      plannedDurationSeconds: plannedDurationSeconds, useImagery: useImagery));
     return issues.toSet().toList();
   }
 

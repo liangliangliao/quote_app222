@@ -299,15 +299,18 @@ void main() {
     expect(ai.calls, hasLength(1));
   });
 
-  test('正文实质超过一分钟预算时不截断、不交付，并记录准确原因', () async {
+  test('正文实质超过一分钟预算且重写仍偏长时保留完整版本，并记录目标与预计时长', () async {
     final raw = jsonEncode(cognitiveChangeScript());
     final dao = FakeDao();
-    await expectLater(
-        generate(FakeAi([raw, raw]), dao, minutes: 1),
-        throwsA(isA<MeditationGenerationException>()
-            .having(
-                (e) => e.kind, 'kind', MeditationGenerationFailureKind.quality)
-            .having((e) => e.issues.join(), 'time budget', contains('超过目标'))));
+    final ai = FakeAi([raw, raw]);
+    final result = await generate(ai, dao, minutes: 1);
+    expect(result!.targetDurationSeconds, 60);
+    expect(result.session.durationSeconds, greaterThan(60));
+    expect(ai.calls, hasLength(2));
+    final input = dao.outputs.single['input'] as Map;
+    expect(input['duration_repair_requested'], isTrue);
+    expect(input['duration_plan']['complete_version_offered'], isTrue);
+    expect(input['quality_issues'], isEmpty);
     expect(dao.outputs.single['raw'], raw);
   });
 
