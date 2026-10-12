@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'behavior_observation_presets.dart';
 import 'behavior_tracking_dao.dart';
+import 'behavior_tracking_analytics.dart';
 import 'behavior_tracking_external_sources.dart';
 import 'behavior_tracking_models.dart';
 
@@ -434,7 +435,7 @@ class _BehaviorTrackingHomePageState extends State<BehaviorTrackingHomePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除这条记录？'),
-        content: Text(record.title.ifBlank(record.oneLineSummary)),
+        content: Text('${record.title.ifBlank(record.oneLineSummary)}\n\n记录将从列表、统计和导出中移除。本地删除记录可在统计页永久清理。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
@@ -445,6 +446,21 @@ class _BehaviorTrackingHomePageState extends State<BehaviorTrackingHomePage> {
       await _dao.delete(record.id!);
       await _load();
     }
+  }
+
+  Future<void> _purgeDeletedRecords() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('永久清理已删除记录？'),
+      content: const Text('这会永久清除已经删除的本地行为记录，无法恢复。当前可见记录将继续保留。'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('永久清理')),
+      ],
+    ));
+    if (confirmed != true) return;
+    await _dao.purgeDeleted(olderThan: Duration.zero);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已永久清理删除记录')));
   }
 
   Future<void> _clearAllRecords() async {
@@ -590,7 +606,7 @@ class _BehaviorTrackingHomePageState extends State<BehaviorTrackingHomePage> {
                   BehaviorObservationPresetsPage(categories: _categories, onRecordsChanged: () { _load(); }),
                   _LayersPage(onLayer: (layer) => _openEditor(template: _templateByKey(layer.mode), layer: layer.name)),
                   _RecordsPage(records: _records, categories: _categories, onEdit: (r) => _openEditor(record: r), onDelete: _deleteRecord, onClearAll: _clearAllRecords, onQuick: _quickCapture),
-                  _StatsPage(records: _records, pendingImportCount: _pendingImportCount, onOpenPending: () => DefaultTabController.of(context).animateTo(4), onExport: _export),
+                  _StatsPage(records: _records, onPurge: _purgeDeletedRecords, onEdit: (record) => _openEditor(record: record), pendingImportCount: _pendingImportCount, onOpenPending: () => DefaultTabController.of(context).animateTo(4), onExport: _export),
                   BehaviorTrackingDataSourcesPage(onRecordsChanged: _load),
                 ]),
               ),
@@ -1083,10 +1099,12 @@ class _RecordsPageState extends State<_RecordsPage> {
 
 class _StatsPage extends StatefulWidget {
   final List<BehaviorTrackingRecord> records;
+  final ValueChanged<BehaviorTrackingRecord> onEdit;
   final int pendingImportCount;
   final VoidCallback onOpenPending;
   final ValueChanged<String> onExport;
-  const _StatsPage({required this.records, required this.pendingImportCount, required this.onOpenPending, required this.onExport});
+  final VoidCallback onPurge;
+  const _StatsPage({required this.records, required this.onEdit, required this.pendingImportCount, required this.onOpenPending, required this.onExport, required this.onPurge});
 
   @override
   State<_StatsPage> createState() => _StatsPageState();
@@ -1139,6 +1157,8 @@ class _StatsPageState extends State<_StatsPage> {
       const SizedBox(height: 12),
       _MultiDimensionReviewCard(records: periodRecords, periodLabel: period.label),
       const SizedBox(height: 12),
+      _BehaviorAnalyticsCard(onEdit: widget.onEdit, overview: BehaviorStatsOverview.fromRecords(periodRecords, rangeDays: period.endExclusive.difference(period.start).inDays)),
+      const SizedBox(height: 12),
       _ObservationClarityCard(
         records: periodRecords,
         periodLabel: period.label,
@@ -1153,6 +1173,7 @@ class _StatsPageState extends State<_StatsPage> {
           FilledButton.tonalIcon(onPressed: () => widget.onExport('markdown'), icon: const Icon(Icons.description_outlined), label: const Text('Markdown')),
           FilledButton.tonalIcon(onPressed: () => widget.onExport('csv'), icon: const Icon(Icons.table_chart_outlined), label: const Text('CSV')),
           FilledButton.tonalIcon(onPressed: () => widget.onExport('json'), icon: const Icon(Icons.data_object_outlined), label: const Text('JSON')),
+          OutlinedButton.icon(onPressed: widget.onPurge, icon: const Icon(Icons.delete_forever_outlined), label: const Text('永久清理已删除记录')),
         ]),
       ]),
     ]);
@@ -2949,4 +2970,36 @@ class _Choice extends StatelessWidget {
 
 extension _BehaviorStringExt on String {
   String ifBlank(String fallback) => trim().isEmpty ? fallback : trim();
+}
+
+
+class _BehaviorAnalyticsCard extends StatelessWidget {
+  final BehaviorStatsOverview overview;
+  final ValueChanged<BehaviorTrackingRecord> onEdit;
+  const _BehaviorAnalyticsCard({required this.overview, required this.onEdit});
+
+  @override
+  Widget build(BuildContext context) {
+    return _InfoCard(title: '触发、情绪与长期影响', icon: Icons.insights_outlined, children: [
+      Text('有效记录 ${(overview.effectiveRecordRate * 100).round()}% · 触发复盘闭环 ${(overview.reviewClosureRate * 100).round()}%'),
+      if (overview.topTriggers.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Text('常见触发：${overview.topTriggers.map((item) => '${item.label}（${item.value}次）').join('、')}'),
+      ],
+      for (final point in overview.emotionTrend)
+        Text('${DateFormat('MM/dd').format(point.date)} · 平均情绪强度 ${point.avgIntensity.toStringAsFixed(1)}/10（${point.samples}条）'),
+      for (final cell in overview.triggerHeatmap)
+        Text('${cell.weekdayLabel} ${cell.hourLabel} · ${cell.topTrigger}（${cell.count}次）'),
+      for (final effect in overview.effectComparisons)
+        Text('${effect.behavior} · ${effect.directionLabel}（${effect.sampleSize}条；${effect.avgNextEnergy == null ? '次日精力未记录' : '次日精力均值 ${effect.avgNextEnergy!.toStringAsFixed(1)}'}）'),
+      if (overview.pendingFollowUps.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        const Text('等待补充长期结果', style: TextStyle(fontWeight: FontWeight.w700)),
+        for (final record in overview.pendingFollowUps)
+          ListTile(title: Text(record.title.isEmpty ? record.behavior : record.title), subtitle: Text(DateFormat('MM/dd').format(record.recordDate)), trailing: const Icon(Icons.edit_outlined), onTap: () => onEdit(record)),
+      ],
+      const SizedBox(height: 8),
+      const Text('这些是已记录样本的描述，不能据此判断因果。', style: TextStyle(color: Color(0xFF64748B))),
+    ]);
+  }
 }

@@ -684,7 +684,6 @@ ${quote.translation}
             Tab(text: '意义罗盘'),
             Tab(text: '价值校准'),
             Tab(text: '足下努力'),
-            Tab(text: '向上基线'),
           ],
         ),
         actions: [
@@ -737,16 +736,6 @@ ${quote.translation}
                     ),
                     _buildCompassTab(),
                     _EffortOperatingSystemTab(goals: _goals, todaySteps: _todaySteps, onDataChanged: _load),
-                    TodoRaiseBasePage(
-                      dao: _goalDao,
-                      goals: _goals,
-                      todaySteps: _todaySteps,
-                      reflections: _reflections,
-                      onOpenActions: () => _tabController.animateTo(2),
-                      onOpenFailure: () => _tabController.animateTo(4),
-                      onOpenReview: () => _tabController.animateTo(3),
-                      onDataChanged: _load,
-                    ),
                   ],
                 ),
                 if (_busy)
@@ -5444,20 +5433,20 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
     return step.simplifiedStandard.trim().isEmpty ? step.recommendedStandard : step.simplifiedStandard;
   }
 
-  Future<void> _createRitual() async {
+  Future<void> _createRitual([TodoGoalRitual? existing]) async {
     final goal = _activeGoal;
     if (goal == null) return;
-    final trigger = TextEditingController(text: _activeStep?.startTrigger.isNotEmpty == true ? _activeStep!.startTrigger : '晚饭后坐到桌前时');
-    final action = TextEditingController(text: _activeStep?.minimumStandard.isNotEmpty == true ? _activeStep!.minimumStandard : '打开材料并做 2 分钟');
-    final reward = TextEditingController(text: '完成后记录一句“我实际做了什么”');
-    final environment = TextEditingController(text: '提前把材料放到可见位置，并关闭一个干扰入口');
-    final friction = TextEditingController(text: '如果太累，就自动降级为只做 2 分钟');
-    var minutes = 5;
+    final trigger = TextEditingController(text: existing?.triggerText ?? (_activeStep?.startTrigger.isNotEmpty == true ? _activeStep!.startTrigger : '晚饭后坐到桌前时'));
+    final action = TextEditingController(text: existing?.minimumAction ?? (_activeStep?.minimumStandard.isNotEmpty == true ? _activeStep!.minimumStandard : '打开材料并做 2 分钟'));
+    final reward = TextEditingController(text: existing?.rewardOrRecord ?? '完成后记录一句“我实际做了什么”');
+    final environment = TextEditingController(text: existing?.environmentDesign ?? '提前把材料放到可见位置，并关闭一个干扰入口');
+    final friction = TextEditingController(text: existing?.frictionPlan ?? '如果太累，就自动降级为只做 2 分钟');
+    var minutes = existing?.minimumMinutes ?? 5;
     try {
       final save = await showDialog<bool>(
         context: context,
         builder: (context) => StatefulBuilder(builder: (context, setLocalState) => AlertDialog(
-          title: const Text('创建低阻力努力仪式'),
+          title: Text(existing == null ? '创建低阻力努力仪式' : '复盘并调整努力仪式'),
           content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text('目标：${goal.goalTitle}', style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
@@ -5477,11 +5466,45 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
         )),
       );
       if (save != true) return;
-      await _dao.saveRitual(goalId: goal.goalId, triggerText: trigger.text, minimumAction: action.text, minimumMinutes: minutes, rewardOrRecord: reward.text, environmentDesign: environment.text, frictionPlan: friction.text);
+      await _dao.saveRitual(goalId: goal.goalId, triggerText: trigger.text, minimumAction: action.text, minimumMinutes: minutes, rewardOrRecord: reward.text, environmentDesign: environment.text, frictionPlan: friction.text, ritualId: existing?.ritualId);
       await _load();
     } finally {
       trigger.dispose(); action.dispose(); reward.dispose(); environment.dispose(); friction.dispose();
     }
+  }
+
+  Future<void> _checkInRitual(TodoGoalRitual ritual, String result) async {
+    var note = '';
+    if (result == 'blocked') {
+      final controller = TextEditingController();
+      try {
+        note = await showDialog<String>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('这次仪式卡在哪里？'),
+                content: TextField(
+                  controller: controller,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: '例如：触发时间太晚、材料没准备好、动作仍然太大。',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+                  FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('记录阻力')),
+                ],
+              ),
+            ) ??
+            '';
+        if (note.isEmpty) return;
+      } finally {
+        controller.dispose();
+      }
+    }
+    await _dao.recordRitualCheckIn(ritual: ritual, result: result, note: note);
+    await _load();
   }
 
   Future<void> _recordEffort({String effortType = 'goal'}) async {
@@ -5519,6 +5542,10 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
     var mindfulMinutes = effortType == 'mindful_return' || effortType == 'mindful_focus' ? minutes : 0;
     var recoveryMinutes = effortType == 'recovery' ? minutes : 0;
     var changed = false;
+    var frictionCategory = 'none';
+    var effortContext = effortType == 'relationship' ? 'self' : '';
+    var cycleStage = effortType == 'deep_work' ? 'immerse' : '';
+    var relationshipQuality = effortType == 'relationship' ? 3 : 0;
     try {
       final save = await showDialog<bool>(context: context, builder: (context) => StatefulBuilder(builder: (context, setLocalState) => AlertDialog(
         title: Text(effortType == 'relationship'
@@ -5736,8 +5763,29 @@ class _EffortOperatingSystemTabState extends State<_EffortOperatingSystemTab> {
           const SizedBox(height: 6),
           const Text('当我在【时间/场景】时，我会做【最小行动】，持续【最小时间】，完成后做【奖励/记录】。', style: TextStyle(height: 1.45, color: Color(0xFF4B5563))),
           const SizedBox(height: 10),
-          FilledButton.tonalIcon(onPressed: goal == null ? null : _createRitual, icon: const Icon(Icons.repeat), label: const Text('创建一个努力仪式')),
-          ..._rituals.take(3).map((r) => ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.autorenew, color: _goalBlue), title: Text('当${r.triggerText}，我会${r.minimumAction}'), subtitle: Text('${r.minimumMinutes}分钟 · ${r.rewardOrRecord}\n阻力预案：${r.frictionPlan}'))),
+          FilledButton.tonalIcon(onPressed: goal == null ? null : () => _createRitual(), icon: const Icon(Icons.repeat), label: const Text('创建一个努力仪式')),
+          ..._rituals.take(3).map((ritual) => Card(
+            elevation: 0,
+            color: const Color(0xFFF8FAFC),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('当${ritual.triggerText}，我会${ritual.minimumAction}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 5),
+                Text('${ritual.minimumMinutes}分钟 · ${ritual.rewardOrRecord}\n阻力预案：${ritual.frictionPlan}', style: const TextStyle(height: 1.4, color: Color(0xFF4B5563))),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(value: ritual.stabilityScore / 100, minHeight: 7, borderRadius: BorderRadius.circular(8)),
+                const SizedBox(height: 5),
+                Text('仪式稳定度 ${ritual.stabilityScore}% · 已自然启动 ${ritual.completedCheckIns}/${ritual.checkInCount} 次', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, children: [
+                  FilledButton.tonalIcon(onPressed: () => _checkInRitual(ritual, 'completed'), icon: const Icon(Icons.check, size: 18), label: const Text('今天自然启动了')),
+                  OutlinedButton.icon(onPressed: () => _checkInRitual(ritual, 'blocked'), icon: const Icon(Icons.tune, size: 18), label: const Text('遇到阻力')),
+                  TextButton.icon(onPressed: () => _createRitual(ritual), icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('调整仪式')),
+                ]),
+              ]),
+            ),
+          )),
         ]))),
         const SizedBox(height: 12),
         Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -5827,6 +5875,19 @@ class _EffortMetricCard extends StatelessWidget {
   const _EffortMetricCard({required this.summary});
   final TodoGoalEffortSummary summary;
 
+  String get _obstacleLabel {
+    switch (summary.commonObstacle) {
+      case 'too_hard': return '任务太难或太大';
+      case 'too_busy': return '时间不足';
+      case 'too_tired': return '精力不足';
+      case 'forgot': return '触发器不清楚';
+      case 'no_meaning': return '意义感不足';
+      case 'emotion_low': return '情绪阻力';
+      case 'environment': return '环境或工具阻力';
+      default: return summary.commonObstacle;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget metric(String value, String label) => Expanded(child: Column(children: [Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _goalBlue)), Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)))]));
@@ -5838,7 +5899,7 @@ class _EffortMetricCard extends StatelessWidget {
       Row(children: [metric('${summary.attentionReturnCount}', '分心后回来'), metric('${summary.mindfulPracticeCount}', '正念练习'), metric('${summary.mindfulMinutes}', '正念分钟'), metric('${summary.recoveryMinutes}', '恢复分钟')]),
       const Divider(height: 24),
       Text('反思 ${summary.reflectionCount} 次 · 策略调整 ${summary.strategyChangeCount} 次 · 明智调整 ${summary.wiseAdjustmentCount} 次 · 关系投入 ${summary.relationshipInvestmentCount} 次 · 努力愉悦 ${summary.averageJoy.toStringAsFixed(1)}/5', style: const TextStyle(height: 1.45)),
-      if (summary.commonObstacle.isNotEmpty) Text('最常见阻力：${summary.commonObstacle}', style: const TextStyle(color: Color(0xFF92400E), fontWeight: FontWeight.w700)),
+      if (summary.commonObstacle.isNotEmpty) Text('最常见阻力：$_obstacleLabel', style: const TextStyle(color: Color(0xFF92400E), fontWeight: FontWeight.w700)),
     ])));
   }
 }

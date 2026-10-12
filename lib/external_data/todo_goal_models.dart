@@ -1300,6 +1300,10 @@ class TodoGoalRitual {
     required this.createdAtMs,
     required this.updatedAtMs,
     this.goalTitle = '',
+    this.checkInCount = 0,
+    this.completedCheckIns = 0,
+    this.blockedCheckIns = 0,
+    this.lastCheckInAtMs = 0,
   });
 
   final String ritualId;
@@ -1315,6 +1319,10 @@ class TodoGoalRitual {
   final int createdAtMs;
   final int updatedAtMs;
   final String goalTitle;
+  final int checkInCount;
+  final int completedCheckIns;
+  final int blockedCheckIns;
+  final int lastCheckInAtMs;
 
   factory TodoGoalRitual.fromMap(Map<String, Object?> row) => TodoGoalRitual(
         ritualId: (row['ritual_id'] ?? '').toString(),
@@ -1330,6 +1338,10 @@ class TodoGoalRitual {
         createdAtMs: _toInt(row['created_at_ms']),
         updatedAtMs: _toInt(row['updated_at_ms']),
         goalTitle: (row['goal_title'] ?? '').toString(),
+        checkInCount: _toInt(row['check_in_count']),
+        completedCheckIns: _toInt(row['completed_check_ins']),
+        blockedCheckIns: _toInt(row['blocked_check_ins']),
+        lastCheckInAtMs: _toInt(row['last_check_in_at_ms']),
       );
 }
 
@@ -1368,6 +1380,11 @@ class TodoGoalEffortEntry {
     this.mindfulMinutes = 0,
     this.recoveryMinutes = 0,
     this.goalTitle = '',
+    this.frictionCategory = '',
+    this.effortContext = 'daily',
+    this.cycleStage = 'action',
+    this.relationshipQuality = 0,
+    this.recoveryGapHours = 0,
     this.nodeId = '',
     this.ritualId = '',
     this.sourceObjectType = 'goal',
@@ -1408,6 +1425,11 @@ class TodoGoalEffortEntry {
   final int mindfulMinutes;
   final int recoveryMinutes;
   final String goalTitle;
+  final String frictionCategory;
+  final String effortContext;
+  final String cycleStage;
+  final int relationshipQuality;
+  final int recoveryGapHours;
   final String nodeId;
   final String ritualId;
   final String sourceObjectType;
@@ -1458,6 +1480,42 @@ class TodoGoalEffortEntry {
     }
   }
 
+  String get frictionLabel {
+    switch (frictionCategory) {
+      case 'too_hard': return '任务太难或太大';
+      case 'too_busy': return '时间不足';
+      case 'too_tired': return '精力不足';
+      case 'forgot': return '触发器不清楚';
+      case 'no_meaning': return '意义感不足';
+      case 'emotion_low': return '情绪阻力';
+      case 'environment': return '环境或工具阻力';
+      default: return obstacle.trim();
+    }
+  }
+
+  String get contextLabel {
+    switch (effortContext) {
+      case 'partner': return '伴侣';
+      case 'parent': return '父母';
+      case 'child': return '孩子';
+      case 'friend': return '朋友';
+      case 'colleague': return '同事';
+      case 'self': return '自己';
+      default: return '';
+    }
+  }
+
+  String get cycleStageLabel {
+    switch (cycleStage) {
+      case 'prepare': return '准备';
+      case 'immerse': return '沉浸';
+      case 'incubate': return '孵化';
+      case 'insight': return '洞察';
+      case 'polish': return '打磨';
+      default: return '';
+    }
+  }
+
   factory TodoGoalEffortEntry.fromMap(Map<String, Object?> row) => TodoGoalEffortEntry(
         entryId: (row['entry_id'] ?? '').toString(),
         goalId: (row['goal_id'] ?? '').toString(),
@@ -1492,6 +1550,11 @@ class TodoGoalEffortEntry {
         mindfulMinutes: _toInt(row['mindful_minutes']),
         recoveryMinutes: _toInt(row['recovery_minutes']),
         goalTitle: (row['goal_title'] ?? '').toString(),
+        frictionCategory: (row['friction_category'] ?? '').toString(),
+        effortContext: (row['effort_context'] ?? 'daily').toString(),
+        cycleStage: (row['cycle_stage'] ?? 'action').toString(),
+        relationshipQuality: _toInt(row['relationship_quality']),
+        recoveryGapHours: _toInt(row['recovery_gap_hours']),
         nodeId: (row['node_id'] ?? '').toString(),
         ritualId: (row['ritual_id'] ?? '').toString(),
         sourceObjectType: (row['source_object_type'] ?? 'goal').toString(),

@@ -1,0 +1,55 @@
+name: Historical Branch Integration CI
+
+on:
+  pull_request:
+    paths:
+      - 'lib/shame_transform/**'
+      - 'lib/behavior_tracking/**'
+      - 'lib/external_data/todo_goal_*.dart'
+      - 'lib/pages/ai_prompt_settings_page.dart'
+      - 'test/branch_integration/**'
+      - 'test/shame_transform_models_test.dart'
+      - 'test/external_data/**'
+      - 'test/todo_failure_growth_engine_test.dart'
+      - '.github/workflows/branch_integration_ci.yml'
+      - 'pubspec.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: historical-integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+      - name: Install SQLite development library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze affected modules
+        run: >-
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+          lib/shame_transform lib/behavior_tracking
+          lib/external_data/todo_goal_dao.dart
+          lib/external_data/todo_goal_models.dart
+          lib/external_data/todo_goal_pages.dart
+          lib/pages/ai_prompt_settings_page.dart
+          test/branch_integration test/shame_transform_models_test.dart
+      - name: Run persistence and existing workflow regressions
+        run: >-
+          flutter test --no-pub
+          test/branch_integration test/shame_transform_models_test.dart
+          test/external_data test/todo_failure_growth_engine_test.dart

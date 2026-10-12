@@ -11,6 +11,14 @@ enum ShameScene {
   healthyResponsibility,
   todoGoal,
   dailyReview,
+  shameIdentification,
+  shameNaming,
+  shameBinding,
+  bridgeRepair,
+  culturalShame,
+  avoidanceCycle,
+  identityRebuild,
+  shameDictionary,
   shameCompass,
   affectRecovery,
   beingSeenTraining,
@@ -32,6 +40,14 @@ extension ShameSceneMeta on ShameScene {
         ShameScene.healthyResponsibility => '健康责任训练',
         ShameScene.todoGoal => 'Todo 目标羞耻转化',
         ShameScene.dailyReview => '每日羞耻转化复盘',
+        ShameScene.shameIdentification => '羞耻识别评估',
+        ShameScene.shameNaming => '识别并命名羞耻',
+        ShameScene.shameBinding => '羞耻绑定解码',
+        ShameScene.bridgeRepair => '关系桥梁修复',
+        ShameScene.culturalShame => '文化/社会羞耻识别',
+        ShameScene.avoidanceCycle => '逃避/拖延羞耻循环',
+        ShameScene.identityRebuild => '身份重建卡',
+        ShameScene.shameDictionary => '羞耻语言词典',
         ShameScene.shameCompass => '羞耻罗盘识别',
         ShameScene.affectRecovery => '积极情感恢复',
         ShameScene.beingSeenTraining => '被看见训练',
@@ -50,6 +66,14 @@ extension ShameSceneMeta on ShameScene {
         ShameScene.healthyResponsibility => '具体发生了什么行为？它给谁造成了什么影响？',
         ShameScene.todoGoal => '写下 Todo 或目标，以及它让你怎样评价自己。',
         ShameScene.dailyReview => '今天哪个时刻触发了羞耻？你做了或没做什么？',
+        ShameScene.shameIdentification => '描述你的行为、态度、身体反应和脑中声音，让 AI 评估它与羞耻概念的一致程度。',
+        ShameScene.shameNaming => '发生了什么？最刺痛的感觉是什么？你害怕别人怎么看你？',
+        ShameScene.shameBinding => '这次羞耻似乎绑定了你的什么需要、情感或自我部分？',
+        ShameScene.bridgeRepair => '这段关系里你期待什么回应？桥梁在哪里断了？',
+        ShameScene.culturalShame => '这个羞耻是否和家庭、学校、性别、职业、学历、收入、年龄或社会比较有关？',
+        ShameScene.avoidanceCycle => '写下回避、成瘾、刷手机、暴食、拖延或麻木前后的羞耻循环。',
+        ShameScene.identityRebuild => '写下一个旧身份脚本，以及一个已经发生的小行动证据。',
+        ShameScene.shameDictionary => '选择或描述一个想学习命名的羞耻词，例如暴露羞耻、能力羞耻或关系断裂羞耻。',
         ShameScene.shameCompass => '羞耻后你最自然的反应是什么：退缩、自责、回避，还是攻击他人？',
         ShameScene.affectRecovery => '你原本想靠近、表达、学习、连接或享受什么？它在哪里被打断了？',
         ShameScene.beingSeenTraining => '你希望哪一部分真实自我逐步被看见？现在最担心什么？',
@@ -88,6 +112,16 @@ class ShameEvent {
   final String truePridePotential;
   final String abilityReflected;
   final String seenRiskLevel;
+  final String shameFitLevel;
+  final String shameFitExplanation;
+  final String shameBehaviorSignals;
+  final String shameAttitudeSignals;
+  final String nonShamePossibilities;
+  final String primaryShameName;
+  final String namingSentence;
+  final String boundPart;
+  final String bridgeRupturePoint;
+  final String newIdentityStatement;
 
   const ShameEvent({
     required this.id,
@@ -119,6 +153,16 @@ class ShameEvent {
     this.truePridePotential = '',
     this.abilityReflected = '',
     this.seenRiskLevel = '',
+    this.shameFitLevel = '',
+    this.shameFitExplanation = '',
+    this.shameBehaviorSignals = '',
+    this.shameAttitudeSignals = '',
+    this.nonShamePossibilities = '',
+    this.primaryShameName = '',
+    this.namingSentence = '',
+    this.boundPart = '',
+    this.bridgeRupturePoint = '',
+    this.newIdentityStatement = '',
   });
 
   Map<String, Object?> toMap() => {
@@ -151,6 +195,16 @@ class ShameEvent {
         'true_pride_potential': truePridePotential,
         'ability_reflected': abilityReflected,
         'seen_risk_level': seenRiskLevel,
+        'shame_fit_level': shameFitLevel,
+        'shame_fit_explanation': shameFitExplanation,
+        'shame_behavior_signals': shameBehaviorSignals,
+        'shame_attitude_signals': shameAttitudeSignals,
+        'non_shame_possibilities': nonShamePossibilities,
+        'primary_shame_name': primaryShameName,
+        'naming_sentence': namingSentence,
+        'bound_part': boundPart,
+        'bridge_rupture_point': bridgeRupturePoint,
+        'new_identity_statement': newIdentityStatement,
       };
 
   factory ShameEvent.fromMap(Map<String, Object?> map) {
@@ -188,6 +242,16 @@ class ShameEvent {
       truePridePotential: '${map['true_pride_potential'] ?? ''}',
       abilityReflected: '${map['ability_reflected'] ?? ''}',
       seenRiskLevel: '${map['seen_risk_level'] ?? ''}',
+      shameFitLevel: '${map['shame_fit_level'] ?? ''}',
+      shameFitExplanation: '${map['shame_fit_explanation'] ?? ''}',
+      shameBehaviorSignals: '${map['shame_behavior_signals'] ?? ''}',
+      shameAttitudeSignals: '${map['shame_attitude_signals'] ?? ''}',
+      nonShamePossibilities: '${map['non_shame_possibilities'] ?? ''}',
+      primaryShameName: '${map['primary_shame_name'] ?? ''}',
+      namingSentence: '${map['naming_sentence'] ?? ''}',
+      boundPart: '${map['bound_part'] ?? ''}',
+      bridgeRupturePoint: '${map['bridge_rupture_point'] ?? ''}',
+      newIdentityStatement: '${map['new_identity_statement'] ?? ''}',
     );
   }
 }
@@ -298,6 +362,72 @@ class GoalShameProfile {
         exposureLadderJson: '${map['exposure_ladder_json'] ?? '[]'}',
         truePrideStandard: '${map['true_pride_standard'] ?? ''}',
       );
+}
+
+class MicroJoyRecord {
+  final String id;
+  final int createdAt;
+  final String moment;
+  final String source;
+  final String repeatAction;
+  final int affectBefore;
+  final int affectAfter;
+  final bool shareable;
+
+  const MicroJoyRecord({
+    required this.id,
+    required this.createdAt,
+    required this.moment,
+    required this.source,
+    required this.repeatAction,
+    required this.affectBefore,
+    required this.affectAfter,
+    required this.shareable,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'moment': moment,
+        'source': source,
+        'repeat_action': repeatAction,
+        'affect_before': affectBefore,
+        'affect_after': affectAfter,
+        'shareable': shareable ? 1 : 0,
+      };
+
+  factory MicroJoyRecord.fromMap(Map<String, Object?> map) => MicroJoyRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        moment: '${map['moment'] ?? ''}',
+        source: '${map['source'] ?? ''}',
+        repeatAction: '${map['repeat_action'] ?? ''}',
+        affectBefore: (map['affect_before'] as num?)?.toInt() ?? 0,
+        affectAfter: (map['affect_after'] as num?)?.toInt() ?? 0,
+        shareable: (map['shareable'] as num?)?.toInt() == 1,
+      );
+}
+
+class SelfMapDimension {
+  final String name;
+  final int eventCount;
+  final int evidenceCount;
+  final String commonCompass;
+  final String oldScript;
+  final String newScript;
+  final String latestPride;
+
+  const SelfMapDimension({
+    required this.name,
+    required this.eventCount,
+    required this.evidenceCount,
+    required this.commonCompass,
+    required this.oldScript,
+    required this.newScript,
+    required this.latestPride,
+  });
+
+  int get growthLevel => evidenceCount >= 4 ? 5 : evidenceCount + 1;
 }
 
 class EvidenceItem {
@@ -448,6 +578,316 @@ class AffectRecoveryLog {
       );
 }
 
+
+class ShameNamingRecord {
+  final String id;
+  final int createdAt;
+  final String primaryName;
+  final String secondaryNames;
+  final String shameTexture;
+  final String bodySignals;
+  final String languageSignals;
+  final String dignityWound;
+  final String belongingRupture;
+  final String beingSeenFear;
+  final String namingSentence;
+  final String sourceEventId;
+
+  const ShameNamingRecord({
+    required this.id,
+    required this.createdAt,
+    required this.primaryName,
+    required this.secondaryNames,
+    required this.shameTexture,
+    required this.bodySignals,
+    required this.languageSignals,
+    required this.dignityWound,
+    required this.belongingRupture,
+    required this.beingSeenFear,
+    required this.namingSentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'primary_name': primaryName,
+        'secondary_names': secondaryNames,
+        'shame_texture': shameTexture,
+        'body_signals': bodySignals,
+        'language_signals': languageSignals,
+        'dignity_wound': dignityWound,
+        'belonging_rupture': belongingRupture,
+        'being_seen_fear': beingSeenFear,
+        'naming_sentence': namingSentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory ShameNamingRecord.fromMap(Map<String, Object?> map) =>
+      ShameNamingRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        primaryName: '${map['primary_name'] ?? ''}',
+        secondaryNames: '${map['secondary_names'] ?? ''}',
+        shameTexture: '${map['shame_texture'] ?? ''}',
+        bodySignals: '${map['body_signals'] ?? ''}',
+        languageSignals: '${map['language_signals'] ?? ''}',
+        dignityWound: '${map['dignity_wound'] ?? ''}',
+        belongingRupture: '${map['belonging_rupture'] ?? ''}',
+        beingSeenFear: '${map['being_seen_fear'] ?? ''}',
+        namingSentence: '${map['naming_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class ShameBindRecord {
+  final String id;
+  final int createdAt;
+  final String boundPart;
+  final String normalNeed;
+  final String shameContamination;
+  final String immatureExpression;
+  final String matureExpression;
+  final String unbindingAction;
+  final String reclaimingSentence;
+  final String sourceEventId;
+
+  const ShameBindRecord({
+    required this.id,
+    required this.createdAt,
+    required this.boundPart,
+    required this.normalNeed,
+    required this.shameContamination,
+    required this.immatureExpression,
+    required this.matureExpression,
+    required this.unbindingAction,
+    required this.reclaimingSentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'bound_part': boundPart,
+        'normal_need': normalNeed,
+        'shame_contamination': shameContamination,
+        'immature_expression': immatureExpression,
+        'mature_expression': matureExpression,
+        'unbinding_action': unbindingAction,
+        'reclaiming_sentence': reclaimingSentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory ShameBindRecord.fromMap(Map<String, Object?> map) => ShameBindRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        boundPart: '${map['bound_part'] ?? ''}',
+        normalNeed: '${map['normal_need'] ?? ''}',
+        shameContamination: '${map['shame_contamination'] ?? ''}',
+        immatureExpression: '${map['immature_expression'] ?? ''}',
+        matureExpression: '${map['mature_expression'] ?? ''}',
+        unbindingAction: '${map['unbinding_action'] ?? ''}',
+        reclaimingSentence: '${map['reclaiming_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class BridgeRepairRecord {
+  final String id;
+  final int createdAt;
+  final String relationshipExpectation;
+  final String rupturePoint;
+  final String internalizedMessage;
+  final String repairPossibility;
+  final String caringRepairDirection;
+  final String boundarySentence;
+  final String sourceEventId;
+
+  const BridgeRepairRecord({
+    required this.id,
+    required this.createdAt,
+    required this.relationshipExpectation,
+    required this.rupturePoint,
+    required this.internalizedMessage,
+    required this.repairPossibility,
+    required this.caringRepairDirection,
+    required this.boundarySentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'relationship_expectation': relationshipExpectation,
+        'rupture_point': rupturePoint,
+        'internalized_message': internalizedMessage,
+        'repair_possibility': repairPossibility,
+        'caring_repair_direction': caringRepairDirection,
+        'boundary_sentence': boundarySentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory BridgeRepairRecord.fromMap(Map<String, Object?> map) =>
+      BridgeRepairRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        relationshipExpectation: '${map['relationship_expectation'] ?? ''}',
+        rupturePoint: '${map['rupture_point'] ?? ''}',
+        internalizedMessage: '${map['internalized_message'] ?? ''}',
+        repairPossibility: '${map['repair_possibility'] ?? ''}',
+        caringRepairDirection: '${map['caring_repair_direction'] ?? ''}',
+        boundarySentence: '${map['boundary_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class IdentityCardRecord {
+  final String id;
+  final int createdAt;
+  final String oldIdentityScript;
+  final String shameName;
+  final String experienceReframe;
+  final String reclaimedSelfPart;
+  final String newIdentityStatement;
+  final String evidenceSentence;
+  final String truePrideSentence;
+  final String sourceEventId;
+
+  const IdentityCardRecord({
+    required this.id,
+    required this.createdAt,
+    required this.oldIdentityScript,
+    required this.shameName,
+    required this.experienceReframe,
+    required this.reclaimedSelfPart,
+    required this.newIdentityStatement,
+    required this.evidenceSentence,
+    required this.truePrideSentence,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'old_identity_script': oldIdentityScript,
+        'shame_name': shameName,
+        'experience_reframe': experienceReframe,
+        'reclaimed_self_part': reclaimedSelfPart,
+        'new_identity_statement': newIdentityStatement,
+        'evidence_sentence': evidenceSentence,
+        'true_pride_sentence': truePrideSentence,
+        'source_event_id': sourceEventId,
+      };
+
+  factory IdentityCardRecord.fromMap(Map<String, Object?> map) =>
+      IdentityCardRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        oldIdentityScript: '${map['old_identity_script'] ?? ''}',
+        shameName: '${map['shame_name'] ?? ''}',
+        experienceReframe: '${map['experience_reframe'] ?? ''}',
+        reclaimedSelfPart: '${map['reclaimed_self_part'] ?? ''}',
+        newIdentityStatement: '${map['new_identity_statement'] ?? ''}',
+        evidenceSentence: '${map['evidence_sentence'] ?? ''}',
+        truePrideSentence: '${map['true_pride_sentence'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class CulturalShameRecord {
+  final String id;
+  final int createdAt;
+  final String shameStandard;
+  final String source;
+  final String impact;
+  final String newStandard;
+  final String antiShameAction;
+  final String sourceEventId;
+
+  const CulturalShameRecord({
+    required this.id,
+    required this.createdAt,
+    required this.shameStandard,
+    required this.source,
+    required this.impact,
+    required this.newStandard,
+    required this.antiShameAction,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'shame_standard': shameStandard,
+        'source': source,
+        'impact': impact,
+        'new_standard': newStandard,
+        'anti_shame_action': antiShameAction,
+        'source_event_id': sourceEventId,
+      };
+
+  factory CulturalShameRecord.fromMap(Map<String, Object?> map) =>
+      CulturalShameRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        shameStandard: '${map['shame_standard'] ?? ''}',
+        source: '${map['source'] ?? ''}',
+        impact: '${map['impact'] ?? ''}',
+        newStandard: '${map['new_standard'] ?? ''}',
+        antiShameAction: '${map['anti_shame_action'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
+class AvoidanceCycleRecord {
+  final String id;
+  final int createdAt;
+  final String shameBefore;
+  final String avoidanceBehavior;
+  final String shortFunction;
+  final String secondaryShame;
+  final String replacementAction;
+  final String recoveryAction;
+  final String sourceEventId;
+
+  const AvoidanceCycleRecord({
+    required this.id,
+    required this.createdAt,
+    required this.shameBefore,
+    required this.avoidanceBehavior,
+    required this.shortFunction,
+    required this.secondaryShame,
+    required this.replacementAction,
+    required this.recoveryAction,
+    required this.sourceEventId,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'created_at': createdAt,
+        'shame_before': shameBefore,
+        'avoidance_behavior': avoidanceBehavior,
+        'short_function': shortFunction,
+        'secondary_shame': secondaryShame,
+        'replacement_action': replacementAction,
+        'recovery_action': recoveryAction,
+        'source_event_id': sourceEventId,
+      };
+
+  factory AvoidanceCycleRecord.fromMap(Map<String, Object?> map) =>
+      AvoidanceCycleRecord(
+        id: '${map['id']}',
+        createdAt: (map['created_at'] as num?)?.toInt() ?? 0,
+        shameBefore: '${map['shame_before'] ?? ''}',
+        avoidanceBehavior: '${map['avoidance_behavior'] ?? ''}',
+        shortFunction: '${map['short_function'] ?? ''}',
+        secondaryShame: '${map['secondary_shame'] ?? ''}',
+        replacementAction: '${map['replacement_action'] ?? ''}',
+        recoveryAction: '${map['recovery_action'] ?? ''}',
+        sourceEventId: '${map['source_event_id'] ?? ''}',
+      );
+}
+
 class ShameActionOption {
   final String name;
   final String purpose;
@@ -495,6 +935,45 @@ class ShameAiResult {
   final List<String> toxicLanguages;
   final List<String> shamePatterns;
   final String healthyMessage;
+  final String shameFitLevel;
+  final String shameFitScore;
+  final String shameFitExplanation;
+  final List<String> shameBehaviorSignals;
+  final List<String> shameAttitudeSignals;
+  final List<String> shameBodySignals;
+  final List<String> shameLanguageSignals;
+  final List<String> nonShamePossibilities;
+  final String identificationSummary;
+  final String safetyHasUrgentRisk;
+  final String riskNote;
+  final String primaryShameName;
+  final List<String> secondaryShameNames;
+  final List<String> shameTexture;
+  final String dignityWound;
+  final String belongingRupture;
+  final String beingSeenFear;
+  final String namingSentence;
+  final String namingConfidence;
+  final String boundPart;
+  final String normalNeed;
+  final String shameContamination;
+  final String immatureExpression;
+  final String matureExpression;
+  final String unbindingAction;
+  final String reclaimingSentence;
+  final String bridgeRelevant;
+  final String relationshipExpectation;
+  final String bridgeRupturePoint;
+  final String internalizedMessage;
+  final String repairPossibility;
+  final String caringRepairDirection;
+  final String oldIdentityScript;
+  final String identityShameName;
+  final String identityExperienceReframe;
+  final String reclaimedSelfPart;
+  final String newIdentityStatement;
+  final String identityEvidenceSentence;
+  final String identityTruePrideSentence;
   final List<String> facts;
   final List<String> interpretations;
   final List<String> identityJudgments;
@@ -558,6 +1037,45 @@ class ShameAiResult {
     required this.toxicLanguages,
     required this.shamePatterns,
     required this.healthyMessage,
+    this.shameFitLevel = '',
+    this.shameFitScore = '',
+    this.shameFitExplanation = '',
+    this.shameBehaviorSignals = const [],
+    this.shameAttitudeSignals = const [],
+    this.shameBodySignals = const [],
+    this.shameLanguageSignals = const [],
+    this.nonShamePossibilities = const [],
+    this.identificationSummary = '',
+    this.safetyHasUrgentRisk = '',
+    this.riskNote = '',
+    this.primaryShameName = '',
+    this.secondaryShameNames = const [],
+    this.shameTexture = const [],
+    this.dignityWound = '',
+    this.belongingRupture = '',
+    this.beingSeenFear = '',
+    this.namingSentence = '',
+    this.namingConfidence = '',
+    this.boundPart = '',
+    this.normalNeed = '',
+    this.shameContamination = '',
+    this.immatureExpression = '',
+    this.matureExpression = '',
+    this.unbindingAction = '',
+    this.reclaimingSentence = '',
+    this.bridgeRelevant = '',
+    this.relationshipExpectation = '',
+    this.bridgeRupturePoint = '',
+    this.internalizedMessage = '',
+    this.repairPossibility = '',
+    this.caringRepairDirection = '',
+    this.oldIdentityScript = '',
+    this.identityShameName = '',
+    this.identityExperienceReframe = '',
+    this.reclaimedSelfPart = '',
+    this.newIdentityStatement = '',
+    this.identityEvidenceSentence = '',
+    this.identityTruePrideSentence = '',
     required this.facts,
     required this.interpretations,
     required this.identityJudgments,
@@ -616,10 +1134,20 @@ class ShameAiResult {
     Map<String, dynamic> json,
     ShameScene fallbackScene,
   ) {
+    final safety = _map(json['safety_check']);
     final core = _map(json['core_recognition']);
-    final factStory = _map(json['fact_vs_story']);
+    final identification = _map(json['shame_identification']);
+    final naming = _map(json['shame_naming']);
+    final bind = _map(json['shame_bind']);
+    final bridge = _map(json['interpersonal_bridge']);
+    final identityCard = _map(json['identity_card']);
+    final factStory = _map(json['fact_vs_story']).isNotEmpty
+        ? _map(json['fact_vs_story'])
+        : _map(json['fact_story_identity']);
     final responsibility = _map(json['responsibility_boundary']);
-    final reframe = _map(json['reframe']);
+    final reframe = _map(json['reframe']).isNotEmpty
+        ? _map(json['reframe'])
+        : _map(json['caring_reframe']);
     final minimum = _map(json['today_minimum_action']);
     final externalization = _map(json['voice_externalization']);
     final affectBlock = _map(json['positive_affect_block']);
@@ -643,12 +1171,51 @@ class ShameAiResult {
       scene: scene,
       valueAnchor: '${json['value_anchor'] ?? '我不是错误本身'}',
       summary: '${json['user_input_summary'] ?? ''}',
-      eventFact: '${core['event_fact'] ?? ''}',
+      eventFact: '${core['event_fact'] ?? factStory['facts'] ?? ''}',
       emotions: _strings(core['emotion']),
       bodyReactions: _strings(core['body_reaction']),
       toxicLanguages: _strings(core['toxic_shame_language']),
       shamePatterns: _strings(core['shame_patterns']),
-      healthyMessage: '${core['healthy_shame_message'] ?? ''}',
+      healthyMessage: '${core['healthy_shame_message'] ?? reframe['healthy_shame_message'] ?? ''}',
+      shameFitLevel: '${identification['fit_level'] ?? ''}',
+      shameFitScore: '${identification['fit_score'] ?? ''}',
+      shameFitExplanation: '${identification['fit_explanation'] ?? ''}',
+      shameBehaviorSignals: _strings(identification['behavior_signals']),
+      shameAttitudeSignals: _strings(identification['attitude_signals']),
+      shameBodySignals: _strings(identification['body_signals']),
+      shameLanguageSignals: _strings(identification['language_signals']),
+      nonShamePossibilities: _strings(identification['non_shame_possibilities']),
+      identificationSummary: '${identification['identification_summary'] ?? ''}',
+      safetyHasUrgentRisk: '${safety['has_urgent_risk'] ?? ''}',
+      riskNote: '${safety['risk_note'] ?? ''}',
+      primaryShameName: '${naming['primary_shame_name'] ?? ''}',
+      secondaryShameNames: _strings(naming['secondary_shame_names']),
+      shameTexture: _strings(naming['shame_texture']),
+      dignityWound: '${naming['dignity_wound'] ?? ''}',
+      belongingRupture: '${naming['belonging_rupture'] ?? ''}',
+      beingSeenFear: '${naming['being_seen_fear'] ?? ''}',
+      namingSentence: '${naming['naming_sentence'] ?? ''}',
+      namingConfidence: '${naming['naming_confidence'] ?? ''}',
+      boundPart: '${bind['bound_part'] ?? ''}',
+      normalNeed: '${bind['normal_need'] ?? ''}',
+      shameContamination: '${bind['shame_contamination'] ?? ''}',
+      immatureExpression: '${bind['immature_expression'] ?? ''}',
+      matureExpression: '${bind['mature_expression'] ?? ''}',
+      unbindingAction: '${bind['unbinding_action'] ?? ''}',
+      reclaimingSentence: '${bind['reclaiming_sentence'] ?? ''}',
+      bridgeRelevant: '${bridge['is_relevant'] ?? ''}',
+      relationshipExpectation: '${bridge['relationship_expectation'] ?? ''}',
+      bridgeRupturePoint: '${bridge['rupture_point'] ?? ''}',
+      internalizedMessage: '${bridge['internalized_message'] ?? ''}',
+      repairPossibility: '${bridge['repair_possibility'] ?? ''}',
+      caringRepairDirection: '${bridge['caring_repair_direction'] ?? ''}',
+      oldIdentityScript: '${identityCard['old_identity_script'] ?? ''}',
+      identityShameName: '${identityCard['shame_name'] ?? ''}',
+      identityExperienceReframe: '${identityCard['experience_reframe'] ?? ''}',
+      reclaimedSelfPart: '${identityCard['reclaimed_self_part'] ?? ''}',
+      newIdentityStatement: '${identityCard['new_identity_statement'] ?? ''}',
+      identityEvidenceSentence: '${identityCard['evidence_sentence'] ?? ''}',
+      identityTruePrideSentence: '${identityCard['true_pride_sentence'] ?? ''}',
       facts: _strings(factStory['facts']),
       interpretations: _strings(factStory['interpretations']),
       identityJudgments: _strings(factStory['identity_judgments']),
@@ -658,11 +1225,11 @@ class ShameAiResult {
       repairableParts: _strings(responsibility['repairable_part']),
       uncontrollableParts: _strings(responsibility['uncontrollable_part']),
       toxicVersion: '${reframe['toxic_version'] ?? ''}',
-      healthyVersion: '${reframe['healthy_version'] ?? ''}',
+      healthyVersion: '${reframe['healthy_version'] ?? reframe['healthy_shame_message'] ?? reframe['not_cheap_comfort'] ?? ''}',
       identitySentence: '${reframe['new_identity_sentence'] ?? ''}',
       sourceVoice: '${externalization['source_voice'] ?? ''}',
       protectionIntent: '${externalization['protection_intent'] ?? ''}',
-      boundarySentence: '${json['boundary_sentence'] ?? ''}',
+      boundarySentence: '${json['boundary_sentence'] ?? responsibility['boundary_sentence'] ?? ''}',
       actionOptions: options,
       minimumAction: '${minimum['action'] ?? ''}',
       minimumTime: '${minimum['time_required'] ?? ''}',
@@ -717,6 +1284,45 @@ class ShameAiResult {
         toxicLanguages: toxicLanguages,
         shamePatterns: shamePatterns,
         healthyMessage: healthyMessage,
+        shameFitLevel: shameFitLevel,
+        shameFitScore: shameFitScore,
+        shameFitExplanation: shameFitExplanation,
+        shameBehaviorSignals: shameBehaviorSignals,
+        shameAttitudeSignals: shameAttitudeSignals,
+        shameBodySignals: shameBodySignals,
+        shameLanguageSignals: shameLanguageSignals,
+        nonShamePossibilities: nonShamePossibilities,
+        identificationSummary: identificationSummary,
+        safetyHasUrgentRisk: safetyHasUrgentRisk,
+        riskNote: riskNote,
+        primaryShameName: primaryShameName,
+        secondaryShameNames: secondaryShameNames,
+        shameTexture: shameTexture,
+        dignityWound: dignityWound,
+        belongingRupture: belongingRupture,
+        beingSeenFear: beingSeenFear,
+        namingSentence: namingSentence,
+        namingConfidence: namingConfidence,
+        boundPart: boundPart,
+        normalNeed: normalNeed,
+        shameContamination: shameContamination,
+        immatureExpression: immatureExpression,
+        matureExpression: matureExpression,
+        unbindingAction: unbindingAction,
+        reclaimingSentence: reclaimingSentence,
+        bridgeRelevant: bridgeRelevant,
+        relationshipExpectation: relationshipExpectation,
+        bridgeRupturePoint: bridgeRupturePoint,
+        internalizedMessage: internalizedMessage,
+        repairPossibility: repairPossibility,
+        caringRepairDirection: caringRepairDirection,
+        oldIdentityScript: oldIdentityScript,
+        identityShameName: identityShameName,
+        identityExperienceReframe: identityExperienceReframe,
+        reclaimedSelfPart: reclaimedSelfPart,
+        newIdentityStatement: newIdentityStatement,
+        identityEvidenceSentence: identityEvidenceSentence,
+        identityTruePrideSentence: identityTruePrideSentence,
         facts: facts,
         interpretations: interpretations,
         identityJudgments: identityJudgments,
@@ -773,6 +1379,10 @@ class ShameAiResult {
 
   bool get hasMeaningfulAiContent =>
       eventFact.trim().isNotEmpty &&
+      shameFitLevel.trim().isNotEmpty &&
+      identificationSummary.trim().isNotEmpty &&
+      primaryShameName.trim().isNotEmpty &&
+      namingSentence.trim().isNotEmpty &&
       healthyVersion.trim().isNotEmpty &&
       minimumAction.trim().isNotEmpty &&
       evidenceSentence.trim().isNotEmpty;
