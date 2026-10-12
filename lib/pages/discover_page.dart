@@ -53,6 +53,8 @@ import '../kindling/kindling.dart';
 import '../kindling_host/kindling_host_page.dart';
 import '../beautiful_enemy/beautiful_enemy.dart' show EnemyDiscoverEntry;
 import '../beautiful_enemy_host/enemy_host_page.dart';
+import '../zhaojian/zhaojian.dart' show ZhaojianDiscoverEntry;
+import '../zhaojian_host/zhaojian_host_page.dart';
 import '../evidence_growth/evidence_growth_discover_entry.dart';
 import '../evidence_growth/evidence_growth_home_page.dart';
 
@@ -2520,6 +2522,15 @@ Widget _buildEmotionPieChart() {
     );
   }
 
+  /// 打开「照见」。装配（等库、接 AI 引擎）都在 ZhaojianHostPage 里。
+  Future<void> _openZhaojianFromDiscover() async {
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => const ZhaojianHostPage(),
+      ),
+    );
+  }
+
   Widget _buildDiscoverEntry({
     required IconData icon,
     required String title,
@@ -2639,6 +2650,10 @@ Widget _buildEmotionPieChart() {
                     const SizedBox(height: 12),
                     EnemyDiscoverEntry(
                       onTap: _openEnemyFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    ZhaojianDiscoverEntry(
+                      onTap: _openZhaojianFromDiscover,
                     ),
                     const SizedBox(height: 12),
                     Material(
