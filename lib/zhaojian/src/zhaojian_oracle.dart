@@ -11,6 +11,9 @@ abstract class ZhaojianOracle {
   /// 给界面看的来源说明。
   String get label;
 
+  /// 这个引擎会不会把用户写下的内容发给外部服务。界面据此决定是否披露。
+  bool get sendsData => false;
+
   /// 针对这个选择补出用户可能没意识到的动机。返回空表示没有（用本地库）。
   Future<List<ZMotive>> completeMotives({
     required String question,

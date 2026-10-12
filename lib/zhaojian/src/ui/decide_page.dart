@@ -351,6 +351,8 @@ class _DecidePageState extends State<DecidePage> {
           ),
           ZNote(
               '对全部 ${_cards.length} 个动机逐个打分（拉力 0 到 4），再按拉力、置信度和你常漏的类别排序，每类最多 2 个。'),
+          if (widget.controller.oracle.sendsData)
+            ZNote('点击后，题面和动机文字会发送给：${widget.controller.oracle.label}。', warn: true),
           FilledButton(
             onPressed: _busy ? null : _runTop,
             child: Text(top == null ? '为全部动机打分，推荐前 5' : '重新打分'),

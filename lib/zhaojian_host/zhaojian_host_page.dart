@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
+import '../evidence_growth/evidence_growth_dao.dart';
+import '../evidence_growth/evidence_growth_discovery.dart' show GrowthJevAccess;
 import '../zhaojian/zhaojian.dart';
 import 'zhaojian_ai_oracle.dart';
+import 'zhaojian_host_oracle.dart';
+import 'zhaojian_jev_oracle.dart';
 
 /// 宿主侧的装配点：把已经打开的库和 AI 引擎接上模块。
 ///
@@ -21,6 +25,10 @@ class ZhaojianHostPage extends StatefulWidget {
 class _ZhaojianHostPageState extends State<ZhaojianHostPage> {
   late final Future<Database> _db = AppDatabase.instance();
 
+  /// 只用来读「证据成长」里已配置的 JEV 密钥，不写任何数据。
+  late final EvidenceGrowthDao _jevDao =
+      EvidenceGrowthDao(database: AppDatabase.instance);
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Database>(
@@ -36,8 +44,13 @@ class _ZhaojianHostPageState extends State<ZhaojianHostPage> {
         }
         return ZhaojianEntry.build(
           db: db,
-          // AI 只是增强：没配置或调用失败会自己落回内置动机库与规则推荐。
-          oracle: ZhaojianAiOracle(),
+          // AI 与 JEV 都只是增强：没配置或调用失败会自己落回内置动机库与规则推荐。
+          oracle: ZhaojianHostOracle(
+            text: ZhaojianAiOracle(),
+            scorer: ZhaojianJevOracle(
+              readKey: () => GrowthJevAccess.key(_jevDao),
+            ),
+          ),
         );
       },
     );

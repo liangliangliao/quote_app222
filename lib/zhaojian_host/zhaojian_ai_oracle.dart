@@ -33,6 +33,9 @@ class ZhaojianAiOracle extends ZhaojianOracle {
   @override
   String get label => 'AI 补全与打分（模拟决策引擎）';
 
+  @override
+  bool get sendsData => true;
+
   static const Duration callTimeout = Duration(seconds: 100);
 
   static const String motiveSystemPrompt =

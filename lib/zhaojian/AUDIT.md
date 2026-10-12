@@ -26,10 +26,17 @@ web 原型（叔本华「性格 × 动机」因果链）的**核心闭环**，�
 假设行动（as-if）实验、如果—那么签名、目标链、一条线与接力、放弃拆分器、路径探测、
 愿望漏斗、反宿命论提示、控制圈、数据导出。
 
-**决策引擎**：目前「打分」由宿主 `ZhaojianAiOracle` 让通用大模型按决策引擎的格式给出，
-**不是**真实的 OpenAI Decisions API 或 JEV。仓库里已有 `lib/evidence_growth/evidence_growth_jev.dart`
-（System One，密钥存在 evidence_growth 的加密设置里）；接真实引擎时，应在 `lib/zhaojian_host/`
-新增一个 `ZhaojianOracle` 实现去复用它，模块本体不碰网络和密钥。
+**决策引擎**（宿主层 `lib/zhaojian_host/`，模块本体不碰网络和密钥）：
+
+- 打分优先用真实的 **JEV（System One）**：复用 `EvidenceGrowthJev` 和「证据成长」里已启用、已配置的密钥
+  （`GrowthJevAccess.key`）；每个候选一个独立的 score 问题，每批 12 题，键名 `factor_m<下标>`
+  （客户端对 `factor_` 开头的可选权重题遇到非法答案会跳过而不是整批失败）。
+- JEV 不可用（没启用、没密钥、限流、响应不合规、不足一半的候选有分数）→ 回落到通用大模型按决策引擎格式的**模拟**打分
+  （`ZhaojianAiOracle`，界面标明不是真实的 Decisions API 或 JEV）→ 再不行用规则推荐。
+- 动机补全只能由文字引擎（AI）做；JEV 不生成文字。
+- 隐私：任何会把题面或动机文字发给外部服务的引擎，界面在点击前披露（`ZhaojianOracle.sendsData`）。
+- **没做**：OpenAI Decisions API 的接入（格式相同，可再写一个 `ZhaojianOracle` 实现；密钥与启用开关需要新的设置入口）。
+- **没验证**：中文输入下 JEV 的打分质量（据公开评测，它对英文最强）；指令用英文，题面和动机文字保持中文原文。
 
 ## 与已有模块的关系
 
@@ -41,7 +48,7 @@ web 原型（叔本华「性格 × 动机」因果链）的**核心闭环**，�
 ## 集成契约（与火种一致）
 
 - 模块目录 `lib/zhaojian/`：除 `flutter`、`sqflite` 外零外部依赖；不自己开库，不引用 `AppDatabase`。
-- 宿主装配层 `lib/zhaojian_host/`：等库、注入 AI 引擎。
+- 宿主装配层 `lib/zhaojian_host/`：等库、注入引擎（JEV → AI 模拟 → 规则推荐）。
 - `lib/data/db.dart`：`version` 35→36；`onCreate` 调 `ZhaojianSchema.createAll`，`onUpgrade` 调 `ZhaojianSchema.migrate`（均幂等）。
 - `lib/pages/discover_page.dart`：新增入口卡片与 `_openZhaojianFromDiscover`。
 - 隐私：所有数据只在本机 SQLite；仅当用户点「让 AI 补全」或「为全部动机打分」时，题面和动机文字发给所配置的 AI 服务。没配置或失败时全部功能可用（内置动机库 + 规则推荐）。
