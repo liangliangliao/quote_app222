@@ -5,6 +5,7 @@ import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
 import 'meditation_dao.dart';
 import 'meditation_models.dart';
+import 'meditation_mentor_guidance.dart';
 import 'meditation_script_pause_planner.dart';
 
 class MeditationAiService {
@@ -31,9 +32,14 @@ class MeditationAiService {
 9. 输出必须是合法 JSON 对象，包含 understood_need、cognitive_shift、embodied_goal、real_life_scene、practice_focus、title、type、duration_minutes、segments、ending_reflection。segments 中每项必须包含 phase、start_seconds、text、intent；不得输出 Markdown 或 JSON 之外的解释。
 ''';
 
-  final UnifiedAiService _ai = UnifiedAiService();
-  final GlobalAiSettings _settings = GlobalAiSettings();
-  final MeditationDao _dao = MeditationDao();
+  final UnifiedAiService _ai;
+  final GlobalAiSettings _settings;
+  final MeditationDao _dao;
+
+  MeditationAiService({UnifiedAiService? ai, GlobalAiSettings? settings, MeditationDao? dao})
+      : _ai = ai ?? UnifiedAiService(),
+        _settings = settings ?? GlobalAiSettings(),
+        _dao = dao ?? MeditationDao();
 
   /// 这是一个保守的本地分流器：只决定是否适合继续普通冥想生成，
   /// 不判断用户的心理状态，也不把关键词当成诊断依据。
@@ -178,13 +184,19 @@ class MeditationAiService {
     MeditationExpertPreferences preferences = const MeditationExpertPreferences(),
   }) async {
     final targetMinutes = durationMinutes.clamp(1, 30).toInt();
-    final targetSegmentCount = math.max(8, (targetMinutes * 60 / 45).ceil()).clamp(8, 48).toInt();
-    final targetMinChars = math.max(130, targetMinutes * 65);
-    final targetMaxChars = math.max(200, targetMinutes * 100);
+    final targetSegmentCount = math.max(8, (targetMinutes * 60 / 25).ceil()).clamp(8, 64).toInt();
+    final targetMinChars = math.max(130, targetMinutes * 50);
+    final targetMaxChars = math.max(200, targetMinutes * 90);
     final normalizedDescription = _limitPromptText(userDescription.trim(), 1200);
     final safety = assessUserInput(normalizedDescription);
     if (safety.requiresImmediateSupport) return null;
     final adaptiveProfile = _buildAdaptiveProfile(recentRecords);
+    final primaryInput = normalizedDescription.isNotEmpty
+        ? normalizedDescription : (currentState.trim().isEmpty ? '日常练习' : currentState.trim());
+    final isSleep = normalizedDescription.isNotEmpty
+        ? RegExp(r'睡前|入睡|睡眠|失眠|助眠').hasMatch(normalizedDescription)
+        : recommended.isSleep || currentState.contains('睡');
+    final useImagery = safety.isNormal && preferences.imageryPreference != '真实感官';
     final input = <String, dynamic>{
       'current_state': currentState,
       'recommended_type': recommended.type,
@@ -194,6 +206,11 @@ class MeditationAiService {
       'target_chinese_character_range': '$targetMinChars-$targetMaxChars',
       'recent_records': _recordsForJson(recentRecords.take(8).toList()),
       'user_description': normalizedDescription,
+      'primary_practice_input': primaryInput,
+      'input_priority': '用户原话决定主题；推荐、状态和历史仅调节引导方式，不得替换主题',
+      'experience_contract_version': 'experiential_mentor_v1',
+      'experience_contract': MeditationMentorGuidance.rules,
+      'imagery_mode': useImagery ? '可选温和想象，并提供真实感官替代' : '真实感官与环境，不深入想象',
       'expert_preferences': preferences.toMap(),
       'safety_level': safety.level,
       'adaptive_practice_profile': adaptiveProfile,
@@ -237,9 +254,9 @@ class MeditationAiService {
     try {
       var raw = await _ai.generateText(
         purpose: 'meditation.daily_script',
-        systemPrompt: _dailyMeditationSystemPrompt,
+        systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}',
         prompt: prompt,
-        maxTokens: (1500 + targetMinutes * 170).clamp(1800, 7000).toInt(),
+        maxTokens: (2000 + targetMinutes * 280).clamp(2200, 12000).toInt(),
         expectJson: true,
         temperature: 0.6,
       );
@@ -251,14 +268,16 @@ class MeditationAiService {
         targetSegmentCount: targetSegmentCount,
         targetMinChars: targetMinChars,
         targetMaxChars: targetMaxChars,
-        isSleep: recommended.isSleep || currentState.contains('睡'),
+        isSleep: isSleep,
+        userInput: primaryInput,
+        useImagery: useImagery,
       );
       var qualityIssues = initialQualityIssues;
       var repairApplied = false;
       if (qualityIssues.isNotEmpty) {
         final repairedRaw = await _ai.generateText(
           purpose: 'meditation.daily_script.repair',
-          systemPrompt: _dailyMeditationSystemPrompt,
+          systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}',
           prompt: _dailyScriptRepairPrompt(
             originalPrompt: prompt,
             originalOutput: raw,
@@ -268,7 +287,7 @@ class MeditationAiService {
             targetMinChars: targetMinChars,
             targetMaxChars: targetMaxChars,
           ),
-          maxTokens: (1600 + targetMinutes * 180).clamp(2000, 7200).toInt(),
+          maxTokens: (2200 + targetMinutes * 280).clamp(2400, 12500).toInt(),
           expectJson: true,
           temperature: 0.42,
         );
@@ -279,7 +298,9 @@ class MeditationAiService {
           targetSegmentCount: targetSegmentCount,
           targetMinChars: targetMinChars,
           targetMaxChars: targetMaxChars,
-          isSleep: recommended.isSleep || currentState.contains('睡'),
+          isSleep: isSleep,
+          userInput: primaryInput,
+          useImagery: useImagery,
         );
         if (repairedMap != null && (parsedMap == null || repairedIssues.length <= qualityIssues.length)) {
           raw = repairedRaw;
@@ -311,6 +332,7 @@ class MeditationAiService {
         parsedMap,
         targetDurationMinutes: targetMinutes,
         targetSegmentCount: targetSegmentCount,
+        isSleep: isSleep,
       );
       final understoodNeed = _readUnderstoodNeed(
         parsedMap,
@@ -674,6 +696,7 @@ class MeditationAiService {
     Map<String, dynamic>? parsed, {
     required int targetDurationMinutes,
     required int targetSegmentCount,
+    required bool isSleep,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final map = parsed ?? <String, dynamic>{};
@@ -698,7 +721,7 @@ class MeditationAiService {
       category: 'AI 冥想专家',
       description: '根据你的输入、专家校准和近期练习反馈生成，可在本地保存并重复练习。',
       durationSeconds: durationSeconds,
-      isSleep: fallback.isSleep || currentState.contains('睡'),
+      isSleep: isSleep,
       source: 'ai_generated',
       steps: safeSteps,
       endingReflection: ending,
@@ -761,52 +784,8 @@ class MeditationAiService {
     return List.generate(safe.length, (i) => MeditationStep(startSecond: math.min(durationSeconds - 1, i * step), text: safe[i]));
   }
 
-  List<MeditationStep> _fitStepTimeline(List<MeditationStep> steps, int durationSeconds) {
-    final safe = steps.where((e) => e.text.trim().isNotEmpty).toList();
-    if (safe.isEmpty) {
-      return const <MeditationStep>[
-        MeditationStep(startSecond: 0, text: '现在，先不用解决所有问题。感受身体被支撑，慢慢回到这一刻。'),
-      ];
-    }
-    if (safe.length == 1) {
-      return <MeditationStep>[
-        MeditationStep(
-          startSecond: 0,
-          text: safe.first.text,
-          pauseAfterSeconds: safe.first.pauseAfterSeconds,
-          intent: safe.first.intent,
-        ),
-      ];
-    }
-    // AI 设计的时间轴通常会给 arrival、允许体验和 closing 更多留白。
-    // 过去这里把所有段落均匀重排，会悄悄抹掉这部分专业节奏；现在只做
-    // 防御性修正，尽量保留原始 start_seconds，并限制停顿不覆盖下一段。
-    final lastAllowedSecond = math.max(1, durationSeconds - 1);
-    final originalLast = safe.last.startSecond.clamp(1, lastAllowedSecond).toInt();
-    final desiredLast = (durationSeconds * 0.88).round().clamp(1, lastAllowedSecond).toInt();
-    final scale = originalLast <= 0 ? 1.0 : desiredLast / originalLast;
-    final fitted = <MeditationStep>[];
-    var previousStart = -1;
-    for (var index = 0; index < safe.length; index++) {
-      final original = safe[index];
-      var start = index == 0 ? 0 : (original.startSecond * scale).round();
-      start = start.clamp(0, lastAllowedSecond).toInt();
-      if (start <= previousStart) start = math.min(lastAllowedSecond, previousStart + 1);
-      final nextOriginal = index + 1 < safe.length ? safe[index + 1] : null;
-      final nextStart = nextOriginal == null
-          ? durationSeconds
-          : math.max(start + 1, (nextOriginal.startSecond * scale).round());
-      final availablePause = math.max(0, nextStart - start - 1);
-      fitted.add(MeditationStep(
-        startSecond: start,
-        text: original.text,
-        pauseAfterSeconds: original.pauseAfterSeconds.clamp(0, math.min(60, availablePause)).toInt(),
-        intent: original.intent,
-      ));
-      previousStart = start;
-    }
-    return fitted;
-  }
+  List<MeditationStep> _fitStepTimeline(List<MeditationStep> steps, int durationSeconds) =>
+      MeditationMentorGuidance.schedule(steps, durationSeconds);
 
   String _readUnderstoodNeed(
     Map<String, dynamic>? parsed, {
@@ -853,6 +832,8 @@ class MeditationAiService {
     required int targetMinChars,
     required int targetMaxChars,
     required bool isSleep,
+    required String userInput,
+    required bool useImagery,
   }) {
     if (map == null) return <String>['输出不是合法 JSON 对象'];
     final issues = <String>[];
@@ -926,9 +907,8 @@ class MeditationAiService {
     if (phases.isNotEmpty && phases.last != 'closing') issues.add('最后一个 segment 必须是 closing');
     var previousIndex = -1;
     var phaseOrderValid = true;
-    for (final phase in requiredPhases) {
-      final index = phases.indexOf(phase);
-      if (index < 0) continue;
+    for (final phase in phases) {
+      final index = requiredPhases.indexOf(phase);
       if (index < previousIndex) phaseOrderValid = false;
       previousIndex = index;
     }
@@ -940,7 +920,7 @@ class MeditationAiService {
       'allow_experience': r'允许|可以|不用|不必|存在|变化|接纳',
       'embodied_shift': r'呼吸|触|身体|脚|手|松|距离|空间|选择',
       'real_life_rehearsal': r'稍后|之后|当|如果|场景|消息|对话|工作|家|任务|回应|想象',
-      'integration': r'如果|愿意|下一步|选择|一件|今天|现在|问问',
+      'integration': r'如果|愿意|下一步|选择|一件|今天|现在|问问|留意|觉察|感受|听',
       'closing': r'睁|看见|周围|听见|回到|休息|入睡|环境',
     };
     for (final entry in phaseGuidanceChecks.entries) {
@@ -983,7 +963,7 @@ class MeditationAiService {
     if (!RegExp(r'可以|也可以|如果愿意|不必|不用|随时|选择').hasMatch(joined)) {
       issues.add('缺少让用户保有选择和调整空间的表达');
     }
-    if (RegExp(r'你必须|你应该|保证|彻底治愈|马上治好|研究表明|课堂|校园|草地|同学').hasMatch(joined)) {
+    if (RegExp(r'你必须|你应该|保证|彻底治愈|马上治好|研究表明').hasMatch(joined)) {
       issues.add('包含说教、夸大、课程化或范文场景措辞');
     }
     if (RegExp(r'自杀|自残|杀人|结束生命|你有病|诊断为').hasMatch(joined)) {
@@ -997,7 +977,9 @@ class MeditationAiService {
     if (practiceFocus is! List || practiceFocus.where((e) => _cleanOneLine(e?.toString()).isNotEmpty).isEmpty) {
       issues.add('practice_focus 至少需要一项');
     }
-    return issues;
+    issues.addAll(MeditationMentorGuidance.qualityIssues(map,
+      userInput: userInput, durationSeconds: targetDurationMinutes * 60, useImagery: useImagery));
+    return issues.toSet().toList();
   }
 
   String _dailyScriptRepairPrompt({
@@ -1021,6 +1003,7 @@ ${qualityIssues.map((e) => '- $e').join('\n')}
 - 正文中文字符建议：$targetMinChars-$targetMaxChars
 - 八阶段依次完整出现：arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing
 - 保留对用户真正需要的深入理解，但把说理转换成身体、情绪和具体生活场景中的体验
+- 优先回应本次用户主题；修复体验合同、短段和说完后的留白，不要只补几个关键词。
 - 每个阶段至少包含一个与阶段相符的可跟随动作；全程保留“可以睁眼、换姿势、停下或回到环境”的选择
 - 不把呼吸、放松、情绪变化或一次练习的结果当作考核；高唤醒内容优先外部感官和支撑面，睡前内容保持低刺激
 - 全部重新组织为自然原创表达，不照抄任何固定范文

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -359,6 +360,7 @@ class MeditationAudioService {
   final ElevenLabsService _elevenLabsService;
   final MultiProviderTtsService _multiProviderTtsService;
   final FlutterTts _systemTts = FlutterTts();
+  int _systemTtsGeneration = 0;
 
   static const List<String> supportedTtsProviders = <String>[
     'elevenlabs',
@@ -1321,15 +1323,38 @@ class MeditationAudioService {
     return buffer.toString().replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
   }
 
-  Future<void> speakWithSystemTts(String text, {double volume = 0.9, double rate = 0.36, double pitch = 0.92}) async {
+  Future<void> speakWithSystemTts(String text, {double volume = 0.9, double rate = 0.36, double pitch = 0.92, bool awaitCompletion = false}) async {
     final clean = text.trim();
     if (clean.isEmpty) return;
+    final generation = ++_systemTtsGeneration;
     await _systemTts.stop();
+    await _systemTts.awaitSpeakCompletion(awaitCompletion);
     await _systemTts.setLanguage('zh-CN');
     await _systemTts.setSpeechRate(rate.clamp(0.2, 0.65).toDouble());
     await _systemTts.setPitch(pitch.clamp(0.6, 1.2).toDouble());
     await _systemTts.setVolume(volume.clamp(0.0, 1.0).toDouble());
-    await _systemTts.speak(clean);
+    if (!awaitCompletion) {
+      await _systemTts.speak(clean);
+      return;
+    }
+    // Some native engines report an error without resolving the awaited speak
+    // call. Release the player boundary on failure rather than waiting forever.
+    final failure = Completer<void>();
+    _systemTts.setErrorHandler((message) {
+      if (generation == _systemTtsGeneration && !failure.isCompleted) {
+        failure.completeError(StateError('系统朗读失败：$message'));
+      }
+    });
+    try {
+      await Future.any<void>([
+        _systemTts.speak(clean).then<void>((_) {}),
+        failure.future,
+      ]);
+    } finally {
+      if (generation == _systemTtsGeneration) {
+        _systemTts.setErrorHandler((_) {});
+      }
+    }
   }
 
   Future<void> stopSystemTts() => _systemTts.stop();

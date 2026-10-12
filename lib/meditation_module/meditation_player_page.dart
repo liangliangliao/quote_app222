@@ -12,6 +12,7 @@ import 'meditation_ai_service.dart';
 import 'meditation_audio_service.dart';
 import 'meditation_dao.dart';
 import 'meditation_models.dart';
+import 'meditation_mentor_guidance.dart';
 import 'meditation_settings_service.dart';
 
 class MeditationPlayerPage extends StatefulWidget {
@@ -68,6 +69,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
   MeditationAudioCacheStats? _cacheStats;
   MeditationFeatureSettings _featureSettings = MeditationFeatureSettings.defaults();
   int _totalPracticeSeconds = 0;
+  final MeditationVoicePacing _voicePacing = MeditationVoicePacing();
 
   @override
   void initState() {
@@ -80,6 +82,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
       duration: const Duration(seconds: 5),
     );
     _guidedPlayer.onPlayerComplete.listen((_) {
+      _voicePacing.complete();
       if (mounted) setState(() => _guidedAudioPlaying = false);
     });
     _currentSegmentIndex = _findCurrentStepIndex(_elapsedSeconds);
@@ -112,7 +115,12 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
 
   Future<void> _loadSegmentAudioSettings() async {
     try {
-      final settings = await _audioService.loadTtsRuntimeSettings(sessionKey: widget.session.key);
+      final configured = await _audioService.loadTtsRuntimeSettings(sessionKey: widget.session.key);
+      // Starting an AI mentor practice should include its voice and pauses.
+      // This is local to the player; keep the saved provider and preferences.
+      final settings = widget.session.isAiGenerated && !widget.timerOnly
+          ? configured.copyWith(segmentVoiceEnabled: true)
+          : configured;
       final keep = await _dao.isSegmentAudioCacheProtected(widget.session.key);
       final stats = await _dao.loadSegmentAudioCacheStats();
       var matchingCaches = settings.segmentVoiceEnabled && !widget.timerOnly
@@ -169,6 +177,9 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
             _audioStatus = '准备进度：$_segmentPreparedCount/$_segmentTotalCount';
           });
           await _prepareSegmentAudios(forceRegenerate: false, playAfter: true);
+          if (mounted && widget.session.isAiGenerated && _audioPreparationFailed) {
+            await _startMentorWithAvailableVoice();
+          }
         }
       } else {
         await _startPractice(playCurrentSegment: true);
@@ -422,9 +433,11 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
     if (index < 0 || index >= widget.session.steps.length) return;
     final step = widget.session.steps[index];
     final cache = _segmentAudioByIndex[index];
+    int? generation;
     try {
       await _guidedPlayer.stop();
       await _audioService.stopSystemTts();
+      generation = _voicePacing.begin(step.pauseAfterSeconds);
       if (cache != null && File(cache.audioPath).existsSync()) {
         await _guidedPlayer.setVolume(_voiceVolume);
         await _guidedPlayer.play(DeviceFileSource(cache.audioPath), volume: _voiceVolume);
@@ -436,15 +449,21 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
           });
         }
       } else {
-        await _audioService.speakWithSystemTts(step.text, volume: _voiceVolume);
         if (mounted) {
           setState(() {
             _guidedAudioPlaying = true;
             _audioStatus = '第 ${index + 1} 段未缓存，已临时使用系统朗读。';
           });
         }
+        await _audioService.speakWithSystemTts(step.text, volume: _voiceVolume,
+          awaitCompletion: widget.session.isAiGenerated);
+        if (widget.session.isAiGenerated) {
+          final completed = _voicePacing.complete(generation);
+          if (mounted && completed) setState(() => _guidedAudioPlaying = false);
+        }
       }
     } catch (e) {
+      if (generation != null) _voicePacing.cancel(generation);
       if (mounted) setState(() => _audioStatus = '当前句语音播放失败：$e');
     }
   }
@@ -521,6 +540,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
   }
 
   Future<void> _stopAllAudio() async {
+    _voicePacing.cancel();
     try {
       await _guidedPlayer.stop();
       await _backgroundPlayer.stop();
@@ -544,6 +564,36 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
   }
 
   Future<void> _toggleGuidedAudio({bool forceRegenerate = false}) async {
+    if (widget.session.isAiGenerated) {
+      // A flat full-script recording loses the designed experience pauses.
+      // Use the current provider in segments, without changing global prefs.
+      if (_guidedAudioPlaying && !forceRegenerate) {
+        setState(() => _running = false);
+        await _pauseAllAudio();
+        return;
+      }
+      setState(() {
+        _generatingGuidedAudio = true;
+        _running = false;
+      });
+      await _pauseAllAudio();
+      try {
+        final settings = _ttsSettings ?? await _audioService.loadTtsRuntimeSettings(sessionKey: widget.session.key);
+        if (!mounted) return;
+        setState(() {
+          _ttsSettings = settings.copyWith(segmentVoiceEnabled: true);
+          _segmentVoiceEnabled = true;
+        });
+        await _prepareSegmentAudios(forceRegenerate: forceRegenerate, playAfter: false);
+        if (!mounted) return;
+        await _startMentorWithAvailableVoice();
+      } catch (e) {
+        if (mounted) setState(() => _audioStatus = '导师引导语音准备失败：$e');
+      } finally {
+        if (mounted) setState(() => _generatingGuidedAudio = false);
+      }
+      return;
+    }
     if (_guidedAudioPlaying) {
       await _guidedPlayer.pause();
       await _audioService.pauseSystemTts();
@@ -600,6 +650,23 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
       }
     } finally {
       if (mounted) setState(() => _generatingGuidedAudio = false);
+    }
+  }
+
+  Future<void> _startMentorWithAvailableVoice() async {
+    if (!mounted) return;
+    if (_audioPreparationFailed) {
+      setState(() {
+        _audioPreparationFailed = false;
+        _blockingAutoAudioPreparation = false;
+        _audioStatus = '缓存语音暂不可用，本次用系统朗读并保留体验停顿。';
+      });
+    }
+    if (!_practiceStarted) {
+      await _startPractice(playCurrentSegment: true);
+    } else {
+      setState(() => _running = true);
+      await _playSegmentVoice(_currentSegmentIndex);
     }
   }
 
@@ -1738,7 +1805,7 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
                               icon: _generatingGuidedAudio
                                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                                   : Icon(_guidedAudioPlaying ? Icons.pause : Icons.record_voice_over),
-                              label: Text(_generatingGuidedAudio ? '生成中……' : (_guidedAudioPlaying ? '暂停整段语音' : '生成/播放整段语音')),
+                              label: Text(_generatingGuidedAudio ? '生成中……' : (widget.session.isAiGenerated ? (_guidedAudioPlaying ? '暂停导师引导' : '播放导师引导') : (_guidedAudioPlaying ? '暂停整段语音' : '生成/播放整段语音'))),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -1775,6 +1842,14 @@ class _MeditationPlayerPageState extends State<MeditationPlayerPage> with Ticker
     if (!_running) return;
     final nextTotalSeconds = _totalPracticeSeconds + 1;
     var nextElapsed = _elapsedSeconds + 1;
+    if (widget.session.isAiGenerated && _segmentVoiceEnabled && !widget.timerOnly) {
+      final boundary = _currentSegmentIndex + 1 < widget.session.steps.length
+          ? widget.session.steps[_currentSegmentIndex + 1].startSecond
+          : widget.session.durationSeconds;
+      final hold = _voicePacing.holdAtBoundary(nextElapsed, boundary);
+      _voicePacing.tick();
+      if (hold) nextElapsed = _elapsedSeconds;
+    }
 
     if (_sleepTimerMinutes > 0 && nextTotalSeconds >= _sleepTimerMinutes * 60) {
       setState(() {

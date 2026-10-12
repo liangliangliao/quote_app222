@@ -56,25 +56,30 @@ class MeditationSessionTemplate {
 class MeditationExpertPreferences {
   final String guidanceStyle;
   final String anchorPreference;
+  final String imageryPreference;
 
   const MeditationExpertPreferences({
     this.guidanceStyle = '温柔陪伴',
     this.anchorPreference = '身体触点',
+    this.imageryPreference = '温和画面',
   });
 
   MeditationExpertPreferences copyWith({
     String? guidanceStyle,
     String? anchorPreference,
+    String? imageryPreference,
   }) {
     return MeditationExpertPreferences(
       guidanceStyle: guidanceStyle ?? this.guidanceStyle,
       anchorPreference: anchorPreference ?? this.anchorPreference,
+      imageryPreference: imageryPreference ?? this.imageryPreference,
     );
   }
 
   Map<String, String> toMap() => <String, String>{
         'guidance_style': guidanceStyle,
         'anchor_preference': anchorPreference,
+        'imagery_preference': imageryPreference,
       };
 }
 
