@@ -34,6 +34,21 @@ class ZhaojianHostOracle extends ZhaojianOracle {
   }
 
   @override
+  Future<ZAlignResult> scoreAlignment({
+    required String situation,
+    required String optionA,
+    required String optionB,
+    required List<ZDesire> desires,
+  }) {
+    return text.scoreAlignment(
+      situation: situation,
+      optionA: optionA,
+      optionB: optionB,
+      desires: desires,
+    );
+  }
+
+  @override
   Future<ZScoreResult> scoreMotives({
     required String situation,
     required List<ZMotive> motives,

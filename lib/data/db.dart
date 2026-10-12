@@ -33,7 +33,8 @@ class AppDatabase {
       // v35: rebuild legacy 知行树 action tables that still contain required
       // columns such as diagnosis_id from pre-product schemas.
       // v36: 照见模块新增 z_ 前缀表（模块自管迁移，幂等）。
-      version: 36,
+      // v37: 照见 schema v2（z_decision 新增 align_json）；模块的 migrate 按自己的版本补列。
+      version: 37,
       onCreate: _create,
       onUpgrade: _upgrade,
     );

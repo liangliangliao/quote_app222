@@ -138,6 +138,20 @@ class GrowthPage extends StatelessWidget {
     );
   }
 
+  Widget _alignSection(List<ZDecision> rev) {
+    final ({double? early, double? recent})? t = alignTrend(rev);
+    String f(double? v) => v == null ? '-' : v.round().toString();
+    return ZSection(
+      title: '选择贴近欲求吗？',
+      children: <Widget>[
+        ZNote(t == null
+            ? '做过「一致度与难度」并且开过牌的决定还不到 2 个。看的是：你实际选的那一项，对你所选欲求的一年一致度，是不是越来越高。'
+            : '所选项的一年一致度：早期 ${f(t.early)} → 近期 ${f(t.recent)}（50 表示无关）。'
+                '一致度来自你对照的欲求假设，欲求若变了，这里的数也会变；样本小时别下结论。'),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -169,6 +183,7 @@ class GrowthPage extends StatelessWidget {
               _winSection(rev),
               _freedomSection(rev),
               _imagerySection(rev),
+              _alignSection(rev),
               ZSection(
                 title: '反应与身体信号',
                 children: <Widget>[

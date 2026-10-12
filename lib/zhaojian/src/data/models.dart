@@ -137,6 +137,65 @@ List<int> _decodeInts(String? raw) {
   }
 }
 
+/// 一致度与难度的摘要：封存时存下，开牌时对照，成长页统计「选择是否越来越贴近欲求」。
+class ZAlignSummary {
+  const ZAlignSummary({
+    required this.yearA,
+    required this.yearB,
+    this.diffA = '',
+    this.diffB = '',
+    this.manual = false,
+    this.weakOnly = false,
+  });
+
+  /// 两个选项在「一年」尺度上对所选欲求的一致度，0 到 100，50 表示无关。
+  final int yearA;
+  final int yearB;
+
+  /// 难度：易 / 中 / 难 / 空。
+  final String diffA;
+  final String diffB;
+
+  /// 是否是用户自评（自述，弱证据）。
+  final bool manual;
+
+  /// 对照的欲求是否全是自述（没有被行为支持的）。
+  final bool weakOnly;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ya': yearA,
+        'yb': yearB,
+        'da': diffA,
+        'db': diffB,
+        'man': manual,
+        'weak': weakOnly,
+      };
+
+  static ZAlignSummary? fromJsonString(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final dynamic v = jsonDecode(raw);
+      if (v is! Map) return null;
+      final dynamic a = v['ya'];
+      final dynamic b = v['yb'];
+      if (a is! num || b is! num) return null;
+      return ZAlignSummary(
+        yearA: a.toInt(),
+        yearB: b.toInt(),
+        diffA: (v['da'] ?? '').toString(),
+        diffB: (v['db'] ?? '').toString(),
+        manual: v['man'] == true,
+        weakOnly: v['weak'] == true,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 指定选项（'a' / 'b'）的一年一致度。
+  int yearOf(String side) => side == 'a' ? yearA : yearB;
+}
+
 /// 一次决策：从封存预测到开牌。
 class ZDecision {
   ZDecision({
@@ -164,6 +223,7 @@ class ZDecision {
     this.notes = const <String>[],
     this.imageryDepth,
     this.imagerySymmetry,
+    this.align,
   });
 
   int? id;
@@ -214,6 +274,9 @@ class ZDecision {
   final double? imageryDepth;
   final double? imagerySymmetry;
 
+  /// 一致度与难度摘要；没做这一步就是 null。
+  final ZAlignSummary? align;
+
   bool get revealed => actual != null;
   bool get hit => actual != null && actual == pred;
 
@@ -242,6 +305,7 @@ class ZDecision {
         'notes_json': jsonEncode(notes),
         'imagery_depth': imageryDepth,
         'imagery_sym': imagerySymmetry,
+        'align_json': align == null ? null : jsonEncode(align!.toJson()),
       };
 
   factory ZDecision.fromRow(Map<String, Object?> r) {
@@ -275,6 +339,7 @@ class ZDecision {
       notes: _decodeStrings(r['notes_json'] as String?),
       imageryDepth: asDouble(r['imagery_depth']),
       imagerySymmetry: asDouble(r['imagery_sym']),
+      align: ZAlignSummary.fromJsonString(r['align_json'] as String?),
     );
   }
 }

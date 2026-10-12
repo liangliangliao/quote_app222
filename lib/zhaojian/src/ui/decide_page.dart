@@ -56,6 +56,16 @@ class _DecidePageState extends State<DecidePage> {
   int _freedom = 5;
   int? _jtPred;
 
+  // 一致度与难度
+  final TextEditingController _desireText = TextEditingController();
+  final List<ZDesire> _selDesires = <ZDesire>[];
+  ZAlignResult _alignRes = const ZAlignResult();
+  bool _useManual = false;
+  int _manA = 50;
+  int _manB = 50;
+  String _manDiffA = '';
+  String _manDiffB = '';
+
   @override
   void dispose() {
     _q.dispose();
@@ -63,6 +73,7 @@ class _DecidePageState extends State<DecidePage> {
     _b.dispose();
     _ownText.dispose();
     _cond.dispose();
+    _desireText.dispose();
     for (final TextEditingController c in _notes) {
       c.dispose();
     }
@@ -594,6 +605,290 @@ class _DecidePageState extends State<DecidePage> {
     );
   }
 
+  // ---------------------------------------------------------------- 一致度与难度
+
+  List<ZDesire> _availableDesires() {
+    final List<ZDesire> out = <ZDesire>[];
+    for (final ZHypothesis h in widget.controller.hypotheses) {
+      out.add(ZDesire(h.text, strong: h.status == 1));
+    }
+    out.sort((ZDesire x, ZDesire y) =>
+        (y.strong ? 1 : 0).compareTo(x.strong ? 1 : 0));
+    return out;
+  }
+
+  void _addDesire(ZDesire d) {
+    if (_selDesires.contains(d)) return;
+    if (_selDesires.length >= 3) {
+      zSnack(context, '最多对照 3 条欲求');
+      return;
+    }
+    setState(() {
+      _selDesires.add(d);
+      _alignRes = const ZAlignResult();
+    });
+  }
+
+  void _removeDesire(int i) {
+    setState(() {
+      _selDesires.removeAt(i);
+      _alignRes = const ZAlignResult();
+    });
+  }
+
+  void _addManualDesire() {
+    final String t = _desireText.text.trim();
+    if (t.isEmpty) return;
+    _addDesire(ZDesire(t));
+    _desireText.clear();
+  }
+
+  Future<void> _runAlign() async {
+    if (_busy) return;
+    if (_selDesires.isEmpty) {
+      zSnack(context, '先选一条要对照的欲求（可手写）');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _msg = '正在评估一致度与难度…（约半分钟）';
+    });
+    ZAlignResult res = const ZAlignResult();
+    try {
+      res = await widget.controller.oracle
+          .scoreAlignment(
+            situation: _situation(),
+            optionA: _a.text.trim(),
+            optionB: _b.text.trim(),
+            desires: List<ZDesire>.from(_selDesires),
+          )
+          .timeout(const Duration(seconds: 120));
+    } catch (_) {
+      res = const ZAlignResult();
+    }
+    if (!mounted) return;
+    setState(() {
+      _alignRes = res;
+      _busy = false;
+      _msg = res.isEmpty ? '没有可用的引擎，或评估没有完成。可以在下面自己评。' : '';
+    });
+  }
+
+  ZAlignCalc? _alignCalc() {
+    if (!_alignRes.isEmpty) return calcAlignment(_alignRes, _selDesires);
+    if (_useManual) return manualAlignment(_manA, _manB);
+    return null;
+  }
+
+  ZDifficulty _difficultyOf(String side) {
+    if (!_alignRes.isEmpty) return side == 'a' ? _alignRes.diffA : _alignRes.diffB;
+    return ZDifficulty(tier: side == 'a' ? _manDiffA : _manDiffB);
+  }
+
+  ZAlignSummary? _alignSummary() {
+    final ZAlignCalc? c = _alignCalc();
+    if (c == null) return null;
+    return ZAlignSummary(
+      yearA: c.yearA,
+      yearB: c.yearB,
+      diffA: _difficultyOf('a').tier,
+      diffB: _difficultyOf('b').tier,
+      manual: c.manual,
+      weakOnly: c.weakOnly,
+    );
+  }
+
+  String _reasonOf(String side) {
+    if (_alignRes.isEmpty) return '';
+    final List<String> parts = <String>[];
+    for (final ZAlignRow r in _alignRes.rows) {
+      final String t = side == 'a' ? r.reasonA : r.reasonB;
+      if (t.trim().isNotEmpty) parts.add(t.trim());
+    }
+    return parts.join('；');
+  }
+
+  Widget _alignCard(String side, ZAlignCalc c, ZSums s) {
+    final bool a = side == 'a';
+    final int year = c.yearOf(side);
+    final double share = pullShare(s, side);
+    final int q = quadrantOf(year, share);
+    final ZDifficulty d = _difficultyOf(side);
+    final String reason = _reasonOf(side);
+    return ZItem(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('${a ? 'A' : 'B'}：${(a ? _a : _b).text.trim()}',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(
+              '一致度：本周 ${a ? c.weekA : c.weekB} · 一年 $year · 十年 ${a ? c.decadeA : c.decadeB}'
+              '${c.manual ? '' : '（一年的范围 ${a ? c.loA : c.loB}–${a ? c.hiA : c.hiB}）'}'),
+          const ZNote('50 表示无关，低于 50 是在背离。'),
+          ZBar(label: '一年的一致度', value: year / 100),
+          Text('拉力：${zPercent(share)}（来自天平）'),
+          Text(ZCopy.quadrants[q][0],
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(ZCopy.quadrants[q][1]),
+          const SizedBox(height: 4),
+          Text(
+              '难度：${d.tier.isEmpty ? '未评' : d.tier}'
+              '${d.ring.isEmpty ? '' : ' · 要动「${d.ring}」'}'
+              '${d.reason.isEmpty ? '' : ' · ${d.reason}'}',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (d.ladder.isNotEmpty)
+            ZNote('阶梯：${<String>[
+              for (int i = 0; i < d.ladder.length; i++)
+                '${<String>['小', '中', '大'][i]}：${d.ladder[i]}',
+            ].join('　')}'),
+          if (d.externals.isNotEmpty)
+            ZNote('外部条件：${d.externals.map((ZExternal e) => '[${e.control}]${e.text}').join('；')}'),
+          if (d.externals.any((ZExternal e) => e.uncontrollable))
+            const ZNote('有不可控的外部条件：这个选项的难度不只取决于你。', warn: true),
+          if (reason.isNotEmpty) ZNote('依据：$reason'),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepAlign() {
+    final ZAlignCalc? c = _alignCalc();
+    final ZSums s = sumMotives(_allMotives());
+    final List<ZDesire> avail = _availableDesires()
+        .where((ZDesire d) => !_selDesires.contains(d))
+        .toList();
+    final bool engine = widget.controller.oracle.sendsData;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        ZSection(
+          title: '一致度与难度：哪个选择更通向你要的？',
+          children: <Widget>[
+            const ZNote(ZCopy.alignmentNote),
+            const ZNote('已选对照的欲求（点叉移除）'),
+            if (_selDesires.isEmpty)
+              const ZNote('还没选。可以从下面的假设里选，也可以手写一条。', warn: true)
+            else
+              Wrap(
+                spacing: 6,
+                children: <Widget>[
+                  for (int i = 0; i < _selDesires.length; i++)
+                    InputChip(
+                      label: Text(
+                        '${_selDesires[i].text} · ${_selDesires[i].strong ? '被行为支持' : '自述'}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      onDeleted: () => _removeDesire(i),
+                    ),
+                ],
+              ),
+            if (_selDesires.isNotEmpty && _selDesires.every((ZDesire d) => !d.strong))
+              const ZNote('目前只有自述类欲求：结果只作参考。', warn: true),
+            if (avail.isNotEmpty)
+              Wrap(
+                spacing: 6,
+                children: <Widget>[
+                  for (final ZDesire d in avail)
+                    ActionChip(
+                      label: Text(
+                        '＋ ${d.text} · ${d.strong ? '被行为支持' : '自述'}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      onPressed: () => _addDesire(d),
+                    ),
+                ],
+              ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _desireText,
+              decoration: zInput('手写一条我认为自己真正想要的（算自述）'),
+            ),
+            OutlinedButton(
+              onPressed: _addManualDesire,
+              child: const Text('加入对照'),
+            ),
+          ],
+        ),
+        ZSection(
+          children: <Widget>[
+            if (engine) ...<Widget>[
+              ZNote('点击后，题面和所选欲求会发送给：${widget.controller.oracle.label}。', warn: true),
+              FilledButton(
+                onPressed: _busy ? null : _runAlign,
+                child: const Text('评估一致度与难度'),
+              ),
+            ] else
+              const ZNote('没有 AI 引擎：请在下面自己评。'),
+            if (_msg.isNotEmpty) ZNote(_msg, warn: true),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('自己评（自述，弱证据）', style: TextStyle(fontSize: 14)),
+              value: _useManual,
+              onChanged: (bool v) => setState(() => _useManual = v),
+            ),
+            if (_useManual) ...<Widget>[
+              ZNote('A 对我真正要的帮助：$_manA'),
+              Slider(
+                value: _manA.toDouble(),
+                min: 0,
+                max: 100,
+                divisions: 20,
+                label: '$_manA',
+                onChanged: (double v) => setState(() => _manA = v.round()),
+              ),
+              ZNote('B 对我真正要的帮助：$_manB'),
+              Slider(
+                value: _manB.toDouble(),
+                min: 0,
+                max: 100,
+                divisions: 20,
+                label: '$_manB',
+                onChanged: (double v) => setState(() => _manB = v.round()),
+              ),
+              const ZNote('A 的难度：'),
+              zChoice(
+                labels: ZCopy.difficultyTiers,
+                selected: ZCopy.difficultyTiers.indexOf(_manDiffA) < 0
+                    ? null
+                    : ZCopy.difficultyTiers.indexOf(_manDiffA),
+                onSelect: (int i) =>
+                    setState(() => _manDiffA = ZCopy.difficultyTiers[i]),
+              ),
+              const ZNote('B 的难度：'),
+              zChoice(
+                labels: ZCopy.difficultyTiers,
+                selected: ZCopy.difficultyTiers.indexOf(_manDiffB) < 0
+                    ? null
+                    : ZCopy.difficultyTiers.indexOf(_manDiffB),
+                onSelect: (int i) =>
+                    setState(() => _manDiffB = ZCopy.difficultyTiers[i]),
+              ),
+              const ZNote('自评是自述，不是证据；也可以不评，直接下一步。'),
+            ],
+          ],
+        ),
+        if (c != null) ...<Widget>[
+          _alignCard('a', c, s),
+          _alignCard('b', c, s),
+          if (c.confidence != null)
+            ZNote(
+                '模型置信 ${zPercent(_alignRes.confidence)}，按欲求的证据等级封顶后为 ${zPercent(c.confidence)}。'
+                '${c.confidence! < 0.6 ? '置信偏低，只作参考。' : ''}',
+                warn: c.confidence! < 0.6),
+          if (c.flip)
+            const ZNote('排序随欲求而变：结论取决于你到底要什么，先去验证欲求（在「主线与假设」里用行为检验）。', warn: true),
+        ],
+        Row(
+          children: <Widget>[
+            OutlinedButton(onPressed: () => _go(3), child: const Text('上一步')),
+            const SizedBox(width: 8),
+            FilledButton(onPressed: () => _go(5), child: const Text('下一步：下注')),
+          ],
+        ),
+      ],
+    );
+  }
+
   // ---------------------------------------------------------------- 第 4 步
 
   Future<void> _seal() async {
@@ -620,6 +915,7 @@ class _DecidePageState extends State<DecidePage> {
       notes: _notes.map((TextEditingController c) => c.text.trim()).toList(),
       imageryDepth: im.count == 0 ? null : im.average,
       imagerySymmetry: im.symmetry,
+      align: _alignSummary(),
     );
     await widget.controller.seal(d);
     if (!mounted) return;
@@ -685,7 +981,7 @@ class _DecidePageState extends State<DecidePage> {
         ),
         Row(
           children: <Widget>[
-            OutlinedButton(onPressed: () => _go(3), child: const Text('回天平')),
+            OutlinedButton(onPressed: () => _go(4), child: const Text('回一致度')),
             const SizedBox(width: 8),
             FilledButton(onPressed: _seal, child: const Text('封存预测')),
           ],
@@ -706,6 +1002,8 @@ class _DecidePageState extends State<DecidePage> {
         return _stepCards();
       case 3:
         return _stepBalance();
+      case 4:
+        return _stepAlign();
       default:
         return _stepBet();
     }
@@ -718,6 +1016,7 @@ class _DecidePageState extends State<DecidePage> {
       '补全动机',
       '体验卡',
       '天平',
+      '一致度与难度',
       '下注',
     ];
     return Scaffold(
@@ -731,7 +1030,7 @@ class _DecidePageState extends State<DecidePage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
         children: <Widget>[
-          ZNote('第 ${_step + 1} / 5 步：${names[_step]}'),
+          ZNote('第 ${_step + 1} / 6 步：${names[_step]}'),
           _body(),
         ],
       ),

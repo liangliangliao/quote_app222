@@ -28,6 +28,100 @@ abstract class ZhaojianOracle {
     required String situation,
     required List<ZMotive> motives,
   });
+
+  /// 评估两个选项对所选欲求的一致度（本周/一年/十年）和难度。
+  /// 默认没有引擎：返回空结果，界面改为用户自评。
+  Future<ZAlignResult> scoreAlignment({
+    required String situation,
+    required String optionA,
+    required String optionB,
+    required List<ZDesire> desires,
+  }) async =>
+      const ZAlignResult();
+}
+
+/// 要对照的欲求。strong 表示它已被后来的行为反复支持，否则只是自述。
+class ZDesire {
+  const ZDesire(this.text, {this.strong = false});
+
+  final String text;
+  final bool strong;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ZDesire && other.text == text && other.strong == strong;
+
+  @override
+  int get hashCode => Object.hash(text, strong);
+}
+
+/// 一个欲求对两个选项的评估：[本周, 一年, 十年]，0 到 100，50 表示无关。
+class ZAlignRow {
+  const ZAlignRow({
+    required this.a,
+    required this.b,
+    this.reasonA = '',
+    this.reasonB = '',
+  });
+
+  final List<int> a;
+  final List<int> b;
+  final String reasonA;
+  final String reasonB;
+}
+
+/// 完成一个选项所需要的外部条件，以及可控度（可控/可影响/不可控）。
+class ZExternal {
+  const ZExternal(this.text, this.control);
+
+  final String text;
+  final String control;
+
+  bool get uncontrollable => control == '不可控';
+}
+
+/// 一个选项的难度评估。
+class ZDifficulty {
+  const ZDifficulty({
+    this.tier = '',
+    this.ring = '',
+    this.reason = '',
+    this.ladder = const <String>[],
+    this.externals = const <ZExternal>[],
+  });
+
+  /// 易 / 中 / 难 / 空。
+  final String tier;
+
+  /// 要动链条的哪一环：认知 / 动机 / 行为 / 环境 / 空。
+  final String ring;
+  final String reason;
+
+  /// 小、中、大三档阶梯。
+  final List<String> ladder;
+  final List<ZExternal> externals;
+}
+
+/// 一致度与难度的评估结果。
+class ZAlignResult {
+  const ZAlignResult({
+    this.rows = const <ZAlignRow>[],
+    this.diffA = const ZDifficulty(),
+    this.diffB = const ZDifficulty(),
+    this.confidence,
+    this.source = '',
+  });
+
+  /// 与传入的欲求一一对应。
+  final List<ZAlignRow> rows;
+  final ZDifficulty diffA;
+  final ZDifficulty diffB;
+
+  /// 模型自报的置信度 0 到 1。
+  final double? confidence;
+  final String source;
+
+  bool get isEmpty => rows.isEmpty;
 }
 
 /// 打分结果：拉力与置信度。

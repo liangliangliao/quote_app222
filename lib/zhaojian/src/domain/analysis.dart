@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../copy.dart';
 import '../data/models.dart';
+import '../zhaojian_oracle.dart';
 
 /// 全部是纯函数，不碰数据库、不碰界面，方便单元测试。
 
@@ -423,4 +424,170 @@ ZImageryStat? imageryStat(Iterable<ZDecision> revealed) {
     deepHit: hitRateOf(deep) ?? 0,
     shallowHit: hitRateOf(shallow) ?? 0,
   );
+}
+
+// ---------------------------------------------------------------------------
+// 一致度与难度
+// ---------------------------------------------------------------------------
+
+/// 一致度的汇总：每个选项在三个尺度上按欲求的证据强弱加权平均。
+class ZAlignCalc {
+  const ZAlignCalc({
+    required this.weekA,
+    required this.yearA,
+    required this.decadeA,
+    required this.loA,
+    required this.hiA,
+    required this.weekB,
+    required this.yearB,
+    required this.decadeB,
+    required this.loB,
+    required this.hiB,
+    required this.flip,
+    required this.confidence,
+    required this.manual,
+    required this.weakOnly,
+  });
+
+  final int weekA;
+  final int yearA;
+  final int decadeA;
+
+  /// 一年尺度上，各个欲求给出的最低与最高值。
+  final int loA;
+  final int hiA;
+  final int weekB;
+  final int yearB;
+  final int decadeB;
+  final int loB;
+  final int hiB;
+
+  /// 排序随欲求而变：结论取决于你到底要什么。
+  final bool flip;
+
+  /// 模型自报置信度，按欲求的证据等级封顶后的值；没有则为 null。
+  final double? confidence;
+
+  /// 是否是用户自评。
+  final bool manual;
+
+  /// 对照的欲求是否全是自述。
+  final bool weakOnly;
+
+  int yearOf(String side) => side == 'a' ? yearA : yearB;
+}
+
+/// 强证据（被行为支持）权重 1，自述权重 0.3。
+double desireWeight(ZDesire d) => d.strong ? 1.0 : 0.3;
+
+/// 把引擎结果按欲求的证据强弱加权汇总。没有结果返回 null。
+ZAlignCalc? calcAlignment(ZAlignResult r, List<ZDesire> desires) {
+  final int n = math.min(r.rows.length, desires.length);
+  if (n == 0) return null;
+  double totalW = 0;
+  for (int i = 0; i < n; i++) {
+    totalW += desireWeight(desires[i]);
+  }
+  int avg(int Function(ZAlignRow row) pick) {
+    double sum = 0;
+    for (int i = 0; i < n; i++) {
+      sum += desireWeight(desires[i]) * pick(r.rows[i]);
+    }
+    return (sum / totalW).round();
+  }
+
+  int at(List<int> v, int k) => k < v.length ? v[k].clamp(0, 100).toInt() : 50;
+  int loA = 100, hiA = 0, loB = 100, hiB = 0;
+  bool up = false, down = false;
+  for (int i = 0; i < n; i++) {
+    final int ya = at(r.rows[i].a, 1);
+    final int yb = at(r.rows[i].b, 1);
+    loA = math.min(loA, ya);
+    hiA = math.max(hiA, ya);
+    loB = math.min(loB, yb);
+    hiB = math.max(hiB, yb);
+    if (ya > yb) up = true;
+    if (ya < yb) down = true;
+  }
+  final bool anyStrong = desires.take(n).any((ZDesire d) => d.strong);
+  final double cap = anyStrong ? 0.9 : 0.5;
+  final double? conf = r.confidence == null
+      ? null
+      : math.min(r.confidence!.clamp(0.0, 1.0).toDouble(), cap);
+  return ZAlignCalc(
+    weekA: avg((ZAlignRow x) => at(x.a, 0)),
+    yearA: avg((ZAlignRow x) => at(x.a, 1)),
+    decadeA: avg((ZAlignRow x) => at(x.a, 2)),
+    loA: loA,
+    hiA: hiA,
+    weekB: avg((ZAlignRow x) => at(x.b, 0)),
+    yearB: avg((ZAlignRow x) => at(x.b, 1)),
+    decadeB: avg((ZAlignRow x) => at(x.b, 2)),
+    loB: loB,
+    hiB: hiB,
+    flip: up && down,
+    confidence: conf,
+    manual: false,
+    weakOnly: !anyStrong,
+  );
+}
+
+/// 用户自评：只有一年尺度的一个数，三个尺度取同一个值，没有范围和置信度。
+ZAlignCalc manualAlignment(int a, int b) {
+  final int x = a.clamp(0, 100).toInt();
+  final int y = b.clamp(0, 100).toInt();
+  return ZAlignCalc(
+    weekA: x,
+    yearA: x,
+    decadeA: x,
+    loA: x,
+    hiA: x,
+    weekB: y,
+    yearB: y,
+    decadeB: y,
+    loB: y,
+    hiB: y,
+    flip: false,
+    confidence: null,
+    manual: true,
+    weakOnly: true,
+  );
+}
+
+/// 某个选项在天平里的拉力占比（两边加起来为 1）；没有评分时为 0.5。
+double pullShare(ZSums s, String side) {
+  final double total = s.a + s.b;
+  if (total <= 0) return 0.5;
+  return (side == 'a' ? s.a : s.b) / total;
+}
+
+/// 「一致度 × 拉力」四象限的下标，对应 [ZCopy.quadrants]：
+/// 0 高一致高拉力 / 1 高一致低拉力 / 2 低一致高拉力 / 3 低一致低拉力。
+int quadrantOf(int year, double share) {
+  final bool highAlign = year >= 60;
+  final bool highPull = share > 0.5;
+  if (highAlign && highPull) return 0;
+  if (highAlign) return 1;
+  if (highPull) return 2;
+  return 3;
+}
+
+/// 「选择贴近欲求」：所选项的一年一致度，早期与近期的平均。
+/// 做过一致度的已开牌决定不足两个时返回 null。
+({double? early, double? recent})? alignTrend(List<ZDecision> revealed) {
+  final List<ZDecision> q = revealed
+      .where((ZDecision d) => d.actual != null && d.align != null)
+      .toList();
+  if (q.length < 2) return null;
+  final ({List<ZDecision> early, List<ZDecision> recent}) h = splitHalves(q);
+  double? mean(List<ZDecision> ds) {
+    if (ds.isEmpty) return null;
+    double sum = 0;
+    for (final ZDecision d in ds) {
+      sum += d.align!.yearOf(d.actual!);
+    }
+    return sum / ds.length;
+  }
+
+  return (early: mean(h.early), recent: mean(h.recent));
 }

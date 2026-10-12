@@ -202,6 +202,134 @@ class ZhaojianAiOracle extends ZhaojianOracle {
     return ZScoreResult(pulls: pulls, confidences: confs, source: sourceNote);
   }
 
+  // ------------------------------------------------------------ 一致度与难度
+
+  static const String alignSystemPrompt =
+      '你是严谨的决策对照助手，依据叔本华：根本欲求不变，行为与欲求不符常因认识有误而选错手段；'
+      '欲求只是假设，证据强弱不同。只输出 JSON 对象，不输出解释和代码围栏。不替用户做决定。';
+
+  @override
+  Future<ZAlignResult> scoreAlignment({
+    required String situation,
+    required String optionA,
+    required String optionB,
+    required List<ZDesire> desires,
+  }) async {
+    if (desires.isEmpty || !await _isAvailable()) return const ZAlignResult();
+    try {
+      final StringBuffer list = StringBuffer();
+      for (int i = 0; i < desires.length; i++) {
+        list.writeln('${i + 1}. ${desires[i].text}'
+            '（${desires[i].strong ? '被行为支持' : '自述'}）');
+      }
+      final String prompt = '$situation\n'
+          '要对照的欲求假设（按顺序，括号内是证据等级）：\n$list'
+          '请只回答：每个选项对每个欲求，在「本周」「一年」「十年」三个尺度上推进该欲求的程度'
+          '（0 到 100 的整数；50 表示无关，低于 50 表示在背离）；以及每个选项做起来的难度，'
+          '和完成它需要的外部条件（资源、他人的同意或配合、时机、身体条件等）及可控度。'
+          '注意：一致度不是对错判断，也不保证幸福；证据弱就在 why 里说明；不要替用户决定。'
+          '只输出 JSON 对象：'
+          '{"rows":[{"a":{"w":0,"y":0,"d":0,"why":"不超过30字"},'
+          '"b":{"w":0,"y":0,"d":0,"why":"不超过30字"}}],'
+          '"diff":{"a":{"tier":"易|中|难","ring":"认知|动机|行为|环境","why":"不超过30字",'
+          '"ladder":["小步","中步","大步"],"ext":[{"t":"条件","c":"可控|可影响|不可控"}]},'
+          '"b":{同上}},"conf":0到1的数字}。rows 与欲求按顺序一一对应；w 本周，y 一年，d 十年。';
+      final String raw = await _call(
+        prompt: prompt,
+        systemPrompt: alignSystemPrompt,
+        purpose: 'zhaojian.score_alignment',
+        maxTokens: 2500,
+      ).timeout(callTimeout);
+      return parseAlignment(raw, desires.length);
+    } catch (_) {
+      return const ZAlignResult();
+    }
+  }
+
+  /// 把模型返回的文本解析成一致度结果。解析失败、行数对不上时返回空。
+  static ZAlignResult parseAlignment(String raw, int desireCount) {
+    final dynamic obj = _parseObject(raw);
+    if (obj is! Map) return const ZAlignResult();
+    final dynamic rowsRaw = obj['rows'];
+    if (rowsRaw is! List || rowsRaw.length < desireCount) {
+      return const ZAlignResult();
+    }
+    int num100(dynamic v) {
+      final num? n = v is num ? v : num.tryParse('$v');
+      if (n == null || n.isNaN) return 50;
+      return n.round().clamp(0, 100).toInt();
+    }
+
+    List<int> triple(dynamic m) {
+      if (m is! Map) return <int>[50, 50, 50];
+      return <int>[num100(m['w']), num100(m['y']), num100(m['d'])];
+    }
+
+    final List<ZAlignRow> rows = <ZAlignRow>[];
+    for (int i = 0; i < desireCount; i++) {
+      final dynamic r = rowsRaw[i];
+      if (r is! Map) return const ZAlignResult();
+      rows.add(ZAlignRow(
+        a: triple(r['a']),
+        b: triple(r['b']),
+        reasonA: r['a'] is Map ? '${(r['a'] as Map)['why'] ?? ''}' : '',
+        reasonB: r['b'] is Map ? '${(r['b'] as Map)['why'] ?? ''}' : '',
+      ));
+    }
+    final dynamic diff = obj['diff'];
+    final dynamic confRaw = obj['conf'];
+    final double? conf =
+        confRaw is num ? confRaw.toDouble().clamp(0.0, 1.0).toDouble() : null;
+    return ZAlignResult(
+      rows: rows,
+      diffA: _parseDifficulty(diff is Map ? diff['a'] : null),
+      diffB: _parseDifficulty(diff is Map ? diff['b'] : null),
+      confidence: conf,
+      source: sourceNote,
+    );
+  }
+
+  static ZDifficulty _parseDifficulty(dynamic d) {
+    if (d is! Map) return const ZDifficulty();
+    final String tier = '${d['tier'] ?? ''}'.trim();
+    final String ring = '${d['ring'] ?? ''}'.trim();
+    final dynamic ladder = d['ladder'];
+    final dynamic ext = d['ext'];
+    return ZDifficulty(
+      tier: ZCopy.difficultyTiers.contains(tier) ? tier : '',
+      ring: ZCopy.rings.contains(ring) ? ring : '',
+      reason: '${d['why'] ?? ''}'.trim(),
+      ladder: ladder is List
+          ? ladder.map((dynamic e) => '$e'.trim()).where((String e) => e.isNotEmpty).take(3).toList()
+          : <String>[],
+      externals: ext is List
+          ? ext
+              .whereType<Map>()
+              .map((Map e) => ZExternal(
+                    '${e['t'] ?? ''}'.trim(),
+                    ZCopy.controlLevels.contains('${e['c']}'.trim())
+                        ? '${e['c']}'.trim()
+                        : '可影响',
+                  ))
+              .where((ZExternal e) => e.text.isNotEmpty)
+              .take(4)
+              .toList()
+          : <ZExternal>[],
+    );
+  }
+
+  static dynamic _parseObject(String raw) {
+    final String s = raw.replaceAll('```json', '').replaceAll('```', '').trim();
+    final int a = s.indexOf('{');
+    final int b = s.lastIndexOf('}');
+    if (a < 0 || b <= a) return null;
+    try {
+      return jsonDecode(s.substring(a, b + 1));
+    } catch (_) {
+      return null;
+    }
+  }
+
   static List<dynamic> _parseArray(String raw) {
     final String s = raw.replaceAll('```json', '').replaceAll('```', '').trim();
     final int a = s.indexOf('[');

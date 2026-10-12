@@ -9,7 +9,7 @@ class ZhaojianSchema {
   const ZhaojianSchema._();
 
   /// 模块自管的 schema 版本，与宿主 database version 无关。
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
 
   static const String _metaKey = 'schema_version';
 
@@ -45,7 +45,8 @@ class ZhaojianSchema {
       miss_logged     INTEGER NOT NULL DEFAULT 0,
       notes_json      TEXT,
       imagery_depth   REAL,
-      imagery_sym     REAL
+      imagery_sym     REAL,
+      align_json      TEXT
     )
     ''',
     '''
@@ -111,15 +112,26 @@ class ZhaojianSchema {
     );
   }
 
-  /// 目前只有 v1：迁移就是幂等地补建缺失的表。
+  /// 迁移幂等：先补建缺失的表，再按模块自己记录的版本补列。
+  /// v2：z_decision 新增 align_json（一致度与难度）。
   static Future<void> migrate(Database db, int oldV, int newV) async {
     await createAll(db);
+    final int stored = await storedVersion(db);
+    if (stored < 2 && !await _hasColumn(db, 'z_decision', 'align_json')) {
+      await db.execute('ALTER TABLE z_decision ADD COLUMN align_json TEXT');
+    }
     await db.update(
       'z_meta',
       <String, Object?>{'value': '$schemaVersion'},
       where: 'key = ?',
       whereArgs: <Object?>[_metaKey],
     );
+  }
+
+  static Future<bool> _hasColumn(Database db, String table, String column) async {
+    final List<Map<String, Object?>> rows =
+        await db.rawQuery('PRAGMA table_info($table)');
+    return rows.any((Map<String, Object?> r) => r['name'] == column);
   }
 
   static Future<int> storedVersion(Database db) async {

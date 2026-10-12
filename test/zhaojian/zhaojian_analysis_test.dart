@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/zhaojian/src/copy.dart';
 import 'package:quote_app/zhaojian/src/data/models.dart';
 import 'package:quote_app/zhaojian/src/domain/analysis.dart';
+import 'package:quote_app/zhaojian/src/zhaojian_oracle.dart';
 
 ZMotive m(
   String text, {
@@ -307,6 +308,99 @@ void main() {
           ZMiss(cat: c, text: 't', createdAt: DateTime(2026, 10, 1)),
       ];
       expect(topMissCategories(ms), <int>{1, 2, 3});
+    });
+  });
+
+  group('alignment', () {
+    ZAlignRow row(int ya, int yb) =>
+        ZAlignRow(a: <int>[ya - 10, ya, ya + 10], b: <int>[yb - 10, yb, yb + 10]);
+
+    test('weights desires by evidence tier and reports the range', () {
+      final ZAlignResult r = ZAlignResult(
+        rows: <ZAlignRow>[row(80, 40), row(20, 60)],
+        confidence: 0.95,
+      );
+      final ZAlignCalc c = calcAlignment(
+        r,
+        const <ZDesire>[ZDesire('被行为支持', strong: true), ZDesire('自述')],
+      )!;
+      // 一年：A = (1.0*80 + 0.3*20) / 1.3 ≈ 66；B = (1.0*40 + 0.3*60) / 1.3 ≈ 45
+      expect(c.yearA, 66);
+      expect(c.yearB, 45);
+      expect(c.loA, 20);
+      expect(c.hiA, 80);
+      expect(c.weekA, 56);
+      expect(c.decadeA, 76);
+      expect(c.flip, isTrue, reason: '第二个欲求下排序相反');
+      expect(c.weakOnly, isFalse);
+      expect(c.confidence, 0.9, reason: '有被行为支持的欲求，置信度封顶 0.9');
+    });
+
+    test('weak-only desires cap confidence at 0.5 and are flagged', () {
+      final ZAlignCalc c = calcAlignment(
+        ZAlignResult(rows: <ZAlignRow>[row(70, 30)], confidence: 0.9),
+        const <ZDesire>[ZDesire('自述')],
+      )!;
+      expect(c.confidence, 0.5);
+      expect(c.weakOnly, isTrue);
+      expect(c.flip, isFalse);
+    });
+
+    test('empty results and mismatched rows', () {
+      expect(calcAlignment(const ZAlignResult(), const <ZDesire>[ZDesire('x')]), isNull);
+      expect(calcAlignment(ZAlignResult(rows: <ZAlignRow>[row(50, 50)]), const <ZDesire>[]), isNull);
+    });
+
+    test('manual alignment is flagged and has no range or confidence', () {
+      final ZAlignCalc c = manualAlignment(30, 120);
+      expect(c.manual, isTrue);
+      expect(c.yearA, 30);
+      expect(c.yearB, 100, reason: '越界值被截断到 100');
+      expect(c.confidence, isNull);
+      expect(c.hiA, c.loA);
+    });
+
+    test('quadrants combine alignment with the pull share', () {
+      expect(quadrantOf(70, 0.8), 0);
+      expect(quadrantOf(70, 0.3), 1);
+      expect(quadrantOf(40, 0.8), 2);
+      expect(quadrantOf(40, 0.3), 3);
+      expect(quadrantOf(60, 0.5), 1, reason: '边界：60 算高一致，0.5 不算高拉力');
+    });
+
+    test('pullShare divides the total weight between the sides', () {
+      final ZSums s = sumMotives(<ZMotive>[
+        m('x', side: 'a', weight: 3),
+        m('y', side: 'b', weight: 1),
+      ]);
+      expect(pullShare(s, 'a'), 0.75);
+      expect(pullShare(s, 'b'), 0.25);
+      expect(pullShare(const ZSums(0, 0, 0, 0), 'a'), 0.5);
+    });
+
+    test('alignTrend averages the chosen option over early and recent halves', () {
+      ZDecision d(String actual, int ya, int yb) => ZDecision(
+            question: 'q',
+            optionA: 'A',
+            optionB: 'B',
+            motives: const <ZMotive>[],
+            pred: 'a',
+            stake: 1,
+            sealedAt: DateTime(2026, 10, 1),
+            actual: actual,
+            actualAt: DateTime(2026, 10, 2),
+            align: ZAlignSummary(yearA: ya, yearB: yb),
+          );
+      expect(alignTrend(<ZDecision>[d('a', 50, 50)]), isNull);
+      final ({double? early, double? recent})? t = alignTrend(<ZDecision>[
+        d('a', 40, 80),
+        d('b', 10, 50),
+        d('a', 70, 20),
+        d('b', 30, 90),
+      ]);
+      expect(t, isNotNull);
+      expect(t!.early, 45.0);
+      expect(t!.recent, 80.0);
     });
   });
 

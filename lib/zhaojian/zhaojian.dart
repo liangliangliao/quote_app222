@@ -10,7 +10,15 @@ library zhaojian;
 export 'src/zhaojian_entry.dart' show ZhaojianEntry;
 export 'src/data/zhaojian_schema.dart' show ZhaojianSchema;
 export 'src/zhaojian_oracle.dart'
-    show ZhaojianOracle, LocalZhaojianOracle, ZScoreResult;
+    show
+        ZhaojianOracle,
+        LocalZhaojianOracle,
+        ZScoreResult,
+        ZDesire,
+        ZAlignRow,
+        ZAlignResult,
+        ZDifficulty,
+        ZExternal;
 export 'src/data/models.dart' show ZMotive;
 export 'src/copy.dart' show ZCopy;
 

@@ -61,6 +61,87 @@ void main() {
     });
   });
 
+  group('AI oracle alignment parsing', () {
+    const String good = '```json\n{"rows":['
+        '{"a":{"w":60,"y":70,"d":80,"why":"推进自由"},"b":{"w":40,"y":30,"d":20,"why":"背离"}},'
+        '{"a":{"w":999,"y":"55","d":-5,"why":"x"},"b":{"w":50,"y":50,"d":50,"why":""}}],'
+        '"diff":{"a":{"tier":"难","ring":"动机","why":"要承受失望","ladder":["先拖一天","设上限","明确拒绝"],'
+        '"ext":[{"t":"上司批准","c":"不可控"},{"t":"积蓄","c":"随便写"},{"t":"","c":"可控"}]},'
+        '"b":{"tier":"很难","ring":"x","why":"","ladder":[],"ext":[]}},"conf":1.7}\n```';
+
+    test('parses rows, clamps numbers, and keeps only valid enums', () {
+      final ZAlignResult r = ZhaojianAiOracle.parseAlignment(good, 2);
+      expect(r.isEmpty, isFalse);
+      expect(r.rows.length, 2);
+      expect(r.rows[0].a, <int>[60, 70, 80]);
+      expect(r.rows[0].reasonA, '推进自由');
+      expect(r.rows[1].a, <int>[100, 55, 0], reason: '越界截断、字符串数字可解析');
+      expect(r.diffA.tier, '难');
+      expect(r.diffA.ring, '动机');
+      expect(r.diffA.ladder.length, 3);
+      expect(r.diffA.externals.length, 2, reason: '空条件被丢弃');
+      expect(r.diffA.externals.first.uncontrollable, isTrue);
+      expect(r.diffA.externals.last.control, '可影响', reason: '非法可控度回到「可影响」');
+      expect(r.diffB.tier, '', reason: '非法难度档被丢弃');
+      expect(r.confidence, 1.0, reason: '置信度截断到 1');
+      expect(r.source, ZhaojianAiOracle.sourceNote);
+    });
+
+    test('too few rows or garbage means empty', () {
+      expect(ZhaojianAiOracle.parseAlignment(good, 3).isEmpty, isTrue);
+      expect(ZhaojianAiOracle.parseAlignment('没有对象', 1).isEmpty, isTrue);
+      expect(ZhaojianAiOracle.parseAlignment('{"rows": 5}', 1).isEmpty, isTrue);
+    });
+
+    test('scoreAlignment degrades without calling the model when AI is unavailable', () async {
+      int calls = 0;
+      final ZhaojianAiOracle o = ZhaojianAiOracle(
+        call: ({
+          required String prompt,
+          required String systemPrompt,
+          required String purpose,
+          required int maxTokens,
+        }) {
+          calls += 1;
+          return _reply(good);
+        },
+        isAvailable: () async => false,
+      );
+      final ZAlignResult r = await o.scoreAlignment(
+        situation: 's',
+        optionA: 'a',
+        optionB: 'b',
+        desires: const <ZDesire>[ZDesire('x')],
+      );
+      expect(r.isEmpty, isTrue);
+      expect(calls, 0);
+    });
+
+    test('scoreAlignment returns parsed results when the model answers', () async {
+      String? seenPurpose;
+      final ZhaojianAiOracle o = ZhaojianAiOracle(
+        call: ({
+          required String prompt,
+          required String systemPrompt,
+          required String purpose,
+          required int maxTokens,
+        }) {
+          seenPurpose = purpose;
+          return _reply(good);
+        },
+        isAvailable: () async => true,
+      );
+      final ZAlignResult r = await o.scoreAlignment(
+        situation: 's',
+        optionA: 'a',
+        optionB: 'b',
+        desires: const <ZDesire>[ZDesire('自由', strong: true), ZDesire('被认可')],
+      );
+      expect(seenPurpose, 'zhaojian.score_alignment');
+      expect(r.rows.length, 2);
+    });
+  });
+
   group('AI oracle fallbacks', () {
     test('unavailable AI yields empty results without calling the model', () async {
       int calls = 0;

@@ -421,6 +421,20 @@ class _RevealDialogState extends State<RevealDialog> {
     );
   }
 
+  Widget _alignLine(ZDecision d) {
+    final ZAlignSummary? al = d.align;
+    final String? actual = d.actual;
+    if (al == null || actual == null) return const SizedBox.shrink();
+    final int mine = al.yearOf(actual);
+    final int other = al.yearOf(actual == 'a' ? 'b' : 'a');
+    final bool lower = mine < other;
+    return ZNote(
+      '你选的这一项一年一致度 $mine，另一项 $other${al.manual ? '（自评）' : ''}。'
+      '${lower ? '你选了更不通向欲求的那一边：回头看看，是诱惑，还是手段错位。' : ''}',
+      warn: lower,
+    );
+  }
+
   Widget _missPrompt(ZDecision d) {
     if (d.missLogged || _missDone) return const SizedBox.shrink();
     if (!(opposesBalance(d) || !d.hit)) return const SizedBox.shrink();
@@ -501,6 +515,7 @@ class _RevealDialogState extends State<RevealDialog> {
           ? '你对这次的自己判断得准。对了不等于认识了全部，下次换个情境再押。'
           : '落差就是线索：你以为的自己和实际的自己不一样。'));
       body.add(_replay(d));
+      body.add(_alignLine(d));
       body.add(_missPrompt(d));
     }
     return AlertDialog(

@@ -122,6 +122,24 @@ class ZCopy {
     <String>['双趋避：两边都有利有弊', '最耗神，也最容易漂流。把利弊分维度写清，补全还缺的事实，并设决定的截止时间。'],
   ];
 
+  /// 「一致度 × 拉力」四象限：标题、提示。
+  static const List<List<String>> quadrants = <List<String>>[
+    <String>['高一致 · 高拉力', '顺势而为：到现场多半不会拧，重点是别被别的动机劫持。'],
+    <String>['高一致 · 低拉力', '知行不合一的高风险区：你知道它对，但现场不太想做。要改动机局面，或设绳子。'],
+    <String>['低一致 · 高拉力', '最危险：现场很想选，却不太通向你要的。分清是诱惑还是错位的手段，并设绳子与蜡。'],
+    <String>['低一致 · 低拉力', '既不通向你要的，也没多想选：可以放心舍弃。'],
+  ];
+
+  static const List<String> difficultyTiers = <String>['易', '中', '难'];
+
+  static const List<String> rings = <String>['认知', '动机', '行为', '环境'];
+
+  static const List<String> controlLevels = <String>['可控', '可影响', '不可控'];
+
+  static const String alignmentNote = '一致度是对照，不是指令，也不保证幸福（叔本华认为满足是短暂的）。'
+      '欲求只是假设：先选要对照的（最多 3 条），证据强弱决定结果有多可信。'
+      '难度另评：难不等于错，也不该只选容易的。';
+
   static const List<String> coolQuestions = <String>[
     '此刻是哪个直观动机在拉我？',
     '一年后的我会怎么看这个选择？',

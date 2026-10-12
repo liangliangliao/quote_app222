@@ -96,6 +96,91 @@ void main() {
     });
   });
 
+  group('alignment storage and schema v2', () {
+    test('an alignment summary round-trips through the dao', () async {
+      final ZhaojianDao dao = ZhaojianDao(db);
+      final ZDecision d = sample();
+      final ZDecision withAlign = ZDecision(
+        question: d.question,
+        optionA: d.optionA,
+        optionB: d.optionB,
+        motives: d.motives,
+        pred: d.pred,
+        stake: d.stake,
+        sealedAt: d.sealedAt,
+        align: const ZAlignSummary(
+          yearA: 70,
+          yearB: 35,
+          diffA: '难',
+          diffB: '易',
+          manual: true,
+          weakOnly: true,
+        ),
+      );
+      final int id = await dao.insertDecision(withAlign);
+      final ZDecision? back = await dao.findDecision(id);
+      expect(back!.align, isNotNull);
+      expect(back.align!.yearA, 70);
+      expect(back.align!.diffA, '难');
+      expect(back.align!.manual, isTrue);
+      expect(back.align!.yearOf('b'), 35);
+
+      final int plain = await dao.insertDecision(sample());
+      expect((await dao.findDecision(plain))!.align, isNull);
+    });
+
+    test('migrate adds align_json to a v1 database and keeps old rows', () async {
+      final Database old = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      addTearDown(old.close);
+      await old.execute('CREATE TABLE z_meta (key TEXT PRIMARY KEY, value TEXT)');
+      await old.insert('z_meta', <String, Object?>{'key': 'schema_version', 'value': '1'});
+      await old.execute('''
+        CREATE TABLE z_decision (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          question TEXT NOT NULL, option_a TEXT NOT NULL, option_b TEXT NOT NULL,
+          importance TEXT, motives_json TEXT, pred TEXT NOT NULL, stake INTEGER NOT NULL,
+          felt_freedom INTEGER, condition_text TEXT, jt_pred INTEGER, conflict_type INTEGER,
+          sealed_at INTEGER NOT NULL, actual TEXT, actual_at INTEGER, reaction TEXT,
+          body_json TEXT, jt_actual INTEGER, hyp_id INTEGER, hyp_kind TEXT,
+          miss_logged INTEGER NOT NULL DEFAULT 0, notes_json TEXT,
+          imagery_depth REAL, imagery_sym REAL
+        )
+      ''');
+      await old.insert('z_decision', <String, Object?>{
+        'question': '旧数据',
+        'option_a': 'A',
+        'option_b': 'B',
+        'pred': 'a',
+        'stake': 2,
+        'sealed_at': 1000,
+      });
+
+      await ZhaojianSchema.migrate(old, 36, 37);
+      await ZhaojianSchema.migrate(old, 36, 37); // 幂等
+
+      final List<Map<String, Object?>> cols = await old.rawQuery('PRAGMA table_info(z_decision)');
+      expect(cols.any((Map<String, Object?> c) => c['name'] == 'align_json'), isTrue);
+      expect(await ZhaojianSchema.storedVersion(old), 2);
+      final ZhaojianDao dao = ZhaojianDao(old);
+      final List<ZDecision> all = await dao.allDecisions();
+      expect(all.single.question, '旧数据');
+      expect(all.single.align, isNull);
+      final int id = await dao.insertDecision(ZDecision(
+        question: '新数据',
+        optionA: 'A',
+        optionB: 'B',
+        pred: 'b',
+        stake: 1,
+        sealedAt: DateTime(2026, 10, 2),
+        align: const ZAlignSummary(yearA: 55, yearB: 45),
+      ));
+      expect((await dao.findDecision(id))!.align!.yearA, 55);
+    });
+  });
+
   group('controller', () {
     test('seal, reveal, log and hypothesis counting work together', () async {
       final ZhaojianController c =
