@@ -11,14 +11,19 @@ import 'todo_meaning_models.dart';
 import 'todo_raisebase_models.dart';
 
 class TodoGoalDao {
+  final Future<Database> Function() _databaseProvider;
+
+  TodoGoalDao({Future<Database> Function()? database})
+      : _databaseProvider = database ?? AppDatabase.instance;
+
   Future<Database> get _db async {
-    final db = await AppDatabase.instance();
+    final db = await _databaseProvider();
     await ensureTables(db);
     return db;
   }
 
   Future<void> ensureTables([Database? database]) async {
-    final db = database ?? await AppDatabase.instance();
+    final db = database ?? await _databaseProvider();
     await TodoDao().ensureTables(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS goal_profiles (
@@ -247,6 +252,17 @@ class TodoGoalDao {
       )
     ''');
     await db.execute('''
+      CREATE TABLE IF NOT EXISTS goal_ritual_checkins (
+        checkin_id TEXT PRIMARY KEY,
+        ritual_id TEXT NOT NULL,
+        goal_id TEXT NOT NULL,
+        checkin_date TEXT NOT NULL,
+        result TEXT DEFAULT 'completed',
+        note TEXT,
+        created_at_ms INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS goal_failure_growth_loops (
         loop_id TEXT PRIMARY KEY,
         goal_id TEXT NOT NULL,
@@ -342,6 +358,11 @@ class TodoGoalDao {
         created_at_ms INTEGER NOT NULL
       )
     ''');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'friction_category', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'effort_context', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'cycle_stage', 'TEXT');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'relationship_quality', 'INTEGER DEFAULT 0');
+    await _addColumnIfMissing(db, 'goal_effort_entries', 'recovery_gap_hours', 'INTEGER DEFAULT 0');
     await _addColumnIfMissing(db, 'goal_action_steps', 'parent_step_id', "TEXT DEFAULT ''");
     await _addColumnIfMissing(db, 'goal_action_steps', 'step_level', 'INTEGER DEFAULT 1');
     await _addColumnIfMissing(db, 'goal_action_steps', 'sort_order', 'INTEGER DEFAULT 0');
@@ -1456,6 +1477,7 @@ class TodoGoalDao {
         'change_action_cards',
         'goal_failure_growth_loops',
         'goal_effort_entries',
+        'goal_ritual_checkins',
         'goal_rituals',
         'goal_step_reviews',
         'goal_problem_nodes',
@@ -1857,10 +1879,16 @@ class TodoGoalDao {
   Future<List<TodoGoalRitual>> listRituals({String? goalId}) async {
     final db = await _db;
     final rows = await db.rawQuery('''
-      SELECT r.*, COALESCE(g.goal_title, '') AS goal_title
+      SELECT r.*, COALESCE(g.goal_title, '') AS goal_title,
+             COUNT(c.checkin_id) AS check_in_count,
+             SUM(CASE WHEN c.result = 'completed' THEN 1 ELSE 0 END) AS completed_check_ins,
+             SUM(CASE WHEN c.result = 'blocked' THEN 1 ELSE 0 END) AS blocked_check_ins,
+             COALESCE(MAX(c.created_at_ms), 0) AS last_check_in_at_ms
       FROM goal_rituals r
       LEFT JOIN goal_profiles g ON g.goal_id = r.goal_id
+      LEFT JOIN goal_ritual_checkins c ON c.ritual_id = r.ritual_id
       WHERE r.status != 'archived' ${goalId == null ? '' : 'AND r.goal_id = ?'}
+      GROUP BY r.ritual_id
       ORDER BY r.updated_at_ms DESC
     ''', goalId == null ? const <Object?>[] : <Object?>[goalId]);
     return rows.map(TodoGoalRitual.fromMap).toList();
@@ -1879,6 +1907,10 @@ class TodoGoalDao {
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
     final id = ritualId?.trim().isNotEmpty == true ? ritualId!.trim() : newId('goal_ritual');
+    final existingRows = ritualId?.trim().isNotEmpty == true
+        ? await db.query('goal_rituals', columns: ['created_at_ms', 'stability_score'], where: 'ritual_id = ?', whereArgs: [id], limit: 1)
+        : const <Map<String, Object?>>[];
+    final existing = existingRows.isEmpty ? null : existingRows.first;
     await db.insert('goal_rituals', <String, Object?>{
       'ritual_id': id,
       'goal_id': goalId,
@@ -1888,17 +1920,49 @@ class TodoGoalDao {
       'reward_or_record': rewardOrRecord.trim(),
       'environment_design': environmentDesign.trim(),
       'friction_plan': frictionPlan.trim(),
-      'stability_score': 0,
+      'stability_score': existing == null ? 0 : _toLocalInt(existing['stability_score']),
       'status': 'active',
-      'created_at_ms': now,
+      'created_at_ms': existing == null ? now : _toLocalInt(existing['created_at_ms']),
       'updated_at_ms': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
     return id;
   }
 
+  Future<void> recordRitualCheckIn({required TodoGoalRitual ritual, required String result, String note = ''}) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final normalized = result == 'blocked' ? 'blocked' : 'completed';
+    await db.transaction((txn) async {
+      await txn.insert('goal_ritual_checkins', <String, Object?>{
+        'checkin_id': newId('ritual_checkin'),
+        'ritual_id': ritual.ritualId,
+        'goal_id': ritual.goalId,
+        'checkin_date': todayDate(),
+        'result': normalized,
+        'note': note.trim(),
+        'created_at_ms': now,
+      });
+      final counts = await txn.rawQuery(
+        "SELECT COUNT(*) AS total, SUM(CASE WHEN result = 'completed' THEN 1 ELSE 0 END) AS completed FROM goal_ritual_checkins WHERE ritual_id = ?",
+        [ritual.ritualId],
+      );
+      final total = _toLocalInt(counts.single['total']);
+      final completed = _toLocalInt(counts.single['completed']);
+      final stability = total == 0 ? 0 : ((completed / total) * 100).round();
+      await txn.update('goal_rituals', <String, Object?>{
+        'stability_score': stability.clamp(0, 100),
+        'updated_at_ms': now,
+      }, where: 'ritual_id = ?', whereArgs: [ritual.ritualId]);
+    });
+  }
+
   Future<String> addEffortEntry({
     required String goalId,
     String stepId = '',
+    String frictionCategory = '',
+    String effortContext = 'daily',
+    String cycleStage = 'action',
+    int relationshipQuality = 0,
     String nodeId = '',
     String ritualId = '',
     String sourceObjectType = 'goal',
@@ -1933,6 +1997,7 @@ class TodoGoalDao {
     final now = DateTime.now().millisecondsSinceEpoch;
     final recent = await db.query('goal_effort_entries', columns: ['created_at_ms'], where: 'goal_id = ?', whereArgs: [goalId], orderBy: 'created_at_ms DESC', limit: 1);
     final lastAt = recent.isEmpty ? 0 : _toLocalInt(recent.first['created_at_ms']);
+    final gapHours = lastAt > 0 ? Duration(milliseconds: now - lastAt).inHours : 0;
     final normalizedReturnKind = returnKind.trim();
     final returned = (lastAt > 0 && now - lastAt >= const Duration(hours: 24).inMilliseconds) ||
         normalizedReturnKind.isNotEmpty || attentionReturnCount > 0 || effortType == 'mindful_return';
@@ -1953,6 +2018,11 @@ class TodoGoalDao {
       'effort_type': effortType,
       'investment_text': investmentText.trim(),
       'obstacle': obstacle.trim(),
+      'friction_category': frictionCategory.trim(),
+      'effort_context': effortContext.trim(),
+      'cycle_stage': cycleStage.trim(),
+      'relationship_quality': relationshipQuality.clamp(0, 5),
+      'recovery_gap_hours': returned ? gapHours : 0,
       'strategy_used': strategyUsed.trim(),
       'small_progress': smallProgress.trim(),
       'next_minimum_step': nextMinimumStep.trim(),
@@ -2115,7 +2185,7 @@ class TodoGoalDao {
     final entries = await listEffortEntries(days: days, limit: 500);
     final obstacleCounts = <String, int>{};
     for (final entry in entries) {
-      final obstacle = entry.obstacle.trim();
+      final obstacle = entry.frictionCategory.trim().isNotEmpty ? entry.frictionCategory.trim() : entry.obstacle.trim();
       if (obstacle.isNotEmpty) obstacleCounts[obstacle] = (obstacleCounts[obstacle] ?? 0) + 1;
     }
     var commonObstacle = '';

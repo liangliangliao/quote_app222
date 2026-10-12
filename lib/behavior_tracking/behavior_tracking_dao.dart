@@ -3,9 +3,15 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/db.dart';
+import 'behavior_tracking_analytics.dart';
 import 'behavior_tracking_models.dart';
 
 class BehaviorTrackingDao {
+  final Future<Database> Function() _databaseProvider;
+
+  BehaviorTrackingDao({Future<Database> Function()? database})
+      : _databaseProvider = database ?? AppDatabase.instance;
+
   static const String tableName = 'behavior_tracking_records';
   static const String categoriesTable = 'behavior_observation_categories';
   static const String presetsTable = 'behavior_observation_presets';
@@ -15,18 +21,19 @@ class BehaviorTrackingDao {
   static const String settingsTable = 'behavior_observation_settings';
 
   Future<Database> get _db async {
-    final db = await AppDatabase.instance();
+    final db = await _databaseProvider();
     await ensureTables(db);
     return db;
   }
 
   Future<void> ensureTables([Database? database]) async {
-    final db = database ?? await AppDatabase.instance();
+    final db = database ?? await _databaseProvider();
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $tableName (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         created_at_ms INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL,
+        deleted_at_ms INTEGER,
         record_date_ms INTEGER NOT NULL,
         mode TEXT,
         entry_mode TEXT,
@@ -114,6 +121,7 @@ class BehaviorTrackingDao {
     final info = await db.rawQuery('PRAGMA table_info($tableName)');
     final existing = info.map((row) => row['name']?.toString()).whereType<String>().toSet();
     final columns = <String, String>{
+      'deleted_at_ms': 'INTEGER',
       'entry_mode': 'TEXT',
       'template_key': 'TEXT',
       'method_name': 'TEXT',
@@ -383,7 +391,14 @@ class BehaviorTrackingDao {
 
   Future<void> delete(int id) async {
     final db = await _db;
-    await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.update(tableName, {'deleted_at_ms': now, 'updated_at_ms': now}, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> purgeDeleted({Duration olderThan = const Duration(days: 30)}) async {
+    final db = await _db;
+    final cutoff = DateTime.now().subtract(olderThan).millisecondsSinceEpoch;
+    await db.delete(tableName, where: olderThan == Duration.zero ? 'deleted_at_ms IS NOT NULL' : 'deleted_at_ms IS NOT NULL AND deleted_at_ms < ?', whereArgs: olderThan == Duration.zero ? null : [cutoff]);
   }
 
   /// Delete every behavior observation record.
@@ -399,7 +414,7 @@ class BehaviorTrackingDao {
 
   Future<List<BehaviorTrackingRecord>> recent({int limit = 200}) async {
     final db = await _db;
-    final rows = await db.query(tableName, orderBy: 'record_date_ms DESC, id DESC', limit: limit);
+    final rows = await db.query(tableName, where: 'deleted_at_ms IS NULL', orderBy: 'record_date_ms DESC, id DESC', limit: limit);
     return rows.map(BehaviorTrackingRecord.fromMap).toList();
   }
 
@@ -407,7 +422,7 @@ class BehaviorTrackingDao {
     final db = await _db;
     final rows = await db.query(
       tableName,
-      where: 'record_date_ms >= ? AND record_date_ms < ?',
+      where: 'deleted_at_ms IS NULL AND record_date_ms >= ? AND record_date_ms < ?',
       whereArgs: [
         DateTime(startInclusive.year, startInclusive.month, startInclusive.day).millisecondsSinceEpoch,
         DateTime(endExclusive.year, endExclusive.month, endExclusive.day).millisecondsSinceEpoch,
@@ -630,6 +645,12 @@ class BehaviorTrackingDao {
     final db = await _db;
     final rows = await db.query(presetAiAnalysesTable, orderBy: 'review_date_ms DESC', limit: limit);
     return rows.map(BehaviorPresetAiAnalysisRecord.fromMap).toList();
+  }
+
+  Future<BehaviorStatsOverview> statsOverview({int days = 30}) async {
+    final now = DateTime.now();
+    final records = await between(now.subtract(Duration(days: days)), now.add(const Duration(days: 1)));
+    return BehaviorStatsOverview.fromRecords(records, rangeDays: days, now: now);
   }
 
   Future<String> exportJson({int limit = 5000}) async {
