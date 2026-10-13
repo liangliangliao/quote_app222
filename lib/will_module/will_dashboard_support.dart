@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import 'will_models.dart';
 import 'will_seed.dart';
 import 'will_route_resolver.dart';
@@ -25,7 +23,7 @@ List<WillNamedCount> problemHitsFromExecutions(List<WillTaskExecutionEntry> exec
     final task = WillRouteResolver.taskByTitle(execution.taskTitle);
     if (task == null) continue;
     for (final problem in WillRouteResolver.recommendedProblemsForTask(task)) {
-      counts[problem.zoneTitle] = (counts[problem.zoneTitle] ?? 0) + 1;
+      counts[problem.title] = (counts[problem.title] ?? 0) + 1;
     }
   }
   final list = counts.entries.map((e) => WillNamedCount(label: e.key, count: e.value)).toList()
@@ -217,7 +215,7 @@ class SmartSuggestion {
 
   const SmartSuggestion({
     required this.key,
-    required this.zoneTitle,
+    required this.title,
     required this.subtitle,
     required this.actionLabel,
     required this.kind,
@@ -263,7 +261,7 @@ class CoachStage {
   const CoachStage({
     required this.key,
     required this.label,
-    required this.zoneTitle,
+    required this.title,
     required this.subtitle,
     required this.focusPoints,
     required this.recommendedUnitIds,
@@ -411,7 +409,6 @@ bool isRecentStageChange(WillStageRuntimeState? state) {
 CoachStage buildCoachStage(DashboardBundle data) {
   final latestExecutionEntry = latestExecution(data.executions);
   final latestReviewEntry = latestReview(data.reviews);
-  final latestZoneEntry = latestZoneVisit(data.recentZoneVisits);
   final hasPlan = data.summary.savedPlanCount > 0;
   final hasExecution = data.summary.executionCount > 0;
   final hasReview = data.summary.reviewCount > 0;
@@ -461,9 +458,9 @@ CoachStage buildCoachStage(DashboardBundle data) {
       subtitle: '你已经有了最小闭环。现在要做的，是把“现实训练”和“虚拟预演”接起来，形成更稳定的训练回路。',
       focusPoints: const ['把执行接到复盘', '把复盘接到镜像城', '同一条任务先不要频繁切换'],
       recommendedUnitIds: const ['R-003', 'W-001', 'P-017'],
-      primaryActionLabel: zone == null ? '进入起意场' : '进入${zone.zoneTitle}',
+      primaryActionLabel: zone == null ? '进入起意场' : '进入${zone.title}',
       primaryActionKind: 'zone',
-      primaryActionRef: zone?.zoneTitle ?? '起意场',
+      primaryActionRef: zone?.title ?? '起意场',
       checkpoints: checkpoints,
       progressLabel: progressSummary(checkpoints),
       nextStageLabel: '稳定训练期',
@@ -557,8 +554,8 @@ List<SmartSuggestion> buildSmartSuggestions(DashboardBundle data) {
 
   bool isSoftHidden(String key) {
     final state = stateMap[key];
-    if (state == null || state.completedAtMs == null) return false;
-    return DateTime.now().millisecondsSinceEpoch - state.completedAtMs! < const Duration(hours: 36).inMilliseconds;
+    if (state == null) return false;
+    return DateTime.now().millisecondsSinceEpoch - state.completedAtMs < const Duration(hours: 36).inMilliseconds;
   }
 
   void addSuggestion(SmartSuggestion s) {
@@ -640,19 +637,19 @@ List<SmartSuggestion> buildSmartSuggestions(DashboardBundle data) {
   if (latestReviewEntry != null) {
     final latestZoneTime = latestZone?.visitedAtMs ?? 0;
     if (latestReviewEntry.updatedAtMs > latestZoneTime) {
-      final taskTitle = latestReviewEntry.taskTitle ?? latestExecutionEntry?.taskTitle ?? '10 秒起步';
+      final taskTitle = latestReviewEntry.taskTitle;
       final zone = primaryZoneForTaskTitle(taskTitle);
       if (zone != null) {
         addSuggestion(SmartSuggestion(
           key: 'review_to_zone',
           title: '复盘之后，先去镜像城预演下一次难点',
-          subtitle: '你已经把这次行动写出来了。下一步更适合去 ${zone.zoneTitle} 里先模拟一次，把下次最容易卡住的地方预演掉。',
-          actionLabel: '进入${zone.zoneTitle}',
+          subtitle: '你已经把这次行动写出来了。下一步更适合去 ${zone.title} 里先模拟一次，把下次最容易卡住的地方预演掉。',
+          actionLabel: '进入${zone.title}',
           kind: 'zone',
-          refTitle: zone.zoneTitle,
+          refTitle: zone.title,
           priorityLabel: '高优先级',
           horizonLabel: '短期',
-          unitIds: defaultUnitIdsForZone(zone.zoneTitle),
+          unitIds: defaultUnitIdsForZone(zone.title),
           priorityScore: 90,
         ));
       }
@@ -664,7 +661,7 @@ List<SmartSuggestion> buildSmartSuggestions(DashboardBundle data) {
     if (latestZone.visitedAtMs > latestExecutionTime) {
       final mappedTasks = kWillTaskPlans.where((task) {
         final zones = WillRouteResolver.recommendedZonesForTask(task);
-        return zones.any((z) => z.zoneTitle == latestZone.zoneTitle);
+        return zones.any((z) => z.title == latestZone.zoneTitle);
       }).toList();
       final firstTask = mappedTasks.isNotEmpty ? mappedTasks.first : null;
       if (firstTask != null) {
@@ -672,12 +669,12 @@ List<SmartSuggestion> buildSmartSuggestions(DashboardBundle data) {
           key: 'zone_to_execution',
           title: '把刚才的虚拟预演带回现实做一次',
           subtitle: '你刚进入过 ${latestZone.zoneTitle}。现在最适合把那次预演立即带回现实，完成一次对应动作。',
-          actionLabel: '去做${firstTask.zoneTitle}',
+          actionLabel: '去做${firstTask.title}',
           kind: 'task',
-          refTitle: firstTask.zoneTitle,
+          refTitle: firstTask.title,
           priorityLabel: '高优先级',
           horizonLabel: '短期',
-          unitIds: defaultUnitIdsForTask(firstTask.zoneTitle),
+          unitIds: defaultUnitIdsForTask(firstTask.title),
           priorityScore: 89,
         ));
       }
@@ -795,7 +792,7 @@ List<SmartSuggestion> buildSmartSuggestions(DashboardBundle data) {
   final seen = <String>{};
   final deduped = <SmartSuggestion>[];
   for (final s in suggestions) {
-    final fingerprint = '${s.key}|${s.refTitle}|${s.zoneTitle}';
+    final fingerprint = '${s.key}|${s.refTitle}|${s.title}';
     if (seen.add(fingerprint)) deduped.add(s);
   }
   deduped.sort((a, b) {

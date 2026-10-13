@@ -6,6 +6,7 @@ import 'package:quote_app/beautiful_enemy/src/domain/enemy_engine.dart';
 import 'package:quote_app/beautiful_enemy/src/domain/enemy_presence.dart';
 import 'package:quote_app/beautiful_enemy/src/domain/evidence_source.dart';
 import 'package:quote_app/beautiful_enemy/src/domain/guard.dart';
+import 'package:quote_app/beautiful_enemy/src/enemy_oracle.dart';
 import 'package:quote_app/beautiful_enemy/src/enemy_talker.dart';
 import 'package:quote_app/beautiful_enemy/src/persona.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -478,7 +479,10 @@ void main() {
 
   group('迁移', () {
     test('v1 的库（承诺表没有赌注列）进场后补列，已有数据保留', () async {
-      final Database old = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      final Database old = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
       await old.execute('''CREATE TABLE be_commitment (
         id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL,
         created_ms INTEGER NOT NULL, due_ms INTEGER,
