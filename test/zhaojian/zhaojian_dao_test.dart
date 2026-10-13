@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/zhaojian/zhaojian.dart';
 import 'package:quote_app/zhaojian/src/data/models.dart';
@@ -163,7 +165,10 @@ void main() {
 
       final List<Map<String, Object?>> cols = await old.rawQuery('PRAGMA table_info(z_decision)');
       expect(cols.any((Map<String, Object?> c) => c['name'] == 'align_json'), isTrue);
-      expect(await ZhaojianSchema.storedVersion(old), 2);
+      expect(await ZhaojianSchema.storedVersion(old), ZhaojianSchema.schemaVersion);
+      final List<Map<String, Object?>> tables = await old.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='z_item'");
+      expect(tables, isNotEmpty, reason: 'v3 新增的 z_item 表也被补建');
       final ZhaojianDao dao = ZhaojianDao(old);
       final List<ZDecision> all = await dao.allDecisions();
       expect(all.single.question, '旧数据');
@@ -178,6 +183,130 @@ void main() {
         align: const ZAlignSummary(yearA: 55, yearB: 45),
       ));
       expect((await dao.findDecision(id))!.align!.yearA, 55);
+    });
+  });
+
+  group('generic items and key-value', () {
+    test('items round-trip, update and delete through the controller', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      final ZEntry rope = await c.addItem('rope', <String, dynamic>{
+        's': '想赌的时候',
+        'r': '把卡放家里',
+        'bs': <String>['胃沉', '轻松'],
+        'n': 3,
+        'flag': true,
+      });
+      expect(c.items('rope').length, 1);
+      expect(c.items('plan'), isEmpty);
+      rope.data['ok'] = 'y';
+      await c.saveItem(rope);
+
+      await c.load();
+      final ZEntry back = c.items('rope').single;
+      expect(back.s('s'), '想赌的时候');
+      expect(back.s('ok'), 'y');
+      expect(back.i('n'), 3);
+      expect(back.b('flag'), isTrue);
+      expect(back.list('bs'), <String>['胃沉', '轻松']);
+      expect(back.s('missing', 'dflt'), 'dflt');
+
+      await c.removeItem(back);
+      await c.load();
+      expect(c.items('rope'), isEmpty);
+    });
+
+    test('corrupt item json degrades to empty data', () async {
+      final ZhaojianDao dao = ZhaojianDao(db);
+      final int id = await dao.insertItem(ZEntry(kind: 'x', data: <String, dynamic>{'a': 1}));
+      await db.update('z_item', <String, Object?>{'data_json': '{oops'},
+          where: 'id = ?', whereArgs: <Object?>[id]);
+      final List<ZEntry> all = await dao.allItems();
+      expect(all.single.data, isEmpty);
+    });
+
+    test('key-value survives a reload and keeps keys apart from the schema version', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      await c.setKv('ab.s', '耐心');
+      await c.setKv('ab.s', '耐心，肯下笨功夫');
+      await c.setKv('line.pick', '写作');
+      await c.load();
+      expect(c.kv('ab.s'), '耐心，肯下笨功夫');
+      expect(c.kv('line.pick'), '写作');
+      expect(c.kv('nope', 'x'), 'x');
+      expect(await ZhaojianSchema.storedVersion(db), ZhaojianSchema.schemaVersion);
+    });
+
+    test('tagging an item counts for a hypothesis and can be changed or undone', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      final int h1 = await c.addHypothesis('心软', '');
+      final int h2 = await c.addHypothesis('怕被看不起', '');
+      final ZEntry e = await c.addItem('arch', <String, dynamic>{'w': '借了钱', 'ph': '高中'});
+
+      await c.tagItem(e, h1, 'sup');
+      expect(c.hypotheses.firstWhere((ZHypothesis h) => h.id == h1).sup.length, 1);
+      expect(c.actsOfHypothesis(h1), 1);
+
+      await c.tagItem(c.items('arch').single, h1, 'ref');
+      final ZHypothesis a = c.hypotheses.firstWhere((ZHypothesis h) => h.id == h1);
+      expect(a.sup.length, 0, reason: '改成背离时撤销原来的支持');
+      expect(a.ref.length, 1);
+
+      await c.tagItem(c.items('arch').single, h2, 'sup');
+      expect(c.hypotheses.firstWhere((ZHypothesis h) => h.id == h1).ref.length, 0);
+      expect(c.hypotheses.firstWhere((ZHypothesis h) => h.id == h2).sup.length, 1);
+
+      await c.tagItem(c.items('arch').single, null, 'sup');
+      expect(c.hypotheses.firstWhere((ZHypothesis h) => h.id == h2).sup.length, 0);
+      expect(c.actsOfHypothesis(h2), 0);
+    });
+
+    test('phases of a hypothesis count distinct life stages', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      final int h = await c.addHypothesis('心软', '');
+      for (final String ph in <String>['童年', '高中', '高中', '']) {
+        final ZEntry e = await c.addItem('arch', <String, dynamic>{'w': 'x', 'ph': ph});
+        await c.tagItem(e, h, 'sup');
+      }
+      expect(c.phasesOfHypothesis(h), 2);
+      expect(c.actsOfHypothesis(h), 4);
+    });
+
+    test('evidence count adds up the strong sources', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      expect(c.evidenceCount, 0);
+      await c.addLog(ZLog(what: 'x', reaction: '松了口气', createdAt: DateTime(2026, 10, 1)));
+      await c.addItem('arch', <String, dynamic>{'w': 'x'});
+      await c.addItem('obs', <String, dynamic>{'saw': 'x'});
+      await c.addItem('rope', <String, dynamic>{'s': 'x'});
+      expect(c.evidenceCount, 3, reason: '没有结果的绳子不算证据');
+      await c.addItem('rope', <String, dynamic>{'s': 'y', 'ok': 'n'});
+      expect(c.evidenceCount, 4);
+    });
+
+    test('export is valid json with every section', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      await c.seal(sample());
+      await c.addItem('prin', <String, dynamic>{'t': '先过一夜'});
+      await c.setKv('ab.s', '耐心');
+      final Map<String, dynamic> j =
+          jsonDecode(c.exportJson()) as Map<String, dynamic>;
+      expect(j['app'], 'zhaojian');
+      expect(j['schemaVersion'], ZhaojianSchema.schemaVersion);
+      expect((j['decisions'] as List<dynamic>).length, 1);
+      expect((j['items'] as Map<String, dynamic>)['prin'], isNotEmpty);
+      expect((j['kv'] as Map<String, dynamic>)['ab.s'], '耐心');
     });
   });
 

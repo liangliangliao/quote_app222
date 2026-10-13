@@ -34,7 +34,8 @@ class AppDatabase {
       // columns such as diagnosis_id from pre-product schemas.
       // v36: 照见模块新增 z_ 前缀表（模块自管迁移，幂等）。
       // v37: 照见 schema v2（z_decision 新增 align_json）；模块的 migrate 按自己的版本补列。
-      version: 37,
+      // v38: 照见 schema v3（新增通用条目表 z_item）。
+      version: 38,
       onCreate: _create,
       onUpgrade: _upgrade,
     );

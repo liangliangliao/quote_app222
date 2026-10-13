@@ -112,6 +112,51 @@ class ZhaojianDao {
     await db.delete('z_hyp', where: 'id = ?', whereArgs: <Object?>[id]);
   }
 
+  // ---- 通用条目 ----
+
+  Future<int> insertItem(ZEntry it) async {
+    final Map<String, Object?> row = it.toRow()..remove('id');
+    return db.insert('z_item', row);
+  }
+
+  Future<void> updateItem(ZEntry it) async {
+    if (it.id == null) return;
+    final Map<String, Object?> row = it.toRow()..remove('id');
+    await db.update('z_item', row, where: 'id = ?', whereArgs: <Object?>[it.id]);
+  }
+
+  Future<void> deleteItem(int id) async {
+    await db.delete('z_item', where: 'id = ?', whereArgs: <Object?>[id]);
+  }
+
+  Future<List<ZEntry>> allItems() async {
+    final List<Map<String, Object?>> rows =
+        await db.query('z_item', orderBy: 'created_at ASC, id ASC');
+    return rows.map(ZEntry.fromRow).toList();
+  }
+
+  // ---- 键值（放在 z_meta，键名加 kv: 前缀） ----
+
+  Future<Map<String, String>> allKv() async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'z_meta',
+      where: 'key LIKE ?',
+      whereArgs: <Object?>['kv:%'],
+    );
+    return <String, String>{
+      for (final Map<String, Object?> r in rows)
+        (r['key'] ?? '').toString().substring(3): (r['value'] ?? '').toString(),
+    };
+  }
+
+  Future<void> setKv(String key, String value) async {
+    await db.insert(
+      'z_meta',
+      <String, Object?>{'key': 'kv:$key', 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   // ---- 漏掉的动机 ----
 
   Future<int> insertMiss(ZMiss m) async {

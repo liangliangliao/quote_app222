@@ -29,6 +29,15 @@ abstract class ZhaojianOracle {
     required List<ZMotive> motives,
   });
 
+  /// 通用的文字生成：模块自己拼提示词、自己解析结果。
+  /// 不可用（没配置、超时、失败）时返回空串；调用方要有不依赖它的兜底。
+  Future<String> generate({
+    required String prompt,
+    required String purpose,
+    int maxTokens = 2500,
+  }) async =>
+      '';
+
   /// 评估两个选项对所选欲求的一致度（本周/一年/十年）和难度。
   /// 默认没有引擎：返回空结果，界面改为用户自评。
   Future<ZAlignResult> scoreAlignment({

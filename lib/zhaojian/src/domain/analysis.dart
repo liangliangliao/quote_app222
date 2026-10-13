@@ -591,3 +591,30 @@ int quadrantOf(int year, double share) {
 
   return (early: mean(h.early), recent: mean(h.recent));
 }
+
+// ---------------------------------------------------------------------------
+// 通用统计
+// ---------------------------------------------------------------------------
+
+/// 数每个非空字符串出现的次数。
+Map<String, int> countStrings(Iterable<String> items) {
+  final Map<String, int> c = <String, int>{};
+  for (final String s in items) {
+    if (s.isEmpty) continue;
+    c[s] = (c[s] ?? 0) + 1;
+  }
+  return c;
+}
+
+/// 出现次数最多的前 n 个，形如「松了口气 3　胃沉 2」。
+String topCounts(Map<String, int> c, {int n = 6}) {
+  final List<MapEntry<String, int>> es = c.entries.toList()
+    ..sort((MapEntry<String, int> x, MapEntry<String, int> y) {
+      final int d = y.value.compareTo(x.value);
+      return d != 0 ? d : x.key.compareTo(y.key);
+    });
+  return es
+      .take(n)
+      .map((MapEntry<String, int> e) => '${e.key} ${e.value}')
+      .join('　');
+}

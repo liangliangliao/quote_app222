@@ -1,8 +1,13 @@
+import 'dart:convert';
+
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/models.dart';
 import '../data/zhaojian_dao.dart';
+import '../data/zhaojian_schema.dart';
 import '../zhaojian_oracle.dart';
 import 'analysis.dart';
 
@@ -18,7 +23,24 @@ class ZhaojianController extends ChangeNotifier {
   List<ZLog> logs = <ZLog>[];
   List<ZHypothesis> hypotheses = <ZHypothesis>[];
   List<ZMiss> misses = <ZMiss>[];
+  final Map<String, List<ZEntry>> _items = <String, List<ZEntry>>{};
+  Map<String, String> _kv = <String, String>{};
   bool loaded = false;
+
+  /// 某一类通用条目（按创建时间从早到晚）。
+  List<ZEntry> items(String kind) => _items[kind] ?? const <ZEntry>[];
+
+  /// 键值（自评的长处短处、选定的线、自述线索等）。
+  String kv(String key, [String fallback = '']) => _kv[key] ?? fallback;
+
+  /// 行为证据的条数：行为记录、已开牌的决定、行为考古、他人观察、回望、有结果的绳子。
+  int get evidenceCount =>
+      logs.length +
+      revealed.length +
+      items('arch').length +
+      items('obs').length +
+      items('reg').length +
+      items('rope').where((ZEntry r) => r.s('ok').isNotEmpty).length;
 
   List<ZDecision> get pending =>
       decisions.where((ZDecision d) => !d.revealed).toList().reversed.toList();
@@ -34,6 +56,11 @@ class ZhaojianController extends ChangeNotifier {
     logs = await dao.allLogs();
     hypotheses = await dao.allHypotheses();
     misses = await dao.allMisses();
+    _items.clear();
+    for (final ZEntry it in await dao.allItems()) {
+      _items.putIfAbsent(it.kind, () => <ZEntry>[]).add(it);
+    }
+    _kv = await dao.allKv();
     loaded = true;
     notifyListeners();
   }
@@ -145,6 +172,116 @@ class ZhaojianController extends ChangeNotifier {
   Future<void> deleteHypothesis(int id) async {
     await dao.deleteHypothesis(id);
     await load();
+  }
+
+  /// 全部数据导出为 JSON 文本（给用户复制备份）。
+  String exportJson() {
+    final Map<String, Object?> m = <String, Object?>{
+      'app': 'zhaojian',
+      'schema': 3,
+      'exported_at': DateTime.now().toIso8601String(),
+      'decisions': decisions.map((ZDecision d) => d.toRow()).toList(),
+      'logs': logs.map((ZLog l) => l.toRow()).toList(),
+      'hypotheses': hypotheses.map((ZHypothesis h) => h.toRow()).toList(),
+      'misses': misses.map((ZMiss x) => x.toRow()).toList(),
+      'items': <Object?>[
+        for (final List<ZEntry> list in _items.values)
+          for (final ZEntry it in list) it.toRow(),
+      ],
+      'kv': _kv,
+    };
+    return const JsonEncoder.withIndent('  ').convert(m);
+  }
+
+  Future<ZEntry> addItem(String kind, Map<String, dynamic> data) async {
+    final ZEntry it = ZEntry(kind: kind, data: data);
+    it.id = await dao.insertItem(it);
+    _items.putIfAbsent(kind, () => <ZEntry>[]).add(it);
+    notifyListeners();
+    return it;
+  }
+
+  Future<void> saveItem(ZEntry it) async {
+    it.updatedAt = DateTime.now();
+    await dao.updateItem(it);
+    notifyListeners();
+  }
+
+  Future<void> removeItem(ZEntry it) async {
+    final int? id = it.id;
+    if (id != null) await dao.deleteItem(id);
+    _items[it.kind]?.remove(it);
+    notifyListeners();
+  }
+
+  /// 某条主线被标注过的行为条数（行为记录、已开牌的决定、带主线标注的各类条目）。
+  int actsOfHypothesis(int id) {
+    int n = logs.where((ZLog l) => l.hypId == id).length +
+        revealed.where((ZDecision d) => d.hypId == id).length;
+    for (final List<ZEntry> list in _items.values) {
+      n += list.where((ZEntry e) => e.i('th') == id).length;
+    }
+    return n;
+  }
+
+  /// 某条主线在几个不同的人生阶段出现过（来自带阶段标注的行为考古）。
+  int phasesOfHypothesis(int id) {
+    final Set<String> ph = <String>{};
+    for (final ZEntry e in items('arch')) {
+      if (e.i('th') == id && e.s('ph').isNotEmpty) ph.add(e.s('ph'));
+    }
+    return ph.length;
+  }
+
+  /// 导出全部数据（JSON 文本），用于备份或带给别人看。
+  String exportJson() {
+    return const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
+      'app': 'zhaojian',
+      'schemaVersion': ZhaojianSchema.schemaVersion,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'decisions': decisions.map((ZDecision d) => d.toRow()).toList(),
+      'logs': logs.map((ZLog l) => l.toRow()).toList(),
+      'hypotheses': hypotheses.map((ZHypothesis h) => h.toRow()).toList(),
+      'misses': misses.map((ZMiss m) => m.toRow()).toList(),
+      'items': <String, dynamic>{
+        for (final MapEntry<String, List<ZEntry>> e in _items.entries)
+          e.key: e.value.map((ZEntry i) => i.toRow()).toList(),
+      },
+      'kv': _kv,
+    });
+  }
+
+  Future<void> setKv(String key, String value) async {
+    _kv[key] = value;
+    await dao.setKv(key, value);
+    notifyListeners();
+  }
+
+  /// 给一个条目标注「它表达了（或背离了）哪条主线」，同步计入该假设的支持或反驳。
+  /// 换了主线或换了方向会先撤销上一次的计数；取消标注时 [hypId] 传 null。
+  Future<void> tagItem(ZEntry it, int? hypId, String kind) async {
+    final int? oldId = it.i('th');
+    final String oldKind = it.s('tk', 'sup');
+    if (oldId != null) await _unbumpHypothesis(oldId, oldKind);
+    if (hypId == null) {
+      it.data.remove('th');
+      it.data.remove('tk');
+    } else {
+      it.data['th'] = hypId;
+      it.data['tk'] = kind;
+      await _bumpHypothesis(hypId, kind);
+    }
+    await dao.updateItem(it);
+    await load();
+  }
+
+  Future<void> _unbumpHypothesis(int id, String kind) async {
+    final ZHypothesis? h = await dao.findHypothesis(id);
+    if (h == null) return;
+    final List<int> list = kind == 'ref' ? h.ref : h.sup;
+    if (list.isNotEmpty) list.removeLast();
+    h.status = hypothesisStatus(h.sup.length, h.ref.length);
+    await dao.updateHypothesis(h);
   }
 
   Future<void> _bumpHypothesis(int id, String kind) async {

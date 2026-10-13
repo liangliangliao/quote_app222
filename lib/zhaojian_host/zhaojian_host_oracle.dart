@@ -34,6 +34,15 @@ class ZhaojianHostOracle extends ZhaojianOracle {
   }
 
   @override
+  Future<String> generate({
+    required String prompt,
+    required String purpose,
+    int maxTokens = 2500,
+  }) {
+    return text.generate(prompt: prompt, purpose: purpose, maxTokens: maxTokens);
+  }
+
+  @override
   Future<ZAlignResult> scoreAlignment({
     required String situation,
     required String optionA,

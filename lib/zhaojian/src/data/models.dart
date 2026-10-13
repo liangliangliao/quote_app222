@@ -455,6 +455,81 @@ class ZHypothesis {
   }
 }
 
+/// 通用条目：绳子、小墙、计划、行为考古等十几类条目共用，按 [kind] 区分，
+/// 内容放在 [data]（JSON）里。这样新增一类条目不需要新表、新迁移。
+class ZEntry {
+  ZEntry({
+    this.id,
+    required this.kind,
+    Map<String, dynamic>? data,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  })  : data = data ?? <String, dynamic>{},
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
+
+  int? id;
+  final String kind;
+  final Map<String, dynamic> data;
+  final DateTime createdAt;
+  DateTime updatedAt;
+
+  String s(String key, [String fallback = '']) {
+    final dynamic v = data[key];
+    return v == null ? fallback : v.toString();
+  }
+
+  int? i(String key) {
+    final dynamic v = data[key];
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
+  }
+
+  bool b(String key) => data[key] == true;
+
+  List<String> list(String key) {
+    final dynamic v = data[key];
+    if (v is! List) return <String>[];
+    return v.map((dynamic e) => e.toString()).toList();
+  }
+
+  List<Map<String, dynamic>> maps(String key) {
+    final dynamic v = data[key];
+    if (v is! List) return <Map<String, dynamic>>[];
+    return v
+        .whereType<Map>()
+        .map((Map e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Map<String, Object?> toRow() => <String, Object?>{
+        if (id != null) 'id': id,
+        'kind': kind,
+        'data_json': jsonEncode(data),
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+      };
+
+  factory ZEntry.fromRow(Map<String, Object?> r) {
+    int asInt(Object? v) => v is int ? v : (v is num ? v.toInt() : 0);
+    Map<String, dynamic> data = <String, dynamic>{};
+    try {
+      final dynamic v = jsonDecode((r['data_json'] ?? '{}').toString());
+      if (v is Map) data = Map<String, dynamic>.from(v);
+    } catch (_) {
+      data = <String, dynamic>{};
+    }
+    return ZEntry(
+      id: r['id'] is int ? r['id'] as int : null,
+      kind: (r['kind'] ?? '').toString(),
+      data: data,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(asInt(r['created_at'])),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(asInt(r['updated_at'])),
+    );
+  }
+}
+
 /// 开牌时登记的「天平漏掉的动机」。
 class ZMiss {
   ZMiss({
