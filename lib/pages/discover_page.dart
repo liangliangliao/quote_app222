@@ -44,8 +44,6 @@ import '../zhixing_tree/zhixing_tree_home_page.dart';
 import '../xiangji_future_strategist/xiangji_home_page.dart';
 import '../xiangji_goal_mentor/xiangji_discover_entries.dart';
 import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
-import '../will_mirror/will_mirror_discover_entry.dart';
-import '../will_mirror/will_mirror_home_page.dart';
 import '../mental_health_checkup/mental_health_checkup_page.dart';
 import '../belief_lab/belief_mentor_discover_entry.dart';
 import '../belief_lab/belief_mentor_home_page.dart';
@@ -2629,16 +2627,6 @@ Widget _buildEmotionPieChart() {
                           CupertinoPageRoute<void>(
                             builder: (_) =>
                                 const XiangjiFutureStrategistHomePage(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    WillMirrorDiscoverEntry(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          CupertinoPageRoute<void>(
-                            builder: (_) => const WillMirrorHomePage(),
                           ),
                         );
                       },
