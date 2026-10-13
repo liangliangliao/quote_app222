@@ -28,7 +28,7 @@ flutter build apk --release --no-pub --target-platform android-arm64
 
 新回归文件：`v28_workflow_test.dart`（时序/风险/排序/原则/撤回/现实边界）、`v28_vault_test.dart`（v1 迁移、加密边界、乐观锁、不可变历史、跨课题传播、整库删除）、`v28_ai_test.dart`（最小授权、取消、失败降级、Decisions 名称/分值/概率、私密日志）、`v28_widget_test.dart`（手机操作、提醒不伪造触发、失效链接、大字体）。全部位于 `test/will_mirror/`。
 
-远程验证均对应源码提交 `580e06195305d5202832da06402b16cc64bdb3cf`（后续交付记录仅更新文档）：
+远程验证均对应源码提交 `580e06195305d5202832da06402b16cc64bdb3cf`（后续提交仅更新验收文档和构建缓存忽略规则）：
 
 - [PR #172](https://github.com/liangliangliao/quote_app222/pull/172)，保持 draft，尚有专项验收和高级功能未完成。
 - [意志之镜 v2.8 / V5 回归通过](https://github.com/liangliangliao/quote_app222/actions/runs/38383308057)。

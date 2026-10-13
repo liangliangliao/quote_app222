@@ -4,6 +4,7 @@
 .flutter-plugins-dependencies
 /build/
 /android/.gradle/
+/android/.kotlin/
 /android/build/
 /android/local.properties
 /android/gradle/wrapper/gradle-wrapper.jar
