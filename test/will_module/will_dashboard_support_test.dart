@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:project_fixed_20260307_v10_goal_module_phase39_world_navigation_chain/will_module/will_dashboard_support.dart';
-import 'package:project_fixed_20260307_v10_goal_module_phase39_world_navigation_chain/will_module/will_models.dart';
+import 'package:quote_app/will_module/will_dashboard_support.dart';
+import 'package:quote_app/will_module/will_models.dart';
 
 void main() {
   test('trainingTypeForTaskTitle maps known tasks', () {
