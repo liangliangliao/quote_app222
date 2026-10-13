@@ -1,0 +1,25 @@
+# Flutter and local Android/iOS build output
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+/build/
+/android/.gradle/
+/android/build/
+/android/local.properties
+/android/gradle/wrapper/gradle-wrapper.jar
+/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/flutter_export_environment.sh
+/ios/Flutter/ephemeral/
+/ios/Runner/GeneratedPluginRegistrant.h
+/ios/Runner/GeneratedPluginRegistrant.m
+*.iml
+.idea/
+# Local credentials must not be committed.
+.env
+.env.*
+!.env.example
+key.properties
+*.jks
+*.keystore
+__pycache__/

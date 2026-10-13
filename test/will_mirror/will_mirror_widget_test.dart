@@ -8,6 +8,7 @@ import 'package:quote_app/will_mirror/will_mirror_practice_intelligence_service.
 import 'package:quote_app/will_mirror/will_mirror_practice_models.dart';
 import 'package:quote_app/will_mirror/will_mirror_practice_page.dart';
 import 'package:quote_app/will_mirror/will_mirror_vault.dart';
+import 'package:quote_app/will_mirror/v28/case_models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -140,6 +141,8 @@ Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
 }
 
 class _EmptyWillMirrorVault extends WillMirrorVault {
+  @override
+  Future<List<WmCase>> caseFiles() async => [];
   @override
   Future<WillMirrorGoal?> activeGoal() async => null;
 

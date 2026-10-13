@@ -21,6 +21,7 @@ dependencies:
   # incompatible method signatures under the app's Flutter 3.35 toolchain.
   workmanager: 0.9.2
   flutter_local_notifications: ^19.4.2
+  timezone: ^0.10.1
   fl_chart: ^0.68.0
   intl: ^0.19.0
   crypto: ^3.0.3

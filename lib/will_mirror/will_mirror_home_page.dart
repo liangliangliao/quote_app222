@@ -18,6 +18,9 @@ import 'will_mirror_profile_page.dart';
 import 'will_mirror_support_pages.dart';
 import 'will_mirror_vault.dart';
 import 'will_mirror_widgets.dart';
+import 'v28/case_models.dart';
+import 'v28/case_page.dart';
+import 'v28/case_workflow.dart';
 
 class WillMirrorHomePage extends StatefulWidget {
   const WillMirrorHomePage({
@@ -55,6 +58,8 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
   WillMirrorExperiment? _experiment;
   bool _loading = true;
   String? _error;
+  List<WmCase> _cases = const [];
+  bool _startingCase = false;
 
   @override
   void initState() {
@@ -72,6 +77,7 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
 
   Future<void> _load() async {
     try {
+      final cases = await _vault.caseFiles();
       final goal = await _vault.activeGoal();
       var plan = await _vault.activeActionPlan();
       plan ??= goal == null ? null : await _vault.actionPlan(goal.id);
@@ -97,6 +103,7 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
         _hypotheses = hypotheses;
         _experiment = experiment;
         _observations = observations;
+        _cases = cases;
         _loading = false;
         _error = null;
       });
@@ -134,6 +141,23 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
       ),
     );
     if (created == true) _quickInput.clear();
+  }
+
+  Future<void> _startCase() async {
+    if (_startingCase) return;
+    final text = _quickInput.text.trim();
+    if (text.isEmpty || text.length > 8000) { _show('先用一句话说出你想面对的事（最多 8000 字）'); return; }
+    setState(() => _startingCase = true);
+    try {
+      final c = WmWorkflow().start(WillMirrorIds.next('goal'), text);
+      await _vault.saveGoal(WillMirrorGoal(id: c.id, text: text, domain: '待探索', baselineDesire: 0,
+        status: 'case_open', createdAt: c.createdAt, updatedAt: c.updatedAt));
+      await _vault.saveCaseFile(c);
+      if (!mounted) return;
+      _quickInput.clear();
+      await _open<void>(WmCasePage(caseId: c.id, vault: _vault));
+    } catch (_) { _show('课题未能打开，请重试。已有记录仍保留。'); }
+    finally { if (mounted) setState(() => _startingCase = false); }
   }
 
   Future<void> _openAssistant() async {
@@ -247,10 +271,16 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (_plan == null || _plan!.status != 'active')
-                    _startCard()
-                  else
-                    _todayCard(_plan!),
+                  _startCard(),
+                  const SizedBox(height: 14),
+                  WillMirrorSectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const Text('继续我的课题', style: TextStyle(fontWeight: FontWeight.w800)),
+                    for (final c in _cases.take(3)) ListTile(contentPadding: EdgeInsets.zero, title: Text(c.issue, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('第 ${c.cycle} 轮 · ${c.stateLabel}'), trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open<void>(WmCasePage(caseId: c.id, vault: _vault))),
+                    TextButton.icon(onPressed: () => _open<void>(WmCaseLibraryPage(vault: _vault)), icon: const Icon(Icons.history), label: const Text('我的课题与既往经历')),
+                  ])),
+                  if (_plan?.status == 'active') ExpansionTile(title: const Text('继续已有的今日练习'), children: [_todayCard(_plan!)]),
                   if (_plan != null && _plan!.status == 'completed') ...<Widget>[
                     const SizedBox(height: 12),
                     _completedCard(_plan!),
@@ -293,7 +323,7 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
           ),
           const SizedBox(height: 7),
           const Text(
-            '说一句就够。接下来我会帮你把知识变成今天能完成的第一步。',
+            '从一件具体的事开始：看清想要，比较理由，在现实里验证自己的选择。',
             style: TextStyle(color: Color(0xFFE7F0EA), height: 1.45),
           ),
           const SizedBox(height: 14),
@@ -342,11 +372,15 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
                 backgroundColor: Colors.white,
                 foregroundColor: WillMirrorPalette.forest,
               ),
-              onPressed: _startPractice,
+              onPressed: _startingCase ? null : _startCase,
               icon: const Icon(Icons.arrow_forward),
-              label: const Text('带我做到今天第一步'),
+              label: const Text('开始我的课题'),
             ),
           ),
+          Wrap(spacing: 6, children: [
+            for (final example in ['我想完成作品集，但一直拖延', '我在两种工作安排之间犹豫', '我努力过，却没有得到想要的结果'])
+              TextButton(onPressed: () => setState(() => _quickInput.text = example), style: TextButton.styleFrom(foregroundColor: Colors.white), child: Text(example)),
+          ]),
         ],
       ),
     );
@@ -588,6 +622,12 @@ class _WillMirrorHomePageState extends State<WillMirrorHomePage> {
         subtitle: const Text('需要深入分析时再打开；新用户不必先学会这些'),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         children: <Widget>[
+          WillMirrorEntryTile(
+            icon: Icons.play_circle_outline,
+            title: '旧版今日第一步练习',
+            subtitle: '沿用原有个性化练习与七日反馈；先在首页填写一句话',
+            onTap: _startPractice,
+          ),
           WillMirrorEntryTile(
             icon: Icons.account_tree_outlined,
             title: '目标、Deep Why 与变量探针',

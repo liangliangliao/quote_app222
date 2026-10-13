@@ -1,4 +1,4 @@
-name: Will Mirror V5 CI
+name: Will Mirror v2.8 + V5 regression
 
 on:
   push:
@@ -8,9 +8,15 @@ on:
       - "test/will_mirror/**"
       - "assets/will_mirror/**"
       - "docs/will_mirror_v5_*.md"
+      - "docs/will_mirror_v28/**"
+      - "server/will_mirror_decisions/**"
+      - "lib/services/notification_service.dart"
+      - "lib/utils/deepseek_logger.dart"
+      - "android/app/src/main/AndroidManifest.xml"
       - "android/app/src/main/kotlin/com/example/quote_app/WillMirrorVaultChannel.kt"
       - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
       - "pubspec.yaml"
+      - "pubspec.lock"
       - ".github/workflows/will_mirror_v4_ci.yml"
   pull_request:
     paths:
@@ -19,9 +25,15 @@ on:
       - "test/will_mirror/**"
       - "assets/will_mirror/**"
       - "docs/will_mirror_v5_*.md"
+      - "docs/will_mirror_v28/**"
+      - "server/will_mirror_decisions/**"
+      - "lib/services/notification_service.dart"
+      - "lib/utils/deepseek_logger.dart"
+      - "android/app/src/main/AndroidManifest.xml"
       - "android/app/src/main/kotlin/com/example/quote_app/WillMirrorVaultChannel.kt"
       - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
       - "pubspec.yaml"
+      - "pubspec.lock"
       - ".github/workflows/will_mirror_v4_ci.yml"
   workflow_dispatch:
 
@@ -49,6 +61,12 @@ jobs:
 
       - name: Resolve dependencies
         run: flutter pub get
+
+      - name: Install SQLite test runtime
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Test Decisions proxy contract without live API credentials
+        run: python3 -m unittest discover -s server/will_mirror_decisions -p 'test_*.py' -v
 
       - name: Verify KB manifest hash and record count
         shell: bash
@@ -98,7 +116,7 @@ jobs:
           PY
 
       - name: Analyze Will Mirror module
-        run: dart analyze lib/will_mirror
+        run: dart analyze lib/will_mirror lib/services/notification_service.dart lib/utils/deepseek_logger.dart
 
       - name: Analyze Will Mirror tests
         run: dart analyze test/will_mirror

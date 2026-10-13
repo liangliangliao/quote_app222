@@ -6,6 +6,11 @@ import '../services/native_guard.dart';
 class DeepSeekLogger {
   static final LogDao _dao = LogDao();
 
+  /// Private Vault content must never be copied to the host's plaintext logs,
+  /// including provider errors that may echo the request or response body.
+  static bool isPrivateModule(String module) =>
+      module.startsWith('will_mirror.') || module.startsWith('unified_ai.will_mirror.');
+
   static String _providerTitle(String provider, String suffix) => '【${provider}${suffix}】';
 
   static Map<String, String> _sanitizeHeaders(Map<String, String> headers) {
@@ -62,6 +67,7 @@ class DeepSeekLogger {
     String? traceId,
     String? sessionId,
   }) async {
+    if (isPrivateModule(module)) return;
     final sanitizedHeaders = _sanitizeHeaders(headers);
     await _write(
       _providerTitle(provider, '请求'),
@@ -88,6 +94,7 @@ class DeepSeekLogger {
     String? traceId,
     String? sessionId,
   }) async {
+    if (isPrivateModule(module)) return;
     await _write(
       _providerTitle(provider, '响应'),
       module,
@@ -112,6 +119,7 @@ class DeepSeekLogger {
     String? traceId,
     String? sessionId,
   }) async {
+    if (isPrivateModule(module)) return;
     await _write(
       _providerTitle(provider, '异常'),
       module,

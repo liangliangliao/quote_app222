@@ -1,11 +1,8 @@
-import '../services/native_guard.dart';
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import '../evidence_growth/evidence_growth_notification_link.dart';
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../kindling/kindling.dart';
@@ -30,6 +27,8 @@ import '../xiangji_future_strategist/xiangji_repository.dart';
 import '../belief_lab/belief_mentor_dao.dart';
 import '../belief_lab/belief_mentor_home_page.dart';
 import '../belief_lab/belief_mentor_models.dart';
+import '../will_mirror/v28/case_page.dart';
+import '../will_mirror/v28/case_reminders.dart';
 
 import 'package:flutter/material.dart';
 
@@ -48,6 +47,8 @@ class NotificationService {
   static const _growthNative = MethodChannel('native.scheduler');
   static final _growthTapTokens = <String>{};
   static Route<void>? _growthNotificationRoute;
+  static Route<void>? _willMirrorNotificationRoute;
+  static String? _willMirrorNotificationPayload;
   static bool get hasOpenEvidenceGrowthNotification => _growthNotificationRoute?.isActive ?? false;
   static bool _launchFromNotif = false;
   static String? _pendingPayload;
@@ -97,6 +98,7 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateWillMirror(payload)) return;
     if (await _tryNavigateKindling(payload)) return;
     if (await _tryNavigateBeliefMentor(payload)) return;
     if (await _tryNavigateXiangjiFutureStrategist(payload)) return;
@@ -107,6 +109,21 @@ class NotificationService {
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateWillMirror(String? payload) async {
+    final link = WmCaseLink.parse(payload);
+    if (link == null) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) return false;
+    _launchFromNotif = false;
+    _pendingPayload = null;
+    if ((_willMirrorNotificationRoute?.isActive ?? false) && _willMirrorNotificationPayload == link.encode()) return true;
+    final route = MaterialPageRoute<void>(builder: (_) => WmCasePage(caseId: link.caseId, link: link));
+    _willMirrorNotificationRoute = route;
+    _willMirrorNotificationPayload = link.encode();
+    nav.push(route);
+    return true;
   }
 
   /// 火种的复问通知：直接开模块首页，不带任何参数。
@@ -468,6 +485,8 @@ class NotificationService {
           // Fallback to home if something fails
           SimpleBus.navHome();
           SimpleBus.pokeHome();
+        } else if (await NotificationService._tryNavigateWillMirror(p)) {
+          return;
         } else if (await NotificationService._tryNavigateBeliefMentor(p)) {
           return;
         } else if (await NotificationService._tryNavigateXiangjiFutureStrategist(

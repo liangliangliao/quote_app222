@@ -9,6 +9,10 @@ import 'package:sqflite/sqflite.dart';
 import 'will_mirror_models.dart';
 import 'will_mirror_practice_models.dart';
 import 'will_mirror_vault_cipher.dart';
+import 'v28/case_models.dart';
+import 'v28/case_analysis.dart';
+import 'v28/case_workflow.dart';
+import 'v28/case_reminders.dart';
 
 class WillMirrorIds {
   static final Random _random = Random.secure();
@@ -47,7 +51,7 @@ class WillMirrorVault {
         _baseDirectoryProvider = baseDirectoryProvider;
 
   static const String fileName = 'will_mirror_vault.sqlite';
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
   static const String practiceProfileKey = 'v5_practice_profile';
   static const String activeActionPlanKey = 'v5_active_action_plan';
   static const String assistantHistoryKey = 'v5_assistant_history';
@@ -88,6 +92,9 @@ class WillMirrorVault {
           await db.rawQuery('PRAGMA secure_delete = ON');
         },
         onCreate: _create,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) await _createCaseExtension(db);
+        },
       ),
     );
     try {
@@ -99,6 +106,7 @@ class WillMirrorVault {
   }
 
   Future<void> _create(Database db, int version) async {
+    // The extension is created after the legacy tables below.
     await db.execute('''
       CREATE TABLE wm_goal (
         id TEXT PRIMARY KEY,
@@ -250,6 +258,17 @@ class WillMirrorVault {
         synced_at INTEGER
       )
     ''');
+    await _createCaseExtension(db);
+  }
+
+  Future<void> _createCaseExtension(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS wm_case_state (
+      goal_id TEXT PRIMARY KEY,
+      revision INTEGER NOT NULL,
+      payload_enc TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(goal_id) REFERENCES wm_goal(id) ON DELETE CASCADE
+    )''');
   }
 
   Future<void> ensureSecureReady() async {
@@ -900,6 +919,8 @@ class WillMirrorVault {
       allHypotheses.addAll(hypothesisList);
       goalPayloads.add(<String, dynamic>{
         ...goal.toJson(),
+        if (await caseFile(goal.id) != null)
+          'case_v28': (await caseFile(goal.id))!.toJson(),
         'why_nodes': nodes.map((item) => item.toJson()).toList(),
         'evidence': evidence.map((item) => item.toJson()).toList(),
         'probes': goalProbes.map((item) => item.toJson()).toList(),
@@ -935,7 +956,7 @@ class WillMirrorVault {
     }
     return <String, dynamic>{
       'product': '意志之镜',
-      'schema_version': '5.0',
+      'schema_version': '5.0+case-2.8',
       'exported_at': DateTime.now().toIso8601String(),
       'notice': '这是用户主动导出的明文副本，请由用户自行安全保管。',
       if (profile != null) 'practice_profile': profile.toJson(),
@@ -959,6 +980,156 @@ class WillMirrorVault {
     return file.path;
   }
 
+  Future<WmCase?> caseFile(String goalId) async {
+    final db = await _database();
+    final rows = await db.query('wm_case_state', where: 'goal_id = ?',
+        whereArgs: <Object?>[goalId]);
+    return rows.isEmpty ? null : WmCase.fromJson(wmMap(jsonDecode(
+      await _dec(rows.single['payload_enc']),
+    )));
+  }
+
+  Future<List<WmCase>> caseFiles() async {
+    final db = await _database();
+    final rows = await db.query('wm_case_state', orderBy: 'updated_at DESC');
+    final result = <WmCase>[];
+    for (final row in rows) {
+      result.add(WmCase.fromJson(wmMap(jsonDecode(await _dec(row['payload_enc'])))));
+    }
+    return result;
+  }
+
+  /// Optimistic locking prevents an in-flight AI response from restoring an
+  /// older evidence/consent version. Never uses REPLACE (which cascades deletes).
+  Future<WmCase> saveCaseFile(WmCase value) async {
+    await ensureSecureReady();
+    final db = await _database();
+    return db.transaction((txn) async {
+      final rows = await txn.query('wm_case_state', where: 'goal_id = ?',
+          whereArgs: <Object?>[value.id]);
+      final actual = rows.isEmpty ? 0 : wmInt(rows.single['revision']);
+      if (actual != value.revision) {
+        throw StateError('课题已在别处更新，请重新打开后再操作。');
+      }
+      if (rows.isNotEmpty) {
+        final old = WmCase.fromJson(wmMap(jsonDecode(await _dec(rows.single['payload_enc']))));
+        if (old.createdAt != value.createdAt || old.issue != value.issue) throw StateError('原始课题不可被事后改写');
+        void preserve(List<WmJson> previous, List<WmJson> next, String Function(WmJson) key) {
+          for (final item in previous) {
+            final replacement = next.where((n) => key(n) == key(item)).firstOrNull;
+            if (replacement == null || jsonEncode(item) != jsonEncode(replacement)) throw StateError('既有证据、事件与原则版本不可改写');
+          }
+        }
+        preserve(old.evidence.map((e) => e.toJson()).toList(), value.evidence.map((e) => e.toJson()).toList(), (v) => wmText(v['id']));
+        preserve(old.events.map((e) => e.toJson()).toList(), value.events.map((e) => e.toJson()).toList(), (v) => wmText(v['id']));
+        preserve(old.principles.map((e) => e.toJson()).toList(), value.principles.map((e) => e.toJson()).toList(), (v) => '${v['id']}:${v['version']}');
+        for (final seal in old.snapshots) {
+          final newer = value.snapshots.where((s) => s['id'] == seal['id']).firstOrNull;
+          if (newer == null || jsonEncode(newer['payload']) != jsonEncode(seal['payload']) || newer['hash'] != seal['hash']) {
+            throw StateError('事前快照不可改写；撤回证据请使用专用删除操作。');
+          }
+        }
+      }
+      const WmAnalysisEngine().validate(value.analysis, value);
+      final ids = value.evidence.map((e) => e.id).toSet();
+      if (ids.length != value.evidence.length || value.evidence.any((e) => e.knownAt > e.recordedAt) ||
+          value.events.any((e) => e.evidenceIds.any((id) => !ids.contains(id)))) {
+        throw const FormatException('证据引用或认识时间不合法');
+      }
+      // A new principle revision invalidates old applications, but never alters
+      // the principle reference inside an earlier sealed snapshot.
+      WmCase invalidate(WmCase target) => target.change({'principleUses': target.principleUses.map((u) {
+        if (u['sourceCaseId'] != value.id || u['status'] != 'active') return u;
+        final current = value.latestPrinciples.where((p) => p.id == u['principleId']).firstOrNull;
+        if (current != null && current.version == u['principleVersion'] && current.status == WmPrincipleStatus.accepted) return u;
+        return {...u, 'status': 'stale_source_revision'};
+      }).toList()});
+      final saved = invalidate(value).change({'revision': actual + 1});
+      await _upsert(txn, 'wm_case_state', <String, Object?>{
+        'goal_id': saved.id, 'revision': saved.revision,
+        'payload_enc': await _enc(jsonEncode(saved.toJson())), 'updated_at': saved.updatedAt,
+      }, where: 'goal_id = ?', whereArgs: <Object?>[saved.id]);
+      for (final row in await txn.query('wm_case_state', where: 'goal_id != ?', whereArgs: [saved.id])) {
+        final target = WmCase.fromJson(wmMap(jsonDecode(await _dec(row['payload_enc']))));
+        final revised = invalidate(target);
+        if (jsonEncode(target.principleUses) == jsonEncode(revised.principleUses)) continue;
+        final next = revised.change({'revision': target.revision + 1,
+          'rankings': revised.rankings.map((r) => {...r, 'status': 'stale_source_revision'}).toList()});
+        await txn.update('wm_case_state', {'revision': next.revision, 'payload_enc': await _enc(jsonEncode(next.toJson()))}, where: 'goal_id = ?', whereArgs: [next.id]);
+      }
+      return saved;
+    });
+  }
+
+  /// In one transaction redact revoked source text and invalidate all dependent
+  /// applications. No old explanation survives as a usable local cache.
+  Future<void> revokeCaseEvidence(String caseId, String evidenceId) async {
+    await WmReminders().cancel(caseId);
+    await ensureSecureReady();
+    final db = await _database();
+    await db.transaction((txn) async {
+      final rows = await txn.query('wm_case_state');
+      final sourceRow = rows.where((r) => r['goal_id'] == caseId).firstOrNull;
+      if (sourceRow == null) throw StateError('课题不存在');
+      final source = WmCase.fromJson(wmMap(jsonDecode(await _dec(sourceRow['payload_enc']))));
+      final evidence = source.evidence.where((e) => e.id == evidenceId).firstOrNull;
+      if (evidence == null) throw StateError('证据不存在');
+      final workflow = WmWorkflow();
+      for (final row in rows) {
+        final c = WmCase.fromJson(wmMap(jsonDecode(await _dec(row['payload_enc']))));
+        if (c.id != caseId && !c.principleUses.any((u) => u['sourceCaseId'] == caseId)) continue;
+        final next = (c.id == caseId ? workflow.revokeEvidence(c, evidenceId) : workflow.revokeSource(c, caseId))
+            .change({'revision': c.revision + 1});
+        await txn.update('wm_case_state', <String, Object?>{
+          'revision': next.revision, 'payload_enc': await _enc(jsonEncode(next.toJson())), 'updated_at': next.updatedAt,
+        }, where: 'goal_id = ?', whereArgs: <Object?>[next.id]);
+      }
+      if (evidence.legacyId != null) {
+        await txn.delete('wm_life_evidence', where: 'id = ? AND goal_id = ?', whereArgs: <Object?>[evidence.legacyId, caseId]);
+      }
+      if (evidence.kind == WmFactKind.statement) {
+        await txn.update('wm_goal', {'text_enc': await _enc('已撤回原始描述')}, where: 'id = ?', whereArgs: <Object?>[caseId]);
+      }
+      await _clearDerivedPrivateCaches(txn, caseId);
+    });
+  }
+
+  Future<void> _clearDerivedPrivateCaches(DatabaseExecutor db, String caseId) async {
+    // V4 inference runs have no case FK; conservatively drop derived copies.
+    await db.delete('wm_inference_run');
+    await db.delete('wm_sync_outbox');
+    await db.delete('wm_setting', where: 'setting_key IN (?, ?)',
+      whereArgs: <Object?>[actionPlanKey(caseId), assistantHistoryKey]);
+    if (await _readSettingWithDb(db, activeActionPlanKey) == caseId) {
+      await db.delete('wm_setting', where: 'setting_key = ?', whereArgs: [activeActionPlanKey]);
+    }
+    await db.update('wm_hypothesis', <String, Object?>{
+      'status': 'needs_review', 'confidence_band': 'insufficient',
+      'label_enc': await _enc('待重新核实的候选'),
+      'counter_search_note_enc': await _enc('来源已修改或撤回'),
+      'counter_search_completed': 0,
+      'explanation_enc': await _enc('来源已修改或撤回，请重新核实'),
+    }, where: 'goal_id = ?', whereArgs: <Object?>[caseId]);
+  }
+
+  Future<void> deleteCaseFile(String caseId) async {
+    await WmReminders().cancel(caseId);
+    await ensureSecureReady();
+    final db = await _database();
+    await db.transaction((txn) async {
+      final rows = await txn.query('wm_case_state');
+      for (final row in rows) {
+        final c = WmCase.fromJson(wmMap(jsonDecode(await _dec(row['payload_enc']))));
+        if (c.id == caseId || !c.allowedSourceCaseIds.contains(caseId) && !c.principleUses.any((u) => u['sourceCaseId'] == caseId)) continue;
+        final next = WmWorkflow().revokeSource(c, caseId).change({'revision': c.revision + 1});
+        await txn.update('wm_case_state', {'revision':next.revision,'payload_enc':await _enc(jsonEncode(next.toJson()))},
+          where:'goal_id = ?',whereArgs:<Object?>[c.id]);
+      }
+      await _clearDerivedPrivateCaches(txn, caseId);
+      await txn.delete('wm_goal', where: 'id = ?', whereArgs: <Object?>[caseId]);
+    });
+  }
+
   Future<void> close() async {
     final db = _db;
     _db = null;
@@ -968,6 +1139,7 @@ class WillMirrorVault {
   /// Cryptographic erasure: delete the SQLite file, then destroy the Keystore
   /// key so any remnant ciphertext is irrecoverable.
   Future<void> deleteAll() async {
+    await WmReminders().cancelAll();
     final path = await _resolvePath();
     final db = await _database();
     await db.rawQuery('PRAGMA secure_delete = ON');

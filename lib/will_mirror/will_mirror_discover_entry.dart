@@ -16,7 +16,7 @@ class WillMirrorDiscoverEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: '意志之镜 V5，说出目标或问题，生成今天能完成的一步并用现实反馈持续调整',
+      label: '意志之镜，从具体课题看清想要、比较理由、记录行动，并形成可检验的个人原则',
       child: Material(
         key: entryKey,
         color: const Color(0xFFF1EDE5),
@@ -52,7 +52,7 @@ class WillMirrorDiscoverEntry extends StatelessWidget {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        '说出目标或问题 → 今天第一步 → 现实反馈 → 下一轮',
+                        '看清想要 → 今天第一步 → 现实反馈 → 个人原则',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
