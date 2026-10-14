@@ -48,6 +48,7 @@ import '../mental_health_checkup/mental_health_checkup_page.dart';
 import '../belief_lab/belief_mentor_discover_entry.dart';
 import '../belief_lab/belief_mentor_home_page.dart';
 import '../kindling/kindling.dart';
+import '../will_mirror/will_mirror.dart';
 import '../kindling_host/kindling_host_page.dart';
 import '../beautiful_enemy/beautiful_enemy.dart' show EnemyDiscoverEntry;
 import '../beautiful_enemy_host/enemy_host_page.dart';
@@ -2634,6 +2635,12 @@ Widget _buildEmotionPieChart() {
                     const SizedBox(height: 12),
                     KindlingDiscoverEntry(
                       onTap: _openKindlingFromDiscover,
+                    ),
+                    const SizedBox(height: 12),
+                    WillMirrorDiscoverEntry(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => const WillMirrorModulePage()),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     EnemyDiscoverEntry(

@@ -1,0 +1,112 @@
+00:00 +0: loading /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart
+00:00 +0: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 证据来源 宿主的表还不存在时，所有来源都返回空而不是抛
+00:00 +1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 证据来源 打卡只取 done / missed / skipped，pending 不算证据
+00:00 +2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结
+00:00 +2 -1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结 [E]
+  Expected: Set:['手动记录', '没有来源']
+    Actual: Set:[]
+     Which: does not contain '手动记录'
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 92:7      main.<fn>.<fn>
+
+00:00 +2 -1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 证据来源 火种区分完成和中途退出，并带上分钟数
+00:00 +3 -1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 证据来源 重复采集产出同样的 dedupeKey
+00:00 +4 -1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 证据来源 端到端：授权后同步进案卷，开庭得到带证据的事实播报
+00:00 +5 -1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 解析标准 JSON，包括被代码围栏包着的
+00:00 +6 -1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型自己说证据不足，或输出不是 JSON，都返回 null
+00:00 +7 -1: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词
+00:00 +7 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词 [E]
+  Expected: <7201000>
+    Actual: <978307200000>
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 184:7     main.<fn>.<fn>
+
+00:00 +7 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型不可用或抛错时返回 null，让引擎降级
+00:00 +8 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 0 档（休战日）不调模型
+00:00 +9 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 系统提示里写死了铁律和各档边界
+00:00 +10 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 认得出毫秒、秒、数字字符串、ISO 时间；认不出的返回 null
+00:00 +11 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 库里没有这些表：不抛，也没有指纹
+00:01 +12 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 找得到时间列的表产出动静；没有时间列的表跳过；旧的不翻
+00:01 +13 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 同一模块 10 分钟内的多条新记录合并成一次动静
+00:01 +14 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 新增一行，指纹就变；没动，指纹不变
+00:01 +15 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 使用时长来源只是授权开关，不读任何表
+00:01 +16 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 默认接入的来源包含动静和使用时长，且标识不重复
+00:01 +17 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 清理模型输出：围栏、角色前缀、旁白、外层引号
+00:01 +18 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 提示里带情境、称呼、强度、证据摘要，历史只取最近几条并截断
+00:01 +19 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 主动开口时标明「没有用户输入」
+00:01 +20 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 模型不可用、抛错或只返回空白：返回 null，让模块用本地台词
+00:01 +21 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 正常返回时清理后交给模块
+00:01 +22 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 系统提示写死了人设、铁律和退场条件
+00:01 +23 -2: loading /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart
+00:03 +23 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 指纹没变就不重新收集；变了才收集
+00:03 +24 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 来源不提供指纹（null）时每次都收集
+00:03 +25 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 没授权的来源既不查指纹也不收集
+00:03 +26 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 授权后每分钟累加；没授权不记
+00:03 +27 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 静默时段内的算深夜使用
+00:03 +28 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 使用时长进入证据摘要
+00:03 +29 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 说做完了但账上没有；账上有；说没时间但在线很久
+00:03 +30 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上没有，敌人当场盘问
+00:04 +31 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上有，敌人核对后认
+00:04 +32 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说没时间，但今天在 App 里待了 45 分钟
+00:04 +33 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晨报：早上的第一次巡查自己开口，一天只一次
+00:04 +34 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 安静时段不开口；没有账可报也不开口
+00:04 +35 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：到钟点后还有账没平就开口，一天一次
+00:04 +36 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：今天一件完成的事都没有，就算没有字据也要说
+00:04 +37 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：人在 App 里 25 分钟、案卷没有新记录、字据还开着
+00:04 +38 -2: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话
+00:04 +38 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话 [E]
+  Expected: null
+    Actual: <Instance of 'EnemyMessage'>
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 290:7   main.<fn>.<fn>
+
+00:04 +38 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 开关：主动巡查关掉、实时插话总开关关掉、静音时都不开口
+00:05 +39 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 force 只接话，不做主动巡查
+00:05 +40 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 新事件优先：有事件时 step 先接话，不抢着做晨报
+00:05 +41 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 字据开着时点出「在忙别处」；没有字据就不吭声
+00:05 +42 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 其它模块的动静进入摘要，并被计成「有记录」
+00:05 +43 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 间隔只防刷屏：20 秒后又有新事，立刻接话，不用等 5 分钟
+00:05 +44 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 每日上限默认 30，不是 6：连续做 8 件事，敌人每一件都接话
+00:05 +45 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 主动巡查不占事件插话的上限：上限用光了，晚间结算照样开口
+00:05 +46 -3: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静
+00:05 +46 -4: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静 [E]
+  Expected: 'baseline'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: baseline
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 425:7   main.<fn>.<fn>
+
+00:05 +46 -4: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因
+00:05 +46 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因 [E]
+  Expected: 'capped'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: capped
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 463:7   main.<fn>.<fn>
+
+00:05 +46 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 开关关掉有各自的原因
+00:05 +47 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 状态快照：来源授权与条数、静默时段、今日开口、使用时长、后台记录
+00:05 +48 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 心跳年龄
+00:05 +49 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 演练 不等时段也能走一遍：带【演练】，不占上限，也不让今天真正的结算作废
+00:05 +50 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 演练 晨报演练、发呆演练
+00:05 +51 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 演练 发呆演练：没有字据就说明为什么做不了；静音时不演练；不认识的演练
+00:05 +52 -5: /workspace/quote_app222-baseline/test/beautiful_enemy/enemy_patrol_test.dart: 台词 巡查和核对的台词都过同一套校验
+00:06 +53 -5: Some tests failed.

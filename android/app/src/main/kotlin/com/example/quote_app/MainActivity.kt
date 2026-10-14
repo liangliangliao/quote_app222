@@ -101,6 +101,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         // 仅注册通道；不引入业务逻辑，避免后续维护成本
         Channels.register(flutterEngine, applicationContext)
+        WillMirrorV28Vault(flutterEngine.dartExecutor.binaryMessenger)
 		// 高精度 PPG：Android Camera2（含可选预览）
 		try { PpgCamera2Channel.register(flutterEngine, applicationContext) } catch (_: Throwable) {}
 		try { HealthDietHealthConnectChannel.register(this, flutterEngine) } catch (_: Throwable) {}
