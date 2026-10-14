@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../domain/controller.dart';
+import 'accept_page.dart';
+import 'cog_page.dart';
 import 'decide_page.dart';
+import 'engine_page.dart';
 import 'evidence_page.dart';
 import 'growth_page.dart';
 import 'hypothesis_page.dart';
 import 'log_page.dart';
 import 'map_page.dart';
 import 'pending_page.dart';
+import 'plans_page.dart';
+import 'rope_page.dart';
 import 'self_page.dart';
 import 'style_page.dart';
+import 'wall_page.dart';
 import 'widgets.dart';
 
 /// 模块里所有可以打开的页面。
@@ -98,6 +104,12 @@ class ZNav {
     ZDest.evidence: (ZhaojianController c) => EvidencePage(controller: c),
     ZDest.style: (ZhaojianController c) => StylePage(controller: c),
     ZDest.map: (ZhaojianController c) => MapPage(controller: c),
+    ZDest.engine: (ZhaojianController c) => EnginePage(controller: c),
+    ZDest.plans: (ZhaojianController c) => PlansPage(controller: c),
+    ZDest.rope: (ZhaojianController c) => RopePage(controller: c),
+    ZDest.wall: (ZhaojianController c) => WallPage(controller: c),
+    ZDest.accept: (ZhaojianController c) => AcceptPage(controller: c),
+    ZDest.cog: (ZhaojianController c) => CogPage(controller: c),
   };
 
   static bool isReady(ZDest d) => _builders.containsKey(d);

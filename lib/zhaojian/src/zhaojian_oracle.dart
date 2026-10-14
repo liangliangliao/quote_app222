@@ -14,6 +14,10 @@ abstract class ZhaojianOracle {
   /// 这个引擎会不会把用户写下的内容发给外部服务。界面据此决定是否披露。
   bool get sendsData => false;
 
+  /// 通用文字生成（[generate]）实际发给谁。默认与 [label] 相同；组合引擎里文字生成
+  /// 只走文字引擎，不走打分引擎，所以要单独说明。
+  String get generateLabel => label;
+
   /// 针对这个选择补出用户可能没意识到的动机。返回空表示没有（用本地库）。
   Future<List<ZMotive>> completeMotives({
     required String question,

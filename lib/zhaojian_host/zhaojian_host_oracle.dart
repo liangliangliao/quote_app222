@@ -19,6 +19,9 @@ class ZhaojianHostOracle extends ZhaojianOracle {
   bool get sendsData => true;
 
   @override
+  String get generateLabel => text.generateLabel;
+
+  @override
   Future<List<ZMotive>> completeMotives({
     required String question,
     required String optionA,

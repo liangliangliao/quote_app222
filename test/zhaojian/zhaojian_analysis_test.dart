@@ -404,6 +404,57 @@ void main() {
     });
   });
 
+  group('change helpers', () {
+    test('asifVerdict covers keep, continue, reset, drop and incomplete', () {
+      expect(asifVerdict('', '没成真', '更靠近'), startsWith('信息不全'));
+      expect(asifVerdict('自然', '没成真', '更远了'), startsWith('弃'), reason: '不通向欲求就弃，无论反应如何');
+      expect(asifVerdict('自然', '成真了', '更靠近'), startsWith('重设'));
+      expect(asifVerdict('自然', '没成真', '更靠近'), startsWith('保留'));
+      expect(asifVerdict('别扭', '没成真', '更靠近'), startsWith('继续'));
+      expect(asifVerdict('像在演', '部分成真', '更靠近'), startsWith('继续'));
+      expect(asifVerdict('自然', '没成真', '说不准'), startsWith('再观察'));
+    });
+
+    test('asifVerdict puts the alignment check before the belief check', () {
+      expect(asifVerdict('自然', '成真了', '更远了'), startsWith('弃'));
+    });
+
+    test('crisis detection catches despair and self-harm wording only', () {
+      expect(zCrisis('我真的不想活了'), isTrue);
+      expect(zCrisis('有时候想自杀'), isTrue);
+      expect(zCrisis('活着没意思'), isTrue);
+      expect(zCrisis('今天活着没有意思'), isTrue);
+      expect(zCrisis('我想把这个项目做完'), isFalse);
+      expect(zCrisis('这个任务快把我累死了'), isFalse, reason: '日常夸张说法不触发');
+      expect(zCrisis(''), isFalse);
+    });
+
+    test('fatalism detection returns the first matched phrase', () {
+      expect(zFatalism('反正我就是改不了'), '反正');
+      expect(zFatalism('本性难移吧'), '本性难移');
+      expect(zFatalism('这次我会试试看'), isNull);
+    });
+
+    test('ropeStats counts kept and broken', () {
+      final ({int kept, int broken}) s = ropeStats(<String>['y', 'n', 'y', 'y', '']);
+      expect(s.kept, 3);
+      expect(s.broken, 1);
+    });
+
+    test('acceptance comfort needs control 2, a bypass and a confirmation', () {
+      expect(acceptComfortAllowed(control: 2, bypass: '换条路', confirmedFixed: true), isTrue);
+      expect(acceptComfortAllowed(control: 2, bypass: '  ', confirmedFixed: true), isFalse);
+      expect(acceptComfortAllowed(control: 2, bypass: '换条路', confirmedFixed: false), isFalse);
+      expect(acceptComfortAllowed(control: 1, bypass: '换条路', confirmedFixed: true), isFalse);
+    });
+
+    test('string counting ignores empties and ranks by count then name', () {
+      final Map<String, int> c = countStrings(<String>['b', 'a', 'b', '', 'a', 'c']);
+      expect(c, <String, int>{'b': 2, 'a': 2, 'c': 1});
+      expect(topCounts(c, n: 2), 'a 2　b 2');
+    });
+  });
+
   group('library', () {
     test('static data is consistent', () {
       expect(ZCopy.categories.length, 12);
