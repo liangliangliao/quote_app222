@@ -143,7 +143,7 @@ class EvidencePage extends StatelessWidget {
                 ZFieldSpec('m', '当时我说自己是因为…（可选）'),
                 ZFieldSpec('r', '事后的反应（可选）'),
               ],
-              required: const <String>['w'],
+              mustFill: const <String>['w'],
               submitLabel: '记下这件事',
               onSubmit: (Map<String, String> v) async {
                 await controller.addItem('arch', <String, dynamic>{
@@ -170,7 +170,7 @@ class EvidencePage extends StatelessWidget {
                 ZFieldSpec('guess', '他猜我当时的动机'),
                 ZFieldSpec('real', '我自己知道的真实动机'),
               ],
-              required: const <String>['saw'],
+              mustFill: const <String>['saw'],
               submitLabel: '记下他的观察',
               onSubmit: (Map<String, String> v) async {
                 await controller.addItem('obs', <String, dynamic>{

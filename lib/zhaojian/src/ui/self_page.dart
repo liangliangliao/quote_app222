@@ -180,7 +180,7 @@ class _SelfPageState extends State<SelfPage> {
                   ZFieldSpec('t', '原则，例：借钱前先过一夜'),
                   ZFieldSpec('src', '它从哪次经历来（可选）'),
                 ],
-                required: const <String>['t'],
+                mustFill: const <String>['t'],
                 submitLabel: '记下原则',
                 onSubmit: (Map<String, String> v) async {
                   await c.addItem('prin', <String, dynamic>{'t': v['t'], 'src': v['src']});

@@ -618,3 +618,77 @@ String topCounts(Map<String, int> c, {int n = 6}) {
       .map((MapEntry<String, int> e) => '${e.key} ${e.value}')
       .join('　');
 }
+
+// ---------------------------------------------------------------------------
+// 改变：假设行动判词、安全检测、宿命式措辞
+// ---------------------------------------------------------------------------
+
+/// 假设行动的结论：保留 / 继续 / 重设 / 弃 / 信息不全。
+/// [reaction]、[belief]、[aligned] 分别是 [ZCopy.asifReactions]、[ZCopy.asifBeliefs]、
+/// [ZCopy.asifAligned] 里的选项，没填就是空串。
+String asifVerdict(String reaction, String belief, String aligned) {
+  if (reaction.isEmpty || belief.isEmpty || aligned.isEmpty) {
+    return '信息不全：先把三项检验都填完。';
+  }
+  if (aligned == '更远了') {
+    return '弃：它不通向你真正想要的，别硬撑；回到「一致度」重新看你要什么。';
+  }
+  if (belief == '成真了') {
+    return '重设：担心成真了。先别加码，用更小的实验去查证那个担心。';
+  }
+  if (reaction == '自然' && belief == '没成真' && aligned == '更靠近') {
+    return '保留：反应自然、担心没成真、也更靠近你要的。可以固定下来，继续小步重复。';
+  }
+  if (aligned == '更靠近') {
+    return '继续（有代价）：通向你要的，但有别扭或部分成真的担心。降低强度、拉长时间再试。';
+  }
+  return '再观察：证据还不够，再做几次，别急着下结论。';
+}
+
+final RegExp _crisisPattern = RegExp(
+    r'不想活|想死|自杀|自残|结束生命|活着没(有)?意思|伤害自己|不如死了|了结自己');
+
+/// 文字里是否出现绝望或自伤的迹象。出现就要停下重构，转向求助。
+bool zCrisis(String text) => _crisisPattern.hasMatch(text);
+
+final RegExp _fatalismPattern = RegExp(
+    r'反正|注定|本性难移|改不了|天生就|没救了|一辈子就这样|就是这样的人|永远都');
+
+/// 宿命式措辞的第一处匹配；没有返回 null。
+String? zFatalism(String text) => _fatalismPattern.firstMatch(text)?.group(0);
+
+/// 绳子的守住情况：序列里 'y' 守住、'n' 被破。
+({int kept, int broken}) ropeStats(List<String> seq) {
+  int k = 0, b = 0;
+  for (final String s in seq) {
+    if (s == 'y') k += 1;
+    if (s == 'n') b += 1;
+  }
+  return (kept: k, broken: b);
+}
+
+/// 接受页：不可控的项是否可以给「必然性」的安慰。
+/// 必须先写过绕开办法，并且确认它不会因为你的努力而改变。
+bool acceptComfortAllowed({
+  required int control,
+  required String bypass,
+  required bool confirmedFixed,
+}) {
+  return control == 2 && bypass.trim().isNotEmpty && confirmedFixed;
+}
+
+/// 同时进行的事项过多：进行中的计划、没出结论的假设行动、没完成的探测。
+int activeThreads(ZhaojianControllerView c) => c.activePlans + c.activeAsif + c.activeProbes;
+
+/// 给分散度提醒用的最小只读视图，避免纯函数依赖控制器。
+class ZhaojianControllerView {
+  const ZhaojianControllerView({
+    required this.activePlans,
+    required this.activeAsif,
+    required this.activeProbes,
+  });
+
+  final int activePlans;
+  final int activeAsif;
+  final int activeProbes;
+}

@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -172,25 +170,6 @@ class ZhaojianController extends ChangeNotifier {
   Future<void> deleteHypothesis(int id) async {
     await dao.deleteHypothesis(id);
     await load();
-  }
-
-  /// 全部数据导出为 JSON 文本（给用户复制备份）。
-  String exportJson() {
-    final Map<String, Object?> m = <String, Object?>{
-      'app': 'zhaojian',
-      'schema': 3,
-      'exported_at': DateTime.now().toIso8601String(),
-      'decisions': decisions.map((ZDecision d) => d.toRow()).toList(),
-      'logs': logs.map((ZLog l) => l.toRow()).toList(),
-      'hypotheses': hypotheses.map((ZHypothesis h) => h.toRow()).toList(),
-      'misses': misses.map((ZMiss x) => x.toRow()).toList(),
-      'items': <Object?>[
-        for (final List<ZEntry> list in _items.values)
-          for (final ZEntry it in list) it.toRow(),
-      ],
-      'kv': _kv,
-    };
-    return const JsonEncoder.withIndent('  ').convert(m);
   }
 
   Future<ZEntry> addItem(String kind, Map<String, dynamic> data) async {

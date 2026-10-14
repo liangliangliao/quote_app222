@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../copy.dart';
 import '../data/models.dart';
+import '../domain/analysis.dart';
 import '../domain/controller.dart';
 
 const Color zAccent = Color(0xFF2C5D70);
@@ -231,13 +233,13 @@ class ZForm extends StatefulWidget {
     required this.fields,
     required this.submitLabel,
     required this.onSubmit,
-    this.required = const <String>[],
+    this.mustFill = const <String>[],
   });
 
   final List<ZFieldSpec> fields;
   final String submitLabel;
   final Future<void> Function(Map<String, String> values) onSubmit;
-  final List<String> required;
+  final List<String> mustFill;
 
   @override
   State<ZForm> createState() => _ZFormState();
@@ -262,9 +264,9 @@ class _ZFormState extends State<ZForm> {
       for (final MapEntry<String, TextEditingController> e in _c.entries)
         e.key: e.value.text.trim(),
     };
-    final bool ok = widget.required.isEmpty
+    final bool ok = widget.mustFill.isEmpty
         ? v.values.any((String t) => t.isNotEmpty)
-        : widget.required.every((String k) => (v[k] ?? '').isNotEmpty);
+        : widget.mustFill.every((String k) => (v[k] ?? '').isNotEmpty);
     if (!ok) {
       zSnack(context, '先写点内容');
       return;
@@ -331,3 +333,65 @@ Widget zHypPicker({
     ],
   );
 }
+
+/// 反宿命论护栏：文字里出现「反正」「注定」「本性难移」之类，实时提示换一种说法。可以关闭。
+class ZGuard extends StatelessWidget {
+  const ZGuard({super.key, required this.controllers, required this.app});
+
+  final List<TextEditingController> controllers;
+  final ZhaojianController app;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge(controllers),
+      builder: (BuildContext context, Widget? child) {
+        if (app.kv('guard.off') == '1') return const SizedBox.shrink();
+        final String? hit =
+            zFatalism(controllers.map((TextEditingController c) => c.text).join('\n'));
+        if (hit == null) return const SizedBox.shrink();
+        return ZItem(
+          warn: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('「$hit」', style: const TextStyle(fontWeight: FontWeight.w700)),
+              const ZNote(ZCopy.fatalismNote, warn: true),
+              TextButton(
+                onPressed: () => app.setKv('guard.off', '1'),
+                child: const Text('不再提示'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 绝望或自伤的迹象：出现就停下练习，转向求助。
+class ZCrisisCard extends StatelessWidget {
+  const ZCrisisCard({super.key, required this.controllers});
+
+  final List<TextEditingController> controllers;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge(controllers),
+      builder: (BuildContext context, Widget? child) {
+        if (!zCrisis(controllers.map((TextEditingController c) => c.text).join('\n'))) {
+          return const SizedBox.shrink();
+        }
+        return const ZItem(
+          warn: true,
+          child: Text(ZCopy.crisisMessage, style: TextStyle(height: 1.6)),
+        );
+      },
+    );
+  }
+}
+
+/// 是否有任何一段文字出现绝望或自伤的迹象。
+bool zAnyCrisis(Iterable<TextEditingController> cs) =>
+    zCrisis(cs.map((TextEditingController c) => c.text).join('\n'));
