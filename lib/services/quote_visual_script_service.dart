@@ -20,6 +20,7 @@ class QuoteVisualScript {
     required this.palette,
     required this.frameFinish,
     required this.fromAi,
+    this.isThemeOnly = false,
   });
 
   final String meaning;
@@ -30,6 +31,7 @@ class QuoteVisualScript {
   final String palette;
   final String frameFinish;
   final bool fromAi;
+  final bool isThemeOnly;
 
   Map<String, dynamic> toJson() => {
     'meaning': meaning,
@@ -40,6 +42,7 @@ class QuoteVisualScript {
     'palette': palette,
     'frameFinish': frameFinish,
     'fromAi': fromAi,
+    'isThemeOnly': isThemeOnly,
   };
 
   factory QuoteVisualScript.fromJson(Map<String, dynamic> value) {
@@ -63,6 +66,7 @@ class QuoteVisualScript {
       palette: valueOf('palette').isEmpty ? '柔和、通透、自然' : valueOf('palette'),
       frameFinish: finishes.contains(requested) ? requested : 'walnut',
       fromAi: value['fromAi'] == true,
+      isThemeOnly: value['isThemeOnly'] == true,
     );
   }
 
@@ -128,7 +132,7 @@ class QuoteVisualScriptService {
   }) async {
     if (!force) {
       final cached = await readCached(topic: topic, quote: quote);
-      if (cached != null) return cached;
+      if (cached != null && !cached.isThemeOnly) return cached;
     }
 
     // 显式启用图像生成后才会调用 LLM；LLM 失败使用可解释的本地隐喻。
@@ -203,6 +207,7 @@ class QuoteVisualScriptService {
       relationship: '在 AI 语义分析不可用时，仅匹配主题气氛；无法保证逐字对应，请在联网后重新生成。',
       mood: theme.label,
       palette: '暖白纸面、柔和自然色',
+      isThemeOnly: true,
       frameFinish: theme.scene == QuoteScene.affection ? 'rosewood' :
           theme.scene == QuoteScene.hope || theme.scene == QuoteScene.growth ? 'oak' :
           theme.scene == QuoteScene.serenity ? 'ash' : 'walnut',
