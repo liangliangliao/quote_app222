@@ -17,7 +17,7 @@ class QuoteFrameAiService {
   final AiAssistantMediaService _mediaService;
 
   String cacheKey(String topic, String quote) =>
-      sha256.convert(utf8.encode('${topic.trim()}|盘|${quote.trim()}')).toString();
+      sha256.convert(utf8.encode('${topic.trim()}|quote|${quote.trim()}')).toString();
 
   Future<Directory> _framesDir() async {
     final docs = await getApplicationDocumentsDirectory();
@@ -34,7 +34,11 @@ class QuoteFrameAiService {
   Future<String?> findCached(String topic, String quote) async {
     if (quote.trim().isEmpty) return null;
     final target = await _targetFile(topic, quote);
-    return await target.exists() && await target.length() > 0 ? target.path : null;
+    for (final ext in const ['.png', '.jpg', '.jpeg', '.webp']) {
+      final f = File(p.join(target.parent.path, '${cacheKey(topic,quote)}$ext'));
+      if (await f.exists() && await f.length() > 0) return f.path;
+    }
+    return null;
   }
 
   Future<bool> get autoEnabled async {
@@ -56,7 +60,10 @@ class QuoteFrameAiService {
   }) async {
     if (quote.trim().isEmpty) throw StateError('名言为空，无法生成画框');
     final target = await _targetFile(topic, quote);
-    if (!force && await target.exists() && await target.length() > 0) return target.path;
+    if (!force) {
+      final existing = await findCached(topic, quote);
+      if (existing != null) return existing;
+    }
     // 不让 AI 写名言，中文由 Flutter 原生绘制，确保字形及出处正确。
     final cleanedTopic = topic.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
     final cleanedQuote = quote.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
@@ -84,7 +91,10 @@ typography, watermarks, logos, borders, poster mockups, frames, or text.
     final extension = p.extension(source.path).toLowerCase();
     final actualExt = const ['.png','.jpg','.jpeg','.webp'].contains(extension) ? extension : '.png';
     final actualTarget = File(p.join(target.parent.path, '${cacheKey(topic,quote)}$actualExt'));
-    if (await actualTarget.exists()) await actualTarget.delete();
+    for (final ext in const ['.png', '.jpg', '.jpeg', '.webp']) {
+      final old = File(p.join(target.parent.path, '${cacheKey(topic,quote)}$ext'));
+      if (await old.exists()) await old.delete();
+    }
     await source.copy(actualTarget.path);
     return actualTarget.path;
   }
