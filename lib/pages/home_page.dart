@@ -523,7 +523,9 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
 
   int idx = 0;
   try {
-    idx = await QuoteDao().nextCamusFallbackIndex(all.length);
+    idx = await QuoteDao().nextCamusFallbackIndex(all.length)
+        .timeout(const Duration(milliseconds: 300),
+          onTimeout: () => (DateTime.now().millisecondsSinceEpoch ~/ 60000) % all.length);
   } catch (_) {
     idx = 0;
   }
@@ -545,30 +547,38 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
 }
 
   Future<void> _load() async {
-    // 仅在首次加载时将数据设为空以显示兜底，后续刷新保持原有数据避免闪屏
-    if (!_firstLoaded) {
-      setState(() { _todayData = null; _firstLoaded = true; });
+    if (!_firstLoaded && mounted) setState(() => _firstLoaded = true);
+    // 先加载随包发布的几十条默认名言，再异步请求 SQLite。
+    // 旧逻辑先等 latestNotifiedToday()，首次启动/数据库受阻时整张画一直空白。
+    try {
+      final fallback = await _loadNextFallbackQuote();
+      if (!mounted) return;
+      if (_latestRow == null && (fallback['quote'] ?? '').toString().trim().isNotEmpty) {
+        setState(() => _todayData = fallback);
+        unawaited(_activateFrame(fallback));
+      }
+    } catch (e) {
+      await DLog.e('HOME', '兜底名言加载失败: $e');
+      if (mounted && _todayData == null) {
+        setState(() => _todayData = <String, dynamic>{
+          'topic': '每日名言',
+          'quote': '千里之行，始于足下。',
+          'author': '——《道德经》',
+          'note': '从眼前的一小步开始。',
+        });
+      }
     }
     try {
       final dao = QuoteDao();
       final latest = await dao.latestNotifiedToday();
       if (!mounted) return;
       _latestRow = latest;
-      if (latest == null) {
-        // 当查询不到今日数据时，注入固定的兜底内容而非 null。
-        // 兜底内容与模板原始文案保持一致，这样即便无数据，也能通过 setDynamicData 渲染完整页面。
-        await DLog.i('HOME', '今日未检索到已通知记录：注入兜底内容');
-        final fallbackBg = await _getBgDataUrl();
-        // 从资产 JSON 读取并轮播兜底内容
-        final Map<String, dynamic> fallback = await _loadNextFallbackQuote();
-        fallback['bgUrl'] = fallbackBg; // 运行时覆盖背景
-        await _logInject('json', fallback);
-        if (mounted) setState(() { _todayData = fallback; });
-        if (mounted) unawaited(_activateFrame(fallback));
-        // Update pinned state after injecting fallback content
+      if (latest == null || (latest['content'] ?? latest['quote'] ?? '').toString().trim().isEmpty) {
+        // 没有今日有效记录时，保留刚刚即时显示的默认名言，不让首页回到空白。
+        await DLog.i('HOME', '今日未检索到有效记录：显示默认名言');
         await _checkPinnedState();
         _requestNotifAfterFirstFrame();
-        } else {
+      } else {
         final avatarUrl = await _avatarToDataUrl((latest['avatar'] ?? '').toString());
         // 根据署名和出处组装 author 字段。若存在署名或出处则前缀“——”，否则为空
         final String authorName = (latest['author_name'] ?? latest['author'] ?? '').toString().trim();
@@ -604,14 +614,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       }
     } catch (e) {
       await DLog.e('HOME', '查询异常：注入兜底内容；err=$e');
-      // 当查询发生异常时，注入兜底内容以保证页面不为空白
-      final fallbackBg = await _getBgDataUrl();
-        // 从资产 JSON 读取并轮播兜底内容
-        final Map<String, dynamic> fallback = await _loadNextFallbackQuote();
-        fallback['bgUrl'] = fallbackBg; // 运行时覆盖背景
-        await _logInject('json', fallback);
-        if (mounted) setState(() { _todayData = fallback; });
-        if (mounted) unawaited(_activateFrame(fallback));
+      // 异常也不擦掉已显示的随包兜底名言。
         // Update pinned state after error fallback
         await _checkPinnedState();
         _requestNotifAfterFirstFrame();
@@ -1327,9 +1330,13 @@ ImageProvider _imageFrom(String? any) {
   }
 
   Widget _buildScaffold(BuildContext context) {
-    final content = (!_firstLoaded)
-        ? (_firstBg == null ? const {'__blank__': true} : {'bgUrl': _firstBg})
-        : _todayData;
+    // 永远不要把空对象渲染成整张无字相框。
+    final content = _todayData ?? const <String, dynamic>{
+      'topic': '每日名言',
+      'quote': '名言加载中…',
+      'author': '',
+      'note': '',
+    };
     final media = MediaQuery.of(context);
     final topPad = media.padding.top;
     final contentPad = topPad;
