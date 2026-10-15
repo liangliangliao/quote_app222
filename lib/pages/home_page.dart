@@ -116,9 +116,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final cached = await _frameAi.findCached(topic, quote);
       final script = await _frameAi.readCachedScript(topic, quote);
       if (!mounted || revision != _frameRevision) return;
-      if (script != null) setState(() => _frameFinish = script.frameFinish);
       if (cached != null) {
-        setState(() => _frameImagePath = cached);
+        // 只有确实存在 AI 画作时才允许切换材质；
+        // 纯兜底名言一律使用用户要求的默认暖胡桃木相框。
+        setState(() {
+          _frameImagePath = cached;
+          _frameFinish = script?.fromAi == true ? script!.frameFinish : null;
+        });
       } else if (_frameAuto && !_frameAttempted.contains(key)) {
         unawaited(_generateFrameFor(payload, userInitiated: false));
       }
@@ -151,7 +155,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (_visibleFrameKey == key) {
         setState(() {
           _frameImagePath = path;
-          _frameFinish = script?.frameFinish;
+          _frameFinish = script?.fromAi == true ? script!.frameFinish : null;
         });
       }
       if (userInitiated) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('主题画框已生成并缓存')));
