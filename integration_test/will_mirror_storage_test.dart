@@ -71,6 +71,12 @@ void main() {
     var store = await SqliteMirrorStore.open(path: path);
     MirrorController? controller;
     try {
+      // Reproduce the original operation on Android itself, not only through
+      // the desktop channel mock. The fixed open above uses rawQuery instead.
+      await expectLater(
+        store.db.execute('PRAGMA secure_delete = ON'),
+        throwsA(isA<DatabaseException>()),
+      );
       expect(await store.list(), isEmpty);
       expect(
         (await store.db.rawQuery('PRAGMA secure_delete')).single.values.single,

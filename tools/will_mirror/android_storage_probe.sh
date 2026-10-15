@@ -11,7 +11,7 @@ probe_db=databases/will_mirror_android_upgrade_probe.sqlite
 run_probe() {
   local phase="$1"
   adb -s "$device" shell am force-stop "$package"
-  flutter drive --no-pub --no-dds --keep-app-running \
+  flutter drive --no-dds --keep-app-running \
     --driver=test_driver/will_mirror_storage_driver.dart \
     --target=integration_test/will_mirror_storage_test.dart \
     --dart-define="MIRROR_UPGRADE_PHASE=$phase" -d "$device"

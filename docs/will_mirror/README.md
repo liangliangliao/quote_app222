@@ -42,7 +42,7 @@ flutter test --no-pub --reporter expanded test/will_mirror
 python3 -m pip install -r server/will_mirror/requirements.txt
 python3 -m pytest -q server/will_mirror/test_contract.py
 python3 docs/will_mirror/check_acceptance.py
-flutter build apk --release --no-pub --target-platform android-arm64
+flutter build apk --release --target-platform android-arm64
 ```
 
 `.github/workflows/will_mirror_v28_ci.yml` 执行相同模块与评分服务检查。测试使用模拟 Provider/HTTP/设备能力；不会调用付费 AI。
