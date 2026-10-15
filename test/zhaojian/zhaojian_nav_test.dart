@@ -30,11 +30,19 @@ void main() {
       expect(ZNav.byName('nope'), isNull);
     });
 
+    test('every destination is registered once the port is complete', () {
+      for (final ZDest d in ZDest.values) {
+        expect(ZNav.isReady(d), isTrue, reason: '${d.name} 还没注册');
+      }
+    });
+
     test('the core pages are registered', () {
       for (final ZDest d in <ZDest>[
         ZDest.decide, ZDest.pending, ZDest.log, ZDest.hypothesis, ZDest.growth,
         ZDest.self, ZDest.evidence, ZDest.style, ZDest.map,
         ZDest.engine, ZDest.plans, ZDest.rope, ZDest.wall, ZDest.accept, ZDest.cog,
+        ZDest.belief, ZDest.knowAct, ZDest.regret,
+        ZDest.goal, ZDest.line, ZDest.forgo, ZDest.probe, ZDest.shift, ZDest.signature, ZDest.analysis,
       ]) {
         expect(ZNav.isReady(d), isTrue, reason: '${d.name} 应已注册');
       }

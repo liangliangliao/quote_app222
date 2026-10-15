@@ -2,21 +2,28 @@ import 'package:flutter/material.dart';
 
 import '../domain/controller.dart';
 import 'accept_page.dart';
+import 'analysis_page.dart';
 import 'belief_page.dart';
 import 'cog_page.dart';
 import 'decide_page.dart';
 import 'engine_page.dart';
 import 'evidence_page.dart';
+import 'forgo_page.dart';
+import 'goal_page.dart';
 import 'growth_page.dart';
 import 'hypothesis_page.dart';
 import 'know_act_page.dart';
+import 'line_page.dart';
 import 'log_page.dart';
 import 'map_page.dart';
 import 'pending_page.dart';
 import 'plans_page.dart';
+import 'probe_page.dart';
 import 'regret_page.dart';
 import 'rope_page.dart';
 import 'self_page.dart';
+import 'shift_page.dart';
+import 'signature_page.dart';
 import 'style_page.dart';
 import 'wall_page.dart';
 import 'widgets.dart';
@@ -116,6 +123,13 @@ class ZNav {
     ZDest.belief: (ZhaojianController c) => BeliefPage(controller: c),
     ZDest.knowAct: (ZhaojianController c) => KnowActPage(controller: c),
     ZDest.regret: (ZhaojianController c) => RegretPage(controller: c),
+    ZDest.goal: (ZhaojianController c) => GoalPage(controller: c),
+    ZDest.line: (ZhaojianController c) => LinePage(controller: c),
+    ZDest.forgo: (ZhaojianController c) => ForgoPage(controller: c),
+    ZDest.probe: (ZhaojianController c) => ProbePage(controller: c),
+    ZDest.shift: (ZhaojianController c) => ShiftPage(controller: c),
+    ZDest.signature: (ZhaojianController c) => SignaturePage(controller: c),
+    ZDest.analysis: (ZhaojianController c) => AnalysisPage(controller: c),
   };
 
   static bool isReady(ZDest d) => _builders.containsKey(d);

@@ -25,6 +25,27 @@ class ZhaojianController extends ChangeNotifier {
   Map<String, String> _kv = <String, String>{};
   bool loaded = false;
 
+  /// 进行中的计划。
+  int get activePlans =>
+      items('plan').where((ZEntry e) => e.s('st') == '进行中').length;
+
+  /// 三项检验还没填完的假设行动。
+  int get activeAsif => items('asif')
+      .where((ZEntry e) =>
+          e.s('r').isEmpty || e.s('nb').isEmpty || e.s('al').isEmpty)
+      .length;
+
+  /// 还没做完的小探测。
+  int get activeProbes => items('probe').where((ZEntry e) => !e.b('done')).length;
+
+  /// 记录天数还不够的放弃实验。
+  int get activeForgo => items('forgo')
+      .where((ZEntry e) => e.maps('log').length < (e.i('days') ?? 3))
+      .length;
+
+  /// 同时进行的事项总数：太多就是分散。
+  int get activeThreads => activePlans + activeAsif + activeProbes + activeForgo;
+
   /// 某一类通用条目（按创建时间从早到晚）。
   List<ZEntry> items(String kind) => _items[kind] ?? const <ZEntry>[];
 

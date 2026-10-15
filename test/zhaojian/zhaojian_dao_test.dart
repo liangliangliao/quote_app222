@@ -293,6 +293,29 @@ void main() {
       expect(c.evidenceCount, 4);
     });
 
+    test('active threads add up plans, open as-if, undone probes and unfinished forgo', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      expect(c.activeThreads, 0);
+      await c.addItem('plan', <String, dynamic>{'st': '进行中'});
+      await c.addItem('plan', <String, dynamic>{'st': '做到了'});
+      await c.addItem('asif', <String, dynamic>{'r': '自然', 'nb': '', 'al': ''});
+      await c.addItem('asif', <String, dynamic>{'r': '自然', 'nb': '没成真', 'al': '更靠近'});
+      await c.addItem('probe', <String, dynamic>{'done': false});
+      await c.addItem('probe', <String, dynamic>{'done': true});
+      await c.addItem('forgo', <String, dynamic>{'days': 3, 'log': <Map<String, dynamic>>[{'v': 4}]});
+      await c.addItem('forgo', <String, dynamic>{
+        'days': 1,
+        'log': <Map<String, dynamic>>[{'v': 4}],
+      });
+      expect(c.activePlans, 1);
+      expect(c.activeAsif, 1);
+      expect(c.activeProbes, 1);
+      expect(c.activeForgo, 1);
+      expect(c.activeThreads, 4);
+    });
+
     test('export is valid json with every section', () async {
       final ZhaojianController c =
           ZhaojianController(db: db, oracle: const LocalZhaojianOracle());

@@ -493,6 +493,41 @@ void main() {
     });
   });
 
+  group('direction helpers', () {
+    test('probeQuadrant uses 4 and above as high', () {
+      expect(probeQuadrant(5, 4), 0);
+      expect(probeQuadrant(4, 3), 1);
+      expect(probeQuadrant(3, 5), 2);
+      expect(probeQuadrant(1, 2), 3);
+      expect(probeQuadrant(4, 4), 0);
+    });
+
+    test('signature stats count hits, misses and distinct contexts of hits', () {
+      final ZSigStats st = signatureStats(<Map<String, dynamic>>[
+        <String, dynamic>{'ctx': '会议', 'hit': true},
+        <String, dynamic>{'ctx': '会议', 'hit': true},
+        <String, dynamic>{'ctx': '饭局', 'hit': true},
+        <String, dynamic>{'ctx': '', 'hit': true},
+        <String, dynamic>{'ctx': '会议', 'hit': false},
+      ]);
+      expect(st.hits, 4);
+      expect(st.misses, 1);
+      expect(st.contexts, 2, reason: '空情境不算，落空的情境不算');
+    });
+
+    test('signature gate needs 3 hits, 2 contexts and hits not below misses', () {
+      expect(signatureGate(const ZSigStats(3, 0, 2)), isTrue);
+      expect(signatureGate(const ZSigStats(2, 0, 2)), isFalse);
+      expect(signatureGate(const ZSigStats(3, 0, 1)), isFalse);
+      expect(signatureGate(const ZSigStats(3, 4, 2)), isFalse);
+      expect(signatureGate(const ZSigStats(4, 4, 2)), isTrue);
+    });
+
+    test('analysis needs at least four pieces of behavior evidence', () {
+      expect(analysisMinEvidence, 4);
+    });
+  });
+
   group('library', () {
     test('static data is consistent', () {
       expect(ZCopy.categories.length, 12);

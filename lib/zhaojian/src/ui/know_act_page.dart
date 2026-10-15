@@ -30,12 +30,12 @@ class KnowActPage extends StatelessWidget {
           ZNote('抽象动机指向：$abs　行动实际：$did'),
           const ZNote('知而不行，卡在哪儿？'),
           zChoice(
-            labels: ZCopy.knowActGaps.map((List<String> g) => g[0]).toList(),
+            labels: ZCopy.knowActKinds.map((List<String> g) => g[0]).toList(),
             selected: cur < 0 ? null : cur,
             onSelect: (int i) => controller.setKv(key, '$i'),
           ),
           if (cur >= 0) ...<Widget>[
-            ZNote(ZCopy.knowActGaps[cur][1]),
+            ZNote(ZCopy.knowActKinds[cur][1]),
             if (cur == 4)
               const ZNote('外部障碍要写绕开办法，否则容易变成借口：去「计划与复盘」里记。', warn: true),
             TextButton(

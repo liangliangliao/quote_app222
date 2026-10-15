@@ -677,22 +677,6 @@ bool acceptComfortAllowed({
   return control == 2 && bypass.trim().isNotEmpty && confirmedFixed;
 }
 
-/// 同时进行的事项过多：进行中的计划、没出结论的假设行动、没完成的探测。
-int activeThreads(ZhaojianControllerView c) => c.activePlans + c.activeAsif + c.activeProbes;
-
-/// 给分散度提醒用的最小只读视图，避免纯函数依赖控制器。
-class ZhaojianControllerView {
-  const ZhaojianControllerView({
-    required this.activePlans,
-    required this.activeAsif,
-    required this.activeProbes,
-  });
-
-  final int activePlans;
-  final int activeAsif;
-  final int activeProbes;
-}
-
 // ---------------------------------------------------------------------------
 // 信念「远期汇票」
 // ---------------------------------------------------------------------------
@@ -742,3 +726,52 @@ ZFunnel funnelOf(Iterable<int> stages) {
 /// 知行落差的决定：抽象与直观动机指向不同，而行动跟了直观。
 List<ZDecision> knowActGaps(Iterable<ZDecision> revealed) =>
     revealed.where((ZDecision d) => followedKind(d) == '直观').toList();
+
+// ---------------------------------------------------------------------------
+// 探测、签名、AI 分析的门槛
+// ---------------------------------------------------------------------------
+
+/// 小探测完成后的「想要 × 能力」四象限，对应 [ZCopy.probeQuadrants]：
+/// 0 想要高能力高 / 1 想要高能力低 / 2 想要低能力高 / 3 想要低能力低。
+/// [want]、[able] 是 1 到 5 的自评，4 及以上算高。
+int probeQuadrant(int want, int able) {
+  final bool hw = want >= 4;
+  final bool ha = able >= 4;
+  if (hw && ha) return 0;
+  if (hw) return 1;
+  if (ha) return 2;
+  return 3;
+}
+
+/// 如果—那么签名的记录：每条是 {'ctx': 情境, 'hit': 是否应验}。
+class ZSigStats {
+  const ZSigStats(this.hits, this.misses, this.contexts);
+
+  final int hits;
+  final int misses;
+
+  /// 应验过的不同情境数。
+  final int contexts;
+}
+
+ZSigStats signatureStats(List<Map<String, dynamic>> log) {
+  int h = 0, m = 0;
+  final Set<String> ctx = <String>{};
+  for (final Map<String, dynamic> e in log) {
+    if (e['hit'] == true) {
+      h += 1;
+      final String c = '${e['ctx'] ?? ''}'.trim();
+      if (c.isNotEmpty) ctx.add(c);
+    } else {
+      m += 1;
+    }
+  }
+  return ZSigStats(h, m, ctx.length);
+}
+
+/// 一个签名要被确认：应验至少 3 次、至少 2 种情境、应验不少于落空。
+/// 这是经验规则，不是统计检验。
+bool signatureGate(ZSigStats s) => s.hits >= 3 && s.contexts >= 2 && s.hits >= s.misses;
+
+/// AI 分析需要的最少行为证据条数。证据太少时，模型只会把自述复述一遍。
+const int analysisMinEvidence = 4;
