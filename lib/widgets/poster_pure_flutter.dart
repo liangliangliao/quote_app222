@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/wood_frame_card.dart';
+import 'package:quote_app/widgets/quote_adaptive_frame.dart';
+import 'package:quote_app/services/quote_frame_theme.dart';
 
 class _NoIndicatorScroll extends ScrollBehavior {
   @override
@@ -50,6 +52,7 @@ class PosterPureFlutter extends StatelessWidget {
   final String note;
   final String avatar;
   final String woodBgAsset;
+  final String? aiFramePath;
 
   const PosterPureFlutter({
     super.key,
@@ -59,10 +62,12 @@ class PosterPureFlutter extends StatelessWidget {
     required this.note,
     required this.avatar,
     this.woodBgAsset = 'assets/bg-wood-upload.jpg',
+    this.aiFramePath,
   });
 
   @override
   Widget build(BuildContext context) {
+    final frameTheme = QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note);
     return LayoutBuilder(builder: (context, cons) {
       final short = (cons.maxWidth < cons.maxHeight) ? cons.maxWidth : cons.maxHeight;
       final tTitle = (short * 0.040).clamp(18.5, 24.0);
@@ -98,8 +103,8 @@ class PosterPureFlutter extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // 木纹相框背景（底层）
-                    Image.asset(woodBgAsset, fit: BoxFit.cover),
+                    // 语义相框：根据文字内容原生绘制，用户启用 AI 后可叠加缓存配画。
+                    QuoteAdaptiveFrame(theme: frameTheme, aiImagePath: aiFramePath),
                     // 相框内部边距：左右 40dp，上下 50dp
                     Padding(
                     padding: const EdgeInsets.only(left: 0, right: 0, top: 0, bottom: 30),
