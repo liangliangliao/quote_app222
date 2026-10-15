@@ -25,6 +25,49 @@ void main() {
     await store.close();
     await temp.delete(recursive: true);
   });
+  test(
+    'first open configures secure deletion and foreign key enforcement',
+    () async {
+      expect(
+        (await store.db.rawQuery('PRAGMA secure_delete')).single.values.single,
+        1,
+      );
+      expect(
+        (await store.db.rawQuery('PRAGMA foreign_keys')).single.values.single,
+        1,
+      );
+      expect(await store.list(), isEmpty);
+      expect((await store.settings()).remoteScoring, isFalse);
+    },
+  );
+  test(
+    'reopening preserves encrypted settings, cases and every old revision',
+    () async {
+      final f = newCase('覆盖安装与重启必须保留的记录');
+      await store.save(f, expectedRevision: 0);
+      final revised = f.evolve(step: 2);
+      await store.save(revised, expectedRevision: f.revision);
+      await store.saveSettings(const MirrorSettings(darkMode: 'dark'));
+      final cases = await store.db.query('cases');
+      final history = await store.db.query('case_history');
+      final settings = await store.db.query('settings');
+      await store.close();
+      store = await SqliteMirrorStore.open(
+        factory: databaseFactoryFfi,
+        path: '${temp.path}/test.sqlite',
+        cipher: cipher,
+      );
+      expect(await store.db.query('cases'), cases);
+      expect(await store.db.query('case_history'), history);
+      expect(await store.db.query('settings'), settings);
+      expect((await store.load(f.id))!.revision, revised.revision);
+      expect((await store.settings()).darkMode, 'dark');
+      expect(await store.history(f.id), hasLength(2));
+      await store.deleteCase(f.id);
+      expect(await store.list(), isEmpty);
+      expect(await store.history(f.id), isEmpty);
+    },
+  );
   test('database and history persist cipher payload, no private raw strings',
       () async {
     final f = newCase('PRIVATE-CASE-SENTINEL');

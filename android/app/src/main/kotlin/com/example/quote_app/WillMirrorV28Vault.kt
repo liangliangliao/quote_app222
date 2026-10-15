@@ -10,12 +10,14 @@ import java.util.concurrent.Executors
 import android.os.Handler
 import android.os.Looper
 import javax.crypto.Cipher
+import javax.crypto.AEADBadTagException
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** New isolated vault. Legacy vault aliases/files are deliberately untouched. */
 class WillMirrorV28Vault(messenger: BinaryMessenger) {
+    private class MissingVaultKey : Exception()
     private val executor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private val alias = "quote_app_will_mirror_rebuilt_v28"
@@ -33,9 +35,15 @@ class WillMirrorV28Vault(messenger: BinaryMessenger) {
                     try {
                         val output = if (call.method == "encrypt") encrypt(input, context) else decrypt(input, context)
                         main.post { result.success(output) }
-                    } catch (_: Exception) {
+                    } catch (error: Exception) {
                         // Never log private text, ciphertext, credentials, or exception payloads.
-                        main.post { result.error("vault_unavailable", "Encrypted data could not be opened; original data retained", null) }
+                        val code = when (error) {
+                            is MissingVaultKey -> "vault_key_missing"
+                            is AEADBadTagException -> "vault_authentication_failed"
+                            is IllegalArgumentException -> "vault_invalid_payload"
+                            else -> "vault_unavailable"
+                        }
+                        main.post { result.error(code, "Encrypted data unavailable; original data retained", null) }
                     }
                 }
             }
@@ -46,7 +54,7 @@ class WillMirrorV28Vault(messenger: BinaryMessenger) {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val existing = store.getKey(alias, null)
         if (existing is SecretKey) return existing
-        check(create) { "Missing key; never regenerate on decrypt" }
+        if (!create) throw MissingVaultKey() // Never regenerate on decrypt.
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         generator.init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)

@@ -62,6 +62,7 @@ class WillMirrorModulePage extends StatefulWidget {
 class _WillMirrorModulePageState extends State<WillMirrorModulePage> {
   MirrorController? _controller;
   String? _error;
+  String? _errorCode;
   final _navigator = GlobalKey<NavigatorState>();
   @override
   void initState() {
@@ -70,7 +71,10 @@ class _WillMirrorModulePageState extends State<WillMirrorModulePage> {
   }
 
   Future<void> _load() async {
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _errorCode = null;
+    });
     try {
       final controller = widget.controller ?? await MirrorRuntime.acquire();
       if (!controller.initialized) await controller.initialize();
@@ -89,19 +93,39 @@ class _WillMirrorModulePageState extends State<WillMirrorModulePage> {
           if (!mounted) return;
           final current = controller.file(link.caseId);
           if (current != null)
-            _navigator.currentState?.push(MaterialPageRoute<void>(
+            _navigator.currentState?.push(
+              MaterialPageRoute<void>(
                 builder: (_) => CaseWorkbench(
-                    controller: controller,
-                    caseId: current.id,
-                    initialStep: valid ? link.step : null,
-                    notificationStale: !valid,
-                    focusNodeId: valid ? link.principleId : null)));
+                  controller: controller,
+                  caseId: current.id,
+                  initialStep: valid ? link.step : null,
+                  notificationStale: !valid,
+                  focusNodeId: valid ? link.principleId : null,
+                ),
+              ),
+            );
         });
       }
     } catch (error) {
-      if (mounted)
-        setState(() => _error =
-            error is MirrorProblem ? error.message : '暂时无法打开加密资料，原文件已保留');
+      if (mounted) {
+        setState(() {
+          _error = error is MirrorProblem
+              ? error.message
+              : '模块暂时无法打开，请重试。原资料已保留，请勿清除应用数据。';
+          const safeCodes = {
+            'database_open_failed',
+            'database_service_unavailable',
+            'storage_version_unsupported',
+            'vault_key_missing',
+            'vault_authentication_failed',
+            'vault_invalid_payload',
+            'vault_unavailable',
+          };
+          _errorCode = error is MirrorProblem && safeCodes.contains(error.code)
+              ? error.code
+              : 'module_startup_failed';
+        });
+      }
     }
   }
 
@@ -119,17 +143,35 @@ class _WillMirrorModulePageState extends State<WillMirrorModulePage> {
     final controller = _controller;
     if (controller == null)
       return Scaffold(
-          appBar: AppBar(title: const Text('意志之镜')),
-          body: Center(
-              child: _error == null
-                  ? const CircularProgressIndicator()
-                  : Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: MirrorEmpty(
-                          title: '资料暂时无法打开',
-                          body: _error!,
-                          action: OutlinedButton(
-                              onPressed: _load, child: const Text('重试'))))));
+        appBar: AppBar(title: const Text('意志之镜')),
+        body: Center(
+          child: _error == null
+              ? const CircularProgressIndicator()
+              : Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SingleChildScrollView(
+                    child: MirrorEmpty(
+                      title: '资料暂时无法打开',
+                      body: _error!,
+                      action: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          OutlinedButton(
+                            onPressed: _load,
+                            child: const Text('重试'),
+                          ),
+                          const SizedBox(height: 12),
+                          SelectableText(
+                            '问题代码：$_errorCode',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      );
     return AnimatedBuilder(
         animation: controller,
         builder: (context, _) => Theme(
@@ -287,6 +329,10 @@ class _CasesHomeState extends State<_CasesHome> {
     return ListView(
         padding: const EdgeInsets.fromLTRB(22, 8, 22, 28),
         children: [
+          if (c.notice != null) ...[
+            MirrorCard(child: Text(c.notice!)),
+            const SizedBox(height: 12),
+          ],
           Text('把眼前的事，\n慢慢看清楚。', style: theme.textTheme.headlineLarge),
           const SizedBox(height: 12),
           Text('从真实处境出发，看见理由与走法，\n再用自己的经历检验。',

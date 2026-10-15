@@ -63,10 +63,23 @@ class MirrorController extends ChangeNotifier {
   Future<void> initialize() async {
     preferences = await store.settings();
     files = await store.list();
-    providerLabel = await model.label();
+    // Provider settings and reminders are optional. Their platform failures must
+    // not lock users out of a successfully opened, local encrypted ledger.
+    final startupNotices = <String>[];
+    try {
+      providerLabel = await model.label();
+    } catch (_) {
+      providerLabel = 'AI 设置暂时不可用';
+      startupNotices.add('AI 设置暂时无法读取，仍可查看资料和继续本地记录。');
+    }
+    try {
+      await reconcileReminders();
+    } catch (_) {
+      startupNotices.add('提醒暂时无法同步，请在工作台手动回看；未确认提醒已送达。');
+    }
+    notice = startupNotices.isEmpty ? null : startupNotices.join('\n');
     initialized = true;
     _notify();
-    await reconcileReminders();
   }
 
   Future<void> reload() async {

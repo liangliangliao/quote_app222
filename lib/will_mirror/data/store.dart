@@ -15,25 +15,50 @@ abstract interface class VaultCipher {
 /// Android AES-256-GCM; the non-exportable key never crosses the platform channel.
 class AndroidVaultCipher implements VaultCipher {
   static const channel = MethodChannel('quote_app/will_mirror_v28_vault');
-  @override
-  Future<String> encrypt(String cleartext, String context) async {
-    final result = await channel.invokeMethod<String>(
-        'encrypt', {'data': cleartext, 'context': context});
-    if (result == null) throw const MirrorProblem('加密服务不可用，未写入未加密记录');
-    return result;
+
+  MirrorProblem _failure(String code) => switch (code) {
+        'vault_key_missing' => const MirrorProblem(
+            '此设备暂时找不到原加密密钥。原资料已保留，请勿卸载应用或清除数据。',
+            code: 'vault_key_missing',
+          ),
+        'vault_authentication_failed' => const MirrorProblem(
+            '加密资料验证未通过。原资料已保留，请勿卸载应用或清除数据。',
+            code: 'vault_authentication_failed',
+          ),
+        'vault_invalid_payload' => const MirrorProblem(
+            '加密资料格式无法识别。原资料已保留，请勿清除应用数据。',
+            code: 'vault_invalid_payload',
+          ),
+        _ => const MirrorProblem(
+            '设备加密服务暂时不可用。请解锁设备后重试；原资料已保留，请勿清除应用数据。',
+            code: 'vault_unavailable',
+          ),
+      };
+
+  Future<String> _invoke(String method, String data, String context) async {
+    try {
+      final result = await channel.invokeMethod<String>(method, {
+        'data': data,
+        'context': context,
+      });
+      if (result == null) throw _failure('vault_unavailable');
+      return result;
+    } on PlatformException catch (error) {
+      // Only allowlisted codes cross this boundary. Native messages/details may
+      // contain sensitive input and must never reach the UI or logs.
+      throw _failure(error.code);
+    } on MissingPluginException {
+      throw _failure('vault_unavailable');
+    }
   }
 
   @override
-  Future<String> decrypt(String ciphertext, String context) async {
-    try {
-      final result = await channel.invokeMethod<String>(
-          'decrypt', {'data': ciphertext, 'context': context});
-      if (result == null) throw const MirrorProblem('无法解密记录');
-      return result;
-    } on PlatformException {
-      throw const MirrorProblem('无法打开加密资料。原文件已保留，请勿清除应用数据。');
-    }
-  }
+  Future<String> encrypt(String cleartext, String context) =>
+      _invoke('encrypt', cleartext, context);
+
+  @override
+  Future<String> decrypt(String ciphertext, String context) =>
+      _invoke('decrypt', ciphertext, context);
 }
 
 abstract interface class MirrorStore {
@@ -55,34 +80,68 @@ class SqliteMirrorStore implements MirrorStore {
   final Database db;
   final VaultCipher cipher;
 
-  static Future<SqliteMirrorStore> open(
-      {DatabaseFactory? factory, String? path, VaultCipher? cipher}) async {
+  static Future<SqliteMirrorStore> open({
+    DatabaseFactory? factory,
+    String? path,
+    VaultCipher? cipher,
+  }) async {
     final selectedFactory = factory ?? databaseFactory;
-    final db = await selectedFactory.openDatabase(
+    try {
+      final db = await selectedFactory.openDatabase(
         path ??
-            p.join(await selectedFactory.getDatabasesPath(),
-                'will_mirror_rebuilt_v28.sqlite'),
+            p.join(
+              await selectedFactory.getDatabasesPath(),
+              'will_mirror_rebuilt_v28.sqlite',
+            ),
         options: OpenDatabaseOptions(
-            version: 1,
-            onConfigure: (db) async {
-              await db.execute('PRAGMA foreign_keys = ON');
-              await db.execute('PRAGMA secure_delete = ON');
-            },
-            onCreate: (db, version) async {
-              await db.execute(
-                  'CREATE TABLE cases (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL)');
-              await db.execute(
-                  'CREATE TABLE case_history (case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE, revision INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(case_id,revision))');
-              await db.execute(
-                  'CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)');
-            },
-            onUpgrade: (db, oldVersion, newVersion) async {
-              // Future migrations must decode and re-encrypt; never reinterpret old
-              // booleans as actual behavior or fill unknown event times with now.
-              if (oldVersion != newVersion)
-                throw const MirrorProblem('请使用兼容资料版本的应用');
-            }));
-    return SqliteMirrorStore._(db, cipher ?? AndroidVaultCipher());
+          version: 1,
+          onConfigure: (db) async {
+            await db.execute('PRAGMA foreign_keys = ON');
+            // Unlike foreign_keys assignment, secure_delete returns a row.
+            // Android SQLiteDatabase.execSQL rejects result-producing PRAGMAs;
+            // desktop FFI accepts them, so FFI-only tests miss this failure.
+            await db.rawQuery('PRAGMA secure_delete = ON');
+          },
+          onCreate: (db, version) async {
+            await db.execute(
+              'CREATE TABLE cases (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL)',
+            );
+            await db.execute(
+              'CREATE TABLE case_history (case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE, revision INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(case_id,revision))',
+            );
+            await db.execute(
+              'CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)',
+            );
+          },
+          onUpgrade: (db, oldVersion, newVersion) async {
+            // Future migrations must decode and re-encrypt; never reinterpret old
+            // booleans as actual behavior or fill unknown event times with now.
+            if (oldVersion != newVersion)
+              throw const MirrorProblem(
+                '请使用兼容资料版本的应用，原资料已保留。',
+                code: 'storage_version_unsupported',
+              );
+          },
+          onDowngrade: (db, oldVersion, newVersion) async {
+            throw const MirrorProblem(
+              '资料由更新版本的应用创建，请安装兼容版本。原资料已保留。',
+              code: 'storage_version_unsupported',
+            );
+          },
+        ),
+      );
+      return SqliteMirrorStore._(db, cipher ?? AndroidVaultCipher());
+    } on DatabaseException {
+      throw const MirrorProblem(
+        '本地资料库暂时无法打开，请重试。原资料已保留，请勿清除应用数据。',
+        code: 'database_open_failed',
+      );
+    } on MissingPluginException {
+      throw const MirrorProblem(
+        '设备存储服务暂时不可用，请重新打开应用后重试。',
+        code: 'database_service_unavailable',
+      );
+    }
   }
 
   String _context(String id, int revision) =>
@@ -196,7 +255,7 @@ class SqliteMirrorStore implements MirrorStore {
             {'case_id': id, 'revision': revised.revision, 'payload': payload});
       }
     });
-    await db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+    await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
     return changedCases;
   }
 
@@ -216,7 +275,7 @@ class SqliteMirrorStore implements MirrorStore {
       await saveSettings(config.change({
         'crossCaseIds': config.crossCaseIds.where((e) => e != id).toList()
       }));
-    await db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+    await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
   }
 
   @override
