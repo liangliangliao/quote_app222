@@ -692,3 +692,53 @@ class ZhaojianControllerView {
   final int activeAsif;
   final int activeProbes;
 }
+
+// ---------------------------------------------------------------------------
+// 信念「远期汇票」
+// ---------------------------------------------------------------------------
+
+/// 一条信念像一张远期汇票：期限未到、证据不足、没人背书、从不想「若永不兑付」，
+/// 都是风险。返回 0 低 / 1 中 / 2 高。
+int billRisk({
+  required String term,
+  required String evidence,
+  required String endorser,
+  required String neverCashed,
+}) {
+  int points = 0;
+  if (evidence.trim().isEmpty) points += 2;
+  if (endorser.trim().isEmpty) points += 1;
+  if (term.trim().isEmpty) points += 1;
+  if (neverCashed.trim().isEmpty) points += 1;
+  if (points >= 3) return 2;
+  if (points >= 1) return 1;
+  return 0;
+}
+
+/// 愿望漏斗：各阶段的条数与转化率。
+class ZFunnel {
+  const ZFunnel(this.wish, this.resolve, this.act);
+
+  /// 到达过「愿望」「决意」「行动」阶段的条数（高阶段也算到过低阶段）。
+  final int wish;
+  final int resolve;
+  final int act;
+
+  double? get wishToResolve => wish == 0 ? null : resolve / wish;
+  double? get resolveToAct => resolve == 0 ? null : act / resolve;
+}
+
+/// [stages] 是每条愿望当前所处的阶段：0 愿望 / 1 决意 / 2 行动。
+ZFunnel funnelOf(Iterable<int> stages) {
+  int w = 0, r = 0, a = 0;
+  for (final int s in stages) {
+    w += 1;
+    if (s >= 1) r += 1;
+    if (s >= 2) a += 1;
+  }
+  return ZFunnel(w, r, a);
+}
+
+/// 知行落差的决定：抽象与直观动机指向不同，而行动跟了直观。
+List<ZDecision> knowActGaps(Iterable<ZDecision> revealed) =>
+    revealed.where((ZDecision d) => followedKind(d) == '直观').toList();

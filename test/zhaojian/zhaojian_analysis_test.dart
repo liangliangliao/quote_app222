@@ -455,6 +455,44 @@ void main() {
     });
   });
 
+  group('action and belief helpers', () {
+    test('billRisk grows as evidence, endorsement, term and the never-cashed case go missing', () {
+      expect(billRisk(term: '一年', evidence: '有数据', endorser: '导师', neverCashed: '换个方向'), 0);
+      expect(billRisk(term: '', evidence: '有数据', endorser: '导师', neverCashed: '换个方向'), 1);
+      expect(billRisk(term: '一年', evidence: '', endorser: '导师', neverCashed: '换个方向'), 1);
+      expect(billRisk(term: '', evidence: '', endorser: '导师', neverCashed: '换个方向'), 2);
+      expect(billRisk(term: '', evidence: '有数据', endorser: '', neverCashed: ''), 2);
+      expect(billRisk(term: '', evidence: '', endorser: '', neverCashed: ''), 2);
+    });
+
+    test('funnel counts each stage reached and the conversions', () {
+      final ZFunnel f = funnelOf(<int>[0, 0, 1, 2, 2, 1]);
+      expect(f.wish, 6);
+      expect(f.resolve, 4);
+      expect(f.act, 2);
+      expect(f.wishToResolve, closeTo(4 / 6, 1e-9));
+      expect(f.resolveToAct, 0.5);
+      final ZFunnel empty = funnelOf(<int>[]);
+      expect(empty.wishToResolve, isNull);
+      expect(empty.resolveToAct, isNull);
+      expect(funnelOf(<int>[0, 0]).resolveToAct, isNull, reason: '没有决意就没有决意→行动的转化率');
+    });
+
+    test('knowActGaps keeps decisions where abstract motives lost to intuitive ones', () {
+      final List<ZMotive> split = <ZMotive>[
+        m('后果', kind: 'abs', side: 'a', weight: 5),
+        m('他的神情', kind: 'int', side: 'b', weight: 4),
+      ];
+      final List<ZDecision> gaps = knowActGaps(<ZDecision>[
+        decision(motives: split, actual: 'b'),
+        decision(motives: split, actual: 'a'),
+        decision(motives: <ZMotive>[m('x', side: 'a')], actual: 'a'),
+      ]);
+      expect(gaps.length, 1);
+      expect(gaps.single.actual, 'b');
+    });
+  });
+
   group('library', () {
     test('static data is consistent', () {
       expect(ZCopy.categories.length, 12);
