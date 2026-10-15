@@ -82,11 +82,15 @@ class QuoteFrameAiService {
       theme: theme,
       force: force,
     );
-    if (script.isThemeOnly) {
-      throw StateError('文字 AI 未能形成针对这句名言的具体视觉解释，'
-          '为避免付费生成无关风景，本次没有调用图片模型。请检查文字 AI 配置后重试。');
-    }
-    final prompt = script.imagePrompt(quoteCharacters: quote.runes.length);
+    // 文字 AI 与绘图 AI 可以是不同服务：文字模型未配置/解析失败时，
+    // 仍把原文直接交给文生图模型，要求它按原句作具体视觉转译。
+    // 这不会伪称“文字 AI 已理解”；缓存脚本仍记录 isThemeOnly。
+    final prompt = script.imagePrompt(
+      quoteCharacters: quote.runes.length,
+      originalQuote: quote,
+      topic: topic,
+      note: note,
+    );
     final generated = await _mediaService.generateImage(prompt);
     final source = File(generated.path);
     if (!await source.exists() || await source.length() == 0) {
