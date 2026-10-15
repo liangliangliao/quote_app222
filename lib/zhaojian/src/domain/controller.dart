@@ -46,6 +46,21 @@ class ZhaojianController extends ChangeNotifier {
   /// 同时进行的事项总数：太多就是分散。
   int get activeThreads => activePlans + activeAsif + activeProbes + activeForgo;
 
+  /// 封存时 AI 引擎对「选 A 的概率」的预测（开牌前不给用户看，避免影响自己的判断）。
+  double? engineProbA(int? decisionId) =>
+      decisionId == null ? null : double.tryParse(kv('eng.$decisionId'));
+
+  /// 封存时挑选的、适用于这个决定的签名。
+  ZEntry? signatureOf(int? decisionId) {
+    if (decisionId == null) return null;
+    final int? sid = int.tryParse(kv('sig.$decisionId'));
+    if (sid == null) return null;
+    for (final ZEntry e in items('sig')) {
+      if (e.id == sid) return e;
+    }
+    return null;
+  }
+
   /// 某一类通用条目（按创建时间从早到晚）。
   List<ZEntry> items(String kind) => _items[kind] ?? const <ZEntry>[];
 

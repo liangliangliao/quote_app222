@@ -316,6 +316,26 @@ void main() {
       expect(c.activeThreads, 4);
     });
 
+    test('engine prediction and the picked signature are looked up by decision id', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      final int id = await c.seal(sample());
+      expect(c.engineProbA(id), isNull);
+      expect(c.signatureOf(id), isNull);
+      expect(c.engineProbA(null), isNull);
+
+      final ZEntry sig = await c.addItem('sig', <String, dynamic>{'ifc': '被当面请求', 'then': '先答应', 'conf': true});
+      await c.setKv('eng.$id', '0.62');
+      await c.setKv('sig.$id', '${sig.id}');
+      await c.load();
+      expect(c.engineProbA(id), 0.62);
+      expect(c.signatureOf(id)!.s('then'), '先答应');
+
+      await c.removeItem(c.items('sig').single);
+      expect(c.signatureOf(id), isNull, reason: '签名被删后不再关联');
+    });
+
     test('export is valid json with every section', () async {
       final ZhaojianController c =
           ZhaojianController(db: db, oracle: const LocalZhaojianOracle());

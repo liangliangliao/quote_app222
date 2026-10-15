@@ -209,6 +209,7 @@ class _RevealPageState extends State<RevealPage> {
   String? _actual;
   int? _reaction;
   int? _jt;
+  bool? _sigHit;
   final List<String> _body = <String>[];
   int? _hypId;
   String _hypKind = 'sup';
@@ -230,6 +231,14 @@ class _RevealPageState extends State<RevealPage> {
       hypId: _hypId,
       hypKind: _hypKind,
     );
+    if (!mounted) return;
+    final ZEntry? sig = widget.controller.signatureOf(widget.decision.id);
+    if (sig != null && _sigHit != null) {
+      final List<Map<String, dynamic>> log = sig.maps('log')
+        ..add(<String, dynamic>{'ctx': widget.decision.question, 'hit': _sigHit});
+      sig.data['log'] = log;
+      await widget.controller.saveItem(sig);
+    }
     if (!mounted) return;
     if (d != null) {
       await showDialog<void>(
@@ -294,6 +303,20 @@ class _RevealPageState extends State<RevealPage> {
               ),
             ],
           ),
+          if (widget.controller.signatureOf(d.id) != null)
+            ZSection(
+              title: '封存时你挑了一个签名：',
+              children: <Widget>[
+                Text(
+                    '如果${widget.controller.signatureOf(d.id)!.s('ifc')}，那么${widget.controller.signatureOf(d.id)!.s('then')}'),
+                const ZNote('这次，它应验了吗？（如实选，落空也是证据）'),
+                zChoice(
+                  labels: const <String>['应验了', '落空了'],
+                  selected: _sigHit == null ? null : (_sigHit! ? 0 : 1),
+                  onSelect: (int i) => setState(() => _sigHit = i == 0),
+                ),
+              ],
+            ),
           ZSection(
             title: '当时的身体信号（可多选，只是线索，不是诊断）：',
             children: <Widget>[
@@ -435,6 +458,17 @@ class _RevealDialogState extends State<RevealDialog> {
     );
   }
 
+  Widget _engLine(ZDecision d) {
+    final double? pa = widget.controller.engineProbA(d.id);
+    final String? actual = d.actual;
+    if (pa == null || actual == null) return const SizedBox.shrink();
+    final bool? hit = engineHit(pa, actual);
+    return ZNote(
+      'AI 引擎事先估计你选 A 的概率 ${zPercent(pa)}：${hit == null ? '没有倾向' : (hit ? '估对了' : '估错了')}。'
+      '你自己${d.hit ? '对了' : '错了'}。引擎只是一个对照，不是标准答案。',
+    );
+  }
+
   Widget _missPrompt(ZDecision d) {
     if (d.missLogged || _missDone) return const SizedBox.shrink();
     if (!(opposesBalance(d) || !d.hit)) return const SizedBox.shrink();
@@ -516,6 +550,7 @@ class _RevealDialogState extends State<RevealDialog> {
           : '落差就是线索：你以为的自己和实际的自己不一样。'));
       body.add(_replay(d));
       body.add(_alignLine(d));
+      body.add(_engLine(d));
       body.add(_missPrompt(d));
     }
     return AlertDialog(

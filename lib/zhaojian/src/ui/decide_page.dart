@@ -62,6 +62,12 @@ class _DecidePageState extends State<DecidePage> {
   String _verdict = '';
   bool _verdictBusy = false;
 
+  // 签名挑选与引擎预测
+  int? _sigId;
+  double? _engA;
+  bool _engBusy = false;
+  String _engMsg = '';
+
   // 一致度与难度
   final TextEditingController _desireText = TextEditingController();
   final List<ZDesire> _selDesires = <ZDesire>[];
@@ -191,6 +197,82 @@ class _DecidePageState extends State<DecidePage> {
     setState(() {
       _verdictBusy = false;
       _verdict = raw.trim().isEmpty ? '没有可用的 AI，或没有完成。' : raw.trim();
+    });
+  }
+
+  // ---------------------------------------------------------------- 签名与引擎预测
+
+  /// 已确认的签名里，挑一个适用于这件事的；开牌时会问它应验了吗。
+  Widget _sigPicker() {
+    final List<ZEntry> sigs =
+        widget.controller.items('sig').where((ZEntry e) => e.b('conf')).toList();
+    if (sigs.isEmpty) return const SizedBox.shrink();
+    final int idx = _sigId == null ? -1 : sigs.indexWhere((ZEntry e) => e.id == _sigId);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 8),
+        const ZNote('这件事适用你已确认的哪个签名？（可选；开牌时会问你它应验了吗）'),
+        zChoice(
+          labels: sigs.map((ZEntry e) => '如果${e.s('ifc')}，那么${e.s('then')}').toList(),
+          selected: idx < 0 ? null : idx,
+          onSelect: (int i) => setState(() {
+            final int? sid = sigs[i].id;
+            _sigId = _sigId == sid ? null : sid;
+          }),
+        ),
+      ],
+    );
+  }
+
+  /// 让 AI 引擎也预测一次「你会选 A 的概率」。结果存起来，开牌前不给你看，
+  /// 免得影响你自己的判断；开牌时三方对照：你、引擎、实际。
+  Widget _enginePicker() {
+    if (!widget.controller.oracle.sendsData) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 8),
+        const ZNote('让 AI 引擎也预测一次（可选）：开牌前不给你看，开牌时和你的预测、实际三方对照。它只是对照，不是标准答案。'),
+        ZNote('点击后，题面和你评过分的动机会发送给：${widget.controller.oracle.generateLabel}。', warn: true),
+        OutlinedButton(
+          onPressed: _engBusy ? null : _enginePredict,
+          child: Text(_engA == null ? '让引擎预测一次' : '重新预测（已记录）'),
+        ),
+        if (_engMsg.isNotEmpty) ZNote(_engMsg, warn: _engA == null),
+      ],
+    );
+  }
+
+  Future<void> _enginePredict() async {
+    final List<ZMotive> all = _allMotives()
+      ..sort((ZMotive x, ZMotive y) => y.weight.compareTo(x.weight));
+    final StringBuffer lines = StringBuffer();
+    for (final ZMotive m in all.take(12)) {
+      lines.writeln('${m.text}｜${m.weight}分｜${m.isAbstract ? '抽象' : '直观'}｜'
+          '${m.side == 'a' ? '拉向A' : (m.side == 'b' ? '拉向B' : '两边')}｜${m.valence == 'av' ? '害怕' : '想要'}');
+    }
+    setState(() {
+      _engBusy = true;
+      _engMsg = '';
+    });
+    final String raw = await widget.controller.oracle.generate(
+      prompt: '${_situation()}\n评过分的动机（动机｜分量｜类型｜拉向｜想要或害怕）：\n$lines'
+          '请估计：到了现场，这个人最终选 A 的概率（0 到 1 的小数）。这是对「现场会发生什么」的估计，不是建议。'
+          '只输出 JSON {"a":0.0}。',
+      purpose: 'zhaojian.engine_predict',
+    );
+    if (!mounted) return;
+    final Map<String, dynamic>? o = zParseObject(raw);
+    final dynamic a = o == null ? null : o['a'];
+    setState(() {
+      _engBusy = false;
+      if (a is num) {
+        _engA = a.toDouble().clamp(0.0, 1.0).toDouble();
+        _engMsg = '已记录。引擎的预测要开牌时才揭晓。';
+      } else {
+        _engMsg = raw.trim().isEmpty ? '没有可用的 AI，或没有完成。' : 'AI 的回答没法解析。';
+      }
     });
   }
 
@@ -1055,7 +1137,9 @@ class _DecidePageState extends State<DecidePage> {
       imagerySymmetry: im.symmetry,
       align: _alignSummary(),
     );
-    await widget.controller.seal(d);
+    final int id = await widget.controller.seal(d);
+    if (_sigId != null) await widget.controller.setKv('sig.$id', '$_sigId');
+    if (_engA != null) await widget.controller.setKv('eng.$id', '$_engA');
     if (!mounted) return;
     zSnack(context, '已封存。现场发生后，到「未开的牌」开牌。');
     Navigator.of(context).pop(true);
@@ -1115,6 +1199,8 @@ class _DecidePageState extends State<DecidePage> {
               selected: _jtPred,
               onSelect: (int i) => setState(() => _jtPred = i),
             ),
+            _sigPicker(),
+            _enginePicker(),
           ],
         ),
         Row(

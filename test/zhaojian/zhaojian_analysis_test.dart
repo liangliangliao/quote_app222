@@ -528,6 +528,60 @@ void main() {
     });
   });
 
+  group('growth supplements', () {
+    test('ropeKeepRate pools every rope and is null without results', () {
+      expect(ropeKeepRate(<List<String>>[<String>['y', 'n'], <String>['y', 'y']]), 0.75);
+      expect(ropeKeepRate(<List<String>>[<String>[], <String>['']]), isNull);
+      expect(ropeKeepRate(<List<String>>[]), isNull);
+    });
+
+    test('actingShare splits early and recent only with four or more reactions', () {
+      final ({double? all, double? early, double? recent}) few = actingShare(<String>['像在演', '松了口气']);
+      expect(few.all, 0.5);
+      expect(few.early, isNull);
+      final ({double? all, double? early, double? recent}) many = actingShare(
+          <String>['像在演', '像在演', '松了口气', '松了口气', '松了口气']);
+      expect(many.all, 0.4);
+      expect(many.early, closeTo(2 / 3, 1e-9), reason: '前 3 个里有 2 个');
+      expect(many.recent, 0.0);
+      expect(actingShare(<String>[]).all, isNull);
+    });
+
+    test('asifVerdictCounts labels finished experiments and skips unfinished ones', () {
+      ZEntry e(String r, String nb, String al) => ZEntry(
+          kind: 'asif', data: <String, dynamic>{'r': r, 'nb': nb, 'al': al});
+      final Map<String, int> c = asifVerdictCounts(<ZEntry>[
+        e('自然', '没成真', '更靠近'),
+        e('自然', '没成真', '更靠近'),
+        e('别扭', '没成真', '更靠近'),
+        e('自然', '成真了', '更靠近'),
+        e('自然', '没成真', '更远了'),
+        e('自然', '', '更靠近'),
+      ]);
+      expect(c, <String, int>{'保留': 2, '继续': 1, '重设': 1, '弃': 1});
+    });
+
+    test('forgoSummary only counts experiments with at least two days logged', () {
+      ZEntry e(int pred, List<int> vs) => ZEntry(kind: 'forgo', data: <String, dynamic>{
+            'pred': pred,
+            'log': <Map<String, dynamic>>[for (final int v in vs) <String, dynamic>{'v': v}],
+          });
+      final ({int n, double? predicted, double? actual}) r =
+          forgoSummary(<ZEntry>[e(8, <int>[2, 4]), e(4, <int>[6, 6]), e(9, <int>[9])]);
+      expect(r.n, 2);
+      expect(r.predicted, 6.0);
+      expect(r.actual, 4.5);
+      expect(forgoSummary(<ZEntry>[]).predicted, isNull);
+    });
+
+    test('engineHit compares the predicted side with the actual one', () {
+      expect(engineHit(0.7, 'a'), isTrue);
+      expect(engineHit(0.7, 'b'), isFalse);
+      expect(engineHit(0.2, 'b'), isTrue);
+      expect(engineHit(0.5, 'a'), isNull);
+    });
+  });
+
   group('library', () {
     test('static data is consistent', () {
       expect(ZCopy.categories.length, 12);

@@ -775,3 +775,78 @@ bool signatureGate(ZSigStats s) => s.hits >= 3 && s.contexts >= 2 && s.hits >= s
 
 /// AI 分析需要的最少行为证据条数。证据太少时，模型只会把自述复述一遍。
 const int analysisMinEvidence = 4;
+
+// ---------------------------------------------------------------------------
+// 成长回顾的补充统计、引擎预测
+// ---------------------------------------------------------------------------
+
+/// 绳子整体守住率（每条绳子的序列：'y' 守住 / 'n' 被破）；没有记录返回 null。
+double? ropeKeepRate(Iterable<List<String>> seqs) {
+  int k = 0, b = 0;
+  for (final List<String> s in seqs) {
+    final ({int kept, int broken}) st = ropeStats(s);
+    k += st.kept;
+    b += st.broken;
+  }
+  if (k + b == 0) return null;
+  return k / (k + b);
+}
+
+/// 「像在演」占比。[reactions] 按时间从早到晚；不足 4 条不分早晚。
+({double? all, double? early, double? recent}) actingShare(List<String> reactions) {
+  double? share(List<String> xs) {
+    final List<String> nonEmpty = xs.where((String r) => r.isNotEmpty).toList();
+    if (nonEmpty.isEmpty) return null;
+    return nonEmpty.where((String r) => r == '像在演').length / nonEmpty.length;
+  }
+
+  if (reactions.length < 4) return (all: share(reactions), early: null, recent: null);
+  final int cut = (reactions.length + 1) ~/ 2;
+  return (
+    all: share(reactions),
+    early: share(reactions.sublist(0, cut)),
+    recent: share(reactions.sublist(cut)),
+  );
+}
+
+/// 假设行动的结论分布，键是「保留 / 继续 / 重设 / 弃 / 再观察」。
+/// 三项检验没填完的不计。
+Map<String, int> asifVerdictCounts(Iterable<ZEntry> asifs) {
+  final Map<String, int> c = <String, int>{};
+  for (final ZEntry e in asifs) {
+    final String r = e.s('r');
+    final String nb = e.s('nb');
+    final String al = e.s('al');
+    if (r.isEmpty || nb.isEmpty || al.isEmpty) continue;
+    final String v = asifVerdict(r, nb, al);
+    final String label = v.split('：').first.replaceAll('（有代价）', '');
+    c[label] = (c[label] ?? 0) + 1;
+  }
+  return c;
+}
+
+/// 放弃实验：预测的难受程度与实际平均的对照。只算记录了至少 2 天的实验。
+({int n, double? predicted, double? actual}) forgoSummary(Iterable<ZEntry> forgos) {
+  double p = 0, a = 0;
+  int n = 0;
+  for (final ZEntry e in forgos) {
+    final List<Map<String, dynamic>> log = e.maps('log');
+    if (log.length < 2) continue;
+    double sum = 0;
+    for (final Map<String, dynamic> x in log) {
+      sum += x['v'] is num ? (x['v'] as num).toDouble() : 0;
+    }
+    p += (e.i('pred') ?? 5).toDouble();
+    a += sum / log.length;
+    n += 1;
+  }
+  if (n == 0) return (n: 0, predicted: null, actual: null);
+  return (n: n, predicted: p / n, actual: a / n);
+}
+
+/// 引擎预测「选 A 的概率」是否命中；恰好 0.5 不算预测，返回 null。
+bool? engineHit(double probA, String actual) {
+  if (probA == 0.5) return null;
+  final String side = probA > 0.5 ? 'a' : 'b';
+  return side == actual;
+}
