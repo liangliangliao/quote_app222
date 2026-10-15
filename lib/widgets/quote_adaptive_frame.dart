@@ -62,8 +62,8 @@ class QuoteAdaptiveFrame extends StatelessWidget {
                     colors: [
                       const Color(0xfffaf7ef).withValues(alpha:.94),
                       const Color(0xfffaf7ef).withValues(alpha:.89),
-                      const Color(0xfffaf7ef).withValues(alpha: longQuote ? .79 : (midQuote ? .66 : .38)),
-                      const Color(0xfffaf7ef).withValues(alpha: longQuote ? .62 : (midQuote ? .43 : .13)),
+                      const Color(0xfffaf7ef).withValues(alpha: longQuote ? .76 : (midQuote ? .63 : .42)),
+                      const Color(0xfffaf7ef).withValues(alpha: .09),
                     ],
                   ),
                 ),
