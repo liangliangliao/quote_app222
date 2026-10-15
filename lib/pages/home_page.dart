@@ -147,8 +147,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 配画失败，已保留本地主题相框：$e')));
       }
     } finally {
-      if (mounted) setState(() => _frameGenerating = false);
+      if (mounted) {
+        setState(() => _frameGenerating = false);
+        // 生成期间若切换名言，则接着处理最新一条，不让它卡在无图状态。
+        final current = _todayData;
+        if (_frameAuto && current != null &&
+            _frameAi.cacheKey((current['topic'] ?? '').toString(), (current['quote'] ?? '').toString()) != key) {
+          unawaited(_activateFrame(current));
+        }
+      }
     }
+  }
+
+  Future<void> _requestManualFrame() async {
+    final payload = _todayData;
+    if (payload == null || _frameGenerating) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('为当前名言生成 AI 相框？'),
+        content: const Text('将名言及其主题发送给当前配置的图片生成服务商。此操作可能产生 API 费用；重新生成也会再次计费。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('生成')),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) unawaited(_generateFrameFor(payload, userInitiated: true));
   }
 
   Future<void> _setFrameAuto() async {
@@ -157,7 +182,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('开启 AI 自动配画？'),
-          content: const Text('新名言会自动调用当前配置的图片生成服务商，可能产生 API 费用。每条名言缓存一次，重复打开不会再次扣费。不开启时，免费的本地主题相框仍会自动匹配。'),
+          content: const Text('新名言的主题和正文会发送给当前配置的图片生成服务商，可能产生 API 费用。每条名言缓存一次，重复打开不会再次扣费。不开启时，免费的本地主题相框仍会自动匹配。'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
             FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('开启')),
@@ -325,7 +350,7 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   void _handleTopBarMenu(String value) async {
     switch (value) {
       case 'frame_generate':
-        if (_todayData != null) unawaited(_generateFrameFor(_todayData!, userInitiated: true));
+        unawaited(_requestManualFrame());
         break;
       case 'frame_toggle':
         unawaited(_setFrameAuto());
@@ -1409,7 +1434,7 @@ ImageProvider _imageFrom(String? any) {
                             child: Row(children: [
                               Icon(_frameGenerating ? Icons.hourglass_top : Icons.auto_awesome),
                               const SizedBox(width: 8),
-                              Text(_frameGenerating ? '正在生成配画' : 'AI 生成/重绘当前画框'),
+                              Text(_frameGenerating ? '正在生成配画' : 'AI 生成/重绘当前画框（可能收费）'),
                             ]),
                           ),
                           PopupMenuItem<String>(
