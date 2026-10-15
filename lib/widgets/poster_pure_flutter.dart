@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/wood_frame_card.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
+import 'package:quote_app/widgets/wood_frame_3d_overlay.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 
 class _NoIndicatorScroll extends ScrollBehavior {
@@ -53,6 +54,7 @@ class PosterPureFlutter extends StatelessWidget {
   final String avatar;
   final String woodBgAsset;
   final String? aiFramePath;
+  final String? frameFinish;
 
   const PosterPureFlutter({
     super.key,
@@ -63,6 +65,7 @@ class PosterPureFlutter extends StatelessWidget {
     required this.avatar,
     this.woodBgAsset = 'assets/bg-wood-upload.jpg',
     this.aiFramePath,
+    this.frameFinish,
   });
 
   @override
@@ -71,7 +74,11 @@ class PosterPureFlutter extends StatelessWidget {
     return LayoutBuilder(builder: (context, cons) {
       final short = (cons.maxWidth < cons.maxHeight) ? cons.maxWidth : cons.maxHeight;
       final tTitle = (short * 0.040).clamp(18.5, 24.0);
-      final tQuote = (short * 0.065).clamp(19.0, 31.0);
+      final quoteLength = quote.characters.length;
+      final tQuote = quoteLength > 115 ? 19.5 :
+          quoteLength > 90 ? 21.5 :
+          quoteLength > 65 ? 23.0 :
+          quoteLength > 45 ? 25.0 : 29.5;
       final tAuth = (short * 0.033).clamp(13.0, 16.0);
       final tNote = (short * 0.030).clamp(10.5, 12.4);
       final frameTop = (short * 0.035).clamp(14.0, 24.0);
@@ -104,7 +111,7 @@ class PosterPureFlutter extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     // 语义相框：根据文字内容原生绘制，用户启用 AI 后可叠加缓存配画。
-                    QuoteAdaptiveFrame(theme: frameTheme, aiImagePath: aiFramePath),
+                    QuoteAdaptiveFrame(theme: frameTheme, aiImagePath: aiFramePath, quoteCharacters: quoteLength),
                     // 相框内部边距：左右 40dp，上下 50dp
                     Padding(
                     padding: const EdgeInsets.only(left: 0, right: 0, top: 0, bottom: 30),
@@ -133,7 +140,7 @@ class PosterPureFlutter extends StatelessWidget {
                                                     textAlign: (topic.characters.length < 20) ? TextAlign.center : TextAlign.left,
                                                     style: TextStyle(
                                                       color: Colors.black87,
-                                                      fontSize: tTitle + 4, height: 1.30,
+                                                      fontSize: tTitle + 1, height: 1.30,
                                                       fontWeight: FontWeight.w400,
                                       letterSpacing: 2.8,
                                                     ),
@@ -165,7 +172,7 @@ class PosterPureFlutter extends StatelessWidget {
                                               textAlign: TextAlign.center,
                                               style: TextStyle(
                                                 color: Colors.black87,
-                                                fontSize: tTitle + 2, height: 1.30,
+                                                fontSize: tTitle + 1, height: 1.30,
                                                 fontWeight: FontWeight.w400,
                                       letterSpacing: 2.8,
                                               ),
@@ -173,9 +180,9 @@ class PosterPureFlutter extends StatelessWidget {
                                             ),
 
 SizedBox(height: (canvasPad * 0.3) - 5),
-                                    Text(quote, textScaleFactor: 1.0, style: const TextStyle(
+                                    Text(quote, textScaler: TextScaler.noScaling, style: TextStyle(
                                         color: Colors.black87,
-                                        fontSize: 31,
+                                        fontSize: tQuote,
                                         height: 1.45,
                                         fontWeight: FontWeight.w700,
                                         letterSpacing: 2.0,
@@ -222,6 +229,10 @@ SizedBox(height: (canvasPad * 0.3) - 5),
                       ),
                     ),
                   ),
+                    // 实体木材的表面必须压住纸张和文字的最外缘。
+                    Positioned.fill(
+                      child: WoodFrame3dOverlay(theme: frameTheme, finish: frameFinish),
+                    ),
                   ],
                 ),
               ),
