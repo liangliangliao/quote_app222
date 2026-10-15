@@ -91,9 +91,15 @@ void main() {
     ))));
     await tester.pump();
     final boundary=key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    final image=await boundary.toImage(pixelRatio:1);
-    final bytes=(await image.toByteData(format:ui.ImageByteFormat.rawRgba))!;
-    int channel(int x,int y,int c)=> bytes.getUint8((y*240+x)*4+c);
+    // toImage() waits for the engine raster thread; use real async outside
+    // WidgetTester fake async so CI doesn't remain blocked awaiting pixels.
+    final bytes=await tester.runAsync(() async {
+      final image=await boundary.toImage(pixelRatio:1);
+      return (await image.toByteData(format:ui.ImageByteFormat.rawRgba))!;
+    });
+    expect(bytes, isNotNull);
+    final pixelBytes=bytes!;
+    int channel(int x,int y,int c)=> pixelBytes.getUint8((y*240+x)*4+c);
     // 同一画框中心应保留画芯的颜色，旧版会变成深灰褐色且覆盖名言。
     expect(channel(120,180,0), greaterThan(225));
     expect(channel(120,180,1), greaterThan(210));
