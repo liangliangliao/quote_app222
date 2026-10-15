@@ -12,15 +12,19 @@ class QuoteAdaptiveFrame extends StatelessWidget {
     super.key,
     required this.theme,
     this.aiImagePath,
+    this.quoteCharacters = 0,
   });
 
   final QuoteFrameTheme theme;
   final String? aiImagePath;
+  final int quoteCharacters;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      final edge = (constraints.maxWidth * 0.047).clamp(8.0, 17.0);
+      final edge = (constraints.maxWidth * .060).clamp(8.0, 21.0) + 2.5;
+      final longQuote = quoteCharacters > 80;
+      final midQuote = quoteCharacters > 48;
       final path = aiImagePath;
       return Stack(
         fit: StackFit.expand,
@@ -31,39 +35,41 @@ class QuoteAdaptiveFrame extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(edge),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: Image.file(
-                    File(path),
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                  ),
-                ),
-              ),
-            ),
-          if (path != null && path.isNotEmpty)
-            Positioned.fill(
-              child: Padding(
-                padding: EdgeInsets.all(edge),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: const [0, .28, .67, 1],
-                      colors: [
-                        const Color(0xfffaf6eb).withOpacity(.93),
-                        const Color(0xfffaf6eb).withOpacity(.89),
-                        const Color(0xfffaf6eb).withOpacity(.80),
-                        const Color(0xfffaf6eb).withOpacity(.24),
-                      ],
+                  borderRadius: BorderRadius.circular(2),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 550),
+                    child: Image.file(
+                      File(path),
+                      key: ValueKey(path),
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                     ),
                   ),
                 ),
               ),
             ),
-          // AI 图片绘制在纸张中而非边框之上，四层细边始终保留。
-          CustomPaint(painter: _SemanticFrameBorderPainter(theme)),
+          // 即使长名言也能阅读：文字优先；画的高对比主体限定在底部。
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.all(edge),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0, .44, .75, 1],
+                    colors: [
+                      const Color(0xfffaf7ef).withValues(alpha:.94),
+                      const Color(0xfffaf7ef).withValues(alpha:.89),
+                      const Color(0xfffaf7ef).withValues(alpha: longQuote ? .79 : (midQuote ? .66 : .38)),
+                      const Color(0xfffaf7ef).withValues(alpha: longQuote ? .62 : (midQuote ? .43 : .13)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       );
     });
@@ -111,8 +117,8 @@ class _SemanticFramePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final c = _colors(theme.scene);
     final w = size.width, h = size.height;
-    final edge = (w * .047).clamp(8.0, 17.0);
-    canvas.drawRect(Offset.zero & size, Paint()..color = c.wood);
+    final edge = (w * .060).clamp(8.0, 21.0) + 2.5;
+    canvas.drawRect(Offset.zero & size, Paint()..color = c.paper);
     final paper = Rect.fromLTWH(edge, edge, w - edge * 2, h - edge * 2);
     canvas.drawRect(paper, Paint()
       ..shader = LinearGradient(
@@ -288,28 +294,3 @@ class _SemanticFramePainter extends CustomPainter {
   bool shouldRepaint(covariant _SemanticFramePainter old) => old.theme.scene != theme.scene;
 }
 
-class _SemanticFrameBorderPainter extends CustomPainter {
-  const _SemanticFrameBorderPainter(this.theme);
-  final QuoteFrameTheme theme;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w=size.width, h=size.height;
-    final edge=(w*.047).clamp(8.0,17.0);
-    final colors=_colors(theme.scene);
-    final outer=Rect.fromLTWH(.8,.8,w-1.6,h-1.6);
-    final inner=Rect.fromLTWH(edge,edge,w-edge*2,h-edge*2);
-    canvas.drawRect(outer,Paint()
-      ..color=colors.wood.withOpacity(.74)
-      ..style=PaintingStyle.stroke
-      ..strokeWidth=2);
-    canvas.drawRect(Rect.fromLTWH(edge*.43,edge*.43,w-edge*.86,h-edge*.86),
-      Paint()..color=Colors.white.withOpacity(.30)..style=PaintingStyle.stroke..strokeWidth=1.1);
-    canvas.drawRect(inner,Paint()
-      ..color=colors.ink.withOpacity(.35)
-      ..style=PaintingStyle.stroke..strokeWidth=1.1);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SemanticFrameBorderPainter old) => old.theme.scene != theme.scene;
-}
