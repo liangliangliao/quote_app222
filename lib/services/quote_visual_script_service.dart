@@ -71,7 +71,12 @@ class QuoteVisualScript {
   }
 
   /// 减少引入不相关事物：核心象征来自经过审阅的视觉脚本。
-  String imagePrompt({required int quoteCharacters}) {
+  String imagePrompt({
+    required int quoteCharacters,
+    String originalQuote = '',
+    String topic = '',
+    String note = '',
+  }) {
     final subjectMax = quoteCharacters > 85 ? 0.22 : (quoteCharacters > 50 ? 0.28 : 0.36);
     return '''
 Create a cinematic fine-art visual metaphor for a Chinese quotation.
@@ -81,6 +86,20 @@ Central visual metaphor: $metaphor
 Concrete stage, subjects, lighting and visible action: $scene
 How visual objects express the abstract relation: $relationship
 Emotional atmosphere: $mood. Color palette: $palette.
+${isThemeOnly ? '''
+CRITICAL: The text analysis model was unavailable. The following theme-level
+suggestion is NOT verified against the original quote.
+Original Chinese quotation (the primary ground truth): $originalQuote
+Its topic: $topic
+Commentary (secondary evidence): ${note.length > 420 ? note.substring(0, 420) : note}
+You MUST independently interpret this quotation and its actual contrast,
+action, consequence or inner experience, then invent one coherent, SPECIFIC
+visual scene that expresses it. Do NOT just illustrate the generic theme above.
+If the quote describes two opposing states, depict their observable contrast.
+If it describes transformation, depict a before/after or visible transition.
+If it is existential or abstract, choose visible symbolic objects and explain
+the relationship through their physical arrangement. Avoid stock scenery.
+''' : ''}
 IMPORTANT: Objects MUST actually convey the quoted meaning, not generic landscapes.
 Composition: portrait aspect ratio 2:3. Foreground storytelling and distinctive
 symbols must remain inside the BOTTOM ${(subjectMax * 100).round()}% of the canvas,
