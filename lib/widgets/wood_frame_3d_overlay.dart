@@ -35,20 +35,9 @@ WoodFinish _resolveFinish(String? requested, QuoteFrameTheme theme) {
     case 'rosewood': return WoodFinish.rosewood;
     case 'ash': return WoodFinish.ash;
   }
-  switch (theme.scene) {
-    case QuoteScene.growth:
-    case QuoteScene.hope:
-    case QuoteScene.journey:
-      return WoodFinish.oak;
-    case QuoteScene.affection:
-    case QuoteScene.time:
-      return WoodFinish.rosewood;
-    case QuoteScene.serenity:
-    case QuoteScene.freedom:
-      return WoodFinish.ash;
-    default:
-      return WoodFinish.walnut;
-  }
+  // 默认统一采用与参考图接近的暖胡桃木，不再用灰色白蜡木。
+  // 只有主动选择的 AI 风格才使用其他木料。
+  return WoodFinish.walnut;
 }
 
 class WoodFrame3dPainter extends CustomPainter {
@@ -58,7 +47,7 @@ class WoodFrame3dPainter extends CustomPainter {
 
   Color get _base {
     switch (finish) {
-      case WoodFinish.walnut: return const Color(0xff65412a);
+      case WoodFinish.walnut: return const Color(0xff87502b);
       case WoodFinish.oak: return const Color(0xffb27b45);
       case WoodFinish.rosewood: return const Color(0xff7b3027);
       case WoodFinish.ash: return const Color(0xff897d6c);
@@ -81,22 +70,23 @@ class WoodFrame3dPainter extends CustomPainter {
     final iy0 = y0 + edge, iy1 = y1 - edge;
     if (ix1 <= ix0 || iy1 <= iy0) return;
 
-    // 实木侧面投影：边框悬浮在海报前方的阴影。
-    final silhouette = Path()
-      ..addRRect(RRect.fromRectAndRadius(Rect.fromLTRB(x0,y0,x1,y1), const Radius.circular(3)));
-    canvas.drawShadow(silhouette, Colors.black.withValues(alpha: .58),
-        math.max(3, edge * .56), false);
-
-    // 外缘厚度、抛光边线和基材暗部。
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTRB(x0,y0,x1,y1), const Radius.circular(3)),
-      Paint()..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [_light(.32), _base, _dark(.52)],
-        stops: const [0,.43,1],
-      ).createShader(Rect.fromLTRB(x0,y0,x1,y1)),
-    );
+    // 关键修复：这是一个四边木料组成的“空心框”而不是实心矩形！
+    // 旧版本先 drawRRect 填满整个框面，把后方所有名言文字和插画盖住。
+    // 这里用 PathOperation.difference 扣除透明画芯，只给木框的环形部分着色。
+    final outerPath = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+          Rect.fromLTRB(x0, y0, x1, y1), const Radius.circular(3)));
+    final innerRect = Rect.fromLTRB(ix0, iy0, ix1, iy1);
+    final innerPath = Path()..addRect(innerRect);
+    final ring = Path.combine(PathOperation.difference, outerPath, innerPath);
+    canvas.drawShadow(ring, Colors.black.withValues(alpha:.35),
+        math.max(2, edge*.48), false);
+    canvas.drawPath(ring,
+      Paint()..shader=LinearGradient(
+        begin: Alignment.topLeft, end: Alignment.bottomRight,
+        colors: [_light(.39),_base,_dark(.38)],
+        stops: const [0,.46,1],
+      ).createShader(Rect.fromLTRB(x0,y0,x1,y1)));
 
     final top = Path()
       ..moveTo(x0,y0)..lineTo(x1,y0)..lineTo(ix1,iy0)..lineTo(ix0,iy0)..close();
