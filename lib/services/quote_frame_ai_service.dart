@@ -7,17 +7,25 @@ import 'package:path_provider/path_provider.dart';
 
 import '../ai_assistant/ai_assistant_media_service.dart';
 import 'quote_frame_theme.dart';
+import 'quote_visual_script_service.dart';
 
 /// AI 配画仅通过显式用户操作或用户开启的自动模式触发，避免静默 API 扣费。
 /// 每条名言只保存一幅背景，用户主动“重新生成”才会覆盖它。
 class QuoteFrameAiService {
-  QuoteFrameAiService({AiAssistantMediaService? mediaService})
-      : _mediaService = mediaService ?? AiAssistantMediaService();
+  QuoteFrameAiService({
+    AiAssistantMediaService? mediaService,
+    QuoteVisualScriptService? visualScriptService,
+  }) : _mediaService = mediaService ?? AiAssistantMediaService(),
+       _visualScripts = visualScriptService ?? QuoteVisualScriptService();
 
   final AiAssistantMediaService _mediaService;
+  final QuoteVisualScriptService _visualScripts;
+
+  Future<QuoteVisualScript?> readCachedScript(String topic, String quote) =>
+      _visualScripts.readCached(topic: topic, quote: quote);
 
   String cacheKey(String topic, String quote) =>
-      sha256.convert(utf8.encode('${topic.trim()}|quote|${quote.trim()}')).toString();
+      sha256.convert(utf8.encode('v2-meaning-20261016|${topic.trim()}|${quote.trim()}')).toString();
 
   Future<Directory> _framesDir() async {
     final docs = await getApplicationDocumentsDirectory();
@@ -56,6 +64,7 @@ class QuoteFrameAiService {
     required String topic,
     required String quote,
     required QuoteFrameTheme theme,
+    String note = '',
     bool force = false,
   }) async {
     if (quote.trim().isEmpty) throw StateError('名言为空，无法生成画框');
@@ -64,24 +73,16 @@ class QuoteFrameAiService {
       final existing = await findCached(topic, quote);
       if (existing != null) return existing;
     }
-    // 不让 AI 写名言，中文由 Flutter 原生绘制，确保字形及出处正确。
-    final cleanedTopic = topic.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-    final cleanedQuote = quote.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-    final prompt = '''
-Create an exquisite VERTICAL 2:3 background artwork for a framed Chinese quotation poster.
-Visual concept: ${theme.imageScene}
-Topic (semantic reference only): ${cleanedTopic.length > 100 ? cleanedTopic.substring(0,100) : cleanedTopic}
-Quotation meaning (semantic reference only): ${cleanedQuote.length > 260 ? cleanedQuote.substring(0,260) : cleanedQuote}
-Mood: ${theme.label}. Build the scene from the meaning and emotional tone, not generic decoration.
-Art style: elegant contemporary ink-wash illustration combined with fine-art watercolor,
-subtle natural pigments and tactile handmade paper, refined gallery quality.
-Layout: keep the TOP 70% exceptionally light and uncluttered for legible overlaid
-Chinese text and a small author portrait. Put distinctive subject/details mainly in
-the BOTTOM 30%, with delicate motifs near the corners only.
-A narrow margin should remain free of focal objects for a wooden mat/frame.
-The image must contain ABSOLUTELY NO writing, letters, Chinese characters,
-typography, watermarks, logos, borders, poster mockups, frames, or text.
-''';
+    // 先进行一次深层语义分析，再基于因果/对比/变化生成直观视觉脚本。
+    // 不把生成文字嵌入图片，避免书法错字；中文由 Flutter 独立渲染。
+    final script = await _visualScripts.create(
+      topic: topic,
+      quote: quote,
+      note: note,
+      theme: theme,
+      force: force,
+    );
+    final prompt = script.imagePrompt(quoteCharacters: quote.runes.length);
     final generated = await _mediaService.generateImage(prompt);
     final source = File(generated.path);
     if (!await source.exists() || await source.length() == 0) {
