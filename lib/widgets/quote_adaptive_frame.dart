@@ -193,8 +193,8 @@ class _SemanticFramePainter extends CustomPainter {
         ..strokeCap=StrokeCap.round);
       for(final center in <Offset>[p(.61,.65),p(.69,.61),p(.83,.64),p(.84,.71),p(.66,.72)]) {
         canvas.drawOval(
-          Rect.fromCenter(center:center,width:w*(weather?.18:.15),height:h*.063),
-          Paint()..color=c.ink.withOpacity(weather?.40:.29),
+          Rect.fromCenter(center:center,width:w*(weather ? .18 : .15),height:h*.063),
+          Paint()..color=c.ink.withOpacity(weather ? .40 : .29),
         );
       }
     }
