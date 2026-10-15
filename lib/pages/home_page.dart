@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
+import 'package:quote_app/widgets/wood_frame_3d_overlay.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/notification_service.dart';
@@ -82,6 +83,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final Set<String> _frameAttempted = <String>{};
   String _visibleFrameKey = '';
   String? _frameImagePath;
+  String? _frameFinish;
   bool _frameAuto = false;
   bool _frameGenerating = false;
   int _frameRevision = 0;
@@ -106,12 +108,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _visibleFrameKey = key;
         _frameImagePath = null; // 不展示上一条名言的画面
+        _frameFinish = null;
       });
     }
     if (quote.trim().isEmpty) return;
     try {
       final cached = await _frameAi.findCached(topic, quote);
+      final script = await _frameAi.readCachedScript(topic, quote);
       if (!mounted || revision != _frameRevision) return;
+      if (script != null) setState(() => _frameFinish = script.frameFinish);
       if (cached != null) {
         setState(() => _frameImagePath = cached);
       } else if (_frameAuto && !_frameAttempted.contains(key)) {
@@ -137,9 +142,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _frameGenerating = true);
     try {
       final style = QuoteFrameTheme.resolve(topic: topic, quote: quote, note: (payload['note'] ?? '').toString());
-      final path = await _frameAi.generate(topic: topic, quote: quote, theme: style, force: userInitiated);
+      final path = await _frameAi.generate(
+        topic: topic, quote: quote, note: (payload['note'] ?? '').toString(),
+        theme: style, force: userInitiated,
+      );
+      final script = await _frameAi.readCachedScript(topic, quote);
       if (!mounted) return;
-      if (_visibleFrameKey == key) setState(() => _frameImagePath = path);
+      if (_visibleFrameKey == key) {
+        setState(() {
+          _frameImagePath = path;
+          _frameFinish = script?.frameFinish;
+        });
+      }
       if (userInitiated) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('主题画框已生成并缓存')));
     } catch (e) {
       await DLog.e('FRAME', 'AI 生成配画失败: $e');
@@ -159,6 +173,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _showFrameInterpretation() async {
+    final payload = _todayData;
+    if (payload == null) return;
+    final topic = (payload['topic'] ?? '').toString();
+    final quote = (payload['quote'] ?? '').toString();
+    final script = await _frameAi.readCachedScript(topic, quote);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('名言如何变成画面'),
+        content: SingleChildScrollView(
+          child: Text(script == null
+            ? '当前尚未生成 AI 视觉脚本。请先选择「AI 生成/重绘当前画框」。本地主题相框只能提供基本意境，并非深入理解原文。'
+            : '原句含义：${script.meaning}\n\n核心视觉类比：${script.metaphor}\n\n可见场景：${script.scene}\n\n为什么这样画：${script.relationship}\n\n氛围：${script.mood}\n木框：${script.frameFinish}\n\n分析来源：${script.fromAi ? 'AI 语义解析' : '本地有限规则兜底（不代表 AI 已理解）'}'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+        ],
+      ),
+    );
+  }
+
   Future<void> _requestManualFrame() async {
     final payload = _todayData;
     if (payload == null || _frameGenerating) return;
@@ -166,7 +203,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('为当前名言生成 AI 相框？'),
-        content: const Text('将名言及其主题发送给当前配置的图片生成服务商。此操作可能产生 API 费用；重新生成也会再次计费。'),
+        content: const Text('系统将先调用文字 AI 理解名言的含义、象征与画面关系，然后再用图片模型生成。两次调用都可能产生 API 费用；重新生成会再次计费。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('生成')),
@@ -182,7 +219,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('开启 AI 自动配画？'),
-          content: const Text('新名言的主题和正文会发送给当前配置的图片生成服务商，可能产生 API 费用。每条名言缓存一次，重复打开不会再次扣费。不开启时，免费的本地主题相框仍会自动匹配。'),
+          content: const Text('新名言会先调用文字 AI 形成可解释的视觉脚本，再调用图片 AI 生成画面。两次模型调用可能分别收费；每句有缓存，重复打开不会重复生成。关闭后仅使用免费的本地视觉兜底。'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
             FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('开启')),
@@ -354,6 +391,9 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
         break;
       case 'frame_toggle':
         unawaited(_setFrameAuto());
+        break;
+      case 'frame_explain':
+        unawaited(_showFrameInterpretation());
         break;
       case 'share':
         // 沿用原来的分享行为：复制当前名言到剪贴板并提示
@@ -741,7 +781,7 @@ ImageProvider _imageFrom(String? any) {
                 children: [
                   // 背景相框
                   Positioned.fill(
-                    child: QuoteAdaptiveFrame(theme: QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note)),
+                    child: QuoteAdaptiveFrame(theme: QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note), quoteCharacters: quote.runes.length),
                   ),
                   // 画布内容
                   Positioned.fill(
@@ -877,6 +917,11 @@ ImageProvider _imageFrom(String? any) {
                         ),
                       ),
                       ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: WoodFrame3dOverlay(
+                      theme: QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note),
                     ),
                   ),
                 ],
@@ -1334,6 +1379,7 @@ ImageProvider _imageFrom(String? any) {
                                     avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
                                     woodBgAsset: 'assets/bg-wood-upload.jpg',
                                     aiFramePath: _frameImagePath,
+                                    frameFinish: _frameFinish,
                                   ),
                                 ),
                               ),
@@ -1443,6 +1489,14 @@ ImageProvider _imageFrom(String? any) {
                               Icon(_frameAuto ? Icons.check_box : Icons.check_box_outline_blank),
                               const SizedBox(width: 8),
                               Text(_frameAuto ? '关闭 AI 自动配画' : '开启 AI 自动配画（可能收费）'),
+                            ]),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'frame_explain',
+                            child: Row(children: [
+                              Icon(Icons.auto_stories_outlined),
+                              SizedBox(width: 8),
+                              Text('查看名言视觉化解释'),
                             ]),
                           ),
                           const PopupMenuDivider(),
