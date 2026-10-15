@@ -40,6 +40,20 @@ WoodFinish _resolveFinish(String? requested, QuoteFrameTheme theme) {
   return WoodFinish.walnut;
 }
 
+/// 可直接单元测试的相框几何：中间的画芯必须真正镂空。
+Path woodFrameOuterRing(Size size) {
+  final w=size.width, h=size.height;
+  final edge=(w*.060).clamp(8.0,21.0);
+  const outer=2.5;
+  final exterior=Path()..addRRect(RRect.fromRectAndRadius(
+    Rect.fromLTRB(outer,outer,w-outer,h-outer),
+    const Radius.circular(3),
+  ));
+  final aperture=Path()..addRect(
+    Rect.fromLTRB(outer+edge,outer+edge,w-outer-edge,h-outer-edge));
+  return Path.combine(PathOperation.difference, exterior, aperture);
+}
+
 class WoodFrame3dPainter extends CustomPainter {
   const WoodFrame3dPainter(this.finish);
 
@@ -73,12 +87,7 @@ class WoodFrame3dPainter extends CustomPainter {
     // 关键修复：这是一个四边木料组成的“空心框”而不是实心矩形！
     // 旧版本先 drawRRect 填满整个框面，把后方所有名言文字和插画盖住。
     // 这里用 PathOperation.difference 扣除透明画芯，只给木框的环形部分着色。
-    final outerPath = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-          Rect.fromLTRB(x0, y0, x1, y1), const Radius.circular(3)));
-    final innerRect = Rect.fromLTRB(ix0, iy0, ix1, iy1);
-    final innerPath = Path()..addRect(innerRect);
-    final ring = Path.combine(PathOperation.difference, outerPath, innerPath);
+    final ring = woodFrameOuterRing(size);
     canvas.drawShadow(ring, Colors.black.withValues(alpha:.35),
         math.max(2, edge*.48), false);
     canvas.drawPath(ring,
