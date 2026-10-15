@@ -82,6 +82,10 @@ class QuoteFrameAiService {
       theme: theme,
       force: force,
     );
+    if (script.isThemeOnly) {
+      throw StateError('文字 AI 未能形成针对这句名言的具体视觉解释，'
+          '为避免付费生成无关风景，本次没有调用图片模型。请检查文字 AI 配置后重试。');
+    }
     final prompt = script.imagePrompt(quoteCharacters: quote.runes.length);
     final generated = await _mediaService.generateImage(prompt);
     final source = File(generated.path);
