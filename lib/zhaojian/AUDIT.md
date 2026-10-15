@@ -65,7 +65,7 @@ AI 引擎适配（JEV → AI 模拟 → 规则）、引擎预测的三方揭示�
 - **编译**：整个 app 的 Flutter release 编译在 CI 里通过（`Build Android APK`，Flutter 3.35.3，不是备用的 Gradle 路径）。
   中途有过一次失败：第一批里有重复声明（控制器里两个 `exportJson`、`ZCopy` 里两个 `threeLayers`），已修。
 - **数据库**：Kindling CI 和 Zhixing Tree CI 里的「打开宿主库」测试在 schema v3 下通过，说明建表在真实打开流程里没问题。
-- **测试**：`test/zhaojian/` 写了 8 个文件（纯函数、阈值、迁移、DAO 往返、控制器流程、AI 解析与降级、JEV 请求结构与回落、导航注册表、入口卡片），
+- **测试**：`test/zhaojian/` 写了 6 个文件、约 106 个用例（纯函数与阈值、schema 迁移、DAO 往返、控制器流程、AI 输出解析与降级、JEV 请求结构与回落、导航注册表、入口卡片），
   但**没有在 CI 里跑过**：专属工作流 `zhaojian_ci.yml` 没能推送（令牌没有 workflow 权限），需要手动加进 `.github/workflows/`。
   我也没有本地 Dart 环境，所以测试的断言是对着代码手算核对的，不是运行过的。
 - 静态自查（本地脚本）：括号配平、相对导入存在、符号与导入、重复声明、对模块自有组件的调用参数。这些排除一部分错误，不能替代编译和测试。
