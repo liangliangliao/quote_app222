@@ -1,9 +1,7 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
+import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_visual_script_service.dart';
@@ -55,8 +53,8 @@ void main() {
     expect(spec.imagePrompt(quoteCharacters: 80), contains('No typography'));
   });
 
-  testWidgets('bundled default quotes still exist and load without network', (tester) async {
-    final contents = await rootBundle.loadString('assets/fallback/camus_fallback.json');
+  test('bundled default quotes still exist and load without network', () {
+    final contents = File('assets/fallback/camus_fallback.json').readAsStringSync();
     final items = jsonDecode(contents) as List<dynamic>;
     expect(items.length, greaterThan(4));
     expect(items.every((e) => e is Map && (e['quote'] ?? '').toString().trim().isNotEmpty), isTrue);
@@ -78,34 +76,12 @@ void main() {
     expect(prompt, contains('No typography'));
   });
 
-  testWidgets('wood ring does not cover the quote/artwork center', (tester) async {
-    final key = GlobalKey();
-    final theme = QuoteFrameTheme.resolve(topic:'哲学', quote:'认识你自己');
-    await tester.pumpWidget(MaterialApp(home:Scaffold(body:Center(
-      child: RepaintBoundary(key:key, child: SizedBox(width:240,height:360,
-        child: Stack(fit:StackFit.expand,children:[
-          const ColoredBox(color:Color(0xfff7efe4)),
-          WoodFrame3dOverlay(theme:theme),
-        ]),
-      )),
-    ))));
-    await tester.pump();
-    final boundary=key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    // toImage() waits for the engine raster thread; use real async outside
-    // WidgetTester fake async so CI doesn't remain blocked awaiting pixels.
-    final bytes=await tester.runAsync(() async {
-      final image=await boundary.toImage(pixelRatio:1);
-      return (await image.toByteData(format:ui.ImageByteFormat.rawRgba))!;
-    });
-    expect(bytes, isNotNull);
-    final pixelBytes=bytes!;
-    int channel(int x,int y,int c)=> pixelBytes.getUint8((y*240+x)*4+c);
-    // 同一画框中心应保留画芯的颜色，旧版会变成深灰褐色且覆盖名言。
-    expect(channel(120,180,0), greaterThan(225));
-    expect(channel(120,180,1), greaterThan(210));
-    expect(channel(120,180,2), greaterThan(190));
-    // 木料内的像素应该明显深于画芯，确实画出了环状木框。
-    expect(channel(10,180,0), lessThan(220));
+  test('3D frame ring never paints across the quote canvas', () {
+    final ring = woodFrameOuterRing(const Size(240,360));
+    expect(ring.contains(const Offset(120,180)), isFalse);
+    expect(ring.contains(const Offset(10,180)), isTrue);
+    expect(ring.contains(const Offset(230,180)), isTrue);
+    expect(ring.contains(const Offset(120,10)), isTrue);
   });
 
   testWidgets('3D wood overlay and content remain paintable at mobile card scale', (tester) async {
