@@ -1,4 +1,25 @@
-# 本次重建的验证记录
+# 意志之镜 v2.8 验证记录
+
+## 2026-10-15 续开发与覆盖安装修复
+
+基线 `c94151a1`，首个修复提交 `9cf5cd7d`；分支和 PR #173 保持不变。实现说明和剩余验收见 [CONTINUATION.md](CONTINUATION.md)。
+
+| 检查 | 本轮实际结果 |
+|---|---|
+| 模块及 Android 集成/driver 静态检查 | 4 个检查目标，No issues found；[日志](evidence/2026-10-15-module-analyze.log) |
+| 模块回归 | 107 项通过，含 13 项原则领域/Widget 回归及 Android SQL 调用契约；[日志](evidence/2026-10-15-module-tests.log) |
+| 评分服务 | 12 项通过、1 条依赖弃用提示；[日志](evidence/2026-10-15-server-tests.log) |
+| T1–T366 索引 | 366 条可追溯，24 个合成案例；新增原则回归文件关联，不更改为完整验收通过 |
+| 全仓库静态检查 | 0 error、429 warning、816 info；因既有告警非零退出 |
+| 全仓库回归 | 1055 项通过、5 项失败；失败名称与下方原基线记录相同，均属未修改的 beautiful_enemy；[日志](evidence/2026-10-15-full-tests.log) |
+| Android 发布构建 | 启动修复提交的 [GitHub APK 构建](https://github.com/liangliangliao/quote_app222/actions/runs/38740171296) 已成功；包含后续原则约束的最终版本继续编译 |
+| 原生 SQLite / Keystore | [首轮 API 26/35 CI](https://github.com/liangliangliao/quote_app222/actions/runs/38740171261) 中首次打开 UI、加密写入、关闭重开、AAD 错误保留数据、撤回及删除均通过 |
+| 同签名 APK 覆盖测试 | 首轮测试方式失败：Flutter test 结束时自动卸载，API 26 verify 发现空库；API 35 seed 连接中断。改用 drive 保留安装并检查 seed 库存在，重跑结果待补。不能把首轮工作流标为通过 |
+| 用户原设备 / 真实模型 | 未取得原设备日志和签名来源，尚未执行原设备直接覆盖验收；未发送真实模型请求 |
+
+本地首次发布构建曾因同时执行 Flutter tests 改写生成的插件注册文件而失败（integration_test 注册与 release 依赖不一致）；在完成 tests 后独立重新构建。GitHub 发布构建运行在独立作业，已成功。
+
+## 初次重建记录（2026-10-14，保留原证据）
 
 验证基线：`origin/main ec8f7749fc2801e97e38da459dabccdda11657a2`；2026-10-14 已重新 fetch，main 未前移。隔离分支 `codex/will-mirror-v28-rebuild`，未合并 main。
 

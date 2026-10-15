@@ -7575,7 +7575,8 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/principle_application_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -7621,7 +7622,8 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/principle_application_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -7644,7 +7646,8 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/principle_application_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7690,7 +7693,8 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/principle_application_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -7876,7 +7880,8 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/principle_application_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -8279,7 +8284,9 @@
       "test/will_mirror/ai_contract_test.dart",
       "test/will_mirror/widget_flow_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/principle_application_test.dart",
+      "test/will_mirror/startup_recovery_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -8387,7 +8394,8 @@
       "test/will_mirror/ai_contract_test.dart",
       "test/will_mirror/widget_flow_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/principle_application_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",

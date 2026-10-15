@@ -1,0 +1,1256 @@
+00:00 +0: loading test/mental_health_checkup/mental_health_checkup_engine_test.dart
+00:00 +0: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package passes hash and row-count validation
+00:00 +1: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package keeps D1 and D2 supplemental coverage separate
+00:00 +2: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package only fully signed official items enter the rotating assessment bank
+00:00 +3: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package official A7 uses its signed answer key and preserves item version
+00:00 +4: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package retired signed items only restore an existing draft snapshot
+00:00 +5: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package focused mode keeps gates unique and includes the focus anchor
+00:00 +6: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package low anchors add bounded adaptive evidence questions
+00:00 +7: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package question randomization is repeatable and keeps safety gates first
+00:00 +8: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package assessment plan enforces question limit and uncovered-check choice
+00:00 +9: test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package longitudinal selection prioritizes a previously high-risk indicator
+00:00 +10: test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine safety alert blocks ordinary diagnosis and prescription
+00:00 +11: test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine uncertain safety also blocks ordinary course output
+00:00 +12: test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine clear safety produces bounded course output
+00:00 +13: test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine official B1 replaces the matching starter task and is versioned
+00:00 +14: test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine user can request assessment-only output without a course action
+00:00 +15: test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine K/A/B report uses the documented 25/30/45 weighting
+00:00 +16: test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules one high-execution cycle without improvement waits for evidence
+00:00 +17: test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules two high-execution cycles without improvement trigger rediagnosis
+00:00 +18: test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules low execution shrinks the task before blaming the user
+00:00 +19: test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules overuse takes priority over score chasing
+00:00 +20: test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules maintenance requires two stable retests
+00:00 +21: test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules recovery is blocked without autonomy and a relapse plan
+00:01 +22: test/mental_health_checkup/mental_health_checkup_engine_test.dart: persistent state survives a JSON round trip
+00:01 +23: test/mental_health_checkup/mental_health_checkup_engine_test.dart: external AI prompt layers cannot receive personal checkup data
+00:01 +24: test/mental_health_checkup/mental_health_checkup_engine_test.dart: backup envelope validates hash and preserves the current install id
+00:01 +25: test/mental_health_checkup/mental_health_checkup_engine_test.dart: backup preflight rejects tampered state before persistence
+00:01 +26: test/mental_health_checkup/mental_health_checkup_engine_test.dart: trend analyzer raises the 15-point personal-baseline rule
+00:01 +27: test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance every indicator gets item types, B0-B4 and evidence ids
+00:01 +28: test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance quality gate rejects an unreviewed local template
+00:01 +29: test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance independent review, interview and pilot are required for publish
+00:01 +30: test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance official content creates a new immutable revision lineage
+00:01 +31: test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance candidate JSON keeps version and audit-critical fields
+00:01 +32: test/mental_health_checkup/mental_health_checkup_engine_test.dart: full content blueprints and human validation evidence materializes exactly nine stable slots for all 345 indicators
+00:01 +33: test/mental_health_checkup/mental_health_checkup_engine_test.dart: full content blueprints and human validation evidence real records drive all validation gates and content edits invalidate them
+00:01 +34: test/mental_health_checkup/mental_health_checkup_engine_test.dart: full content blueprints and human validation evidence validation package detects tampering and participant keys are private
+00:01 +35: test/mental_health_checkup/mental_health_checkup_engine_test.dart: indicator candidate governance AI cannot bypass independent review, pilot or human signing
+00:01 +36: test/mental_health_checkup/mental_health_checkup_engine_test.dart: indicator candidate governance published indicator enters catalog and retirement removes it
+00:01 +37: test/mental_health_checkup/mental_health_checkup_engine_test.dart: indicator candidate governance revision preserves formal indicator id and JSON audit fields
+00:01 +38: test/mental_health_checkup/mental_health_checkup_engine_test.dart: resumable generation and provider knowledge metadata batch expands every unique item and B0-B4 slot
+00:01 +39: test/mental_health_checkup/mental_health_checkup_engine_test.dart: resumable generation and provider knowledge metadata provider file id is reusable only when ready and hash matches
+00:01 +40: loading test/belief_mentor/belief_mentor_discover_entry_test.dart
+00:01 +40: test/belief_mentor/belief_mentor_discover_entry_test.dart: 发现之旅入口说明完整闭环并可打开产品
+00:02 +41: loading test/belief_mentor/belief_mentor_dao_test.dart
+00:03 +41: test/belief_mentor/belief_mentor_dao_test.dart: seeds eight boundary-labeled stories and persists the evidence loop
+00:03 +42: test/belief_mentor/belief_mentor_dao_test.dart: one failed experiment owns only one open recovery protocol
+00:03 +43: test/belief_mentor/belief_mentor_dao_test.dart: P1 calendar and Past Me records are encrypted and deletable
+00:03 +44: test/belief_mentor/belief_mentor_dao_test.dart: delete removes all user data while preserving reviewed story seeds
+00:03 +45: loading test/belief_mentor/belief_mentor_policies_test.dart
+00:04 +45: test/belief_mentor/belief_mentor_policies_test.dart: internalized remains reachable before the shifting superset check
+00:04 +46: test/belief_mentor/belief_mentor_policies_test.dart: LLM output cannot skip user confirmation or behavior gates
+00:04 +47: test/belief_mentor/belief_mentor_policies_test.dart: reminder policy enforces quiet hours, attention budget and dedupe
+00:04 +48: test/belief_mentor/belief_mentor_policies_test.dart: high-risk language hard-overrides the normal coaching flow
+00:04 +49: test/belief_mentor/belief_mentor_policies_test.dart: 3M radar detects magnification, minimization and unsupported inference
+00:04 +50: test/belief_mentor/belief_mentor_policies_test.dart: duplicates diminish while distinct evidence still counts
+00:04 +51: test/belief_mentor/belief_mentor_policies_test.dart: experiment transitions reject impossible shortcuts
+00:04 +52: loading test/will_module/will_route_resolver_test.dart
+00:04 +52: test/will_module/will_route_resolver_test.dart: 关键单元 P-017 能解析到抗诱惑路径
+00:04 +53: test/will_module/will_route_resolver_test.dart: 导论 D-015 会推荐流程感相关训练
+00:04 +54: loading test/will_module/will_deep_content_seed_test.dart
+00:05 +54: test/will_module/will_deep_content_seed_test.dart: 导论中段单元也能获得非空深内容
+00:05 +55: test/will_module/will_deep_content_seed_test.dart: 观念—运动后段单元也能获得非空深内容
+00:05 +56: loading test/will_module/will_dashboard_support_test.dart
+00:05 +56: test/will_module/will_dashboard_support_test.dart: trainingTypeForTaskTitle maps known tasks
+00:05 +57: test/will_module/will_dashboard_support_test.dart: defaultUnitIdsForTask returns non-empty unit ids
+00:05 +58: test/will_module/will_dashboard_support_test.dart: progress helpers compute expected values
+00:05 +59: test/will_module/will_dashboard_support_test.dart: currentTrainingStreak counts consecutive active days
+00:05 +60: loading test/beautiful_enemy/enemy_guard_test.dart
+00:06 +60: test/beautiful_enemy/enemy_guard_test.dart: a concrete, evidenced draft passes
+00:06 +61: test/beautiful_enemy/enemy_guard_test.dart: no evidence, or evidence outside the digest, is rejected
+00:06 +62: test/beautiful_enemy/enemy_guard_test.dart: a charge without a number or quote is not concrete
+00:06 +63: test/beautiful_enemy/enemy_guard_test.dart: every action needs a due time inside the next seven days
+00:06 +64: test/beautiful_enemy/enemy_guard_test.dart: tone may not exceed the effective intensity
+00:06 +65: test/beautiful_enemy/enemy_guard_test.dart: identity attacks, threats and control language are banned
+00:06 +66: test/beautiful_enemy/enemy_guard_test.dart: a harsh line aimed at behaviour is not banned
+00:06 +67: test/beautiful_enemy/enemy_guard_test.dart: profanity is only allowed at tier 3
+00:06 +68: test/beautiful_enemy/enemy_guard_test.dart: fact-only drafts skip the concreteness rule but not the banned list
+00:06 +69: test/beautiful_enemy/enemy_guard_test.dart: safety valve detects crisis wording and the truce word
+00:06 +70: test/beautiful_enemy/enemy_guard_test.dart: intensity governor never exceeds the base and never rises on its own
+00:06 +71: test/beautiful_enemy/enemy_guard_test.dart: intensity governor truce day forces fact-only
+00:06 +72: loading test/beautiful_enemy/enemy_engine_test.dart
+00:06 +72: test/beautiful_enemy/enemy_engine_test.dart: 证据采集 没授权的来源不采集；授权后采集一次，重复同步不重复入库
+00:06 +73: test/beautiful_enemy/enemy_engine_test.dart: 证据采集 来源抛异常不会拖垮同步
+00:06 +74: test/beautiful_enemy/enemy_engine_test.dart: 摘要 同一项同一天只认最后一次状态
+00:06 +75: test/beautiful_enemy/enemy_engine_test.dart: 摘要 没有任何证据就是不足
+00:06 +76: test/beautiful_enemy/enemy_engine_test.dart: 开庭 证据不足时不生成判词
+00:06 +77: test/beautiful_enemy/enemy_engine_test.dart: 开庭 合规的模型判词被保存，动作自动成为承诺
+00:06 +78: test/beautiful_enemy/enemy_engine_test.dart: 开庭 违规输出最多重试两次，然后降级成事实播报
+00:06 +79: test/beautiful_enemy/enemy_engine_test.dart: 开庭 模型没产出就不重试，直接降级
+00:06 +80: test/beautiful_enemy/enemy_engine_test.dart: 开庭 模型引用了摘要里没有的证据会被拒绝
+00:06 +81: test/beautiful_enemy/enemy_engine_test.dart: 开庭 休战日只报事实，不调模型
+00:06 +82: test/beautiful_enemy/enemy_engine_test.dart: 开庭 静默时段和每日上限只拦自动开庭，手动开庭不受限
+00:07 +83: test/beautiful_enemy/enemy_engine_test.dart: 闭环 兑现：认账，判词记为完成
+00:07 +84: test/beautiful_enemy/enemy_engine_test.dart: 闭环 到期没兑现：承诺失效，判词记为失败
+00:07 +85: test/beautiful_enemy/enemy_engine_test.dart: 闭环 归因不收空话；同类别再次失败只累加次数
+00:07 +86: test/beautiful_enemy/enemy_engine_test.dart: 闭环 申辩要写理由；成立的记为豁免；每周额度用完后照记
+00:07 +87: test/beautiful_enemy/enemy_engine_test.dart: 安全阀 申辩里出现危机表达：立刻静音，不当作申辩处理
+00:07 +88: test/beautiful_enemy/enemy_engine_test.dart: 安全阀 立承诺、写归因时出现危机表达同样静音，且不入库
+00:07 +89: test/beautiful_enemy/enemy_engine_test.dart: 安全阀 只说「停战」：静音，但不显示危机文案
+00:07 +90: test/beautiful_enemy/enemy_engine_test.dart: 安全阀 点了「太过了」之后实际档位下降
+00:07 +91: test/beautiful_enemy/enemy_engine_test.dart: 安全阀 连续三条判词过了一天都没回应：降一档
+00:07 +92: test/beautiful_enemy/enemy_engine_test.dart: 每周审判 本周没有数据时不给百分比
+00:07 +93: test/beautiful_enemy/enemy_engine_test.dart: 每周审判 统计兑现率，并把最常见的失败类别作为下周重点
+00:07 +94: loading test/beautiful_enemy/enemy_opposition_test.dart
+00:07 +94: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 什么都抓不到也要问：兜底的开放式质询，不是沉默
+00:07 +95: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 手里一条字据都没有：质询，并正式提动议（要他亲手写具体内容）
+00:07 +96: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 动议不可用（有未决动议、到上限、或太晚）：只质询，不提动议
+00:07 +97: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 火种 24 小时没有完整的十五分钟：质询并提动议，动议带核实
+00:07 +98: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 知识转化了、行动是零：纸上谈兵
+00:07 +99: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 沉寂的模块、预设打卡七天零条、驳回成习惯、重复踩坑、判词被无视
+00:07 +100: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 没回答的质询：2 小时后追问，最多两次，追问优先于其它
+00:07 +101: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 每一类都有冷却：刚问过就换下一件，全部冷却中则不开口
+00:07 +102: test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 情境里写明了不能编造：账上没有的只说账上没有
+00:07 +103: test/beautiful_enemy/enemy_opposition_test.dart: 台词 质询、动议、反驳、通过：全部过同一套校验，1 档没有粗口
+00:07 +104: test/beautiful_enemy/enemy_opposition_test.dart: 台词 质询里带着事实
+00:07 +105: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 案卷空空如也、一条字据都没有：它自己开口质询，还提了动议
+00:08 +106: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 节奏：间隔没到不再质询；到了就换一件事问；有未决动议时不再提新动议
+00:08 +107: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 每日上限：到了就不再质询
+00:08 +108: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 质询频率可调：改成「密」45 分钟
+00:08 +109: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 开关：反对党质询关掉就不质询；静默时段、静音也不
+00:08 +110: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 火种质询：提动议；接受后立成带核实的字据
+00:08 +111: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 需要亲手写内容的动议：不写不行；赌注不合规被拒；处理过的不能再处理
+00:08 +112: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 驳回动议：要给理由，敌人当场反驳，动议状态记下
+00:08 +113: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 驳回的理由里出现危机表达：敌人退场、静音，这句话不存储
+00:08 +114: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 追问：没回答的质询 2 小时后追问，最多两次
+00:08 +115: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 用户回答之后就不再追问；敌人对话时知道他在回应哪条质询
+00:08 +116: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 不回应也不是好结果：没说话的人，不会因为没动静被放过
+00:08 +117: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 沉寂的模块：曾经常有记录、最近 5 天一条没有
+00:08 +118: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 只有最近发生的事才值得插话：灌进来的旧账不触发反应
+00:08 +119: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 字据标记完成但账上没有火种：敌人不认
+00:08 +120: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 字据标记完成而且账上确实有火种：不质疑
+00:08 +121: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 质询演练：带【演练】，不提动议，不占今天的次数和间隔
+00:08 +122: test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 自检状态包含质询的节奏
+00:08 +123: loading test/beautiful_enemy/enemy_presence_test.dart
+00:09 +123: test/beautiful_enemy/enemy_presence_test.dart: 本地台词 每一句都过同一套校验：禁区、长度、粗口只在 3 档
+00:09 +124: test/beautiful_enemy/enemy_presence_test.dart: 本地台词 台词带着事实：对象、称呼、赌注
+00:09 +125: test/beautiful_enemy/enemy_presence_test.dart: 本地台词 1、2 档绝不出现粗口
+00:09 +126: test/beautiful_enemy/enemy_presence_test.dart: 对话 时间线为空时敌人先开口，只开一次，并带上称呼
+00:09 +127: test/beautiful_enemy/enemy_presence_test.dart: 对话 合规的模型回复被采用，并带着情境发给模型
+00:09 +128: test/beautiful_enemy/enemy_presence_test.dart: 对话 模型违规：重试一次，仍违规就用本地台词
+00:09 +129: test/beautiful_enemy/enemy_presence_test.dart: 对话 2 档下模型说粗口算违规
+00:09 +130: test/beautiful_enemy/enemy_presence_test.dart: 对话 模型没产出就不重试，直接用本地台词
+00:09 +131: test/beautiful_enemy/enemy_presence_test.dart: 对话 没接模型也能对话
+00:09 +132: test/beautiful_enemy/enemy_presence_test.dart: 对话 危机表达：敌人退场、静音，这句话既不存储也不发给模型
+00:09 +133: test/beautiful_enemy/enemy_presence_test.dart: 对话 只说停战：静音，但不显示危机文案
+00:09 +134: test/beautiful_enemy/enemy_presence_test.dart: 对话 静音期间说话送不出去，也不留下记录
+00:09 +135: test/beautiful_enemy/enemy_presence_test.dart: 开庭 判词作为敌人的一条消息进入时间线
+00:09 +136: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 第一次只定起点，不翻旧账；之后的新事件才开口
+00:09 +137: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 有模型时用模型的话，并把事件作为情境发过去
+00:09 +138: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 间隔太近不开口，且不丢事件：过了间隔再说
+00:09 +139: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 force 绕过间隔和上限，但不绕过静音
+00:09 +140: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 每日上限：到了就不再插话
+00:09 +141: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 静默时段不插话，这批事件也不会在早上被翻出来
+00:09 +142: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 总开关关掉：不插话
+00:09 +143: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 静音时不插话
+00:09 +144: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 字据快到期：提醒一次，只一次
+00:09 +145: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 字据到期输了：敌人当场把赌注摆出来
+00:09 +146: test/beautiful_enemy/enemy_presence_test.dart: 实时插话 兑现字据：认账，赌注作废
+00:10 +147: test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 赌注只能是行动：伤害自己、羞辱、涉及钱都被拒绝
+00:10 +148: test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 赌注里出现危机表达：按安全阀处理，不入库
+00:10 +149: test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 称呼不能是羞辱性的，也不能太长
+00:10 +150: test/beautiful_enemy/enemy_presence_test.dart: 行对话校验 空、过长、禁区、1/2 档粗口都被拦
+00:10 +151: test/beautiful_enemy/enemy_presence_test.dart: 迁移 v1 的库（承诺表没有赌注列）进场后补列，已有数据保留
+00:10 +152: loading test/beautiful_enemy/enemy_host_test.dart
+00:10 +152: test/beautiful_enemy/enemy_host_test.dart: 证据来源 宿主的表还不存在时，所有来源都返回空而不是抛
+00:10 +153: test/beautiful_enemy/enemy_host_test.dart: 证据来源 打卡只取 done / missed / skipped，pending 不算证据
+00:10 +154: test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结
+00:10 +154 -1: test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结 [E]
+  Expected: Set:['手动记录', '没有来源']
+    Actual: Set:[]
+     Which: does not contain '手动记录'
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 92:7      main.<fn>.<fn>
+
+00:10 +154 -1: test/beautiful_enemy/enemy_host_test.dart: 证据来源 火种区分完成和中途退出，并带上分钟数
+00:10 +155 -1: test/beautiful_enemy/enemy_host_test.dart: 证据来源 重复采集产出同样的 dedupeKey
+00:10 +156 -1: test/beautiful_enemy/enemy_host_test.dart: 证据来源 端到端：授权后同步进案卷，开庭得到带证据的事实播报
+00:10 +157 -1: test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 解析标准 JSON，包括被代码围栏包着的
+00:10 +158 -1: test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型自己说证据不足，或输出不是 JSON，都返回 null
+00:10 +159 -1: test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词
+00:11 +159 -2: test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词 [E]
+  Expected: <7201000>
+    Actual: <978307200000>
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 184:7     main.<fn>.<fn>
+
+00:11 +159 -2: test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型不可用或抛错时返回 null，让引擎降级
+00:11 +160 -2: test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 0 档（休战日）不调模型
+00:11 +161 -2: test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 系统提示里写死了铁律和各档边界
+00:11 +162 -2: test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 认得出毫秒、秒、数字字符串、ISO 时间；认不出的返回 null
+00:11 +163 -2: test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 库里没有这些表：不抛，也没有指纹
+00:11 +164 -2: test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 找得到时间列的表产出动静；没有时间列的表跳过；旧的不翻
+00:11 +165 -2: test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 同一模块 10 分钟内的多条新记录合并成一次动静
+00:11 +166 -2: test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 新增一行，指纹就变；没动，指纹不变
+00:11 +167 -2: test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 使用时长来源只是授权开关，不读任何表
+00:11 +168 -2: test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 默认接入的来源包含动静和使用时长，且标识不重复
+00:11 +169 -2: test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 清理模型输出：围栏、角色前缀、旁白、外层引号
+00:11 +170 -2: test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 提示里带情境、称呼、强度、证据摘要，历史只取最近几条并截断
+00:11 +171 -2: test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 主动开口时标明「没有用户输入」
+00:11 +172 -2: test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 模型不可用、抛错或只返回空白：返回 null，让模块用本地台词
+00:11 +173 -2: test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 正常返回时清理后交给模块
+00:11 +174 -2: test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 系统提示写死了人设、铁律和退场条件
+00:11 +175 -2: loading test/beautiful_enemy/enemy_patrol_test.dart
+00:11 +175 -2: test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 指纹没变就不重新收集；变了才收集
+00:11 +176 -2: test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 来源不提供指纹（null）时每次都收集
+00:11 +177 -2: test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 没授权的来源既不查指纹也不收集
+00:11 +178 -2: test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 授权后每分钟累加；没授权不记
+00:11 +179 -2: test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 静默时段内的算深夜使用
+00:11 +180 -2: test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 使用时长进入证据摘要
+00:11 +181 -2: test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 说做完了但账上没有；账上有；说没时间但在线很久
+00:11 +182 -2: test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上没有，敌人当场盘问
+00:11 +183 -2: test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上有，敌人核对后认
+00:11 +184 -2: test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说没时间，但今天在 App 里待了 45 分钟
+00:11 +185 -2: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晨报：早上的第一次巡查自己开口，一天只一次
+00:12 +186 -2: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 安静时段不开口；没有账可报也不开口
+00:12 +187 -2: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：到钟点后还有账没平就开口，一天一次
+00:12 +188 -2: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：今天一件完成的事都没有，就算没有字据也要说
+00:12 +189 -2: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：人在 App 里 25 分钟、案卷没有新记录、字据还开着
+00:12 +190 -2: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话
+00:12 +190 -3: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话 [E]
+  Expected: null
+    Actual: <Instance of 'EnemyMessage'>
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 290:7   main.<fn>.<fn>
+
+00:12 +190 -3: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 开关：主动巡查关掉、实时插话总开关关掉、静音时都不开口
+00:12 +191 -3: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 force 只接话，不做主动巡查
+00:12 +192 -3: test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 新事件优先：有事件时 step 先接话，不抢着做晨报
+00:12 +193 -3: test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 字据开着时点出「在忙别处」；没有字据就不吭声
+00:12 +194 -3: test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 其它模块的动静进入摘要，并被计成「有记录」
+00:12 +195 -3: test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 间隔只防刷屏：20 秒后又有新事，立刻接话，不用等 5 分钟
+00:12 +196 -3: test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 每日上限默认 30，不是 6：连续做 8 件事，敌人每一件都接话
+00:12 +197 -3: test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 主动巡查不占事件插话的上限：上限用光了，晚间结算照样开口
+00:12 +198 -3: test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静
+00:12 +198 -4: test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静 [E]
+  Expected: 'baseline'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: baseline
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 425:7   main.<fn>.<fn>
+
+00:12 +198 -4: test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因
+00:12 +198 -5: test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因 [E]
+  Expected: 'capped'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: capped
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 463:7   main.<fn>.<fn>
+
+00:12 +198 -5: test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 开关关掉有各自的原因
+00:12 +199 -5: test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 状态快照：来源授权与条数、静默时段、今日开口、使用时长、后台记录
+00:12 +200 -5: test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 心跳年龄
+00:12 +201 -5: test/beautiful_enemy/enemy_patrol_test.dart: 演练 不等时段也能走一遍：带【演练】，不占上限，也不让今天真正的结算作废
+00:12 +202 -5: test/beautiful_enemy/enemy_patrol_test.dart: 演练 晨报演练、发呆演练
+00:12 +203 -5: test/beautiful_enemy/enemy_patrol_test.dart: 演练 发呆演练：没有字据就说明为什么做不了；静音时不演练；不认识的演练
+00:12 +204 -5: test/beautiful_enemy/enemy_patrol_test.dart: 台词 巡查和核对的台词都过同一套校验
+00:12 +205 -5: loading test/todo_failure_growth_engine_test.dart
+00:13 +205 -5: test/todo_failure_growth_engine_test.dart: turns perfectionistic delay into a 70 percent experiment
+00:13 +206 -5: test/todo_failure_growth_engine_test.dart: separates identity judgment from behavioral feedback
+00:13 +207 -5: loading test/zhaojian/zhaojian_dao_test.dart
+00:13 +207 -5: test/zhaojian/zhaojian_dao_test.dart: schema createAll and migrate are idempotent and write the version
+00:14 +208 -5: test/zhaojian/zhaojian_dao_test.dart: schema every table uses the z_ prefix
+00:14 +209 -5: test/zhaojian/zhaojian_dao_test.dart: dao a decision round-trips with all fields
+00:14 +210 -5: test/zhaojian/zhaojian_dao_test.dart: dao corrupt json columns degrade to empty lists
+00:14 +211 -5: test/zhaojian/zhaojian_dao_test.dart: alignment storage and schema v2 an alignment summary round-trips through the dao
+00:14 +212 -5: test/zhaojian/zhaojian_dao_test.dart: alignment storage and schema v2 migrate adds align_json to a v1 database and keeps old rows
+00:14 +213 -5: test/zhaojian/zhaojian_dao_test.dart: controller seal, reveal, log and hypothesis counting work together
+00:14 +214 -5: test/zhaojian/zhaojian_dao_test.dart: controller revealing twice does not double count
+00:14 +215 -5: test/zhaojian/zhaojian_dao_test.dart: controller three supports flip a hypothesis to supported
+00:14 +216 -5: test/zhaojian/zhaojian_dao_test.dart: controller missing motives are stored and surface as frequent categories
+00:14 +217 -5: test/zhaojian/zhaojian_dao_test.dart: controller profile text mentions supported hypotheses and missed categories
+00:14 +218 -5: test/zhaojian/zhaojian_dao_test.dart: oracle local oracle returns the 61-motive library and no scores
+00:14 +219 -5: loading test/zhaojian/zhaojian_jev_oracle_test.dart
+00:14 +219 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle sends one independent score question per motive in small batches
+00:14 +220 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle does nothing without a key
+00:14 +221 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle a failing endpoint yields empty results
+00:14 +222 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle fewer than half of the motives scored counts as unavailable
+00:14 +223 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle invalid answers are skipped but the valid ones are kept
+00:14 +224 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle JEV does not generate text and is declared as sending data
+00:14 +225 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianHostOracle prefers the scorer and does not touch the text engine
+00:14 +226 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianHostOracle falls back to the text engine when the scorer is empty or throws
+00:14 +227 -5: test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianHostOracle motive completion comes from the text engine and data sending is declared
+00:14 +228 -5: loading test/zhaojian/zhaojian_host_test.dart
+00:15 +228 -5: test/zhaojian/zhaojian_host_test.dart: discover entry shows the title and reports taps
+00:16 +229 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle parsing parseMotives keeps valid rows and tolerates fences and noise
+00:16 +230 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle parsing parseMotives returns empty for garbage
+00:16 +231 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle parsing parseScores clamps values and needs at least half of the candidates
+00:16 +232 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing parses rows, clamps numbers, and keeps only valid enums
+00:16 +233 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing too few rows or garbage means empty
+00:16 +234 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing scoreAlignment degrades without calling the model when AI is unavailable
+00:16 +235 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing scoreAlignment returns parsed results when the model answers
+00:16 +236 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle fallbacks unavailable AI yields empty results without calling the model
+00:16 +237 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle fallbacks a throwing model call degrades to empty
+00:16 +238 -5: test/zhaojian/zhaojian_host_test.dart: AI oracle fallbacks a working model call returns parsed motives and scores
+00:16 +239 -5: loading test/zhaojian/zhaojian_analysis_test.dart
+00:16 +239 -5: test/zhaojian/zhaojian_analysis_test.dart: sumMotives splits abstract and intuitive per side and halves "both"
+00:16 +240 -5: test/zhaojian/zhaojian_analysis_test.dart: sumMotives abstract lane and intuitive lane can disagree
+00:16 +241 -5: test/zhaojian/zhaojian_analysis_test.dart: sumMotives no disagreement when one lane is empty
+00:16 +242 -5: test/zhaojian/zhaojian_analysis_test.dart: conflictOf approach-approach
+00:16 +243 -5: test/zhaojian/zhaojian_analysis_test.dart: conflictOf avoidance-avoidance
+00:16 +244 -5: test/zhaojian/zhaojian_analysis_test.dart: conflictOf approach-avoidance on one side
+00:16 +245 -5: test/zhaojian/zhaojian_analysis_test.dart: conflictOf double approach-avoidance
+00:16 +246 -5: test/zhaojian/zhaojian_analysis_test.dart: conflictOf no strong conflict when nothing is rated
+00:16 +247 -5: test/zhaojian/zhaojian_analysis_test.dart: decision outcomes followedKind reports which lane the action followed
+00:16 +248 -5: test/zhaojian/zhaojian_analysis_test.dart: decision outcomes self score is stake when hit and minus stake when missed
+00:16 +249 -5: test/zhaojian/zhaojian_analysis_test.dart: decision outcomes opposesBalance flags an action against the heavier side
+00:16 +250 -5: test/zhaojian/zhaojian_analysis_test.dart: decision outcomes hit rate ignores unrevealed decisions
+00:16 +251 -5: test/zhaojian/zhaojian_analysis_test.dart: decision outcomes winStat counts only decisions where the lanes disagree
+00:16 +252 -5: test/zhaojian/zhaojian_analysis_test.dart: hypothesisStatus needs 3 supports and twice the refutations
+00:16 +253 -5: test/zhaojian/zhaojian_analysis_test.dart: hypothesisStatus refuted when refutations are at least 2 and outnumber supports
+00:16 +254 -5: test/zhaojian/zhaojian_analysis_test.dart: rankTop5 keeps at most two per category and returns five
+00:16 +255 -5: test/zhaojian/zhaojian_analysis_test.dart: rankTop5 higher pull ranks first
+00:16 +256 -5: test/zhaojian/zhaojian_analysis_test.dart: rankTop5 rule fallback prefers hidden and frequently missed categories
+00:16 +257 -5: test/zhaojian/zhaojian_analysis_test.dart: rankTop5 badge marks missed categories
+00:16 +258 -5: test/zhaojian/zhaojian_analysis_test.dart: imageryOf counts depth per side and the worst moment
+00:16 +259 -5: test/zhaojian/zhaojian_analysis_test.dart: imageryOf no imagery means no symmetry
+00:16 +260 -5: test/zhaojian/zhaojian_analysis_test.dart: threshold statistics freedomStat needs at least six samples
+00:16 +261 -5: test/zhaojian/zhaojian_analysis_test.dart: threshold statistics freedomStat splits high and low by the mean
+00:16 +262 -5: test/zhaojian/zhaojian_analysis_test.dart: threshold statistics imageryStat needs six samples and a spread
+00:16 +263 -5: test/zhaojian/zhaojian_analysis_test.dart: topMissCategories returns the three most frequent categories
+00:16 +264 -5: test/zhaojian/zhaojian_analysis_test.dart: alignment weights desires by evidence tier and reports the range
+00:16 +265 -5: test/zhaojian/zhaojian_analysis_test.dart: alignment weak-only desires cap confidence at 0.5 and are flagged
+00:16 +266 -5: test/zhaojian/zhaojian_analysis_test.dart: alignment empty results and mismatched rows
+00:16 +267 -5: test/zhaojian/zhaojian_analysis_test.dart: alignment manual alignment is flagged and has no range or confidence
+00:16 +268 -5: test/zhaojian/zhaojian_analysis_test.dart: alignment quadrants combine alignment with the pull share
+00:16 +269 -5: test/zhaojian/zhaojian_analysis_test.dart: alignment pullShare divides the total weight between the sides
+00:16 +270 -5: test/zhaojian/zhaojian_analysis_test.dart: alignment alignTrend averages the chosen option over early and recent halves
+00:16 +271 -5: test/zhaojian/zhaojian_analysis_test.dart: library static data is consistent
+00:16 +272 -5: loading test/branch_integration/persistence_test.dart
+00:17 +272 -5: test/branch_integration/persistence_test.dart: existing observation schema migrates; deleted records leave stats and exports
+00:17 +273 -5: test/branch_integration/persistence_test.dart: care bridge archives and joy survive alongside existing compass data
+00:17 +274 -5: test/branch_integration/persistence_test.dart: ritual checkins count persisted events, preserve edits, and keep RaiseBase tables
+00:18 +275 -5: loading test/branch_integration/analytics_test.dart
+00:18 +275 -5: test/branch_integration/analytics_test.dart: current list tags and recorded times feed the recovered analytics
+00:18 +276 -5: loading test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart
+00:19 +276 -5: test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: (setUpAll)
+00:19 +276 -5: test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: routes the fixed V1.4 goal scenarios to one primary mentor
+00:19 +277 -5: test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: ten selected mentors keep distinct values and practices
+00:19 +278 -5: test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: adversarial requests cannot bypass sources or create many mentors
+00:19 +279 -5: test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: high-risk expressions stop ordinary goal guidance
+00:19 +280 -5: test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: (tearDownAll)
+00:19 +280 -5: loading test/xiangji_goal_mentor/xiangji_engine_test.dart
+00:19 +280 -5: test/xiangji_goal_mentor/xiangji_engine_test.dart: safety gate blocks self-harm, violence, abuse danger and dangerous self-neglect
+00:19 +281 -5: test/xiangji_goal_mentor/xiangji_engine_test.dart: goal and guidance generation creates one controllable action with traceable local sources
+00:19 +282 -5: test/xiangji_goal_mentor/xiangji_engine_test.dart: goal and guidance generation shrinking lowers burden while keeping the same goal direction
+00:19 +283 -5: test/xiangji_goal_mentor/xiangji_engine_test.dart: goal and guidance generation stops when a selected system has no traceable evidence
+00:19 +284 -5: test/xiangji_goal_mentor/xiangji_engine_test.dart: selected V2.1 mentors produce distinct judgments and actions
+00:20 +285 -5: test/xiangji_goal_mentor/xiangji_engine_test.dart: four-layer calibration can produce all five specified outcomes
+00:20 +286 -5: test/xiangji_goal_mentor/xiangji_engine_test.dart: records non-start and goal-exit evidence without failure language
+00:20 +287 -5: loading test/xiangji_goal_mentor/xiangji_provider_mirror_service_test.dart
+00:20 +287 -5: test/xiangji_goal_mentor/xiangji_provider_mirror_service_test.dart: sync is hash-idempotent, remote search is scoped, and delete propagates
+00:20 +288 -5: test/xiangji_goal_mentor/xiangji_provider_mirror_service_test.dart: failed provider deletion remains pending and auditable
+00:20 +289 -5: loading test/xiangji_goal_mentor/xiangji_dao_test.dart
+00:21 +289 -5: test/xiangji_goal_mentor/xiangji_dao_test.dart: claims at most once per day, retries failures and audits delivery
+00:21 +290 -5: test/xiangji_goal_mentor/xiangji_dao_test.dart: disabled reminders never create a delivery claim
+00:21 +291 -5: test/xiangji_goal_mentor/xiangji_dao_test.dart: persists and restores the intelligence receipt with the goal
+00:21 +292 -5: test/xiangji_goal_mentor/xiangji_dao_test.dart: persists personalization and complete reality-review rounds
+00:21 +293 -5: test/xiangji_goal_mentor/xiangji_dao_test.dart: persists mentor selection history and 8-step progress
+00:21 +294 -5: test/xiangji_goal_mentor/xiangji_dao_test.dart: upgrades a PR146 database without deleting goal, history or action
+00:21 +295 -5: loading test/xiangji_goal_mentor/xiangji_upgrade_page_test.dart
+00:22 +295 -5: test/xiangji_goal_mentor/xiangji_upgrade_page_test.dart: PR146 旧导师显示无损升级提示和重新选择入口
+00:22 +296 -5: loading test/xiangji_goal_mentor/xiangji_book_index_service_test.dart
+00:23 +296 -5: test/xiangji_goal_mentor/xiangji_book_index_service_test.dart: parses, chunks and retrieves only from the allowed private book
+00:23 +297 -5: loading test/xiangji_goal_mentor/xiangji_knowledge_repository_test.dart
+00:24 +297 -5: test/xiangji_goal_mentor/xiangji_knowledge_repository_test.dart: loads the complete goal-first V2.1 knowledge baseline
+00:24 +298 -5: loading test/xiangji_goal_mentor/xiangji_book_service_test.dart
+00:24 +298 -5: test/xiangji_goal_mentor/xiangji_book_service_test.dart: clear-all removes registered books, orphan files and prior exports
+00:24 +299 -5: test/xiangji_goal_mentor/xiangji_book_service_test.dart: import immediately builds a local index and deduplicates by hash
+00:24 +300 -5: loading test/xiangji_goal_mentor/xiangji_policies_test.dart
+00:25 +300 -5: test/xiangji_goal_mentor/xiangji_policies_test.dart: goal transition policy allows the documented forward and calibration transitions
+00:25 +301 -5: test/xiangji_goal_mentor/xiangji_policies_test.dart: goal transition policy rejects shortcuts and any transition out of archived
+00:25 +302 -5: test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy moves an overnight quiet-hour selection to quiet end
+00:25 +303 -5: test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy normalizes malformed or out-of-range times
+00:25 +304 -5: test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy degrades long-silence cadence without exposing failure days
+00:25 +305 -5: test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy uses one deterministic key per local calendar day
+00:25 +306 -5: test/xiangji_goal_mentor/xiangji_policies_test.dart: check-in and evidence contracts expose every specified value
+00:25 +307 -5: loading test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart
+00:26 +307 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: (setUpAll)
+00:26 +307 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: turns one need into three concrete and source-backed local routes
+00:26 +308 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: uses valid grounded AI output and exposes a truthful receipt
+00:26 +309 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: recursively redacts direct identifiers before any AI request
+00:26 +310 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: rejects ungrounded AI structure and visibly falls back
+00:26 +311 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: assistant gives the exact current step and recovery boundary
+00:26 +312 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: reality review converts a blocked fact into a grounded next step
+00:26 +313 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: round review uses valid AI but keeps the knowledge id and decision
+00:26 +314 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: built-in examples preserve seven-day reality and revision traces
+00:26 +315 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: planning policy rejects manipulation and product dependency
+00:26 +316 -5: test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: (tearDownAll)
+00:26 +316 -5: loading test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart
+00:26 +316 -5: test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart: publishes only a JSON answer with exact in-scope citations
+00:26 +317 -5: test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart: rejects invented source IDs and records a non-content audit
+00:26 +318 -5: test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart: safety gate runs before retrieval or model generation
+00:26 +319 -5: loading test/xiangji_goal_mentor/xiangji_discover_entries_test.dart
+00:27 +319 -5: test/xiangji_goal_mentor/xiangji_discover_entries_test.dart: 发现之旅始终展示目标导师和未来军师两个独立入口
+00:27 +320 -5: loading test/will_mirror/startup_recovery_test.dart
+00:28 +320 -5: test/will_mirror/startup_recovery_test.dart: native vault errors expose only safe categories, never native details
+00:28 +321 -5: test/will_mirror/startup_recovery_test.dart: missing channel and empty native reply cannot write plaintext
+00:28 +322 -5: test/will_mirror/startup_recovery_test.dart: optional provider and reminder failures keep the local ledger usable
+00:28 +323 -5: test/will_mirror/startup_recovery_test.dart: storage failures remain blocking and preserve the existing records
+00:28 +324 -5: test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:29 +325 -5: test/will_mirror/startup_recovery_test.dart: unknown startup error is neutral and usable with large text
+00:29 +326 -5: loading test/will_mirror/widget_flow_test.dart
+00:30 +326 -5: test/will_mirror/widget_flow_test.dart: (setUpAll)
+00:30 +326 -5: test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:31 +327 -5: test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:32 +328 -5: test/will_mirror/widget_flow_test.dart: unknown observation keeps waiting and no reveal button invents result
+00:32 +329 -5: test/will_mirror/widget_flow_test.dart: active source detail removes private content immediately after withdrawal
+00:32 +330 -5: test/will_mirror/widget_flow_test.dart: populated Top5 keeps counterarguments visible on a phone
+00:32 +331 -5: test/will_mirror/widget_flow_test.dart: life path renders actual episodes and optional possible branches distinctly
+00:32 +332 -5: test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
+00:33 +333 -5: test/will_mirror/widget_flow_test.dart: (tearDownAll)
+00:33 +333 -5: loading test/will_mirror/principle_application_test.dart
+00:33 +333 -5: test/will_mirror/principle_application_test.dart: a draft principle cannot become an adopted cue before user acceptance
+00:33 +334 -5: test/will_mirror/principle_application_test.dart: risk and review gates block principle adoption and plan sealing
+00:33 +335 -5: test/will_mirror/principle_application_test.dart: display and advance declarations cannot fabricate actual principle use
+00:33 +336 -5: test/will_mirror/principle_application_test.dart: real application needs a concrete account and a known observation
+00:33 +337 -5: test/will_mirror/principle_application_test.dart: version references must match and an application cannot switch versions
+00:33 +338 -5: test/will_mirror/principle_application_test.dart: later revisions stop new cues but preserve review of the version used
+00:33 +339 -5: test/will_mirror/principle_application_test.dart: changed field conditions stop reuse without rewriting past acceptance
+00:33 +340 -5: test/will_mirror/principle_application_test.dart: cross-case reuse requires authorization and a current safe context match
+00:33 +341 -5: test/will_mirror/principle_application_test.dart: a new safety restriction suspends even an accepted principle
+00:33 +342 -5: test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:34 +343 -5: test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=opened
+00:34 +344 -5: test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=accepted
+00:34 +345 -5: test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+00:34 +346 -5: loading test/will_mirror/scenario_integrity_test.dart
+00:35 +346 -5: test/will_mirror/scenario_integrity_test.dart: E01 工作: no fabricated facts across a new evidence version
+00:35 +347 -5: test/will_mirror/scenario_integrity_test.dart: E02 任务能力: no fabricated facts across a new evidence version
+00:35 +348 -5: test/will_mirror/scenario_integrity_test.dart: E03 学习: no fabricated facts across a new evidence version
+00:35 +349 -5: test/will_mirror/scenario_integrity_test.dart: E04 关系: no fabricated facts across a new evidence version
+00:35 +350 -5: test/will_mirror/scenario_integrity_test.dart: E05 人身安全: no fabricated facts across a new evidence version
+00:35 +351 -5: test/will_mirror/scenario_integrity_test.dart: E06 健康: no fabricated facts across a new evidence version
+00:35 +352 -5: test/will_mirror/scenario_integrity_test.dart: E07 资金: no fabricated facts across a new evidence version
+00:35 +353 -5: test/will_mirror/scenario_integrity_test.dart: E08 法律责任: no fabricated facts across a new evidence version
+00:35 +354 -5: test/will_mirror/scenario_integrity_test.dart: E09 休息: no fabricated facts across a new evidence version
+00:35 +355 -5: test/will_mirror/scenario_integrity_test.dart: E10 资源取舍: no fabricated facts across a new evidence version
+00:35 +356 -5: test/will_mirror/scenario_integrity_test.dart: E11 资源取舍: no fabricated facts across a new evidence version
+00:35 +357 -5: test/will_mirror/scenario_integrity_test.dart: E12 社会榜样: no fabricated facts across a new evidence version
+00:35 +358 -5: test/will_mirror/scenario_integrity_test.dart: E13 获得与满足: no fabricated facts across a new evidence version
+00:35 +359 -5: test/will_mirror/scenario_integrity_test.dart: E14 新兴趣: no fabricated facts across a new evidence version
+00:35 +360 -5: test/will_mirror/scenario_integrity_test.dart: E15 多样性: no fabricated facts across a new evidence version
+00:35 +361 -5: test/will_mirror/scenario_integrity_test.dart: E16 被迫行为: no fabricated facts across a new evidence version
+00:35 +362 -5: test/will_mirror/scenario_integrity_test.dart: E17 通知: no fabricated facts across a new evidence version
+00:35 +363 -5: test/will_mirror/scenario_integrity_test.dart: E18 现场变化: no fabricated facts across a new evidence version
+00:35 +364 -5: test/will_mirror/scenario_integrity_test.dart: E19 多次尝试: no fabricated facts across a new evidence version
+00:35 +365 -5: test/will_mirror/scenario_integrity_test.dart: E20 认知反证: no fabricated facts across a new evidence version
+00:35 +366 -5: test/will_mirror/scenario_integrity_test.dart: E21 原则修订: no fabricated facts across a new evidence version
+00:35 +367 -5: test/will_mirror/scenario_integrity_test.dart: E22 他人自主: no fabricated facts across a new evidence version
+00:35 +368 -5: test/will_mirror/scenario_integrity_test.dart: E23 隐私撤回: no fabricated facts across a new evidence version
+00:35 +369 -5: test/will_mirror/scenario_integrity_test.dart: E24 信息极少: no fabricated facts across a new evidence version
+00:35 +370 -5: loading test/will_mirror/ai_contract_test.dart
+00:35 +370 -5: test/will_mirror/ai_contract_test.dart: minimal consent excludes unselected raw data and all of its derivatives
+00:35 +371 -5: test/will_mirror/ai_contract_test.dart: cross-case selection requires both explicit case and evidence grants
+00:35 +372 -5: test/will_mirror/ai_contract_test.dart: seals are sent only if the complete linked source set was authorized
+00:35 +373 -5: test/will_mirror/ai_contract_test.dart: stage schema repair is bounded and unauthorized references never commit
+00:35 +374 -5: test/will_mirror/ai_contract_test.dart: cancellation before model request retains the original case
+00:35 +375 -5: test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
+00:36 +376 -5: test/will_mirror/ai_contract_test.dart: semantic paraphrases do not get counted just to reach fifty
+00:36 +377 -5: test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
+00:36 +378 -5: test/will_mirror/ai_contract_test.dart: private model never forwards upstream error bodies
+00:36 +379 -5: test/will_mirror/ai_contract_test.dart: Decisions refusal and name mismatch have no manufactured zero scores
+00:36 +380 -5: test/will_mirror/ai_contract_test.dart: strict model schemas require every declared property and no additional properties
+00:36 +381 -5: loading test/will_mirror/domain_test.dart
+00:36 +381 -5: test/will_mirror/domain_test.dart: one case preserves raw input and separates UI step from real time phase
+00:36 +382 -5: test/will_mirror/domain_test.dart: nested ledger bodies and support references are immutable
+00:36 +383 -5: test/will_mirror/domain_test.dart: schema rejects invented keys, invalid score and unknown enum
+00:36 +384 -5: test/will_mirror/domain_test.dart: sealed T0 is canonical, unchanged by T1 and T2, and cannot be backfilled
+00:36 +385 -5: test/will_mirror/domain_test.dart: changed T1 conditions also prohibit inventing a T0 forecast
+00:36 +386 -5: test/will_mirror/domain_test.dart: retrospective case has no manufactured prediction
+00:36 +387 -5: test/will_mirror/domain_test.dart: unknown actual action does not become failure or reveal
+00:36 +388 -5: test/will_mirror/domain_test.dart: actual action and outside result remain independent
+00:36 +389 -5: test/will_mirror/domain_test.dart: next episode retains original observations once on the same CaseID
+00:36 +390 -5: test/will_mirror/domain_test.dart: unsafe route and later unsafe assessment prevent preparation
+00:36 +391 -5: test/will_mirror/domain_test.dart: AI cannot author action facts or user acceptance
+00:36 +392 -5: test/will_mirror/domain_test.dart: missing, stale, or foreign evidence blocks model records
+00:36 +393 -5: test/will_mirror/domain_test.dart: plans, scenes, scores and device events do not self-prove personality
+00:36 +394 -5: test/will_mirror/domain_test.dart: transitive withdrawal reaches saved forecasts and ranking
+00:36 +395 -5: test/will_mirror/domain_test.dart: Top5 preserves counterarguments and long horizon and never fills false scores
+00:36 +396 -5: test/will_mirror/domain_test.dart: generic assumptions remain verify-first rather than personal facts
+00:36 +397 -5: test/will_mirror/domain_test.dart: duplicate semantic key collapses paraphrases, bounded distinct pool
+00:36 +398 -5: test/will_mirror/domain_test.dart: all scored candidates survive weight adjustment, refusal stays unknown
+00:36 +399 -5: loading test/will_mirror/store_controller_test.dart
+00:37 +399 -5: test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
+00:37 +400 -5: test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:37 +401 -5: test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:37 +402 -5: test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
+00:37 +403 -5: test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:37 +404 -5: test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:37 +405 -5: test/will_mirror/store_controller_test.dart: cross-case revoke preserves source while clearing all dependent histories
+00:37 +406 -5: test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
+00:37 +407 -5: test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:37 +408 -5: test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:37 +409 -5: test/will_mirror/store_controller_test.dart: denied reminder permission preserves plan and never fabricates delivery
+00:37 +410 -5: test/will_mirror/store_controller_test.dart: malformed or unrelated notification payload is not handled by this module
+00:37 +411 -5: loading test/will_mirror/notification_host_test.dart
+00:38 +411 -5: test/will_mirror/notification_host_test.dart: a foreground notification consumes pending navigation and opens only once
+00:39 +412 -5: loading test/will_mirror/android_sqlite_contract_test.dart
+00:39 +412 -5: test/will_mirror/android_sqlite_contract_test.dart: Android startup and privacy cleanup use result-capable SQL operations
+error DatabaseException(Queries can be performed using SQLiteDatabase query or rawQuery methods only.) during open, closing...
+00:39 +413 -5: loading test/will_mirror/regression_v28_test.dart
+00:40 +413 -5: test/will_mirror/regression_v28_test.dart: a superseded route cannot activate an old plan or rank its old support as current
+00:40 +414 -5: test/will_mirror/regression_v28_test.dart: repeated route analysis must revise prior IDs instead of exceeding six active alternatives
+00:40 +415 -5: test/will_mirror/regression_v28_test.dart: weight adjustment retains the original online scoring and expiry times
+00:40 +416 -5: test/will_mirror/regression_v28_test.dart: latest hard safety assessment blocks high-scored supporting motives
+00:40 +417 -5: test/will_mirror/regression_v28_test.dart: unreferenced AI guesses cannot use verified fact status
+00:40 +418 -5: test/will_mirror/regression_v28_test.dart: later user records cannot acquire an earlier knowledge phase
+00:40 +419 -5: test/will_mirror/regression_v28_test.dart: known exclusive resources prohibit a parallel tradeoff but allow sequencing
+00:40 +420 -5: test/will_mirror/regression_v28_test.dart: two actual events without free informed alternatives cannot prove a stable want
+00:40 +421 -5: test/will_mirror/regression_v28_test.dart: safety reappraisal immediately retires preparation and cancels the OS job
+00:40 +422 -5: test/will_mirror/regression_v28_test.dart: identical completed analysis reuses its result and new facts invalidate reuse
+00:40 +423 -5: test/will_mirror/regression_v28_test.dart: independent learning review repairs once before commit
+00:40 +424 -5: test/will_mirror/regression_v28_test.dart: independent learning review rejects persistent violations
+00:40 +425 -5: test/will_mirror/regression_v28_test.dart: Azure tries an alternate path only after an unsupported endpoint
+00:40 +426 -5: test/will_mirror/regression_v28_test.dart: Azure Claude uses Messages body and parses text blocks
+00:40 +427 -5: loading test/shame_transform_models_test.dart
+00:40 +427 -5: test/shame_transform_models_test.dart: parses affect, compass, pride and exposure fields from V2 JSON
+00:40 +428 -5: test/shame_transform_models_test.dart: new persistence models retain V2 fields
+00:40 +429 -5: loading test/services/unified_ai_service_azure_claude_test.dart
+00:41 +429 -5: test/services/unified_ai_service_azure_claude_test.dart: Azure token 参数兼容 GPT-5 及以上版本与 o 系列使用 max_completion_tokens
+00:41 +430 -5: test/services/unified_ai_service_azure_claude_test.dart: Azure token 参数兼容 旧 GPT 与非 OpenAI 模型继续使用 max_tokens
+00:41 +431 -5: test/services/unified_ai_service_azure_claude_test.dart: Azure Claude / Anthropic Messages API 识别 Claude 部署名
+00:41 +432 -5: test/services/unified_ai_service_azure_claude_test.dart: Azure Claude / Anthropic Messages API 解析 Anthropic Messages 非流式 content blocks
+00:41 +433 -5: test/services/unified_ai_service_azure_claude_test.dart: Azure Claude / Anthropic Messages API 解析 Anthropic SSE text_delta
+00:41 +434 -5: loading test/services/azure_ai_settings_test.dart
+00:41 +434 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 Microsoft Foundry 项目终结点会被裁成资源根地址，并解析出项目名
+00:41 +435 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 Azure OpenAI 终结点按 Azure OpenAI 部署方式接入
+00:41 +436 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 已经带上数据面后缀的终结点会被裁掉后缀
+00:41 +437 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 门户部署页的“目标 URI”会被裁成资源根地址，查询串一并丢弃
+00:41 +438 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 完整的 chat/completions 调用地址也会被裁成资源根地址
+00:41 +439 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 终结点自带的 api-version 会在未显式填写时被采用
+00:41 +440 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 显式填写的 api-version 优先于终结点里自带的
+00:41 +441 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 缺少协议头时补上 https
+00:41 +442 -5: test/services/azure_ai_settings_test.dart: 终结点归一化 终结点为空时判定为未配置
+00:41 +443 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 Azure OpenAI 资源优先走部署路径
+00:41 +444 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 Foundry Claude 资源固定走 Anthropic Messages API
+00:41 +445 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 直接粘贴 Claude Messages 目标 URI 时也固定走 Anthropic API
+00:41 +446 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 同一 Claude 目标 URI 下的 GPT 部署改走 Foundry 模型推理 API
+00:41 +447 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 Foundry 非 Claude 模型仍优先走模型推理路径，并保留部署路径作为回退
+00:41 +448 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 部署名会做 URL 编码
+00:41 +449 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 终结点或部署名缺失时不产生候选地址
+00:41 +450 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 既没显式填写、终结点也不带 api-version 时按接入方式取默认值
+00:41 +451 -5: test/services/azure_ai_settings_test.dart: 调用地址候选 Azure OpenAI 默认 api-version 支持 gpt-5 系列所需的 max_completion_tokens
+00:41 +452 -5: test/services/azure_ai_settings_test.dart: 鉴权头 所有 Azure 路径都带 api-key；models / v1 路径额外带 Bearer
+00:41 +453 -5: test/services/azure_ai_settings_test.dart: 鉴权头 没有密钥时不产生鉴权头
+00:41 +454 -5: test/services/azure_ai_settings_test.dart: 限定模型 id 资源名与部署名可以往返转换
+00:41 +455 -5: test/services/azure_ai_settings_test.dart: 限定模型 id 没有分隔符时整串当作部署名，资源名留空表示用第一个可用资源
+00:41 +456 -5: test/services/azure_ai_settings_test.dart: 限定模型 id 资源名里的分隔符会被规范化掉，避免拆分歧义
+00:41 +457 -5: test/services/azure_ai_settings_test.dart: 限定模型 id 空部署名不产生限定 id
+00:41 +458 -5: test/services/azure_ai_settings_test.dart: 部署名输入解析 支持中英文逗号、分号与空白分隔并去重
+00:41 +459 -5: test/services/azure_ai_settings_test.dart: 接入方式规范化 识别常见别名，未知值退回自动识别
+00:41 +460 -5: test/services/azure_ai_settings_test.dart: 内置模板 给出需求里的两个项目名，且默认未配置
+00:41 +461 -5: test/services/azure_ai_settings_test.dart: 内置模板 模板不预填 api-version，好让终结点里自带的版本能生效
+00:42 +462 -5: loading test/external_data/change_path_engine_test.dart
+00:42 +462 -5: test/external_data/change_path_engine_test.dart: difficulty is classified into comfort stretch and panic zones
+00:42 +463 -5: test/external_data/change_path_engine_test.dart: panic-zone action is diagnosed and downgraded
+00:42 +464 -5: test/external_data/change_path_engine_test.dart: missing trigger is treated as design data instead of weak willpower
+00:42 +465 -5: loading test/external_data/todo_goal_will_bridge_test.dart
+00:43 +465 -5: test/external_data/todo_goal_will_bridge_test.dart: uses a stable Todo goal/action identity
+00:43 +466 -5: test/external_data/todo_goal_will_bridge_test.dart: projects goal value and action tree into a concrete will card
+00:43 +467 -5: test/external_data/todo_goal_will_bridge_test.dart: AI refresh can preserve the stable Todo association identity
+00:43 +468 -5: loading test/external_data/todo_raisebase_engine_test.dart
+00:43 +468 -5: test/external_data/todo_raisebase_engine_test.dart: belief map separates facts from permanent identity judgment
+00:43 +469 -5: test/external_data/todo_raisebase_engine_test.dart: completed action becomes self efficacy evidence
+00:43 +470 -5: loading test/external_data/todo_goal_will_state_test.dart
+00:44 +470 -5: test/external_data/todo_goal_will_state_test.dart: dominance follows user-calibrated strengths
+00:44 +471 -5: test/external_data/todo_goal_will_state_test.dart: distinguishes unfamiliar action image from bodily execution limits
+00:44 +472 -5: test/external_data/todo_goal_will_state_test.dart: round trips persisted practice calibration
+00:44 +473 -5: loading test/external_data/todo_meaning_engine_test.dart
+00:44 +473 -5: test/external_data/todo_meaning_engine_test.dart: detects direct Chinese and English crisis signals
+00:44 +474 -5: test/external_data/todo_meaning_engine_test.dart: relationship responsibility selects relationship path
+00:44 +475 -5: test/external_data/todo_meaning_engine_test.dart: unavoidable hardship selects attitude path without glorifying pain
+00:44 +476 -5: loading test/external_data/todo_goal_reflective_growth_test.dart
+00:45 +476 -5: test/external_data/todo_goal_reflective_growth_test.dart: reflection maps structured Reflective Growth evidence
+00:45 +477 -5: test/external_data/todo_goal_reflective_growth_test.dart: AI review serializes action and pattern fields
+00:45 +478 -5: loading test/kindling/kindling_heat_test.dart
+00:45 +478 -5: test/kindling/kindling_heat_test.dart: "不做" sinks the item to the bottom
+00:45 +479 -5: test/kindling/kindling_heat_test.dart: "做" adds a bonus over an otherwise identical item
+00:45 +480 -5: test/kindling/kindling_heat_test.dart: an unrated item lands on the neutral middle
+00:45 +481 -5: test/kindling/kindling_heat_test.dart: a 14-day-old self report is halved in weight
+00:45 +482 -5: test/kindling/kindling_heat_test.dart: the result stays inside 0..1.2
+00:45 +483 -5: test/kindling/kindling_heat_test.dart: sortByHeat only reorders, it never annotates
+00:45 +484 -5: loading test/kindling/host_db_open_smoke_test.dart
+00:46 +484 -5: test/kindling/host_db_open_smoke_test.dart: opening the host database finishes instead of hanging
+[DBG] AppDatabase opened at: /tmp/host_db_open_TVPERS/quotes.db
+00:46 +485 -5: loading test/kindling/kindling_flow_widget_test.dart
+00:47 +485 -5: test/kindling/kindling_flow_widget_test.dart: an empty list offers 回溯, 十五分钟 and 直接写一个 only
+00:47 +486 -5: test/kindling/kindling_flow_widget_test.dart: 直接写一个 immediately asks the verdict question
+00:48 +487 -5: test/kindling/kindling_flow_widget_test.dart: answering 不做 keeps the item and moves it to 放掉的
+00:48 +488 -5: test/kindling/kindling_flow_widget_test.dart: long press opens 换个说法 / 问一句 / 卡住了 / 放掉
+00:49 +489 -5: test/kindling/kindling_flow_widget_test.dart: 痒度自评只给措辞，不给任何数字
+00:49 +490 -5: test/kindling/kindling_flow_widget_test.dart: 换个说法可以顺手留一句备注
+00:50 +491 -5: test/kindling/kindling_flow_widget_test.dart: 卡住了 only asks and ends with the fixed closing line
+00:50 +492 -5: test/kindling/kindling_flow_widget_test.dart: 卡住了 进场立刻有第一问，不等追问器
+00:51 +493 -5: test/kindling/kindling_flow_widget_test.dart: 回溯 turns raw answers into candidates the user may keep
+00:52 +494 -5: test/kindling/kindling_flow_widget_test.dart: the discover entry hands the tap back to the host
+00:53 +495 -5: test/kindling/kindling_flow_widget_test.dart: (tearDownAll)
+00:53 +495 -5: loading test/kindling/kindling_host_test.dart
+00:54 +495 -5: test/kindling/kindling_host_test.dart: 候选切分 AI 不可用时用本地规则
+00:54 +496 -5: test/kindling/kindling_host_test.dart: 候选切分 AI 抛错时用本地规则
+00:54 +497 -5: test/kindling/kindling_host_test.dart: 候选切分 AI 返回空内容时用本地规则
+00:54 +498 -5: test/kindling/kindling_host_test.dart: 候选切分 AI 的切分同样受 2–40 字与去重约束
+00:54 +499 -5: test/kindling/kindling_host_test.dart: 阻抗追问 第一问不碰网络，进场就有内容
+00:54 +500 -5: test/kindling/kindling_host_test.dart: 阻抗追问 模型太慢就用本地问题梯，不干等
+00:57 +501 -5: test/kindling/kindling_host_test.dart: 阻抗追问 AI 不可用时走本地问题梯
+00:57 +502 -5: test/kindling/kindling_host_test.dart: 阻抗追问 问句超过 25 字就不采用
+00:57 +503 -5: test/kindling/kindling_host_test.dart: 阻抗追问 出现禁用词就不采用
+00:57 +504 -5: test/kindling/kindling_host_test.dart: 阻抗追问 不是问句就不采用
+00:57 +505 -5: test/kindling/kindling_host_test.dart: 阻抗追问 合规的问句照用
+00:57 +506 -5: test/kindling/kindling_host_test.dart: 阻抗追问 问满四步就结束，不无限追问
+00:57 +507 -5: test/kindling/kindling_host_test.dart: 阻抗追问 system prompt 与方案 §7 逐字一致
+00:57 +508 -5: test/kindling/kindling_host_test.dart: 复问提醒 默认实现什么都不做，也就是默认关
+00:57 +509 -5: test/kindling/kindling_host_test.dart: 复问提醒 通知文案与模块内的文案逐字一致
+00:57 +510 -5: test/kindling/kindling_host_test.dart: 复问提醒 宿主实现挂得上模块的接口
+00:57 +511 -5: loading test/kindling/kindling_red_lines_test.dart
+00:57 +511 -5: test/kindling/kindling_red_lines_test.dart: (setUpAll)
+00:57 +511 -5: test/kindling/kindling_red_lines_test.dart: no copy carries an exclamation mark or a pep-talk word
+00:57 +512 -5: test/kindling/kindling_red_lines_test.dart: the module never speaks of streaks, badges, ranking or sharing
+00:57 +513 -5: test/kindling/kindling_red_lines_test.dart: no progress indicator or percentage is rendered
+00:57 +514 -5: test/kindling/kindling_red_lines_test.dart: UI files hold no literal copy of their own
+00:57 +515 -5: test/kindling/kindling_red_lines_test.dart: the module depends on nothing beyond flutter and sqflite
+00:57 +516 -5: test/kindling/kindling_red_lines_test.dart: the probe ladder shows wording only, never a score
+00:57 +517 -5: test/kindling/kindling_red_lines_test.dart: the recall questions keep their fixed wording and order
+00:57 +518 -5: test/kindling/kindling_red_lines_test.dart: (tearDownAll)
+00:57 +518 -5: loading test/kindling/kindling_schema_test.dart
+00:58 +518 -5: test/kindling/kindling_schema_test.dart: createAll builds every k_ table and is idempotent
+00:58 +519 -5: test/kindling/kindling_schema_test.dart: migrate is idempotent and independent of host version numbers
+00:58 +520 -5: test/kindling/kindling_schema_test.dart: no foreign key points outside the module
+00:58 +521 -5: test/kindling/kindling_schema_test.dart: item schema carries no goal / plan / deadline / streak column
+00:58 +522 -5: test/kindling/kindling_schema_test.dart: probe score is constrained to 0..4
+00:58 +523 -5: loading test/kindling/kindling_dao_test.dart
+00:58 +523 -5: test/kindling/kindling_dao_test.dart: verdict "no" keeps the item and moves it to released
+00:59 +524 -5: test/kindling/kindling_dao_test.dart: released_count counter tracks the核心成功指标
+00:59 +525 -5: test/kindling/kindling_dao_test.dart: an aborted run never drags the want ratio down
+00:59 +526 -5: test/kindling/kindling_dao_test.dart: recall candidates keep the kind of the question they came from
+00:59 +527 -5: test/kindling/kindling_dao_test.dart: a fully blank recall is not counted as a session
+00:59 +528 -5: test/kindling/kindling_dao_test.dart: 换个说法 can also leave a note behind
+00:59 +529 -5: test/kindling/kindling_dao_test.dart: recall answers are stored verbatim and bump the session counter
+00:59 +530 -5: test/kindling/kindling_dao_test.dart: burn records aborted runs without any failure marker
+00:59 +531 -5: test/kindling/kindling_dao_test.dart: want_more rate is kept in k_meta only
+00:59 +532 -5: test/kindling/kindling_dao_test.dart: three consecutive "不想" answers pin 放掉 in the long-press menu
+00:59 +533 -5: test/kindling/kindling_dao_test.dart: "说不准" comes back for one more question after 7 days
+00:59 +534 -5: test/kindling/kindling_dao_test.dart: item views aggregate the signals used for ordering
+00:59 +535 -5: test/kindling/kindling_dao_test.dart: probe scores are clamped into 0..4
+00:59 +536 -5: test/kindling/kindling_dao_test.dart: resistance steps are recorded and answers may stay empty
+00:59 +537 -5: loading test/kindling/kindling_oracle_test.dart
+00:59 +537 -5: test/kindling/kindling_oracle_test.dart: candidates are split on line breaks and Chinese punctuation
+00:59 +538 -5: test/kindling/kindling_oracle_test.dart: too short, too long and duplicate fragments are dropped
+00:59 +539 -5: test/kindling/kindling_oracle_test.dart: list markers are stripped from candidates
+00:59 +540 -5: test/kindling/kindling_oracle_test.dart: the resistance ladder asks four questions and then stops
+00:59 +541 -5: loading test/meditation/system_voice_completion_test.dart
+01:00 +541 -5: test/meditation/system_voice_completion_test.dart: 系统朗读等待真实完成，再交还给体验停顿
+01:00 +542 -5: test/meditation/system_voice_completion_test.dart: 原生引擎只回报错误时，等待能退出而不会卡在当前段
+01:00 +543 -5: loading test/meditation/experiential_mentor_test.dart
+01:00 +543 -5: test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 用户主题优先于默认睡眠推荐，生成可播放的短段体验
+01:00 +544 -5: test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 一分钟仍有主题、身体情绪与短留白
+01:00 +545 -5: test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 没有想象画面时选择真实感官，仍可完成同一个主题
+01:00 +546 -5: test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 关键词齐全的说理稿触发重写，自定义提示词不能移除体验合同
+01:00 +547 -5: test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 缺失的体验停顿由本地补齐，保留正文且不额外请求重写
+01:00 +548 -5: test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 同一阶段后退不会穿过质量校验
+01:00 +549 -5: test/meditation/experiential_mentor_test.dart: 体验质量 主题只放标题和分析字段，正文换成其他话题会失败
+01:00 +550 -5: test/meditation/experiential_mentor_test.dart: 体验质量 设计字段齐全也不能让概念讲解代替体验
+01:00 +551 -5: test/meditation/experiential_mentor_test.dart: 体验质量 选择真实感官时不能重新引入想象任务
+01:00 +552 -5: test/meditation/experiential_mentor_test.dart: 体验质量 设计字段里有感官、正文没有画面触感，会失败
+01:00 +553 -5: test/meditation/experiential_mentor_test.dart: 体验质量 宣布用户已经释怀，会失败
+01:00 +554 -5: test/meditation/experiential_mentor_test.dart: 体验质量 不保证或不一定放松不是对用户宣布结果
+01:00 +555 -5: test/meditation/experiential_mentor_test.dart: 体验质量 真实感官中的“不需要在脑海中想象”不是想象邀请
+01:00 +556 -5: test/meditation/experiential_mentor_test.dart: 体验质量 说话和留白放不进所选时长，会失败
+01:00 +557 -5: test/meditation/experiential_mentor_test.dart: 语音与留白 声音提前完成时不重复添加留白或缩短原时间轴
+01:00 +558 -5: test/meditation/experiential_mentor_test.dart: 语音与留白 下一段以及最后的结束都等待声音和留白完成
+01:00 +559 -5: test/meditation/experiential_mentor_test.dart: 语音与留白 停止或切换之后，旧的 TTS 回调不会释放新声音
+01:00 +560 -5: test/meditation/experiential_mentor_test.dart: 语音与留白 时间轴修正计算播报时间，保留每段停顿
+01:01 +561 -5: loading test/meditation/duration_planning_test.dart
+01:01 +561 -5: test/meditation/duration_planning_test.dart: 569 秒对 480 秒的有效引导直接交付完整版本，原文与收束都保留
+01:01 +562 -5: test/meditation/duration_planning_test.dart: 569 秒中的可调整停顿能校准到 480 秒，不删正文、不再次请求模型
+01:01 +563 -5: test/meditation/duration_planning_test.dart: 预算充足时保留原停顿和可行时间轴，核心原有短停顿不被强行加长
+01:01 +564 -5: test/meditation/duration_planning_test.dart: 无法再压缩时保留身体体验的停顿，不靠加速或截断强行装入预算
+01:01 +565 -5: test/meditation/duration_planning_test.dart: 明显偏长时只重写一次，合格短版优先于原完整版本
+01:01 +566 -5: test/meditation/duration_planning_test.dart: 精简请求超时后仍提供原完整引导与真实时长，不变成内容失败
+01:01 +567 -5: test/meditation/duration_planning_test.dart: 精简结果丢失体验设计时继续提供原合格版本
+01:01 +568 -5: loading test/meditation/validation_logging_test.dart
+01:02 +568 -5: test/meditation/validation_logging_test.dart: 内容拒绝原因能从全局日志的错误筛选中找到，并保留原始返回
+[DBG] AppDatabase opened at: /tmp/meditation_validation_log_UCJPIW/quotes.db
+01:02 +569 -5: loading test/meditation/response_recovery_test.dart
+01:02 +569 -5: test/meditation/response_recovery_test.dart: 八分钟八阶段正文被保留并排成可播放短段，不因格式建议整份丢弃
+01:03 +570 -5: test/meditation/response_recovery_test.dart: 日志响应中的 JSON 字符串解码后可被识别
+01:03 +571 -5: test/meditation/response_recovery_test.dart: 带围栏的 JSON、字符串秒数和缺失时间轴能归一，缺少分析附注也可播放
+01:03 +572 -5: test/meditation/response_recovery_test.dart: 完整结构的八阶段短句不会为了凑推荐段数而重写
+01:03 +573 -5: test/meditation/response_recovery_test.dart: 截断 JSON 经过一次模型修复后交付，初始正文和修复状态有记录
+01:03 +574 -5: test/meditation/response_recovery_test.dart: 自动重写超时保留原响应，并明确是内容问题，避免说成配置或网络错误
+01:03 +575 -5: test/meditation/response_recovery_test.dart: 两次都是无法识别的响应时，呈现格式失败
+01:03 +576 -5: test/meditation/response_recovery_test.dart: 空响应与没有可用模型分别说明，不混入质量失败
+01:03 +577 -5: test/meditation/response_recovery_test.dart: 诊断保存失败不吞掉已经可用的 AI 引导
+01:03 +578 -5: test/meditation/response_recovery_test.dart: 用户原话中的两字主题锚点可用，不强求四字或反复逐字复述
+01:03 +579 -5: test/meditation/response_recovery_test.dart: 正文实质超过一分钟预算且重写仍偏长时保留完整版本，并记录目标与预计时长
+01:03 +580 -5: test/meditation/response_recovery_test.dart: 真实感官模式中的“不需要想象”不会被当作想象任务
+01:03 +581 -5: loading test/meditation/mentor_result_page_test.dart
+01:03 +581 -5: test/meditation/mentor_result_page_test.dart: 完整 AI 正文展示为可开始的引导，附加说明慢或失败都不会吞掉结果
+01:05 +582 -5: test/meditation/mentor_result_page_test.dart: 确实未通过内容校验时页面说明 AI 已返回与具体原因
+01:05 +583 -5: test/meditation/mentor_result_page_test.dart: 569 秒有效引导显示目标和预计时长，用户能选择完整版本或重新生成八分钟版
+01:05 +584 -5: test/meditation/mentor_result_page_test.dart: 完整版本保存真实时间轴与预计时长，不把九分钟内容保存成八分钟
+01:06 +585 -5: loading test/zhixing_tree/zhixing_action_schema_migration_test.dart
+01:06 +585 -5: test/zhixing_tree/zhixing_action_schema_migration_test.dart: legacy required diagnosis_id is removed before a current action insert
+01:06 +586 -5: loading test/zhixing_tree/zhixing_dual_mode_test.dart
+01:07 +586 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: local and AI-derived knowledge isolation AI draft validates detail and keeps ai-derived origin
+01:07 +587 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: local and AI-derived knowledge isolation remote-derived draft remains explicitly distinct from local upload
+01:07 +588 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: local and AI-derived knowledge isolation action serialization preserves guidance source and draft reference
+01:07 +589 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers provider-specific ready state requires durable identifiers
+01:07 +590 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers Gemini retention wording does not claim permanent raw file storage
+01:07 +591 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers direct and gateway providers preserve their distinct ID contracts
+01:07 +592 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers OpenRouter requires a separate management key for workspace files
+01:07 +593 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers Eden AI expiry prevents stale IDs from being reused
+01:07 +594 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: automatic local review report successful fitting action recommends continuing current thought
+01:07 +595 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: automatic local review report unfinished high-load action recommends a knowledge-based blend
+01:07 +596 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: action mentor state machine asks for goal before all other scenes
+01:07 +597 -5: test/zhixing_tree/zhixing_dual_mode_test.dart: action mentor state machine auto-matches thought, then asks for action and review
+01:07 +598 -5: loading test/zhixing_tree/zhixing_productization_test.dart
+01:07 +598 -5: test/zhixing_tree/zhixing_productization_test.dart: one-input productization four experience modes change load without changing safety flags
+01:07 +599 -5: test/zhixing_tree/zhixing_productization_test.dart: one-input productization five one-tap blocks create distinct, testable hypotheses
+01:07 +600 -5: test/zhixing_tree/zhixing_productization_test.dart: one-input productization all saved examples run through to an observable action
+01:07 +601 -5: test/zhixing_tree/zhixing_productization_test.dart: one-input productization preference round-trip preserves all four personalization choices
+01:07 +602 -5: test/zhixing_tree/zhixing_productization_test.dart: assistant and embedded manual assistant routes practical questions to the right product area
+01:07 +603 -5: test/zhixing_tree/zhixing_productization_test.dart: assistant and embedded manual every visible feature explains input, output, reason and theory
+01:07 +604 -5: test/zhixing_tree/zhixing_productization_test.dart: feedback-specific review routing environment feedback changes both finding and thought route
+01:07 +605 -5: test/zhixing_tree/zhixing_productization_test.dart: feedback-specific review routing fear feedback becomes a reversible experiment, not blame
+01:07 +606 -5: loading test/zhixing_tree/zhixing_engines_test.dart
+01:08 +606 -5: test/zhixing_tree/zhixing_engines_test.dart: knowledge package loads V2 primary-source package with synchronized catalog hashes
+01:08 +607 -5: test/zhixing_tree/zhixing_engines_test.dart: knowledge package can retrieve both mechanisms and evidence locators
+01:08 +608 -5: test/zhixing_tree/zhixing_engines_test.dart: knowledge package groups 22 reviewed lenses into 17 complete systems on a Yangming-led evolution path
+01:08 +609 -5: test/zhixing_tree/zhixing_engines_test.dart: safety and COM-B diagnosis R4 and R3 block ordinary actions
+01:08 +610 -5: test/zhixing_tree/zhixing_engines_test.dart: safety and COM-B diagnosis low capacity restricts action to L1
+01:08 +611 -5: test/zhixing_tree/zhixing_engines_test.dart: safety and COM-B diagnosis missing time and tools diagnose opportunity, not vague motivation
+01:08 +612 -5: test/zhixing_tree/zhixing_engines_test.dart: thinker matching and prescription uses the documented weighted fit formula and selects direct lens
+01:08 +613 -5: test/zhixing_tree/zhixing_engines_test.dart: thinker matching and prescription prescription contains one observable action, stop rules and evidence
+01:08 +614 -5: test/zhixing_tree/zhixing_engines_test.dart: thinker matching and prescription thought stays in rationale while the main action remains observable
+01:08 +615 -5: test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules completion and learning rewards are separate and daily-capped
+01:08 +616 -5: test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules repetition reduces novelty but never below 0.7
+01:08 +617 -5: test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules tree vitality is geometric and coins cannot purchase XP
+01:08 +618 -5: test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules dormancy is recoverable and does not delete growth
+01:08 +619 -5: test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules garden contains 10 dimensions x 5 difficulties
+01:08 +620 -5: loading test/evidence_growth/evidence_growth_guidance_test.dart
+01:09 +620 -5: test/evidence_growth/evidence_growth_guidance_test.dart: (setUpAll)
+01:09 +620 -5: test/evidence_growth/evidence_growth_guidance_test.dart: BELIEF plans evidence then guides without mutating journey and caches identical context
+01:09 +621 -5: test/evidence_growth/evidence_growth_guidance_test.dart: GOAL plans evidence then guides without mutating journey and caches identical context
+01:09 +622 -5: test/evidence_growth/evidence_growth_guidance_test.dart: ACTION plans evidence then guides without mutating journey and caches identical context
+01:09 +623 -5: test/evidence_growth/evidence_growth_guidance_test.dart: OUTCOME plans evidence then guides without mutating journey and caches identical context
+01:09 +624 -5: test/evidence_growth/evidence_growth_guidance_test.dart: REVIEW plans evidence then guides without mutating journey and caches identical context
+01:09 +625 -5: test/evidence_growth/evidence_growth_guidance_test.dart: CHANGE plans evidence then guides without mutating journey and caches identical context
+01:09 +626 -5: test/evidence_growth/evidence_growth_guidance_test.dart: missing configuration and deferred readiness are explicitly local with zero AI calls
+01:09 +627 -5: test/evidence_growth/evidence_growth_guidance_test.dart: fabricated source, fact, and workflow jump are rejected
+01:09 +628 -5: test/evidence_growth/evidence_growth_guidance_test.dart: missing prerequisite yields a clarification with no formal intervention
+01:10 +629 -5: test/evidence_growth/evidence_growth_guidance_test.dart: new reality invalidates in-flight old guidance
+01:10 +630 -5: test/evidence_growth/evidence_growth_guidance_test.dart: goal carries confirmed belief knowledge into its confirmable AI proposal
+01:10 +631 -5: test/evidence_growth/evidence_growth_guidance_test.dart: multiple success criteria each need their own evidence
+01:10 +632 -5: test/evidence_growth/evidence_growth_guidance_test.dart: structure change requires a new evidence-backed plan before next action
+01:10 +633 -5: test/evidence_growth/evidence_growth_guidance_test.dart: self-label cannot start an intervention until concrete pattern is checked
+01:10 +634 -5: test/evidence_growth/evidence_growth_guidance_test.dart: confirmed details persist and constrain action instead of disappearing after guidance
+01:10 +635 -5: test/evidence_growth/evidence_growth_guidance_test.dart: guidance distinguishes AI analysis, user records and local fallback
+01:10 +636 -5: test/evidence_growth/evidence_growth_guidance_test.dart: (tearDownAll)
+01:10 +636 -5: loading test/evidence_growth/evidence_growth_knowledge_transform_test.dart
+01:11 +636 -5: test/evidence_growth/evidence_growth_knowledge_transform_test.dart: parses a complete 6-step result and round-trips through JSON
+01:11 +637 -5: test/evidence_growth/evidence_growth_knowledge_transform_test.dart: rejects incomplete results instead of inventing content
+01:11 +638 -5: test/evidence_growth/evidence_growth_knowledge_transform_test.dart: optional fields fall back to the method's own wording
+01:11 +639 -5: test/evidence_growth/evidence_growth_knowledge_transform_test.dart: prompt carries only title and story, for every bundled card
+01:11 +640 -5: loading test/evidence_growth/evidence_growth_forecast_science_test.dart
+01:12 +640 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: (setUpAll)
+01:12 +640 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: pooling requires same explicit event, window and context; no tag shortcut
+01:12 +641 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: calibration excludes duplicates, pending revisions, censoring, future data and different model
+01:12 +642 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: partial outcome only enters binary metrics with explicit frozen-event observation
+01:12 +643 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: calibration uses independent chronological holdout and improves a biased raw forecast
+01:12 +644 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: a correct raw forecast is retained when calibration offers no holdout improvement
+01:12 +645 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: overlapping trials cannot leak future outcomes into temporal validation
+01:12 +646 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: weight learner uses observed categories and refuses sparse or unhelpful data
+01:12 +647 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: reported Brier uses paired rows and probability bins keep sparse counts visible
+01:12 +648 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: typed JEV parser rejects non-finite values, unknown choices and missing answers
+01:12 +649 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: reference personality claims need actual source quotes; fabricated sources remain assumptions
+01:12 +650 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: name-only person forecast retains a conditional estimate with low confidence
+01:12 +651 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: same event intervention questions preserve constraints and include root alternatives
+01:12 +652 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: snapshot writes prevent overwriting, same-fact reruns and superseded outcome duplication
+01:12 +653 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: full prediction pipeline preserves event and partial work: failedStage=none
+01:12 +654 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: full prediction pipeline preserves event and partial work: failedStage=first
+01:12 +655 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: full prediction pipeline preserves event and partial work: failedStage=final
+01:12 +656 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: partial running report shows the preserved 85 percent and a clear JEV failure on a narrow screen
+01:13 +657 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: preliminary forecasts are excluded from formal prediction accuracy even when they carry an outcome
+01:13 +658 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: final optional adjudication rejects choices outside its requested enum
+01:13 +659 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: public biography lookup is bounded to public hosts, disambiguation is rejected
+01:13 +660 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: delayed outcome entry uses actual observation time to exclude hindsight
+01:13 +661 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: long root analysis fits final JEV transport without deleting candidates or changes
+01:13 +662 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: reference service truly calls LLM and JEV, persists separately and keeps raw sources
+01:13 +663 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: review persists disagreement semantics and cannot rewrite the original forecast
+01:13 +664 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: report renders on a narrow phone and preserves frozen success criterion
+01:13 +665 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: recording and correcting an outcome refreshes accuracy without rewriting prediction
+01:13 +666 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: reference entry supports world and person mode on a narrow phone
+01:13 +667 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: review saves actual observations without calling AI
+01:14 +668 -5: test/evidence_growth/evidence_growth_forecast_science_test.dart: (tearDownAll)
+01:14 +668 -5: loading test/evidence_growth/evidence_growth_v27_test.dart
+01:14 +668 -5: test/evidence_growth/evidence_growth_v27_test.dart: (setUpAll)
+01:14 +668 -5: test/evidence_growth/evidence_growth_v27_test.dart: confirmed change and incoming facts survive cycle rollover and compile into action
+01:15 +669 -5: test/evidence_growth/evidence_growth_v27_test.dart: new plan cannot inherit frozen ACT action; tasks store active plan provenance
+01:15 +670 -5: test/evidence_growth/evidence_growth_v27_test.dart: campaign collects three real trials before review without rewriting their predictions
+01:15 +671 -5: test/evidence_growth/evidence_growth_v27_test.dart: explicit refusal ends campaign early without declaring the parent goal failed
+01:15 +672 -5: test/evidence_growth/evidence_growth_v27_test.dart: manual learning boundary and restored bundle preserve collected samples
+01:15 +673 -5: test/evidence_growth/evidence_growth_v27_test.dart: past recovery time cannot authorize new high load; dependencies can be removed with history
+01:15 +674 -5: test/evidence_growth/evidence_growth_v27_test.dart: terminal journey rejects new evidence until explicitly reopened
+01:15 +675 -5: test/evidence_growth/evidence_growth_v27_test.dart: confirmed change survives gate and is compiled into the next action
+01:15 +676 -5: test/evidence_growth/evidence_growth_v27_test.dart: new plan cannot inherit old ACT conditions and tasks retain plan provenance
+01:15 +677 -5: test/evidence_growth/evidence_growth_v27_test.dart: three samples share one learning cycle; intermediate samples never fabricate reviews
+01:15 +678 -5: test/evidence_growth/evidence_growth_v27_test.dart: major rejection ends a sample window early without completing the parent
+01:15 +679 -5: test/evidence_growth/evidence_growth_v27_test.dart: user can close a campaign early and the synced bundle preserves samples
+01:15 +680 -5: test/evidence_growth/evidence_growth_v27_test.dart: new entry survives the gate and is explicitly consumed as context
+01:15 +681 -5: test/evidence_growth/evidence_growth_v27_test.dart: archived evidence cannot be rewritten through non-status operations
+01:16 +682 -5: test/evidence_growth/evidence_growth_v27_test.dart: portfolio patch cannot bypass dependency validation; invalid links can be removed
+01:16 +683 -5: test/evidence_growth/evidence_growth_v27_test.dart: expired recovery does not satisfy a high-load portfolio
+01:16 +684 -5: test/evidence_growth/evidence_growth_v27_test.dart: a stage transition requires gate and facts and never completes the goal
+01:16 +685 -5: test/evidence_growth/evidence_growth_v27_test.dart: episode evidence reaches the parent without changing its criteria or lifecycle
+01:16 +686 -5: test/evidence_growth/evidence_growth_v27_test.dart: three full node cycles reach only the finite evidence gate; reopening preserves achievement
+01:16 +687 -5: test/evidence_growth/evidence_growth_v27_test.dart: six entry fragments remain user data; retrospective outcome never creates a prediction
+01:16 +688 -5: test/evidence_growth/evidence_growth_v27_test.dart: exploration samples do not promote without a completed cycle and user choice
+01:16 +689 -5: test/evidence_growth/evidence_growth_v27_test.dart: continuous/recurring maintain, persist and recover without erasing stable history
+01:16 +690 -5: test/evidence_growth/evidence_growth_v27_test.dart: portfolio conserves budgets, attention and protected recovery, including actual task times
+01:16 +691 -5: test/evidence_growth/evidence_growth_v27_test.dart: two active goals cannot book the same time slot
+01:16 +692 -5: test/evidence_growth/evidence_growth_v27_test.dart: dependencies block prerequisites, distinguish external wait, and reject cycles
+01:16 +693 -5: test/evidence_growth/evidence_growth_v27_test.dart: rejection object determines local effects; ambiguous and proposal rejection never terminate parent
+01:16 +694 -5: test/evidence_growth/evidence_growth_v27_test.dart: deferred review survives restart with at most one opt-in reminder and no forced learning
+01:16 +695 -5: test/evidence_growth/evidence_growth_v27_test.dart: shared-body metric and ongoing withdrawal override goal and action plan
+01:16 +696 -5: test/evidence_growth/evidence_growth_v27_test.dart: shared participants cannot be impersonated; withdrawing keeps personal agency
+01:16 +697 -5: test/evidence_growth/evidence_growth_v27_test.dart: plan revision binds tasks to immutable versions, separate from goal version
+01:16 +698 -5: test/evidence_growth/evidence_growth_v27_test.dart: change attempt lapse retains baseline and previous observations; transferred assets need target evidence
+01:16 +699 -5: test/evidence_growth/evidence_growth_v27_test.dart: stale versions, duplicate actions and API gate bypass fail atomically
+01:16 +700 -5: test/evidence_growth/evidence_growth_v27_test.dart: goal bundles restore exploration and immutable records, reject stale remote overwrite
+01:16 +701 -5: test/evidence_growth/evidence_growth_v27_test.dart: pairwise orthogonal profile coverage and mandatory sensitive combinations preserve invariants
+01:16 +702 -5: test/evidence_growth/evidence_growth_v27_test.dart: home hides sensitive titles and binds a fresh input to an existing goal
+01:18 +703 -5: test/evidence_growth/evidence_growth_v27_test.dart: (tearDownAll)
+01:18 +703 -5: loading test/evidence_growth/evidence_growth_prediction_recovery_test.dart
+01:18 +703 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume llm_first after reopening only executes missing and dependent work
+01:19 +704 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume jev_first after reopening only executes missing and dependent work
+01:19 +705 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume llm_synthesis after reopening only executes missing and dependent work
+01:19 +706 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume jev_final after reopening only executes missing and dependent work
+01:19 +707 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: typed core batches remain bounded and validated successes survive process restart
+01:19 +708 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: healthy provider work beyond 120 seconds is not abandoned by a second deadline
+01:19 +709 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: changing the AI model invalidates its completed analysis and dependent stages
+01:19 +710 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: malformed synthesis remains partial and is retried without repeating the first passes: {"pattern_code":
+01:19 +711 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: malformed synthesis remains partial and is retried without repeating the first passes: {}
+01:19 +712 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: malformed synthesis remains partial and is retried without repeating the first passes: {"pattern_code":"no_major_theory_blocker","integrated_pattern":"明确","core_conclusions":[{"factor_ids":["invented"]}]}
+01:19 +713 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: report identifies AI authentication failures and never copies response bodies or credentials
+01:19 +714 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: final JEV review arriving after 30 seconds is accepted
+01:19 +715 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: empty optional questionnaire does not leave synthesis in a permanent retry loop
+01:19 +716 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: a legacy partial report resumes from its saved successful model results
+01:19 +717 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: cooldown keeps an already validated primary JEV estimate
+01:19 +718 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: reference forecast retry keeps the same person, works and LLM analysis without new API research
+01:19 +719 -5: test/evidence_growth/evidence_growth_prediction_recovery_test.dart: recorded outcomes stop resumption before any provider calls
+01:19 +720 -5: loading test/evidence_growth/evidence_growth_forecast_weights_test.dart
+01:20 +720 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: a later role batch failure keeps the primary probability and reuses completed batches on retry
+01:20 +721 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: malformed optional answers preserve the primary event and other valid factors
+01:20 +722 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: a different event cannot substitute for a missing frozen primary event
+01:20 +723 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: authentication errors retain the HTTP status for a clear recovery message
+01:20 +724 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: a healthy JEV response after eight seconds is still accepted
+01:20 +725 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: confirmed running questionnaire gets JEV probability and factor roles through the real wire schema
+01:21 +726 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: large action importance assessment is batched without losing core evidence
+01:21 +727 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: a severely adverse minor item cannot override important supports
+01:21 +728 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: many supports do not erase one evidenced necessary failed condition
+01:21 +729 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: unverified adverse hypotheses cannot impose a prerequisite ceiling
+01:21 +730 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: deduplication cannot hide a critical failed gate behind a supportive alias
+01:21 +731 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: unknown factors reduce evidence coverage without creating negative votes
+01:21 +732 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: overlapping theory constructs receive one budget
+01:21 +733 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: importance changes priority independently of the current support score
+01:21 +734 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: pooling is symmetric and does not systematically inflate predictions
+01:21 +735 -5: test/evidence_growth/evidence_growth_forecast_weights_test.dart: old or malformed weights are explicit fallbacks, not invented coefficients
+01:21 +736 -5: loading test/evidence_growth/evidence_growth_forecast_optimizer_test.dart
+01:21 +736 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: factor scores alone can never manufacture an event probability
+01:21 +737 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: factor support is diagnostic and does not inject ordinal values into probability
+01:21 +738 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: two dependent JEV passes share one model-family budget
+01:21 +739 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: importance alone cannot turn motivation or social approval into a necessary gate
+01:21 +740 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: an evidenced necessary prerequisite still restricts an optimistic pool
+01:21 +741 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: speculative prerequisites and minor obstacles cannot impose ceilings
+01:21 +742 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: convex event pooling treats optimistic and pessimistic changes symmetrically
+01:21 +743 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: temporally validated stacking exceeds the 10 percent target in a controlled simulation
+01:21 +744 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: a shifted chronological holdout rejects learned weights
+01:21 +745 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: the learner also favors JEV when its real-outcome component is better
+01:21 +746 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: fitting cannot use training outcomes observed after holdout predictions
+01:21 +747 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: unknown components and another optimizer version cannot train this pool
+01:21 +748 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: paired verification reports Brier, log loss and accuracy separately
+01:21 +749 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: no data, one outcome class and zero baseline loss never verify improvement
+01:21 +750 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: better binary accuracy alone does not verify the probability improvement target
+01:21 +751 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: prospective pairing excludes partial, hypothetical, censored and future trials
+01:21 +752 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: placeholder contracts cannot contaminate empirical accuracy or calibration
+01:21 +753 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: guidance prioritizes necessary prerequisites and keeps unknowns as questions
+01:21 +754 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: reference JEV state omits every peer score and behavioral conclusion
+01:21 +755 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: authored philosophy and past failure cannot prove a current failed prerequisite
+01:21 +756 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: reference can retain a clearly labelled LLM estimate after JEV failure
+01:21 +757 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: reference source excerpts include late relevant passages within a bounded payload
+01:21 +758 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: scenario sensitivity compares the same JEV review instead of the pooled score
+01:21 +759 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: new actionable guidance and verification render on a narrow phone
+01:22 +760 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: a later optional reference batch failure preserves the primary event
+01:22 +761 -5: test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: report shows insufficient verification and deterioration without inflated percentages
+01:22 +762 -5: loading test/evidence_growth/evidence_growth_reference_forecast_test.dart
+01:23 +762 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: reference report explains a critical gate even when its construct is deduplicated
+01:23 +763 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: successful works fallback is reported as available public evidence
+01:23 +764 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: public works lookup retains original work headings and rejects different people
+01:23 +765 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: work title and viewpoint need matching provided source passages
+01:23 +766 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: person forecast pools important supports rather than copying a low JEV event score
+01:23 +767 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: both screenshot scenarios yield rough results despite insufficient evidence
+01:23 +768 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: defaults transfer across actions and never erase a hand-edited criterion
+01:23 +769 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: public person automatically invokes Grok web search and retains real API citations
+01:23 +770 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: failed web tool falls back to alias-aware public search, without an identity checkbox
+01:23 +771 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: no sources or ambiguous people still get low-confidence estimates without invented biographies
+01:23 +772 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: world search failure retains estimate and excludes irrelevant person fields from AI input
+01:23 +773 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: known people are not publicly searched and technical failure is not called insufficient evidence
+01:23 +774 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: uncited model URLs are never promoted to retrieved sources; incomplete responses rejected
+01:23 +775 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: malformed probabilities cannot become available and reversed ranges use valid scenario envelope
+01:23 +776 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: one action auto-fills fields; manual edits survive a new action and submitting produces a result
+01:24 +777 -5: test/evidence_growth/evidence_growth_reference_forecast_test.dart: long reference analysis fits JEV transport while preserving the event and all factor claims
+01:24 +778 -5: loading test/evidence_growth/evidence_growth_closed_loop_test.dart
+01:25 +778 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: (setUpAll)
+01:25 +778 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S1 persists complete evidence-result-review-decision loop
+01:25 +779 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S2 persists complete evidence-result-review-decision loop
+01:25 +780 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S3 persists complete evidence-result-review-decision loop
+01:25 +781 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S4 persists complete evidence-result-review-decision loop
+01:25 +782 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S5 persists complete evidence-result-review-decision loop
+01:25 +783 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S6 persists complete evidence-result-review-decision loop
+01:25 +784 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S7 persists complete evidence-result-review-decision loop
+01:25 +785 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S8 persists complete evidence-result-review-decision loop
+01:25 +786 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: S9 persists complete evidence-result-review-decision loop
+01:25 +787 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: repeated start is idempotent and stale capture cannot double count
+01:25 +788 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: partial, not done and aborted remain distinct
+01:25 +789 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: OBSERVE keeps trial active and allows a later result
+01:25 +790 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: SQL and service both reject rewritten predictions
+01:25 +791 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: unconfirmed safety cannot create a trial
+01:25 +792 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: reminders deduplicate time windows and stop for closed trials
+01:25 +793 -5: test/evidence_growth/evidence_growth_closed_loop_test.dart: (tearDownAll)
+01:25 +793 -5: loading test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart
+01:26 +793 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: (setUpAll)
+01:26 +793 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: starts empty, then saving returns a saved entry with an id
+01:26 +794 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: re-converting appends and never overwrites earlier records
+01:26 +795 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: history is kept per card
+01:26 +796 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: saved content cannot be rewritten in place
+01:26 +797 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: an unreadable row is skipped but never deleted
+01:26 +798 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: records survive closing and reopening the database file
+01:26 +799 -5: test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: (tearDownAll)
+01:26 +799 -5: loading test/evidence_growth/evidence_growth_notification_link_test.dart
+01:27 +799 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: (setUpAll)
+01:27 +799 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: seven kinds carry the intended actionable node, independently of knowledge module
+01:27 +800 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: new grouped payload preserves distinct records, journey IDs and nodes
+01:27 +801 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: legacy trial and journey links remain supported; unrelated or invalid data rejected
+01:27 +802 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: trial notification opens that exact trial at its requested node without changing state
+01:27 +803 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: result already captured goes to readiness choice, never forces AI review
+01:27 +804 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: old cycle notification opens original archive rather than the new active trial
+01:27 +805 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: deleted and mismatched records never open an unrelated goal
+01:27 +806 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: deferred review and maintaining checks retain exact journey and readiness
+01:27 +807 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: planned notifications identify module, node, action and original prediction
+01:27 +808 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: grouped notification lets user choose the exact target and shows each node
+01:28 +809 -5: test/evidence_growth/evidence_growth_notification_link_test.dart: (tearDownAll)
+01:28 +809 -5: loading test/evidence_growth/health_diet_background_schedule_test.dart
+01:29 +809 -5: test/evidence_growth/health_diet_background_schedule_test.dart: background run respects settings rather than forcing disabled work
+01:29 +810 -5: test/evidence_growth/health_diet_background_schedule_test.dart: AI failure cannot break subsequent daily scheduling
+01:29 +811 -5: loading test/evidence_growth/evidence_growth_cycle_test.dart
+01:29 +811 -5: test/evidence_growth/evidence_growth_cycle_test.dart: (setUpAll)
+01:29 +811 -5: test/evidence_growth/evidence_growth_cycle_test.dart: confirmed learning versions the belief and links a re-diagnosed next round
+01:29 +812 -5: test/evidence_growth/evidence_growth_cycle_test.dart: unconfirmed AI belief is not inherited as a user conclusion
+01:29 +813 -5: test/evidence_growth/evidence_growth_cycle_test.dart: ended unstarted attempt adjusts now without fabricating a failed experiment
+01:29 +814 -5: test/evidence_growth/evidence_growth_cycle_test.dart: exit closes a route and cannot silently become its next trial
+01:30 +815 -5: test/evidence_growth/evidence_growth_cycle_test.dart: AI continuation receives actuals and confirmed learning and may switch modules
+01:30 +816 -5: test/evidence_growth/evidence_growth_cycle_test.dart: AI can interpret plain feedback without requiring manual outcome labels
+01:30 +817 -5: test/evidence_growth/evidence_growth_cycle_test.dart: ACT retains confirmed action even when the model tries to change conditions
+01:30 +818 -5: test/evidence_growth/evidence_growth_cycle_test.dart: fabricated decision quote cannot promote uncertain feedback into ACT
+01:30 +819 -5: test/evidence_growth/evidence_growth_cycle_test.dart: cycle presents the pending reality instead of six false completion badges
+01:30 +820 -5: test/evidence_growth/evidence_growth_cycle_test.dart: (tearDownAll)
+01:30 +820 -5: loading test/evidence_growth/evidence_growth_dao_test.dart
+01:31 +820 -5: test/evidence_growth/evidence_growth_dao_test.dart: (setUpAll)
+01:31 +820 -5: test/evidence_growth/evidence_growth_dao_test.dart: prediction-result-review-decision persists without changing public KB
+01:31 +821 -5: test/evidence_growth/evidence_growth_dao_test.dart: privacy switch removes raw user text
+01:31 +822 -5: test/evidence_growth/evidence_growth_dao_test.dart: EXIT preserves learning rather than becoming identity failure
+01:31 +823 -5: test/evidence_growth/evidence_growth_dao_test.dart: (tearDownAll)
+01:31 +823 -5: loading test/evidence_growth/evidence_growth_notification_handoff_test.dart
+01:32 +823 -5: test/evidence_growth/evidence_growth_notification_handoff_test.dart: cold native payload survives missed event, acknowledges exact token and opens once
+01:32 +824 -5: test/evidence_growth/evidence_growth_notification_handoff_test.dart: warm notification routing deduplicates same tap while accepting a new target
+01:32 +825 -5: loading test/evidence_growth/evidence_growth_six_features_test.dart
+01:33 +825 -5: test/evidence_growth/evidence_growth_six_features_test.dart: (setUpAll)
+01:33 +825 -5: test/evidence_growth/evidence_growth_six_features_test.dart: AI recognizes a non-keyword situation using recalled knowledge and exact user facts
+01:33 +826 -5: test/evidence_growth/evidence_growth_six_features_test.dart: semantic score cannot bypass source sufficiency or a risk stop
+01:33 +827 -5: test/evidence_growth/evidence_growth_six_features_test.dart: invented facts do not turn unsupported input into a formal action
+01:33 +828 -5: test/evidence_growth/evidence_growth_six_features_test.dart: provider vectors persist, resume, retrieve and invalidate changed knowledge
+01:33 +829 -5: test/evidence_growth/evidence_growth_six_features_test.dart: embedding service rejects corrupt dimensions and HTTP errors without a fake vector
+01:33 +830 -5: test/evidence_growth/evidence_growth_six_features_test.dart: Gemini uses native embedding authentication and query task type
+01:33 +831 -5: test/evidence_growth/evidence_growth_six_features_test.dart: all seven commitment levels have executable saved conditions and legacy mappings
+01:33 +832 -5: test/evidence_growth/evidence_growth_six_features_test.dart: premortem ranks risks and cannot omit a selected contingency
+01:33 +833 -5: test/evidence_growth/evidence_growth_six_features_test.dart: advanced workflows produce persisted real actions, feedback, review and a next decision
+01:33 +834 -5: test/evidence_growth/evidence_growth_six_features_test.dart: system scan requires all eight layers and a controllable single experiment
+01:33 +835 -5: test/evidence_growth/evidence_growth_six_features_test.dart: no action and a single negative result do not prove a hypothesis false
+01:33 +836 -5: test/evidence_growth/evidence_growth_six_features_test.dart: only linked repeated refutations after a real strategy change support EXIT
+01:34 +837 -5: test/evidence_growth/evidence_growth_six_features_test.dart: budget and next-round protection override premature encouragement
+01:34 +838 -5: test/evidence_growth/evidence_growth_six_features_test.dart: future observation remains OBSERVE unless the agreed signal is confirmed final
+01:34 +839 -5: test/evidence_growth/evidence_growth_six_features_test.dart: PREMORTEM page saves the inherited plan and applies the chosen next change
+01:35 +840 -5: test/evidence_growth/evidence_growth_six_features_test.dart: SYSTEM_SCAN page saves the inherited plan and applies the chosen next change
+01:35 +841 -5: test/evidence_growth/evidence_growth_six_features_test.dart: (tearDownAll)
+01:35 +841 -5: loading test/evidence_growth/evidence_growth_permission_test.dart
+01:36 +841 -5: test/evidence_growth/evidence_growth_permission_test.dart: already enabled module bypasses missing legacy permission method
+01:36 +842 -5: test/evidence_growth/evidence_growth_permission_test.dart: shared permission request recognizes already authorized app
+01:36 +843 -5: test/evidence_growth/evidence_growth_permission_test.dart: new authorization is rechecked against the module channel
+01:36 +844 -5: test/evidence_growth/evidence_growth_permission_test.dart: denied authorization does not enable reminders
+01:36 +845 -5: test/evidence_growth/evidence_growth_permission_test.dart: disabled module channel is not mistaken for enabled app permission
+01:36 +846 -5: loading test/evidence_growth/evidence_growth_discovery_test.dart
+01:37 +846 -5: test/evidence_growth/evidence_growth_discovery_test.dart: (setUpAll)
+01:37 +846 -5: test/evidence_growth/evidence_growth_discovery_test.dart: JSON handles provider prose, fences, quoted braces; incomplete JSON fails
+01:37 +847 -5: test/evidence_growth/evidence_growth_discovery_test.dart: successful cache survives instance recreation, preserves canonical keys and invalidates cycle/model
+01:37 +848 -5: test/evidence_growth/evidence_growth_discovery_test.dart: inflight requests coalesce while service failures remain retryable
+01:37 +849 -5: test/evidence_growth/evidence_growth_discovery_test.dart: LLM explores distinct needs, JEV sorts the top 20, no selection is made for user
+01:37 +850 -5: test/evidence_growth/evidence_growth_discovery_test.dart: JEV failure remains labelled LLM, does not manufacture JEV scores
+01:37 +851 -5: test/evidence_growth/evidence_growth_discovery_test.dart: candidate facts must be literal input excerpts
+01:37 +852 -5: test/evidence_growth/evidence_growth_discovery_test.dart: knowledge is ranked across a recalled pool and returns five with JEV provenance
+01:37 +853 -5: test/evidence_growth/evidence_growth_discovery_test.dart: solution excludes unselected needs and sources, covers every selected need
+01:37 +854 -5: test/evidence_growth/evidence_growth_discovery_test.dart: user confirmed choices persist; compiled action uses only chosen knowledge
+01:37 +855 -5: test/evidence_growth/evidence_growth_discovery_test.dart: six module stats count real node runs, successful AI drafts and knowledge usage separately
+01:37 +856 -5: test/evidence_growth/evidence_growth_discovery_test.dart: first journey route needs no previous learning; successful route cache preserves facts and frozen knowledge
+01:37 +857 -5: test/evidence_growth/evidence_growth_discovery_test.dart: review accepts exact excerpts but persists complete original facts; cache and manual refresh work
+01:37 +858 -5: test/evidence_growth/evidence_growth_discovery_test.dart: manual JEV rematch bypasses judge memory cache
+01:37 +859 -5: test/evidence_growth/evidence_growth_discovery_test.dart: new cycle uses its confirmed changed action instead of the initial discovery proposal
+01:37 +860 -5: test/evidence_growth/evidence_growth_discovery_test.dart: knowledge snapshots are canonical and a plan cannot smuggle an unselected source
+01:37 +861 -5: test/evidence_growth/evidence_growth_discovery_test.dart: form defaults contain valid numbers and AI fills optional fields with labelled, cached suggestions
+01:37 +862 -5: test/evidence_growth/evidence_growth_discovery_test.dart: all fields are prefilled; late AI cannot overwrite typed or existing user content
+01:38 +863 -5: test/evidence_growth/evidence_growth_discovery_test.dart: new discovery page exposes two explicit choice gates before solution
+01:40 +864 -5: test/evidence_growth/evidence_growth_discovery_test.dart: (tearDownAll)
+01:40 +864 -5: loading test/evidence_growth/evidence_growth_router_test.dart
+01:40 +864 -5: test/evidence_growth/evidence_growth_router_test.dart: unsupported non-empty input and Panic do not fall through to action
+01:40 +865 -5: test/evidence_growth/evidence_growth_router_test.dart: all source records have meaningful fields and registered operators
+01:40 +866 -5: test/evidence_growth/evidence_growth_router_test.dart: P0 knowledge has 60+ Tal nodes, expert layers, sources and cases
+01:40 +867 -5: test/evidence_growth/evidence_growth_router_test.dart: S1 routes through Tal to expected operator
+01:40 +868 -5: test/evidence_growth/evidence_growth_router_test.dart: S2 routes through Tal to expected operator
+01:40 +869 -5: test/evidence_growth/evidence_growth_router_test.dart: S3 routes through Tal to expected operator
+01:40 +870 -5: test/evidence_growth/evidence_growth_router_test.dart: S4 routes through Tal to expected operator
+01:40 +871 -5: test/evidence_growth/evidence_growth_router_test.dart: S5 routes through Tal to expected operator
+01:40 +872 -5: test/evidence_growth/evidence_growth_router_test.dart: S6 routes through Tal to expected operator
+01:40 +873 -5: test/evidence_growth/evidence_growth_router_test.dart: S7 routes through Tal to expected operator
+01:40 +874 -5: test/evidence_growth/evidence_growth_router_test.dart: S8 routes through Tal to expected operator
+01:40 +875 -5: test/evidence_growth/evidence_growth_router_test.dart: S9 routes through Tal to expected operator
+01:40 +876 -5: test/evidence_growth/evidence_growth_router_test.dart: N1 exhaustion recovers before five-minute action
+01:40 +877 -5: test/evidence_growth/evidence_growth_router_test.dart: N2 irreversible bet is blocked by Ruin Gate
+01:40 +878 -5: test/evidence_growth/evidence_growth_router_test.dart: N3 correlation does not become causation
+01:40 +879 -5: test/evidence_growth/evidence_growth_router_test.dart: N4 extensions never precede Tal
+01:40 +880 -5: test/evidence_growth/evidence_growth_router_test.dart: N5 insufficient evidence is explicit E0
+01:40 +881 -5: test/evidence_growth/evidence_growth_router_test.dart: professional boundary blocks action
+01:40 +882 -5: loading test/evidence_growth/evidence_growth_knowledge_runtime_test.dart
+01:41 +882 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: (setUpAll)
+01:41 +882 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: unknown text has no fabricated first-card fallback
+01:41 +883 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: context contains latest facts and cross-module candidates
+01:41 +884 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: selected action changes actual compiled instruction and sources
+01:41 +885 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: application cannot bypass action safety gate
+01:41 +886 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: all six stages store versioned sources; do not advance journey or claim mastery
+01:41 +887 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: missing boundaries, source version and transfer reasons are rejected
+01:41 +888 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: past step application queues next cycle and stale clients cannot overwrite it
+01:41 +889 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: node runs distinguish retrieved from selected; knowledge gap does not invent facts
+01:41 +890 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: sync bundle preserves knowledge provenance and excludes JEV secret
+01:41 +891 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: knowledge added during a live action cannot rewrite prediction; review can use new sources
+01:42 +892 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV native typed request and cache include context; never chat completions
+01:42 +893 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV malformed, incomplete, out-of-range responses fall back locally
+01:42 +894 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV overload cools down, empty key never sends request
+01:42 +895 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV action prediction follows the interpreted contract
+01:42 +896 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: action prediction records reality outcome for later personal calibration
+01:42 +897 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: learning opens all stages and browsing does not mark mastery
+01:43 +898 -5: test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: (tearDownAll)
+01:43 +898 -5: loading test/evidence_growth/evidence_growth_regression_test.dart
+01:44 +898 -5: test/evidence_growth/evidence_growth_regression_test.dart: (setUpAll)
+01:44 +898 -5: test/evidence_growth/evidence_growth_regression_test.dart: conflict resolution keeps both archives and applies the selected version (true)
+01:44 +899 -5: test/evidence_growth/evidence_growth_regression_test.dart: conflict resolution keeps both archives and applies the selected version (false)
+01:44 +900 -5: test/evidence_growth/evidence_growth_regression_test.dart: historical review cites the saved node snapshot after a knowledge upgrade
+01:44 +901 -5: test/evidence_growth/evidence_growth_regression_test.dart: explicit specialized practices keep WOOP and lifeline instructions from their own source
+01:44 +902 -5: test/evidence_growth/evidence_growth_regression_test.dart: a saved offline result survives database close and reopen
+01:44 +903 -5: test/evidence_growth/evidence_growth_regression_test.dart: a negative prediction occurring is not a positive outcome
+01:44 +904 -5: test/evidence_growth/evidence_growth_regression_test.dart: observe cycles never double count completion or outcome
+01:44 +905 -5: test/evidence_growth/evidence_growth_regression_test.dart: result measurements cannot overwrite setup or use invalid scales
+01:44 +906 -5: test/evidence_growth/evidence_growth_regression_test.dart: bounded retry rejects fabricated citations and rewritten predictions
+01:44 +907 -5: test/evidence_growth/evidence_growth_regression_test.dart: ADJUST carries the chosen variable into a linked next trial
+01:44 +908 -5: test/evidence_growth/evidence_growth_regression_test.dart: Bennett and Five-Minute are searchable with physical sources
+01:45 +909 -5: test/evidence_growth/evidence_growth_regression_test.dart: manifest integrity failure retains stable KB; rollback preserves trial snapshot
+01:45 +910 -5: test/evidence_growth/evidence_growth_regression_test.dart: sync retry is idempotent and conflicting observations are preserved
+01:45 +911 -5: test/evidence_growth/evidence_growth_regression_test.dart: network failure leaves trial pending and a successful retry acknowledges it
+01:45 +912 -5: test/evidence_growth/evidence_growth_regression_test.dart: core API creates, records, reviews and decides with user isolation
+01:45 +913 -5: test/evidence_growth/evidence_growth_regression_test.dart: HTTP API rejects missing auth and replays an idempotent creation
+01:45 +914 -5: test/evidence_growth/evidence_growth_regression_test.dart: (tearDownAll)
+01:45 +914 -5: loading test/evidence_growth/evidence_growth_action_prediction_test.dart
+01:46 +914 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: (setUpAll)
+01:46 +914 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: theory catalog matches source-theory core constructs
+01:46 +915 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: cross-theory aliases do not collapse distinct constructs
+01:46 +916 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: major behavior theory packs expose deduplicated standard factors
+01:46 +917 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: theory catalog preserves source-theory construct coverage
+01:46 +918 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV theory prefill uses typed choices for theory options
+01:46 +919 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: confirmed theory options use ordinal levels, not interval weights
+01:46 +920 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV action request explicitly honors confirmed theory answers
+01:46 +921 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV first-pass request strips oversized UI/theory metadata
+01:46 +922 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV theory roles can be split into compact batches without dropping answers
+01:46 +923 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV bottleneck noul is limited to direct behavior and execution factors
+01:46 +924 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV request strips pseudo-scores and keeps unselected factors missing
+01:46 +925 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: original work-case predictor pool is preserved for dynamic reuse
+01:46 +926 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV action workflow adapts to the interpreted action profile
+01:46 +927 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV parses independent roles for user-confirmed theory factors
+01:46 +928 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV dynamic factor selection rejects steps and rewards incremental predictors
+01:46 +929 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV final adjudication independently judges LLM theory conclusions
+01:46 +930 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV final adjudication keeps usable core output when an optional verdict is malformed
+01:46 +931 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV final adjudication request omits duplicated full theory-answer payload
+01:46 +932 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: diagnostic evidence criteria keep missing separate from mixed
+01:46 +933 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: action prediction history stores outcomes for later calibration
+01:46 +934 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: diagnostic model distinguishes current bottleneck from repeated weakness
+01:46 +935 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: prediction bands remain descriptive rather than guaranteed
+01:46 +936 -5: test/evidence_growth/evidence_growth_action_prediction_test.dart: (tearDownAll)
+01:46 +936 -5: loading test/evidence_growth/evidence_growth_reminder_test.dart
+01:46 +936 -5: test/evidence_growth/evidence_growth_reminder_test.dart: (setUpAll)
+01:46 +936 -5: test/evidence_growth/evidence_growth_reminder_test.dart: creation commits five-trigger outbox inputs and source provenance
+01:47 +937 -5: test/evidence_growth/evidence_growth_reminder_test.dart: start removes start alarm and recovery end uses the chosen window exactly once
+01:47 +938 -5: test/evidence_growth/evidence_growth_reminder_test.dart: unstarted trial records nonaction without fabricating a start and cancels due alarms
+01:47 +939 -5: test/evidence_growth/evidence_growth_reminder_test.dart: OBSERVE creates a fresh window and never reactivates the delivered one
+01:47 +940 -5: test/evidence_growth/evidence_growth_reminder_test.dart: third EXIT on the same primary node triggers once; ADJUST breaks the sequence
+01:47 +941 -5: test/evidence_growth/evidence_growth_reminder_test.dart: permissions can be retried without duplicate IDs and per-trial opt out persists
+01:47 +942 -5: test/evidence_growth/evidence_growth_reminder_test.dart: missing result delay changes alarms without rewriting the original prediction window
+01:47 +943 -5: test/evidence_growth/evidence_growth_reminder_test.dart: one-hour missing reminder follows the selected fourteen-day window, not app opening
+01:47 +944 -5: test/evidence_growth/evidence_growth_reminder_test.dart: repeats survive refresh, interval changes, toggle and feedback cancellation
+01:47 +945 -5: test/evidence_growth/evidence_growth_reminder_test.dart: late delivery skips missed slots and old window history does not affect OBSERVE
+01:47 +946 -5: test/evidence_growth/evidence_growth_reminder_test.dart: upgrade recovers the chain after an old single reminder was delivered
+01:47 +947 -5: test/evidence_growth/evidence_growth_reminder_test.dart: new OBSERVE window restarts missing feedback timing and cancels old continuation
+01:47 +948 -5: test/evidence_growth/evidence_growth_reminder_test.dart: postponing a start moves its alarm while preserving the original observation window
+01:47 +949 -5: test/evidence_growth/evidence_growth_reminder_test.dart: (tearDownAll)
+01:47 +949 -5: loading test/xiangji_future_strategist/xiangji_rev3_widget_test.dart
+01:48 +949 -5: test/xiangji_future_strategist/xiangji_rev3_widget_test.dart: TC-UX-R3-01/accessible natural-language entry at 200% text
+01:48 +950 -5: test/xiangji_future_strategist/xiangji_rev3_widget_test.dart: TC-UX-V62 practical result defaults to choice and one action
+01:49 +951 -5: test/xiangji_future_strategist/xiangji_rev3_widget_test.dart: TC-UX-V63 guided case rehearses the complete useful loop
+01:49 +952 -5: loading test/xiangji_future_strategist/xiangji_rev3_sck_test.dart
+01:49 +952 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-SCK / AskUserGuard only Missing + HighImpact + CannotInfer may ask
+01:49 +953 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-SCK / AskUserGuard reversible information gap becomes a scout, not a form
+01:49 +954 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-SCK / AskUserGuard TC-AI-004/006 asks only the EVSI-highest single question
+01:49 +955 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation an explicit new need outranks facts embedded in the same sentence
+01:49 +956 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation A03 judgment precedes Solver and major routes include red team
+01:49 +957 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-AI-001/002 natural language yields a full prefilled draft
+01:49 +958 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation G8 local fallback changes Gap, mechanism and prediction by case
+01:49 +959 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation T-SCK-02 same work label but different state changes bottleneck
+01:49 +960 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation irreversible urgent decision with no boundary asks one question
+01:49 +961 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-SCK-018 reality contradiction is not rewritten as support
+01:49 +962 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation all eighteen SCK rules are executable kernel entries
+01:49 +963 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-SCK-002 keeps observation separate from intention attribution
+01:49 +964 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-SCK-003/005 compares concrete causes before abstraction
+01:49 +965 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-PS-R3-01 audits the hidden premise before perseverance training
+01:49 +966 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-ST-R3-01 can recommend ending a low-value fight
+01:49 +967 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation AI context cannot promote itself into a major user decision
+01:49 +968 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-AI-010 extracts reality facts, experience and interpretation
+01:49 +969 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation A02 causal work and A12 action compression survive merge
+01:49 +970 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-AI-011 high-value background route is A14 then A00
+01:49 +971 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: SituationModel state machine judgment and grounding are explicit gates
+01:49 +972 -5: test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: SituationModel state machine new contradictory reality forces STALE first
+01:49 +973 -5: loading test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart
+01:50 +973 -5: test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart: V5 Schopenhauer L0 catalog keeps the complete frozen concept core
+01:50 +974 -5: test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart: product operationalizations never masquerade as original terminology
+01:50 +975 -5: test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart: every runtime method is constrained by L0 and every core is reachable
+01:50 +976 -5: loading test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart
+01:50 +976 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-01 separates experience and interpretation authority
+01:50 +977 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-02 preserves feeling and demotes external cause
+01:50 +978 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-03 creates distinct causal mechanisms and a test
+01:50 +979 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-04 decisive difference changes Gap and invalidates reuse
+01:50 +980 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-05 keeps a not-yet-named experience without forced label
+01:50 +981 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-06 counterexample shrinks concept scope
+01:50 +982 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-07 weak ground lowers action commitment
+01:50 +983 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-08 systematicity never raises epistemic status
+01:50 +984 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-09 reality mismatch changes downstream state
+01:50 +985 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-10 path-as-goal creates a user decision gate
+01:50 +986 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-11 same Goal but different S0 selects different KeyGap
+01:50 +987 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-12 missing precondition becomes recursive subgoal
+01:50 +988 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-13 preserves prediction and updates H/Gap on contrary reality
+01:50 +989 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-14 identifies earliest failed layer and reroutes
+01:50 +990 -5: test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: contextual reveal shows at most 3 and Action Mode shows none
+01:50 +991 -5: loading test/xiangji_future_strategist/xiangji_privacy_guard_test.dart
+01:51 +991 -5: test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: persisted problem identity does not disable configured AI
+01:51 +992 -5: test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: strongly sensitive categories require explicit consent
+01:51 +993 -5: test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: direct identifiers are redacted recursively before cloud use
+01:51 +994 -5: test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: agent cloud routing regression normal persisted problem invokes configured model without consent
+01:51 +995 -5: test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: agent cloud routing regression detected sensitive category stays local until consent
+01:51 +996 -5: loading test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart
+01:52 +996 -5: test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: V5 Schopenhauer L0 architecture is visible and accessible
+01:52 +997 -5: test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: G3/DOC-08 solver cockpit is first-class and uses user language
+01:52 +998 -5: test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: DOC-08 cockpit remains usable at 200 percent text
+01:52 +999 -5: test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: DOC-08 changed method exposes trigger and before/after effect
+01:53 +1000 -5: test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: AI participation is visible as auditable product work
+01:53 +1001 -5: test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: local fallback is never presented as cloud AI
+01:53 +1002 -5: loading test/xiangji_future_strategist/xiangji_rev3_database_test.dart
+01:53 +1002 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: Rev3 creates all AI work-domain entities and SCK-001..018
+01:53 +1003 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: SituationModel is versioned and latest version remains explicit
+01:54 +1004 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: user correction marks every downstream AI object STALE
+01:54 +1005 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: AskUserGuard persistence selects at most one question per round
+01:54 +1006 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: ConceptVersion preserves support, counterexample and supersession
+01:54 +1007 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: SCK-018 always creates AIError even in deterministic local mode
+01:54 +1008 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: TC-AI-011 two failed cycles create one auditable A14 to A00 council
+01:54 +1009 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: G6: three Need -> analysis -> Action -> Reality -> Update loops
+01:55 +1010 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: legacy Rev2 tables receive all Rev3 columns without data reset
+01:55 +1011 -5: test/xiangji_future_strategist/xiangji_rev3_database_test.dart: module export advertises Rev5.2 without losing legacy tables
+01:55 +1012 -5: loading test/xiangji_future_strategist/xiangji_state_machine_test.dart
+01:56 +1012 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: Rev5.2 restores the complete A00-A19 agent registry
+01:56 +1013 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-EP-014/015 complexity never raises certainty
+01:56 +1014 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-EP-016 valid inference cannot rescue ungrounded premise
+01:56 +1015 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-EP-017 direct perception keeps observation conditions
+01:56 +1016 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-KB-025 semantic recall cannot become evidence
+01:56 +1017 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-PS: problem state machine CAPTURED cannot jump to EXECUTING
+01:56 +1018 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-PS: problem state machine PS-010 reality result is required before verifying
+01:56 +1019 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-PS: problem state machine RESOLVED needs reality and success criteria
+01:56 +1020 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-ST: campaign gates formal execution requires all six gates
+01:56 +1021 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-ST: campaign gates closing a campaign requires battle review
+01:56 +1022 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-KB: provider and candidate lifecycle TC-KB-010 cannot claim READY without verified persistence
+01:56 +1023 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-KB: provider and candidate lifecycle TC-KB-015 provider deletion requires remote confirmation
+01:56 +1024 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-KB: provider and candidate lifecycle TC-KB-018 one AI inference cannot become a stable rule
+01:56 +1025 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-LG/AC: grounding and monitoring concept cycle is detected separately from reality spring
+01:56 +1026 -5: test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-LG/AC: grounding and monitoring AC-006 high-risk irreversible debt creates RED freeze
+01:56 +1027 -5: loading test/xiangji_future_strategist/xiangji_knowledge_router_test.dart
+01:56 +1027 -5: test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: TC-KB-005 route order starts with reality and offline K0
+01:57 +1028 -5: test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: TC-KB-011 original-source request returns traceable locator
+01:57 +1029 -5: test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: TC-KB-016 expired provider file is rejected, never silently reused
+01:57 +1030 -5: test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: K0 risk gate is executable with no network or provider
+01:57 +1031 -5: loading test/xiangji_future_strategist/xiangji_method_catalog_test.dart
+01:58 +1031 -5: test/xiangji_future_strategist/xiangji_method_catalog_test.dart: Rev5.2 catalog preserves all 14 distinct product concepts
+01:58 +1032 -5: test/xiangji_future_strategist/xiangji_method_catalog_test.dart: persistent solver concepts are not misattributed as philosophy
+01:58 +1033 -5: test/xiangji_future_strategist/xiangji_method_catalog_test.dart: bundled JSON registry matches the runtime catalog
+01:58 +1034 -5: loading test/xiangji_future_strategist/xiangji_database_test.dart
+01:58 +1034 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-001/002 seeds protected offline K0 with source locators
+01:58 +1035 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-REV52 seeds the complete method and rule inventory
+01:59 +1036 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-V63-GUIDE seeds cases, feature grounding and user preferences
+01:59 +1037 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-V62-ACTION user-selected burden becomes the authoritative action
+01:59 +1038 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-PS-001 preserves user raw material and derived layers separately
+01:59 +1039 -5: test/xiangji_future_strategist/xiangji_database_test.dart: rapid problem transitions keep every audit event without id collision
+01:59 +1040 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-EP-008 deleting sole evidence downgrades high impact claim
+01:59 +1041 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-025 database rejects embedding as formal grounding
+01:59 +1042 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-LG-005 action DONE never fabricates RealityResult
+01:59 +1043 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-013 one local source can map to multiple providers
+01:59 +1044 -5: test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-018 candidate knowledge starts outside stable personal rules
+02:00 +1045 -5: test/xiangji_future_strategist/xiangji_database_test.dart: data reset stays inside module and restores protected K0
+02:00 +1046 -5: test/xiangji_future_strategist/xiangji_database_test.dart: T-MEC-DB atomically persists SolverSnapshot and MethodEvent
+02:00 +1047 -5: test/xiangji_future_strategist/xiangji_database_test.dart: Method Effect gate rejects explanation-only MethodEvent
+02:00 +1048 -5: loading test/xiangji_future_strategist/xiangji_practical_product_test.dart
+02:00 +1048 -5: test/xiangji_future_strategist/xiangji_practical_product_test.dart: V6.2 default experience is one closed reality-producing loop
+02:00 +1049 -5: test/xiangji_future_strategist/xiangji_practical_product_test.dart: every visible feature explains use, output and knowledge grounding
+02:00 +1050 -5: test/xiangji_future_strategist/xiangji_practical_product_test.dart: three default cases preserve the complete action-reality-revision trace
+02:00 +1051 -5: test/xiangji_future_strategist/xiangji_practical_product_test.dart: action burden follows current energy without changing the real problem
+02:00 +1052 -5: test/xiangji_future_strategist/xiangji_practical_product_test.dart: offline usage assistant routes real questions to existing functions
+02:00 +1053 -5: test/xiangji_future_strategist/xiangji_practical_product_test.dart: usage assistant answers the current action instead of reciting a guide
+02:00 +1054 -5: test/xiangji_future_strategist/xiangji_practical_product_test.dart: motivation boundary supports autonomy and rejects coercive dependency
+02:00 +1055 -5: Some tests failed.

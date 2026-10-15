@@ -21,6 +21,7 @@ AI 配置和提醒同步是可选能力：它们失败时继续开放已成功�
 - `android_sqlite_contract_test.dart` 先让原 `execute` 调用在 Android 通道约束下失败，再验证修复后的首次建库及撤回/删除。它是平台契约模拟，不能冒充真机测试。
 - `integration_test/will_mirror_storage_test.dart` 使用实际 Android sqflite 和 Keystore；覆盖首次打开 UI、加密写入、关闭重开、AAD 不匹配时保留记录、撤回历史和删除。使用独立测试数据库，绝不删除正式数据库或 Keystore alias。
 - CI 新增 Android API 26 / 35，先运行原生存储测试，再运行 `MIRROR_UPGRADE_PHASE=seed` 与 `verify` 两次测试 APK 安装，验证同签名覆盖安装后的密钥、课题、历史及设置。其数据格式与原 v2.8 相同；不等同于用户那台真机和原发布签名的验收。
+- 覆盖安装通过 `bash tools/will_mirror/android_storage_probe.sh emulator-5554` 执行，使用 `flutter drive --keep-app-running` 并在各阶段 force-stop。不能连续使用 `flutter test` 模拟升级，因为 Flutter 3.35 的该测试运行器会在每次结束时卸载应用；初轮 CI 已据此暴露并修正测试方案。seed 后另检查测试库仍存在，verify 再读出真实密文与设置。只在独立测试模拟器执行。
 
 实际执行结果继续记录在 [VALIDATION.md](VALIDATION.md)。完整 T1–T366、真实模型质量、通知/省电/重启和厂商设备矩阵仍按原验收索引分别执行，不因本次修复全部标记通过。
 

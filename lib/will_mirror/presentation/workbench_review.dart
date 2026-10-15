@@ -386,28 +386,43 @@ extension _ReviewViews on _CaseWorkbenchState {
         phase: TimePhase.t3));
   }
 
-  MirrorNode? _applicablePrinciple() {
+  MirrorNode? _applicablePrinciple({bool atField = false}) {
     final application = f.latest(NodeKind.principleApplication);
     if (application?.text('exposure') == 'declined') return null;
     if (application != null) {
       final p = c.resolve(application.text('principleId'));
-      if (p?.usable == true) return p;
+      final adopted = {'accepted', 'scheduled', 'delivered'}
+          .contains(application.text('exposure'));
+      if ((!atField || adopted) && p != null && EvidenceRules.principleCanBePrepared(p, f,
+          authorized: c.authorizedHistory)) return p;
     }
+    // Showing a draft at T1 must not imply it was adopted for this occasion.
+    if (atField) return null;
     final matches = f
         .current(NodeKind.principleMatch)
         .where((n) => {'applicable', 'conditional'}.contains(n.text('fit')));
     for (final match in matches) {
       final p = c.resolve(match.text('principleId'));
-      if (p?.usable == true && p?.status == NodeStatus.accepted) return p;
+      if (p != null && EvidenceRules.principleCanBePrepared(p, f,
+          authorized: c.authorizedHistory)) return p;
     }
     final own = f.current(NodeKind.principle);
-    return own.isEmpty ? null : own.first;
+    if (own.isNotEmpty) return own.first;
+    final earlier = f.current(NodeKind.principle, allEpisodes: true).where((p) =>
+        EvidenceRules.principleCanBePrepared(p, f,
+            authorized: c.authorizedHistory));
+    return earlier.isEmpty ? null : earlier.first;
   }
 
   Widget _principleCard({bool atField = false}) {
-    final principle = _applicablePrinciple();
+    final principle = _applicablePrinciple(atField: atField);
     if (principle == null) return const SizedBox.shrink();
-    final application = f.latest(NodeKind.principleApplication);
+    final latest = f.latest(NodeKind.principleApplication);
+    final application = latest?.text('principleId') == principle.id ? latest : null;
+    final canAdopt = EvidenceRules.principleCanBePrepared(principle, f,
+        authorized: c.authorizedHistory, requireAccepted: false);
+    final adopted = {'accepted', 'scheduled', 'delivered'}
+        .contains(application?.text('exposure'));
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: MirrorCard(
@@ -429,11 +444,14 @@ extension _ReviewViews on _CaseWorkbenchState {
               Text('不适用时：${principle.text('exceptionRule')}'),
               Text('仍需验证：${principle.text('nextTest')}'),
               _sourceLink(principle, label: '实际出处、反例和适用条件'),
+              if (!atField && !canAdopt)
+                const Text('适用条件或安全限制需要重新核实。可以修改这条原则，也可以不使用原则继续。'),
               if (!atField)
                 Wrap(spacing: 6, runSpacing: 4, children: [
                   FilledButton.tonal(
-                      onPressed: () => _adoptPrinciple(principle),
-                      child: Text(application?.text('exposure') == 'accepted'
+                      onPressed: canAdopt && !adopted
+                          ? () => _adoptPrinciple(principle) : null,
+                      child: Text(adopted
                           ? '已采用为本次参考'
                           : '采用为本次参考')),
                   TextButton(
@@ -468,6 +486,7 @@ extension _ReviewViews on _CaseWorkbenchState {
     await _act(() async {
       if (principle.caseId == f.id && principle.status != NodeStatus.accepted)
         await c.feedback(f.id, principle.id, 'accept');
+      final prior = f.latest(NodeKind.principleApplication);
       await c.recordNode(
           f.id,
           NodeKind.principleApplication,
@@ -483,13 +502,15 @@ extension _ReviewViews on _CaseWorkbenchState {
             'detail': '本人选为这次参考，尚无实际应用证据'
           },
           evidenceIds: principle.evidenceIds,
-          links: [principle.id]);
+          links: [principle.id],
+          revisionOf: prior?.text('principleId') == principle.id ? prior?.id : null);
     });
   }
 
   Future<void> _declinePrinciple(MirrorNode principle, String action) async {
     await _act(() async {
-      final application = f.latest(NodeKind.principleApplication);
+      final latest = f.latest(NodeKind.principleApplication);
+      final application = latest?.text('principleId') == principle.id ? latest : null;
       await c.recordNode(
           f.id,
           NodeKind.principleApplication,
@@ -575,7 +596,8 @@ extension _ReviewViews on _CaseWorkbenchState {
   Future<void> _applicationOutcome(MirrorNode application, String state) async {
     final details = await askText(context,
         title: '原则应用与结果分别记录',
-        questions: [const TextQuestion('detail', '具体用了什么做法，或为什么尚不清楚？')]);
+        questions: [TextQuestion('detail', '具体用了什么做法，或为什么尚不清楚？',
+            required: state == 'applied_self_report')]);
     if (details == null) return;
     await _updateApplication(
         application,

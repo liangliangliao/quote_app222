@@ -114,6 +114,7 @@ class EvidenceRules {
         'interventionIds': NodeKind.intervention,
         'decisionId': NodeKind.decision,
         'principleId': NodeKind.principle,
+        'principleVersion': NodeKind.principle,
         'insightIds': NodeKind.insight,
         'capabilityIds': NodeKind.capability,
         'requirementId': NodeKind.taskRequirement,
@@ -297,12 +298,85 @@ class EvidenceRules {
           node.evidenceIds.isEmpty) {
         throw const MirrorProblem('没有证据，不能宣布永久或硬性限制');
       }
-      if (node.kind == NodeKind.principleApplication &&
-          node.text('application') == 'applied_verified' &&
-          node.origin != EvidenceOrigin.authorizedObservation) {
-        throw const MirrorProblem('本人反馈只能标为自述采用，不能冒充外部核实');
+      if (node.kind == NodeKind.principleApplication) {
+        final principle = all[node.text('principleId')];
+        final prior = all[node.revisionOf];
+        if (node.text('principleVersion') != node.text('principleId') ||
+            (prior != null &&
+                prior.text('principleVersion') != node.text('principleVersion'))) {
+          throw const MirrorProblem('应用记录必须保留当时的原则版本，不能替换成后来修订的版本');
+        }
+        final actualApplication =
+            {'applied_self_report', 'applied_verified'}.contains(node.text('application'));
+        if (actualApplication) {
+          final observed = [
+            ...node.strings('attemptIds'),
+            ...node.strings('observationIds')
+          ].map((id) => all[id]).any((n) =>
+              n != null && n.usable && n.isFact &&
+              n.caseId == file.id && n.episodeId == file.episodeId &&
+              (n.kind == NodeKind.attempt
+                  ? !{'unknown', 'not_started'}.contains(n.text('stage'))
+                  : n.kind == NodeKind.observation &&
+                      n.text('actionState') != 'unknown'));
+          if (node.phase.index < TimePhase.t2.index ||
+              node.text('detail').trim().isEmpty || !observed) {
+            throw const MirrorProblem('实际采用需要具体做法和本轮真实尝试或观察；计划、打开和未知不算应用证据');
+          }
+          if (node.text('application') == 'applied_verified' &&
+              node.origin != EvidenceOrigin.authorizedObservation) {
+            throw const MirrorProblem('本人反馈只能标为自述采用，不能冒充外部核实');
+          }
+        }
+        if (node.text('recall') == 'explicitly_recalled' &&
+            file.phase == TimePhase.t0) {
+          throw const MirrorProblem('请先核实实际现场条件；收到提醒或打开卡片不等于现场想起');
+        }
+        // Later reports may refer to the historical version actually used.
+        // A new adoption or pre-action cue must use an accepted, current and
+        // safe principle; a new version never rewrites the old application.
+        final adopting = {'accepted', 'scheduled', 'delivered'}
+            .contains(node.text('exposure'));
+        if (adopting && (prior == null || node.phase.index < TimePhase.t2.index) &&
+            (principle == null ||
+                !principleCanBePrepared(principle, file, authorized: authorized))) {
+          throw const MirrorProblem('这条原则尚未认可、已修订或需要重新核实适用条件，不能作为当前行动提示');
+        }
       }
     }
+  }
+
+  static bool principleCanBePrepared(MirrorNode principle, CaseFile file,
+      {Map<String, MirrorNode> authorized = const {},
+      bool requireAccepted = true}) {
+    final all = {...authorized, for (final n in file.nodes) n.id: n};
+    final current = all[principle.id];
+    if (current == null) return false;
+    principle = current;
+    if (principle.kind != NodeKind.principle ||
+        (requireAccepted
+            ? principle.status != NodeStatus.accepted
+            : !{NodeStatus.draft, NodeStatus.accepted}.contains(principle.status)) ||
+        principle.text('riskGate') != 'clear' ||
+        principle.text('maturity') == 'needs_review' ||
+        all.values.any((n) => n.revisionOf == principle.id)) return false;
+    if (file.latest(NodeKind.reappraisal)?.flag('safetyChanged') == true) {
+      return false;
+    }
+    if (principle.dependencies.any((id) => all[id]?.usable != true)) return false;
+    final matches = file.current(NodeKind.principleMatch)
+        .where((n) => n.text('principleId') == principle.id);
+    if (matches.any((n) =>
+        !{'applicable', 'conditional'}.contains(n.text('fit')) ||
+        n.text('riskGate') != 'clear')) return false;
+    final application = file.latest(NodeKind.principleApplication);
+    if (application?.text('principleId') == principle.id &&
+        (application?.text('exposure') == 'declined' ||
+            {'context_changed', 'rejected'}.contains(application?.text('recall')))) {
+      return false;
+    }
+    // Cross-case use always requires a current, explicit context match.
+    return principle.caseId == file.id || matches.isNotEmpty;
   }
 
   static Set<String> actualRoots(MirrorNode node, Map<String, MirrorNode> all) {
@@ -563,6 +637,15 @@ class CaseCommands {
     final scene = file.node(body['sceneId'] as String?);
     if (scene != null && (!scene.usable || scene.status != NodeStatus.accepted))
       throw const MirrorProblem('预演尚未认可或已经失效');
+    final principleId = body['principleId'] as String?;
+    if (principleId != null) {
+      final principle = file.node(principleId) ?? authorized[principleId];
+      if (principle == null ||
+          !EvidenceRules.principleCanBePrepared(principle, file,
+              authorized: authorized)) {
+        throw const MirrorProblem('这条原则需要重新核实，不能封存为现场提示；也可以不使用原则继续');
+      }
+    }
     final prior = file.latest(NodeKind.plan);
     final now = clock().toUtc();
     final plan = record(file, NodeKind.plan, {...body, 'userConfirmed': true},

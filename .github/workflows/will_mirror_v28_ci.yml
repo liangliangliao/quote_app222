@@ -8,6 +8,8 @@ on:
       - 'android/app/src/main/kotlin/com/example/quote_app/WillMirrorV28Vault.kt'
       - 'test/will_mirror/**'
       - 'integration_test/will_mirror_storage_test.dart'
+      - 'test_driver/will_mirror_storage_driver.dart'
+      - 'tools/will_mirror/**'
       - 'server/will_mirror/**'
       - 'docs/will_mirror/**'
       - 'pubspec.yaml'
@@ -35,7 +37,7 @@ jobs:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev fonts-noto-cjk
       - run: flutter pub get
-      - run: flutter analyze --no-pub lib/will_mirror test/will_mirror
+      - run: flutter analyze --no-pub lib/will_mirror test/will_mirror integration_test/will_mirror_storage_test.dart test_driver/will_mirror_storage_driver.dart
       - run: flutter test --no-pub --reporter expanded test/will_mirror
       - run: pip install -r server/will_mirror/requirements.txt
       - run: pytest -q server/will_mirror/test_contract.py
@@ -71,7 +73,4 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: |
-            flutter test integration_test/will_mirror_storage_test.dart -d emulator-5554 --reporter expanded
-            flutter test integration_test/will_mirror_storage_test.dart -d emulator-5554 --dart-define=MIRROR_UPGRADE_PHASE=seed --reporter expanded
-            flutter test integration_test/will_mirror_storage_test.dart -d emulator-5554 --dart-define=MIRROR_UPGRADE_PHASE=verify --reporter expanded
+          script: bash tools/will_mirror/android_storage_probe.sh emulator-5554
