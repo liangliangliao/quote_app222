@@ -30,7 +30,7 @@ const stageTitles = <AnalysisStage, String>{
   AnalysisStage.scene: '把认可的理由变成简短预演',
   AnalysisStage.review: '对照事实与原先判断',
   AnalysisStage.learning: '整理经验、反例和可用原则',
-  AnalysisStage.reappraise: '根据现场新事实重估',
+  AnalysisStage.reappraise: '根据当前证据重估理由与路线',
 };
 
 const stageKinds = <AnalysisStage, Set<NodeKind>>{
@@ -155,6 +155,7 @@ route是将来的可考虑方案，不能声称已做。''',
         '''S3动机池第${batch + 1}批：本批生成18–24条语义不同的motive，最终目标50–70。读取已有池，避免同义复述，不为数量虚构个体事实。
 覆盖实际相关的直观/抽象、当下/长远、正反不同路线、健康休息和责任等真实冲突；不要把未来长远自动放在即时之上。
 semanticKey标实际因果含义，相同意思用同key；一条理由可对不同路线方向不同。必须引用现存route/want，附反证、失效条件、证据未知。
+只引用currentRouteIds里的当前路线；只有currentMotiveIds列出的旧理由算本轮已有池。历史理由可重新审议，但不能让失效的路线版本凑成本轮50条。
 给0–8条graphEdge及0–3个真正存在的conflict，可未知；James不当人格。原型与假设只标hypothesized，未核实高代价风险突出但不宣布已发生。
 证据不够就诚实少生成并在summary说明；不能按词汇替换凑数。''',
       AnalysisStage.cognition =>

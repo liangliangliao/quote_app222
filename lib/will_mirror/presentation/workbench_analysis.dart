@@ -74,7 +74,8 @@ extension _AnalysisViews on _CaseWorkbenchState {
         _primary('看看有哪些正反理由', _busy ? null : () => _continue(1)),
       if (understood != null)
         TextButton(
-            onPressed: _busy ? null : () => _analyze(),
+            onPressed:
+                _busy ? null : () => _analyze(null, {'fullWorkflow': true}),
             child: const Text('根据补充的事实更新分析')),
       if (f.retrospective)
         TextButton(onPressed: () => _go(6), child: const Text('直接记录实际发生的事')),
@@ -469,6 +470,14 @@ extension _AnalysisViews on _CaseWorkbenchState {
       _nodeList(NodeKind.strengthMatch, title: '已有能力可以用在哪里'),
       _nodeList(NodeKind.boundaryReview, title: '自己能做的事与他人的自主'),
       const SizedBox(height: 10),
+      TextButton.icon(
+          onPressed: _busy ? null : () => _analyze(AnalysisStage.options),
+          icon: const Icon(Icons.alt_route),
+          label: const Text('根据新的认识，再发现其他走法')),
+      if (routes.isNotEmpty && f.current(NodeKind.motive).isEmpty)
+        TextButton(
+            onPressed: _busy ? null : () => _continue(1),
+            child: const Text('为当前走法补全正反理由')),
       TextButton.icon(
           onPressed: _ownRoute,
           icon: const Icon(Icons.edit_road_outlined),

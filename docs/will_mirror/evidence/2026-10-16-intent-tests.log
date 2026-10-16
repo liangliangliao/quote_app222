@@ -5,42 +5,42 @@
 00:00 +3: <workspace>/test/will_mirror/ai_contract_test.dart: stage schema repair is bounded and unauthorized references never commit
 00:00 +4: <workspace>/test/will_mirror/ai_contract_test.dart: cancellation before model request retains the original case
 00:00 +5: <workspace>/test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
-00:00 +6: <workspace>/test/will_mirror/ai_contract_test.dart: semantic paraphrases do not get counted just to reach fifty
-00:00 +7: <workspace>/test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
-00:00 +8: <workspace>/test/will_mirror/ai_contract_test.dart: private model never forwards upstream error bodies
-00:00 +9: <workspace>/test/will_mirror/ai_contract_test.dart: Decisions refusal and name mismatch have no manufactured zero scores
-00:00 +10: <workspace>/test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
-00:00 +11: <workspace>/test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
+00:00 +6: <workspace>/test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
+00:00 +7: <workspace>/test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
+00:00 +8: <workspace>/test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
+00:00 +9: <workspace>/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:00 +10: <workspace>/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:00 +11: <workspace>/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
 00:00 +12: <workspace>/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
 00:00 +13: <workspace>/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
-00:00 +14: <workspace>/test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
-00:00 +15: <workspace>/test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
-00:00 +16: <workspace>/test/will_mirror/intent_workbench_test.dart: first pass commits understanding without starting the fifty-motive workflow
-00:00 +17: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
-00:00 +18: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
-00:00 +19: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
-00:00 +20: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
-00:00 +21: <workspace>/test/will_mirror/intent_workbench_test.dart: new condition cancels reminders and stops stale plans without altering the seal
-00:00 +22: <workspace>/test/will_mirror/intent_workbench_test.dart: new condition cancels reminders and stops stale plans without altering the seal
-00:00 +23: <workspace>/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
-00:00 +24: <workspace>/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
-00:00 +25: <workspace>/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
-00:00 +26: <workspace>/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
-00:00 +27: <workspace>/test/will_mirror/intent_workbench_test.dart: invalid workbench scope cannot leave an orphan permission or busy state
-00:00 +28: <workspace>/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:00 +14: <workspace>/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:00 +15: <workspace>/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:00 +16: <workspace>/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:00 +17: <workspace>/test/will_mirror/intent_workbench_test.dart: same motive keeps different directions for different routes
+00:00 +18: <workspace>/test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
+00:00 +19: <workspace>/test/will_mirror/intent_workbench_test.dart: new condition cancels reminders and stops stale plans without altering the seal
+00:00 +20: <workspace>/test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:00 +21: <workspace>/test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:00 +22: <workspace>/test/will_mirror/intent_workbench_test.dart: principle reuse needs a new match after changed conditions or a new episode
+00:00 +23: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:00 +24: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:00 +25: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:00 +26: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:00 +27: <workspace>/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:00 +28: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
 00:00 +29: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
-00:01 +30: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
-00:01 +31: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
-00:01 +32: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
-00:01 +33: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
-00:01 +34: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:00 +30: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:00 +31: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:00 +32: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:00 +33: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:00 +34: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
 00:01 +35: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
 00:01 +36: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
-00:02 +37: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
-00:02 +38: <workspace>/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
-00:02 +39: <workspace>/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
-00:02 +40: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
-00:02 +41: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:01 +37: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:01 +38: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:02 +39: <workspace>/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:02 +40: <workspace>/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:02 +41: <workspace>/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
 00:02 +42: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:02 +43: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:02 +44: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
@@ -57,15 +57,15 @@
 00:02 +55: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:02 +56: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:02 +57: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
-00:03 +58: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:02 +58: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:03 +59: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:03 +60: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:03 +61: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:03 +62: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:03 +63: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:03 +64: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
-00:03 +65: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
-00:03 +66: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +65: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +66: <workspace>/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
 00:03 +67: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
 00:03 +68: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
 00:03 +69: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
@@ -75,8 +75,8 @@
 00:03 +73: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
 00:03 +74: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
 00:03 +75: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
-00:03 +76: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
-00:03 +77: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:03 +76: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +77: <workspace>/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
 00:03 +78: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
 00:03 +79: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
 00:03 +80: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
@@ -96,30 +96,32 @@
 00:03 +94: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
 00:03 +95: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
 00:03 +96: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
-00:04 +96: <workspace>/test/will_mirror/android_sqlite_contract_test.dart: Android startup and privacy cleanup use result-capable SQL operations
+00:03 +97: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:03 +98: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:03 +98: <workspace>/test/will_mirror/android_sqlite_contract_test.dart: Android startup and privacy cleanup use result-capable SQL operations
 error DatabaseException(Queries can be performed using SQLiteDatabase query or rawQuery methods only.) during open, closing...
-00:04 +97: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
-00:04 +98: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
-00:04 +99: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
-00:04 +100: <workspace>/test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
-00:04 +101: <workspace>/test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
-00:04 +102: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=accepted
-00:04 +103: <workspace>/test/will_mirror/intent_visual_test.dart: accepting a reframe invalidates affected route fits and keeps other fits
-00:04 +104: <workspace>/test/will_mirror/intent_visual_test.dart: accepting a reframe invalidates affected route fits and keeps other fits
-00:04 +105: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
-00:04 +106: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+00:03 +99: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +100: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +101: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +102: <workspace>/test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
+00:04 +103: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=opened
+00:04 +104: <workspace>/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=accepted
+00:04 +105: <workspace>/test/will_mirror/intent_visual_test.dart: accepting a reframe invalidates affected route fits and keeps other fits
+00:04 +106: <workspace>/test/will_mirror/intent_visual_test.dart: accepting a reframe invalidates affected route fits and keeps other fits
 00:04 +107: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
 00:04 +108: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
 00:04 +109: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
 00:04 +110: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
 00:04 +111: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
 00:04 +112: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
-00:05 +113: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
-00:05 +114: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
-00:05 +115: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
-00:05 +116: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
-00:05 +117: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
-00:05 +118: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
-00:05 +119: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
-00:06 +120: <workspace>/test/will_mirror/intent_visual_test.dart: (tearDownAll)
-00:06 +120: All tests passed!
+00:04 +113: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+00:04 +114: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+00:04 +115: <workspace>/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+00:04 +116: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:04 +117: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:04 +118: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:04 +119: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:04 +120: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:04 +121: <workspace>/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:06 +122: <workspace>/test/will_mirror/intent_visual_test.dart: (tearDownAll)
+00:06 +122: All tests passed!

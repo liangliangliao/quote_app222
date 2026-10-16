@@ -10,7 +10,11 @@ List<AnalysisStage> stagesForPass(WorkbenchPass pass) => switch (pass) {
           AnalysisStage.understand,
           AnalysisStage.wants
         ],
-      WorkbenchPass.reasons => [AnalysisStage.options, AnalysisStage.motives],
+      WorkbenchPass.reasons => [
+          AnalysisStage.options,
+          AnalysisStage.motives,
+          AnalysisStage.reappraise
+        ],
       WorkbenchPass.cognition => [
           AnalysisStage.cognition,
           AnalysisStage.challenge

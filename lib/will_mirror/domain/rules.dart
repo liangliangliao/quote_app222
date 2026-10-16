@@ -643,7 +643,10 @@ class CaseCommands {
 
   CaseFile chooseMotive(CaseFile file, String motiveId, bool selected) {
     final motive = file.node(motiveId);
-    if (motive == null || motive.kind != NodeKind.motive || !motive.usable)
+    if (motive == null ||
+        motive.kind != NodeKind.motive ||
+        !motive.usable ||
+        !file.current(NodeKind.motive).any((n) => n.id == motiveId))
       throw const MirrorProblem('这条理由已失效');
     var updated = file;
     final ids = {...file.selectedMotiveIds};

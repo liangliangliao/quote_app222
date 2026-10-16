@@ -304,12 +304,29 @@ class CaseFile {
       {bool allEpisodes = false, bool usableOnly = true}) {
     final superseded =
         nodes.map((n) => n.revisionOf).whereType<String>().toSet();
+    final liveRouteIds = kind == NodeKind.motive && !allEpisodes
+        ? nodes
+            .where((n) =>
+                n.kind == NodeKind.route &&
+                n.usable &&
+                n.episodeId == episodeId &&
+                !superseded.contains(n.id))
+            .map((n) => n.id)
+            .toSet()
+        : const <String>{};
     return nodes
         .where((n) =>
             n.kind == kind &&
             !superseded.contains(n.id) &&
             (allEpisodes || n.episodeId == episodeId) &&
-            (!usableOnly || n.usable))
+            (!usableOnly || n.usable) &&
+            (kind != NodeKind.motive ||
+                allEpisodes ||
+                !usableOnly ||
+                n.objects('directionByRoute').isEmpty ||
+                n
+                    .objects('directionByRoute')
+                    .any((r) => liveRouteIds.contains(r['routeId']))))
         .toList(growable: false);
   }
 

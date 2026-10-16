@@ -1,4 +1,4 @@
-Final full suite: 00:45 +1068 -5: Some tests failed.
+Final full suite: 00:40 +1070 -5: Some tests failed.
 Baseline suite: 00:01 +53 -5: Some tests failed.
 Full analyzer: 0 errors, 429 warnings, 816 info.
 Identical failure names:

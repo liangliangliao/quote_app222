@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -187,22 +188,23 @@ void main() {
     await c.addEvidence(f.id, '岗位要求发生变化，尚待重新核实', materialChange: true);
     final revised = c.file(f.id)!;
     expect(revised.latest(NodeKind.plan), isNull);
+    expect(revised.selectedRouteId, isNull);
+    expect(revised.selectedMotiveIds, isEmpty);
     expect(realityTrace(revised).first.source?.id, f.latest(NodeKind.plan)!.id);
     expect(revised.node(seal.id)!.toJson(), seal.toJson());
     expect(EvidenceRules.verifySeal(revised.node(seal.id)!), isTrue);
     expect(
         EvidenceRules.routeCanBePrepared(
-            revised.node(revised.selectedRouteId)!, revised),
+            revised.node(f.selectedRouteId)!, revised),
         isFalse);
     expect(revised.current(NodeKind.observation), isEmpty);
     final reassessed = commands.record(
-        revised, NodeKind.routeFit, fitBody(revised.selectedRouteId!),
+        revised, NodeKind.routeFit, fitBody(f.selectedRouteId!),
         evidenceIds: [revised.nodes.first.id],
         origin: EvidenceOrigin.aiHypothesis);
     final fresh = commands.append(revised, [reassessed]);
     expect(
-        EvidenceRules.routeCanBePrepared(
-            fresh.node(fresh.selectedRouteId)!, fresh),
+        EvidenceRules.routeCanBePrepared(fresh.node(f.selectedRouteId)!, fresh),
         isTrue);
     c.dispose();
   });
@@ -276,6 +278,82 @@ void main() {
     expect(c.busyCaseId, isNull);
     expect(c.file(f.id)!.current(NodeKind.permission), isEmpty);
     c.dispose();
+  });
+
+  test(
+      'superseded-route motives leave the live pool while historical evidence remains',
+      () {
+    var f = prepared();
+    final oldRoute = f.node(f.selectedRouteId)!;
+    final oldMotive = motive(f, 1);
+    f = commands.append(f, [oldMotive]);
+    final newRoute = commands.record(
+        f, NodeKind.route, {...oldRoute.body, 'title': '调整后的走法'},
+        revisionOf: oldRoute.id,
+        evidenceIds: oldRoute.evidenceIds,
+        origin: EvidenceOrigin.aiHypothesis);
+    f = commands.append(f, [newRoute]);
+    expect(f.current(NodeKind.motive), isEmpty);
+    expect(
+        f.current(NodeKind.motive, allEpisodes: true).single.id, oldMotive.id);
+    expect(f.node(oldMotive.id), isNotNull);
+    expect(() => commands.chooseMotive(f, oldMotive.id, true),
+        throwsA(isA<MirrorProblem>()));
+  });
+
+  test(
+      'historical reasons cannot suppress current-route candidates during deduplication',
+      () async {
+    var f = prepared();
+    final oldRoute = f.node(f.selectedRouteId)!;
+    final oldMotive = motive(f, 1, semanticKey: 'same_reason');
+    f = commands.append(f, [oldMotive]);
+    f = commands.chooseMotive(f, oldMotive.id, true);
+    final newRoute = commands.record(
+        f, NodeKind.route, {...oldRoute.body, 'title': '新的实际走法'},
+        revisionOf: oldRoute.id,
+        evidenceIds: oldRoute.evidenceIds,
+        origin: EvidenceOrigin.aiHypothesis);
+    f = commands.append(f, [newRoute]);
+    final template = motive(f, 1, semanticKey: 'same_reason');
+    final model = FunctionModel((stage, prompt, _) async {
+      if (prompt.startsWith('这是独立语义审查')) {
+        final pool = jsonDecode(prompt.split('\n').last) as List;
+        return {
+          'items': [
+            for (final n in pool)
+              {'id': n['id'], 'duplicateOf': null, 'reason': '当前路线的有效候选'}
+          ]
+        };
+      }
+      final input = inputOf(prompt);
+      return {
+        'records': [
+          responseRow('${input['idPrefix']}fresh', 'motive', template.body,
+              [f.nodes.first.id])
+        ],
+        'summary': '只保留有来源的当前候选',
+        'unknowns': ['不凑数']
+      };
+    });
+    final result = await CaseAnalysisPipeline(model).run(
+        file: f,
+        consent: grant(f),
+        cancel: CancelToken(),
+        onlyStage: AnalysisStage.motives,
+        commit: (_, __, ___) async {},
+        progress: (_, __) {});
+    expect(result.current(NodeKind.motive).single.id, isNot(oldMotive.id));
+    expect(result.selectedRouteId, isNull);
+    expect(result.selectedMotiveIds, isEmpty);
+    expect(
+        result
+            .current(NodeKind.motive)
+            .single
+            .objects('directionByRoute')
+            .single['routeId'],
+        newRoute.id);
+    expect(result.analysisMessage, contains('1 条'));
   });
 
   testWidgets('feedback is a single sheet and unknown remains unknown',

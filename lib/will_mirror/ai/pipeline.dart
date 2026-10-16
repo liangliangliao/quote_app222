@@ -116,7 +116,10 @@ class CaseAnalysisPipeline {
     for (final stage in stages) {
       if (pass != null &&
           stage == AnalysisStage.options &&
-          current.current(NodeKind.route).isNotEmpty) continue;
+          current.current(NodeKind.route).isNotEmpty &&
+          !current
+              .current(NodeKind.route)
+              .any((r) => EvidenceRules.routeNeedsReview(r, current))) continue;
       var batch = 0;
       // Commit one route's matrix at a time to avoid truncating the combined
       // six-route, multi-want response at the provider's output limit.
@@ -148,6 +151,10 @@ class CaseAnalysisPipeline {
           'idPrefix': prefix,
           'selectedRouteId': current.selectedRouteId,
           'selectedMotiveIds': current.selectedMotiveIds,
+          'currentRouteIds':
+              scoped.current(NodeKind.route).map((n) => n.id).toList(),
+          'currentMotiveIds':
+              scoped.current(NodeKind.motive).map((n) => n.id).toList(),
           'records': visible.map((n) => n.toJson()).toList(),
           'options': {
             ...options,
@@ -219,6 +226,12 @@ class CaseAnalysisPipeline {
                 snapshotAt: now);
             _stageRequirements(
                 stage, records, scoped, stringList(result['unknowns']));
+            final liveRoutes =
+                scoped.current(NodeKind.route).map((n) => n.id).toSet();
+            if (records.where((n) => n.kind == NodeKind.motive).any((n) => n
+                .objects('directionByRoute')
+                .any((r) => !liveRoutes.contains(r['routeId']))))
+              throw const MirrorProblem('新动机必须引用 currentRouteIds 中的当前路线版本');
             if (stage == AnalysisStage.routeAssessment) {
               final fits =
                   records.where((n) => n.kind == NodeKind.routeFit).toList();
@@ -265,9 +278,13 @@ class CaseAnalysisPipeline {
           final dependent =
               EvidenceRules.invalidationClosure(records, rejectedIds);
           records = records.where((n) => !dependent.contains(n.id)).toList();
+          final currentMotiveIds =
+              current.current(NodeKind.motive).map((n) => n.id).toSet();
           final auditPool = [
-            ...permittedNodes(current, consent, external, generated)
-                .where((n) => n.kind == NodeKind.motive),
+            ...permittedNodes(current, consent, external, generated).where(
+                (n) =>
+                    n.kind == NodeKind.motive &&
+                    currentMotiveIds.contains(n.id)),
             ...records.where((n) => n.kind == NodeKind.motive),
           ];
           progress(stage, '正在独立检查理由的语义差异，合并换一种说法的重复理由');
@@ -356,6 +373,20 @@ class CaseAnalysisPipeline {
               origin: EvidenceOrigin.productRule);
           next = commands.append(next, [before, after, shift],
               authorized: external);
+        }
+        final activeRoutes =
+            next.current(NodeKind.route).map((n) => n.id).toSet();
+        final activeMotives =
+            next.current(NodeKind.motive).map((n) => n.id).toSet();
+        if ((next.selectedRouteId != null &&
+                !activeRoutes.contains(next.selectedRouteId)) ||
+            next.selectedMotiveIds.any((id) => !activeMotives.contains(id))) {
+          next = next.evolve(
+              clearRoute: next.selectedRouteId != null &&
+                  !activeRoutes.contains(next.selectedRouteId),
+              selectedMotiveIds:
+                  next.selectedMotiveIds.where(activeMotives.contains).toList(),
+              revision: next.revision);
         }
         await commit(current, next, stage);
         current = next;

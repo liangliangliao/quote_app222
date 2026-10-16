@@ -174,6 +174,8 @@ class MirrorController extends ChangeNotifier {
         NodeKind.recommendation,
       };
       return next.evolve(
+          clearRoute: true,
+          selectedMotiveIds: [],
           nodes: next.nodes
               .map((n) => n.episodeId == f.episodeId &&
                       obsolete.contains(n.kind) &&

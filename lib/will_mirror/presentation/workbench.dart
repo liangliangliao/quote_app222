@@ -122,15 +122,22 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
       context,
       c,
       f,
-      action: stage == null ? '看清当前这一步' : stageTitles[stage]!,
-      scope: pass == null
-          ? null
-          : switch (pass) {
-              WorkbenchPass.understand => '只还原事实与欲求候选，先给出可核对的理解。后续步骤由你选择继续。',
-              WorkbenchPass.reasons => '生成不同走法和正反理由，后台补全候选并整理最多五条优先理由。',
-              WorkbenchPass.cognition => '检验旧认识、提出其他解释并检查反证。',
-              WorkbenchPass.routes => '比较现有路线的欲求得失、能力、难度与现实限制。',
-            },
+      action: stage == null
+          ? options['fullWorkflow'] == true
+              ? '重新分析整件事'
+              : '看清当前这一步'
+          : stageTitles[stage]!,
+      scope: options['fullWorkflow'] == true
+          ? '从新事实重新检查欲求、走法、理由、认识和路线条件，保留原来历史。'
+          : pass == null
+              ? null
+              : switch (pass) {
+                  WorkbenchPass.understand =>
+                    '只还原事实与欲求候选，先给出可核对的理解。后续步骤由你选择继续。',
+                  WorkbenchPass.reasons => '生成不同走法和正反理由，后台补全候选并整理最多五条优先理由。',
+                  WorkbenchPass.cognition => '检验旧认识、提出其他解释并检查反证。',
+                  WorkbenchPass.routes => '比较现有路线的欲求得失、能力、难度与现实限制。',
+                },
     );
     if (consent == null || !mounted) return;
     await _act(() => c.analyze(consent, onlyStage: stage, options: request));
@@ -228,6 +235,9 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
                         onSelected: _menu,
                         itemBuilder: (_) => const [
                               PopupMenuItem(
+                                  value: 'reanalyze',
+                                  child: Text('按新事实重新分析整件事')),
+                              PopupMenuItem(
                                   value: 'history', child: Text('查看真实历程与版本')),
                               PopupMenuItem(
                                   value: 'observation',
@@ -281,6 +291,20 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
                                   child: Text(
                                       _expandedIssue ? '收起原话' : '展开完整原话'))),
                         const SizedBox(height: 18),
+                        if (!_busy &&
+                            f.current(NodeKind.route).any(
+                                (r) => EvidenceRules.routeNeedsReview(r, f)))
+                          MirrorCard(
+                              child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                const Text('现实条件有新记录，旧走法与理由需要重新核实。'),
+                                TextButton(
+                                    onPressed: () =>
+                                        _analyze(null, {'fullWorkflow': true}),
+                                    child: const Text('根据新事实重新分析整件事')),
+                              ])),
                         if (_busy)
                           MirrorCard(
                               color: theme.colorScheme.primaryContainer
@@ -414,6 +438,10 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
             : humanValue(f.latest(NodeKind.observation)!.text('actionState')),
       };
   Future<void> _menu(String action) async {
+    if (action == 'reanalyze') {
+      await _analyze(null, {'fullWorkflow': true});
+      return;
+    }
     if (action == 'pause') {
       await _act(() => c.pause(f.id));
       return;
