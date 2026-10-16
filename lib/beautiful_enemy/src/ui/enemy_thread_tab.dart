@@ -484,29 +484,32 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
 
   Widget _quickRow() => Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-        child: Row(
-          children: <Widget>[
-            ActionChip(
-              label: Text(_courtBusy ? '开庭中…' : '开庭'),
-              onPressed: (_courtBusy || _muted) ? null : _openCourt,
-            ),
-            const SizedBox(width: 8),
-            ActionChip(
-              avatar: const Icon(Icons.bolt_rounded, size: 17),
-              label: Text(_stimulating ? '点火中…' : '刺激我'),
-              onPressed: (_stimulating || _muted) ? null : _stimulate,
-            ),
-            const SizedBox(width: 8),
-            ActionChip(label: const Text('停战'), onPressed: _muted ? null : _truce),
-            const SizedBox(width: 8),
-            ActionChip(
-              label: const Text('太过了'),
-              onPressed: () async {
-                await _engine.markTooMuch();
-                _snack('记下了，接下来几天会降一档。');
-              },
-            ),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: <Widget>[
+              ActionChip(
+                label: Text(_courtBusy ? '开庭中…' : '开庭'),
+                onPressed: (_courtBusy || _muted) ? null : _openCourt,
+              ),
+              const SizedBox(width: 8),
+              ActionChip(
+                avatar: const Icon(Icons.bolt_rounded, size: 17),
+                label: Text(_stimulating ? '点火中…' : '刺激我'),
+                onPressed: (_stimulating || _muted) ? null : _stimulate,
+              ),
+              const SizedBox(width: 8),
+              ActionChip(label: const Text('停战'), onPressed: _muted ? null : _truce),
+              const SizedBox(width: 8),
+              ActionChip(
+                label: const Text('太过了'),
+                onPressed: () async {
+                  await _engine.markTooMuch();
+                  _snack('记下了，接下来几天会降一档。');
+                },
+              ),
+            ],
+          ),
         ),
       );
 
