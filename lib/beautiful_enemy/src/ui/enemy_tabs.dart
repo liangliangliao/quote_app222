@@ -6,6 +6,7 @@ import '../data/models.dart';
 import '../domain/enemy_engine.dart';
 import '../domain/evidence_source.dart';
 import '../domain/enemy_presence.dart';
+import '../domain/motivation_profile.dart';
 import '../domain/motivation_stimulus.dart';
 import '../enemy_reminder.dart';
 import '../enemy_talker.dart';
@@ -574,6 +575,16 @@ class _SettingsTabState extends State<SettingsTab> {
   Map<String, int> _stimulusScores = <String, int>{
     for (final String s in StimulusStyle.all) s: 0,
   };
+  Map<String, int> _stimulusPriors = <String, int>{
+    for (final String s in StimulusStyle.all) s: MotivationProfile.defaultPrior(s),
+  };
+  Map<String, int> _stimulusSamples = <String, int>{
+    for (final String s in StimulusStyle.all) s: 0,
+  };
+  Map<String, int> _stimulusEffective = <String, int>{
+    for (final String s in StimulusStyle.all) s: MotivationProfile.defaultPrior(s),
+  };
+  bool _questionnaireDone = false;
   int _probeGap = 90;
   String _address = EnemyCopy.defaultAddress;
   Map<String, bool> _consents = <String, bool>{};
@@ -608,9 +619,24 @@ class _SettingsTabState extends State<SettingsTab> {
     final bool allowProvocation =
         await _dao.boolSetting(EnemySettings.allowProvocation, fallback: false);
     final Map<String, int> stimulusScores = <String, int>{};
+    final Map<String, int> stimulusPriors = <String, int>{};
+    final Map<String, int> stimulusSamples = <String, int>{};
+    final Map<String, int> stimulusEffective = <String, int>{};
     for (final String s in StimulusStyle.all) {
       stimulusScores[s] = await _dao.intSetting(EnemySettings.stimulusScore(s), 0);
+      stimulusPriors[s] = await _dao.intSetting(
+        EnemySettings.stimulusPrior(s),
+        MotivationProfile.defaultPrior(s),
+      );
+      stimulusSamples[s] =
+          await _dao.intSetting(EnemySettings.stimulusSamples(s), 0);
+      stimulusEffective[s] = MotivationProfile.effectiveScore(
+        prior: stimulusPriors[s] ?? 0,
+        learned: stimulusScores[s] ?? 0,
+      );
     }
+    final bool questionnaireDone =
+        await _dao.boolSetting(EnemySettings.motivationQuestionnaireDone);
     final int probeGap = await _dao.intSetting(EnemySettings.probeGapMin, 90);
     final Map<String, bool> consents = await _engine.consents();
     if (!mounted) return;
@@ -619,6 +645,10 @@ class _SettingsTabState extends State<SettingsTab> {
       _motivationStimulus = motivationStimulus;
       _allowProvocation = allowProvocation;
       _stimulusScores = stimulusScores;
+      _stimulusPriors = stimulusPriors;
+      _stimulusSamples = stimulusSamples;
+      _stimulusEffective = stimulusEffective;
+      _questionnaireDone = questionnaireDone;
       _probeGap = const <int>[45, 90, 180].contains(probeGap) ? probeGap : 90;
       _patrol = patrol;
       _voiceOut = voiceOut;
