@@ -30,6 +30,9 @@ trap on_exit EXIT
 
 run_probe normal
 run_probe seed
-# Explicitly fail if the runner removed the seeded installation/data.
-adb -s "$device" shell run-as "$package" test -f "$probe_db"
+# Explicitly fail if the runner removed the seeded installation/data. run-as
+# executes a binary directly: `test` is only a shell builtin on some Android
+# images. Use the absolute, available ls binary instead of relying on PATH or
+# shell parsing, and leave the encrypted database untouched.
+adb -s "$device" shell run-as "$package" /system/bin/ls "$probe_db" >/dev/null
 run_probe verify

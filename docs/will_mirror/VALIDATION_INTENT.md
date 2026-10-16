@@ -14,7 +14,8 @@
 | 最终全仓复核 | **1070 通过、相同 5 失败**；与基线五项失败名称完全一致；[最终摘要](evidence/2026-10-16-intent-full-summary.log) |
 | Flutter 手机渲染 | 390×844 中文界面已检查：理解、冲突、认知转换、路线；首页、未知、人生轨迹回归预览保持。320 宽、1.8 倍文字的冲突视图无溢出 |
 | 本地 Android release APK 尝试 | 已执行，**因本环境没有 Android SDK 终止**；[日志](evidence/2026-10-16-intent-local-build.log)。不声称本地 APK 编译通过 |
-| GitHub Actions / Android API 26、35 / APK | 推送后沿用现有工作流。以 PR Checks 真实状态为准；不能用本地单测替代 Android 原生验收 |
+| GitHub Actions APK（52f487b） | [run 38830992316](https://github.com/liangliangliao/quote_app222/actions/runs/38830992316) **通过**；生成 `quote_app-apk`。不等同于原设备覆盖安装验证 |
+| 首轮 Android API 26、35（52f487b） | [run 38830999740](https://github.com/liangliangliao/quote_app222/actions/runs/38830999740) contracts 通过，原生检查失败。API 26 启动/存储/seed 测试通过，脚本在 `run-as … test -f` 处失败；已改为绝对路径 `/system/bin/ls`。API 35 normal 通过，seed 驱动连接出现 `Service connection disposed`；不能声称升级验证通过。修复后结果以新 PR Checks 为准 |
 | 真实模型与用户原设备 | **未执行**；没有新增密钥、付费调用、代理部署或合并 main。仍需现场体验与真实生成质量校验 |
 
 ## 新回归具体保护什么
