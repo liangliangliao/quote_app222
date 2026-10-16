@@ -569,7 +569,11 @@ class EnemyPresence {
     return last;
   }
 
-  Future<ProbeFacts> _probeFacts(int now, {required bool forDrill}) async {
+  Future<ProbeFacts> _probeFacts(
+    int now, {
+    required bool forDrill,
+    bool ignoreCooldown = false,
+  }) async {
     const int hourMs = 3600 * 1000;
     const int dayMs = 24 * hourMs;
     final DateTime dt = DateTime.fromMillisecondsSinceEpoch(now);
@@ -642,7 +646,7 @@ class EnemyPresence {
     final int follow = pending == null ? 0 : await dao.intSetting(EnemySettings.inquiryFollow(pending.id), 0);
 
     final Map<String, int> lastProbe = <String, int>{};
-    if (!forDrill) {
+    if (!forDrill && !ignoreCooldown) {
       for (final String type in Opposition.cooldownHours.keys) {
         lastProbe[type] = await dao.intSetting(EnemySettings.probeLast(type), 0);
       }
@@ -772,7 +776,8 @@ class EnemyPresence {
   Future<EnemyMessage?> stimulateNow() async {
     if (await engine.isMuted()) return null;
     final int now = engine.nowMs();
-    final ProbeFacts facts = await _probeFacts(now, forDrill: true);
+    final ProbeFacts facts =
+        await _probeFacts(now, forDrill: false, ignoreCooldown: true);
     final ProbePlan? plan = Opposition.choose(facts);
     if (plan == null) return null;
     return _probeSay(plan, now, drill: false, manualStimulus: true);
