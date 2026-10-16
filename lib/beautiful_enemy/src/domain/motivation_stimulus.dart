@@ -107,8 +107,12 @@ class MotivationStimulus {
     }
   }
 
-  static int updatedScore(int current, String feedback) =>
-      (current + feedbackDelta(feedback)).clamp(-8, 8);
+  static int updatedScore(int current, String feedback) {
+    final int next = current + feedbackDelta(feedback);
+    if (next < -8) return -8;
+    if (next > 8) return 8;
+    return next;
+  }
 
   /// 给模型的策略说明。所有策略都保留“beautiful + enemy”双重约束。
   static String instruction(String style) {
