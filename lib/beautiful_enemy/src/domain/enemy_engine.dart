@@ -284,8 +284,8 @@ class EnemyEngine {
     if (c.verdictId != null) {
       await dao.setVerdictOutcome(c.verdictId!, 'done', now);
     }
-    await _learnStimulusOutcome(c, done: true);
     // 核实：这条字据声明要靠账上的记录证明，而账上没有——勾可以打，但敌人不认。
+    bool verified = true;
     if (c.verify == 'kindling') {
       try {
         await syncIfChanged();
@@ -294,9 +294,11 @@ class EnemyEngine {
       }
       final List<EnemyEvent> burns = await dao.eventsBetween(c.createdMs, now + 1, source: 'kindling');
       if (!burns.any((EnemyEvent e) => e.type == 'kindling_completed')) {
+        verified = false;
         await _commitmentEvent(c, 'commitment_unverified', now);
       }
     }
+    await _learnStimulusOutcome(c, done: verified);
     final List<EnemyVerdict> recent = await dao.recentVerdicts(limit: 10);
     int streak = 0;
     for (final EnemyVerdict v in recent) {
@@ -342,7 +344,8 @@ class EnemyEngine {
 
     final String scoreKey = EnemySettings.stimulusScore(style);
     final int before = await dao.intSetting(scoreKey, 0);
-    final int after = (before + (done ? 1 : -1)).clamp(-8, 8);
+    final int raw = before + (done ? 1 : -1);
+    final int after = raw < -8 ? -8 : (raw > 8 ? 8 : raw);
     await dao.setSetting(scoreKey, '$after');
     await dao.setSetting(outcomeKey, done ? 'done' : 'missed');
   }
