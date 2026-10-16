@@ -78,7 +78,7 @@ class MotivationProfile {
     for (final MotivationQuestion q in questions) {
       final int? raw = answers[q.id];
       if (raw == null) continue;
-      final int v = raw.clamp(1, 5);
+      final int v = raw < 1 ? 1 : (raw > 5 ? 5 : raw);
       final int mapped = (v - 3) * 2; // 1,2,3,4,5 => -4,-2,0,2,4
       (bucket[q.style] ??= <int>[]).add(mapped);
       if (q.secondaryStyle != null) {
@@ -93,7 +93,8 @@ class MotivationProfile {
         out[style] = defaultPrior(style);
       } else {
         final int sum = values.fold<int>(0, (int a, int b) => a + b);
-        out[style] = (sum / values.length).round().clamp(-4, 4);
+        final int avg = (sum / values.length).round();
+        out[style] = avg < -4 ? -4 : (avg > 4 ? 4 : avg);
       }
     }
     return out;
