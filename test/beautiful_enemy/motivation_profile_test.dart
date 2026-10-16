@@ -55,6 +55,30 @@ void main() {
       );
     });
 
+    test('情境记忆只做局部修正，不会无限放大单一场景', () {
+      expect(
+        MotivationProfile.contextAdjustedScore(
+          globalScore: 6,
+          contextBias: 3,
+        ),
+        9,
+      );
+      expect(
+        MotivationProfile.contextAdjustedScore(
+          globalScore: 6,
+          contextBias: 99,
+        ),
+        10,
+      );
+      expect(
+        MotivationProfile.contextAdjustedScore(
+          globalScore: -6,
+          contextBias: -99,
+        ),
+        -10,
+      );
+    });
+
     test('置信度明确区分默认、问卷和真实行为样本', () {
       expect(
         MotivationProfile.confidenceLabel(0, questionnaireDone: false),
