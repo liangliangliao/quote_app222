@@ -3,7 +3,7 @@ class EnemyCopy {
   const EnemyCopy._();
 
   static const String title = '美丽的敌人';
-  static const String tagline = '只评行为，不评人。无证据，不开口。';
+  static const String tagline = '站在你的目标这边，站在借口的对面。只评行为，不评人。';
   static const String discoverSubtitle = '证据 · 挑战 · 刺激 · 行动 · 复盘';
   static const String discoverSemantics = '打开美丽的敌人';
 
@@ -20,8 +20,9 @@ class EnemyCopy {
   static const String stakeRejected = '赌注只能是一个行动：不能伤害自己、羞辱自己，也不能涉及钱。换一个。';
 
   static String opening(String address) =>
-      '$address，我是你的敌人。不是教练，不安慰你，也不骂你这个人。\n'
-      '我只做三件事：记账、盘问、认账。你先说——今天打算做成什么？';
+      '$address，我是你请来的美丽敌人：我站在你真正选择的目标这边，不站在借口这边。\n'
+      '我会记账、盘问、刺激、认账。刺激只为把你推入伸展区，不攻击你这个人。'
+      '你先说——今天打算做成什么？';
 
   static const String defaultAppealPrompt = '如果我说错了，你拿什么反驳？';
 
