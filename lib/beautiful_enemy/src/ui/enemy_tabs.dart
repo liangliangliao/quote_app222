@@ -6,6 +6,7 @@ import '../data/models.dart';
 import '../domain/enemy_engine.dart';
 import '../domain/evidence_source.dart';
 import '../domain/enemy_presence.dart';
+import '../domain/motivation_stimulus.dart';
 import '../enemy_reminder.dart';
 import '../enemy_talker.dart';
 import 'ui_helpers.dart';
@@ -568,6 +569,11 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _interjectEverywhere = true;
   bool _patrol = true;
   bool _opposition = true;
+  bool _motivationStimulus = true;
+  bool _allowProvocation = false;
+  Map<String, int> _stimulusScores = <String, int>{
+    for (final String s in StimulusStyle.all) s: 0,
+  };
   int _probeGap = 90;
   String _address = EnemyCopy.defaultAddress;
   Map<String, bool> _consents = <String, bool>{};
@@ -597,11 +603,22 @@ class _SettingsTabState extends State<SettingsTab> {
     final String address = await _engine.address();
     final bool patrol = await _dao.boolSetting(EnemySettings.patrol, fallback: true);
     final bool opposition = await _dao.boolSetting(EnemySettings.opposition, fallback: true);
+    final bool motivationStimulus =
+        await _dao.boolSetting(EnemySettings.motivationStimulus, fallback: true);
+    final bool allowProvocation =
+        await _dao.boolSetting(EnemySettings.allowProvocation, fallback: false);
+    final Map<String, int> stimulusScores = <String, int>{};
+    for (final String s in StimulusStyle.all) {
+      stimulusScores[s] = await _dao.intSetting(EnemySettings.stimulusScore(s), 0);
+    }
     final int probeGap = await _dao.intSetting(EnemySettings.probeGapMin, 90);
     final Map<String, bool> consents = await _engine.consents();
     if (!mounted) return;
     setState(() {
       _opposition = opposition;
+      _motivationStimulus = motivationStimulus;
+      _allowProvocation = allowProvocation;
+      _stimulusScores = stimulusScores;
       _probeGap = const <int>[45, 90, 180].contains(probeGap) ? probeGap : 90;
       _patrol = patrol;
       _voiceOut = voiceOut;
@@ -759,6 +776,89 @@ class _SettingsTabState extends State<SettingsTab> {
             style: TextStyle(color: kEnemyMuted, fontSize: 12),
           ),
         ),
+        const Divider(height: 28),
+        const Text('动机刺激', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('自适应动机刺激', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text(
+            '不只是“说得更狠”：在事实镜照、言行一致、直接挑战、自我竞争之间选择，并根据你每次的反馈学习。',
+            style: TextStyle(color: kEnemyMuted),
+          ),
+          value: _motivationStimulus,
+          onChanged: (bool v) async {
+            setState(() => _motivationStimulus = v);
+            await _dao.setBoolSetting(EnemySettings.motivationStimulus, v);
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('允许轻度挑衅', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text(
+            '默认关闭。开启后，2–3 档可用克制挑衅激起“我偏要证明给你看”的证明欲或有益愤怒。只针对借口与回避，不攻击你这个人。',
+            style: TextStyle(color: kEnemyMuted),
+          ),
+          value: _allowProvocation,
+          onChanged: _motivationStimulus
+              ? (bool v) async {
+                  setState(() => _allowProvocation = v);
+                  await _dao.setBoolSetting(EnemySettings.allowProvocation, v);
+                }
+              : null,
+        ),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: kEnemyCard,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                '它正在学：什么方式真正能把你点着',
+                style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              for (final String s in StimulusStyle.all)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          StimulusStyle.label(s),
+                          style: const TextStyle(color: kEnemyMuted, fontSize: 13),
+                        ),
+                      ),
+                      Text(
+                        (_stimulusScores[s] ?? 0) > 0
+                            ? '+${_stimulusScores[s]}'
+                            : '${_stimulusScores[s] ?? 0}',
+                        style: const TextStyle(color: kEnemyText, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 6),
+              const Text(
+                '“点着了” +2 · “没感觉” −1 · “太过了” −4。挑衅还受单独授权和强度上限约束。',
+                style: TextStyle(color: kEnemyMuted, fontSize: 11, height: 1.4),
+              ),
+              const SizedBox(height: 6),
+              TextButton(
+                onPressed: () async {
+                  for (final String s in StimulusStyle.all) {
+                    await _dao.setSetting(EnemySettings.stimulusScore(s), '0');
+                  }
+                  await _load();
+                },
+                child: const Text('清零刺激学习'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('出声', style: TextStyle(color: kEnemyText)),
