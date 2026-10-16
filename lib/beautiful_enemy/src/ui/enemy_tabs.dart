@@ -1033,44 +1033,119 @@ class _SettingsTabState extends State<SettingsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               const Text(
-                '它正在学：什么方式真正能把你点着',
-                style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700),
+                '它对你的了解',
+                style: TextStyle(
+                  color: kEnemyText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                MotivationProfile.confidenceLabel(
+                  _stimulusSamples.values.fold<int>(
+                    0,
+                    (int sum, int n) => sum + n,
+                  ),
+                  questionnaireDone: _questionnaireDone,
+                ),
+                style: const TextStyle(
+                  color: kEnemyAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 6),
+              Text(
+                _questionnaireDone
+                    ? '先验已经由问卷校准；下面的“经验”来自你之后的主观反馈和真实行动结果。'
+                    : '目前先用为你预置的冷启动画像。它只是工作假设，不是人格结论；可以用 6 个问题立即校准。',
+                style: const TextStyle(
+                  color: kEnemyMuted,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 10),
               for (final String s in StimulusStyle.all)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          StimulusStyle.label(s),
-                          style: const TextStyle(color: kEnemyMuted, fontSize: 13),
-                        ),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              StimulusStyle.label(s),
+                              style: const TextStyle(
+                                color: kEnemyText,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '综合 ${_stimulusEffective[s] ?? 0}',
+                            style: const TextStyle(
+                              color: kEnemyAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        (_stimulusScores[s] ?? 0) > 0
-                            ? '+${_stimulusScores[s]}'
-                            : '${_stimulusScores[s] ?? 0}',
-                        style: const TextStyle(color: kEnemyText, fontSize: 13),
+                        '先验 ${_stimulusPriors[s] ?? 0} · '
+                        '经验 ${_stimulusScores[s] ?? 0} · '
+                        '样本 ${_stimulusSamples[s] ?? 0}',
+                        style: const TextStyle(
+                          color: kEnemyMuted,
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               const Text(
-                '“点着了” +2 · “没感觉” −1 · “太过了” −4。挑衅还受单独授权和强度上限约束。',
-                style: TextStyle(color: kEnemyMuted, fontSize: 11, height: 1.4),
+                '综合分 = 先验 + 经验。先验最多 ±4，真实经验可到 ±8，所以使用越久，系统越少依赖默认判断。',
+                style: TextStyle(
+                  color: kEnemyMuted,
+                  fontSize: 11,
+                  height: 1.4,
+                ),
               ),
-              const SizedBox(height: 6),
-              TextButton(
-                onPressed: () async {
-                  for (final String s in StimulusStyle.all) {
-                    await _dao.setSetting(EnemySettings.stimulusScore(s), '0');
-                  }
-                  await _load();
-                },
-                child: const Text('清零刺激学习'),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: <Widget>[
+                  FilledButton.tonal(
+                    onPressed: _openMotivationQuestionnaire,
+                    child: Text(_questionnaireDone ? '重新做问卷' : '6 题初步了解我'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _restoreDefaultMotivationPrior,
+                    child: const Text('恢复默认先验'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      for (final String s in StimulusStyle.all) {
+                        await _dao.setSetting(
+                          EnemySettings.stimulusScore(s),
+                          '0',
+                        );
+                        await _dao.setSetting(
+                          EnemySettings.stimulusSamples(s),
+                          '0',
+                        );
+                      }
+                      await _load();
+                    },
+                    child: const Text('清零经验学习'),
+                  ),
+                ],
               ),
             ],
           ),
