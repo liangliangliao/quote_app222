@@ -347,6 +347,11 @@ class EnemyEngine {
     final int raw = before + (done ? 1 : -1);
     final int after = raw < -8 ? -8 : (raw > 8 ? 8 : raw);
     await dao.setSetting(scoreKey, '$after');
+    final String sampleKey = EnemySettings.stimulusSamples(style);
+    await dao.setSetting(
+      sampleKey,
+      '${await dao.intSetting(sampleKey, 0) + 1}',
+    );
     await dao.setSetting(outcomeKey, done ? 'done' : 'missed');
   }
 
