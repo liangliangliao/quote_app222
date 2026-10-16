@@ -109,6 +109,19 @@ class MotivationProfile {
     return v;
   }
 
+  /// 同一种刺激在不同情境下可以有局部偏差。局部记忆只做小幅修正，
+  /// 避免某一次特殊情境推翻整个用户画像。
+  static int contextAdjustedScore({
+    required int globalScore,
+    required int contextBias,
+  }) {
+    final int bias = contextBias < -4 ? -4 : (contextBias > 4 ? 4 : contextBias);
+    final int v = globalScore + bias;
+    if (v < -16) return -16;
+    if (v > 16) return 16;
+    return v;
+  }
+
   static String confidenceLabel(int samples, {required bool questionnaireDone}) {
     if (samples >= 12) return '高：主要来自真实行动';
     if (samples >= 5) return '中：已有多次行为校准';
