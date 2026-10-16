@@ -668,6 +668,193 @@ class _SettingsTabState extends State<SettingsTab> {
     });
   }
 
+  Future<void> _openMotivationQuestionnaire() async {
+    final Map<String, int> answers = <String, int>{};
+    for (final MotivationQuestion q in MotivationProfile.questions) {
+      answers[q.id] =
+          await _dao.intSetting(EnemySettings.motivationAnswer(q.id), 3);
+    }
+    if (!mounted) return;
+
+    final Map<String, int>? result =
+        await showModalBottomSheet<Map<String, int>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kEnemyBg,
+      builder: (BuildContext sheetContext) {
+        final Map<String, int> draft = Map<String, int>.from(answers);
+        return StatefulBuilder(
+          builder: (BuildContext ctx, StateSetter setLocal) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: SizedBox(
+                  height: MediaQuery.of(ctx).size.height * 0.82,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        '初步了解：什么真正能推动我？',
+                        style: TextStyle(
+                          color: kEnemyText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        '这不是人格测试。只问“哪种外部刺激更可能转化成行动”。'
+                        '1 表示明显无效/反作用，5 表示明显有效。以后真实行动会继续修正这些答案。',
+                        style: TextStyle(
+                          color: kEnemyMuted,
+                          fontSize: 12,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: MotivationProfile.questions.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 22),
+                          itemBuilder: (BuildContext context, int index) {
+                            final MotivationQuestion q =
+                                MotivationProfile.questions[index];
+                            final int value = draft[q.id] ?? 3;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  '${index + 1}. ${q.text}',
+                                  style: const TextStyle(
+                                    color: kEnemyText,
+                                    fontSize: 14,
+                                    height: 1.45,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: Text(
+                                        q.low,
+                                        style: const TextStyle(
+                                          color: kEnemyMuted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '$value / 5',
+                                      style: const TextStyle(
+                                        color: kEnemyAccent,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        q.high,
+                                        textAlign: TextAlign.right,
+                                        style: const TextStyle(
+                                          color: kEnemyMuted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Slider(
+                                  value: value.toDouble(),
+                                  min: 1,
+                                  max: 5,
+                                  divisions: 4,
+                                  label: '$value',
+                                  onChanged: (double v) => setLocal(
+                                    () => draft[q.id] = v.round(),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('取消'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () => Navigator.of(ctx).pop(draft),
+                              child: const Text('保存并校准'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (result == null) return;
+
+    final Map<String, int> priors =
+        MotivationProfile.priorsFromAnswers(result);
+    for (final MotivationQuestion q in MotivationProfile.questions) {
+      await _dao.setSetting(
+        EnemySettings.motivationAnswer(q.id),
+        '${result[q.id] ?? 3}',
+      );
+    }
+    for (final String style in StimulusStyle.all) {
+      await _dao.setSetting(
+        EnemySettings.stimulusPrior(style),
+        '${priors[style] ?? MotivationProfile.defaultPrior(style)}',
+      );
+    }
+    await _dao.setBoolSetting(
+      EnemySettings.motivationQuestionnaireDone,
+      true,
+    );
+    await _dao.setSetting(
+      EnemySettings.motivationQuestionnaireAtMs,
+      '${DateTime.now().millisecondsSinceEpoch}',
+    );
+    await _dao.setSetting(
+      EnemySettings.motivationProfileVersion,
+      MotivationProfile.version,
+    );
+    await _load();
+  }
+
+  Future<void> _restoreDefaultMotivationPrior() async {
+    for (final String style in StimulusStyle.all) {
+      await _dao.setSetting(
+        EnemySettings.stimulusPrior(style),
+        '${MotivationProfile.defaultPrior(style)}',
+      );
+    }
+    await _dao.setBoolSetting(
+      EnemySettings.motivationQuestionnaireDone,
+      false,
+    );
+    await _load();
+  }
+
   Future<void> _set(String key, int value) => _dao.setSetting(key, '$value');
 
   Widget _hourDropdown(int value, ValueChanged<int> onChanged) {
