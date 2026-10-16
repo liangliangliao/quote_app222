@@ -1,0 +1,45 @@
+name: Beautiful Enemy CI
+
+on:
+  pull_request:
+    paths:
+      - 'lib/beautiful_enemy/**'
+      - 'lib/beautiful_enemy_host/**'
+      - 'test/beautiful_enemy/**'
+      - '.github/workflows/beautiful_enemy_ci.yml'
+      - 'pubspec.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beautiful-enemy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stimulus-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+      - name: Install SQLite development library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze Beautiful Enemy
+        run: >-
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+          lib/beautiful_enemy lib/beautiful_enemy_host test/beautiful_enemy
+      - name: Run adaptive stimulus contract
+        run: flutter test --no-pub --reporter expanded test/beautiful_enemy/motivation_stimulus_test.dart
+      - name: Full Beautiful Enemy regression (baseline currently has known failures)
+        continue-on-error: true
+        run: flutter test --no-pub --reporter expanded test/beautiful_enemy
