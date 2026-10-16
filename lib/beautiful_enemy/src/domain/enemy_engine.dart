@@ -5,6 +5,7 @@ import '../enemy_oracle.dart';
 import 'digest_builder.dart';
 import 'evidence_source.dart';
 import 'guard.dart';
+import 'motivation_stimulus.dart';
 
 enum EnemyOutcomeKind { verdict, insufficient, skipped }
 
@@ -220,6 +221,7 @@ class EnemyEngine {
       if (c.verdictId != null) {
         await dao.setVerdictOutcome(c.verdictId!, 'missed', now);
       }
+      await _learnStimulusOutcome(c, done: false);
     }
     return overdue.length;
   }
@@ -282,6 +284,7 @@ class EnemyEngine {
     if (c.verdictId != null) {
       await dao.setVerdictOutcome(c.verdictId!, 'done', now);
     }
+    await _learnStimulusOutcome(c, done: true);
     // 核实：这条字据声明要靠账上的记录证明，而账上没有——勾可以打，但敌人不认。
     if (c.verify == 'kindling') {
       try {
@@ -317,6 +320,31 @@ class EnemyEngine {
     if (c.verdictId != null) {
       await dao.setVerdictOutcome(c.verdictId!, 'missed', now);
     }
+    await _learnStimulusOutcome(c, done: false);
+  }
+
+  /// 如果这条字据来自一次“动机刺激 → 动议”，就把真实行为结果作为弱信号回流。
+  /// 主观反馈权重更大（点着 +2 / 太过 -4）；真实兑现这里只做 +1 / -1，
+  /// 避免把任务本身的难度全部归因给刺激方式。
+  Future<void> _learnStimulusOutcome(EnemyCommitment c, {required bool done}) async {
+    if (c.origin != 'motion') return;
+    final EnemyMotion? motion = await dao.motionForCommitment(c.id);
+    if (motion == null) return;
+    final EnemyMessage? message = await dao.messageForMotion(motion.id);
+    if (message == null) return;
+
+    final String style =
+        await dao.getSetting(EnemySettings.stimulusStyle(message.id)) ?? '';
+    if (!StimulusStyle.all.contains(style)) return;
+
+    final String outcomeKey = EnemySettings.stimulusOutcome(message.id);
+    if ((await dao.getSetting(outcomeKey) ?? '').isNotEmpty) return;
+
+    final String scoreKey = EnemySettings.stimulusScore(style);
+    final int before = await dao.intSetting(scoreKey, 0);
+    final int after = (before + (done ? 1 : -1)).clamp(-8, 8);
+    await dao.setSetting(scoreKey, '$after');
+    await dao.setSetting(outcomeKey, done ? 'done' : 'missed');
   }
 
   /// 失败归因。不接受「忙」这类单独的空话。
