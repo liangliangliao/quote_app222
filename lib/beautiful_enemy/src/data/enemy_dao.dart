@@ -68,6 +68,16 @@ class EnemySettings {
 
   /// 每一种刺激策略的学习分数，以及某条消息实际使用的策略 / 用户反馈。
   static String stimulusScore(String style) => 'stimulus_score_$style';
+
+  /// 冷启动 / 问卷形成的先验分（-4..4）与已观察样本数。
+  /// 经验分独立保存，避免重新做问卷时抹掉真实行为学习。
+  static String stimulusPrior(String style) => 'stimulus_prior_$style';
+  static String stimulusSamples(String style) => 'stimulus_samples_$style';
+  static const String motivationQuestionnaireDone = 'motivation_questionnaire_done';
+  static const String motivationQuestionnaireAtMs = 'motivation_questionnaire_at_ms';
+  static const String motivationProfileVersion = 'motivation_profile_version';
+  static String motivationAnswer(String questionId) => 'motivation_answer_$questionId';
+
   static String stimulusStyle(int messageId) => 'stimulus_style_$messageId';
   static String stimulusFeedback(int messageId) => 'stimulus_feedback_$messageId';
   static String stimulusOutcome(int messageId) => 'stimulus_outcome_$messageId';
