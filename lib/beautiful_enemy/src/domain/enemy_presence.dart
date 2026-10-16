@@ -7,6 +7,7 @@ import 'claim_check.dart';
 import 'digest_builder.dart';
 import 'enemy_engine.dart';
 import 'guard.dart';
+import 'motivation_profile.dart';
 import 'motivation_stimulus.dart';
 import 'opposition.dart';
 
@@ -723,14 +724,75 @@ class EnemyPresence {
 
   // -------------------------------------------------------- motivation stimulus
 
-  /// 读取每种刺激方式目前学到的分数。分数只表示“对这个用户曾经有没有点着”，
-  /// 不表示哪一种方式普遍更好。
+  /// 行为学习分：只表示“过去这种方式有没有转化成行动/主观点火”。
   Future<Map<String, int>> stimulusScores() async {
     final Map<String, int> out = <String, int>{};
     for (final String style in StimulusStyle.all) {
       out[style] = await dao.intSetting(EnemySettings.stimulusScore(style), 0);
     }
     return out;
+  }
+
+  /// 冷启动 / 问卷先验。数据库没有写过时使用面向当前产品主人的默认画像。
+  Future<Map<String, int>> stimulusPriors() async {
+    final Map<String, int> out = <String, int>{};
+    for (final String style in StimulusStyle.all) {
+      out[style] = await dao.intSetting(
+        EnemySettings.stimulusPrior(style),
+        MotivationProfile.defaultPrior(style),
+      );
+    }
+    return out;
+  }
+
+  Future<Map<String, int>> stimulusSamples() async {
+    final Map<String, int> out = <String, int>{};
+    for (final String style in StimulusStyle.all) {
+      out[style] = await dao.intSetting(EnemySettings.stimulusSamples(style), 0);
+    }
+    return out;
+  }
+
+  /// 真正用于选策略的分数 = 先验 + 经验。
+  /// 默认先验最多 ±4，而真实经验最多 ±8，因此经验积累后会自然压过冷启动假设。
+  Future<Map<String, int>> effectiveStimulusScores() async {
+    final Map<String, int> priors = await stimulusPriors();
+    final Map<String, int> learned = await stimulusScores();
+    return <String, int>{
+      for (final String style in StimulusStyle.all)
+        style: MotivationProfile.effectiveScore(
+          prior: priors[style] ?? 0,
+          learned: learned[style] ?? 0,
+        ),
+    };
+  }
+
+  Future<bool> motivationQuestionnaireDone() =>
+      dao.boolSetting(EnemySettings.motivationQuestionnaireDone);
+
+  Future<void> applyMotivationQuestionnaire(Map<String, int> answers) async {
+    final Map<String, int> priors = MotivationProfile.priorsFromAnswers(answers);
+    for (final MotivationQuestion q in MotivationProfile.questions) {
+      final int? value = answers[q.id];
+      if (value != null) {
+        await dao.setSetting(EnemySettings.motivationAnswer(q.id), '$value');
+      }
+    }
+    for (final String style in StimulusStyle.all) {
+      await dao.setSetting(
+        EnemySettings.stimulusPrior(style),
+        '${priors[style] ?? MotivationProfile.defaultPrior(style)}',
+      );
+    }
+    await dao.setBoolSetting(EnemySettings.motivationQuestionnaireDone, true);
+    await dao.setSetting(
+      EnemySettings.motivationQuestionnaireAtMs,
+      '${engine.nowMs()}',
+    );
+    await dao.setSetting(
+      EnemySettings.motivationProfileVersion,
+      MotivationProfile.version,
+    );
   }
 
   Future<String> stimulusStyleFor(int messageId) async =>
@@ -750,6 +812,11 @@ class EnemyPresence {
     final String key = EnemySettings.stimulusScore(style);
     final int before = await dao.intSetting(key, 0);
     await dao.setSetting(key, '${MotivationStimulus.updatedScore(before, feedback)}');
+    final String sampleKey = EnemySettings.stimulusSamples(style);
+    await dao.setSetting(
+      sampleKey,
+      '${await dao.intSetting(sampleKey, 0) + 1}',
+    );
     await dao.setSetting(EnemySettings.stimulusFeedback(messageId), feedback);
     if (feedback == StimulusFeedback.tooMuch) {
       await engine.markTooMuch();
@@ -766,7 +833,7 @@ class EnemyPresence {
     return MotivationStimulus.choose(
       intensity: intensity,
       allowProvocation: allowProvocation,
-      scores: await stimulusScores(),
+      scores: await effectiveStimulusScores(),
       seed: seed,
     );
   }
