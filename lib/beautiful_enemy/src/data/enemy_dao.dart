@@ -59,6 +59,18 @@ class EnemySettings {
   /// 反对党质询（主动盘问、动议、讽刺你的借口）的总开关，默认开。
   static const String opposition = 'opposition';
 
+  /// 自适应动机刺激总开关，默认开。它不是“说得更狠”，而是选择哪一种
+  /// 外部刺激更可能把用户推入 stretch zone。
+  static const String motivationStimulus = 'motivation_stimulus';
+
+  /// 轻度挑衅必须由用户明确开启，默认关。
+  static const String allowProvocation = 'allow_provocation';
+
+  /// 每一种刺激策略的学习分数，以及某条消息实际使用的策略 / 用户反馈。
+  static String stimulusScore(String style) => 'stimulus_score_$style';
+  static String stimulusStyle(int messageId) => 'stimulus_style_$messageId';
+  static String stimulusFeedback(int messageId) => 'stimulus_feedback_$messageId';
+
   /// 两次主动质询之间至少隔几分钟。默认 90。
   static const String probeGapMin = 'probe_gap_min';
 
