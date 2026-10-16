@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../ai/decisions_gateway.dart';
 import '../ai/pipeline.dart';
 import '../ai/protocol.dart';
+import '../ai/workbench_pass.dart';
 import '../data/store.dart';
 import '../domain/model.dart';
 import '../domain/ranking.dart';
@@ -32,6 +33,7 @@ class MirrorController extends ChangeNotifier {
   String? notice;
   AnalysisStage? retryStage;
   bool retryWorkflow = false;
+  Json retryOptions = const {};
   CancelToken? _cancel;
   bool _disposed = false;
   Future<void> _queue = Future.value();
@@ -140,25 +142,49 @@ class MirrorController extends ChangeNotifier {
   }
 
   Future<void> addEvidence(String id, String text,
-          {String category = 'condition',
-          bool sensitive = false,
-          DateTime? happenedAt}) =>
-      mutate(id, (f) {
-        if (text.trim().isEmpty) throw const MirrorProblem('请写下需要补充的一条事实');
-        final node = commands.record(
-            f,
-            NodeKind.evidence,
-            {
-              'text': text.trim(),
-              'category': category,
-              'source': 'self_report',
-              'sensitive': sensitive,
-              'scope': 'case_only'
-            },
-            knownAt: DateTime.now().toUtc(),
-            happenedAt: happenedAt);
-        return commands.append(f, [node]);
-      });
+      {String category = 'condition',
+      bool sensitive = false,
+      DateTime? happenedAt,
+      bool materialChange = false}) async {
+    if (text.trim().isEmpty) throw const MirrorProblem('请写下需要补充的一条事实');
+    if (materialChange) await cancelReminders(id);
+    await mutate(id, (f) {
+      final node = commands.record(
+          f,
+          NodeKind.evidence,
+          {
+            'text': text.trim(),
+            'category': category,
+            'source': 'self_report',
+            'sensitive': sensitive,
+            'scope': 'case_only',
+            if (materialChange) 'context': 'requires_route_review',
+          },
+          knownAt: DateTime.now().toUtc(),
+          happenedAt: happenedAt);
+      final next = commands.append(f, [node]);
+      if (!materialChange) return next;
+      const obsolete = {
+        NodeKind.routeFit,
+        NodeKind.preflight,
+        NodeKind.plan,
+        NodeKind.trigger,
+        NodeKind.scene,
+        NodeKind.principleMatch,
+        NodeKind.recommendation,
+      };
+      return next.evolve(
+          nodes: next.nodes
+              .map((n) => n.episodeId == f.episodeId &&
+                      obsolete.contains(n.kind) &&
+                      n.usable
+                  ? n.withStatus(NodeStatus.stale)
+                  : n)
+              .toList(),
+          analysisMessage: '有新的现实记录，旧路线比较与预案需要重新核实；已发生的事实和封存历史保留。');
+    });
+  }
+
   Future<void> feedback(String id, String target, String action,
       {String comment = ''}) async {
     await mutate(
@@ -267,6 +293,12 @@ class MirrorController extends ChangeNotifier {
   }
 
   Future<void> acceptReframe(String id, String reframeId) async {
+    final candidate = file(id)?.node(reframeId);
+    if (candidate == null ||
+        !candidate.usable ||
+        candidate.kind != NodeKind.reframe)
+      throw const MirrorProblem('认识候选已变化');
+    await cancelReminders(id);
     await mutate(id, (f) {
       final reframe = f.node(reframeId);
       if (reframe == null || !reframe.usable)
@@ -337,8 +369,26 @@ class MirrorController extends ChangeNotifier {
           },
           links: [reframe.id],
           origin: EvidenceOrigin.productRule);
-      return commands.append(next, [belief, after, shift],
+      final revised = commands.append(next, [belief, after, shift],
           stage: CaseStage.reframed);
+      final affected = reframe.strings('affectedRouteIds').toSet();
+      return revised.evolve(
+        nodes: revised.nodes
+            .map(
+              (n) => n.usable &&
+                      n.episodeId == f.episodeId &&
+                      {
+                        NodeKind.routeFit,
+                        NodeKind.preflight,
+                        NodeKind.plan,
+                        NodeKind.scene,
+                      }.contains(n.kind) &&
+                      affected.contains(n.text('routeId'))
+                  ? n.withStatus(NodeStatus.stale)
+                  : n,
+            )
+            .toList(),
+      );
     });
   }
 
@@ -355,6 +405,7 @@ class MirrorController extends ChangeNotifier {
     var initial = await store.load(consent.caseId);
     if (initial == null || initial.revision != consent.revision)
       throw const VersionConflict();
+    final pass = requestedPass(options);
     notice = null;
     final fingerprint = digest({
       'sources': (consent.evidenceIds.toList()..sort())
@@ -368,6 +419,7 @@ class MirrorController extends ChangeNotifier {
       'provider': providerLabel
     });
     if (onlyStage == null &&
+        options['workbenchPass'] == null &&
         initial.current(NodeKind.motive).length >= 50 &&
         initial.current(NodeKind.routeFit).isNotEmpty &&
         initial.current(NodeKind.permission).any((n) =>
@@ -390,7 +442,9 @@ class MirrorController extends ChangeNotifier {
           'granted': true,
           'runId': consent.runId,
           'analysisFingerprint': fingerprint,
-          'stage': onlyStage?.name ?? 'full',
+          'stage': options['workbenchPass'] is String
+              ? 'workbench_${options['workbenchPass']}'
+              : onlyStage?.name ?? 'full',
           'completed': false,
         },
         origin: EvidenceOrigin.deviceEvent);
@@ -404,7 +458,9 @@ class MirrorController extends ChangeNotifier {
     busyCaseId = initial.id;
     error = null;
     retryStage = onlyStage;
-    retryWorkflow = onlyStage == null || options['resumeWorkflow'] == true;
+    retryOptions = {...options};
+    retryWorkflow = pass == null &&
+        (onlyStage == null || options['resumeWorkflow'] == true);
     _notify();
     try {
       final external = externalFor(consent);
@@ -418,6 +474,8 @@ class MirrorController extends ChangeNotifier {
           weights: preferences.weights,
           progress: (stage, detail) {
             retryStage = stage;
+            if (pass != null)
+              retryOptions = {...options, 'resumeAt': stage.name};
             progressTitle = stageTitles[stage]!;
             progressDetail = detail;
             _notify();

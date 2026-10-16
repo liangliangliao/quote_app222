@@ -166,7 +166,7 @@ semanticKey标实际因果含义，相同意思用同key；一条理由可对不
         '''S4独立反证审查：重新检查现有每个reframe，主动找支持旧认识的最强证据、新解释的反例/混杂/现实限制。不要为了积极而反驳合理判断。
 返回有必要改进的reframe新版本，revisionOf引用旧版；无问题可返回空records。保留原有事实和未知，补具体可推翻条件。''',
       AnalysisStage.routeAssessment =>
-        '''S5：为每条route生成routeFit，区分wantFit/bodySkillFit/externalFeasibility/motivationCognition/hardSafetyGate/difficulty。
+        '''S5：本批只为options.assessmentRouteId指定的route生成恰好一项routeFit；不要重评其他路线。区分wantFit/bodySkillFit/externalFeasibility/motivationCognition/hardSafetyGate/difficulty。
 matrix每项欲求分别列now/near/long，有条件与支持，未知不得编造。difficultyFactors含启动摩擦/技能/资源/情绪/情境5维，未知null。exploratoryIndex默认null；无足够个人真实证据或至少2维未知禁止数值。
 按相关性给consequence时间窗口/重复累计阈值/暂时可恢复或不可逆；未来日期只有已知才填，永久损失的感受不是事实。
 给有证据相关的obstacle（阶段、机制、控制度、客观与T0信念、支持反例）、taskRequirement、supportVariant。未知身体条件不猜测不强制问卷，技能可训练有支持变体；功能限制仅属特定任务。
@@ -197,7 +197,7 @@ revisedClaims引用哪些既有判断因此获支持/受质疑/未知；不能�
 Top5分数、原则被打开和被认可不能作为原则有效性证据。实际应用与结果、满意分别分析。可给有真实任务能力出处的strengthMatch，不做天赋/道德排名。
 如果已有principle/insight被新反例推翻，返回修订新版本revisionOf旧ID，并解释条件改变；不默默保留旧结论。''',
       AnalysisStage.reappraise =>
-        '''T1现场：只用真实触发核实和新事实，比较T0与现在。双方理由同时保留，风险/外部/身体/条件变更允许原路线失效。
+        '''按当前phase重新审议：T0只用事前已有证据和认可的新认识，不声称已到现场；T1必须引用真实触发核实和当前事实，比较T0与现在。双方理由同时保留，风险/外部/身体/条件变更允许原路线失效。
 给需要变化的routeFit/obstacle/reframe/motive/graphEdge新版本revisionOf旧对象，并说明旧认识到新认识改变了哪条路线的支持/反对关系；没有证据不造变化。不是单向劝坚持。旧计划/榜单不覆盖，新认识只有当前已知。''',
     };
 

@@ -335,7 +335,7 @@ class _CasesHomeState extends State<_CasesHome> {
           ],
           Text('把眼前的事，\n慢慢看清楚。', style: theme.textTheme.headlineLarge),
           const SizedBox(height: 12),
-          Text('从真实处境出发，看见理由与走法，\n再用自己的经历检验。',
+          Text('为什么明明想做，到了那一刻却不想动？\n从一件具体的事，找到能核实、能尝试的下一步。',
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 24),
@@ -366,6 +366,26 @@ class _CasesHomeState extends State<_CasesHome> {
                           label: Text(_listening ? '停止语音' : '用语音描述'))),
                   TextButton(onPressed: _examples, child: const Text('看一个例子'))
                 ]),
+                Text('借一个例子，改成你的情况：', style: theme.textTheme.bodySmall),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final sample in const {
+                      '明早不想出门':
+                          '我约好了明早去了解一个岗位。现在想去，但担心明天醒来又只想躺着。岗位条件还没核实，我也不想草率答应。',
+                      '怕一次失败': '我想练习一项新技能，但总觉得只要失败一次，就说明我没有能力。所以练习前就想放弃。',
+                      '想坚持又想换路': '我已经尝试了几次，现在不知道该继续原来的方法，还是先改变条件、寻求帮助或换一条路。',
+                    }.entries)
+                      ActionChip(
+                        label: Text(sample.key),
+                        onPressed: () => setState(() {
+                          _input.text = sample.value;
+                          _past = false;
+                        }),
+                      ),
+                  ],
+                ),
                 SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
@@ -380,8 +400,12 @@ class _CasesHomeState extends State<_CasesHome> {
                     icon: const Icon(Icons.arrow_forward, size: 18),
                     label: const Text('开始看清这件事')),
                 const SizedBox(height: 10),
-                Text('默认保存在本机。开始 AI 分析前，你会看到本次使用的资料。',
-                    style: theme.textTheme.bodySmall),
+                Text(
+                  '默认保存在本机。开始 AI 分析前，你会看到本次使用的资料。',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                Text(c.providerLabel, style: theme.textTheme.bodySmall),
               ])),
           const SizedBox(height: 22),
           MotiveTide(

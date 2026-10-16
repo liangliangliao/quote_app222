@@ -1,0 +1,7 @@
+Downloading android-arm-profile/linux-x64 tools...                  4.9s
+Downloading android-arm-release/linux-x64 tools...                  4.0s
+Downloading android-arm64-profile/linux-x64 tools...                4.5s
+Downloading android-arm64-release/linux-x64 tools...                3.5s
+Downloading android-x64-profile/linux-x64 tools...                  4.1s
+Downloading android-x64-release/linux-x64 tools...                  3.8s
+[!] No Android SDK found. Try setting the ANDROID_HOME environment variable.

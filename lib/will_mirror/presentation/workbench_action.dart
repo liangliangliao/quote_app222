@@ -6,6 +6,16 @@ extension _ActionViews on _CaseWorkbenchState {
         preflight = f.latest(NodeKind.preflight),
         scene = f.latest(NodeKind.scene),
         plan = f.latest(NodeKind.plan);
+    if (route != null && !EvidenceRules.routeCanBePrepared(route, f)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _heading('先重新核实这条走法。'),
+          const Text('新的认识或现实条件可能改变了原判断。旧记录仍可回看，先确认得失、限制与安全条件，再安排下一步。'),
+          _primary('重新比较路线与条件', _busy ? null : () => _continue(3)),
+        ],
+      );
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _heading('给未来加入一个\n真实能改变的条件。', '预案是一份准备。真正到了现场，你仍然可以重新判断。'),
       if (route == null) ...[

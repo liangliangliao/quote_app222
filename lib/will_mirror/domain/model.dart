@@ -343,7 +343,11 @@ class CaseFile {
         CaseStage.noObservation =>
           '事后回望',
         CaseStage.paused => '已暂缓',
-        _ => retrospective ? '事后回望' : '事前准备',
+        _ => switch (phase) {
+            TimePhase.t1 => '已到现场',
+            TimePhase.t2 || TimePhase.t3 => '事后回望',
+            _ => '事前准备',
+          },
       };
 
   CaseFile evolve(

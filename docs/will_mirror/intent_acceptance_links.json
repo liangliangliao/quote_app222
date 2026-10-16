@@ -1,0 +1,128 @@
+[
+  {
+    "id": "T8",
+    "scope": "首轮渐进理解与欲求；不自动启动全池",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T25",
+    "scope": "同一动机在两条路线上的方向分别保留",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T33",
+    "scope": "计划/现场/行动/后续体验分层",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T37",
+    "scope": "即时和长远得失的 Flutter 渲染",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T38",
+    "scope": "适配/难度/能力/外部条件分开显示",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T66",
+    "scope": "关键新事实不改写原封存字节",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T68",
+    "scope": "行动完成不补造决意或满意",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T90",
+    "scope": "新认识使受影响路线待复核，其他路线保留",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T100",
+    "scope": "认可新认识不生成行为观察",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T192",
+    "scope": "新条件停止旧预案和待执行提醒",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T309",
+    "scope": "按路线保留双向动机关系",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T333",
+    "scope": "新条件和新轮次要求原则重新匹配",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T365",
+    "scope": "事后认识仍为事后；历史封存不覆盖",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  },
+  {
+    "id": "T366",
+    "scope": "原模块回归与新增工作台回归同时执行",
+    "regression_files": [
+      "test/will_mirror/intent_workbench_test.dart",
+      "test/will_mirror/intent_visual_test.dart"
+    ],
+    "limit": "补充覆盖，不把整条需求或真实效果标为已验收。"
+  }
+]

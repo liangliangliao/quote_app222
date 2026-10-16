@@ -3,8 +3,7 @@ part of 'workbench.dart';
 extension _ReviewViews on _CaseWorkbenchState {
   Widget _review() {
     final observation = f.latest(NodeKind.observation),
-        review = f.latest(NodeKind.review),
-        plan = f.latest(NodeKind.plan);
+        review = f.latest(NodeKind.review);
     final revealable = EvidenceRules.canReveal(f);
     final revealed =
         {CaseStage.revealed, CaseStage.revised}.contains(f.stage) && revealable;
@@ -15,16 +14,7 @@ extension _ReviewViews on _CaseWorkbenchState {
         _primary('记录实际观察', _observe, icon: Icons.edit_note)
       ],
       if (observation != null) ...[
-        _comparison(
-            '事前 · 当时的预案', plan?.text('ifThen') ?? '没有记录事前预案，不会事后补造', plan),
-        _comparison(
-            '现场 · 当时出现的条件',
-            f.latest(NodeKind.triggerCheck)?.text('detail') ?? '现场条件尚未记录',
-            f.latest(NodeKind.triggerCheck)),
-        _comparison(
-            '事后 · 真实做了什么',
-            '${humanValue(observation.text('actionState'))}：${observation.text('action')}',
-            observation),
+        RealityEvidenceTrace(file: f, onNode: _details),
         _comparison(
             '外部结果 · 与行动分开',
             '${humanValue(observation.text('outcomeState'))}${observation.text('externalOutcome').isEmpty ? '' : '：${observation.text('externalOutcome')}'}',
@@ -77,6 +67,36 @@ extension _ReviewViews on _CaseWorkbenchState {
               '基于真实记录复盘', _busy ? null : () => _analyze(AnalysisStage.review),
               icon: Icons.auto_awesome_outlined),
         ] else ...[
+          if (review.objects('revisedClaims').isNotEmpty) ...[
+            Text(
+              '这次现实改变了哪些判断',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            for (final item in review.objects('revisedClaims').take(3))
+              MirrorCard(
+                padding: const EdgeInsets.all(14),
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MirrorTag(
+                      const {
+                            'supported': '得到初步支持',
+                            'challenged': '遇到反例',
+                            'uncertain': '仍不确定',
+                          }[item['direction']] ??
+                          '待核实',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(item['reason'] as String),
+                    if (f.node(item['nodeId'] as String) case final old?)
+                      _sourceLink(old, label: '对照原判断与依据'),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 14),
+          ],
           Text(review.text('summary'),
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -132,52 +152,173 @@ extension _ReviewViews on _CaseWorkbenchState {
             Text(body)
           ])));
   Future<void> _observe() async {
-    final state = await chooseOption(context, title: '行动本身实际怎样了？', options: {
-      'completed': '确实完成了行动',
-      'partial': '完成了一部分',
-      'changed': '实际采取了另一条路线',
+    final action = TextEditingController();
+    final external = TextEditingController();
+    final feeling = TextEditingController();
+    final form = GlobalKey<FormState>();
+    var state = 'unknown', outcome = 'unknown', saving = false;
+    DateTime? happenedAt;
+    const states = {
+      'completed': '确实完成',
+      'partial': '做了一部分',
+      'changed': '换了走法',
       'blocked': '尝试后受阻',
-      'not_performed': '本人确认没有行动',
-      'unknown': '尚不清楚／暂不记录结果'
-    });
-    if (state == null || !mounted) return;
-    final details = await askText(context,
-        title: '只把事实留在这里',
-        questions: [
-          const TextQuestion('action', '实际发生了什么？', required: true, lines: 3),
-          const TextQuestion('outcome', '外部结果（还不知道可留空）'),
-          const TextQuestion('feeling', '你的真实感受（可不填）')
-        ],
-        explanation: '例如已出发但对方取消，仍保留“已尝试”的事实，不会变成没有努力。');
-    if (details == null || !mounted) return;
-    final outcome = await chooseOption(context, title: '外部结果是否已经知道？', options: {
-      'unknown': '目前未知',
-      'pending': '需要等后续反馈',
-      'achieved': '本人确认取得预期结果',
-      'partial': '取得了一部分',
-      'not_achieved': '本人确认未取得预期结果'
-    });
-    if (outcome == null || !mounted) return;
-    final at = await pickMoment(context);
-    await _act(() => c.observe(
-        f.id,
-        {
-          'routeId':
-              f.latest(NodeKind.decision)?.body['routeId'] ?? f.selectedRouteId,
-          'attemptId': f.latest(NodeKind.attempt)?.id,
-          'actionState': state,
-          'action': details['action'],
-          'externalOutcome': details['outcome'],
-          'outcomeState': outcome,
-          'feeling': details['feeling'],
-          'noticedMotiveIds': <String>[],
-          'context': '',
-          'domains': f.latest(NodeKind.understanding)?.strings('domains') ??
-              <String>[],
-          'opportunityId': f.latest(NodeKind.opportunity)?.id
-        },
-        details['action']!,
-        happenedAt: at));
+      'not_performed': '确实没行动',
+      'unknown': '尚不清楚',
+    };
+    const outcomes = {
+      'unknown': '还不知道',
+      'pending': '等待后续',
+      'achieved': '确实取得',
+      'partial': '取得一部分',
+      'not_achieved': '确实未取得',
+    };
+    await mirrorSheet<void>(
+      context,
+      title: '这次实际发生了什么？',
+      child: StatefulBuilder(
+        builder: (sheetContext, refresh) => Form(
+          key: form,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('一次反馈即可。做过的部分会留下；不知道的部分可以保持未知。'),
+              const SizedBox(height: 14),
+              Text('行动本身', style: Theme.of(context).textTheme.titleSmall),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final entry in states.entries)
+                    ChoiceChip(
+                      label: Text(entry.value),
+                      selected: state == entry.key,
+                      onSelected: saving
+                          ? null
+                          : (_) => refresh(() => state = entry.key),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                key: const ValueKey('mirror-observation-action'),
+                controller: action,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: '实际做了什么？',
+                  hintText: '例如：已出发，但对方取消了。只写真实发生的部分。',
+                ),
+                validator: (v) => state != 'unknown' && (v ?? '').trim().isEmpty
+                    ? '请留下一句实际情况'
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              Text('外部结果', style: Theme.of(context).textTheme.titleSmall),
+              const Text('采取了行动，也可能仍要等待对方或后续结果。'),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final entry in outcomes.entries)
+                    ChoiceChip(
+                      label: Text(entry.value),
+                      selected: outcome == entry.key,
+                      onSelected: saving
+                          ? null
+                          : (_) => refresh(() => outcome = entry.key),
+                    ),
+                ],
+              ),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('补充结果、感受或发生时间（可选）'),
+                children: [
+                  TextFormField(
+                    controller: external,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: '外部结果的具体事实'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: feeling,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: '你的真实感受'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final at = await pickMoment(sheetContext);
+                      if (at != null && sheetContext.mounted)
+                        refresh(() => happenedAt = at);
+                    },
+                    icon: const Icon(Icons.schedule),
+                    label: Text(
+                      happenedAt == null ? '发生时间未指定' : timeLabel(happenedAt),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                key: const ValueKey('mirror-save-observation'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        if (!form.currentState!.validate()) return;
+                        refresh(() => saving = true);
+                        var saved = false;
+                        await _act(() async {
+                          final text = action.text.trim().isEmpty
+                              ? '本轮行动情况尚不清楚'
+                              : action.text.trim();
+                          await c.observe(
+                            f.id,
+                            {
+                              'routeId': f
+                                      .latest(NodeKind.decision)
+                                      ?.body['routeId'] ??
+                                  f.selectedRouteId,
+                              'attemptId': f.latest(NodeKind.attempt)?.id,
+                              'actionState': state,
+                              'action': text,
+                              'externalOutcome': external.text.trim(),
+                              'outcomeState': outcome,
+                              'feeling': feeling.text.trim(),
+                              'noticedMotiveIds': <String>[],
+                              'context': '',
+                              'domains': f
+                                      .latest(NodeKind.understanding)
+                                      ?.strings('domains') ??
+                                  <String>[],
+                              'opportunityId':
+                                  f.latest(NodeKind.opportunity)?.id
+                            },
+                            text,
+                            happenedAt: happenedAt,
+                          );
+                          saved = true;
+                        });
+                        if (sheetContext.mounted) {
+                          if (saved) {
+                            Navigator.pop(sheetContext);
+                          } else {
+                            refresh(() => saving = false);
+                          }
+                        }
+                      },
+                child: const Text('保存真实反馈'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    action.dispose();
+    external.dispose();
+    feeling.dispose();
   }
 
   Future<void> _opportunity() async {
@@ -393,8 +534,10 @@ extension _ReviewViews on _CaseWorkbenchState {
       final p = c.resolve(application.text('principleId'));
       final adopted = {'accepted', 'scheduled', 'delivered'}
           .contains(application.text('exposure'));
-      if ((!atField || adopted) && p != null && EvidenceRules.principleCanBePrepared(p, f,
-          authorized: c.authorizedHistory)) return p;
+      if ((!atField || adopted) &&
+          p != null &&
+          EvidenceRules.principleCanBePrepared(p, f,
+              authorized: c.authorizedHistory)) return p;
     }
     // Showing a draft at T1 must not imply it was adopted for this occasion.
     if (atField) return null;
@@ -403,13 +546,14 @@ extension _ReviewViews on _CaseWorkbenchState {
         .where((n) => {'applicable', 'conditional'}.contains(n.text('fit')));
     for (final match in matches) {
       final p = c.resolve(match.text('principleId'));
-      if (p != null && EvidenceRules.principleCanBePrepared(p, f,
-          authorized: c.authorizedHistory)) return p;
+      if (p != null &&
+          EvidenceRules.principleCanBePrepared(p, f,
+              authorized: c.authorizedHistory)) return p;
     }
     final own = f.current(NodeKind.principle);
     if (own.isNotEmpty) return own.first;
-    final earlier = f.current(NodeKind.principle, allEpisodes: true).where((p) =>
-        EvidenceRules.principleCanBePrepared(p, f,
+    final earlier = f.current(NodeKind.principle, allEpisodes: true).where(
+        (p) => EvidenceRules.principleCanBePrepared(p, f,
             authorized: c.authorizedHistory));
     return earlier.isEmpty ? null : earlier.first;
   }
@@ -418,7 +562,8 @@ extension _ReviewViews on _CaseWorkbenchState {
     final principle = _applicablePrinciple(atField: atField);
     if (principle == null) return const SizedBox.shrink();
     final latest = f.latest(NodeKind.principleApplication);
-    final application = latest?.text('principleId') == principle.id ? latest : null;
+    final application =
+        latest?.text('principleId') == principle.id ? latest : null;
     final canAdopt = EvidenceRules.principleCanBePrepared(principle, f,
         authorized: c.authorizedHistory, requireAccepted: false);
     final adopted = {'accepted', 'scheduled', 'delivered'}
@@ -450,10 +595,9 @@ extension _ReviewViews on _CaseWorkbenchState {
                 Wrap(spacing: 6, runSpacing: 4, children: [
                   FilledButton.tonal(
                       onPressed: canAdopt && !adopted
-                          ? () => _adoptPrinciple(principle) : null,
-                      child: Text(adopted
-                          ? '已采用为本次参考'
-                          : '采用为本次参考')),
+                          ? () => _adoptPrinciple(principle)
+                          : null,
+                      child: Text(adopted ? '已采用为本次参考' : '采用为本次参考')),
                   TextButton(
                       onPressed: () => _editPrinciple(principle),
                       child: const Text('修改')),
@@ -503,14 +647,16 @@ extension _ReviewViews on _CaseWorkbenchState {
           },
           evidenceIds: principle.evidenceIds,
           links: [principle.id],
-          revisionOf: prior?.text('principleId') == principle.id ? prior?.id : null);
+          revisionOf:
+              prior?.text('principleId') == principle.id ? prior?.id : null);
     });
   }
 
   Future<void> _declinePrinciple(MirrorNode principle, String action) async {
     await _act(() async {
       final latest = f.latest(NodeKind.principleApplication);
-      final application = latest?.text('principleId') == principle.id ? latest : null;
+      final application =
+          latest?.text('principleId') == principle.id ? latest : null;
       await c.recordNode(
           f.id,
           NodeKind.principleApplication,
@@ -594,10 +740,10 @@ extension _ReviewViews on _CaseWorkbenchState {
   }
 
   Future<void> _applicationOutcome(MirrorNode application, String state) async {
-    final details = await askText(context,
-        title: '原则应用与结果分别记录',
-        questions: [TextQuestion('detail', '具体用了什么做法，或为什么尚不清楚？',
-            required: state == 'applied_self_report')]);
+    final details = await askText(context, title: '原则应用与结果分别记录', questions: [
+      TextQuestion('detail', '具体用了什么做法，或为什么尚不清楚？',
+          required: state == 'applied_self_report')
+    ]);
     if (details == null) return;
     await _updateApplication(
         application,

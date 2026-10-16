@@ -303,24 +303,29 @@ class EvidenceRules {
         final prior = all[node.revisionOf];
         if (node.text('principleVersion') != node.text('principleId') ||
             (prior != null &&
-                prior.text('principleVersion') != node.text('principleVersion'))) {
+                prior.text('principleVersion') !=
+                    node.text('principleVersion'))) {
           throw const MirrorProblem('应用记录必须保留当时的原则版本，不能替换成后来修订的版本');
         }
-        final actualApplication =
-            {'applied_self_report', 'applied_verified'}.contains(node.text('application'));
+        final actualApplication = {'applied_self_report', 'applied_verified'}
+            .contains(node.text('application'));
         if (actualApplication) {
           final observed = [
             ...node.strings('attemptIds'),
             ...node.strings('observationIds')
           ].map((id) => all[id]).any((n) =>
-              n != null && n.usable && n.isFact &&
-              n.caseId == file.id && n.episodeId == file.episodeId &&
+              n != null &&
+              n.usable &&
+              n.isFact &&
+              n.caseId == file.id &&
+              n.episodeId == file.episodeId &&
               (n.kind == NodeKind.attempt
                   ? !{'unknown', 'not_started'}.contains(n.text('stage'))
                   : n.kind == NodeKind.observation &&
                       n.text('actionState') != 'unknown'));
           if (node.phase.index < TimePhase.t2.index ||
-              node.text('detail').trim().isEmpty || !observed) {
+              node.text('detail').trim().isEmpty ||
+              !observed) {
             throw const MirrorProblem('实际采用需要具体做法和本轮真实尝试或观察；计划、打开和未知不算应用证据');
           }
           if (node.text('application') == 'applied_verified' &&
@@ -337,9 +342,11 @@ class EvidenceRules {
         // safe principle; a new version never rewrites the old application.
         final adopting = {'accepted', 'scheduled', 'delivered'}
             .contains(node.text('exposure'));
-        if (adopting && (prior == null || node.phase.index < TimePhase.t2.index) &&
+        if (adopting &&
+            (prior == null || node.phase.index < TimePhase.t2.index) &&
             (principle == null ||
-                !principleCanBePrepared(principle, file, authorized: authorized))) {
+                !principleCanBePrepared(principle, file,
+                    authorized: authorized))) {
           throw const MirrorProblem('这条原则尚未认可、已修订或需要重新核实适用条件，不能作为当前行动提示');
         }
       }
@@ -356,27 +363,39 @@ class EvidenceRules {
     if (principle.kind != NodeKind.principle ||
         (requireAccepted
             ? principle.status != NodeStatus.accepted
-            : !{NodeStatus.draft, NodeStatus.accepted}.contains(principle.status)) ||
+            : !{NodeStatus.draft, NodeStatus.accepted}
+                .contains(principle.status)) ||
         principle.text('riskGate') != 'clear' ||
         principle.text('maturity') == 'needs_review' ||
         all.values.any((n) => n.revisionOf == principle.id)) return false;
     if (file.latest(NodeKind.reappraisal)?.flag('safetyChanged') == true) {
       return false;
     }
-    if (principle.dependencies.any((id) => all[id]?.usable != true)) return false;
-    final matches = file.current(NodeKind.principleMatch)
+    if (principle.dependencies.any((id) => all[id]?.usable != true))
+      return false;
+    final matches = file
+        .current(NodeKind.principleMatch)
         .where((n) => n.text('principleId') == principle.id);
+    final contextVersion = matches.lastOrNull?.id ?? principle.id;
+    final reviewedAt = file.nodes.indexWhere((n) => n.id == contextVersion);
+    if (file.current(NodeKind.evidence).any((n) =>
+        n.text('context') == 'requires_route_review' &&
+        file.nodes.indexWhere((row) => row.id == n.id) > reviewedAt))
+      return false;
     if (matches.any((n) =>
         !{'applicable', 'conditional'}.contains(n.text('fit')) ||
         n.text('riskGate') != 'clear')) return false;
     final application = file.latest(NodeKind.principleApplication);
     if (application?.text('principleId') == principle.id &&
         (application?.text('exposure') == 'declined' ||
-            {'context_changed', 'rejected'}.contains(application?.text('recall')))) {
+            {'context_changed', 'rejected'}
+                .contains(application?.text('recall')))) {
       return false;
     }
-    // Cross-case use always requires a current, explicit context match.
-    return principle.caseId == file.id || matches.isNotEmpty;
+    // A new episode can have new conditions even inside the same Case.
+    return (principle.caseId == file.id &&
+            principle.episodeId == file.episodeId) ||
+        matches.isNotEmpty;
   }
 
   static Set<String> actualRoots(MirrorNode node, Map<String, MirrorNode> all) {
@@ -437,6 +456,21 @@ class EvidenceRules {
     return affected;
   }
 
+  static bool routeNeedsReview(MirrorNode route, CaseFile file) {
+    final assessment = file
+        .current(NodeKind.routeFit)
+        .where((n) => n.text('routeId') == route.id)
+        .lastOrNull;
+    final asOf = file.nodes.indexWhere(
+      (n) => n.id == (assessment?.id ?? route.id),
+    );
+    return file.current(NodeKind.evidence).any(
+          (n) =>
+              n.text('context') == 'requires_route_review' &&
+              file.nodes.indexWhere((row) => row.id == n.id) > asOf,
+        );
+  }
+
   static bool routeCanBePrepared(MirrorNode route, [CaseFile? file]) =>
       route.usable &&
       route.kind == NodeKind.route &&
@@ -445,6 +479,9 @@ class EvidenceRules {
       route.text('safety') != 'blocked' &&
       route.text('feasibility') != 'infeasible' &&
       (route.text('safety') == 'clear' || route.flag('protective')) &&
+      (file == null ||
+          !routeNeedsReview(route, file) ||
+          route.flag('protective')) &&
       !(file?.latest(NodeKind.reappraisal)?.flag('safetyChanged') == true &&
           !route.flag('protective')) &&
       !(file?.current(NodeKind.routeFit).any((fit) =>

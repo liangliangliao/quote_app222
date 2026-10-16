@@ -21,37 +21,12 @@ extension _AnalysisViews on _CaseWorkbenchState {
         Text(understood.text('summary'),
             style: Theme.of(context).textTheme.bodyLarge),
         const SizedBox(height: 16),
-        for (final fact in understood.objects('facts'))
-          Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child:
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Icon(Icons.format_quote, size: 16)),
-                const SizedBox(width: 8),
-                Expanded(child: Text(fact['claim'] as String))
-              ])),
-        if (understood.strings('unknowns').isNotEmpty) ...[
-          const SizedBox(height: 10),
-          const MirrorTag('还不知道的事', icon: Icons.help_outline),
-          for (final item in understood.strings('unknowns'))
-            Padding(
-                padding: const EdgeInsets.only(top: 8), child: Text('· $item'))
-        ],
-        _sourceLink(understood, label: '查看原话与事实来源'),
-        if (understood.text('keyQuestion').isNotEmpty)
-          MirrorCard(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(understood.text('keyQuestion')),
-                    TextButton(
-                        onPressed: () => _evidence(),
-                        child: const Text('补充这条信息（可以稍后）'))
-                  ])),
+        CaseSituationCard(
+          file: f,
+          onNode: _details,
+          onAdd: () => _evidence(),
+        ),
+        _sourceLink(understood, label: '查看完整原话与来源'),
       ],
       _nodeList(NodeKind.capability, title: '原文中的任务能力线索 · 待核实'),
       if (wants.isNotEmpty) ...[
@@ -96,7 +71,7 @@ extension _AnalysisViews on _CaseWorkbenchState {
                       ])))
       ],
       if (understood != null)
-        _primary('看看有哪些正反理由', _busy ? null : () => _go(1)),
+        _primary('看看有哪些正反理由', _busy ? null : () => _continue(1)),
       if (understood != null)
         TextButton(
             onPressed: _busy ? null : () => _analyze(),
@@ -157,8 +132,23 @@ extension _AnalysisViews on _CaseWorkbenchState {
           const Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
               child: Text('暂时没有可靠的 Top5。可以先阅读代表性理由，核实其中最关键的事实。')),
+        const SizedBox(height: 14),
+        MotiveConflictPanel(file: f, onNode: _details),
+        const SizedBox(height: 18),
+        Text('本次优先审议的理由', style: Theme.of(context).textTheme.titleMedium),
         for (var i = 0; i < displayed.length; i++)
-          _motiveCard(displayed[i], rank: i + 1, score: ranked[i]),
+          ExpansionTile(
+              key: ValueKey('mirror-priority-${displayed[i].id}'),
+              tilePadding: EdgeInsets.zero,
+              title: Text('${i + 1}. ${displayed[i].text('summary')}'),
+              subtitle: Text(
+                f.selectedMotiveIds.contains(displayed[i].id)
+                    ? '你已认可，留作现场理由'
+                    : '${humanValue(displayed[i].text('horizon'))} · ${humanValue(displayed[i].text('factStatus'))}',
+              ),
+              children: [
+                _motiveCard(displayed[i], rank: i + 1, score: ranked[i]),
+              ]),
         if (ranking?.flag('unstable') == true)
           const Text('这些量规分数很接近，排序并不稳定；请一起审议。'),
         if (ranking != null && ranking.strings('verifyFirstIds').isNotEmpty)
@@ -194,7 +184,7 @@ extension _AnalysisViews on _CaseWorkbenchState {
           TextButton(
               onPressed: _busy ? null : _score, child: const Text('本次远程评分'))
         ]),
-        _primary('看看有哪些认识值得核实', _busy ? null : () => _go(2)),
+        _primary('看看有哪些认识值得核实', _busy ? null : () => _continue(2)),
       ],
     ]);
   }
@@ -357,6 +347,9 @@ extension _AnalysisViews on _CaseWorkbenchState {
 
   Widget _cognition() {
     final reframes = f.current(NodeKind.reframe);
+    final focused =
+        reframes.where((r) => r.id == _focusedReframeId).firstOrNull ??
+            reframes.firstOrNull;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _heading('有哪项认识，\n可能让走法不同？', '旧认识可以是正确的。每项新认识都需要现实检验。'),
       if (reframes.isEmpty) ...[
@@ -365,7 +358,22 @@ extension _AnalysisViews on _CaseWorkbenchState {
             '寻找可检验的新认识', _busy ? null : () => _analyze(AnalysisStage.cognition),
             icon: Icons.auto_awesome_outlined)
       ],
-      for (final reframe in reframes)
+      if (reframes.length > 1) ...[
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (var i = 0; i < reframes.length; i++)
+              ChoiceChip(
+                label: Text('可能解释 ${i + 1}'),
+                selected: focused?.id == reframes[i].id,
+                onSelected: (_) => _focusReframe(reframes[i].id),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+      ],
+      for (final reframe in [if (focused != null) focused])
         Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: MirrorCard(
@@ -374,23 +382,11 @@ extension _AnalysisViews on _CaseWorkbenchState {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MirrorTag('原来的认识'),
-                      const SizedBox(height: 8),
-                      Text(f.node(reframe.text('oldBeliefId'))?.text('claim') ??
-                          '原认识来源待复核'),
-                      const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 9),
-                          child: Icon(Icons.south, size: 20)),
-                      const MirrorTag('一个可检验的新认识', emphasis: true),
-                      const SizedBox(height: 10),
-                      Text(reframe.text('newClaim'),
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 10),
-                      Text('可能改变：${reframe.text('mechanism')}'),
-                      const SizedBox(height: 8),
-                      Text('原判断也可能成立：${reframe.text('oldMayBeRight')}'),
-                      const SizedBox(height: 10),
-                      Text('可以核实：${reframe.text('test')}'),
+                      RecognitionBridge(
+                        file: f,
+                        reframe: reframe,
+                        onNode: _details,
+                      ),
                       _sourceLink(reframe),
                       Wrap(spacing: 6, children: [
                         FilledButton.tonal(
@@ -426,7 +422,7 @@ extension _AnalysisViews on _CaseWorkbenchState {
                       subtitle: Text('${card['source']}\n${card['text']}'))
               ])),
           child: const Text('查看方法与理论边界')),
-      _primary('比较可以实际采取的走法', _busy ? null : () => _go(3)),
+      _primary('比较可以实际采取的走法', _busy ? null : () => _continue(3)),
     ]);
   }
 
@@ -435,7 +431,30 @@ extension _AnalysisViews on _CaseWorkbenchState {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _heading('不止一种走法。', '想要什么、现在能否实施、需要什么支持，分开看。'),
       if (routes.isEmpty) const Text('还没有生成路线。可以补全分析，也可以写下你自己的走法。'),
-      for (final route in routes) _routeCard(route),
+      if (routes.isNotEmpty &&
+          routes.any(
+            (r) => !f
+                .current(NodeKind.routeFit)
+                .any((fit) => fit.text('routeId') == r.id),
+          ))
+        OutlinedButton.icon(
+          onPressed: _busy ? null : () => _analyze(),
+          icon: const Icon(Icons.fact_check_outlined),
+          label: const Text('补全路线得失与现实条件比较'),
+        ),
+      for (var i = 0; i < routes.length; i++)
+        RouteTradeoffCard(
+          file: f,
+          route: routes[i],
+          index: i,
+          safe: EvidenceRules.routeCanBePrepared(routes[i], f),
+          onSelect: () => _act(() => c.selectRoute(f.id, routes[i].id)),
+          onDetails: () => mirrorSheet<void>(
+            context,
+            title: '这条走法的完整依据',
+            child: _routeCard(routes[i]),
+          ),
+        ),
       if (routes.length > 1)
         OutlinedButton.icon(
             onPressed: () => mirrorSheet<void>(context,

@@ -138,8 +138,12 @@ Future<DateTime?> pickMoment(BuildContext context,
 }
 
 Future<AnalysisConsent?> askAnalysisConsent(
-    BuildContext context, MirrorController controller, CaseFile file,
-    {String action = '分析这个课题'}) async {
+  BuildContext context,
+  MirrorController controller,
+  CaseFile file, {
+  String action = '分析这个课题',
+  String? scope,
+}) async {
   List<MirrorNode> selectable(CaseFile f) => f.nodes
       .where((n) =>
           n.usable &&
@@ -164,6 +168,10 @@ Future<AnalysisConsent?> askAnalysisConsent(
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text(
                     '${controller.providerLabel}\n只发送勾选记录，以及依赖这些来源的有效候选与封存对照。未选的其他课题不会发送。'),
+                if (scope != null) ...[
+                  const SizedBox(height: 12),
+                  MirrorCard(child: Text('本次只做：$scope')),
+                ],
                 const SizedBox(height: 16),
                 for (final node in own)
                   CheckboxListTile(

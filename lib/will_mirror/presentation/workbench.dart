@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import '../ai/protocol.dart';
+import '../ai/workbench_pass.dart';
 import '../application/controller.dart';
 import '../domain/model.dart';
 import '../domain/ranking.dart';
@@ -11,6 +12,7 @@ import 'design.dart';
 import 'sheets.dart';
 import 'tide.dart';
 import 'visuals.dart';
+import 'journey_views.dart';
 
 part 'workbench_analysis.dart';
 part 'workbench_action.dart';
@@ -35,7 +37,8 @@ class CaseWorkbench extends StatefulWidget {
 }
 
 class _CaseWorkbenchState extends State<CaseWorkbench> {
-  final Set<int> _opened = {};
+  String? _focusedReframeId;
+  bool _expandedIssue = false;
   final _stepKeys = List.generate(7, (_) => GlobalKey());
   final _scroll = ScrollController();
   final _tts = FlutterTts();
@@ -92,10 +95,11 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
 
   Future<void> _act(Future<void> Function() action) =>
       runUiAction(context, action);
+  void _focusReframe(String id) => setState(() => _focusedReframeId = id);
   Future<void> _go(int step) async {
     await _act(() => c.advance(widget.caseId, step));
     if (!mounted) return;
-    setState(() => _opened.clear());
+    setState(() {});
     _scrollTo(step);
   }
 
@@ -112,13 +116,33 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
   }
 
   Future<void> _analyze([AnalysisStage? stage, Json options = const {}]) async {
-    final consent = await askAnalysisConsent(context, c, f,
-        action: stage == null ? '开始分析' : stageTitles[stage]!);
+    final pass = stage == null && options.isEmpty ? passForStep(_active) : null;
+    final request = pass == null ? options : {'workbenchPass': pass.name};
+    final consent = await askAnalysisConsent(
+      context,
+      c,
+      f,
+      action: stage == null ? '看清当前这一步' : stageTitles[stage]!,
+      scope: pass == null
+          ? null
+          : switch (pass) {
+              WorkbenchPass.understand => '只还原事实与欲求候选，先给出可核对的理解。后续步骤由你选择继续。',
+              WorkbenchPass.reasons => '生成不同走法和正反理由，后台补全候选并整理最多五条优先理由。',
+              WorkbenchPass.cognition => '检验旧认识、提出其他解释并检查反证。',
+              WorkbenchPass.routes => '比较现有路线的欲求得失、能力、难度与现实限制。',
+            },
+    );
     if (consent == null || !mounted) return;
-    await _act(() => c.analyze(consent, onlyStage: stage, options: options));
+    await _act(() => c.analyze(consent, onlyStage: stage, options: request));
     if (mounted && c.notice != null)
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(c.notice!)));
+  }
+
+  Future<void> _continue(int step) async {
+    await _go(step);
+    if (!mounted || stepHasAnalysis(f, step)) return;
+    await _analyze();
   }
 
   Future<void> _evidence({String category = 'condition'}) async {
@@ -130,8 +154,13 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
         ],
         explanation: '新发现会保留自己的记录时间，不会写回事前。');
     if (result != null)
-      await _act(
-          () => c.addEvidence(f.id, result['text']!, category: category));
+      await _act(() => c.addEvidence(
+            f.id,
+            result['text']!,
+            category: category,
+            materialChange: f.current(NodeKind.route).isNotEmpty &&
+                {'condition', 'correction', 'counter'}.contains(category),
+          ));
   }
 
   void _details(MirrorNode node) => showNodeDetails(context, c, node);
@@ -238,7 +267,19 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
                         Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: Text(f.issue,
-                                style: theme.textTheme.titleLarge)),
+                                maxLines: _expandedIssue ? null : 3,
+                                overflow: _expandedIssue
+                                    ? null
+                                    : TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyLarge)),
+                        if (f.issue.length > 80)
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                  onPressed: () => setState(
+                                      () => _expandedIssue = !_expandedIssue),
+                                  child: Text(
+                                      _expandedIssue ? '收起原话' : '展开完整原话'))),
                         const SizedBox(height: 18),
                         if (_busy)
                           MirrorCard(
@@ -265,109 +306,72 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
                                   body: c.error!,
                                   icon: Icons.cloud_off_outlined,
                                   action: TextButton(
-                                      onPressed: () => _analyze(c.retryStage,
-                                          {'resumeWorkflow': c.retryWorkflow}),
+                                      onPressed: () => _analyze(c.retryStage, {
+                                            ...c.retryOptions,
+                                            'resumeWorkflow': c.retryWorkflow
+                                          }),
                                       child: const Text('检查资料后重试')))),
-                        for (var i = 0; i < 7; i++)
-                          Padding(
-                              key: _stepKeys[i],
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: MirrorCard(
-                                  padding: const EdgeInsets.all(18),
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        InkWell(
-                                            borderRadius:
-                                                BorderRadius.circular(14),
-                                            onTap: () => setState(() {
-                                                  if (_opened.contains(i)) {
-                                                    _opened.remove(i);
-                                                  } else {
-                                                    _opened.add(i);
-                                                  }
-                                                }),
-                                            child: Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        vertical: 6),
-                                                child: Row(children: [
-                                                  Container(
-                                                      width: 31,
-                                                      height: 31,
-                                                      alignment:
-                                                          Alignment.center,
-                                                      decoration: BoxDecoration(
-                                                          color: i == active
-                                                              ? theme
-                                                                  .colorScheme
-                                                                  .primary
-                                                              : theme
-                                                                  .colorScheme
-                                                                  .surfaceContainer,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                  10)),
-                                                      child: Text('${i + 1}'.padLeft(2, '0'),
-                                                          style: TextStyle(
-                                                              color: i == active
-                                                                  ? theme
-                                                                      .colorScheme
-                                                                      .onPrimary
-                                                                  : theme
-                                                                      .colorScheme
-                                                                      .onSurface,
-                                                              fontSize: 12,
-                                                              fontWeight:
-                                                                  FontWeight.w700))),
-                                                  const SizedBox(width: 12),
-                                                  Expanded(
-                                                      child: Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                        Text(_stepTitles[i],
-                                                            style: theme
-                                                                .textTheme
-                                                                .titleSmall),
-                                                        if (i != active &&
-                                                            !_opened
-                                                                .contains(i))
-                                                          Text(_stepSummary(i),
-                                                              style: theme
-                                                                  .textTheme
-                                                                  .bodySmall,
-                                                              maxLines: 2,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis)
-                                                      ])),
-                                                  Icon(
-                                                      i == active ||
-                                                              _opened
-                                                                  .contains(i)
-                                                          ? Icons
-                                                              .keyboard_arrow_up
-                                                          : Icons
-                                                              .keyboard_arrow_down,
-                                                      size: 20)
-                                                ]))),
-                                        if (i == active ||
-                                            _opened.contains(i)) ...[
-                                          const SizedBox(height: 18),
-                                          switch (i) {
-                                            0 => _understanding(),
-                                            1 => _motives(),
-                                            2 => _cognition(),
-                                            3 => _routes(),
-                                            4 => _preparation(),
-                                            5 => _field(),
-                                            _ => _review()
-                                          }
-                                        ],
-                                      ]))),
+                        CaseJourneyHeader(
+                          file: f,
+                          step: active,
+                          onStep: (step) => _go(step),
+                        ),
+                        const SizedBox(height: 18),
+                        Padding(
+                          key: _stepKeys[active],
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: MirrorCard(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    MirrorTag(
+                                      '${active + 1}'.padLeft(2, '0'),
+                                      emphasis: true,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(_stepTitles[active],
+                                          style: theme.textTheme.titleSmall),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 18),
+                                switch (active) {
+                                  0 => _understanding(),
+                                  1 => _motives(),
+                                  2 => _cognition(),
+                                  3 => _routes(),
+                                  4 => _preparation(),
+                                  5 => _field(),
+                                  _ => _review()
+                                }
+                              ],
+                            ),
+                          ),
+                        ),
+                        ExpansionTile(
+                          key: const ValueKey('mirror-case-overview'),
+                          tilePadding:
+                              const EdgeInsets.symmetric(horizontal: 4),
+                          title: const Text('回看这件事的全貌与已有记录'),
+                          children: [
+                            for (var i = 0; i < 7; i++)
+                              ListTile(
+                                leading: Text('${i + 1}'.padLeft(2, '0')),
+                                title: Text(_stepTitles[i]),
+                                subtitle: Text(
+                                  _stepSummary(i),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => _go(i),
+                              ),
+                          ],
+                        ),
                         if (!_busy)
                           TextButton.icon(
                               onPressed: () => _evidence(),

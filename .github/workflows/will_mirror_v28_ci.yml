@@ -39,6 +39,14 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-pub lib/will_mirror test/will_mirror integration_test/will_mirror_storage_test.dart test_driver/will_mirror_storage_driver.dart
       - run: flutter test --no-pub --reporter expanded test/will_mirror
+        env:
+          WM_PREVIEW_DIR: ${{ runner.temp }}/will-mirror-previews
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: will-mirror-intent-previews
+          path: ${{ runner.temp }}/will-mirror-previews
+          if-no-files-found: warn
       - run: pip install -r server/will_mirror/requirements.txt
       - run: pytest -q server/will_mirror/test_contract.py
       - run: python3 docs/will_mirror/check_acceptance.py

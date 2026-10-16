@@ -1,5 +1,7 @@
 # v2.8 真机问题修复与后续开发
 
+2026-10-16 新一轮需求意图重开发见 [INTENT_REDEVELOPMENT.md](INTENT_REDEVELOPMENT.md) 与 [VALIDATION_INTENT.md](VALIDATION_INTENT.md)。下文保留上轮修复记录。
+
 本轮从最新相关分支 `codex/will-mirror-v28-rebuild@c94151a1` 继续，沿用 PR #173。已 fetch 核对 `main@ec8f7749`；没有把无关功能分支的提交时间当作本模块的开发基线。用户反馈是覆盖安装后首次进入即报错。
 
 ## 本轮完成

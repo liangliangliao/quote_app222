@@ -5,6 +5,7 @@ import '../domain/ranking.dart';
 import '../domain/rules.dart';
 import '../domain/schema.dart';
 import 'protocol.dart';
+import 'workbench_pass.dart';
 
 typedef StageCommit = Future<void> Function(
     CaseFile before, CaseFile after, AnalysisStage stage);
@@ -87,8 +88,9 @@ class CaseAnalysisPipeline {
       AnalysisStage.challenge,
       AnalysisStage.routeAssessment
     ];
-    final stages =
-        options['resumeWorkflow'] == true && workflow.contains(onlyStage)
+    final pass = requestedPass(options);
+    final stages = pass ??
+        (options['resumeWorkflow'] == true && workflow.contains(onlyStage)
             ? workflow.skipWhile((s) => s != onlyStage).toList()
             : onlyStage == null
                 ? [
@@ -102,16 +104,27 @@ class CaseAnalysisPipeline {
                   ]
                 : onlyStage == AnalysisStage.review
                     ? [AnalysisStage.review, AnalysisStage.learning]
-                    : [onlyStage];
+                    : [onlyStage]);
     // A previously complete pool must be re-examined after new facts. Reaching
     // fifty earlier is not evidence that its old route directions remain valid.
-    if ((onlyStage == null || options['resumeWorkflow'] == true) &&
+    if (pass == null &&
+        (onlyStage == null || options['resumeWorkflow'] == true) &&
         file.current(NodeKind.motive).length >= 50) {
       stages.add(AnalysisStage.reappraise);
     }
     var sequence = 0;
     for (final stage in stages) {
+      if (pass != null &&
+          stage == AnalysisStage.options &&
+          current.current(NodeKind.route).isNotEmpty) continue;
       var batch = 0;
+      // Commit one route's matrix at a time to avoid truncating the combined
+      // six-route, multi-want response at the provider's output limit.
+      final assessmentRoutes = stage == AnalysisStage.routeAssessment
+          ? current.current(NodeKind.route)
+          : <MirrorNode>[];
+      if (stage == AnalysisStage.routeAssessment && assessmentRoutes.isEmpty)
+        throw const MirrorProblem('先生成或填写一条实际走法，再比较路线条件');
       do {
         cancel.check();
         final pool = MotiveRanking.distinct(current.current(NodeKind.motive));
@@ -120,7 +133,9 @@ class CaseAnalysisPipeline {
             stage,
             stage == AnalysisStage.motives
                 ? '已整理 ${pool.length} 条不同理由，正在补全第 ${batch + 1} 批'
-                : '正在核对来源、条件和反证');
+                : stage == AnalysisStage.routeAssessment
+                    ? '正在比较第 ${batch + 1}/${assessmentRoutes.length} 条走法：${assessmentRoutes[batch].text('title')}'
+                    : '正在核对来源、条件和反证');
         final visible = permittedNodes(current, consent, external, generated);
         final scoped =
             current.evolve(nodes: visible, revision: current.revision);
@@ -134,7 +149,11 @@ class CaseAnalysisPipeline {
           'selectedRouteId': current.selectedRouteId,
           'selectedMotiveIds': current.selectedMotiveIds,
           'records': visible.map((n) => n.toJson()).toList(),
-          'options': options,
+          'options': {
+            ...options,
+            if (stage == AnalysisStage.routeAssessment)
+              'assessmentRouteId': assessmentRoutes[batch].id,
+          },
           if (stage == AnalysisStage.cognition) 'theory': theoryCards,
         };
         final prompt =
@@ -200,6 +219,20 @@ class CaseAnalysisPipeline {
                 snapshotAt: now);
             _stageRequirements(
                 stage, records, scoped, stringList(result['unknowns']));
+            if (stage == AnalysisStage.routeAssessment) {
+              final fits =
+                  records.where((n) => n.kind == NodeKind.routeFit).toList();
+              if (fits.length != 1 ||
+                  fits.single.text('routeId') != assessmentRoutes[batch].id)
+                throw const MirrorProblem('本次需只评估指定的一条路线；信息不足时各判断保留未知');
+              final prior = scoped
+                  .current(NodeKind.routeFit)
+                  .where((n) => n.text('routeId') == assessmentRoutes[batch].id)
+                  .lastOrNull;
+              if (prior != null && fits.single.revisionOf != prior.id)
+                throw MirrorProblem(
+                    '请用 revisionOf=${prior.id} 修订此路线已有的评估，不能并列追加');
+            }
             if ({AnalysisStage.scene, AnalysisStage.learning}.contains(stage)) {
               await _qualityReview(stage, records, visible, cancel);
             }
@@ -328,9 +361,12 @@ class CaseAnalysisPipeline {
         current = next;
         generated.addAll(records.map((n) => n.id));
         batch++;
-      } while (stage == AnalysisStage.motives && batch < 4);
+      } while ((stage == AnalysisStage.motives && batch < 4) ||
+          (stage == AnalysisStage.routeAssessment &&
+              batch < assessmentRoutes.length));
     }
-    if (onlyStage == null ||
+    if ((pass == null && onlyStage == null) ||
+        pass?.contains(AnalysisStage.motives) == true ||
         options['resumeWorkflow'] == true ||
         onlyStage == AnalysisStage.motives ||
         onlyStage == AnalysisStage.reappraise) {
