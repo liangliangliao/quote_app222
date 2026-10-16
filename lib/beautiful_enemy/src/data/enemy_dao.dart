@@ -79,8 +79,15 @@ class EnemySettings {
   static String motivationAnswer(String questionId) => 'motivation_answer_$questionId';
 
   static String stimulusStyle(int messageId) => 'stimulus_style_$messageId';
+  static String stimulusContext(int messageId) => 'stimulus_context_$messageId';
   static String stimulusFeedback(int messageId) => 'stimulus_feedback_$messageId';
   static String stimulusOutcome(int messageId) => 'stimulus_outcome_$messageId';
+
+  /// 情境记忆：同一种刺激在不同阻力场景下可以有不同效果。
+  static String stimulusContextScore(String context, String style) =>
+      'stimulus_context_score_${context}_$style';
+  static String stimulusContextSamples(String context, String style) =>
+      'stimulus_context_samples_${context}_$style';
 
   /// 两次主动质询之间至少隔几分钟。默认 90。
   static const String probeGapMin = 'probe_gap_min';
