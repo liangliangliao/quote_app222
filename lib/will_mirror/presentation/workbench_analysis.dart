@@ -85,7 +85,15 @@ extension _AnalysisViews on _CaseWorkbenchState {
   Widget _motives() {
     final ranking = f.latest(NodeKind.recommendation);
     final motives = MotiveRanking.distinct(f.current(NodeKind.motive));
-    final ranked = ranking?.objects('ranked') ?? <Json>[];
+    final currentMotiveIds = motives.map((n) => n.id).toSet();
+    final previousRanked = ranking?.objects('ranked') ?? <Json>[];
+    // A route-only revision can finish before the new motive/ranking pass.
+    // Keep each displayed reason paired with its own score, and never offer
+    // a historical reason as a current priority during that interval.
+    final ranked = previousRanked
+        .where((row) => currentMotiveIds.contains(row['motiveId']))
+        .toList();
+    final rankingNeedsRefresh = ranked.length != previousRanked.length;
     final expiresAt = parseTime(ranking?.body['expiresAt']);
     final expired =
         expiresAt != null && DateTime.now().toUtc().isAfter(expiresAt);
@@ -114,7 +122,12 @@ extension _AnalysisViews on _CaseWorkbenchState {
           MirrorTag('已选 ${f.selectedMotiveIds.length}/3')
         ]),
         const SizedBox(height: 12),
-        if (ranking != null)
+        if (rankingNeedsRefresh) ...[
+          const Text('走法已更新，旧榜单中只适用于旧走法的理由已收起。请按当前走法补全理由与榜单。'),
+          TextButton(
+              onPressed: _busy ? null : () => _analyze(),
+              child: const Text('按当前走法更新理由与榜单')),
+        ] else if (ranking != null)
           Text(ranking.text('message'),
               style: Theme.of(context).textTheme.bodySmall),
         if (ranking?.text('method') == 'decisions')
@@ -158,7 +171,7 @@ extension _AnalysisViews on _CaseWorkbenchState {
               title: const Text('重要但仍待核实的理由'),
               children: [
                 for (final id in ranking.strings('verifyFirstIds'))
-                  if (f.node(id) != null) _motiveCard(f.node(id)!)
+                  if (currentMotiveIds.contains(id)) _motiveCard(f.node(id)!)
               ]),
         Wrap(spacing: 8, runSpacing: 6, children: [
           OutlinedButton(

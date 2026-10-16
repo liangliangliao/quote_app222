@@ -193,6 +193,50 @@ void main() {
     c.dispose();
   });
   testWidgets(
+      'route revision hides historical priorities and preserves current score pairing',
+      (tester) async {
+    var f = prepared();
+    final oldRoute = f.current(NodeKind.route).single;
+    final oldMotive = motive(f, 91, critical: true);
+    f = commands.append(f, [oldMotive, route(f)]);
+    final currentMotive = motive(f, 92);
+    f = commands.append(f, [currentMotive]);
+    f = commands.append(f, [MotiveRanking.build(f)]);
+    final revisedRoute = commands.record(
+        f,
+        NodeKind.route,
+        {
+          ...oldRoute.body,
+          'title': '核实新条件之后的走法',
+        },
+        evidenceIds: oldRoute.evidenceIds,
+        origin: EvidenceOrigin.aiHypothesis,
+        revisionOf: oldRoute.id);
+    f = commands.append(f, [revisedRoute]).evolve(step: 1);
+    expect(f.current(NodeKind.motive).map((n) => n.id), [currentMotive.id]);
+    final store = MemoryStore();
+    await store.save(f, expectedRevision: 0);
+    final c = MirrorController(
+        store: store, model: OfflineModel(), reminders: TestReminders());
+    await c.initialize();
+    await tester.pumpWidget(MaterialApp(
+        theme: mirrorTheme(Brightness.light),
+        home: CaseWorkbench(controller: c, caseId: f.id)));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(ValueKey('mirror-priority-${oldMotive.id}')), findsNothing);
+    final current = find.byKey(ValueKey('mirror-priority-${currentMotive.id}'));
+    expect(current, findsOneWidget);
+    expect(find.text('按当前走法更新理由与榜单'), findsOneWidget);
+    await tester.ensureVisible(current);
+    await tester.tap(current);
+    await tester.pumpAndSettle();
+    expect(find.text('与当前课题和实际来源有关'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+  testWidgets(
       'one fictional case renders understanding, conflict, recognition and route comparisons',
       (tester) async {
     final store = MemoryStore();

@@ -1,6 +1,6 @@
-Final full suite: 00:40 +1070 -5: Some tests failed.
-Baseline suite: 00:01 +53 -5: Some tests failed.
-Full analyzer: 0 errors, 429 warnings, 816 info.
+Final full suite: 00:45 +1071 -5: Some tests failed.
+Baseline suite: 53 passed, same 5 failed on a02ba5ec.
+Full analyzer: 0 errors, 429 warnings, 816 info (recorded before final view-only filtering).
 Identical failure names:
 beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词 [E]
 beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结 [E]
