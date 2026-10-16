@@ -38,8 +38,11 @@ jobs:
         run: >-
           flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
           lib/beautiful_enemy lib/beautiful_enemy_host test/beautiful_enemy
-      - name: Run adaptive stimulus contract
-        run: flutter test --no-pub --reporter expanded test/beautiful_enemy/motivation_stimulus_test.dart
+      - name: Run adaptive stimulus and motivation profile contracts
+        run: >-
+          flutter test --no-pub --reporter expanded
+          test/beautiful_enemy/motivation_stimulus_test.dart
+          test/beautiful_enemy/motivation_profile_test.dart
       - name: Full Beautiful Enemy regression (baseline currently has known failures)
         continue-on-error: true
         run: flutter test --no-pub --reporter expanded test/beautiful_enemy
