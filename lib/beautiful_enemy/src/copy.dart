@@ -4,7 +4,7 @@ class EnemyCopy {
 
   static const String title = '美丽的敌人';
   static const String tagline = '只评行为，不评人。无证据，不开口。';
-  static const String discoverSubtitle = '证据 · 判词 · 承诺 · 教训';
+  static const String discoverSubtitle = '证据 · 挑战 · 刺激 · 行动 · 复盘';
   static const String discoverSemantics = '打开美丽的敌人';
 
   static const String insufficient = '证据不足，不评判。先去做点事，或者在设置里授权更多模块。';
