@@ -817,6 +817,28 @@ class EnemyPresence {
       sampleKey,
       '${await dao.intSetting(sampleKey, 0) + 1}',
     );
+    final String context =
+        await dao.getSetting(EnemySettings.stimulusContext(messageId)) ?? '';
+    if (context.isNotEmpty) {
+      final String contextKey =
+          EnemySettings.stimulusContextScore(context, style);
+      final int beforeContext = await dao.intSetting(contextKey, 0);
+      final int delta = switch (feedback) {
+        StimulusFeedback.fired => 1,
+        StimulusFeedback.flat => -1,
+        StimulusFeedback.tooMuch => -2,
+        _ => 0,
+      };
+      final int raw = beforeContext + delta;
+      final int afterContext = raw < -4 ? -4 : (raw > 4 ? 4 : raw);
+      await dao.setSetting(contextKey, '$afterContext');
+      final String sampleKey =
+          EnemySettings.stimulusContextSamples(context, style);
+      await dao.setSetting(
+        sampleKey,
+        '${await dao.intSetting(sampleKey, 0) + 1}',
+      );
+    }
     await dao.setSetting(EnemySettings.stimulusFeedback(messageId), feedback);
     if (feedback == StimulusFeedback.tooMuch) {
       await engine.markTooMuch();
@@ -824,16 +846,32 @@ class EnemyPresence {
     return true;
   }
 
-  Future<String?> _chooseStimulus(int intensity, int seed) async {
+  Future<String?> _chooseStimulus(
+    int intensity,
+    int seed, {
+    required String context,
+  }) async {
     if (!await dao.boolSetting(EnemySettings.motivationStimulus, fallback: true)) {
       return null;
     }
     final bool allowProvocation =
         await dao.boolSetting(EnemySettings.allowProvocation, fallback: false);
+    final Map<String, int> global = await effectiveStimulusScores();
+    final Map<String, int> contextual = <String, int>{};
+    for (final String style in StimulusStyle.all) {
+      final int bias = await dao.intSetting(
+        EnemySettings.stimulusContextScore(context, style),
+        0,
+      );
+      contextual[style] = MotivationProfile.contextAdjustedScore(
+        globalScore: global[style] ?? 0,
+        contextBias: bias,
+      );
+    }
     return MotivationStimulus.choose(
       intensity: intensity,
       allowProvocation: allowProvocation,
-      scores: await effectiveStimulusScores(),
+      scores: contextual,
       seed: seed,
     );
   }
@@ -877,7 +915,13 @@ class EnemyPresence {
     }
 
     final int tone = _tone(snap.intensity);
-    final String? stimulus = drill ? null : await _chooseStimulus(snap.intensity, now ~/ 60000);
+    final String? stimulus = drill
+        ? null
+        : await _chooseStimulus(
+            snap.intensity,
+            now ~/ 60000,
+            context: plan.type,
+          );
     final String strategyNote = stimulus == null
         ? ''
         : '\n【动机刺激策略】${MotivationStimulus.instruction(stimulus)}'
@@ -937,6 +981,7 @@ class EnemyPresence {
     );
     if (stimulus != null) {
       await dao.setSetting(EnemySettings.stimulusStyle(msg.id), stimulus);
+      await dao.setSetting(EnemySettings.stimulusContext(msg.id), plan.type);
     }
     return msg;
   }
