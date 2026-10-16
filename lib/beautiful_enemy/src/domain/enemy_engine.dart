@@ -352,6 +352,26 @@ class EnemyEngine {
       sampleKey,
       '${await dao.intSetting(sampleKey, 0) + 1}',
     );
+
+    final String context =
+        await dao.getSetting(EnemySettings.stimulusContext(message.id)) ?? '';
+    if (context.isNotEmpty) {
+      final String contextKey =
+          EnemySettings.stimulusContextScore(context, style);
+      final int beforeContext = await dao.intSetting(contextKey, 0);
+      final int rawContext = beforeContext + (done ? 1 : -1);
+      final int afterContext =
+          rawContext < -4 ? -4 : (rawContext > 4 ? 4 : rawContext);
+      await dao.setSetting(contextKey, '$afterContext');
+
+      final String contextSamples =
+          EnemySettings.stimulusContextSamples(context, style);
+      await dao.setSetting(
+        contextSamples,
+        '${await dao.intSetting(contextSamples, 0) + 1}',
+      );
+    }
+
     await dao.setSetting(outcomeKey, done ? 'done' : 'missed');
   }
 
