@@ -259,6 +259,10 @@ class MessageKind {
 
   /// 反对党的动议：敌人提出一项要你接受或驳回的安排，refId 指向 be_motion。
   static const String motion = 'motion';
+
+  /// 动机刺激：一次明确采用了某种刺激策略的挑战。策略和反馈存于 be_setting，
+  /// 以 message id 关联，不改动消息表结构。
+  static const String stimulus = 'stimulus';
 }
 
 /// 对峙页里的一条消息。判词、插话、对话统一在同一条时间线上。
