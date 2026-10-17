@@ -7,6 +7,8 @@ import 'claim_check.dart';
 import 'digest_builder.dart';
 import 'enemy_engine.dart';
 import 'guard.dart';
+import 'motivation_profile.dart';
+import 'motivation_stimulus.dart';
 import 'opposition.dart';
 
 /// 一次对话的结果。
@@ -568,7 +570,11 @@ class EnemyPresence {
     return last;
   }
 
-  Future<ProbeFacts> _probeFacts(int now, {required bool forDrill}) async {
+  Future<ProbeFacts> _probeFacts(
+    int now, {
+    required bool forDrill,
+    bool ignoreCooldown = false,
+  }) async {
     const int hourMs = 3600 * 1000;
     const int dayMs = 24 * hourMs;
     final DateTime dt = DateTime.fromMillisecondsSinceEpoch(now);
@@ -641,7 +647,7 @@ class EnemyPresence {
     final int follow = pending == null ? 0 : await dao.intSetting(EnemySettings.inquiryFollow(pending.id), 0);
 
     final Map<String, int> lastProbe = <String, int>{};
-    if (!forDrill) {
+    if (!forDrill && !ignoreCooldown) {
       for (final String type in Opposition.cooldownHours.keys) {
         lastProbe[type] = await dao.intSetting(EnemySettings.probeLast(type), 0);
       }
@@ -716,13 +722,184 @@ class EnemyPresence {
     return msg;
   }
 
+  // -------------------------------------------------------- motivation stimulus
+
+  /// 行为学习分：只表示“过去这种方式有没有转化成行动/主观点火”。
+  Future<Map<String, int>> stimulusScores() async {
+    final Map<String, int> out = <String, int>{};
+    for (final String style in StimulusStyle.all) {
+      out[style] = await dao.intSetting(EnemySettings.stimulusScore(style), 0);
+    }
+    return out;
+  }
+
+  /// 冷启动 / 问卷先验。数据库没有写过时使用面向当前产品主人的默认画像。
+  Future<Map<String, int>> stimulusPriors() async {
+    final Map<String, int> out = <String, int>{};
+    for (final String style in StimulusStyle.all) {
+      out[style] = await dao.intSetting(
+        EnemySettings.stimulusPrior(style),
+        MotivationProfile.defaultPrior(style),
+      );
+    }
+    return out;
+  }
+
+  Future<Map<String, int>> stimulusSamples() async {
+    final Map<String, int> out = <String, int>{};
+    for (final String style in StimulusStyle.all) {
+      out[style] = await dao.intSetting(EnemySettings.stimulusSamples(style), 0);
+    }
+    return out;
+  }
+
+  /// 真正用于选策略的分数 = 先验 + 经验。
+  /// 默认先验最多 ±4，而真实经验最多 ±8，因此经验积累后会自然压过冷启动假设。
+  Future<Map<String, int>> effectiveStimulusScores() async {
+    final Map<String, int> priors = await stimulusPriors();
+    final Map<String, int> learned = await stimulusScores();
+    return <String, int>{
+      for (final String style in StimulusStyle.all)
+        style: MotivationProfile.effectiveScore(
+          prior: priors[style] ?? 0,
+          learned: learned[style] ?? 0,
+        ),
+    };
+  }
+
+  Future<bool> motivationQuestionnaireDone() =>
+      dao.boolSetting(EnemySettings.motivationQuestionnaireDone);
+
+  Future<void> applyMotivationQuestionnaire(Map<String, int> answers) async {
+    final Map<String, int> priors = MotivationProfile.priorsFromAnswers(answers);
+    for (final MotivationQuestion q in MotivationProfile.questions) {
+      final int? value = answers[q.id];
+      if (value != null) {
+        await dao.setSetting(EnemySettings.motivationAnswer(q.id), '$value');
+      }
+    }
+    for (final String style in StimulusStyle.all) {
+      await dao.setSetting(
+        EnemySettings.stimulusPrior(style),
+        '${priors[style] ?? MotivationProfile.defaultPrior(style)}',
+      );
+    }
+    await dao.setBoolSetting(EnemySettings.motivationQuestionnaireDone, true);
+    await dao.setSetting(
+      EnemySettings.motivationQuestionnaireAtMs,
+      '${engine.nowMs()}',
+    );
+    await dao.setSetting(
+      EnemySettings.motivationProfileVersion,
+      MotivationProfile.version,
+    );
+  }
+
+  Future<String> stimulusStyleFor(int messageId) async =>
+      await dao.getSetting(EnemySettings.stimulusStyle(messageId)) ?? '';
+
+  Future<String> stimulusFeedbackFor(int messageId) async =>
+      await dao.getSetting(EnemySettings.stimulusFeedback(messageId)) ?? '';
+
+  /// 用户告诉敌人：这一下点着了 / 没感觉 / 太过了。
+  /// “太过了”除了降低这种策略的学习分，还沿用既有的强度治理，未来 72 小时自动降档。
+  Future<bool> rateStimulus(int messageId, String feedback) async {
+    if (!StimulusFeedback.all.contains(feedback)) return false;
+    final String style = await stimulusStyleFor(messageId);
+    if (!StimulusStyle.all.contains(style)) return false;
+    if ((await stimulusFeedbackFor(messageId)).isNotEmpty) return false;
+
+    final String key = EnemySettings.stimulusScore(style);
+    final int before = await dao.intSetting(key, 0);
+    await dao.setSetting(key, '${MotivationStimulus.updatedScore(before, feedback)}');
+    final String sampleKey = EnemySettings.stimulusSamples(style);
+    await dao.setSetting(
+      sampleKey,
+      '${await dao.intSetting(sampleKey, 0) + 1}',
+    );
+    final String context =
+        await dao.getSetting(EnemySettings.stimulusContext(messageId)) ?? '';
+    if (context.isNotEmpty) {
+      final String contextKey =
+          EnemySettings.stimulusContextScore(context, style);
+      final int beforeContext = await dao.intSetting(contextKey, 0);
+      final int delta = switch (feedback) {
+        StimulusFeedback.fired => 1,
+        StimulusFeedback.flat => -1,
+        StimulusFeedback.tooMuch => -2,
+        _ => 0,
+      };
+      final int raw = beforeContext + delta;
+      final int afterContext = raw < -4 ? -4 : (raw > 4 ? 4 : raw);
+      await dao.setSetting(contextKey, '$afterContext');
+      final String sampleKey =
+          EnemySettings.stimulusContextSamples(context, style);
+      await dao.setSetting(
+        sampleKey,
+        '${await dao.intSetting(sampleKey, 0) + 1}',
+      );
+    }
+    await dao.setSetting(EnemySettings.stimulusFeedback(messageId), feedback);
+    if (feedback == StimulusFeedback.tooMuch) {
+      await engine.markTooMuch();
+    }
+    return true;
+  }
+
+  Future<String?> _chooseStimulus(
+    int intensity,
+    int seed, {
+    required String context,
+  }) async {
+    if (!await dao.boolSetting(EnemySettings.motivationStimulus, fallback: true)) {
+      return null;
+    }
+    final bool allowProvocation =
+        await dao.boolSetting(EnemySettings.allowProvocation, fallback: false);
+    final Map<String, int> global = await effectiveStimulusScores();
+    final Map<String, int> contextual = <String, int>{};
+    for (final String style in StimulusStyle.all) {
+      final int bias = await dao.intSetting(
+        EnemySettings.stimulusContextScore(context, style),
+        0,
+      );
+      contextual[style] = MotivationProfile.contextAdjustedScore(
+        globalScore: global[style] ?? 0,
+        contextBias: bias,
+      );
+    }
+    return MotivationStimulus.choose(
+      intensity: intensity,
+      allowProvocation: allowProvocation,
+      scores: contextual,
+      seed: seed,
+    );
+  }
+
+  /// 用户主动按“刺激我”：绕过主动质询的时间间隔，但仍使用真实案卷、
+  /// 安全阀和用户设定的强度；不为了刺激而编造事实。
+  Future<EnemyMessage?> stimulateNow() async {
+    if (await engine.isMuted()) return null;
+    final int now = engine.nowMs();
+    final ProbeFacts facts =
+        await _probeFacts(now, forDrill: false, ignoreCooldown: true);
+    final ProbePlan? plan = Opposition.choose(facts);
+    if (plan == null) return null;
+    return _probeSay(plan, now, drill: false, manualStimulus: true);
+  }
+
   String _dueText(int dueMs) {
     final DateTime d = DateTime.fromMillisecondsSinceEpoch(dueMs);
     String two(int v) => v.toString().padLeft(2, '0');
     return '${two(d.hour)}:${two(d.minute)}';
   }
 
-  Future<EnemyMessage> _probeSay(ProbePlan plan, int now, {required bool drill}) async {
+  Future<EnemyMessage> _probeSay(
+    ProbePlan plan,
+    int now, {
+    required bool drill,
+    bool manualStimulus = false,
+  }) async {
     final ({EnemyDigest digest, int intensity, String address}) snap = await _snapshot();
     final MotionPlan? mp = drill ? null : plan.motion;
     int? motionId;
@@ -736,48 +913,77 @@ class EnemyPresence {
         verify: mp.verify,
       );
     }
+
     final int tone = _tone(snap.intensity);
-    return _speak(
+    final String? stimulus = drill
+        ? null
+        : await _chooseStimulus(
+            snap.intensity,
+            now ~/ 60000,
+            context: plan.type,
+          );
+    final String strategyNote = stimulus == null
+        ? ''
+        : '\n【动机刺激策略】${MotivationStimulus.instruction(stimulus)}'
+            '\n这是一次外部点火，不是长期情绪操纵。刺激后立即把注意力交还给行动。';
+
+    String localBase() => mp != null
+        ? '${PersonaLines.probe(
+            type: plan.type,
+            address: snap.address,
+            tone: tone,
+            n: plan.n,
+            m: plan.m,
+            hours: plan.hours,
+            days: plan.days,
+            label: plan.label,
+            text: plan.text,
+            category: plan.category,
+            seed: now ~/ 60000,
+          )}\n${PersonaLines.motion(
+            address: snap.address,
+            text: mp.text,
+            dueText: _dueText(mp.dueMs),
+            tone: tone,
+            seed: now ~/ 60000,
+          )}'
+        : PersonaLines.probe(
+            type: plan.type,
+            address: snap.address,
+            tone: tone,
+            n: plan.n,
+            m: plan.m,
+            hours: plan.hours,
+            days: plan.days,
+            label: plan.label,
+            text: plan.text,
+            category: plan.category,
+            seed: now ~/ 60000,
+          );
+
+    final EnemyMessage msg = await _speak(
       snap: snap,
-      situation: plan.situation,
+      situation: '${manualStimulus ? '【用户主动要求刺激】' : ''}${plan.situation}$strategyNote',
       userText: '',
       kind: drill ? MessageKind.drill : (mp != null ? MessageKind.motion : MessageKind.inquiry),
       refId: motionId,
       prefix: drill ? drillPrefix : '',
-      fallback: () => mp != null
-          ? '${PersonaLines.probe(
-              type: plan.type,
-              address: snap.address,
-              tone: tone,
-              n: plan.n,
-              m: plan.m,
-              hours: plan.hours,
-              days: plan.days,
-              label: plan.label,
-              text: plan.text,
-              category: plan.category,
-              seed: now ~/ 60000,
-            )}\n${PersonaLines.motion(
-              address: snap.address,
-              text: mp.text,
-              dueText: _dueText(mp.dueMs),
-              tone: tone,
-              seed: now ~/ 60000,
-            )}'
-          : PersonaLines.probe(
-              type: plan.type,
-              address: snap.address,
-              tone: tone,
-              n: plan.n,
-              m: plan.m,
-              hours: plan.hours,
-              days: plan.days,
-              label: plan.label,
-              text: plan.text,
-              category: plan.category,
-              seed: now ~/ 60000,
-            ),
+      fallback: () {
+        final String base = localBase();
+        return stimulus == null
+            ? base
+            : MotivationStimulus.decorateLocal(
+                base: base,
+                style: stimulus,
+                address: snap.address,
+              );
+      },
     );
+    if (stimulus != null) {
+      await dao.setSetting(EnemySettings.stimulusStyle(msg.id), stimulus);
+      await dao.setSetting(EnemySettings.stimulusContext(msg.id), plan.type);
+    }
+    return msg;
   }
 
   // ----------------------------------------------------------------- motions

@@ -5,6 +5,7 @@ import '../enemy_oracle.dart';
 import 'digest_builder.dart';
 import 'evidence_source.dart';
 import 'guard.dart';
+import 'motivation_stimulus.dart';
 
 enum EnemyOutcomeKind { verdict, insufficient, skipped }
 
@@ -220,6 +221,7 @@ class EnemyEngine {
       if (c.verdictId != null) {
         await dao.setVerdictOutcome(c.verdictId!, 'missed', now);
       }
+      await _learnStimulusOutcome(c, done: false);
     }
     return overdue.length;
   }
@@ -283,6 +285,7 @@ class EnemyEngine {
       await dao.setVerdictOutcome(c.verdictId!, 'done', now);
     }
     // 核实：这条字据声明要靠账上的记录证明，而账上没有——勾可以打，但敌人不认。
+    bool verified = true;
     if (c.verify == 'kindling') {
       try {
         await syncIfChanged();
@@ -291,9 +294,11 @@ class EnemyEngine {
       }
       final List<EnemyEvent> burns = await dao.eventsBetween(c.createdMs, now + 1, source: 'kindling');
       if (!burns.any((EnemyEvent e) => e.type == 'kindling_completed')) {
+        verified = false;
         await _commitmentEvent(c, 'commitment_unverified', now);
       }
     }
+    await _learnStimulusOutcome(c, done: verified);
     final List<EnemyVerdict> recent = await dao.recentVerdicts(limit: 10);
     int streak = 0;
     for (final EnemyVerdict v in recent) {
@@ -317,6 +322,57 @@ class EnemyEngine {
     if (c.verdictId != null) {
       await dao.setVerdictOutcome(c.verdictId!, 'missed', now);
     }
+    await _learnStimulusOutcome(c, done: false);
+  }
+
+  /// 如果这条字据来自一次“动机刺激 → 动议”，就把真实行为结果作为弱信号回流。
+  /// 主观反馈权重更大（点着 +2 / 太过 -4）；真实兑现这里只做 +1 / -1，
+  /// 避免把任务本身的难度全部归因给刺激方式。
+  Future<void> _learnStimulusOutcome(EnemyCommitment c, {required bool done}) async {
+    if (c.origin != 'motion') return;
+    final EnemyMotion? motion = await dao.motionForCommitment(c.id);
+    if (motion == null) return;
+    final EnemyMessage? message = await dao.messageForMotion(motion.id);
+    if (message == null) return;
+
+    final String style =
+        await dao.getSetting(EnemySettings.stimulusStyle(message.id)) ?? '';
+    if (!StimulusStyle.all.contains(style)) return;
+
+    final String outcomeKey = EnemySettings.stimulusOutcome(message.id);
+    if ((await dao.getSetting(outcomeKey) ?? '').isNotEmpty) return;
+
+    final String scoreKey = EnemySettings.stimulusScore(style);
+    final int before = await dao.intSetting(scoreKey, 0);
+    final int raw = before + (done ? 1 : -1);
+    final int after = raw < -8 ? -8 : (raw > 8 ? 8 : raw);
+    await dao.setSetting(scoreKey, '$after');
+    final String sampleKey = EnemySettings.stimulusSamples(style);
+    await dao.setSetting(
+      sampleKey,
+      '${await dao.intSetting(sampleKey, 0) + 1}',
+    );
+
+    final String context =
+        await dao.getSetting(EnemySettings.stimulusContext(message.id)) ?? '';
+    if (context.isNotEmpty) {
+      final String contextKey =
+          EnemySettings.stimulusContextScore(context, style);
+      final int beforeContext = await dao.intSetting(contextKey, 0);
+      final int rawContext = beforeContext + (done ? 1 : -1);
+      final int afterContext =
+          rawContext < -4 ? -4 : (rawContext > 4 ? 4 : rawContext);
+      await dao.setSetting(contextKey, '$afterContext');
+
+      final String contextSamples =
+          EnemySettings.stimulusContextSamples(context, style);
+      await dao.setSetting(
+        contextSamples,
+        '${await dao.intSetting(contextSamples, 0) + 1}',
+      );
+    }
+
+    await dao.setSetting(outcomeKey, done ? 'done' : 'missed');
   }
 
   /// 失败归因。不接受「忙」这类单独的空话。

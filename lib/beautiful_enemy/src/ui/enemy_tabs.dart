@@ -6,6 +6,8 @@ import '../data/models.dart';
 import '../domain/enemy_engine.dart';
 import '../domain/evidence_source.dart';
 import '../domain/enemy_presence.dart';
+import '../domain/motivation_profile.dart';
+import '../domain/motivation_stimulus.dart';
 import '../enemy_reminder.dart';
 import '../enemy_talker.dart';
 import 'ui_helpers.dart';
@@ -568,6 +570,21 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _interjectEverywhere = true;
   bool _patrol = true;
   bool _opposition = true;
+  bool _motivationStimulus = true;
+  bool _allowProvocation = false;
+  Map<String, int> _stimulusScores = <String, int>{
+    for (final String s in StimulusStyle.all) s: 0,
+  };
+  Map<String, int> _stimulusPriors = <String, int>{
+    for (final String s in StimulusStyle.all) s: MotivationProfile.defaultPrior(s),
+  };
+  Map<String, int> _stimulusSamples = <String, int>{
+    for (final String s in StimulusStyle.all) s: 0,
+  };
+  Map<String, int> _stimulusEffective = <String, int>{
+    for (final String s in StimulusStyle.all) s: MotivationProfile.defaultPrior(s),
+  };
+  bool _questionnaireDone = false;
   int _probeGap = 90;
   String _address = EnemyCopy.defaultAddress;
   Map<String, bool> _consents = <String, bool>{};
@@ -597,11 +614,41 @@ class _SettingsTabState extends State<SettingsTab> {
     final String address = await _engine.address();
     final bool patrol = await _dao.boolSetting(EnemySettings.patrol, fallback: true);
     final bool opposition = await _dao.boolSetting(EnemySettings.opposition, fallback: true);
+    final bool motivationStimulus =
+        await _dao.boolSetting(EnemySettings.motivationStimulus, fallback: true);
+    final bool allowProvocation =
+        await _dao.boolSetting(EnemySettings.allowProvocation, fallback: false);
+    final Map<String, int> stimulusScores = <String, int>{};
+    final Map<String, int> stimulusPriors = <String, int>{};
+    final Map<String, int> stimulusSamples = <String, int>{};
+    final Map<String, int> stimulusEffective = <String, int>{};
+    for (final String s in StimulusStyle.all) {
+      stimulusScores[s] = await _dao.intSetting(EnemySettings.stimulusScore(s), 0);
+      stimulusPriors[s] = await _dao.intSetting(
+        EnemySettings.stimulusPrior(s),
+        MotivationProfile.defaultPrior(s),
+      );
+      stimulusSamples[s] =
+          await _dao.intSetting(EnemySettings.stimulusSamples(s), 0);
+      stimulusEffective[s] = MotivationProfile.effectiveScore(
+        prior: stimulusPriors[s] ?? 0,
+        learned: stimulusScores[s] ?? 0,
+      );
+    }
+    final bool questionnaireDone =
+        await _dao.boolSetting(EnemySettings.motivationQuestionnaireDone);
     final int probeGap = await _dao.intSetting(EnemySettings.probeGapMin, 90);
     final Map<String, bool> consents = await _engine.consents();
     if (!mounted) return;
     setState(() {
       _opposition = opposition;
+      _motivationStimulus = motivationStimulus;
+      _allowProvocation = allowProvocation;
+      _stimulusScores = stimulusScores;
+      _stimulusPriors = stimulusPriors;
+      _stimulusSamples = stimulusSamples;
+      _stimulusEffective = stimulusEffective;
+      _questionnaireDone = questionnaireDone;
       _probeGap = const <int>[45, 90, 180].contains(probeGap) ? probeGap : 90;
       _patrol = patrol;
       _voiceOut = voiceOut;
@@ -619,6 +666,193 @@ class _SettingsTabState extends State<SettingsTab> {
       _consents = consents;
       _loaded = true;
     });
+  }
+
+  Future<void> _openMotivationQuestionnaire() async {
+    final Map<String, int> answers = <String, int>{};
+    for (final MotivationQuestion q in MotivationProfile.questions) {
+      answers[q.id] =
+          await _dao.intSetting(EnemySettings.motivationAnswer(q.id), 3);
+    }
+    if (!mounted) return;
+
+    final Map<String, int>? result =
+        await showModalBottomSheet<Map<String, int>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kEnemyBg,
+      builder: (BuildContext sheetContext) {
+        final Map<String, int> draft = Map<String, int>.from(answers);
+        return StatefulBuilder(
+          builder: (BuildContext ctx, StateSetter setLocal) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: SizedBox(
+                  height: MediaQuery.of(ctx).size.height * 0.82,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        '初步了解：什么真正能推动我？',
+                        style: TextStyle(
+                          color: kEnemyText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        '这不是人格测试。只问“哪种外部刺激更可能转化成行动”。'
+                        '1 表示明显无效/反作用，5 表示明显有效。以后真实行动会继续修正这些答案。',
+                        style: TextStyle(
+                          color: kEnemyMuted,
+                          fontSize: 12,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: MotivationProfile.questions.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 22),
+                          itemBuilder: (BuildContext context, int index) {
+                            final MotivationQuestion q =
+                                MotivationProfile.questions[index];
+                            final int value = draft[q.id] ?? 3;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  '${index + 1}. ${q.text}',
+                                  style: const TextStyle(
+                                    color: kEnemyText,
+                                    fontSize: 14,
+                                    height: 1.45,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: Text(
+                                        q.low,
+                                        style: const TextStyle(
+                                          color: kEnemyMuted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '$value / 5',
+                                      style: const TextStyle(
+                                        color: kEnemyAccent,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        q.high,
+                                        textAlign: TextAlign.right,
+                                        style: const TextStyle(
+                                          color: kEnemyMuted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Slider(
+                                  value: value.toDouble(),
+                                  min: 1,
+                                  max: 5,
+                                  divisions: 4,
+                                  label: '$value',
+                                  onChanged: (double v) => setLocal(
+                                    () => draft[q.id] = v.round(),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('取消'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () => Navigator.of(ctx).pop(draft),
+                              child: const Text('保存并校准'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (result == null) return;
+
+    final Map<String, int> priors =
+        MotivationProfile.priorsFromAnswers(result);
+    for (final MotivationQuestion q in MotivationProfile.questions) {
+      await _dao.setSetting(
+        EnemySettings.motivationAnswer(q.id),
+        '${result[q.id] ?? 3}',
+      );
+    }
+    for (final String style in StimulusStyle.all) {
+      await _dao.setSetting(
+        EnemySettings.stimulusPrior(style),
+        '${priors[style] ?? MotivationProfile.defaultPrior(style)}',
+      );
+    }
+    await _dao.setBoolSetting(
+      EnemySettings.motivationQuestionnaireDone,
+      true,
+    );
+    await _dao.setSetting(
+      EnemySettings.motivationQuestionnaireAtMs,
+      '${DateTime.now().millisecondsSinceEpoch}',
+    );
+    await _dao.setSetting(
+      EnemySettings.motivationProfileVersion,
+      MotivationProfile.version,
+    );
+    await _load();
+  }
+
+  Future<void> _restoreDefaultMotivationPrior() async {
+    for (final String style in StimulusStyle.all) {
+      await _dao.setSetting(
+        EnemySettings.stimulusPrior(style),
+        '${MotivationProfile.defaultPrior(style)}',
+      );
+    }
+    await _dao.setBoolSetting(
+      EnemySettings.motivationQuestionnaireDone,
+      false,
+    );
+    await _load();
   }
 
   Future<void> _set(String key, int value) => _dao.setSetting(key, '$value');
@@ -759,6 +993,164 @@ class _SettingsTabState extends State<SettingsTab> {
             style: TextStyle(color: kEnemyMuted, fontSize: 12),
           ),
         ),
+        const Divider(height: 28),
+        const Text('动机刺激', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('自适应动机刺激', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text(
+            '不只是“说得更狠”：在事实镜照、言行一致、直接挑战、自我竞争之间选择，并根据你每次的反馈学习。',
+            style: TextStyle(color: kEnemyMuted),
+          ),
+          value: _motivationStimulus,
+          onChanged: (bool v) async {
+            setState(() => _motivationStimulus = v);
+            await _dao.setBoolSetting(EnemySettings.motivationStimulus, v);
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('允许轻度挑衅', style: TextStyle(color: kEnemyText)),
+          subtitle: const Text(
+            '默认关闭。开启后，2–3 档可用克制挑衅激起“我偏要证明给你看”的证明欲或有益愤怒。只针对借口与回避，不攻击你这个人。',
+            style: TextStyle(color: kEnemyMuted),
+          ),
+          value: _allowProvocation,
+          onChanged: _motivationStimulus
+              ? (bool v) async {
+                  setState(() => _allowProvocation = v);
+                  await _dao.setBoolSetting(EnemySettings.allowProvocation, v);
+                }
+              : null,
+        ),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: kEnemyCard,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                '它对你的了解',
+                style: TextStyle(
+                  color: kEnemyText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                MotivationProfile.confidenceLabel(
+                  _stimulusSamples.values.fold<int>(
+                    0,
+                    (int sum, int n) => sum + n,
+                  ),
+                  questionnaireDone: _questionnaireDone,
+                ),
+                style: const TextStyle(
+                  color: kEnemyAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _questionnaireDone
+                    ? '先验已经由问卷校准；下面的“经验”来自你之后的主观反馈和真实行动结果。'
+                    : '目前先用为你预置的冷启动画像。它只是工作假设，不是人格结论；可以用 6 个问题立即校准。',
+                style: const TextStyle(
+                  color: kEnemyMuted,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final String s in StimulusStyle.all)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              StimulusStyle.label(s),
+                              style: const TextStyle(
+                                color: kEnemyText,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '综合 ${_stimulusEffective[s] ?? 0}',
+                            style: const TextStyle(
+                              color: kEnemyAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '先验 ${_stimulusPriors[s] ?? 0} · '
+                        '经验 ${_stimulusScores[s] ?? 0} · '
+                        '样本 ${_stimulusSamples[s] ?? 0}',
+                        style: const TextStyle(
+                          color: kEnemyMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 8),
+              const Text(
+                '综合分 = 先验 + 经验。先验最多 ±4，真实经验可到 ±8，所以使用越久，系统越少依赖默认判断。',
+                style: TextStyle(
+                  color: kEnemyMuted,
+                  fontSize: 11,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: <Widget>[
+                  FilledButton.tonal(
+                    onPressed: _openMotivationQuestionnaire,
+                    child: Text(_questionnaireDone ? '重新做问卷' : '6 题初步了解我'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _restoreDefaultMotivationPrior,
+                    child: const Text('恢复默认先验'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      for (final String s in StimulusStyle.all) {
+                        await _dao.setSetting(
+                          EnemySettings.stimulusScore(s),
+                          '0',
+                        );
+                        await _dao.setSetting(
+                          EnemySettings.stimulusSamples(s),
+                          '0',
+                        );
+                      }
+                      await _load();
+                    },
+                    child: const Text('清零经验学习'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('出声', style: TextStyle(color: kEnemyText)),

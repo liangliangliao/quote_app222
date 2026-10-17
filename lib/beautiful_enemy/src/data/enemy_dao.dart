@@ -59,6 +59,36 @@ class EnemySettings {
   /// 反对党质询（主动盘问、动议、讽刺你的借口）的总开关，默认开。
   static const String opposition = 'opposition';
 
+  /// 自适应动机刺激总开关，默认开。它不是“说得更狠”，而是选择哪一种
+  /// 外部刺激更可能把用户推入 stretch zone。
+  static const String motivationStimulus = 'motivation_stimulus';
+
+  /// 轻度挑衅必须由用户明确开启，默认关。
+  static const String allowProvocation = 'allow_provocation';
+
+  /// 每一种刺激策略的学习分数，以及某条消息实际使用的策略 / 用户反馈。
+  static String stimulusScore(String style) => 'stimulus_score_$style';
+
+  /// 冷启动 / 问卷形成的先验分（-4..4）与已观察样本数。
+  /// 经验分独立保存，避免重新做问卷时抹掉真实行为学习。
+  static String stimulusPrior(String style) => 'stimulus_prior_$style';
+  static String stimulusSamples(String style) => 'stimulus_samples_$style';
+  static const String motivationQuestionnaireDone = 'motivation_questionnaire_done';
+  static const String motivationQuestionnaireAtMs = 'motivation_questionnaire_at_ms';
+  static const String motivationProfileVersion = 'motivation_profile_version';
+  static String motivationAnswer(String questionId) => 'motivation_answer_$questionId';
+
+  static String stimulusStyle(int messageId) => 'stimulus_style_$messageId';
+  static String stimulusContext(int messageId) => 'stimulus_context_$messageId';
+  static String stimulusFeedback(int messageId) => 'stimulus_feedback_$messageId';
+  static String stimulusOutcome(int messageId) => 'stimulus_outcome_$messageId';
+
+  /// 情境记忆：同一种刺激在不同阻力场景下可以有不同效果。
+  static String stimulusContextScore(String context, String style) =>
+      'stimulus_context_score_${context}_$style';
+  static String stimulusContextSamples(String context, String style) =>
+      'stimulus_context_samples_${context}_$style';
+
   /// 两次主动质询之间至少隔几分钟。默认 90。
   static const String probeGapMin = 'probe_gap_min';
 
@@ -537,6 +567,18 @@ class EnemyDao {
     return rows.isEmpty ? null : EnemyMotion.fromMap(rows.first);
   }
 
+  /// 找到由某项动议建立的字据。用于把真实兑现结果回流到刺激策略学习。
+  Future<EnemyMotion?> motionForCommitment(int commitmentId) async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_motion',
+      where: 'commitment_id = ?',
+      whereArgs: <Object?>[commitmentId],
+      orderBy: 'ts DESC, id DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : EnemyMotion.fromMap(rows.first);
+  }
+
   Future<EnemyMotion?> openMotion() async {
     final List<Map<String, Object?>> rows = await db.query(
       'be_motion',
@@ -593,6 +635,18 @@ class EnemyDao {
       'ref_id': refId,
       'tone': tone,
     });
+  }
+
+  /// 找到引用某条动议的敌人消息。动机刺激策略以 message id 为学习单位。
+  Future<EnemyMessage?> messageForMotion(int motionId) async {
+    final List<Map<String, Object?>> rows = await db.query(
+      'be_message',
+      where: 'kind = ? AND ref_id = ?',
+      whereArgs: <Object?>[MessageKind.motion, motionId],
+      orderBy: 'ts DESC, id DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : EnemyMessage.fromMap(rows.first);
   }
 
   /// 最近 [limit] 条，按时间从旧到新返回（直接可用于从上到下显示）。

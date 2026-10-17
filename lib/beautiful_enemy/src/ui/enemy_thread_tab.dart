@@ -8,6 +8,7 @@ import '../data/enemy_dao.dart';
 import '../data/models.dart';
 import '../domain/enemy_engine.dart';
 import '../domain/enemy_presence.dart';
+import '../domain/motivation_stimulus.dart';
 import '../domain/evidence_source.dart';
 import '../enemy_talker.dart';
 import 'enemy_tabs.dart';
@@ -38,11 +39,14 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   final Map<int, EnemyVerdict> _verdicts = <int, EnemyVerdict>{};
   final Map<int, EnemyCommitment> _commitments = <int, EnemyCommitment>{};
   final Map<int, EnemyMotion> _motions = <int, EnemyMotion>{};
+  final Map<int, String> _stimulusStyles = <int, String>{};
+  final Map<int, String> _stimulusFeedback = <int, String>{};
   int _latestVerdictId = -1;
 
   Timer? _timer;
   bool _sending = false;
   bool _courtBusy = false;
+  bool _stimulating = false;
   bool _muted = false;
   bool _crisisNotice = false;
   bool _noConsent = false;
@@ -124,7 +128,15 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
     final Map<int, EnemyCommitment> commitments = <int, EnemyCommitment>{};
     final Map<int, EnemyMotion> motions = <int, EnemyMotion>{};
     int latest = -1;
+    final Map<int, String> stimulusStyles = <int, String>{};
+    final Map<int, String> stimulusFeedback = <int, String>{};
     for (final EnemyMessage m in messages) {
+      final String style = await _presence.stimulusStyleFor(m.id);
+      if (style.isNotEmpty) {
+        stimulusStyles[m.id] = style;
+        final String feedback = await _presence.stimulusFeedbackFor(m.id);
+        if (feedback.isNotEmpty) stimulusFeedback[m.id] = feedback;
+      }
       if (m.kind == MessageKind.motion && m.refId != null) {
         final EnemyMotion? mo = await _dao.motion(m.refId!);
         if (mo != null) motions[mo.id] = mo;
@@ -156,6 +168,12 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
       _motions
         ..clear()
         ..addAll(motions);
+      _stimulusStyles
+        ..clear()
+        ..addAll(stimulusStyles);
+      _stimulusFeedback
+        ..clear()
+        ..addAll(stimulusFeedback);
       _latestVerdictId = latest;
       _muted = muted;
       _crisisNotice = crisis && muted;
@@ -248,6 +266,26 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
         await widget.voice.speak(v.charge);
       }
     }
+  }
+
+  /// 主动点火：不等巡查节奏，要求美丽的敌人现在给一次基于真实案卷的刺激。
+  Future<void> _stimulate() async {
+    if (_stimulating || _muted) return;
+    setState(() {
+      _stimulating = true;
+      _notice = '';
+    });
+    EnemyMessage? msg;
+    try {
+      msg = await _presence.stimulateNow();
+      if (msg == null) _notice = '现在没有足够的案卷事实可以发起有效刺激。';
+    } catch (_) {
+      _notice = '刺激失败，稍后再试。';
+    }
+    if (!mounted) return;
+    setState(() => _stimulating = false);
+    await _load();
+    if (msg != null) await _announce(msg);
   }
 
   /// 喊停战：和对话里说「停战」走同一条路，敌人会在时间线上留一句退场的话。
@@ -446,23 +484,32 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
 
   Widget _quickRow() => Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-        child: Row(
-          children: <Widget>[
-            ActionChip(
-              label: Text(_courtBusy ? '开庭中…' : '开庭'),
-              onPressed: (_courtBusy || _muted) ? null : _openCourt,
-            ),
-            const SizedBox(width: 8),
-            ActionChip(label: const Text('停战'), onPressed: _muted ? null : _truce),
-            const SizedBox(width: 8),
-            ActionChip(
-              label: const Text('太过了'),
-              onPressed: () async {
-                await _engine.markTooMuch();
-                _snack('记下了，接下来几天会降一档。');
-              },
-            ),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: <Widget>[
+              ActionChip(
+                label: Text(_courtBusy ? '开庭中…' : '开庭'),
+                onPressed: (_courtBusy || _muted) ? null : _openCourt,
+              ),
+              const SizedBox(width: 8),
+              ActionChip(
+                avatar: const Icon(Icons.bolt_rounded, size: 17),
+                label: Text(_stimulating ? '点火中…' : '刺激我'),
+                onPressed: (_stimulating || _muted) ? null : _stimulate,
+              ),
+              const SizedBox(width: 8),
+              ActionChip(label: const Text('停战'), onPressed: _muted ? null : _truce),
+              const SizedBox(width: 8),
+              ActionChip(
+                label: const Text('太过了'),
+                onPressed: () async {
+                  await _engine.markTooMuch();
+                  _snack('记下了，接下来几天会降一档。');
+                },
+              ),
+            ],
+          ),
         ),
       );
 
@@ -508,6 +555,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   Widget _row(EnemyMessage m) {
     if (m.kind == MessageKind.verdict) return _verdictBubble(m);
     if (m.kind == MessageKind.motion) return _motionBubble(m);
+    final String stimulus = _stimulusStyles[m.id] ?? '';
     final bool mine = m.role == MessageRole.user;
     final double maxWidth = MediaQuery.of(context).size.width * 0.8;
     final bool drill = m.kind == MessageKind.drill;
@@ -529,7 +577,15 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            if (interject)
+            if (stimulus.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '动机刺激 · ${StimulusStyle.label(stimulus)}',
+                  style: const TextStyle(color: kEnemyAccent, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              )
+            else if (interject)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
@@ -540,6 +596,10 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
             Text(m.text, style: const TextStyle(color: kEnemyText, fontSize: 16, height: 1.55)),
             const SizedBox(height: 4),
             Text(fmtTime(m.ts), style: const TextStyle(color: kEnemyMuted, fontSize: 11)),
+            if (stimulus.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 6),
+              _stimulusControls(m),
+            ],
           ],
         ),
       ),
@@ -563,7 +623,12 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('动议', style: TextStyle(color: kEnemyAccent, fontSize: 11)),
+            Text(
+              (_stimulusStyles[m.id] ?? '').isEmpty
+                  ? '动议'
+                  : '动机刺激 · ${StimulusStyle.label(_stimulusStyles[m.id]!)}',
+              style: const TextStyle(color: kEnemyAccent, fontSize: 11, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 4),
             Text(m.text, style: const TextStyle(color: kEnemyText, fontSize: 16, height: 1.55)),
             if (mo != null) ...<Widget>[
@@ -593,10 +658,66 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
             ],
             const SizedBox(height: 4),
             Text(fmtTime(m.ts), style: const TextStyle(color: kEnemyMuted, fontSize: 11)),
+            if ((_stimulusStyles[m.id] ?? '').isNotEmpty) ...<Widget>[
+              const SizedBox(height: 6),
+              _stimulusControls(m),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Widget _stimulusControls(EnemyMessage m) {
+    final String feedback = _stimulusFeedback[m.id] ?? '';
+    if (feedback.isNotEmpty) {
+      final String label = switch (feedback) {
+        StimulusFeedback.fired => '✓ 点着了',
+        StimulusFeedback.flat => '没感觉',
+        StimulusFeedback.tooMuch => '已降档 · 太过了',
+        _ => feedback,
+      };
+      return Text('你的反馈：$label', style: const TextStyle(color: kEnemyMuted, fontSize: 12));
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: <Widget>[
+        ActionChip(
+          visualDensity: VisualDensity.compact,
+          label: const Text('点着了 · 现在做'),
+          onPressed: () => _rateStimulus(m, StimulusFeedback.fired),
+        ),
+        ActionChip(
+          visualDensity: VisualDensity.compact,
+          label: const Text('没感觉'),
+          onPressed: () => _rateStimulus(m, StimulusFeedback.flat),
+        ),
+        ActionChip(
+          visualDensity: VisualDensity.compact,
+          label: const Text('太过了'),
+          onPressed: () => _rateStimulus(m, StimulusFeedback.tooMuch),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _rateStimulus(EnemyMessage m, String feedback) async {
+    final bool ok = await _presence.rateStimulus(m.id, feedback);
+    if (!mounted) return;
+    if (!ok) {
+      _snack('这次反馈没有记上。');
+      return;
+    }
+    if (feedback == StimulusFeedback.fired) {
+      HapticFeedback.mediumImpact();
+      _snack('记下了：这种方式更可能点着你。现在别继续聊，去做第一个动作。');
+    } else if (feedback == StimulusFeedback.flat) {
+      _snack('记下了：下次降低这种刺激方式的优先级。');
+    } else {
+      _snack('记下了：这种方式降权，并触发自动降档。');
+    }
+    await _load();
   }
 
   Widget _verdictBubble(EnemyMessage m) {
