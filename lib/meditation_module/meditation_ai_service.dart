@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
 import 'meditation_dao.dart';
+import 'meditation_depth_guidance.dart';
 import 'meditation_models.dart';
 import 'meditation_mentor_guidance.dart';
 import 'meditation_script_response.dart';
@@ -19,9 +20,9 @@ class MeditationAiService {
 3. 必须依次完成八个体验阶段，并在每个 segment 的 phase 中准确标注：
    arrival：进入本次主题，安排有支撑的姿势、双脚或身体触点，可选择闭眼，不能强迫。
    breath：至少两轮自然呼吸，也提供“只听声音/感受脚底”的替代入口；不要求深呼吸，不把呼吸变成考核。
-   body_emotion：询问并定位此刻真实的身体感觉与情绪，一次只邀请观察一种体验。
-   allow_experience：允许体验变化，不评价、不压制；明确“允许感受存在，不等于任由冲动或伤害性行为发生”。
-   embodied_shift：用很少的道理完成认知转向，并让用户通过呼吸、触感、姿态或外部感官真正体验这一转向。
+   body_emotion：把本次主题对应的一个轻微自动反应带入注意，询问此刻身体与情绪，建立尝试前的参照。
+   allow_experience：辨认反应也许想保护的需要，允许它存在；感受与行动保有区分，不要求用户必须接纳。
+   embodied_shift：针对同一个内在规则，邀请一处可撤回的小变化；留白之后分段观察身体、情绪与原判断的关系，让认知区分来自这次尝试。
    real_life_rehearsal：根据用户原话选择一个具体、日常、可辨认的真实场景，在场景中练习新的身体反应与选择；不得套用教室、校园、草地、同学等示例场景，除非用户自己提到。
    integration：提出一到两个体验式问题，例如“如果此刻真的允许……，身体或下一步会有什么细小变化”，不是知识问答；连接一个健康、现实、可选择的下一步。
    closing：用缓慢呼吸、身体触点和周围环境收束，再温和睁眼；睡眠主题则允许继续闭眼休息或入睡。
@@ -183,6 +184,7 @@ class MeditationAiService {
     required int durationMinutes,
     String userDescription = '',
     MeditationExpertPreferences preferences = const MeditationExpertPreferences(),
+    void Function(String stage)? onProgress,
   }) async {
     final targetMinutes = durationMinutes.clamp(1, 30).toInt();
     final targetSegmentCount = math.max(8, (targetMinutes * 60 / 25).ceil()).clamp(8, 64).toInt();
@@ -216,7 +218,7 @@ class MeditationAiService {
       'user_description': normalizedDescription,
       'primary_practice_input': primaryInput,
       'input_priority': '用户原话决定主题；推荐、状态和历史仅调节引导方式，不得替换主题',
-      'experience_contract_version': 'experiential_mentor_v1',
+      'experience_contract_version': 'experiential_mentor_v2_depth',
       'experience_contract': MeditationMentorGuidance.rules,
       'imagery_mode': useImagery ? '可选温和想象，并提供真实感官替代' : '真实感官与环境，不深入想象',
       'expert_preferences': preferences.toMap(),
@@ -239,7 +241,7 @@ class MeditationAiService {
       'tone': '温和、稳定、不说教、不空泛鼓励',
       'language': 'zh-CN',
     };
-    final prompt = await _renderPrompt(
+    var prompt = await _renderPrompt(
       () => _settings.inspectMeditationDailyScriptPromptState(),
       _settings.defaultMeditationDailyScriptPrompt,
       <String, String>{
@@ -264,9 +266,35 @@ class MeditationAiService {
     try {
       cfg = await _ai.resolveGlobalConfig();
       if (!cfg.available) throw MeditationGenerationException(MeditationGenerationFailureKind.configuration);
+      onProgress?.call('正在理解主题、设计体验……');
+      Map<String, dynamic>? blueprint;
+      try {
+        final designRaw = await _ai.generateText(
+          purpose: 'meditation.daily_design',
+          systemPrompt: MeditationDepthGuidance.planningSystem,
+          prompt: MeditationDepthGuidance.planningPrompt(
+            userInput: primaryInput, durationMinutes: targetMinutes,
+            useImagery: useImagery, isSleep: isSleep,
+            preferences: preferences.toMap(), safetyLevel: safety.level,
+          ),
+          maxTokens: 2600,
+          expectJson: true,
+          temperature: 0.45,
+        );
+        blueprint = MeditationDepthGuidance.readPlan(designRaw, primaryInput);
+        input['depth_design_status'] = blueprint == null ? 'unusable' : 'ready';
+      } catch (e) {
+        input['depth_design_status'] = 'unavailable';
+        input['depth_design_error'] = e.toString();
+      }
+      input['experience_blueprint'] = blueprint;
+      prompt = '$prompt\n\n【本次体验设计：作为待验证的写作材料，用户原话优先】\n'
+          '${jsonEncode({'experience_blueprint': blueprint, 'design_status': input['depth_design_status']})}\n'
+          '请把主题中的矛盾、保护需要、微小试验和体验后的认知整合写进正文。设计不可用时，按系统中的深度要求直接完成设计与成稿。';
+      onProgress?.call('正在撰写有层次的引导……');
       raw = await _ai.generateText(
         purpose: 'meditation.daily_script',
-        systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}',
+        systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}\n${MeditationDepthGuidance.writingRules}',
         prompt: prompt,
         maxTokens: (2000 + targetMinutes * 280).clamp(2200, 12000).toInt(),
         expectJson: true,
@@ -285,20 +313,27 @@ class MeditationAiService {
         useImagery: useImagery,
       );
       qualityIssues = initialQualityIssues;
+      var depthHints = initialQualityIssues.isEmpty
+          ? MeditationDepthGuidance.revisionHints(parsedMap, targetMinutes * 60) : <String>[];
+      final depthRepairNeeded = depthHints.isNotEmpty;
       final durationRepairNeeded = normalized?.durationPlan?.needsShorterVersion ?? false;
       var repairApplied = false;
       input['quality_repair_requested'] = initialQualityIssues.isNotEmpty;
       input['duration_repair_requested'] = durationRepairNeeded;
-      if (qualityIssues.isNotEmpty || durationRepairNeeded) {
+      input['depth_repair_requested'] = depthRepairNeeded;
+      input['initial_depth_hints'] = depthHints;
+      if (qualityIssues.isNotEmpty || durationRepairNeeded || depthRepairNeeded) {
+        onProgress?.call('正在校对体验联系与节奏……');
         try {
           final repairedRaw = await _ai.generateText(
             purpose: 'meditation.daily_script.repair',
-            systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}',
+            systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}\n${MeditationDepthGuidance.writingRules}',
             prompt: _dailyScriptRepairPrompt(
               originalPrompt: prompt,
               originalOutput: raw,
               qualityIssues: [
                 ...qualityIssues,
+                ...depthHints,
                 if (durationRepairNeeded) normalized!.durationPlan!.shorteningRequest,
               ],
               targetDurationMinutes: targetMinutes,
@@ -322,16 +357,22 @@ class MeditationAiService {
           );
           final contentImproved = parsedMap == null || repairedIssues.length < qualityIssues.length;
           final contentTied = repairedIssues.length == qualityIssues.length;
+          final repairedDepthHints = repairedIssues.isEmpty
+              ? MeditationDepthGuidance.revisionHints(repairedMap, targetMinutes * 60) : <String>[];
           final currentPlan = normalized?.durationPlan;
           final repairedPlan = repairedNormalized?.durationPlan;
           final durationImproved = currentPlan == null ||
               (repairedPlan != null && repairedPlan.durationSeconds < currentPlan.durationSeconds);
+          final depthImproved = repairedDepthHints.length < depthHints.length &&
+              repairedPlan != null && (currentPlan == null || repairedPlan.durationSeconds <= currentPlan.durationSeconds);
           if (repairedMap != null && (contentImproved ||
-              (contentTied && (qualityIssues.isNotEmpty || durationImproved)))) {
+              (contentTied && (qualityIssues.isNotEmpty || depthImproved ||
+                  (durationImproved && repairedDepthHints.length <= depthHints.length))))) {
             raw = repairedRaw;
             parsedMap = repairedMap;
             qualityIssues = repairedIssues;
             normalized = repairedNormalized;
+            depthHints = repairedDepthHints;
             repairApplied = true;
           }
         } catch (e) {
@@ -343,11 +384,14 @@ class MeditationAiService {
           }
           // A failed shortening request cannot invalidate sound content. Offer
           // the complete version with its actual plan instead of a retry loop.
-          input['duration_repair_error'] = e.toString();
+          if (durationRepairNeeded) input['duration_repair_error'] = e.toString();
+          if (depthRepairNeeded) input['depth_repair_error'] = e.toString();
         }
       }
       input['quality_repair_applied'] = repairApplied;
       input['duration_repair_applied'] = durationRepairNeeded && repairApplied;
+      input['depth_repair_applied'] = depthRepairNeeded && repairApplied;
+      input['remaining_depth_hints'] = depthHints;
       input['quality_issues'] = qualityIssues;
       input['response_normalization'] = normalized?.corrections ?? <String>[];
       if (parsedMap == null || qualityIssues.isNotEmpty) {
@@ -974,7 +1018,7 @@ class MeditationAiService {
       'allow_experience': r'允许|可以|不用|不必|存在|变化|接纳',
       'embodied_shift': r'呼吸|触|身体|脚|手|松|距离|空间|选择',
       'real_life_rehearsal': r'稍后|之后|当|如果|场景|消息|对话|工作|家|任务|回应|想象',
-      'integration': r'如果|愿意|下一步|选择|一件|今天|现在|问问|留意|觉察|感受|听',
+      'integration': r'如果|愿意|下一步|选择|一件|今天|现在|问问|留意|觉察|感受|听|回看|注意到|比较|此刻',
       'closing': r'睁|看见|周围|听见|回到|休息|入睡|环境',
     };
     for (final entry in phaseGuidanceChecks.entries) {
@@ -1035,7 +1079,7 @@ class MeditationAiService {
     required int targetMaxChars,
   }) {
     return '''
-请重写下面的冥想 JSON。上一版没有通过质量校验，因此不能交付给用户。
+请根据下面的具体问题或编辑建议修订冥想 JSON。保留已经有效的主题、体验与结束收束；认知、身体与情绪的联系需要在正文中成立，不能只补元数据。
 
 必须修复的问题：
 ${qualityIssues.map((e) => '- $e').join('\n')}
@@ -1047,6 +1091,7 @@ ${qualityIssues.map((e) => '- $e').join('\n')}
 - 八阶段依次完整出现：arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing
 - 保留对用户真正需要的深入理解，但把说理转换成身体、情绪和具体生活场景中的体验
 - 优先回应本次用户主题；修复体验合同、短段和说完后的留白，不要只补几个关键词。
+- 让体验前的自动反应、保护需要、微小试验、停留后的身体和情绪观察、认知整合形成连续过程；用 depth_evidence 引用真实正文核对。
 - 每个阶段至少包含一个与阶段相符的可跟随动作；全程保留“可以睁眼、换姿势、停下或回到环境”的选择
 - 不把呼吸、放松、情绪变化或一次练习的结果当作考核；高唤醒内容优先外部感官和支撑面，睡前内容保持低刺激
 - 全部重新组织为自然原创表达，不照抄任何固定范文

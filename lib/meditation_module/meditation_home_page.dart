@@ -29,6 +29,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
   MeditationStats? _stats;
   bool _loading = true;
   bool _aiGenerating = false;
+  String _aiGenerationStage = '正在理解主题、设计体验……';
   MeditationSessionTemplate? _aiSession;
   int? _aiTargetDurationSeconds;
   bool _aiPausesAdjusted = false;
@@ -85,6 +86,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
     final safety = _aiService.assessUserInput(userDescription);
     setState(() {
       _aiGenerating = true;
+      _aiGenerationStage = '正在理解主题、设计体验……';
       _aiError = null;
       _aiSafetyNotice = safety.isNormal ? null : safety.message;
       _aiSession = null;
@@ -108,6 +110,9 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
         durationMinutes: _aiDurationMinutes,
         userDescription: userDescription,
         preferences: _expertPreferences,
+        onProgress: (stage) {
+          if (mounted) setState(() => _aiGenerationStage = stage);
+        },
       );
       if (!mounted) return;
       setState(() {
@@ -390,13 +395,13 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                     children: [
                       if ((_aiUnderstoodNeed ?? '').isNotEmpty) ...[
                         const SizedBox(height: 10),
-                        const Text('AI 理解到的真正需要', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                        const Text('这次如何理解你的主题', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
                         const SizedBox(height: 4),
                         Text(_aiUnderstoodNeed!, style: const TextStyle(height: 1.5)),
                       ],
                       if ((_aiCognitiveShift ?? '').isNotEmpty) ...[
                         const SizedBox(height: 10),
-                        const Text('这次要松动的认知', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
+                        const Text('这次尝试的认知区分', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.deepPurple)),
                         const SizedBox(height: 4),
                         Text(_aiCognitiveShift!, style: const TextStyle(height: 1.5)),
                       ],
@@ -475,7 +480,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                 icon: _aiGenerating
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.auto_awesome),
-                label: Text(_aiGenerating ? '专家正在编排引导……' : '生成我的专家引导'),
+                label: Text(_aiGenerating ? _aiGenerationStage : '生成我的专家引导'),
               ),
             ),
           ],

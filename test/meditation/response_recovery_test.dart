@@ -9,6 +9,7 @@ import 'package:quote_app/services/unified_ai_service.dart';
 
 import 'experiential_mentor_test.dart'
     show FakeAi, FakeDao, FakeSettings, recommendation;
+import 'depth_fixtures.dart';
 
 // The visible design fields match the reported shape. The screenshot does not
 // include the complete script, so these segments are representative fixtures.
@@ -34,7 +35,7 @@ Map<String, dynamic> cognitiveChangeScript() {
     '最后，再感受脚底或座面的支撑。眼睛如果闭着，可以温和睁开，看向周围一个普通物体。让目光慢慢辨认它的轮廓，再选择继续休息或做一个很小的动作。你已经完成这次尝试，不需要先产生某种感觉。',
   ];
   const starts = [0, 40, 105, 160, 225, 320, 390, 455];
-  return {
+  final script = <String, dynamic>{
     'experience_design': {
       'input_anchor': '认知转变',
       'theme': '让认知转变成为念头与行动之间可感的一点空间',
@@ -59,6 +60,8 @@ Map<String, dynamic> cognitiveChangeScript() {
             }),
     'ending_reflection': '没有变化也能完成这次练习。',
   };
+  script['depth_evidence'] = depthEvidence(script['segments'] as List);
+  return script;
 }
 
 class RepairTimeoutAi extends FakeAi {
@@ -222,6 +225,7 @@ void main() {
       segments[i]['text'] = shortTexts[i];
       segments[i]['pause_after_seconds'] = 8;
     }
+    script['depth_evidence'] = depthEvidence(segments);
     final ai = FakeAi([jsonEncode(script)]);
     final result = await generate(ai, FakeDao());
     expect(result, isNotNull);
@@ -281,6 +285,7 @@ void main() {
         throwsA(isA<MeditationGenerationException>().having((e) => e.kind,
             'kind', MeditationGenerationFailureKind.configuration)));
     expect(unavailable.calls, isEmpty);
+    expect(unavailable.designCalls, isEmpty);
   });
 
   test('诊断保存失败不吞掉已经可用的 AI 引导', () async {
@@ -318,6 +323,7 @@ void main() {
     final script = cognitiveChangeScript();
     (script['segments'] as List)[4]['text'] =
         '不需要想象。看向真实纸面的光影，留意手掌的触感。认知转变可以是留意念头与行动之间的空间；再观察身体反应。';
+    script['depth_evidence'] = depthEvidence(script['segments'] as List);
     final ai = FakeAi([jsonEncode(script)]);
     final result = await MeditationAiService(
             ai: ai, settings: FakeSettings(), dao: FakeDao())
