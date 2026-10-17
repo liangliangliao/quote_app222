@@ -1,56 +1,27 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'dart:io';
+
 import 'package:characters/characters.dart';
-import 'package:quote_app/widgets/wood_frame_card.dart';
+import 'package:flutter/material.dart';
 
-class _NoIndicatorScroll extends ScrollBehavior {
-  @override
-  Widget buildViewportChrome(BuildContext context, Widget child, AxisDirection axisDirection) => child;
+import '../services/quote_frame_theme.dart';
+import 'quote_adaptive_frame.dart';
+import 'wood_frame_3d_overlay.dart';
 
-  @override
-  ScrollPhysics getScrollPhysics(BuildContext context) => const ClampingScrollPhysics();
-}
-
-class OctagonClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final w = size.width, h = size.height;
-    final c = 0.18;
-    return Path()
-      ..moveTo(c * w, 0)
-      ..lineTo(w - c * w, 0)
-      ..lineTo(w, c * h)
-      ..lineTo(w, h - c * h)
-      ..lineTo(w - c * w, h)
-      ..lineTo(c * w, h)
-      ..lineTo(0, h - c * h)
-      ..lineTo(0, c * h)
-      ..close();
+ImageProvider _posterAvatar(String raw, String fallback) {
+  if (raw.startsWith('data:')) {
+    try { return MemoryImage(base64Decode(raw.substring(raw.indexOf(',')+1))); }
+    catch (_) { return AssetImage(fallback); }
   }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return NetworkImage(raw);
+  if (raw.startsWith('assets/')) return AssetImage(raw);
+  if (raw.startsWith('/')) return FileImage(File(raw));
+  return AssetImage(fallback);
 }
 
-ImageProvider _imageFrom(String? any, {String? fallbackAsset}) {
-  if (any == null || any.isEmpty) return AssetImage(fallbackAsset ?? 'assets/bg-wood-upload.jpg');
-  if (any.startsWith('data:')) {
-    final b64 = any.substring(any.indexOf(',') + 1);
-    return MemoryImage(base64.decode(b64));
-  }
-  if (any.startsWith('http')) return NetworkImage(any);
-  if (any.startsWith('assets/')) return AssetImage(any);
-  return AssetImage(fallbackAsset ?? 'assets/bg-wood-upload.jpg');
-}
-
+/// 画芯与文字独立布局：无论名言多长，视觉故事始终拥有固定下部空间。
+/// 名言全部可上下滚动阅读；绘画区与木框不随滚动消失。
 class PosterPureFlutter extends StatelessWidget {
-  final String topic;
-  final String quote;
-  final String author;
-  final String note;
-  final String avatar;
-  final String woodBgAsset;
-
   const PosterPureFlutter({
     super.key,
     required this.topic,
@@ -59,166 +30,147 @@ class PosterPureFlutter extends StatelessWidget {
     required this.note,
     required this.avatar,
     this.woodBgAsset = 'assets/bg-wood-upload.jpg',
+    this.aiFramePath,
+    this.frameFinish,
   });
+
+  final String topic;
+  final String quote;
+  final String author;
+  final String note;
+  final String avatar;
+  final String woodBgAsset;
+  final String? aiFramePath;
+  final String? frameFinish;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, cons) {
-      final short = (cons.maxWidth < cons.maxHeight) ? cons.maxWidth : cons.maxHeight;
-      final tTitle = (short * 0.040).clamp(18.5, 24.0);
-      final tQuote = (short * 0.065).clamp(19.0, 31.0);
-      final tAuth = (short * 0.033).clamp(13.0, 16.0);
-      final tNote = (short * 0.030).clamp(10.5, 12.4);
-      final frameTop = (short * 0.035).clamp(14.0, 24.0);
-      final frameBottom = (short * 0.035).clamp(14.0, 24.0);
-      final canvasPad = (short * 0.130).clamp(44.0, 70.0);
-      final framePaddingH = (short * 0.115).clamp(64.0, 88.0) - 15.0 - 15.0;
-      final framePaddingV = (short * 0.160).clamp(92.0, 124.0) - 15.0 - 15.0;
-      final avatarSize = (short * 0.118).clamp(88.0, 140.0);
-      final bool hasAvatar = avatar.trim().isNotEmpty;
-    final bool shortTopic = (topic.characters.length < 15);
-      const frameRadius = 12.0;
-      const canvasRadius = 6.0;
+    final theme = QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note);
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = constraints.maxWidth;
+      final h = constraints.maxHeight;
+      final count = quote.characters.length;
+      final titleSize = (w*.055).clamp(15.0, 25.0);
+      final quoteSize = count > 115 ? 19.5 :
+          count > 90 ? 21.5 : count > 65 ? 23.0 :
+          count > 45 ? 25.0 : 29.5;
+      final authorSize = (w*.035).clamp(12.0, 16.0);
+      final noteSize = (w*.033).clamp(11.0, 13.5);
+      final avatarSize = (w*.19).clamp(42.0, 82.0);
+      final side = (w*.105).clamp(27.0, 51.0);
+      final sceneHeight = (h*(count>80 ? .22 : .32)).clamp(75.0, 215.0);
 
-      return Container(
-        color: Colors.transparent,
-        alignment: Alignment.center,
-        padding: EdgeInsets.only(top: (short * 0.10).clamp(30.0, 60.0) - 55.0),
+      return Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620),
+          constraints: const BoxConstraints(maxWidth:620),
           child: AspectRatio(
-            aspectRatio: 1024 / 1536, // match bg-wood-upload.jpg
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(frameRadius),
-                // boxShadow removed per design: frame alone without outer card shadow
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(frameRadius),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // 木纹相框背景（底层）
-                    Image.asset(woodBgAsset, fit: BoxFit.cover),
-                    // 相框内部边距：左右 40dp，上下 50dp
-                    Padding(
-                    padding: const EdgeInsets.only(left: 0, right: 0, top: 0, bottom: 30),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(canvasRadius),
-                        clipBehavior: Clip.hardEdge, // 确保内部滚动不越界
-                        child: Container(
-                          color: Colors.transparent,
-                          child: Padding(
-                             padding: const EdgeInsets.fromLTRB(55, 64, 55, 34), // top padding +4dp total, bottom +1dp for better spacing
-                             child: SingleChildScrollView(
-                               physics: const ClampingScrollPhysics(),
-                               child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(height: 20),
-                                    hasAvatar
-                                        ? Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Padding(
-                                                  padding: EdgeInsets.only(left: 12),
-                                                  child: Text(
-                                                    topic,
-                                                    textAlign: (topic.characters.length < 20) ? TextAlign.center : TextAlign.left,
-                                                    style: TextStyle(
-                                                      color: Colors.black87,
-                                                      fontSize: tTitle + 4, height: 1.30,
-                                                      fontWeight: FontWeight.w400,
-                                      letterSpacing: 2.8,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 16),
-                                              ClipOval(
-                                                child: SizedBox(
-                                                  width: avatarSize,
-                                                  height: avatarSize,
-                                                  child: hasAvatar
-                                                      ? Image(
-                                                          image: _imageFrom(avatar, fallbackAsset: woodBgAsset),
-                                                          fit: BoxFit.contain,
-                                                          gaplessPlayback: true, filterQuality: FilterQuality.medium,
-                                                        )
-                                                      : Image.asset(
-                                                          woodBgAsset,
-                                                          fit: BoxFit.contain,
-                                                        ),
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        : Center(
-                                            child: Text(
-                                              topic,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                color: Colors.black87,
-                                                fontSize: tTitle + 2, height: 1.30,
-                                                fontWeight: FontWeight.w400,
-                                      letterSpacing: 2.8,
-                                              ),
-                                              ),
-                                            ),
-
-SizedBox(height: (canvasPad * 0.3) - 5),
-                                    Text(quote, textScaleFactor: 1.0, style: const TextStyle(
-                                        color: Colors.black87,
-                                        fontSize: 31,
-                                        height: 1.45,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 2.0,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        author,
-                                        textAlign: TextAlign.right,
-                                        style: TextStyle(
-                                          color: Colors.black87,
-                                          fontSize: tAuth,
-                                          height: 1.35,
-                                          fontStyle: FontStyle.italic,
-                                          fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8, ),
-                                      ),
-                                    ),
-                                    SizedBox(height: 15),
-                                    SizedBox(height: 14), // reduced top margin for note by 6dp
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Padding(
-                                        padding: EdgeInsets.only(bottom: 20),
-                                        child: Text(
-                                          note,
+            aspectRatio: 2/3,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  QuoteAdaptiveFrame(
+                    theme: theme,
+                    aiImagePath: aiFramePath,
+                    quoteCharacters: count,
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(side, h*.085, side, h*.04),
+                    child: Column(children: [
+                      Expanded(
+                        child: ScrollConfiguration(
+                          behavior: const _QuietScroll(),
+                          child: SingleChildScrollView(
+                            physics: const ClampingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (avatar.trim().isNotEmpty)
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Text(topic,
                                           textAlign: TextAlign.left,
                                           style: TextStyle(
-                                            color: Colors.black87,
-                                            fontSize: tNote + 1,
-                                            height: 1.40,
-                                            fontWeight: FontWeight.w400,
-                                            letterSpacing: 0.5,
+                                            color: const Color(0xff352c27),
+                                            fontSize:titleSize,
+                                            letterSpacing:1.2,
+                                            height:1.35,
                                           ),
                                         ),
                                       ),
+                                      const SizedBox(width:10),
+                                      ClipOval(
+                                        child: SizedBox(
+                                          width:avatarSize,height:avatarSize,
+                                          child: Image(
+                                            image:_posterAvatar(avatar,woodBgAsset),
+                                            fit:BoxFit.cover,
+                                            errorBuilder:(_,__,___)=>const SizedBox.shrink(),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Text(topic,
+                                    textAlign:TextAlign.center,
+                                    style:TextStyle(
+                                      fontSize:titleSize,
+                                      color:const Color(0xff352c27),
+                                      letterSpacing:1.5,height:1.4,
                                     ),
-                                  ],
+                                  ),
+                                SizedBox(height:(h*.038).clamp(12.0,29.0)),
+                                Text(
+                                  quote,
+                                  textScaler:TextScaler.noScaling,
+                                  style:TextStyle(
+                                    color:const Color(0xff201a17),
+                                    fontSize:quoteSize,
+                                    height:1.47,
+                                    letterSpacing:.9,
+                                    fontWeight:FontWeight.w700,
+                                  ),
+                                ),
+                                if (author.trim().isNotEmpty) ...[
+                                  const SizedBox(height:13),
+                                  Text(author,
+                                    textAlign:TextAlign.right,
+                                    style:TextStyle(
+                                      fontSize:authorSize,
+                                      height:1.4,
+                                      color:const Color(0xff544538),
+                                      fontWeight:FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                                if (note.trim().isNotEmpty) ...[
+                                  const SizedBox(height:21),
+                                  Text(note,
+                                    style:TextStyle(
+                                      fontSize:noteSize,
+                                      height:1.50,
+                                      color:const Color(0xff62584e),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height:16),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    ),
+                      // 图像不再被长篇名言覆盖，始终能看见脚本中的主意象。
+                      SizedBox(height:sceneHeight),
+                    ]),
                   ),
-                  ],
-                ),
+                  Positioned.fill(
+                    child: WoodFrame3dOverlay(theme:theme,finish:frameFinish),
+                  ),
+                ],
               ),
             ),
           ),
@@ -226,4 +178,11 @@ SizedBox(height: (canvasPad * 0.3) - 5),
       );
     });
   }
+}
+
+class _QuietScroll extends MaterialScrollBehavior {
+  const _QuietScroll();
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) => child;
 }

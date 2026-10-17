@@ -1,0 +1,46 @@
+name: Semantic Quote Frame CI
+
+on:
+  pull_request:
+    paths:
+      - 'lib/pages/home_page.dart'
+      - 'lib/widgets/poster_pure_flutter.dart'
+      - 'lib/widgets/quote_adaptive_frame.dart'
+      - 'lib/services/quote_frame_theme.dart'
+      - 'lib/services/quote_frame_ai_service.dart'
+      - 'lib/services/quote_visual_script_service.dart'
+      - 'lib/widgets/wood_frame_3d_overlay.dart'
+      - 'test/quote_frame_theme_test.dart'
+      - 'test/quote_visual_script_test.dart'
+      - '.github/workflows/quote_frame_ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Check semantic frame source
+        run: >-
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+          lib/services/quote_frame_theme.dart
+          lib/services/quote_frame_ai_service.dart
+          lib/services/quote_visual_script_service.dart
+          lib/widgets/wood_frame_3d_overlay.dart
+          lib/widgets/quote_adaptive_frame.dart
+          lib/widgets/poster_pure_flutter.dart
+          lib/pages/home_page.dart
+          test/quote_frame_theme_test.dart test/quote_visual_script_test.dart
+      - name: Run theme selection tests
+        run: flutter test --no-pub test/quote_frame_theme_test.dart test/quote_visual_script_test.dart

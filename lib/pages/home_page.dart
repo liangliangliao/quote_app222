@@ -10,6 +10,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
+import 'package:quote_app/widgets/quote_adaptive_frame.dart';
+import 'package:quote_app/widgets/wood_frame_3d_overlay.dart';
+import 'package:quote_app/services/quote_frame_theme.dart';
+import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/notification_service.dart';
 import '../data/dao.dart';
 import '../utils/debug_logger.dart';
@@ -74,6 +78,172 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _sessionPrompted = false;
 
   Map<String, dynamic>? _todayData;
+
+  final QuoteFrameAiService _frameAi = QuoteFrameAiService();
+  final Set<String> _frameAttempted = <String>{};
+  String _visibleFrameKey = '';
+  String? _frameImagePath;
+  String? _frameFinish;
+  bool _frameAuto = false;
+  bool _frameGenerating = false;
+  int _frameRevision = 0;
+
+  Future<void> _initFramePreference() async {
+    try {
+      final auto = await _frameAi.autoEnabled;
+      if (!mounted) return;
+      setState(() => _frameAuto = auto);
+      if (_todayData != null) unawaited(_activateFrame(_todayData!));
+    } catch (e) {
+      await DLog.e('FRAME', '配画设置加载失败: $e');
+    }
+  }
+
+  Future<void> _activateFrame(Map<String, dynamic> payload) async {
+    final topic = (payload['topic'] ?? '').toString();
+    final quote = (payload['quote'] ?? '').toString();
+    final key = _frameAi.cacheKey(topic, quote);
+    final int revision = ++_frameRevision;
+    if (_visibleFrameKey != key && mounted) {
+      setState(() {
+        _visibleFrameKey = key;
+        _frameImagePath = null; // 不展示上一条名言的画面
+        _frameFinish = null;
+      });
+    }
+    if (quote.trim().isEmpty) return;
+    try {
+      final cached = await _frameAi.findCached(topic, quote);
+      final script = await _frameAi.readCachedScript(topic, quote);
+      if (!mounted || revision != _frameRevision) return;
+      if (cached != null) {
+        // 只有确实存在 AI 画作时才允许切换材质；
+        // 纯兜底名言一律使用用户要求的默认暖胡桃木相框。
+        setState(() {
+          _frameImagePath = cached;
+          _frameFinish = script?.fromAi == true ? script!.frameFinish : null;
+        });
+      } else if (_frameAuto && !_frameAttempted.contains(key)) {
+        unawaited(_generateFrameFor(payload, userInitiated: false));
+      }
+    } catch (e) {
+      await DLog.e('FRAME', '读取图片缓存失败: $e');
+    }
+  }
+
+  Future<void> _generateFrameFor(Map<String, dynamic> payload, {required bool userInitiated}) async {
+    if (_frameGenerating) {
+      if (userInitiated && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已有一幅画正在生成')));
+      }
+      return;
+    }
+    final topic = (payload['topic'] ?? '').toString();
+    final quote = (payload['quote'] ?? '').toString();
+    if (quote.trim().isEmpty) return;
+    final key = _frameAi.cacheKey(topic, quote);
+    _frameAttempted.add(key);
+    setState(() => _frameGenerating = true);
+    try {
+      final style = QuoteFrameTheme.resolve(topic: topic, quote: quote, note: (payload['note'] ?? '').toString());
+      final path = await _frameAi.generate(
+        topic: topic, quote: quote, note: (payload['note'] ?? '').toString(),
+        theme: style, force: userInitiated,
+      );
+      final script = await _frameAi.readCachedScript(topic, quote);
+      if (!mounted) return;
+      if (_visibleFrameKey == key) {
+        setState(() {
+          _frameImagePath = path;
+          _frameFinish = script?.fromAi == true ? script!.frameFinish : null;
+        });
+      }
+      if (userInitiated) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('主题画框已生成并缓存')));
+    } catch (e) {
+      await DLog.e('FRAME', 'AI 生成配画失败: $e');
+      if (userInitiated && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 配画失败，已保留本地主题相框：$e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _frameGenerating = false);
+        // 生成期间若切换名言，则接着处理最新一条，不让它卡在无图状态。
+        final current = _todayData;
+        if (_frameAuto && current != null &&
+            _frameAi.cacheKey((current['topic'] ?? '').toString(), (current['quote'] ?? '').toString()) != key) {
+          unawaited(_activateFrame(current));
+        }
+      }
+    }
+  }
+
+  Future<void> _showFrameInterpretation() async {
+    final payload = _todayData;
+    if (payload == null) return;
+    final topic = (payload['topic'] ?? '').toString();
+    final quote = (payload['quote'] ?? '').toString();
+    final script = await _frameAi.readCachedScript(topic, quote);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('名言如何变成画面'),
+        content: SingleChildScrollView(
+          child: Text(script == null
+            ? '当前尚未生成 AI 视觉脚本。请先选择「AI 生成/重绘当前画框」。本地主题相框只能提供基本意境，并非深入理解原文。'
+            : '原句含义：${script.meaning}\n\n核心视觉类比：${script.metaphor}\n\n可见场景：${script.scene}\n\n为什么这样画：${script.relationship}\n\n氛围：${script.mood}\n木框：${script.frameFinish}\n\n分析来源：${script.fromAi ? 'AI 语义解析' : '本地有限规则兜底（不代表 AI 已理解）'}'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestManualFrame() async {
+    final payload = _todayData;
+    if (payload == null || _frameGenerating) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('为当前名言生成 AI 相框？'),
+        content: const Text('系统将先调用文字 AI 理解名言的含义、象征与画面关系，然后再用图片模型生成。两次调用都可能产生 API 费用；重新生成会再次计费。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('生成')),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) unawaited(_generateFrameFor(payload, userInitiated: true));
+  }
+
+  Future<void> _setFrameAuto() async {
+    if (!_frameAuto) {
+      final agreed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('开启 AI 自动配画？'),
+          content: const Text('新名言会先调用文字 AI 形成可解释的视觉脚本，再调用图片 AI 生成画面。两次模型调用可能分别收费；每句有缓存，重复打开不会重复生成。关闭后仅使用免费的本地视觉兜底。'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('开启')),
+          ],
+        ),
+      );
+      if (agreed != true || !mounted) return;
+    }
+    final enabled = !_frameAuto;
+    try {
+      await _frameAi.setAutoEnabled(enabled);
+      if (!mounted) return;
+      setState(() => _frameAuto = enabled);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(enabled ? 'AI 自动配画已开启' : 'AI 自动配画已关闭，本地相框继续生效')));
+      if (enabled && _todayData != null) unawaited(_activateFrame(_todayData!));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存配画设置失败：$e')));
+    }
+  }
+
 
 
 // ---------------------------------------------------------------------------
@@ -220,6 +390,15 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
 
   void _handleTopBarMenu(String value) async {
     switch (value) {
+      case 'frame_generate':
+        unawaited(_requestManualFrame());
+        break;
+      case 'frame_toggle':
+        unawaited(_setFrameAuto());
+        break;
+      case 'frame_explain':
+        unawaited(_showFrameInterpretation());
+        break;
       case 'share':
         // 沿用原来的分享行为：复制当前名言到剪贴板并提示
         await _copyLatest();
@@ -255,6 +434,7 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
       _checkNotificationPermission();
     });
     _primeFirstBg();
+    unawaited(_initFramePreference());
     _load();
     _pinnedController.addListener(_handlePinnedScroll);
     // Load pinned quotes immediately on first build
@@ -347,7 +527,9 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
 
   int idx = 0;
   try {
-    idx = await QuoteDao().nextCamusFallbackIndex(all.length);
+    idx = await QuoteDao().nextCamusFallbackIndex(all.length)
+        .timeout(const Duration(milliseconds: 300),
+          onTimeout: () => (DateTime.now().millisecondsSinceEpoch ~/ 60000) % all.length);
   } catch (_) {
     idx = 0;
   }
@@ -369,29 +551,38 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
 }
 
   Future<void> _load() async {
-    // 仅在首次加载时将数据设为空以显示兜底，后续刷新保持原有数据避免闪屏
-    if (!_firstLoaded) {
-      setState(() { _todayData = null; _firstLoaded = true; });
+    if (!_firstLoaded && mounted) setState(() => _firstLoaded = true);
+    // 先加载随包发布的几十条默认名言，再异步请求 SQLite。
+    // 旧逻辑先等 latestNotifiedToday()，首次启动/数据库受阻时整张画一直空白。
+    try {
+      final fallback = await _loadNextFallbackQuote();
+      if (!mounted) return;
+      if (_latestRow == null && (fallback['quote'] ?? '').toString().trim().isNotEmpty) {
+        setState(() => _todayData = fallback);
+        unawaited(_activateFrame(fallback));
+      }
+    } catch (e) {
+      await DLog.e('HOME', '兜底名言加载失败: $e');
+      if (mounted && _todayData == null) {
+        setState(() => _todayData = <String, dynamic>{
+          'topic': '每日名言',
+          'quote': '千里之行，始于足下。',
+          'author': '——《道德经》',
+          'note': '从眼前的一小步开始。',
+        });
+      }
     }
     try {
       final dao = QuoteDao();
       final latest = await dao.latestNotifiedToday();
       if (!mounted) return;
       _latestRow = latest;
-      if (latest == null) {
-        // 当查询不到今日数据时，注入固定的兜底内容而非 null。
-        // 兜底内容与模板原始文案保持一致，这样即便无数据，也能通过 setDynamicData 渲染完整页面。
-        await DLog.i('HOME', '今日未检索到已通知记录：注入兜底内容');
-        final fallbackBg = await _getBgDataUrl();
-        // 从资产 JSON 读取并轮播兜底内容
-        final Map<String, dynamic> fallback = await _loadNextFallbackQuote();
-        fallback['bgUrl'] = fallbackBg; // 运行时覆盖背景
-        await _logInject('json', fallback);
-        if (mounted) setState(() { _todayData = fallback; });
-        // Update pinned state after injecting fallback content
+      if (latest == null || (latest['content'] ?? latest['quote'] ?? '').toString().trim().isEmpty) {
+        // 没有今日有效记录时，保留刚刚即时显示的默认名言，不让首页回到空白。
+        await DLog.i('HOME', '今日未检索到有效记录：显示默认名言');
         await _checkPinnedState();
         _requestNotifAfterFirstFrame();
-        } else {
+      } else {
         final avatarUrl = await _avatarToDataUrl((latest['avatar'] ?? '').toString());
         // 根据署名和出处组装 author 字段。若存在署名或出处则前缀“——”，否则为空
         final String authorName = (latest['author_name'] ?? latest['author'] ?? '').toString().trim();
@@ -420,19 +611,14 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         await DLog.i('HOME', '已检索到今日最新已通知记录：准备注入');
         await _logInject('db', payload);
         if (mounted) setState(() { _todayData = payload; });
+        if (mounted) unawaited(_activateFrame(payload));
       // Update pinned state after injecting DB content
       await _checkPinnedState();
       _requestNotifAfterFirstFrame();
       }
     } catch (e) {
       await DLog.e('HOME', '查询异常：注入兜底内容；err=$e');
-      // 当查询发生异常时，注入兜底内容以保证页面不为空白
-      final fallbackBg = await _getBgDataUrl();
-        // 从资产 JSON 读取并轮播兜底内容
-        final Map<String, dynamic> fallback = await _loadNextFallbackQuote();
-        fallback['bgUrl'] = fallbackBg; // 运行时覆盖背景
-        await _logInject('json', fallback);
-        if (mounted) setState(() { _todayData = fallback; });
+      // 异常也不擦掉已显示的随包兜底名言。
         // Update pinned state after error fallback
         await _checkPinnedState();
         _requestNotifAfterFirstFrame();
@@ -602,7 +788,7 @@ ImageProvider _imageFrom(String? any) {
                 children: [
                   // 背景相框
                   Positioned.fill(
-                    child: Image.asset('assets/home_small_frame.png', fit: BoxFit.fill),
+                    child: QuoteAdaptiveFrame(theme: QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note), quoteCharacters: quote.runes.length),
                   ),
                   // 画布内容
                   Positioned.fill(
@@ -738,6 +924,11 @@ ImageProvider _imageFrom(String? any) {
                         ),
                       ),
                       ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: WoodFrame3dOverlay(
+                      theme: QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note),
                     ),
                   ),
                 ],
@@ -1112,6 +1303,7 @@ ImageProvider _imageFrom(String? any) {
     setState(() {
       _todayData = payload;
     });
+    unawaited(_activateFrame(payload));
     // After switching, update pinned state
     await _checkPinnedState();
   }
@@ -1142,9 +1334,13 @@ ImageProvider _imageFrom(String? any) {
   }
 
   Widget _buildScaffold(BuildContext context) {
-    final content = (!_firstLoaded)
-        ? (_firstBg == null ? const {'__blank__': true} : {'bgUrl': _firstBg})
-        : _todayData;
+    // 永远不要把空对象渲染成整张无字相框。
+    final content = _todayData ?? const <String, dynamic>{
+      'topic': '每日名言',
+      'quote': '名言加载中…',
+      'author': '',
+      'note': '',
+    };
     final media = MediaQuery.of(context);
     final topPad = media.padding.top;
     final contentPad = topPad;
@@ -1193,6 +1389,8 @@ ImageProvider _imageFrom(String? any) {
                                     note: '${content?['note'] ?? ''}',
                                     avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
                                     woodBgAsset: 'assets/bg-wood-upload.jpg',
+                                    aiFramePath: _frameImagePath,
+                                    frameFinish: _frameFinish,
                                   ),
                                 ),
                               ),
@@ -1288,6 +1486,31 @@ ImageProvider _imageFrom(String? any) {
                         icon: const Icon(Icons.more_vert, color: Colors.black87),
                         onSelected: _handleTopBarMenu,
                         itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                          PopupMenuItem<String>(
+                            value: 'frame_generate',
+                            child: Row(children: [
+                              Icon(_frameGenerating ? Icons.hourglass_top : Icons.auto_awesome),
+                              const SizedBox(width: 8),
+                              Text(_frameGenerating ? '正在生成配画' : 'AI 生成/重绘当前画框（可能收费）'),
+                            ]),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'frame_toggle',
+                            child: Row(children: [
+                              Icon(_frameAuto ? Icons.check_box : Icons.check_box_outline_blank),
+                              const SizedBox(width: 8),
+                              Text(_frameAuto ? '关闭 AI 自动配画' : '开启 AI 自动配画（可能收费）'),
+                            ]),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'frame_explain',
+                            child: Row(children: [
+                              Icon(Icons.auto_stories_outlined),
+                              SizedBox(width: 8),
+                              Text('查看名言视觉化解释'),
+                            ]),
+                          ),
+                          const PopupMenuDivider(),
                           PopupMenuItem<String>(
                             value: 'share',
                             child: Row(
