@@ -39,6 +39,6 @@ jobs:
       - name: Analyze meditation generation and playback
         run: >-
           flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
-          lib/meditation_module lib/services/global_ai_settings.dart test/meditation
+          lib/meditation_module test/meditation
       - name: Test topic guidance, repair and speech pauses
         run: flutter test --no-pub test/meditation

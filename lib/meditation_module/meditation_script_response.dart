@@ -18,7 +18,7 @@ class NormalizedMeditationScript {
 class MeditationScriptResponse {
   static NormalizedMeditationScript? read(String raw,
       {required int durationSeconds}) {
-    final decoded = _decodeObject(raw);
+    final decoded = decodeObject(raw);
     if (decoded == null) return null;
     final script = Map<String, dynamic>.from(decoded);
     final corrections = <String>{};
@@ -161,7 +161,7 @@ class MeditationScriptResponse {
         durationPlan: durationPlan);
   }
 
-  static Map<String, dynamic>? _decodeObject(String raw, [int depth = 0]) {
+  static Map<String, dynamic>? decodeObject(String raw, [int depth = 0]) {
     if (depth > 3) return null;
     final stripped = raw
         .trim()
@@ -184,7 +184,7 @@ class MeditationScriptResponse {
         final decoded = jsonDecode(candidate);
         if (decoded is Map<String, dynamic>) return decoded;
         if (decoded is String) {
-          final nested = _decodeObject(decoded, depth + 1);
+          final nested = decodeObject(decoded, depth + 1);
           if (nested != null) return nested;
         }
       } on FormatException {

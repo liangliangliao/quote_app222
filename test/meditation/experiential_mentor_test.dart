@@ -8,6 +8,8 @@ import 'package:quote_app/meditation_module/meditation_models.dart';
 import 'package:quote_app/services/global_ai_settings.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
 
+import 'depth_fixtures.dart';
+
 const topic = '允许自己为人';
 
 Map<String, dynamic> example({bool short = false, bool imagery = true}) {
@@ -96,6 +98,7 @@ Map<String, dynamic> example({bool short = false, bool imagery = true}) {
     'practice_focus': ['身体触点', '情绪允许'],
     'duration_minutes': short ? 1 : 5,
     'segments': segments,
+    'depth_evidence': depthEvidence(segments),
     'ending_reflection': '练习可以在没有明显变化的情况下完成。',
   };
 }
@@ -103,7 +106,9 @@ Map<String, dynamic> example({bool short = false, bool imagery = true}) {
 class FakeAi extends UnifiedAiService {
   final List<String> replies;
   final List<Map<String, String>> calls = [];
-  FakeAi(this.replies);
+  final List<Map<String, String>> designCalls = [];
+  final String? designReply;
+  FakeAi(this.replies, {this.designReply});
   @override
   Future<UnifiedAiResolvedConfig> resolveGlobalConfig(
           {String? forcedProvider, String? forcedModel}) async =>
@@ -125,6 +130,12 @@ class FakeAi extends UnifiedAiService {
       String? forcedProvider,
       String? forcedModel,
       double? temperature}) async {
+    if (purpose == 'meditation.daily_design') {
+      designCalls.add(
+          {'prompt': prompt, 'system': systemPrompt ?? '', 'purpose': purpose});
+      return designReply ??
+          jsonEncode(depthPlan(jsonDecode(prompt)['user_input'] as String));
+    }
     calls.add(
         {'prompt': prompt, 'system': systemPrompt ?? '', 'purpose': purpose});
     return replies.removeAt(0);
@@ -203,6 +214,7 @@ void main() {
                 MeditationMentorGuidance.speechSeconds(step.text) + 8));
       }
       expect(ai.calls, hasLength(1));
+      expect(ai.designCalls, hasLength(1));
       expect(ai.calls.single['prompt'], contains('primary_practice_input'));
       expect(dao.outputs.single['provider'], 'existing-app-provider');
     });
