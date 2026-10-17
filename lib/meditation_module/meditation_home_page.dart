@@ -29,11 +29,10 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
   MeditationStats? _stats;
   bool _loading = true;
   bool _aiGenerating = false;
-  String _aiGenerationStage = '正在理解主题、设计体验……';
+  String _aiGenerationStage = '正在生成冥想引导……';
   MeditationSessionTemplate? _aiSession;
   int? _aiTargetDurationSeconds;
   bool _aiPausesAdjusted = false;
-  String? _aiReason;
   String? _aiUnderstoodNeed;
   String? _aiCognitiveShift;
   String? _aiEmbodiedGoal;
@@ -86,13 +85,12 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
     final safety = _aiService.assessUserInput(userDescription);
     setState(() {
       _aiGenerating = true;
-      _aiGenerationStage = '正在理解主题、设计体验……';
+      _aiGenerationStage = '正在生成冥想引导……';
       _aiError = null;
       _aiSafetyNotice = safety.isNormal ? null : safety.message;
       _aiSession = null;
       _aiTargetDurationSeconds = null;
       _aiPausesAdjusted = false;
-      _aiReason = null;
       _aiUnderstoodNeed = null;
       _aiCognitiveShift = null;
       _aiEmbodiedGoal = null;
@@ -128,7 +126,6 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
             ? '本次暂未生成引导，可以重试或先使用本地练习。'
             : null;
       });
-      if (result != null) _loadAiReason(result.session);
     } on MeditationGenerationException catch (e) {
       if (mounted) setState(() => _aiError = e.userMessage);
     } catch (e) {
@@ -136,16 +133,6 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
       setState(() => _aiError = 'AI 生成失败：$e');
     } finally {
       if (mounted) setState(() => _aiGenerating = false);
-    }
-  }
-
-  Future<void> _loadAiReason(MeditationSessionTemplate session) async {
-    try {
-      final reason = await _aiService.generateRecommendationReason(currentState: _state, recommended: session);
-      if (!mounted || _aiSession?.key != session.key) return;
-      setState(() => _aiReason = reason.trim().isEmpty ? null : reason.trim());
-    } catch (_) {
-      // The optional explanation must not hide a usable practice or delay it.
     }
   }
 
@@ -171,7 +158,6 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
     _aiSession = null;
     _aiTargetDurationSeconds = null;
     _aiPausesAdjusted = false;
-    _aiReason = null;
     _aiUnderstoodNeed = null;
     _aiCognitiveShift = null;
     _aiEmbodiedGoal = null;
@@ -421,10 +407,6 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                                 label: Text(item),
                               )).toList(),
                         ),
-                      ],
-                      if ((_aiReason ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(_aiReason!, style: const TextStyle(height: 1.45)),
                       ],
                     ],
                   ),

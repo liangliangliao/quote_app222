@@ -19,16 +19,6 @@ class MeditationDurationPlan {
   });
 
   bool get exceedsTarget => durationSeconds > targetSeconds;
-
-  // A modest overrun can be offered immediately. A substantially longer
-  // practice gets one attempt at a shorter version, with this one as fallback.
-  bool get needsShorterVersion =>
-      durationSeconds - targetSeconds >
-      math.min(120, math.max(15, (targetSeconds * .2).floor()));
-
-  String get shorteningRequest =>
-      '保留正文和必要留白预计需 $durationSeconds 秒，目标 $targetSeconds 秒。'
-      '请精简重复说明，保留八阶段、用户主题和核心体验；不要加快语速或取消体验停顿。';
 }
 
 /// Fit reducible silence first. Never discard narration or force faster speech.

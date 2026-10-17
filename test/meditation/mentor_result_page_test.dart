@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -33,16 +32,18 @@ class PageDao extends FakeDao {
 }
 
 class PageService extends MeditationAiService {
-  final Completer<String> reason = Completer<String>();
+  int reasonCalls = 0;
 
   PageService(FakeAi ai, PageDao dao)
       : super(ai: ai, settings: FakeSettings(), dao: dao);
 
   @override
   Future<String> generateRecommendationReason(
-          {required String currentState,
-          required MeditationSessionTemplate recommended}) =>
-      reason.future;
+      {required String currentState,
+      required MeditationSessionTemplate recommended}) async {
+    reasonCalls++;
+    return '不应自动调用';
+  }
 }
 
 Future<void> submit(
@@ -67,7 +68,7 @@ Future<void> submit(
 }
 
 void main() {
-  testWidgets('完整 AI 正文展示为可开始的引导，附加说明慢或失败都不会吞掉结果', (tester) async {
+  testWidgets('完整 AI 正文直接展示为可开始的引导，不额外请求推荐说明', (tester) async {
     final dao = PageDao();
     final service =
         PageService(FakeAi([jsonEncode(cognitiveChangeScript())]), dao);
@@ -80,24 +81,46 @@ void main() {
     expect(tester.widget<OutlinedButton>(regenerate).onPressed, isNotNull);
     expect(find.textContaining('AI 暂时未生成可用内容'), findsNothing);
     expect(find.textContaining('AI 已返回引导，但还需要调整'), findsNothing);
-    service.reason
-        .completeError(StateError('optional explanation unavailable'));
-    await tester.pumpAndSettle();
-    expect(find.text('开始专家引导'), findsOneWidget);
+    expect(service.reasonCalls, 0);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('确实未通过内容校验时页面说明 AI 已返回与具体原因', (tester) async {
+  testWidgets('自然收束不命中旧关键词、缺少设计附注时仍能开始和保存', (tester) async {
     final script = cognitiveChangeScript()..remove('experience_design');
+    (script['segments'] as List).last['text'] = '感受脚底的支撑，轻轻活动手指，让视线慢慢清晰。';
     final raw = jsonEncode(script);
     final dao = PageDao();
-    final service = PageService(FakeAi([raw, raw]), dao);
+    final ai = FakeAi([raw]);
+    final service = PageService(ai, dao);
     await submit(tester, service, dao);
-    expect(find.textContaining('AI 已返回引导，但还需要调整'), findsOneWidget);
-    expect(find.textContaining('缺少把主题转成感官、身体和情绪体验'), findsOneWidget);
-    expect(find.textContaining('可能是配置或网络异常'), findsNothing);
+    expect(find.textContaining('AI 已返回引导，但还需要调整'), findsNothing);
+    expect(find.textContaining('结束收束 缺少'), findsNothing);
+    expect(find.text('开始专家引导'), findsOneWidget);
+    expect(ai.calls, hasLength(1));
+    expect(service.reasonCalls, 0);
+    final save = find.text('保存到本地，供以后重复使用');
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(dao.savedSessions.single.steps.last.text, '感受脚底的支撑，轻轻活动手指，让视线慢慢清晰。');
+    expect(dao.outputs.single['raw'], raw);
+    expect(dao.outputs.single['success'], isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('无法读取正文时说明未自动重写，并保留原始响应', (tester) async {
+    const raw = '{"segments":[';
+    final dao = PageDao();
+    final ai = FakeAi([raw]);
+    final service = PageService(ai, dao);
+    await submit(tester, service, dao);
+    expect(find.textContaining('未能读取到可播放的引导正文'), findsOneWidget);
+    expect(find.textContaining('未自动重写'), findsOneWidget);
+    expect(find.textContaining('已尝试自动'), findsNothing);
     expect(find.text('开始专家引导'), findsNothing);
-    expect(find.text('生成我的专家引导'), findsOneWidget);
+    expect(ai.calls, hasLength(1));
+    expect(service.reasonCalls, 0);
     expect(dao.outputs.single['raw'], raw);
     expect(tester.takeException(), isNull);
   });
