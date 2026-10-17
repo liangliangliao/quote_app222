@@ -1,0 +1,121 @@
+00:00 +0: loading test/will_mirror/startup_recovery_test.dart
+00:00 +0: test/will_mirror/startup_recovery_test.dart: native vault errors expose only safe categories, never native details
+00:00 +1: test/will_mirror/startup_recovery_test.dart: missing channel and empty native reply cannot write plaintext
+00:00 +2: test/will_mirror/startup_recovery_test.dart: optional provider and reminder failures keep the local ledger usable
+00:00 +3: test/will_mirror/startup_recovery_test.dart: storage failures remain blocking and preserve the existing records
+00:00 +4: test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:02 +5: test/will_mirror/startup_recovery_test.dart: unknown startup error is neutral and usable with large text
+00:02 +6: loading test/will_mirror/widget_flow_test.dart
+00:04 +6: test/will_mirror/widget_flow_test.dart: (setUpAll)
+00:04 +6: test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:05 +7: test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:06 +8: test/will_mirror/widget_flow_test.dart: unknown observation keeps waiting and no reveal button invents result
+00:06 +9: test/will_mirror/widget_flow_test.dart: active source detail removes private content immediately after withdrawal
+00:06 +10: test/will_mirror/widget_flow_test.dart: populated Top5 keeps counterarguments visible on a phone
+00:06 +11: test/will_mirror/widget_flow_test.dart: life path renders actual episodes and optional possible branches distinctly
+00:06 +12: test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
+00:07 +13: test/will_mirror/widget_flow_test.dart: (tearDownAll)
+00:07 +13: loading test/will_mirror/principle_application_test.dart
+00:07 +13: test/will_mirror/principle_application_test.dart: a draft principle cannot become an adopted cue before user acceptance
+00:07 +14: test/will_mirror/principle_application_test.dart: risk and review gates block principle adoption and plan sealing
+00:07 +15: test/will_mirror/principle_application_test.dart: display and advance declarations cannot fabricate actual principle use
+00:07 +16: test/will_mirror/principle_application_test.dart: real application needs a concrete account and a known observation
+00:07 +17: test/will_mirror/principle_application_test.dart: version references must match and an application cannot switch versions
+00:07 +18: test/will_mirror/principle_application_test.dart: later revisions stop new cues but preserve review of the version used
+00:07 +19: test/will_mirror/principle_application_test.dart: changed field conditions stop reuse without rewriting past acceptance
+00:07 +20: test/will_mirror/principle_application_test.dart: cross-case reuse requires authorization and a current safe context match
+00:07 +21: test/will_mirror/principle_application_test.dart: a new safety restriction suspends even an accepted principle
+00:07 +22: test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:08 +23: test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=opened
+00:08 +24: test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=accepted
+00:08 +25: test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+00:09 +26: loading test/will_mirror/scenario_integrity_test.dart
+00:09 +26: test/will_mirror/scenario_integrity_test.dart: E01 工作: no fabricated facts across a new evidence version
+00:09 +27: test/will_mirror/scenario_integrity_test.dart: E02 任务能力: no fabricated facts across a new evidence version
+00:09 +28: test/will_mirror/scenario_integrity_test.dart: E03 学习: no fabricated facts across a new evidence version
+00:09 +29: test/will_mirror/scenario_integrity_test.dart: E04 关系: no fabricated facts across a new evidence version
+00:09 +30: test/will_mirror/scenario_integrity_test.dart: E05 人身安全: no fabricated facts across a new evidence version
+00:09 +31: test/will_mirror/scenario_integrity_test.dart: E06 健康: no fabricated facts across a new evidence version
+00:09 +32: test/will_mirror/scenario_integrity_test.dart: E07 资金: no fabricated facts across a new evidence version
+00:09 +33: test/will_mirror/scenario_integrity_test.dart: E08 法律责任: no fabricated facts across a new evidence version
+00:09 +34: test/will_mirror/scenario_integrity_test.dart: E09 休息: no fabricated facts across a new evidence version
+00:09 +35: test/will_mirror/scenario_integrity_test.dart: E10 资源取舍: no fabricated facts across a new evidence version
+00:09 +36: test/will_mirror/scenario_integrity_test.dart: E11 资源取舍: no fabricated facts across a new evidence version
+00:09 +37: test/will_mirror/scenario_integrity_test.dart: E12 社会榜样: no fabricated facts across a new evidence version
+00:09 +38: test/will_mirror/scenario_integrity_test.dart: E13 获得与满足: no fabricated facts across a new evidence version
+00:09 +39: test/will_mirror/scenario_integrity_test.dart: E14 新兴趣: no fabricated facts across a new evidence version
+00:09 +40: test/will_mirror/scenario_integrity_test.dart: E15 多样性: no fabricated facts across a new evidence version
+00:09 +41: test/will_mirror/scenario_integrity_test.dart: E16 被迫行为: no fabricated facts across a new evidence version
+00:09 +42: test/will_mirror/scenario_integrity_test.dart: E17 通知: no fabricated facts across a new evidence version
+00:09 +43: test/will_mirror/scenario_integrity_test.dart: E18 现场变化: no fabricated facts across a new evidence version
+00:09 +44: test/will_mirror/scenario_integrity_test.dart: E19 多次尝试: no fabricated facts across a new evidence version
+00:09 +45: test/will_mirror/scenario_integrity_test.dart: E20 认知反证: no fabricated facts across a new evidence version
+00:09 +46: test/will_mirror/scenario_integrity_test.dart: E21 原则修订: no fabricated facts across a new evidence version
+00:09 +47: test/will_mirror/scenario_integrity_test.dart: E22 他人自主: no fabricated facts across a new evidence version
+00:09 +48: test/will_mirror/scenario_integrity_test.dart: E23 隐私撤回: no fabricated facts across a new evidence version
+00:09 +49: test/will_mirror/scenario_integrity_test.dart: E24 信息极少: no fabricated facts across a new evidence version
+00:09 +50: loading test/will_mirror/ai_contract_test.dart
+00:10 +50: test/will_mirror/ai_contract_test.dart: minimal consent excludes unselected raw data and all of its derivatives
+00:10 +51: test/will_mirror/ai_contract_test.dart: cross-case selection requires both explicit case and evidence grants
+00:10 +52: test/will_mirror/ai_contract_test.dart: seals are sent only if the complete linked source set was authorized
+00:10 +53: test/will_mirror/ai_contract_test.dart: stage schema repair is bounded and unauthorized references never commit
+00:10 +54: test/will_mirror/ai_contract_test.dart: cancellation before model request retains the original case
+00:10 +55: test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
+00:10 +56: test/will_mirror/ai_contract_test.dart: semantic paraphrases do not get counted just to reach fifty
+00:10 +57: test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
+00:10 +58: test/will_mirror/ai_contract_test.dart: private model never forwards upstream error bodies
+00:10 +59: test/will_mirror/ai_contract_test.dart: Decisions refusal and name mismatch have no manufactured zero scores
+00:10 +60: test/will_mirror/ai_contract_test.dart: strict model schemas require every declared property and no additional properties
+00:10 +61: loading test/will_mirror/domain_test.dart
+00:11 +61: test/will_mirror/domain_test.dart: one case preserves raw input and separates UI step from real time phase
+00:11 +62: test/will_mirror/domain_test.dart: nested ledger bodies and support references are immutable
+00:11 +63: test/will_mirror/domain_test.dart: schema rejects invented keys, invalid score and unknown enum
+00:11 +64: test/will_mirror/domain_test.dart: sealed T0 is canonical, unchanged by T1 and T2, and cannot be backfilled
+00:11 +65: test/will_mirror/domain_test.dart: changed T1 conditions also prohibit inventing a T0 forecast
+00:11 +66: test/will_mirror/domain_test.dart: retrospective case has no manufactured prediction
+00:11 +67: test/will_mirror/domain_test.dart: unknown actual action does not become failure or reveal
+00:11 +68: test/will_mirror/domain_test.dart: actual action and outside result remain independent
+00:11 +69: test/will_mirror/domain_test.dart: next episode retains original observations once on the same CaseID
+00:11 +70: test/will_mirror/domain_test.dart: unsafe route and later unsafe assessment prevent preparation
+00:11 +71: test/will_mirror/domain_test.dart: AI cannot author action facts or user acceptance
+00:11 +72: test/will_mirror/domain_test.dart: missing, stale, or foreign evidence blocks model records
+00:11 +73: test/will_mirror/domain_test.dart: plans, scenes, scores and device events do not self-prove personality
+00:11 +74: test/will_mirror/domain_test.dart: transitive withdrawal reaches saved forecasts and ranking
+00:11 +75: test/will_mirror/domain_test.dart: Top5 preserves counterarguments and long horizon and never fills false scores
+00:11 +76: test/will_mirror/domain_test.dart: generic assumptions remain verify-first rather than personal facts
+00:11 +77: test/will_mirror/domain_test.dart: duplicate semantic key collapses paraphrases, bounded distinct pool
+00:11 +78: test/will_mirror/domain_test.dart: all scored candidates survive weight adjustment, refusal stays unknown
+00:11 +79: loading test/will_mirror/store_controller_test.dart
+00:11 +79: test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
+00:12 +80: test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:12 +81: test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:12 +82: test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
+00:12 +83: test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:12 +84: test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:12 +85: test/will_mirror/store_controller_test.dart: cross-case revoke preserves source while clearing all dependent histories
+00:12 +86: test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
+00:12 +87: test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:12 +88: test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:12 +89: test/will_mirror/store_controller_test.dart: denied reminder permission preserves plan and never fabricates delivery
+00:12 +90: test/will_mirror/store_controller_test.dart: malformed or unrelated notification payload is not handled by this module
+00:12 +91: loading test/will_mirror/notification_host_test.dart
+00:13 +91: test/will_mirror/notification_host_test.dart: a foreground notification consumes pending navigation and opens only once
+00:13 +92: loading test/will_mirror/android_sqlite_contract_test.dart
+00:14 +92: test/will_mirror/android_sqlite_contract_test.dart: Android startup and privacy cleanup use result-capable SQL operations
+error DatabaseException(Queries can be performed using SQLiteDatabase query or rawQuery methods only.) during open, closing...
+00:14 +93: loading test/will_mirror/regression_v28_test.dart
+00:15 +93: test/will_mirror/regression_v28_test.dart: a superseded route cannot activate an old plan or rank its old support as current
+00:15 +94: test/will_mirror/regression_v28_test.dart: repeated route analysis must revise prior IDs instead of exceeding six active alternatives
+00:15 +95: test/will_mirror/regression_v28_test.dart: weight adjustment retains the original online scoring and expiry times
+00:15 +96: test/will_mirror/regression_v28_test.dart: latest hard safety assessment blocks high-scored supporting motives
+00:15 +97: test/will_mirror/regression_v28_test.dart: unreferenced AI guesses cannot use verified fact status
+00:15 +98: test/will_mirror/regression_v28_test.dart: later user records cannot acquire an earlier knowledge phase
+00:15 +99: test/will_mirror/regression_v28_test.dart: known exclusive resources prohibit a parallel tradeoff but allow sequencing
+00:15 +100: test/will_mirror/regression_v28_test.dart: two actual events without free informed alternatives cannot prove a stable want
+00:15 +101: test/will_mirror/regression_v28_test.dart: safety reappraisal immediately retires preparation and cancels the OS job
+00:15 +102: test/will_mirror/regression_v28_test.dart: identical completed analysis reuses its result and new facts invalidate reuse
+00:15 +103: test/will_mirror/regression_v28_test.dart: independent learning review repairs once before commit
+00:15 +104: test/will_mirror/regression_v28_test.dart: independent learning review rejects persistent violations
+00:15 +105: test/will_mirror/regression_v28_test.dart: Azure tries an alternate path only after an unsupported endpoint
+00:15 +106: test/will_mirror/regression_v28_test.dart: Azure Claude uses Messages body and parses text blocks
+00:15 +107: All tests passed!

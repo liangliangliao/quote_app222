@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../kindling/kindling.dart';
+import '../will_mirror/will_mirror.dart';
 import '../kindling_host/kindling_host_reminder.dart';
 
 import 'native_guard.dart';
@@ -53,6 +54,7 @@ class NotificationService {
   static String? _pendingPayload;
   static bool _homeVisible = false;
   static bool _requestedThisSession = false;
+  static final Set<String> _openWillMirrorPayloads = <String>{};
 
   /// 仅供主入口消费使用：是否由通知启动（冷启动）
   static Future<bool> didLaunchFromNotification() async {
@@ -97,6 +99,7 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateWillMirror(payload)) return;
     if (await _tryNavigateKindling(payload)) return;
     if (await _tryNavigateBeliefMentor(payload)) return;
     if (await _tryNavigateXiangjiFutureStrategist(payload)) return;
@@ -107,6 +110,32 @@ class NotificationService {
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateWillMirror(String? payload) async {
+    final link = MirrorLink.parse(payload);
+    if (link == null) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = payload;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (SimpleBus.navigatorKey.currentState != null) {
+          handlePendingNotificationNavigation();
+        }
+      });
+      return true;
+    }
+    // Module verifies all IDs against the saved plan before using the link.
+    if (_pendingPayload == payload) {
+      _pendingPayload = null;
+      _launchFromNotif = false;
+    }
+    final identity = link.encode();
+    if (!_openWillMirrorPayloads.add(identity)) return true;
+    nav.push(MaterialPageRoute<void>(builder: (_) => WillMirrorModulePage(initialLink: link)))
+        .whenComplete(() => _openWillMirrorPayloads.remove(identity));
+    return true;
   }
 
   /// 火种的复问通知：直接开模块首页，不带任何参数。
@@ -449,7 +478,9 @@ class NotificationService {
         try {
           await NotificationService.markLaunchedFromNotification(p);
         } catch (_) {}
-        if (p != null && p.startsWith('vision_focus')) {
+        if (await NotificationService._tryNavigateWillMirror(p)) {
+          return;
+        } else if (p != null && p.startsWith('vision_focus')) {
           try {
             final dao = VisionDao();
             final goal = await dao.loadGoal();

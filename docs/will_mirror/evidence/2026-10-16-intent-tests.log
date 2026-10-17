@@ -1,0 +1,128 @@
+00:00 +0: loading /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart
+00:00 +0: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: minimal consent excludes unselected raw data and all of its derivatives
+00:00 +1: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: cross-case selection requires both explicit case and evidence grants
+00:00 +2: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: seals are sent only if the complete linked source set was authorized
+00:00 +3: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: stage schema repair is bounded and unauthorized references never commit
+00:00 +4: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: cancellation before model request retains the original case
+00:00 +5: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
+00:00 +6: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
+00:00 +7: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:00 +8: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:00 +9: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
+00:00 +10: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:00 +11: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:00 +12: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:00 +13: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:00 +14: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
+00:00 +15: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:00 +16: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:00 +17: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: first pass commits understanding without starting the fifty-motive workflow
+00:00 +18: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: cross-case revoke preserves source while clearing all dependent histories
+00:00 +19: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: cross-case revoke preserves source while clearing all dependent histories
+00:00 +20: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: scope retry resumes inside its pass without repeating earlier work
+00:00 +21: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
+00:00 +22: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
+00:00 +23: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: new condition cancels reminders and stops stale plans without altering the seal
+00:00 +24: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:00 +25: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:00 +26: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:00 +27: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:00 +28: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: invalid workbench scope cannot leave an orphan permission or busy state
+00:00 +29: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:00 +30: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:00 +31: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:00 +32: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:00 +33: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:00 +34: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:01 +35: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:01 +36: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:01 +37: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:01 +38: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:02 +39: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:02 +40: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:02 +41: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:02 +42: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +43: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +44: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +45: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +46: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +47: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +48: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +49: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +50: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +51: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +52: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +53: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +54: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +55: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +56: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +57: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +58: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +59: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +60: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +61: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +62: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +63: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +64: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +65: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +66: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:03 +67: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +68: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +69: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +70: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +71: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +72: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +73: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +74: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +75: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +76: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +77: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:03 +78: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +79: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +80: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +81: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +82: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +83: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +84: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +85: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +86: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +87: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +88: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +89: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +90: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +91: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +92: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +93: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +94: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +95: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +96: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +97: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +97: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/android_sqlite_contract_test.dart: Android startup and privacy cleanup use result-capable SQL operations
+error DatabaseException(Queries can be performed using SQLiteDatabase query or rawQuery methods only.) during open, closing...
+00:04 +98: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +99: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+00:04 +100: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: populated Top5 keeps counterarguments visible on a phone
+00:04 +101: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=opened
+00:04 +102: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=opened
+00:04 +103: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
+00:05 +104: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=accepted
+00:05 +105: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+00:05 +106: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: accepting a reframe invalidates affected route fits and keeps other fits
+00:05 +107: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/regression_v28_test.dart: a superseded route cannot activate an old plan or rank its old support as current
+00:05 +108: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +109: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +110: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +111: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +112: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +113: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +114: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +115: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +116: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +117: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +118: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +119: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +120: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:05 +121: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:06 +122: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:07 +123: /workspace/scratch/e412b4a9d3a5/quote_app222/test/will_mirror/intent_visual_test.dart: (tearDownAll)
+00:07 +123: All tests passed!

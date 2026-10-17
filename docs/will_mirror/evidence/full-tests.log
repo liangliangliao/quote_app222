@@ -1,0 +1,1186 @@
+00:00 +0: loading /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart
+00:00 +0: /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart: (setUpAll)
+00:00 +0: /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:05 +1: /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:10 +2: /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart: unknown observation keeps waiting and no reveal button invents result
+00:12 +3: /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart: active source detail removes private content immediately after withdrawal
+00:12 +4: /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
+00:13 +5: /workspace/quote_app222-remove/test/will_mirror/widget_flow_test.dart: (tearDownAll)
+00:14 +5: loading /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart
+00:16 +5: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:17 +6: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
+00:17 +7: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:17 +8: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:17 +9: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: cross-case revoke preserves source while clearing all dependent histories
+00:18 +10: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
+00:18 +11: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:18 +12: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:18 +13: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: denied reminder permission preserves plan and never fabricates delivery
+00:18 +14: /workspace/quote_app222-remove/test/will_mirror/store_controller_test.dart: malformed or unrelated notification payload is not handled by this module
+00:18 +15: loading /workspace/quote_app222-remove/test/will_mirror/domain_test.dart
+00:21 +15: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: one case preserves raw input and separates UI step from real time phase
+00:21 +16: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: nested ledger bodies and support references are immutable
+00:21 +17: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: schema rejects invented keys, invalid score and unknown enum
+00:21 +18: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: sealed T0 is canonical, unchanged by T1 and T2, and cannot be backfilled
+00:21 +19: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: changed T1 conditions also prohibit inventing a T0 forecast
+00:21 +20: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: retrospective case has no manufactured prediction
+00:21 +21: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: unknown actual action does not become failure or reveal
+00:22 +22: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: actual action and outside result remain independent
+00:22 +23: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: next episode retains original observations once on the same CaseID
+00:22 +24: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: unsafe route and later unsafe assessment prevent preparation
+00:22 +25: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: AI cannot author action facts or user acceptance
+00:22 +26: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: missing, stale, or foreign evidence blocks model records
+00:22 +27: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: plans, scenes, scores and device events do not self-prove personality
+00:22 +28: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: transitive withdrawal reaches saved forecasts and ranking
+00:22 +29: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: Top5 preserves counterarguments and long horizon and never fills false scores
+00:22 +30: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: generic assumptions remain verify-first rather than personal facts
+00:22 +31: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: duplicate semantic key collapses paraphrases, bounded distinct pool
+00:22 +32: /workspace/quote_app222-remove/test/will_mirror/domain_test.dart: all scored candidates survive weight adjustment, refusal stays unknown
+00:22 +33: loading /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart
+00:25 +33: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: minimal consent excludes unselected raw data and all of its derivatives
+00:25 +34: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: cross-case selection requires both explicit case and evidence grants
+00:25 +35: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: seals are sent only if the complete linked source set was authorized
+00:25 +36: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: stage schema repair is bounded and unauthorized references never commit
+00:25 +37: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: cancellation before model request retains the original case
+00:25 +38: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
+00:27 +39: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: semantic paraphrases do not get counted just to reach fifty
+00:27 +40: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
+00:28 +41: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: private model never forwards upstream error bodies
+00:28 +42: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: Decisions refusal and name mismatch have no manufactured zero scores
+00:28 +43: /workspace/quote_app222-remove/test/will_mirror/ai_contract_test.dart: strict model schemas require every declared property and no additional properties
+00:28 +44: loading /workspace/quote_app222-remove/test/will_module/will_route_resolver_test.dart
+00:29 +44: /workspace/quote_app222-remove/test/will_module/will_route_resolver_test.dart: 关键单元 P-017 能解析到抗诱惑路径
+00:29 +45: /workspace/quote_app222-remove/test/will_module/will_route_resolver_test.dart: 导论 D-015 会推荐流程感相关训练
+00:29 +46: loading /workspace/quote_app222-remove/test/will_module/will_deep_content_seed_test.dart
+00:32 +46: /workspace/quote_app222-remove/test/will_module/will_deep_content_seed_test.dart: 导论中段单元也能获得非空深内容
+00:32 +47: /workspace/quote_app222-remove/test/will_module/will_deep_content_seed_test.dart: 观念—运动后段单元也能获得非空深内容
+00:32 +48: loading /workspace/quote_app222-remove/test/will_module/will_dashboard_support_test.dart
+00:34 +48: /workspace/quote_app222-remove/test/will_module/will_dashboard_support_test.dart: trainingTypeForTaskTitle maps known tasks
+00:34 +49: /workspace/quote_app222-remove/test/will_module/will_dashboard_support_test.dart: defaultUnitIdsForTask returns non-empty unit ids
+00:34 +50: /workspace/quote_app222-remove/test/will_module/will_dashboard_support_test.dart: progress helpers compute expected values
+00:34 +51: /workspace/quote_app222-remove/test/will_module/will_dashboard_support_test.dart: currentTrainingStreak counts consecutive active days
+00:34 +52: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart
+00:39 +52: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-001/002 seeds protected offline K0 with source locators
+00:40 +53: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-REV52 seeds the complete method and rule inventory
+00:41 +54: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-V63-GUIDE seeds cases, feature grounding and user preferences
+00:42 +55: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-V62-ACTION user-selected burden becomes the authoritative action
+00:42 +56: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-PS-001 preserves user raw material and derived layers separately
+00:43 +57: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: rapid problem transitions keep every audit event without id collision
+00:43 +58: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-EP-008 deleting sole evidence downgrades high impact claim
+00:44 +59: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-025 database rejects embedding as formal grounding
+00:45 +60: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-LG-005 action DONE never fabricates RealityResult
+00:46 +61: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-013 one local source can map to multiple providers
+00:47 +62: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: TC-KB-018 candidate knowledge starts outside stable personal rules
+00:48 +63: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: data reset stays inside module and restores protected K0
+00:49 +64: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: T-MEC-DB atomically persists SolverSnapshot and MethodEvent
+00:50 +65: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_database_test.dart: Method Effect gate rejects explanation-only MethodEvent
+00:50 +66: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart
+00:53 +66: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-SCK / AskUserGuard only Missing + HighImpact + CannotInfer may ask
+00:53 +67: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-SCK / AskUserGuard reversible information gap becomes a scout, not a form
+00:53 +68: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-SCK / AskUserGuard TC-AI-004/006 asks only the EVSI-highest single question
+00:53 +69: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation an explicit new need outranks facts embedded in the same sentence
+00:53 +70: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation A03 judgment precedes Solver and major routes include red team
+00:53 +71: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-AI-001/002 natural language yields a full prefilled draft
+00:53 +72: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation G8 local fallback changes Gap, mechanism and prediction by case
+00:53 +73: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation T-SCK-02 same work label but different state changes bottleneck
+00:53 +74: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation irreversible urgent decision with no boundary asks one question
+00:53 +75: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-SCK-018 reality contradiction is not rewritten as support
+00:53 +76: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation all eighteen SCK rules are executable kernel entries
+00:53 +77: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-SCK-002 keeps observation separate from intention attribution
+00:53 +78: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-SCK-003/005 compares concrete causes before abstraction
+00:53 +79: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-PS-R3-01 audits the hidden premise before perseverance training
+00:53 +80: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-ST-R3-01 can recommend ending a low-value fight
+00:53 +81: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation AI context cannot promote itself into a major user decision
+00:53 +82: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-AI-010 extracts reality facts, experience and interpretation
+00:53 +83: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation A02 causal work and A12 action compression survive merge
+00:53 +84: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: TC-AI / automatic delegation TC-AI-011 high-value background route is A14 then A00
+00:53 +85: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: SituationModel state machine judgment and grounding are explicit gates
+00:53 +86: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_sck_test.dart: SituationModel state machine new contradictory reality forces STALE first
+00:53 +87: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart
+00:55 +87: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-01 separates experience and interpretation authority
+00:55 +88: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-02 preserves feeling and demotes external cause
+00:55 +89: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-03 creates distinct causal mechanisms and a test
+00:55 +90: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-04 decisive difference changes Gap and invalidates reuse
+00:55 +91: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-05 keeps a not-yet-named experience without forced label
+00:55 +92: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-06 counterexample shrinks concept scope
+00:55 +93: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-07 weak ground lowers action commitment
+00:55 +94: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-08 systematicity never raises epistemic status
+00:55 +95: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-09 reality mismatch changes downstream state
+00:55 +96: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-10 path-as-goal creates a user decision gate
+00:55 +97: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-11 same Goal but different S0 selects different KeyGap
+00:55 +98: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-12 missing precondition becomes recursive subgoal
+00:55 +99: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-13 preserves prediction and updates H/Gap on contrary reality
+00:55 +100: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: T-MEC-14 identifies earliest failed layer and reroutes
+00:56 +101: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_signature_method_engine_test.dart: contextual reveal shows at most 3 and Action Mode shows none
+00:56 +102: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_method_catalog_test.dart
+01:00 +102: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_method_catalog_test.dart: Rev5.2 catalog preserves all 14 distinct product concepts
+01:00 +103: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_method_catalog_test.dart: persistent solver concepts are not misattributed as philosophy
+01:00 +104: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_method_catalog_test.dart: bundled JSON registry matches the runtime catalog
+01:00 +105: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart
+01:03 +105: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: V5 Schopenhauer L0 architecture is visible and accessible
+01:06 +106: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: G3/DOC-08 solver cockpit is first-class and uses user language
+01:06 +107: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: DOC-08 cockpit remains usable at 200 percent text
+01:06 +108: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: DOC-08 changed method exposes trigger and before/after effect
+01:06 +109: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: AI participation is visible as auditable product work
+01:06 +110: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_master_prd_experience_test.dart: local fallback is never presented as cloud AI
+01:07 +111: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_knowledge_router_test.dart
+01:09 +111: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: TC-KB-005 route order starts with reality and offline K0
+01:10 +112: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: TC-KB-011 original-source request returns traceable locator
+01:11 +113: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: TC-KB-016 expired provider file is rejected, never silently reused
+01:12 +114: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_knowledge_router_test.dart: K0 risk gate is executable with no network or provider
+01:13 +115: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart
+01:15 +115: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: Rev5.2 restores the complete A00-A19 agent registry
+01:15 +116: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-EP-014/015 complexity never raises certainty
+01:15 +117: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-EP-016 valid inference cannot rescue ungrounded premise
+01:15 +118: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-EP-017 direct perception keeps observation conditions
+01:15 +119: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-EP: epistemic invariants TC-KB-025 semantic recall cannot become evidence
+01:15 +120: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-PS: problem state machine CAPTURED cannot jump to EXECUTING
+01:15 +121: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-PS: problem state machine PS-010 reality result is required before verifying
+01:15 +122: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-PS: problem state machine RESOLVED needs reality and success criteria
+01:15 +123: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-ST: campaign gates formal execution requires all six gates
+01:15 +124: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-ST: campaign gates closing a campaign requires battle review
+01:15 +125: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-KB: provider and candidate lifecycle TC-KB-010 cannot claim READY without verified persistence
+01:15 +126: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-KB: provider and candidate lifecycle TC-KB-015 provider deletion requires remote confirmation
+01:15 +127: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-KB: provider and candidate lifecycle TC-KB-018 one AI inference cannot become a stable rule
+01:15 +128: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-LG/AC: grounding and monitoring concept cycle is detected separately from reality spring
+01:15 +129: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_state_machine_test.dart: TC-LG/AC: grounding and monitoring AC-006 high-risk irreversible debt creates RED freeze
+01:15 +130: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart
+01:16 +130: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart: V5 Schopenhauer L0 catalog keeps the complete frozen concept core
+01:16 +131: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart: product operationalizations never masquerade as original terminology
+01:16 +132: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_schopenhauer_core_catalog_test.dart: every runtime method is constrained by L0 and every core is reachable
+01:16 +133: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_widget_test.dart
+01:18 +133: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_widget_test.dart: TC-UX-R3-01/accessible natural-language entry at 200% text
+01:20 +134: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_widget_test.dart: TC-UX-V62 practical result defaults to choice and one action
+01:20 +135: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_widget_test.dart: TC-UX-V63 guided case rehearses the complete useful loop
+01:21 +136: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_privacy_guard_test.dart
+01:24 +136: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: persisted problem identity does not disable configured AI
+01:24 +137: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: strongly sensitive categories require explicit consent
+01:24 +138: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: direct identifiers are redacted recursively before cloud use
+01:24 +139: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: agent cloud routing regression normal persisted problem invokes configured model without consent
+01:25 +140: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_privacy_guard_test.dart: agent cloud routing regression detected sensitive category stays local until consent
+01:26 +141: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart
+01:27 +141: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart: V6.2 default experience is one closed reality-producing loop
+01:27 +142: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart: every visible feature explains use, output and knowledge grounding
+01:27 +143: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart: three default cases preserve the complete action-reality-revision trace
+01:27 +144: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart: action burden follows current energy without changing the real problem
+01:27 +145: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart: offline usage assistant routes real questions to existing functions
+01:28 +146: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart: usage assistant answers the current action instead of reciting a guide
+01:28 +147: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_practical_product_test.dart: motivation boundary supports autonomy and rejects coercive dependency
+01:28 +148: loading /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart
+01:29 +148: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: Rev3 creates all AI work-domain entities and SCK-001..018
+01:30 +149: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: SituationModel is versioned and latest version remains explicit
+01:30 +150: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: user correction marks every downstream AI object STALE
+01:31 +151: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: AskUserGuard persistence selects at most one question per round
+01:31 +152: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: ConceptVersion preserves support, counterexample and supersession
+01:31 +153: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: SCK-018 always creates AIError even in deterministic local mode
+01:32 +154: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: TC-AI-011 two failed cycles create one auditable A14 to A00 council
+01:32 +155: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: G6: three Need -> analysis -> Action -> Reality -> Update loops
+01:36 +156: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: legacy Rev2 tables receive all Rev3 columns without data reset
+01:37 +157: /workspace/quote_app222-remove/test/xiangji_future_strategist/xiangji_rev3_database_test.dart: module export advertises Rev5.2 without losing legacy tables
+01:37 +158: loading /workspace/quote_app222-remove/test/kindling/kindling_schema_test.dart
+01:39 +158: /workspace/quote_app222-remove/test/kindling/kindling_schema_test.dart: createAll builds every k_ table and is idempotent
+01:39 +159: /workspace/quote_app222-remove/test/kindling/kindling_schema_test.dart: migrate is idempotent and independent of host version numbers
+01:39 +160: /workspace/quote_app222-remove/test/kindling/kindling_schema_test.dart: no foreign key points outside the module
+01:39 +161: /workspace/quote_app222-remove/test/kindling/kindling_schema_test.dart: item schema carries no goal / plan / deadline / streak column
+01:39 +162: /workspace/quote_app222-remove/test/kindling/kindling_schema_test.dart: probe score is constrained to 0..4
+01:39 +163: loading /workspace/quote_app222-remove/test/kindling/host_db_open_smoke_test.dart
+01:41 +163: /workspace/quote_app222-remove/test/kindling/host_db_open_smoke_test.dart: opening the host database finishes instead of hanging
+[DBG] AppDatabase opened at: /tmp/host_db_open_TYVBIQ/quotes.db
+01:42 +164: loading /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart
+01:43 +164: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: verdict "no" keeps the item and moves it to released
+01:43 +165: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: released_count counter tracks the核心成功指标
+01:44 +166: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: an aborted run never drags the want ratio down
+01:44 +167: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: recall candidates keep the kind of the question they came from
+01:44 +168: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: a fully blank recall is not counted as a session
+01:44 +169: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: 换个说法 can also leave a note behind
+01:44 +170: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: recall answers are stored verbatim and bump the session counter
+01:44 +171: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: burn records aborted runs without any failure marker
+01:44 +172: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: want_more rate is kept in k_meta only
+01:44 +173: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: three consecutive "不想" answers pin 放掉 in the long-press menu
+01:44 +174: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: "说不准" comes back for one more question after 7 days
+01:44 +175: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: item views aggregate the signals used for ordering
+01:44 +176: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: probe scores are clamped into 0..4
+01:44 +177: /workspace/quote_app222-remove/test/kindling/kindling_dao_test.dart: resistance steps are recorded and answers may stay empty
+01:44 +178: loading /workspace/quote_app222-remove/test/kindling/kindling_oracle_test.dart
+01:47 +178: /workspace/quote_app222-remove/test/kindling/kindling_oracle_test.dart: candidates are split on line breaks and Chinese punctuation
+01:47 +179: /workspace/quote_app222-remove/test/kindling/kindling_oracle_test.dart: too short, too long and duplicate fragments are dropped
+01:47 +180: /workspace/quote_app222-remove/test/kindling/kindling_oracle_test.dart: list markers are stripped from candidates
+01:47 +181: /workspace/quote_app222-remove/test/kindling/kindling_oracle_test.dart: the resistance ladder asks four questions and then stops
+01:47 +182: loading /workspace/quote_app222-remove/test/kindling/kindling_heat_test.dart
+01:48 +182: /workspace/quote_app222-remove/test/kindling/kindling_heat_test.dart: "不做" sinks the item to the bottom
+01:48 +183: /workspace/quote_app222-remove/test/kindling/kindling_heat_test.dart: "做" adds a bonus over an otherwise identical item
+01:48 +184: /workspace/quote_app222-remove/test/kindling/kindling_heat_test.dart: an unrated item lands on the neutral middle
+01:48 +185: /workspace/quote_app222-remove/test/kindling/kindling_heat_test.dart: a 14-day-old self report is halved in weight
+01:48 +186: /workspace/quote_app222-remove/test/kindling/kindling_heat_test.dart: the result stays inside 0..1.2
+01:48 +187: /workspace/quote_app222-remove/test/kindling/kindling_heat_test.dart: sortByHeat only reorders, it never annotates
+01:48 +188: loading /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart
+01:49 +188: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 候选切分 AI 不可用时用本地规则
+01:49 +189: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 候选切分 AI 抛错时用本地规则
+01:49 +190: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 候选切分 AI 返回空内容时用本地规则
+01:49 +191: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 候选切分 AI 的切分同样受 2–40 字与去重约束
+01:49 +192: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 第一问不碰网络，进场就有内容
+01:49 +193: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 模型太慢就用本地问题梯，不干等
+01:53 +194: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 AI 不可用时走本地问题梯
+01:53 +195: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 问句超过 25 字就不采用
+01:53 +196: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 出现禁用词就不采用
+01:53 +197: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 不是问句就不采用
+01:53 +198: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 合规的问句照用
+01:53 +199: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 问满四步就结束，不无限追问
+01:53 +200: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 阻抗追问 system prompt 与方案 §7 逐字一致
+01:53 +201: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 复问提醒 默认实现什么都不做，也就是默认关
+01:53 +202: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 复问提醒 通知文案与模块内的文案逐字一致
+01:53 +203: /workspace/quote_app222-remove/test/kindling/kindling_host_test.dart: 复问提醒 宿主实现挂得上模块的接口
+01:53 +204: loading /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart
+01:54 +204: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: an empty list offers 回溯, 十五分钟 and 直接写一个 only
+01:55 +205: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: 直接写一个 immediately asks the verdict question
+01:58 +206: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: answering 不做 keeps the item and moves it to 放掉的
+02:00 +207: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: long press opens 换个说法 / 问一句 / 卡住了 / 放掉
+02:00 +208: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: 痒度自评只给措辞，不给任何数字
+02:01 +209: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: 换个说法可以顺手留一句备注
+02:02 +210: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: 卡住了 only asks and ends with the fixed closing line
+02:05 +211: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: 卡住了 进场立刻有第一问，不等追问器
+02:05 +212: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: 回溯 turns raw answers into candidates the user may keep
+02:07 +213: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: the discover entry hands the tap back to the host
+02:09 +214: /workspace/quote_app222-remove/test/kindling/kindling_flow_widget_test.dart: (tearDownAll)
+02:09 +214: loading /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart
+02:11 +214: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: (setUpAll)
+02:11 +214: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: no copy carries an exclamation mark or a pep-talk word
+02:11 +215: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: the module never speaks of streaks, badges, ranking or sharing
+02:11 +216: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: no progress indicator or percentage is rendered
+02:11 +217: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: UI files hold no literal copy of their own
+02:11 +218: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: the module depends on nothing beyond flutter and sqflite
+02:11 +219: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: the probe ladder shows wording only, never a score
+02:11 +220: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: the recall questions keep their fixed wording and order
+02:11 +221: /workspace/quote_app222-remove/test/kindling/kindling_red_lines_test.dart: (tearDownAll)
+02:11 +221: loading /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart
+02:13 +221: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: one-input productization four experience modes change load without changing safety flags
+02:13 +222: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: one-input productization five one-tap blocks create distinct, testable hypotheses
+02:13 +223: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: one-input productization all saved examples run through to an observable action
+02:13 +224: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: one-input productization preference round-trip preserves all four personalization choices
+02:13 +225: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: assistant and embedded manual assistant routes practical questions to the right product area
+02:13 +226: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: assistant and embedded manual every visible feature explains input, output, reason and theory
+02:13 +227: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: feedback-specific review routing environment feedback changes both finding and thought route
+02:13 +228: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_productization_test.dart: feedback-specific review routing fear feedback becomes a reversible experiment, not blame
+02:13 +229: loading /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart
+02:15 +229: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: local and AI-derived knowledge isolation AI draft validates detail and keeps ai-derived origin
+02:15 +230: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: local and AI-derived knowledge isolation remote-derived draft remains explicitly distinct from local upload
+02:15 +231: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: local and AI-derived knowledge isolation action serialization preserves guidance source and draft reference
+02:15 +232: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers provider-specific ready state requires durable identifiers
+02:15 +233: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers Gemini retention wording does not claim permanent raw file storage
+02:16 +234: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers direct and gateway providers preserve their distinct ID contracts
+02:16 +235: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers OpenRouter requires a separate management key for workspace files
+02:16 +236: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: persistent remote knowledge identifiers Eden AI expiry prevents stale IDs from being reused
+02:16 +237: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: automatic local review report successful fitting action recommends continuing current thought
+02:16 +238: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: automatic local review report unfinished high-load action recommends a knowledge-based blend
+02:16 +239: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: action mentor state machine asks for goal before all other scenes
+02:16 +240: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_dual_mode_test.dart: action mentor state machine auto-matches thought, then asks for action and review
+02:16 +241: loading /workspace/quote_app222-remove/test/zhixing_tree/zhixing_action_schema_migration_test.dart
+02:17 +241: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_action_schema_migration_test.dart: legacy required diagnosis_id is removed before a current action insert
+02:17 +242: loading /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart
+02:19 +242: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: knowledge package loads V2 primary-source package with synchronized catalog hashes
+02:20 +243: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: knowledge package can retrieve both mechanisms and evidence locators
+02:20 +244: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: knowledge package groups 22 reviewed lenses into 17 complete systems on a Yangming-led evolution path
+02:20 +245: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: safety and COM-B diagnosis R4 and R3 block ordinary actions
+02:20 +246: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: safety and COM-B diagnosis low capacity restricts action to L1
+02:20 +247: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: safety and COM-B diagnosis missing time and tools diagnose opportunity, not vague motivation
+02:20 +248: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: thinker matching and prescription uses the documented weighted fit formula and selects direct lens
+02:20 +249: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: thinker matching and prescription prescription contains one observable action, stop rules and evidence
+02:20 +250: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: thinker matching and prescription thought stays in rationale while the main action remains observable
+02:20 +251: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules completion and learning rewards are separate and daily-capped
+02:20 +252: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules repetition reduces novelty but never below 0.7
+02:20 +253: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules tree vitality is geometric and coins cannot purchase XP
+02:20 +254: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules dormancy is recoverable and does not delete growth
+02:20 +255: /workspace/quote_app222-remove/test/zhixing_tree/zhixing_engines_test.dart: reward, tree and challenge rules garden contains 10 dimensions x 5 difficulties
+02:20 +256: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart
+02:22 +256: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: (setUpAll)
+02:22 +256: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: theory catalog matches source-theory core constructs
+02:22 +257: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: cross-theory aliases do not collapse distinct constructs
+02:22 +258: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: major behavior theory packs expose deduplicated standard factors
+02:22 +259: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: theory catalog preserves source-theory construct coverage
+02:22 +260: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV theory prefill uses typed choices for theory options
+02:22 +261: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: confirmed theory options use ordinal levels, not interval weights
+02:22 +262: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV action request explicitly honors confirmed theory answers
+02:22 +263: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV first-pass request strips oversized UI/theory metadata
+02:22 +264: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV theory roles can be split into compact batches without dropping answers
+02:22 +265: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV bottleneck noul is limited to direct behavior and execution factors
+02:22 +266: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV request strips pseudo-scores and keeps unselected factors missing
+02:22 +267: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: original work-case predictor pool is preserved for dynamic reuse
+02:22 +268: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV action workflow adapts to the interpreted action profile
+02:22 +269: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV parses independent roles for user-confirmed theory factors
+02:22 +270: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV dynamic factor selection rejects steps and rewards incremental predictors
+02:22 +271: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV final adjudication independently judges LLM theory conclusions
+02:22 +272: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV final adjudication keeps usable core output when an optional verdict is malformed
+02:22 +273: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: JEV final adjudication request omits duplicated full theory-answer payload
+02:22 +274: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: diagnostic evidence criteria keep missing separate from mixed
+02:22 +275: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: action prediction history stores outcomes for later calibration
+02:22 +276: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: diagnostic model distinguishes current bottleneck from repeated weakness
+02:22 +277: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: prediction bands remain descriptive rather than guaranteed
+02:22 +278: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_action_prediction_test.dart: (tearDownAll)
+02:23 +278: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_test.dart
+02:25 +278: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_test.dart: parses a complete 6-step result and round-trips through JSON
+02:25 +279: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_test.dart: rejects incomplete results instead of inventing content
+02:25 +280: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_test.dart: optional fields fall back to the method's own wording
+02:25 +281: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_test.dart: prompt carries only title and story, for every bundled card
+02:25 +282: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart
+02:26 +282: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: factor scores alone can never manufacture an event probability
+02:27 +283: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: factor support is diagnostic and does not inject ordinal values into probability
+02:27 +284: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: two dependent JEV passes share one model-family budget
+02:27 +285: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: importance alone cannot turn motivation or social approval into a necessary gate
+02:27 +286: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: an evidenced necessary prerequisite still restricts an optimistic pool
+02:27 +287: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: speculative prerequisites and minor obstacles cannot impose ceilings
+02:27 +288: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: convex event pooling treats optimistic and pessimistic changes symmetrically
+02:27 +289: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: temporally validated stacking exceeds the 10 percent target in a controlled simulation
+02:27 +290: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: a shifted chronological holdout rejects learned weights
+02:27 +291: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: the learner also favors JEV when its real-outcome component is better
+02:27 +292: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: fitting cannot use training outcomes observed after holdout predictions
+02:27 +293: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: unknown components and another optimizer version cannot train this pool
+02:27 +294: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: paired verification reports Brier, log loss and accuracy separately
+02:27 +295: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: no data, one outcome class and zero baseline loss never verify improvement
+02:27 +296: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: better binary accuracy alone does not verify the probability improvement target
+02:27 +297: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: prospective pairing excludes partial, hypothetical, censored and future trials
+02:27 +298: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: placeholder contracts cannot contaminate empirical accuracy or calibration
+02:27 +299: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: guidance prioritizes necessary prerequisites and keeps unknowns as questions
+02:27 +300: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: reference JEV state omits every peer score and behavioral conclusion
+02:27 +301: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: authored philosophy and past failure cannot prove a current failed prerequisite
+02:27 +302: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: reference can retain a clearly labelled LLM estimate after JEV failure
+02:27 +303: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: reference source excerpts include late relevant passages within a bounded payload
+02:27 +304: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: scenario sensitivity compares the same JEV review instead of the pooled score
+02:27 +305: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: new actionable guidance and verification render on a narrow phone
+02:28 +306: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: a later optional reference batch failure preserves the primary event
+02:28 +307: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_optimizer_test.dart: report shows insufficient verification and deterioration without inflated percentages
+02:28 +308: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_handoff_test.dart
+02:30 +308: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_handoff_test.dart: cold native payload survives missed event, acknowledges exact token and opens once
+02:31 +309: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_handoff_test.dart: warm notification routing deduplicates same tap while accepting a new target
+02:31 +310: loading /workspace/quote_app222-remove/test/evidence_growth/health_diet_background_schedule_test.dart
+02:33 +310: /workspace/quote_app222-remove/test/evidence_growth/health_diet_background_schedule_test.dart: background run respects settings rather than forcing disabled work
+02:33 +311: /workspace/quote_app222-remove/test/evidence_growth/health_diet_background_schedule_test.dart: AI failure cannot break subsequent daily scheduling
+02:33 +312: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_dao_test.dart
+02:36 +312: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_dao_test.dart: (setUpAll)
+02:36 +312: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_dao_test.dart: prediction-result-review-decision persists without changing public KB
+02:37 +313: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_dao_test.dart: privacy switch removes raw user text
+02:37 +314: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_dao_test.dart: EXIT preserves learning rather than becoming identity failure
+02:37 +315: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_dao_test.dart: (tearDownAll)
+02:37 +315: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart
+02:40 +315: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: (setUpAll)
+02:40 +315: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: BELIEF plans evidence then guides without mutating journey and caches identical context
+02:40 +316: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: GOAL plans evidence then guides without mutating journey and caches identical context
+02:40 +317: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: ACTION plans evidence then guides without mutating journey and caches identical context
+02:40 +318: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: OUTCOME plans evidence then guides without mutating journey and caches identical context
+02:41 +319: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: REVIEW plans evidence then guides without mutating journey and caches identical context
+02:41 +320: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: CHANGE plans evidence then guides without mutating journey and caches identical context
+02:41 +321: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: missing configuration and deferred readiness are explicitly local with zero AI calls
+02:41 +322: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: fabricated source, fact, and workflow jump are rejected
+02:41 +323: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: missing prerequisite yields a clarification with no formal intervention
+02:41 +324: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: new reality invalidates in-flight old guidance
+02:41 +325: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: goal carries confirmed belief knowledge into its confirmable AI proposal
+02:41 +326: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: multiple success criteria each need their own evidence
+02:41 +327: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: structure change requires a new evidence-backed plan before next action
+02:41 +328: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: self-label cannot start an intervention until concrete pattern is checked
+02:42 +329: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: confirmed details persist and constrain action instead of disappearing after guidance
+02:42 +330: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: guidance distinguishes AI analysis, user records and local fallback
+02:43 +331: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_guidance_test.dart: (tearDownAll)
+02:43 +331: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart
+02:46 +331: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: (setUpAll)
+02:46 +331: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: conflict resolution keeps both archives and applies the selected version (true)
+02:48 +332: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: conflict resolution keeps both archives and applies the selected version (false)
+02:49 +333: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: historical review cites the saved node snapshot after a knowledge upgrade
+02:49 +334: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: explicit specialized practices keep WOOP and lifeline instructions from their own source
+02:49 +335: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: a saved offline result survives database close and reopen
+02:50 +336: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: a negative prediction occurring is not a positive outcome
+02:51 +337: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: observe cycles never double count completion or outcome
+02:51 +338: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: result measurements cannot overwrite setup or use invalid scales
+02:51 +339: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: bounded retry rejects fabricated citations and rewritten predictions
+02:52 +340: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: ADJUST carries the chosen variable into a linked next trial
+02:52 +341: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: Bennett and Five-Minute are searchable with physical sources
+02:53 +342: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: manifest integrity failure retains stable KB; rollback preserves trial snapshot
+02:55 +343: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: sync retry is idempotent and conflicting observations are preserved
+02:55 +344: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: network failure leaves trial pending and a successful retry acknowledges it
+02:56 +345: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: core API creates, records, reviews and decides with user isolation
+02:56 +346: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: HTTP API rejects missing auth and replays an idempotent creation
+02:56 +347: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_regression_test.dart: (tearDownAll)
+02:56 +347: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart
+02:59 +347: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: (setUpAll)
+02:59 +347: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: pooling requires same explicit event, window and context; no tag shortcut
+02:59 +348: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: calibration excludes duplicates, pending revisions, censoring, future data and different model
+02:59 +349: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: partial outcome only enters binary metrics with explicit frozen-event observation
+02:59 +350: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: calibration uses independent chronological holdout and improves a biased raw forecast
+03:00 +351: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: a correct raw forecast is retained when calibration offers no holdout improvement
+03:00 +352: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: overlapping trials cannot leak future outcomes into temporal validation
+03:00 +353: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: weight learner uses observed categories and refuses sparse or unhelpful data
+03:00 +354: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: reported Brier uses paired rows and probability bins keep sparse counts visible
+03:00 +355: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: typed JEV parser rejects non-finite values, unknown choices and missing answers
+03:00 +356: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: reference personality claims need actual source quotes; fabricated sources remain assumptions
+03:00 +357: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: name-only person forecast retains a conditional estimate with low confidence
+03:00 +358: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: same event intervention questions preserve constraints and include root alternatives
+03:00 +359: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: snapshot writes prevent overwriting, same-fact reruns and superseded outcome duplication
+03:00 +360: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: full prediction pipeline preserves event and partial work: failedStage=none
+03:01 +361: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: full prediction pipeline preserves event and partial work: failedStage=first
+03:01 +362: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: full prediction pipeline preserves event and partial work: failedStage=final
+03:01 +363: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: partial running report shows the preserved 85 percent and a clear JEV failure on a narrow screen
+03:03 +364: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: preliminary forecasts are excluded from formal prediction accuracy even when they carry an outcome
+03:03 +365: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: final optional adjudication rejects choices outside its requested enum
+03:03 +366: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: public biography lookup is bounded to public hosts, disambiguation is rejected
+03:03 +367: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: delayed outcome entry uses actual observation time to exclude hindsight
+03:03 +368: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: long root analysis fits final JEV transport without deleting candidates or changes
+03:03 +369: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: reference service truly calls LLM and JEV, persists separately and keeps raw sources
+03:04 +370: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: review persists disagreement semantics and cannot rewrite the original forecast
+03:04 +371: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: report renders on a narrow phone and preserves frozen success criterion
+03:04 +372: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: recording and correcting an outcome refreshes accuracy without rewriting prediction
+03:04 +373: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: reference entry supports world and person mode on a narrow phone
+03:05 +374: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: review saves actual observations without calling AI
+03:06 +375: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_science_test.dart: (tearDownAll)
+03:06 +375: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_permission_test.dart
+03:07 +375: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_permission_test.dart: already enabled module bypasses missing legacy permission method
+03:07 +376: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_permission_test.dart: shared permission request recognizes already authorized app
+03:07 +377: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_permission_test.dart: new authorization is rechecked against the module channel
+03:07 +378: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_permission_test.dart: denied authorization does not enable reminders
+03:07 +379: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_permission_test.dart: disabled module channel is not mistaken for enabled app permission
+03:07 +380: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart
+03:09 +380: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: (setUpAll)
+03:09 +380: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: confirmed learning versions the belief and links a re-diagnosed next round
+03:09 +381: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: unconfirmed AI belief is not inherited as a user conclusion
+03:10 +382: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: ended unstarted attempt adjusts now without fabricating a failed experiment
+03:10 +383: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: exit closes a route and cannot silently become its next trial
+03:10 +384: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: AI continuation receives actuals and confirmed learning and may switch modules
+03:11 +385: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: AI can interpret plain feedback without requiring manual outcome labels
+03:11 +386: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: ACT retains confirmed action even when the model tries to change conditions
+03:11 +387: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: fabricated decision quote cannot promote uncertain feedback into ACT
+03:11 +388: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: cycle presents the pending reality instead of six false completion badges
+03:12 +389: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_cycle_test.dart: (tearDownAll)
+03:12 +389: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart
+03:14 +389: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: (setUpAll)
+03:14 +389: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: creation commits five-trigger outbox inputs and source provenance
+03:14 +390: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: start removes start alarm and recovery end uses the chosen window exactly once
+03:15 +391: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: unstarted trial records nonaction without fabricating a start and cancels due alarms
+03:15 +392: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: OBSERVE creates a fresh window and never reactivates the delivered one
+03:15 +393: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: third EXIT on the same primary node triggers once; ADJUST breaks the sequence
+03:16 +394: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: permissions can be retried without duplicate IDs and per-trial opt out persists
+03:16 +395: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: missing result delay changes alarms without rewriting the original prediction window
+03:16 +396: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: one-hour missing reminder follows the selected fourteen-day window, not app opening
+03:16 +397: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: repeats survive refresh, interval changes, toggle and feedback cancellation
+03:16 +398: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: late delivery skips missed slots and old window history does not affect OBSERVE
+03:16 +399: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: upgrade recovers the chain after an old single reminder was delivered
+03:16 +400: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: new OBSERVE window restarts missing feedback timing and cancels old continuation
+03:16 +401: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: postponing a start moves its alarm while preserving the original observation window
+03:17 +402: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reminder_test.dart: (tearDownAll)
+03:17 +402: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart
+03:18 +402: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: unsupported non-empty input and Panic do not fall through to action
+03:18 +403: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: all source records have meaningful fields and registered operators
+03:18 +404: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: P0 knowledge has 60+ Tal nodes, expert layers, sources and cases
+03:18 +405: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S1 routes through Tal to expected operator
+03:18 +406: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S2 routes through Tal to expected operator
+03:18 +407: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S3 routes through Tal to expected operator
+03:18 +408: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S4 routes through Tal to expected operator
+03:18 +409: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S5 routes through Tal to expected operator
+03:18 +410: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S6 routes through Tal to expected operator
+03:18 +411: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S7 routes through Tal to expected operator
+03:18 +412: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S8 routes through Tal to expected operator
+03:18 +413: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: S9 routes through Tal to expected operator
+03:18 +414: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: N1 exhaustion recovers before five-minute action
+03:18 +415: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: N2 irreversible bet is blocked by Ruin Gate
+03:18 +416: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: N3 correlation does not become causation
+03:18 +417: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: N4 extensions never precede Tal
+03:18 +418: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: N5 insufficient evidence is explicit E0
+03:18 +419: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_router_test.dart: professional boundary blocks action
+03:18 +420: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart
+03:19 +420: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: a later role batch failure keeps the primary probability and reuses completed batches on retry
+03:20 +421: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: malformed optional answers preserve the primary event and other valid factors
+03:20 +422: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: a different event cannot substitute for a missing frozen primary event
+03:20 +423: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: authentication errors retain the HTTP status for a clear recovery message
+03:20 +424: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: a healthy JEV response after eight seconds is still accepted
+03:21 +425: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: confirmed running questionnaire gets JEV probability and factor roles through the real wire schema
+03:21 +426: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: large action importance assessment is batched without losing core evidence
+03:21 +427: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: a severely adverse minor item cannot override important supports
+03:21 +428: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: many supports do not erase one evidenced necessary failed condition
+03:21 +429: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: unverified adverse hypotheses cannot impose a prerequisite ceiling
+03:21 +430: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: deduplication cannot hide a critical failed gate behind a supportive alias
+03:21 +431: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: unknown factors reduce evidence coverage without creating negative votes
+03:21 +432: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: overlapping theory constructs receive one budget
+03:21 +433: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: importance changes priority independently of the current support score
+03:21 +434: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: pooling is symmetric and does not systematically inflate predictions
+03:21 +435: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_forecast_weights_test.dart: old or malformed weights are explicit fallbacks, not invented coefficients
+03:21 +436: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart
+03:23 +436: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: (setUpAll)
+03:23 +436: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: seven kinds carry the intended actionable node, independently of knowledge module
+03:23 +437: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: new grouped payload preserves distinct records, journey IDs and nodes
+03:23 +438: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: legacy trial and journey links remain supported; unrelated or invalid data rejected
+03:23 +439: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: trial notification opens that exact trial at its requested node without changing state
+03:24 +440: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: result already captured goes to readiness choice, never forces AI review
+03:24 +441: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: old cycle notification opens original archive rather than the new active trial
+03:24 +442: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: deleted and mismatched records never open an unrelated goal
+03:24 +443: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: deferred review and maintaining checks retain exact journey and readiness
+03:24 +444: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: planned notifications identify module, node, action and original prediction
+03:24 +445: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: grouped notification lets user choose the exact target and shows each node
+03:26 +446: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_notification_link_test.dart: (tearDownAll)
+03:26 +446: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart
+03:27 +446: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: (setUpAll)
+03:27 +446: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S1 persists complete evidence-result-review-decision loop
+03:28 +447: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S2 persists complete evidence-result-review-decision loop
+03:28 +448: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S3 persists complete evidence-result-review-decision loop
+03:28 +449: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S4 persists complete evidence-result-review-decision loop
+03:29 +450: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S5 persists complete evidence-result-review-decision loop
+03:29 +451: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S6 persists complete evidence-result-review-decision loop
+03:29 +452: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S7 persists complete evidence-result-review-decision loop
+03:29 +453: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S8 persists complete evidence-result-review-decision loop
+03:29 +454: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: S9 persists complete evidence-result-review-decision loop
+03:29 +455: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: repeated start is idempotent and stale capture cannot double count
+03:29 +456: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: partial, not done and aborted remain distinct
+03:29 +457: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: OBSERVE keeps trial active and allows a later result
+03:29 +458: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: SQL and service both reject rewritten predictions
+03:30 +459: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: unconfirmed safety cannot create a trial
+03:30 +460: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: reminders deduplicate time windows and stop for closed trials
+03:30 +461: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_closed_loop_test.dart: (tearDownAll)
+03:30 +461: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart
+03:31 +461: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: (setUpAll)
+03:31 +461: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: JSON handles provider prose, fences, quoted braces; incomplete JSON fails
+03:31 +462: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: successful cache survives instance recreation, preserves canonical keys and invalidates cycle/model
+03:31 +463: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: inflight requests coalesce while service failures remain retryable
+03:31 +464: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: LLM explores distinct needs, JEV sorts the top 20, no selection is made for user
+03:32 +465: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: JEV failure remains labelled LLM, does not manufacture JEV scores
+03:32 +466: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: candidate facts must be literal input excerpts
+03:32 +467: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: knowledge is ranked across a recalled pool and returns five with JEV provenance
+03:32 +468: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: solution excludes unselected needs and sources, covers every selected need
+03:32 +469: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: user confirmed choices persist; compiled action uses only chosen knowledge
+03:32 +470: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: six module stats count real node runs, successful AI drafts and knowledge usage separately
+03:33 +471: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: first journey route needs no previous learning; successful route cache preserves facts and frozen knowledge
+03:33 +472: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: review accepts exact excerpts but persists complete original facts; cache and manual refresh work
+03:33 +473: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: manual JEV rematch bypasses judge memory cache
+03:33 +474: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: new cycle uses its confirmed changed action instead of the initial discovery proposal
+03:34 +475: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: knowledge snapshots are canonical and a plan cannot smuggle an unselected source
+03:34 +476: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: form defaults contain valid numbers and AI fills optional fields with labelled, cached suggestions
+03:34 +477: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: all fields are prefilled; late AI cannot overwrite typed or existing user content
+03:37 +478: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: new discovery page exposes two explicit choice gates before solution
+03:40 +479: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_discovery_test.dart: (tearDownAll)
+03:40 +479: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart
+03:42 +479: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: reference report explains a critical gate even when its construct is deduplicated
+03:42 +480: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: successful works fallback is reported as available public evidence
+03:42 +481: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: public works lookup retains original work headings and rejects different people
+03:42 +482: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: work title and viewpoint need matching provided source passages
+03:42 +483: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: person forecast pools important supports rather than copying a low JEV event score
+03:42 +484: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: both screenshot scenarios yield rough results despite insufficient evidence
+03:42 +485: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: defaults transfer across actions and never erase a hand-edited criterion
+03:42 +486: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: public person automatically invokes Grok web search and retains real API citations
+03:42 +487: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: failed web tool falls back to alias-aware public search, without an identity checkbox
+03:42 +488: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: no sources or ambiguous people still get low-confidence estimates without invented biographies
+03:42 +489: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: world search failure retains estimate and excludes irrelevant person fields from AI input
+03:42 +490: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: known people are not publicly searched and technical failure is not called insufficient evidence
+03:42 +491: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: uncited model URLs are never promoted to retrieved sources; incomplete responses rejected
+03:42 +492: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: malformed probabilities cannot become available and reversed ranges use valid scenario envelope
+03:42 +493: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: one action auto-fills fields; manual edits survive a new action and submitting produces a result
+03:46 +494: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_reference_forecast_test.dart: long reference analysis fits JEV transport while preserving the event and all factor claims
+03:46 +495: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart
+03:47 +495: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume llm_first after reopening only executes missing and dependent work
+03:48 +496: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume jev_first after reopening only executes missing and dependent work
+03:48 +497: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume llm_synthesis after reopening only executes missing and dependent work
+03:48 +498: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: resume jev_final after reopening only executes missing and dependent work
+03:49 +499: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: typed core batches remain bounded and validated successes survive process restart
+03:49 +500: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: healthy provider work beyond 120 seconds is not abandoned by a second deadline
+03:49 +501: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: changing the AI model invalidates its completed analysis and dependent stages
+03:49 +502: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: malformed synthesis remains partial and is retried without repeating the first passes: {"pattern_code":
+03:49 +503: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: malformed synthesis remains partial and is retried without repeating the first passes: {}
+03:50 +504: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: malformed synthesis remains partial and is retried without repeating the first passes: {"pattern_code":"no_major_theory_blocker","integrated_pattern":"明确","core_conclusions":[{"factor_ids":["invented"]}]}
+03:50 +505: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: report identifies AI authentication failures and never copies response bodies or credentials
+03:50 +506: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: final JEV review arriving after 30 seconds is accepted
+03:50 +507: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: empty optional questionnaire does not leave synthesis in a permanent retry loop
+03:50 +508: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: a legacy partial report resumes from its saved successful model results
+03:50 +509: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: cooldown keeps an already validated primary JEV estimate
+03:50 +510: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: reference forecast retry keeps the same person, works and LLM analysis without new API research
+03:50 +511: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_prediction_recovery_test.dart: recorded outcomes stop resumption before any provider calls
+03:50 +512: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart
+03:54 +512: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: (setUpAll)
+03:54 +512: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: starts empty, then saving returns a saved entry with an id
+03:55 +513: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: re-converting appends and never overwrites earlier records
+03:55 +514: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: history is kept per card
+03:55 +515: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: saved content cannot be rewritten in place
+03:55 +516: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: an unreadable row is skipped but never deleted
+03:56 +517: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: records survive closing and reopening the database file
+03:56 +518: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_transform_store_test.dart: (tearDownAll)
+03:56 +518: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart
+03:58 +518: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: (setUpAll)
+03:58 +518: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: AI recognizes a non-keyword situation using recalled knowledge and exact user facts
+03:59 +519: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: semantic score cannot bypass source sufficiency or a risk stop
+04:00 +520: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: invented facts do not turn unsupported input into a formal action
+04:00 +521: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: provider vectors persist, resume, retrieve and invalidate changed knowledge
+04:00 +522: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: embedding service rejects corrupt dimensions and HTTP errors without a fake vector
+04:01 +523: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: Gemini uses native embedding authentication and query task type
+04:01 +524: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: all seven commitment levels have executable saved conditions and legacy mappings
+04:01 +525: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: premortem ranks risks and cannot omit a selected contingency
+04:01 +526: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: advanced workflows produce persisted real actions, feedback, review and a next decision
+04:02 +527: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: system scan requires all eight layers and a controllable single experiment
+04:02 +528: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: no action and a single negative result do not prove a hypothesis false
+04:02 +529: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: only linked repeated refutations after a real strategy change support EXIT
+04:02 +530: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: budget and next-round protection override premature encouragement
+04:02 +531: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: future observation remains OBSERVE unless the agreed signal is confirmed final
+04:02 +532: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: PREMORTEM page saves the inherited plan and applies the chosen next change
+04:05 +533: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: SYSTEM_SCAN page saves the inherited plan and applies the chosen next change
+04:06 +534: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_six_features_test.dart: (tearDownAll)
+04:06 +534: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart
+04:08 +534: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: (setUpAll)
+04:08 +534: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: unknown text has no fabricated first-card fallback
+04:08 +535: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: context contains latest facts and cross-module candidates
+04:09 +536: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: selected action changes actual compiled instruction and sources
+04:09 +537: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: application cannot bypass action safety gate
+04:09 +538: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: all six stages store versioned sources; do not advance journey or claim mastery
+04:10 +539: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: missing boundaries, source version and transfer reasons are rejected
+04:10 +540: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: past step application queues next cycle and stale clients cannot overwrite it
+04:10 +541: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: node runs distinguish retrieved from selected; knowledge gap does not invent facts
+04:10 +542: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: sync bundle preserves knowledge provenance and excludes JEV secret
+04:10 +543: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: knowledge added during a live action cannot rewrite prediction; review can use new sources
+04:11 +544: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV native typed request and cache include context; never chat completions
+04:11 +545: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV malformed, incomplete, out-of-range responses fall back locally
+04:11 +546: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV overload cools down, empty key never sends request
+04:11 +547: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: JEV action prediction follows the interpreted contract
+04:11 +548: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: action prediction records reality outcome for later personal calibration
+04:12 +549: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: learning opens all stages and browsing does not mark mastery
+04:16 +550: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_knowledge_runtime_test.dart: (tearDownAll)
+04:16 +550: loading /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart
+04:17 +550: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: (setUpAll)
+04:17 +550: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: confirmed change and incoming facts survive cycle rollover and compile into action
+04:19 +551: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: new plan cannot inherit frozen ACT action; tasks store active plan provenance
+04:19 +552: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: campaign collects three real trials before review without rewriting their predictions
+04:20 +553: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: explicit refusal ends campaign early without declaring the parent goal failed
+04:20 +554: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: manual learning boundary and restored bundle preserve collected samples
+04:20 +555: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: past recovery time cannot authorize new high load; dependencies can be removed with history
+04:21 +556: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: terminal journey rejects new evidence until explicitly reopened
+04:21 +557: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: confirmed change survives gate and is compiled into the next action
+04:21 +558: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: new plan cannot inherit old ACT conditions and tasks retain plan provenance
+04:22 +559: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: three samples share one learning cycle; intermediate samples never fabricate reviews
+04:22 +560: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: major rejection ends a sample window early without completing the parent
+04:22 +561: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: user can close a campaign early and the synced bundle preserves samples
+04:23 +562: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: new entry survives the gate and is explicitly consumed as context
+04:23 +563: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: archived evidence cannot be rewritten through non-status operations
+04:23 +564: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: portfolio patch cannot bypass dependency validation; invalid links can be removed
+04:23 +565: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: expired recovery does not satisfy a high-load portfolio
+04:23 +566: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: a stage transition requires gate and facts and never completes the goal
+04:24 +567: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: episode evidence reaches the parent without changing its criteria or lifecycle
+04:24 +568: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: three full node cycles reach only the finite evidence gate; reopening preserves achievement
+04:24 +569: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: six entry fragments remain user data; retrospective outcome never creates a prediction
+04:24 +570: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: exploration samples do not promote without a completed cycle and user choice
+04:25 +571: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: continuous/recurring maintain, persist and recover without erasing stable history
+04:25 +572: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: portfolio conserves budgets, attention and protected recovery, including actual task times
+04:25 +573: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: two active goals cannot book the same time slot
+04:25 +574: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: dependencies block prerequisites, distinguish external wait, and reject cycles
+04:25 +575: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: rejection object determines local effects; ambiguous and proposal rejection never terminate parent
+04:25 +576: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: deferred review survives restart with at most one opt-in reminder and no forced learning
+04:25 +577: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: shared-body metric and ongoing withdrawal override goal and action plan
+04:25 +578: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: shared participants cannot be impersonated; withdrawing keeps personal agency
+04:26 +579: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: plan revision binds tasks to immutable versions, separate from goal version
+04:26 +580: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: change attempt lapse retains baseline and previous observations; transferred assets need target evidence
+04:26 +581: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: stale versions, duplicate actions and API gate bypass fail atomically
+04:26 +582: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: goal bundles restore exploration and immutable records, reject stale remote overwrite
+04:26 +583: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: pairwise orthogonal profile coverage and mandatory sensitive combinations preserve invariants
+04:26 +584: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: home hides sensitive titles and binds a fresh input to an existing goal
+04:29 +585: /workspace/quote_app222-remove/test/evidence_growth/evidence_growth_v27_test.dart: (tearDownAll)
+04:29 +585: loading /workspace/quote_app222-remove/test/branch_integration/analytics_test.dart
+04:31 +585: /workspace/quote_app222-remove/test/branch_integration/analytics_test.dart: current list tags and recorded times feed the recovered analytics
+04:31 +586: loading /workspace/quote_app222-remove/test/branch_integration/persistence_test.dart
+04:33 +586: /workspace/quote_app222-remove/test/branch_integration/persistence_test.dart: existing observation schema migrates; deleted records leave stats and exports
+04:34 +587: /workspace/quote_app222-remove/test/branch_integration/persistence_test.dart: care bridge archives and joy survive alongside existing compass data
+04:34 +588: /workspace/quote_app222-remove/test/branch_integration/persistence_test.dart: ritual checkins count persisted events, preserve edits, and keep RaiseBase tables
+04:36 +589: loading /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart
+04:37 +589: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package passes hash and row-count validation
+04:38 +590: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package keeps D1 and D2 supplemental coverage separate
+04:38 +591: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package only fully signed official items enter the rotating assessment bank
+04:38 +592: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package official A7 uses its signed answer key and preserves item version
+04:38 +593: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package retired signed items only restore an existing draft snapshot
+04:38 +594: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package focused mode keeps gates unique and includes the focus anchor
+04:39 +595: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package low anchors add bounded adaptive evidence questions
+04:39 +596: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package question randomization is repeatable and keeps safety gates first
+04:39 +597: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package assessment plan enforces question limit and uncovered-check choice
+04:39 +598: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: V2.5 seed package longitudinal selection prioritizes a previously high-risk indicator
+04:39 +599: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine safety alert blocks ordinary diagnosis and prescription
+04:39 +600: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine uncertain safety also blocks ordinary course output
+04:39 +601: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine clear safety produces bounded course output
+04:39 +602: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine official B1 replaces the matching starter task and is versioned
+04:39 +603: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine user can request assessment-only output without a course action
+04:39 +604: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: safety-first report engine K/A/B report uses the documented 25/30/45 weighting
+04:39 +605: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules one high-execution cycle without improvement waits for evidence
+04:39 +606: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules two high-execution cycles without improvement trigger rediagnosis
+04:39 +607: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules low execution shrinks the task before blaming the user
+04:39 +608: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules overuse takes priority over score chasing
+04:39 +609: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules maintenance requires two stable retests
+04:39 +610: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: retest adjustment rules recovery is blocked without autonomy and a relapse plan
+04:39 +611: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: persistent state survives a JSON round trip
+04:39 +612: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: external AI prompt layers cannot receive personal checkup data
+04:39 +613: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: backup envelope validates hash and preserves the current install id
+04:39 +614: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: backup preflight rejects tampered state before persistence
+04:40 +615: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: trend analyzer raises the 15-point personal-baseline rule
+04:40 +616: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance every indicator gets item types, B0-B4 and evidence ids
+04:40 +617: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance quality gate rejects an unreviewed local template
+04:40 +618: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance independent review, interview and pilot are required for publish
+04:40 +619: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance official content creates a new immutable revision lineage
+04:40 +620: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: content candidate governance candidate JSON keeps version and audit-critical fields
+04:40 +621: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: full content blueprints and human validation evidence materializes exactly nine stable slots for all 345 indicators
+04:40 +622: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: full content blueprints and human validation evidence real records drive all validation gates and content edits invalidate them
+04:40 +623: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: full content blueprints and human validation evidence validation package detects tampering and participant keys are private
+04:40 +624: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: indicator candidate governance AI cannot bypass independent review, pilot or human signing
+04:40 +625: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: indicator candidate governance published indicator enters catalog and retirement removes it
+04:40 +626: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: indicator candidate governance revision preserves formal indicator id and JSON audit fields
+04:40 +627: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: resumable generation and provider knowledge metadata batch expands every unique item and B0-B4 slot
+04:40 +628: /workspace/quote_app222-remove/test/mental_health_checkup/mental_health_checkup_engine_test.dart: resumable generation and provider knowledge metadata provider file id is reusable only when ready and hash matches
+04:40 +629: loading /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart
+04:41 +629: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 Microsoft Foundry 项目终结点会被裁成资源根地址，并解析出项目名
+04:41 +630: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 Azure OpenAI 终结点按 Azure OpenAI 部署方式接入
+04:41 +631: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 已经带上数据面后缀的终结点会被裁掉后缀
+04:41 +632: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 门户部署页的“目标 URI”会被裁成资源根地址，查询串一并丢弃
+04:41 +633: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 完整的 chat/completions 调用地址也会被裁成资源根地址
+04:41 +634: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 终结点自带的 api-version 会在未显式填写时被采用
+04:41 +635: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 显式填写的 api-version 优先于终结点里自带的
+04:41 +636: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 缺少协议头时补上 https
+04:41 +637: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 终结点归一化 终结点为空时判定为未配置
+04:41 +638: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 Azure OpenAI 资源优先走部署路径
+04:41 +639: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 Foundry Claude 资源固定走 Anthropic Messages API
+04:41 +640: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 直接粘贴 Claude Messages 目标 URI 时也固定走 Anthropic API
+04:41 +641: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 同一 Claude 目标 URI 下的 GPT 部署改走 Foundry 模型推理 API
+04:41 +642: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 Foundry 非 Claude 模型仍优先走模型推理路径，并保留部署路径作为回退
+04:41 +643: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 部署名会做 URL 编码
+04:41 +644: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 终结点或部署名缺失时不产生候选地址
+04:41 +645: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 既没显式填写、终结点也不带 api-version 时按接入方式取默认值
+04:41 +646: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 调用地址候选 Azure OpenAI 默认 api-version 支持 gpt-5 系列所需的 max_completion_tokens
+04:41 +647: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 鉴权头 所有 Azure 路径都带 api-key；models / v1 路径额外带 Bearer
+04:41 +648: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 鉴权头 没有密钥时不产生鉴权头
+04:41 +649: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 限定模型 id 资源名与部署名可以往返转换
+04:41 +650: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 限定模型 id 没有分隔符时整串当作部署名，资源名留空表示用第一个可用资源
+04:41 +651: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 限定模型 id 资源名里的分隔符会被规范化掉，避免拆分歧义
+04:41 +652: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 限定模型 id 空部署名不产生限定 id
+04:41 +653: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 部署名输入解析 支持中英文逗号、分号与空白分隔并去重
+04:41 +654: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 接入方式规范化 识别常见别名，未知值退回自动识别
+04:41 +655: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 内置模板 给出需求里的两个项目名，且默认未配置
+04:41 +656: /workspace/quote_app222-remove/test/services/azure_ai_settings_test.dart: 内置模板 模板不预填 api-version，好让终结点里自带的版本能生效
+04:41 +657: loading /workspace/quote_app222-remove/test/services/unified_ai_service_azure_claude_test.dart
+04:43 +657: /workspace/quote_app222-remove/test/services/unified_ai_service_azure_claude_test.dart: Azure token 参数兼容 GPT-5 及以上版本与 o 系列使用 max_completion_tokens
+04:44 +658: /workspace/quote_app222-remove/test/services/unified_ai_service_azure_claude_test.dart: Azure token 参数兼容 旧 GPT 与非 OpenAI 模型继续使用 max_tokens
+04:44 +659: /workspace/quote_app222-remove/test/services/unified_ai_service_azure_claude_test.dart: Azure Claude / Anthropic Messages API 识别 Claude 部署名
+04:44 +660: /workspace/quote_app222-remove/test/services/unified_ai_service_azure_claude_test.dart: Azure Claude / Anthropic Messages API 解析 Anthropic Messages 非流式 content blocks
+04:44 +661: /workspace/quote_app222-remove/test/services/unified_ai_service_azure_claude_test.dart: Azure Claude / Anthropic Messages API 解析 Anthropic SSE text_delta
+04:44 +662: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart
+04:45 +662: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: (setUpAll)
+04:46 +662: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: turns one need into three concrete and source-backed local routes
+04:46 +663: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: uses valid grounded AI output and exposes a truthful receipt
+04:46 +664: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: recursively redacts direct identifiers before any AI request
+04:46 +665: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: rejects ungrounded AI structure and visibly falls back
+04:46 +666: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: assistant gives the exact current step and recovery boundary
+04:46 +667: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: reality review converts a blocked fact into a grounded next step
+04:46 +668: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: round review uses valid AI but keeps the knowledge id and decision
+04:46 +669: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: built-in examples preserve seven-day reality and revision traces
+04:46 +670: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: planning policy rejects manipulation and product dependency
+04:46 +671: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_goal_intelligence_service_test.dart: (tearDownAll)
+04:46 +671: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_provider_mirror_service_test.dart
+04:48 +671: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_provider_mirror_service_test.dart: sync is hash-idempotent, remote search is scoped, and delete propagates
+04:49 +672: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_provider_mirror_service_test.dart: failed provider deletion remains pending and auditable
+04:49 +673: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart
+04:50 +673: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: (setUpAll)
+04:50 +673: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: routes the fixed V1.4 goal scenarios to one primary mentor
+04:50 +674: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: ten selected mentors keep distinct values and practices
+04:51 +675: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: adversarial requests cannot bypass sources or create many mentors
+04:51 +676: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: high-risk expressions stop ordinary goal guidance
+04:51 +677: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_offline_evaluation_test.dart: (tearDownAll)
+04:51 +677: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_discover_entries_test.dart
+04:52 +677: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_discover_entries_test.dart: 发现之旅始终展示目标导师和未来军师两个独立入口
+04:53 +678: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_knowledge_repository_test.dart
+04:54 +678: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_knowledge_repository_test.dart: loads the complete goal-first V2.1 knowledge baseline
+04:54 +679: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart
+04:56 +679: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart: safety gate blocks self-harm, violence, abuse danger and dangerous self-neglect
+04:57 +680: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart: goal and guidance generation creates one controllable action with traceable local sources
+04:57 +681: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart: goal and guidance generation shrinking lowers burden while keeping the same goal direction
+04:57 +682: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart: goal and guidance generation stops when a selected system has no traceable evidence
+04:57 +683: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart: selected V2.1 mentors produce distinct judgments and actions
+04:57 +684: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart: four-layer calibration can produce all five specified outcomes
+04:57 +685: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_engine_test.dart: records non-start and goal-exit evidence without failure language
+04:57 +686: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_upgrade_page_test.dart
+04:59 +686: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_upgrade_page_test.dart: PR146 旧导师显示无损升级提示和重新选择入口
+05:01 +687: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_dao_test.dart
+05:03 +687: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_dao_test.dart: claims at most once per day, retries failures and audits delivery
+05:03 +688: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_dao_test.dart: disabled reminders never create a delivery claim
+05:03 +689: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_dao_test.dart: persists and restores the intelligence receipt with the goal
+05:03 +690: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_dao_test.dart: persists personalization and complete reality-review rounds
+05:04 +691: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_dao_test.dart: persists mentor selection history and 8-step progress
+05:04 +692: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_dao_test.dart: upgrades a PR146 database without deleting goal, history or action
+05:04 +693: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_book_service_test.dart
+05:05 +693: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_book_service_test.dart: clear-all removes registered books, orphan files and prior exports
+05:05 +694: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_book_service_test.dart: import immediately builds a local index and deduplicates by hash
+05:05 +695: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart
+05:06 +695: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart: publishes only a JSON answer with exact in-scope citations
+05:07 +696: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart: rejects invented source IDs and records a non-content audit
+05:07 +697: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_grounded_ai_service_test.dart: safety gate runs before retrieval or model generation
+05:07 +698: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_book_index_service_test.dart
+05:08 +698: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_book_index_service_test.dart: parses, chunks and retrieves only from the allowed private book
+05:09 +699: loading /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart
+05:10 +699: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart: goal transition policy allows the documented forward and calibration transitions
+05:10 +700: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart: goal transition policy rejects shortcuts and any transition out of archived
+05:10 +701: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy moves an overnight quiet-hour selection to quiet end
+05:10 +702: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy normalizes malformed or out-of-range times
+05:10 +703: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy degrades long-silence cadence without exposing failure days
+05:10 +704: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart: reminder policy uses one deterministic key per local calendar day
+05:10 +705: /workspace/quote_app222-remove/test/xiangji_goal_mentor/xiangji_policies_test.dart: check-in and evidence contracts expose every specified value
+05:10 +706: loading /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart
+05:12 +706: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 证据来源 宿主的表还不存在时，所有来源都返回空而不是抛
+05:13 +707: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 证据来源 打卡只取 done / missed / skipped，pending 不算证据
+05:13 +708: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结
+05:13 +708 -1: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结 [E]
+  Expected: Set:['手动记录', '没有来源']
+    Actual: Set:[]
+     Which: does not contain '手动记录'
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 92:7      main.<fn>.<fn>
+
+05:13 +708 -1: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 证据来源 火种区分完成和中途退出，并带上分钟数
+05:13 +709 -1: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 证据来源 重复采集产出同样的 dedupeKey
+05:13 +710 -1: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 证据来源 端到端：授权后同步进案卷，开庭得到带证据的事实播报
+05:14 +711 -1: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 解析标准 JSON，包括被代码围栏包着的
+05:14 +712 -1: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型自己说证据不足，或输出不是 JSON，都返回 null
+05:14 +713 -1: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词
+05:14 +713 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词 [E]
+  Expected: <7201000>
+    Actual: <978307200000>
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 184:7     main.<fn>.<fn>
+
+05:14 +713 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型不可用或抛错时返回 null，让引擎降级
+05:14 +714 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 0 档（休战日）不调模型
+05:14 +715 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 系统提示里写死了铁律和各档边界
+05:14 +716 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 认得出毫秒、秒、数字字符串、ISO 时间；认不出的返回 null
+05:15 +717 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 库里没有这些表：不抛，也没有指纹
+05:15 +718 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 找得到时间列的表产出动静；没有时间列的表跳过；旧的不翻
+05:15 +719 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 同一模块 10 分钟内的多条新记录合并成一次动静
+05:15 +720 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 新增一行，指纹就变；没动，指纹不变
+05:15 +721 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 使用时长来源只是授权开关，不读任何表
+05:15 +722 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 默认接入的来源包含动静和使用时长，且标识不重复
+05:15 +723 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 清理模型输出：围栏、角色前缀、旁白、外层引号
+05:15 +724 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 提示里带情境、称呼、强度、证据摘要，历史只取最近几条并截断
+05:15 +725 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 主动开口时标明「没有用户输入」
+05:15 +726 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 模型不可用、抛错或只返回空白：返回 null，让模块用本地台词
+05:15 +727 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 正常返回时清理后交给模块
+05:15 +728 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 系统提示写死了人设、铁律和退场条件
+05:15 +729 -2: loading /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart
+05:17 +729 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 证据采集 没授权的来源不采集；授权后采集一次，重复同步不重复入库
+05:17 +730 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 证据采集 来源抛异常不会拖垮同步
+05:17 +731 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 摘要 同一项同一天只认最后一次状态
+05:17 +732 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 摘要 没有任何证据就是不足
+05:18 +733 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 开庭 证据不足时不生成判词
+05:18 +734 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 开庭 合规的模型判词被保存，动作自动成为承诺
+05:18 +735 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 开庭 违规输出最多重试两次，然后降级成事实播报
+05:18 +736 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 开庭 模型没产出就不重试，直接降级
+05:19 +737 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 开庭 模型引用了摘要里没有的证据会被拒绝
+05:19 +738 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 开庭 休战日只报事实，不调模型
+05:20 +739 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 开庭 静默时段和每日上限只拦自动开庭，手动开庭不受限
+05:21 +740 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 闭环 兑现：认账，判词记为完成
+05:21 +741 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 闭环 到期没兑现：承诺失效，判词记为失败
+05:21 +742 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 闭环 归因不收空话；同类别再次失败只累加次数
+05:21 +743 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 闭环 申辩要写理由；成立的记为豁免；每周额度用完后照记
+05:22 +744 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 申辩里出现危机表达：立刻静音，不当作申辩处理
+05:22 +745 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 立承诺、写归因时出现危机表达同样静音，且不入库
+05:22 +746 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 只说「停战」：静音，但不显示危机文案
+05:22 +747 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 点了「太过了」之后实际档位下降
+05:22 +748 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 连续三条判词过了一天都没回应：降一档
+05:22 +749 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 每周审判 本周没有数据时不给百分比
+05:22 +750 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_engine_test.dart: 每周审判 统计兑现率，并把最常见的失败类别作为下周重点
+05:23 +751 -2: loading /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart
+05:26 +751 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 指纹没变就不重新收集；变了才收集
+05:27 +752 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 来源不提供指纹（null）时每次都收集
+05:27 +753 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 没授权的来源既不查指纹也不收集
+05:27 +754 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 授权后每分钟累加；没授权不记
+05:27 +755 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 静默时段内的算深夜使用
+05:28 +756 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 使用时长进入证据摘要
+05:28 +757 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 说做完了但账上没有；账上有；说没时间但在线很久
+05:28 +758 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上没有，敌人当场盘问
+05:28 +759 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上有，敌人核对后认
+05:28 +760 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说没时间，但今天在 App 里待了 45 分钟
+05:28 +761 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晨报：早上的第一次巡查自己开口，一天只一次
+05:29 +762 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 安静时段不开口；没有账可报也不开口
+05:29 +763 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：到钟点后还有账没平就开口，一天一次
+05:29 +764 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：今天一件完成的事都没有，就算没有字据也要说
+05:29 +765 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：人在 App 里 25 分钟、案卷没有新记录、字据还开着
+05:29 +766 -2: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话
+05:29 +766 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话 [E]
+  Expected: null
+    Actual: <Instance of 'EnemyMessage'>
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 290:7   main.<fn>.<fn>
+
+05:29 +766 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 开关：主动巡查关掉、实时插话总开关关掉、静音时都不开口
+05:29 +767 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 force 只接话，不做主动巡查
+05:30 +768 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 新事件优先：有事件时 step 先接话，不抢着做晨报
+05:30 +769 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 字据开着时点出「在忙别处」；没有字据就不吭声
+05:30 +770 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 其它模块的动静进入摘要，并被计成「有记录」
+05:30 +771 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 间隔只防刷屏：20 秒后又有新事，立刻接话，不用等 5 分钟
+05:30 +772 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 每日上限默认 30，不是 6：连续做 8 件事，敌人每一件都接话
+05:31 +773 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 主动巡查不占事件插话的上限：上限用光了，晚间结算照样开口
+05:31 +774 -3: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静
+05:32 +774 -4: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静 [E]
+  Expected: 'baseline'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: baseline
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 425:7   main.<fn>.<fn>
+
+05:32 +774 -4: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因
+05:32 +774 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因 [E]
+  Expected: 'capped'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: capped
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 463:7   main.<fn>.<fn>
+
+05:32 +774 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 开关关掉有各自的原因
+05:32 +775 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 状态快照：来源授权与条数、静默时段、今日开口、使用时长、后台记录
+05:33 +776 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 心跳年龄
+05:33 +777 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 演练 不等时段也能走一遍：带【演练】，不占上限，也不让今天真正的结算作废
+05:33 +778 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 演练 晨报演练、发呆演练
+05:33 +779 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 演练 发呆演练：没有字据就说明为什么做不了；静音时不演练；不认识的演练
+05:33 +780 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_patrol_test.dart: 台词 巡查和核对的台词都过同一套校验
+05:34 +781 -5: loading /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart
+05:39 +781 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: a concrete, evidenced draft passes
+05:39 +782 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: no evidence, or evidence outside the digest, is rejected
+05:39 +783 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: a charge without a number or quote is not concrete
+05:39 +784 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: every action needs a due time inside the next seven days
+05:39 +785 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: tone may not exceed the effective intensity
+05:39 +786 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: identity attacks, threats and control language are banned
+05:39 +787 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: a harsh line aimed at behaviour is not banned
+05:39 +788 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: profanity is only allowed at tier 3
+05:39 +789 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: fact-only drafts skip the concreteness rule but not the banned list
+05:39 +790 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: safety valve detects crisis wording and the truce word
+05:39 +791 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: intensity governor never exceeds the base and never rises on its own
+05:39 +792 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_guard_test.dart: intensity governor truce day forces fact-only
+05:39 +793 -5: loading /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart
+05:44 +793 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 本地台词 每一句都过同一套校验：禁区、长度、粗口只在 3 档
+05:45 +794 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 本地台词 台词带着事实：对象、称呼、赌注
+05:46 +795 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 本地台词 1、2 档绝不出现粗口
+05:46 +796 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 时间线为空时敌人先开口，只开一次，并带上称呼
+05:46 +797 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 合规的模型回复被采用，并带着情境发给模型
+05:46 +798 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 模型违规：重试一次，仍违规就用本地台词
+05:47 +799 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 2 档下模型说粗口算违规
+05:47 +800 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 模型没产出就不重试，直接用本地台词
+05:47 +801 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 没接模型也能对话
+05:47 +802 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 危机表达：敌人退场、静音，这句话既不存储也不发给模型
+05:48 +803 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 只说停战：静音，但不显示危机文案
+05:48 +804 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 对话 静音期间说话送不出去，也不留下记录
+05:48 +805 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 开庭 判词作为敌人的一条消息进入时间线
+05:49 +806 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 第一次只定起点，不翻旧账；之后的新事件才开口
+05:49 +807 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 有模型时用模型的话，并把事件作为情境发过去
+05:49 +808 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 间隔太近不开口，且不丢事件：过了间隔再说
+05:50 +809 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 force 绕过间隔和上限，但不绕过静音
+05:50 +810 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 每日上限：到了就不再插话
+05:51 +811 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 静默时段不插话，这批事件也不会在早上被翻出来
+05:51 +812 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 总开关关掉：不插话
+05:51 +813 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 静音时不插话
+05:52 +814 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 字据快到期：提醒一次，只一次
+05:52 +815 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 字据到期输了：敌人当场把赌注摆出来
+05:52 +816 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 兑现字据：认账，赌注作废
+05:52 +817 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 赌注只能是行动：伤害自己、羞辱、涉及钱都被拒绝
+05:53 +818 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 赌注里出现危机表达：按安全阀处理，不入库
+05:53 +819 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 称呼不能是羞辱性的，也不能太长
+05:53 +820 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 行对话校验 空、过长、禁区、1/2 档粗口都被拦
+05:53 +821 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_presence_test.dart: 迁移 v1 的库（承诺表没有赌注列）进场后补列，已有数据保留
+05:53 +822 -5: loading /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart
+06:03 +822 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 什么都抓不到也要问：兜底的开放式质询，不是沉默
+06:03 +823 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 手里一条字据都没有：质询，并正式提动议（要他亲手写具体内容）
+06:03 +824 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 动议不可用（有未决动议、到上限、或太晚）：只质询，不提动议
+06:03 +825 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 火种 24 小时没有完整的十五分钟：质询并提动议，动议带核实
+06:03 +826 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 知识转化了、行动是零：纸上谈兵
+06:03 +827 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 沉寂的模块、预设打卡七天零条、驳回成习惯、重复踩坑、判词被无视
+06:03 +828 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 没回答的质询：2 小时后追问，最多两次，追问优先于其它
+06:03 +829 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 每一类都有冷却：刚问过就换下一件，全部冷却中则不开口
+06:03 +830 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 情境里写明了不能编造：账上没有的只说账上没有
+06:03 +831 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 台词 质询、动议、反驳、通过：全部过同一套校验，1 档没有粗口
+06:03 +832 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 台词 质询里带着事实
+06:03 +833 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 案卷空空如也、一条字据都没有：它自己开口质询，还提了动议
+06:04 +834 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 节奏：间隔没到不再质询；到了就换一件事问；有未决动议时不再提新动议
+06:05 +835 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 每日上限：到了就不再质询
+06:06 +836 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 质询频率可调：改成「密」45 分钟
+06:07 +837 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 开关：反对党质询关掉就不质询；静默时段、静音也不
+06:08 +838 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 火种质询：提动议；接受后立成带核实的字据
+06:09 +839 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 需要亲手写内容的动议：不写不行；赌注不合规被拒；处理过的不能再处理
+06:09 +840 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 驳回动议：要给理由，敌人当场反驳，动议状态记下
+06:09 +841 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 驳回的理由里出现危机表达：敌人退场、静音，这句话不存储
+06:09 +842 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 追问：没回答的质询 2 小时后追问，最多两次
+06:10 +843 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 用户回答之后就不再追问；敌人对话时知道他在回应哪条质询
+06:11 +844 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 不回应也不是好结果：没说话的人，不会因为没动静被放过
+06:12 +845 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 沉寂的模块：曾经常有记录、最近 5 天一条没有
+06:12 +846 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 只有最近发生的事才值得插话：灌进来的旧账不触发反应
+06:12 +847 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 字据标记完成但账上没有火种：敌人不认
+06:12 +848 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 字据标记完成而且账上确实有火种：不质疑
+06:12 +849 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 质询演练：带【演练】，不提动议，不占今天的次数和间隔
+06:12 +850 -5: /workspace/quote_app222-remove/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 自检状态包含质询的节奏
+06:13 +851 -5: loading /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart
+06:16 +851 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart: internalized remains reachable before the shifting superset check
+06:16 +852 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart: LLM output cannot skip user confirmation or behavior gates
+06:16 +853 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart: reminder policy enforces quiet hours, attention budget and dedupe
+06:16 +854 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart: high-risk language hard-overrides the normal coaching flow
+06:17 +855 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart: 3M radar detects magnification, minimization and unsupported inference
+06:17 +856 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart: duplicates diminish while distinct evidence still counts
+06:17 +857 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_policies_test.dart: experiment transitions reject impossible shortcuts
+06:17 +858 -5: loading /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_discover_entry_test.dart
+06:20 +858 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_discover_entry_test.dart: 发现之旅入口说明完整闭环并可打开产品
+06:25 +859 -5: loading /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_dao_test.dart
+06:28 +859 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_dao_test.dart: seeds eight boundary-labeled stories and persists the evidence loop
+06:29 +860 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_dao_test.dart: one failed experiment owns only one open recovery protocol
+06:29 +861 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_dao_test.dart: P1 calendar and Past Me records are encrypted and deletable
+06:29 +862 -5: /workspace/quote_app222-remove/test/belief_mentor/belief_mentor_dao_test.dart: delete removes all user data while preserving reviewed story seeds
+06:30 +863 -5: loading /workspace/quote_app222-remove/test/external_data/todo_goal_will_state_test.dart
+06:32 +863 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_will_state_test.dart: dominance follows user-calibrated strengths
+06:32 +864 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_will_state_test.dart: distinguishes unfamiliar action image from bodily execution limits
+06:33 +865 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_will_state_test.dart: round trips persisted practice calibration
+06:33 +866 -5: loading /workspace/quote_app222-remove/test/external_data/todo_raisebase_engine_test.dart
+06:35 +866 -5: /workspace/quote_app222-remove/test/external_data/todo_raisebase_engine_test.dart: belief map separates facts from permanent identity judgment
+06:35 +867 -5: /workspace/quote_app222-remove/test/external_data/todo_raisebase_engine_test.dart: completed action becomes self efficacy evidence
+06:35 +868 -5: loading /workspace/quote_app222-remove/test/external_data/todo_meaning_engine_test.dart
+06:40 +868 -5: /workspace/quote_app222-remove/test/external_data/todo_meaning_engine_test.dart: detects direct Chinese and English crisis signals
+06:40 +869 -5: /workspace/quote_app222-remove/test/external_data/todo_meaning_engine_test.dart: relationship responsibility selects relationship path
+06:40 +870 -5: /workspace/quote_app222-remove/test/external_data/todo_meaning_engine_test.dart: unavoidable hardship selects attitude path without glorifying pain
+06:40 +871 -5: loading /workspace/quote_app222-remove/test/external_data/todo_goal_will_bridge_test.dart
+06:47 +871 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_will_bridge_test.dart: uses a stable Todo goal/action identity
+06:47 +872 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_will_bridge_test.dart: projects goal value and action tree into a concrete will card
+06:47 +873 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_will_bridge_test.dart: AI refresh can preserve the stable Todo association identity
+06:47 +874 -5: loading /workspace/quote_app222-remove/test/external_data/change_path_engine_test.dart
+06:50 +874 -5: /workspace/quote_app222-remove/test/external_data/change_path_engine_test.dart: difficulty is classified into comfort stretch and panic zones
+06:50 +875 -5: /workspace/quote_app222-remove/test/external_data/change_path_engine_test.dart: panic-zone action is diagnosed and downgraded
+06:50 +876 -5: /workspace/quote_app222-remove/test/external_data/change_path_engine_test.dart: missing trigger is treated as design data instead of weak willpower
+06:50 +877 -5: loading /workspace/quote_app222-remove/test/external_data/todo_goal_reflective_growth_test.dart
+06:53 +877 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_reflective_growth_test.dart: reflection maps structured Reflective Growth evidence
+06:53 +878 -5: /workspace/quote_app222-remove/test/external_data/todo_goal_reflective_growth_test.dart: AI review serializes action and pattern fields
+06:53 +879 -5: loading /workspace/quote_app222-remove/test/todo_failure_growth_engine_test.dart
+06:57 +879 -5: /workspace/quote_app222-remove/test/todo_failure_growth_engine_test.dart: turns perfectionistic delay into a 70 percent experiment
+06:57 +880 -5: /workspace/quote_app222-remove/test/todo_failure_growth_engine_test.dart: separates identity judgment from behavioral feedback
+06:58 +881 -5: loading /workspace/quote_app222-remove/test/shame_transform_models_test.dart
+07:02 +881 -5: /workspace/quote_app222-remove/test/shame_transform_models_test.dart: parses affect, compass, pride and exposure fields from V2 JSON
+07:02 +882 -5: /workspace/quote_app222-remove/test/shame_transform_models_test.dart: new persistence models retain V2 fields
+07:02 +883 -5: loading /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart
+07:06 +883 -5: /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart: 569 秒对 480 秒的有效引导直接交付完整版本，原文与收束都保留
+07:06 +884 -5: /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart: 569 秒中的可调整停顿能校准到 480 秒，不删正文、不再次请求模型
+07:07 +885 -5: /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart: 预算充足时保留原停顿和可行时间轴，核心原有短停顿不被强行加长
+07:07 +886 -5: /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart: 无法再压缩时保留身体体验的停顿，不靠加速或截断强行装入预算
+07:07 +887 -5: /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart: 明显偏长时只重写一次，合格短版优先于原完整版本
+07:07 +888 -5: /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart: 精简请求超时后仍提供原完整引导与真实时长，不变成内容失败
+07:07 +889 -5: /workspace/quote_app222-remove/test/meditation/duration_planning_test.dart: 精简结果丢失体验设计时继续提供原合格版本
+07:07 +890 -5: loading /workspace/quote_app222-remove/test/meditation/mentor_result_page_test.dart
+07:13 +890 -5: /workspace/quote_app222-remove/test/meditation/mentor_result_page_test.dart: 完整 AI 正文展示为可开始的引导，附加说明慢或失败都不会吞掉结果
+07:26 +891 -5: /workspace/quote_app222-remove/test/meditation/mentor_result_page_test.dart: 确实未通过内容校验时页面说明 AI 已返回与具体原因
+07:29 +892 -5: /workspace/quote_app222-remove/test/meditation/mentor_result_page_test.dart: 569 秒有效引导显示目标和预计时长，用户能选择完整版本或重新生成八分钟版
+07:33 +893 -5: /workspace/quote_app222-remove/test/meditation/mentor_result_page_test.dart: 完整版本保存真实时间轴与预计时长，不把九分钟内容保存成八分钟
+07:39 +894 -5: loading /workspace/quote_app222-remove/test/meditation/system_voice_completion_test.dart
+07:42 +894 -5: /workspace/quote_app222-remove/test/meditation/system_voice_completion_test.dart: 系统朗读等待真实完成，再交还给体验停顿
+07:42 +895 -5: /workspace/quote_app222-remove/test/meditation/system_voice_completion_test.dart: 原生引擎只回报错误时，等待能退出而不会卡在当前段
+07:42 +896 -5: loading /workspace/quote_app222-remove/test/meditation/validation_logging_test.dart
+07:46 +896 -5: /workspace/quote_app222-remove/test/meditation/validation_logging_test.dart: 内容拒绝原因能从全局日志的错误筛选中找到，并保留原始返回
+[DBG] AppDatabase opened at: /tmp/meditation_validation_log_IVRXJW/quotes.db
+07:48 +897 -5: loading /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart
+07:53 +897 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 八分钟八阶段正文被保留并排成可播放短段，不因格式建议整份丢弃
+07:55 +898 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 日志响应中的 JSON 字符串解码后可被识别
+07:55 +899 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 带围栏的 JSON、字符串秒数和缺失时间轴能归一，缺少分析附注也可播放
+07:55 +900 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 完整结构的八阶段短句不会为了凑推荐段数而重写
+07:55 +901 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 截断 JSON 经过一次模型修复后交付，初始正文和修复状态有记录
+07:56 +902 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 自动重写超时保留原响应，并明确是内容问题，避免说成配置或网络错误
+07:56 +903 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 两次都是无法识别的响应时，呈现格式失败
+07:56 +904 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 空响应与没有可用模型分别说明，不混入质量失败
+07:56 +905 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 诊断保存失败不吞掉已经可用的 AI 引导
+07:56 +906 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 用户原话中的两字主题锚点可用，不强求四字或反复逐字复述
+07:56 +907 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 正文实质超过一分钟预算且重写仍偏长时保留完整版本，并记录目标与预计时长
+07:56 +908 -5: /workspace/quote_app222-remove/test/meditation/response_recovery_test.dart: 真实感官模式中的“不需要想象”不会被当作想象任务
+07:56 +909 -5: loading /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart
+08:04 +909 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 用户主题优先于默认睡眠推荐，生成可播放的短段体验
+08:04 +910 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 一分钟仍有主题、身体情绪与短留白
+08:04 +911 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 没有想象画面时选择真实感官，仍可完成同一个主题
+08:04 +912 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 关键词齐全的说理稿触发重写，自定义提示词不能移除体验合同
+08:04 +913 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 缺失的体验停顿由本地补齐，保留正文且不额外请求重写
+08:05 +914 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 生成与修复使用已有 App 模型 同一阶段后退不会穿过质量校验
+08:05 +915 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 主题只放标题和分析字段，正文换成其他话题会失败
+08:05 +916 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 设计字段齐全也不能让概念讲解代替体验
+08:05 +917 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 选择真实感官时不能重新引入想象任务
+08:05 +918 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 设计字段里有感官、正文没有画面触感，会失败
+08:05 +919 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 宣布用户已经释怀，会失败
+08:05 +920 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 不保证或不一定放松不是对用户宣布结果
+08:05 +921 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 真实感官中的“不需要在脑海中想象”不是想象邀请
+08:05 +922 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 体验质量 说话和留白放不进所选时长，会失败
+08:05 +923 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 语音与留白 声音提前完成时不重复添加留白或缩短原时间轴
+08:05 +924 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 语音与留白 下一段以及最后的结束都等待声音和留白完成
+08:05 +925 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 语音与留白 停止或切换之后，旧的 TTS 回调不会释放新声音
+08:05 +926 -5: /workspace/quote_app222-remove/test/meditation/experiential_mentor_test.dart: 语音与留白 时间轴修正计算播报时间，保留每段停顿
+08:05 +927 -5: loading /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart
+08:11 +927 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: schema createAll and migrate are idempotent and write the version
+08:11 +928 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: schema every table uses the z_ prefix
+08:11 +929 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: dao a decision round-trips with all fields
+08:11 +930 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: dao corrupt json columns degrade to empty lists
+08:12 +931 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: alignment storage and schema v2 an alignment summary round-trips through the dao
+08:12 +932 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: alignment storage and schema v2 migrate adds align_json to a v1 database and keeps old rows
+08:12 +933 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: controller seal, reveal, log and hypothesis counting work together
+08:12 +934 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: controller revealing twice does not double count
+08:13 +935 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: controller three supports flip a hypothesis to supported
+08:13 +936 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: controller missing motives are stored and surface as frequent categories
+08:13 +937 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: controller profile text mentions supported hypotheses and missed categories
+08:13 +938 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_dao_test.dart: oracle local oracle returns the 61-motive library and no scores
+08:14 +939 -5: loading /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart
+08:19 +939 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: discover entry shows the title and reports taps
+08:23 +940 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle parsing parseMotives keeps valid rows and tolerates fences and noise
+08:24 +941 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle parsing parseMotives returns empty for garbage
+08:24 +942 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle parsing parseScores clamps values and needs at least half of the candidates
+08:24 +943 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing parses rows, clamps numbers, and keeps only valid enums
+08:24 +944 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing too few rows or garbage means empty
+08:24 +945 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing scoreAlignment degrades without calling the model when AI is unavailable
+08:24 +946 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle alignment parsing scoreAlignment returns parsed results when the model answers
+08:24 +947 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle fallbacks unavailable AI yields empty results without calling the model
+08:24 +948 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle fallbacks a throwing model call degrades to empty
+08:24 +949 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_host_test.dart: AI oracle fallbacks a working model call returns parsed motives and scores
+08:24 +950 -5: loading /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart
+08:29 +950 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: sumMotives splits abstract and intuitive per side and halves "both"
+08:29 +951 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: sumMotives abstract lane and intuitive lane can disagree
+08:29 +952 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: sumMotives no disagreement when one lane is empty
+08:29 +953 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: conflictOf approach-approach
+08:29 +954 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: conflictOf avoidance-avoidance
+08:29 +955 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: conflictOf approach-avoidance on one side
+08:29 +956 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: conflictOf double approach-avoidance
+08:29 +957 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: conflictOf no strong conflict when nothing is rated
+08:29 +958 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: decision outcomes followedKind reports which lane the action followed
+08:29 +959 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: decision outcomes self score is stake when hit and minus stake when missed
+08:29 +960 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: decision outcomes opposesBalance flags an action against the heavier side
+08:29 +961 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: decision outcomes hit rate ignores unrevealed decisions
+08:29 +962 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: decision outcomes winStat counts only decisions where the lanes disagree
+08:29 +963 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: hypothesisStatus needs 3 supports and twice the refutations
+08:29 +964 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: hypothesisStatus refuted when refutations are at least 2 and outnumber supports
+08:29 +965 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: rankTop5 keeps at most two per category and returns five
+08:29 +966 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: rankTop5 higher pull ranks first
+08:29 +967 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: rankTop5 rule fallback prefers hidden and frequently missed categories
+08:29 +968 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: rankTop5 badge marks missed categories
+08:29 +969 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: imageryOf counts depth per side and the worst moment
+08:29 +970 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: imageryOf no imagery means no symmetry
+08:29 +971 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: threshold statistics freedomStat needs at least six samples
+08:29 +972 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: threshold statistics freedomStat splits high and low by the mean
+08:29 +973 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: threshold statistics imageryStat needs six samples and a spread
+08:29 +974 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: topMissCategories returns the three most frequent categories
+08:30 +975 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: alignment weights desires by evidence tier and reports the range
+08:30 +976 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: alignment weak-only desires cap confidence at 0.5 and are flagged
+08:30 +977 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: alignment empty results and mismatched rows
+08:30 +978 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: alignment manual alignment is flagged and has no range or confidence
+08:30 +979 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: alignment quadrants combine alignment with the pull share
+08:30 +980 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: alignment pullShare divides the total weight between the sides
+08:30 +981 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: alignment alignTrend averages the chosen option over early and recent halves
+08:30 +982 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_analysis_test.dart: library static data is consistent
+08:30 +983 -5: loading /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart
+08:39 +983 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle sends one independent score question per motive in small batches
+08:40 +984 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle does nothing without a key
+08:40 +985 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle a failing endpoint yields empty results
+08:40 +986 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle fewer than half of the motives scored counts as unavailable
+08:40 +987 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle invalid answers are skipped but the valid ones are kept
+08:40 +988 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianJevOracle JEV does not generate text and is declared as sending data
+08:40 +989 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianHostOracle prefers the scorer and does not touch the text engine
+08:40 +990 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianHostOracle falls back to the text engine when the scorer is empty or throws
+08:40 +991 -5: /workspace/quote_app222-remove/test/zhaojian/zhaojian_jev_oracle_test.dart: ZhaojianHostOracle motive completion comes from the text engine and data sending is declared
+08:40 +992 -5: Some tests failed.
