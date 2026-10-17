@@ -4,8 +4,10 @@ import 'package:sqflite/sqflite.dart';
 import '../data/db.dart';
 import '../evidence_growth/evidence_growth_dao.dart';
 import '../evidence_growth/evidence_growth_discovery.dart' show GrowthJevAccess;
+import '../services/unified_ai_service.dart';
 import '../zhaojian/zhaojian.dart';
 import 'zhaojian_ai_oracle.dart';
+import 'zhaojian_decisions_oracle.dart';
 import 'zhaojian_host_oracle.dart';
 import 'zhaojian_jev_oracle.dart';
 
@@ -29,6 +31,18 @@ class _ZhaojianHostPageState extends State<ZhaojianHostPage> {
   late final EvidenceGrowthDao _jevDao =
       EvidenceGrowthDao(database: AppDatabase.instance);
 
+  /// 只在全局 AI 配置的服务商是 OpenAI 且可用时，才用它的密钥去调 Decisions API。
+  /// 不另存任何密钥。
+  Future<ZDecisionsAccess?> _decisionsAccess() async {
+    try {
+      final UnifiedAiResolvedConfig c = await UnifiedAiService().resolveGlobalConfig();
+      if (!c.available || c.provider.trim().toLowerCase() != 'openai') return null;
+      return ZDecisionsAccess(Map<String, String>.from(c.authHeaders));
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Database>(
@@ -50,6 +64,9 @@ class _ZhaojianHostPageState extends State<ZhaojianHostPage> {
             scorer: ZhaojianJevOracle(
               readKey: () => GrowthJevAccess.key(_jevDao),
             ),
+            extraScorers: <ZhaojianOracle>[
+              ZhaojianDecisionsOracle(access: _decisionsAccess),
+            ],
           ),
         );
       },

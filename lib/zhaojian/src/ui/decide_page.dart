@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../copy.dart';
 import '../data/models.dart';
+import '../domain/ai_parse.dart';
 import '../domain/analysis.dart';
 import '../domain/controller.dart';
 import '../domain/json_util.dart';
@@ -59,7 +60,8 @@ class _DecidePageState extends State<DecidePage> {
 
   // AI 列选项（10 选 5）与研判
   List<Map<String, dynamic>> _aiOpts = <Map<String, dynamic>>[];
-  String _verdict = '';
+  ZVerdict? _verdictObj;
+  String _verdictMsg = '';
   bool _verdictBusy = false;
 
   // 签名挑选与引擎预测
@@ -189,15 +191,69 @@ class _DecidePageState extends State<DecidePage> {
       prompt: '${_situation()}\n用户评过分的动机（动机｜分量｜类型｜拉向｜想要或害怕）：\n$lines'
           '天平：A 抽象 ${s.aAbs.toStringAsFixed(1)} 直观 ${s.aInt.toStringAsFixed(1)}；'
           'B 抽象 ${s.bAbs.toStringAsFixed(1)} 直观 ${s.bInt.toStringAsFixed(1)}；冲突类型：${ZCopy.conflictTypes[cf.type][0]}。\n'
-          '请用不超过 200 字读一遍这架天平：哪边总体更强、抽象与直观是否分歧、到现场最可能的变数。'
-          '不替用户决定，不说「你应该」，不诊断，结论是待检验的猜测。',
+          '请分三类独立回答：choice（到现场选 A 的概率，0 到 1）；score（conflict 冲突强度 0 到 4，flip 到现场结果与事先想的相反的可能 0 到 1）；'
+          'noul（还不知道、却会影响结果的事，最多 4 条；不知道就如实写不知道，不要凑答案）；note（一句话说明，不超过 60 字）。'
+          '不替用户决定，不说「你应该」，不诊断，都是待检验的估计。'
+          '只输出 JSON：{"choice":{"a":0.0},"score":{"conflict":0,"flip":0.0},"noul":["…"],"note":"…"}。',
       purpose: 'zhaojian.verdict',
     );
     if (!mounted) return;
+    final ZVerdict v = parseVerdict(raw);
     setState(() {
       _verdictBusy = false;
-      _verdict = raw.trim().isEmpty ? '没有可用的 AI，或没有完成。' : raw.trim();
+      _verdictObj = v.isEmpty ? null : v;
+      _verdictMsg = v.isEmpty ? (raw.trim().isEmpty ? '没有可用的 AI，或没有完成。' : 'AI 的回答没法解析。') : '';
     });
+  }
+
+  Widget _verdictCard(ZVerdict v) {
+    return ZItem(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('研判（AI 的估计，不是真实决策引擎的打分）', style: TextStyle(fontWeight: FontWeight.w700)),
+          if (v.probA != null)
+            Text('Choice：到现场选 A 的概率 ${zPercent(v.probA)}，选 B ${zPercent(1 - v.probA!)}'),
+          if (v.conflict != null) Text('Score：冲突强度 ${v.conflict!.toStringAsFixed(1)} / 4'),
+          if (v.flip != null) Text('Score：到现场翻盘的可能 ${zPercent(v.flip)}'),
+          if (v.unknown.isNotEmpty) ...<Widget>[
+            const Text('Noul：还不知道的'),
+            for (final String u in v.unknown) Text('· $u', style: const TextStyle(fontSize: 13)),
+          ],
+          if (v.note.isNotEmpty) ZNote(v.note),
+        ],
+      ),
+    );
+  }
+
+  Widget _sensitivityBox() {
+    if (_alignRes.isEmpty) return const SizedBox.shrink();
+    final ZSensitivity? s = sensitivityOf(
+      _alignRes,
+      _selDesires,
+      aUncontrollable: _alignRes.diffA.externals.any((ZExternal e) => e.uncontrollable),
+      bUncontrollable: _alignRes.diffB.externals.any((ZExternal e) => e.uncontrollable),
+    );
+    if (s == null) return const SizedBox.shrink();
+    String name(String w) => w == 'a' ? '偏向 A' : (w == 'b' ? '偏向 B' : '差不多');
+    return ZItem(
+      warn: !s.robust,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('敏感性检验：这个结论经得起换几种看法吗', style: TextStyle(fontWeight: FontWeight.w700)),
+          ZNote('基线（加权 · 一年）：${name(s.baseline)}。${s.scenarios.length} 种换法里：结论不变 ${s.same} 种，翻转 ${s.flipped} 种，说不清 ${s.vague} 种。'),
+          for (final ZScenario sc in s.scenarios)
+            Text(
+              '${sc.winner != s.baseline && sc.winner != 'tie' && s.baseline != 'tie' ? '⚠ ' : '· '}${sc.label}：${name(sc.winner)}',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ZNote(s.robust
+              ? '没有一种换法把结论翻过来：相对稳，但它依然只是对照，不是答案。'
+              : '有换法把结论翻过来了：说明结论取决于你怎么看，别把它当答案。', warn: !s.robust),
+        ],
+      ),
+    );
   }
 
   // ---------------------------------------------------------------- 签名与引擎预测
@@ -800,7 +856,8 @@ class _DecidePageState extends State<DecidePage> {
               ),
             ] else
               const ZNote('没有 AI 引擎：看上面的天平和冲突诊断就够了。'),
-            if (_verdict.isNotEmpty) ZItem(child: Text(_verdict)),
+            if (_verdictMsg.isNotEmpty) ZNote(_verdictMsg, warn: true),
+            if (_verdictObj != null) _verdictCard(_verdictObj!),
           ],
         ),
         ZSection(
@@ -1095,6 +1152,7 @@ class _DecidePageState extends State<DecidePage> {
                 '模型置信 ${zPercent(_alignRes.confidence)}，按欲求的证据等级封顶后为 ${zPercent(c.confidence)}。'
                 '${c.confidence! < 0.6 ? '置信偏低，只作参考。' : ''}',
                 warn: c.confidence! < 0.6),
+          _sensitivityBox(),
           if (c.flip)
             const ZNote('排序随欲求而变：结论取决于你到底要什么，先去验证欲求（在「主线与假设」里用行为检验）。', warn: true),
         ],

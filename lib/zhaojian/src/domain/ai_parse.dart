@@ -128,3 +128,55 @@ ZAnalysis parseAnalysis(String raw) {
     dropped: dropped,
   );
 }
+
+/// 研判：Choice（会选哪个）、Score（冲突有多强、现场翻转的可能）、Noul（还不知道什么）。
+/// 三类回答各自独立；Noul 是「承认不知道」，不是凑一个答案。
+class ZVerdict {
+  const ZVerdict({
+    this.probA,
+    this.conflict,
+    this.flip,
+    this.unknown = const <String>[],
+    this.note = '',
+  });
+
+  /// 到现场选 A 的概率 0 到 1。
+  final double? probA;
+
+  /// 冲突强度 0 到 4。
+  final double? conflict;
+
+  /// 到现场结果与事先想的相反的可能 0 到 1。
+  final double? flip;
+
+  /// 还不知道、会影响结果的事。
+  final List<String> unknown;
+
+  /// 一句话说明。
+  final String note;
+
+  bool get isEmpty =>
+      probA == null && conflict == null && flip == null && unknown.isEmpty && note.isEmpty;
+}
+
+/// 解析研判。解析失败返回空；说明文字里有诊断、外貌、宿命式措辞就丢掉说明。
+ZVerdict parseVerdict(String raw) {
+  final Map<String, dynamic>? o = zParseObject(raw);
+  if (o == null) return const ZVerdict();
+  double? num01(dynamic v, double max) {
+    final num? x = v is num ? v : num.tryParse('$v');
+    if (x == null || x.isNaN) return null;
+    return x.toDouble().clamp(0.0, max).toDouble();
+  }
+
+  final dynamic choice = o['choice'];
+  final dynamic score = o['score'];
+  final String note = '${o['note'] ?? ''}'.trim();
+  return ZVerdict(
+    probA: choice is Map ? num01(choice['a'], 1) : null,
+    conflict: score is Map ? num01(score['conflict'], 4) : null,
+    flip: score is Map ? num01(score['flip'], 1) : null,
+    unknown: zStrings(o['noul'], max: 4),
+    note: _bannedInAnalysis.hasMatch(note) ? '' : note,
+  );
+}

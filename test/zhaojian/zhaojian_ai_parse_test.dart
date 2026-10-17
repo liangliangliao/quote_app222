@@ -85,4 +85,36 @@ void main() {
       expect(b.compare, a.compare);
     });
   });
+
+  group('parseVerdict', () {
+    test('reads choice, score and noul independently and clamps the numbers', () {
+      final ZVerdict v = parseVerdict(
+          '{"choice":{"a":1.4},"score":{"conflict":9,"flip":0.35},"noul":["他当天的状态"," ","对方是否真的缺钱"],"note":"直观动机偏向 B"}');
+      expect(v.isEmpty, isFalse);
+      expect(v.probA, 1.0);
+      expect(v.conflict, 4.0);
+      expect(v.flip, 0.35);
+      expect(v.unknown, <String>['他当天的状态', '对方是否真的缺钱']);
+      expect(v.note, '直观动机偏向 B');
+    });
+
+    test('missing groups stay null instead of being invented', () {
+      final ZVerdict v = parseVerdict('{"noul":["不知道他会不会开口"]}');
+      expect(v.probA, isNull);
+      expect(v.conflict, isNull);
+      expect(v.flip, isNull);
+      expect(v.unknown.length, 1);
+    });
+
+    test('numbers given as strings parse; a banned note is dropped', () {
+      final ZVerdict v = parseVerdict('{"choice":{"a":"0.25"},"note":"他注定如此"}');
+      expect(v.probA, 0.25);
+      expect(v.note, '');
+    });
+
+    test('garbage is empty', () {
+      expect(parseVerdict('没有对象').isEmpty, isTrue);
+      expect(parseVerdict('{}').isEmpty, isTrue);
+    });
+  });
 }

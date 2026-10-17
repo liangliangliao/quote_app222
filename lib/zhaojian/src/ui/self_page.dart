@@ -34,6 +34,43 @@ class _SelfPageState extends State<SelfPage> {
     super.dispose();
   }
 
+  Future<void> _restore(BuildContext context) async {
+    final TextEditingController box = TextEditingController();
+    final bool? go = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('从备份恢复'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('把之前复制的备份（JSON）粘贴到这里。恢复会替换现在的全部数据，不能撤销。',
+                style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 8),
+            TextField(controller: box, minLines: 4, maxLines: 8, decoration: zInput('备份内容')),
+            TextButton(
+              onPressed: () async {
+                final ClipboardData? d = await Clipboard.getData(Clipboard.kTextPlain);
+                if (d?.text != null) box.text = d!.text!;
+              },
+              child: const Text('从剪贴板粘贴'),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('恢复')),
+        ],
+      ),
+    );
+    final String raw = box.text;
+    box.dispose();
+    if (go != true || !context.mounted) return;
+    final String? err = await widget.controller.restoreJson(raw);
+    if (!context.mounted) return;
+    zSnack(context, err ?? '已恢复。');
+  }
+
   Widget _tag(String t) => Chip(
         label: Text(t, style: const TextStyle(fontSize: 12)),
         backgroundColor: zCard,
@@ -219,6 +256,10 @@ class _SelfPageState extends State<SelfPage> {
                   zSnack(context, '已复制全部数据（JSON）');
                 },
                 child: const Text('复制全部数据（JSON）'),
+              ),
+              OutlinedButton(
+                onPressed: () => _restore(context),
+                child: const Text('从备份恢复（会替换现有全部数据）'),
               ),
               TextButton(
                 onPressed: () => ZNav.open(context, c, ZDest.map),

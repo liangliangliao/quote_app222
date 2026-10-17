@@ -266,6 +266,51 @@ class ZhaojianController extends ChangeNotifier {
     });
   }
 
+  /// 从 [exportJson] 导出的备份恢复，**替换**现有全部数据。
+  /// 成功返回 null；失败返回原因，现有数据保持不变。
+  Future<String?> restoreJson(String raw) async {
+    dynamic v;
+    try {
+      v = jsonDecode(raw.trim());
+    } catch (_) {
+      return '这不是合法的 JSON。';
+    }
+    if (v is! Map || v['app'] != 'zhaojian') return '这不是照见导出的备份。';
+    final dynamic ver = v['schemaVersion'];
+    if (ver is num && ver > ZhaojianSchema.schemaVersion) {
+      return '这份备份来自更新的版本，请先把应用更新到最新。';
+    }
+    List<Map<String, Object?>> rows(dynamic x) => x is! List
+        ? <Map<String, Object?>>[]
+        : x.whereType<Map>().map((Map m) => Map<String, Object?>.from(m)).toList();
+    final List<Map<String, Object?>> items = <Map<String, Object?>>[];
+    final dynamic rawItems = v['items'];
+    if (rawItems is Map) {
+      for (final dynamic list in rawItems.values) {
+        items.addAll(rows(list));
+      }
+    }
+    final Map<String, String> kv = <String, String>{};
+    final dynamic rawKv = v['kv'];
+    if (rawKv is Map) {
+      rawKv.forEach((dynamic a, dynamic b) => kv['$a'] = '$b');
+    }
+    try {
+      await dao.replaceAll(
+        decisions: rows(v['decisions']),
+        logs: rows(v['logs']),
+        hyps: rows(v['hypotheses']),
+        misses: rows(v['misses']),
+        items: items,
+        kv: kv,
+      );
+    } catch (e) {
+      return '恢复失败，现有数据没有改动。';
+    }
+    await load();
+    return null;
+  }
+
   Future<void> setKv(String key, String value) async {
     _kv[key] = value;
     await dao.setKv(key, value);

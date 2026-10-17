@@ -336,6 +336,84 @@ void main() {
       expect(c.signatureOf(id), isNull, reason: '签名被删后不再关联');
     });
 
+    test('restore replaces everything with the backup, ids and links intact', () async {
+      final ZhaojianController a =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await a.load();
+      final int hid = await a.addHypothesis('心软', '先答应');
+      final int did = await a.seal(sample());
+      await a.reveal(decisionId: did, actual: 'b', reaction: '松了口气', hypId: hid, hypKind: 'sup');
+      await a.addItem('rope', <String, dynamic>{'s': '想赌', 'r': '卸载', 'seq': <String>['y', 'n'], 'ok': 'n'});
+      await a.addMiss(cat: 1, text: '怕议论', decisionId: did);
+      await a.setKv('ab.s', '耐心');
+      await a.setKv('eng.$did', '0.4');
+      final String backup = a.exportJson();
+
+      // 另一个全新的库：恢复后应当和原来一模一样。
+      final Database other = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      addTearDown(other.close);
+      await ZhaojianSchema.createAll(other);
+      final ZhaojianController b =
+          ZhaojianController(db: other, oracle: const LocalZhaojianOracle());
+      await b.load();
+      await b.addItem('prin', <String, dynamic>{'t': '会被替换掉的旧数据'});
+      await b.setKv('stale', 'x');
+
+      expect(await b.restoreJson(backup), isNull);
+      expect(b.items('prin'), isEmpty, reason: '恢复是替换，不是合并');
+      expect(b.kv('stale'), '');
+      expect(b.decisions.length, 1);
+      expect(b.revealed.single.id, did);
+      expect(b.revealed.single.hypId, hid);
+      expect(b.revealed.single.body, a.revealed.single.body);
+      expect(b.hypotheses.single.sup.length, 1);
+      expect(b.hypotheses.single.id, hid);
+      expect(b.items('rope').single.list('seq'), <String>['y', 'n']);
+      expect(b.misses.single.decisionId, did);
+      expect(b.kv('ab.s'), '耐心');
+      expect(b.engineProbA(did), 0.4);
+      expect(b.logs.length, a.logs.length);
+      Map<String, dynamic> norm(String s) {
+        final Map<String, dynamic> m = jsonDecode(s) as Map<String, dynamic>;
+        m.remove('exportedAt');
+        return m;
+      }
+
+      expect(norm(b.exportJson()), equals(norm(backup)), reason: '导出、恢复、再导出，内容不变');
+    });
+
+    test('restore rejects bad input and leaves the existing data untouched', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      await c.seal(sample());
+      await c.setKv('ab.s', '耐心');
+
+      expect(await c.restoreJson('这不是 JSON'), contains('JSON'));
+      expect(await c.restoreJson('{"app":"other"}'), contains('不是照见'));
+      expect(await c.restoreJson('{"app":"zhaojian","schemaVersion":99}'), contains('更新'));
+      // 一行缺了必填列：整个事务回滚。
+      expect(
+        await c.restoreJson('{"app":"zhaojian","schemaVersion":3,"decisions":[{"id":7,"question":"q"}]}'),
+        contains('没有改动'),
+      );
+      expect(c.decisions.length, 1);
+      expect(c.kv('ab.s'), '耐心');
+    });
+
+    test('restore tolerates columns the current schema does not have', () async {
+      final ZhaojianController c =
+          ZhaojianController(db: db, oracle: const LocalZhaojianOracle());
+      await c.load();
+      const String backup = '{"app":"zhaojian","schemaVersion":1,"decisions":[{"id":3,"question":"旧版","option_a":"A","option_b":"B","pred":"a","stake":2,"sealed_at":1000,"future_column":"x"}],"hypotheses":[],"logs":[],"misses":[],"items":{},"kv":{"k":"v"}}';
+      expect(await c.restoreJson(backup), isNull);
+      expect(c.decisions.single.question, '旧版');
+      expect(c.kv('k'), 'v');
+    });
+
     test('export is valid json with every section', () async {
       final ZhaojianController c =
           ZhaojianController(db: db, oracle: const LocalZhaojianOracle());

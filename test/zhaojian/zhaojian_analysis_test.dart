@@ -582,6 +582,69 @@ void main() {
     });
   });
 
+  group('sensitivity', () {
+    ZAlignRow row(int wa, int ya, int da, int wb, int yb, int db) =>
+        ZAlignRow(a: <int>[wa, ya, da], b: <int>[wb, yb, db]);
+
+    test('a clear and stable winner survives every change of view', () {
+      final ZSensitivity s = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 30, 30, 30), row(70, 70, 70, 40, 40, 40)]),
+        const <ZDesire>[ZDesire('自由', strong: true), ZDesire('被认可')],
+      )!;
+      expect(s.baseline, 'a');
+      expect(s.flipped, 0);
+      expect(s.robust, isTrue);
+      expect(s.same, s.scenarios.length);
+      expect(s.scenarios.any((ZScenario x) => x.label.contains('去掉「自由」')), isTrue);
+    });
+
+    test('dropping one desire can flip the winner and is reported', () {
+      // 第一个欲求（强证据）偏 A，第二个（自述，权重低）强烈偏 B：
+      // 基线 A = (80 + 0.3×10) / 1.3 ≈ 63.8，B = (50 + 0.3×90) / 1.3 ≈ 59.2，A 略胜；去掉第一个欲求后 B 赢。
+      final ZSensitivity s = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 50, 50, 50), row(10, 10, 10, 90, 90, 90)]),
+        const <ZDesire>[ZDesire('自由', strong: true), ZDesire('被认可')],
+      )!;
+      expect(s.baseline, 'a');
+      expect(s.flipped, greaterThan(0));
+      expect(s.robust, isFalse);
+      final ZScenario drop = s.scenarios.firstWhere((ZScenario x) => x.label.contains('去掉「自由」'));
+      expect(drop.winner, 'b');
+      final ZScenario equal = s.scenarios.firstWhere((ZScenario x) => x.label.contains('等权'));
+      expect(equal.winner, 'b', reason: '等权时 (80+10)/2=45 对 (50+90)/2=70');
+    });
+
+    test('a tiny gap is a tie and ties never count as flips', () {
+      final ZSensitivity s = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(50, 51, 50, 50, 50, 50)]),
+        const <ZDesire>[ZDesire('自由', strong: true)],
+      )!;
+      expect(s.baseline, 'tie');
+      expect(s.flipped, 0);
+      expect(s.same, s.scenarios.length);
+    });
+
+    test('an uncontrollable external condition adds a knock-out scenario', () {
+      final ZAlignResult r = ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 30, 30, 30)]);
+      final ZSensitivity s = sensitivityOf(r, const <ZDesire>[ZDesire('自由', strong: true)],
+          aUncontrollable: true)!;
+      final ZScenario out = s.scenarios.firstWhere((ZScenario x) => x.label.contains('A 做不成'));
+      expect(out.winner, 'b');
+      expect(s.flipped, 1);
+      expect(s.vague, 0);
+    });
+
+    test('only-strong scenario needs both strong and weak desires; one desire has no leave-one-out', () {
+      final ZSensitivity one = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 30, 30, 30)]),
+        const <ZDesire>[ZDesire('自由', strong: true)],
+      )!;
+      expect(one.scenarios.any((ZScenario x) => x.label.contains('只看被行为支持')), isFalse);
+      expect(one.scenarios.any((ZScenario x) => x.label.contains('去掉')), isFalse);
+      expect(sensitivityOf(const ZAlignResult(), const <ZDesire>[ZDesire('x')]), isNull);
+    });
+  });
+
   group('library', () {
     test('static data is consistent', () {
       expect(ZCopy.categories.length, 12);

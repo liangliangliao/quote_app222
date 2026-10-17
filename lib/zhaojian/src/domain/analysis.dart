@@ -850,3 +850,95 @@ bool? engineHit(double probA, String actual) {
   final String side = probA > 0.5 ? 'a' : 'b';
   return side == actual;
 }
+
+// ---------------------------------------------------------------------------
+// 一致度的敏感性检验
+// ---------------------------------------------------------------------------
+
+/// 换一种看法之后，哪个选项占上风：'a' / 'b' / 'tie'（差距小于 3 分算差不多）。
+class ZScenario {
+  const ZScenario(this.label, this.winner);
+
+  final String label;
+  final String winner;
+}
+
+/// 结论经不经得起换看法：基线与各种换法的对照。
+class ZSensitivity {
+  const ZSensitivity(this.baseline, this.scenarios);
+
+  /// 基线的结论：'a' / 'b' / 'tie'。
+  final String baseline;
+  final List<ZScenario> scenarios;
+
+  /// 结论和基线一致的换法数。
+  int get same => scenarios.where((ZScenario s) => s.winner == baseline).length;
+
+  /// 结论反过来的换法数（基线和这种换法都有明确的赢家，而且不同）。
+  int get flipped => scenarios
+      .where((ZScenario s) => baseline != 'tie' && s.winner != 'tie' && s.winner != baseline)
+      .length;
+
+  /// 其余的：有一边是「差不多」，说不清。
+  int get vague => scenarios.length - same - flipped;
+
+  bool get robust => flipped == 0;
+}
+
+/// 对一致度的结论做敏感性检验：逐个换看法，看赢家会不会翻转。
+/// 换法包括：欲求一律等权；只看被行为支持的欲求；逐个去掉一条欲求；
+/// 换成「本周」或「十年」的尺度；以及某个选项的不可控外部条件不成立（它就做不成）。
+/// 没有结果时返回 null。
+ZSensitivity? sensitivityOf(
+  ZAlignResult r,
+  List<ZDesire> desires, {
+  bool aUncontrollable = false,
+  bool bUncontrollable = false,
+}) {
+  final int n = math.min(r.rows.length, desires.length);
+  if (n == 0) return null;
+  final List<int> all = List<int>.generate(n, (int i) => i);
+
+  String winner(double a, double b) {
+    final double d = a - b;
+    if (d.abs() < 3) return 'tie';
+    return d > 0 ? 'a' : 'b';
+  }
+
+  String run(Iterable<int> idx, double Function(int) weight, int horizon) {
+    double sa = 0, sb = 0, tw = 0;
+    for (final int i in idx) {
+      final double w = weight(i);
+      if (w <= 0) continue;
+      final ZAlignRow row = r.rows[i];
+      sa += w * (horizon < row.a.length ? row.a[horizon] : 50);
+      sb += w * (horizon < row.b.length ? row.b[horizon] : 50);
+      tw += w;
+    }
+    if (tw == 0) return 'tie';
+    return winner(sa / tw, sb / tw);
+  }
+
+  double byTier(int i) => desireWeight(desires[i]);
+  final String base = run(all, byTier, 1);
+  final List<ZScenario> out = <ZScenario>[
+    ZScenario('一年 · 所有欲求等权', run(all, (int i) => 1, 1)),
+  ];
+  final bool anyStrong = desires.take(n).any((ZDesire d) => d.strong);
+  final bool anyWeak = desires.take(n).any((ZDesire d) => !d.strong);
+  if (anyStrong && anyWeak) {
+    out.add(ZScenario('一年 · 只看被行为支持的欲求',
+        run(all, (int i) => desires[i].strong ? 1 : 0, 1)));
+  }
+  if (n >= 2) {
+    for (int k = 0; k < n; k++) {
+      out.add(ZScenario('一年 · 去掉「${desires[k].text}」',
+          run(all.where((int i) => i != k), byTier, 1)));
+    }
+  }
+  out.add(ZScenario('本周尺度', run(all, byTier, 0)));
+  out.add(ZScenario('十年尺度', run(all, byTier, 2)));
+  if (aUncontrollable) out.add(const ZScenario('若 A 的不可控外部条件不成立（A 做不成）', 'b'));
+  if (bUncontrollable) out.add(const ZScenario('若 B 的不可控外部条件不成立（B 做不成）', 'a'));
+  return ZSensitivity(base, out);
+}
