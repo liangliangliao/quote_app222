@@ -90,6 +90,7 @@ void main() {
                 <String, dynamic>{'type': 'score', 'name': 'm2', 'score': 'x'},
                 <String, dynamic>{'type': 'predicate', 'name': 'm3', 'probability': 0.5},
                 <String, dynamic>{'type': 'score', 'name': 'm4', 'score': 1.0},
+                <String, dynamic>{'type': 'score', 'name': 'm5', 'score': 2.0},
                 <String, dynamic>{'type': 'score', 'name': 'm99', 'score': 1.0},
                 'not a map',
               ],
@@ -98,11 +99,14 @@ void main() {
           );
         }),
       );
-      final ZScoreResult r = await o.scoreMotives(situation: 's', motives: motives(5));
-      expect(r.pulls.keys.toSet(), <int>{1, 4});
+      // 6 个动机里有 3 个有效答案：刚好够一半，引擎的结果被采用。
+      final ZScoreResult r = await o.scoreMotives(situation: 's', motives: motives(6));
+      expect(r.isEmpty, isFalse);
+      expect(r.pulls.keys.toSet(), <int>{1, 4, 5});
       expect(r.pulls[1], 4.0, reason: '超出 0..4 的分数被截断');
       expect(r.confidences[1], 1.0);
       expect(r.pulls[4], 1.0);
+      expect(r.pulls[5], 2.0);
     });
 
     test('fewer than half of the motives scored means unavailable', () async {
