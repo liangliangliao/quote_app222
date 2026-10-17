@@ -404,6 +404,247 @@ void main() {
     });
   });
 
+  group('change helpers', () {
+    test('asifVerdict covers keep, continue, reset, drop and incomplete', () {
+      expect(asifVerdict('', '没成真', '更靠近'), startsWith('信息不全'));
+      expect(asifVerdict('自然', '没成真', '更远了'), startsWith('弃'), reason: '不通向欲求就弃，无论反应如何');
+      expect(asifVerdict('自然', '成真了', '更靠近'), startsWith('重设'));
+      expect(asifVerdict('自然', '没成真', '更靠近'), startsWith('保留'));
+      expect(asifVerdict('别扭', '没成真', '更靠近'), startsWith('继续'));
+      expect(asifVerdict('像在演', '部分成真', '更靠近'), startsWith('继续'));
+      expect(asifVerdict('自然', '没成真', '说不准'), startsWith('再观察'));
+    });
+
+    test('asifVerdict puts the alignment check before the belief check', () {
+      expect(asifVerdict('自然', '成真了', '更远了'), startsWith('弃'));
+    });
+
+    test('crisis detection catches despair and self-harm wording only', () {
+      expect(zCrisis('我真的不想活了'), isTrue);
+      expect(zCrisis('有时候想自杀'), isTrue);
+      expect(zCrisis('活着没意思'), isTrue);
+      expect(zCrisis('今天活着没有意思'), isTrue);
+      expect(zCrisis('我想把这个项目做完'), isFalse);
+      expect(zCrisis('这个任务快把我累死了'), isFalse, reason: '日常夸张说法不触发');
+      expect(zCrisis(''), isFalse);
+    });
+
+    test('fatalism detection returns the first matched phrase', () {
+      expect(zFatalism('反正我就是改不了'), '反正');
+      expect(zFatalism('本性难移吧'), '本性难移');
+      expect(zFatalism('这次我会试试看'), isNull);
+    });
+
+    test('ropeStats counts kept and broken', () {
+      final ({int kept, int broken}) s = ropeStats(<String>['y', 'n', 'y', 'y', '']);
+      expect(s.kept, 3);
+      expect(s.broken, 1);
+    });
+
+    test('acceptance comfort needs control 2, a bypass and a confirmation', () {
+      expect(acceptComfortAllowed(control: 2, bypass: '换条路', confirmedFixed: true), isTrue);
+      expect(acceptComfortAllowed(control: 2, bypass: '  ', confirmedFixed: true), isFalse);
+      expect(acceptComfortAllowed(control: 2, bypass: '换条路', confirmedFixed: false), isFalse);
+      expect(acceptComfortAllowed(control: 1, bypass: '换条路', confirmedFixed: true), isFalse);
+    });
+
+    test('string counting ignores empties and ranks by count then name', () {
+      final Map<String, int> c = countStrings(<String>['b', 'a', 'b', '', 'a', 'c']);
+      expect(c, <String, int>{'b': 2, 'a': 2, 'c': 1});
+      expect(topCounts(c, n: 2), 'a 2　b 2');
+    });
+  });
+
+  group('action and belief helpers', () {
+    test('billRisk grows as evidence, endorsement, term and the never-cashed case go missing', () {
+      expect(billRisk(term: '一年', evidence: '有数据', endorser: '导师', neverCashed: '换个方向'), 0);
+      expect(billRisk(term: '', evidence: '有数据', endorser: '导师', neverCashed: '换个方向'), 1);
+      expect(billRisk(term: '一年', evidence: '', endorser: '导师', neverCashed: '换个方向'), 1);
+      expect(billRisk(term: '', evidence: '', endorser: '导师', neverCashed: '换个方向'), 2);
+      expect(billRisk(term: '', evidence: '有数据', endorser: '', neverCashed: ''), 2);
+      expect(billRisk(term: '', evidence: '', endorser: '', neverCashed: ''), 2);
+    });
+
+    test('funnel counts each stage reached and the conversions', () {
+      final ZFunnel f = funnelOf(<int>[0, 0, 1, 2, 2, 1]);
+      expect(f.wish, 6);
+      expect(f.resolve, 4);
+      expect(f.act, 2);
+      expect(f.wishToResolve, closeTo(4 / 6, 1e-9));
+      expect(f.resolveToAct, 0.5);
+      final ZFunnel empty = funnelOf(<int>[]);
+      expect(empty.wishToResolve, isNull);
+      expect(empty.resolveToAct, isNull);
+      expect(funnelOf(<int>[0, 0]).resolveToAct, isNull, reason: '没有决意就没有决意→行动的转化率');
+    });
+
+    test('knowActGaps keeps decisions where abstract motives lost to intuitive ones', () {
+      final List<ZMotive> split = <ZMotive>[
+        m('后果', kind: 'abs', side: 'a', weight: 5),
+        m('他的神情', kind: 'int', side: 'b', weight: 4),
+      ];
+      final List<ZDecision> gaps = knowActGaps(<ZDecision>[
+        decision(motives: split, actual: 'b'),
+        decision(motives: split, actual: 'a'),
+        decision(motives: <ZMotive>[m('x', side: 'a')], actual: 'a'),
+      ]);
+      expect(gaps.length, 1);
+      expect(gaps.single.actual, 'b');
+    });
+  });
+
+  group('direction helpers', () {
+    test('probeQuadrant uses 4 and above as high', () {
+      expect(probeQuadrant(5, 4), 0);
+      expect(probeQuadrant(4, 3), 1);
+      expect(probeQuadrant(3, 5), 2);
+      expect(probeQuadrant(1, 2), 3);
+      expect(probeQuadrant(4, 4), 0);
+    });
+
+    test('signature stats count hits, misses and distinct contexts of hits', () {
+      final ZSigStats st = signatureStats(<Map<String, dynamic>>[
+        <String, dynamic>{'ctx': '会议', 'hit': true},
+        <String, dynamic>{'ctx': '会议', 'hit': true},
+        <String, dynamic>{'ctx': '饭局', 'hit': true},
+        <String, dynamic>{'ctx': '', 'hit': true},
+        <String, dynamic>{'ctx': '会议', 'hit': false},
+      ]);
+      expect(st.hits, 4);
+      expect(st.misses, 1);
+      expect(st.contexts, 2, reason: '空情境不算，落空的情境不算');
+    });
+
+    test('signature gate needs 3 hits, 2 contexts and hits not below misses', () {
+      expect(signatureGate(const ZSigStats(3, 0, 2)), isTrue);
+      expect(signatureGate(const ZSigStats(2, 0, 2)), isFalse);
+      expect(signatureGate(const ZSigStats(3, 0, 1)), isFalse);
+      expect(signatureGate(const ZSigStats(3, 4, 2)), isFalse);
+      expect(signatureGate(const ZSigStats(4, 4, 2)), isTrue);
+    });
+
+    test('analysis needs at least four pieces of behavior evidence', () {
+      expect(analysisMinEvidence, 4);
+    });
+  });
+
+  group('growth supplements', () {
+    test('ropeKeepRate pools every rope and is null without results', () {
+      expect(ropeKeepRate(<List<String>>[<String>['y', 'n'], <String>['y', 'y']]), 0.75);
+      expect(ropeKeepRate(<List<String>>[<String>[], <String>['']]), isNull);
+      expect(ropeKeepRate(<List<String>>[]), isNull);
+    });
+
+    test('actingShare splits early and recent only with four or more reactions', () {
+      final ({double? all, double? early, double? recent}) few = actingShare(<String>['像在演', '松了口气']);
+      expect(few.all, 0.5);
+      expect(few.early, isNull);
+      final ({double? all, double? early, double? recent}) many = actingShare(
+          <String>['像在演', '像在演', '松了口气', '松了口气', '松了口气']);
+      expect(many.all, 0.4);
+      expect(many.early, closeTo(2 / 3, 1e-9), reason: '前 3 个里有 2 个');
+      expect(many.recent, 0.0);
+      expect(actingShare(<String>[]).all, isNull);
+    });
+
+    test('asifVerdictCounts labels finished experiments and skips unfinished ones', () {
+      ZEntry e(String r, String nb, String al) => ZEntry(
+          kind: 'asif', data: <String, dynamic>{'r': r, 'nb': nb, 'al': al});
+      final Map<String, int> c = asifVerdictCounts(<ZEntry>[
+        e('自然', '没成真', '更靠近'),
+        e('自然', '没成真', '更靠近'),
+        e('别扭', '没成真', '更靠近'),
+        e('自然', '成真了', '更靠近'),
+        e('自然', '没成真', '更远了'),
+        e('自然', '', '更靠近'),
+      ]);
+      expect(c, <String, int>{'保留': 2, '继续': 1, '重设': 1, '弃': 1});
+    });
+
+    test('forgoSummary only counts experiments with at least two days logged', () {
+      ZEntry e(int pred, List<int> vs) => ZEntry(kind: 'forgo', data: <String, dynamic>{
+            'pred': pred,
+            'log': <Map<String, dynamic>>[for (final int v in vs) <String, dynamic>{'v': v}],
+          });
+      final ({int n, double? predicted, double? actual}) r =
+          forgoSummary(<ZEntry>[e(8, <int>[2, 4]), e(4, <int>[6, 6]), e(9, <int>[9])]);
+      expect(r.n, 2);
+      expect(r.predicted, 6.0);
+      expect(r.actual, 4.5);
+      expect(forgoSummary(<ZEntry>[]).predicted, isNull);
+    });
+
+    test('engineHit compares the predicted side with the actual one', () {
+      expect(engineHit(0.7, 'a'), isTrue);
+      expect(engineHit(0.7, 'b'), isFalse);
+      expect(engineHit(0.2, 'b'), isTrue);
+      expect(engineHit(0.5, 'a'), isNull);
+    });
+  });
+
+  group('sensitivity', () {
+    ZAlignRow row(int wa, int ya, int da, int wb, int yb, int db) =>
+        ZAlignRow(a: <int>[wa, ya, da], b: <int>[wb, yb, db]);
+
+    test('a clear and stable winner survives every change of view', () {
+      final ZSensitivity s = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 30, 30, 30), row(70, 70, 70, 40, 40, 40)]),
+        const <ZDesire>[ZDesire('自由', strong: true), ZDesire('被认可')],
+      )!;
+      expect(s.baseline, 'a');
+      expect(s.flipped, 0);
+      expect(s.robust, isTrue);
+      expect(s.same, s.scenarios.length);
+      expect(s.scenarios.any((ZScenario x) => x.label.contains('去掉「自由」')), isTrue);
+    });
+
+    test('dropping one desire can flip the winner and is reported', () {
+      // 第一个欲求（强证据）偏 A，第二个（自述，权重低）强烈偏 B：
+      // 基线 A = (80 + 0.3×10) / 1.3 ≈ 63.8，B = (50 + 0.3×90) / 1.3 ≈ 59.2，A 略胜；去掉第一个欲求后 B 赢。
+      final ZSensitivity s = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 50, 50, 50), row(10, 10, 10, 90, 90, 90)]),
+        const <ZDesire>[ZDesire('自由', strong: true), ZDesire('被认可')],
+      )!;
+      expect(s.baseline, 'a');
+      expect(s.flipped, greaterThan(0));
+      expect(s.robust, isFalse);
+      final ZScenario drop = s.scenarios.firstWhere((ZScenario x) => x.label.contains('去掉「自由」'));
+      expect(drop.winner, 'b');
+      final ZScenario equal = s.scenarios.firstWhere((ZScenario x) => x.label.contains('等权'));
+      expect(equal.winner, 'b', reason: '等权时 (80+10)/2=45 对 (50+90)/2=70');
+    });
+
+    test('a tiny gap is a tie and ties never count as flips', () {
+      final ZSensitivity s = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(50, 51, 50, 50, 50, 50)]),
+        const <ZDesire>[ZDesire('自由', strong: true)],
+      )!;
+      expect(s.baseline, 'tie');
+      expect(s.flipped, 0);
+      expect(s.same, s.scenarios.length);
+    });
+
+    test('an uncontrollable external condition adds a knock-out scenario', () {
+      final ZAlignResult r = ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 30, 30, 30)]);
+      final ZSensitivity s = sensitivityOf(r, const <ZDesire>[ZDesire('自由', strong: true)],
+          aUncontrollable: true)!;
+      final ZScenario out = s.scenarios.firstWhere((ZScenario x) => x.label.contains('A 做不成'));
+      expect(out.winner, 'b');
+      expect(s.flipped, 1);
+      expect(s.vague, 0);
+    });
+
+    test('only-strong scenario needs both strong and weak desires; one desire has no leave-one-out', () {
+      final ZSensitivity one = sensitivityOf(
+        ZAlignResult(rows: <ZAlignRow>[row(80, 80, 80, 30, 30, 30)]),
+        const <ZDesire>[ZDesire('自由', strong: true)],
+      )!;
+      expect(one.scenarios.any((ZScenario x) => x.label.contains('只看被行为支持')), isFalse);
+      expect(one.scenarios.any((ZScenario x) => x.label.contains('去掉')), isFalse);
+      expect(sensitivityOf(const ZAlignResult(), const <ZDesire>[ZDesire('x')]), isNull);
+    });
+  });
+
   group('library', () {
     test('static data is consistent', () {
       expect(ZCopy.categories.length, 12);

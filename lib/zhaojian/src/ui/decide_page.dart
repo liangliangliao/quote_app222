@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../copy.dart';
 import '../data/models.dart';
+import '../domain/ai_parse.dart';
 import '../domain/analysis.dart';
 import '../domain/controller.dart';
+import '../domain/json_util.dart';
 import '../zhaojian_oracle.dart';
 import 'widgets.dart';
 
@@ -55,6 +57,18 @@ class _DecidePageState extends State<DecidePage> {
   bool _recordFreedom = false;
   int _freedom = 5;
   int? _jtPred;
+
+  // AI 列选项（10 选 5）与研判
+  List<Map<String, dynamic>> _aiOpts = <Map<String, dynamic>>[];
+  ZVerdict? _verdictObj;
+  String _verdictMsg = '';
+  bool _verdictBusy = false;
+
+  // 签名挑选与引擎预测
+  int? _sigId;
+  double? _engA;
+  bool _engBusy = false;
+  String _engMsg = '';
 
   // 一致度与难度
   final TextEditingController _desireText = TextEditingController();
@@ -109,6 +123,215 @@ class _DecidePageState extends State<DecidePage> {
     return '两边';
   }
 
+  // ---------------------------------------------------------------- AI 辅助
+
+  Future<void> _aiOptions() async {
+    if (_busy) return;
+    if (_q.text.trim().isEmpty) {
+      zSnack(context, '先写下处境或问题');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _msg = 'AI 正在列选项并打分…（约半分钟）';
+    });
+    final String raw = await widget.controller.oracle.generate(
+      prompt: '用户的处境或问题：「${_q.text.trim()}」。${widget.controller.profileText(ZCopy.categories)}\n'
+          '请列出 10 个与此高度相关、彼此真正不同的行动选项（包括看起来不体面但现实中常见的，包括「先不决定、拖一拖」，也包括折中和第三条路）。'
+          '每个给出：t(选项，不超过14字)、gain(它保护或满足什么，不超过20字)、cost(它要付出或放弃什么，不超过20字)、'
+          'fit(它在多大程度上通向用户真正想要的，0到100，50表示无关)、feas(现实中做到它的可行性，0到100)。'
+          'fit 与 feas 是你的估计，信息不足就取接近 50，不要夸大。'
+          '只输出 JSON 数组 [{"t":"","gain":"","cost":"","fit":0,"feas":0}]。',
+      purpose: 'zhaojian.options',
+      maxTokens: 3000,
+    );
+    if (!mounted) return;
+    final List<Map<String, dynamic>> list = <Map<String, dynamic>>[];
+    for (final dynamic e in zParseArray(raw)) {
+      if (e is! Map) continue;
+      final String t = '${e['t'] ?? ''}'.trim();
+      if (t.isEmpty) continue;
+      int n100(dynamic v) {
+        final num? x = v is num ? v : num.tryParse('$v');
+        return x == null || x.isNaN ? 50 : x.round().clamp(0, 100).toInt();
+      }
+
+      final int fit = n100(e['fit']);
+      final int feas = n100(e['feas']);
+      list.add(<String, dynamic>{
+        't': t,
+        'gain': '${e['gain'] ?? ''}'.trim(),
+        'cost': '${e['cost'] ?? ''}'.trim(),
+        'fit': fit,
+        'feas': feas,
+        'sc': (0.65 * fit + 0.35 * feas).round(),
+      });
+    }
+    list.sort((Map<String, dynamic> x, Map<String, dynamic> y) =>
+        (y['sc'] as int).compareTo(x['sc'] as int));
+    setState(() {
+      _busy = false;
+      _aiOpts = list.take(5).toList();
+      _msg = list.isEmpty ? '没有可用的 AI，或没有完成。请自己写选项。' : '';
+    });
+  }
+
+  Future<void> _aiVerdict() async {
+    final List<ZMotive> all = _allMotives()
+      ..sort((ZMotive x, ZMotive y) => y.weight.compareTo(x.weight));
+    final ZSums s = sumMotives(all);
+    final ZConflict cf = conflictOf(all);
+    final StringBuffer lines = StringBuffer();
+    for (final ZMotive m in all.take(12)) {
+      lines.writeln('${m.text}｜${m.weight}分｜${m.isAbstract ? '抽象' : '直观'}｜'
+          '${m.side == 'a' ? '拉向A' : (m.side == 'b' ? '拉向B' : '两边')}｜${m.valence == 'av' ? '害怕' : '想要'}');
+    }
+    setState(() => _verdictBusy = true);
+    final String raw = await widget.controller.oracle.generate(
+      prompt: '${_situation()}\n用户评过分的动机（动机｜分量｜类型｜拉向｜想要或害怕）：\n$lines'
+          '天平：A 抽象 ${s.aAbs.toStringAsFixed(1)} 直观 ${s.aInt.toStringAsFixed(1)}；'
+          'B 抽象 ${s.bAbs.toStringAsFixed(1)} 直观 ${s.bInt.toStringAsFixed(1)}；冲突类型：${ZCopy.conflictTypes[cf.type][0]}。\n'
+          '请分三类独立回答：choice（到现场选 A 的概率，0 到 1）；score（conflict 冲突强度 0 到 4，flip 到现场结果与事先想的相反的可能 0 到 1）；'
+          'noul（还不知道、却会影响结果的事，最多 4 条；不知道就如实写不知道，不要凑答案）；note（一句话说明，不超过 60 字）。'
+          '不替用户决定，不说「你应该」，不诊断，都是待检验的估计。'
+          '只输出 JSON：{"choice":{"a":0.0},"score":{"conflict":0,"flip":0.0},"noul":["…"],"note":"…"}。',
+      purpose: 'zhaojian.verdict',
+    );
+    if (!mounted) return;
+    final ZVerdict v = parseVerdict(raw);
+    setState(() {
+      _verdictBusy = false;
+      _verdictObj = v.isEmpty ? null : v;
+      _verdictMsg = v.isEmpty ? (raw.trim().isEmpty ? '没有可用的 AI，或没有完成。' : 'AI 的回答没法解析。') : '';
+    });
+  }
+
+  Widget _verdictCard(ZVerdict v) {
+    return ZItem(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('研判（AI 的估计，不是真实决策引擎的打分）', style: TextStyle(fontWeight: FontWeight.w700)),
+          if (v.probA != null)
+            Text('Choice：到现场选 A 的概率 ${zPercent(v.probA)}，选 B ${zPercent(1 - v.probA!)}'),
+          if (v.conflict != null) Text('Score：冲突强度 ${v.conflict!.toStringAsFixed(1)} / 4'),
+          if (v.flip != null) Text('Score：到现场翻盘的可能 ${zPercent(v.flip)}'),
+          if (v.unknown.isNotEmpty) ...<Widget>[
+            const Text('Noul：还不知道的'),
+            for (final String u in v.unknown) Text('· $u', style: const TextStyle(fontSize: 13)),
+          ],
+          if (v.note.isNotEmpty) ZNote(v.note),
+        ],
+      ),
+    );
+  }
+
+  Widget _sensitivityBox() {
+    if (_alignRes.isEmpty) return const SizedBox.shrink();
+    final ZSensitivity? s = sensitivityOf(
+      _alignRes,
+      _selDesires,
+      aUncontrollable: _alignRes.diffA.externals.any((ZExternal e) => e.uncontrollable),
+      bUncontrollable: _alignRes.diffB.externals.any((ZExternal e) => e.uncontrollable),
+    );
+    if (s == null) return const SizedBox.shrink();
+    String name(String w) => w == 'a' ? '偏向 A' : (w == 'b' ? '偏向 B' : '差不多');
+    return ZItem(
+      warn: !s.robust,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('敏感性检验：这个结论经得起换几种看法吗', style: TextStyle(fontWeight: FontWeight.w700)),
+          ZNote('基线（加权 · 一年）：${name(s.baseline)}。${s.scenarios.length} 种换法里：结论不变 ${s.same} 种，翻转 ${s.flipped} 种，说不清 ${s.vague} 种。'),
+          for (final ZScenario sc in s.scenarios)
+            Text(
+              '${sc.winner != s.baseline && sc.winner != 'tie' && s.baseline != 'tie' ? '⚠ ' : '· '}${sc.label}：${name(sc.winner)}',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ZNote(s.robust
+              ? '没有一种换法把结论翻过来：相对稳，但它依然只是对照，不是答案。'
+              : '有换法把结论翻过来了：说明结论取决于你怎么看，别把它当答案。', warn: !s.robust),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- 签名与引擎预测
+
+  /// 已确认的签名里，挑一个适用于这件事的；开牌时会问它应验了吗。
+  Widget _sigPicker() {
+    final List<ZEntry> sigs =
+        widget.controller.items('sig').where((ZEntry e) => e.b('conf')).toList();
+    if (sigs.isEmpty) return const SizedBox.shrink();
+    final int idx = _sigId == null ? -1 : sigs.indexWhere((ZEntry e) => e.id == _sigId);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 8),
+        const ZNote('这件事适用你已确认的哪个签名？（可选；开牌时会问你它应验了吗）'),
+        zChoice(
+          labels: sigs.map((ZEntry e) => '如果${e.s('ifc')}，那么${e.s('then')}').toList(),
+          selected: idx < 0 ? null : idx,
+          onSelect: (int i) => setState(() {
+            final int? sid = sigs[i].id;
+            _sigId = _sigId == sid ? null : sid;
+          }),
+        ),
+      ],
+    );
+  }
+
+  /// 让 AI 引擎也预测一次「你会选 A 的概率」。结果存起来，开牌前不给你看，
+  /// 免得影响你自己的判断；开牌时三方对照：你、引擎、实际。
+  Widget _enginePicker() {
+    if (!widget.controller.oracle.sendsData) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 8),
+        const ZNote('让 AI 引擎也预测一次（可选）：开牌前不给你看，开牌时和你的预测、实际三方对照。它只是对照，不是标准答案。'),
+        ZNote('点击后，题面和你评过分的动机会发送给：${widget.controller.oracle.generateLabel}。', warn: true),
+        OutlinedButton(
+          onPressed: _engBusy ? null : _enginePredict,
+          child: Text(_engA == null ? '让引擎预测一次' : '重新预测（已记录）'),
+        ),
+        if (_engMsg.isNotEmpty) ZNote(_engMsg, warn: _engA == null),
+      ],
+    );
+  }
+
+  Future<void> _enginePredict() async {
+    final List<ZMotive> all = _allMotives()
+      ..sort((ZMotive x, ZMotive y) => y.weight.compareTo(x.weight));
+    final StringBuffer lines = StringBuffer();
+    for (final ZMotive m in all.take(12)) {
+      lines.writeln('${m.text}｜${m.weight}分｜${m.isAbstract ? '抽象' : '直观'}｜'
+          '${m.side == 'a' ? '拉向A' : (m.side == 'b' ? '拉向B' : '两边')}｜${m.valence == 'av' ? '害怕' : '想要'}');
+    }
+    setState(() {
+      _engBusy = true;
+      _engMsg = '';
+    });
+    final String raw = await widget.controller.oracle.generate(
+      prompt: '${_situation()}\n评过分的动机（动机｜分量｜类型｜拉向｜想要或害怕）：\n$lines'
+          '请估计：到了现场，这个人最终选 A 的概率（0 到 1 的小数）。这是对「现场会发生什么」的估计，不是建议。'
+          '只输出 JSON {"a":0.0}。',
+      purpose: 'zhaojian.engine_predict',
+    );
+    if (!mounted) return;
+    final Map<String, dynamic>? o = zParseObject(raw);
+    final dynamic a = o == null ? null : o['a'];
+    setState(() {
+      _engBusy = false;
+      if (a is num) {
+        _engA = a.toDouble().clamp(0.0, 1.0).toDouble();
+        _engMsg = '已记录。引擎的预测要开牌时才揭晓。';
+      } else {
+        _engMsg = raw.trim().isEmpty ? '没有可用的 AI，或没有完成。' : 'AI 的回答没法解析。';
+      }
+    });
+  }
+
   // ---------------------------------------------------------------- 第 0 步
 
   Widget _stepQuestion() {
@@ -127,6 +350,44 @@ class _DecidePageState extends State<DecidePage> {
             TextField(controller: _a, decoration: zInput('选项 A，如：借')),
             const SizedBox(height: 8),
             TextField(controller: _b, decoration: zInput('选项 B，如：不借')),
+          ],
+        ),
+        ZSection(
+          title: '让 AI 帮我想选项（可选）',
+          children: <Widget>[
+            const ZNote('不确定有哪些选项时：AI 先列 10 个彼此不同的行动选项（包括不体面但常见的、拖一拖、折中和第三条路），自评一致度和可行性，取综合最高的 5 个。分数是 AI 的自评，不是决策引擎的打分。'),
+            if (widget.controller.oracle.sendsData) ...<Widget>[
+              ZNote('点击后，你写的处境会发送给：${widget.controller.oracle.generateLabel}。', warn: true),
+              OutlinedButton(
+                onPressed: _busy ? null : _aiOptions,
+                child: const Text('让 AI 列出候选选项'),
+              ),
+            ] else
+              const ZNote('没有 AI 引擎：请自己写 A、B 两个选项。'),
+            if (_msg.isNotEmpty) ZNote(_msg, warn: true),
+            for (final Map<String, dynamic> o in _aiOpts)
+              ZItem(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('${o['t']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ZNote('保护：${o['gain']}　付出：${o['cost']}'),
+                    Text('综合 ${o['sc']}　一致度 ${o['fit']}　可行 ${o['feas']}', style: const TextStyle(fontSize: 13)),
+                    Row(
+                      children: <Widget>[
+                        TextButton(
+                          onPressed: () => setState(() => _a.text = '${o['t']}'),
+                          child: const Text('设为 A'),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() => _b.text = '${o['t']}'),
+                          child: const Text('设为 B'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         ZSection(
@@ -584,6 +845,22 @@ class _DecidePageState extends State<DecidePage> {
             ],
           ),
         ZSection(
+          title: 'AI 研判（可选）',
+          children: <Widget>[
+            const ZNote('让 AI 用几句话把这架天平读一遍：哪边更强、抽象与直观是否分歧、到现场最可能的变数。它不替你决定，也不说「你应该」。'),
+            if (widget.controller.oracle.sendsData) ...<Widget>[
+              ZNote('点击后，题面和你评过分的动机会发送给：${widget.controller.oracle.generateLabel}。', warn: true),
+              OutlinedButton(
+                onPressed: _verdictBusy || all.isEmpty ? null : _aiVerdict,
+                child: Text(_verdictBusy ? '研判中…' : '让 AI 研判这架天平'),
+              ),
+            ] else
+              const ZNote('没有 AI 引擎：看上面的天平和冲突诊断就够了。'),
+            if (_verdictMsg.isNotEmpty) ZNote(_verdictMsg, warn: true),
+            if (_verdictObj != null) _verdictCard(_verdictObj!),
+          ],
+        ),
+        ZSection(
           title: '再想三件事（可跳过）',
           children: <Widget>[
             for (int i = 0; i < 3; i++) ...<Widget>[
@@ -875,6 +1152,7 @@ class _DecidePageState extends State<DecidePage> {
                 '模型置信 ${zPercent(_alignRes.confidence)}，按欲求的证据等级封顶后为 ${zPercent(c.confidence)}。'
                 '${c.confidence! < 0.6 ? '置信偏低，只作参考。' : ''}',
                 warn: c.confidence! < 0.6),
+          _sensitivityBox(),
           if (c.flip)
             const ZNote('排序随欲求而变：结论取决于你到底要什么，先去验证欲求（在「主线与假设」里用行为检验）。', warn: true),
         ],
@@ -917,7 +1195,9 @@ class _DecidePageState extends State<DecidePage> {
       imagerySymmetry: im.symmetry,
       align: _alignSummary(),
     );
-    await widget.controller.seal(d);
+    final int id = await widget.controller.seal(d);
+    if (_sigId != null) await widget.controller.setKv('sig.$id', '$_sigId');
+    if (_engA != null) await widget.controller.setKv('eng.$id', '$_engA');
     if (!mounted) return;
     zSnack(context, '已封存。现场发生后，到「未开的牌」开牌。');
     Navigator.of(context).pop(true);
@@ -977,6 +1257,8 @@ class _DecidePageState extends State<DecidePage> {
               selected: _jtPred,
               onSelect: (int i) => setState(() => _jtPred = i),
             ),
+            _sigPicker(),
+            _enginePicker(),
           ],
         ),
         Row(
@@ -1022,7 +1304,7 @@ class _DecidePageState extends State<DecidePage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('选择'),
+        title: const Text('决策'),
         backgroundColor: Colors.white,
         foregroundColor: zInk,
         elevation: 0,

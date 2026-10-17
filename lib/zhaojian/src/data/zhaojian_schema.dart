@@ -9,7 +9,7 @@ class ZhaojianSchema {
   const ZhaojianSchema._();
 
   /// 模块自管的 schema 版本，与宿主 database version 无关。
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
 
   static const String _metaKey = 'schema_version';
 
@@ -82,6 +82,19 @@ class ZhaojianSchema {
     )
     ''',
     '''
+    CREATE TABLE IF NOT EXISTS z_item (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind        TEXT    NOT NULL,
+      data_json   TEXT    NOT NULL,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    )
+    ''',
+    '''
+    CREATE INDEX IF NOT EXISTS idx_z_item_kind
+      ON z_item(kind, created_at)
+    ''',
+    '''
     CREATE TABLE IF NOT EXISTS z_miss (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
       cat          INTEGER NOT NULL,
@@ -99,6 +112,7 @@ class ZhaojianSchema {
     'z_log',
     'z_hyp',
     'z_miss',
+    'z_item',
   ];
 
   static Future<void> createAll(Database db) async {
@@ -114,6 +128,7 @@ class ZhaojianSchema {
 
   /// 迁移幂等：先补建缺失的表，再按模块自己记录的版本补列。
   /// v2：z_decision 新增 align_json（一致度与难度）。
+  /// v3：新增通用条目表 z_item（绳子、小墙、计划等十几类条目共用，按 kind 区分）。
   static Future<void> migrate(Database db, int oldV, int newV) async {
     await createAll(db);
     final int stored = await storedVersion(db);

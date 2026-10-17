@@ -591,3 +591,354 @@ int quadrantOf(int year, double share) {
 
   return (early: mean(h.early), recent: mean(h.recent));
 }
+
+// ---------------------------------------------------------------------------
+// 通用统计
+// ---------------------------------------------------------------------------
+
+/// 数每个非空字符串出现的次数。
+Map<String, int> countStrings(Iterable<String> items) {
+  final Map<String, int> c = <String, int>{};
+  for (final String s in items) {
+    if (s.isEmpty) continue;
+    c[s] = (c[s] ?? 0) + 1;
+  }
+  return c;
+}
+
+/// 出现次数最多的前 n 个，形如「松了口气 3　胃沉 2」。
+String topCounts(Map<String, int> c, {int n = 6}) {
+  final List<MapEntry<String, int>> es = c.entries.toList()
+    ..sort((MapEntry<String, int> x, MapEntry<String, int> y) {
+      final int d = y.value.compareTo(x.value);
+      return d != 0 ? d : x.key.compareTo(y.key);
+    });
+  return es
+      .take(n)
+      .map((MapEntry<String, int> e) => '${e.key} ${e.value}')
+      .join('　');
+}
+
+// ---------------------------------------------------------------------------
+// 改变：假设行动判词、安全检测、宿命式措辞
+// ---------------------------------------------------------------------------
+
+/// 假设行动的结论：保留 / 继续 / 重设 / 弃 / 信息不全。
+/// [reaction]、[belief]、[aligned] 分别是 [ZCopy.asifReactions]、[ZCopy.asifBeliefs]、
+/// [ZCopy.asifAligned] 里的选项，没填就是空串。
+String asifVerdict(String reaction, String belief, String aligned) {
+  if (reaction.isEmpty || belief.isEmpty || aligned.isEmpty) {
+    return '信息不全：先把三项检验都填完。';
+  }
+  if (aligned == '更远了') {
+    return '弃：它不通向你真正想要的，别硬撑；回到「一致度」重新看你要什么。';
+  }
+  if (belief == '成真了') {
+    return '重设：担心成真了。先别加码，用更小的实验去查证那个担心。';
+  }
+  if (reaction == '自然' && belief == '没成真' && aligned == '更靠近') {
+    return '保留：反应自然、担心没成真、也更靠近你要的。可以固定下来，继续小步重复。';
+  }
+  if (aligned == '更靠近') {
+    return '继续（有代价）：通向你要的，但有别扭或部分成真的担心。降低强度、拉长时间再试。';
+  }
+  return '再观察：证据还不够，再做几次，别急着下结论。';
+}
+
+final RegExp _crisisPattern = RegExp(
+    r'不想活|想死|自杀|自残|结束生命|活着没(有)?意思|伤害自己|不如死了|了结自己');
+
+/// 文字里是否出现绝望或自伤的迹象。出现就要停下重构，转向求助。
+bool zCrisis(String text) => _crisisPattern.hasMatch(text);
+
+final RegExp _fatalismPattern = RegExp(
+    r'反正|注定|本性难移|改不了|天生就|没救了|一辈子就这样|就是这样的人|永远都');
+
+/// 宿命式措辞的第一处匹配；没有返回 null。
+String? zFatalism(String text) => _fatalismPattern.firstMatch(text)?.group(0);
+
+/// 绳子的守住情况：序列里 'y' 守住、'n' 被破。
+({int kept, int broken}) ropeStats(List<String> seq) {
+  int k = 0, b = 0;
+  for (final String s in seq) {
+    if (s == 'y') k += 1;
+    if (s == 'n') b += 1;
+  }
+  return (kept: k, broken: b);
+}
+
+/// 接受页：不可控的项是否可以给「必然性」的安慰。
+/// 必须先写过绕开办法，并且确认它不会因为你的努力而改变。
+bool acceptComfortAllowed({
+  required int control,
+  required String bypass,
+  required bool confirmedFixed,
+}) {
+  return control == 2 && bypass.trim().isNotEmpty && confirmedFixed;
+}
+
+// ---------------------------------------------------------------------------
+// 信念「远期汇票」
+// ---------------------------------------------------------------------------
+
+/// 一条信念像一张远期汇票：期限未到、证据不足、没人背书、从不想「若永不兑付」，
+/// 都是风险。返回 0 低 / 1 中 / 2 高。
+int billRisk({
+  required String term,
+  required String evidence,
+  required String endorser,
+  required String neverCashed,
+}) {
+  int points = 0;
+  if (evidence.trim().isEmpty) points += 2;
+  if (endorser.trim().isEmpty) points += 1;
+  if (term.trim().isEmpty) points += 1;
+  if (neverCashed.trim().isEmpty) points += 1;
+  if (points >= 3) return 2;
+  if (points >= 1) return 1;
+  return 0;
+}
+
+/// 愿望漏斗：各阶段的条数与转化率。
+class ZFunnel {
+  const ZFunnel(this.wish, this.resolve, this.act);
+
+  /// 到达过「愿望」「决意」「行动」阶段的条数（高阶段也算到过低阶段）。
+  final int wish;
+  final int resolve;
+  final int act;
+
+  double? get wishToResolve => wish == 0 ? null : resolve / wish;
+  double? get resolveToAct => resolve == 0 ? null : act / resolve;
+}
+
+/// [stages] 是每条愿望当前所处的阶段：0 愿望 / 1 决意 / 2 行动。
+ZFunnel funnelOf(Iterable<int> stages) {
+  int w = 0, r = 0, a = 0;
+  for (final int s in stages) {
+    w += 1;
+    if (s >= 1) r += 1;
+    if (s >= 2) a += 1;
+  }
+  return ZFunnel(w, r, a);
+}
+
+/// 知行落差的决定：抽象与直观动机指向不同，而行动跟了直观。
+List<ZDecision> knowActGaps(Iterable<ZDecision> revealed) =>
+    revealed.where((ZDecision d) => followedKind(d) == '直观').toList();
+
+// ---------------------------------------------------------------------------
+// 探测、签名、AI 分析的门槛
+// ---------------------------------------------------------------------------
+
+/// 小探测完成后的「想要 × 能力」四象限，对应 [ZCopy.probeQuadrants]：
+/// 0 想要高能力高 / 1 想要高能力低 / 2 想要低能力高 / 3 想要低能力低。
+/// [want]、[able] 是 1 到 5 的自评，4 及以上算高。
+int probeQuadrant(int want, int able) {
+  final bool hw = want >= 4;
+  final bool ha = able >= 4;
+  if (hw && ha) return 0;
+  if (hw) return 1;
+  if (ha) return 2;
+  return 3;
+}
+
+/// 如果—那么签名的记录：每条是 {'ctx': 情境, 'hit': 是否应验}。
+class ZSigStats {
+  const ZSigStats(this.hits, this.misses, this.contexts);
+
+  final int hits;
+  final int misses;
+
+  /// 应验过的不同情境数。
+  final int contexts;
+}
+
+ZSigStats signatureStats(List<Map<String, dynamic>> log) {
+  int h = 0, m = 0;
+  final Set<String> ctx = <String>{};
+  for (final Map<String, dynamic> e in log) {
+    if (e['hit'] == true) {
+      h += 1;
+      final String c = '${e['ctx'] ?? ''}'.trim();
+      if (c.isNotEmpty) ctx.add(c);
+    } else {
+      m += 1;
+    }
+  }
+  return ZSigStats(h, m, ctx.length);
+}
+
+/// 一个签名要被确认：应验至少 3 次、至少 2 种情境、应验不少于落空。
+/// 这是经验规则，不是统计检验。
+bool signatureGate(ZSigStats s) => s.hits >= 3 && s.contexts >= 2 && s.hits >= s.misses;
+
+/// AI 分析需要的最少行为证据条数。证据太少时，模型只会把自述复述一遍。
+const int analysisMinEvidence = 4;
+
+// ---------------------------------------------------------------------------
+// 成长回顾的补充统计、引擎预测
+// ---------------------------------------------------------------------------
+
+/// 绳子整体守住率（每条绳子的序列：'y' 守住 / 'n' 被破）；没有记录返回 null。
+double? ropeKeepRate(Iterable<List<String>> seqs) {
+  int k = 0, b = 0;
+  for (final List<String> s in seqs) {
+    final ({int kept, int broken}) st = ropeStats(s);
+    k += st.kept;
+    b += st.broken;
+  }
+  if (k + b == 0) return null;
+  return k / (k + b);
+}
+
+/// 「像在演」占比。[reactions] 按时间从早到晚；不足 4 条不分早晚。
+({double? all, double? early, double? recent}) actingShare(List<String> reactions) {
+  double? share(List<String> xs) {
+    final List<String> nonEmpty = xs.where((String r) => r.isNotEmpty).toList();
+    if (nonEmpty.isEmpty) return null;
+    return nonEmpty.where((String r) => r == '像在演').length / nonEmpty.length;
+  }
+
+  if (reactions.length < 4) return (all: share(reactions), early: null, recent: null);
+  final int cut = (reactions.length + 1) ~/ 2;
+  return (
+    all: share(reactions),
+    early: share(reactions.sublist(0, cut)),
+    recent: share(reactions.sublist(cut)),
+  );
+}
+
+/// 假设行动的结论分布，键是「保留 / 继续 / 重设 / 弃 / 再观察」。
+/// 三项检验没填完的不计。
+Map<String, int> asifVerdictCounts(Iterable<ZEntry> asifs) {
+  final Map<String, int> c = <String, int>{};
+  for (final ZEntry e in asifs) {
+    final String r = e.s('r');
+    final String nb = e.s('nb');
+    final String al = e.s('al');
+    if (r.isEmpty || nb.isEmpty || al.isEmpty) continue;
+    final String v = asifVerdict(r, nb, al);
+    final String label = v.split('：').first.replaceAll('（有代价）', '');
+    c[label] = (c[label] ?? 0) + 1;
+  }
+  return c;
+}
+
+/// 放弃实验：预测的难受程度与实际平均的对照。只算记录了至少 2 天的实验。
+({int n, double? predicted, double? actual}) forgoSummary(Iterable<ZEntry> forgos) {
+  double p = 0, a = 0;
+  int n = 0;
+  for (final ZEntry e in forgos) {
+    final List<Map<String, dynamic>> log = e.maps('log');
+    if (log.length < 2) continue;
+    double sum = 0;
+    for (final Map<String, dynamic> x in log) {
+      sum += x['v'] is num ? (x['v'] as num).toDouble() : 0;
+    }
+    p += (e.i('pred') ?? 5).toDouble();
+    a += sum / log.length;
+    n += 1;
+  }
+  if (n == 0) return (n: 0, predicted: null, actual: null);
+  return (n: n, predicted: p / n, actual: a / n);
+}
+
+/// 引擎预测「选 A 的概率」是否命中；恰好 0.5 不算预测，返回 null。
+bool? engineHit(double probA, String actual) {
+  if (probA == 0.5) return null;
+  final String side = probA > 0.5 ? 'a' : 'b';
+  return side == actual;
+}
+
+// ---------------------------------------------------------------------------
+// 一致度的敏感性检验
+// ---------------------------------------------------------------------------
+
+/// 换一种看法之后，哪个选项占上风：'a' / 'b' / 'tie'（差距小于 3 分算差不多）。
+class ZScenario {
+  const ZScenario(this.label, this.winner);
+
+  final String label;
+  final String winner;
+}
+
+/// 结论经不经得起换看法：基线与各种换法的对照。
+class ZSensitivity {
+  const ZSensitivity(this.baseline, this.scenarios);
+
+  /// 基线的结论：'a' / 'b' / 'tie'。
+  final String baseline;
+  final List<ZScenario> scenarios;
+
+  /// 结论和基线一致的换法数。
+  int get same => scenarios.where((ZScenario s) => s.winner == baseline).length;
+
+  /// 结论反过来的换法数（基线和这种换法都有明确的赢家，而且不同）。
+  int get flipped => scenarios
+      .where((ZScenario s) => baseline != 'tie' && s.winner != 'tie' && s.winner != baseline)
+      .length;
+
+  /// 其余的：有一边是「差不多」，说不清。
+  int get vague => scenarios.length - same - flipped;
+
+  bool get robust => flipped == 0;
+}
+
+/// 对一致度的结论做敏感性检验：逐个换看法，看赢家会不会翻转。
+/// 换法包括：欲求一律等权；只看被行为支持的欲求；逐个去掉一条欲求；
+/// 换成「本周」或「十年」的尺度；以及某个选项的不可控外部条件不成立（它就做不成）。
+/// 没有结果时返回 null。
+ZSensitivity? sensitivityOf(
+  ZAlignResult r,
+  List<ZDesire> desires, {
+  bool aUncontrollable = false,
+  bool bUncontrollable = false,
+}) {
+  final int n = math.min(r.rows.length, desires.length);
+  if (n == 0) return null;
+  final List<int> all = List<int>.generate(n, (int i) => i);
+
+  String winner(double a, double b) {
+    final double d = a - b;
+    if (d.abs() < 3) return 'tie';
+    return d > 0 ? 'a' : 'b';
+  }
+
+  String run(Iterable<int> idx, double Function(int) weight, int horizon) {
+    double sa = 0, sb = 0, tw = 0;
+    for (final int i in idx) {
+      final double w = weight(i);
+      if (w <= 0) continue;
+      final ZAlignRow row = r.rows[i];
+      sa += w * (horizon < row.a.length ? row.a[horizon] : 50);
+      sb += w * (horizon < row.b.length ? row.b[horizon] : 50);
+      tw += w;
+    }
+    if (tw == 0) return 'tie';
+    return winner(sa / tw, sb / tw);
+  }
+
+  double byTier(int i) => desireWeight(desires[i]);
+  final String base = run(all, byTier, 1);
+  final List<ZScenario> out = <ZScenario>[
+    ZScenario('一年 · 所有欲求等权', run(all, (int i) => 1, 1)),
+  ];
+  final bool anyStrong = desires.take(n).any((ZDesire d) => d.strong);
+  final bool anyWeak = desires.take(n).any((ZDesire d) => !d.strong);
+  if (anyStrong && anyWeak) {
+    out.add(ZScenario('一年 · 只看被行为支持的欲求',
+        run(all, (int i) => desires[i].strong ? 1 : 0, 1)));
+  }
+  if (n >= 2) {
+    for (int k = 0; k < n; k++) {
+      out.add(ZScenario('一年 · 去掉「${desires[k].text}」',
+          run(all.where((int i) => i != k), byTier, 1)));
+    }
+  }
+  out.add(ZScenario('本周尺度', run(all, byTier, 0)));
+  out.add(ZScenario('十年尺度', run(all, byTier, 2)));
+  if (aUncontrollable) out.add(const ZScenario('若 A 的不可控外部条件不成立（A 做不成）', 'b'));
+  if (bUncontrollable) out.add(const ZScenario('若 B 的不可控外部条件不成立（B 做不成）', 'a'));
+  return ZSensitivity(base, out);
+}

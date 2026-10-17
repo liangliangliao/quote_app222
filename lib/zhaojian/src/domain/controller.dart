@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/models.dart';
 import '../data/zhaojian_dao.dart';
+import '../data/zhaojian_schema.dart';
 import '../zhaojian_oracle.dart';
 import 'analysis.dart';
 
@@ -18,7 +21,60 @@ class ZhaojianController extends ChangeNotifier {
   List<ZLog> logs = <ZLog>[];
   List<ZHypothesis> hypotheses = <ZHypothesis>[];
   List<ZMiss> misses = <ZMiss>[];
+  final Map<String, List<ZEntry>> _items = <String, List<ZEntry>>{};
+  Map<String, String> _kv = <String, String>{};
   bool loaded = false;
+
+  /// 进行中的计划。
+  int get activePlans =>
+      items('plan').where((ZEntry e) => e.s('st') == '进行中').length;
+
+  /// 三项检验还没填完的假设行动。
+  int get activeAsif => items('asif')
+      .where((ZEntry e) =>
+          e.s('r').isEmpty || e.s('nb').isEmpty || e.s('al').isEmpty)
+      .length;
+
+  /// 还没做完的小探测。
+  int get activeProbes => items('probe').where((ZEntry e) => !e.b('done')).length;
+
+  /// 记录天数还不够的放弃实验。
+  int get activeForgo => items('forgo')
+      .where((ZEntry e) => e.maps('log').length < (e.i('days') ?? 3))
+      .length;
+
+  /// 同时进行的事项总数：太多就是分散。
+  int get activeThreads => activePlans + activeAsif + activeProbes + activeForgo;
+
+  /// 封存时 AI 引擎对「选 A 的概率」的预测（开牌前不给用户看，避免影响自己的判断）。
+  double? engineProbA(int? decisionId) =>
+      decisionId == null ? null : double.tryParse(kv('eng.$decisionId'));
+
+  /// 封存时挑选的、适用于这个决定的签名。
+  ZEntry? signatureOf(int? decisionId) {
+    if (decisionId == null) return null;
+    final int? sid = int.tryParse(kv('sig.$decisionId'));
+    if (sid == null) return null;
+    for (final ZEntry e in items('sig')) {
+      if (e.id == sid) return e;
+    }
+    return null;
+  }
+
+  /// 某一类通用条目（按创建时间从早到晚）。
+  List<ZEntry> items(String kind) => _items[kind] ?? const <ZEntry>[];
+
+  /// 键值（自评的长处短处、选定的线、自述线索等）。
+  String kv(String key, [String fallback = '']) => _kv[key] ?? fallback;
+
+  /// 行为证据的条数：行为记录、已开牌的决定、行为考古、他人观察、回望、有结果的绳子。
+  int get evidenceCount =>
+      logs.length +
+      revealed.length +
+      items('arch').length +
+      items('obs').length +
+      items('reg').length +
+      items('rope').where((ZEntry r) => r.s('ok').isNotEmpty).length;
 
   List<ZDecision> get pending =>
       decisions.where((ZDecision d) => !d.revealed).toList().reversed.toList();
@@ -34,6 +90,11 @@ class ZhaojianController extends ChangeNotifier {
     logs = await dao.allLogs();
     hypotheses = await dao.allHypotheses();
     misses = await dao.allMisses();
+    _items.clear();
+    for (final ZEntry it in await dao.allItems()) {
+      _items.putIfAbsent(it.kind, () => <ZEntry>[]).add(it);
+    }
+    _kv = await dao.allKv();
     loaded = true;
     notifyListeners();
   }
@@ -145,6 +206,142 @@ class ZhaojianController extends ChangeNotifier {
   Future<void> deleteHypothesis(int id) async {
     await dao.deleteHypothesis(id);
     await load();
+  }
+
+  Future<ZEntry> addItem(String kind, Map<String, dynamic> data) async {
+    final ZEntry it = ZEntry(kind: kind, data: data);
+    it.id = await dao.insertItem(it);
+    _items.putIfAbsent(kind, () => <ZEntry>[]).add(it);
+    notifyListeners();
+    return it;
+  }
+
+  Future<void> saveItem(ZEntry it) async {
+    it.updatedAt = DateTime.now();
+    await dao.updateItem(it);
+    notifyListeners();
+  }
+
+  Future<void> removeItem(ZEntry it) async {
+    final int? id = it.id;
+    if (id != null) await dao.deleteItem(id);
+    _items[it.kind]?.remove(it);
+    notifyListeners();
+  }
+
+  /// 某条主线被标注过的行为条数（行为记录、已开牌的决定、带主线标注的各类条目）。
+  int actsOfHypothesis(int id) {
+    int n = logs.where((ZLog l) => l.hypId == id).length +
+        revealed.where((ZDecision d) => d.hypId == id).length;
+    for (final List<ZEntry> list in _items.values) {
+      n += list.where((ZEntry e) => e.i('th') == id).length;
+    }
+    return n;
+  }
+
+  /// 某条主线在几个不同的人生阶段出现过（来自带阶段标注的行为考古）。
+  int phasesOfHypothesis(int id) {
+    final Set<String> ph = <String>{};
+    for (final ZEntry e in items('arch')) {
+      if (e.i('th') == id && e.s('ph').isNotEmpty) ph.add(e.s('ph'));
+    }
+    return ph.length;
+  }
+
+  /// 导出全部数据（JSON 文本），用于备份或带给别人看。
+  String exportJson() {
+    return const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
+      'app': 'zhaojian',
+      'schemaVersion': ZhaojianSchema.schemaVersion,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'decisions': decisions.map((ZDecision d) => d.toRow()).toList(),
+      'logs': logs.map((ZLog l) => l.toRow()).toList(),
+      'hypotheses': hypotheses.map((ZHypothesis h) => h.toRow()).toList(),
+      'misses': misses.map((ZMiss m) => m.toRow()).toList(),
+      'items': <String, dynamic>{
+        for (final MapEntry<String, List<ZEntry>> e in _items.entries)
+          e.key: e.value.map((ZEntry i) => i.toRow()).toList(),
+      },
+      'kv': _kv,
+    });
+  }
+
+  /// 从 [exportJson] 导出的备份恢复，**替换**现有全部数据。
+  /// 成功返回 null；失败返回原因，现有数据保持不变。
+  Future<String?> restoreJson(String raw) async {
+    dynamic v;
+    try {
+      v = jsonDecode(raw.trim());
+    } catch (_) {
+      return '这不是合法的 JSON。';
+    }
+    if (v is! Map || v['app'] != 'zhaojian') return '这不是照见导出的备份。';
+    final dynamic ver = v['schemaVersion'];
+    if (ver is num && ver > ZhaojianSchema.schemaVersion) {
+      return '这份备份来自更新的版本，请先把应用更新到最新。';
+    }
+    List<Map<String, Object?>> rows(dynamic x) => x is! List
+        ? <Map<String, Object?>>[]
+        : x.whereType<Map>().map((Map m) => Map<String, Object?>.from(m)).toList();
+    final List<Map<String, Object?>> items = <Map<String, Object?>>[];
+    final dynamic rawItems = v['items'];
+    if (rawItems is Map) {
+      for (final dynamic list in rawItems.values) {
+        items.addAll(rows(list));
+      }
+    }
+    final Map<String, String> kv = <String, String>{};
+    final dynamic rawKv = v['kv'];
+    if (rawKv is Map) {
+      rawKv.forEach((dynamic a, dynamic b) => kv['$a'] = '$b');
+    }
+    try {
+      await dao.replaceAll(
+        decisions: rows(v['decisions']),
+        logs: rows(v['logs']),
+        hyps: rows(v['hypotheses']),
+        misses: rows(v['misses']),
+        items: items,
+        kv: kv,
+      );
+    } catch (e) {
+      return '恢复失败，现有数据没有改动。';
+    }
+    await load();
+    return null;
+  }
+
+  Future<void> setKv(String key, String value) async {
+    _kv[key] = value;
+    await dao.setKv(key, value);
+    notifyListeners();
+  }
+
+  /// 给一个条目标注「它表达了（或背离了）哪条主线」，同步计入该假设的支持或反驳。
+  /// 换了主线或换了方向会先撤销上一次的计数；取消标注时 [hypId] 传 null。
+  Future<void> tagItem(ZEntry it, int? hypId, String kind) async {
+    final int? oldId = it.i('th');
+    final String oldKind = it.s('tk', 'sup');
+    if (oldId != null) await _unbumpHypothesis(oldId, oldKind);
+    if (hypId == null) {
+      it.data.remove('th');
+      it.data.remove('tk');
+    } else {
+      it.data['th'] = hypId;
+      it.data['tk'] = kind;
+      await _bumpHypothesis(hypId, kind);
+    }
+    await dao.updateItem(it);
+    await load();
+  }
+
+  Future<void> _unbumpHypothesis(int id, String kind) async {
+    final ZHypothesis? h = await dao.findHypothesis(id);
+    if (h == null) return;
+    final List<int> list = kind == 'ref' ? h.ref : h.sup;
+    if (list.isNotEmpty) list.removeLast();
+    h.status = hypothesisStatus(h.sup.length, h.ref.length);
+    await dao.updateHypothesis(h);
   }
 
   Future<void> _bumpHypothesis(int id, String kind) async {

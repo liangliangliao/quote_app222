@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../copy.dart';
+import '../data/models.dart';
+import '../domain/analysis.dart';
+import '../domain/controller.dart';
+
 const Color zAccent = Color(0xFF2C5D70);
 const Color zInk = Color(0xFF2B2B2B);
 const Color zMuted = Color(0xFF8A7F6E);
@@ -174,3 +179,219 @@ String zPercent(double? v) {
   if (v == null) return '-';
   return '${(v * 100).round()}%';
 }
+
+/// 一个页面的外壳：标题、控制器变化时重建、统一的边距。
+class ZPage extends StatelessWidget {
+  const ZPage({
+    super.key,
+    required this.title,
+    required this.controller,
+    required this.content,
+  });
+
+  final String title;
+  final ZhaojianController controller;
+  final List<Widget> Function(BuildContext context) content;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (BuildContext ctx, Widget? child) {
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            title: Text(title),
+            backgroundColor: Colors.white,
+            foregroundColor: zInk,
+            elevation: 0,
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+            children: content(ctx),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 表单里的一个输入框。
+class ZFieldSpec {
+  const ZFieldSpec(this.key, this.hint, {this.lines = 1});
+
+  final String key;
+  final String hint;
+  final int lines;
+}
+
+/// 一组输入框加一个提交按钮；提交成功后清空。
+/// [required] 里的键必须非空；留空则要求至少有一个框非空。
+class ZForm extends StatefulWidget {
+  const ZForm({
+    super.key,
+    required this.fields,
+    required this.submitLabel,
+    required this.onSubmit,
+    this.mustFill = const <String>[],
+  });
+
+  final List<ZFieldSpec> fields;
+  final String submitLabel;
+  final Future<void> Function(Map<String, String> values) onSubmit;
+  final List<String> mustFill;
+
+  @override
+  State<ZForm> createState() => _ZFormState();
+}
+
+class _ZFormState extends State<ZForm> {
+  late final Map<String, TextEditingController> _c =
+      <String, TextEditingController>{
+    for (final ZFieldSpec f in widget.fields) f.key: TextEditingController(),
+  };
+
+  @override
+  void dispose() {
+    for (final TextEditingController c in _c.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final Map<String, String> v = <String, String>{
+      for (final MapEntry<String, TextEditingController> e in _c.entries)
+        e.key: e.value.text.trim(),
+    };
+    final bool ok = widget.mustFill.isEmpty
+        ? v.values.any((String t) => t.isNotEmpty)
+        : widget.mustFill.every((String k) => (v[k] ?? '').isNotEmpty);
+    if (!ok) {
+      zSnack(context, '先写点内容');
+      return;
+    }
+    await widget.onSubmit(v);
+    if (!mounted) return;
+    for (final TextEditingController c in _c.values) {
+      c.clear();
+    }
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        for (final ZFieldSpec f in widget.fields) ...<Widget>[
+          TextField(
+            controller: _c[f.key],
+            minLines: 1,
+            maxLines: f.lines,
+            decoration: zInput(f.hint),
+          ),
+          const SizedBox(height: 8),
+        ],
+        FilledButton(onPressed: _submit, child: Text(widget.submitLabel)),
+      ],
+    );
+  }
+}
+
+/// 「这个行为表达了哪条主线」的选择：点假设，再选表达或背离；再点一次取消。
+Widget zHypPicker({
+  required List<ZHypothesis> hyps,
+  required int? current,
+  required String kind,
+  required void Function(int? hypId, String kind) onChange,
+}) {
+  final List<ZHypothesis> shown =
+      hyps.length > 6 ? hyps.sublist(hyps.length - 6) : hyps;
+  if (shown.isEmpty) return const SizedBox.shrink();
+  final int idx = current == null
+      ? -1
+      : shown.indexWhere((ZHypothesis h) => h.id == current);
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const ZNote('这个行为表达了哪条主线？（可选，会自动计入该假设的支持或反驳）'),
+      zChoice(
+        labels: shown.map((ZHypothesis h) => h.text).toList(),
+        selected: idx < 0 ? null : idx,
+        onSelect: (int i) {
+          final int? hid = shown[i].id;
+          onChange(current == hid ? null : hid, kind);
+        },
+      ),
+      if (current != null)
+        zChoice(
+          labels: <String>['表达了它', '背离了它'],
+          selected: kind == 'ref' ? 1 : 0,
+          onSelect: (int i) => onChange(current, i == 0 ? 'sup' : 'ref'),
+        ),
+    ],
+  );
+}
+
+/// 反宿命论护栏：文字里出现「反正」「注定」「本性难移」之类，实时提示换一种说法。可以关闭。
+class ZGuard extends StatelessWidget {
+  const ZGuard({super.key, required this.controllers, required this.app});
+
+  final List<TextEditingController> controllers;
+  final ZhaojianController app;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge(controllers),
+      builder: (BuildContext context, Widget? child) {
+        if (app.kv('guard.off') == '1') return const SizedBox.shrink();
+        final String? hit =
+            zFatalism(controllers.map((TextEditingController c) => c.text).join('\n'));
+        if (hit == null) return const SizedBox.shrink();
+        return ZItem(
+          warn: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('「$hit」', style: const TextStyle(fontWeight: FontWeight.w700)),
+              const ZNote(ZCopy.fatalismNote, warn: true),
+              TextButton(
+                onPressed: () => app.setKv('guard.off', '1'),
+                child: const Text('不再提示'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 绝望或自伤的迹象：出现就停下练习，转向求助。
+class ZCrisisCard extends StatelessWidget {
+  const ZCrisisCard({super.key, required this.controllers});
+
+  final List<TextEditingController> controllers;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge(controllers),
+      builder: (BuildContext context, Widget? child) {
+        if (!zCrisis(controllers.map((TextEditingController c) => c.text).join('\n'))) {
+          return const SizedBox.shrink();
+        }
+        return const ZItem(
+          warn: true,
+          child: Text(ZCopy.crisisMessage, style: TextStyle(height: 1.6)),
+        );
+      },
+    );
+  }
+}
+
+/// 是否有任何一段文字出现绝望或自伤的迹象。
+bool zAnyCrisis(Iterable<TextEditingController> cs) =>
+    zCrisis(cs.map((TextEditingController c) => c.text).join('\n'));

@@ -152,6 +152,89 @@ class GrowthPage extends StatelessWidget {
     );
   }
 
+  /// 绳子、像在演、假设行动、放弃实验、签名、和引擎的对照。
+  List<Widget> _moreSections(List<ZDecision> rev) {
+    final double? keep = ropeKeepRate(
+        controller.items('rope').map((ZEntry r) => r.list('seq')));
+    final ({double? all, double? early, double? recent}) act =
+        actingShare(controller.logs.map((ZLog l) => l.reaction).toList());
+    final Map<String, int> asif = asifVerdictCounts(controller.items('asif'));
+    final int asifDone = asif.values.fold(0, (int a, int b) => a + b);
+    final int came = controller
+        .items('asif')
+        .where((ZEntry e) => e.s('nb') == '成真了')
+        .length;
+    final ({int n, double? predicted, double? actual}) fg =
+        forgoSummary(controller.items('forgo'));
+    final List<ZEntry> sigs = controller.items('sig');
+    final int confirmed = sigs.where((ZEntry e) => e.b('conf')).length;
+    int mineN = 0, mineHit = 0, engN = 0, engHit = 0;
+    for (final ZDecision d in rev) {
+      final double? pa = controller.engineProbA(d.id);
+      final String? actual = d.actual;
+      if (pa == null || actual == null) continue;
+      final bool? h = engineHit(pa, actual);
+      if (h == null) continue;
+      mineN += 1;
+      if (d.hit) mineHit += 1;
+      engN += 1;
+      if (h) engHit += 1;
+    }
+    String f(double? v) => v == null ? '-' : v.toStringAsFixed(1);
+    return <Widget>[
+      ZSection(
+        title: '绳子守住了吗？',
+        children: <Widget>[
+          ZNote(keep == null
+              ? '还没有绳子的结果。守住或被破都记下来：这比「我有决心」更能说明问题。'
+              : '绳子整体守住率 ${zPercent(keep)}。被破多的绳子，多半是系得太晚或太松。'),
+        ],
+      ),
+      ZSection(
+        title: '「像在演」占比',
+        children: <Widget>[
+          ZNote(act.all == null
+              ? '还没有行为记录的反应。'
+              : '事后反应里「像在演」占 ${zPercent(act.all)}'
+                  '${act.early == null ? '' : '（早期 ${zPercent(act.early)} → 近期 ${zPercent(act.recent)}）'}。'
+                  '占比高，说明你做的事和你真正想要的有距离；这只是线索。'),
+        ],
+      ),
+      ZSection(
+        title: '假设行动：弄假成真了吗？',
+        children: <Widget>[
+          ZNote(asifDone == 0
+              ? '还没有填完三项检验的假设行动。'
+              : '结论：${topCounts(asif)}。担心成真 $came / ${controller.items('asif').length} 次。'),
+        ],
+      ),
+      ZSection(
+        title: '放弃：预测 vs 实际',
+        children: <Widget>[
+          ZNote(fg.n == 0
+              ? '还没有记录至少两天的放弃实验。'
+              : '${fg.n} 个实验：预测的难受程度平均 ${f(fg.predicted)}，实际平均 ${f(fg.actual)}。'
+                  '${(fg.actual ?? 0) < (fg.predicted ?? 0) - 1 ? '你多半高估了放弃的代价。' : ''}'),
+        ],
+      ),
+      ZSection(
+        title: '签名',
+        children: <Widget>[
+          ZNote('候选 ${sigs.length} 个，已确认 $confirmed 个。签名只在不同情境里反复应验后才算数。'),
+        ],
+      ),
+      ZSection(
+        title: '你 vs AI 引擎',
+        children: <Widget>[
+          ZNote(mineN < 3
+              ? '封存时让引擎也预测、并已开牌的决定还不到 3 个（现在 $mineN 个）。'
+              : '你自己预测命中 ${zPercent(mineHit / mineN)}；AI 引擎命中 ${zPercent(engHit / engN)}（共 $mineN 个决定）。'
+                  '样本小，只是对照：引擎不是标准答案，它也只看你写下的动机。'),
+        ],
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -184,6 +267,7 @@ class GrowthPage extends StatelessWidget {
               _freedomSection(rev),
               _imagerySection(rev),
               _alignSection(rev),
+              ..._moreSections(rev),
               ZSection(
                 title: '反应与身体信号',
                 children: <Widget>[

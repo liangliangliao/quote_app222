@@ -14,6 +14,10 @@ abstract class ZhaojianOracle {
   /// 这个引擎会不会把用户写下的内容发给外部服务。界面据此决定是否披露。
   bool get sendsData => false;
 
+  /// 通用文字生成（[generate]）实际发给谁。默认与 [label] 相同；组合引擎里文字生成
+  /// 只走文字引擎，不走打分引擎，所以要单独说明。
+  String get generateLabel => label;
+
   /// 针对这个选择补出用户可能没意识到的动机。返回空表示没有（用本地库）。
   Future<List<ZMotive>> completeMotives({
     required String question,
@@ -28,6 +32,15 @@ abstract class ZhaojianOracle {
     required String situation,
     required List<ZMotive> motives,
   });
+
+  /// 通用的文字生成：模块自己拼提示词、自己解析结果。
+  /// 不可用（没配置、超时、失败）时返回空串；调用方要有不依赖它的兜底。
+  Future<String> generate({
+    required String prompt,
+    required String purpose,
+    int maxTokens = 2500,
+  }) async =>
+      '';
 
   /// 评估两个选项对所选欲求的一致度（本周/一年/十年）和难度。
   /// 默认没有引擎：返回空结果，界面改为用户自评。
