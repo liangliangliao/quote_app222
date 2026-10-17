@@ -46,7 +46,7 @@
 
 ## 验证范围
 
-仅运行 `test/self_os/` 和本模块的静态分析；没有运行其他模块测试、全仓测试或 APK / 全应用构建。
+测试范围仅为 `test/self_os/` 和本模块的静态分析；不运行其他模块测试或全仓测试。APK 编译采用完整应用入口，包含发现之旅中的 Self OS。
 
 本次结果：29 项专项测试全部通过；上述范围的静态分析无问题。另使用中文字体与 Material 图标渲染了 390×844 的首页，检查实际显示。
 
@@ -60,3 +60,16 @@ flutter test --no-pub test/self_os --reporter expanded
 测试覆盖：四类分流、历史现场失败升级、预测缺失、正反动机约束、快照不可追溯改写、每轮复盘唯一性、K3→K1、Why Tree 合并回退、证据模式门槛、冲突矩阵、个人指纹、概率校准、SQLite 重开持久化、原子路线取舍、损坏数据保护、AI 结构校验与取消后续批次、入口导航、案例创建、失败恢复、复盘闭环、窄屏与大字体。
 
 真实模型请求未执行：AI 测试使用注入的响应与失败，验证请求边界和数据处理；真实效果和响应长度仍需在设备已配置的 AI 服务下验证。
+
+## GitHub Actions 与 APK
+
+使用源码工作流 `.github/workflows/android_build_source_repo.yml`（显示名称 **Build Android APK**），不要选择读取历史 ZIP 包的同名工作流。手动运行时选择 `codex/self-os-v3-discovery` 分支，并勾选 `self_os_checks`，依次执行 Self OS 专项静态分析、专项测试和完整应用的 release APK 编译。未勾选时保持原有的仅编译行为。
+
+```sh
+gh workflow run android_build_source_repo.yml \
+  --repo liangliangliao/quote_app222 \
+  --ref codex/self-os-v3-discovery \
+  --field self_os_checks=true
+```
+
+成功后在运行页面的 **Artifacts → quote_app-apk** 下载 ZIP，解压得到 `app-release.apk`。`[skip ci]` 仅用于避免推送或 PR 触发其他模块的测试，不影响上述手动运行。
