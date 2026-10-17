@@ -8,9 +8,8 @@ import 'package:quote_app/meditation_module/meditation_models.dart';
 
 import 'duration_fixtures.dart';
 import 'experiential_mentor_test.dart'
-    show FakeAi, FakeDao, FakeSettings, recommendation, example, topic;
-import 'response_recovery_test.dart'
-    show cognitiveChangeScript, RepairTimeoutAi;
+    show FakeAi, FakeDao, FakeSettings, recommendation;
+import 'response_recovery_test.dart' show cognitiveChangeScript;
 
 Future<MeditationAiGenerationResult> generateTimed(FakeAi ai, FakeDao dao,
         {int minutes = 8}) async =>
@@ -137,54 +136,25 @@ void main() {
     expect(plan.pausesAdjusted, isFalse);
   });
 
-  test('明显偏长时只重写一次，合格短版优先于原完整版本', () async {
-    final short = jsonEncode(example(short: true)).replaceAll(topic, '认知转变');
-    final ai = FakeAi([jsonEncode(cognitiveChangeScript()), short]);
+  test('明显超时也只交付原完整版本，不花费第二次调用精简', () async {
+    final script = cognitiveChangeScript();
+    final raw = jsonEncode(script);
+    final ai = FakeAi([raw]);
     final dao = FakeDao();
     final result = await generateTimed(ai, dao, minutes: 1);
     expect(result.targetDurationSeconds, 60);
-    expect(result.session.durationSeconds, 60);
-    expect(ai.calls, hasLength(2));
-    expect(ai.calls.last['purpose'], 'meditation.daily_script.repair');
-    expect((dao.outputs.single['input'] as Map)['duration_repair_requested'],
-        isTrue);
-    expectPlayable(result.session);
-  });
-
-  test('精简请求超时后仍提供原完整引导与真实时长，不变成内容失败', () async {
-    final script = cognitiveChangeScript();
-    final raw = jsonEncode(script);
-    final dao = FakeDao();
-    final result = await generateTimed(RepairTimeoutAi(raw), dao, minutes: 1);
     expect(result.session.durationSeconds, greaterThan(60));
+    expect(ai.calls, hasLength(1));
     expect(
         result.session.steps
             .map((s) => s.text)
             .join()
             .replaceAll(RegExp(r'\s'), ''),
         narration(script));
-    expectPlayable(result.session);
     expect(dao.outputs.single['raw'], raw);
     expect(dao.outputs.single['success'], isTrue);
-    expect((dao.outputs.single['input'] as Map)['duration_repair_error'],
-        contains('repair timed out'));
-  });
-
-  test('精简结果丢失体验设计时继续提供原合格版本', () async {
-    final script = cognitiveChangeScript();
-    final broken = cognitiveChangeScript()..remove('experience_design');
-    final ai = FakeAi([jsonEncode(script), jsonEncode(broken)]);
-    final dao = FakeDao();
-    final result = await generateTimed(ai, dao, minutes: 1);
-    expect(
-        result.session.steps
-            .map((s) => s.text)
-            .join()
-            .replaceAll(RegExp(r'\s'), ''),
-        narration(script));
-    expectPlayable(result.session);
-    expect(ai.calls, hasLength(2));
-    expect((dao.outputs.single['input'] as Map)['quality_repair_applied'],
+    expect((dao.outputs.single['input'] as Map)['duration_repair_requested'],
         isFalse);
+    expectPlayable(result.session);
   });
 }

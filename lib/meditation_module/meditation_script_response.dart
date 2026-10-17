@@ -18,33 +18,67 @@ class NormalizedMeditationScript {
 class MeditationScriptResponse {
   static NormalizedMeditationScript? read(String raw,
       {required int durationSeconds}) {
-    final decoded = decodeObject(raw);
-    if (decoded == null) return null;
-    final script = Map<String, dynamic>.from(decoded);
     final corrections = <String>{};
+    final decoded = decodeObject(raw);
+    final Map<String, dynamic> script;
+    if (decoded != null) {
+      script = Map<String, dynamic>.from(decoded);
+    } else {
+      final prose = _plainNarration(raw);
+      if (prose == null) return null;
+      script = {
+        'segments': [
+          {'text': prose}
+        ]
+      };
+      corrections.add('plain_text_narration');
+    }
     MeditationDurationPlan? durationPlan;
     if (script['duration_minutes'] != durationSeconds ~/ 60) {
       script['duration_minutes'] = durationSeconds ~/ 60;
       corrections.add('duration_from_user_selection');
     }
 
-    final original = script['segments'] ?? script['steps'];
+    var original = script['segments'] ?? script['steps'];
+    if (original is! List || original.isEmpty) {
+      final prose = _firstText([
+        if (original is String) original,
+        script['narration'],
+        script['script'],
+        script['content'],
+        script['guide'],
+        script['text'],
+      ]);
+      if (prose != null) {
+        original = [
+          {'text': prose}
+        ];
+        corrections.add('narration_field');
+      }
+    }
     if (original is! List)
       return NormalizedMeditationScript(script, corrections.toList());
     final segments = <dynamic>[];
     var cursor = 0;
     for (final item in original) {
-      if (item is! Map) {
-        segments.add(item); // Do not silently drop malformed content.
+      final Map<String, dynamic> segment;
+      if (item is String) {
+        segment = {'text': item};
+        corrections.add('string_segment');
+      } else if (item is Map) {
+        segment = Map<String, dynamic>.from(item);
+      } else {
+        corrections.add('empty_or_non_text_segments');
         continue;
       }
-      final segment = Map<String, dynamic>.from(item);
-      final phase = '${segment['phase'] ?? ''}'.trim().toLowerCase();
+      final rawPhase = '${segment['phase'] ?? ''}'.trim().toLowerCase();
+      final phase = rawPhase.isEmpty ? 'practice' : rawPhase;
       segment['phase'] = phase;
-      final text = segment['text'] ?? segment['content'] ?? segment['guide'];
-      if (text is! String || text.trim().isEmpty) {
-        segment['text'] = text;
-        segments.add(segment);
+      if (rawPhase.isEmpty) corrections.add('optional_phase');
+      final text =
+          _firstText([segment['text'], segment['content'], segment['guide']]);
+      if (text == null) {
+        corrections.add('empty_or_non_text_segments');
         continue;
       }
       final intent = '${segment['intent'] ?? ''}'.trim();
@@ -145,7 +179,11 @@ class MeditationScriptResponse {
         corrections.add('optional_metadata');
       }
     }
-    if (script['type'] == null || '${script['type']}'.trim().isEmpty) {
+    if (_firstText([script['title']]) == null) {
+      script['title'] = '本次冥想引导';
+      corrections.add('optional_metadata');
+    }
+    if (_firstText([script['type']]) == null) {
       script['type'] = '体验式冥想';
       corrections.add('optional_metadata');
     }
@@ -159,6 +197,37 @@ class MeditationScriptResponse {
     }
     return NormalizedMeditationScript(script, corrections.toList(),
         durationPlan: durationPlan);
+  }
+
+  static String? _firstText(List<dynamic> values) {
+    for (final value in values) {
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  // Preserve prose without requiring JSON, but never read broken JSON or an
+  // HTML gateway error aloud as a meditation. No model repair is requested.
+  static String? _plainNarration(String raw, [int depth = 0]) {
+    if (depth > 3) return null;
+    final text = raw
+        .trim()
+        .replaceFirst(
+            RegExp(r'^```(?:json|text|markdown)?\s*', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'\s*```$'), '')
+        .trim();
+    if (text.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(text);
+      return decoded is String ? _plainNarration(decoded, depth + 1) : null;
+    } on FormatException {
+      if (RegExp(r'^[\{\[\"]|^```|^<(?:!doctype|html|head|body)\b',
+              caseSensitive: false)
+          .hasMatch(text)) {
+        return null;
+      }
+      return text;
+    }
   }
 
   static Map<String, dynamic>? decodeObject(String raw, [int depth = 0]) {

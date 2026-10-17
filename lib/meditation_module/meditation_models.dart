@@ -154,11 +154,11 @@ class MeditationGenerationException implements Exception {
       case MeditationGenerationFailureKind.configuration:
         return '尚未配置可用的 AI 模型，请检查 App 现有的 AI 设置。';
       case MeditationGenerationFailureKind.emptyResponse:
-        return 'AI 返回了空内容，请重试生成。';
+        return 'AI 返回了空内容。未自动重试，你可以选择重新生成。';
       case MeditationGenerationFailureKind.request:
         return 'AI 请求未完成，请重试；具体请求错误已记录在日志中。';
       case MeditationGenerationFailureKind.format:
-        return 'AI 已返回内容，但未能识别为完整的冥想脚本。${repairFailed ? '自动修复未完成。' : '已尝试自动修复格式。'}请重试生成，具体原因已记录在日志中。';
+        return 'AI 已返回内容，但未能读取到可播放的引导正文。原始返回已保留在日志中；未自动重写，你可以选择重新生成。';
       case MeditationGenerationFailureKind.quality:
         final detail = issues
             .map(_friendlyIssue)

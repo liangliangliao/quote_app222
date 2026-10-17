@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -62,30 +61,6 @@ Map<String, dynamic> cognitiveChangeScript() {
   };
   script['depth_evidence'] = depthEvidence(script['segments'] as List);
   return script;
-}
-
-class RepairTimeoutAi extends FakeAi {
-  RepairTimeoutAi(String initial) : super([initial]);
-
-  @override
-  Future<String> generateText(
-      {required String prompt,
-      required String purpose,
-      String? systemPrompt,
-      int maxTokens = 1800,
-      bool expectJson = false,
-      String? forcedProvider,
-      String? forcedModel,
-      double? temperature}) {
-    if (purpose.endsWith('.repair')) throw TimeoutException('repair timed out');
-    return super.generateText(
-        prompt: prompt,
-        purpose: purpose,
-        systemPrompt: systemPrompt,
-        maxTokens: maxTokens,
-        expectJson: expectJson,
-        temperature: temperature);
-  }
 }
 
 class UnavailableAi extends FakeAi {
@@ -233,45 +208,48 @@ void main() {
     expect(ai.calls, hasLength(1));
   });
 
-  test('截断 JSON 经过一次模型修复后交付，初始正文和修复状态有记录', () async {
+  test('无法读取的截断 JSON 保留原响应，仅请求一次且如实说明未自动重写', () async {
     final full = jsonEncode(cognitiveChangeScript());
-    final ai = FakeAi([full.substring(0, full.length - 40), full]);
+    final raw = full.substring(0, full.length - 40);
+    final ai = FakeAi([raw]);
+    final dao = FakeDao();
+    await expectLater(
+        generate(ai, dao),
+        throwsA(isA<MeditationGenerationException>()
+            .having(
+                (e) => e.kind, 'kind', MeditationGenerationFailureKind.format)
+            .having((e) => e.userMessage, 'message', contains('未自动重写'))));
+    expect(ai.calls, hasLength(1));
+    expect(dao.outputs.single['raw'], raw);
+    expect(dao.outputs.single['success'], isFalse);
+  });
+
+  test('缺少体验设计附注时，保留正文并记录非阻断建议', () async {
+    final script = cognitiveChangeScript()..remove('experience_design');
+    final raw = jsonEncode(script);
+    final ai = FakeAi([raw]);
     final dao = FakeDao();
     final result = await generate(ai, dao);
     expect(result, isNotNull);
-    expect(ai.calls, hasLength(2));
-    expect(ai.calls.last['purpose'], 'meditation.daily_script.repair');
-    expect(
-        (dao.outputs.single['input'] as Map)['quality_repair_applied'], isTrue);
-  });
-
-  test('自动重写超时保留原响应，并明确是内容问题，避免说成配置或网络错误', () async {
-    final bad = cognitiveChangeScript()..remove('experience_design');
-    final raw = jsonEncode(bad);
-    final dao = FakeDao();
-    await expectLater(
-        generate(RepairTimeoutAi(raw), dao),
-        throwsA(isA<MeditationGenerationException>()
-            .having(
-                (e) => e.kind, 'kind', MeditationGenerationFailureKind.quality)
-            .having((e) => e.repairFailed, 'repair failed', isTrue)
-            .having((e) => e.userMessage, 'message', contains('AI 已返回引导'))
-            .having((e) => e.userMessage, 'reason', contains('感官、身体和情绪体验'))
-            .having(
-                (e) => e.userMessage, 'configuration', isNot(contains('配置')))));
+    expect(ai.calls, hasLength(1));
     expect(dao.outputs.single['raw'], raw);
-    expect(dao.outputs.single['error'], contains('repair timed out'));
+    expect(dao.outputs.single['success'], isTrue);
     expect((dao.outputs.single['input'] as Map)['quality_repair_requested'],
-        isTrue);
+        isFalse);
+    expect((dao.outputs.single['input'] as Map)['content_advisories'].join(),
+        contains('experience_design'));
   });
 
-  test('两次都是无法识别的响应时，呈现格式失败', () async {
+  test('只有元数据而没有正文时呈现可读的失败，不自动再请求', () async {
+    final ai = FakeAi(['{"title":"主题设计","experience_design":{}}']);
     final dao = FakeDao();
     await expectLater(
-        generate(FakeAi(['不是 JSON', '仍不是 JSON']), dao),
+        generate(ai, dao),
         throwsA(isA<MeditationGenerationException>().having(
             (e) => e.kind, 'kind', MeditationGenerationFailureKind.format)));
-    expect(dao.outputs.single['raw'], '不是 JSON');
+    expect(ai.calls, hasLength(1));
+    expect(
+        dao.outputs.single['raw'], '{"title":"主题设计","experience_design":{}}');
   });
 
   test('空响应与没有可用模型分别说明，不混入质量失败', () async {
@@ -285,7 +263,6 @@ void main() {
         throwsA(isA<MeditationGenerationException>().having((e) => e.kind,
             'kind', MeditationGenerationFailureKind.configuration)));
     expect(unavailable.calls, isEmpty);
-    expect(unavailable.designCalls, isEmpty);
   });
 
   test('诊断保存失败不吞掉已经可用的 AI 引导', () async {
@@ -304,16 +281,16 @@ void main() {
     expect(ai.calls, hasLength(1));
   });
 
-  test('正文实质超过一分钟预算且重写仍偏长时保留完整版本，并记录目标与预计时长', () async {
+  test('正文超过一分钟预算时直接保留完整版本，不额外请求精简', () async {
     final raw = jsonEncode(cognitiveChangeScript());
     final dao = FakeDao();
     final ai = FakeAi([raw, raw]);
     final result = await generate(ai, dao, minutes: 1);
     expect(result!.targetDurationSeconds, 60);
     expect(result.session.durationSeconds, greaterThan(60));
-    expect(ai.calls, hasLength(2));
+    expect(ai.calls, hasLength(1));
     final input = dao.outputs.single['input'] as Map;
-    expect(input['duration_repair_requested'], isTrue);
+    expect(input['duration_repair_requested'], isFalse);
     expect(input['duration_plan']['complete_version_offered'], isTrue);
     expect(input['quality_issues'], isEmpty);
     expect(dao.outputs.single['raw'], raw);

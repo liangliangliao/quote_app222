@@ -11,7 +11,7 @@ void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   sqfliteFfiInit();
 
-  test('内容拒绝原因能从全局日志的错误筛选中找到，并保留原始返回', () async {
+  test('确实没有可读正文时保留原响应，日志可按错误筛选', () async {
     final docs =
         await Directory.systemTemp.createTemp('meditation_validation_log_');
     databaseFactory = databaseFactoryFfi;
@@ -29,13 +29,13 @@ void main() {
         provider: 'openrouter',
         model: 'test-only-model',
         success: false,
-        errorMessage: 'AI 已返回引导，但还需要调整：缺少 embodied_shift',
+        errorMessage: 'AI 已返回内容，但未能读取到可播放的引导正文；未自动重写',
       );
       final errors = await LogDao().latest(
           errorOnly: true, keyword: 'meditation.daily_script.validation');
       expect(errors, hasLength(1));
       expect(errors.single['detail'], contains('【OpenRouter异常】'));
-      expect(errors.single['detail'], contains('缺少 embodied_shift'));
+      expect(errors.single['detail'], contains('未能读取到可播放的引导正文'));
       final db = await AppDatabase.instance();
       final saved = await db.query('meditation_ai_outputs');
       expect(saved.single['output_text'], '{"segments":[]}');

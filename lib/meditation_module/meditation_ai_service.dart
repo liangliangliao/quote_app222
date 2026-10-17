@@ -218,8 +218,9 @@ class MeditationAiService {
       'user_description': normalizedDescription,
       'primary_practice_input': primaryInput,
       'input_priority': '用户原话决定主题；推荐、状态和历史仅调节引导方式，不得替换主题',
-      'experience_contract_version': 'experiential_mentor_v2_depth',
-      'experience_contract': MeditationMentorGuidance.rules,
+      'experience_contract_version': 'experiential_mentor_v3_single_request',
+      'generation_mode': 'single_request',
+      'automatic_rewrite': false,
       'imagery_mode': useImagery ? '可选温和想象，并提供真实感官替代' : '真实感官与环境，不深入想象',
       'expert_preferences': preferences.toMap(),
       'safety_level': safety.level,
@@ -241,7 +242,7 @@ class MeditationAiService {
       'tone': '温和、稳定、不说教、不空泛鼓励',
       'language': 'zh-CN',
     };
-    var prompt = await _renderPrompt(
+    final prompt = await _renderPrompt(
       () => _settings.inspectMeditationDailyScriptPromptState(),
       _settings.defaultMeditationDailyScriptPrompt,
       <String, String>{
@@ -262,36 +263,10 @@ class MeditationAiService {
     UnifiedAiResolvedConfig? cfg;
     var raw = '';
     Map<String, dynamic>? parsedMap;
-    var qualityIssues = <String>[];
     try {
       cfg = await _ai.resolveGlobalConfig();
       if (!cfg.available) throw MeditationGenerationException(MeditationGenerationFailureKind.configuration);
-      onProgress?.call('正在理解主题、设计体验……');
-      Map<String, dynamic>? blueprint;
-      try {
-        final designRaw = await _ai.generateText(
-          purpose: 'meditation.daily_design',
-          systemPrompt: MeditationDepthGuidance.planningSystem,
-          prompt: MeditationDepthGuidance.planningPrompt(
-            userInput: primaryInput, durationMinutes: targetMinutes,
-            useImagery: useImagery, isSleep: isSleep,
-            preferences: preferences.toMap(), safetyLevel: safety.level,
-          ),
-          maxTokens: 2600,
-          expectJson: true,
-          temperature: 0.45,
-        );
-        blueprint = MeditationDepthGuidance.readPlan(designRaw, primaryInput);
-        input['depth_design_status'] = blueprint == null ? 'unusable' : 'ready';
-      } catch (e) {
-        input['depth_design_status'] = 'unavailable';
-        input['depth_design_error'] = e.toString();
-      }
-      input['experience_blueprint'] = blueprint;
-      prompt = '$prompt\n\n【本次体验设计：作为待验证的写作材料，用户原话优先】\n'
-          '${jsonEncode({'experience_blueprint': blueprint, 'design_status': input['depth_design_status']})}\n'
-          '请把主题中的矛盾、保护需要、微小试验和体验后的认知整合写进正文。设计不可用时，按系统中的深度要求直接完成设计与成稿。';
-      onProgress?.call('正在撰写有层次的引导……');
+      onProgress?.call('正在生成冥想引导……');
       raw = await _ai.generateText(
         purpose: 'meditation.daily_script',
         systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}\n${MeditationDepthGuidance.writingRules}',
@@ -301,105 +276,34 @@ class MeditationAiService {
         temperature: 0.6,
       );
       if (raw.trim().isEmpty) throw MeditationGenerationException(MeditationGenerationFailureKind.emptyResponse);
-      var normalized = MeditationScriptResponse.read(raw, durationSeconds: targetMinutes * 60);
+      final normalized = MeditationScriptResponse.read(raw, durationSeconds: targetMinutes * 60);
       parsedMap = normalized?.script;
       input['response_normalization'] = normalized?.corrections ?? <String>[];
-      final initialQualityIssues = _dailyScriptQualityIssues(
-        parsedMap,
-        targetDurationMinutes: targetMinutes,
-        plannedDurationSeconds: normalized?.durationPlan?.durationSeconds,
-        isSleep: isSleep,
-        userInput: primaryInput,
-        useImagery: useImagery,
-      );
-      qualityIssues = initialQualityIssues;
-      var depthHints = initialQualityIssues.isEmpty
-          ? MeditationDepthGuidance.revisionHints(parsedMap, targetMinutes * 60) : <String>[];
-      final depthRepairNeeded = depthHints.isNotEmpty;
-      final durationRepairNeeded = normalized?.durationPlan?.needsShorterVersion ?? false;
-      var repairApplied = false;
-      input['quality_repair_requested'] = initialQualityIssues.isNotEmpty;
-      input['duration_repair_requested'] = durationRepairNeeded;
-      input['depth_repair_requested'] = depthRepairNeeded;
-      input['initial_depth_hints'] = depthHints;
-      if (qualityIssues.isNotEmpty || durationRepairNeeded || depthRepairNeeded) {
-        onProgress?.call('正在校对体验联系与节奏……');
-        try {
-          final repairedRaw = await _ai.generateText(
-            purpose: 'meditation.daily_script.repair',
-            systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}\n${MeditationDepthGuidance.writingRules}',
-            prompt: _dailyScriptRepairPrompt(
-              originalPrompt: prompt,
-              originalOutput: raw,
-              qualityIssues: [
-                ...qualityIssues,
-                ...depthHints,
-                if (durationRepairNeeded) normalized!.durationPlan!.shorteningRequest,
-              ],
-              targetDurationMinutes: targetMinutes,
-              targetSegmentCount: targetSegmentCount,
-              targetMinChars: targetMinChars,
-              targetMaxChars: targetMaxChars,
-            ),
-            maxTokens: (2200 + targetMinutes * 280).clamp(2400, 12500).toInt(),
-            expectJson: true,
-            temperature: 0.42,
-          );
-          final repairedNormalized = MeditationScriptResponse.read(repairedRaw, durationSeconds: targetMinutes * 60);
-          final repairedMap = repairedNormalized?.script;
-          final repairedIssues = _dailyScriptQualityIssues(
-            repairedMap,
-            targetDurationMinutes: targetMinutes,
-            plannedDurationSeconds: repairedNormalized?.durationPlan?.durationSeconds,
-            isSleep: isSleep,
-            userInput: primaryInput,
-            useImagery: useImagery,
-          );
-          final contentImproved = parsedMap == null || repairedIssues.length < qualityIssues.length;
-          final contentTied = repairedIssues.length == qualityIssues.length;
-          final repairedDepthHints = repairedIssues.isEmpty
-              ? MeditationDepthGuidance.revisionHints(repairedMap, targetMinutes * 60) : <String>[];
-          final currentPlan = normalized?.durationPlan;
-          final repairedPlan = repairedNormalized?.durationPlan;
-          final durationImproved = currentPlan == null ||
-              (repairedPlan != null && repairedPlan.durationSeconds < currentPlan.durationSeconds);
-          final depthImproved = repairedDepthHints.length < depthHints.length &&
-              repairedPlan != null && (currentPlan == null || repairedPlan.durationSeconds <= currentPlan.durationSeconds);
-          if (repairedMap != null && (contentImproved ||
-              (contentTied && (qualityIssues.isNotEmpty || depthImproved ||
-                  (durationImproved && repairedDepthHints.length <= depthHints.length))))) {
-            raw = repairedRaw;
-            parsedMap = repairedMap;
-            qualityIssues = repairedIssues;
-            normalized = repairedNormalized;
-            depthHints = repairedDepthHints;
-            repairApplied = true;
-          }
-        } catch (e) {
-          if (qualityIssues.isNotEmpty) {
-            throw MeditationGenerationException(
-              parsedMap == null ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.quality,
-              issues: qualityIssues, repairFailed: true, cause: e,
-            );
-          }
-          // A failed shortening request cannot invalidate sound content. Offer
-          // the complete version with its actual plan instead of a retry loop.
-          if (durationRepairNeeded) input['duration_repair_error'] = e.toString();
-          if (depthRepairNeeded) input['depth_repair_error'] = e.toString();
-        }
+      // Only unreadable/empty narration blocks playback. Content heuristics
+      // are diagnostics, never a reason to discard text or spend another call.
+      if (parsedMap == null || normalized?.durationPlan == null) {
+        throw MeditationGenerationException(MeditationGenerationFailureKind.format);
       }
-      input['quality_repair_applied'] = repairApplied;
-      input['duration_repair_applied'] = durationRepairNeeded && repairApplied;
-      input['depth_repair_applied'] = depthRepairNeeded && repairApplied;
-      input['remaining_depth_hints'] = depthHints;
-      input['quality_issues'] = qualityIssues;
-      input['response_normalization'] = normalized?.corrections ?? <String>[];
-      if (parsedMap == null || qualityIssues.isNotEmpty) {
-        throw MeditationGenerationException(
-          parsedMap == null ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.quality,
-          issues: qualityIssues,
+      try {
+        input['content_advisories'] = _dailyScriptQualityIssues(
+          parsedMap,
+          targetDurationMinutes: targetMinutes,
+          plannedDurationSeconds: normalized!.durationPlan!.durationSeconds,
+          isSleep: isSleep,
+          userInput: primaryInput,
+          useImagery: useImagery,
         );
+      } catch (_) {
+        // Optional editorial diagnostics cannot invalidate playable narration.
+        input['content_advisories'] = <String>[];
       }
+      input['quality_issues'] = <String>[];
+      input['quality_repair_requested'] = false;
+      input['duration_repair_requested'] = false;
+      input['depth_repair_requested'] = false;
+      input['quality_repair_applied'] = false;
+      input['duration_repair_applied'] = false;
+      input['depth_repair_applied'] = false;
       final durationPlan = normalized!.durationPlan!;
       input['duration_plan'] = {
         'target_seconds': durationPlan.targetSeconds,
@@ -415,7 +319,6 @@ class MeditationAiService {
         parsedMap,
         targetDurationMinutes: targetMinutes,
         plannedDurationSeconds: durationPlan.durationSeconds,
-        targetSegmentCount: targetSegmentCount,
         isSleep: isSleep,
       );
       final understoodNeed = _readUnderstoodNeed(
@@ -450,9 +353,8 @@ class MeditationAiService {
     } catch (e) {
       final failure = e is MeditationGenerationException ? e : MeditationGenerationException(
         e is FormatException ? MeditationGenerationFailureKind.format : MeditationGenerationFailureKind.request,
-        issues: qualityIssues, cause: e,
+        cause: e,
       );
-      input['quality_issues'] = qualityIssues;
       await _recordDailyOutput(
         inputJson: jsonEncode(input),
         outputText: raw,
@@ -796,7 +698,6 @@ class MeditationAiService {
     Map<String, dynamic>? parsed, {
     required int targetDurationMinutes,
     required int plannedDurationSeconds,
-    required int targetSegmentCount,
     required bool isSleep,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -810,8 +711,7 @@ class MeditationAiService {
     final durationMinutes = targetDurationMinutes.clamp(1, 30).toInt();
     final durationSeconds = plannedDurationSeconds;
     final steps = _readSteps(map['segments'] ?? map['steps'], durationSeconds);
-    final parsedSteps = steps.isNotEmpty ? steps : _plainTextToSteps(raw, durationSeconds, targetSegmentCount);
-    final safeSteps = _fitStepTimeline(parsedSteps, durationSeconds);
+    final safeSteps = _fitStepTimeline(steps, durationSeconds);
     final ending = _cleanText(map['ending_reflection'] ?? map['endingReflection']).isNotEmpty
         ? _cleanText(map['ending_reflection'] ?? map['endingReflection'])
         : fallback.endingReflection;
@@ -866,24 +766,6 @@ class MeditationAiService {
       );
     }
     return out;
-  }
-
-  List<MeditationStep> _plainTextToSteps(String raw, int durationSeconds, int targetSegmentCount) {
-    final cleaned = _stripCodeFence(raw)
-        .replaceAll(RegExp(r'^[#>*\-\s]+', multiLine: true), '')
-        .replaceAll(RegExp(r'(?i)title\s*[:：]'), '')
-        .trim();
-    final pieces = cleaned
-        .split(RegExp(r'\n\s*\n|\n\d+[\.、]\s*|\n[-•]\s*'))
-        .map((e) => _cleanText(e))
-        .where((e) => e.isNotEmpty)
-        .toList();
-    final selected = pieces.length > targetSegmentCount ? pieces.take(targetSegmentCount).toList() : pieces;
-    final safe = selected.isEmpty
-        ? <String>['现在，先不用解决任何问题。只是坐下来，感受身体和呼吸。', '如果走神了，不用责备自己。看见它，然后回来。']
-        : selected;
-    final step = math.max(20, durationSeconds ~/ math.max(1, safe.length));
-    return List.generate(safe.length, (i) => MeditationStep(startSecond: math.min(durationSeconds - 1, i * step), text: safe[i]));
   }
 
   List<MeditationStep> _fitStepTimeline(List<MeditationStep> steps, int durationSeconds) =>
@@ -1068,43 +950,6 @@ class MeditationAiService {
       plannedDurationSeconds: plannedDurationSeconds, useImagery: useImagery));
     return issues.toSet().toList();
   }
-
-  String _dailyScriptRepairPrompt({
-    required String originalPrompt,
-    required String originalOutput,
-    required List<String> qualityIssues,
-    required int targetDurationMinutes,
-    required int targetSegmentCount,
-    required int targetMinChars,
-    required int targetMaxChars,
-  }) {
-    return '''
-请根据下面的具体问题或编辑建议修订冥想 JSON。保留已经有效的主题、体验与结束收束；认知、身体与情绪的联系需要在正文中成立，不能只补元数据。
-
-必须修复的问题：
-${qualityIssues.map((e) => '- $e').join('\n')}
-
-硬性目标：
-- 时长：$targetDurationMinutes 分钟
-- 建议段数：约 $targetSegmentCount 段，至少完整覆盖八阶段；不为凑段数或字数重复内容
-- 正文中文字符建议：$targetMinChars-$targetMaxChars
-- 八阶段依次完整出现：arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing
-- 保留对用户真正需要的深入理解，但把说理转换成身体、情绪和具体生活场景中的体验
-- 优先回应本次用户主题；修复体验合同、短段和说完后的留白，不要只补几个关键词。
-- 让体验前的自动反应、保护需要、微小试验、停留后的身体和情绪观察、认知整合形成连续过程；用 depth_evidence 引用真实正文核对。
-- 每个阶段至少包含一个与阶段相符的可跟随动作；全程保留“可以睁眼、换姿势、停下或回到环境”的选择
-- 不把呼吸、放松、情绪变化或一次练习的结果当作考核；高唤醒内容优先外部感官和支撑面，睡前内容保持低刺激
-- 全部重新组织为自然原创表达，不照抄任何固定范文
-- 只返回合法 JSON
-
-原始任务：
-$originalPrompt
-
-未通过的上一版输出：
-$originalOutput
-''';
-  }
-
 
   int _readSeconds(dynamic value, int fallback) {
     if (value is num) return value.toInt();

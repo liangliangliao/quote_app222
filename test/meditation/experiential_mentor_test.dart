@@ -106,9 +106,7 @@ Map<String, dynamic> example({bool short = false, bool imagery = true}) {
 class FakeAi extends UnifiedAiService {
   final List<String> replies;
   final List<Map<String, String>> calls = [];
-  final List<Map<String, String>> designCalls = [];
-  final String? designReply;
-  FakeAi(this.replies, {this.designReply});
+  FakeAi(this.replies);
   @override
   Future<UnifiedAiResolvedConfig> resolveGlobalConfig(
           {String? forcedProvider, String? forcedModel}) async =>
@@ -130,12 +128,6 @@ class FakeAi extends UnifiedAiService {
       String? forcedProvider,
       String? forcedModel,
       double? temperature}) async {
-    if (purpose == 'meditation.daily_design') {
-      designCalls.add(
-          {'prompt': prompt, 'system': systemPrompt ?? '', 'purpose': purpose});
-      return designReply ??
-          jsonEncode(depthPlan(jsonDecode(prompt)['user_input'] as String));
-    }
     calls.add(
         {'prompt': prompt, 'system': systemPrompt ?? '', 'purpose': purpose});
     return replies.removeAt(0);
@@ -185,7 +177,7 @@ const recommendation = MeditationSessionTemplate(
     endingReflection: '休息');
 
 void main() {
-  group('生成与修复使用已有 App 模型', () {
+  group('单次生成使用已有 App 模型', () {
     test('用户主题优先于默认睡眠推荐，生成可播放的短段体验', () async {
       final ai = FakeAi([jsonEncode(example())]);
       final dao = FakeDao();
@@ -214,7 +206,6 @@ void main() {
                 MeditationMentorGuidance.speechSeconds(step.text) + 8));
       }
       expect(ai.calls, hasLength(1));
-      expect(ai.designCalls, hasLength(1));
       expect(ai.calls.single['prompt'], contains('primary_practice_input'));
       expect(dao.outputs.single['provider'], 'existing-app-provider');
     });
@@ -255,7 +246,7 @@ void main() {
       expect(ai.calls.single['prompt'], contains('真实感官与环境，不深入想象'));
     });
 
-    test('关键词齐全的说理稿触发重写，自定义提示词不能移除体验合同', () async {
+    test('设计附注缺失只记录建议，仍保留正文和自定义提示词中的写作约束', () async {
       final bad = example();
       bad.remove('experience_design');
       final ai = FakeAi([jsonEncode(bad), jsonEncode(example())]);
@@ -270,12 +261,14 @@ void main() {
               userDescription: topic);
       expect(result, isNotNull,
           reason: '${dao.outputs.map((output) => output['error']).toList()}');
-      expect(ai.calls.last['purpose'], 'meditation.daily_script.repair');
+      expect(ai.calls, hasLength(1));
+      expect(ai.calls.single['purpose'], 'meditation.daily_script');
       expect(ai.calls.every((call) => call['system']!.contains('以用户主题为中心')),
           isTrue);
-      expect(ai.calls.last['prompt'], contains('缺少 experience_design'));
+      expect((dao.outputs.single['input'] as Map)['content_advisories'].join(),
+          contains('缺少 experience_design'));
       expect((dao.outputs.single['input'] as Map)['quality_repair_applied'],
-          isTrue);
+          isFalse);
     });
 
     test('缺失的体验停顿由本地补齐，保留正文且不额外请求重写', () async {
@@ -302,33 +295,35 @@ void main() {
           contains('experience_pauses'));
     });
 
-    test('同一阶段后退不会穿过质量校验', () async {
+    test('阶段标签错序只记录建议，不重排或丢弃已经返回的正文', () async {
       final bad = example();
       (bad['segments'] as List)[3]['phase'] = 'arrival';
       final dao = FakeDao();
-      final generating = MeditationAiService(
-              ai: FakeAi([jsonEncode(bad), jsonEncode(bad)]),
-              settings: FakeSettings(),
-              dao: dao)
-          .generateDailyMeditation(
-              currentState: '日常',
-              recommended: recommendation,
-              recentRecords: [],
-              durationMinutes: 5,
-              userDescription: topic);
-      await expectLater(
-          generating,
-          throwsA(isA<MeditationGenerationException>().having(
-              (e) => e.kind, 'kind', MeditationGenerationFailureKind.quality)));
-      expect(dao.outputs.single['error'], contains('顺序不正确'));
+      final ai = FakeAi([jsonEncode(bad)]);
+      final generating =
+          MeditationAiService(ai: ai, settings: FakeSettings(), dao: dao)
+              .generateDailyMeditation(
+                  currentState: '日常',
+                  recommended: recommendation,
+                  recentRecords: [],
+                  durationMinutes: 5,
+                  userDescription: topic);
+      final result = await generating;
+      expect(result, isNotNull);
+      expect(ai.calls, hasLength(1));
+      expect(result!.session.steps.map((s) => s.text).join(),
+          (bad['segments'] as List).map((s) => s['text']).join());
+      expect((dao.outputs.single['input'] as Map)['content_advisories'].join(),
+          contains('顺序不正确'));
+      expect(dao.outputs.single['success'], isTrue);
     });
   });
 
-  group('体验质量', () {
+  group('内容建议（仅诊断，不阻断生成）', () {
     List<String> check(Map<String, dynamic> map) =>
         MeditationMentorGuidance.qualityIssues(map,
             userInput: topic, durationSeconds: 300, useImagery: true);
-    test('主题只放标题和分析字段，正文换成其他话题会失败', () {
+    test('主题只放标题和分析字段，正文换成其他话题产生建议', () {
       final bad = example();
       for (final s in bad['segments'] as List)
         s['text'] = (s['text'] as String).replaceAll(topic, '提高工作效率');
@@ -346,7 +341,7 @@ void main() {
           userInput: topic, durationSeconds: 300, useImagery: false);
       expect(issues.join(), contains('不应引导进入想象场景'));
     });
-    test('设计字段里有感官、正文没有画面触感，会失败', () {
+    test('设计字段里有感官、正文没有画面触感，产生建议', () {
       final bad = example();
       for (final s in bad['segments'] as List) {
         if (s['phase'] == 'embodied_shift')
@@ -354,7 +349,7 @@ void main() {
       }
       expect(check(bad).join(), contains('核心体验正文至少要有两种感官'));
     });
-    test('宣布用户已经释怀，会失败', () {
+    test('宣布用户已经释怀，产生建议', () {
       final bad = example();
       (bad['segments'] as List).last['text'] = '你已经释怀了。温和睁眼看向周围。';
       expect(check(bad).join(), contains('不能替用户宣布'));
@@ -372,7 +367,7 @@ void main() {
           userInput: topic, durationSeconds: 300, useImagery: false);
       expect(issues, isEmpty);
     });
-    test('说话和留白放不进所选时长，会失败', () {
+    test('说话和留白放不进所选时长，产生建议', () {
       final bad = example();
       for (final s in bad['segments'] as List) s['pause_after_seconds'] = 30;
       expect(check(bad).join(), contains('超过目标'));
