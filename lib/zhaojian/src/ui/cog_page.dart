@@ -45,9 +45,24 @@ class _CogPageState extends State<CogPage> {
         _sit, _bel, _evf, _eva, _exp, _how, _alt, _res,
       ];
 
+  /// 文字一变就重建：「下一步」和 AI 按钮是否可点取决于有没有绝望迹象，
+  /// 不能等到别的原因触发重建才更新。
+  void _onText() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    for (final TextEditingController c in _all) {
+      c.addListener(_onText);
+    }
+  }
+
   @override
   void dispose() {
     for (final TextEditingController c in _all) {
+      c.removeListener(_onText);
       c.dispose();
     }
     super.dispose();

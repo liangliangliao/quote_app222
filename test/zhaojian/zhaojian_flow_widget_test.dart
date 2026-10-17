@@ -151,11 +151,12 @@ void main() {
       phone(tester);
       await pumpEntry(tester);
       expect(find.text('照见'), findsWidgets);
-      for (final String g in ZNav.groups) {
-        expect(find.text(g), findsWidgets, reason: '首页缺少分组 $g');
-      }
       expect(find.textContaining('走一遍「决策」'), findsOneWidget);
       expect(find.text('决策'), findsOneWidget);
+      for (final String g in ZNav.groups) {
+        await reveal(tester, find.text(g)); // 列表是懒构建的，屏幕外的分组要滚到才存在
+        expect(find.text(g), findsWidgets, reason: '首页缺少分组 $g');
+      }
     });
 
     testWidgets('logging a behavior stores it with the chosen reaction', (WidgetTester tester) async {
@@ -227,10 +228,8 @@ void main() {
       await tapText(tester, '不借');
       await tapText(tester, '松了口气');
       await tapText(tester, '翻牌');
-      await settle(tester, until: find.text('牌在翻……'));
-      for (int i = 0; i < 3; i++) {
-        await tester.pump(const Duration(milliseconds: 1000));
-      }
+      // 稳定等待会把弹窗里的三段计时一并走完，所以直接等最后一段出现。
+      await settle(tester, until: find.text('关闭'));
       expect(find.textContaining('落空，−3 自知分'), findsOneWidget);
       expect(find.text('关闭'), findsOneWidget);
       await tapText(tester, '关闭');
@@ -265,6 +264,7 @@ void main() {
       await typeInto(tester, '这件事是…', '领导的决定');
       await tapText(tester, '不可控');
       await tapText(tester, '放进去');
+      await reveal(tester, find.textContaining('写过绕开办法并勾选确认之后'));
       expect(find.textContaining('写过绕开办法并勾选确认之后'), findsOneWidget);
       expect(find.textContaining('现在放下的不是责任'), findsNothing);
       await typeInto(tester, '绕开办法', '换个部门');
@@ -273,6 +273,7 @@ void main() {
       await reveal(tester, find.byType(CheckboxListTile));
       await tester.tap(find.byType(CheckboxListTile).first);
       await settle(tester);
+      await reveal(tester, find.textContaining('现在放下的不是责任'));
       expect(find.textContaining('现在放下的不是责任'), findsOneWidget);
     });
 
@@ -414,6 +415,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ZhaojianEntry.build(db: db)));
       await settle(tester);
       for (final String g in ZNav.groups) {
+        await reveal(tester, find.text(g));
         expect(find.text(g), findsWidgets);
       }
     });

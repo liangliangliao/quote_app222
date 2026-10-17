@@ -46,9 +46,23 @@ class _EnginePageState extends State<EnginePage> {
         _goal, _cur0, _cur1, _cur2, _lv0, _lv1, _lv2, _act, _chk,
       ];
 
+  /// 文字一变就重建：第一步的「下一步」是否可点取决于有没有绝望迹象。
+  void _onText() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    for (final TextEditingController c in _all) {
+      c.addListener(_onText);
+    }
+  }
+
   @override
   void dispose() {
     for (final TextEditingController c in _all) {
+      c.removeListener(_onText);
       c.dispose();
     }
     super.dispose();

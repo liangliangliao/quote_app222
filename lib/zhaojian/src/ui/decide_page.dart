@@ -1304,7 +1304,7 @@ class _DecidePageState extends State<DecidePage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('选择'),
+        title: const Text('决策'),
         backgroundColor: Colors.white,
         foregroundColor: zInk,
         elevation: 0,
