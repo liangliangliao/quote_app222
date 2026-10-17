@@ -56,6 +56,7 @@ import '../zhaojian/zhaojian.dart' show ZhaojianDiscoverEntry;
 import '../zhaojian_host/zhaojian_host_page.dart';
 import '../evidence_growth/evidence_growth_discover_entry.dart';
 import '../evidence_growth/evidence_growth_home_page.dart';
+import '../self_os/self_os_discover_entry.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -2594,6 +2595,8 @@ Widget _buildEmotionPieChart() {
                       title: '写日记',
                       onTap: _openDiaryFromDiscover,
                     ),
+                    const SizedBox(height: 12),
+                    const SelfOsDiscoverEntry(),
                     const SizedBox(height: 12),
                     EvidenceGrowthDiscoverEntry(
                       onTap: () {

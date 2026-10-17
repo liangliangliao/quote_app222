@@ -1,7 +1,14 @@
 name: Build Android APK
+run-name: Build Android APK · ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
+    inputs:
+      self_os_checks:
+        description: 'Run only Self OS analysis and tests before building the APK'
+        type: boolean
+        required: false
+        default: false
   push:
     paths:
       - ".github/workflows/**"
@@ -137,9 +144,23 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter pub get
 
-      # APK delivery is intentionally compile-only. Module test suites run in
-      # their own workflows and must not prevent a build artifact from being
-      # produced when the application source itself compiles successfully.
+      # Automatic APK delivery remains compile-only. A manual dispatch may
+      # explicitly request Self OS checks without running other module suites.
+      - name: Prepare SQLite for Self OS tests
+        if: steps.detect.outputs.project_type == 'flutter' && inputs.self_os_checks == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+
+      - name: Analyze Self OS only
+        if: steps.detect.outputs.project_type == 'flutter' && inputs.self_os_checks == true
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: flutter analyze --no-pub lib/self_os test/self_os
+
+      - name: Test Self OS only
+        if: steps.detect.outputs.project_type == 'flutter' && inputs.self_os_checks == true
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        run: flutter test --no-pub test/self_os --reporter expanded
 
       - name: Preload Gradle wrapper with retries
         if: steps.detect.outputs.project_type == 'flutter'
@@ -187,6 +208,7 @@ jobs:
         with:
           name: quote_app-apk
           path: ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
 
       # ---------- Gradle path fallback ----------
       - name: Set up Gradle 8.7
