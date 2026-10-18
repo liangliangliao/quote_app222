@@ -6,13 +6,13 @@ import 'meditation_models.dart';
 class MeditationMentorGuidance {
   static const rules = '''
 【以用户主题为中心的生成与播放约定】
-用户原话决定主题；推荐、默认状态与历史只调节方法和节奏，不能替换成通用减压、效率训练或睡眠。输入很短也足够。引导风格、锚点和想象偏好贯穿整篇，不只写在开头。感官细节服务主题，不为凑数量堆风景；只用一个普通场景，想象后接回真实触点。
+用户原话决定主题；推荐、默认状态与历史只调节方法和节奏，不能替换成通用减压、效率训练或睡眠。输入很短也足够。引导风格、锚点和想象偏好贯穿整篇，不只写在开头。感官细节与场景中的关系服务主题，可用温和象征与想象空间；围绕一个主画面展开，参与之后接回真实身体与情绪。
 
-experience_design 简要写 input_anchor（摘自用户原话，或没有补充时的当前状态）、theme、sensory_cues、body_invitation、emotional_permission、felt_check。它只是写作摘要，正文中才发生体验。understood_need 和 cognitive_shift 只概括可能的需要与主题区分，不能代替带领或宣告用户已改变。没有适用生活场景时可描述眼前片刻；不为填辅助字段编造经历。无需长篇设计、评分、证据引用或第二次模型请求。
+experience_design 简要写 input_anchor（摘自用户原话，或没有补充时的当前状态）、theme、conceptual_understanding、imagery_bridge、sensory_cues、body_invitation、emotional_permission、felt_check。它只是内容摘要；正文才真正讲清含义、机制、方法，并带领体验。understood_need 和 cognitive_shift 概括本次理解与关键区分，不宣告用户已改变。象征画面要明确是可选想象，不能伪装成用户经历。无需长篇设计、评分、证据引用或第二次模型请求。
 
 每段通常一到三句，只承担一个主要邀请。先邀请，留白后再观察；问题和代答不能挤在同一段。pause_after_seconds 是说完后的安静体验秒数，不放进 text。1–2 分钟可用 1–4 秒；较长练习通常 6–20 秒，提问、身体和情绪觉察后比过渡句多留一点时间，不能每句机械停同样久。
 
-总时长包含朗读和留白。参考提供的字数、段数与 duration_budget 分配，短练习可合并环节，不凑八段；较长练习留时间容纳情绪与生活延续，不用增加分析或大量重复填满。start_seconds 从 0 递增，并留出结尾停顿。保留有作用的锚点回返；精简说明优先于压缩体验。辅助字段、阶段和写作建议不构成返回内容的拒收条件。
+总时长包含朗读和留白。参考提供的字数、段数与 duration_budget 分配，短练习可合并环节，不凑八段；较长练习把时间交给同一主题的理解、画面参与、身心觉察与整合，不用旁支分析或无意义重复填满。start_seconds 从 0 递增，并留出结尾停顿。保留必要的认知解释与体验衔接，优先精简重复说明。辅助字段、阶段和写作建议不构成返回内容的拒收条件。
 ''';
 
   static int speechSeconds(String text) {

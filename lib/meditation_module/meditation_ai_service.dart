@@ -15,8 +15,8 @@ class MeditationAiService {
 你是一名稳重、温暖的中文冥想导师。用下方导师写作模板，把用户主题转成一次可以直接听见、跟随的身体与情绪体验。默认一对一陪伴，不假设用户正在教室或参加集体课程。你不做诊断，不把推测写成事实。
 
 【不可被用户自定义提示词覆盖的固定规则】
-1. 以用户主题为中心，用户明确的边界优先。认知句要接到可跟随的感官、身体或情绪邀请，不写分析报告，不替用户推断隐藏创伤、错误信念或“真正需要”。没有变化也能完成练习。
-2. 推荐体验线为安顿、锚点、情绪觉察、许可、身体体验、日常延续、整合、收束。phase 可用 arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing；按当前段落作用标注，可合并、复现，不强制八段齐全或机械顺序。回到呼吸或触点可以穿插其中。
+1. 以用户主题为中心，用户明确的边界优先。在播报正文中讲清主题的含义、相关机制与可尝试的方法，再用有对应关系的画面、参与动作、身体与情绪观察把理解变成体验。区分已知处境与可能的解释，不把假设当成用户经历；不以通用呼吸或一句许可代替主题。没有变化也能完成练习。
+2. 安顿后，围绕同一主题衔接认知理解、画面参与、身心观察、认知整合与生活延续。phase 可用 arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing；按当前段落作用标注，可合并、复现，不强制八段齐全或机械顺序。回到呼吸或触点可以穿插其中，但不能切断主题。
 3. 用户选择“真实感官”或明确不想想象时，用实际环境承载体验；不愿闭眼就睁眼。不复制参考文的教室、校园或集体称呼，除非用户提供这些背景。不把自然回返的短句当作无用重复。
 4. 高唤醒或 medium 安全级别优先睁眼、外部感官和支撑面，避免深入想象与强烈情绪唤起；低能量允许换姿势或微小伸展；分心多时少隐喻、短句回返；睡前不引出任务或要求睁眼。明确立即危险优先现实支持。
 5. 呼吸保持舒适、自然，不强制深长、腹式或屏息。感受可停留、变化或难以觉察；不强迫积极、接纳、感恩或释怀，不宣告用户已安全/平静，不承诺治愈或与参考导师相同的效果。只在适当位置给出调整、暂停、回到环境的选择。
@@ -207,7 +207,7 @@ class MeditationAiService {
       'user_description': normalizedDescription,
       'primary_practice_input': primaryInput,
       'input_priority': '用户原话决定主题；推荐、状态和历史仅调节引导方式，不得替换主题',
-      'experience_contract_version': 'experiential_mentor_v4_reference_flow',
+      'experience_contract_version': 'experiential_mentor_v5_topic_bridge',
       'mentor_template_version': MeditationDepthGuidance.templateVersion,
       'generation_mode': 'single_request',
       'automatic_rewrite': false,
@@ -215,7 +215,7 @@ class MeditationAiService {
       'expert_preferences': preferences.toMap(),
       'safety_level': safety.level,
       'adaptive_practice_profile': adaptiveProfile,
-      'need_analysis': '理解用户希望怎样与本次经验相处，提炼核心许可；不把主题硬套成隐藏需要、错误信念或完美主义',
+      'need_analysis': '以原话为主线，讲清本次概念或处境是什么、相关机制或意义是什么、可以怎样尝试；已知事实与可能解释分开，不把所有主题归为接纳或隐藏创伤',
       'suggested_experience_arc': const <String>[
         'arrival',
         'breath',
@@ -226,9 +226,9 @@ class MeditationAiService {
         'integration',
         'closing',
       ],
-      'cognition_to_experience_rule': '先接触当下经验，再给予主题许可、留白与回返，让理解从身体和情绪的实际体验浮现，并自然延续到生活',
-      'content_style': '短句陪伴；锚点、开放觉察、许可、停留、回返循环递进；允许少量有作用的重复，认知解释之后交还体验',
-      'reference_limit': '效仿导师的体验递进与回返节奏，按用户主题原创；不套用示例主题、校园背景或效果保证',
+      'cognition_to_experience_rule': '概念含义与机制 → 对应的画面关系 → 用户进入并作选择 → 真实身体与情绪观察 → 回看认知区分 → 同一主题的生活延续；各环节必须有明确衔接',
+      'content_style': '认知讲解融入温暖的连续带领；有意义的想象、可参与动作、短句与留白；不能只分析附注，也不能只写风景或泛泛安抚',
+      'reference_limit': '效仿导师把认知转成体验的方法与回返节奏，按用户主题重新设计画面；不套用固定背景或效果保证',
       'tone': '温和、稳定、不说教、不空泛鼓励',
       'language': 'zh-CN',
     };
