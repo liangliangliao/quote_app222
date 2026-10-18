@@ -9,15 +9,18 @@ import 'experiential_mentor_test.dart'
     show FakeAi, FakeDao, FakeSettings, recommendation;
 import 'response_recovery_test.dart' show cognitiveChangeScript;
 
-Future<MeditationAiGenerationResult?> generate(FakeAi ai, FakeDao dao,
-        {String topic = '恐惧'}) =>
-    MeditationAiService(ai: ai, dao: dao, settings: FakeSettings())
-        .generateDailyMeditation(
-            currentState: '日常',
-            recommended: recommendation,
-            recentRecords: [],
-            durationMinutes: 8,
-            userDescription: topic);
+Future<MeditationAiGenerationResult?> generate(
+  FakeAi ai,
+  FakeDao dao, {
+  String topic = '恐惧',
+}) => MeditationAiService(ai: ai, dao: dao, settings: FakeSettings())
+    .generateDailyMeditation(
+      currentState: '日常',
+      recommended: recommendation,
+      recentRecords: [],
+      durationMinutes: 8,
+      userDescription: topic,
+    );
 
 void expectPlayable(MeditationAiGenerationResult result) {
   final session = result.session;
@@ -29,13 +32,72 @@ void expectPlayable(MeditationAiGenerationResult result) {
         ? session.steps[i + 1].startSecond
         : session.durationSeconds;
     expect(
-        end - step.startSecond,
-        greaterThanOrEqualTo(MeditationMentorGuidance.speechSeconds(step.text) +
-            step.pauseAfterSeconds));
+      end - step.startSecond,
+      greaterThanOrEqualTo(
+        MeditationMentorGuidance.speechSeconds(step.text) +
+            step.pauseAfterSeconds,
+      ),
+    );
   }
 }
 
 void main() {
+  test('导师式回返可复现阶段和短句，不强求八阶段或设计附注，保留留白与原顺序', () async {
+    const refrain = '再回到脚底与地面的接触。';
+    final beats = [
+      ('arrival', '今天，试着给作为人的各种感受一点位置。感受座面的支撑。', 6),
+      ('body_emotion', '此刻是什么感觉？不用急着给它名字。', 12),
+      ('allow_experience', '如果有一点担心，允许它暂时在这里。不必先变好才有位置。', 15),
+      ('arrival', refrain, 6),
+      ('body_emotion', '那份感受可能变化，也可能还在。脚底的支撑与它可以同时存在。', 15),
+      ('integration', '如果不急着和这份感受较劲，此刻会怎样？没有答案也可以。', 18),
+      ('arrival', refrain, 6),
+      ('closing', '轻轻活动指尖，让视线慢慢清晰。按自己的节奏结束。', 8),
+    ];
+    final raw = jsonEncode({
+      'title': '允许为人',
+      'segments': [
+        for (final beat in beats)
+          {'phase': beat.$1, 'text': beat.$2, 'pause_after_seconds': beat.$3},
+      ],
+    });
+    final ai = FakeAi([raw]);
+    final dao = FakeDao();
+    final result =
+        await MeditationAiService(
+          ai: ai,
+          dao: dao,
+          settings: FakeSettings('请陪伴我，不催促改变。'),
+        ).generateDailyMeditation(
+          currentState: '日常',
+          recommended: recommendation,
+          recentRecords: [],
+          durationMinutes: 8,
+          userDescription: '允许为人，不想闭眼或想象',
+          preferences: const MeditationExpertPreferences(
+            anchorPreference: '身体触点',
+            imageryPreference: '真实感官',
+          ),
+        );
+    expect(result, isNotNull);
+    expect(result!.session.steps.map((s) => s.text), beats.map((b) => b.$2));
+    expect(result.session.steps.where((s) => s.text == refrain), hasLength(2));
+    expect(
+      result.session.steps.map((s) => s.pauseAfterSeconds),
+      beats.map((b) => b.$3),
+    );
+    expectPlayable(result);
+    expect(ai.calls, hasLength(1));
+    expect(ai.calls.single['prompt'], contains('允许为人，不想闭眼或想象'));
+    expect(ai.calls.single['prompt'], contains('请陪伴我，不催促改变。'));
+    expect(dao.outputs.single['raw'], raw);
+    expect(dao.outputs.single['success'], isTrue);
+    expect(
+      (dao.outputs.single['input'] as Map)['quality_repair_requested'],
+      isFalse,
+    );
+  });
+
   test('恐惧主题的自然收束不含旧关键词时仍交付原文，只有一次模型调用', () async {
     final script = cognitiveChangeScript();
     const closing = '感受脚底的支撑，轻轻活动手指，让视线慢慢清晰。';
@@ -51,8 +113,10 @@ void main() {
     expect(dao.outputs.single['raw'], raw);
     expect(dao.outputs.single['success'], isTrue);
     expect(dao.outputs.single['error'], isNull);
-    expect((dao.outputs.single['input'] as Map)['content_advisories'].join(),
-        contains('closing 缺少对应的可体验引导'));
+    expect(
+      (dao.outputs.single['input'] as Map)['content_advisories'].join(),
+      contains('closing 缺少对应的可体验引导'),
+    );
   });
 
   test('阶段数量、标签、设计附注都缺失时仍按原顺序播放有效段落', () async {
@@ -78,12 +142,15 @@ void main() {
         {'text': null, 'content': '感觉椅子承托着你。', 'start': '-1', 'pause': '8秒'},
         {'guide': '留意此刻的声音。', 'start_seconds': 0, 'pause_after_seconds': -3},
         '让视线自然变得清晰。',
-      ]
+      ],
     });
     final ai = FakeAi([raw]);
     final result = (await generate(ai, FakeDao()))!;
-    expect(result.session.steps.map((s) => s.text).toList(),
-        ['感觉椅子承托着你。', '留意此刻的声音。', '让视线自然变得清晰。']);
+    expect(result.session.steps.map((s) => s.text).toList(), [
+      '感觉椅子承托着你。',
+      '留意此刻的声音。',
+      '让视线自然变得清晰。',
+    ]);
     expectPlayable(result);
     expect(ai.calls, hasLength(1));
   });
@@ -94,17 +161,18 @@ void main() {
       text,
       '```text\n$text\n```',
       jsonEncode(text),
-      jsonEncode({'content': text})
+      jsonEncode({'content': text}),
     ]) {
       final ai = FakeAi([raw]);
       final dao = FakeDao();
       final result = (await generate(ai, dao))!;
       expect(
-          result.session.steps
-              .map((s) => s.text)
-              .join()
-              .replaceAll(RegExp(r'\s'), ''),
-          text.replaceAll(RegExp(r'\s'), ''));
+        result.session.steps
+            .map((s) => s.text)
+            .join()
+            .replaceAll(RegExp(r'\s'), ''),
+        text.replaceAll(RegExp(r'\s'), ''),
+      );
       expectPlayable(result);
       expect(ai.calls, hasLength(1));
       expect(dao.outputs.single['raw'], raw);
@@ -112,16 +180,19 @@ void main() {
   });
 
   test('很长的普通正文不会按推荐段数截断，也不会自动请求精简', () async {
-    final text =
-        List.generate(100, (i) => '第${i + 1}个片刻，留意双脚触地，允许情绪存在。').join('\n');
+    final text = List.generate(
+      100,
+      (i) => '第${i + 1}个片刻，留意双脚触地，允许情绪存在。',
+    ).join('\n');
     final ai = FakeAi([text]);
     final result = (await generate(ai, FakeDao()))!;
     expect(
-        result.session.steps
-            .map((s) => s.text)
-            .join()
-            .replaceAll(RegExp(r'\s'), ''),
-        text.replaceAll(RegExp(r'\s'), ''));
+      result.session.steps
+          .map((s) => s.text)
+          .join()
+          .replaceAll(RegExp(r'\s'), ''),
+      text.replaceAll(RegExp(r'\s'), ''),
+    );
     expect(result.session.durationSeconds, greaterThan(480));
     expectPlayable(result);
     expect(ai.calls, hasLength(1));
@@ -132,14 +203,20 @@ void main() {
       '{"segments":[',
       '{"segments":[null,17,{"text":false}]}',
       '{"title":"只有标题"}',
-      '<html><body>Bad Gateway</body></html>'
+      '<html><body>Bad Gateway</body></html>',
     ]) {
       final ai = FakeAi([raw]);
       final dao = FakeDao();
       await expectLater(
-          generate(ai, dao),
-          throwsA(isA<MeditationGenerationException>().having(
-              (e) => e.kind, 'kind', MeditationGenerationFailureKind.format)));
+        generate(ai, dao),
+        throwsA(
+          isA<MeditationGenerationException>().having(
+            (e) => e.kind,
+            'kind',
+            MeditationGenerationFailureKind.format,
+          ),
+        ),
+      );
       expect(ai.calls, hasLength(1));
       expect(dao.outputs.single['success'], isFalse);
       expect(dao.outputs.single['raw'], raw);
