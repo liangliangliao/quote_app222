@@ -48,7 +48,7 @@ void main() {
       expect(MeditationExperientialMethod.systemRules, contains('EAM-8'));
       expect(MeditationExperientialMethod.systemRules, contains('一至两个'));
       expect(MeditationExperientialMethod.systemRules, contains('不评判'));
-      expect(MeditationExperientialMethod.systemRules, contains('不阻断已返回'));
+      expect(MeditationExperientialMethod.systemRules, contains('不得额外触发模型请求或阻断'));
     });
   });
 }
