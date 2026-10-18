@@ -210,6 +210,53 @@ void main() {
       expect(dao.outputs.single['provider'], 'existing-app-provider');
     });
 
+    test('允许为人接入 EAM-8，同一次请求保留情绪接纳主题', () async {
+      final ai = FakeAi([jsonEncode(example())]);
+      final dao = FakeDao();
+      final result = await MeditationAiService(
+              ai: ai, settings: FakeSettings(), dao: dao)
+          .generateDailyMeditation(
+              currentState: '睡前',
+              recommended: recommendation,
+              recentRecords: [],
+              durationMinutes: 8,
+              userDescription: '允许为人');
+      expect(result, isNotNull);
+      expect(ai.calls, hasLength(1));
+      expect(ai.calls.single['purpose'], 'meditation.daily_script');
+      expect(ai.calls.single['system'], contains('EAM-8'));
+      expect(ai.calls.single['system'], contains('情绪自然存在'));
+      final input = dao.outputs.single['input'] as Map;
+      expect(input['experience_contract_version'], contains('v4_eam8'));
+      final method = input['experiential_method'] as Map;
+      expect(method['topic_specific_focus'], contains('各种情绪'));
+      expect(method['duration_mode'], contains('完整练习'));
+      expect(dao.outputs.single['success'], isTrue);
+    });
+
+    test('EAM-8 不覆盖用户明确主题、短时长或真实感官偏好', () async {
+      final ai = FakeAi([jsonEncode(example(short: true, imagery: false))]);
+      final dao = FakeDao();
+      final result = await MeditationAiService(
+              ai: ai, settings: FakeSettings(), dao: dao)
+          .generateDailyMeditation(
+              currentState: '睡前',
+              recommended: recommendation,
+              recentRecords: [],
+              durationMinutes: 1,
+              userDescription: '我害怕失败，但不想进行想象练习',
+              preferences: const MeditationExpertPreferences(
+                  imageryPreference: '真实感官'));
+      expect(result, isNotNull);
+      expect(ai.calls, hasLength(1));
+      final input = dao.outputs.single['input'] as Map;
+      final method = input['experiential_method'] as Map;
+      expect(input['primary_practice_input'], '我害怕失败，但不想进行想象练习');
+      expect(method['topic_specific_focus'], contains('从用户主题重新设计'));
+      expect(method['scene_mode'], contains('不要求闭眼想象'));
+      expect(method['duration_mode'], contains('微练习'));
+    });
+
     test('一分钟仍有主题、身体情绪与短留白', () async {
       final dao = FakeDao();
       final result = await MeditationAiService(
