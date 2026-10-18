@@ -326,6 +326,32 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
             ),
             onChanged: (_) => setState(_clearAiResult),
           ),
+          const SizedBox(height: 8),
+          const Text('快速体验主题（可再编辑）',
+              style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final entry in const <String, String>{
+                '允许为人': '允许为人。我想觉察此刻的情绪，无论它是什么，都试着暂时不评价它。',
+                '带着恐惧行动': '我想体验：即使害怕还在，是否也可以迈出一小步？',
+                '失败不定义我': '我害怕失败意味着我没有能力，想练习区分一次失败和整体自我价值。',
+              }.entries)
+                ActionChip(
+                  label: Text(entry.key),
+                  onPressed: _aiGenerating
+                      ? null
+                      : () => setState(() {
+                            _descriptionController.text = entry.value;
+                            _descriptionController.selection =
+                                TextSelection.collapsed(offset: entry.value.length);
+                            _clearAiResult();
+                          }),
+                ),
+            ],
+          ),
           if ((_aiSafetyNotice ?? '').isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
