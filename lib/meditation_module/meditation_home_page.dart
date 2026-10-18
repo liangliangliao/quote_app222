@@ -276,7 +276,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '写下你想体验的主题或此刻的处境。导师会围绕你的原话，用温和画面、感官细节和安静留白，引导你觉察身体与情绪的真实反应。',
+            '写下你想体验的主题或此刻的处境。导师会以身体安顿、呼吸、情绪觉察、允许体验、生活演练和开放提问，引导你亲身探索；不会要求你必须放松或变积极。',
             style: TextStyle(color: Colors.black.withOpacity(0.62), height: 1.45),
           ),
           const SizedBox(height: 12),
@@ -319,7 +319,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
             maxLines: 7,
             decoration: InputDecoration(
               labelText: '本次想体验什么？',
-              hintText: '例如：允许自己为人。想练习不完美也能暂时放下证明自己，在身体和情绪里体验一点允许。',
+              hintText: '例如：允许为人。我想观察此刻的情绪，无论紧张、快乐还是无聊，都试着不急于评价它。',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
               filled: true,
               fillColor: Colors.white,
