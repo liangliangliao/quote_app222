@@ -1,5 +1,5 @@
-name: Build Android APK
-run-name: Build Android APK · ${{ github.ref_name }}
+name: Build Android APK (Manual)
+run-name: APK · manual · ${{ github.ref_name }} · ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -9,60 +9,18 @@ on:
         type: boolean
         required: false
         default: false
-  push:
-    paths:
-      - ".github/workflows/**"
-      - "lib/**"
-      - "android/**"
-      - "ios/**"
-      - "assets/**"
-      - "test/**"
-      - "tools/zhixing_tree/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - "analysis_options.yaml"
-      - "gradle/**"
-      - "gradlew"
-      - "settings.gradle"
-      - "settings.gradle.kts"
-      - "build.gradle"
-      - "build.gradle.kts"
-      - "**/*.dart"
-      - "**/*.gradle"
-      - "**/*.gradle.kts"
-      - "**/*.xml"
-      - "**/*.kt"
-      - "**/*.java"
-  pull_request:
-    paths:
-      - ".github/workflows/**"
-      - "lib/**"
-      - "android/**"
-      - "ios/**"
-      - "assets/**"
-      - "test/**"
-      - "tools/zhixing_tree/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - "analysis_options.yaml"
-      - "gradle/**"
-      - "gradlew"
-      - "settings.gradle"
-      - "settings.gradle.kts"
-      - "build.gradle"
-      - "build.gradle.kts"
-      - "**/*.dart"
-      - "**/*.gradle"
-      - "**/*.gradle.kts"
-      - "**/*.xml"
-      - "**/*.kt"
-      - "**/*.java"
+# APKs are intentionally NOT built for push / pull_request events.
+# Feature-specific CI workflows run on PRs; choose the branch in Actions -> Run workflow.
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-manual-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    # The dedicated delivery workflow handles branch pushes; PRs still need
-    # this workflow so the APK build check is not skipped on the review commit.
-    if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/codex/growth-six-core-features' && github.head_ref != 'codex/growth-six-core-features' && github.ref != 'refs/heads/codex/growth-v27-journeys' && github.head_ref != 'codex/growth-v27-journeys')
+    # One explicit manual build on the selected branch; no automatic PR/push builds.
     runs-on: ubuntu-latest
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g"
@@ -70,6 +28,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Show exact source revision
+        shell: bash
+        run: |
+          printf '### 手动 APK 构建版本\\n\\n' >> "$GITHUB_STEP_SUMMARY"
+          printf -- '- Branch: \`%s\`\\n' "$GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          printf -- '- Commit SHA: \`%s\`\\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Sanity check - list repo root
         shell: bash
@@ -144,8 +109,7 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter pub get
 
-      # Automatic APK delivery remains compile-only. A manual dispatch may
-      # explicitly request Self OS checks without running other module suites.
+      # Opt-in Self OS validation for a manual build; PR module tests remain separate.
       - name: Prepare SQLite for Self OS tests
         if: steps.detect.outputs.project_type == 'flutter' && inputs.self_os_checks == true
         run: |
@@ -202,12 +166,35 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter build apk --release -t lib/main.dart
 
+      - name: Record Flutter APK version and SHA-256
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk='build/app/outputs/flutter-apk/app-release.apk'
+          test -s "$apk"
+          sha256sum "$apk" > build/app/outputs/flutter-apk/app-release.sha256
+          {
+            printf 'branch=%s\\n' "$GITHUB_REF_NAME"
+            printf 'commit_sha=%s\\n' "$GITHUB_SHA"
+            printf 'run_url=%s/%s/actions/runs/%s\\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf 'apk_sha256=%s\\n' "$(sha256sum "$apk" | cut -d ' ' -f 1)"
+          } > build/app/outputs/flutter-apk/build-info.txt
+          {
+            printf '### APK 文件验证\\n'
+            cat build/app/outputs/flutter-apk/build-info.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload APK - Flutter
         if: steps.detect.outputs.project_type == 'flutter'
         uses: actions/upload-artifact@v4
         with:
           name: quote_app-apk
-          path: ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/app-release.apk
+            ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/app-release.sha256
+            ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/build-info.txt
           if-no-files-found: error
 
       # ---------- Gradle path fallback ----------
