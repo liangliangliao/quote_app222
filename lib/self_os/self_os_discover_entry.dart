@@ -33,7 +33,7 @@ class SelfOsDiscoverEntry extends StatelessWidget {
                               fontWeight: FontWeight.w700,
                               color: osForest)),
                       SizedBox(height: 4),
-                      Text('从真实选择与行动，逐渐认识自己',
+                      Text('V3.7 · 看见可能性，在行动中认识自己',
                           style:
                               TextStyle(fontSize: 12, color: Color(0xFF65766B)))
                     ])),

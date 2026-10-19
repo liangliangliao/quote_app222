@@ -30,6 +30,13 @@ class MemoryRepository extends SelfOsRepository {
   }
 
   @override
+  Future<void> saveCaseAndProfile(
+      SelfOsCase value, SelfOsProfile profile) async {
+    await saveCase(value);
+    await saveProfile(profile);
+  }
+
+  @override
   Future<void> saveRouteDecision(
       List<SelfOsCase> values, SelfOsProfile value) async {
     for (final c in values) {
@@ -119,7 +126,9 @@ void main() {
         find.byKey(const ValueKey('dialog_problem')), '我想换一份工作');
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
-    expect(find.text('我想换一份工作'), findsOneWidget);
+    expect(find.byKey(const ValueKey('workbench_tab_0')), findsOneWidget);
+    await tester.tap(find.text('1  真正欲求'));
+    await tester.pumpAndSettle();
     await fill(tester, 'goal', '先了解岗位要求', engine: 'desire');
     await reveal(tester, find.text('帮助辨别阻塞原因'), engine: 'desire');
     await tester.tap(find.text('帮助辨别阻塞原因'));
@@ -206,7 +215,8 @@ void main() {
             repository: repo,
             ai: offlineAi(),
             history: [],
-            profile: SelfOsProfile())));
+            profile: SelfOsProfile(),
+            initialEngine: SelfOsEngine.desire)));
     await tester.pumpAndSettle();
     await fill(tester, 'goal', '试学一节课', engine: 'desire');
     await tester.tap(find.widgetWithText(TextButton, '保存'));

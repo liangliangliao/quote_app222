@@ -5,6 +5,8 @@ import 'package:quote_app/self_os/self_os_models.dart';
 
 SelfOsCase plannedCase() {
   final c = SelfOsCase(problem: '明天有面试，但我越来越不想去');
+  c.v37.settings
+      .addAll({'risk': 'low', 'riskReason': '只验证十分钟的可逆动作', 'reversible': true});
   c.desires.add(SelfOsDesire(title: '稳定', verdict: 'accepted'));
   c.fields.addAll({
     'trigger': '明天 8 点，闹钟响',

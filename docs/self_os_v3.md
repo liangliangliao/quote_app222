@@ -1,5 +1,7 @@
 # 成为自己 · Self OS V3.0
 
+> 本文为 V3.0 历史实现记录。当前版本、升级方式与 APK 工作流请参阅 [Self OS V3.7](self_os_v37.md)。
+
 依据《Self_OS_V3.0_完整产品方案.pdf》（21 页）集成的独立 Flutter 产品模块。
 
 入口：**发现之旅 → 成为自己 · Self OS**。基线为远端默认分支 `main` 的 `ec8f7749fc2801e97e38da459dabccdda11657a2`，开发分支 `codex/self-os-v3-discovery`。没有合入其他未完成的专项或验证分支。
