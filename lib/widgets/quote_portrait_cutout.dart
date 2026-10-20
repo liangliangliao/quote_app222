@@ -115,15 +115,24 @@ class _QuotePortraitCutoutState extends State<QuotePortraitCutout> {
           ).createShader(bounds),
           child: FutureBuilder<Uint8List>(
             future: _portrait,
-            builder: (context, snapshot) => Image(
-              image: snapshot.hasData ? MemoryImage(snapshot.data!) : widget.image,
-              fit: BoxFit.contain,
-              alignment: Alignment.topCenter,
-              filterQuality: FilterQuality.high,
-              gaplessPlayback: false,
-              excludeFromSemantics: true,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            ),
+            builder: (context, snapshot) {
+              // Wait for the matte instead of flashing the rectangular source
+              // photograph over the paper during native image decoding.
+              if (!snapshot.hasData && !snapshot.hasError) {
+                return const SizedBox.shrink();
+              }
+              return Image(
+                key: ValueKey(snapshot.hasData
+                    ? 'quote-portrait-matted' : 'quote-portrait-original'),
+                image: snapshot.hasData ? MemoryImage(snapshot.data!) : widget.image,
+                fit: BoxFit.contain,
+                alignment: Alignment.topCenter,
+                filterQuality: FilterQuality.high,
+                gaplessPlayback: false,
+                excludeFromSemantics: true,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              );
+            },
           ),
         ),
       ),

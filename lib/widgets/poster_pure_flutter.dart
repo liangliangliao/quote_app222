@@ -64,8 +64,13 @@ class PosterPureFlutter extends StatelessWidget {
     constraints: const BoxConstraints(maxWidth: 620),
     child: AspectRatio(aspectRatio: 2 / 3,
       child: LayoutBuilder(builder: (context, constraints) {
-        final paper = QuoteAdaptiveFrame.scaleRect(
+        final fullPaper = QuoteAdaptiveFrame.scaleRect(
           QuoteAdaptiveFrame.textSafeRect, constraints.biggest);
+        final hasArtwork = aiFramePath?.trim().isNotEmpty ?? false;
+        final reservedScene = hasArtwork
+            ? fullPaper.height * (quote.runes.length > 80 ? .18 : .25) : 0.0;
+        final paper = Rect.fromLTRB(fullPaper.left, fullPaper.top,
+            fullPaper.right, fullPaper.bottom - reservedScene);
         return Stack(fit: StackFit.expand, children: [
           QuoteAdaptiveFrame(backgroundAsset: woodBgAsset,
             aiImagePath: aiFramePath, quoteCharacters: quote.runes.length),

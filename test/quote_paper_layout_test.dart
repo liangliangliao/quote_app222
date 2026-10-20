@@ -83,10 +83,20 @@ void main() {
 
   testWidgets('portrait composition and white wall render without clipping', (tester) async {
     await mount(tester, 400, portrait: true);
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(seconds: 2));
-    });
+    // Pump between native stages: provider resolve, pixel readback, isolate
+    // matting and PNG encoding each completes on a different event turn.
+    for (var attempt = 0; attempt < 40; attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+      if (find.byKey(const ValueKey('quote-portrait-matted')).evaluate().isNotEmpty) {
+        break;
+      }
+    }
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('quote-portrait-matted')), findsOneWidget,
+      reason: 'The visual check must capture the completed matte, not its fallback');
     expect(tester.takeException(), isNull);
     final body = tester.renderObject<RenderParagraph>(
       find.byKey(const ValueKey('quote-body')));
