@@ -38,11 +38,11 @@ void main() {
           textScaler: TextScaler.linear(scale)),
         child: Scaffold(backgroundColor: Colors.white,
           body: RepaintBoundary(key: const ValueKey('preview-boundary'),
-            child: PosterPureFlutter(
+            child: ColoredBox(color: Colors.white, child: PosterPureFlutter(
               topic: '成为那样的人', quote: text, author: author,
               note: explanation,
               avatar: portrait ? 'assets/avatars/talbenshahar .jpeg' : '',
-            )),
+            ))),
         ),
       ),
     ));
