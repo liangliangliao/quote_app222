@@ -91,6 +91,7 @@ void main() {
     final body = tester.renderObject<RenderParagraph>(
       find.byKey(const ValueKey('quote-body')));
     expect(body.didExceedMaxLines, isFalse, reason: 'The screenshot quote must fit in full');
+    await tester.runAsync(() async {
     final boundary = tester.renderObject<RenderRepaintBoundary>(
       find.byKey(const ValueKey('preview-boundary')));
     final image = await boundary.toImage(pixelRatio: 1);
@@ -112,5 +113,6 @@ void main() {
     // The CI log offers a compact, directly inspectable render for this fix.
     print('QUOTE_PREVIEW_BASE64:${base64Encode(preview)}');
     image.dispose();
+    });
   });
 }
