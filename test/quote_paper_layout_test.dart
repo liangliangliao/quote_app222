@@ -95,8 +95,12 @@ void main() {
       }
     }
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('quote-portrait-matted')), findsOneWidget,
+    final matted = find.byKey(const ValueKey('quote-portrait-matted'));
+    expect(matted, findsOneWidget,
       reason: 'The visual check must capture the completed matte, not its fallback');
+    final portrait = tester.widget<Image>(matted);
+    await tester.runAsync(() => precacheImage(portrait.image, tester.element(matted)));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     final body = tester.renderObject<RenderParagraph>(
       find.byKey(const ValueKey('quote-body')));

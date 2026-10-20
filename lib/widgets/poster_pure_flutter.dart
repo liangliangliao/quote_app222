@@ -5,15 +5,15 @@ import 'package:flutter/material.dart';
 import 'quote_adaptive_frame.dart';
 import 'quote_portrait_cutout.dart';
 
-ImageProvider _posterAvatar(String raw) {
+ImageProvider? _posterAvatar(String raw) {
   if (raw.startsWith('data:')) {
     try { return MemoryImage(base64Decode(raw.substring(raw.indexOf(',') + 1))); }
-    catch (_) { return const AssetImage('assets/avatars/talbenshahar .jpeg'); }
+    catch (_) { return null; }
   }
   if (raw.startsWith('http://') || raw.startsWith('https://')) return NetworkImage(raw);
   if (raw.startsWith('assets/')) return AssetImage(raw);
   if (raw.startsWith('/')) return FileImage(File(raw));
-  return const AssetImage('assets/avatars/talbenshahar .jpeg');
+  return null;
 }
 
 /// Measure the real painting bounds before placing text. No foreground masks
@@ -94,7 +94,8 @@ class _PaperComposition extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, bounds) {
     final width = bounds.maxWidth, height = bounds.maxHeight;
-    final hasAvatar = avatar.trim().isNotEmpty && avatar.trim() != 'null';
+    final portrait = _posterAvatar(avatar.trim());
+    final hasAvatar = portrait != null;
     final direction = Directionality.of(context);
     final baseStyle = DefaultTextStyle.of(context).style;
     final titleStyle = baseStyle.copyWith(
@@ -162,7 +163,7 @@ class _PaperComposition extends StatelessWidget {
               maxLines: 3, overflow: TextOverflow.ellipsis, style: titleStyle)),
             if (hasAvatar) ...[
               SizedBox(width: gap),
-              QuotePortraitCutout(image: _posterAvatar(avatar),
+              QuotePortraitCutout(image: portrait!,
                 width: portraitWidth, height: portraitHeight),
             ],
           ])),
