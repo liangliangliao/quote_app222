@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 /// 首页唯一的默认名言画框。
 ///
-/// 默认显示用户提供的 2:3 木质画框照片；AI 只替换照片中的白色画芯，
+/// 默认显示基于用户照片修整的 2:3 白墙木质画框；AI 只替换照片中的白色画芯，
 /// 不生成或覆盖木框、墙面、植物和桌面。这样离线与 AI 两种状态始终
 /// 使用同一个真实画框，切换时也不会改变首页的整体空间关系。
 class QuoteAdaptiveFrame extends StatelessWidget {
@@ -15,7 +15,7 @@ class QuoteAdaptiveFrame extends StatelessWidget {
     this.backgroundAsset = defaultBackgroundAsset,
   });
 
-  static const String defaultBackgroundAsset = 'assets/bg-wood-upload.jpg';
+  static const String defaultBackgroundAsset = 'assets/bg-white-gallery.png';
 
   /// 用户照片中白色画芯的归一化位置（基于 1024 × 1536 原图）。
   /// AI 图和文字都必须限制在这里，不能遮住真实木框。
@@ -51,12 +51,13 @@ class QuoteAdaptiveFrame extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Positioned.fill(
-              child: Image.asset(
-                backgroundAsset,
-                key: ValueKey(backgroundAsset),
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                filterQuality: FilterQuality.high,
+              child: QuoteWallBlend(
+                child: Image.asset(
+                  backgroundAsset,
+                  key: ValueKey(backgroundAsset),
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.high,
+                ),
               ),
             ),
             if (hasAiArtwork)
@@ -105,4 +106,30 @@ class QuoteAdaptiveFrame extends StatelessWidget {
       },
     );
   }
+}
+
+/// Composite only the photograph perimeter into the white page. The complete
+/// wood frame and paper lie inside the fully opaque plateau of both masks.
+class QuoteWallBlend extends StatelessWidget {
+  const QuoteWallBlend({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ShaderMask(
+    blendMode: BlendMode.dstIn,
+    shaderCallback: (bounds) => const LinearGradient(
+      begin: Alignment.centerLeft, end: Alignment.centerRight,
+      stops: [0, .10, .94, 1],
+      colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
+    ).createShader(bounds),
+    child: ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => const LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        stops: [0, .085, .835, 1],
+        colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
+      ).createShader(bounds),
+      child: child,
+    ),
+  );
 }

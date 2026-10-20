@@ -1331,7 +1331,7 @@ ImageProvider _imageFrom(String? any) {
     final double posterLayoutHeight = posterLayoutWidth * 1.5;
 
     return Scaffold(
-      backgroundColor: const Color(0xffefe5d7),
+      backgroundColor: Colors.white,
       body: Stack(
         clipBehavior: Clip.none,
         children: [

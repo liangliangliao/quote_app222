@@ -1,92 +1,127 @@
+import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-/// 把常见的浅色证件照/历史人物肖像处理成贴在画纸上的人物剪影。
-///
-/// 根据内置肖像的明暗背景把背景像素映射为透明，同时羽化照片四周，
-/// 避免矩形照片边界或圆形头像框破坏画面的自然感。
-/// 原图仍然保留，因而网络头像、用户头像和内置头像都能使用同一套展示逻辑。
-class QuotePortraitCutout extends StatelessWidget {
+import '../services/quote_portrait_matte.dart';
+
+/// A sharp portrait with a border-connected background matte. The face and
+/// clothing stay opaque; only the narrow perimeter and the bust's lower edge fade.
+class QuotePortraitCutout extends StatefulWidget {
   const QuotePortraitCutout({
     super.key,
     required this.image,
     required this.width,
     required this.height,
   });
-
   final ImageProvider image;
   final double width;
   final double height;
 
-  /// alpha = (250 - luminance) * 3.3：
-  /// 浅色照片背景会消失，脸部、头发和衣服会保持可见。
-  static const ColorFilter _removeLightBackground = ColorFilter.matrix([
-    1, 0, 0, 0, 0,
-    0, 1, 0, 0, 0,
-    0, 0, 1, 0, 0,
-    -0.70, -2.36, -0.24, 3.24, 0,
-  ]);
+  @override
+  State<QuotePortraitCutout> createState() => _QuotePortraitCutoutState();
+}
 
-  /// 深色影棚背景使用相反的亮度键：保留脸部、头发高光和衣着细节，
-  /// 去掉接近黑色的背景与硬边。
-  static const ColorFilter _removeDarkBackground = ColorFilter.matrix([
-    1, 0, 0, 0, 0,
-    0, 1, 0, 0, 0,
-    0, 0, 1, 0, 0,
-    .53, 1.79, .18, 0, -112,
-  ]);
+class _QuotePortraitCutoutState extends State<QuotePortraitCutout> {
+  static final _cache = <Object, Future<Uint8List>>{};
+  Future<Uint8List>? _portrait;
+  ImageConfiguration? _configuration;
 
-  bool get _hasDarkBackground {
-    final source = image;
-    if (source is! AssetImage) return false;
-    final name = source.assetName.toLowerCase();
-    return name.contains('william_james') ||
-        name.contains('immanuel kant') ||
-        name.contains('schopenhauer') ||
-        name.contains('talbenshahar') ||
-        name.contains('avatar_legacy');
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final configuration = createLocalImageConfiguration(context);
+    if (_configuration != configuration) {
+      _configuration = configuration;
+      _load();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant QuotePortraitCutout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.image != widget.image) _load();
+  }
+
+  void _load() {
+    final provider = widget.image;
+    final configuration = _configuration ?? ImageConfiguration.empty;
+    _portrait = () async {
+      final key = await provider.obtainKey(configuration);
+      if (_cache.length >= 24 && !_cache.containsKey(key)) {
+        _cache.remove(_cache.keys.first);
+      }
+      return _cache.putIfAbsent(key, () => _prepare(provider, configuration));
+    }();
+  }
+
+  static Future<Uint8List> _prepare(
+      ImageProvider provider, ImageConfiguration configuration) async {
+    final completer = Completer<ImageInfo>();
+    final stream = provider.resolve(configuration);
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (info, _) { if (!completer.isCompleted) completer.complete(info.clone()); },
+      onError: (Object error, StackTrace? stack) {
+        if (!completer.isCompleted) completer.completeError(error, stack);
+      },
+    );
+    stream.addListener(listener);
+    ImageInfo? info;
+    ui.Image? result;
+    try {
+      info = await completer.future.timeout(const Duration(seconds: 15));
+      final data = await info.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) throw StateError('Portrait pixels are unavailable');
+      final pixels = await compute(mattePortraitRgba, <String, Object>{
+        'pixels': data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        'width': info.image.width,
+        'height': info.image.height,
+      });
+      final decoded = Completer<ui.Image>();
+      ui.decodeImageFromPixels(pixels, info.image.width, info.image.height,
+          ui.PixelFormat.rgba8888, decoded.complete);
+      result = await decoded.future;
+      final png = await result.toByteData(format: ui.ImageByteFormat.png);
+      if (png == null) throw StateError('Portrait encoding failed');
+      return png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes);
+    } finally {
+      stream.removeListener(listener);
+      info?.dispose();
+      result?.dispose();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: width,
-      height: height,
+      width: widget.width,
+      height: widget.height,
       child: ShaderMask(
         blendMode: BlendMode.dstIn,
         shaderCallback: (bounds) => const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          stops: [0, .10, .90, 1],
-          colors: [
-            Colors.transparent,
-            Colors.white,
-            Colors.white,
-            Colors.transparent,
-          ],
+          begin: Alignment.centerLeft, end: Alignment.centerRight,
+          stops: [0, .035, .965, 1],
+          colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
         ).createShader(bounds),
         child: ShaderMask(
           blendMode: BlendMode.dstIn,
           shaderCallback: (bounds) => const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0, .08, .72, 1],
-            colors: [
-              Colors.transparent,
-              Colors.white,
-              Colors.white,
-              Colors.transparent,
-            ],
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            stops: [0, .025, .88, 1],
+            colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
           ).createShader(bounds),
-          child: ColorFiltered(
-            colorFilter: _hasDarkBackground
-                ? _removeDarkBackground
-                : _removeLightBackground,
-            child: Image(
-              image: image,
-              fit: BoxFit.cover,
+          child: FutureBuilder<Uint8List>(
+            future: _portrait,
+            builder: (context, snapshot) => Image(
+              image: snapshot.hasData ? MemoryImage(snapshot.data!) : widget.image,
+              fit: BoxFit.contain,
               alignment: Alignment.topCenter,
               filterQuality: FilterQuality.high,
-              gaplessPlayback: true,
+              gaplessPlayback: false,
+              excludeFromSemantics: true,
               errorBuilder: (_, __, ___) => const SizedBox.shrink(),
             ),
           ),
