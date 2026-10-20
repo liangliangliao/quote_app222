@@ -4,9 +4,7 @@ import 'dart:io';
 import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 
-import '../services/quote_frame_theme.dart';
 import 'quote_adaptive_frame.dart';
-import 'wood_frame_3d_overlay.dart';
 
 ImageProvider _posterAvatar(String raw, String fallback) {
   if (raw.startsWith('data:')) {
@@ -31,7 +29,6 @@ class PosterPureFlutter extends StatelessWidget {
     required this.avatar,
     this.woodBgAsset = 'assets/bg-wood-upload.jpg',
     this.aiFramePath,
-    this.frameFinish,
   });
 
   final String topic;
@@ -41,11 +38,9 @@ class PosterPureFlutter extends StatelessWidget {
   final String avatar;
   final String woodBgAsset;
   final String? aiFramePath;
-  final String? frameFinish;
 
   @override
   Widget build(BuildContext context) {
-    final theme = QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note);
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
@@ -57,8 +52,11 @@ class PosterPureFlutter extends StatelessWidget {
       final authorSize = (w*.035).clamp(12.0, 16.0);
       final noteSize = (w*.033).clamp(11.0, 13.5);
       final avatarSize = (w*.19).clamp(42.0, 82.0);
-      final side = (w*.105).clamp(27.0, 51.0);
       final sceneHeight = (h*(count>80 ? .22 : .32)).clamp(75.0, 215.0);
+      final textArea = QuoteAdaptiveFrame.scaleRect(
+        QuoteAdaptiveFrame.textSafeRect,
+        Size(w, h),
+      );
 
       return Center(
         child: ConstrainedBox(
@@ -71,12 +69,11 @@ class PosterPureFlutter extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   QuoteAdaptiveFrame(
-                    theme: theme,
                     aiImagePath: aiFramePath,
                     quoteCharacters: count,
                   ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(side, h*.085, side, h*.04),
+                  Positioned.fromRect(
+                    rect: textArea,
                     child: Column(children: [
                       Expanded(
                         child: ScrollConfiguration(
@@ -166,9 +163,6 @@ class PosterPureFlutter extends StatelessWidget {
                       // 图像不再被长篇名言覆盖，始终能看见脚本中的主意象。
                       SizedBox(height:sceneHeight),
                     ]),
-                  ),
-                  Positioned.fill(
-                    child: WoodFrame3dOverlay(theme:theme,finish:frameFinish),
                   ),
                 ],
               ),

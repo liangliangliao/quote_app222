@@ -25,7 +25,7 @@ class QuoteFrameAiService {
       _visualScripts.readCached(topic: topic, quote: quote);
 
   String cacheKey(String topic, String quote) =>
-      sha256.convert(utf8.encode('v2-meaning-20261016|${topic.trim()}|${quote.trim()}')).toString();
+      sha256.convert(utf8.encode('v3-visual-thesis-20261020|${topic.trim()}|${quote.trim()}')).toString();
 
   Future<Directory> _framesDir() async {
     final docs = await getApplicationDocumentsDirectory();
@@ -73,8 +73,8 @@ class QuoteFrameAiService {
       final existing = await findCached(topic, quote);
       if (existing != null) return existing;
     }
-    // 先进行一次深层语义分析，再基于因果/对比/变化生成直观视觉脚本。
-    // 不把生成文字嵌入图片，避免书法错字；中文由 Flutter 独立渲染。
+    // 先提炼“原句命题 → 可见关系 → 决定性瞬间”，再生成框内配画。
+    // 原句仍会直接交给图片模型作最终语义校验；中文由 Flutter 独立渲染。
     final script = await _visualScripts.create(
       topic: topic,
       quote: quote,

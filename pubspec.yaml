@@ -81,7 +81,6 @@ flutter:
     - assets/fallback/camus_fallback.json
     # 新增背景图片用于海报页面背景
     - assets/bg-wood-upload.jpg
-    - assets/home_small_frame.png
     - assets/todo_bg/
     # Explicitly enumerate avatar assets to avoid stale/invalid filenames in reused CI workspaces.
     - assets/avatars/talbenshahar .jpeg
