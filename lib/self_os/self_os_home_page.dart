@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'self_os_ai_service.dart';
 import 'self_os_case_page.dart';
+import 'self_os_guide_page.dart';
+import 'self_os_guidance.dart';
 import 'self_os_engine.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
@@ -63,14 +65,21 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
   Future<void> _open(SelfOsCase c,
       {SelfOsEngine? engine, int? workspace}) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => SelfOsCasePage(
-            value: c,
-            repository: _repository,
-            ai: _ai,
-            history: _cases,
-            profile: _profile,
-            initialEngine: engine,
-            initialWorkspace: workspace)));
+        builder: (_) => engine == null && workspace == null
+            ? SelfOsGuidePage(
+                value: c,
+                repository: _repository,
+                ai: _ai,
+                history: _cases,
+                profile: _profile)
+            : SelfOsCasePage(
+                value: c,
+                repository: _repository,
+                ai: _ai,
+                history: _cases,
+                profile: _profile,
+                initialEngine: engine,
+                initialWorkspace: workspace)));
     if (mounted) await _load();
   }
 
@@ -79,12 +88,10 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
         title: retrospective ? '我刚刚做了一件事' : '我现在面临一个选择',
         labels: {'problem': retrospective ? '发生了什么？' : '说说眼前的问题或选择'},
         requiredFields: {'problem'},
-        hint: '从一件真实的小事开始。可以先记录，再慢慢补充。');
+        hint: '从一件真实的小事开始。我们会一起理清，再找到可以验证的一小步。');
     if (values == null || !mounted) return;
-    final c = SelfOsCase(
-        problem: values['problem']!,
-        retrospective: retrospective ||
-            SelfOsEngineService.isRetrospective(values['problem']!));
+    final c =
+        SelfOsCase(problem: values['problem']!, retrospective: retrospective);
     try {
       await _repository.saveCase(c);
       if (mounted) await _open(c);
@@ -295,7 +302,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                     height: 1.4,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
-            const Text('从欲求出发，看清路径、代价与未来。\n在真实行动中，慢慢认识自己的力量。',
+            const Text('说出眼前的困惑，一次理清一点。\n找到可试的一小步，让现实带回答案。',
                 style: TextStyle(color: Color(0xFFD4E0D7), height: 1.7)),
             const SizedBox(height: 24),
             Wrap(spacing: 24, runSpacing: 12, children: [
@@ -326,14 +333,13 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
       if (pending.isNotEmpty)
         OsSection(
             title: '此刻，下一步',
-            subtitle: SelfOsEngineService.next(pending.first).reason,
+            subtitle: SelfOsGuidance.next(pending.first),
             children: [
               ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(pending.first.problem,
                       maxLines: 2, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(
-                      '继续 · ${SelfOsEngineService.next(pending.first).engine.label}'),
+                  subtitle: const Text('继续上次停下的地方'),
                   trailing: const Icon(Icons.arrow_forward),
                   onTap: () => _open(pending.first))
             ]),
@@ -475,7 +481,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                   onPressed: () => _delete(c),
                   icon: const Icon(Icons.delete_outline, size: 20)),
               children: [
-                Text(SelfOsEngineService.next(c).reason,
+                Text(SelfOsGuidance.next(c),
                     style: const TextStyle(height: 1.5)),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(

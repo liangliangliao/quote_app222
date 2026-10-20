@@ -3,6 +3,8 @@ import '../services/unified_ai_service.dart';
 import 'self_os_engine.dart';
 import 'self_os_models.dart';
 import 'self_os_v37_ai.dart';
+import 'self_os_guidance.dart';
+import 'self_os_insights.dart';
 
 typedef SelfOsGenerate = Future<String> Function(
     {required String prompt,
@@ -206,6 +208,69 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
         'v37.$task',
         tokens: 10000);
     return OsAnalysisProposal.parse(j, c);
+  }
+
+  Future<OsGuideFrame> guide(
+      SelfOsCase c, List<SelfOsCase> history, SelfOsProfile profile) async {
+    const instruction = '''你正在陪用户理清一个真实困惑。请承担理解、取舍和串联工作，不要求用户填写分析框架。
+先准确回应具体处境，区分想接近的欲求和想保护的价值。解释保持暂定，主动保留其他解释，不把想换手段等同于欲求改变。
+每轮只问一个最能改变下一步的问题。说明为什么问，可给最多3个易区分的选项，允许用户自由表达或不确定。
+先引用用户本轮原话，回应纠正。不能在用户已否定的解释上继续。不要重复已回答的问题；若没有新信息，承认边界，不无限追问。
+结合独立欲求假设与已有真实复盘。不要虚构用户的话、模型记录、历史、个性或稳定倾向。没有历史证据就不要声称了解此人。
+根据语义检查选项/收益代价/时间/因果/抽象度/累积/条件的缺口，寻找真正影响选择的未知；公有事实指向来源核验、私有事实询问本人、经验未知设计现实实验。
+若仍需要澄清，question 非空、experiment 为 null。问题最多含一个问号。第一次必须澄清，不能直接让用户承诺。
+当至少得到一次具体补充，形成值得检验的新理解时，给 insight（此前理解、另一种解释、为何变化），同时给2–4条机制不同的路径，每条同样写收益、代价和未知。
+此时 question 为 null，只提出一个最小必要的 experiment，用它检验最重要未知。写清可观察的预期、观察方法、时间/费用/承诺边界和停止条件。边界必须与具体动作匹配。仍有关键外部事实不明时先查证；高风险决定只提出可撤回的信息收集，不用激励代替证据。不得把辞职、投资、医疗调整等不可逆承诺包装成小实验。
+用用户能理解的话表达，页面不出现 K2、动机场、GMRC、James 等术语。不要保证正确、不要替用户认可动机或估计概率。
+未来准备只保留最必要动作，分析跨期、锁定和机会成本时说明条件；具体证据不足不编造未来。cue 最多一句10–20秒可保持的可信提醒，留空也可以。
+仅输出以下 JSON。basis 必须逐字引用 userSources 中的原文，至少引用 latestSourceId。所有分析均为候选，不输出验证状态、实际结果或用户承诺。
+{"understanding":"短而具体的暂定理解","toward":"可能想接近什么","protect":"可能想保护什么","basis":[{"turnId":"problem或真实用户条目ID","quote":"原文片段"}],"risk":"unknown/low/medium/high（大选择的风险建议，不是小动作风险）","insight":{"before":"此前理解","after":"值得验证的新解释","reason":"哪些具体信息支持它，尚有什么不确定"},"routes":[{"title":"路径","mechanism":"current/alternative/ability/transition/combination/conditions/experiment/wait","benefit":"可能得到","cost":"可能付出","unknown":"依赖什么条件、尚待确认什么"}],"question":{"text":"一个关键问题","why":"答案会帮助分清什么","options":["可选回答"],"access":"private/public/experience"},"experiment":null}
+experiment 非空时的结构：{"action":"具体第一动作","question":"要验证的一个未知","prediction":"可被现实否定的预期，标明是假设","observe":"观察什么，怎样区分不同解释","boundary":"具体时间、费用与承诺上限","stopWhen":"什么发生时停止或重新判断","cue":"可选的一句提醒"}。
+insight 无内容时为 null；早期 routes 可为空。每段不超过400字，understanding不超过400字，toward/protect不超过160字，question.text不超过180字，why不超过240字；路径各项不超过240字。''';
+    final sources = SelfOsGuidance.sources(c);
+    final latest = SelfOsGuidance.latestSource(c);
+    // Keep quoted source identities stable while bounding context size.
+    final ids = c.guide.turns
+        .where((t) => t['role'] == 'user')
+        .toList()
+        .reversed
+        .take(10)
+        .map((t) => osText(t['id']))
+        .toSet();
+    final input = {
+      'case': _context(c),
+      'userSources': {
+        for (final e in sources.entries)
+          if (e.key == 'problem' || ids.contains(e.key)) e.key: e.value
+      },
+      'latestSourceId': latest,
+      'conversation': c.guide.turns.reversed
+          .take(16)
+          .toList()
+          .reversed
+          .map((t) => {
+                'role': t['role'],
+                'text': t['text'],
+                if (t['question'] != null) 'question': t['question'],
+                if (t['kind'] != null) 'kind': t['kind']
+              })
+          .toList(),
+      'history': SelfOsEngineService.historyForAi(history),
+      'personalPrinciples': profile.principles.take(8).toList(),
+      'selfDescriptionNotVerified': profile.manual.map(
+          (k, v) => MapEntry(k, v.length > 1200 ? v.substring(0, 1200) : v)),
+      'observedDecisionPatterns': SelfOsInsights.decisionFingerprint(history),
+      'observedPreparationPatterns':
+          SelfOsInsights.interventionFingerprint(history),
+      'strengthCandidates':
+          profile.strengths.take(8).map((s) => s.toJson()).toList(),
+      'currentLifeLine': {
+        'caseId': profile.activeCaseId,
+        'routeId': profile.activeRouteId
+      },
+    };
+    final j = await _request(instruction, input, 'guide', tokens: 5500);
+    return OsGuideFrame.parse(j, userSources: sources, latestId: latest);
   }
 
   Future<List<Map<String, dynamic>>> suggest(

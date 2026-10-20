@@ -126,8 +126,10 @@ void main() {
         find.byKey(const ValueKey('dialog_problem')), '我想换一份工作');
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('workbench_tab_0')), findsOneWidget);
-    await tester.tap(find.text('1  真正欲求'));
+    expect(find.byKey(const ValueKey('self_os_guide')), findsOneWidget);
+    await tester.tap(find.byTooltip('分析与记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('欲求假设与 Why Tree'));
     await tester.pumpAndSettle();
     await fill(tester, 'goal', '先了解岗位要求', engine: 'desire');
     await reveal(tester, find.text('帮助辨别阻塞原因'), engine: 'desire');
@@ -135,6 +137,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('AI 暂时不可用'), findsOneWidget);
     expect(repo.records.values.single.text('goal'), '先了解岗位要求');
+    await tester.tap(find.byTooltip('保存并返回'));
+    await tester.pumpAndSettle();
+    expect(find.text('一起理清这件事'), findsOneWidget);
     await tester.tap(find.byTooltip('保存并返回'));
     await tester.pumpAndSettle();
     expect(find.text('成为自己'), findsOneWidget);

@@ -6,6 +6,8 @@ import 'package:quote_app/self_os/self_os_models.dart';
 import 'package:quote_app/self_os/self_os_repository.dart';
 import 'self_os_domain_test.dart' show plannedCase, reviewFor;
 import 'self_os_v37_rules_test.dart' show decision, node, proof;
+import 'self_os_guide_test.dart' show experimentGuide;
+import 'package:quote_app/self_os/self_os_guidance.dart';
 
 void main() {
   late Directory dir;
@@ -19,6 +21,35 @@ void main() {
   tearDown(() async {
     await repo.close();
     await dir.delete(recursive: true);
+  });
+
+  test('引导中断后关闭重开恢复草稿，实验封存与实际反馈保持对应', () async {
+    final c = experimentGuide();
+    c.guide.compose = '明天的安排还有一点需要确认';
+    await repo.saveCase(c);
+    await repo.close();
+    final resumed = (await repo.loadCases()).single;
+    expect(resumed.guide.phase, 'plan');
+    expect(resumed.guide.compose, '明天的安排还有一点需要确认');
+    expect(resumed.guide.confirmed, isTrue);
+    SelfOsGuidance.commitExperiment(resumed);
+    await repo.saveCase(resumed);
+    await repo.close();
+    final active = (await repo.loadCases()).single;
+    final frozen = jsonEncode(active.commitment);
+    SelfOsGuidance.review(active,
+        outcome: 'notDone',
+        result: '主管一直在开会',
+        learning: '需要先约时间',
+        context: '例会取消');
+    await repo.saveCase(active);
+    await repo.close();
+    final learned = (await repo.loadCases()).single;
+    expect(learned.guide.phase, 'learn');
+    expect(jsonEncode(learned.reviews.single.snapshot), frozen);
+    expect(learned.v37.evidence.single.text('reviewId'),
+        learned.reviews.single.id);
+    expect((await repo.loadProfile()).activeRouteId, isEmpty);
   });
 
   test('V3.0 JSON 原地升级，不改历史快照、复盘 ID 或独立数据库名', () async {
@@ -150,6 +181,7 @@ void main() {
     c.v37.interventions.add(i);
     c.startIntervention(i);
     c.completeIntervention(i, '未发生变化');
+    c.v37.settings['understandingReviewed'] = true;
     c.commit();
     c.addReview(reviewFor(c));
     final p = SelfOsProfile()

@@ -6,7 +6,14 @@ import 'package:quote_app/self_os/self_os_insights.dart';
 import 'self_os_domain_test.dart' show plannedCase, reviewFor;
 
 SelfOsV37 decision({String risk = 'low'}) {
-  final s = SelfOsV37()..settings.addAll({'risk': risk, 'reversible': true});
+  final s = SelfOsV37()
+    ..settings.addAll({
+      'risk': risk,
+      'reversible': true,
+      'understandingReviewed': true,
+      'understandingSummary': '已比较尝试与等待，确认当前只是获取一次现实反馈',
+      'remainingUnknowns': '长期效果未知，保留后续复审',
+    });
   s.routes.addAll([
     OsRoute({'id': 'a', 'title': '尝试', 'mechanism': 'current'}),
     OsRoute({'id': 'b', 'title': '等待', 'mechanism': 'wait'}),
@@ -348,6 +355,9 @@ void main() {
     c.motives.first.title = '后来改变';
     c.fields['k2'] = '后续认识';
     expect(jsonEncode(trace), serialized);
+    expect(c.commit, throwsFormatException);
+    c.v37.settings['understandingSummary'] = c.text('k2');
+    c.v37.settings['understandingReviewed'] = true;
     c.commit();
     final first = jsonEncode(c.commitment);
     c.fields['firstAction'] = '后来第一步';

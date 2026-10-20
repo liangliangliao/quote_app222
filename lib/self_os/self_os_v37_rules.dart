@@ -182,7 +182,12 @@ class SelfOsV37Rules {
         !s.flag('cooledAndReviewed')) {
       return const OsGate('HOLD', ['本次决定带有偶然、爆发或短时价值变化特征。完成冷却与证据复核后再作不可逆承诺。']);
     }
-    return const OsGate('PASS', ['关键未知已检查。剩余未知不妨碍当前可逆行动，保留后续复审条件。'],
+    if (!s.flag('understandingReviewed') ||
+        s.text('understandingSummary').trim().isEmpty ||
+        s.text('remainingUnknowns').trim().isEmpty) {
+      return const OsGate('ASK', ['还没有确认这次决定的具体理解与未知。没有填写缺口，不代表已经检查充分。']);
+    }
+    return const OsGate('PASS', ['本次决定的理解与关键未知已确认。按记录的范围行动，并保留后续复审条件。'],
         mayCommit: true);
   }
 

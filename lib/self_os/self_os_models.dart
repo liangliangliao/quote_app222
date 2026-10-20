@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'self_os_codec.dart';
 import 'self_os_v37_models.dart';
 import 'self_os_v37_rules.dart';
+import 'self_os_guide_models.dart';
 export 'self_os_codec.dart';
 export 'self_os_v37_models.dart';
+export 'self_os_guide_models.dart';
 
 enum SelfOsEngine { desire, motivation, cognition, action, mirror }
 
@@ -301,6 +303,7 @@ class SelfOsCase {
   final List<SelfOsMotive> motives = [];
   final List<SelfOsReview> reviews = [];
   SelfOsV37 v37 = SelfOsV37();
+  OsGuideState guide = OsGuideState();
   final Map<String, List<Map<String, dynamic>>> suggestions = {};
   String text(String key) => fields[key] ?? '';
   bool get reviewed => reviews.any((r) => r.round == round);
@@ -347,6 +350,11 @@ class SelfOsCase {
         'motives':
             motives.where((m) => m.selected).map((m) => m.toJson()).toList(),
         'committedAt': committedAt?.toIso8601String(),
+        'guide': {
+          'revision': guide.revision,
+          'confirmed': guide.confirmed,
+          'frame': guide.frame == null ? null : osClone(guide.frame!),
+        },
         'v37': v37.toJson()
           ..remove('priorCommitments')
           ..remove('knowledgeTraces')
@@ -370,6 +378,7 @@ class SelfOsCase {
 
   void beginCognition() {
     v37.knowledgeBefore ??= osClone(cognitiveSnapshot());
+    v37.settings['understandingReviewed'] = false;
   }
 
   void completeCognition(String reason, {String noChangeReason = ''}) {
@@ -393,6 +402,7 @@ class SelfOsCase {
       'createdAt': DateTime.now().toIso8601String(),
     });
     v37.knowledgeBefore = null;
+    v37.settings['understandingSummary'] = text('k2');
     if (text('newInformation').trim().isNotEmpty)
       v37.settings['newInformationReviewed'] = true;
   }
@@ -505,6 +515,15 @@ class SelfOsCase {
     fields.remove('newInformation');
     v37.knowledgeBefore = null;
     v37.pendingProposal = null;
+    guide
+      ..phase = 'explore'
+      ..frame = null
+      ..confirmedRevision = null
+      ..compose = '';
+    guide.revision++;
+    guide.draft.clear();
+    v37.settings['understandingReviewed'] = false;
+    v37.settings['holdCue'] = '';
     for (final key in [
       'jamesMode',
       'decisionStage',
@@ -521,6 +540,7 @@ class SelfOsCase {
   Map<String, dynamic> toJson() => {
         'schemaVersion': 2,
         'v37': v37.toJson(),
+        'guide': guide.toJson(),
         'id': id,
         'problem': problem,
         'retrospective': retrospective,
@@ -550,6 +570,7 @@ class SelfOsCase {
         retrospective: j['retrospective'] == true,
         createdAt: DateTime.tryParse(osText(j['createdAt'])));
     c.v37 = SelfOsV37.fromJson(osMap(j['v37']));
+    c.guide = OsGuideState.fromJson(osMap(j['guide']));
     c.updatedAt = DateTime.tryParse(osText(j['updatedAt'])) ?? c.createdAt;
     c.round = (j['round'] as num?)?.toInt() ?? 1;
     c.blocker =

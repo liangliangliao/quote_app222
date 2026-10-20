@@ -164,6 +164,8 @@ class _SelfOsWorkbenchState extends State<SelfOsWorkbench> {
           OsInput('repeated', '这是会重复发生的选择 / 行为', kind: 'bool'),
           OsInput('mutuallyExclusive', '这些主要路径不能同时实现', kind: 'bool'),
           OsInput('riskReason', '判断风险与可逆性的依据', required: true),
+          OsInput('understandingSummary', '现在怎样理解这件具体的事？'),
+          OsInput('understandingReviewed', '这份理解符合我的情况，已检查关键未知', kind: 'bool'),
           OsInput('experimentPlan', '允许保留未知时，只做哪一个可逆实验？'),
           OsInput('criticalUnknownsReviewed', '已逐项检查会翻转决定的关键未知', kind: 'bool'),
           OsInput('remainingUnknowns', '仍保留哪些未知？为什么不妨碍当前行动？'),
