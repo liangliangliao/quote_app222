@@ -47,8 +47,8 @@ void main() {
       theme: QuoteFrameTheme.resolve(topic:'行动',quote:'千里之行，始于足下。'),
     );
     expect(spec.isThemeOnly, isTrue);
-    expect(spec.imagePrompt(quoteCharacters: 130), contains('BOTTOM 34%'));
-    expect(spec.imagePrompt(quoteCharacters: 20), contains('BOTTOM 46%'));
+    expect(spec.imagePrompt(quoteCharacters: 130), contains('34% of the canvas'));
+    expect(spec.imagePrompt(quoteCharacters: 20), contains('46% of the canvas'));
     expect(spec.imagePrompt(quoteCharacters: 80), contains('No typography'));
   });
 
