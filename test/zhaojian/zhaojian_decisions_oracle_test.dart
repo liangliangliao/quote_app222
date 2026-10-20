@@ -167,6 +167,21 @@ void main() {
     });
   });
 
+  group('which endpoints may receive the key', () {
+    test('only the official https api.openai.com host is allowed', () {
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('https://api.openai.com/v1/responses'), isTrue);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('  https://api.openai.com/v1/chat/completions  '), isTrue);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('https://my-gateway.example.com/v1/responses'), isFalse);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('https://api.openai.com.evil.example/v1'), isFalse);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('https://evil.example/api.openai.com'), isFalse);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('http://api.openai.com/v1/responses'), isFalse, reason: '不是 https');
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('https://api.deepseek.com/chat/completions'), isFalse);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('https://res.openai.azure.com/openai/deployments/x'), isFalse);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint(''), isFalse);
+      expect(ZhaojianDecisionsOracle.isOfficialEndpoint('not a url'), isFalse);
+    });
+  });
+
   group('availability', () {
     test('without an OpenAI key nothing is sent', () async {
       int calls = 0;

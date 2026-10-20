@@ -36,6 +36,13 @@ class ZhaojianDecisionsOracle extends ZhaojianOracle {
   final Duration _timeout;
 
   static const String defaultEndpoint = 'https://api.openai.com/v1/decisions';
+
+  /// 应用里「OpenAI」服务商的地址可以改成第三方的兼容网关；那种地址对应的密钥是网关的，
+  /// 不能发给官方的 api.openai.com。只有地址确实指向官方域名时才允许用 Decisions API。
+  static bool isOfficialEndpoint(String endpoint) {
+    final Uri? u = Uri.tryParse(endpoint.trim());
+    return u != null && u.scheme == 'https' && u.host == 'api.openai.com';
+  }
   static const String model = 'gpt-6-luna';
   static const String sourceNote = 'OpenAI Decisions API（真实决策模型，使用你配置的 OpenAI 密钥）';
   static const int chunkSize = 12;

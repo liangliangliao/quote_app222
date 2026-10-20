@@ -31,12 +31,14 @@ class _ZhaojianHostPageState extends State<ZhaojianHostPage> {
   late final EvidenceGrowthDao _jevDao =
       EvidenceGrowthDao(database: AppDatabase.instance);
 
-  /// 只在全局 AI 配置的服务商是 OpenAI 且可用时，才用它的密钥去调 Decisions API。
-  /// 不另存任何密钥。
+  /// 只在全局 AI 配置的服务商是 OpenAI、可用、并且地址指向官方 api.openai.com 时，
+  /// 才用它的密钥去调 Decisions API：DeepSeek、Azure 等其它服务商，以及指向第三方网关的
+  /// 「OpenAI」配置，一律不用（那些密钥不能发给 OpenAI）。不另存任何密钥。
   Future<ZDecisionsAccess?> _decisionsAccess() async {
     try {
       final UnifiedAiResolvedConfig c = await UnifiedAiService().resolveGlobalConfig();
       if (!c.available || c.provider.trim().toLowerCase() != 'openai') return null;
+      if (!ZhaojianDecisionsOracle.isOfficialEndpoint(c.endpoint)) return null;
       return ZDecisionsAccess(Map<String, String>.from(c.authHeaders));
     } catch (_) {
       return null;
