@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
+import 'package:quote_app/widgets/quote_portrait_cutout.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/notification_service.dart';
@@ -820,18 +821,10 @@ ImageProvider _imageFrom(String? any) {
                                         ),
                                       ),
                                       SizedBox(width: innerPadH * 0.6),
-                                      ClipOval(
-                                        child: SizedBox(
-                                          width: avatarSize,
-                                          height: avatarSize,
-                                          child: hasAvatar
-                                              ? Image(
-                                                  image: _imageFrom(avatar),
-                                                  fit: BoxFit.contain,
-                                                  gaplessPlayback: true,
-                                                )
-                                              : const SizedBox.shrink(),
-                                        ),
+                                      QuotePortraitCutout(
+                                        image: _imageFrom(avatar),
+                                        width: avatarSize,
+                                        height: avatarSize * 1.22,
                                       ),
                                     ],
                                   )
@@ -1351,21 +1344,29 @@ ImageProvider _imageFrom(String? any) {
                   Expanded(
                     child: Padding(
                       padding: EdgeInsets.only(bottom: posterBottomReserve),
-                      child: ClipRect(
-                        child: FittedBox(
-                          fit: showPinnedArea ? BoxFit.contain : BoxFit.cover,
-                          alignment: showPinnedArea ? Alignment.topCenter : Alignment.center,
-                          child: SizedBox(
-                            width: posterLayoutWidth,
-                            height: posterLayoutHeight,
-                            child: PosterPureFlutter(
-                              topic: '${content?['topic'] ?? ''}',
-                              quote: '${content?['quote'] ?? ''}',
-                              author: '${content?['author'] ?? ''}',
-                              note: '${content?['note'] ?? ''}',
-                              avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
-                              woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
-                              aiFramePath: _frameImagePath,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
+                        child: ClipRect(
+                          child: FittedBox(
+                            // 完整展示 2:3 背景，不再以 cover 放大并裁掉左右场景。
+                            fit: BoxFit.contain,
+                            alignment: showPinnedArea
+                                ? Alignment.topCenter
+                                // 原图中的木框中心略高于整张照片中心；在竖屏
+                                // 留白内轻微下移照片，使木框本身落在屏幕视觉中心。
+                                : const Alignment(0, .45),
+                            child: SizedBox(
+                              width: posterLayoutWidth,
+                              height: posterLayoutHeight,
+                              child: PosterPureFlutter(
+                                topic: '${content?['topic'] ?? ''}',
+                                quote: '${content?['quote'] ?? ''}',
+                                author: '${content?['author'] ?? ''}',
+                                note: '${content?['note'] ?? ''}',
+                                avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
+                                woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
+                                aiFramePath: _frameImagePath,
+                              ),
                             ),
                           ),
                         ),

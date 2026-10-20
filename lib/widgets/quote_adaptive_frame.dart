@@ -21,8 +21,9 @@ class QuoteAdaptiveFrame extends StatelessWidget {
   /// AI 图和文字都必须限制在这里，不能遮住真实木框。
   static const Rect artworkRect = Rect.fromLTRB(.180, .139, .850, .785);
 
-  /// 在画芯内部再留出呼吸空间，避免文字贴近木框及其阴影。
-  static const Rect textSafeRect = Rect.fromLTRB(.205, .162, .825, .755);
+  /// 在画芯内部保留窄而均衡的呼吸空间。它覆盖几乎全部白纸区域，
+  /// 既不会碰到木框阴影，也不会因边距过大浪费下半幅画纸。
+  static const Rect textSafeRect = Rect.fromLTRB(.198, .157, .832, .765);
 
   final String? aiImagePath;
   final int quoteCharacters;

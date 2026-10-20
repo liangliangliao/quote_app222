@@ -5,6 +5,7 @@ import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 
 import 'quote_adaptive_frame.dart';
+import 'quote_portrait_cutout.dart';
 
 ImageProvider _posterAvatar(String raw, String fallback) {
   if (raw.startsWith('data:')) {
@@ -17,8 +18,8 @@ ImageProvider _posterAvatar(String raw, String fallback) {
   return AssetImage(fallback);
 }
 
-/// 画芯与文字独立布局：无论名言多长，视觉故事始终拥有固定下部空间。
-/// 名言全部可上下滚动阅读；绘画区与木框不随滚动消失。
+/// 画芯与文字独立布局。默认相框让文字使用完整白纸区域；只有真实存在
+/// AI 配画时才在下方保留画面空间，避免无配画时出现大片空白和正文裁切。
 class PosterPureFlutter extends StatelessWidget {
   const PosterPureFlutter({
     super.key,
@@ -46,17 +47,23 @@ class PosterPureFlutter extends StatelessWidget {
       final h = constraints.maxHeight;
       final count = quote.characters.length;
       final titleSize = (w*.055).clamp(15.0, 25.0);
-      final quoteSize = count > 115 ? 19.5 :
-          count > 90 ? 21.5 : count > 65 ? 23.0 :
-          count > 45 ? 25.0 : 29.5;
+      final quoteSize = (w * (count > 115 ? .044 :
+          count > 90 ? .048 : count > 65 ? .052 :
+          count > 45 ? .057 : count > 22 ? .061 : .067))
+          .clamp(16.0, 29.5);
       final authorSize = (w*.035).clamp(12.0, 16.0);
       final noteSize = (w*.033).clamp(11.0, 13.5);
-      final avatarSize = (w*.19).clamp(42.0, 82.0);
-      final sceneHeight = (h*(count>80 ? .22 : .32)).clamp(75.0, 215.0);
+      final avatarWidth = (w*.21).clamp(46.0, 88.0);
+      final avatarHeight = (w*.255).clamp(58.0, 108.0);
+      final hasAiArtwork = (aiFramePath?.trim().isNotEmpty ?? false);
       final textArea = QuoteAdaptiveFrame.scaleRect(
         QuoteAdaptiveFrame.textSafeRect,
         Size(w, h),
       );
+      final sceneHeight = hasAiArtwork
+          ? (textArea.height * (count > 80 ? .18 : count > 45 ? .23 : .28))
+              .clamp(58.0, 128.0)
+          : 0.0;
 
       return Center(
         child: ConstrainedBox(
@@ -99,14 +106,12 @@ class PosterPureFlutter extends StatelessWidget {
                                         ),
                                       ),
                                       const SizedBox(width:10),
-                                      ClipOval(
-                                        child: SizedBox(
-                                          width:avatarSize,height:avatarSize,
-                                          child: Image(
-                                            image:_posterAvatar(avatar,woodBgAsset),
-                                            fit:BoxFit.cover,
-                                            errorBuilder:(_,__,___)=>const SizedBox.shrink(),
-                                          ),
+                                      Transform.translate(
+                                        offset: const Offset(0, -4),
+                                        child: QuotePortraitCutout(
+                                          image: _posterAvatar(avatar, woodBgAsset),
+                                          width: avatarWidth,
+                                          height: avatarHeight,
                                         ),
                                       ),
                                     ],
@@ -160,8 +165,8 @@ class PosterPureFlutter extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // 图像不再被长篇名言覆盖，始终能看见脚本中的主意象。
-                      SizedBox(height:sceneHeight),
+                      // 只有 AI 画芯存在时才为主意象留位；默认白纸全部给文字。
+                      if (sceneHeight > 0) SizedBox(height:sceneHeight),
                     ]),
                   ),
                 ],
