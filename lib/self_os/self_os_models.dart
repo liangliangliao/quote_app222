@@ -379,6 +379,10 @@ class SelfOsCase {
   void beginCognition() {
     v37.knowledgeBefore ??= osClone(cognitiveSnapshot());
     v37.settings['understandingReviewed'] = false;
+    if (committedAt != null && !reviewed) {
+      v37.settings['requiresReconsideration'] = true;
+      v37.settings['phase'] = 'revise';
+    }
   }
 
   void completeCognition(String reason, {String noChangeReason = ''}) {
@@ -402,9 +406,16 @@ class SelfOsCase {
       'createdAt': DateTime.now().toIso8601String(),
     });
     v37.knowledgeBefore = null;
+    v37.settings['deliberationCycles'] =
+        (v37.number('deliberationCycles') ?? 0).toInt() + 1;
+    v37.settings['informationGain'] =
+        delta.isEmpty && before['probability'] == after['probability']
+            ? 'none'
+            : 'new';
     v37.settings['understandingSummary'] = text('k2');
     if (text('newInformation').trim().isNotEmpty)
       v37.settings['newInformationReviewed'] = true;
+    v37.settings['requiresReconsideration'] = false;
   }
 
   void startIntervention(OsIntervention i) {
@@ -464,7 +475,56 @@ class SelfOsCase {
     }
     if (commitment != null) v37.priorCommitments.add(osClone(commitment!));
     committedAt = DateTime.now();
-    commitment = osClone(evidenceSnapshot());
+    v37.settings['phase'] =
+        gate.action == 'EXPERIMENT' ? 'experiment' : 'commit';
+    commitment = osClone({
+      ...evidenceSnapshot(),
+      'commitmentScope': gate.action == 'EXPERIMENT' ? 'experiment' : 'decision'
+    });
+  }
+
+  /// Bring a reviewed strength bridge into the action draft. It never approves
+  /// a commitment or makes a candidate strength a verified trait.
+  void stageStrengthBridge() {
+    if (reviewed) throw const FormatException('本轮已复盘，请在下一轮尝试这个桥接动作');
+    for (final key in [
+      'bridgeStrengthId',
+      'bridgeWeakness',
+      'bridgeMechanism',
+      'bridgeAction',
+      'bridgeGuardrail'
+    ]) {
+      if (v37.text(key).trim().isEmpty)
+        throw const FormatException('先补齐力量、阻碍、作用方式、动作与过度使用边界');
+    }
+    if (committedAt != null) {
+      beginCognition();
+      fields['newInformation'] = '根据力量桥接修改行动草稿：${v37.text('bridgeAction')}';
+      v37.settings['newInformationReviewed'] = false;
+    }
+    fields['firstAction'] = v37.text('bridgeAction');
+    fields['reconsiderWhen'] = v37.text('bridgeGuardrail');
+    v37.settings['actionBridge'] = {
+      'strengthId': v37.text('bridgeStrengthId'),
+      'weakness': v37.text('bridgeWeakness'),
+      'mechanism': v37.text('bridgeMechanism'),
+      'action': v37.text('bridgeAction'),
+      'guardrail': v37.text('bridgeGuardrail'),
+      'stagedAt': DateTime.now().toIso8601String(),
+    };
+    // A previous cue was endorsed for a different action; choose it again if
+    // still appropriate. Staging a bridge never creates a strength cue.
+    v37.settings.remove('holdCue');
+    v37.settings.remove('cueSource');
+    if (guide.confirmed && guide.phase == 'plan') {
+      guide.draft.addAll({
+        'action': fields['firstAction'],
+        'stopWhen': fields['reconsiderWhen'],
+        'costAccepted': false,
+        'reversible': false,
+        'cueAccepted': false
+      });
+    }
   }
 
   void addReview(SelfOsReview review) {
@@ -476,6 +536,7 @@ class SelfOsCase {
         review.context.trim().isEmpty)
       throw const FormatException('请记录真实行动、结果、情境和至少一条新证据');
     reviews.add(review);
+    v37.settings['phase'] = 'revise';
     v37.decisionTraces.add({
       'id': selfOsId(),
       'reviewId': review.id,
@@ -496,7 +557,7 @@ class SelfOsCase {
   void nextRound() {
     if (!reviewed) throw const FormatException('请先完成本轮复盘');
     final previous = reviews.singleWhere((r) => r.round == round);
-    fields['k1'] = previous.learning;
+    fields['k1'] = previous.notes['calibrationConclusion'] ?? previous.learning;
     fields['knowledgeSource'] = '第 $round 轮行动之镜';
     fields.remove('k2');
     fields.remove('cognitiveOperation');
@@ -523,6 +584,8 @@ class SelfOsCase {
     guide.revision++;
     guide.draft.clear();
     v37.settings['understandingReviewed'] = false;
+    v37.settings['requiresReconsideration'] = false;
+    v37.settings['phase'] = v37.routes.length >= 2 ? 'filter' : 'expand';
     v37.settings['holdCue'] = '';
     for (final key in [
       'jamesMode',

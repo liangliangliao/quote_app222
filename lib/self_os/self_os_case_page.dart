@@ -251,8 +251,10 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             maxLength: 6000,
             onChanged: (v) {
               if (key == 'k2' || key == 'newInformation') _c.beginCognition();
-              if (key == 'newInformation')
+              if (key == 'newInformation') {
                 _c.v37.settings['newInformationReviewed'] = false;
+                _c.v37.settings['requiresReconsideration'] = true;
+              }
               _c.fields[key] = v;
             }),
       );

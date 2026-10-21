@@ -105,7 +105,7 @@ extension _ConflictPanel on _SelfOsWorkbenchState {
                     for (final p in widget.profile.principles)
                       OsRecordCard(title: osText(p['rule']), children: [
                         text(
-                            '适用：${p['condition']}\n不适用：${p['doesNotApply'] ?? '待补充'}\n覆盖旧原则的新证据：${p['overrideEvidence'] ?? p['exception']}'),
+                            '适用：${p['condition']}\n不适用：${p['notApplicable'] ?? p['doesNotApply'] ?? '待补充'}\n覆盖旧原则的新证据：${p['overrideEvidence'] ?? p['exception']}'),
                         TextButton(
                             onPressed: () => update(
                                 (d) => d.settings['principleId'] = p['id']),

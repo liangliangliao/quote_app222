@@ -55,7 +55,9 @@ class OsGuideFrame {
   /// No arbitrary case fields, verification flags, scores or outcome writes.
   /// Quotations must be actual user text, including the latest correction.
   static OsGuideFrame parse(Map<String, dynamic> j,
-      {required Map<String, String> userSources, required String latestId}) {
+      {required Map<String, String> userSources,
+      required String latestId,
+      Set<String> knownGapIds = const {}}) {
     String requiredText(Map<String, dynamic> row, String key, [int max = 500]) {
       final value = osText(row[key]).trim();
       if (value.isEmpty || value.length > max) {
@@ -144,7 +146,16 @@ class OsGuideFrame {
       if (latestId == 'problem' || insight.isEmpty || routes.length < 2) {
         throw const FormatException('还需要先理解你的具体处境，再提出验证动作');
       }
+      final gapId = osText(experiment['gapId']);
+      final routeTitle = osText(experiment['routeTitle']);
+      if ((gapId.isNotEmpty && !knownGapIds.contains(gapId)) ||
+          (routeTitle.isNotEmpty &&
+              !routes.any((r) => r['title'] == routeTitle))) {
+        throw const FormatException('验证动作引用了不存在的问题或路径，请重新理解');
+      }
       result['experiment'] = {
+        if (gapId.isNotEmpty) 'gapId': gapId,
+        if (routeTitle.isNotEmpty) 'routeTitle': routeTitle,
         for (final key in [
           'action',
           'question',

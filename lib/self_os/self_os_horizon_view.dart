@@ -71,6 +71,12 @@ class _SelfOsHorizonViewState extends State<SelfOsHorizonView> {
                                   Text('${item.value}：${node.text(item.key)}')),
                       const SizedBox(height: 16),
                       Text('证据标签：${osEpistemicLabels[node.label]}；候选标签不等于已核实。'),
+                      if (node.flag('calibrationNeedsReview'))
+                        const OsNote('实际反馈使原推断需要修订，后续推演已暂停。请保留原预期，并根据反证调整条件。'),
+                      for (final observation
+                          in osMaps(node.data['observations']).reversed.take(3))
+                        OsNote(
+                            '实际观察：${observation['result']}\n适用范围：${observation['scope']}\n复盘记录：${observation['reviewId']}'),
                       if (node.evidenceIds.isEmpty)
                         const OsNote('尚未关联可追溯证据。此节点保留为推断、模拟或未知。'),
                       for (final e in s.evidence
@@ -143,7 +149,7 @@ class _SelfOsHorizonViewState extends State<SelfOsHorizonView> {
       if (!_showUncertain && !pathIds.contains(n.id)) return false;
       return switch (_horizon) {
         0 => n.order <= 2,
-        1 => n.order >= 2 && n.order <= 5,
+        1 => n.order >= 3 && n.order <= 5,
         _ => n.horizon == 'long' || n.order >= 4
       };
     }).toList()
@@ -312,6 +318,8 @@ class _SelfOsHorizonViewState extends State<SelfOsHorizonView> {
               title: d.text('title'),
               tag: osOptionDeltas[d.delta],
               children: [
+                if (d.flag('needsReview'))
+                  const OsNote('关联的后果已出现反证，这条未来路径需要重新核验。'),
                 Text(d.text('condition').isEmpty
                     ? '条件尚未确认'
                     : d.text('condition')),

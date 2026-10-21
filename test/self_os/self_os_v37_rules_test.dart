@@ -181,6 +181,9 @@ void main() {
     final s = decision();
     s.gaps.add(OsGap({
       'question': '事实',
+      'resolutionConfirmed': true,
+      'resolutionAnswer': '行动记录回答了此事实问题',
+      'resolutionScope': '该次行动的具体情境',
       'evidenceIds': ['proof']
     }));
     final e = proof(now: now);
@@ -223,6 +226,7 @@ void main() {
     final s = decision();
     final g = OsGap({
       'question': '投入时间',
+      'sensitivityReviewed': true,
       'lowScenario': '每周一小时',
       'highScenario': '每周三小时',
       'lowChoice': 'a',

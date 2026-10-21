@@ -5,9 +5,13 @@ import 'self_os_action_focus.dart';
 import 'self_os_ai_service.dart';
 import 'self_os_case_page.dart';
 import 'self_os_guidance.dart';
+import 'self_os_learning.dart';
+import 'self_os_progress.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
+
+part 'self_os_guide_learning_panel.dart';
 
 class SelfOsGuidePage extends StatefulWidget {
   const SelfOsGuidePage(
@@ -47,6 +51,10 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
   OsGuideFrame? get _frame =>
       g.frame == null ? null : OsGuideFrame.saved(g.frame!);
 
+  void _redraw(VoidCallback change) {
+    if (mounted) setState(change);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +64,15 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
       g.phase = 'learn';
     } else if (_c.retrospective) {
       g.phase = 'review';
+    } else if (_c.v37.flag('requiresReconsideration') ||
+        (_c.text('newInformation').isNotEmpty &&
+            !_c.v37.flag('newInformationReviewed'))) {
+      g
+        ..phase = 'explore'
+        ..frame = null
+        ..confirmedRevision = null;
+      g.draft['correcting'] = true;
+      _correcting = true;
     } else if (_c.committedAt != null && g.turns.isEmpty) {
       g.phase = 'act';
     }
@@ -222,39 +239,41 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
     }
   }
 
-  Future<void> _details() async {
+  Future<void> _details([int? target]) async {
     if (_locked) return;
-    final selection = await showModalBottomSheet<int>(
-        context: context,
-        isScrollControlled: true,
-        builder: (ctx) => SafeArea(
-                child: SingleChildScrollView(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('分析与记录',
-                      style: TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w700))),
-              const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24),
-                  child: Text('按需要展开。返回后，继续眼前这一步。')),
-              for (final e in const {
-                0: '选择与未来路径',
-                1: '认识、证据与因果',
-                2: '冲突与注意',
-                3: '未来认识准备',
-                4: '本性与力量',
-                5: '欲求假设与 Why Tree',
-                6: '完整动机空间',
-                7: '认识纠错',
-                8: '完整行动协议',
-                9: '详细复盘'
-              }.entries)
-                ListTile(
-                    title: Text(e.value),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pop(ctx, e.key)),
-            ]))));
+    final selection = target ??
+        await showModalBottomSheet<int>(
+            context: context,
+            isScrollControlled: true,
+            builder: (ctx) => SafeArea(
+                    child: SingleChildScrollView(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text('分析与记录',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w700))),
+                  const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24),
+                      child: Text('按需要展开。返回后，继续眼前这一步。')),
+                  for (final e in const {
+                    0: '选择与未来路径',
+                    1: '认识、证据与因果',
+                    2: '冲突与注意',
+                    3: '未来认识准备',
+                    4: '本性与力量',
+                    5: '欲求假设与 Why Tree',
+                    6: '完整动机空间',
+                    7: '认识纠错',
+                    8: '完整行动协议',
+                    9: '详细复盘'
+                  }.entries)
+                    ListTile(
+                        title: Text(e.value),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.pop(ctx, e.key)),
+                ]))));
     if (selection == null || !mounted) return;
     _draftTimer?.cancel();
     if (!await _persist(_c) || !mounted) return;
@@ -288,6 +307,14 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
       final changed = jsonEncode(c.evidenceSnapshot()) != _detailBefore;
       if (c.reviewed) {
         c.guide.phase = 'learn';
+      } else if (c.v37.flag('requiresReconsideration') ||
+          (c.text('newInformation').isNotEmpty &&
+              !c.v37.flag('newInformationReviewed'))) {
+        c.guide
+          ..phase = 'explore'
+          ..frame = null
+          ..confirmedRevision = null;
+        c.guide.draft['correcting'] = true;
       } else if (c.committedAt != null &&
           (c.committedAt != _detailCommit || c.guide.phase == 'act')) {
         c.guide.phase = 'act';
@@ -320,6 +347,12 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
   Future<void> _focus() async {
     final snapshot = _c.commitment;
     if (snapshot == null || _locked) return;
+    if (_c.v37.flag('requiresReconsideration') ||
+        (_c.text('newInformation').isNotEmpty &&
+            !_c.v37.flag('newInformationReviewed'))) {
+      setState(() => _error = '先回应重要新信息，更新认识后再确认行动约定。');
+      return;
+    }
     final result = await Navigator.push<Map<String, dynamic>>(
         context,
         MaterialPageRoute(
@@ -336,6 +369,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
         c.guide.draft['correcting'] = true;
         c.fields['newInformation'] = '现场出现重要新信息，待补充与重审';
         c.v37.settings['newInformationReviewed'] = false;
+        c.v37.settings['requiresReconsideration'] = true;
         c.v37.settings['understandingReviewed'] = false;
       }
     });
@@ -544,6 +578,27 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
               _input('question', '想验证的问题', d),
               _input('prediction', '我预期会发生什么', d),
               _input('observe', '怎样观察，什么结果会改变判断', d),
+              DropdownButtonFormField<String>(
+                key: ValueKey('guide_${_c.round}_experiment_route'),
+                initialValue: _c.v37.routes.any((r) => r.id == d['routeId'])
+                    ? osText(d['routeId'])
+                    : '',
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '这一步在检验哪条路径？'),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('跨路径了解，暂不关联')),
+                  for (final r in _c.v37.routes)
+                    DropdownMenuItem(
+                        value: r.id,
+                        child: Text(r.title, overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: _locked
+                    ? null
+                    : (v) {
+                        setState(() => d['routeId'] = v ?? '');
+                        _draftChanged();
+                      },
+              ),
             ]),
       ]),
       OsSection(title: '让它小到可以开始', children: [
@@ -691,6 +746,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                           c.guide.draft['correcting'] = true;
                           c.fields['newInformation'] = '出现新情况，待补充与重审';
                           c.v37.settings['newInformationReviewed'] = false;
+                          c.v37.settings['requiresReconsideration'] = true;
                           c.v37.settings['understandingReviewed'] = false;
                         })) {
                           setState(() => _correcting = true);
@@ -778,11 +834,13 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
             const OsNote('这是一条具体情境下的证据。先保留它，也保留其他解释；更多经历会让你看得更清楚。',
                 icon: Icons.spa_outlined),
           ]),
+      if (plan.isNotEmpty) _calibrationCard(r),
+      _nextStepCard(),
       _primary('带着这个发现再试一轮', () async {
         if (await _transition((c) {
           SelfOsGuidance.nextRound(c);
-          SelfOsGuidance.answer(
-              c, '上一次实际观察：${r.result}\n当时情境：${r.context}\n我的新认识：${r.learning}');
+          SelfOsGuidance.answer(c,
+              '上一次实际观察：${r.result}\n当时情境：${r.context}\n我的新认识：${r.notes['calibrationConclusion'] ?? r.learning}\n适用范围：${r.notes['calibrationScope'] ?? r.context}');
         })) {
           _top();
           await _runAi();
@@ -902,6 +960,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                                   'learn' => _learn(),
                                   _ => _explore(),
                                 },
+                                if (g.phase == 'explore') _nextStepCard(),
                                 const SizedBox(height: 20),
                                 if (g.turns.isNotEmpty)
                                   ExpansionTile(

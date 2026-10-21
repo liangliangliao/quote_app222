@@ -11,6 +11,8 @@ import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
 import 'self_os_insights.dart';
 import 'self_os_v37_rules.dart';
+import 'self_os_progress.dart';
+import 'self_os_learning.dart';
 
 class SelfOsHomePage extends StatefulWidget {
   const SelfOsHomePage({super.key, this.repository, this.ai});
@@ -367,17 +369,32 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
               : values.map((s) => OsNote(s)).toList());
 
   List<Widget> _guidance(List<SelfOsCase> pending) {
-    final gaps = pending
-        .where((c) => c.v37.gaps
-            .any((g) => !g.resolvedBy(c.v37.evidence, DateTime.now())))
+    final nextCases = _cases
+        .where((c) =>
+            !c.reviewed ||
+            ['calibrate', 'verify', 'reentry']
+                .contains(SelfOsProgress.next(c).kind))
         .toList();
+    int rank(SelfOsCase c) =>
+        const {
+          'reconsider': 0,
+          'hold': 1,
+          'verify': 2,
+          'prepare': 3,
+          'calibrate': 4,
+          'reentry': 5,
+          'retrieve': 6,
+          'ask': 7,
+          'experiment': 8,
+        }[SelfOsProgress.next(c).kind] ??
+        9;
+    nextCases.sort((a, b) => rank(a).compareTo(rank(b)));
+    final nextCase = nextCases.where((c) => rank(c) < 9).firstOrNull;
+    final next = nextCase == null ? null : SelfOsProgress.next(nextCase);
     final attention = pending
         .where((c) => SelfOsV37Rules.attentionBreaks(
                 c.motives.map((m) => m.toJson()).toList())
             .isNotEmpty)
-        .toList();
-    final preparation = pending
-        .where((c) => c.v37.interventions.any((i) => !i.completed))
         .toList();
     Widget card(SelfOsCase c, String title, String detail, int tab,
             IconData icon) =>
@@ -393,15 +410,19 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
     return [
       for (final warning in SelfOsInsights.pathGuard(_cases, _profile))
         OsNote(warning),
-      if (gaps.isNotEmpty)
-        card(gaps.first, '有一处认识，值得先补上',
-            SelfOsV37Rules.gate(gaps.first.v37).label, 1, Icons.search),
+      if (nextCase != null && next != null)
+        OsSection(title: next.title, subtitle: next.reason, children: [
+          ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.near_me_outlined, color: osForest),
+              title: Text(nextCase.problem,
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              trailing: const Icon(Icons.arrow_forward),
+              onTap: () => _open(nextCase, workspace: next.workspace)),
+        ]),
       if (attention.isNotEmpty)
         card(attention.first, '相信的理由，进入现场了吗？', '看看注意前景与行动连接，让双向动机都被看见。', 2,
             Icons.center_focus_strong),
-      if (preparation.isNotEmpty)
-        card(preparation.first, '为下一个真实时刻准备', '在决定前完成最小的认识准备；现场只留一条有效提示。', 3,
-            Icons.schedule),
       if (_profile.strengths.isNotEmpty && pending.isNotEmpty)
         card(pending.first, '把力量用在合适的位置', '结合行动证据，找到恰当使用与过度使用的边界。', 4,
             Icons.spa_outlined),
@@ -537,6 +558,21 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
           style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700)),
       const SizedBox(height: 10),
       OsNote('获得性格 · 证据覆盖 $coverage / 5：欲求、能力、代价、取舍、预测。仅表示已有记录的维度，不是人格分数。'),
+      OsSection(
+          title: '从现实中修订过的认识',
+          subtitle: '每条都保留原来的预期、实际观察和适用范围。以后分析会优先参考这些具体经历。',
+          children: SelfOsLearning.history(_cases).isEmpty
+              ? [const Text('完成一次实际反馈并确认它的含义后，认识会出现在这里。')]
+              : SelfOsLearning.history(_cases)
+                  .take(5)
+                  .map((e) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(osText(e['conclusion'])),
+                      subtitle: Text('实际：${e['actual']}\n适用范围：${e['scope']}'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          _open(_cases.firstWhere((c) => c.id == e['caseId']))))
+                  .toList()),
       OsSection(
           title: '个人使用说明书',
           subtitle: '用可追溯的行动记录，持续修订你的个人模型。',

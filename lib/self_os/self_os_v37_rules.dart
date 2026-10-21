@@ -94,7 +94,8 @@ class SelfOsV37Rules {
             for (final node in s.nodes
                 .where((n) => n.routeId == route.id && n.relevant)) ...[
               node.horizon,
-              node.text('valence'),
+              if (node.text('valence') == 'mixed') ...['benefit', 'cost'] else
+                node.text('valence'),
               node.order > 1 ? 'indirect' : 'direct',
               node.flag('cumulative') ? 'repeated' : 'single',
             ]
@@ -104,10 +105,21 @@ class SelfOsV37Rules {
   static List<String> symmetryWarnings(SelfOsV37 s) {
     final covered = coverage(s);
     final union = covered.values.expand((v) => v).toSet()..remove('');
+    Set<String> missing(OsRoute route) => union
+        .difference(covered[route.id]!)
+        .where((v) => !s.dimensionWaived(
+            route.id,
+            switch (v) {
+              'benefit' || 'cost' => 'valence',
+              'now' || 'near' || 'long' => 'temporal',
+              'direct' || 'indirect' => 'causal',
+              _ => 'cumulative',
+            }))
+        .toSet();
     return [
       for (final route in s.consideredRoutes)
-        if (union.difference(covered[route.id]!).isNotEmpty)
-          '「${route.title}」还没有按同样的问题深度检查：${union.difference(covered[route.id]!).map((v) => {
+        if (missing(route).isNotEmpty)
+          '「${route.title}」还没有按同样的问题深度检查：${missing(route).map((v) => {
                 ...osHorizons,
                 ...osValences,
                 'direct': '直接后果',
@@ -120,6 +132,9 @@ class SelfOsV37Rules {
 
   static OsGate gate(SelfOsV37 s, {DateTime? at}) {
     final now = at ?? DateTime.now();
+    if (s.flag('requiresReconsideration')) {
+      return const OsGate('ASK', ['现实条件有新变化，先回应新信息并更新认识，再确认原来的约定。']);
+    }
     if (!['low', 'medium', 'high'].contains(s.text('risk'))) {
       return const OsGate('ASK', ['先确认本次成本、可逆性和机会成本，再决定检查深度。']);
     }
@@ -138,6 +153,12 @@ class SelfOsV37Rules {
     if (conflicted.isNotEmpty)
       return OsGate(
           'VERIFY', conflicted.map((e) => '来源冲突：${e.claim}').toList());
+    final challenged =
+        s.nodes.where((n) => n.relevant && n.flag('calibrationNeedsReview'));
+    if (challenged.isNotEmpty) {
+      return OsGate(
+          'VERIFY', ['实际反馈没有支持原来的推断，先修订「${challenged.first.title}」及相关后续路径。']);
+    }
     if (s.cognitionOpen)
       return const OsGate(
           'ASK', ['本次认识更新尚未完成：保存 K2，说明它改变了哪些动机；若没有影响，明确记录并停止重复准备。']);
@@ -171,6 +192,9 @@ class SelfOsV37Rules {
       final structure = representationGaps(s);
       if (structure.isNotEmpty)
         return OsGate('ASK', structure.take(3).map((g) => g.reason).toList());
+      final asymmetric = symmetryWarnings(s);
+      if (asymmetric.isNotEmpty)
+        return OsGate('ASK', asymmetric.take(3).toList());
       if (!s.evidence.any((e) => e.reliableAt(now))) {
         return const OsGate('VERIFY', ['重大承诺需要至少一条可追溯、未过期且无冲突的已核实依据。']);
       }
@@ -198,8 +222,7 @@ class SelfOsV37Rules {
         s.text('informationGain') == 'none') {
       return '同一批证据已反复比较，没有新增认识。选择一条适用的个人原则、一个低成本实验，或明确复审时间。';
     }
-    if (s.gaps.isNotEmpty &&
-        s.gaps.every((g) => g.sensitivity == 'stable' || !g.important)) {
+    if (s.gaps.isNotEmpty && s.gaps.every((g) => !g.important)) {
       return '关键未知在已记录的合理情景下不改变选择。可以停止搜索，进入实验或行动。';
     }
     return '只补会改变决定的信息；新的材料不自动等于更好的决定。';
@@ -390,6 +413,10 @@ class SelfOsV37Rules {
         ..sort((a, b) => a.id.compareTo(b.id));
       String stop = '';
       if (weakest == 0) stop = '这里开始不确定：关键依据缺失、冲突或失效，停止继续推断。';
+      if (node.flag('calibrationNeedsReview')) {
+        weakest = 0;
+        stop = '实际反馈与预期不符。先修订这个节点，暂不沿旧判断推演后续路径。';
+      }
       if (path.length >= maxDepth) stop = '已到本次展开边界；只有新增决定相关证据时才继续。';
       if (node.flag('prune'))
         stop = node.text('pruneReason').isEmpty
