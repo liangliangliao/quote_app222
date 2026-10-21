@@ -5,6 +5,7 @@ import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
 import 'meditation_dao.dart';
 import 'meditation_depth_guidance.dart';
+import 'meditation_experiential_method.dart';
 import 'meditation_models.dart';
 import 'meditation_mentor_guidance.dart';
 import 'meditation_script_response.dart';
@@ -218,7 +219,13 @@ class MeditationAiService {
       'user_description': normalizedDescription,
       'primary_practice_input': primaryInput,
       'input_priority': '用户原话决定主题；推荐、状态和历史仅调节引导方式，不得替换主题',
-      'experience_contract_version': 'experiential_mentor_v3_single_request',
+      'experience_contract_version': 'experiential_mentor_v4_eam8_single_request',
+      'experiential_method': MeditationExperientialMethod.buildBrief(
+        userInput: primaryInput,
+        durationMinutes: targetMinutes,
+        useImagery: useImagery,
+        isSleep: isSleep,
+      ),
       'generation_mode': 'single_request',
       'automatic_rewrite': false,
       'imagery_mode': useImagery ? '可选温和想象，并提供真实感官替代' : '真实感官与环境，不深入想象',
@@ -269,7 +276,7 @@ class MeditationAiService {
       onProgress?.call('正在生成冥想引导……');
       raw = await _ai.generateText(
         purpose: 'meditation.daily_script',
-        systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}\n${MeditationDepthGuidance.writingRules}',
+        systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}\n${MeditationDepthGuidance.writingRules}\n${MeditationExperientialMethod.systemRules}',
         prompt: prompt,
         maxTokens: (2000 + targetMinutes * 280).clamp(2200, 12000).toInt(),
         expectJson: true,
