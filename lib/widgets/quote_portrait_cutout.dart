@@ -29,7 +29,7 @@ class QuotePortraitCutout extends StatelessWidget {
           shaderCallback: (bounds) => const LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            stops: [0, .055, .945, 1],
+            stops: [0, .075, .925, 1],
             colors: [
               Colors.transparent,
               Colors.white,
@@ -42,7 +42,7 @@ class QuotePortraitCutout extends StatelessWidget {
             shaderCallback: (bounds) => const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0, .022, .94, 1],
+              stops: [0, .045, .92, 1],
               colors: [
                 Colors.transparent,
                 Colors.white,

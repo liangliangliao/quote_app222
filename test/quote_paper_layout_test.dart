@@ -169,6 +169,13 @@ void main() {
         ),
       ),
     )));
+    await tester.pump();
+    final portraitContext = tester.element(find.byType(QuotePortraitCutout).first);
+    await tester.runAsync(() async {
+      for (final source in sources) {
+        await precacheImage(AssetImage(source), portraitContext);
+      }
+    });
     await tester.pumpAndSettle();
     final viewports = find.byKey(const ValueKey('quote-portrait-viewport'));
     expect(viewports, findsNWidgets(4));
