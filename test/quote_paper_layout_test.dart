@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
+import 'package:quote_app/widgets/quote_portrait_cutout.dart';
 
 const quote = '你的大脑分不清现实和想象的区别，因此你可以先在内心模拟自己想成为的样子。当你在脑海中一遍遍练习变得轻松、冷静和包容，你就更容易在现实中真的那样去做。';
 const author = '— Tal Ben-Shahar, Harvard Positive Psychology (Happiness) Course';
@@ -90,18 +91,27 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       });
       await tester.pump();
-      if (find.byKey(const ValueKey('quote-portrait-matted')).evaluate().isNotEmpty) {
+      if (find.byKey(const ValueKey('quote-portrait-composited')).evaluate().isNotEmpty) {
         break;
       }
     }
     await tester.pumpAndSettle();
-    final matted = find.byKey(const ValueKey('quote-portrait-matted'));
-    expect(matted, findsOneWidget,
-      reason: 'The visual check must capture the completed matte, not its fallback');
-    final portrait = tester.widget<Image>(matted);
-    await tester.runAsync(() => precacheImage(portrait.image, tester.element(matted)));
+    final composited = find.byKey(const ValueKey('quote-portrait-composited'));
+    expect(composited, findsOneWidget);
+    final portrait = tester.widget<Image>(composited);
+    await tester.runAsync(() => precacheImage(portrait.image, tester.element(composited)));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    final viewport = tester.getRect(
+      find.byKey(const ValueKey('quote-portrait-viewport')));
+    expect(viewport.width / viewport.height, closeTo(.78, .001));
+    expect(tester.getRect(composited), viewport,
+      reason: 'The source image must fill exactly the clipped safe viewport');
+    expect(find.descendant(
+      of: find.byKey(const ValueKey('quote-portrait-viewport')),
+      matching: find.byType(ClipRect)),
+      findsOneWidget,
+      reason: 'The clip must contain the image and both edge-blend shaders');
     final body = tester.renderObject<RenderParagraph>(
       find.byKey(const ValueKey('quote-body')));
     expect(body.didExceedMaxLines, isFalse, reason: 'The screenshot quote must fit in full');
@@ -122,11 +132,63 @@ void main() {
     }
     final bytes = png!.buffer.asUint8List();
     final dir = Directory('build/quote-frame-preview')..createSync(recursive: true);
-    File('${dir.path}/white-wall-build6.png').writeAsBytesSync(bytes);
+    File('${dir.path}/white-wall-build7.png').writeAsBytesSync(bytes);
     final preview = img.encodeJpg(img.decodeImage(bytes)!, quality: 86);
     // The CI log offers a compact, directly inspectable render for this fix.
     print('QUOTE_PREVIEW_BASE64:${base64Encode(preview)}');
     image.dispose();
+    });
+  });
+
+  testWidgets('all portrait sources use one fixed clipped window', (tester) async {
+    const sources = [
+      'assets/avatars/talbenshahar .jpeg',
+      'assets/avatars/Albert_Camus_1945_(cropped).jpg',
+      'assets/avatars/250px-William_James_b1842c.jpg',
+      'assets/avatars/schopenhauer.jpg',
+    ];
+    await tester.binding.setSurfaceSize(const Size(420, 260));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      backgroundColor: Colors.white,
+      body: RepaintBoundary(
+        key: const ValueKey('portrait-grid-boundary'),
+        child: ColoredBox(
+          color: Colors.white,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final source in sources)
+                QuotePortraitCutout(
+                  image: AssetImage(source),
+                  width: 78,
+                  height: 100,
+                ),
+            ],
+          ),
+        ),
+      ),
+    )));
+    await tester.pumpAndSettle();
+    final viewports = find.byKey(const ValueKey('quote-portrait-viewport'));
+    expect(viewports, findsNWidgets(4));
+    for (var i = 0; i < 4; i++) {
+      expect(tester.getSize(viewports.at(i)), const Size(78, 100));
+    }
+    final clips = find.descendant(of: viewports, matching: find.byType(ClipRect));
+    expect(clips, findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+
+    await tester.runAsync(() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const ValueKey('portrait-grid-boundary')));
+      final image = await boundary.toImage(pixelRatio: 2);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      final dir = Directory('build/quote-frame-preview')
+        ..createSync(recursive: true);
+      File('${dir.path}/fixed-portrait-grid-build7.png')
+        .writeAsBytesSync(png!.buffer.asUint8List());
+      image.dispose();
     });
   });
 }

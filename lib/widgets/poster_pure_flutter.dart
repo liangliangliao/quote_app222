@@ -118,8 +118,11 @@ class _PaperComposition extends StatelessWidget {
       painter.dispose();
       return result;
     }
-    final portraitWidth = (width * .25).clamp(35.0, 82.0);
-    final portraitHeight = portraitWidth * 1.22;
+    // Every source portrait uses the same 39:50 window. BoxFit.cover normalises
+    // the source canvas while ClipRect in QuotePortraitCutout is the final
+    // paint boundary, so neither the photograph nor its feather can overflow.
+    final portraitWidth = (width * .235).clamp(40.0, 76.0);
+    final portraitHeight = portraitWidth / .78;
     final gap = (width * .041).clamp(5.0, 12.0);
     final titleWidth = width - (hasAvatar ? portraitWidth + gap : 0);
     final titleHeight = measure(topic, titleStyle, titleWidth, maxLines: 3);

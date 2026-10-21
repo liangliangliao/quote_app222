@@ -200,21 +200,21 @@ jobs:
       - name: Build APK - Flutter release
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: flutter build apk --release --build-name 0.1.2 --build-number 6 -t lib/main.dart
+        run: flutter build apk --release --build-name 0.1.3 --build-number 7 -t lib/main.dart
 
       - name: Give corrected APK a unique filename
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: >-
           mv build/app/outputs/flutter-apk/app-release.apk
-          build/app/outputs/flutter-apk/quote_app_home_frame_v0.1.2_build6.apk
+          build/app/outputs/flutter-apk/quote_app_fixed_portrait_v0.1.3_build7.apk
 
       - name: Upload APK - Flutter
         if: steps.detect.outputs.project_type == 'flutter'
         uses: actions/upload-artifact@v4
         with:
-          name: quote_app-home-frame-v0.1.2-build6
-          path: ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/quote_app_home_frame_v0.1.2_build6.apk
+          name: quote_app-fixed-portrait-v0.1.3-build7
+          path: ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/quote_app_fixed_portrait_v0.1.3_build7.apk
           if-no-files-found: error
 
       # ---------- Gradle path fallback ----------
