@@ -12,7 +12,6 @@ on:
       - pubspec.yaml
       - pubspec.lock
       - .github/workflows/evidence_growth_release.yml
-      - .github/workflows/android_build_source_repo.yml
 
 permissions:
   contents: read

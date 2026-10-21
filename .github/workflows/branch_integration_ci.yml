@@ -11,8 +11,6 @@ on:
       - 'test/shame_transform_models_test.dart'
       - 'test/external_data/**'
       - 'test/todo_failure_growth_engine_test.dart'
-      - '.github/workflows/branch_integration_ci.yml'
-      - 'pubspec.yaml'
   workflow_dispatch:
 
 permissions:

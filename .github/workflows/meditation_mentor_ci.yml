@@ -6,8 +6,6 @@ on:
       - 'lib/meditation_module/**'
       - 'lib/services/global_ai_settings.dart'
       - 'test/meditation/**'
-      - '.github/workflows/meditation_mentor_ci.yml'
-      - 'pubspec.yaml'
   workflow_dispatch:
 
 permissions:

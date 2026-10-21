@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
-import 'package:quote_app/widgets/wood_frame_3d_overlay.dart';
+import 'package:quote_app/widgets/quote_portrait_cutout.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/notification_service.dart';
@@ -83,7 +83,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final Set<String> _frameAttempted = <String>{};
   String _visibleFrameKey = '';
   String? _frameImagePath;
-  String? _frameFinish;
   bool _frameAuto = false;
   bool _frameGenerating = false;
   int _frameRevision = 0;
@@ -108,21 +107,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _visibleFrameKey = key;
         _frameImagePath = null; // 不展示上一条名言的画面
-        _frameFinish = null;
       });
     }
     if (quote.trim().isEmpty) return;
     try {
       final cached = await _frameAi.findCached(topic, quote);
-      final script = await _frameAi.readCachedScript(topic, quote);
       if (!mounted || revision != _frameRevision) return;
       if (cached != null) {
-        // 只有确实存在 AI 画作时才允许切换材质；
-        // 纯兜底名言一律使用用户要求的默认暖胡桃木相框。
-        setState(() {
-          _frameImagePath = cached;
-          _frameFinish = script?.fromAi == true ? script!.frameFinish : null;
-        });
+        // AI 只替换用户木质画框中的画芯，不改变画框与房间背景。
+        setState(() => _frameImagePath = cached);
       } else if (_frameAuto && !_frameAttempted.contains(key)) {
         unawaited(_generateFrameFor(payload, userInitiated: false));
       }
@@ -150,19 +143,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         topic: topic, quote: quote, note: (payload['note'] ?? '').toString(),
         theme: style, force: userInitiated,
       );
-      final script = await _frameAi.readCachedScript(topic, quote);
       if (!mounted) return;
       if (_visibleFrameKey == key) {
-        setState(() {
-          _frameImagePath = path;
-          _frameFinish = script?.fromAi == true ? script!.frameFinish : null;
-        });
+        setState(() => _frameImagePath = path);
       }
-      if (userInitiated) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('主题画框已生成并缓存')));
+      if (userInitiated) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('名言配画已生成并放入木质画框')));
     } catch (e) {
       await DLog.e('FRAME', 'AI 生成配画失败: $e');
       if (userInitiated && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 配画失败，已保留本地主题相框：$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 配画失败，已保留默认木质画框：$e')));
       }
     } finally {
       if (mounted) {
@@ -190,8 +179,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         title: const Text('名言如何变成画面'),
         content: SingleChildScrollView(
           child: Text(script == null
-            ? '当前尚未生成 AI 视觉脚本。请先选择「AI 生成/重绘当前画框」。本地主题相框只能提供基本意境，并非深入理解原文。'
-            : '原句含义：${script.meaning}\n\n核心视觉类比：${script.metaphor}\n\n可见场景：${script.scene}\n\n为什么这样画：${script.relationship}\n\n氛围：${script.mood}\n木框：${script.frameFinish}\n\n分析来源：${script.fromAi ? 'AI 语义解析' : '本地有限规则兜底（不代表 AI 已理解）'}'),
+            ? '当前尚未生成 AI 视觉脚本。请先选择「AI 生成/重绘框内配画」。默认始终使用你提供的木质画框。'
+            : '原句含义：${script.meaning}\n\n核心视觉类比：${script.metaphor}\n\n可见场景：${script.scene}\n\n为什么这样画：${script.relationship}\n\n氛围：${script.mood}\n\n固定画框：你提供的木质画框；AI 只替换框内画面。\n\n分析来源：${script.fromAi ? 'AI 语义解析' : '本地有限规则兜底（不代表 AI 已理解）'}'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
@@ -206,8 +195,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('为当前名言生成 AI 相框？'),
-        content: const Text('系统将先调用文字 AI 理解名言的含义、象征与画面关系，然后再用图片模型生成。两次调用都可能产生 API 费用；重新生成会再次计费。'),
+        title: const Text('为当前名言生成框内配画？'),
+        content: const Text('系统将先调用文字 AI 提炼名言的核心命题、对比或因果关系，再让图片模型把它变成直观画面，并只替换木框内的白色画芯。两次调用都可能产生 API 费用；重新生成会再次计费。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('生成')),
@@ -223,7 +212,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('开启 AI 自动配画？'),
-          content: const Text('新名言会先调用文字 AI 形成可解释的视觉脚本，再调用图片 AI 生成画面。两次模型调用可能分别收费；每句有缓存，重复打开不会重复生成。关闭后仅使用免费的本地视觉兜底。'),
+          content: const Text('新名言会先调用文字 AI 形成可解释的视觉脚本，再调用图片 AI 生成框内画面。两次模型调用可能分别收费；每句有缓存，重复打开不会重复生成。关闭后显示你提供的默认木质画框和白色画芯。'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
             FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('开启')),
@@ -237,7 +226,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await _frameAi.setAutoEnabled(enabled);
       if (!mounted) return;
       setState(() => _frameAuto = enabled);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(enabled ? 'AI 自动配画已开启' : 'AI 自动配画已关闭，本地相框继续生效')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(enabled ? 'AI 自动配画已开启' : 'AI 自动配画已关闭，默认木质画框继续生效')));
       if (enabled && _todayData != null) unawaited(_activateFrame(_todayData!));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存配画设置失败：$e')));
@@ -729,8 +718,8 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
     );
   }
 
-  /// Build a single fixed quote card.  The card uses the home_small_frame
-  /// image as the background and overlays the quote content scaled to fit.
+  /// Build a single fixed quote card using the same default wooden-frame photo
+  /// as the main home poster.
   Widget 
 _buildFixedCard(Map<String, dynamic> row) {
 
@@ -786,9 +775,9 @@ ImageProvider _imageFrom(String? any) {
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 背景相框
+                  // 与首页主画面一致的唯一默认木质画框。
                   Positioned.fill(
-                    child: QuoteAdaptiveFrame(theme: QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note), quoteCharacters: quote.runes.length),
+                    child: QuoteAdaptiveFrame(quoteCharacters: quote.runes.length),
                   ),
                   // 画布内容
                   Positioned.fill(
@@ -832,18 +821,10 @@ ImageProvider _imageFrom(String? any) {
                                         ),
                                       ),
                                       SizedBox(width: innerPadH * 0.6),
-                                      ClipOval(
-                                        child: SizedBox(
-                                          width: avatarSize,
-                                          height: avatarSize,
-                                          child: hasAvatar
-                                              ? Image(
-                                                  image: _imageFrom(avatar),
-                                                  fit: BoxFit.contain,
-                                                  gaplessPlayback: true,
-                                                )
-                                              : const SizedBox.shrink(),
-                                        ),
+                                      QuotePortraitCutout(
+                                        image: _imageFrom(avatar),
+                                        width: avatarSize,
+                                        height: avatarSize * 1.22,
                                       ),
                                     ],
                                   )
@@ -924,11 +905,6 @@ ImageProvider _imageFrom(String? any) {
                         ),
                       ),
                       ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: WoodFrame3dOverlay(
-                      theme: QuoteFrameTheme.resolve(topic: topic, quote: quote, note: note),
                     ),
                   ),
                 ],
@@ -1368,31 +1344,28 @@ ImageProvider _imageFrom(String? any) {
                   Expanded(
                     child: Padding(
                       padding: EdgeInsets.only(bottom: posterBottomReserve),
-                      child: Align(
-                        alignment: showPinnedArea ? Alignment.topCenter : Alignment.center,
-                        child: SizedBox(
-                          width: posterLayoutWidth,
-                          height: posterLayoutHeight,
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 0),
-                            child: Transform.translate(
-                              offset: const Offset(2, 0),
-                              child: Transform.scale(
-                                scale: 0.725,
-                                child: SizedBox(
-                                  width: posterLayoutWidth,
-                                  height: posterLayoutHeight,
-                                  child: PosterPureFlutter(
-                                    topic: '${content?['topic'] ?? ''}',
-                                    quote: '${content?['quote'] ?? ''}',
-                                    author: '${content?['author'] ?? ''}',
-                                    note: '${content?['note'] ?? ''}',
-                                    avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
-                                    woodBgAsset: 'assets/bg-wood-upload.jpg',
-                                    aiFramePath: _frameImagePath,
-                                    frameFinish: _frameFinish,
-                                  ),
-                                ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
+                        child: ClipRect(
+                          child: FittedBox(
+                            // 完整展示 2:3 背景，不再以 cover 放大并裁掉左右场景。
+                            fit: BoxFit.contain,
+                            alignment: showPinnedArea
+                                ? Alignment.topCenter
+                                // 原图中的木框中心略高于整张照片中心；在竖屏
+                                // 留白内轻微下移照片，使木框本身落在屏幕视觉中心。
+                                : const Alignment(0, .45),
+                            child: SizedBox(
+                              width: posterLayoutWidth,
+                              height: posterLayoutHeight,
+                              child: PosterPureFlutter(
+                                topic: '${content?['topic'] ?? ''}',
+                                quote: '${content?['quote'] ?? ''}',
+                                author: '${content?['author'] ?? ''}',
+                                note: '${content?['note'] ?? ''}',
+                                avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
+                                woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
+                                aiFramePath: _frameImagePath,
                               ),
                             ),
                           ),
@@ -1491,7 +1464,7 @@ ImageProvider _imageFrom(String? any) {
                             child: Row(children: [
                               Icon(_frameGenerating ? Icons.hourglass_top : Icons.auto_awesome),
                               const SizedBox(width: 8),
-                              Text(_frameGenerating ? '正在生成配画' : 'AI 生成/重绘当前画框（可能收费）'),
+                              Text(_frameGenerating ? '正在生成配画' : 'AI 生成/重绘框内配画（可能收费）'),
                             ]),
                           ),
                           PopupMenuItem<String>(

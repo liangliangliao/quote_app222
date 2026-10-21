@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_visual_script_service.dart';
-import 'package:quote_app/widgets/wood_frame_3d_overlay.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
 
 void main() {
@@ -48,8 +47,8 @@ void main() {
       theme: QuoteFrameTheme.resolve(topic:'行动',quote:'千里之行，始于足下。'),
     );
     expect(spec.isThemeOnly, isTrue);
-    expect(spec.imagePrompt(quoteCharacters: 130), contains('BOTTOM 22%'));
-    expect(spec.imagePrompt(quoteCharacters: 20), contains('BOTTOM 36%'));
+    expect(spec.imagePrompt(quoteCharacters: 130), contains('34% of the canvas'));
+    expect(spec.imagePrompt(quoteCharacters: 20), contains('46% of the canvas'));
     expect(spec.imagePrompt(quoteCharacters: 80), contains('No typography'));
   });
 
@@ -72,31 +71,65 @@ void main() {
       topic: '价值',
     );
     expect(prompt, contains('我们反抗，故我们存在。'));
-    expect(prompt, contains('MUST independently interpret'));
+    expect(prompt, contains('PRIMARY SOURCE'));
+    expect(prompt, contains('Independently interpret'));
     expect(prompt, contains('No typography'));
   });
 
-  test('3D frame ring never paints across the quote canvas', () {
-    final ring = woodFrameOuterRing(const Size(240,360));
-    expect(ring.contains(const Offset(120,180)), isFalse);
-    expect(ring.contains(const Offset(10,180)), isTrue);
-    expect(ring.contains(const Offset(230,180)), isTrue);
-    expect(ring.contains(const Offset(120,10)), isTrue);
+  test('AI-reviewed prompt still keeps the exact quotation as ground truth', () {
+    final spec = QuoteVisualScript.fromJson({
+      'meaning': '失败是一次事件，不能独自证明一个人的全部能力。',
+      'metaphor': '一张被标记的试卷与仍在继续搭建的桥',
+      'scene': '桌面上放着一张有明显错误标记的试卷，旁边的人没有把它贴在自己的胸前，而是根据错误调整图纸，继续把一座尚未完成的模型桥搭向对岸。',
+      'relationship': '一次错误对应试卷上的一个标记；继续修正并建桥对应能力仍可通过后续行动被检验。',
+      'frameFinish': 'walnut',
+      'fromAi': true,
+    });
+    const quote = '失败一次，只能说明这一次没有成功，不能证明我没有能力。';
+    final prompt = spec.imagePrompt(
+      quoteCharacters: quote.length,
+      originalQuote: quote,
+      topic: '失败与能力',
+    );
+    expect(prompt, contains(quote));
+    expect(prompt, contains('same proposition'));
+    expect(prompt, contains('clause-to-image mapping'));
   });
 
-  testWidgets('3D wood overlay and content remain paintable at mobile card scale', (tester) async {
-    final theme = QuoteFrameTheme.resolve(topic: '成长', quote: '努力成长');
+  test('the uploaded wooden frame is the only bundled default frame', () {
+    final frame = File(QuoteAdaptiveFrame.defaultBackgroundAsset);
+    expect(frame.existsSync(), isTrue);
+    expect(frame.lengthSync(), greaterThan(100000));
+    expect(File('assets/home_small_frame.png').existsSync(), isFalse);
+  });
+
+  test('AI artwork geometry stays inside the photographed wooden frame', () {
+    final rect = QuoteAdaptiveFrame.scaleRect(
+      QuoteAdaptiveFrame.artworkRect,
+      const Size(300, 450),
+    );
+    expect(rect.left, closeTo(54, .01));
+    expect(rect.top, closeTo(62.55, .01));
+    expect(rect.right, closeTo(255, .01));
+    expect(rect.bottom, closeTo(353.25, .01));
+    expect(rect.contains(const Offset(150, 225)), isTrue);
+    expect(rect.contains(const Offset(10, 225)), isFalse);
+  });
+
+  testWidgets('the home frame renders the uploaded asset at mobile scale', (tester) async {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: Center(
-      child: SizedBox(width: 300,height: 450,child: Stack(
-        fit: StackFit.expand,
-        children:[
-          QuoteAdaptiveFrame(theme: theme, quoteCharacters: 115),
-          const Center(child: Text('名言字形由 Flutter 独立渲染')),
-          WoodFrame3dOverlay(theme: theme, finish: 'walnut'),
-        ],
-      )),
+      child: const SizedBox(
+        width: 300,
+        height: 450,
+        child: QuoteAdaptiveFrame(quoteCharacters: 115),
+      ),
     ))));
-    expect(find.text('名言字形由 Flutter 独立渲染'), findsOneWidget);
+    final image = tester.widget<Image>(find.byType(Image).first);
+    expect(image.image, isA<AssetImage>());
+    expect(
+      (image.image as AssetImage).assetName,
+      QuoteAdaptiveFrame.defaultBackgroundAsset,
+    );
     expect(tester.takeException(), isNull);
   });
 }

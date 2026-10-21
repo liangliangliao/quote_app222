@@ -10,9 +10,6 @@ on:
       - "assets/zhixing_tree/**"
       - "tools/zhixing_tree/**"
       - "test/zhixing_tree/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - ".github/workflows/zhixing_tree_ci.yml"
   pull_request:
     paths:
       - "lib/zhixing_tree/**"
@@ -22,9 +19,6 @@ on:
       - "assets/zhixing_tree/**"
       - "tools/zhixing_tree/**"
       - "test/zhixing_tree/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - ".github/workflows/zhixing_tree_ci.yml"
 
 concurrency:
   group: zhixing-tree-${{ github.workflow }}-${{ github.ref }}
