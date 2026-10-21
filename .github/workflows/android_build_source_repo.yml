@@ -11,7 +11,6 @@ on:
         default: false
   push:
     paths:
-      - ".github/workflows/**"
       - "lib/**"
       - "android/**"
       - "ios/**"
@@ -35,7 +34,6 @@ on:
       - "**/*.java"
   pull_request:
     paths:
-      - ".github/workflows/**"
       - "lib/**"
       - "android/**"
       - "ios/**"

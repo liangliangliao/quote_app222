@@ -12,8 +12,6 @@ on:
       - "lib/services/notification_service.dart"
       - "test/kindling/**"
       - "tools/pack_kindling.sh"
-      - "pubspec.yaml"
-      - ".github/workflows/kindling_ci.yml"
   pull_request:
     paths:
       - "lib/kindling/**"
@@ -25,8 +23,6 @@ on:
       - "lib/services/notification_service.dart"
       - "test/kindling/**"
       - "tools/pack_kindling.sh"
-      - "pubspec.yaml"
-      - ".github/workflows/kindling_ci.yml"
   workflow_dispatch:
 
 permissions:

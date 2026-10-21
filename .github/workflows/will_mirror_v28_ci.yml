@@ -12,9 +12,6 @@ on:
       - 'tools/will_mirror/**'
       - 'server/will_mirror/**'
       - 'docs/will_mirror/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - '.github/workflows/will_mirror_v28_ci.yml'
   workflow_dispatch:
 permissions:
   contents: read

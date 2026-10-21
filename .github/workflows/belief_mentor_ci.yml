@@ -9,8 +9,6 @@ on:
       - "lib/platform/native_scheduler.dart"
       - "android/app/src/main/java/com/example/quote_app/am/AlarmReceiver.java"
       - "test/belief_mentor/**"
-      - "pubspec.yaml"
-      - ".github/workflows/belief_mentor_ci.yml"
   workflow_dispatch:
 
 permissions:

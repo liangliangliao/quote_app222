@@ -6,8 +6,6 @@ on:
       - 'lib/beautiful_enemy/**'
       - 'lib/beautiful_enemy_host/**'
       - 'test/beautiful_enemy/**'
-      - '.github/workflows/beautiful_enemy_ci.yml'
-      - 'pubspec.yaml'
   workflow_dispatch:
 
 permissions:

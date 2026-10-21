@@ -6,8 +6,6 @@ on:
       - "lib/xiangji_future_strategist/**"
       - "test/xiangji_future_strategist/**"
       - "assets/xiangji_future_strategist/**"
-      - "pubspec.yaml"
-      - ".github/workflows/xiangji_future_strategist_ci.yml"
   workflow_dispatch:
 
 permissions:

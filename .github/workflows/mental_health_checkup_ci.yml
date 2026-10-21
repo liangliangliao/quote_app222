@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - ".github/workflows/mental_health_checkup_ci.yml"
       - "android/app/build.gradle"
       - "android/app/src/main/AndroidManifest.xml"
       - "android/app/src/main/kotlin/com/example/quote_app/MainActivity.kt"
@@ -17,7 +16,6 @@ on:
       - "lib/services/native_guard.dart"
       - "assets/mental_health_checkup/**"
       - "test/mental_health_checkup/**"
-      - "pubspec.yaml"
 
 jobs:
   checkup:

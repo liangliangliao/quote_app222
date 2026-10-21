@@ -9,8 +9,6 @@ on:
       - "test/xiangji_goal_mentor/**"
       - "assets/zhixing_tree/knowledge_systems_v2_0.json"
       - "assets/xiangji_goal_mentor/**"
-      - "pubspec.yaml"
-      - ".github/workflows/xiangji_goal_mentor_ci.yml"
   workflow_dispatch:
 
 permissions:
@@ -44,7 +42,7 @@ jobs:
             exit 0
           fi
           changed_files="$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")"
-          if printf '%s\n' "$changed_files" | grep -Eq '^(lib/xiangji_goal_mentor/|lib/pages/discover_page\.dart$|lib/services/task_runner\.dart$|test/xiangji_goal_mentor/|assets/xiangji_goal_mentor/|assets/zhixing_tree/knowledge_systems_v2_0\.json$|pubspec\.yaml$)'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^(lib/xiangji_goal_mentor/|lib/pages/discover_page\.dart$|lib/services/task_runner\.dart$|test/xiangji_goal_mentor/|assets/xiangji_goal_mentor/|assets/zhixing_tree/knowledge_systems_v2_0\.json$)'; then
             echo "run_goal_mentor=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_goal_mentor=false" >> "$GITHUB_OUTPUT"
