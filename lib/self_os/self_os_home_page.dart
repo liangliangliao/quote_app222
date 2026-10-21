@@ -3,10 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'self_os_ai_service.dart';
 import 'self_os_case_page.dart';
+import 'self_os_guide_page.dart';
+import 'self_os_guidance.dart';
 import 'self_os_engine.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
+import 'self_os_insights.dart';
+import 'self_os_v37_rules.dart';
 
 class SelfOsHomePage extends StatefulWidget {
   const SelfOsHomePage({super.key, this.repository, this.ai});
@@ -22,7 +26,6 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
   List<SelfOsCase> _cases = [];
   SelfOsProfile _profile = SelfOsProfile();
   bool _loading = true;
-  bool _writing = false;
   String? _error;
   int _tab = 0;
   String _query = '';
@@ -59,15 +62,24 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
     }
   }
 
-  Future<void> _open(SelfOsCase c, {SelfOsEngine? engine}) async {
+  Future<void> _open(SelfOsCase c,
+      {SelfOsEngine? engine, int? workspace}) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => SelfOsCasePage(
-            value: c,
-            repository: _repository,
-            ai: _ai,
-            history: _cases,
-            profile: _profile,
-            initialEngine: engine)));
+        builder: (_) => engine == null && workspace == null
+            ? SelfOsGuidePage(
+                value: c,
+                repository: _repository,
+                ai: _ai,
+                history: _cases,
+                profile: _profile)
+            : SelfOsCasePage(
+                value: c,
+                repository: _repository,
+                ai: _ai,
+                history: _cases,
+                profile: _profile,
+                initialEngine: engine,
+                initialWorkspace: workspace)));
     if (mounted) await _load();
   }
 
@@ -76,12 +88,10 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
         title: retrospective ? '我刚刚做了一件事' : '我现在面临一个选择',
         labels: {'problem': retrospective ? '发生了什么？' : '说说眼前的问题或选择'},
         requiredFields: {'problem'},
-        hint: '从一件真实的小事开始。可以先记录，再慢慢补充。');
+        hint: '从一件真实的小事开始。我们会一起理清，再找到可以验证的一小步。');
     if (values == null || !mounted) return;
-    final c = SelfOsCase(
-        problem: values['problem']!,
-        retrospective: retrospective ||
-            SelfOsEngineService.isRetrospective(values['problem']!));
+    final c =
+        SelfOsCase(problem: values['problem']!, retrospective: retrospective);
     try {
       await _repository.saveCase(c);
       if (mounted) await _open(c);
@@ -149,10 +159,11 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
         labels: const {
           'condition': '什么情境下适用？',
           'rule': '我准备怎样选择？',
+          'notApplicable': '哪些情境不适用？',
           'exception': '哪些新信息出现时要重审？'
         },
         initial: {'rule': evidence.review.learning},
-        requiredFields: {'condition', 'rule', 'exception'},
+        requiredFields: {'condition', 'rule', 'notApplicable', 'exception'},
         hint: '来源：${evidence.review.context}。这是一条待持续验证的个人原则。');
     if (values == null) return;
     final draft = SelfOsProfile.fromJson(_profile.toJson());
@@ -171,52 +182,6 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
     } catch (_) {
       if (mounted) osMessage(context, '原则保存失败，请重试。');
     }
-  }
-
-  Future<void> _changeRoute(SelfOsCase c, String status) async {
-    if (_writing || status == c.routeStatus) return;
-    final current =
-        _cases.where((v) => v.routeStatus == 'active' && v.id != c.id).toList();
-    final values = await osEditDialog(context,
-        title: '取舍工作台',
-        labels: const {
-          'reason': '依据哪些证据作出这个选择？',
-          'sacrifice': '为了保住它，愿意降低、延期或舍弃什么？'
-        },
-        requiredFields: {'reason', 'sacrifice'},
-        hint: status == 'active' && current.isNotEmpty
-            ? '「${current.first.problem}」将改为次要保留，把主线交给这条路线。'
-            : '调整为「${selfOsRouteStates[status]}」。舍弃也可以是有依据的选择。');
-    if (values == null || !mounted) return;
-    setState(() => _writing = true);
-    final cases = _cases.map((v) => v.copy()).toList();
-    for (final item in cases) {
-      if (status == 'active' && item.routeStatus == 'active' && item.id != c.id)
-        item.routeStatus = 'secondary';
-      if (item.id == c.id) item.routeStatus = status;
-    }
-    final profile = SelfOsProfile.fromJson(_profile.toJson());
-    profile.tradeoffs.add({
-      'id': selfOsId(),
-      'caseId': c.id,
-      'title': c.problem,
-      'from': c.routeStatus,
-      'to': status,
-      'previousActiveIds': current.map((v) => v.id).toList(),
-      ...values,
-      'createdAt': DateTime.now().toIso8601String()
-    });
-    try {
-      await _repository.saveRouteDecision(cases, profile);
-      if (mounted)
-        setState(() {
-          _cases = cases;
-          _profile = profile;
-        });
-    } catch (_) {
-      if (mounted) osMessage(context, '路线未保存，请重试。');
-    }
-    if (mounted) setState(() => _writing = false);
   }
 
   Future<void> _export() async {
@@ -238,7 +203,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
     await Clipboard.setData(ClipboardData(
         text: jsonEncode({
       'product': 'Self OS',
-      'version': 3,
+      'version': '3.7',
       'exportedAt': DateTime.now().toIso8601String(),
       'cases': _cases.map((c) => c.toJson()).toList(),
       'profile': _profile.toJson()
@@ -254,7 +219,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                 style: TextStyle(fontWeight: FontWeight.w700)),
             actions: [
               const Center(
-                  child: Text('SELF OS  /  3.0',
+                  child: Text('SELF OS  /  3.7',
                       style: TextStyle(
                           fontSize: 11, letterSpacing: 1.2, color: osForest))),
               const SizedBox(width: 8),
@@ -322,19 +287,22 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
             const Row(children: [
               Icon(Icons.blur_circular, color: Color(0xFFD9DDAC), size: 30),
               SizedBox(width: 10),
-              Text('一份持续生长的自我认识',
-                  style: TextStyle(
-                      color: Color(0xFFD9DDAC), fontSize: 12, letterSpacing: 1))
+              Flexible(
+                  child: Text('一份持续生长的自我认识',
+                      style: TextStyle(
+                          color: Color(0xFFD9DDAC),
+                          fontSize: 12,
+                          letterSpacing: 1)))
             ]),
             const SizedBox(height: 22),
-            const Text('在真实生活里，\n慢慢成为自己。',
+            const Text('看见更多可能，\n选择自己的生活。',
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 29,
                     height: 1.4,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
-            const Text('看见欲求，理解阻力。让每一次选择与行动，\n成为下一次更了解自己的依据。',
+            const Text('说出眼前的困惑，一次理清一点。\n找到可试的一小步，让现实带回答案。',
                 style: TextStyle(color: Color(0xFFD4E0D7), height: 1.7)),
             const SizedBox(height: 24),
             Wrap(spacing: 24, runSpacing: 12, children: [
@@ -351,6 +319,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
       _entry('03', '看看我逐渐认识出的自己', '欲求、动机、认识与个人使用说明书', Icons.fingerprint,
           () => setState(() => _tab = 2)),
       const SizedBox(height: 16),
+      ..._guidance(pending),
       if (pending.length >= 3)
         OsSection(
             title: '这些选择，正在争夺同一份精力',
@@ -364,14 +333,13 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
       if (pending.isNotEmpty)
         OsSection(
             title: '此刻，下一步',
-            subtitle: SelfOsEngineService.next(pending.first).reason,
+            subtitle: SelfOsGuidance.next(pending.first),
             children: [
               ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(pending.first.problem,
                       maxLines: 2, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(
-                      '继续 · ${SelfOsEngineService.next(pending.first).engine.label}'),
+                  subtitle: const Text('继续上次停下的地方'),
                   trailing: const Icon(Icons.arrow_forward),
                   onTap: () => _open(pending.first))
             ]),
@@ -387,6 +355,56 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
       const Text('欲求 → 认识 → 动机 → 信念 → 决意 → 行动 → 现实反馈',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 11, color: Color(0xFF6D7C70))),
+    ];
+  }
+
+  Widget _insightCard(
+          String title, List<String> values, String empty) =>
+      OsSection(
+          title: title,
+          children: values.isEmpty
+              ? [Text(empty)]
+              : values.map((s) => OsNote(s)).toList());
+
+  List<Widget> _guidance(List<SelfOsCase> pending) {
+    final gaps = pending
+        .where((c) => c.v37.gaps
+            .any((g) => !g.resolvedBy(c.v37.evidence, DateTime.now())))
+        .toList();
+    final attention = pending
+        .where((c) => SelfOsV37Rules.attentionBreaks(
+                c.motives.map((m) => m.toJson()).toList())
+            .isNotEmpty)
+        .toList();
+    final preparation = pending
+        .where((c) => c.v37.interventions.any((i) => !i.completed))
+        .toList();
+    Widget card(SelfOsCase c, String title, String detail, int tab,
+            IconData icon) =>
+        OsSection(title: title, subtitle: detail, children: [
+          ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(icon, color: osForest),
+              title:
+                  Text(c.problem, maxLines: 2, overflow: TextOverflow.ellipsis),
+              trailing: const Icon(Icons.arrow_forward),
+              onTap: () => _open(c, workspace: tab))
+        ]);
+    return [
+      for (final warning in SelfOsInsights.pathGuard(_cases, _profile))
+        OsNote(warning),
+      if (gaps.isNotEmpty)
+        card(gaps.first, '有一处认识，值得先补上',
+            SelfOsV37Rules.gate(gaps.first.v37).label, 1, Icons.search),
+      if (attention.isNotEmpty)
+        card(attention.first, '相信的理由，进入现场了吗？', '看看注意前景与行动连接，让双向动机都被看见。', 2,
+            Icons.center_focus_strong),
+      if (preparation.isNotEmpty)
+        card(preparation.first, '为下一个真实时刻准备', '在决定前完成最小的认识准备；现场只留一条有效提示。', 3,
+            Icons.schedule),
+      if (_profile.strengths.isNotEmpty && pending.isNotEmpty)
+        card(pending.first, '把力量用在合适的位置', '结合行动证据，找到恰当使用与过度使用的边界。', 4,
+            Icons.spa_outlined),
     ];
   }
 
@@ -463,7 +481,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                   onPressed: () => _delete(c),
                   icon: const Icon(Icons.delete_outline, size: 20)),
               children: [
-                Text(SelfOsEngineService.next(c).reason,
+                Text(SelfOsGuidance.next(c),
                     style: const TextStyle(height: 1.5)),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -521,7 +539,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
       OsNote('获得性格 · 证据覆盖 $coverage / 5：欲求、能力、代价、取舍、预测。仅表示已有记录的维度，不是人格分数。'),
       OsSection(
           title: '个人使用说明书',
-          subtitle: '七个长期模型，用现实证据不断修订。',
+          subtitle: '用可追溯的行动记录，持续修订你的个人模型。',
           trailing: IconButton(
               tooltip: '编辑使用说明书',
               onPressed: _editManual,
@@ -567,6 +585,29 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
           '自报实际影响选择的次数 / 已反馈次数。反方动机同样保留；不等同于因果有效率。'),
       _fingerprints('认知指纹', SelfOsEngineService.cognitiveFingerprint(_cases),
           '自报有帮助的次数 / 已反馈次数；未反馈不计入分母。'),
+      _insightCard('个人决意指纹', SelfOsInsights.decisionFingerprint(_cases),
+          '回看有实际过程证据的决意，尚未完成的决定保持未知。'),
+      _insightCard('认识准备指纹', SelfOsInsights.interventionFingerprint(_cases),
+          '记录准备前后的变化，再接上真实行动反馈。'),
+      _insightCard('稳定变化的候选证据', SelfOsInsights.stableChanges(_cases),
+          '需要至少 3 次、2 个案例、2 种情境，并检查 K / M / Att / E / T / Skill 的替代解释。'),
+      OsSection(title: '我的力量 · 从行动中验证', children: [
+        if (_profile.strengths.isEmpty)
+          const Text('自评是一条线索。把具体力量与真实案例相连，逐步找到使用的分寸。'),
+        for (final s in _profile.strengths)
+          ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(s.title),
+              subtitle: Text(SelfOsInsights.strength(s, _cases).confidence),
+              trailing: const Icon(Icons.arrow_forward),
+              onTap: _cases.isEmpty
+                  ? null
+                  : () => _open(_cases.first, workspace: 4)),
+        if (_cases.isNotEmpty)
+          TextButton(
+              onPressed: () => _open(_cases.first, workspace: 4),
+              child: const Text('打开力量实验室'))
+      ]),
       OsSection(
           title: '预测校准',
           subtitle: '只比较行动前已保存的预测与真实反馈，未记录的值保持未知。',
@@ -655,6 +696,7 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                             Text(osText(p['rule']),
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600, height: 1.6)),
+                            Text('不适用：${p['notApplicable'] ?? '尚未补充'}'),
                             Text('重审条件：${p['exception']}'),
                             Text(
                                 osStrings(p['evidenceIds'])
@@ -670,16 +712,20 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                                       labels: const {
                                         'condition': '适用情境',
                                         'rule': '原则',
+                                        'notApplicable': '不适用情境',
                                         'exception': '重审条件'
                                       },
                                       initial: {
                                         'condition': osText(p['condition']),
                                         'rule': osText(p['rule']),
+                                        'notApplicable':
+                                            osText(p['notApplicable']),
                                         'exception': osText(p['exception'])
                                       },
                                       requiredFields: {
                                         'condition',
                                         'rule',
+                                        'notApplicable',
                                         'exception'
                                       });
                                   if (values == null) return;
@@ -737,6 +783,8 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
             style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         const OsNote('时间、精力与资源有限。选定当前主线，也为延期、实验和主动舍弃留出位置。'),
+        for (final warning in SelfOsInsights.pathGuard(_cases, _profile))
+          OsNote(warning),
         if (_cases.isEmpty)
           _entry(
               '+', '从一个现实选择开始', '让路线有具体问题和证据作为依据', Icons.add, () => _create()),
@@ -746,20 +794,22 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
               subtitle:
                   '通常价值 ${_number(c.scores['generalValue'])} · 个人适配 ${_number(c.scores['personalFit'])} · ${c.reviews.length} 条行动证据',
               children: [
-                Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: selfOsRouteStates.entries
-                        .map((e) => ChoiceChip(
-                            label: Text(e.value),
-                            selected: c.routeStatus == e.key,
-                            onSelected: _writing
-                                ? null
-                                : (_) => _changeRoute(c, e.key)))
-                        .toList()),
-                TextButton(
-                    onPressed: () => _open(c, engine: SelfOsEngine.desire),
-                    child: const Text('查看欲求、代价与个人适配')),
+                for (final r in c.v37.routes)
+                  ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(r.title),
+                      subtitle: Text(
+                          '${selfOsRouteStates[r.status]} · ${osMechanisms[r.mechanism]}\n${r.fit.values.whereType<double>().length}/6 项个人适配已有记录'),
+                      trailing: Icon(
+                          r.status == 'active' ? Icons.flag : Icons.alt_route,
+                          color: osForest),
+                      onTap: () => _open(c, workspace: 0)),
+                if (c.v37.routes.isEmpty)
+                  Text('${selfOsRouteStates[c.routeStatus]} · 历史案例，打开后补充路线结构'),
+                TextButton.icon(
+                    onPressed: () => _open(c, workspace: 0),
+                    icon: const Icon(Icons.hub_outlined),
+                    label: const Text('比较可能性与真实取舍')),
               ]),
         OsSection(
             title: '真实取舍记录',

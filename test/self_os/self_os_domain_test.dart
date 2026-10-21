@@ -5,6 +5,13 @@ import 'package:quote_app/self_os/self_os_models.dart';
 
 SelfOsCase plannedCase() {
   final c = SelfOsCase(problem: '明天有面试，但我越来越不想去');
+  c.v37.settings
+      .addAll({'risk': 'low', 'riskReason': '只验证十分钟的可逆动作', 'reversible': true});
+  c.v37.settings.addAll({
+    'understandingReviewed': true,
+    'understandingSummary': '先去现场得到一次具体反馈，暂不承诺接受岗位',
+    'remainingUnknowns': '岗位是否适合仍未知，不影响先参加一次面试',
+  });
   c.desires.add(SelfOsDesire(title: '稳定', verdict: 'accepted'));
   c.fields.addAll({
     'trigger': '明天 8 点，闹钟响',
@@ -90,6 +97,8 @@ void main() {
     for (var i = 0; i < 2; i++) {
       c.nextRound();
       c.scores.addAll({'planProbability': 90, 'actionProbability': 80});
+      c.v37.settings['understandingReviewed'] = true;
+      c.v37.settings['understandingSummary'] = c.text('k1');
       c.commit();
       c.addReview(reviewFor(c, outcome: 'notDone'));
     }
@@ -165,6 +174,8 @@ void main() {
     expect(c.scores['planProbability'], isNull);
     expect(c.reviews.single.snapshot['scores']['planProbability'], 55);
     expect(c.reviewed, isFalse);
+    expect(c.v37.flag('understandingReviewed'), isFalse);
+    expect(c.guide.phase, 'explore');
   });
 
   test('空结果或空新证据不能成为有效复盘', () {

@@ -5,6 +5,11 @@ import 'self_os_engine.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
+import 'self_os_workbench.dart';
+import 'self_os_workbench_widgets.dart';
+import 'self_os_action_focus.dart';
+import 'self_os_v37_rules.dart';
+import 'self_os_insights.dart';
 
 class SelfOsCasePage extends StatefulWidget {
   const SelfOsCasePage(
@@ -14,13 +19,15 @@ class SelfOsCasePage extends StatefulWidget {
       required this.ai,
       required this.history,
       required this.profile,
-      this.initialEngine});
+      this.initialEngine,
+      this.initialWorkspace});
   final SelfOsCase value;
   final SelfOsRepository repository;
   final SelfOsAiService ai;
   final List<SelfOsCase> history;
   final SelfOsProfile profile;
   final SelfOsEngine? initialEngine;
+  final int? initialWorkspace;
   @override
   State<SelfOsCasePage> createState() => _SelfOsCasePageState();
 }
@@ -29,6 +36,29 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
   late SelfOsCase _c = widget.value.copy();
   late SelfOsEngine _engine =
       widget.initialEngine ?? SelfOsEngineService.next(_c).engine;
+  late SelfOsProfile _profile = SelfOsProfile.fromJson(widget.profile.toJson());
+  late List<SelfOsCase> _allCases = widget.history;
+  late bool _workspace = widget.initialWorkspace != null ||
+      (widget.initialEngine == null &&
+          !_c.retrospective &&
+          !_c.reviewed &&
+          _c.committedAt == null);
+  late int _workspaceTab = widget.initialWorkspace ?? 0;
+  bool _profileDirty = false;
+  @override
+  void initState() {
+    super.initState();
+    if (!_c.retrospective) {
+      _c.v37.ensureCurrentRoute(_c.problem, _c.text('means'));
+      if (_c.routeStatus == 'active' && _profile.activeCaseId.isEmpty) {
+        _c.v37.routes.first.data['status'] = 'active';
+        _profile.activeCaseId = _c.id;
+        _profile.activeRouteId = _c.v37.routes.first.id;
+        _profileDirty = true;
+      }
+    }
+  }
+
   bool _saving = false,
       _busy = false,
       _allowPop = false,
@@ -37,13 +67,18 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
   String? _error;
   String _aiProgress = '';
   List<SelfOsCase> get _history =>
-      [...widget.history.where((v) => v.id != _c.id), _c];
+      [..._allCases.where((v) => v.id != _c.id), _c];
 
   Future<bool> _save({bool notify = false}) async {
     if (_saving) return false;
     setState(() => _saving = true);
     try {
-      await widget.repository.saveCase(_c);
+      if (_profileDirty) {
+        await widget.repository.saveCaseAndProfile(_c, _profile);
+        _profileDirty = false;
+      } else {
+        await widget.repository.saveCase(_c);
+      }
       if (!mounted) return false;
       setState(() {
         _saving = false;
@@ -76,9 +111,79 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
   }
 
   Future<void> _switch(SelfOsEngine engine) async {
-    if (_busy || _saving || engine == _engine) return;
+    if (_busy || _saving || (engine == _engine && !_workspace)) return;
     FocusScope.of(context).unfocus();
-    if (await _save() && mounted) setState(() => _engine = engine);
+    if (await _save() && mounted)
+      setState(() {
+        _engine = engine;
+        _workspace = false;
+      });
+  }
+
+  Future<void> _openWorkspace(int tab) async {
+    if (_busy || _saving) return;
+    if (await _save() && mounted)
+      setState(() {
+        _workspace = true;
+        _workspaceTab = tab;
+      });
+  }
+
+  Widget _workbenchLink(String label, int tab) => Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: OutlinedButton.icon(
+          onPressed: () => _openWorkspace(tab),
+          icon: const Icon(Icons.hub_outlined),
+          label: Text(label)));
+
+  Future<void> _updateProfile(SelfOsProfile profile) async {
+    try {
+      await widget.repository.saveProfile(profile);
+      if (mounted) setState(() => _profile = profile);
+    } catch (_) {
+      if (mounted) osMessage(context, '个人模型保存失败，原有记录仍保留');
+    }
+  }
+
+  Future<void> _routeState(OsRoute route, String status) async {
+    final v = await osRecordEditor(context,
+        title: status == 'active' ? '收束为当前主线' : '调整路线投入方式',
+        note: '主线只有一条。承认其他路径的真实价值，记录改变的依据；旧主线可以保留或按证据修订。',
+        fields: const [
+          OsInput('reason', '依据哪些真实信息作出选择？', required: true),
+          OsInput('sacrifice', '让位的未来仍有什么真实价值？', required: true),
+          OsInput('opportunityCost', '我将失去、减少或推迟什么？', required: true),
+          OsInput('trigger', '这次转向主要由什么推动？',
+              options: {
+                'evidence': '新的能力、结果、代价或现实机会证据',
+                'novelty': '新鲜感',
+                'comparison': '别人的成功 / 羡慕',
+                'escape': '逃离当前不适',
+                'unknown': '仍不确定'
+              },
+              required: true),
+          OsInput('accepted', '我已比较原主线，并接受机会成本', kind: 'bool'),
+          OsInput('reviewWhen', '什么新证据出现时复审？', required: true),
+        ]);
+    if (v == null || !mounted) return;
+    if (!await _save() || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await widget.repository.transitionRoute(_c, route.id, status, v);
+      final cases = await widget.repository.loadCases();
+      final profile = await widget.repository.loadProfile();
+      if (mounted)
+        setState(() {
+          _allCases = cases;
+          _c = cases.firstWhere((c) => c.id == _c.id);
+          _profile = profile;
+          _revision++;
+        });
+    } catch (e) {
+      if (mounted)
+        osMessage(context, e is FormatException ? e.message : '路线未保存，请重试');
+    }
+    if (mounted) setState(() => _saving = false);
   }
 
   Future<void> _runAi(String task) async {
@@ -91,7 +196,12 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
       _aiProgress = task == 'motives' ? '搜索动机空间 · 第 1 / 3 批' : '结合当前材料提出候选…';
     });
     try {
-      if (task == 'desires') {
+      if (task.startsWith('v37.')) {
+        final value = await widget.ai
+            .analyseV37(input, _history, _profile, task.substring(4));
+        if (!mounted || ticket != _request) return;
+        _c.v37.pendingProposal = value.data;
+      } else if (task == 'desires') {
         final values = await widget.ai.discover(input, _history);
         if (!mounted || ticket != _request) return;
         final titles = _c.desires.map((d) => d.title).toSet();
@@ -139,7 +249,12 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             minLines: lines,
             maxLines: lines + 3,
             maxLength: 6000,
-            onChanged: (v) => _c.fields[key] = v),
+            onChanged: (v) {
+              if (key == 'k2' || key == 'newInformation') _c.beginCognition();
+              if (key == 'newInformation')
+                _c.v37.settings['newInformationReviewed'] = false;
+              _c.fields[key] = v;
+            }),
       );
   Widget _score(String key, String label, {double max = 100, String? help}) =>
       OsScore(
@@ -233,7 +348,7 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                   tooltip: '保存并返回',
                   onPressed: _saving ? null : _leave,
                   icon: const Icon(Icons.arrow_back)),
-              title: Text(_engine.label),
+              title: Text(_workspace ? '选择的地图' : _engine.label),
               actions: [
                 TextButton(
                     onPressed:
@@ -244,17 +359,26 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                    children: SelfOsEngine.values
-                        .map((e) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                                label: Text('${e.index + 1}  ${e.label}'),
-                                selected: e == _engine,
-                                onSelected: _busy || _saving
-                                    ? null
-                                    : (_) => _switch(e))))
-                        .toList())),
+                child: Row(children: [
+                  Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                          key: const ValueKey('open_workbench'),
+                          label: const Text('选择的地图'),
+                          selected: _workspace,
+                          onSelected: _busy || _saving
+                              ? null
+                              : (_) => _openWorkspace(_workspaceTab))),
+                  ...SelfOsEngine.values
+                      .map((e) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                              label: Text('${e.index + 1}  ${e.label}'),
+                              selected: e == _engine && !_workspace,
+                              onSelected:
+                                  _busy || _saving ? null : (_) => _switch(e))))
+                      .toList()
+                ])),
             if (_busy)
               Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -284,7 +408,9 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                         child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 820),
                             child: ListView(
-                                key: ValueKey('self_os_engine_${_engine.name}'),
+                                key: ValueKey(_workspace
+                                    ? 'self_os_workbench'
+                                    : 'self_os_engine_${_engine.name}'),
                                 padding:
                                     const EdgeInsets.fromLTRB(20, 18, 20, 30),
                                 children: [
@@ -301,14 +427,31 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                                   const SizedBox(height: 14),
                                   OsNote(SelfOsEngineService.next(_c).reason,
                                       icon: Icons.route_outlined),
-                                  ...[
-                                    _desire,
-                                    _motivation,
-                                    _cognition,
-                                    _action,
-                                    _mirror
-                                  ][_engine.index](),
-                                  if (_engine != SelfOsEngine.mirror)
+                                  if (_workspace)
+                                    SelfOsWorkbench(
+                                      value: _c,
+                                      profile: _profile,
+                                      history: _history,
+                                      initialSection: _workspaceTab,
+                                      onChanged: () async {
+                                        setState(() {});
+                                        return _save();
+                                      },
+                                      onAi: _runAi,
+                                      onEngine: _switch,
+                                      onRouteState: _routeState,
+                                      onProfile: _updateProfile,
+                                    )
+                                  else
+                                    ...[
+                                      _desire,
+                                      _motivation,
+                                      _cognition,
+                                      _action,
+                                      _mirror
+                                    ][_engine.index](),
+                                  if (!_workspace &&
+                                      _engine != SelfOsEngine.mirror)
                                     FilledButton.icon(
                                         onPressed: () => _switch(SelfOsEngine
                                             .values[_engine.index + 1]),
@@ -329,6 +472,7 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
       ));
 
   List<Widget> _desire() => [
+        _workbenchLink('把欲求带入选择空间', 0),
         OsSection(
             title: '先辨别阻塞，再决定方向',
             subtitle: '欲求、手段、认识、环境，可以给出完全不同的下一步。',
@@ -703,6 +847,7 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
   }
 
   List<Widget> _cognition() => [
+        _workbenchLink('进入证据台账与因果地平线', 1),
         if (_c.blocker != 'cognition')
           OsNote(
               '当前阻塞判断：${selfOsBlockers[_c.blocker]}。先检验原因；如果目标、手段或环境不合适，可以直接调整它们。'),
@@ -743,6 +888,9 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
       ];
 
   List<Widget> _action() => [
+        OsNote(
+            '${SelfOsV37Rules.gate(_c.v37).label}：${SelfOsV37Rules.gate(_c.v37).reasons.first}'),
+        _workbenchLink('检查认识、冲突与现场观念', 2),
         OsSection(
             title: '计划时的我 / 现场的我',
             subtitle: '两种时刻分别估计。留空就保持未知，不用一个百分比代替证据。',
@@ -797,11 +945,11 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('进入现场 · 按协议一步步执行')),
             ]),
-        if (widget.profile.principles.isNotEmpty)
+        if (_profile.principles.isNotEmpty)
           OsSection(
               title: '带上自己的决策原则',
               subtitle: '先判断适用条件，也留意例外。',
-              children: widget.profile.principles
+              children: _profile.principles
                   .take(8)
                   .map((p) => OsNote(
                       '当 ${p['condition']}：${p['rule']}\n重审：${p['exception']}'))
@@ -809,51 +957,41 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
       ];
 
   Future<void> _ritual() async {
-    final snapshot = osMap(_c.commitment);
-    final fields = osMap(snapshot['fields']);
-    final steps = osText(fields['ritual'])
-        .split('\n')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-    if (steps.isEmpty) steps.add(osText(fields['firstAction']));
-    final checked = <int>{};
-    final review = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-            builder: (ctx, update) => AlertDialog(
-                    title: const Text('只走到下一个节点'),
-                    content: SizedBox(
-                        width: 460,
-                        child: SingleChildScrollView(
-                            child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                              OsNote(
-                                  '触发：${fields['trigger']}\n出现新信息可重审：${osText(fields['reconsiderWhen']).isEmpty ? '必要时暂停，重新评估' : fields['reconsiderWhen']}'),
-                              for (var i = 0; i < steps.length; i++)
-                                CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    value: checked.contains(i),
-                                    onChanged: (v) => update(() {
-                                          if (v == true) {
-                                            checked.add(i);
-                                          } else {
-                                            checked.remove(i);
-                                          }
-                                        }),
-                                    title: Text('${i + 1}. ${steps[i]}'))
-                            ]))),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('暂停 / 重审')),
-                      FilledButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('记录真实结果'))
-                    ])));
-    if (review == true && mounted) await _switch(SelfOsEngine.mirror);
+    if (_c.commitment == null) return;
+    if (_c.text('newInformation').trim().isNotEmpty &&
+        !_c.v37.flag('newInformationReviewed')) {
+      await _openWorkspace(1);
+      return;
+    }
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+        MaterialPageRoute(
+            builder: (_) =>
+                SelfOsActionFocus(snapshot: osClone(_c.commitment!))));
+    if (result == null || !mounted) return;
+    _c.v37.decisionTraces.add({
+      'id': selfOsId(),
+      'round': _c.round,
+      'kind': 'field',
+      'cue': osMap(osMap(_c.commitment!['v37'])['settings'])['holdCue'],
+      ...result
+    });
+    _c.v37.settings['holdResult'] = result;
+    if (result['result'] == 'reconsider') {
+      final v = await osEditDialog(context,
+          title: '先记录重要新信息',
+          labels: const {'information': '现实发生了什么变化？'},
+          requiredFields: {'information'});
+      if (!mounted) return;
+      _c.beginCognition();
+      _c.fields['newInformation'] = v?['information'] ?? '现场出现重要变化，尚待补充与核验';
+      _c.v37.settings['newInformationReviewed'] = false;
+      await _save();
+      if (mounted) await _openWorkspace(1);
+    } else {
+      await _save();
+      if (mounted && result['result'] == 'review')
+        await _switch(SelfOsEngine.mirror);
+    }
   }
 
   List<Widget> _mirror() {
@@ -965,6 +1103,60 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             }),
           ]),
       OsSection(
+          title: '什么条件真正发生了变化？',
+          subtitle: '对照事前快照，记录行动当时的条件。未填写的维度保持未知；结果变好本身不能证明性格改变。',
+          children: [
+            for (final e in const {
+              'knowledgeAtAction': 'K · 行动时实际知道并相信什么？',
+              'motivationChange': 'M · 哪些动机变强、变弱或退出？',
+              'attentionChange': 'Att · 哪个观念真正占据前景？',
+              'environmentAtAction': 'E · 行动时的环境与限制',
+              'stateAtAction': 'T · 行动时的身体状态与时点',
+              'skillAtAction': 'Skill · 行动时可用的技能'
+            }.entries)
+              _field('review.${e.key}', e.value),
+            _choice('review.jamesMode', '回看这次决意，最接近哪种过程？', osJamesModes),
+            _field('review.decisionProcessEvidence', '有哪些实际过程支持这个判断？'),
+            _choice('review.holdEffect', '现场那一条提示实际有帮助吗？', const {
+              'unknown': '没有使用 / 不能判断',
+              'helped': '帮助保持了关键观念',
+              'notHelped': '没有观察到帮助',
+              'harmed': '反而分散了注意'
+            }),
+            if (_profile.strengths.isNotEmpty) ...[
+              _choice('review.strengthId', '这次实际使用了哪项力量？', {
+                'none': '没有使用 / 不确定',
+                for (final s in _profile.strengths) s.id: s.title
+              }),
+              _choice('review.strengthEffect', '力量的实际影响', const {
+                'unknown': '无法判断',
+                'helped': '有帮助',
+                'notHelped': '没有帮助',
+                'harmed': '产生了负作用'
+              }),
+              _choice('review.strengthUsage', '这次使用的程度', const {
+                'unknown': '不能判断',
+                'underuse': '使用不足',
+                'optimal': '恰当使用',
+                'overuse': '过度使用'
+              }),
+            ],
+          ]),
+      OsSection(
+          title: '稳定变化 · 留给重复证据回答',
+          subtitle: '可选。只有跨案例、跨情境的重复观察，且逐项检查其他解释后，才形成待验证的稳定变化。',
+          children: [
+            _field('review.patternClaim', '本次要检验的同一条模式是什么？'),
+            for (final key in ['K', 'M', 'Att', 'E', 'T', 'Skill'])
+              _choice('review.control.$key', '$key 条件的对照结论', const {
+                'unknown': '未核对 / 不确定',
+                'stable': '有对照，未观察到变化',
+                'changed': '有变化，不能排除这种解释'
+              }),
+            _field(
+                'review.alternativeExplanationCheck', '支持以上对照的具体记录，以及仍未排除的解释'),
+          ]),
+      OsSection(
           title: 'K1 → 行动 → 结果 → K3',
           subtitle: '每次复盘至少留下一条可复用的新证据。',
           children: [
@@ -1016,6 +1208,21 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
         motiveFeedbackRecorded: _c.text('review.motiveFeedback') == 'yes');
     try {
       _c.addReview(review);
+      final strengthId = review.notes['strengthId'];
+      final strengthEffect = review.notes['strengthEffect'];
+      for (final s in _profile.strengths.where((s) => s.id == strengthId)) {
+        if (['helped', 'notHelped', 'harmed'].contains(strengthEffect)) {
+          final observations = s.observations;
+          observations.removeWhere((o) => o['reviewId'] == review.id);
+          observations.add({
+            'reviewId': review.id,
+            'effect': strengthEffect,
+            'usage': review.notes['strengthUsage'] ?? 'unknown'
+          });
+          s.data['observations'] = observations;
+          _profileDirty = true;
+        }
+      }
       if (await _save() && mounted) {
         setState(() {});
         osMessage(context, '已留下新证据，可在「逐渐认识自己」中查看');
@@ -1063,6 +1270,17 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
               Text('${e.value}：${r.notes[e.key]}',
                   style: const TextStyle(height: 1.6, fontSize: 13)),
           const SizedBox(height: 12),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('查看这次变化的来源'),
+            children: [
+              for (final a in SelfOsInsights.attribution(r))
+                ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${a['source']} · ${a['level']}'),
+                    subtitle: Text(a['evidence']!))
+            ],
+          ),
           const OsNote('这是一条带有具体情境的行为证据，不是对你性格或永久能力的判定。'),
         ]);
   }

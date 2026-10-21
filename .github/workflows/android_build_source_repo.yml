@@ -1,5 +1,5 @@
 name: Build Android APK
-run-name: Build Android APK · ${{ github.ref_name }}
+run-name: Build Android APK · ${{ inputs.self_os_checks && 'Self OS V3.7 · ' || '' }}${{ github.ref_name }}
 
 on:
   workflow_dispatch:

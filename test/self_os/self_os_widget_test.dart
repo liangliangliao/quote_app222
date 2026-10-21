@@ -30,6 +30,13 @@ class MemoryRepository extends SelfOsRepository {
   }
 
   @override
+  Future<void> saveCaseAndProfile(
+      SelfOsCase value, SelfOsProfile profile) async {
+    await saveCase(value);
+    await saveProfile(profile);
+  }
+
+  @override
   Future<void> saveRouteDecision(
       List<SelfOsCase> values, SelfOsProfile value) async {
     for (final c in values) {
@@ -119,13 +126,20 @@ void main() {
         find.byKey(const ValueKey('dialog_problem')), '我想换一份工作');
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
-    expect(find.text('我想换一份工作'), findsOneWidget);
+    expect(find.byKey(const ValueKey('self_os_guide')), findsOneWidget);
+    await tester.tap(find.byTooltip('分析与记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('欲求假设与 Why Tree'));
+    await tester.pumpAndSettle();
     await fill(tester, 'goal', '先了解岗位要求', engine: 'desire');
     await reveal(tester, find.text('帮助辨别阻塞原因'), engine: 'desire');
     await tester.tap(find.text('帮助辨别阻塞原因'));
     await tester.pumpAndSettle();
     expect(find.textContaining('AI 暂时不可用'), findsOneWidget);
     expect(repo.records.values.single.text('goal'), '先了解岗位要求');
+    await tester.tap(find.byTooltip('保存并返回'));
+    await tester.pumpAndSettle();
+    expect(find.text('一起理清这件事'), findsOneWidget);
     await tester.tap(find.byTooltip('保存并返回'));
     await tester.pumpAndSettle();
     expect(find.text('成为自己'), findsOneWidget);
@@ -206,7 +220,8 @@ void main() {
             repository: repo,
             ai: offlineAi(),
             history: [],
-            profile: SelfOsProfile())));
+            profile: SelfOsProfile(),
+            initialEngine: SelfOsEngine.desire)));
     await tester.pumpAndSettle();
     await fill(tester, 'goal', '试学一节课', engine: 'desire');
     await tester.tap(find.widgetWithText(TextButton, '保存'));
