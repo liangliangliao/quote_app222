@@ -1,0 +1,183 @@
+{
+  "experience_design": {
+    "input_anchor": "允许自己为人",
+    "theme": "为感受留位置，同时保有回应的选择",
+    "conceptual_understanding": "是什么：感受有位置，不等于整个自我或行动命令。为什么：对感受再加不该如此的要求，有时增加一层自责。怎么做：允许感受仍在，试着保留怎样回应的选择。",
+    "imagery_bridge": "卡片代表当下感受，桌面代表容纳空间；把卡片放下而不丢弃，体验感受仍在与不急着行动能否并存。",
+    "sensory_cues": [
+      "纸的边缘",
+      "桌面光线与脚底接触"
+    ],
+    "body_invitation": "放下想象的卡片后觉察真实手指的用力或推开冲动",
+    "emotional_permission": "不安、抗拒、松动或没有变化都可被观察",
+    "felt_check": "分别观察身体与情绪，再探索允许感受与任其决定行动的区别"
+  },
+  "understood_need": "允许自己为人，可以为真实感受与有限性留位置；有时对感受的苛责又增添一层用力。本次探索感受仍在时是否也有选择。",
+  "cognitive_shift": "从感受必须先合格才可继续，探索感受可有位置、行动仍可选择。",
+  "embodied_goal": "通过安放卡片与真实手部觉察，观察接触感受时的身体、情绪和行动冲动，不预设改变。",
+  "real_life_scene": "明确可选的稍后普通交谈，在感受尚在时先停一刻再选择开口。",
+  "practice_focus": [
+    "理解允许与服从的区别",
+    "画面参与和实际身心觉察"
+  ],
+  "title": "给真实的自己一个位置",
+  "type": "允许为人",
+  "duration_minutes": 8,
+  "segments": [
+    {
+      "phase": "arrival",
+      "start_seconds": 0,
+      "text": "今天，练习“允许自己为人”：为真实的感受留位置，同时保有怎样回应的选择。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 6
+    },
+    {
+      "phase": "arrival",
+      "start_seconds": 17,
+      "text": "坐在有支撑的位置，留意双脚或座面。眼睛可以闭上，也可以轻轻睁着。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 6
+    },
+    {
+      "phase": "breath",
+      "start_seconds": 35,
+      "text": "跟随一轮自然呼吸。不需要吸得更深。走神时，回到这一处接触。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 10
+    },
+    {
+      "phase": "body_emotion",
+      "start_seconds": 57,
+      "text": "感到难过或害怕，是此刻的经验；它不必成为对整个你的判决。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 6
+    },
+    {
+      "phase": "body_emotion",
+      "start_seconds": 73,
+      "text": "有时，难过之外又添一句“我不该这样”，我们便多了一层与自己的争执。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 6
+    },
+    {
+      "phase": "body_emotion",
+      "start_seconds": 91,
+      "text": "若这贴近你，留意想赶快把感受改好的冲动。身体有没有多用一点力？不必故意制造紧张。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 10
+    },
+    {
+      "phase": "body_emotion",
+      "start_seconds": 116,
+      "text": "再留意这份催促旁边的情绪。不安、抗拒，或暂时说不清，都可以如实知道。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 10
+    },
+    {
+      "phase": "allow_experience",
+      "start_seconds": 138,
+      "text": "这次试试让感受有位置，同时不急着照它行动。把这个区别放进一个小画面。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 6
+    },
+    {
+      "phase": "embodied_shift",
+      "start_seconds": 157,
+      "text": "如果愿意，设想你坐在一张桌前。脚底触着地，桌面落着普通的光。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 8
+    },
+    {
+      "phase": "embodied_shift",
+      "start_seconds": 176,
+      "text": "手边有张小卡片，记着此刻一种轻微的感受。不想命名，就留一处空白。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 10
+    },
+    {
+      "phase": "embodied_shift",
+      "start_seconds": 199,
+      "text": "注意纸的边缘，卡片与桌面的距离。这一张只记录此刻的感受，不代表整个你。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 8
+    },
+    {
+      "phase": "embodied_shift",
+      "start_seconds": 220,
+      "text": "看看自己是否想把卡片藏起来、推走，或立刻改写。不需要评判这个冲动。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 10
+    },
+    {
+      "phase": "embodied_shift",
+      "start_seconds": 242,
+      "text": "如果愿意，让卡片慢慢落到桌上。保留它，也给它旁边的空处一点位置。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 12
+    },
+    {
+      "phase": "embodied_shift",
+      "start_seconds": 267,
+      "text": "回到真实的手指与掌心。有没有仍想抓紧或推开的用力？先陪这一处停一下。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 12
+    },
+    {
+      "phase": "embodied_shift",
+      "start_seconds": 293,
+      "text": "再留意情绪：给它一个位置时，是不安、松动、抗拒，还是暂时没有明显感觉？",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 12
+    },
+    {
+      "phase": "allow_experience",
+      "start_seconds": 317,
+      "text": "如果什么都没变，也不用把这个反应判为失败。感受可以仍在，是否继续由你决定。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 8
+    },
+    {
+      "phase": "integration",
+      "start_seconds": 340,
+      "text": "卡片若仍在，而你没有急着消除它或任它决定行动，“允许”与“照做”之间，有没有一点可感的区别？",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 14
+    },
+    {
+      "phase": "integration",
+      "start_seconds": 370,
+      "text": "这个画面不能证明所有事情都没问题。它只让你试一试：有感受时，能否仍保有一点选择。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 6
+    },
+    {
+      "phase": "real_life_rehearsal",
+      "start_seconds": 390,
+      "text": "如果愿意，设想稍后一次普通交谈，烦躁或担心还在。先感觉脚底，再选择怎样开口。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 10
+    },
+    {
+      "phase": "integration",
+      "start_seconds": 415,
+      "text": "回看刚才：什么最贴近“允许自己为人”？可以是一个小发现，也可以是还不知道。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 12
+    },
+    {
+      "phase": "closing",
+      "start_seconds": 440,
+      "text": "再回到熟悉的接触和自然呼吸。不用急着把这次练习做成一个结果。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 8
+    },
+    {
+      "phase": "closing",
+      "start_seconds": 460,
+      "text": "轻轻活动指尖，让周围的轮廓慢慢清楚。带着真实的自己，按自己的节奏结束。",
+      "intent": "将允许感受与保有选择的区分转成画面参与和身心观察",
+      "pause_after_seconds": 6
+    }
+  ],
+  "ending_reflection": "有感受时仍可尝试选择；没有明显变化也可以完成。"
+}
