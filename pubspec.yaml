@@ -24,6 +24,7 @@ dependencies:
   timezone: ^0.10.1
   fl_chart: ^0.68.0
   intl: ^0.19.0
+  characters: ^1.4.0
   crypto: ^3.0.3
   image_picker: ^1.1.2
   # Camera barcode scanning for packaged food barcode lookup.
@@ -75,6 +76,19 @@ dependency_overrides:
   workmanager_platform_interface: 0.9.3
 flutter:
   uses-material-design: true
+  fonts:
+    - family: QuoteSignatureLatin
+      fonts:
+        - asset: assets/fonts/Allura-Regular.ttf
+    - family: QuoteXingShu
+      fonts:
+        - asset: assets/fonts/ZhiMangXing-Regular.ttf
+    - family: QuoteKaiShu
+      fonts:
+        - asset: assets/fonts/MaShanZheng-Regular.ttf
+    - family: QuoteCaoShu
+      fonts:
+        - asset: assets/fonts/LiuJianMaoCao-Regular.ttf
   assets:
     - assets/mental_health_checkup/
     - assets/html/poster-wall-only-frame-v23-1.html

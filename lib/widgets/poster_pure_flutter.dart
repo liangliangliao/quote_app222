@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../services/quote_calligraphy_settings.dart';
 import 'quote_adaptive_frame.dart';
+import 'quote_calligraphy_text.dart';
 import 'quote_portrait_cutout.dart';
 
 ImageProvider? _posterAvatar(String raw) {
@@ -23,9 +25,13 @@ class PosterPureFlutter extends StatelessWidget {
     super.key, required this.topic, required this.quote, required this.author,
     required this.note, required this.avatar,
     this.woodBgAsset = QuoteAdaptiveFrame.defaultBackgroundAsset, this.aiFramePath,
+    this.animateCalligraphy = false,
+    this.calligraphyStyle = QuoteCalligraphyStyle.xingshu,
   });
   final String topic, quote, author, note, avatar, woodBgAsset;
   final String? aiFramePath;
+  final bool animateCalligraphy;
+  final QuoteCalligraphyStyle calligraphyStyle;
 
   void _openReading(BuildContext context) {
     showModalBottomSheet<void>(
@@ -45,7 +51,8 @@ class PosterPureFlutter extends StatelessWidget {
                 fontSize: 21, height: 1.65, fontWeight: FontWeight.w600)),
               if (author.trim().isNotEmpty) ...[
                 const SizedBox(height: 18),
-                Text(author, textAlign: TextAlign.right,
+                QuoteAuthorSignature(author,
+                  textAlign: TextAlign.right,
                   style: const TextStyle(fontSize: 15, height: 1.5)),
               ],
               if (note.trim().isNotEmpty) ...[
@@ -76,6 +83,8 @@ class PosterPureFlutter extends StatelessWidget {
             aiImagePath: aiFramePath, quoteCharacters: quote.runes.length),
           Positioned.fromRect(rect: paper, child: _PaperComposition(
             topic: topic, quote: quote, author: author, note: note, avatar: avatar,
+            animateCalligraphy: animateCalligraphy,
+            calligraphyStyle: calligraphyStyle,
             onRead: () => _openReading(context))),
         ]);
       }),
@@ -87,9 +96,12 @@ class _PaperComposition extends StatelessWidget {
   const _PaperComposition({
     required this.topic, required this.quote, required this.author,
     required this.note, required this.avatar, required this.onRead,
+    required this.animateCalligraphy, required this.calligraphyStyle,
   });
   final String topic, quote, author, note, avatar;
   final VoidCallback onRead;
+  final bool animateCalligraphy;
+  final QuoteCalligraphyStyle calligraphyStyle;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, bounds) {
@@ -118,6 +130,16 @@ class _PaperComposition extends StatelessWidget {
       painter.dispose();
       return result;
     }
+    double measureSpan(InlineSpan span, double maxWidth, {int? maxLines}) {
+      final painter = TextPainter(
+        text: span, textDirection: direction,
+        textScaler: TextScaler.noScaling, maxLines: maxLines,
+        ellipsis: maxLines == null ? null : '…',
+      )..layout(maxWidth: maxWidth);
+      final result = painter.height;
+      painter.dispose();
+      return result;
+    }
     // Every source portrait uses the same 39:50 window. BoxFit.cover normalises
     // the source canvas while ClipRect in QuotePortraitCutout is the final
     // paint boundary, so neither the photograph nor its feather can overflow.
@@ -127,7 +149,8 @@ class _PaperComposition extends StatelessWidget {
     final titleWidth = width - (hasAvatar ? portraitWidth + gap : 0);
     final titleHeight = measure(topic, titleStyle, titleWidth, maxLines: 3);
     final headerHeight = math.max(titleHeight, hasAvatar ? portraitHeight : 0.0);
-    final authorHeight = measure(author, authorStyle, width, maxLines: 3);
+    final authorSpan = quoteAuthorSignatureSpan(author, authorStyle);
+    final authorHeight = measureSpan(authorSpan, width, maxLines: 3);
     final footerHeight = (width * .105).clamp(22.0, 30.0);
     final hasNote = note.trim().isNotEmpty;
     final noteLineHeight = measure('解读', noteStyle, width);
@@ -136,9 +159,14 @@ class _PaperComposition extends StatelessWidget {
       (hasNote ? noteLineHeight * 2 + gap : 0) - footerHeight - 3);
     var quoteSize = (width * .083).clamp(14.0, 27.0).toDouble();
     final minimumSize = (width * .062).clamp(11.0, 18.0).toDouble();
-    TextStyle quoteStyle() => baseStyle.copyWith(
-      fontSize: quoteSize, height: 1.47, letterSpacing: .45,
-      fontWeight: FontWeight.w700, color: const Color(0xff25211d));
+    TextStyle quoteStyle() {
+      final original = baseStyle.copyWith(
+        fontSize: quoteSize, height: 1.47, letterSpacing: .45,
+        fontWeight: FontWeight.w700, color: const Color(0xff25211d));
+      return animateCalligraphy
+        ? quoteCalligraphyTextStyle(original, calligraphyStyle)
+        : original;
+    }
     while (quoteSize > minimumSize &&
         measure(quote, quoteStyle(), width) > available) {
       quoteSize = math.max(minimumSize, quoteSize - .25);
@@ -154,7 +182,7 @@ class _PaperComposition extends StatelessWidget {
     final noteLines = hasNote
       ? math.max(0, (noteSpace / math.max(1, noteLineHeight)).floor()) : 0;
     final needsReading = quoteLines != null ||
-      measure(author, authorStyle, width) > authorHeight + .5 ||
+      measureSpan(authorSpan, width) > authorHeight + .5 ||
       measure(topic, titleStyle, titleWidth) > titleHeight + .5 ||
       (hasNote && (noteLines == 0 || measure(note, noteStyle, width) > noteSpace));
     return MediaQuery(
@@ -171,12 +199,24 @@ class _PaperComposition extends StatelessWidget {
             ],
           ])),
         SizedBox(height: gap),
-        Text(quote, key: const ValueKey('quote-body'), maxLines: quoteLines,
-          overflow: quoteLines == null ? TextOverflow.visible : TextOverflow.ellipsis,
-          style: quoteStyle()),
+        if (animateCalligraphy)
+          CalligraphyWritingText(
+            key: const ValueKey('quote-body'),
+            text: quote,
+            maxLines: quoteLines,
+            overflow: quoteLines == null
+                ? TextOverflow.visible
+                : TextOverflow.ellipsis,
+            style: quoteStyle(),
+            calligraphyStyle: calligraphyStyle,
+          )
+        else
+          Text(quote, key: const ValueKey('quote-body'), maxLines: quoteLines,
+            overflow: quoteLines == null ? TextOverflow.visible : TextOverflow.ellipsis,
+            style: quoteStyle()),
         if (author.trim().isNotEmpty) ...[
           SizedBox(height: gap),
-          Text(author, key: const ValueKey('quote-author'),
+          QuoteAuthorSignature(author, key: const ValueKey('quote-author'),
             textAlign: TextAlign.right, maxLines: 3,
             overflow: TextOverflow.ellipsis, style: authorStyle),
         ],
